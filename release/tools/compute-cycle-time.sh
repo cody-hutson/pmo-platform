@@ -701,10 +701,19 @@ ROWS
   # RI-2 passing; the same at the T_DEPLOY read fails RI-2 alone; surfacing every line of
   # the query tool's stderr fails RI-5; a notice folded into the reason line fails RI-6;
   # and a selection that drops the reported rows fails RI-3.
+  # RI-7 and RI-8 ride the same harness for the T_DEPLOY N/A reason (#5553). Group CR grades
+  # t_deploy_na_reason by calling it; these two run the tool, so they grade what the main
+  # flow HANDS it: handing it the already-filtered rows (the selector's output, empty
+  # whenever T_DEPLOY is N/A) at the main flow's call turns every Excluded and every Failed
+  # release into the None cause, and fails RI-7 and RI-8 while every group-CR arm passes.
   #   slug-r  v9.93  both reads INDETERMINATE: two milestone subjects under the legacy key
   #   slug-s  v9.94  slug-keyed rows only — no rung-3 match at all
   #   slug-n  v9.95  legacy-keyed, ONE milestone subject — the query tool's best-effort NOTE
   #   slug-q  v9.96  the T_GO read INDETERMINATE and no deploy row — an N/A release
+  #   slug-p  v9.97  slug-keyed, a package-only occasion: a rules-mirror row and a package
+  #                  row, both resolved, both written by the deploy emitter — Excluded
+  #   slug-f  v9.98  slug-keyed, a skill row that did not resolve (escalated) beside a
+  #                  resolved package row — Failed
   _ri_tmp="$(/usr/bin/mktemp -d)"
   /bin/mkdir "$_ri_tmp/evals"
   /bin/cat > "$_ri_tmp/RELEASE_LOG.md" <<'RLOG'
@@ -714,6 +723,8 @@ ROWS
 | v9.94 | slug-s | n/a | n/a | n/a | v9.94 | VERIFIED | 2026-02-02 |
 | v9.95 | slug-n | n/a | n/a | n/a | v9.95 | VERIFIED | 2026-02-03 |
 | v9.96 | slug-q | n/a | n/a | n/a | v9.96 | VERIFIED | 2026-02-04 |
+| v9.97 | slug-p | n/a | n/a | n/a | v9.97 | VERIFIED | 2026-02-05 |
+| v9.98 | slug-f | n/a | n/a | n/a | v9.98 | VERIFIED | 2026-02-06 |
 RLOG
   /bin/cat > "$_ri_tmp/evals/pipeline-event-log.md" <<'ROWS'
 | ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |
@@ -728,6 +739,12 @@ RLOG
 | 2026-02-03T10:00:00Z | v9.95 | 12 | deployment-status | deploy-skill | hub | milestone:#14 | CHEAP | resolved | p |
 | 2026-02-04T09:00:00Z | v9.96 | 9 | gate-outcome | plan-review-go | operator | milestone:#15 | MODERATE | resolved | p |
 | 2026-02-04T09:30:00Z | v9.96 | 9 | gate-outcome | plan-review-go | operator | milestone:#16 | MODERATE | resolved | p |
+| 2026-02-05T09:00:00Z | slug-p | 9 | gate-outcome | plan-review-go | operator | milestone:#17 | MODERATE | resolved | p |
+| 2026-02-05T11:00:00Z | slug-p | 12 | deployment-status | deploy-rules-mirror | hub | rules-mirror:p | CHEAP | resolved | target:rules-mirror; module:core; mech:deploy.sh --deploy; result:SUCCESS; detail:none |
+| 2026-02-05T11:00:30Z | slug-p | 12 | deployment-status | deploy-package | hub | package:p | CHEAP | resolved | target:p.skill; module:core; mech:deploy.sh --deploy; result:SUCCESS; detail:none |
+| 2026-02-06T09:00:00Z | slug-f | 9 | gate-outcome | plan-review-go | operator | milestone:#18 | MODERATE | resolved | p |
+| 2026-02-06T11:00:10Z | slug-f | 12 | deployment-status | deploy-skill | hub | skill:f | CHEAP | escalated | target:f; module:core; mech:deploy.sh --deploy; result:FAIL; detail:none |
+| 2026-02-06T11:00:30Z | slug-f | 12 | deployment-status | deploy-package | hub | package:f | CHEAP | resolved | target:f.skill; module:core; mech:deploy.sh --deploy; result:SUCCESS; detail:none |
 ROWS
   _ri_run() {  # <release> — this tool over the fixture; sets _ri_rc, _ri_out (stdout) and _ri_err (stderr)
     _ri_rc=0
@@ -741,10 +758,15 @@ ROWS
   _ri_lines() {  # <text> <prefix> — counts the lines of <text> that begin with <prefix>; an empty prefix counts every non-empty line (no regex)
     /usr/bin/awk -v p="$2" '(p == "" && length($0) > 0) || (p != "" && index($0, p) == 1) { n++ } END { print n + 0 }' <<<"$1"
   }
+  _ri_count() {  # <text> <phrase> — counts the occurrences of <phrase> in <text>, over every line (no regex)
+    /usr/bin/awk -v s="$2" '{ l = $0; while ((i = index(l, s)) > 0) { n++; l = substr(l, i + length(s)) } } END { print n + 0 }' <<<"$1"
+  }
   _ri_run slug-r; _ri_r_rc="$_ri_rc"; _ri_r_out="$_ri_out"; _ri_r_err="$_ri_err"
   _ri_run slug-s; _ri_s_rc="$_ri_rc"; _ri_s_out="$_ri_out"; _ri_s_err="$_ri_err"
   _ri_run slug-n; _ri_n_rc="$_ri_rc"; _ri_n_out="$_ri_out"; _ri_n_err="$_ri_err"
   _ri_run slug-q; _ri_q_rc="$_ri_rc"; _ri_q_out="$_ri_out"; _ri_q_err="$_ri_err"
+  _ri_run slug-p; _ri_p_rc="$_ri_rc"; _ri_p_out="$_ri_out"; _ri_p_err="$_ri_err"
+  _ri_run slug-f; _ri_f_rc="$_ri_rc"; _ri_f_out="$_ri_out"; _ri_f_err="$_ri_err"
   _ri_qt_r_go="$(_ri_query slug-r gate-outcome)";  _ri_qt_r_dep="$(_ri_query slug-r deployment-status)"
   _ri_qt_s_go="$(_ri_query slug-s gate-outcome)";  _ri_qt_s_dep="$(_ri_query slug-s deployment-status)"
   _ri_qt_n_go="$(_ri_query slug-n gate-outcome)";  _ri_qt_n_dep="$(_ri_query slug-n deployment-status)"
@@ -812,7 +834,40 @@ ROWS
     || die "self-test: RI-6 the N/A reason must stay one line, unchanged and last, beside the notice; got '$_ri_q_err'"
   [[ "$(_ri_lines "$_ri_q_err" 'INDETERMINATE (T_DEPLOY read): ')" == "0" && "$(_ri_lines "$_ri_q_err" '')" == "2" ]] \
     || die "self-test: RI-6 slug-q's T_DEPLOY read matched no legacy row, so its stderr is the T_GO notice and the reason line only; got '$_ri_q_err'"
-  unset -f _ri_lines
+
+  # RI-7, RI-8 THE EXCLUDED AND THE FAILED CAUSE, THROUGH THE MAIN FLOW (#5553; Stage-8
+  #      QF-02) — the tool as a child process over the fixture, as RI-6 runs it for the
+  #      None cause. RI-7, slug-p, a package-only occasion: stdout reads T_DEPLOY=N/A at
+  #      exit 0; stderr is ONE reason line, the Excluded one, naming each excluded subtype
+  #      with its tally; and "did not succeed" reads 0. RI-8, slug-f, a skill row that did
+  #      not resolve: stdout reads T_DEPLOY=N/A at exit 0; stderr is ONE reason line, the
+  #      Failed one, saying the targets did not succeed exactly once, with the excluded row
+  #      listed beside it; and "excluded by definition" reads 0. Each reason's opening
+  #      words carry the tool's own count of the fixture's rows, so a fixture that stopped
+  #      holding those rows fails here too. The two arms differ in both directions: neither
+  #      reason satisfies the other arm's checks. They are graded together and reported by
+  #      name, so one run shows every check that failed.
+  _ri_miss=""
+  [[ "$_ri_p_rc" -eq 0 && "$_ri_p_out" == "T_GO=2026-02-05T09:00:00Z; T_DEPLOY=N/A; delta=N/A" ]] \
+    || _ri_miss="${_ri_miss} RI-7 (slug-p, stdout and exit status)"
+  [[ "$(_ri_lines "$_ri_p_err" '')" == "1" && "$(_ri_lines "$_ri_p_err" 'Cycle-Time: N/A (2 deployment-status row(s) exist for slug-p, none of an anchor subtype')" == "1" \
+     && "$_ri_p_err" == *"excluded by definition"* \
+     && "$_ri_p_err" == *"deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written)"* \
+     && "$_ri_p_err" == *"deploy-package 1 (1 resolved, 1 by the deploy emitter, 0 hand-written)"* ]] \
+    || _ri_miss="${_ri_miss} RI-7 (slug-p, the Excluded reason naming each excluded subtype with its tally)"
+  [[ "$(_ri_count "$_ri_p_err" 'did not succeed')" == "0" ]] \
+    || _ri_miss="${_ri_miss} RI-7 (slug-p, 'did not succeed' must read 0)"
+  [[ "$_ri_f_rc" -eq 0 && "$_ri_f_out" == "T_GO=2026-02-06T09:00:00Z; T_DEPLOY=N/A; delta=N/A" ]] \
+    || _ri_miss="${_ri_miss} RI-8 (slug-f, stdout and exit status)"
+  [[ "$(_ri_lines "$_ri_f_err" '')" == "1" && "$(_ri_lines "$_ri_f_err" 'Cycle-Time: N/A (1 deploy-skill/deploy-harness row(s) exist for slug-f but NONE reached outcome=resolved (escalated 1)')" == "1" \
+     && "$(_ri_count "$_ri_f_err" 'did not succeed')" == "1" \
+     && "$_ri_f_err" == *"[also present, never an anchor: deploy-package 1 (1 resolved, 1 by the deploy emitter, 0 hand-written)]"* ]] \
+    || _ri_miss="${_ri_miss} RI-8 (slug-f, the Failed reason saying 'did not succeed' exactly once)"
+  [[ "$(_ri_count "$_ri_f_err" 'excluded by definition')" == "0" ]] \
+    || _ri_miss="${_ri_miss} RI-8 (slug-f, 'excluded by definition' must read 0)"
+  [[ -z "$_ri_miss" ]] \
+    || die "self-test:${_ri_miss} — a T_DEPLOY N/A cause did not reach the tool's output through the main flow: an Excluded or a Failed release must print its own reason, never another cause's. slug-p printed '$_ri_p_out' with stderr '$_ri_p_err'; slug-f printed '$_ri_f_out' with stderr '$_ri_f_err'"
+  unset -f _ri_lines _ri_count
 
   echo "self-test: PASS"
   echo "  ISO8601 delta arithmetic validated"
@@ -824,7 +879,7 @@ ROWS
   echo "  T_DEPLOY N/A reason accounts for every row (#5553, group CR): CR-1..CR-6 package-only / skill-bearing control / rules-mirror-only / PRF-1 survives / no rows / totality, each non-anchor subtype named with its outcome and producer tally (deploy emitter or hand-written) and no reason carrying '; ' or '|'; CR-7 partition = selector; CR-8 partition = schema enum; CR-9 partition = the DORA read-model's anchor tuple; CR-10 an unreadable event log exits 1, never a published N/A"
   echo "  --help prints the whole header (U-1)"
   echo "  T_GO anchor identity validated (group CG): CG-1 SENSITIVITY the 2 operator Stage-9 GO rows are kept / CG-2 T_GO = the earliest row OF THE IDENTITY / CG-3 NEGATIVE CONTROL a subtype-only selector derived from the shipped source anchors on the hub Stage-7 row / CG-4 stage / CG-5 actor / CG-6 subtype term / CG-7 SPECIFICITY no identity row, no T_GO / CG-8 CONTROL a single-row release is unchanged / CG-9 an identity miss names its count and the identity as observed under the join keys / CG-10 the no-rows reason is kept byte-for-byte / CG-11 an unreadable log exits 1 at the T_GO read / CG-12 every query-tool read checks the tool's own exit status; HELP-1 --help carries the T_GO identity contract"
-  echo "  the query tool's rung-3 INDETERMINATE notice is surfaced (#5467, group RI): RI-0 ANTI-VACUITY the fixture makes the query tool itself report INDETERMINATE for three reads, its best-effort NOTE for two and nothing for three / RI-1 SENSITIVITY the T_GO read's notice reaches stderr as one line naming the read and carrying the query tool's words / RI-2 SENSITIVITY the T_DEPLOY read's notice does too / RI-3 no value moves: the release still computes on the same anchors, and stderr carries the two notice lines and nothing else / RI-4 CONTROL a slug-keyed release prints its value and a silent stderr / RI-5 SPECIFICITY the query tool's best-effort NOTE is not surfaced / RI-6 on an N/A release the notice is its own line beside one unchanged reason line, and a read that matched no legacy row surfaces nothing"
+  echo "  the query tool's rung-3 INDETERMINATE notice is surfaced (#5467, group RI): RI-0 ANTI-VACUITY the fixture makes the query tool itself report INDETERMINATE for three reads, its best-effort NOTE for two and nothing for three / RI-1 SENSITIVITY the T_GO read's notice reaches stderr as one line naming the read and carrying the query tool's words / RI-2 SENSITIVITY the T_DEPLOY read's notice does too / RI-3 no value moves: the release still computes on the same anchors, and stderr carries the two notice lines and nothing else / RI-4 CONTROL a slug-keyed release prints its value and a silent stderr / RI-5 SPECIFICITY the query tool's best-effort NOTE is not surfaced / RI-6 on an N/A release the notice is its own line beside one unchanged reason line, and a read that matched no legacy row surfaces nothing / RI-7 the Excluded cause through the main flow (#5553): a package-only occasion prints T_DEPLOY=N/A and one reason line naming deploy-rules-mirror and deploy-package with their tallies, and never 'did not succeed' / RI-8 the Failed cause through the main flow (#5553): a skill row that did not resolve prints T_DEPLOY=N/A and one reason line saying 'did not succeed' exactly once, with the excluded row listed beside it, and never 'excluded by definition'"
   exit 0
 fi
 
