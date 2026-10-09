@@ -14233,6 +14233,11 @@ EOF
   _prt_fx "$_pr_d" cand_one "200 OK" 4999 '[{"number":9191,"state":"open","merged_at":null,"head":{"label":"x:'"$_pr_branch"'","ref":"'"$_pr_branch"'"}}]'
   _prt_fx "$_pr_d" cand_none "200 OK" 4999 '[]'
   _prt_fx "$_pr_d" cand_foreign "200 OK" 4999 '[{"number":7331,"state":"open","merged_at":null,"head":{"label":"intruder:'"$_pr_branch"'","ref":"'"$_pr_branch"'"}}]'
+  # This run's own pull request as the host labels it when the slug was typed in
+  # another letter case: the label differs from x:<branch> ONLY by the case of its
+  # owner. The host matches a head's owner without regard to letter case and reports
+  # its own spelling of it, so this is the reply such an installation reads.
+  _prt_fx "$_pr_d" cand_case "200 OK" 4999 '[{"number":9192,"state":"open","merged_at":null,"head":{"label":"X:'"$_pr_branch"'","ref":"'"$_pr_branch"'"}}]'
   # The binding reads EVERY state, so its callers select: a merged, an open and a
   # closed-unmerged pull request on this head; then the same list without the open one.
   _prt_fx "$_pr_d" cand_mixed "200 OK" 4999 '[{"number":9190,"state":"closed","merged_at":"2026-09-25T10:00:00Z","head":{"label":"x:'"$_pr_branch"'"}},{"number":9191,"state":"open","merged_at":null,"head":{"label":"x:'"$_pr_branch"'"}},{"number":9189,"state":"closed","merged_at":null,"head":{"label":"x:'"$_pr_branch"'"}}]'
@@ -14554,6 +14559,13 @@ EOF
   _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
   _pr_got="$(_host_chore_pr_candidates "$_pr_branch" 2>/dev/null || true)"
   _st_arm PRT-u u14; [[ "$_pr_rc" -eq 0 && "$HOST_READ_VALUE" == "9191 open -" && "$_pr_got" == "9191 open -" && "$(_chore_pr_open_candidate "$HOST_READ_VALUE")" == "9191" ]] || { echo "FAIL: PRT-u u14 — the matching candidate must read '9191 open -' on stdout and in HOST_READ_VALUE alike, and be taken as the open candidate, got rc=$_pr_rc value='$HOST_READ_VALUE' stdout='$_pr_got'"; failures=$((failures+1)); }
+  # The owner in ANOTHER LETTER CASE is the same head (#6871 F-06). The label X:<branch>
+  # is this run's own pull request under a slug typed x/y, so it must be printed on
+  # both channels and taken as the open candidate, never read as "no pull request".
+  _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_case
+  _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
+  _pr_got="$(_host_chore_pr_candidates "$_pr_branch" 2>/dev/null || true)"
+  [[ "$_pr_rc" -eq 0 && "$HOST_READ_VALUE" == "9192 open -" && "$_pr_got" == "9192 open -" && "$(_chore_pr_open_candidate "$HOST_READ_VALUE")" == "9192" ]] || { echo "FAIL: PRT-u u14 (F-06) — a candidate whose head label differs from x:${_pr_branch} only by the letter case of its owner (X:${_pr_branch}) is on this head and must read '9192 open -' on stdout and in HOST_READ_VALUE alike, and be taken as the open candidate, got rc=$_pr_rc value='$HOST_READ_VALUE' stdout='$_pr_got'"; failures=$((failures+1)); }
   _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_foreign
   _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
   [[ "$_pr_rc" -eq 0 && -z "$HOST_READ_VALUE" ]] || { echo "FAIL: PRT-u u14 (FM-1) — a candidate whose head label is not x:${_pr_branch} must be dropped, got rc=$_pr_rc value='$HOST_READ_VALUE'"; failures=$((failures+1)); }
