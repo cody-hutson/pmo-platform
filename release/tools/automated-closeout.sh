@@ -6166,8 +6166,12 @@ EOF
 # leave its subshell; a direct caller discards stdout and reads the globals. When the
 # candidate set could not be read the exit is non-zero, stdout and HOST_READ_VALUE
 # are empty, HOST_READ_CLASS, _SUB, _STATUS and _REASON carry the class, and ONE line
-# on stderr carries the same reason: exit 2 for a lookup refused before any host
-# call, exit 1 for a read that did not answer or that was refused as incomplete.
+# on stderr carries the same reason. Exit 2 is a lookup THIS binding refused before
+# any host call: a slug that is not owner/repo-shaped, an empty branch, or a branch
+# outside the URL-safe set. Exit 1 is every other failure: a read that did not answer,
+# a set refused as incomplete, and a read the READER refused before any host call — a
+# slug that is owner/repo-shaped here and carries a character outside the reader's
+# set, a space for one. No caller tells 1 from 2.
 _host_chore_pr_candidates() {
   local _branch="${1:-}" _owner="${REPO_SLUG%%/*}" _name="${REPO_SLUG#*/}"
   local _p=1 _raw="" _rows="" _n=0 _all="" _nl=$'\n' _why=""
@@ -13292,8 +13296,12 @@ GITSTUB
     # The gh stub. ONE table, $_cr_tmp/prs, one row per pull request: number owner branch
     # state merged_at composite. A REST `api …/pulls?head=H&state=S` read returns the rows
     # whose owner:branch equals H; a head carrying NO owner matches the branch under ANY
-    # owner, which is exactly what an unqualified lookup gets, so a regression that drops
-    # the owner binds the fork row and CR-13 reddens. The rows are answered as the host
+    # owner, which is exactly what an unqualified lookup gets. So a regression that drops
+    # the owner from the REQUEST is served the fork row, and CR-13 reddens on its
+    # request-shape line, as CR-1 and CR-5 do on theirs. The fork row is still not bound:
+    # the candidates projection re-checks each item's head label on the response side
+    # (#7884 FM-1) and drops it. It binds, and CR-13's two SECURITY lines redden, only
+    # when that re-check is gone as well. The rows are answered as the host
     # answers them — a JSON list in the live `gh api -i` layout, each item carrying its
     # number, state, merge time and head label — because the candidates binding reads
     # through the classified reader, which takes a reply only from a status line; and a
@@ -13432,9 +13440,12 @@ STUB
       # CR-13 — OWNER QUALIFICATION (public-repository security): a FORK's pull request on a same-named
       #         branch must never bind as this run's chore PR, on either path. (a) Fresh ref, zero-commit
       #         guard: the fork's OPEN PR is invisible, so the idempotent skip stands. (b) Stale ref, main
-      #         path: the fork's OPEN PR is invisible, so this run creates its own. An unqualified lookup —
-      #         the pre-#7436 GraphQL one, or REST without the owner — binds #4406 in both, and phase 12
-      #         would then poll and merge the fork's PR with the operator's credentials.
+      #         path: the fork's OPEN PR is invisible, so this run creates its own. An unqualified lookup
+      #         whose reply is taken as it comes — the pre-#7436 GraphQL one, or REST with neither the
+      #         owner in its request nor the head-label re-check on its response — binds #4406 in both,
+      #         and phase 12 would then poll and merge the fork's PR with the operator's credentials.
+      #         REST without the owner alone is served #4406 and still does not bind it: the re-check
+      #         drops it, and only (a)'s request-shape line reddens.
       _cr_reset "$_cr_f6"
       _cr_run
       _st_arm CR CR-13; [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" != "4406" && "$CHORE_PR_OUTCOME" == "skipped-as-idempotent" ]] || { echo "FAIL: CR-13 (a) SECURITY — a fork's same-named OPEN PR must not bind as this run's chore PR on the zero-commit path; got rc=$_cr_rc outcome='$CHORE_PR_OUTCOME' pr='$CHORE_PR_NUMBER'"; failures=$((failures+1)); }
