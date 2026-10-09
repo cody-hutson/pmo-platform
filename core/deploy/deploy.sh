@@ -17571,10 +17571,12 @@ cmd_check_version_freeness() {
 #   (13) end to end  — per sentinel (warn|enforce) the probe exits 0 for CLEAN, 2|1 for
 #                      INCOMPLETE, 3 for NOT-EVALUATED and 3|1 for SKIP, and prints a
 #                      handshake line equal to that exit.
-#   (14a)-(14m)      — a failed network instrument is NOT-EVALUATED on both surfaces, never
+#   (14a)-(14n)      — a failed network instrument is NOT-EVALUATED on both surfaces, never
 #                      "absent"; a genuinely absent Release on a repository that answered is
 #                      still a finding; withheld rows fan in to one line; a finding dominates
-#                      an outage; the network-leg denominator balances.
+#                      an outage; the network-leg denominator balances; and (14n) a drift
+#                      engine that cannot be run — its path missing, or its file not
+#                      executable — is NOT-EVALUATED under its own cause, never a clean row.
 #   (15) consumer    — close-completeness.yml dispatches on the integer, never re-reads the
 #                      sentinel, and honours 2 and 3 only on the handshake.
 cmd_self_test() {
@@ -17830,7 +17832,8 @@ EOF
   # live scope into the fixture. `gh` is a shell FUNCTION (command -v resolves it) whose
   # answers each arm selects through two locals, so no arm touches the network or the
   # checkout's real remote. The body-drift engine is one stub script per exit code,
-  # selected through CC_DRIFT. `gh release view` always fails the way a checkout whose
+  # selected through CC_DRIFT; arm (14n) points CC_DRIFT at a path that holds no file and
+  # at a file without its executable bit. `gh release view` always fails the way a checkout whose
   # remote is not a GitHub repository makes it fail: that is the real failure of a
   # per-row lookup, and it is what makes arms (13)-(14) RED against an engine that still
   # performs one. Every helper and the stub are unset at the end of the block.
@@ -18065,7 +18068,7 @@ EOF
   _cc_st_probe_is 2 "$_t/no-such-sentinel" v9.99   __none__ "INCOMPLETE with the sentinel file ABSENT reads as warn"
   _cc_st_net_reset
 
-  # (14a)-(14m) THE NETWORK-LEG INSTRUMENT, through the shared engine. Row cutoff v9.99 and
+  # (14a)-(14n) THE NETWORK-LEG INSTRUMENT, through the shared engine. Row cutoff v9.99 and
   # network cutoff v9.99 put exactly one versioned row in scope for every limb, unless the
   # arm says otherwise.
   local _cc_v _cc_e _cc_vg _cc_vl _cc_d0="$_t/drift0.sh"
@@ -18179,8 +18182,32 @@ EOF
   }
   _cc_st_net_denom_is "$_cc_d0"       1 0 0 "a present row"
   _cc_st_net_denom_is "$_t/drift2.sh" 0 0 1 "a present row whose drift limb was withheld moves to NOT-EVALUATED"
+  _cc_st_net_denom_is "$_t/no-such-drift-engine.sh" 0 0 1 "a present row whose drift engine cannot be run moves to NOT-EVALUATED"
   _cc_st_list=$'v9.98'
   _cc_st_net_denom_is "$_cc_d0"       0 1 0 "an absent row"
+  # (14n) THE DRIFT ENGINE CANNOT BE RUN — its path holds no file, or the file there is not
+  #       executable — after (h) found the Release. Nothing was compared, so the row is
+  #       withheld under its own cause on both surfaces: never a finding, and never a clean
+  #       row. The guard around the engine once had no else arm, so either state printed
+  #       nothing and the row read as present and clean. The fixture is asserted first: a
+  #       second engine file that could run would make this arm grade the wrong state.
+  local _cc_gone="$_t/no-such-drift-engine.sh" _cc_nx="$_t/drift-not-executable.sh"
+  /usr/bin/printf '#!/usr/bin/env bash\nexit 0\n' > "$_cc_nx"
+  [[ ! -e "$_cc_gone" && -f "$_cc_nx" && ! -x "$_cc_nx" ]] \
+    || { echo "FAIL: (14n) fixture — the first engine path must hold no file and the second must hold a file without its executable bit; otherwise this arm grades a drift engine that can run"; failures=$((failures+1)); }
+  _cc_st_repo="ok"; _cc_st_list=$'v9.99'
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_cc_gone" out)"; _cc_e="$(_cc_st_net gate v9.99 v9.99 "$_cc_gone" err)"
+  [[ "$_cc_v" == "NOT-EVALUATED 1 1 body-drift-unrunnable" \
+     && "$(_cc_st_count 'body-drift-unrunnable (1 row(s))' "$_cc_e")" -eq 1 \
+     && "$(_cc_st_count '§5.1 drift' "$_cc_e")" -eq 0 \
+     && "$(_cc_st_count 'no published GitHub Release' "$_cc_e")" -eq 0 ]] \
+    || { echo "FAIL: (14n) a drift engine whose path holds no file must verdict 'NOT-EVALUATED 1 1 body-drift-unrunnable', with one aggregate line naming that cause and no finding line — never a clean row; got '$_cc_v'"; failures=$((failures+1)); }
+  _cc_v="$(_cc_st_net gate v9.99 v9.99 "$_cc_nx" out)"
+  [[ "$_cc_v" == "NOT-EVALUATED 1 1 body-drift-unrunnable" ]] \
+    || { echo "FAIL: (14n) a drift engine file that is not executable must verdict 'NOT-EVALUATED 1 1 body-drift-unrunnable' — never a clean row; got '$_cc_v'"; failures=$((failures+1)); }
+  _cc_vl="$(_cc_st_net lifecycle v9.99 v9.99 "$_cc_gone" out)"
+  [[ "$_cc_vl" == "NOT-EVALUATED 1 1 body-drift-unrunnable" ]] \
+    || { echo "FAIL: (14n) the lifecycle surface must verdict a drift engine that cannot be run exactly as the gate does ('NOT-EVALUATED 1 1 body-drift-unrunnable'), got '$_cc_vl'"; failures=$((failures+1)); }
   _cc_st_net_reset
 
   # (15) THE CONSUMER, STRUCTURALLY. Inside the run: bodies of close-completeness.yml (shell
@@ -20431,7 +20458,7 @@ EOF
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
   echo "    explicit-__none__ cutover SKIPs / abbreviated scaffold caught (INCOMPLETE) / complete set CLEAN / VERIFIED-scoped (DEPLOYED excluded, VERIFIED included)" >&2
   echo "    mis-arm (5) prefix-shortened cutoff WARNs naming the armed row / (6) exact-row cutoff does NOT warn but still names it / (7) no-match cutoff WARNs that zero rows were asserted and verdicts SKIP (3 warn / 1 enforce), never CLEAN / (7b) an allowlist naming every VERIFIED row at/after the cutoff verdicts SKIP with its own cause (3 warn / 1 enforce), never CLEAN / (7c) control — a mid-close scope with nothing allowlisted keeps CLEAN 0 / (7d) control — a partly allowlisted scope keeps its verdict over the rows that remain" >&2
-  echo "    exit contract + network leg (#4318): (8) all ten (verdict x sentinel) pairs map as contracted / (9) the sentinel moves INCOMPLETE and SKIP and never NOT-EVALUATED / (10) PV-7 as a population property, exit 0 with exactly two producers / (11) SENSITIVITY — the same predicate reports a violation on a collapsed map / (12) the probe body carries no exit statement, its one exit path prints the handshake (12b/12c control + specificity) / (13) the probe end to end per sentinel, handshake equal to the exit / (14a-14d) a failed instrument is NOT-EVALUATED on both surfaces, never 'absent' / (14e) a genuinely absent Release is still a finding / (14f-14i, 14l) present, drift, drift-N/A, empty set, drift-MISSING / (14j) fan-in to one line / (14k) a finding dominates an outage + no findings counter / (14m) the network-leg denominator balances / (15) the consumer dispatches on the integer with the handshake (15b/15c control + specificity)" >&2
+  echo "    exit contract + network leg (#4318): (8) all ten (verdict x sentinel) pairs map as contracted / (9) the sentinel moves INCOMPLETE and SKIP and never NOT-EVALUATED / (10) PV-7 as a population property, exit 0 with exactly two producers / (11) SENSITIVITY — the same predicate reports a violation on a collapsed map / (12) the probe body carries no exit statement, its one exit path prints the handshake (12b/12c control + specificity) / (13) the probe end to end per sentinel, handshake equal to the exit / (14a-14d) a failed instrument is NOT-EVALUATED on both surfaces, never 'absent' / (14e) a genuinely absent Release is still a finding / (14f-14i, 14l) present, drift, drift-N/A, empty set, drift-MISSING / (14j) fan-in to one line / (14k) a finding dominates an outage + no findings counter / (14m) the network-leg denominator balances / (14n) a drift engine that cannot be run, its path missing or its file not executable, is NOT-EVALUATED under its own cause on both surfaces, never a clean row / (15) the consumer dispatches on the integer with the handshake (15b/15c control + specificity)" >&2
   echo "  Stage-13 output-set sub-checks (j velocity + k learnings) validated (#4452, group OS):" >&2
   echo "    OS-1 suppressed -> BOTH findings / OS-2 emitted -> zero / OS-3 bolded numerals -> grammar finding / OS-4 explicit-N/A conformant / OS-5 archived+co-located -> zero / OS-6 T4 wrong-surface write -> split-record / OS-7 field on both surfaces -> split-record / OS-8 dangling segment pointer -> finding / OS-9 learnings mis-placed names the heading found / OS-10 short field-set / OS-11 duplicate heading / OS-12 no-match outputs cutoff WARNs vacuous / OS-13 __none__ re-dormants (j)+(k) only. Every arm graded on the FINDING LINE — exit code, corpus-wide grep and 'the field parses' are all identical on OS-4/OS-5 and OS-6.
     Close-Class-Telemetry sub-check (l) (#4437): OS-14 GENUINE FAILURE — a row with velocity+learnings and no telemetry field fires (l) alone / OS-15 control — the same fixture with a measured field raises nothing / OS-16 slot-short field fails the ordered eight-slot grammar while presence passes / OS-17 ANTI-VACUITY — a byte-perfect all-N/A field is a finding, with OS-15 as its control / OS-18 split record (field in the hot stub, body in the segment) / OS-19 __none__ re-dormants (l) and ONLY (l) — the SHIPPED configuration / OS-20 no-match telemetry cutoff WARNs vacuous in its own voice / OS-21 prefix mis-arm WARNs naming the row it actually armed at." >&2
