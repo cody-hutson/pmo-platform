@@ -800,6 +800,10 @@ STATE_LOG_ROW_STATE=""
 STATE_MILESTONE_STATE=""
 STATE_MILESTONE_SLUG=""
 STATE_CYCLE_TIME=""
+STATE_CYCLE_TIME_NOTE=""         # a value's own stderr, e.g. the tool's negative-interval
+                                 # WARNING; rides the read_state detail only (#6252)
+STATE_CYCLE_TIME_FIELD=""        # the read-only Deployment Log field verdict with its detail
+STATE_CYCLE_TIME_FIELD_CLASS=""  # CONFORMANT | DIVERGENT | ABSENT | NOT-EVALUATED
 STATE_TAG_EXISTS=0
 OPEN_ISSUE_LIST=""        # newline-separated list of issue numbers. PRE-CLOSE
                          # SNAPSHOT, taken once at Phase 4 (#3587): 6 of its 7
@@ -1928,6 +1932,164 @@ phase_preflight() {
 
 # ─── Phase 3: read_state ─────────────────────────────────────────────────────
 
+# _read_cycle_time_state — the value AND compute-cycle-time.sh's own N/A reason
+# (#6252). Sets STATE_CYCLE_TIME and STATE_CYCLE_TIME_NOTE; called directly, never
+# inside $( ). On N/A the tool prints `N/A` on stdout and ONE line
+# `Cycle-Time: N/A (<reason>)` on stderr, naming each missing anchor's cause
+# (deployment-cycle-time.md § 4). stderr is CAPTURED, never discarded: the reason is
+# the tool's to state, and every surface this run writes carries it verbatim, with no
+# hand-written phrase. Same sentinel + stderr-file idiom as phase_inject_velocity_field.
+# Four states that never share a member (review-discipline-principles.md § 8 PV-7): a
+# value; `N/A (<reason>)`; `N/A — DEGRADED` (N/A with no reason line, or a negative
+# interval, which is not a cycle time); `NOT-EVALUATED` (a non-zero exit, no value, or
+# no tool). The key is $VERSION, the RELEASE_LOG row's Version cell — the key
+# deployment-cycle-time.md § 3.1 pins for the field's author, so the two lines compare
+# byte for byte.
+#
+# Its only write is its own mktemp scratch file, removed before it returns. That is why
+# the capture lives here rather than inline in phase_read_state: group CA's lexical
+# write signature cannot tell a redirect into a scratch file from a record write, and
+# read_state is a read-only phase by behaviour, asserted by content hash in CY-11.
+_read_cycle_time_state() {
+  local _ct_out _ct_rc=0 _ct_errf _ct_line _ct_neg _ct_err _ct_proj
+  STATE_CYCLE_TIME_NOTE=""
+  if [[ ! -x "$COMPUTE_CYCLE_TIME" ]]; then
+    STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh is not executable — this is not a clean result"
+    return 0
+  fi
+  _ct_errf="$(/usr/bin/mktemp -t cycletime-stderr.XXXXXX)"
+  _ct_out="$("$COMPUTE_CYCLE_TIME" --version "$VERSION" 2>"$_ct_errf"; _prc=$?; /usr/bin/printf 'X'; exit "$_prc")" || _ct_rc=$?
+  _ct_out="${_ct_out%X}"; _ct_out="${_ct_out%%$'\n'*}"
+  _ct_line="$(/usr/bin/grep -m1 '^Cycle-Time: N/A (' "$_ct_errf" 2>/dev/null || true)"
+  # The tool's human format truncates toward zero, so a sub-minute negative interval
+  # prints UNSIGNED as 0m: its stderr WARNING is the reliable signal, the sign a second.
+  _ct_neg="$(/usr/bin/grep -m1 '^WARNING: negative cycle-time' "$_ct_errf" 2>/dev/null || true)"
+  _ct_err="$(/usr/bin/grep -v '^Cycle-Time: N/A (' "$_ct_errf" 2>/dev/null || true)"
+  /bin/rm -f "$_ct_errf" 2>/dev/null || true
+  # The rest of stderr reaches the phase detail and the report only through the shared
+  # projection, handed the WHOLE capture (self-tests PL-2 and AI-X): _detail_one_line maps
+  # CR, LF and the pipe that would split the phase row, redacts the repository and home
+  # roots and only THEN caps, so no path is cut before it is redacted. The cap is its own.
+  # ( ) are neutralized after it, on the projected value: the shared projection leaves
+  # them, and a parenthesised .md path in a phase detail would read as a written surface.
+  _ct_proj="$(_detail_one_line "$_ct_err")"
+  _ct_proj="$(/usr/bin/printf '%s' "$_ct_proj" | /usr/bin/tr '()' '[]')"
+  if [[ "$_ct_rc" -ne 0 ]]; then
+    STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh exited ${_ct_rc}: ${_ct_proj:-no stderr} — this is not a clean result"
+  elif [[ -z "${_ct_out//[[:space:]]/}" ]]; then
+    STATE_CYCLE_TIME="NOT-EVALUATED — compute-cycle-time.sh returned no value — this is not a clean result"
+  elif [[ "$_ct_out" == "N/A" ]]; then
+    if [[ -n "$_ct_line" ]]; then
+      STATE_CYCLE_TIME="${_ct_line#Cycle-Time: }"
+    else
+      STATE_CYCLE_TIME="N/A — DEGRADED: compute-cycle-time.sh returned N/A with no reason line on stderr"
+    fi
+  elif [[ -n "$_ct_neg" || "$_ct_out" == -* ]]; then
+    STATE_CYCLE_TIME="N/A — DEGRADED: compute-cycle-time.sh measured a negative interval — T_GO is later than T_DEPLOY, so its value ${_ct_out} is not a cycle time"
+    STATE_CYCLE_TIME_NOTE=" [compute-cycle-time.sh stderr: ${_ct_proj:-none}]"
+  else
+    STATE_CYCLE_TIME="$_ct_out"
+    if [[ -n "$_ct_proj" ]]; then STATE_CYCLE_TIME_NOTE=" [compute-cycle-time.sh stderr: ${_ct_proj}]"; fi
+  fi
+  return 0
+}
+
+# _cycle_time_field_verdict — READ-ONLY (#6252). Does this version's Deployment Log
+# **Cycle-Time:** field carry the tool's value (deployment-cycle-time.md § 3.1)?
+# Sets STATE_CYCLE_TIME_FIELD_CLASS (CONFORMANT | DIVERGENT | ABSENT | NOT-EVALUATED)
+# and STATE_CYCLE_TIME_FIELD (the class and its detail). Never writes and never gates:
+# the Stage-12 author owns the field, and this close-out does not rewrite a field it
+# did not author. Called directly, never inside $( ), because it sets globals.
+#
+# DIVERGENT is a DISAGREEMENT, never a verdict on the field. The tool is re-run at
+# close and can itself be the wrong party — a hand-written release-level marker typed
+# as a deploy row can anchor it — so the verdict carries the tool's --iso anchors and
+# leaves the reader to judge which side is right. The key is $VERSION, the RELEASE_LOG
+# row's Version cell, which § 3.1 pins for the field's author too: a line produced
+# under the milestone slug differs in its key token and reads DIVERGENT. A quoted
+# excerpt has ( ) | neutralized, so it cannot name a phantom write surface
+# (_reported_write_surfaces) or split a phase row (get_phase).
+_cycle_time_field_verdict() {
+  local _tgt _kc _cls _pfx _val _want _iso
+  STATE_CYCLE_TIME_FIELD_CLASS="NOT-EVALUATED"
+  case "$STATE_CYCLE_TIME" in
+    NOT-EVALUATED*|"N/A — DEGRADED"*)
+      STATE_CYCLE_TIME_FIELD="NOT-EVALUATED — the tool produced no comparable value — this is not a clean result"
+      return 0 ;;
+  esac
+  _tgt="$(_resolve_deployment_log_target "$VERSION" || true)"
+  if [[ -z "$_tgt" ]]; then
+    STATE_CYCLE_TIME_FIELD="NOT-EVALUATED — no $VERSION Deployment Log block with a **Result:** line on any surface — this is not a clean result"
+    return 0
+  fi
+  _kc="$(_resolve_field_key_in_block "$_tgt" "$VERSION" 'Cycle-Time')"
+  _cls="${_kc%%$'\t'*}"; _pfx="${_kc#*$'\t'}"
+  case "$_cls" in
+    ABSENT)
+      STATE_CYCLE_TIME_FIELD_CLASS="ABSENT"
+      STATE_CYCLE_TIME_FIELD="ABSENT — the block carries no **Cycle-Time:** field"
+      return 0 ;;
+    UNREADABLE)
+      STATE_CYCLE_TIME_FIELD="NOT-EVALUATED — the surface could not be read — this is not a clean result"
+      return 0 ;;
+    CANONICAL) : ;;
+    *)
+      _iso="$(_cycle_time_iso_anchors)"
+      STATE_CYCLE_TIME_FIELD_CLASS="DIVERGENT"
+      STATE_CYCLE_TIME_FIELD="DIVERGENT — the field and the tool disagree on the key: it is ${_cls}, not the bare **Cycle-Time:**; the tool's anchors are ${_iso}"
+      return 0 ;;
+  esac
+  _val="$(/usr/bin/awk -v ver="$VERSION" -v pfx="$_pfx" '
+      { raw = $0; line = raw; sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line) }
+      line == "#### Deployment Log " ver { inblk = 1; next }
+      inblk && line ~ /^#### / { inblk = 0 }
+      inblk && !done && index(raw, pfx) == 1 { print substr(raw, length(pfx) + 1); done = 1 }
+    ' "$_tgt" 2>/dev/null || true)"
+  _val="${_val#"${_val%%[![:space:]]*}"}"
+  _want="$STATE_CYCLE_TIME"
+  # CONFORMANT when the field IS the tool's value, or begins with it and the next
+  # character cannot extend it (48m followed by its anchor parenthetical conforms;
+  # 480m against 48m does not).
+  if [[ "$_val" == "$_want" || ( "${_val:0:${#_want}}" == "$_want" && ! "${_val:${#_want}:1}" =~ [A-Za-z0-9] ) ]]; then
+    STATE_CYCLE_TIME_FIELD_CLASS="CONFORMANT"
+    STATE_CYCLE_TIME_FIELD="CONFORMANT — the field begins with the tool's value"
+  else
+    _iso="$(_cycle_time_iso_anchors)"
+    _val="$(/usr/bin/printf '%s' "$_val" | /usr/bin/tr '()|' '[]/')"
+    STATE_CYCLE_TIME_FIELD_CLASS="DIVERGENT"
+    STATE_CYCLE_TIME_FIELD="DIVERGENT — the field and the tool's current value disagree; the tool's anchors are ${_iso}; the field reads: ${_val:0:160}"
+  fi
+  return 0
+}
+
+# The tool's --iso line (T_GO=…; T_DEPLOY=…; delta=…): the anchors a DIVERGENT verdict
+# carries, so a reader sees which rows the tool used. Read-only; first line only, with
+# ( ) | neutralized for the phase detail.
+_cycle_time_iso_anchors() {
+  local _o
+  _o="$("$COMPUTE_CYCLE_TIME" --version "$VERSION" --iso 2>/dev/null || true)"
+  _o="${_o%%$'\n'*}"
+  if [[ -z "$_o" ]]; then /usr/bin/printf 'unreadable\n'; return 0; fi
+  /usr/bin/printf '%s\n' "$_o" | /usr/bin/tr '()|' '[]/'
+}
+
+# The chore-PR form of a Cycle-Time state (#6252, review FM-4). The chore-PR body is
+# PUBLIC and is posted by `gh pr create`, which no path guard sees, so a NOT-EVALUATED
+# result reaches it as its class and exit code only. The producer's stderr stays in the
+# report and the JSON report, and it reaches them through the shared projection in
+# _read_cycle_time_state: a path under the repository or home root arrives redacted, as
+# <repo> or <home>, and a path outside both roots is carried as written (self-test
+# CY-4 (c)). Every other state is carried as itself, and none of them embeds stderr.
+_cycle_time_public_form() {
+  local _v="$1" _rc
+  case "$_v" in
+    "NOT-EVALUATED — compute-cycle-time.sh exited "*)
+      _rc="${_v#NOT-EVALUATED — compute-cycle-time.sh exited }"; _rc="${_rc%%[!0-9]*}"
+      /usr/bin/printf 'NOT-EVALUATED — compute-cycle-time.sh exited %s — this is not a clean result\n' "${_rc:-unknown}" ;;
+    *) /usr/bin/printf '%s\n' "$_v" ;;
+  esac
+}
+
 phase_read_state() {
   STATE_MILESTONE_STATE="$($GH api "repos/${REPO_SLUG}/milestones/${MILESTONE}" --jq '.state' 2>/dev/null || echo "unknown")"
 
@@ -1939,14 +2101,12 @@ phase_read_state() {
   # and #1682's publish consumer read this single global (no double-population).
   MERGE_SHA="$($GH pr view "$PR_NUMBER" --repo "$REPO_SLUG" --json mergeCommit --jq '.mergeCommit.oid // ""' 2>/dev/null || echo "")"
 
-  # Cycle time (read-only; may be N/A pre-instrumentation)
-  if [[ -x "$COMPUTE_CYCLE_TIME" ]]; then
-    STATE_CYCLE_TIME="$("$COMPUTE_CYCLE_TIME" --version "$VERSION" 2>/dev/null || echo "N/A")"
-  else
-    STATE_CYCLE_TIME="N/A (compute-cycle-time.sh not executable)"
-  fi
+  # Cycle time: the value AND compute-cycle-time.sh's own N/A reason, then the
+  # read-only verdict on the Deployment Log field (#6252). Both are helpers above.
+  _read_cycle_time_state
+  _cycle_time_field_verdict
 
-  mark_phase "read_state" "PASS" "milestone state=$STATE_MILESTONE_STATE; cycle_time=$STATE_CYCLE_TIME; release-PR merge SHA=${MERGE_SHA:-<unresolved>}"
+  mark_phase "read_state" "PASS" "milestone state=$STATE_MILESTONE_STATE; cycle_time=${STATE_CYCLE_TIME//|//}${STATE_CYCLE_TIME_NOTE}; deployment-log field: ${STATE_CYCLE_TIME_FIELD}; release-PR merge SHA=${MERGE_SHA:-<unresolved>}"
   return 0
 }
 
@@ -3429,7 +3589,7 @@ phase_inject_close_class_telemetry_field() {
   # measured one.
   local _vac=""
   if ! _close_class_line_measured "$_line"; then
-    _vac=" — WARNING: this field carries NO computed ratio (every rate slot resolved N/A), so it records that the release closed without a measurable close-quality reading rather than a reading itself."
+    _vac=" — WARNING: this field carries NO computed ratio (every rate slot resolved N/A or NOT-EVALUATED), so it records that the release closed without a measurable close-quality reading rather than a reading itself."
     if /usr/bin/grep -qF 'gh unavailable' <<<"$_line"; then
       _vac="$_vac Disposition read from the emitted line: gh was unavailable, which degrades Indicators 3 and 6 together."
     fi
@@ -3437,6 +3597,16 @@ phase_inject_close_class_telemetry_field() {
       _vac="$_vac Disposition read from the emitted line: no retro register resolved, which degrades Indicators 1, 2 and 5 together."
     fi
     _vac="$_vac Written as measured — an honest N/A is the mandated form; deploy.sh Check 48 sub-check (l) is where the same reading becomes a finding."
+  fi
+  # ── Caller-omission note. DIAGNOSTIC, not fatal, and deliberately OUTSIDE the vacuity
+  # branch above: an omitted --retro leaves Indicators 1, 2 and 5 NOT-EVALUATED while
+  # Indicator 6 usually still computes a ratio, so a note scoped to the vacuous line would
+  # stay silent on exactly the lines the omission produces. Keyed on FROZEN vocabulary — the
+  # § 3.2 slot label plus the PV-7a Register B token — never on the reason prose, so a
+  # reworded reason cannot silently disarm it. It rides the same detail as the measuredness
+  # disposition, whichever mark the phase records.
+  if /usr/bin/grep -qF 'retro-conformance NOT-EVALUATED' <<<"$_line"; then
+    _vac="${_vac:- —} Disposition read from the emitted line: compute-close-class-telemetry.sh was given no --retro path, so Indicators 1, 2 and 5 are NOT-EVALUATED — a property of this invocation, not of the release."
   fi
 
   if [[ "$MODE" == "dry-run" ]]; then
@@ -5130,6 +5300,13 @@ build_chore_pr_body() {
   # at emission is the only chance there is. Resolved before the heredoc for the
   # same reason as the note scaffold: a non-zero return inside it is invisible.
   local plan_ref; plan_ref="$(plan_ref_for_emit)" || true
+  # The Cycle-Time lines, resolved before the heredoc for the same reason (#6252): the
+  # PUBLIC form of the state (_cycle_time_public_form) and the read-only field verdict's
+  # CLASS only — never its detail, which can quote the field.
+  local cycle_public cycle_field
+  cycle_public="$(_cycle_time_public_form "$STATE_CYCLE_TIME")" || true
+  cycle_field="${STATE_CYCLE_TIME_FIELD_CLASS:-NOT-EVALUATED}"
+  [[ "$cycle_field" != "NOT-EVALUATED" ]] || cycle_field="NOT-EVALUATED — this is not a clean result"
 
   /bin/cat <<EOF
 ## Summary
@@ -5159,7 +5336,9 @@ ${deferred_summary}
 
 ## Cycle time
 
-${STATE_CYCLE_TIME}
+${cycle_public}
+
+Deployment Log \`**Cycle-Time:**\` field, compared read-only with the value above (deployment-cycle-time.md § 3.1): ${cycle_field}
 
 ## Cross-references
 
@@ -10538,9 +10717,9 @@ EOF
   # (deploy.sh Check 48 sub-check l-3a) the same reading is a finding.
   #
   # Indicator 5's own bivalence (marker present -> present / absent -> absent /
-  # no register -> N/A) is NOT re-tested here: it is a property of
+  # no register -> N/A / no path -> NOT-EVALUATED) is NOT re-tested here: it is a property of
   # compute-close-class-telemetry.sh and is asserted in that tool's own
-  # --self-test (its Tests 5b-5d, including the substring-vs-whole-line control).
+  # --self-test (its Tests 5b-5d and 9, including the substring-vs-whole-line control).
   # Re-driving it through a stub here would assert the stub, not the tool.
   local _cc_saved_log="$RELEASE_LOG" _cc_saved_ver="$VERSION" _cc_saved_mode="$MODE"
   local _cc_saved_tool="$COMPUTE_CLOSE_CLASS_TELEMETRY" _cc_saved_ms="$MILESTONE"
@@ -10559,6 +10738,7 @@ EOF
 
   local _cc_ok="$_cc_tmp/cct-ok.sh" _cc_vac="$_cc_tmp/cct-vac.sh" _cc_bad="$_cc_tmp/cct-bad.sh"
   local _cc_empty="$_cc_tmp/cct-empty.sh" _cc_e2="$_cc_tmp/cct-e2.sh" _cc_noexec="$_cc_tmp/cct-noexec.sh"
+  local _cc_omit="$_cc_tmp/cct-omit.sh" _cc_omit_m="$_cc_tmp/cct-omit-measured.sh"
   /bin/cat > "$_cc_ok" <<'EOF'
 #!/bin/sh
 echo "retro-conformance 10/10 (1.00); lessons-population 8/10 (0.80); carry-forward-closure 2/3 (0.67); pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
@@ -10567,6 +10747,19 @@ EOF
   /bin/cat > "$_cc_vac" <<'EOF'
 #!/bin/sh
 echo "retro-conformance N/A — no retro register found for v9.96; lessons-population N/A — no lessons register found; carry-forward-closure N/A — gh unavailable — carry-forward closure not computed; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation N/A — gh unavailable — phase-evidence preservation not computed; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh"
+EOF
+  # Conformant AND vacuous, from a CALLER OMISSION: no --retro path was supplied, so the
+  # register-fed slots 1, 2 and 5 carry the tool's Register B NOT-EVALUATED state rather than
+  # the absent-register N/A; gh is unavailable too, so nothing else computes either.
+  /bin/cat > "$_cc_omit" <<'EOF'
+#!/bin/sh
+echo "retro-conformance NOT-EVALUATED — no --retro path was supplied, so no retro register was looked for — this is not a clean result; lessons-population NOT-EVALUATED — no --lessons or --retro path was supplied, so no lessons register was looked for — this is not a clean result; carry-forward-closure N/A — gh unavailable — carry-forward closure not computed; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence NOT-EVALUATED — no --retro path was supplied, so no retro register was looked for — this is not a clean result; evidence-preservation NOT-EVALUATED — gh unavailable, phase-evidence preservation not computed — this is not a clean result; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh"
+EOF
+  # Conformant and MEASURED, from the same omission: Indicator 6 computes a ratio, which is
+  # the shape an omitted --retro actually produces on a hub-spoke release.
+  /bin/cat > "$_cc_omit_m" <<'EOF'
+#!/bin/sh
+echo "retro-conformance NOT-EVALUATED — no --retro path was supplied, so no retro register was looked for — this is not a clean result; lessons-population NOT-EVALUATED — no --lessons or --retro path was supplied, so no lessons register was looked for — this is not a clean result; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence NOT-EVALUATED — no --retro path was supplied, so no retro register was looked for — this is not a clean result; evidence-preservation 12/13 (0.92); evidence-close-gate pass; mechanism: compute-close-class-telemetry.sh"
 EOF
   /bin/cat > "$_cc_bad" <<'EOF'
 #!/bin/sh
@@ -10586,7 +10779,7 @@ EOF
 #!/bin/sh
 echo "this stub is deliberately NOT chmod +x"
 EOF
-  /bin/chmod +x "$_cc_ok" "$_cc_vac" "$_cc_bad" "$_cc_empty" "$_cc_e2"
+  /bin/chmod +x "$_cc_ok" "$_cc_vac" "$_cc_bad" "$_cc_empty" "$_cc_e2" "$_cc_omit" "$_cc_omit_m"
 
   # v9.96 carries **Outcome rationale:** (primary anchor); v9.97 carries only
   # **Outcome:** (fallback anchor); v9.98 is an untouched sibling.
@@ -10677,6 +10870,11 @@ EOF
   [[ "$(_cc_count "$RELEASE_LOG" v9.96)" -eq 1 ]] || { echo "FAIL: the vacuous-but-conformant field must be written exactly once"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: a field with no computed ratio must say so — silence here is how a vacuous row reads as a measured one; got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'gh was unavailable' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: the disposition must be read from the emitted LINE (the exit code cannot carry it — the gh-less path exits 0), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  # The ABSENT-REGISTER disposition, read from the same line, and its specificity against
+  # the caller-omission note: a supplied path that held no register is a different fact
+  # from a path that was never supplied, and the detail must name only the one it saw.
+  /usr/bin/grep -qF 'no retro register resolved' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: an absent-register line must carry the absent-register disposition read from the emitted line, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qF 'are NOT-EVALUATED' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: an absent-register line must NOT carry the caller-omission note (no slot on it is NOT-EVALUATED), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
   # CONTROL — the measured line must NOT carry the vacuity warning. Without this
   # arm the assert above is satisfied by a phase that always warns.
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
@@ -10685,6 +10883,32 @@ EOF
   if /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)"; then
     echo "FAIL: control — a MEASURED field must NOT carry the vacuity warning (the arm above would be vacuous)"; failures=$((failures+1))
   fi
+  ! /usr/bin/grep -qF 'are NOT-EVALUATED' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: control — a measured line with no NOT-EVALUATED slot must NOT carry the caller-omission note (the omission arms below would be vacuous), got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+
+  # (d2) THE OMISSION PAIR, vacuous limb. A caller that supplied no --retro path leaves
+  # the register-fed slots NOT-EVALUATED; the detail must name THAT disposition and not the
+  # absent-register one. VERDICT-AGNOSTIC BY DESIGN: phase 6.8's mark is shared with a
+  # sibling change to its precondition handling, so this arm asserts the disposition text
+  # only, which rides whichever mark the phase records — never the mark itself. The
+  # vacuity-warning presence is this arm's own floor: it proves the fixture exercised the
+  # vacuous path, so a stub that ever computed a ratio cannot turn (d2) into a copy of (d3).
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_omit"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: (d2) floor — the vacuous omission fixture must take the vacuity branch, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'are NOT-EVALUATED' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: (d2) a line whose register-fed slots are NOT-EVALUATED must carry the caller-omission disposition read from the emitted line, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qF 'no retro register resolved' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: (d2) a caller-omission line must NOT carry the absent-register disposition — no register was looked for, so none was found absent; got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+
+  # (d3) THE OMISSION PAIR, measured limb — the shape an omission actually produces: slot 6
+  # still computes a ratio, so the line is MEASURED and the vacuity branch never runs. The
+  # caller-omission note must fire anyway; a note scoped to the vacuous line would stay silent
+  # on every release it exists to report. The vacuity-warning absence is this arm's own
+  # floor: it proves the fixture exercised the measured path.
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+  _cc_write; COMPUTE_CLOSE_CLASS_TELEMETRY="$_cc_omit_m"
+  phase_inject_close_class_telemetry_field >/dev/null 2>&1 || true
+  ! /usr/bin/grep -qF 'carries NO computed ratio' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: (d3) floor — the measured omission fixture must NOT take the vacuity branch, got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
+  /usr/bin/grep -qF 'are NOT-EVALUATED' <<<"$(get_phase inject_close_class_telemetry_field)" || { echo "FAIL: (d3) a MEASURED line whose register-fed slots are NOT-EVALUATED must still carry the caller-omission note — the note is evaluated outside the vacuity branch; got '$(get_phase inject_close_class_telemetry_field)'"; failures=$((failures+1)); }
 
   # (e) non-conformant producer output — FAIL, and nothing is written.
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
@@ -10775,8 +10999,9 @@ EOF
   # staging-completeness arm filters to `inject_*` phases with a PASS result, and
   # neither marker site carries both (6.7 is not inject_*; this one is inject_* but
   # marks SKIPPED). The live path — archived block + producer unavailable + dormant
-  # cutover, today's default — wrote the marker to a segment, never staged the
-  # segment, dropped the marker at commit, and reported "Absence RECORDED".
+  # cutover, the committed default when this was found — wrote the marker to a
+  # segment, never staged the segment, dropped the marker at commit, and reported
+  # "Absence RECORDED".
   #
   # This arm drives the REAL production call site (not the writer directly) over the
   # archived fixture above and asserts the RECORD, because the record is the interface
@@ -14164,6 +14389,279 @@ STUB
 
   /bin/rm -rf "$_ms_tmp" 2>/dev/null || true
   GH="$_ms_saved_gh"; PR_NUMBER="$_ms_saved_pr"; REPO_SLUG="$_ms_saved_slug"; MERGE_SHA="$_ms_saved_mergesha"
+  PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+
+  # Test 4h.2: read_state's Cycle-Time carriage and the read-only field verdict
+  # (#6252, group CY) — offline, hermetic. read_state carries compute-cycle-time.sh's
+  # value, or the tool's OWN N/A reason verbatim, into the report, the JSON report and
+  # the chore-PR body, in four states that never share a member (a value · N/A with its
+  # reason · N/A — DEGRADED · NOT-EVALUATED), and reports read-only whether the
+  # Deployment Log **Cycle-Time:** field carries it. The producer is a stub everywhere
+  # except the SEAM arms (CY-6c, CY-7, CY-8, CY-13), which run the REAL tool against a
+  # fixture event log through EVALS_RESULTS_PATH, so a change to the tool's
+  # `Cycle-Time: N/A (` prefix, its exit-1 contract or its negative-interval WARNING
+  # reddens HERE instead of degrading a close silently. The RELEASE_LOG fixture sits in
+  # its OWN directory, because the block resolver globs RELEASE_LOG_ARCHIVE-*.md beside
+  # it. Arms read the verdict state through ${VAR:-}, so a read_state that does not set
+  # it reports named failures rather than a set -u abort.
+  local _cy_s_cct="$COMPUTE_CYCLE_TIME" _cy_s_gh="$GH" _cy_s_log="$RELEASE_LOG" _cy_s_ver="$VERSION"
+  local _cy_s_pr="$PR_NUMBER" _cy_s_slug="$REPO_SLUG" _cy_s_msha="$MERGE_SHA"
+  local _cy_s_mslug="$STATE_MILESTONE_SLUG" _cy_s_mstate="$STATE_MILESTONE_STATE" _cy_s_ms="$MILESTONE"
+  local _cy_s_evals="${EVALS_RESULTS_PATH-__cy_unset__}" _cy_s_rlf="${RELEASE_LOG_FILE-__cy_unset__}"
+  local _cy_tmp _cy_body _cy_det _cy_want _cy_line _cy_rc _cy_h0 _cy_h1 _cy_h2
+  _cy_tmp="$(/usr/bin/mktemp -d -t cycletime-selftest.XXXXXX)"
+  /bin/mkdir -p "$_cy_tmp/log" "$_cy_tmp/evals" "$_cy_tmp/evals-empty" "$_cy_tmp/stub"
+  RELEASE_LOG="$_cy_tmp/log/RELEASE_LOG.md"; VERSION="v9.91"; PR_NUMBER="9191"; REPO_SLUG="x/y"
+  STATE_MILESTONE_SLUG="cy-selftest"; MILESTONE="9191"   # numeric: the JSON report casts it
+  export EVALS_RESULTS_PATH="$_cy_tmp/evals" RELEASE_LOG_FILE="$RELEASE_LOG"
+  # $GH stub: the milestone state and the release PR's merge commit, nothing else.
+  /bin/cat > "$_cy_tmp/stub/gh.sh" <<'STUB'
+#!/bin/bash
+if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ff"; exit 0; fi
+if [[ "$1" == "api" ]]; then echo "closed"; exit 0; fi
+exit 0
+STUB
+  # The producer stand-in: answers --iso with fixed anchors (what a DIVERGENT verdict
+  # quotes) and otherwise replays the case files _cy_case writes beside it.
+  /bin/cat > "$_cy_tmp/stub/producer.sh" <<'STUB'
+#!/bin/bash
+case " $* " in *" --iso "*) echo "T_GO=2026-01-05T10:00:00Z; T_DEPLOY=2026-01-05T10:48:00Z; delta=2880s"; exit 0 ;; esac
+d="$(/usr/bin/dirname "$0")"
+if [[ -s "$d/case.out" ]]; then /bin/cat "$d/case.out"; fi
+if [[ -s "$d/case.err" ]]; then /bin/cat "$d/case.err" >&2; fi
+exit "$(/bin/cat "$d/case.rc")"
+STUB
+  /bin/chmod +x "$_cy_tmp/stub/gh.sh" "$_cy_tmp/stub/producer.sh"
+  GH="$_cy_tmp/stub/gh.sh"; COMPUTE_CYCLE_TIME="$_cy_tmp/stub/producer.sh"
+  _cy_case() {  # <stdout> <stderr> <exit status> — one producer case
+    : > "$_cy_tmp/stub/case.out"; : > "$_cy_tmp/stub/case.err"
+    if [[ -n "$1" ]]; then /usr/bin/printf '%s\n' "$1" > "$_cy_tmp/stub/case.out"; fi
+    if [[ -n "$2" ]]; then /usr/bin/printf '%s\n' "$2" > "$_cy_tmp/stub/case.err"; fi
+    /usr/bin/printf '%s\n' "$3" > "$_cy_tmp/stub/case.rc"
+  }
+  _cy_log() {  # <the v9.91 block's **Cycle-Time:** line verbatim, or empty for none>
+    {
+      /usr/bin/printf '# Release Log\n\n| Version | Milestone |\n|---|---|\n| v9.90 | cy-older |\n\n#### Deployment Log v9.91\n**Files deployed:** none\n**Timestamp:** 2026-01-05 10:48\n'
+      if [[ -n "$1" ]]; then /usr/bin/printf '%s\n' "$1"; fi
+      /usr/bin/printf '**Result:** SUCCESS\n\n#### Deployment Log v9.90\n**Cycle-Time:** 1h0m\n**Result:** SUCCESS\n'
+    } > "$RELEASE_LOG"
+  }
+  _cy_evlog() {  # <data row>... — the fixture event log, in the query tool's layout
+    local _cy_r
+    {
+      /usr/bin/printf '| ts_iso | version | stage | event_type | event_subtype | actor | subject | reversibility | outcome | payload |\n|---|---|---|---|---|---|---|---|---|---|\n'
+      for _cy_r in "$@"; do /usr/bin/printf '%s\n' "$_cy_r"; done
+    } > "$_cy_tmp/evals/pipeline-event-log.md"
+  }
+  _cy_run() {  # read_state from a clean phase record and clean cycle-time state
+    PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
+    STATE_CYCLE_TIME=""; STATE_CYCLE_TIME_NOTE=""; STATE_CYCLE_TIME_FIELD=""; STATE_CYCLE_TIME_FIELD_CLASS=""
+    _CY_RC=0; phase_read_state >/dev/null 2>&1 || _CY_RC=$?
+  }
+  local _cy_go_row='| 2026-01-05T10:05:00Z | v9.91 | 9 | gate-outcome | plan-review-go | operator | milestone:#1 | MODERATE | resolved | ms:#1; verdict:GO |'
+  local _cy_dep_row='| 2026-01-05T10:00:00Z | v9.91 | 12 | deployment-status | deploy-skill | hub | skill:release-hub | CHEAP | resolved | mech:deploy.sh --deploy |'
+  _cy_log '**Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v9.91)'
+
+  # CY-1 SENSITIVITY — the missing-anchor fixture (#6252 AC-2). The tool prints N/A on
+  # stdout and its ONE reason line on stderr; the reason reaches every surface this run
+  # writes, byte for byte. RED on the capture that discarded stderr.
+  _cy_case 'N/A' 'Cycle-Time: N/A (no gate-outcome/plan-review-go event for v9.91)' 0
+  _cy_run
+  _st_arm CY CY-1; [[ "$STATE_CYCLE_TIME" == "N/A (no gate-outcome/plan-review-go event for v9.91)" ]] || { echo "FAIL: CY-1 — read_state must carry the tool's own N/A reason verbatim, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- 'N/A (no gate-outcome/plan-review-go event for v9.91)' <<<"$(build_chore_pr_body)" || { echo "FAIL: CY-1 — the chore-PR ## Cycle time block must carry the tool's reason line verbatim"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- '- Cycle time: N/A (no gate-outcome/plan-review-go event for v9.91)' <<<"$(generate_markdown_report 2>/dev/null)" || { echo "FAIL: CY-1 — the report's Cycle time line must carry the tool's reason verbatim"; failures=$((failures+1)); }
+  _cy_line="$(generate_json_report 2>&1 || true)"
+  /usr/bin/grep -qF -- '"cycle_time": "N/A (no gate-outcome/plan-review-go event for v9.91)"' <<<"$_cy_line" || { echo "FAIL: CY-1 — the JSON report's cycle_time must carry the tool's reason verbatim, got: ${_cy_line:0:240}"; failures=$((failures+1)); }
+
+  # CY-2 CONTROL — a computed value is carried as itself, with no reason and no note.
+  _cy_case '48m' '' 0
+  _cy_run
+  _st_arm CY CY-2; [[ "$STATE_CYCLE_TIME" == "48m" && -z "${STATE_CYCLE_TIME_NOTE:-}" ]] || { echo "FAIL: CY-2 — a silent producer's value must be carried as itself with no note, got '$STATE_CYCLE_TIME' and note '${STATE_CYCLE_TIME_NOTE:-}'"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- '48m' <<<"$(build_chore_pr_body)" || { echo "FAIL: CY-2 — the chore-PR ## Cycle time block must carry the value line"; failures=$((failures+1)); }
+
+  # CY-3 — the reason names the anchor that is missing, never a stock phrase.
+  _cy_case 'N/A' 'Cycle-Time: N/A (no deployment-status event for v9.91)' 0
+  _cy_run
+  _st_arm CY CY-3; [[ "$STATE_CYCLE_TIME" == *"no deployment-status event for v9.91"* && "$STATE_CYCLE_TIME" != *"plan-review-go"* ]] || { echo "FAIL: CY-3 — a T_DEPLOY-only reason must name deployment-status and not plan-review-go, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+
+  # CY-4 NOT-EVALUATED — a producer failure is not a measured absence (PV-7). (a) exit 2
+  # with the producer's own error; (b) a producer that is not executable; (c) FM-4: a
+  # failure whose stderr carries an absolute path keeps it in the report form, and the
+  # PUBLIC chore-PR body carries only the class and the exit code.
+  _cy_case '' 'ERROR: ts_iso parse failure on (x, y)' 2
+  _cy_run
+  _st_arm CY CY-4; [[ "$STATE_CYCLE_TIME" == "NOT-EVALUATED — "* && "$STATE_CYCLE_TIME" == *"this is not a clean result" && "$STATE_CYCLE_TIME" == *"ts_iso parse failure"* ]] || { echo "FAIL: CY-4 (a) — an exit-2 producer must read NOT-EVALUATED carrying its own error, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  COMPUTE_CYCLE_TIME="$_cy_tmp/stub/absent.sh"
+  _cy_run
+  [[ "$STATE_CYCLE_TIME" == "NOT-EVALUATED — "* ]] || { echo "FAIL: CY-4 (b) — a non-executable producer must read NOT-EVALUATED, never an N/A, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  COMPUTE_CYCLE_TIME="$_cy_tmp/stub/producer.sh"
+  _cy_case '' 'ERROR: query-pipeline-event.sh missing or not executable at /opt/cy-selftest-root/release/tools/query-pipeline-event.sh' 1
+  _cy_run
+  [[ "$STATE_CYCLE_TIME" == *"/opt/cy-selftest-root/"* ]] || { echo "FAIL: CY-4 (c) ANTI-VACUITY — the report form must keep the producer's stderr, else the public-body limb compares over nothing, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  _cy_body="$(build_chore_pr_body)"
+  /usr/bin/grep -qxF -- 'NOT-EVALUATED — compute-cycle-time.sh exited 1 — this is not a clean result' <<<"$_cy_body" || { echo "FAIL: CY-4 (c) — the public chore-PR body must carry the NOT-EVALUATED class and the exit code"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qF -- '/opt/cy-selftest-root/' <<<"$_cy_body" || { echo "FAIL: CY-4 (c) — the public chore-PR body carries the producer's stderr, including an absolute path (FM-4)"; failures=$((failures+1)); }
+
+  # CY-5 DEGRADED — N/A with no reason line is not an N/A with a reason.
+  _cy_case 'N/A' '' 0
+  _cy_run
+  _st_arm CY CY-5; [[ "$STATE_CYCLE_TIME" == "N/A — DEGRADED"* ]] || { echo "FAIL: CY-5 — N/A with no reason line on stderr must read N/A — DEGRADED, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+
+  # CY-6 A NEGATIVE INTERVAL IS NOT A CYCLE TIME (inverted at the scope-lock; review
+  # FM-1). It reads N/A — DEGRADED, a non-value member, with the tool's WARNING kept in
+  # the phase detail. (a) a signed value; (b) a sub-minute negative, which the tool's
+  # human format truncates toward zero and prints UNSIGNED as 0m — so the capture keys
+  # on the stderr WARNING, not on the sign; (c) the SEAM: the real tool on a fixture log
+  # whose T_GO is later than its T_DEPLOY.
+  _cy_case '-5m' 'WARNING: negative cycle-time (-300 s); T_DEPLOY=2026-01-05T10:00:00Z before T_GO=2026-01-05T10:05:00Z — pipeline-event-log integrity issue' 0
+  _cy_run
+  _cy_det="$(get_phase read_state)"
+  _st_arm CY CY-6; [[ "$STATE_CYCLE_TIME" == "N/A — DEGRADED"* && "$_cy_det" == *"WARNING: negative cycle-time"* ]] || { echo "FAIL: CY-6 (a) — a negative interval must read N/A — DEGRADED with the WARNING kept in the read_state detail, got '$STATE_CYCLE_TIME' and '$_cy_det'"; failures=$((failures+1)); }
+  _cy_case '0m' 'WARNING: negative cycle-time (-30 s); T_DEPLOY=2026-01-05T10:00:00Z before T_GO=2026-01-05T10:00:30Z — pipeline-event-log integrity issue' 0
+  _cy_run
+  [[ "$STATE_CYCLE_TIME" == "N/A — DEGRADED"* ]] || { echo "FAIL: CY-6 (b) — a sub-minute negative interval, printed unsigned as 0m, must still read N/A — DEGRADED, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  COMPUTE_CYCLE_TIME="$_cy_s_cct"
+  _cy_evlog "$_cy_go_row" "$_cy_dep_row"
+  _cy_run
+  [[ "$STATE_CYCLE_TIME" == "N/A — DEGRADED"* && "$(get_phase read_state)" == *"WARNING: negative cycle-time"* ]] || { echo "FAIL: CY-6 (c) SEAM — the real tool's negative interval must read N/A — DEGRADED with its WARNING in the detail, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+
+  # CY-7 SEAM — the REAL tool. (i) only a resolved deploy-skill row: the reason names the
+  # missing T_GO and not T_DEPLOY; (ii) only the Stage-9 operator GO row: the reverse.
+  # read_state carries each line exactly as the tool printed it — the expected text is
+  # the tool's own stderr, taken by running it directly — with no pipe character, and
+  # the chore-PR body stays parser-clean. CY-13 is its twin.
+  _cy_evlog "$_cy_dep_row"
+  "$_cy_s_cct" --version v9.91 >/dev/null 2>"$_cy_tmp/tool.err" || true
+  _cy_want="$(/usr/bin/grep -m1 '^Cycle-Time: N/A (' "$_cy_tmp/tool.err" || true)"; _cy_want="${_cy_want#Cycle-Time: }"
+  _cy_run
+  _st_arm CY CY-7; [[ -n "$_cy_want" && "$STATE_CYCLE_TIME" == "$_cy_want" ]] || { echo "FAIL: CY-7 (i) SEAM — read_state must carry the real tool's N/A line verbatim ('$_cy_want'), got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  [[ "$STATE_CYCLE_TIME" == *"plan-review-go"* && "$STATE_CYCLE_TIME" != *"deployment-status"* && "$STATE_CYCLE_TIME" != *"|"* ]] || { echo "FAIL: CY-7 (i) — a T_GO-only miss must name plan-review-go and not deployment-status, with no pipe, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  check_parser_clean "$(build_chore_pr_body)" || { echo "FAIL: CY-7 (i) — the chore-PR body carrying the tool's reason must stay parser-clean"; failures=$((failures+1)); }
+  _cy_evlog "$_cy_go_row"
+  "$_cy_s_cct" --version v9.91 >/dev/null 2>"$_cy_tmp/tool.err" || true
+  _cy_want="$(/usr/bin/grep -m1 '^Cycle-Time: N/A (' "$_cy_tmp/tool.err" || true)"; _cy_want="${_cy_want#Cycle-Time: }"
+  _cy_run
+  [[ -n "$_cy_want" && "$STATE_CYCLE_TIME" == "$_cy_want" ]] || { echo "FAIL: CY-7 (ii) SEAM — read_state must carry the real tool's N/A line verbatim ('$_cy_want'), got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  [[ "$STATE_CYCLE_TIME" == *"deployment-status"* && "$STATE_CYCLE_TIME" != *"plan-review-go"* && "$STATE_CYCLE_TIME" != *"|"* ]] || { echo "FAIL: CY-7 (ii) — a T_DEPLOY-only miss must name deployment-status and not plan-review-go, with no pipe, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  check_parser_clean "$(build_chore_pr_body)" || { echo "FAIL: CY-7 (ii) — the chore-PR body carrying the tool's reason must stay parser-clean"; failures=$((failures+1)); }
+
+  # CY-8 — the exit contract the capture relies on: the real tool exits 0 with stdout
+  # N/A when an anchor is missing (the reason travels on stderr only).
+  _cy_rc=0; _cy_line="$("$_cy_s_cct" --version v9.91 2>/dev/null)" || _cy_rc=$?
+  _st_arm CY CY-8; [[ "$_cy_rc" -eq 0 && "$_cy_line" == "N/A" ]] || { echo "FAIL: CY-8 — the real tool must exit 0 with stdout N/A on a missing anchor, got rc=$_cy_rc and '$_cy_line'"; failures=$((failures+1)); }
+
+  # CY-9 THE FIELD VERDICT, read-only, over the fixture block. (a) the verbatim line
+  # CONFORMS; (b) a hand-written cause DIVERGES, worded as a disagreement and carrying the
+  # tool's --iso anchors (review PR-1); (c) no field is ABSENT, and the sibling block's
+  # field is not borrowed; (d) a value followed by its anchor parenthetical CONFORMS;
+  # (e) 480m against 48m DIVERGES — the boundary; (f) a qualified key DIVERGES; (g) THE
+  # KEY PIN (review FM-3): the verbatim line produced under the milestone slug DIVERGES
+  # from the one produced under the RELEASE_LOG row's Version cell, (a) being its twin.
+  COMPUTE_CYCLE_TIME="$_cy_tmp/stub/producer.sh"
+  _cy_case 'N/A' 'Cycle-Time: N/A (no gate-outcome/plan-review-go event for v9.91)' 0
+  _cy_log '**Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v9.91)'; _cy_run
+  _st_arm CY CY-9; [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "CONFORMANT" ]] || { echo "FAIL: CY-9 (a) — the tool's verbatim line must read CONFORMANT, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_log '**Cycle-Time:** N/A — (T_GO=none; T_DEPLOY=2026-01-05T10:48:00Z; mechanism: compute-cycle-time.sh) no GO was emitted'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" && "${STATE_CYCLE_TIME_FIELD:-}" == *"disagree"* && "${STATE_CYCLE_TIME_FIELD:-}" == *"T_GO=2026-01-05T10:00:00Z; T_DEPLOY=2026-01-05T10:48:00Z"* ]] || { echo "FAIL: CY-9 (b) — a hand-written cause must read DIVERGENT, worded as a disagreement and carrying the tool's --iso anchors, got '${STATE_CYCLE_TIME_FIELD:-}'"; failures=$((failures+1)); }
+  _cy_log ''; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "ABSENT" ]] || { echo "FAIL: CY-9 (c) — a block with no **Cycle-Time:** field must read ABSENT, not the sibling block's field, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_case '48m' '' 0
+  _cy_log '**Cycle-Time:** 48m  (T_GO=2026-01-05T10:00:00Z → T_DEPLOY=2026-01-05T10:48:00Z; mechanism: compute-cycle-time.sh)'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "CONFORMANT" ]] || { echo "FAIL: CY-9 (d) — a value followed by its anchor parenthetical must read CONFORMANT, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_log '**Cycle-Time:** 480m  (T_GO=2026-01-05T10:00:00Z → T_DEPLOY=2026-01-05T18:00:00Z; mechanism: compute-cycle-time.sh)'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" ]] || { echo "FAIL: CY-9 (e) BOUNDARY — 480m against the tool's 48m must read DIVERGENT, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_log '**Cycle-Time (Stage-12 read):** 48m'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" && "${STATE_CYCLE_TIME_FIELD:-}" == *"QUALIFIED"* ]] || { echo "FAIL: CY-9 (f) — a qualified key must read DIVERGENT and name the key class, got '${STATE_CYCLE_TIME_FIELD:-}'"; failures=$((failures+1)); }
+  _cy_case 'N/A' 'Cycle-Time: N/A (no gate-outcome/plan-review-go event for v9.91)' 0
+  _cy_log '**Cycle-Time:** N/A (no gate-outcome/plan-review-go event for cy-selftest)'; _cy_run
+  [[ "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" ]] || { echo "FAIL: CY-9 (g) KEY PIN — the line produced under the milestone slug must read DIVERGENT against the Version-keyed tool line, got '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+
+  # CY-10 NO PHANTOM WRITE SURFACE. A DIVERGENT excerpt quoting a parenthesised .md path
+  # verbatim would be read as a surface this run wrote (_reported_write_surfaces) and
+  # FAIL the close at commit time, and a pipe would split the phase row. The excerpt
+  # reaches the detail neutralized. Anti-vacuity: the fixture line carries both hazards,
+  # the excerpt DID reach the detail, and the reader DOES lift an un-neutralized token.
+  _cy_case '48m' '' 0
+  _cy_line='**Cycle-Time:** 7h0m | see (fake-surface.md)'
+  _cy_log "$_cy_line"; _cy_run
+  _cy_det="$(get_phase read_state)"
+  _st_arm CY CY-10; ! /usr/bin/grep -qF 'fake-surface.md' <<<"$(_reported_write_surfaces)" || { echo "FAIL: CY-10 — a DIVERGENT excerpt became a phantom write surface"; failures=$((failures+1)); }
+  [[ "${_cy_det#*|}" != *"|"* && "$_cy_det" == *"[fake-surface.md]"* ]] || { echo "FAIL: CY-10 — the detail must carry the field excerpt with ( ) | neutralized, got '$_cy_det'"; failures=$((failures+1)); }
+  [[ "$_cy_line" == *"(fake-surface.md)"* && "$_cy_line" == *"|"* ]] || { echo "FAIL: CY-10 ANTI-VACUITY — the fixture line must carry both hazards"; failures=$((failures+1)); }
+  PHASE_NAMES=("zz_cy_control"); PHASE_RESULTS=("PASS"); PHASE_DETAILS=("wrote (fake-surface.md)")
+  /usr/bin/grep -qF 'fake-surface.md' <<<"$(_reported_write_surfaces)" || { echo "FAIL: CY-10 CAPABILITY — _reported_write_surfaces must lift an un-neutralized token, else the zero above is not a measurement"; failures=$((failures+1)); }
+
+  # CY-11 READ-ONLY — the verdict never writes the record it reads: the fixture's
+  # content hash is unchanged across read_state (the m10 instrument), and the same
+  # instrument moves on a known write.
+  _cy_log '**Cycle-Time:** N/A — hand-written'
+  _cy_h0="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"; _cy_run
+  _cy_h1="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
+  _st_arm CY CY-11; [[ "$_cy_h0" == "$_cy_h1" ]] || { echo "FAIL: CY-11 — read_state wrote the Deployment Log it only reads"; failures=$((failures+1)); }
+  /usr/bin/printf 'x\n' >> "$RELEASE_LOG"; _cy_h2="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
+  [[ "$_cy_h2" != "$_cy_h1" ]] || { echo "FAIL: CY-11 ANTI-VACUITY — the hash instrument did not move on a known write, so the unchanged result above is not a measurement"; failures=$((failures+1)); }
+
+  # CY-12 NON-BLOCKING — every verdict class returns 0 and marks read_state PASS, and the
+  # verdict under test is the one the fixture produces.
+  _cy_log '**Cycle-Time:** 480m'; _cy_run
+  _st_arm CY CY-12; [[ "$_CY_RC" -eq 0 && "$(get_phase read_state)" == PASS\|* && "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "DIVERGENT" ]] || { echo "FAIL: CY-12 — a DIVERGENT field must not block: rc=$_CY_RC, '$(get_phase read_state | /usr/bin/cut -d'|' -f1)', class '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_log ''; _cy_run
+  [[ "$_CY_RC" -eq 0 && "$(get_phase read_state)" == PASS\|* && "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "ABSENT" ]] || { echo "FAIL: CY-12 — an ABSENT field must not block: rc=$_CY_RC, class '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+  _cy_case '' 'ERROR: stub failure' 1
+  _cy_log '**Cycle-Time:** 48m'; _cy_run
+  [[ "$_CY_RC" -eq 0 && "$(get_phase read_state)" == PASS\|* && "${STATE_CYCLE_TIME_FIELD_CLASS:-}" == "NOT-EVALUATED" ]] || { echo "FAIL: CY-12 — a NOT-EVALUATED verdict must not block: rc=$_CY_RC, class '${STATE_CYCLE_TIME_FIELD_CLASS:-}'"; failures=$((failures+1)); }
+
+  # CY-13 THE UNREADABLE LOG (INT-4; review FM-1) — the REAL tool against an empty evals
+  # directory exits 1, and read_state renders NOT-EVALUATED, never an N/A with a reason: a
+  # read that never happened is not a measured absence. The public body carries the class
+  # and the exit code. CY-7 is its twin.
+  export EVALS_RESULTS_PATH="$_cy_tmp/evals-empty"
+  COMPUTE_CYCLE_TIME="$_cy_s_cct"
+  _cy_run
+  _st_arm CY CY-13; [[ "$STATE_CYCLE_TIME" == "NOT-EVALUATED — compute-cycle-time.sh exited 1"* && "$STATE_CYCLE_TIME" != "N/A ("* ]] || { echo "FAIL: CY-13 — an unreadable event log must read NOT-EVALUATED with the tool's exit 1, never an N/A with a reason, got '$STATE_CYCLE_TIME'"; failures=$((failures+1)); }
+  /usr/bin/grep -qxF -- 'NOT-EVALUATED — compute-cycle-time.sh exited 1 — this is not a clean result' <<<"$(build_chore_pr_body)" || { echo "FAIL: CY-13 — the public chore-PR body must carry the NOT-EVALUATED class and exit code"; failures=$((failures+1)); }
+
+  # CY-14 THE STDERR PROJECTION, ON A VALUE PATH (#6252; Stage-7 F-03). Beside a value, the
+  # rest of the producer's stderr reaches the note through the shared projection and then the
+  # parenthesis step, and no other arm pins either on this helper's own output. The stub's
+  # stderr carries four hazards at once: a parenthesised .md path and a carriage return on
+  # its first line; a path under a fabricated home root that starts at byte 790, so a cap
+  # taken before the redaction would cut the root and ship the fragment raw; and more than
+  # 800 characters in all. The home root is a synthetic string: the redaction is a literal
+  # replace, so nothing has to exist on disk and no real path is involved. HOME is set for
+  # the one run and restored, as group PL does. (a) the note names the path as <home>;
+  # (b) it carries neither the raw root nor a fragment of it; (c) the .md path reads
+  # bracketed, with no ( left; (d) no carriage return; (e) the projected text is exactly
+  # 800 characters; (f) the reader of written surfaces lifts nothing from the detail, in
+  # CY-10's form. Anti-vacuity: the fixture carries each hazard where the checks need it,
+  # the run took the value path, and the note reached the read_state detail that (f) reads.
+  local _cy_s_home="$HOME" _cy_fh="/zq14-cy-selftest/home" _cy_e14 _cy_z14 _cy_n14
+  local _cy_pfx=' [compute-cycle-time.sh stderr: '
+  _cy_e14="NOTE: cy14 first line, see (notes/cy14-surface.md)"$'\r\n'"second line "
+  _cy_z14="$(/usr/bin/printf '%0900d' 0)"
+  _cy_e14="${_cy_e14}${_cy_z14:0:$(( 790 - ${#_cy_e14} ))}${_cy_fh}/evals/cy14.log ${_cy_z14:0:300} END"
+  COMPUTE_CYCLE_TIME="$_cy_tmp/stub/producer.sh"
+  _cy_case '48m' "$_cy_e14" 0
+  _cy_log '**Cycle-Time:** 48m'
+  HOME="$_cy_fh"; _cy_run; HOME="$_cy_s_home"
+  _cy_n14="${STATE_CYCLE_TIME_NOTE:-}"
+  _st_arm CY CY-14; [[ "$_cy_n14" == *'<home>'* ]] || { echo "FAIL: CY-14 (a) — the stderr note must name a path under the home root as <home>; the note ends '${_cy_n14: -48}'"; failures=$((failures+1)); }
+  [[ -n "$_cy_n14" && "$_cy_n14" != *"$_cy_fh"* && "$_cy_n14" != *"${_cy_fh:0:8}"* ]] || { echo "FAIL: CY-14 (b) — the stderr note carries the raw home root or a fragment of it (or is empty): the redaction must run over the whole capture, before the cap; the note ends '${_cy_n14: -48}'"; failures=$((failures+1)); }
+  [[ "$_cy_n14" == *"[notes/cy14-surface.md]"* && "$_cy_n14" != *"("* ]] || { echo "FAIL: CY-14 (c) — the stderr note must carry the parenthesised .md path as [notes/cy14-surface.md], with no ( left; the note begins '${_cy_n14:0:96}'"; failures=$((failures+1)); }
+  [[ -n "$_cy_n14" && "$_cy_n14" != *$'\r'* ]] || { echo "FAIL: CY-14 (d) — the stderr note carries a carriage return (or is empty)"; failures=$((failures+1)); }
+  [[ "$_cy_n14" == "$_cy_pfx"* && "$_cy_n14" == *"]" && "${#_cy_n14}" -eq $(( ${#_cy_pfx} + 801 )) ]] || { echo "FAIL: CY-14 (e) — the projected stderr inside the note must be exactly 800 characters, between the note's own prefix and its closing bracket; the note is ${#_cy_n14} characters, expected $(( ${#_cy_pfx} + 801 ))"; failures=$((failures+1)); }
+  ! /usr/bin/grep -qF 'cy14-surface.md' <<<"$(_reported_write_surfaces)" || { echo "FAIL: CY-14 (f) — the stderr note became a phantom write surface: _reported_write_surfaces lifted cy14-surface.md from the read_state detail"; failures=$((failures+1)); }
+  [[ "$STATE_CYCLE_TIME" == "48m" && "${#_cy_e14}" -gt 800 && "${_cy_e14:790:${#_cy_fh}}" == "$_cy_fh" && "${_cy_e14:0:790}" == *"(notes/cy14-surface.md)"* && "${_cy_e14:0:790}" == *$'\r'* && -n "$_cy_n14" && "$(get_phase read_state)" == *"$_cy_n14"* ]] || { echo "FAIL: CY-14 ANTI-VACUITY — the fixture must carry the home root at byte 790, with the parenthesised .md path and a carriage return ahead of it, in more than 800 characters; the run must take the value path; and the note must reach the read_state detail — else the checks above grade nothing; got state '$STATE_CYCLE_TIME' and ${#_cy_e14} characters of stderr"; failures=$((failures+1)); }
+  _st_witness CY 14
+
+  unset -f _cy_case _cy_log _cy_evlog _cy_run
+  /bin/rm -rf "$_cy_tmp" 2>/dev/null || true
+  COMPUTE_CYCLE_TIME="$_cy_s_cct"; GH="$_cy_s_gh"; RELEASE_LOG="$_cy_s_log"; VERSION="$_cy_s_ver"
+  PR_NUMBER="$_cy_s_pr"; REPO_SLUG="$_cy_s_slug"; MERGE_SHA="$_cy_s_msha"
+  STATE_MILESTONE_SLUG="$_cy_s_mslug"; STATE_MILESTONE_STATE="$_cy_s_mstate"; MILESTONE="$_cy_s_ms"
+  if [[ "$_cy_s_evals" == "__cy_unset__" ]]; then unset EVALS_RESULTS_PATH; else export EVALS_RESULTS_PATH="$_cy_s_evals"; fi
+  if [[ "$_cy_s_rlf" == "__cy_unset__" ]]; then unset RELEASE_LOG_FILE; else export RELEASE_LOG_FILE="$_cy_s_rlf"; fi
+  STATE_CYCLE_TIME=""; STATE_CYCLE_TIME_NOTE=""; STATE_CYCLE_TIME_FIELD=""; STATE_CYCLE_TIME_FIELD_CLASS=""
   PHASE_NAMES=(); PHASE_RESULTS=(); PHASE_DETAILS=()
 
   # Test 5: check_parser_clean — must reject close-family + #N
@@ -18396,8 +18894,9 @@ EOF
   _os_oracle="$(/usr/bin/awk -F'CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-' '/^[[:space:]]*local cc_telemetry_cutoff=/ { v = $2; sub(/}".*$/, "", v); print v; exit }' "$CLOSE_COMPLETENESS_SOURCE" 2>/dev/null)"
   _st_arm m m1; [[ -n "$_os_oracle" ]] || { echo "FAIL: #5288 m1 anti-vacuity — the independent oracle read NOTHING from deploy.sh, so agreement with it would prove nothing"; failures=$((failures+1)); }
   [[ "$_os_read" == "$_os_oracle" ]] || { echo "FAIL: #5288 m1 — the shipped reader must return deploy.sh's OWN committed default; reader='$_os_read' independent-oracle='$_os_oracle'"; failures=$((failures+1)); }
-  # SENSITIVITY: point the seam at an ARMED fixture. A reader that hardcoded the
-  # shipped `__none__` passes m1 and fails here.
+  # SENSITIVITY: point the seam at an ARMED fixture whose value differs from the committed
+  # one. A reader that hardcoded any default — `__none__`, or the committed value itself —
+  # fails here.
   local _os_fake="$_os_tmp/deploy-armed.sh" _os_none="$_os_tmp/deploy-noline.sh" _os_dup="$_os_tmp/deploy-dup.sh"
   /usr/bin/printf '%s\n' '  local cc_telemetry_cutoff="${CLOSE_COMPLETENESS_TELEMETRY_CUTOFF:-v9.01}"' > "$_os_fake"
   /usr/bin/printf '%s\n' '  local something_else="nothing to see"' > "$_os_none"
@@ -18416,18 +18915,20 @@ EOF
   [[ "$_os_rc2" -ne 0 ]] || { echo "FAIL: #5288 m1 ambiguity — TWO cutoff assignments must resolve UNREADABLE, never a guess at which one is live"; failures=$((failures+1)); }
 
   # ── (m2) AN UNEVALUABLE PREDICATE BLOCKS. This is the arm that proves the
-  # `required-if` state is not a fail-open hole: both `required` members are
+  # `required-if` state is not a fail-open hole: EVERY manifest member is
   # PRESENT, so the ONLY thing wrong is that the membership test could not run.
-  _os_write "vel lrn"
+  _os_write "vel lrn cct"
   CLOSE_COMPLETENESS_SOURCE="$_os_none"
   local _os_r; _os_drive; _os_r="$(_os_verdict)"
   _st_arm m m2; [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m2 — an UNREADABLE membership predicate must BLOCK (expected '3 FAIL'), got '$_os_r'"; failures=$((failures+1)); }
   /usr/bin/grep -qF 'INDETERMINATE' <<<"$(get_phase assert_output_set)" || { echo "FAIL: #5288 m2 — the block must be reported as INDETERMINATE naming the missing element, got '$(get_phase assert_output_set)'"; failures=$((failures+1)); }
-  # CONTROL, same fixture, one variable changed: a READABLE dormant seam PASSes.
+  # CONTROL, same fixture, one variable changed: a READABLE seam PASSes. It reads the REAL
+  # committed seam — armed since #5245 — and the fixture carries every member, so the
+  # control holds under either committed state.
   # Without this the m2 block is indistinguishable from a gate that always fails.
   CLOSE_COMPLETENESS_SOURCE="$REPO_ROOT/core/deploy/deploy.sh"
   _os_drive; _os_r="$(_os_verdict)"
-  [[ "$_os_r" == "0 PASS" ]] || { echo "FAIL: #5288 m2 control — a READABLE dormant seam over a complete fixture must PASS (expected '0 PASS'), got '$_os_r'"; failures=$((failures+1)); }
+  [[ "$_os_r" == "0 PASS" ]] || { echo "FAIL: #5288 m2 control — a READABLE seam over a complete fixture must PASS (expected '0 PASS'), got '$_os_r'"; failures=$((failures+1)); }
 
   # ── (m3) AC-3: a required member ABSENT blocks; present passes (paired).
   _os_write "lrn"
@@ -18457,7 +18958,9 @@ EOF
   # Differential over ONE fixture: the learnings block is absent throughout, and
   # the only thing that changes between the two drives is that a real marker is
   # recorded. The verdict must NOT move.
-  _os_write "vel"
+  # The telemetry field is present in every m5 fixture, so the learnings block is the one
+  # absent member whatever the committed seam's state.
+  _os_write "vel cct"
   _os_drive; _os_r="$(_os_verdict)"
   _st_arm m m5; [[ "$_os_r" == "3 FAIL" ]] || { echo "FAIL: #5288 m5 pre-arm — the absent member must block BEFORE a marker exists, got '$_os_r'"; failures=$((failures+1)); }
   _write_not_produced_marker "learnings-block" "append_release_learnings" "self-test fixture" >/dev/null 2>&1 || true
@@ -18472,7 +18975,7 @@ EOF
   # stays present, yet the gate now passes — so the marker is inert in both
   # directions and the m5 block is caused by absence, not by the marker.
   local _os_saved_marker; _os_saved_marker="$(/usr/bin/grep -F '**Not-produced:** learnings-block' "$RELEASE_LOG" || true)"
-  _os_write "vel lrn"
+  _os_write "vel lrn cct"
   /usr/bin/printf '%s\n' "$_os_saved_marker" >> "$RELEASE_LOG"
   _os_drive; _os_r="$(_os_verdict)"
   [[ "$_os_r" == "0 PASS" ]] || { echo "FAIL: #5288 m5 specificity — with the member PRESENT the same marker must be inert and the gate must PASS, got '$_os_r'"; failures=$((failures+1)); }
@@ -18566,7 +19069,7 @@ EOF
   # ── (m10) READ-ONLY. The phase must not write or stage. Compared by content
   # hash, with an anti-vacuity arm proving the same instrument DOES move when a
   # byte changes — otherwise "unchanged" could mean "the hash never changes".
-  _os_write "vel lrn"
+  _os_write "vel lrn cct"
   local _os_h1 _os_h2 _os_h3
   _os_h1="$(/usr/bin/shasum "$RELEASE_LOG" | /usr/bin/cut -d' ' -f1)"
   _os_drive; _os_r="$(_os_verdict)"
@@ -18937,7 +19440,7 @@ EOF
   echo "  phase_inject_outcome_field validated (#37 — default-SUCCESS after Result / non-SUCCESS-no-rationale FAIL / non-SUCCESS+rationale both-lines / unknown-enum reject / idempotency / block-scoped; #3715 two-surface — archived body resolves to its segment and the hot ledger is left untouched / cross-surface idempotency re-run SKIPs without duplicating / a genuine **Result:** absence still hard-FAILs naming every surface searched / no sibling leak within a segment); Outcome KEY GRAMMAR validated (#4222 — k1 a QUALIFIED key is recognized and REJECTED at --apply leaving the record byte-unchanged, with an EXECUTABLE SENSITIVITY arm re-demonstrating on every run that the pre-fix bare-literal probe reads the same fixture as ABSENT and would inject the second line / k2 the bare path is unregressed (SKIP, no write) with a SPECIFICITY arm proving an Outcome-less block still injects exactly one / k3 phase 6.8 anchors under a qualified key, asserted on the RAW line because the field-name class used elsewhere cannot see parentheses, with the bare-key fallback as its control / k4 ONE RESOLVER, TWO SITES: extending the shared key constant moves BOTH the 6.5 probe and the 6.8 anchor, and at the default constant the same key is accepted at NEITHER — a one-site fix fails here / k5 grammar non-collision asserted in BOTH directions against the real sibling field **Outcome rationale:** / k6 raw-prefix fidelity — an INDENTED key classifies and anchors through the UNCHANGED primitive, with the unindented twin as control / k7 both-present classifies DUPLICATE and FAILs writing nothing, control: bare-only raises no duplicate diagnostic / k8 three PRESENT-BUT-UNPARSEABLE shapes (nested paren, doubled space, missing space) classify UNPARSEABLE rather than ABSENT and stop the write, control: a genuine absence still injects / k9 NO EMPTY ANCHOR REACHES THE PRIMITIVE — an unresolvable anchor FAILs loudly instead of landing the field at the top of the block, paired with an ANTI-VACUITY arm that hands the unchanged primitive an empty anchor and demonstrates it exits 0 writing to the top, so k9 is a measurement and not a tautology / k10 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, control: the same fixture at --apply returns 3 and marks FAIL / k11 the governance constant is hard-assigned, not env-overridable, scoped to the production region with an anti-vacuity control on the known-bad form)" >&2
   echo "  phase_inject_velocity_field + phase_append_release_learnings validated (velocity — field ORDER 'Cycle-Time Velocity Result' on a clean block / no sibling leak / idempotent re-run / bolded-numeral value REJECTED writing nothing / empty capture at exit 0 degrades to an explicit N/A never a bare field / non-conformant existing field SKIPs WITH the warning, conformant control WITHOUT it; CO-LOCATION — an archived block's field lands in the SEGMENT beside its own **Result:** and the hot stub stays at 0, cross-surface re-run SKIPs, dry-run names the segment and prints the RESOLVED bytes. learnings — sibling H4 placed IMMEDIATELY after its Deployment Log block / body intact through the sentinel capture / idempotent re-run / whitespace-only render at exit 0 FAILs writing nothing / D-1 zero-source-events BLOCKS the close and prints the capture remedy, >0-events control PASSes / over an ARCHIVED block the block still lands in the HOT ledger and every segment stays at 0 Release Learnings — RECORDS_POLICY KEEP_CLASS. A7 capture gate — the SAME 0-source-event condition read at Phase 2 by _learnings_capture_gap reports a gap, >0-events control does NOT / an already-placed block is NOT a gap even under the 0-event stub, block-removed sensitivity IS / neither a missing synthesizer nor a whitespace-only render escalates to a gap / phase_preflight actually CALLS the predicate and is dispatched before create_chore_branch and transition_release_log, both derived from the shipped text with fabricated-symbol controls / n.1 THE MANDATED WARN SHAPE — the Collective-Review dry-run posture asserted over that same shipped text in three limbs, one per half of the ruling: the WARN result TOKEN (a regression back to PASS reddens here and nowhere else), the NON-BLOCKING return bound to the WARN line BY CONTEXT (phase_preflight carries two bare 'return 0' lines, so an unbound grep measures nothing), and the TAIL CLAUSE naming what FAILS at --apply, with a fabricated-result-token specificity control / GATE-BACKSTOP PARITY over the placed x synth-absent x synth-empty x render-0 x render-N matrix — a gap implies 6.7 returns 3, with a non-vacuity control asserting the antecedent actually fired)" >&2
   _st_claim 4c.5b "  phase_inject_velocity_field EXIT-CLASS contract validated (#4927, group 4c.5b — this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): (p) a producer exit 2 FAILs at --apply, returns 3 so the runner halts, writes NOTHING, and quotes the producer's OWN stderr rather than a generic message — with a control proving the same fixture PASSes and writes exactly one field under a conformant producer, so the arm is not just a phase that always fails / (q) the same exit 2 under --dry-run marks a NON-blocking WARN that names the condition failing at --apply, and still writes nothing / (r) exit 2 is never laundered into the explicit 'N/A' form — a refusal to measure must not be recorded as a measurement — with a SENSITIVITY arm requiring exit 1 to STILL degrade to N/A at PASS, so a blanket fail-on-any-nonzero phase reddens here instead of passing / (s) a successful run's stderr still reaches the run report, so a DEGRADED Phase-A2 planned-recovery (which under-reports 'planned' and makes the ratio look healthier than the truth) is visible rather than discarded, with a control proving a silent producer manufactures no note"
-  echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs; #5288 AI-028 NOT-PRODUCED MARKER STAGING — j.1 drives the REAL 6.8 call site over an archived block with the producer unavailable and asserts the resolved SEGMENT reaches TOUCHED_ARCHIVE_SEGMENTS, the array files=() consumes, with a sensitivity floor proving the marker genuinely reached the segment (pre-fix the marker still lands on disk, so the differential isolates the LOST APPEND alone) and a HOT-LEDGER control proving the by-design skip is preserved and the recorder is not appending every target it is handed / j.2 STRUCTURAL over the shipped text of BOTH calling phases — neither may invoke the writer inside a command substitution, read from the FUNCTION BODIES so the needle cannot match itself, with per-site vacuity floors and a capability-to-fail arm matching a CONSTRUCTED bad call site so a clean reading is a measurement)" >&2
+  echo "  phase_inject_close_class_telemetry_field validated (#4437 — clean block PASSes with the field positioned after **Outcome rationale:** and no sibling leak / idempotent re-run SKIPs / fallback anchor lands after **Outcome:** and names which anchor it used / VACUITY PAIR: an all-N/A-but-conformant line is WRITTEN and carries the no-computed-ratio warning WITH the disposition read from the emitted line, measured-line control carries NO warning / OMISSION PAIR: a line whose register-fed slots are NOT-EVALUATED names the caller-omission disposition and not the absent-register one, on a vacuous line (d2, verdict-agnostic) and on a MEASURED one (d3), while the absent-register line names its own and not the omission's / a line missing § 3.2 slots FAILs writing nothing / an empty capture at exit 0 FAILs writing nothing / producer exit 2 escalates as a source-integrity condition writing nothing / a non-executable producer SKIPs rather than hand-composing a field that would fabricate its own mechanism claim / dry-run prints the RESOLVED bytes and writes nothing / CO-LOCATION: an archived block's field lands in the SEGMENT beside its own **Result:** with the hot stub at 0, and the cross-surface re-run SKIPs; #5288 AI-028 NOT-PRODUCED MARKER STAGING — j.1 drives the REAL 6.8 call site over an archived block with the producer unavailable and asserts the resolved SEGMENT reaches TOUCHED_ARCHIVE_SEGMENTS, the array files=() consumes, with a sensitivity floor proving the marker genuinely reached the segment (pre-fix the marker still lands on disk, so the differential isolates the LOST APPEND alone) and a HOT-LEDGER control proving the by-design skip is preserved and the recorder is not appending every target it is handed / j.2 STRUCTURAL over the shipped text of BOTH calling phases — neither may invoke the writer inside a command substitution, read from the FUNCTION BODIES so the needle cannot match itself, with per-site vacuity floors and a capability-to-fail arm matching a CONSTRUCTED bad call site so a clean reading is a measurement)" >&2
   _st_claim 4d-settle "  phase_detect_open_issues exclude filter validated (#38 — explicit --exclude-issue / Stage-13-subtask sub-task-label+title-regex / AC-4 mixed fixture / decoy-not-over-excluded / per-issue --close-comment; #3665 — delivered Stage-13-titled work item survives / type:subtask alias excluded / label-alone-does-not-exclude control / both-conjunct exclusion detail); ARMED-gate classified (#2539/A6.5 — correct slug counts real issues, mis-resolved Version reproduces historical false-0); check-5 post-close re-read validated (#3587 — PASS after drain / live PARTIAL enumerates stragglers / UNVERIFIED fail-closed / pre-close globals unclobbered / dry-run reads cache); check-5 settle POLL validated (#4416, legs f-j PLUS the F-01 remediation leg i.2 — six arms, not five; this clause ENUMERATES the settle group's legs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when legs f-j and i.2 leave no witness: f AC2 an injected 5-read search-index lag, longer than the pre-change single-retry window, still converges to PASS and RENDERS its settle figure in both the row and the phase detail — the v4.02 failure reproduced and closed / g AC3 THE NON-VACUITY CONTROL, same fixture with the budget shrunk BELOW the lag: exhaustion must read PARTIAL and NAME the budget, never PASS, so f is proven capable of failing / h AC1 structural self-parse behind an anti-vacuity floor — the attempt bound exists AND is a loop terminal AND the poll loop exists, with the pre-change 'Retry ONCE' form asserted ABSENT so no limb is satisfiable by the old code / i AC4 an out-of-scope straggler is still reported at once, asserted on the CHECK-5-SCOPED instrument ('check-5 settled at poll 0/15') because a PARTIAL row alone cannot distinguish reported-now from reported-after-the-whole-budget, and because the stub's own 'calls' counter is PHASE-scoped rather than check-5-scoped — the gate-passage-proof rung issues a third 'issue list' after check 5 has rendered — so that counter carries an independent CEILING arm (<= 3 = detect + check-5 + gate-passage-proof) stated as the bound it really is; leg (f)'s 'poll 5/15' is the moving control that makes the zero a real reading / i.2 THE F-01 REMEDIATION ARM, and the only one that discriminates the render guard: leg (i) grades the exhaustion suffix but can only ever exercise it at polls=0, where it is unreachable BY CONSTRUCTION under either guard, which is how '-gt 0' survived it. i.2 drives the one separating state — an out-of-scope straggler surfacing MID-POLL, in-scope #401 holding the poll open across a 3-read lag while #999 breaks the loop at 3 of 15 attempts with the budget never waited — behind an anti-vacuity floor on 'poll 3/15' whose moving controls are (f)'s 'poll 5/15' and (i)'s 'poll 0/15'. Twelve fixtures under both guards: 12/12 pass under the loop's own '-ge' terminal, exactly one fails under '-gt 0' / j AC5 the group stays hermetic and instant at DELAY=0, which only an ATTEMPT bound makes structurally possible)"
   echo "  post_gate_passage_proof three-rung target ladder validated (#3819 — T-13 rung 1 resolves a CLOSED Stage-13 sub-task via --state all and does NOT fall through to the PR / rung 2 posts to the release PR naming the OBSERVED rung-1 reason / rung 3 MANUAL names BOTH attempted targets; T-14 two collect_open_release_issues calls in one run keep EXCLUDED_DETAIL undoubled, COLLECTED_OPEN_ISSUES identical and resolve_stage13_subtask stable, with a non-empty-exclusion anti-vacuity control)" >&2
   _st_claim AI "  phase_action_item_gate validated (#4439, group AI — 33 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): A and B are each other's control over ONE differential harness where only the ledger changes — a gate that never blocks fails A, one that always blocks fails B, one reading the wrong path resolves NOT-RECORDED for both and fails BOTH / B2 decoy: a terminal ledger carrying the literal words 'open' and 'in-flight' in trigger_detail still resolves RESOLVED, so the gate is column-addressed and not row-pattern-matched / all five verdict states drive distinct fixtures and are asserted on the STATE_AI_GATE global rather than the detail prose — UNRESOLVED (A) · RESOLVED (B, B2) · NOT-RECORDED (C unattested blocks, C2 attested passes WARN with the operator-actor attestation EMITTED carrying its cause and the spec subtype) · EMPTY-LEDGER (D unattested blocks, D2 attested round-trips the second cause) · UNCLASSIFIABLE (M blocks and NAMES the offending row and its raw value, with a specificity limb proving the enumerator selects the unreadable set and not the terminal one, and the all-terminal ledger re-driven on the same harness as its paired negative control) / E the two SURFACE states must resolve DISTINCT values, because comparing detail strings passes on any two different sentences / E2 an unlicensed attestation cause does NOT clear a SURFACE state / F EXECUTES the two dispatch lines lifted VERBATIM from this file's own text, refusing to pass unless each needle resolves to exactly one top-level line, under three mutually-controlling limbs — F1 blocking gate leaves the close UNFIRED at exit 3, F2 SENSITIVITY a passing gate does fire it (without which F1's clean result is meaningless), F3 NEGATIVE CONTROL a constructed '|| true' line must let the close through (without which a fail-closed gate is indistinguishable from a no-op one) — so capability-to-fail is re-demonstrated on EVERY run, not only under one-time mutation / F4 whole-block invariant: every top-level dispatch line carries the fail-closed guard, with an anti-vacuity floor on the parse and a specificity control proving the filter rejects an unguarded line / G doc<->code parity on the canonical Procedure 7a predicate across the fixture set, with an anti-vacuity floor on the extraction and a sensitivity arm requiring >=5 distinct STATEs over a fixture count DERIVED from the loop rather than restated in the message / M-N-O-Q-R-S-T MEMBERSHIP: the residue of the recognised set is its own BLOCKING state rather than the implicit else of a two-value comparison, which counted a typo, a case variant, a foreign vocabulary and an out-of-range field as RESOLVED — M an unadmitted value blocks and names itself, with the all-terminal ledger as its paired negative control / N case-folding NORMALISES rather than rejects, so an uppercase OPEN resolves UNRESOLVED and a fold-and-reject implementation cannot pass M / O the two section-2.1a status aliases stay ADMITTED, without which every legacy re-run blocks / Q the ARITY class in BOTH its mechanisms, the one witnessed live: at arity<=10 field 11 does not exist and reads EMPTY, at arity 11 the row-terminating pipe stays glued to the last field and reads 'open |' NON-empty, and the detail carries fields:N so a dropped column is distinguishable from a mistyped word / R an unreadable ledger cannot be attested away, the structural sibling of L / S row 6 renders the fifth state WITH its counts instead of falling to the default that asserts the gate did not run, with the still-reachable default as its control / T PRECEDENCE: a ledger carrying both classes renders UNRESOLVED and carries BOTH enumerations in one detail, because the state selects the operator's remedy and reversing it would drop the open enumeration from the ledgers that most need it / H --dry-run never returns non-zero yet still EVALUATES, and names the condition that would FAIL at --apply / I an idempotent re-run over an already-closed milestone, where an UNRESOLVED verdict is the close-before-verdict shape itself / J --no-merge still evaluates and records rather than blocks / K Verification row 6 reads the Phase-12.9 GLOBAL — unset renders UNVERIFIED never a green cell, mutating the global moves the cell, and phase_run_verification is asserted NOT to re-evaluate the predicate after the close / L an attestation does NOT clear an UNRESOLVED verdict — an open row is dispositioned, never attested away / P operator-instance path tokenisation, with a sensitivity arm proving the leak probe can match its own needle / U the REAL writer's argument contract accepts the emitted argv through its own --dry-run, which never appends and whose log path is sandboxed besides, with exactly one invocation per attested clear (#5910) / U0 the same writer refuses the pre-fix argv, so U reaches a real validator / V an induced writer failure stays non-blocking and is surfaced with the writer's own message — single-line, pipe-free, home-redacted — on the gate row and row 6 / W an unresolved release key never reaches the writer and is reported as failed:no-release-key / X the shared projection's caller window: every _detail_one_line call site in the production region hands it the whole capture, its first line or a raw file window of at least 4096 bytes, read structurally so a future caller is covered too, with controls that the classifier sorts all five forms and the census flags a pre-capped caller in a constructed region (Plan amendment 9)"
@@ -18967,6 +19470,7 @@ EOF
   echo "  MERGE_SHA capture + tag↔SHA identity validated (#1682 — read-state captures release-PR merge SHA / tag==SHA publish PASS w/ --target / tag!=SHA publish FAIL)" >&2
   echo "  Surface-1 provenance token validated (#4732 — BOTH ARMS of the detection question, offline on fixtures: (e) CREATED on the State-0 create path / (f) NO-OP on a State-2 fixture whose body is extracted with the phase's OWN expression and asserted non-empty, so the no-op is genuine rather than a '' vs '' comparison / (g) EDITED on a State-1 differing-body fixture / (h) SPECIFICITY: neither found arm reports CREATED, without which a stub emitting CREATED unconditionally satisfies (e) and the suite is vacuous / (i) AGGREGATION NON-REGRESSION, the load-bearing arm: the create path keeps outcome token PASS, so a drift-tool exit 3 still reaches the WARN limb at :6224 and not the N/A limb at :6222 — this arm FAILS if anyone later promotes CREATED to its own mark_phase token and silently inverts :6221)" >&2
   _st_claim 4h-e-j "  §5.1 empty-body guard + conformance-fixture binding validated (#4912, group 4h-e..j — six arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): (e) an EMPTY strip aborts the EDIT path and marks publish FAIL, asserted on the STUB'S ARGV FILE — gh release edit must never have been INVOKED, because reporting after an irreversible overwrite is a report and not a guard, and GitHub keeps no Release-body history to revert / (f) the ANTI-VACUITY twin for (e) over the SAME stub and version with a well-formed note: the edit must be REACHED, the H1 must survive the strip and the frontmatter must NOT — without it (e) is satisfied by a stub that cannot invoke gh at all, and the raw-YAML-publish defect goes ungraded / (g) the CREATE path is the second call site and takes the same rule, asserted on its own argv file rather than on (e)'s / (h) the anti-vacuity twin for (g), same shape, so neither empty-body arm can pass by never reaching gh / (i) the sourced shell transform is bound to the SAME committed fixture that binds both Python mirrors, resolved from SCRIPT_DIR and never REPO_ROOT because the arms above reassign REPO_ROOT to a sandbox, behind a >=7-case iteration floor so a truncated or absent fixture cannot report clean by iterating zero times / (j) the TRANSFORM-PRESENT guard, graded on the DETAIL rather than on the verdict and that is the whole arm: with the guard removed an undefined function still yields an empty capture, so the empty-body backstop fires and all three verdict assertions pass on unguarded code — measured, not assumed — leaving the detail the only discriminator; the restore is then proven, else every later arm in the suite would be measuring an unset function / (k)(l)(m) THE TITLE DIMENSION, the arms that make AC-3's title-equality predicate an EXECUTED check rather than an echo inside a markdown fence: (k) SENSITIVITY — a canonical BODY with a stale posted title must still reach gh release edit carrying --title and the NOTE-DERIVED value, asserted on the stub's ARGV FILE because a phase can record any detail string it likes and only the argv shows what was sent; this is the exact input the pre-change no-op condition returned SKIPPED on, which is how a wrong title survived every close / (l) SPECIFICITY over the SAME fixture family with only the posted title changed to agree: the argv file must stay ABSENT and the token must stay SKIPPED — non-vacuous precisely because (k) proved this family CAN reach the edit, and pinning the token is what catches a withhold routed through _s1_outcome_override, which BOTH terminal mark_phase calls read and which would silently flip the no-op branch too / (m) WITHHOLD — a note with no usable H1 must still refresh the BODY while --title is ABSENT from the argv rather than empty (\`--title \"\"\` blanks the posted title, the one-way degradation the rule exists to prevent), and the outcome token must stay PASS: ADR-148 :91 forbids moving it, and phase 15.6 branches on pub_result != PASS, so a WARN here would report an edited Release as 'Surface 1 not emitted this run' and suppress the body-drift verdict on exactly the malformed-note input where it matters most. All three fixtures' view stubs are OPERAND-AWARE (--json body vs --json name); the undiscriminated shape they replaced returned the whole body as the posted title, which would have reddened (f) and graded (g)'s title dimension against a value no Release ever carries"
+  _st_claim CY "  phase_read_state Cycle-Time carriage and the read-only Deployment Log field verdict validated (#6252, group CY — 14 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): CY-1 SENSITIVITY the missing-anchor fixture — the tool's own N/A reason reaches the state, the chore-PR ## Cycle time block, the report line and the JSON field byte for byte, RED on the capture that discarded stderr / CY-2 CONTROL a computed value is carried as itself with no note / CY-3 the reason names the missing anchor, never a stock phrase / CY-4 NOT-EVALUATED for an exit-2 producer carrying its own error and for a non-executable one, never an N/A; FM-4: a failure whose stderr carries an absolute path keeps it in the report form and reaches the PUBLIC chore-PR body as its class and exit code only, with the report-form limb as the anti-vacuity control / CY-5 N/A with no reason line reads N/A — DEGRADED / CY-6 INVERTED at the scope-lock: a negative interval is not a cycle time and reads N/A — DEGRADED with the tool's WARNING kept in the phase detail, for a signed value, for a sub-minute negative the human format prints unsigned as 0m (so the WARNING, not the sign, is the key), and through the REAL tool on inverted fixture anchors / CY-7 SEAM the REAL tool on a fixture log: a T_GO-only miss and a T_DEPLOY-only miss each reach the state exactly as the tool printed them, naming their own anchor, with no pipe, and the body stays parser-clean / CY-8 the exit contract the capture relies on — N/A exits 0 with stdout N/A / CY-9 THE FIELD VERDICT, read-only: the verbatim line CONFORMS, a hand-written cause DIVERGES worded as a disagreement carrying the tool's --iso anchors, a missing field is ABSENT and the sibling block's field is not borrowed, a value followed by its anchor parenthetical CONFORMS, 480m against 48m DIVERGES at the boundary, a qualified key DIVERGES, and THE KEY PIN — the verbatim line produced under the milestone slug DIVERGES from the one produced under the RELEASE_LOG row's Version cell / CY-10 NO PHANTOM WRITE SURFACE: a DIVERGENT excerpt carrying a parenthesised .md path and a pipe reaches the detail neutralized, with anti-vacuity limbs on the fixture, on the excerpt's presence in the detail and on the reader's capability to lift an un-neutralized token / CY-11 READ-ONLY by content hash, the instrument shown to move on a known write / CY-12 NON-BLOCKING: DIVERGENT, ABSENT and NOT-EVALUATED each return 0 and mark read_state PASS / CY-13 INT-4: the REAL tool against an empty evals directory exits 1, and read_state renders NOT-EVALUATED, never an N/A with a reason, with the class and exit code in the public body / CY-14 THE STDERR PROJECTION on a value path: a producer stderr carrying a parenthesised .md path, a carriage return, a path under a fabricated home root starting at byte 790 and more than 800 characters reaches the note with the path named as <home> and no fragment of the root, the .md path bracketed with no parenthesis left, no carriage return and exactly 800 projected characters, and names no phantom write surface, with an anti-vacuity limb on the fixture, on the value path and on the note's presence in the detail"
   echo "  check_parser_clean validated (D9 — close-family + #N rejection; negated-form rejection; safe-phrasing acceptance)" >&2
   echo "  close-out report phase set is RECORD-DERIVED validated (#4773 — every recorded phase renders against a denominator parsed from this file's own mark_phase subjects (pre-fix: 3 missing — inject_velocity_field / append_release_learnings / audit_epic_rollup) / a phase in NO enumeration still renders (AC-2) / an unmarked name does NOT render (anti-vacuity) / post_gate_passage_proof renders AND is asserted definition-less, so a definition-derived set cannot silently drop it / a double-marked name renders ONE row carrying the FIRST result / the halted marker fires on a FAIL-terminated run and is absent on a clean one / DISPATCH<->RECORD cross-check: every dispatched phase is a record subject, with vacuity floors on both parses plus sensitivity and specificity arms — the one invariant no seeded arm can reach / JSON twin carries the same de-duplicated set with pre-existing keys intact)" >&2
   echo "  Gate-Passage-Proof **Chore PR:** field renders ONCE on BOTH paths (#4322 — b1 POPULATED path, the path the pre-existing report arms never exercised: exactly one **Chore PR:** line carrying the number once, and the doubled form absent / b2 UNSET path (phase 11 never ran) renders the not-yet-created state verbatim with no '#' (#5769 retired the collapsed fallback) / b3 SPECIFICITY on a NON-numeric fixture, because '#3697' contains '3697' so 'no bare number' is unfalsifiable on a numeric input: the value occurs exactly once on the line, counted in PURE BASH by length-delta rather than by grep_count -o, which counts LINES on this suite's BSD grep and so returns the PASS value on the doubled form — paired with the anti-vacuity control asserting the identical computation returns 2 over the pre-fix expansion / b4 EXECUTABLE SENSITIVITY: the pre-fix construct is expanded from a single-quoted source fixture and must BOTH reproduce the doubling AND be rejected by b1's matcher, without which b1's green result is uninformative / b5 REINTRODUCTION GUARD: the production region above self_test carries ZERO same-variable paired set/unset expansions on CHORE_PR_NUMBER, with an anti-vacuity control asserting the same matcher returns 1 on the known-bad source form, so the zero is a measurement rather than a broken probe / b6 the out-of-scope --no-merge deferral message's solitary set-arm is asserted unchanged in BOTH directions, so the fix did not generalize into a correct site, and b6's second leg (#7465 Plan amendment 5): on a RESUMED --no-merge run whose chore PR phase 11 recorded as already merged, the intro states that merged outcome and never says the PR was left open, with the ordinary intro held byte for byte as its control, and b6's third leg (#7465 Plan amendment 6): on the same resumed run the follow-up heading states that merged outcome and never heads the follow-up with a merge still to come, with the ordinary heading held byte for byte as its control / b7 AC-5: with the **Chore PR:** line stripped, two renders differing only in CHORE_PR_NUMBER are byte-identical, preceded by the anti-vacuity arm that the unstripped renders differ — b7 is invariant to a render-line revert BY DESIGN, so the executed mutation-kill set is b1/b3/b5)" >&2
@@ -18975,7 +19479,7 @@ EOF
   _st_claim t7-usage "  usage block extractable and not truncated, exit-2 dispatch set named in the render (#5762, Test 7 — this line ENUMERATES the arm's limbs and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this arm when the limbs leave no witness): HEAD anchor 'Usage:' / TAIL anchor the exit-codes block's '3 = ' entry, which is the last line usage() renders, replacing the '--self-test' needle that bound at render row 4 and therefore covered nothing below it / LIMB C the exit-2 dispatch set EXTRACTED from the guarded top-level dispatch and asserted present in the rendered exit-2 entry, with an anti-vacuity floor on the extracted set, a floor-30 exit-3 control proving the extractor works, and a non-empty check on the rendered entry so the naming loop cannot pass over nothing"
   echo "  corpus paths resolve (RELEASE_LOG/INDEX/DIGEST + notes dir)" >&2
   echo "  corpus append-ledger merge-immunity validated (#3108 AC1 — union two-branch append CLEAN + both rows kept / non-union control CONFLICTS / state-column union CORRUPTS → LOG+REVERSIONS exclusion)" >&2
-  _st_claim m "  phase_assert_output_set validated (#5288, group m — 11 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): m1 THE SEAM — the required-if cutoff is READ out of core/deploy/deploy.sh rather than copied, asserted against a SECOND INDEPENDENT extractor over the same file (awk, not the shipped sed) with an anti-vacuity floor on the oracle, plus a SENSITIVITY arm on an ARMED fixture that a hardcoded default fails, and two SPECIFICITY arms (no assignment / two assignments) that must both resolve UNREADABLE and never a silent default / m2 AN UNEVALUABLE PREDICATE BLOCKS: both required members PRESENT and the only fault is that the membership test could not run — the phase FAILs, returns 3, and reports INDETERMINATE, with a same-fixture one-variable CONTROL proving a readable dormant seam PASSes, so the block is attributable to the seam and not to a gate that always fails / m3 AC-3 a required member's absence blocks and NAMES itself, both members driven, with the present twin as the paired positive / m4 AC-5 membership vs outcome: the SAME absent telemetry field blocks under an ARMED cutover and resolves a REPORTED N-A under a dormant one, one variable apart / m5 THE MARKER IS EVIDENCE, NEVER AN EXEMPTION — differential over one fixture where the only change is that a real **Not-produced:** marker is recorded: the verdict must NOT move, with a SENSITIVITY arm proving the marker is genuinely present (else the arm passes vacuously), an assert that the gate REPORTED reading it (an invisible marker would prove nothing), and a converse SPECIFICITY arm where the member is supplied and the same marker is inert / m6 EMIT ON ABSENCE at the real producer site: a non-executable synthesizer still SKIPs but now records the absence as corpus bytes at its DECLARED anchor, the line immediately after **Result:**, with a working-producer control proving the marker tracks the capability condition and does not fire every run / m7 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, anti-vacuity: the same fixture at --apply returns 3 and FAILs / m8 THE CLASSIFIER IS TOTAL AND FAILS CLOSED: an UNRECORDED producing phase (get_phase's not-found sentinel returns at exit 0, so it is a value and not an error) classifies INDETERMINATE and surfaces, with a PASS-record control proving real discrimination, and the ambiguous SKIPPED result shown to be resolved by the TREE — the identical result string classifies would-present over a present member and would-absent over an absent one, so the classifier is not row-pattern-matching detail prose / m9 the hand-maintained usage()/--help phase roster carries the 9.56 row, with the shipped 9.55 row as its interpretability control / m10 READ-ONLY by content hash across a PASSing run, with an anti-vacuity arm proving the same instrument DOES move on a known write / m11 EXACTLY ONE guarded top-level dispatch line, positioned AFTER assert_derived_surfaces and BEFORE commit_chore_pr (so the stamp cannot commit ahead of the assert), with vacuity floors on all three needles and a fabricated-name specificity control"
+  _st_claim m "  phase_assert_output_set validated (#5288, group m — 11 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): m1 THE SEAM — the required-if cutoff is READ out of core/deploy/deploy.sh rather than copied, asserted against a SECOND INDEPENDENT extractor over the same file (awk, not the shipped sed) with an anti-vacuity floor on the oracle, plus a SENSITIVITY arm on an ARMED fixture that a hardcoded default fails, and two SPECIFICITY arms (no assignment / two assignments) that must both resolve UNREADABLE and never a silent default / m2 AN UNEVALUABLE PREDICATE BLOCKS: every manifest member PRESENT and the only fault is that the membership test could not run — the phase FAILs, returns 3, and reports INDETERMINATE, with a same-fixture one-variable CONTROL proving a readable seam PASSes (every PASS-expecting fixture either carries all three members or pins the cutoff explicitly, so no arm depends on whether the committed seam is armed), so the block is attributable to the seam and not to a gate that always fails / m3 AC-3 a required member's absence blocks and NAMES itself, both members driven, with the present twin as the paired positive / m4 AC-5 membership vs outcome: the SAME absent telemetry field blocks under an ARMED cutover and resolves a REPORTED N-A under a dormant one, one variable apart / m5 THE MARKER IS EVIDENCE, NEVER AN EXEMPTION — differential over one fixture where the only change is that a real **Not-produced:** marker is recorded: the verdict must NOT move, with a SENSITIVITY arm proving the marker is genuinely present (else the arm passes vacuously), an assert that the gate REPORTED reading it (an invisible marker would prove nothing), and a converse SPECIFICITY arm where the member is supplied and the same marker is inert / m6 EMIT ON ABSENCE at the real producer site: a non-executable synthesizer still SKIPs but now records the absence as corpus bytes at its DECLARED anchor, the line immediately after **Result:**, with a working-producer control proving the marker tracks the capability condition and does not fire every run / m7 MODE: --dry-run returns 0 and marks WARN naming the condition that FAILS at --apply, anti-vacuity: the same fixture at --apply returns 3 and FAILs / m8 THE CLASSIFIER IS TOTAL AND FAILS CLOSED: an UNRECORDED producing phase (get_phase's not-found sentinel returns at exit 0, so it is a value and not an error) classifies INDETERMINATE and surfaces, with a PASS-record control proving real discrimination, and the ambiguous SKIPPED result shown to be resolved by the TREE — the identical result string classifies would-present over a present member and would-absent over an absent one, so the classifier is not row-pattern-matching detail prose / m9 the hand-maintained usage()/--help phase roster carries the 9.56 row, with the shipped 9.55 row as its interpretability control / m10 READ-ONLY by content hash across a PASSing run, with an anti-vacuity arm proving the same instrument DOES move on a known write / m11 EXACTLY ONE guarded top-level dispatch line, positioned AFTER assert_derived_surfaces and BEFORE commit_chore_pr (so the stamp cannot commit ahead of the assert), with vacuity floors on all three needles and a fabricated-name specificity control"
   echo "  phase_pattern_scan wiring validated (#3121 — default ON (source-parsed, not live-global) / --no-pattern-scan suppresses with the honest reason / --with-pattern-scan still accepted / NO /dev/null discard / phase detail carries the PARSED counts with a moved-control anti-vacuity arm / captured body reaches the close-out report, and the section is ABSENT when nothing was captured)" >&2
   _st_claim TK "  operator.toml key-read tolerance validated (#5649, group TK — 4 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): TK-1 the CLASS invariant over a WHOLE-FILE parse — every key read tolerates an ABSENT optional key, with an anti-vacuity floor of 4 and the offending line numbers named on failure; the whole-file scan is load-bearing rather than stylistic, because the arg-parse region and check_paths() sit 170 lines BELOW self_test()'s closing brace and a region-scoped parse reads healthy while blind to them / TK-2 CAPABILITY TO FAIL in both directions on a constructed call site: the tolerance filter must NOT count an unguarded specimen as tolerant, and the population parse MUST recognise the specimen at all, so neither an everything-matches nor a nothing-matches filter can satisfy TK-1 / TK-3 the head-pipe reintroduction guard, paired with a specimen the filter must match — the folded grep -m1 form is what keeps this class out of the repo-integrity sigpipe-idiom job, which scans the added-lines delta / TK-3b THE FIXTURE-EXCLUSION PROOF: a specimen held in a single-quoted assignment is asserted INVISIBLE to TK-1's parse, so 'fixtures excluded by construction' is a measurement rather than a claim and this group cannot inflate its own population / TK-4 THE BEHAVIOURAL DIFFERENTIAL, the only arm that fails on the unpatched file: the PRODUCTION line is EXTRACTED from this file rather than retyped and run against a hermetic operator.toml that EXISTS and omits the key, with the tolerance-stripped twin over the SAME fixture asserted to still abort — run in a SEPARATE bash process because '( set -e … ) || rc=\$?' provably does not observe a set -e abort on bash 3.2, which is why the nearby AI-F subshell harness is safe only for its explicit-exit subject"
   exit 0
