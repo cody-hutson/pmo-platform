@@ -14,7 +14,8 @@ name: Close-completeness (pre-merge Stage-13 output-set gate)
 #                  sentinel value (warn: advisory exit 2, reported not blocking;
 #                  enforce: blocking exit 1). Break the network instrument instead
 #                  (no gh, an unauthenticated gh, a remote that is not a GitHub
-#                  repository, a failed published-Release read) -> NOT-EVALUATED,
+#                  repository, a failed published-Release read, a body-drift engine
+#                  that is missing or not executable) -> NOT-EVALUATED,
 #                  exit 3 under EVERY sentinel value and never blocking — never 0,
 #                  never a 'no published GitHub Release' finding. A complete
 #                  output-set -> CLEAN, the SOLE producer of exit 0; an explicitly
@@ -216,8 +217,9 @@ jobs:
                 echo ""
                 echo "One of two withheld verdicts — the probe output above names which:"
                 echo "  (a) the network leg was not measured for one or more rows (gh unavailable or"
-                echo "      unauthenticated, a remote that is not a GitHub repository, or a failed"
-                echo "      published-Release read) and no other limb found anything. Restore the instrument"
+                echo "      unauthenticated, a remote that is not a GitHub repository, a failed"
+                echo "      published-Release read, or a body-drift engine that is missing or not"
+                echo "      executable) and no other limb found anything. Restore the instrument"
                 echo "      and re-run; a failed lookup is never reported as a missing Release. This verdict"
                 echo "      exits 3 under every sentinel value and never blocks."
                 echo "  (b) the whole gate was withheld (SKIP): the cutoff was re-dormanted, the row cutoff"

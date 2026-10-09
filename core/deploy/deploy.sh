@@ -1231,7 +1231,8 @@ _vf_compute_verdict() {
 # strictly AFTER its merge). The network sub-checks (Surface-1 Release + body-drift)
 # need `gh`. A failure of the Surface-1 instrument — gh absent or unauthenticated, a
 # remote that does not resolve to a GitHub repository, a failed or empty published-
-# Releases read — and a body-drift engine that REPORTS it could not compare (its exit 2,
+# Releases read — a body-drift engine that CANNOT BE RUN (its path holds no file, or the
+# file there is not executable), and one that REPORTS it could not compare (its exit 2,
 # and its exit 3 once (h) has found the Release) are NOT-EVALUATED on BOTH surfaces:
 # never a finding, and never an N/A read as clean. The probe's contract table
 # (cmd_check_close_completeness) states the exit that withheld verdict takes. One path
@@ -1530,11 +1531,11 @@ _cc_resolve_network_leg() {
 #   `NOT-EVALUATED<TAB><version><TAB><cause>` record when the row's network verdict
 #   was withheld; echoes nothing when the row's full output-set is present. The
 #   network sub-checks read the instrument state _cc_compute_verdict resolved ONCE
-#   (_cc_resolve_network_leg): a failure of the Surface-1 instrument, and a drift
-#   engine that reports it could not compare, emit the NOT-EVALUATED record on
-#   EITHER surface — never a finding. The orchestrator partitions that record out
-#   of the findings and fans it in to one line. Corpus paths are read from CC_*
-#   (set by the orchestrator).
+#   (_cc_resolve_network_leg): a failure of the Surface-1 instrument, a drift engine
+#   that cannot be run, and one that reports it could not compare, emit the
+#   NOT-EVALUATED record on EITHER surface — never a finding. The orchestrator
+#   partitions that record out of the findings and fans it in to one line. Corpus
+#   paths are read from CC_* (set by the orchestrator).
 _cc_row_findings() {
   local surface="$1" _ver="$2" _ms="$3" _tag="$4"
   # $5 — whether this row is at/after the SEPARATE network cutover. Computed by
@@ -1734,6 +1735,14 @@ _cc_row_findings() {
                  printf 'NOT-EVALUATED\t%s\tbody-drift-missing\n' "$_ver" ;;
               *) printf 'NOT-EVALUATED\t%s\tbody-drift-unexpected\n' "$_ver" ;;
             esac
+          else
+            # The engine CANNOT BE RUN: its path holds no file, or the file there is not
+            # executable. Nothing was compared, so the row is withheld under its own cause
+            # and is never a clean row. One record per row and no stderr line of its own:
+            # the orchestrator fans the withheld rows in to one aggregate line that names
+            # the cause (PV-7c), and the cause table on cmd_check_close_completeness says
+            # what raises it.
+            printf 'NOT-EVALUATED\t%s\tbody-drift-unrunnable\n' "$_ver"
           fi
         else
           # (h) ABSENT — the repository answered and its published set lacks this tag.
@@ -2461,10 +2470,11 @@ _cc_compute_verdict() {
 #   THE TWO WITHHELD VERDICTS DIVERGE ON PURPOSE.
 #     NOT-EVALUATED is SENTINEL-AGNOSTIC — 3 under every token. It is a MEASUREMENT OUTAGE of
 #       the network leg (gh unavailable, a remote that does not resolve, a failed or empty
-#       published-Releases read, a drift engine that could not compare), and a measurement
-#       outage can never gate (ADR-134 D3/D5; PV-7c). Whether a cause that a pull request can
-#       repair should escalate is decided AT THE ENFORCE FLIP, on the cause-to-class table on
-#       cmd_check_close_completeness — until then this function takes no class argument.
+#       published-Releases read, a drift engine that cannot be run or that could not
+#       compare), and a measurement outage can never gate (ADR-134 D3/D5; PV-7c). Whether a
+#       cause that a pull request can repair should escalate is decided AT THE ENFORCE FLIP,
+#       on the cause-to-class table on cmd_check_close_completeness — until then this
+#       function takes no class argument.
 #     SKIP is SENTINEL-AWARE — 3 under warn, 1 under enforce. It means the WHOLE gate was
 #       withheld: the tracked ledger is absent or unparseable, the gate was re-dormanted, the
 #       row cutoff matched no LOG row, or the allowlist named every VERIFIED row at/after the
@@ -20517,13 +20527,14 @@ EOF
 #   INCOMPLETE      enforce          1      BLOCKING finding — the gate must fail closed.
 #   NOT-EVALUATED   any              3      WITHHELD verdict, never blocking: the network leg
 #                                           could not be measured for >=1 row (the Surface-1
-#                                           instrument failed, or the drift engine reported it
-#                                           could not compare) and no limb found anything. Never
-#                                           a "no published GitHub Release" finding — a lookup that
-#                                           failed says something about the instrument, not the
-#                                           release. SENTINEL-AGNOSTIC: a measurement outage can
-#                                           never gate (ADR-134 D3/D5; PV-7c). Escalating a cause
-#                                           is decided at the enforce flip — see the cause table.
+#                                           instrument failed, or the drift engine could not be
+#                                           run or reported it could not compare) and no limb
+#                                           found anything. Never a "no published GitHub Release"
+#                                           finding — a lookup that failed says something about
+#                                           the instrument, not the release. SENTINEL-AGNOSTIC: a
+#                                           measurement outage can never gate (ADR-134 D3/D5;
+#                                           PV-7c). Escalating a cause is decided at the enforce
+#                                           flip — see the cause table.
 #   SKIP            != enforce       3      ADVISORY WITHHELD verdict for the whole gate: the cutoff
 #                                           was re-dormanted (__none__), RELEASE_LOG.md is absent
 #                                           or its header unparseable, the row cutoff matched no
@@ -20579,14 +20590,18 @@ EOF
 #                            the Release: the note is not on origin/     transport
 #                            main yet, or its own lookup failed
 #   body-drift-unexpected    the drift engine exited outside 0-3         failed-other
+#   body-drift-unrunnable    the drift engine could not be run: its      failed-other (a repository
+#                            path holds no file, or the file there is    or install defect; no host
+#                            not executable                              call is made)
 #   network-state-unresolved a row reached the network limbs with the    failed-other (a wiring
 #                            instrument unresolved                       defect)
 #
-# NAMED RESIDUAL — THE EDGE OF THE GUARANTEE. NOT-EVALUATED covers the Surface-1 limb and the
-# drift engine's REPORTED exits. A published-body read that fails INSIDE the drift engine is
-# not reported as such: the engine reads the body under `|| true`, compares the empty result,
-# and exits 1 (DRIFT), so that failure still surfaces here as a §5.1 finding. The engine's
-# exit contract is owned by #4714; this row narrows when it lands.
+# NAMED RESIDUAL — THE EDGE OF THE GUARANTEE. NOT-EVALUATED covers the Surface-1 limb, a
+# drift engine that cannot be run, and the drift engine's REPORTED exits. A published-body
+# read that fails INSIDE the drift engine is not reported as such: the engine reads the body
+# under `|| true`, compares the empty result, and exits 1 (DRIFT), so that failure still
+# surfaces here as a §5.1 finding. The engine's exit contract is owned by #4714; this row
+# narrows when it lands.
 #
 # REMEDIES DIFFER BY FINDING CLASS. A dropped Stage-13 output is backfilled per
 # release/references/pipeline/stage-13-close.md Phase B. A §5.1 body drift is repaired by
@@ -20633,7 +20648,7 @@ cmd_check_close_completeness() {
       _ne_tail="${_ne_rest#* }"; _ne_n="${_ne_tail%% *}"; _ne_cause="${_ne_tail#* }"
       log "close-completeness: NOT-EVALUATED — the network leg was not measured for ${_ne_k} of ${_ne_n} network-scoped versioned row(s) (${_ne_cause}); every other limb verdicted clean"
       log "  A WITHHELD verdict, never a clean one: this run certifies nothing about those rows' published Release or its §5.1 body, and this is not a clean result."
-      log "  Restore the instrument named above (gh on PATH and authenticated, a remote that resolves to a GitHub repository, a reachable API) and re-run."
+      log "  Restore the instrument named above (gh on PATH and authenticated, a remote that resolves to a GitHub repository, a reachable API; for body-drift-unrunnable, the body-drift engine present and executable at its path) and re-run."
       log "  NOT BLOCKING under any sentinel token (sentinel '$cc_enforce_file' reads '$cc_enforce'): a measurement outage never gates — exit 3, non-zero so no caller can read an unmeasured run as clean, and distinct from the INCOMPLETE advisory 2 (a real finding). Escalating a cause a pull request can repair is decided at the enforce flip."
       _cc_exit_through_mapping NOT-EVALUATED "$cc_enforce"
       ;;
