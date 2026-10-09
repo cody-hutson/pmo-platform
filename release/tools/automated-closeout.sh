@@ -2053,16 +2053,36 @@ _host_rest_get() {
 #   files       one filename per line
 #   candidates  line one is the number of items the reply carried; then one line,
 #               "<number> <state> <merged_at-or-dash>", per item whose head label
-#               equals <head-label> exactly — state is the host's open or closed,
-#               and a null merge time reads "-". An item for any other head is
-#               dropped from the lines and still counted on line one, which is how
-#               the binding tells a full page from a short one
+#               names the head <head-label>, "<owner>:<branch>": the same owner
+#               without regard to letter case, and the same branch exactly — state
+#               is the host's open or closed, and a null merge time reads "-". An
+#               item for any other head, or with no label to read, is dropped from
+#               the lines and still counted on line one, which is how the binding
+#               tells a full page from a short one
 # STATE is MERGED only when merged is true, CLOSED when state is closed, else OPEN. A
 # body that lacks what a projection needs exits non-zero, so the read becomes
 # failed-other: a malformed answer is never a state.
+#
+# THE HEAD-LABEL COMPARISON (#7884 FM-1), AND WHY ONLY ITS OWNER IGNORES LETTER CASE.
+# The host matches a head's owner without regard to letter case and reports its own
+# spelling of that login. An exact comparison therefore tested how the handle was
+# typed: under a slug that differs from the host's spelling by letter case alone,
+# this run's own pull request was dropped and the reply read as "no pull request".
+# So an equal label is this head, and so is one whose owner part differs only in the
+# case of ASCII letters; the branch part must be equal as it is, because a branch
+# name is case-sensitive. The label is split at its FIRST colon: git allows no colon
+# anywhere in a ref name and a host login carries none, so a well-formed label has
+# exactly one, and a second would fall in the branch part, which then cannot equal a
+# wanted branch that has none. Only ASCII letters fold, the alphabet of a host
+# login, so no character outside ASCII can fold onto a letter inside it. A different
+# owner, a different branch, and a label that is not a string or does not split are
+# dropped as before.
 _host_project() {
   /usr/bin/python3 - "$@" <<'PY'
 import json, re, sys
+
+# A-Z onto a-z, and nothing else.
+ASCII_FOLD = {c: c + 32 for c in range(ord("A"), ord("Z") + 1)}
 
 
 def state(p):
@@ -2073,6 +2093,21 @@ def state(p):
     if p["merged"]:
         return "MERGED"
     return "CLOSED" if p["state"] == "closed" else "OPEN"
+
+
+def names_head(label, want):
+    # Is <label> the head <want>? Both read "<owner>:<branch>". An equal label is. So
+    # is one whose owner part differs only in the case of ASCII letters, with the
+    # branch part equal as it is. The split is at the FIRST colon.
+    if label == want:
+        return True
+    if not isinstance(label, str):
+        return False
+    owner, sep, branch = label.partition(":")
+    w_owner, w_sep, w_branch = want.partition(":")
+    if not sep or not w_sep or branch != w_branch:
+        return False
+    return owner.translate(ASCII_FOLD) == w_owner.translate(ASCII_FOLD)
 
 
 def main(argv):
@@ -2118,7 +2153,7 @@ def main(argv):
             if not isinstance(c, dict) or not isinstance(c.get("number"), int):
                 raise ValueError("candidate")
             head = c.get("head") if isinstance(c.get("head"), dict) else {}
-            if head.get("label") != want:
+            if not names_head(head.get("label"), want):
                 continue
             if c.get("state") not in ("open", "closed"):
                 raise ValueError("candidate state")
@@ -6100,7 +6135,11 @@ EOF
 # empty branch, or a branch with no owner — and answers 200 with the unfiltered list.
 # So an empty branch, and a branch outside the URL-safe set, are refused here before
 # any host call, and the candidates projection keeps only the items whose head label
-# equals <owner>:<branch> exactly. A pull request for any other head is never
+# names this head: the owner part equal to <owner> without regard to letter case, the
+# branch part equal to <branch> exactly. The owner is compared that way because the
+# host matches it that way and reports its own spelling of the login, so a slug typed
+# in another letter case must still find this run's own pull request; _host_project
+# states the comparison and its split. A pull request for any other head is never
 # printed, so it can never be bound or merged.
 #
 # ONE CLASSIFIED READER, EVERY PAGE (#6871). The read goes through _host_rest_get, so
@@ -14549,12 +14588,14 @@ EOF
   done
   _st_arm PRT-u u13; [[ "$_pr_w" -eq 4 ]] || { echo "FAIL: PRT-u u13 — only ${_pr_w} of 4 live-measured shapes projected to their exact three-field terminal composite"; failures=$((failures+1)); }
   [[ ! "OPEN/MERGEABLE/CLEAN/false" =~ ^[^/]+/[^/]+/[^/]+$ ]] || { echo "FAIL: PRT-u u13 SPECIFICITY — the width predicate accepts a four-field composite"; failures=$((failures+1)); }
-  # (u14) the candidates binding prints only the items whose head label is exactly
-  #       <owner>:<branch> (FM-1), as "<number> <state> <merged_at-or-dash>" lines, the
-  #       same on stdout and in HOST_READ_VALUE: the matching one, nothing for a
-  #       foreign label, and nothing for an empty list. It reads EVERY state, so a
-  #       direct caller takes the open row from its output: the open one among a
-  #       merged, an open and a closed-unmerged pull request, and none when none is open.
+  # (u14) the candidates binding prints only the items on this head (FM-1) — a head
+  #       label whose owner is <owner> without regard to letter case and whose branch
+  #       is <branch> exactly — as "<number> <state> <merged_at-or-dash>" lines, the
+  #       same on stdout and in HOST_READ_VALUE: the matching one, the one whose owner
+  #       is in another letter case, nothing for a foreign label, and nothing for an
+  #       empty list. It reads EVERY state, so a direct caller takes the open row from
+  #       its output: the open one among a merged, an open and a closed-unmerged pull
+  #       request, and none when none is open.
   _prt_reset "$_pr_d"; _prt_use "$_pr_d" cand cand_one
   _pr_rc=0; _host_chore_pr_candidates "$_pr_branch" >/dev/null 2>&1 || _pr_rc=$?
   _pr_got="$(_host_chore_pr_candidates "$_pr_branch" 2>/dev/null || true)"
@@ -20223,7 +20264,7 @@ EOF
   _st_claim TL "  phase 6.8 declared register precondition validated (#6892, group TL — 9 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are): TL/a the REAL register producer writes the Phase A7.2 register under a temporary instance root before 6.8 runs, and 6.8 PASSes with the computed readings the register makes possible / TL/b 6.8 hands the telemetry tool --retro with exactly the producer's --print-path value / TL/c with no register produced the field is still written with the honest absent reading, the row is WARN naming the unmet precondition, and the phase returns 0 / TL/d an unresolvable register path records WARN UNRESOLVABLE and passes no --retro / TL/e --dry-run over an absent register predicts the WARN with no would-FAIL token and writes nothing / TL/f the WARN detail never prints the resolved register path / TL/g with the precondition still unmet the first run writes the field and records WARN, and the re-run SKIPs without writing it twice / TL/h phase 10's cross-check sees 6.8's write when 6.8 records WARN: with the v9.96 block in an archive segment and the register absent, _reported_write_surfaces names the segment from the WARN row (Plan amendment 7), and with the register met it names the segment identically whether or not the recorder recorded it, so a missing recorder call is still caught / TL/i CD-1 end to end, run inside Test 11d's git sandbox: the REAL phase 6.8 over an archived v9.96 block with the register absent writes the field into the segment, records it and records WARN naming it, and with the recorder's entry dropped the REAL phase 10 FAILs naming the segment, so a gate that admits a WARN row only while the recorder holds its surface cannot pass, even with the recorder read hidden in a helper (Plan amendment 9)"
   _st_claim PRT "  close-out pull-request reads validated (#6871, group PRT — 29 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness), every arm under an EXHAUSTED GraphQL pool with the host's REST endpoint answering, through ONE dual-transport stub whose fixtures carry the live gh api -i byte layout. read_state: p1 captures the merge SHA of a PR merged into main / p2 an OPEN PR carrying a test-merge SHA is recorded as not merged and captures no SHA, a non-blocking WARN under --dry-run that predicts the --apply FAIL / p2a the same fact FAILs read_state at --apply with rc 3, before any write (CR-B6) / p2d --outcome DEFERRED excepts that answered not-merged branch / p3 a quota refusal is recorded as unresolvable, naming its class, and never as not merged / p3a it FAILs at --apply / p3d DEFERRED does not except it. The #1681 guard: p4 SKIPs a VERIFIED row over a PR merged into main — the order-7 RED arm, where pre-fix the empty GraphQL read reported false-VERIFIED against a correct row / p5 p6 p7 a quota refusal, a transport failure and a 404 FAIL naming their class and never say false-VERIFIED / p8 a CLOSED-unmerged PR carrying a test-merge SHA is still caught as false-VERIFIED, naming its state / p9 quota wording inside a SUCCESSFUL body is data, not a refusal / p10 a PR merged into another base is still false-VERIFIED, naming the base. Verification row 4: p11 PASS / p12 UNVERIFIED naming the refusal, neither PASS nor FALSE-VERIFIED / p13 FALSE-VERIFIED naming the observed state. The chore-PR lookup: p14 binds an existing open PR found over REST and creates none / p15 a refused lookup FAILs and creates nothing, because a read that did not answer is not an absence / p16 CONTROL: an answered empty list creates and binds exactly one PR / p17 every candidates read carries the owner-qualified head and state=all, and a create follows exactly two of them, the resolver's and the read before the create / p23 a candidates read refused immediately before the create FAILs there, names its class and creates nothing / p24 a pull request opened on the branch after the resolve is reused by that read / fm1 a candidate whose head label is not owner:branch is never bound and never merged, though its own fixture reads mergeable. The await-merge poll: p18 PASSes an already-merged PR on its first read / p19 a quota refusal FAILs after exactly one read instead of polling an exhausted pool to the budget / p20 a transport failure is re-polled and the merge runs once / p21 a 404 FAILs after one read. p22 AC-3: no non-comment line of this file's production region reads a pull request through a GraphQL-bound --json call, with a sensitivity line constructed at run time"
   _st_claim PRT-rb "  rebuild_skill_packages release-diff fallback over REST validated (#6871, group PRT-rb — 4 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness): MERGE_SHA is empty and GraphQL is exhausted, so only the REST files pages can answer — rb1 one answered page resolves tracker-manager / rb2 a full first page fetches page 2 and stops at the short page / rb3 a refused page FAILs naming the refusal, never 'fallback empty' / rb4 FM-3, the host's 3,000-file cap: thirty full pages are a truncation, so the phase FAILs naming the cap and never reads page 31"
-  _st_claim PRT-u "  the REST pull-request reader and its projections validated (#6871, group PRT-u — 19 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness), read through _host_rest_get directly so a defect is named at its unit: u1 a merged PR answers with the fact MERGED, main and its SHA / u2 u3 an OPEN and a CLOSED-unmerged PR carrying a test-merge SHA project NO SHA / u4 refusal wording quoted in a 2xx body is answered / u5 a 403 with remaining 0 is refused-quota primary with no value, never the error body / u9 a 404 whose expose-headers VALUE names Retry-After is failed-other, because header NAMES match exactly / u11 a transport failure is failed-transport, its reason naming neither the URL nor the repository / u12 exit 0 with no status line is failed-other / u13 the terminal projection of the four live-measured shapes is exactly their three-field composites, with a four-field specificity control / u14 the candidates binding prints only an exact owner:branch head label (FM-1), the same lines on stdout and in HOST_READ_VALUE, prints nothing for an empty list, and a direct caller takes the open row from every state it returns / u15 a slug that is not owner/name is refused before any host call / u16 an unavailable classifier is failed-other, never answered, and the library survives the arm / u17 a classifier that exits non-zero or prints an empty line is failed-other, naming that it could not run / u18 a class token outside the classifier's four, even one beginning with a real class, is failed-other naming that, with no sub-class or status / u19 an answered body neither the fact nor the candidates projection can read is failed-other naming the projection, and through the chore-PR lookup it FAILs as unresolvable and creates no pull request — u16 to u19 each assert their exact reason, so a disabled branch cannot pass by falling through to the next / u20 this file defines the chore-PR candidates binding exactly once, because the shell keeps the later of two definitions for every caller; the counter reads 2 on a two-definition fixture built at run time / u21 a slug that is not owner/repo-shaped, an empty branch and a branch outside the URL-safe set are each refused with exit 2 and their reason on stderr before any host call / u22 the reader makes one host call per page, so the binding walks: a full first page is followed by page 2 and the short page ends the walk / u23 a full page carrying a pull request for another head, and a full thirtieth page, are refused as failed-other rather than returned as a set that may be incomplete"
+  _st_claim PRT-u "  the REST pull-request reader and its projections validated (#6871, group PRT-u — 19 arms; this line ENUMERATES the group's arms and is not by itself evidence they ran — the group-execution and per-arm witness gates above are, and it FAILs the run naming this group when its arms leave no witness), read through _host_rest_get directly so a defect is named at its unit: u1 a merged PR answers with the fact MERGED, main and its SHA / u2 u3 an OPEN and a CLOSED-unmerged PR carrying a test-merge SHA project NO SHA / u4 refusal wording quoted in a 2xx body is answered / u5 a 403 with remaining 0 is refused-quota primary with no value, never the error body / u9 a 404 whose expose-headers VALUE names Retry-After is failed-other, because header NAMES match exactly / u11 a transport failure is failed-transport, its reason naming neither the URL nor the repository / u12 exit 0 with no status line is failed-other / u13 the terminal projection of the four live-measured shapes is exactly their three-field composites, with a four-field specificity control / u14 the candidates binding prints only the candidates on this head — a head label whose owner matches without regard to letter case and whose branch matches exactly, so the owner in another letter case is printed and a foreign owner is not (FM-1) — the same lines on stdout and in HOST_READ_VALUE, prints nothing for an empty list, and a direct caller takes the open row from every state it returns / u15 a slug that is not owner/name is refused before any host call / u16 an unavailable classifier is failed-other, never answered, and the library survives the arm / u17 a classifier that exits non-zero or prints an empty line is failed-other, naming that it could not run / u18 a class token outside the classifier's four, even one beginning with a real class, is failed-other naming that, with no sub-class or status / u19 an answered body neither the fact nor the candidates projection can read is failed-other naming the projection, and through the chore-PR lookup it FAILs as unresolvable and creates no pull request — u16 to u19 each assert their exact reason, so a disabled branch cannot pass by falling through to the next / u20 this file defines the chore-PR candidates binding exactly once, because the shell keeps the later of two definitions for every caller; the counter reads 2 on a two-definition fixture built at run time / u21 a slug that is not owner/repo-shaped, an empty branch and a branch outside the URL-safe set are each refused with exit 2 and their reason on stderr before any host call / u22 the reader makes one host call per page, so the binding walks: a full first page is followed by page 2 and the short page ends the walk / u23 a full page carrying a pull request for another head, and a full thirtieth page, are refused as failed-other rather than returned as a set that may be incomplete"
   echo "  --no-merge post-merge behaviour validated (#2919 + NO_MERGE_PHASE_BEHAVIOUR — every defer row DEFERS under --no-merge even with an open milestone and issues, every skip row SKIPs citing the flag without the deferral sentinel; NO_MERGE=0 negative)" >&2
   echo "  phase_transition_release_log VERIFIED re-derivation validated (#1681 — VERIFIED+merged-PR SKIP / VERIFIED+unmerged-PR FAIL false-VERIFIED / DEPLOYED normal transition); #2539 end-to-end validated (AC-2 pure-alpha resolve+flip / AC-3 dry-run<=>apply parity + no-match negative / D-3 true-count over-match fires)" >&2
   echo "  phase_ledger_guard + phase_reparse_ledgers validated (#1680 — clean-diff PASS / I1 foreign-row-removal FAIL / I2 VERIFIED→DEPLOYED FAIL / well-formed reparse PASS / duplicate-H3 reparse FAIL)" >&2
