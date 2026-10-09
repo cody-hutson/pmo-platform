@@ -6168,10 +6168,11 @@ EOF
 # are empty, HOST_READ_CLASS, _SUB, _STATUS and _REASON carry the class, and ONE line
 # on stderr carries the same reason. Exit 2 is a lookup THIS binding refused before
 # any host call: a slug that is not owner/repo-shaped, an empty branch, or a branch
-# outside the URL-safe set. Exit 1 is every other failure: a read that did not answer,
-# a set refused as incomplete, and a read the READER refused before any host call — a
-# slug that is owner/repo-shaped here and carries a character outside the reader's
-# set, a space for one. No caller tells 1 from 2.
+# outside the URL-safe set. Exit 1 is every other failure, and not every one of those
+# reached the host: the READER refuses before any host call too, for one a slug that
+# is owner/repo-shaped here and carries a character outside its own set, such as a
+# space. So exit 2 names who refused, not whether the host was called. No caller
+# tells 1 from 2.
 _host_chore_pr_candidates() {
   local _branch="${1:-}" _owner="${REPO_SLUG%%/*}" _name="${REPO_SLUG#*/}"
   local _p=1 _raw="" _rows="" _n=0 _all="" _nl=$'\n' _why=""
@@ -13445,7 +13446,7 @@ STUB
       #         owner in its request nor the head-label re-check on its response — binds #4406 in both,
       #         and phase 12 would then poll and merge the fork's PR with the operator's credentials.
       #         REST without the owner alone is served #4406 and still does not bind it: the re-check
-      #         drops it, and only (a)'s request-shape line reddens.
+      #         drops it, and of this arm's lines only (a)'s request-shape line reddens.
       _cr_reset "$_cr_f6"
       _cr_run
       _st_arm CR CR-13; [[ "$_cr_rc" -eq 0 && "$CHORE_PR_NUMBER" != "4406" && "$CHORE_PR_OUTCOME" == "skipped-as-idempotent" ]] || { echo "FAIL: CR-13 (a) SECURITY — a fork's same-named OPEN PR must not bind as this run's chore PR on the zero-commit path; got rc=$_cr_rc outcome='$CHORE_PR_OUTCOME' pr='$CHORE_PR_NUMBER'"; failures=$((failures+1)); }
