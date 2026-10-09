@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.74] - 2026-10-09
+
+Cycle time, plan survival and close-quality figures now read the right rows or name why they have no value; the Stage 9 verdict is bound.
+
+[Full notes](release/releases/notes/v4.74_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.74)
+
 ## [v4.73] - 2026-10-04
 
 Updates and installs now bind to your main checkout, and the safety guards judge the file being written, not where a session started.
