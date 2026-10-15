@@ -10,11 +10,11 @@ It carries the same reconciled pattern — AI-001 `done` with a matching
 stay clean and the engine reaches the M4 screen at exit 0. That is what lets the
 screen be graded on its NOTES while the exit code stays out of it.
 
-**This is also the only arm in the harness that enters the ledger resolver's
-DIRECTORY branch.** Every other arm passes a ledger FILE, and the production sweep
-passes a directory — so the branch C4 and C5 actually use in production was reached
-by no self-test arm at all until this tree existed. Closing that gap is a side effect
-of the M4 screen, not its purpose, and it is worth more than the screen.
+**This tree was the first fixture to enter the ledger resolver's DIRECTORY branch**
+— the branch C4 and C5 use in production — **and it is now also C4's clean arm**:
+C4 joins on (release, id) and a ledger's release is its directory name, so only a
+directory-shaped root pairs this ledger with the `fixture-clean-release` rows of
+`log-m4.md`.
 
 | id | created_at | source_stage | source_sub_task | category | owner | description | trigger_type | trigger_detail | target | status | resolved_at | resolution |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|

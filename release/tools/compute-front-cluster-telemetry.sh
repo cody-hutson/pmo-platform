@@ -130,6 +130,15 @@ def rhu(num, den):
         return None
     return math.floor((num / den) * 100 + 0.5) / 100
 
+def norm_stage(s):
+    # A stage is read as its integer value, the way the row-identity rules in
+    # append-pipeline-event.sh match it (^0*4$, ^0*[45]$): the writer admits a zero-padded
+    # stage such as 05, and an exact string compare dropped that row from every stage-keyed
+    # selection below while the writer had judged it a stage-5 row. Normalized once, here,
+    # so every selection agrees. (This heredoc sits inside a command substitution, where
+    # bash 3.2 still scans quote characters: keep apostrophes out of it.)
+    return str(int(s)) if s.isdigit() else s
+
 rows = []
 for line in sys.stdin:
     line = line.rstrip("\n")
@@ -151,7 +160,7 @@ for line in sys.stdin:
         "ts": ts,
         "tsdt": tsdt,
         "version": parts[1].strip(),
-        "stage": parts[2].strip(),
+        "stage": norm_stage(parts[2].strip()),
         "etype": parts[3].strip(),
         "esub": parts[4].strip(),
         "actor": parts[5].strip(),
@@ -211,25 +220,77 @@ def median(xs):
 i4 = {"median_seconds": median(cyc), "n": len(cyc)}
 
 # ─── I6 plan-survival (Definition) ───────────────────────────────────────────
-# Denominator: distinct per-issue subjects that were planned — a decision-class
-# event at stage 4 (Planning), excluding milestone:* (bundle-level, covered by I7)
-# and re-review rows (a re-review is not a plan). This specific anchor keeps the
-# "planned" population from being polluted by incidental stage-4 rows.
-# Numerator: those with no tier-2/tier-3 scope-change at or after that plan.
-plan = {}
+# Population: cards carrying a per-issue Stage-4 gate decision — a stage-4
+# decision row whose subtype is in GATE_DECISION_SUBTYPES, whose actor is in
+# GATE_DECISION_ACTORS (stage-04-planning.md § 11: operator, or hub for a recorded
+# determination) and whose subject is a card (CARD_SUBJECT: issue:#N or #N).
+# Each term is an ALLOW-list: a delegation fork, an action-item transition, a
+# sub-task process decision or a spoke's row is not a gate decision; admitted, it
+# is a phantom card that also counts as a survivor, so the rate can only inflate.
+# One card, one key: card_key() folds #N into issue:#N for the plan, the removal
+# and the scope-change join, so a card carried in one spelling and removed or
+# broken in the other is still one card.
+# Removal (a gate row carrying card-disposition:removed) is re-plan aware. A
+# removal written BEFORE the release's first stage >= 5 row is a first-gate
+# removal: that (release, card) pair was never a plan of the release and is
+# dropped whole, and a later release that carries the card plans it there. A
+# removal AT OR AFTER that row is a re-plan: the carried plan stays in the
+# population and is scored broken at the removal, so a re-plan cannot erase a
+# plan's break. A pair whose only gate rows are removals carried nothing and is
+# dropped. CARD_REMOVED matches a payload segment, never prose; its lookahead
+# admits the " |" the " | " split leaves on the last field. Selection, removal
+# and coverage limits: phase-telemetry-front-cluster.md § 4 I6 and FM2.
+# Numerator: those with no tier-2/tier-3 scope-change and no re-plan removal at
+# or after that plan.
+GATE_DECISION_SUBTYPES = ("d-class",)
+GATE_DECISION_ACTORS = ("operator", "hub")
+CARD_SUBJECT = re.compile(r"^(?:issue:)?#([0-9]+)$")
+CARD_REMOVED = re.compile(r"(?:^|;)\s*card-disposition:\s*removed\s*(?=;|\|?\s*$)", re.IGNORECASE)
+
+def card_key(subject):
+    m = CARD_SUBJECT.match(subject)
+    return "issue:#" + m.group(1) if m else None
+
+def is_gate_decision(r):
+    return (r["stage"] == "4" and r["etype"] == "decision"
+            and r["esub"] in GATE_DECISION_SUBTYPES
+            and r["actor"] in GATE_DECISION_ACTORS
+            and card_key(r["subject"]) is not None)
+
+past_stage4 = {}
 for r in rows:
-    if r["stage"] == "4" and r["etype"] == "decision" and not r["subject"].startswith("milestone:"):
-        s = r["subject"]
-        if s not in plan or r["tsdt"] < plan[s]:
-            plan[s] = r["tsdt"]
+    if r["stage"].isdigit() and int(r["stage"]) >= 5:
+        if r["version"] not in past_stage4 or r["tsdt"] < past_stage4[r["version"]]:
+            past_stage4[r["version"]] = r["tsdt"]
+
+gate_rows = defaultdict(list)
+for r in rows:
+    if is_gate_decision(r):
+        gate_rows[(r["version"], card_key(r["subject"]))].append(r)
+
+plan, replan_removed = {}, {}
+for (v, c), grs in gate_rows.items():
+    removed = [r["tsdt"] for r in grs if CARD_REMOVED.search(r["payload"])]
+    carried = [r["tsdt"] for r in grs if not CARD_REMOVED.search(r["payload"])]
+    t5 = past_stage4.get(v)
+    if not carried or any(t5 is None or t < t5 for t in removed):
+        continue
+    if c not in plan or min(carried) < plan[c]:
+        plan[c] = min(carried)
+    for t in removed:
+        if c not in replan_removed or t < replan_removed[c]:
+            replan_removed[c] = t
+
+card_breaks = defaultdict(list)
+for r in rows:
+    if r["etype"] == "scope-change" and r["esub"] in ("tier-2-scope-change", "tier-3-plan-rejection"):
+        c = card_key(r["subject"])
+        if c is not None:
+            card_breaks[c].append(r["tsdt"])
 surv = 0
-for s, p_ts in plan.items():
-    broke = any(
-        rr["etype"] == "scope-change"
-        and rr["esub"] in ("tier-2-scope-change", "tier-3-plan-rejection")
-        and rr["tsdt"] >= p_ts
-        for rr in by_subject[s]
-    )
+for c, p_ts in plan.items():
+    broke = (any(t >= p_ts for t in card_breaks[c])
+             or (c in replan_removed and replan_removed[c] >= p_ts))
     if not broke:
         surv += 1
 i6 = {"num": surv, "den": len(plan), "rate": rhu(surv, len(plan))}
@@ -261,11 +322,28 @@ a0_c3 = sum(1 for r in rows if r["etype"] == "re-review" and r["esub"] == "phase
 i8 = {"num": a0_c3, "den": a0_total, "rate": rhu(a0_c3, a0_total)}
 
 # ─── I11 plan-survival post-Solutioning (Solution-design) ────────────────────
-# Denominator: distinct subjects with a decision/scope-lock.
+# Denominator: distinct subjects with a Collective Review scope-lock — the
+# identity stage-05-solutioning.md § 11 declares: decision/scope-lock at
+# CR_LOCK_STAGE by CR_LOCK_ACTOR, on the release's milestone:* subject (the
+# Collective Review is release-scoped, per its Release-Level Checkpoint). The
+# subtype alone is not that identity: the Stage-4 plan approval shares it, and
+# admitted it is a phantom subject, an earlier anchor here and a phantom re-lock
+# in I15 (FM7). Rows of the subtype at any other stage, under any other actor or
+# on a sub-release subject (a per-card amendment keyed issue:#N) are off the
+# emission contract and stay inert. The release-grain test is the same milestone:
+# predicate I7 uses for a bundle.
 # Numerator: those with no scope-change at or after their earliest scope-lock.
+CR_LOCK_STAGE = "5"
+CR_LOCK_ACTOR = "operator"
+
+def is_cr_scope_lock(r):
+    return (r["etype"] == "decision" and r["esub"] == "scope-lock"
+            and r["stage"] == CR_LOCK_STAGE and r["actor"] == CR_LOCK_ACTOR
+            and r["subject"].startswith("milestone:"))
+
 lock = {}
 for r in rows:
-    if r["etype"] == "decision" and r["esub"] == "scope-lock":
+    if is_cr_scope_lock(r):
         s = r["subject"]
         if s not in lock or r["tsdt"] < lock[s]:
             lock[s] = r["tsdt"]
@@ -282,11 +360,14 @@ p05_c3 = sum(1 for r in rows if r["etype"] == "re-review" and r["esub"] == "phas
 i14 = {"num": p05_c3, "den": p05_total, "rate": rhu(p05_c3, p05_total)}
 
 # ─── I15 collective-review scope-lock first-pass (Solution-design) ───────────
-# Denominator: distinct subjects with >=1 scope-lock.
-# Numerator: those scope-locked exactly once (approved first pass, no re-lock).
+# Denominator: distinct subjects with >=1 Collective Review scope-lock
+# (is_cr_scope_lock, the I11 selection; a Stage-4 plan approval is not a lock).
+# Numerator: those scope-locked exactly once (no second lock row). The count is a
+# proxy: the contract records approve, adjust and reject under this one subtype,
+# so a lone reject reads as a first pass (phase-telemetry-front-cluster.md § 4 I15).
 lock_counts = defaultdict(int)
 for r in rows:
-    if r["etype"] == "decision" and r["esub"] == "scope-lock":
+    if is_cr_scope_lock(r):
         lock_counts[r["subject"]] += 1
 first_pass = sum(1 for c in lock_counts.values() if c == 1)
 i15 = {"num": first_pass, "den": len(lock_counts), "rate": rhu(first_pass, len(lock_counts))}
@@ -343,9 +424,9 @@ if [[ "${1:-}" == "--self-test" ]]; then
 | 2026-03-02T09:00:00Z | v1.00 | 1 | decision | queued-pending-approval | hub | #B | CHEAP | resolved | p |
 | 2026-03-02T11:00:00Z | v1.00 | 2 | escalation | tier-1 | operator | #B | MODERATE | resolved | p |
 | 2026-03-02T13:00:00Z | v1.00 | 2 | gate-outcome | g1-g2 | spoke:#B | #B | CHEAP | resolved | verdict:Approved |
-| 2026-03-03T10:00:00Z | v1.00 | 4 | decision | d-class | spoke:#C | #C | CHEAP | resolved | p |
-| 2026-03-04T10:00:00Z | v1.00 | 4 | decision | d-class | spoke:#D | #D | CHEAP | resolved | p |
-| 2026-03-04T15:00:00Z | v1.00 | 5 | scope-change | tier-2-scope-change | operator | #D | MODERATE | resolved | p |
+| 2026-03-03T10:00:00Z | v1.00 | 4 | decision | d-class | operator | issue:#3 | CHEAP | resolved | p |
+| 2026-03-04T10:00:00Z | v1.00 | 4 | decision | d-class | operator | issue:#4 | CHEAP | resolved | p |
+| 2026-03-04T15:00:00Z | v1.00 | 5 | scope-change | tier-2-scope-change | operator | issue:#4 | MODERATE | resolved | p |
 | 2026-03-05T10:00:00Z | v1.00 | 3 | decision | outcome-statement-authored | hub | milestone:#M1 | CHEAP | resolved | p |
 | 2026-03-05T11:00:00Z | v1.00 | 4 | decision | a7-bundle-amend | hub | milestone:#M1 | CHEAP | resolved | p |
 | 2026-03-06T10:00:00Z | v1.00 | 3 | decision | outcome-statement-authored | hub | milestone:#M2 | CHEAP | resolved | p |
@@ -356,10 +437,10 @@ if [[ "${1:-}" == "--self-test" ]]; then
 | 2026-03-08T09:05:00Z | v1.00 | 5 | re-review | phase-0.5-row | spoke:#G2 | #G2 | CHEAP | resolved | class:C3 |
 | 2026-03-08T09:07:00Z | v1.00 | 5 | re-review | phase-0.5-row | spoke:#G4 | #G4 | CHEAP | resolved | class: C3 |
 | 2026-03-08T09:10:00Z | v1.00 | 5 | re-review | phase-0.5-row | spoke:#G3 | #G3 | CHEAP | resolved | class:C1 |
-| 2026-03-08T10:00:00Z | v1.00 | 5 | decision | scope-lock | hub | #G | CHEAP | approved | p |
-| 2026-03-09T10:00:00Z | v1.00 | 5 | decision | scope-lock | hub | #H | CHEAP | resolved | p |
-| 2026-03-09T12:00:00Z | v1.00 | 5 | scope-change | tier-2-scope-change | operator | #H | MODERATE | resolved | p |
-| 2026-03-09T14:00:00Z | v1.00 | 5 | decision | scope-lock | hub | #H | CHEAP | approved | p |
+| 2026-03-08T10:00:00Z | v1.00 | 5 | decision | scope-lock | operator | milestone:#M1 | CHEAP | approved | p |
+| 2026-03-09T10:00:00Z | v1.00 | 5 | decision | scope-lock | operator | milestone:#M2 | CHEAP | resolved | p |
+| 2026-03-09T12:00:00Z | v1.00 | 5 | scope-change | tier-2-scope-change | operator | milestone:#M2 | MODERATE | resolved | p |
+| 2026-03-09T14:00:00Z | v1.00 | 5 | decision | scope-lock | operator | milestone:#M2 | CHEAP | approved | p |
 ROWS
 )"
   ST_JSON="$(printf '%s\n' "$FIXTURE" | "$PY" -c "$FRONT_AGG_PY" "NA" "")"
@@ -403,6 +484,99 @@ ROWS
   TSR="$("$PY" -c 'import json,sys; v=json.loads(sys.argv[1])["build"]["zero-round-trip-triage-rate"]["rate"]; print("NA" if v is None else v)' "$TS_JSON")"
   [[ "$TSR" == "1.0" ]] || die "self-test: I1 fractional-second ordering = $TSR, expected 1.0 (the .500Z escalation is AFTER the Z-form gate; a raw-string compare inverts it)"
 
+  # I6 gate-decision selection. Each arm appends stage-4 rows to the main FIXTURE
+  # (issue:#3 survives, issue:#4 is broken by a tier-2 scope-change; both are
+  # operator gate rows): 1/2 0.5 holds unless the arm adds a real card. Each
+  # message names what a wrong filter reads; P2 and X6c are the inert controls.
+  i6_arm() {
+    local j
+    j="$(printf '%s\n%s\n' "$FIXTURE" "$1" | "$PY" -c "$FRONT_AGG_PY" "NA" "")" \
+      || die "self-test: I6 gate-decision arm $2 — aggregation failed"
+    "$PY" -c 'import json,sys
+d=json.loads(sys.argv[1])["build"]["plan-survival-rate"]
+print("%s/%s %s" % (d["num"], d["den"], d["rate"]))' "$j"
+  }
+  I6R="$(i6_arm '| 2026-03-04T11:00:00Z | v1.00 | 4 | decision | delegation | hub | sub-task:#S1 | CHEAP | resolved | ms:#M1; chose:spoke |' P1)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 P1 — a delegation keyed sub-task:#N entered ($I6R; want 1/2 0.5; no subtype term reads 2/3 0.67)"
+  I6R="$(i6_arm '| 2026-03-04T11:00:00Z | v1.00 | 4 | decision | delegation | hub | milestone:#M1 | CHEAP | resolved | ms:#M1; chose:spoke |' P2)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 P2 — the compliant milestone-keyed delegation moved the population ($I6R; want 1/2 0.5)"
+  I6R="$(i6_arm '| 2026-03-04T11:05:00Z | v1.00 | 4 | decision | action-item-opened | hub | issue:#9 | CHEAP | resolved | ms:#M1; id:AI-001 |' P3)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 P3 — an action-item row on a card entered ($I6R; want 1/2 0.5; a deny-list reads 2/3 0.67)"
+  I6R="$(i6_arm '| 2026-03-04T11:10:00Z | v1.00 | 4 | decision | d-class | operator | sub-task:#7 | CHEAP | resolved | ms:#M1; d:process-decision |' G1)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 G1 — a sub-task-grain d-class row entered ($I6R; want 1/2 0.5; no card grain reads 2/3 0.67)"
+  I6R="$(i6_arm '| 2026-03-04T11:15:00Z | v1.00 | 4 | decision | d-class | operator | issue:#5 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:removed |' R1)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 R1 — a card removed at the first gate was scored as a plan ($I6R; want 1/2 0.5)"
+  I6R="$(i6_arm '| 2026-03-04T11:20:00Z | v1.00 | 4 | decision | d-class | operator | issue:#6 | CHEAP | resolved | ms:#M1; d:D-6-Split |
+| 2026-03-04T11:21:00Z | v1.00 | 4 | decision | d-class | operator | issue:#6 | CHEAP | resolved | ms:#M1; card-disposition:removed |' R2)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 R2 — a card removed at the first gate re-entered through a token-less row of its release ($I6R; want 1/2 0.5; the exclusion is per (release, card))"
+  I6R="$(i6_arm '| 2026-03-04T11:25:00Z | v1.00 | 4 | decision | d-class | operator | issue:#8 | CHEAP | resolved | ms:#M1; card-disposition:removed |
+| 2026-03-11T10:00:00Z | v2.00 | 4 | decision | d-class | operator | issue:#8 | CHEAP | resolved | ms:#M2; card-disposition:carried |' R3)"
+  [[ "$I6R" == "2/3 0.67" ]] || die "self-test: I6 R3 — a card removed by v1.00 and carried by v2.00 lost its v2.00 plan ($I6R; want 2/3 0.67; a subject-level exclusion reads 1/2 0.5)"
+  I6R="$(i6_arm '| 2026-03-04T11:30:00Z | v1.00 | 4 | decision | d-class | operator | issue:#10 | CHEAP | resolved | ms:#M1; note:card-disposition:removed was proposed |' R4)"
+  [[ "$I6R" == "2/3 0.67" ]] || die "self-test: I6 R4 — prose naming the token excluded a card ($I6R; want 2/3 0.67; the token is a segment, not a substring)"
+  I6R="$(i6_arm '| 2026-03-04T11:35:00Z | v1.00 | 4 | decision | d-class | spoke:#11 | issue:#11 | CHEAP | resolved | ms:#M1; card-disposition:carried |' A1)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 A1 — a spoke-actored gate row entered ($I6R; want 1/2 0.5; no actor term reads 2/3 0.67)"
+  # G2: the writer admits a zero-padded stage (its row-identity arms match ^0*4$), so a
+  # gate row written at stage 04 is a Stage-4 gate decision and must be read as one.
+  I6R="$(i6_arm '| 2026-03-04T11:40:00Z | v1.00 | 04 | decision | d-class | operator | issue:#19 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:carried |' G2)"
+  [[ "$I6R" == "2/3 0.67" ]] || die "self-test: I6 G2 — a gate row written at the zero-padded stage 04 the writer admits was dropped ($I6R; want 2/3 0.67; an exact string compare on the stage reads 1/2 0.5)"
+  # The re-plan-aware removal rule and the one card key. v1.00's first stage >= 5
+  # row is at 03-04T15:00, so R1-R3 and X2 remove at the first gate and X1 and X6
+  # remove at a re-plan.
+  I6R="$(i6_arm '| 2026-03-04T12:00:00Z | v1.00 | 4 | decision | d-class | operator | issue:#13 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:carried |
+| 2026-03-05T09:00:00Z | v1.00 | 5 | scope-change | tier-2-scope-change | operator | issue:#13 | MODERATE | resolved | p |
+| 2026-03-06T09:00:00Z | v1.00 | 4 | decision | d-class | operator | issue:#13 | CHEAP | resolved | ms:#M1; d:re-plan; card-disposition:removed |' X1)"
+  [[ "$I6R" == "1/3 0.33" ]] || die "self-test: I6 X1 — a re-plan removal erased a broken plan ($I6R; want 1/3 0.33; dropping the pair on any removal reads 1/2 0.5)"
+  I6R="$(i6_arm '| 2026-03-04T12:30:00Z | v1.00 | 4 | decision | d-class | operator | issue:#14 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:carried |
+| 2026-03-06T10:30:00Z | v1.00 | 5 | decision | scope-lock | operator | milestone:#M1 | MODERATE | resolved | ms:#M1; verdict:re-bundle |
+| 2026-03-06T11:30:00Z | v1.00 | 4 | decision | d-class | operator | issue:#14 | CHEAP | resolved | ms:#M1; d:re-plan; card-disposition:removed |' X6)"
+  [[ "$I6R" == "1/3 0.33" ]] || die "self-test: I6 X6 — a card removed at a re-plan after a Collective Review re-bundle was not scored broken ($I6R; want 1/3 0.33; dropping the pair reads 1/2 0.5, keeping it unbroken reads 2/3 0.67)"
+  I6R="$(i6_arm '| 2026-03-04T12:30:00Z | v1.00 | 4 | decision | d-class | operator | issue:#14 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:carried |
+| 2026-03-06T10:30:00Z | v1.00 | 5 | decision | scope-lock | operator | milestone:#M1 | MODERATE | resolved | ms:#M1; verdict:re-bundle |' X6c)"
+  [[ "$I6R" == "2/3 0.67" ]] || die "self-test: I6 X6c — with no removal the carried card must survive the re-bundle ($I6R; want 2/3 0.67; a release past Stage 4 does not break its plans)"
+  I6R="$(i6_arm '| 2026-03-04T13:00:00Z | v1.00 | 4 | decision | d-class | operator | issue:#15 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:carried |
+| 2026-03-04T13:05:00Z | v1.00 | 4 | decision | d-class | operator | #15 | CHEAP | resolved | ms:#M1; card-disposition:removed |' X2)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 X2 — a card carried as issue:#N and removed as #N survived ($I6R; want 1/2 0.5; a raw-subject key reads 2/3 0.67)"
+  I6R="$(i6_arm '| 2026-03-04T13:10:00Z | v1.00 | 4 | decision | d-class | operator | issue:#16 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:carried |
+| 2026-03-05T10:00:00Z | v1.00 | 5 | scope-change | tier-2-scope-change | operator | #16 | MODERATE | resolved | p |' X2j)"
+  [[ "$I6R" == "1/3 0.33" ]] || die "self-test: I6 X2j — a break keyed #N did not reach the card carried as issue:#N ($I6R; want 1/3 0.33; a raw-subject join reads 2/3 0.67)"
+  # The rule's two edges. E1: a removal AT the release's first stage >= 5 instant
+  # is a re-plan. E2: a pair whose only gate rows are removals carried nothing.
+  I6R="$(i6_arm '| 2026-03-04T14:00:00Z | v1.00 | 4 | decision | d-class | operator | issue:#17 | CHEAP | resolved | ms:#M1; d:Plan-Approval; card-disposition:carried |
+| 2026-03-04T15:00:00Z | v1.00 | 4 | decision | d-class | operator | issue:#17 | CHEAP | resolved | ms:#M1; d:re-plan; card-disposition:removed |' E1)"
+  [[ "$I6R" == "1/3 0.33" ]] || die "self-test: I6 E1 — a removal at the instant the release passed Stage 4 was read as a first-gate removal ($I6R; want 1/3 0.33; counting that instant as the first gate reads 1/2 0.5)"
+  I6R="$(i6_arm '| 2026-03-06T12:00:00Z | v1.00 | 4 | decision | d-class | operator | issue:#18 | CHEAP | resolved | ms:#M1; d:re-plan; card-disposition:removed |' E2)"
+  [[ "$I6R" == "1/2 0.5" ]] || die "self-test: I6 E2 — a card whose only gate row is a removal entered the population ($I6R; want 1/2 0.5; planning a removal-only pair reads 1/3 0.33)"
+
+  # I11/I15 Collective Review lock identity: decision/scope-lock at stage 5 by
+  # operator on a release-grain milestone:* subject. FIXTURE locks: milestone:#M1
+  # (one, no reversal) and milestone:#M2 (two, a tier-2 reversal between them):
+  # I11 1/2 0.5 and I15 1/2 0.5 hold in every arm.
+  lock_arm() {
+    local j
+    j="$(printf '%s\n%s\n' "$FIXTURE" "$1" | "$PY" -c "$FRONT_AGG_PY" "NA" "")" \
+      || die "self-test: I11/I15 lock-identity arm $2 — aggregation failed"
+    "$PY" -c 'import json,sys
+b=json.loads(sys.argv[1])["build"]
+a=b["plan-survival-post-solutioning-rate"]; c=b["collective-review-scope-lock-first-pass-rate"]
+print("I11 %s/%s %s; I15 %s/%s %s" % (a["num"], a["den"], a["rate"], c["num"], c["den"], c["rate"]))' "$j"
+  }
+  LKR="$(lock_arm '| 2026-03-10T10:00:00Z | v1.00 | 4 | decision | scope-lock | operator | milestone:#M3 | MODERATE | resolved | d:Plan-Approval |' SL1)"
+  [[ "$LKR" == "I11 1/2 0.5; I15 1/2 0.5" ]] || die "self-test: I11/I15 SL1 — a Stage-4 plan approval entered ($LKR; a subtype-only filter reads I11 2/3 0.67; I15 2/3 0.67)"
+  LKR="$(lock_arm '| 2026-03-08T08:00:00Z | v1.00 | 4 | decision | scope-lock | operator | milestone:#M1 | MODERATE | resolved | d:Plan-Approval |
+| 2026-03-08T08:30:00Z | v1.00 | 5 | scope-change | tier-2-scope-change | operator | milestone:#M1 | MODERATE | resolved | p |' SL2)"
+  [[ "$LKR" == "I11 1/2 0.5; I15 1/2 0.5" ]] || die "self-test: I11/I15 SL2 — a Stage-4 plan approval moved a lock anchor or counted as a re-lock ($LKR; a subtype-only filter reads I11 0/2 0.0; I15 0/2 0.0)"
+  LKR="$(lock_arm '| 2026-03-12T10:00:00Z | v1.00 | 7 | decision | scope-lock | operator | milestone:#M1 | CHEAP | resolved | d:stage-7-amendment |' SL3)"
+  [[ "$LKR" == "I11 1/2 0.5; I15 1/2 0.5" ]] || die "self-test: I11/I15 SL3 — an off-contract stage-7 scope-lock counted as a re-lock ($LKR; a stage >= 5 term reads I15 0/2 0.0)"
+  LKR="$(lock_arm '| 2026-03-12T11:00:00Z | v1.00 | 5 | decision | scope-lock | hub | milestone:#M1 | CHEAP | resolved | d:retroactive-check |' SL4)"
+  [[ "$LKR" == "I11 1/2 0.5; I15 1/2 0.5" ]] || die "self-test: I11/I15 SL4 — a hub-actored stage-5 scope-lock counted as a re-lock ($LKR; a stage-only term reads I15 0/2 0.0)"
+  LKR="$(lock_arm '| 2026-03-12T12:00:00Z | v1.00 | 5 | decision | scope-lock | operator | issue:#12 | CHEAP | resolved | d:per-card-amendment |' SL5)"
+  [[ "$LKR" == "I11 1/2 0.5; I15 1/2 0.5" ]] || die "self-test: I11/I15 SL5 — a card-grain stage-5 scope-lock entered as a Collective Review lock ($LKR; no release-grain subject term reads I11 2/3 0.67; I15 2/3 0.67)"
+  # SL6: the writer admits a zero-padded stage (its scope-lock arm matches ^0*[45]$), so a
+  # Collective Review lock written at stage 05 is a stage-5 lock and must be read as one.
+  LKR="$(lock_arm '| 2026-03-12T13:00:00Z | v1.00 | 05 | decision | scope-lock | operator | milestone:#M4 | MODERATE | resolved | d:collective-review-lock |' SL6)"
+  [[ "$LKR" == "I11 2/3 0.67; I15 2/3 0.67" ]] || die "self-test: I11/I15 SL6 — a Collective Review lock written at the zero-padded stage 05 the writer admits was dropped ($LKR; want I11 2/3 0.67; I15 2/3 0.67; an exact string compare on the stage reads I11 1/2 0.5; I15 1/2 0.5)"
+
   # N/A discipline: an empty stream yields N/A rates (not 0.00) for every BUILD rate.
   EMPTY_JSON="$(printf '' | "$PY" -c "$FRONT_AGG_PY" "NA" "")"
   ER="$("$PY" -c 'import json,sys; v=json.loads(sys.argv[1])["build"]["plan-survival-rate"]["rate"]; print("NA" if v is None else v)' "$EMPTY_JSON")"
@@ -413,6 +587,8 @@ ROWS
   echo "  9 BUILD indicators validated (8 event-sourced rates/median + gauge-N/A path)"
   echo "  C3 class-token match validated (class:C1 prose mentioning C3 excluded; spaced 'class: C3' included)"
   echo "  temporal ordering validated on parsed datetimes (fractional-second stamp does not invert order)"
+  echo "  I6 gate-decision selection validated (a stage-4 delegation or action-item row, a sub-task process decision and a spoke-actored row stay out; a card removed at the first gate is dropped from that release only; a re-plan removal keeps the carried plan and scores it broken; #N and issue:#N are one card; the removal segment is matched as a segment, not a substring; a gate row at the zero-padded stage 04 the writer admits is read as stage 4)"
+  echo "  I11/I15 Collective Review lock identity validated (a Stage-4 plan approval, an off-contract stage-7 scope-lock, a hub-actored stage-5 scope-lock and a card-grain stage-5 scope-lock stay inert; a lock at the zero-padded stage 05 the writer admits is read as stage 5)"
   echo "  N/A discipline validated (empty population -> N/A, never synthesized 0.00)"
   echo "  query-pipeline-event.sh dependency validated"
   exit 0
@@ -484,12 +660,12 @@ else:
 if [[ -n "$SINGLE_INDICATOR" ]]; then
   case "$SINGLE_INDICATOR" in
     zero-round-trip-triage-rate) r_rate "$SINGLE_INDICATOR" "no triaged subjects (no g1-g2 in window)" ;;
-    plan-survival-rate) r_rate "$SINGLE_INDICATOR" "no subjects reached a plan in window" ;;
+    plan-survival-rate) r_rate "$SINGLE_INDICATOR" "no card carried a Stage-4 gate decision in window" ;;
     bundle-amendment-rate) r_rate "$SINGLE_INDICATOR" "no bundled milestones in window" ;;
     phase-a0-c3-rate) r_rate "$SINGLE_INDICATOR" "no phase-a0 re-review rows in window" ;;
-    plan-survival-post-solutioning-rate) r_rate "$SINGLE_INDICATOR" "no scope-locked subjects in window" ;;
+    plan-survival-post-solutioning-rate) r_rate "$SINGLE_INDICATOR" "no Collective Review scope-lock in window" ;;
     phase-0.5-c3-rate) r_rate "$SINGLE_INDICATOR" "no phase-0.5 re-review rows in window" ;;
-    collective-review-scope-lock-first-pass-rate) r_rate "$SINGLE_INDICATOR" "no scope-locked subjects in window" ;;
+    collective-review-scope-lock-first-pass-rate) r_rate "$SINGLE_INDICATOR" "no Collective Review scope-lock in window" ;;
     triage-cycle-time)
       "$PY" -c 'import json,sys; d=json.loads(sys.argv[1])["build"]["triage-cycle-time"]; print("NA" if d["median_seconds"] is None else d["median_seconds"])' "$FRONT_JSON" \
         | { read -r s; [[ "$s" == "NA" ]] && echo "N/A (no triaged subjects in window)" || echo "$(format_duration "$s") (median over subjects)"; } ;;
@@ -517,15 +693,15 @@ echo "    approved-queue-depth:         ${QDEP}"
 echo "    source-of-origin-attribution: NARROWED — presence/coverage; rate deferred (no structured intake source field)"
 echo "    decision-date-setting:        DEFER — gh field deliberately unpopulated (no-backfill-at-scale); N/A-until-populated"
 echo "  [Definition]"
-echo "    plan-survival-rate:           $(r_rate plan-survival-rate 'no subjects reached a plan in window')"
+echo "    plan-survival-rate:           $(r_rate plan-survival-rate 'no card carried a Stage-4 gate decision in window')"
 echo "    bundle-amendment-rate:        $(r_rate bundle-amendment-rate 'no bundled milestones in window')"
 echo "    phase-a0-c3-rate:             $(r_rate phase-a0-c3-rate 'no phase-a0 re-review rows in window')"
 echo "    capacity-overrun:             POINTER — gate-evaluation-spec.md Gate 3->4 Capacity utilization"
 echo "    file-contention-detection:    POINTER — gate-evaluation-spec.md Gate 3->4 Contention density"
 echo "  [Solution-design]"
-echo "    plan-survival-post-solutioning-rate:            $(r_rate plan-survival-post-solutioning-rate 'no scope-locked subjects in window')"
+echo "    plan-survival-post-solutioning-rate:            $(r_rate plan-survival-post-solutioning-rate 'no Collective Review scope-lock in window')"
 echo "    phase-0.5-c3-rate:                              $(r_rate phase-0.5-c3-rate 'no phase-0.5 re-review rows in window')"
-echo "    collective-review-scope-lock-first-pass-rate:   $(r_rate collective-review-scope-lock-first-pass-rate 'no scope-locked subjects in window')"
+echo "    collective-review-scope-lock-first-pass-rate:   $(r_rate collective-review-scope-lock-first-pass-rate 'no Collective Review scope-lock in window')"
 echo "    adr-closure:                                    POINTER — gate-evaluation-spec.md Gate 5->6 ADR closure"
 echo "    quality-attribute-trade-off-mention:            DEFER — no structured field (semantic scan); N/A-until-source"
 echo "  mechanism: compute-front-cluster-telemetry.sh"

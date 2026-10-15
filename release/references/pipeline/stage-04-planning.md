@@ -579,9 +579,13 @@ This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INS
 
 | Event type | Subtype | When | Actor |
 |---|---|---|---|
-| `decision` | `d-class` | Per D-class decision rendered at the Operator Decision Gate (Phase D) — `subject` is the D-letter (D-A, D-B, …) | `operator` |
+| `decision` | `d-class` | Per D-class decision rendered at the plan gate (Phase B) — `subject` is the decision's scope: `milestone:#N` for a release-level decision, `issue:#N` for a decision on one card | `operator` (`hub` for a hub-rendered recorded determination) |
+| `decision` | `d-class` | Per card in the plan's composition, at the plan gate (Phase B) — one `issue:#N` row carrying the card's gate disposition (see Per-card gate disposition below); a card-level D-decision row on the card satisfies it when it carries the same segment | `operator` |
+| `decision` | `scope-lock` | Plan approval rendered at the plan gate (Phase B) — `subject` is `milestone:#N`. The Collective Review scope-lock that re-uses this subtype is a Stage-5 event | `operator` |
 | `escalation` | `tier-0` | Phase A0 re-review fires Tier 0 Premise Rejection (C3 classification) per [`triage-design-rereview.md` § 9](../standards/triage-design-rereview.md) | `spoke:#N` |
 | `re-review` | `phase-a0-row` | Phase A0 re-review row appended to `triage-design-rereview-instrumentation.md`; pipeline-event-log row carries `projects_to: triage-design-rereview-instrumentation.md:<row-anchor>` | `spoke:#N` |
 | `scope-change` | `tier-2-scope-change` | Tier 2 [SCOPE CHANGE] surfaced to operator per § Inter-Stage Feedback Protocol | `spoke:#N` |
+
+**Per-card gate disposition.** When the operator renders the plan gate, every card in the plan's composition is recorded on its own `decision`/`d-class` row keyed `issue:#N`, carrying exactly one payload segment: `card-disposition:carried` — the approved plan keeps the card in this release — or `card-disposition:removed` — it does not: deferred, withdrawn, closed, split out or moved to another release. A card the gate removes is recorded as removed, never omitted. A card-level D-decision row carries the same segment for its card, so one row can record both. The plan-survival indicator reads these rows as its population (`phase-telemetry-front-cluster.md` § 4 I6): a card removed at the first gate is dropped from that release, a card removed at a re-plan after the release passed Stage 4 is scored as a broken plan, neither is ever scored as a surviving plan, and a card with no gate row is absent from the population rather than counted as planned. The writer refuses a stage-4 `d-class` row on a card that carries no disposition segment, more than one, or any other value (`pipeline-event-log-schema.md` § 3).
 
 Cutover: events occurring on or after the FIRST release entering this stage strictly AFTER this protocol's introducing-release merge SHA. The introducing release itself: exempt (reflexive-pipeline-loop discipline).

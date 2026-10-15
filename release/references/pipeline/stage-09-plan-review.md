@@ -165,7 +165,36 @@ Present evidence package to operator in three tiers: Tier 1 (30-second summary �
 
 GO WITH CONDITIONS boundary rule: if a condition requires code changes, it is a NO-GO. Conditions are documentation, tracking, or process items only.
 
-**Ticket lifecycle:** Claim: set Stage→9-PlanReview. Execute: A-C. Resolve: post decision record, route per verdict. Per [ticket-information-architecture.md](../specs/ticket-information-architecture.md).
+**Phase C1 — Record the verdict (one action with rendering it).** A Stage 9 verdict is recorded on two surfaces at the routing point where the operator renders it, and read back, before the gate sub-task closes:
+
+1. **The decision record** — the comment on the Stage 9 sub-task, in the format the sub-task body names (decision, rationale, conditions, risk acceptance).
+2. **The verdict's `gate-outcome` row** — one row per rendered verdict, emitted by the hub on the operator's behalf: `release/tools/append-pipeline-event.sh --version <milestone slug> --stage 9 --event-type gate-outcome --event-subtype <plan-review-go or plan-review-no-go> --actor operator --subject milestone:#<N> --reversibility <the tier the Decision Briefing states for the release> --outcome resolved --payload 'ms:#<N>; verdict:<GO, GO-WITH-CONDITIONS or NO-GO>; record:<the decision-record comment URL>'`. GO and GO WITH CONDITIONS emit `plan-review-go` at stage `9` with actor `operator`; NO-GO emits `plan-review-no-go` at stage `9` with actor `operator`. The operator renders the verdict whichever agent runs the writer, so the actor is always `operator`, and `plan-review-go` is never written for a verdict rendered at any other stage. The verdict's row is `gate-outcome`/`plan-review-go` or `gate-outcome`/`plan-review-no-go`, never `decision`/`d-class`, although the verdict is rendered through a Decision Briefing.
+3. **Read the row back before closing the sub-task** — a PRE/POST count typed to the verdict's own class, `release/tools/query-pipeline-event.sh --release <milestone slug> --event-type gate-outcome --event-subtype <plan-review-go or plan-review-no-go> --stage 9 --count`, taken before and after the append, plus a content match on the `record:` pointer with `--payload-contains`, per the release-hub orchestration playbook's Procedure 4a step 4 (assert the delta, never a non-zero absolute). The count is typed to the class this step writes, so a verdict recorded as `decision`/`d-class` leaves `POST == PRE` and reads as a write that did not land; the stage-`9` `operator` identity is fixed by the invocation in item 2, and the writer refuses either subtype under any other stage or actor. A write that did not land is re-emitted at this same routing point.
+
+A verdict whose row was not written here stays absent and is reported; it is never backfilled later. T_GO is this row's own timestamp (`deployment-cycle-time.md` § 2), so a row appended after the decision anchors cycle time on the wrong instant. Check 61 (`core/deploy/deploy.sh --check-decision-emission`, advisory) reports a post-cutover VERIFIED release that carries no `plan-review-go` row at any stage or under any actor: it asserts presence, and the stage-`9` `operator` identity is held by this phase's typed read-back and by the writer.
+
+<!-- design-artifact: flow-class=agent-process; name=stage-9-verdict-recording; depicts=release/references/pipeline/stage-09-plan-review.md,release/skills/release-hub/references/orchestration-playbook.md -->
+```mermaid
+flowchart TD
+    v[["Operator renders GO, GO WITH CONDITIONS or NO-GO in main-thread chat"]] --> rec[/"Hub posts the decision record on the Stage 9 sub-task"/]
+    rec --> row["Hub appends the verdict's gate-outcome row: plan-review-go or plan-review-no-go, stage 9, actor operator — never decision/d-class"]
+    row --> rb{"Typed read-back at stage 9: POST equals PRE plus 1 for the verdict's own class, and the record pointer is found?"}
+    rb -->|yes| close(["Close the sub-task, then route"])
+    rb -->|"row did not land"| row
+    rb -->|"surplus, or no integer"| stop(["BLOCKED: reconcile at this routing point; never backfill later"])
+    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+    classDef human fill:#D1ECF1,stroke:#17A2B8,color:#0C5460;
+    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+    classDef external fill:#E2E3E5,stroke:#6C757D,color:#383D41;
+    class rec,row automated;
+    class v human;
+    class rb gate;
+    class close,stop external;
+```
+
+**Cutover discipline:** Applies to all releases going forward.
+
+**Ticket lifecycle:** Claim: set Stage→9-PlanReview. Execute: A-C. Resolve: record the verdict per Phase C1 (the decision record and its gate-outcome row, read back before the sub-task closes), route per verdict. Per [ticket-information-architecture.md](../specs/ticket-information-architecture.md).
 
 **Framework dimensions touched:** Handoff (Go/No-Go gate); Assignment (Portfolio Manager persona — operator). Per [execution-framework.md](../../../core/disciplines/execution-framework.md).
 
@@ -196,7 +225,7 @@ This stage emits the following events to [`pipeline-event-log.md`](<OPERATOR_INS
 
 | Event type | Subtype | When | Actor |
 |---|---|---|---|
-| `gate-outcome` | `plan-review-go` / `plan-review-no-go` | Operator renders GO / NO-GO decision after reviewing PR diff (the dry-run governance gate per Stage 9 compression rules); ALSO captured in `calibration-data.md` — payload carries `projects_to: calibration-data.md:<row-anchor>` and confidence label | `operator` |
+| `gate-outcome` | `plan-review-go` / `plan-review-no-go` | Rendered by the operator at Phase C after reviewing the PR diff (the dry-run governance gate per Stage 9 compression rules), and recorded by the Phase C1 step together with the decision record: one row per rendered verdict at stage `9`, actor `operator` — `plan-review-go` for GO and GO WITH CONDITIONS, `plan-review-no-go` for NO-GO. When the verdict is also captured in `calibration-data.md`, the payload carries `projects_to: calibration-data.md:<row-anchor>` and the confidence label | `operator` |
 | `gate-outcome` | `goal-conformance` | Phase A7 verdict (ALIGNED / DIVERGED-WITH-RATIONALE / MISALIGNED) rendered against the Outcome Statement per G-PR7; paired with `plan-review-go` / `plan-review-no-go` capture; payload carries `verdict` (enum) + `outcome_excerpt` (Outcome AFTER paragraph quote) | `hub` |
 | `gate-outcome` | `plan-review-readiness-scan` | Hub completes Phase A6 Release Readiness Scan and posts output per [release-readiness-scan-spec.md § 6](../specs/release-readiness-scan-spec.md); payload carries `aggregate_verdict` (ALL-PASS / ANY-FAIL / ANY-PARTIAL) + per-status counts + `sub_task_comment:<URL>` pointer; cutover: applies to all Stage 9 reviews going forward | `hub` |
 

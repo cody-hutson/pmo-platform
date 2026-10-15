@@ -519,6 +519,124 @@ validate_version_key() {
   return 0
 }
 
+# validate_row_identity <stage> <event_type> <event_subtype> <subject> [<actor>] [<payload>]
+#
+# Row-identity rules: constraints the schema places on a (stage, event_type,
+# event_subtype) triple BEYOND enum membership. Enum validation says the triple
+# exists; these rules say what its identity fields must be. One `case` arm per
+# event_type/event_subtype pair a rule governs, so a further identity rule
+# extends THIS function rather than growing a parallel validator. Dies naming the
+# violated rule and the observed value; returns 0 for every pair no arm governs,
+# which is the overwhelmingly common case and the reason each arm is keyed on the
+# full pair and tests the stage inside it, never on the subtype alone. Arguments
+# 5 (actor) and 6 (payload) are optional; an arm that reads one fails closed when
+# it is absent.
+#
+# Rule: a stage-4 decision/delegation row MUST carry a milestone:#N subject
+# (pipeline-event-log-schema.md § 3, the delegation payload convention). The only
+# Stage-4 delegation is the release-scoped planning spoke, so the release scope is
+# the only honest subject; a sub-task:#N or issue:#N subject would present a
+# phantom card to any reader that selects stage-4 decision rows by subject. The
+# stage is matched as ^0*4$ because the stage check below admits a zero-padded
+# 04. A delegation row at any other stage keeps a free subject: issue, milestone,
+# sub-task and release scopes all occur live. The subject is matched as written,
+# untrimmed, so a padded subject is refused: compute-front-cluster-telemetry.sh
+# strips a subject, but the awk-based readers split on " | " and keep the
+# padding, so a padded row would read differently across readers.
+#
+# Rule: a stage-4 decision/d-class row on a card (issue:#N, or the bare #N) MUST
+# carry exactly one payload segment card-disposition:carried or
+# card-disposition:removed (stage-04-planning.md § 11, the per-card gate
+# disposition; pipeline-event-log-schema.md § 3). compute-front-cluster-telemetry.sh
+# reads the segment (a card removed at the first gate leaves that release's
+# population; one removed at a re-plan is scored broken); a removal written without
+# it would be scored as a surviving plan, and the log is append-only. A
+# segment opens at the payload start or after a ';', leading blanks ignored (the
+# grammar payload_labels reads); the value is trimmed and must be one of the two
+# words exactly. Milestone- and sub-task-grain d-class rows, and d-class rows at
+# any other stage, are not governed.
+# The rule RECOGNIZES a row the way that reader reads it, and ACCEPTS only the
+# canonical spelling. The card grain is tested on the trimmed subject (the reader
+# strips a subject), so padding cannot take a card row out of the rule; a padded
+# card subject is then refused, as the delegation rule refuses one, because the
+# awk-based readers keep the padding. A segment label is recognized in any letter
+# case (the reader matches it case-insensitively), so a case-variant segment
+# counts toward the one; the one segment must still be spelled in lowercase. The
+# stage is matched as ^0*4$, which the reader mirrors by reading a stage as its
+# integer value.
+#
+# Rule: a decision/scope-lock row MUST carry stage 4 or 5 and actor operator —
+# the two gates that render one, the Stage-4 plan approval (stage-04-planning.md
+# § 11) and the Collective Review scope-lock (stage-05-solutioning.md § 11). A
+# change after the lock is a scope-change row, never a second lock at a later
+# stage; a lock at another stage or under another actor is off both emission
+# contracts, and compute-front-cluster-telemetry.sh I11/I15 select the Collective
+# Review lock by that identity. The stage is matched as ^0*[45]$ for the
+# zero-padded form the stage check admits, and that reader reads a stage as its
+# integer value, so a lock written at 05 is the stage-5 lock to both. A call with
+# no actor is refused.
+#
+# Rule: a gate-outcome/plan-review-go or gate-outcome/plan-review-no-go row MUST
+# carry stage 9 and actor operator (pipeline-event-log-schema.md § 3, the Stage-9
+# verdict identity rule). Each records the operator's rendered Stage-9 verdict —
+# plan-review-go the GO, a GO WITH CONDITIONS included, and plan-review-no-go the
+# NO-GO — and compute-cycle-time.sh anchors T_GO on the earliest plan-review-go row
+# of that identity: borrowed rows inflated cycle time with no check noticing. The
+# stage is matched as ^9$ (the stage check refuses a zero-padded 09 as octal before
+# this runs), and a call with no actor is refused. The refusal opens with what the
+# subtype records, so a row that is not that verdict is re-typed rather than
+# relabelled with the passing stage and actor, and then names where each refused
+# class goes.
+validate_row_identity() {
+  local stage="$1" event_type="$2" subtype="$3" subject="$4" actor="${5:-}" payload="${6:-}"
+  case "$event_type/$subtype" in
+    decision/delegation)
+      if [[ "$stage" =~ ^0*4$ ]] && ! [[ "$subject" =~ ^milestone:#[0-9]+$ ]]; then
+        die "Row identity: a stage-4 decision/delegation row must carry a milestone:#N subject; got '$subject'. The only Stage-4 delegation is the release-scoped planning spoke: pass --subject milestone:#<milestone-number> (pipeline-event-log-schema.md § 3, the delegation payload convention)."
+      fi
+      ;;
+    decision/d-class)
+      local _cd_card_re='^(issue:)?#[0-9]+$' _cd_subj="$subject"
+      _cd_subj="${_cd_subj#"${_cd_subj%%[![:space:]]*}"}"
+      _cd_subj="${_cd_subj%"${_cd_subj##*[![:space:]]}"}"
+      if [[ "$stage" =~ ^0*4$ ]] && [[ "$_cd_subj" =~ $_cd_card_re ]]; then
+        if [[ "$subject" != "$_cd_subj" ]]; then
+          die "Row identity: a stage-4 decision/d-class row on a card must carry its subject without surrounding whitespace; got '$subject'. The plan-survival reader strips a subject, but the awk-based readers split on ' | ' and keep the padding, so a padded card row would read differently across readers: pass --subject '$_cd_subj' (stage-04-planning.md § 11, the per-card gate disposition)."
+        fi
+        local _cd_nl=$'\n' _cd_seg _cd_lab _cd_n=0 _cd_v="" _cd_spell=""
+        while IFS= read -r _cd_seg; do
+          _cd_seg="${_cd_seg#"${_cd_seg%%[![:space:]]*}"}"
+          # The label is RECOGNIZED case-insensitively, as the plan-survival reader matches
+          # it, so a case-variant segment counts toward the one. Bash 3.2 has no ${v,,}.
+          _cd_lab="$(/usr/bin/printf '%s' "${_cd_seg:0:17}" | /usr/bin/tr '[:upper:]' '[:lower:]')"
+          if [[ "$_cd_lab" == "card-disposition:" ]]; then
+            _cd_n=$((_cd_n + 1))
+            _cd_spell="${_cd_seg:0:17}"
+            _cd_v="${_cd_seg:17}"
+            _cd_v="${_cd_v#"${_cd_v%%[![:space:]]*}"}"
+            _cd_v="${_cd_v%"${_cd_v##*[![:space:]]}"}"
+          fi
+        done <<< "${payload//;/$_cd_nl}"
+        if [[ "$_cd_n" -ne 1 ]] || [[ "$_cd_spell" != "card-disposition:" ]] \
+            || { [[ "$_cd_v" != "carried" ]] && [[ "$_cd_v" != "removed" ]]; }; then
+          die "Row identity: a stage-4 decision/d-class row on a card records that card's gate disposition and must carry exactly one payload segment card-disposition:carried or card-disposition:removed, spelled in lowercase; subject '$subject' carries ${_cd_n}${_cd_spell:+ (last written '${_cd_spell}${_cd_v}')}. A label in any letter case counts toward the one, because the plan-survival reader matches it case-insensitively. carried = the approved plan keeps the card in this release; removed = it does not (deferred, withdrawn, closed, split out or moved). Add the segment to --payload (stage-04-planning.md § 11, the per-card gate disposition; pipeline-event-log-schema.md § 3)."
+        fi
+      fi
+      ;;
+    decision/scope-lock)
+      if ! [[ "$stage" =~ ^0*[45]$ && "$actor" == "operator" ]]; then
+        die "Row identity: a decision/scope-lock row records a gate's scope lock and must carry stage 4 (the plan approval) or stage 5 (the Collective Review) with actor operator; got stage '$stage', actor '$actor'. A change after the lock is written as a scope-change row (tier-1-adjust, tier-2-scope-change or tier-3-plan-rejection), not as a second lock (stage-04-planning.md § 11; stage-05-solutioning.md § 11)."
+      fi
+      ;;
+    gate-outcome/plan-review-go|gate-outcome/plan-review-no-go)
+      if ! [[ "$stage" =~ ^9$ && "$actor" == "operator" ]]; then
+        die "Row identity: gate-outcome/$subtype records only the operator's rendered Stage-9 verdict (plan-review-go the GO, a GO WITH CONDITIONS included; plan-review-no-go the NO-GO), written at stage 9 with actor operator; got stage '$stage', actor '$actor'. If this row is not that verdict, it is not this subtype at any stage or under any actor: do not re-emit it as stage 9 by operator. Where it goes instead: a Stage-7 Dev Testing verdict is dt-pass, dt-conditional-pass or dt-return; a Stage-8 QA verdict is qa-acceptance or qa-rejection; a Stage-4 plan approval or a Collective Review outcome is decision/scope-lock; a Stage-12 execute authorization is decision/d-class; a stage or milestone completion note is the sub-task comment alone, with no event row. Only the operator's own Stage-9 verdict, typed with another stage or actor, is re-emitted at stage 9 with actor operator (pipeline-event-log-schema.md § 3, the Stage-9 verdict identity rule)."
+      fi
+      ;;
+  esac
+  return 0
+}
+
 # ─── Argument parsing ────────────────────────────────────────────────────────
 
 VERSION=""
@@ -1045,6 +1163,349 @@ if [[ "$SELF_TEST" == "true" ]]; then
     || die "self-test: a CR-carrying version value must still be rejected (trim before match)"
   echo "self-test: § 2a release join-key guard OK (2 reject arms + 5 accept arms + CR-trim; grammar SOURCED from version-grammar.sh)"
 
+  # ─── Row-identity rules — the stage-4 delegation subject grain ───────────
+  # REJECT list (sensitivity): each shape MUST die. ACCEPT list (specificity):
+  # every (stage, subject-grain) pair a decision/delegation row carries in the live
+  # log, plus every stage-4 decision sibling subtype the live log carries with a
+  # non-milestone subject, plus one other event type at stage 4. Each MUST pass:
+  # this gate runs at EVERY emitter, so a false rejection is a lost row mid-release,
+  # not a failed test. Both counts are asserted, so an empty or truncated list
+  # cannot pass vacuously. Fields are space-separated; the subject is the rest of
+  # the line (one live subject is free text). Every call passes actor operator: the
+  # arms that read the actor are the scope-lock arm, whose one line here is the
+  # operator's Stage-4 plan approval, and the Stage-9 verdict arm, which no line here
+  # reaches; their own arms are in the blocks below.
+  _ri_n=0
+  while IFS=' ' read -r _ri_st _ri_et _ri_es _ri_sj; do
+    [[ -n "$_ri_st" ]] || continue
+    if ( validate_row_identity "$_ri_st" "$_ri_et" "$_ri_es" "$_ri_sj" operator ) 2>/dev/null; then
+      die "self-test: row-identity — stage $_ri_st $_ri_et/$_ri_es with subject '$_ri_sj' must be REJECTED"
+    fi
+    _ri_n=$((_ri_n + 1))
+  done <<'RI_REJECT'
+4 decision delegation sub-task:#1
+4 decision delegation issue:#1
+4 decision delegation #1
+4 decision delegation milestone:341
+4 decision delegation milestone:#
+04 decision delegation sub-task:#1
+RI_REJECT
+  [[ "$_ri_n" -eq 6 ]] || die "self-test: row-identity reject list ran $_ri_n arms, expected 6"
+  # A padded subject is asserted outside the list: a trailing space does not
+  # survive a heredoc line reliably, and the arm pins the untrimmed match.
+  if ( validate_row_identity 4 decision delegation 'milestone:#341 ' ) 2>/dev/null; then
+    die "self-test: row-identity — a padded milestone subject must be REJECTED (matched as written, untrimmed)"
+  fi
+  _ri_n=0
+  while IFS=' ' read -r _ri_st _ri_et _ri_es _ri_sj; do
+    [[ -n "$_ri_st" ]] || continue
+    ( validate_row_identity "$_ri_st" "$_ri_et" "$_ri_es" "$_ri_sj" operator ) 2>/dev/null \
+      || die "self-test: row-identity — stage $_ri_st $_ri_et/$_ri_es with subject '$_ri_sj' is a legitimate emitter shape and must be ACCEPTED"
+    _ri_n=$((_ri_n + 1))
+  done <<'RI_ACCEPT'
+4 decision delegation milestone:#341
+5 decision delegation issue:#1
+5 decision delegation milestone:#341
+5 decision delegation sub-task:#1
+6 decision delegation issue:#1
+6 decision delegation milestone:#341
+6 decision delegation sub-task:#1
+6 decision delegation mainline-sync free-text subject
+7 decision delegation issue:#1
+7 decision delegation milestone:#341
+8 decision delegation #1
+8 decision delegation issue:#1
+8 decision delegation milestone:#341
+9 decision delegation #1
+9 decision delegation milestone:#341
+9 decision delegation release:telemetry-is-computable
+9 decision delegation sub-task:#1
+12 decision delegation issue:#1
+12 decision delegation milestone:#341
+12 decision delegation release:telemetry-is-computable
+12 decision delegation sub-task:#1
+13 decision delegation release:telemetry-is-computable
+13 decision delegation sub-task:#1
+4 decision d-class sub-task:#1
+4 decision action-item-opened issue:#1
+4 decision action-item-opened sub-task:#1
+4 decision action-item-resolved issue:#1
+4 decision action-item-resolved sub-task:#1
+4 decision action-item-started sub-task:#1
+4 decision empirical-verification-finding issue:#1
+4 decision empirical-verification-finding sub-task:#1
+4 decision recommendation-choice-delta issue:#1
+4 decision scope-lock issue:#1
+4 decision approval-deferred issue:#1
+4 decision a7-bundle-amend issue:#1
+4 decision decision-superseded issue:#1
+4 re-review phase-a0-row issue:#1
+RI_ACCEPT
+  [[ "$_ri_n" -eq 37 ]] || die "self-test: row-identity accept list ran $_ri_n arms, expected 37"
+  # End-to-end wiring: the rule must fire on the WRITE PATH, not only in the
+  # function. A --dry-run child runs every validator and exits before any append,
+  # so a missing call site fails here even though every arm above still passes.
+  _ri_e2e() { /bin/bash "${BASH_SOURCE[0]}" --dry-run --version selftest-sentinel-release \
+      --stage 4 --event-type decision --event-subtype delegation --actor hub \
+      --subject "$1" --reversibility CHEAP --outcome resolved --payload 'ms:#1; chose:spoke' 2>&1; }
+  if _ri_out="$(_ri_e2e 'sub-task:#1')"; then
+    die "self-test: row-identity — a --dry-run emit of a stage-4 delegation keyed sub-task:#1 exited 0; the rule is not wired into the write path"
+  fi
+  case "$_ri_out" in
+    *"Row identity:"*) : ;;
+    *) die "self-test: row-identity — the sub-task:#1 emit failed, but not on the row-identity rule: $_ri_out" ;;
+  esac
+  _ri_out="$(_ri_e2e 'milestone:#1')" \
+    || die "self-test: row-identity — a --dry-run emit of a stage-4 delegation keyed milestone:#1 was rejected: $_ri_out"
+  case "$_ri_out" in
+    *"[DRY-RUN] would append row:"*) : ;;
+    *) die "self-test: row-identity — the milestone:#1 control did not reach the append step: $_ri_out" ;;
+  esac
+  echo "self-test: row-identity rules OK (6 listed + 1 padded reject arms; 37 accept arms: every live decision/delegation (stage, subject) shape and every live stage-4 decision sibling subtype; write-path wiring: a sub-task-keyed dry-run emit is refused, the milestone-keyed control reaches the append step)"
+
+  # ─── Row-identity rules — the stage-4 card disposition ───────────────────
+  # REJECT (sensitivity): no segment, an unknown or wrong-case value, two segments,
+  # a second segment whose label differs only in letter case (the plan-survival
+  # reader matches the label case-insensitively, so it counts toward the one), a
+  # lone segment with a wrong-case label, the token inside another label. ACCEPT
+  # (specificity): both values, any position and spacing, and d-class shapes the
+  # rule does not govern. The payload is the rest of the line. Both counts are
+  # asserted.
+  _cd_n=0
+  while IFS=' ' read -r _cd_st _cd_et _cd_es _cd_sj _cd_pl; do
+    [[ -n "$_cd_st" ]] || continue
+    if ( validate_row_identity "$_cd_st" "$_cd_et" "$_cd_es" "$_cd_sj" operator "$_cd_pl" ) 2>/dev/null; then
+      die "self-test: card-disposition — stage $_cd_st $_cd_et/$_cd_es on '$_cd_sj' with payload '$_cd_pl' must be REJECTED"
+    fi
+    _cd_n=$((_cd_n + 1))
+  done <<'CD_REJECT'
+4 decision d-class issue:#1 ms:#1; d:Plan-Approval
+4 decision d-class #1 ms:#1; d:D-1-Scope; chose:narrow
+04 decision d-class issue:#1 ms:#1; d:Plan-Approval
+4 decision d-class issue:#1 ms:#1; card-disposition:deferred
+4 decision d-class issue:#1 ms:#1; card-disposition:Carried
+4 decision d-class issue:#1 ms:#1; card-disposition:carried; card-disposition:removed
+4 decision d-class issue:#1 ms:#1; card-disposition:carried; Card-Disposition:removed
+4 decision d-class issue:#1 ms:#1; Card-Disposition:removed
+4 decision d-class issue:#1 ms:#1; note:card-disposition:carried was the proposal
+CD_REJECT
+  [[ "$_cd_n" -eq 9 ]] || die "self-test: card-disposition reject list ran $_cd_n arms, expected 9"
+  _cd_n=0
+  while IFS=' ' read -r _cd_st _cd_et _cd_es _cd_sj _cd_pl; do
+    [[ -n "$_cd_st" ]] || continue
+    ( validate_row_identity "$_cd_st" "$_cd_et" "$_cd_es" "$_cd_sj" operator "$_cd_pl" ) 2>/dev/null \
+      || die "self-test: card-disposition — stage $_cd_st $_cd_et/$_cd_es on '$_cd_sj' with payload '$_cd_pl' must be ACCEPTED"
+    _cd_n=$((_cd_n + 1))
+  done <<'CD_ACCEPT'
+4 decision d-class issue:#1 ms:#1; d:Plan-Approval; card-disposition:carried
+4 decision d-class issue:#1 ms:#1; d:Plan-Approval; card-disposition:removed
+4 decision d-class #1 card-disposition:removed; ms:#1
+4 decision d-class issue:#1 ms:#1;   card-disposition:   carried
+4 decision d-class milestone:#341 ms:#341; d:D-Scope; chose:split
+4 decision d-class sub-task:#1 ms:#341; d:process-decision
+5 decision d-class issue:#1 ms:#341; d:D-5-Design
+12 decision d-class milestone:#341 ms:#341; d:version-claim; claimed:v9.99
+4 decision scope-lock milestone:#341 ms:#341; d:Plan-Approval
+4 decision recommendation-choice-delta issue:#1 ms:#1; rec:a; chose:a; delta:aligned; via:hub-d-gate
+CD_ACCEPT
+  [[ "$_cd_n" -eq 10 ]] || die "self-test: card-disposition accept list ran $_cd_n arms, expected 10"
+  # Padded subjects are asserted outside the lists: a trailing space does not survive a
+  # heredoc line reliably. The card grain is recognized on the TRIMMED subject, the way
+  # the plan-survival reader reads a subject, so padding cannot take a card row out of
+  # the rule; the padded spelling is then refused, with or without a valid disposition,
+  # because the awk-based readers keep the padding. A padded NON-card subject is not a
+  # card on either side and stays ungoverned.
+  for _cd_sj in 'issue:#1 ' ' #1' $'issue:#1\t'; do
+    if ( validate_row_identity 4 decision d-class "$_cd_sj" operator 'ms:#1; d:Plan-Approval' ) 2>/dev/null; then
+      die "self-test: card-disposition — a padded card subject '$_cd_sj' with no disposition must be REJECTED (the card is recognized on the trimmed subject)"
+    fi
+    if ( validate_row_identity 4 decision d-class "$_cd_sj" operator 'ms:#1; card-disposition:carried' ) 2>/dev/null; then
+      die "self-test: card-disposition — a padded card subject '$_cd_sj' must be REJECTED even with a valid disposition (readers disagree on padding)"
+    fi
+  done
+  ( validate_row_identity 4 decision d-class 'sub-task:#1 ' operator 'ms:#1; d:process-decision' ) 2>/dev/null \
+    || die "self-test: card-disposition — a padded NON-card subject is not governed by this rule and must be ACCEPTED"
+  _cd_e2e() { /bin/bash "${BASH_SOURCE[0]}" --dry-run --version selftest-sentinel-release \
+      --stage 4 --event-type decision --event-subtype d-class --actor operator \
+      --subject 'issue:#1' --reversibility CHEAP --outcome resolved --payload "$1" 2>&1; }
+  if _cd_out="$(_cd_e2e 'ms:#1; d:Plan-Approval')"; then
+    die "self-test: card-disposition — a --dry-run emit of a stage-4 d-class row on issue:#1 with no disposition exited 0; the rule is not wired"
+  fi
+  case "$_cd_out" in
+    *"Row identity:"*) : ;;
+    *) die "self-test: card-disposition — the no-disposition emit failed, but not on the row-identity rule: $_cd_out" ;;
+  esac
+  _cd_out="$(_cd_e2e 'ms:#1; d:Plan-Approval; card-disposition:carried')" \
+    || die "self-test: card-disposition — the carried control was rejected (is the payload passed to validate_row_identity?): $_cd_out"
+  case "$_cd_out" in
+    *"[DRY-RUN] would append row:"*) : ;;
+    *) die "self-test: card-disposition — the carried control did not reach the append step: $_cd_out" ;;
+  esac
+  # The padded-subject wiring arm: the shape a padded emit actually takes on the write path.
+  if _cd_out="$(/bin/bash "${BASH_SOURCE[0]}" --dry-run --version selftest-sentinel-release \
+      --stage 4 --event-type decision --event-subtype d-class --actor operator \
+      --subject 'issue:#1 ' --reversibility CHEAP --outcome resolved --payload 'ms:#1; d:Plan-Approval' 2>&1)"; then
+    die "self-test: card-disposition — a --dry-run emit of a stage-4 d-class row on a PADDED card subject with no disposition exited 0; the card must be recognized on the trimmed subject"
+  fi
+  case "$_cd_out" in
+    *"Row identity:"*) : ;;
+    *) die "self-test: card-disposition — the padded-subject emit failed, but not on the row-identity rule: $_cd_out" ;;
+  esac
+  echo "self-test: card-disposition rule OK (9 reject / 10 accept arms; 6 padded-card-subject reject arms and 1 padded non-card accept arm; write-path wiring: a no-disposition card row and a padded card row refused, the carried control reaches the append step)"
+
+  # ─── Row-identity rules — the scope-lock identity ────────────────────────
+  # REJECT (sensitivity): every off-contract live shape — a lock at a stage before
+  # the plan gate or after the Collective Review, and a hub- or spoke-actored lock
+  # at stage 4 or 5 — plus a call with no actor. ACCEPT (specificity): the two
+  # gates' own shapes, the zero-padded stages the stage check admits, and the
+  # scope-change rows a post-lock change is written as, plus other decision
+  # subtypes at a rejected stage (the arm is keyed on the pair, never on the stage
+  # or actor alone). Both counts are asserted.
+  _sl_n=0
+  while IFS=' ' read -r _sl_st _sl_ac; do
+    [[ -n "$_sl_st" ]] || continue
+    if ( validate_row_identity "$_sl_st" decision scope-lock "milestone:#1" "$_sl_ac" ) 2>/dev/null; then
+      die "self-test: scope-lock identity — decision/scope-lock at stage $_sl_st by $_sl_ac must be REJECTED"
+    fi
+    _sl_n=$((_sl_n + 1))
+  done <<'SL_REJECT'
+2 operator
+3 operator
+6 operator
+7 operator
+8 operator
+9 operator
+12 operator
+13 operator
+4 hub
+5 hub
+5 spoke:#1
+SL_REJECT
+  [[ "$_sl_n" -eq 11 ]] || die "self-test: scope-lock identity reject list ran $_sl_n arms, expected 11"
+  if ( validate_row_identity 5 decision scope-lock "milestone:#1" ) 2>/dev/null; then
+    die "self-test: scope-lock identity — a call with no actor must be REJECTED (the arm fails closed)"
+  fi
+  _sl_n=0
+  while IFS=' ' read -r _sl_st _sl_et _sl_es _sl_ac; do
+    [[ -n "$_sl_st" ]] || continue
+    ( validate_row_identity "$_sl_st" "$_sl_et" "$_sl_es" "milestone:#1" "$_sl_ac" ) 2>/dev/null \
+      || die "self-test: scope-lock identity — stage $_sl_st $_sl_et/$_sl_es by $_sl_ac must be ACCEPTED"
+    _sl_n=$((_sl_n + 1))
+  done <<'SL_ACCEPT'
+4 decision scope-lock operator
+5 decision scope-lock operator
+04 decision scope-lock operator
+05 decision scope-lock operator
+6 scope-change tier-2-scope-change operator
+7 scope-change tier-1-adjust hub
+9 scope-change tier-3-plan-rejection operator
+6 decision d-class operator
+7 decision a7-bundle-amend hub
+SL_ACCEPT
+  [[ "$_sl_n" -eq 9 ]] || die "self-test: scope-lock identity accept list ran $_sl_n arms, expected 9"
+  _sl_e2e() { /bin/bash "${BASH_SOURCE[0]}" --dry-run --version selftest-sentinel-release \
+      --stage "$1" --event-type decision --event-subtype scope-lock --actor "$2" \
+      --subject 'milestone:#1' --reversibility MODERATE --outcome resolved --payload 'ms:#1; verdict:approved' 2>&1; }
+  if _sl_out="$(_sl_e2e 6 operator)"; then
+    die "self-test: scope-lock identity — a --dry-run emit of a stage-6 scope-lock exited 0; the rule is not wired"
+  fi
+  case "$_sl_out" in
+    *"Row identity:"*) : ;;
+    *) die "self-test: scope-lock identity — the stage-6 lock failed, but not on the row-identity rule: $_sl_out" ;;
+  esac
+  _sl_out="$(_sl_e2e 5 operator)" \
+    || die "self-test: scope-lock identity — the stage-5 operator lock was rejected (is the actor passed to validate_row_identity?): $_sl_out"
+  case "$_sl_out" in
+    *"[DRY-RUN] would append row:"*) : ;;
+    *) die "self-test: scope-lock identity — the stage-5 operator lock did not reach the append step: $_sl_out" ;;
+  esac
+  echo "self-test: scope-lock identity rule OK (11 listed + 1 no-actor reject arms / 9 accept arms; write-path wiring: a stage-6 lock refused, the stage-5 operator lock reaches the append step)"
+
+  # ─── Row-identity rules — the Stage-9 verdict identity ───────────────────
+  # REJECT (sensitivity): every live off-identity shape of the two Stage-9 verdict
+  # subtypes, spoke- and skill-actored rows at stage 9, a zero-padded stage, and a call
+  # with no actor. ACCEPT (specificity): the legitimate shape of each subtype, and other
+  # subtypes and classes at the rejected shapes — the arm is keyed on the (type,
+  # subtype) pair, never on the stage or actor alone. Both counts are asserted.
+  _go_n=0
+  while IFS=' ' read -r _go_es _go_st _go_ac; do
+    [[ -n "$_go_es" ]] || continue
+    if ( validate_row_identity "$_go_st" gate-outcome "$_go_es" "milestone:#1" "$_go_ac" ) 2>/dev/null; then
+      die "self-test: Stage-9 verdict identity — gate-outcome/$_go_es at stage $_go_st by $_go_ac must be REJECTED"
+    fi
+    _go_n=$((_go_n + 1))
+  done <<'GO_REJECT'
+plan-review-go 4 operator
+plan-review-go 5 operator
+plan-review-go 5 hub
+plan-review-go 7 hub
+plan-review-go 8 hub
+plan-review-go 9 hub
+plan-review-go 12 operator
+plan-review-go 12 hub
+plan-review-go 13 operator
+plan-review-go 13 hub
+plan-review-go 9 spoke:#1
+plan-review-go 9 skill:release-hub
+plan-review-go 09 operator
+plan-review-no-go 8 hub
+plan-review-no-go 9 hub
+plan-review-no-go 12 operator
+GO_REJECT
+  [[ "$_go_n" -eq 16 ]] || die "self-test: Stage-9 verdict identity reject list ran $_go_n arms, expected 16"
+  for _go_es in plan-review-go plan-review-no-go; do
+    if ( validate_row_identity 9 gate-outcome "$_go_es" "milestone:#1" ) 2>/dev/null; then
+      die "self-test: Stage-9 verdict identity — a gate-outcome/$_go_es call with no actor must be REJECTED (the arm fails closed)"
+    fi
+  done
+  _go_n=0
+  while IFS=' ' read -r _go_st _go_et _go_es _go_ac; do
+    [[ -n "$_go_st" ]] || continue
+    ( validate_row_identity "$_go_st" "$_go_et" "$_go_es" "milestone:#1" "$_go_ac" ) 2>/dev/null \
+      || die "self-test: Stage-9 verdict identity — stage $_go_st $_go_et/$_go_es by $_go_ac must be ACCEPTED"
+    _go_n=$((_go_n + 1))
+  done <<'GO_ACCEPT'
+9 gate-outcome plan-review-go operator
+9 gate-outcome plan-review-no-go operator
+9 gate-outcome plan-review-readiness-scan hub
+9 gate-outcome goal-conformance hub
+7 gate-outcome dt-pass hub
+7 gate-outcome dt-conditional-pass spoke:#1
+7 gate-outcome dt-return hub
+8 gate-outcome qa-acceptance hub
+8 gate-outcome qa-rejection spoke:#1
+6 gate-outcome g1-g2 hub
+12 gate-outcome g3-release-readiness operator
+4 decision scope-lock operator
+5 decision scope-lock operator
+12 decision d-class operator
+13 decision action-item-resolved operator
+GO_ACCEPT
+  [[ "$_go_n" -eq 15 ]] || die "self-test: Stage-9 verdict identity accept list ran $_go_n arms, expected 15"
+  # Write-path wiring: the rule fires on the write path, not only in the function.
+  _go_e2e() { /bin/bash "${BASH_SOURCE[0]}" --dry-run --version selftest-sentinel-release \
+      --stage "$2" --event-type gate-outcome --event-subtype "$1" --actor "$3" \
+      --subject 'milestone:#1' --reversibility MODERATE --outcome resolved --payload 'ms:#1; verdict:self-test' 2>&1; }
+  for _go_case in 'plan-review-go 7 hub' 'plan-review-no-go 8 hub'; do
+    read -r _go_es _go_st _go_ac <<<"$_go_case"
+    if _go_out="$(_go_e2e "$_go_es" "$_go_st" "$_go_ac")"; then
+      die "self-test: Stage-9 verdict identity — a stage-$_go_st $_go_ac $_go_es dry-run exited 0; the rule is not wired"
+    fi
+    case "$_go_out" in
+      *"Row identity:"*) : ;;
+      *) die "self-test: Stage-9 verdict identity — the stage-$_go_st $_go_ac $_go_es emit failed on another rule: $_go_out" ;;
+    esac
+  done
+  for _go_es in plan-review-go plan-review-no-go; do
+    _go_out="$(_go_e2e "$_go_es" 9 operator)" \
+      || die "self-test: Stage-9 verdict identity — the stage-9 operator $_go_es was rejected (is the actor passed to validate_row_identity?): $_go_out"
+    case "$_go_out" in
+      *"[DRY-RUN] would append row:"*) : ;;
+      *) die "self-test: Stage-9 verdict identity — the stage-9 operator $_go_es did not reach the append step: $_go_out" ;;
+    esac
+  done
+  echo "self-test: Stage-9 verdict identity rule OK (16 listed + 2 no-actor reject arms / 15 accept arms; write-path wiring: a stage-7 hub GO and a stage-8 hub NO-GO refused, the stage-9 operator GO and NO-GO reach the append step)"
+
   # ─── Payload row-integrity: positive (multi-value) ───
   _pi_ok() { case "$1" in *$'\n'*|*$'\r'*) return 1;; esac
              case "$1 |" in *" | "*) return 1;; esac
@@ -1121,6 +1582,9 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "  § 11.8 payload labels validated (schema<->fallback lockstep; unrecognized label rejected)"
   echo "  no-learning rows reject 'theme:' by enforcement; undeclared-label-set types stay free-form"
   echo "  § 2a release join key enforced: version-grammar values + unresolved tokens rejected, slugs accepted"
+  echo "  row-identity rules enforced: a stage-4 decision/delegation row must carry a milestone:#N subject; a stage-4 decision/d-class row on a card must carry exactly one card-disposition:carried or card-disposition:removed segment"
+  echo "  row-identity rules enforced: a decision/scope-lock row must carry stage 4 or 5 and actor operator"
+  echo "  row-identity rules enforced: a gate-outcome/plan-review-go or plan-review-no-go row must carry stage 9 and actor operator"
   echo "  positive + negative tests passed"
   echo "  append cycle confirmed on a private temp copy (log + write-log); live log never opened for write"
   exit 0
@@ -1168,6 +1632,12 @@ validate_subtype "$EVENT_TYPE" "$EVENT_SUBTYPE" || die "Invalid event_subtype '$
 validate_actor "$ACTOR" || die "Invalid actor: '$ACTOR' (allowed: hub, operator, spoke:#N, skill:NAME)"
 is_in_list "$REVERSIBILITY" "$REVERSIBILITY_VALUES" || die "Invalid reversibility: '$REVERSIBILITY' (allowed: $REVERSIBILITY_VALUES)"
 is_in_list "$OUTCOME" "$OUTCOME_VALUES" || die "Invalid outcome: '$OUTCOME' (allowed: $OUTCOME_VALUES)"
+
+# ─── Row-identity rules (schema § 3; the stages' § 11 emission contracts) ────
+# Same rung as enum validation: a triple whose identity fields break a rule is a
+# malformed call. The log is append-only (§ 4.1), so this write-side gate is the
+# only place a bad row can be kept out.
+validate_row_identity "$STAGE" "$EVENT_TYPE" "$EVENT_SUBTYPE" "$SUBJECT" "$ACTOR" "$PAYLOAD"
 
 # Payload length cap (§ 4.3)
 if [[ ${#PAYLOAD} -gt 300 ]]; then

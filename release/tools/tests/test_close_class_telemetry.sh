@@ -37,6 +37,13 @@ set -uo pipefail
 #       denominator-integrity fixtures, and sensitivity against a mutant that collapses the
 #       unmeasurable-denominator limb back into the clean-absence limb — the verbatim pre-fix
 #       behaviour, in which a true zero and a total label gap emitted the identical 21 bytes.
+#   (E) CALLER OMISSION — Indicators 1, 2 and 5 must not render "the caller supplied no
+#       --retro path" as "the register is genuinely absent". Arm presence, and sensitivity
+#       against a mutant that reads an empty path as an absent register — the verbatim pre-fix
+#       behaviour, in which the two emitted identical bytes. Plus a STRUCTURAL BINDING arm:
+#       the self-test drives the resolution functions directly, so it cannot see a live call
+#       site that stopped calling them; the binding arm counts each live call site exactly
+#       once, and its own mutation control proves each detector catches exactly one class.
 #
 # Offline + deterministic: no network, no gh, no writes to any operator-instance path, no
 # writes into the repo. All fixtures live under one mktemp dir.
@@ -110,6 +117,22 @@ except (ValueError, TypeError) as e:"""),
       ra="truncated"; rb="NOT-EVALUATED\"""",
          """    elif [[ "$u" -gt 999999 ]]; then
       ra="truncated"; rb="NOT-EVALUATED\""""),
+    ],
+    # Read an EMPTY path as an absent register — the verbatim pre-fix behaviour, in which a
+    # caller that supplied no --retro path and a supplied path holding no register emitted
+    # identical bytes. The resolver's own RO/RA inequality MUST catch it.
+    "collapsed-omission": [
+        ("""  if [[ -z "$path" ]]; then
+    echo "omitted\"""",
+         """  if [[ -z "$path" && 1 -eq 0 ]]; then
+    echo "omitted\""""),
+    ],
+    # Re-insert the pre-fix Indicator-5 literal at its live call site, leaving both resolution
+    # functions intact. The self-test drives those functions directly, so it stays green; only
+    # the structural binding arm can see a call site that stopped calling them.
+    "reinserted-rollup-literal": [
+        ("""  IFS=$'\\t' read -r _rp_reason ROLLUP_PRESENCE < <(register_slot_render rollup "$RETRO_STATE" "$VERSION")""",
+         """  ROLLUP_PRESENCE="N/A — no retro register found\""""),
     ],
 }
 
@@ -372,6 +395,125 @@ case "$MUT_DEN_RESULT" in
     ;;
   *)
     bad "D2a mutation-extraction control — $MUT_DEN_RESULT (instrument broken; no sensitivity verdict is reportable)"
+    ;;
+esac
+
+echo
+
+# ---------------------------------------------------------------------------
+# GROUP E — caller omission
+# ---------------------------------------------------------------------------
+echo "GROUP E — Indicators 1, 2 and 5 must not render a caller omission as an absent register"
+
+# binding_findings <file>
+#   The structural binding predicate, shared by E3 (the shipped tool) and the two mutation
+#   controls below, so every verdict comes from ONE predicate rather than a re-implemented
+#   copy. Prints one line per violation and nothing when the file is clean. Every live call
+#   site of the two resolution functions, and the two emission bindings that carry an
+#   unresolved slot into the field, must appear EXACTLY ONCE; the three pre-fix literals —
+#   the renderings the functions replaced at their call sites — must appear ZERO times.
+binding_findings() {
+  local f="$1" s n
+  for s in \
+    'RETRO_STATE="$(register_path_state "$RETRO_PATH")"' \
+    'LESS_STATE="$(register_path_state "$LESSONS_PATH")"' \
+    'register_slot_render retro "$RETRO_STATE" "$VERSION"' \
+    'register_slot_render lessons "$LESS_STATE" "$VERSION"' \
+    'register_slot_render rollup "$RETRO_STATE" "$VERSION"' \
+    'RETRO_STR="$RETRO_SLOT"' \
+    'LESS_STR="$LESS_SLOT"'; do
+    n="$(/usr/bin/grep -cF -- "$s" "$f" || true)"
+    [ "${n:-0}" -eq 1 ] || echo "live call site [$s] found ${n:-0} times, expected exactly 1"
+  done
+  for s in \
+    'ROLLUP_PRESENCE="N/A — no retro register found"' \
+    'RETRO_NA_REASON="no retro register found for $VERSION"' \
+    'LESS_NA_REASON="no lessons register found"'; do
+    n="$(/usr/bin/grep -cF -- "$s" "$f" || true)"
+    [ "${n:-0}" -eq 0 ] || echo "pre-fix literal [$s] found ${n:-0} times, expected 0"
+  done
+}
+
+# E1 — arm presence. A2 alone would still pass if the register-resolution fixtures were
+#      deleted, so assert the shipped self-test REPORTED them.
+if /usr/bin/grep -q 'register-resolution validated' "$SELFTEST_OUT"; then
+  ok "E1 arm presence — $(/usr/bin/grep 'register-resolution validated' "$SELFTEST_OUT" | /usr/bin/sed 's/^ *//')"
+else
+  bad "E1 arm presence — shipped --self-test passed WITHOUT reporting the register-resolution arm; it is green on a path it never exercised"
+fi
+
+# E2 — SENSITIVITY at the resolver. Read an empty path as an absent register, which is
+#      exactly what the tool did before this guard. The suite MUST go red, and for that reason:
+#      the RO/RA inequality is asserted before any omission-shape arm, so it is the first and
+#      only assertion the collapse can reach.
+MUT_OMIT="$WORK/mutant-omission.sh"
+MUT_OMIT_RESULT="$(mutate "$TOOL" "$MUT_OMIT" collapsed-omission)"
+case "$MUT_OMIT_RESULT" in
+  "OK 1")
+    ok "E2a mutation-extraction control — the empty-path limb of the resolver was replaced exactly once"
+    chmod +x "$MUT_OMIT"
+    MUT_OMIT_OUT="$WORK/mutant-omission-out.txt"
+    if "$MUT_OMIT" --self-test >"$MUT_OMIT_OUT" 2>&1; then
+      bad "E2b sensitivity — the collapsed-omission mutant PASSED its own suite; the guard is decorative and a caller omission still reads as an absent register"
+    elif /usr/bin/grep -qF 'register-resolution — RO (caller supplied no --retro) and RA (register genuinely absent) emitted the IDENTICAL state' "$MUT_OMIT_OUT"; then
+      ok "E2b sensitivity — collapsed-omission mutant fails on the RO/RA inequality: $(/usr/bin/tail -1 "$MUT_OMIT_OUT" | /usr/bin/sed 's/^ERROR: self-test: //')"
+    else
+      bad "E2b sensitivity — mutant failed, but not on the RO/RA inequality: $(/usr/bin/tail -1 "$MUT_OMIT_OUT")"
+    fi
+    # E2c — SPECIFICITY of the binding arm. A resolver-level revert leaves every call site
+    #       bound, so the binding predicate must stay silent on this mutant: each detector
+    #       catches exactly one class, and this one is the self-test's.
+    MUT_OMIT_BIND="$(binding_findings "$MUT_OMIT")"
+    if [ -z "$MUT_OMIT_BIND" ]; then
+      ok "E2c binding specificity — the binding predicate reports 0 violations on the resolver mutant (the revert is the self-test's to catch)"
+    else
+      bad "E2c binding specificity — the binding predicate flagged the resolver mutant: ${MUT_OMIT_BIND%%$'\n'*}"
+    fi
+    ;;
+  *)
+    bad "E2a mutation-extraction control — $MUT_OMIT_RESULT (instrument broken; no sensitivity verdict is reportable)"
+    ;;
+esac
+
+# E3 — STRUCTURAL BINDING over the shipped tool. The self-test drives the resolution
+#      functions directly, so a live call site that reverted to its pre-fix literal would
+#      leave every self-test arm green. Each bound site must appear exactly once and each
+#      pre-fix literal zero times. A0 already proved the tool was read non-empty, so a clean
+#      reading here is a measurement rather than an empty file.
+BIND_OUT="$(binding_findings "$TOOL")"
+if [ -z "$BIND_OUT" ]; then
+  ok "E3 structural binding — 7 live call sites bound exactly once each, 3 pre-fix literals absent"
+else
+  bad "E3 structural binding — $(printf '%s' "$BIND_OUT" | /usr/bin/tr '\n' ';' | /usr/bin/sed 's/;$//')"
+fi
+
+# E4 — SENSITIVITY of the binding arm. Re-insert the pre-fix Indicator-5 literal at its live
+#      call site. The binding predicate MUST go red naming that site, and the mutant's own
+#      --self-test MUST stay green — the proof that the binding arm is the only detector
+#      that sees a call-site revert.
+MUT_BIND="$WORK/mutant-binding.sh"
+MUT_BIND_RESULT="$(mutate "$TOOL" "$MUT_BIND" reinserted-rollup-literal)"
+case "$MUT_BIND_RESULT" in
+  "OK 1")
+    ok "E4a mutation-extraction control — the Indicator-5 live call site was replaced exactly once"
+    chmod +x "$MUT_BIND"
+    MUT_BIND_FIND="$(binding_findings "$MUT_BIND")"
+    # Here-strings rather than a writer piped into a quiet grep: under pipefail a reader that
+    # exits on its first match can fail the writer, and the pipeline then reports a match as a miss.
+    if /usr/bin/grep -qF 'register_slot_render rollup' <<<"$MUT_BIND_FIND" \
+       && /usr/bin/grep -qF 'ROLLUP_PRESENCE="N/A — no retro register found"' <<<"$MUT_BIND_FIND"; then
+      ok "E4b binding sensitivity — the reinserted Indicator-5 literal reddens the binding predicate at that site ($(printf '%s\n' "$MUT_BIND_FIND" | /usr/bin/wc -l | /usr/bin/tr -d ' ') violations)"
+    else
+      bad "E4b binding sensitivity — the binding predicate did not name the reinserted Indicator-5 site: '${MUT_BIND_FIND:-<no violations>}'"
+    fi
+    if "$MUT_BIND" --self-test >"$WORK/mutant-binding-out.txt" 2>&1; then
+      ok "E4c detector exclusivity — the call-site mutant's own --self-test stays green, so only the binding arm sees this revert"
+    else
+      bad "E4c detector exclusivity — the call-site mutant failed its own --self-test, so the two detectors overlap: $(/usr/bin/tail -1 "$WORK/mutant-binding-out.txt")"
+    fi
+    ;;
+  *)
+    bad "E4a mutation-extraction control — $MUT_BIND_RESULT (instrument broken; no sensitivity verdict is reportable)"
     ;;
 esac
 

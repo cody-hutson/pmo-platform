@@ -43,15 +43,39 @@
 #   C3  log <-> write-log        — SHA1 CONTENT join, BOTH directions, reported
 #                                  separately. A net count hides two opposite
 #                                  failures inside one smaller number.
-#   C4  ledger <-> log           — AI-NNN id join both ways, PLUS terminal-state
-#                                  agreement. A presence predicate passes while
-#                                  every row is stale; currency is the failure.
+#   C4  ledger <-> log           — (release, AI-NNN) join both ways, PLUS
+#                                  terminal-state agreement. A presence predicate
+#                                  passes while every row is stale; currency is
+#                                  the failure.
 #   C5  ledger row integrity     — 13 fields, status in the § 2.3 enum
 #
 # C5 IS A PRECONDITION OF C4, NOT AN EXTENSION. A field-shifted ledger row makes
 # a position-based `status` read return some other column, so C4's verdict on
 # that row would be meaningless. C5-failing rows are reported and EXCLUDED from
-# C4's denominator, and the exclusion is printed.
+# limbs (a)/(b) and their denominator, and the exclusion is printed. Limb (c)
+# makes no status read — it reads only the id, cell 0 at any arity — so a
+# C5-failing row still puts its id on the ledger for limb (c).
+#
+# C4 JOINS ON (RELEASE, ID), NEVER ON THE BARE ID. Every release numbers its action
+# items from AI-001, so a bare-id join lets one release's event satisfy another's
+# ledger row. A log row's release is its `version` column (schema § 2a rung 1); a
+# ledger's release is the name of its hub-state directory. Every C4 finding key starts
+# with the release — `<release>:L<n>` (a ledger row) or `<release>:<AI-id>` (log-side
+# events with no row) — so attribution by release is a prefix read.
+#
+# LEGACY RULE. A version-form key (rows written before the writer enforced the slug;
+# a few early directories) joins only under its literal value and is NEVER re-keyed
+# through § 2a rung 3 — § 2a keeps rung 3 out of any gate that asserts an emission
+# obligation, and every C4 limb is one. Its findings are graded by the one § 4.1
+# cutover (log-side findings dated by their own rows); those rows predate it, so they
+# report LEGACY. Legacy keys naming more than one milestone are reported
+# release-INDETERMINATE in a report-only note.
+#
+# LIMB (c) HAS ITS OWN POPULATION AND ITS OWN DATE. Limbs (a)/(b) grade ledger rows;
+# limb (c) grades the (release, id) pairs the log carries, so its tally prints on its
+# own denominator line, C4c — a count over pairs is never printed as a ledger-row
+# rate. A pair is dated by its own rows and graded when ANY of them is (at or after
+# the cutover, or undatable), so a pair straddling the cutover grades.
 #
 # Cutover: findings on rows BEFORE the cutover instant report LEGACY and do not
 # affect the exit code; findings at or after it are VIOLATIONs. LEGACY means
@@ -76,6 +100,7 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 SCHEMA_FILE="$REPO_ROOT/release/references/standards/pipeline-event-log-schema.md"
 FIXTURE_DIR="$REPO_ROOT/release/tools/tests/fixtures/event-record"
+VERSION_GRAMMAR_FILE="$SCRIPT_DIR/version-grammar.sh"   # sourced by the C4 legacy screen, never copied
 
 # Fail-closed on an absent resolver, and pass an empty positional: a sourced file
 # inherits the caller's "$@", so sourcing while $1 is still `--self-test` would
@@ -124,8 +149,8 @@ usage() {
 #
 # Usage: run_engine <log> <writelog> <ledger-glob-root> <cutover> <surface> <format>
 run_engine() {
-  /usr/bin/python3 - "$@" <<'PYEOF'
-import sys, os, re, glob, hashlib, json
+  C4_VERSION_GRAMMAR="$VERSION_GRAMMAR_FILE" /usr/bin/python3 - "$@" <<'PYEOF'
+import sys, os, re, glob, hashlib, json, subprocess
 
 log_path, wlog_path, ledger_root, cutover, surface, fmt, schema_file = sys.argv[1:8]
 
@@ -217,9 +242,46 @@ def graded(ts):
     return ts >= cutover
 
 
+def ledger_release(lp):
+    """A ledger's release: the name of the directory holding it (<hub-state>/<slug>/
+    action-items.md; a few early directories keep the version they were made under).
+    One derivation for the C5 key, the C4 key and the C4 join."""
+    return os.path.basename(os.path.dirname(lp)) or "ledger"
+
+
+def legacy_release_keys(keys):
+    """-> the subset of `keys` in the version form (the form the writer REJECTS as a
+    release key), or None when that cannot be evaluated. The grammar is SOURCED from
+    release/tools/version-grammar.sh (its contract: source, do not copy); keys travel
+    as argv, never as script text."""
+    grammar = os.environ.get("C4_VERSION_GRAMMAR", "")
+    if not os.path.isfile(grammar):
+        return None
+    if not keys:
+        return set()
+    try:
+        r = subprocess.run(
+            ["/bin/bash", "-c",
+             'keys=("$@"); source "$C4_VERSION_GRAMMAR" "" || exit 3; '
+             'for v in "${keys[@]}"; do version_canonical "$v" && printf "%s\\n" "$v"; done; exit 0',
+             "_"] + list(keys), capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return {k for k in r.stdout.splitlines() if k} if r.returncode == 0 else None
+
+
 findings = []   # (check, severity, lineno-or-key, message, ts)
 denoms = {}     # check -> (population, unit)
 notes = []
+
+# FM-3 — limb (c) of C4 has its OWN population. Limbs (a)/(b) grade ledger rows; limb
+# (c) grades the (release, id) pairs the log carries. One denominator over both would
+# print a count over two populations as a ledger-row rate — one that can exceed its own
+# population. So limb-(c) findings are tallied under the report label C4c, on their own
+# denominator line, while every finding LINE still names the check C4: the close gate
+# and the JSON consumers read `C4 <release>:…`, so the label splits the tally, never
+# the check.
+REPORTED_AS = {"C4c": "C4"}
 
 
 def add(check, key, msg, ts):
@@ -332,7 +394,7 @@ if surface in ("ledger", "both"):
     denoms["C5"] = (len(all_rows), "ledger rows across %d ledger(s)" % len(ledgers))
     wellformed_ledger = []
     for lp, lineno, raw, f in all_rows:
-        key = "%s:L%d" % (os.path.basename(os.path.dirname(lp)) or "ledger", lineno)
+        key = "%s:L%d" % (ledger_release(lp), lineno)
         created = f[1].strip() if len(f) > 1 else ""
         if len(f) != 13:
             malformed_keys.add((lp, lineno))
@@ -349,32 +411,46 @@ if surface in ("ledger", "both"):
 
     excluded = len(all_rows) - len(wellformed_ledger)
     if excluded:
-        notes.append("C4 EXCLUDES %d of %d ledger row(s) that C5 rejected — state cannot "
-                     "be reconciled against a row that cannot be parsed" % (excluded, len(all_rows)))
+        notes.append("C4 EXCLUDES %d of %d ledger row(s) that C5 rejected from limbs (a)/(b) — "
+                     "state cannot be reconciled against a row that cannot be parsed; limb (c) "
+                     "still reads their ids, which sit first at any arity"
+                     % (excluded, len(all_rows)))
 
     if surface == "both" and log_rows is not None:
-        # Index the log's action-item events by AI id, looking in BOTH subject and
-        # payload: the id is the join key, and writers have put it in either.
-        log_ai_subtypes = {}
+        # Index action-item events by (release, AI id). Every release numbers from
+        # AI-001, so a bare id names a different item in each release and a bare-id
+        # join lets one release's event satisfy another's ledger row. The release is
+        # the row's `version` column VERBATIM (schema § 2a rung 1 — the field M4 joins
+        # on); the id is read from BOTH subject and payload.
+        log_ai, log_ai_ts = {}, {}
         for lineno, raw, f in log_rows:
             if len(f) != 10:
                 continue
-            esub = f[4].strip()
+            rel, esub, ts = f[1].strip(), f[4].strip(), f[0].strip()
             for m in AI_RE.findall(f[6] + " " + f[9]):
-                log_ai_subtypes.setdefault(m, set()).add(esub)
+                log_ai.setdefault((rel, m), set()).add(esub)
+                log_ai_ts.setdefault((rel, m), []).append(ts)
 
         denoms["C4"] = (len(wellformed_ledger), "well-formed ledger rows joined "
-                        "against %d distinct AI id(s) in the log" % len(log_ai_subtypes))
+                        "against %d distinct (release, id) pair(s) in the log" % len(log_ai))
+        denoms["C4c"] = (len(log_ai), "distinct (release, id) pair(s) in the log, each "
+                         "joined to its release's ledger")
 
-        ledger_ids = set()
+        # Limb (c)'s ledger side is keyed on EVERY AI row the ledger carries, C5-rejected
+        # rows included (review CD-1). Limb (c) reads only the id, and the id is cell 0 at
+        # any arity. The C5 exclusion exists to keep a POSITION-based status read off a
+        # field-shifted row — a read limbs (a)/(b) make and limb (c) never does — so
+        # excluding the row here would turn one C5 defect into a second, false C4 finding
+        # that sends the operator to add a row the ledger already carries.
+        ledger_keys = {(ledger_release(lp), f[0].strip()) for lp, lineno, raw, f in all_rows}
         for lp, lineno, f, canonical, created in wellformed_ledger:
-            ai = f[0].strip()
-            ledger_ids.add(ai)
-            key = "%s:L%d" % (os.path.basename(os.path.dirname(lp)) or "ledger", lineno)
-            seen = log_ai_subtypes.get(ai)
-            # (a) presence, ledger -> log
+            ai, rel = f[0].strip(), ledger_release(lp)
+            key = "%s:L%d" % (rel, lineno)
+            seen = log_ai.get((rel, ai))
+            # (a) presence, ledger -> log, within the ledger's own release
             if not seen:
-                add("C4", key, "%s is on the ledger but has NO event in the log" % ai, created)
+                add("C4", key, "%s is on the ledger but has NO event in the log under "
+                               "release %r" % (ai, rel), created)
                 continue
             # (b) STATE AGREEMENT — the limb that makes this a check. A 1:1 id
             #     join alone passes while every row is stale: it is a PRESENCE
@@ -384,19 +460,53 @@ if surface in ("ledger", "both"):
                 if not any(e in seen for e in wanted):
                     add("C4", key,
                         "%s carries terminal ledger status %r but the log has no matching "
-                        "terminal event (%s) — the id join is clean and the record is STALE"
-                        % (ai, canonical, "/".join(sorted(wanted))), created)
-        # (c) presence, log -> ledger
-        for ai, seen in sorted(log_ai_subtypes.items()):
-            if ai not in ledger_ids:
-                add("C4", ai, "%s has events in the log but no row on any ledger" % ai, "")
+                        "terminal event (%s) under release %r — the (release, id) join is "
+                        "clean and the record is STALE"
+                        % (ai, canonical, "/".join(sorted(wanted)), rel), created)
+        # (c) presence, log -> ledger, within the event's own release, dated by the
+        #     pair's OWN rows (graded when any is at/after the cutover; an undatable
+        #     one grades, per graded()). Never undated: that grades every pre-cutover
+        #     pair forever — the born-failing validator § 4.1 exists to prevent.
+        #     Tallied as C4c, against its own population (FM-3).
+        for (rel, ai), _seen in sorted(log_ai.items()):
+            if (rel, ai) not in ledger_keys:
+                tss = log_ai_ts[(rel, ai)]
+                add("C4c", "%s:%s" % (rel, ai),
+                    "%s has events in the log under release %r but no row on that "
+                    "release's ledger" % (ai, rel),
+                    next((t for t in tss if graded(t)), max(tss)))
+
+        # (d) LEGACY RELEASE KEYS — REPORT-ONLY (notes, never add()). A version-form
+        #     key joins only under its literal value and is never re-keyed through
+        #     § 2a rung 3, which § 2a keeps out of every gate asserting an emission
+        #     obligation. One naming >1 `milestone:#N` subject is INDETERMINATE (the
+        #     measure query-pipeline-event.sh applies to a rung-3 match).
+        keys = sorted({r for r, _ in log_ai} | {r for r, _ in ledger_keys})
+        legacy = legacy_release_keys(keys)
+        if legacy is None:
+            notes.append("C4 legacy release keys NOT-EVALUATED — the version grammar could "
+                         "not be sourced; this is not a clean result (report-only: findings "
+                         "and grading are unaffected)")
+        else:
+            subs = {}
+            for lineno, raw, f in log_rows:
+                if len(f) == 10 and f[1].strip() in legacy and f[6].strip().startswith("milestone:#"):
+                    subs.setdefault(f[1].strip(), set()).add(f[6].strip())
+            indeterminate = sorted(k for k in legacy if len(subs.get(k, ())) > 1)
+            notes.append(
+                "C4 legacy release keys — legacy=[%s] indeterminate=[%s] (%d of %d release "
+                "key(s) C4 joined are in the version form: each joins only under its literal "
+                "value and is never re-keyed through § 2a rung 3; an indeterminate key names "
+                "more than one milestone, so its verdicts are not 1:1 with a release). "
+                "REPORT-ONLY — emitted through `notes`, never `add()`."
+                % (", ".join(sorted(legacy)), ", ".join(indeterminate), len(legacy), len(keys)))
     elif surface == "ledger":
         notes.append("C4 requires BOTH surfaces — run with --surface=both to reconcile "
                      "ledger state against the log (explicit zero-state, not a pass)")
 
 # ─── M4: the population screen ───────────────────────────────────────────────
 #
-# WHAT C4 STRUCTURALLY CANNOT SEE. C4 is an AI-NNN id join both ways plus terminal-
+# WHAT C4 STRUCTURALLY CANNOT SEE. C4 is a (release, AI-NNN) join both ways plus terminal-
 # state agreement. Both directions of a join over ids cannot detect a commitment
 # that minted NO id on either side — there is nothing to join on. That residue is
 # what this screens for, which is why it is not a duplicate of C4.
@@ -487,9 +597,9 @@ if fmt == "json":
         "cutover": cutover,
         "surface": surface,
         "denominators": {k: {"population": v[0], "unit": v[1]} for k, v in denoms.items()},
-        "violations": [{"check": c, "key": k, "message": m, "ts": t}
+        "violations": [{"check": REPORTED_AS.get(c, c), "key": k, "message": m, "ts": t}
                        for c, s, k, m, t in violations],
-        "legacy": [{"check": c, "key": k, "message": m, "ts": t}
+        "legacy": [{"check": REPORTED_AS.get(c, c), "key": k, "message": m, "ts": t}
                    for c, s, k, m, t in legacy],
         "notes": notes,
         "exit": 1 if violations else 0,
@@ -500,7 +610,7 @@ else:
         print("  ** CUTOVER UNRESOLVED ** — no boundary is bound yet, so every finding "
               "below is LEGACY and the tool exits 0. Bind the instant in schema § 4.1 "
               "at merge. This is an EXPLICIT zero-state, not a clean population.")
-    for check in ("C1", "C2", "C3", "C4", "C5"):
+    for check in ("C1", "C2", "C3", "C4", "C4c", "C5"):
         if check not in denoms:
             print("  %s  SKIPPED — surface not swept in this run" % check)
             continue
@@ -511,7 +621,7 @@ else:
     for note in notes:
         print("  note: %s" % note)
     for c, s, k, m, t in findings:
-        print("  [%s] %s %s: %s" % (s, c, k, m))
+        print("  [%s] %s %s: %s" % (s, REPORTED_AS.get(c, c), k, m))
     print("RESULT: %d post-cutover violation(s), %d legacy finding(s)"
           % (len(violations), len(legacy)))
 
@@ -619,11 +729,12 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # C5 — both arms
   arm 0 "C5 clean ledger passes"                 "/nonexistent"           "/nonexistent"          "$F/ledger-clean.md" "$PAST" ledger
   arm 1 "C5 arity-bad ledger fails"              "/nonexistent"           "/nonexistent"          "$F/ledger-arity-bad.md" "$PAST" ledger
-  # C4 — both arms. The clean pair joins 1:1 AND agrees on state; the divergent
-  # pair ALSO joins 1:1 and must still FAIL. That asymmetry is the whole point:
-  # a presence predicate passes both.
-  arm 0 "C4 clean ledger+log agrees"             "$F/log-clean.md"        "$F/writelog-clean.log" "$F/ledger-clean.md" "$PAST" both
-  arm 1 "C4 state-divergent ledger fails"        "$F/log-clean.md"        "$F/writelog-clean.log" "$F/ledger-state-divergent.md" "$PAST" both
+  # C4 runs on DIRECTORY roots: it joins on (release, id) and a ledger's release is its
+  # directory, so only a tree pairs a ledger with its own release's rows. The per-limb
+  # collision arms, near-misses and controls follow the M4 block.
+  arm 0 "C4 clean ledger+log agrees (directory branch)" "$F/log-m4.md" "/nonexistent" "$F/hub-state-tree" "$PAST" both
+  # C5 grades STRUCTURE, never currency: a well-formed but state-stale ledger passes C5.
+  arm 0 "C5 passes a well-formed but state-stale ledger" "/nonexistent" "/nonexistent" "$F/ledger-state-divergent.md" "$PAST" ledger
   # Cutover contract — a DIRTY fixture that exits 0 because every finding is
   # pre-cutover. Without this arm the boundary could be dead code.
   #
@@ -655,7 +766,7 @@ if [[ "$SELF_TEST" == "true" ]]; then
   # NOT a here-string here. `grep -q … <<<"$(run_engine …)"` discards run_engine's
   # exit status inside the command substitution. Unlike a `printf` writer this one
   # carries a real status (1 = findings, 2 = unreadable surface), so it is captured
-  # the way every other arm in this harness captures it — see `arm()` at :499 — and
+  # the way every other arm in this harness captures it — see `arm()` above — and
   # reported on failure, which is also what makes an engine that never ran
   # distinguishable from an engine that ran and printed the wrong thing.
 
@@ -760,8 +871,8 @@ if [[ "$SELF_TEST" == "true" ]]; then
   /usr/bin/grep -qF "buckets sum to the denominator (4 vs 4)" <<<"$_m4_out" || {
     echo "ERROR: self-test arm FAILED: M4 buckets must account for every scanned directory" >&2
     FAILED=$((FAILED + 1)); }
-  # The DIRECTORY branch must actually have been taken — the whole point of the
-  # tree, and the branch C4/C5 use in production that no other arm reaches.
+  # The DIRECTORY branch must actually have been taken — the branch C4/C5 use in
+  # production; the C4 release-scope arms below run there too.
   ARMS=$((ARMS + 1))
   /usr/bin/grep -qF "ledger rows across 1 ledger(s)" <<<"$_m4_out" || {
     echo "ERROR: self-test arm FAILED: the fixture tree must exercise the DIRECTORY branch of the ledger resolver" >&2
@@ -774,6 +885,137 @@ if [[ "$SELF_TEST" == "true" ]]; then
     echo "ERROR: self-test arm FAILED: a file-shaped ledger_root must report the screen SKIPPED, not nothing (rc=$_m4f_rc)" >&2
     FAILED=$((FAILED + 1)); }
 
+  # ─── C4 release scope — collision arms, near-misses, controls ────────────────
+  # Each limb: one finding a bare-id join HIDES (RED pre-fix) and a NEAR-MISS owning its
+  # event/row in its own release, which must stay silent. Bound to key + message, per
+  # bucket, at every cutover: a false positive graded LEGACY exits 0, so at FUTURE only
+  # the C4 line and per-key absence can see it (U5 limb 3).
+  MID="2026-08-20T00:00:00Z"   # after the v0.92 rows and AI-006's first row; before every other row
+  CL="$F/log-c4-collision.md";         CT="$F/c4-collision-tree"
+  CLC="$F/log-c4-collision-control.md"; CTC="$F/c4-collision-tree-control"
+  rec_find() {   # rec_find <check> <output> <VIOLATION|LEGACY> <key-prefix> <message-fragment>
+    local chk="$1" out="$2" bucket="$3" kp="$4" frag="$5" line
+    while IFS= read -r line; do
+      case "$line" in *"[$bucket] $chk $kp"*": "*"$frag"*) return 0 ;; esac
+    done <<<"$out"
+    return 1
+  }
+  c4_find() { rec_find C4 "$@"; }   # c4_find <output> <VIOLATION|LEGACY> <key-prefix> <message-fragment>
+  c4_expect() {   # c4_expect <must|mustnot> <label> <output> <bucket> <key-prefix> <fragment>
+    local mode="$1" label="$2" found=0
+    shift 2
+    ARMS=$((ARMS + 1))
+    c4_find "$@" && found=1
+    if { [[ "$mode" == "must" ]] && [[ "$found" -ne 1 ]]; } ||
+       { [[ "$mode" == "mustnot" ]] && [[ "$found" -ne 0 ]]; }; then
+      echo "ERROR: self-test arm FAILED: $label" >&2
+      FAILED=$((FAILED + 1))
+    fi
+  }
+  for _co in "$PAST" "$MID" "$FUTURE"; do
+    _c4_rc=0
+    _c4_out="$(run_engine "$CL" "/nonexistent" "$CT" "$_co" both table "$SCHEMA_FILE")" || _c4_rc=$?
+    _b=VIOLATION; [[ "$_co" == "$FUTURE" ]] && _b=LEGACY
+    c4_expect must "C4 limb (b) @${_co}: fixture-c4-rel-a AI-001 stale in its OWN release (rc=$_c4_rc)" "$_c4_out" "$_b" "fixture-c4-rel-a:L" "AI-001 carries terminal ledger status 'superseded'"
+    c4_expect must "C4 limb (a) @${_co}: fixture-c4-rel-a AI-002 has no event in its OWN release" "$_c4_out" "$_b" "fixture-c4-rel-a:L" "AI-002 is on the ledger but has NO event in the log under release 'fixture-c4-rel-a'"
+    c4_expect must "C4 limb (c) @${_co}: fixture-c4-rel-b AI-003 has no row on its OWN ledger" "$_c4_out" "$_b" "fixture-c4-rel-b:AI-003" "no row on that release's ledger"
+    # FM-4 — limb (c) is dated by the pair's OWN rows, graded when ANY of them is.
+    # AI-006's two rows straddle MID, so the MID pass is the pin: dating the pair by
+    # its earliest (or its first) row would read it LEGACY there.
+    c4_expect must "C4 limb (c) dating @${_co}: fixture-c4-rel-b AI-006 straddles MID and grades by ANY own row" "$_c4_out" "$_b" "fixture-c4-rel-b:AI-006" "no row on that release's ledger"
+    for _bk in VIOLATION LEGACY; do
+      c4_expect mustnot "C4 near-miss @${_co}/${_bk}: fixture-c4-rel-b rows own their events" "$_c4_out" "$_bk" "fixture-c4-rel-b:L" ""
+      c4_expect mustnot "C4 near-miss @${_co}/${_bk}: fixture-c4-rel-a AI-003 owns its row" "$_c4_out" "$_bk" "fixture-c4-rel-a:AI-003" ""
+      # CD-1 — limb (c) reads only the ledger's id cell, so a C5-rejected row still puts
+      # its id on the ledger. Key-agnostic, so a bare-id key cannot slip past it.
+      c4_expect mustnot "C4 near-miss @${_co}/${_bk}: AI-005's C5-rejected row is on its own ledger" "$_c4_out" "$_bk" "" "AI-005 has events in the log"
+    done
+    if [[ "$_co" == "$MID" ]]; then   # LEGACY RULE — graded by the one cutover, by date
+      c4_expect must    "C4 legacy key v0.92 AI-004 reports LEGACY at MID" "$_c4_out" LEGACY "v0.92:AI-004" "no row on that release's ledger"
+      c4_expect mustnot "C4 legacy key v0.92 AI-004 is not a VIOLATION at MID" "$_c4_out" VIOLATION "v0.92:AI-004" ""
+      # FM-3 — limb (c) prints against its OWN population, the (release, id) pairs, never
+      # against ledger rows. At MID the two lines split 2+0 of 5 rows and 2+1 of 8 pairs.
+      ARMS=$((ARMS + 1))
+      /usr/bin/grep -qF "C4  2 violation(s) + 0 legacy of 5 well-formed ledger rows " <<<"$_c4_out" || {
+        echo "ERROR: self-test arm FAILED: the C4 line must count limbs (a)/(b) against well-formed ledger rows only (rc=$_c4_rc)" >&2
+        FAILED=$((FAILED + 1)); }
+      ARMS=$((ARMS + 1))
+      /usr/bin/grep -qF "C4c  2 violation(s) + 1 legacy of 8 distinct (release, id) pair(s) in the log" <<<"$_c4_out" || {
+        echo "ERROR: self-test arm FAILED: limb (c) must print its own line against its (release, id) pairs (rc=$_c4_rc)" >&2
+        FAILED=$((FAILED + 1)); }
+    fi
+  done
+  # CD-1's input carries the near-miss: the AI-005 row IS a C5 finding. The loop's last
+  # pass ran at FUTURE, so that finding reports LEGACY.
+  ARMS=$((ARMS + 1))
+  rec_find C5 "$_c4_out" LEGACY "fixture-c4-rel-b:L" "wrong field count: 12 under" || {
+    echo "ERROR: self-test arm FAILED: the collision tree's AI-005 row must be a C5 finding (12 fields)" >&2
+    FAILED=$((FAILED + 1)); }
+  ARMS=$((ARMS + 1))   # 8 pairs over 6 bare ids — pre-fix prints "6 distinct AI id(s)"
+  /usr/bin/grep -qF "joined against 8 distinct (release, id) pair(s) in the log" <<<"$_c4_out" || {
+    echo "ERROR: self-test arm FAILED: the C4 denominator must count distinct (release, id) pairs" >&2
+    FAILED=$((FAILED + 1)); }
+  # AC-1 CONTROL — same tree, log plus A's OWN events: nothing for A; B's finding stays.
+  _c4c_rc=0
+  _c4c_out="$(run_engine "$CLC" "/nonexistent" "$CT" "$PAST" both table "$SCHEMA_FILE")" || _c4c_rc=$?
+  for _bk in VIOLATION LEGACY; do
+    c4_expect mustnot "C4 control: fixture-c4-rel-a with its own events reports nothing (${_bk}, rc=$_c4c_rc)" "$_c4c_out" "$_bk" "fixture-c4-rel-a:" ""
+  done
+  c4_expect must "C4 control: the other release's finding remains" "$_c4c_out" VIOLATION "fixture-c4-rel-b:AI-003" ""
+  for _co in "$PAST" "$FUTURE"; do   # the agreeing control: zero at a grading and an all-legacy cutover
+    _c4z_rc=0
+    _c4z_out="$(run_engine "$CLC" "/nonexistent" "$CTC" "$_co" both table "$SCHEMA_FILE")" || _c4z_rc=$?
+    ARMS=$((ARMS + 1))
+    /usr/bin/grep -qF "C4  0 violation(s) + 0 legacy of " <<<"$_c4z_out" || {
+      echo "ERROR: self-test arm FAILED: the agreeing control must read 0 violation(s) + 0 legacy at ${_co} (rc=$_c4z_rc)" >&2
+      FAILED=$((FAILED + 1)); }
+    ARMS=$((ARMS + 1))   # FM-3: the ledger-row line alone no longer sees limb (c)
+    /usr/bin/grep -qF "C4c  0 violation(s) + 0 legacy of " <<<"$_c4z_out" || {
+      echo "ERROR: self-test arm FAILED: the agreeing control's limb-(c) line must read 0 violation(s) + 0 legacy at ${_co} (rc=$_c4z_rc)" >&2
+      FAILED=$((FAILED + 1)); }
+  done
+  # The legacy note, bound INSIDE each bucket's brackets (a whole-note grep is vacuous).
+  _c4_lg="$(/usr/bin/sed -n 's/.* legacy=\[\([^]]*\)\] indeterminate=.*/\1/p' <<<"$_c4z_out")"
+  _c4_id="$(/usr/bin/sed -n 's/.* indeterminate=\[\([^]]*\)\].*/\1/p' <<<"$_c4z_out")"
+  c4_bucket() {   # c4_bucket <must|mustnot> <bucket-contents> <item> <label>
+    local mode="$1" bucket="$2" item="$3" label="$4" found=0
+    ARMS=$((ARMS + 1))
+    case ",${bucket// /}," in *",$item,"*) found=1 ;; esac
+    if { [[ "$mode" == "must" ]] && [[ "$found" -ne 1 ]]; } ||
+       { [[ "$mode" == "mustnot" ]] && [[ "$found" -ne 0 ]]; }; then
+      echo "ERROR: self-test arm FAILED: $label (legacy=[$_c4_lg] indeterminate=[$_c4_id])" >&2
+      FAILED=$((FAILED + 1))
+    fi
+  }
+  c4_bucket must    "$_c4_lg" v0.92            "C4 legacy note names the version-form key"
+  c4_bucket mustnot "$_c4_lg" fixture-c4-rel-a "C4 legacy note never names a slug"
+  c4_bucket must    "$_c4_id" v0.92            "C4 legacy note: a version-form key naming two milestones is INDETERMINATE"
+  c4_bucket mustnot "$_c4_id" fixture-c4-rel-b "C4 legacy note: a slug naming two milestones is NOT indeterminate"
+  ARMS=$((ARMS + 1))   # PV-7 — the screen reports its own degradation and cannot move the exit
+  _c4n_rc=0
+  _c4n_out="$(VERSION_GRAMMAR_FILE=/nonexistent; run_engine "$CLC" "/nonexistent" "$CTC" "$PAST" both table "$SCHEMA_FILE")" || _c4n_rc=$?
+  if [[ "$_c4n_rc" -ne 0 ]] || ! /usr/bin/grep -qF "C4 legacy release keys NOT-EVALUATED" <<<"$_c4n_out" \
+     || ! /usr/bin/grep -qF "this is not a clean result" <<<"$_c4n_out"; then
+    echo "ERROR: self-test arm FAILED: an unavailable grammar must report NOT-EVALUATED and leave the exit alone (rc=$_c4n_rc)" >&2
+    FAILED=$((FAILED + 1))
+  fi
+  ARMS=$((ARMS + 1))   # --surface=ledger narrows C4 OUT: SKIPPED, never a zero — on both lines
+  _c4s_rc=0
+  _c4s_out="$(run_engine "$CL" "/nonexistent" "$CT" "$PAST" ledger table "$SCHEMA_FILE")" || _c4s_rc=$?
+  if ! /usr/bin/grep -qF "C4  SKIPPED" <<<"$_c4s_out" || ! /usr/bin/grep -qF "C4c  SKIPPED" <<<"$_c4s_out"; then
+    echo "ERROR: self-test arm FAILED: at --surface=ledger both C4 lines must report SKIPPED (rc=$_c4s_rc)" >&2
+    FAILED=$((FAILED + 1))
+  fi
+  _c4g_rc=0   # one key derivation for every root shape: a GLOB root keys like the tree
+  _c4g_out="$(run_engine "$CL" "/nonexistent" "$CT/*/action-items.md" "$PAST" both table "$SCHEMA_FILE")" || _c4g_rc=$?
+  c4_expect must "C4 glob-shaped root keys like the tree (rc=$_c4g_rc)" "$_c4g_out" VIOLATION "fixture-c4-rel-a:L" "AI-001 carries terminal ledger status 'superseded'"
+  ARMS=$((ARMS + 1))   # FM-3 — the JSON report carries limb (c)'s own denominator too
+  _c4j_rc=0
+  _c4j_out="$(run_engine "$CL" "/nonexistent" "$CT" "$PAST" both json "$SCHEMA_FILE")" || _c4j_rc=$?
+  /usr/bin/grep -qF '"C4c": {' <<<"$_c4j_out" || {
+    echo "ERROR: self-test arm FAILED: the JSON denominators must carry C4c, limb (c)'s (release, id)-pair population (rc=$_c4j_rc)" >&2
+    FAILED=$((FAILED + 1)); }
+
   echo "self-test: $((ARMS - FAILED))/$ARMS assertion(s) passed"
   if [[ "$FAILED" -ne 0 ]]; then
     echo "ERROR: self-test: $FAILED arm(s) FAILED" >&2
@@ -783,7 +1025,13 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "  C1 C2 C3 C4 C5 each exercised with a clean fixture that PASSES and a dirty one that FAILS"
   echo "  D-1 regression guard live: a canonical escaped-pipe row is NOT malformed"
   echo "  C3 asserted in BOTH directions on separate fixtures — a net count sees neither"
-  echo "  C4 asserted on state agreement, not presence: the divergent pair joins 1:1 and still fails"
+  echo "  C4 asserted per (release, id): each limb's collision arm fires where a bare-id join is"
+  echo "    blind; each near-miss stays silent at PAST, MID and FUTURE; the agreeing control reads"
+  echo "    0 violation(s) + 0 legacy; a legacy version-form key is dated by the one cutover and"
+  echo "    named INDETERMINATE when it spans more than one milestone"
+  echo "  C4 limb (c) keys its ledger side on EVERY AI row, so a C5-rejected row's id stays on the"
+  echo "    ledger; it prints its own (release, id)-pair denominator line (C4c); and a pair is dated"
+  echo "    by its own rows — one straddling the cutover grades"
   echo "  cutover contract live: pre-cutover findings are LEGACY at exit 0; (unset) grades nothing"
   echo "  --assert-bound asserted BOTH ways: non-zero while (unset), zero once an instant is bound"
   echo "  unreadable surface exits 2 — never reported as clean"
@@ -792,8 +1040,8 @@ if [[ "$SELF_TEST" == "true" ]]; then
   echo "    so an inverted screen satisfies it; the first form of these arms passed while the"
   echo "    detector was dead. Four buckets, one fixture slug apiece, summing to the computed"
   echo "    denominator; report-only OBSERVED (a run that flags still exits 0); and the fixture"
-  echo "    tree is the FIRST arm to enter the ledger resolver's DIRECTORY branch — the branch"
-  echo "    C4 and C5 use in production and every other arm bypasses by passing a file"
+  echo "    tree was the FIRST arm to enter the ledger resolver's DIRECTORY branch — the branch"
+  echo "    C4 and C5 use in production, where the C4 release-scope arms now run too"
   exit 0
 fi
 
