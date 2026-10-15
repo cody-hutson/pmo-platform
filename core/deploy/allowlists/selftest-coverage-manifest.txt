@@ -56,6 +56,7 @@ core/deploy/tools/build-doc-index.py
 core/deploy/tools/build-hook-registry.py
 core/deploy/tools/check-adr-flip.py
 core/deploy/tools/check-approved-queue-depth.py
+core/deploy/tools/check-commit-close-keywords.py
 core/deploy/tools/check-count-structure.py
 core/deploy/tools/check-doc-frontmatter.py
 core/deploy/tools/check-doc-links.py
