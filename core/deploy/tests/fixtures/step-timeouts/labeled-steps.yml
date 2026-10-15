@@ -1,0 +1,93 @@
+# Labeled expected-match set for core/deploy/tests/test_install_tests_step_timeouts.py.
+#
+# NOT a workflow. Nothing under this directory is run by the host, and no path named
+# below exists. Each step's name opens with its label, and the suite requires each
+# step's verdict to equal it:
+#
+#   must-flag:      the predicate MUST count the step as suite-invoking
+#   must-not-flag:  the predicate MUST NOT count it — a near-miss that carries a
+#                   core/deploy/tests path and invokes no shell suite there
+#   not-seen:       a real invocation the predicate is documented NOT to see. It is
+#                   asserted as uncounted so that a later change to the predicate
+#                   moves it on purpose, with this label edited in the same change
+#
+# No step carries timeout-minutes. Adding a case costs one step here and no code.
+#
+# THE LIVE POPULATION FLOOR — the one key here that is not a labeled step. It is the
+# count of steps of .github/workflows/install-tests.yml that the suite reads as
+# suite-invoking, and the derived population may not fall below it. The suite derives
+# that population on every run; this integer is committed beside it and sourced
+# independently, so an invocation moved out of the predicate's sight (a loop over a
+# variable, a wrapper, a cd or working-directory key) shows up as a count below this
+# floor instead of as an N-of-N success. It is a FLOOR, not a pin: a new suite step
+# that carries a timeout passes without touching it. Raise it when the suite reports
+# the population above it, and lower it in the same change that removes a suite step
+# on purpose.
+live-population-floor: 37
+jobs:
+  labeled:
+    steps:
+      - name: "must-flag: direct invocation"
+        run: bash core/deploy/tests/zz_fixture_suite.sh
+
+      - name: "must-flag: invocation with a flag and an environment prefix"
+        run: |
+          HOME="$(mktemp -d)" bash core/deploy/tests/zz_fixture_suite.sh --fast
+
+      - name: "must-flag: suite wrapped in a program and named below the run line"
+        run: |
+          rc=0
+          python3 - 600 bash core/deploy/tests/zz_fixture_suite.sh <<'PY' || rc=$?
+          import sys
+          PY
+          exit "${rc}"
+
+      - name: "must-flag: suite reached through a loop variable"
+        run: |
+          for suite in \
+            core/deploy/tests/zz_fixture_suite.sh
+          do
+            bash "$suite"
+          done
+
+      - name: "must-flag: suite rewritten into a temporary tree and run from there"
+        run: |
+          tmp="$(mktemp -d)"
+          sed -e 's/a/b/' core/deploy/tests/zz_fixture_suite.sh > "$tmp/suite.sh"
+          bash "$tmp/suite.sh"
+
+      - name: "must-flag: echo sharing its line with an invocation"
+        run: echo start; bash core/deploy/tests/zz_fixture_suite.sh
+
+      - name: "must-flag: invocation inside the command substitution of an echo"
+        run: echo "$(bash core/deploy/tests/zz_fixture_suite.sh)"
+
+      - name: "must-not-flag: named only in a YAML comment"
+        # This step once ran core/deploy/tests/zz_fixture_suite.sh; it no longer does.
+        run: "true"
+
+      - name: "must-not-flag: named only in a shell comment"
+        run: |
+          # bash core/deploy/tests/zz_fixture_suite.sh
+          true
+
+      - name: "must-not-flag: named only in an echo"
+        run: echo "would run core/deploy/tests/zz_fixture_suite.sh"
+
+      - name: "must-not-flag: named only in an echo with a separator inside its quotes and a redirect"
+        run: |
+          echo "skipping core/deploy/tests/zz_fixture_suite.sh; see the log" >&2
+
+      - name: "must-not-flag: named only in a printf"
+        run: printf '%s\n' core/deploy/tests/zz_fixture_suite.sh
+
+      - name: "must-not-flag: a Python suite in the same directory"
+        run: python3 -m pytest core/deploy/tests/zz_fixture_suite.py -v
+
+      - name: "must-not-flag: the directory itself, with no suite named"
+        run: ls core/deploy/tests/
+
+      - name: "not-seen: suite reached with no path on any line"
+        run: |
+          cd core/deploy/tests
+          bash zz_fixture_suite.sh
