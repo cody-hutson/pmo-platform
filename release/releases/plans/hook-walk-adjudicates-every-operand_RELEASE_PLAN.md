@@ -32,9 +32,9 @@ reversibility: MODERATE / Confidence HIGH — one branch and one merge; every ca
 | **Bump Class** | minor — the durable determination (D-Version: guard logic and readiness text inside existing structure; no new skill and no new governance file). Provisional display v4.75, re-verified free at Engineering Commit 0; the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-10-15 (Thursday) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering, Commit 0 and slice 1 |
+| **Status** | Executing — Stage 6 Engineering: Commit 0 and slice 1 (#7019) built; slices 2–7 follow in § Implementation Sequence order |
 | **Branch** | `release/hook-walk-adjudicates-every-operand` |
-| **PR** | opened in draft directly after Engineering Commit 0; its number is recorded in this cell by the first slice commit after it |
+| **PR** | #8306 — opened in draft directly after Engineering Commit 0 |
 | **Milestone** | `hook-walk-adjudicates-every-operand` |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-10-08, domain: security }`
@@ -409,7 +409,7 @@ This release's mover set is empty (no rename, no delete). Its surface is the ver
 | # | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|---|---|---|---|---|
 | R-1 | A scope or placement question surfaces mid-build and re-orders slices | Low after the scope-lock | High | every Q1–Q9 question is rendered; a new one is raised as an inter-stage finding, not decided in a slice | Hub / operator |
-| R-2 | #7019's fix re-opens the failure the fragment records as measured (never advance past an unresolvable token) | Low | High | the walk reads a whole quote-led word only; a fragment still ends the walk; binding controls `F1-QTOK-RESIDUAL-space`, `F1-FP-cmode`, `NOEXEC-ORD-*`; CIAC-2 and CIAC-3 | #7019 slice |
+| R-2 | #7019's fix re-opens the failure the fragment records as measured (the never-advance-past clause, which #7019's slice restates for a fragment) | Low | High | the walk reads a whole quote-led word only; a fragment still ends the walk; binding controls `F1-QTOK-RESIDUAL-space`, `F1-FP-cmode`, `NOEXEC-ORD-*`; CIAC-2 and CIAC-3 | #7019 slice |
 | R-3 | #7027 is built against the wrong guard | **Closed** at the Stage-4 gate (D2) | — | — | — |
 | R-4 | #7004 graded NOT MET because AC-1 asks for a block the shadow phase cannot give | **Closed** — AC-1 corrected at Stage 4 (D3) | — | — | — |
 | R-5 | Over-blocking: a changed walk refuses legitimate work on a guard that sees every Bash call | Medium | High | must-not-flag near misses per card; the corpus records every verdict, so an added refusal is a reviewed diff; #7028 enters at the warn phase (D5) | Stage 6/7 |
@@ -432,10 +432,10 @@ This release's mover set is empty (no rename, no delete). Its surface is the ver
 
 - [ ] **CIAC-1 (#7004 × #7020 on the wrapper vocabulary held by `core/hooks/block-destructive.sh`, `core/hooks/block-egress.sh` and `core/hooks/lib/command-position.awk`):** the suite carries an arm that fails when the wrapper word lists of the two guards and the canonicalizer differ without a declared reason. *Method:* `grep -c -F "WRAPVOCAB-PARITY" core/hooks/tests/block-destructive.test.sh` at least 1. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-2 (#7018 × #7019 on the flag walk's break-and-revoke ordering in `core/hooks/block-destructive.sh`):** both walk changes land with every ordering pin still present. *Method:* `grep -c -F "NOEXEC-ORD" core/hooks/tests/block-destructive.test.sh` at least 10. *Graded at Stage 9 QC3.5 on the merged PR.*
-- [ ] **CIAC-3 (#7018 × #7019 on the space-bearing-operand pin that the "never advance past an unresolvable token" clause rests on):** the pin survives both walk changes, kept or deliberately flipped, never deleted. *Method:* `grep -c -F "F1-QTOK-RESIDUAL-space" core/hooks/tests/block-destructive.test.sh` at least 1. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-3 (#7018 × #7019 on the space-bearing-operand pin that the never-advance-past clause rests on — "a fragment is never advanced past", as #7019's slice restates it):** the pin survives both walk changes, kept or deliberately flipped, never deleted. *Method:* `grep -c -F "F1-QTOK-RESIDUAL-space" core/hooks/tests/block-destructive.test.sh` at least 1. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-4 (#7020 × #7018 × #7019 × #7028 × #7026 on the readiness fragment and its generated registry):** every disposition those five cards record in the block-destructive fragment is carried, unchanged, by the regenerated registry. *Method:* declared, verification deferred to core/rules/bypass-mode-readiness.md *Graded at Stage 9 QC3.5 on the merged PR.*
 
-Transcribed from the Stage-4 plan unchanged. The lint record (gate criterion G4-06) taken on this committed file is in § Verification Evidence.
+Transcribed from the Stage-4 plan, with one wording change: CIAC-3 names the never-advance-past clause as #7019's slice restates it (DEV-13); its method is unchanged. The lint record (gate criterion G4-06) taken on this committed file is in § Verification Evidence.
 
 ---
 
@@ -591,6 +591,9 @@ N/A — enumerated over the schema surfaces (`core/schemas/`, the drain row, the
 | **DEV-10** | #7019's Verification Plan rows are converted to label-presence probes now; the other cards' deferred rows stay bound to their own slices. #7020 AC-3 and #7018 AC-4 restate their conditions as rendered | The Stage-4 plan's own instruction; scope-lock D4 and the #7018 bullet | **APPLIED** |
 | **DEV-11** | The Phase A1–A2 checkpoint the Stage-6 spec places before B1 is presented after the fact, in the spoke's output: the hub's brief directs Commit 0, the draft pull request and #7019's slice end to end under the scope-lock | The hub's Stage-6 brief, under the operator's scope-lock | **RECORDED** |
 | **DEV-12** | #8171's body labels this card "slice 2" (the Stage-4 numbering); under the scope-lock order it is slice 1 | Scope-lock D7 | **RECORDED** |
+| **DEV-13** | R-2 and CIAC-3 quoted the readiness fragment's never-advance-past clause in its wording before this release, which stated it of every unresolvable token. #7019's slice restates that clause for a fragment, so both now name it by its subject and quote the restated wording; CIAC-3's method is unchanged | The scope-lock's #7019 bullet (a fragment still ends the walk), applied by the rename sweep at slice 1 | **APPLIED** — § Risk Register, § Cross-Issue Acceptance Criteria |
+| **DEV-14** | The Header's PR cell said the pull-request number would be recorded by the first slice commit after it. That commit (#7019's red arms) carried the suite and the corpus only; the number is recorded by the slice-1 readiness-text commit instead | This spoke, at slice 1 | **RECORDED** |
+| **DEV-15** | The template's `## Deployment Execution Log` section was missing at Commit 0; it is added at slice 1, empty until Stage 12, ahead of the `## Change Description` section that Stage 6 Phase C1 appends | Template usage rule 1 (every section present); RELEASE_PROTOCOL § Change Description Protocol (placement) | **APPLIED** |
 
 ---
 
@@ -608,3 +611,73 @@ Recorded at Engineering Commit 0 by the spoke on #8171. Later slices append thei
 | **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp hook-walk-adjudicates-every-operand` → **exit 0**, *"verify-stamp OK — hook-walk-adjudicates-every-operand carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s)); package-consequence checks not exercised"* (its pre-flight: the manifest stales 0 packages). Control: the same verb on `hook-walk-adjudicates-every-operand-zz` → exit 1, `NO PRE-CLAIM PLAN`. This file carries exactly one literal double-brace placeholder (a fixed-string count over the file returns 1, and a count of the opening double brace alone returns 1) |
 | **The CIAC lint (G4-06) on this file** | `release/tools/verify-release-plan.sh --ciac-lint` on this file → exit 0, `CIAC-LINT-SUMMARY declared=4 parsed=4 clean=3 declared-deferral=1 flagged=0`, the declared set `CIAC-1 CIAC-2 CIAC-3 CIAC-4`. Control: a copy in which CIAC-1's method names a tool the verifier declines reads `FLAG not-runnable:make`, `flagged=1`, exit 3 |
 | **Plan verifier, pre-commit** | `release/tools/verify-release-plan.sh --format=md` on this file before its commit → 8 PASS / 13 FAIL / 34 SKIP / 0 UNRUNNABLE / 0 ERROR over 55 records (41 per-issue, 4 cross-issue, 10 always-on). Every FAIL is a later obligation, as expected at this slice: #7019 AC-1, AC-3 and AC-5 (this slice's own arms and fragment text, not yet landed); #7020 AC-1 and AC-4, #7028 AC-3, #7026 AC-4 and CIAC-1 (their slices); and FCM-1 to FCM-5, the five declared ADDs, of which the plan and the corpus are delivered by this commit and the three decision records by their slices. The provenance family reads PASS on coverage, presence and grammar (Form X, date 2026-10-08) |
+| **Slice 1 (#7019) — red, on the pre-fix hook** | Commit `bedb28cb` (the arms and the corpus verdicts; no hook change): `bash core/hooks/tests/setup-ci-layout.sh`, then `bash .claude/hooks/tests/test-runner.sh` → `AGGREGATE: PASS=1915 FAIL=62`, exit 1, 410 s; `block-destructive.test.sh` 706 of 768. The 62 are the expected set and no other. **Red-before evidence, 47:** the 24 refusals this slice introduces (`NOEXEC-QSPLIT-01` to `-05`, the ten must-refuse arms of block (7b)(a), the eight unknown-value arms of (b), and `FWALK-QWORD-py`), the 22 corpus groups whose recorded verdict the fix moves, and `WALKCORPUS-TWIN`. **Instrument-absent, 15, not red-before evidence:** `FWALK-QWORD-M1a`, `-M2a` to `-M2j`, `-M3a`, `-M3b`, `-SCAN-01` and `-SCAN-02`, each of which reads a function or a mutation site the fix adds. **Green before, as designed, 14:** the nine must-stay-allowed controls of (c), `FWALK-QWORD-ctl-claimed`, and `FWALK-QWORD-M1b` to `-M1e` |
+| **Slice 1 — the review's scanner arm, measured load-bearing** | The working tree with the walk reading built and the scanner's brace, glob and tilde arm left out (never committed): `block-destructive.test.sh` 766 of 768. Two real failures: `FWALK-QWORD-SCAN-01` read `DISAGREE value ""--{norc,rcfile}` — the shell brace-expands that word into two — and `WALKCORPUS-REC-rv-brace` moved rows RB01, RB05 and RB07 from `B` to `a`, three payloads under which an unlisted script runs. A third failure in that run, `LAYOUT-FRESH-01` (`STALE source-changed core/hooks/block-destructive.sh`), was an artifact: this spoke edited the hook source while the run graded its layout copy, and every later run rebuilt the layout first. That run's aggregate, `PASS=1974 FAIL=3`, is therefore two findings and one artifact |
+| **Slice 1 — green, on the fix** | Commit `55f58355` (the hook): the same two commands → `AGGREGATE: PASS=1977 FAIL=0`, 25 suites, exit 0, about 380 s; `block-destructive.test.sh` 768 of 768 — the Commit-0 floor of 717 plus this slice's 51 new arms. The corpus as `bedb28cb` committed it: 375 rows, SHA-256 `3668e7460ad4c5b9d1cad8c71063a43f0a74d72fe37b8261cab6c01d6abb755c`, 38 of 38 groups and `WALKCORPUS-TWIN` green. Against Commit 0's file, 111 rows in 22 groups carry the verdict the fix gives — 104 from `a` to `B` and 7 from `a` to `W`, none toward `a` — and no row's command changed (a row-by-row comparison of the two committed files; 264 rows unchanged). The operand-walk mutant moved 44 recorded refusals or warnings to an allow (`WALKCORPUS-DET-fires`) |
+| **Slice 1 — registry** | `python3 core/deploy/tools/build-hook-registry.py` → wrote `core/rules/bypass-mode-readiness.md`; then `--check` → `OK: core/rules/bypass-mode-readiness.md is in sync with its sources`, exit 0. Not hand-edited |
+| **Slice 1 — the run on the readiness-text tree** | With the restated fragment and the regenerated registry in place (the content the readiness-text commit carries), the layout rebuilt and the runner run with stdin on the null device → `AGGREGATE: PASS=1977 FAIL=0`, 25 suites, exit 0, 372 s; `block-destructive.test.sh` 768 of 768, its readiness-document arms (`NOEXEC-DOC-*`) reading the new fragment and index; the corpus line unchanged (`3668e746…`, 44 moved by the mutant) |
+| **Slice 1 — verification-plan probes** | On the working tree the readiness-text commit carries: #7019 AC-1 `FWALK-QWORD-ctl-allow` → 2 lines; AC-2 `NOEXEC-ORD` → 10; AC-3 `FWALK-QWORD-M1` → 7; AC-4 `WALKCORPUS-DET-fires` → 2; AC-5 `closed for a whole word` in the fragment → 3 (control: 0 in the fragment at `bedb28cb`, where the restated clause's old wording counts 1); CIAC-3 `F1-QTOK-RESIDUAL-space` → 2 |
+| **Slice 1 — reference cascade of the restated clause** | `git grep -c -i -F` over seven phrasings of the clause's old wording, repo-wide except the release notes and the release log: 12 lines at `bedb28cb` (the hook 4, the fragment 3, the registry 3, this plan 2) → 0 on the working tree |
+| **Slice 1 — skill-package freshness** | The seven changed paths, piped to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` → no skill named, exit 0. Control: `release/skills/release-planner/SKILL.md` through the same command → `release-planner` |
+| **Slice 1 — ADR index** | N/A — this slice adds no record under `release/ADRs/` |
+| **Slice 1 — plan verifier, CIAC lint and stamp, pre-commit** | `release/tools/verify-release-plan.sh --format=md` on this file → 13 PASS / 8 FAIL / 34 SKIP / 0 UNRUNNABLE / 0 ERROR over 55 records. #7019 AC-1 to AC-5 PASS (AC-6 is the runner's), CIAC-2 and CIAC-3 PASS, FCM-1 and FCM-2 delivered. Every FAIL is a later slice's: #7020 AC-1 and AC-4, #7028 AC-3, #7026 AC-4, CIAC-1, and FCM-3 to FCM-5 (the three decision records). `--ciac-lint` → `declared=4 parsed=4 clean=3 declared-deferral=1 flagged=0`, exit 0, unchanged by CIAC-3's new wording. `release/tools/claim-version.sh --verify-stamp hook-walk-adjudicates-every-operand` → exit 0; the file still carries exactly one literal release-version placeholder |
+| **Slice 1 — instance drain, disclosed** | Rows of the instance's BLOCK-DESTRUCTIVE-022 would-fire drain whose working directory is this worktree: 1 before the registry regeneration (an `exec`-arm row naming `core/hooks/block-destructive.sh`, written by the deployed hook during a read-only compound command this spoke ran), 3 after it (the generator and its `--check`, `interp-nonshell` arm, warn phase). 162 rows of the same generator command were already present from other worktrees. All three are this spoke's own traffic; #7026's evidence can exclude them by working directory |
+
+---
+
+## Deployment Execution Log
+
+*(Populated during Stage 12.)*
+
+| Step | Timestamp | Result | Notes |
+|------|-----------|--------|-------|
+| Pre-execution check | | | |
+| Merge PR | | | |
+| Tag release | | | the version binds at the Stage-12 atomic claim (ADR-092) |
+| Skill deployment | | N/A | no skill source is edited by this release |
+| Manifest execution | | | § Operational Deployment Manifest rows 1–2: the hook publisher, then `deploy.sh --deploy` |
+| State anchor update | | | |
+| Post-execution verification | | | release gate E8 — each deployed hook copy equals its merged source by SHA-256, then the fresh-session probes |
+
+---
+
+## Change Description
+
+Authored by the Stage 6 spoke on #8171 when the pull request opened, per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol. This release builds in seven serial slices on one branch, so this section covers the slices that have landed, and each later slice refreshes it: it adds its row to the table and restates the Outcome. It is distinct from the user-facing release note authored at Stage 13.
+
+### Outcome
+
+The script-execution rule (BLOCK-DESTRUCTIVE-022) no longer lets a flag token whose leading quote closes early hide the script behind it. `bash ""-x <script>`, `bash -n ""+n <script>`, `zsh ''-x <script>` and the rest of that family were allowed while their unquoted spellings were refused; they now take the unquoted spelling's verdict, so a script missing from the allowlist is refused and an allowlisted one still runs. A quote-led flag word whose value the hook cannot know — a `$` expansion, a command substitution, an unquoted brace, glob or tilde character, or a token longer than the reader's limit — is no longer taken for the operand: the walk goes on, and the script behind it is checked. The release's walk changes are measured against a committed corpus of 375 payloads, each with a recorded verdict, which the hook suite re-grades on every run.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7019 | A quote-led flag word is read as the word the shell passes the interpreter; the first fragment of a space-bearing quoted path still ends the walk, a declared residual | DONE — built in slice 1; Stages 7 and 8 verify it |
+
+#7018, #7020, #7028, #7004, #7027 and #7026 add their rows when their slices land (§ Implementation Sequence).
+
+### Key decisions
+
+- **Scope-lock D2 — one tracked corpus.** `core/hooks/tests/fixtures/walk-payload-corpus.txt` is the release's differential, read by the block-destructive suite's own harness; each later walk card appends its rows and moves only the verdicts its change moves (§ Decision Record).
+- **Scope-lock, #7019 in the concurring set — the recommended walk option plus the review's scanner arm, without the operand fold.** Built as locked. The scanner arm was measured load-bearing (§ Verification Evidence); the split-suffix operand the fold would have closed stays with its own card (D8).
+- **Scope-lock — the class of flags that begin with `-`, `+` or a backslash and carry a quote or a backslash is #7018's.** This slice builds no route for it; the readiness fragment records the class as open, and the corpus carries its measured spellings as declared-open rows.
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** Each card is its own run of commits on a linear branch and reverts with `git revert` of those commits, or the whole release with a revert of its merge; either way the deployed hooks change only when the hook publisher republishes them.
+
+### Downstream impact
+
+- #7018 builds on this slice's walk reading, in the same loop, as slice 2.
+- #7026's decision evidence: under the phase-gated interpreters this slice turns previously silent quote-led spellings into `interp-nonshell` would-fire rows (dependency edge E2).
+- Every later walk card adds its rows to the corpus; the corpus reader adds about 90 seconds to a full hook-suite run (R-17).
+- Open and recorded, not closed by this slice: a flag that begins with `-`, `+` or a backslash and carries a quote, a backslash, or a brace or glob character is still decided on its raw spelling. The scope-lock assigns that class to #7018 (slice 2): its recommended scope answer routes every flag token the walk cannot read exactly, and its design measured the brace and glob spellings (corpus rows RB02, RB04, RB06, RB08) among that class's rows.
+- Still open by declaration: the first fragment of a space-bearing quoted path (readiness limit 3), pinned by `F1-QTOK-RESIDUAL-space` and `FWALK-QWORD-ctl-fragment-noexec`.
+- Surfaces changed so far: `core/hooks/block-destructive.sh`, its suite, its readiness fragment, the generated registry, and the corpus with its README entry.
+
+### Cross-references
+
+- Release plan: this file, § Header and § Implementation Sequence
+- Milestone: `hook-walk-adjudicates-every-operand` (milestone 404); pull request #8306
+- User-facing release notes: authored at Stage 13 Close under `release/releases/notes/`, per `release/references/standards/release-notes-standard.md`
