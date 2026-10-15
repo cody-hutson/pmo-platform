@@ -573,8 +573,11 @@ script_word_scan() {
 # that begins with `-`, `+` or a backslash and carries a quote, a backslash, or a
 # brace or glob character (`--rcfile""`, `+-emu""late`, `\-c`, `--{norc,rcfile}`)
 # never reaches this reading and is decided on its raw spelling exactly as before.
-# That class is open; the readiness doc names it, and this function does not close
-# it.
+# This function does not reach that class. The walk decides it at the top of its
+# loop, on its own reading of the token: a reading that is not a plain option word
+# ends the option run (script_option_word), so no `-n` behind it is a grant, and
+# under an interpreter a reading that is not plain takes the conservative route
+# (script_take_cmode_route).
 #
 # WHAT IT DOES WITH A DECLINED TOKEN, BY CLASS.
 #   A FRAGMENT keeps script_norm_ok=0. It still ends the walk and is still never
@@ -595,15 +598,19 @@ script_word_scan() {
 #   quote-led `""-x`, `''+n`, `""--` or `""-c` is read as its unquoted spelling
 #   and takes that spelling's verdict, parse-only grant and option arity included.
 #   A WHOLE WORD OF UNKNOWN VALUE that no view claims is neither a flag this hook
-#   can read nor an operand it can name. Under an INTERPRETER it is handed to the
-#   route `-c` already takes: the walk ends, no parse-only exemption applies, and
-#   every remaining token that lands in the arm's operand domain is adjudicated.
-#   Stepping over it instead would be a guess that it takes no argument, and a
-#   `-n` that is in fact its argument would then be read as a grant. Under
-#   `source` that route does not exist — the `-c` label opens a program string
-#   only for an interpreter, and would there skip one token and stop looking —
-#   and there is no parse-only grant to protect. So the word is stepped over
-#   like any other token outside the domain, and the walk keeps looking.
+#   can read nor an operand it can name. It is read as its RAW spelling, which
+#   opens with a quote and so is never plain, and what happens to it is decided at
+#   the top of the walk's loop, where every other token the walk cannot read is
+#   decided: script_take_cmode_route is the one place a token is handed to the
+#   `-c` label. Under an INTERPRETER that route is taken: the walk ends, no
+#   parse-only exemption applies, and every remaining token that lands in the
+#   arm's operand domain is adjudicated. Stepping over it instead would be a
+#   guess that it takes no argument, and a `-n` that is in fact its argument
+#   would then be read as a grant. Under `source` that route does not exist — the
+#   `-c` label opens a program string only for an interpreter, and would there
+#   skip one token and stop looking — and there is no parse-only grant to
+#   protect. So the word is stepped over like any other token outside the
+#   domain, and the walk keeps looking.
 #
 # NET DIRECTION — MONOTONE ALLOW->BLOCK BY CONSTRUCTION. Every token whose reading
 # this function changes was, before it existed, a declined token no view claimed:
@@ -618,8 +625,6 @@ script_walk_view() {
   if [ "$script_ws_exact" -eq 1 ]; then
     if script_operand_domain_hit "$script_interp_domain" "$script_ws_out"; then return 0; fi
     script_norm_out="$script_ws_out"
-  elif [ "$script_verb" = "interp" ]; then
-    script_norm_out="-c"
   else
     script_norm_out="$script_norm_raw"
   fi
@@ -843,10 +848,90 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
   return 1
 }
 
+# IS THIS AN OPTION WORD THE WALK CAN READ EXACTLY? — the question the parse-only
+# GRANT rests on, and one the walk never asked.
+#
+# WHY THE GRANT NEEDS IT. The table above grants parse-only on a bare `-n`, and the
+# arity table below keeps a `-n` that is really an option's ARGUMENT away from it.
+# Both read a token's TEXT. That is sound for a token whose text is its value and
+# which the shell reads as an option. It is unsound for the three other things a
+# walk passes on its way to the operand:
+#   - A WORD THAT IS NOT AN OPTION. The shells stop reading options at the first
+#     argument that begins with neither `-` nor `+`; every argument after it is a
+#     positional parameter. `zsh -s -O extglob -n <path>` runs its stdin with
+#     `extglob` as $1 and `-n` as $2, because zsh's `-O` takes no argument. The
+#     walk, which keeps looking past any token the operand domain does not claim,
+#     read that `-n` as a flag. A lone `-` ends option reading the same way.
+#   - AN OPTION WHOSE TEXT IS NOT ITS VALUE. `--rcfile""`, `--rc\file`,
+#     `\--rcfile`, `--rcfile$X` and `--{norc,rcfile}` are each `--rcfile` to bash,
+#     which takes the following `-n` as the rcfile NAME and EXECUTES the script
+#     behind it. The arity table is asked about the text, finds no row, and the
+#     `-n` was granted.
+#   - AN OPTION'S ARGUMENT THAT MAY BE NO WORD AT ALL. `bash --rcfile $X -n <path>`
+#     with X unset is `bash --rcfile -n <path>` to bash. The walk consumed `$X` as
+#     the argument and read the `-n` behind it as a flag. `"$@"` does the same
+#     inside quotes.
+# All three shapes were refused before the parse-only exemption existed, because
+# there was no exemption for the walk to mistake them for.
+#
+# THE TEST IS A CHARACTER ALLOWLIST, AND ITS DIRECTION IS THE WHOLE DESIGN. A text
+# is PLAIN when it carries nothing but the characters below: no quote, no
+# backslash, no `$`, no backtick, no glob, brace or tilde character, no
+# redirection. Those are the characters no shell rewrites, so a plain text IS the
+# argv word and is exactly one word. Everything else is "not a text this walk can
+# read", and that answer grants nothing. There is no list of option names, of
+# words that end option parsing, or of quoting and expansion constructs to keep
+# complete. A spelling these functions have never seen costs an over-block, never
+# an exemption.
+#
+# THE EMPTY TEXT IS PLAIN, AND TWO CALLERS RELY ON IT. The walk gives the empty
+# reading to a token whose quote it could not resolve. Such a token is not an
+# option word, so the option run ends on it; and it carries no character outside
+# the set, so it is not handed to the conservative route — it ends the walk in
+# the arm that has always ended on it, and arm F1-QTOK-RESIDUAL-space keeps
+# pinning that. A quoted empty argument (`--rcfile ""`) is one word whose text
+# this hook holds, and reads as exact for the same reason.
+#
+# `~` IS OUTSIDE THE SET ALTHOUGH A LEADING TILDE IS ALWAYS ONE WORD. The set is
+# "characters that are never special", which a reader can check without knowing
+# any expansion rule. Admitting a character that is special in one position and
+# not another would trade that for a precision nobody has asked for.
+#
+# NOT CLAIMED: that an option word which passes takes no argument. That is still
+# the arity table's measured answer for the literal spellings. These functions
+# only guarantee the table is asked about the spelling the shell will read.
+script_plain_word() {   # $1 = text -> 0 when every character is in the plain set
+  case "$1" in
+    *[!A-Za-z0-9_=+,.:/@%-]*) return 1 ;;
+  esac
+  return 0
+}
+
+script_option_word() {   # $1 = the walk's reading of one token
+  case "$1" in
+    [-+]?*) if script_plain_word "$1"; then return 0; fi ;;
+  esac
+  return 1
+}
+
+# The same question for a token the walk CONSUMED as an option's argument. Reads
+# the globals normalize_script_token last set, so it is asked directly after that
+# call and nowhere else. A token that opens its own quote is exact when the quote
+# closes on its last character and the text inside is plain; any other token is
+# exact when its raw spelling is plain. The raw spelling is asked, not
+# script_norm_out, because that probe has trailing punctuation stripped.
+script_arg_exact() {   # -> 0 when the token just normalized is one argv word whose text is held
+  case "$script_norm_raw" in
+    \"*|\'*) if [ "$script_norm_ok" -eq 1 ] && script_plain_word "$script_norm_out"; then return 0; fi ;;
+    *) if script_plain_word "$script_norm_raw"; then return 0; fi ;;
+  esac
+  return 1
+}
+
 # THE OPTION-ARITY TABLE, KEYED ON THE INTERPRETER — the third per-interpreter
-# table, beside the other two for the same reason they are beside each other:
+# table, beside the others for the same reason they are beside each other:
 # widening the interpreter set must mean adding a label in one place, not hunting
-# three. This one answers "does this option consume the NEXT token as its
+# four. This one answers "does this option consume the NEXT token as its
 # argument".
 #
 # WHY THE WALK NEEDS IT AT ALL. The flag walk steps over `-*` one token at a time
@@ -960,6 +1045,65 @@ script_interp_optarg_flag() {   # $1 = interpreter basename  $2 = normalized fla
       ;;
     zsh)
       case "$2" in -o|+o|--emulate|+-emulate|--rcfile|--init-file) return 0 ;; esac
+      ;;
+    *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
+  esac
+  return 1
+}
+
+# HAND THE TOKEN THE WALK IS READING TO THE `-c` LABEL — the conservative route.
+#
+# The `-c` label ends the walk, applies no parse-only exemption, and has every
+# remaining token that lands in the arm's operand domain adjudicated. Taking it
+# for a token the walk would otherwise have stepped over can therefore add an
+# adjudication and remove none.
+#
+# A DOMAIN CLAIM STILL BEATS A FLAG SHAPE. A token that does not begin with `-`
+# on raw argv was read through the walk's view at the top of this iteration, and
+# if any view places it in the operand domain it is the operand: it is left alone
+# and reaches the arm that will adjudicate it. Routing it here instead would step
+# over it and move a BLOCK to an ALLOW. A token that begins with `-` on raw argv
+# was never asked that question — the raw view decides for it, unchanged — so it
+# is routed without asking.
+#
+# THIS IS THE ONE DEFINITION OF THE ROUTE. The quoted-word view no longer rewrites
+# a word of unknown value to `-c` itself: it reports the word's raw spelling, which
+# is not plain, and the walk's top-of-loop line hands it here like every other
+# token it cannot read. Two definitions of one rewrite are two places to get the
+# domain-claim guard wrong.
+script_take_cmode_route() {   # reads script_ftok and the last read's globals; sets script_ftok
+  case "$script_ftok" in
+    -*) script_ftok="-c" ;;
+    *) if ! script_operand_implicated "$script_interp_domain"; then script_ftok="-c"; fi ;;
+  esac
+}
+
+# THE COMMAND-STRING TABLE, KEYED ON THE INTERPRETER — the fourth per-interpreter
+# table. It answers "does this option token carry the command-string letter".
+#
+# WHY IT EXISTS. The walk's `-c)` label is an EXACT match, and the shells read
+# one-letter options as a CLUSTER: `bash -ec '<program>'`, `sh -xc`, `zsh -fc`
+# and `bash +ec` all take the next argument as a program string, exactly as a
+# bare `-c` does. The label never saw them. The cluster was stepped over as a
+# flag, the first piece of the program string became the operand, and nothing in
+# the string was adjudicated — while the same program behind a bare `-c` was.
+#
+# THE TEST HAS NOTHING TO OMIT: any single-sign cluster that contains `c`. It does
+# not ask which other letters are present or where the `c` sits. A long option
+# (`--rcfile`, `+-emulate`) is excluded by its second character, not by name.
+#
+# THE DIRECTION IS THE CONSERVATIVE ONE. A token this table claims takes the
+# route above, so reading a cluster as command mode when it is not can only add
+# an adjudication.
+#
+# THE NON-SHELL INTERPRETERS REACH THE EXPLICIT NULL and keep the exact `-c`
+# label only. Their single-dash options are not all one-letter clusters
+# (`perl -Mcharnames`, `python3 -Wignore`), so the cluster reading is not measured
+# for them and is not guessed.
+script_interp_cmode_flag() {   # $1 = interpreter basename  $2 = the walk's reading of one token
+  case "$1" in
+    bash|sh|zsh)
+      case "$2" in -c*|-[!-]*c*|+c*|+[!-]*c*) return 0 ;; esac
       ;;
     *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
   esac
@@ -1338,6 +1482,20 @@ destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
 # from being treated as a path.
 script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argument
   normalize_script_token "$1"
+  # THE CONSUMED ARGUMENT IS PART OF THE OPTION RUN. If its text is not held, the
+  # shell may have given the option a different word, or no word at all, and the
+  # `-n` the walk reads next may be the option's real argument. The run ends here,
+  # so that `-n` is not read as a grant. See script_option_word.
+  if ! script_arg_exact; then script_optrun=0; fi   # M-OPTARG (mutation target; pinned by NOEXEC-TERM-M4a)
+  # AND THE OPERAND BEHIND IT IS NO LONGER KNOWN. The same lost word can leave an
+  # allowlisted script in the argument slot while the shell runs the one after it:
+  # `bash --rcfile $X <allowlisted>.sh <script>.sh` with X unset. The token is
+  # already consumed, so there is nothing to hand to the `-c` label; the route's
+  # flag is set directly. The walk still stops where it always stops, and from
+  # there every remaining token that lands in the operand domain is adjudicated
+  # and no parse-only exemption applies. Both call sites of this function sit
+  # behind the walk's interpreter test, so it is never reached under `source`.
+  if ! script_arg_exact; then script_cmode=1; fi   # M-OPAQUE-ARG (mutation target; pinned by FWALK-OPAQUE-M3a)
   if script_operand_implicated "$script_interp_domain"; then
     if [ "$script_interp_domain" = "interp" ]; then
       check_script_target "$script_norm_out" "$script_norm_ok"
@@ -2249,6 +2407,10 @@ case "$TOOL_NAME" in
     # reason as the three below: an unset read under `set -u` exits 1, and exit 1
     # is NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
     script_ftok=""
+    # The option-run latch and the reading it tests (see script_option_word).
+    # Initialised for the same reason as script_ftok above.
+    script_fsub=""
+    script_optrun=1
     # normalize_script_token sets all three before any reader runs. Initialised
     # anyway because an unset read under `set -u` exits 1, and exit 1 is
     # NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
@@ -2772,6 +2934,10 @@ case "$TOOL_NAME" in
       # script_cmode; read once, after the walk, together with it. 0 is both the
       # initial value and the fail-safe one: it exempts nothing.
       script_noexec=0
+      # Is the walk still inside a run of option words it can read exactly? Reset
+      # per segment beside script_noexec, whose grant it qualifies. 1 is the initial
+      # value; 0 is the fail-safe one: it grants nothing.
+      script_optrun=1
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
         script_ftok="${script_tokens[$script_idx]}"
         case "$script_ftok" in
@@ -2797,6 +2963,67 @@ case "$TOOL_NAME" in
             fi
             ;;
         esac
+        # WHERE THE OPTION RUN ENDS. script_optrun stays 1 only while EVERY token the
+        # walk has read in this segment is an option word it can read exactly — see
+        # script_option_word for what that means and why the test has nothing to omit.
+        # The parse-only grant below is conditional on it, so a `-n` that follows a
+        # word that is not an option, or an option whose text is not its value, is no
+        # longer read as a grant. script_adjudicate_optarg applies the same test to an
+        # argument the walk consumes, which never passes through here.
+        #
+        # IT IS A LATCH, AND THAT IS RIGHT HERE WHERE IT WAS WRONG FOR PARSE-ONLY
+        # ITSELF. noexec is a mode the shells resolve last-one-wins, so its state is
+        # reassigned by every token. Where option parsing ENDS is not a mode: once the
+        # interpreter has stopped reading options, or this walk has lost track of
+        # what it is reading, nothing later on argv restores it.
+        #
+        # THE SUBJECT IS THE WALK'S OWN READING OF THE TOKEN, WHATEVER PRODUCED IT.
+        # script_ftok is the raw spelling for a token that begins with `-`, which the
+        # read above never touches, and for every other token it did not rewrite. For
+        # a token that opens its own quote the subject is the value that read
+        # resolved (`'+x'` is `+x`), or the empty text when it resolved none — which
+        # is not an option word and ends the walk in the arm below anyway. Nothing
+        # here assumes a quoted option has already been given its unquoted spelling:
+        # a reading that still carries a quote, a backslash or an expansion simply
+        # fails the test.
+        #
+        # THIS SETS A STATE AND MOVES NO TOKEN. The walk still terminates on the
+        # arm's operand domain and still adjudicates the first token that lands in
+        # it, so `bash <wrapper> <script>.sh` blocks exactly as before. Only the
+        # grant is narrowed, which makes the change MONOTONE ALLOW -> BLOCK by
+        # construction: a segment this latch touches was exempted before and is
+        # adjudicated now, and nothing that was adjudicated stops being.
+        script_fsub="$script_ftok"
+        case "$script_fsub" in
+          \"*|\'*) if [ "$script_norm_ok" -eq 1 ]; then script_fsub="$script_norm_out"; else script_fsub=""; fi ;;
+        esac
+        if ! script_option_word "$script_fsub"; then script_optrun=0; fi   # M-OPTRUN (mutation target; pinned by NOEXEC-TERM-M2a)
+        # AN OPTION THE WALK CANNOT READ IS NOT STEPPED OVER AS IF IT TOOK NO ARGUMENT.
+        # A token whose reading carries a character outside the plain set — a quote,
+        # a backslash, an expansion, a glob, a brace, a redirection — has a value this
+        # hook does not hold. Stepping over it is a guess that it consumes nothing,
+        # and when the guess is wrong an allowlisted script in its argument slot is
+        # adjudicated as the operand while the script the shell runs is never read:
+        # `bash --rcfile"" <allowlisted>.sh <script>.sh`,
+        # `bash \--rcfile <allowlisted>.sh <script>.sh` and
+        # `bash $X--rcfile <allowlisted>.sh <script>.sh` execute <script>.sh. Under an
+        # interpreter the token takes the route `-c` takes instead.
+        #
+        # ASKED OF THE READING, NOT OF HOW THE TOKEN IS SPELLED. It makes no
+        # difference whether the token begins with `-`, `+`, a backslash or a quote,
+        # or whether an earlier read gave it a value: if that value is not plain, the
+        # walk does not hold the word. The empty reading is plain, so a token whose
+        # quote did not resolve is left to the arm that ends the walk on it. Under
+        # `source` no such route exists and there is no arity to get wrong, so the
+        # token is stepped over as before.
+        if [ "$script_verb" = "interp" ] && ! script_plain_word "$script_fsub"; then script_take_cmode_route; fi   # M-OPAQUE (mutation target; pinned by FWALK-OPAQUE-M1a)
+        # A CLUSTER THAT CARRIES THE COMMAND-STRING LETTER IS `-c`. The label below is
+        # an exact match; script_interp_cmode_flag is what lets `-ec`, `-xc` and `+ec`
+        # reach it. Asked of the same reading the latch above used, so a quoted
+        # cluster is still that cluster. No verb test is needed: script_interp_base
+        # is cleared for every segment beside the verb, so under `source` the table
+        # is asked about an empty basename and reaches its null.
+        if script_interp_cmode_flag "$script_interp_base" "$script_fsub"; then script_take_cmode_route; fi   # M-CLUSTER (mutation target; pinned by FWALK-CLUSTER-M1a)
         # THE TERMINATION PREDICATE IS THE ARM'S OWN DECLARED OPERAND DOMAIN, not
         # "the first token that is not flag-shaped". Answering "where is the operand?"
         # with "the first non-flag token" is wrong in two independent ways, and both
@@ -2899,6 +3126,9 @@ case "$TOOL_NAME" in
             # as the TERMINATION predicate. Parse-only status is granted ONLY by positive
             # recognition in script_interp_noexec_flag and is REVOKED BY EVERY TOKEN THE
             # WALK STEPS OVER, whatever it is spelled.
+            # The grant has a second condition, and it is a narrowing: the walk must still
+            # be inside a run of option words it can read exactly (script_optrun, set at
+            # the top of this loop). Recognition is necessary; it is no longer sufficient.
             #
             # THE GUARANTEE IS SCOPED TO STEPPED-OVER TOKENS, AND AN EARLIER FORM OF THIS
             # NOTE OVERSTATED IT. It said "there is nothing to omit" and "a spelling this
@@ -2925,10 +3155,12 @@ case "$TOOL_NAME" in
             # -05 pin the closed family, NOEXEC-QSPLIT-M* pins the inertness on a fragment,
             # and the fragment case is the readiness doc's limit 3. A flag that begins with
             # a sign or a backslash and carries a quote is not this family: it never reaches
-            # the view, and that class is open.
+            # the view, and it is the option-run latch at the top of this loop that keeps a
+            # `-n` behind it from granting, and the conservative route that adjudicates what
+            # follows it.
             #
-            # FAIL-SAFE DIRECTION, PER BRANCH. Recognised set-spelling -> 1 (exempt) is
-            # the ONLY path to parse-only, and it is exactly today's measured row. Every
+            # FAIL-SAFE DIRECTION, PER BRANCH. Recognised set-spelling INSIDE AN INTACT
+            # OPTION RUN -> 1 (exempt) is the ONLY path to parse-only. Every
             # other token THE WALK STEPS OVER -> 0, which does not allow anything: it
             # routes the segment into the ordinary allowlist adjudication below. Within
             # that class, unknown means REFUSED, never EXEMPT. A token the walk ENDS ON is
@@ -2944,8 +3176,10 @@ case "$TOOL_NAME" in
             # noexec <script>` is revoked by `-o`, not by `noexec`. Adding an
             # argument-taking option to the noexec table would break that and is why the
             # two tables are neighbours.
+            # It does end the option RUN when its text is not held: script_adjudicate_optarg
+            # carries that test, because the argument never passes the top of this loop.
             if [ "$script_verb" = "interp" ]; then
-              if script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
+              if [ "$script_optrun" -eq 1 ] && script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
                 script_noexec=1
               else
                 script_noexec=0   # M-NOEXEC-REVOKE (mutation target; pinned by NOEXEC-M1)
