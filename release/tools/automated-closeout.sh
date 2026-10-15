@@ -15717,10 +15717,19 @@ STUB
   RELEASE_LOG="$_cy_tmp/log/RELEASE_LOG.md"; VERSION="v9.91"; PR_NUMBER="9191"; REPO_SLUG="x/y"
   STATE_MILESTONE_SLUG="cy-selftest"; MILESTONE="9191"   # numeric: the JSON report casts it
   export EVALS_RESULTS_PATH="$_cy_tmp/evals" RELEASE_LOG_FILE="$RELEASE_LOG"
-  # $GH stub: the milestone state and the release PR's merge commit, nothing else.
+  # $GH stub: the milestone state and the release PR's merge fact, nothing else. read_state
+  # reads the merge fact over REST (#6871), so `api -i …/pulls/<n>` is answered in the live
+  # `gh api -i` layout (the status line ending LF, the headers ending CRLF, one CRLF CRLF,
+  # then the body) as a pull request merged into main, carrying the same merge commit the
+  # `pr view` line returns. That line is the GraphQL-bound read REST replaced, and it stays
+  # answerable.
   /bin/cat > "$_cy_tmp/stub/gh.sh" <<'STUB'
 #!/bin/bash
 if [[ "$1" == "pr" && "$2" == "view" ]]; then echo "c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ff"; exit 0; fi
+if [[ "$1" == "api" && "$2" == "-i" && "$3" == */pulls/[0-9]* ]]; then
+  /usr/bin/printf 'HTTP/2.0 200 OK\nContent-Type: application/json; charset=utf-8\r\n\r\n{"number":%s,"state":"closed","merged":true,"merge_commit_sha":"c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ff","base":{"ref":"main"}}' "${3##*/pulls/}"
+  exit 0
+fi
 if [[ "$1" == "api" ]]; then echo "closed"; exit 0; fi
 exit 0
 STUB
