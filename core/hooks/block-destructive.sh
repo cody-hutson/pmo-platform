@@ -432,6 +432,200 @@ normalize_script_token() {
   script_norm_out="$t"
 }
 
+# Read ONE whitespace-delimited argv token the way the shell reads a word.
+#
+# WHY A SECOND READER SITS BESIDE normalize_script_token. That function answers
+# "what FILENAME does this token name?", and it rightly declines a token that
+# closes its own quote and then continues: the value in hand at that point is a
+# prefix, and a prefix is not a filename. The flag walk asks the same token a
+# different question — "is this the operand, or something in front of it?" — and
+# for that question a token the shell hands the interpreter as ONE word is fully
+# determined by argv however its quotes are placed. `""-x`, `'-'x` and `"-x"""`
+# are all the word `-x`. Declining them as a class is what let a quoted spelling
+# of a flag end the walk in front of a script nothing then adjudicated.
+#
+# THREE OUTCOMES, AND THEY ARE THE WHOLE CONTRACT.
+#   script_ws_complete=0            The token leaves a quote open, or ends on a
+#                                   dangling backslash. It is a FRAGMENT: one
+#                                   piece of a longer word that whitespace
+#                                   splitting cut. Nothing else set here may be
+#                                   relied on.
+#   complete=1, script_ws_exact=1   A whole word with no expansion in it.
+#                                   script_ws_out IS the word after quote removal.
+#   complete=1, script_ws_exact=0   A whole word whose VALUE argv does not
+#                                   determine: it carries `$` or a backtick where
+#                                   the shell expands them, an unquoted brace,
+#                                   glob or tilde character, or a `$'...'` run
+#                                   (not decoded here), or it is longer than the
+#                                   read limit. script_ws_out is not a value and
+#                                   must not be read as one.
+#
+# THE QUOTING RULES ARE THE TRACKER'S, STATE FOR STATE: 0 outside quotes, 1 inside
+# '...', 2 inside "...", 3 inside $'...', with the same four rules script_qadvance
+# applies. It is a separate function because that tracker carries ONE state across
+# the segments of a command and yields no value; calling it on a token would
+# overwrite the carried state and spend the command's shared step budget, and the
+# walk needs the value.
+#
+# ONE ARM IS THIS FUNCTION'S OWN, BECAUSE ITS QUESTION IS NOT THE TRACKER'S. The
+# tracker asks only where quoting opens and closes, and an unquoted `{`, `*`, `?`,
+# `[` or `~` moves neither. This function reports a VALUE, and those five
+# characters are where the shell's brace, pathname and tilde expansions act on an
+# unquoted word: `""--{norc,rcfile}` balances its quotes and is the two words
+# `--norc --rcfile` once brace expansion has run. So in state 0 each of them clears
+# script_ws_exact, and the word is reported as a word of unknown value. The test is
+# coarser than the shell's own rules — a lone `{`, a pattern that matches no file,
+# or a `~` that is not a tilde prefix is left as written — and the coarse reading
+# is the conservative one: it sends the word to adjudication, never past it.
+#
+# THE READ LIMIT DEGRADES TOWARD ADJUDICATION. The loop is quadratic in the token's
+# length on a hook that runs before every Bash call, so a longer token is not read.
+# It is reported as a word of unknown value — never as a fragment. Reporting
+# "fragment" would hand a padded spelling of the same flag the exit this function
+# exists to close. Both sides of the limit are adjudicated; the limit decides only
+# how precisely.
+#
+# NOT CLAIMED: that a word reported complete is one word when a command
+# substitution inside it contains whitespace. `""$(echo` balances its quotes and
+# is the first piece of `""$(echo -x)`. It is reported complete and inexact, which
+# is the conservative reading of it.
+script_word_scan() {
+  local t="$1" out="" c="" st=0
+  local sq="'" dq='"' bs='\' ds='$' bt='`'
+  script_ws_complete=0
+  script_ws_exact=1
+  script_ws_out=""
+  if [ "${#t}" -gt 1024 ]; then
+    script_ws_complete=1
+    script_ws_exact=0
+    return 0
+  fi
+  while [ -n "$t" ]; do
+    c="${t:0:1}"
+    case "$st" in
+      0)
+        case "$c" in
+          "$sq") st=1; t="${t:1}" ;;
+          "$dq") st=2; t="${t:1}" ;;
+          "$bs")
+            if [ "${#t}" -lt 2 ]; then return 0; fi
+            out="${out}${t:1:1}"; t="${t:2}"
+            ;;
+          "$ds")
+            script_ws_exact=0
+            case "${t:1:1}" in
+              "$sq") st=3; t="${t:2}" ;;
+              "$dq") st=2; t="${t:2}" ;;
+              *) t="${t:1}" ;;
+            esac
+            ;;
+          "$bt") script_ws_exact=0; t="${t:1}" ;;
+          '{'|'*'|'?'|'['|'~') script_ws_exact=0; out="${out}${c}"; t="${t:1}" ;;
+          *) out="${out}${c}"; t="${t:1}" ;;
+        esac
+        ;;
+      1)
+        case "$c" in
+          "$sq") st=0 ;;
+          *) out="${out}${c}" ;;
+        esac
+        t="${t:1}"
+        ;;
+      2)
+        case "$c" in
+          "$dq") st=0; t="${t:1}" ;;
+          "$bs")
+            if [ "${#t}" -lt 2 ]; then return 0; fi
+            case "${t:1:1}" in
+              "$ds"|"$bt"|"$dq"|"$bs") out="${out}${t:1:1}" ;;
+              *) out="${out}${bs}${t:1:1}" ;;
+            esac
+            t="${t:2}"
+            ;;
+          "$ds"|"$bt") script_ws_exact=0; t="${t:1}" ;;
+          *) out="${out}${c}"; t="${t:1}" ;;
+        esac
+        ;;
+      3)
+        case "$c" in
+          "$sq") st=0; t="${t:1}" ;;
+          "$bs")
+            if [ "${#t}" -lt 2 ]; then return 0; fi
+            t="${t:2}"
+            ;;
+          *) t="${t:1}" ;;
+        esac
+        ;;
+    esac
+  done
+  if [ "$st" -eq 0 ]; then script_ws_complete=1; fi
+  script_ws_out="$out"
+}
+
+# The flag walk's reading of one token.
+#
+# normalize_script_token IS ASKED FIRST AND UNCHANGED, so every token it resolves
+# is read exactly as before and this function acts only where it declined — and it
+# declines only a token that OPENS WITH A QUOTE. That is the whole reach of the
+# reading below, and it is narrower than "a quoted flag". The walk asks this
+# function only about a token that does not begin with `-`, and a token that begins
+# with `+` or a backslash resolves in the normalizer to its raw spelling. So a flag
+# that begins with `-`, `+` or a backslash and carries a quote, a backslash, or a
+# brace or glob character (`--rcfile""`, `+-emu""late`, `\-c`, `--{norc,rcfile}`)
+# never reaches this reading and is decided on its raw spelling exactly as before.
+# That class is open; the readiness doc names it, and this function does not close
+# it.
+#
+# WHAT IT DOES WITH A DECLINED TOKEN, BY CLASS.
+#   A FRAGMENT keeps script_norm_ok=0. It still ends the walk and is still never
+#   advanced past, for the reason that was measured: the first piece of a quoted
+#   path that contains a space cannot be shown NOT to be the operand, and
+#   stepping off it adjudicates a later piece — the wrong subject. Arm
+#   F1-QTOK-RESIDUAL-space pins that.
+#   A TOKEN ANY VIEW PLACES IN THE ARM'S OPERAND DOMAIN keeps script_norm_ok=0 as
+#   well, so it reaches the operand branch exactly as it did. The probe and raw
+#   views are asked FIRST, and that order is what keeps this change monotone:
+#   `'x.sh'y` is the word `x.shy`, which no suffix set claims, yet the probe view
+#   claims the token and it is denied today. Reading it as a word would step
+#   over it and move that BLOCK to ALLOW. Arm FWALK-QWORD-ctl-claimed pins the
+#   deny, and its mutant FWALK-QWORD-M3b deletes this test to show it is the
+#   line that holds it. The word's own value is asked second, so a caller may
+#   rely on script_norm_ok=1 meaning "no view places this token in the domain".
+#   A WHOLE WORD WITH AN EXACT VALUE that no view claims is read as that value. A
+#   quote-led `""-x`, `''+n`, `""--` or `""-c` is read as its unquoted spelling
+#   and takes that spelling's verdict, parse-only grant and option arity included.
+#   A WHOLE WORD OF UNKNOWN VALUE that no view claims is neither a flag this hook
+#   can read nor an operand it can name. Under an INTERPRETER it is handed to the
+#   route `-c` already takes: the walk ends, no parse-only exemption applies, and
+#   every remaining token that lands in the arm's operand domain is adjudicated.
+#   Stepping over it instead would be a guess that it takes no argument, and a
+#   `-n` that is in fact its argument would then be read as a grant. Under
+#   `source` that route does not exist — the `-c` label opens a program string
+#   only for an interpreter, and would there skip one token and stop looking —
+#   and there is no parse-only grant to protect. So the word is stepped over
+#   like any other token outside the domain, and the walk keeps looking.
+#
+# NET DIRECTION — MONOTONE ALLOW->BLOCK BY CONSTRUCTION. Every token whose reading
+# this function changes was, before it existed, a declined token no view claimed:
+# it ended the walk, became the operand, and was adjudicated by nothing. No block
+# was possible on that path, so none can be removed.
+script_walk_view() {
+  normalize_script_token "$1"
+  if [ "$script_norm_ok" -eq 1 ]; then return 0; fi
+  script_word_scan "$1"
+  if [ "$script_ws_complete" -eq 0 ]; then return 0; fi
+  if script_operand_implicated "$script_interp_domain"; then return 0; fi
+  if [ "$script_ws_exact" -eq 1 ]; then
+    if script_operand_domain_hit "$script_interp_domain" "$script_ws_out"; then return 0; fi
+    script_norm_out="$script_ws_out"
+  elif [ "$script_verb" = "interp" ]; then
+    script_norm_out="-c"
+  else
+    script_norm_out="$script_norm_raw"
+  fi
+  script_norm_ok=1
+}
+
 # Decide whether the token just normalized falls inside ONE arm's declared operand
 # domain — the question each arm's `case` filter was already written to answer.
 #
@@ -2538,11 +2732,16 @@ case "$TOOL_NAME" in
       # that claims the token is the arm that will adjudicate it. Arm
       # F1-QFLAG-ctl-domain is that control and was green before this change.
       #
-      # AN UNRESOLVABLE TOKEN IS NEVER SKIPPED, for the reason every exemption in
-      # this file already gives: a filename that cannot be determined from argv
-      # cannot be shown to be a flag either. It breaks the walk and becomes the
-      # operand, where script_operand_implicated reads BOTH views and the
-      # unresolvable deny is reachable.
+      # A FRAGMENT IS NEVER SKIPPED, for the reason every exemption in this file
+      # already gives: a filename that cannot be determined from argv cannot be
+      # shown to be a flag either. It breaks the walk and becomes the operand,
+      # where script_operand_implicated reads BOTH views and the unresolvable deny
+      # is reachable. A token that opens with a quote and closes every quote it
+      # opens is not a fragment — it is a whole word, and script_walk_view reads it
+      # as its unquoted spelling. A flag token that begins with `-`, `+` or a
+      # backslash never reaches that reading: the raw view decides a `-`-led token,
+      # and the normalizer resolves the other two to their raw spelling, exactly as
+      # before.
       #
       # NET DIRECTION. For the FLAG-SHAPE rule immediately above, the direction is
       # one-way: a token can move from "operand that no arm claimed" to "skipped",
@@ -2578,7 +2777,7 @@ case "$TOOL_NAME" in
         case "$script_ftok" in
           -*) ;;   # raw view already decides — unchanged, and asked first
           *)
-            normalize_script_token "$script_ftok"
+            script_walk_view "$script_ftok"
             if [ "$script_norm_ok" -eq 1 ]; then
               case "$script_norm_out" in
                 -*)
@@ -2629,7 +2828,7 @@ case "$TOOL_NAME" in
         # `extglob`, an rcfile path are all simply NOT THE OPERAND, and the walk keeps
         # looking. It needs no arity knowledge and no plus-form enumeration.
         #
-        # AN UNRESOLVABLE TOKEN IS NEVER SKIPPED, AND THAT CLAUSE IS NOT OPTIONAL. It is
+        # A FRAGMENT IS NEVER ADVANCED PAST, AND THAT CLAUSE IS NOT OPTIONAL. It is
         # this file's own doctrine (stated above and on script_exempt_system_bin) applied
         # to a new arm: ADVANCING PAST a token is an exemption in exactly the sense
         # SKIPPING one is, so it inherits the same rule -- a filename that cannot be
@@ -2637,7 +2836,9 @@ case "$TOOL_NAME" in
         # clause the walk advances off `'/tmp/pmo` (whitespace splitting hands it the
         # first fragment of a space-bearing quoted path) onto a LATER fragment and
         # adjudicates the wrong subject; arm F1-QTOK-RESIDUAL-space is that control and
-        # it turns red, which is how the clause was found.
+        # it turns red, which is how the clause was found. The clause is about
+        # fragments. A whole word that opens with a quote is decided by
+        # script_walk_view before this arm sees it.
         #
         # NET DIRECTION -- MONOTONE ALLOW->BLOCK BY CONSTRUCTION, which is the property
         # to check any edit to this arm against. If the old first-non-flag token WAS
@@ -2709,20 +2910,22 @@ case "$TOOL_NAME" in
             # OPERAND ADJUDICATION, not this predicate. State the property that way and it
             # is decidable per token; state it unqualified and it is simply false.
             #
-            # THE BOUNDARY HAS ONE LIVE FAMILY, AND IT IS INHERITED, NOT INTRODUCED HERE.
-            # A token whose leading quote closes early — `""+n`, `''+n`, `'+'n`, `"-"n` —
-            # is marked unresolvable by normalize_script_token, so it breaks at the
-            # script_norm_ok test ABOVE the revoke and an earlier `-n` grant stands:
-            #   bash -n ""+n <unlisted>.sh  -> ALLOW  (the shell runs it; `""+n` IS `+n`)
-            #   bash -n   +n <unlisted>.sh  -> BLOCK  (same invocation, unquoted)
-            # The same family ALLOWs on `origin/main`, so this release introduces none of
-            # it, and the shape that proves WHERE the allow comes from carries no `-n` at
-            # all: `bash ""-x <unlisted>.sh` ALLOWs on `origin/main` and here alike. The
-            # cause is the unresolvable-operand path, not noexec. A symmetric clear on that
-            # break is therefore MEASURABLY INERT — it was built and measured and the shape
-            # still ALLOWs — so it is deliberately NOT shipped: it would add a fourth
-            # enumeration and close nothing. Arms NOEXEC-QSPLIT-* pin the family and
-            # NOEXEC-QSPLIT-M* pins the inertness; closing it is the operand path's job.
+            # THE BOUNDARY'S ONE FAMILY IS CLOSED FOR A WHOLE WORD. A token whose leading
+            # quote closes early — `""+n`, `''+n`, `'+'n`, `"-"n` — is declined by
+            # normalize_script_token, and while the walk read tokens only through that
+            # function it broke at the script_norm_ok test ABOVE the revoke, so an earlier
+            # grant stood and the script behind it was adjudicated by nothing:
+            #   bash -n ""+n <unlisted>.sh  -> was ALLOW (the shell runs it; `""+n` IS `+n`)
+            #   bash -n   +n <unlisted>.sh  -> BLOCK     (same invocation, unquoted)
+            # script_walk_view now reads such a token as the word the shell makes of it, so
+            # a quoted clear revokes and a quoted flag is stepped over like its unquoted
+            # spelling. What still reaches that break is a FRAGMENT, and for a fragment a
+            # symmetric clear there is still inert — the allow originates in the
+            # unadjudicated operand — so it is still not shipped. Arms NOEXEC-QSPLIT-01 to
+            # -05 pin the closed family, NOEXEC-QSPLIT-M* pins the inertness on a fragment,
+            # and the fragment case is the readiness doc's limit 3. A flag that begins with
+            # a sign or a backslash and carries a quote is not this family: it never reaches
+            # the view, and that class is open.
             #
             # FAIL-SAFE DIRECTION, PER BRANCH. Recognised set-spelling -> 1 (exempt) is
             # the ONLY path to parse-only, and it is exactly today's measured row. Every
@@ -2882,8 +3085,8 @@ case "$TOOL_NAME" in
             # and reading this sentence as a property of the whole predicate is the
             # overstatement corrected at the `-*)` arm above.
             #
-            # IT SITS BELOW BOTH BREAKS ON PURPOSE. A token that ENDS the walk — an
-            # unresolvable token, or the domain-claimed operand — is not stepped over and
+            # IT SITS BELOW BOTH BREAKS ON PURPOSE. A token that ENDS the walk — a
+            # fragment, or the domain-claimed operand — is not stepped over and
             # must not revoke, or `bash -n <script>.sh` would revoke on the script itself
             # and the card's entire value would be lost. Arms PARSE-07 and NOEXEC-CTL-01
             # pin that boundary behaviourally and NOEXEC-ORD-01 pins the LINE ORDER
@@ -2892,12 +3095,12 @@ case "$TOOL_NAME" in
             #
             # AND THAT ORDERING IS EXACTLY WHERE THE PREDICATE'S GUARANTEE STOPS. The two
             # breaks above are the tokens the revoke never sees, so a grant made earlier
-            # survives them; the `-*)` arm's note carries the measured residual (the
-            # leading-quote-closes-early family) and the evidence that clearing here would
+            # survives them; the `-*)` arm's note carries the measured residual (a
+            # fragment in front of the operand) and the evidence that clearing here would
             # be inert. The right reading of this ordering is a declared trade — the
             # card's value in exchange for a residual the OPERAND path owns — and not a
             # claim that the predicate cannot fail open.
-            normalize_script_token "${script_tokens[$script_idx]}"   # M-FWALK-BODY
+            script_walk_view "${script_tokens[$script_idx]}"   # M-FWALK-BODY
             if [ "$script_norm_ok" -eq 0 ]; then break; fi
             if script_operand_implicated "$script_interp_domain"; then break; fi
             if [ "$script_verb" = "interp" ]; then
