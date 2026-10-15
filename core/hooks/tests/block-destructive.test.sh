@@ -5208,6 +5208,321 @@ else
 fi
 /bin/rm -f "$NSI_MUT2"
 
+# ==========================================================================
+# WALKCORPUS-* — the tracked payload differential for the operand walk
+# ==========================================================================
+#
+# WHAT THIS IS. core/hooks/tests/fixtures/walk-payload-corpus.txt is the one committed
+# corpus that every change to this rule's token walk shares as its exit bar: no payload's
+# verdict may move from refused to allowed except as a declared precision improvement,
+# with the detector shown able to fire first. Each row records the verdict the hook
+# returns. This block runs every `block-destructive` row against the shipped hook and
+# fails a group whose rows return anything else, so the corpus diff of a change IS that
+# change's differential, and this block is what keeps the recorded column true. The row
+# format and the procedure for adding rows: core/hooks/tests/fixtures/README.md.
+#
+# HERMETIC, ON THE F2 BLOCK'S PATTERN AND FOR ITS REASON. The rows' allows turn on
+# allowlist membership, so this block owns its runtime: its own root, its own copy of
+# the hook and of the operand-walk mutant (the AC-D022 reversion, the same two sed
+# expressions), an allowlist naming exactly @D@/ok.sh and @D@/ok.py, its own .mode,
+# payload cwd inside the root, and PMO_SCOPE_GUARD_ROOT / CLAUDE_WORKSPACE_ROOT unset for
+# every run. WALKCORPUS-SCOPE asserts the copy is live before any verdict is read.
+#
+# THE CORPUS IS RESOLVED, NEVER ASSUMED, and an unresolved corpus is a FAIL rather than
+# an empty pass: (1) beside this file, the source-tree run; (2) the .source-repo-root
+# pointer setup-ci-layout.sh writes beside the materialized tests, the CI sandbox rung;
+# (3) the repository root above a default-site layout.
+#
+# A VERDICT IS READ FROM THE EXIT CODE AND THE DRAIN. Exit 2 is B. Exit 0 with a new row
+# in the hermetic drain is W, a would-fire at a rollout phase, whatever that phase prints.
+# Exit 0 with no new row is a. Anything else is reported as E<rc> and never matches.
+echo ""
+echo "BLOCK-022 walk-payload corpus (WALKCORPUS-*)"
+echo "---"
+
+WC_REL="core/hooks/tests/fixtures/walk-payload-corpus.txt"
+WC_FILE=""
+WC_RUNG=""
+wc_try() { # $1 = candidate file  $2 = rung label
+  if [ -z "$WC_FILE" ] && [ -n "$1" ] && [ -f "$1" ]; then WC_FILE="$1"; WC_RUNG="$2"; fi
+}
+wc_try "$(dirname "$0")/fixtures/walk-payload-corpus.txt" "beside the suite"
+wc_src_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  IFS= read -r wc_src_root < "$(dirname "$0")/.source-repo-root" || true
+fi
+if [ -n "$wc_src_root" ]; then wc_try "${wc_src_root}/${WC_REL}" ".source-repo-root pointer"; fi
+wc_up="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd -P)"
+if [ -n "$wc_up" ]; then wc_try "${wc_up}/${WC_REL}" "repository root above the layout"; fi
+
+# The rows this suite owns, loaded once into parallel arrays (bash 3.2: no associative
+# arrays). A row whose hook field names another guard is counted and left to that
+# guard's suite.
+WC_ID=(); WC_GROUP=(); WC_TWIN=(); WC_GT=(); WC_REC=(); WC_CMD=(); WC_OBS=()
+wc_total=0
+wc_other=0
+if [ -n "$WC_FILE" ]; then
+  while IFS='|' read -r f_id f_hook f_group f_twin f_gt f_rec f_cmd || [ -n "$f_id" ]; do
+    case "$f_id" in ''|'#'*) continue ;; esac
+    wc_total=$((wc_total + 1))
+    if [ "$f_hook" != "block-destructive" ]; then wc_other=$((wc_other + 1)); continue; fi
+    WC_ID+=("$f_id"); WC_GROUP+=("$f_group"); WC_TWIN+=("$f_twin")
+    WC_GT+=("$f_gt"); WC_REC+=("$f_rec"); WC_CMD+=("$f_cmd")
+  done < "$WC_FILE"
+fi
+wc_n=${#WC_ID[@]}
+
+# WALKCORPUS-00 — resolution and identity. The digest is the SHA-256 of the committed
+# file, printed here so every run's output carries the identity of the corpus it graded,
+# recomputable from the file itself (README.md beside the corpus).
+if [ -z "$WC_FILE" ]; then
+  /usr/bin/printf 'FAIL: WALKCORPUS-00 corpus UNRESOLVED — every rung missed (beside=%s pointer=%s root=%s); no row was graded\n' \
+    "$(dirname "$0")/fixtures" "${wc_src_root:-<none>}" "${wc_up:-<none>}"
+  FAIL=$((FAIL + 1))
+elif [ "$wc_n" -eq 0 ]; then
+  /usr/bin/printf 'FAIL: WALKCORPUS-00 corpus resolved via %s but carries no block-destructive row (%s rows in all)\n' "$WC_RUNG" "$wc_total"
+  FAIL=$((FAIL + 1))
+else
+  wc_digest="$(/usr/bin/shasum -a 256 "$WC_FILE")"
+  wc_digest="${wc_digest%% *}"
+  /usr/bin/printf 'PASS: WALKCORPUS-00 corpus resolved via %s: %s block-destructive rows of %s (%s for other guards), sha256 %s\n' \
+    "$WC_RUNG" "$wc_n" "$wc_total" "$wc_other" "$wc_digest"
+  PASS=$((PASS + 1))
+fi
+
+# WALKCORPUS-ROWS — every row is well formed: a unique id, a verdict and a ground-truth
+# class from their closed sets, a group, a command, and a twin that names a row of this
+# guard. A malformed row would otherwise grade as a mismatch, or not at all.
+wc_badrows=""
+wc_all_ids="|"
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  wc_all_ids="${wc_all_ids}${WC_ID[$wc_i]}|"
+  wc_i=$((wc_i + 1))
+done
+wc_seen_ids="|"
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  wc_why=""
+  case "${WC_REC[$wc_i]}" in a|B|W) ;; *) wc_why="${wc_why} verdict" ;; esac
+  case "${WC_GT[$wc_i]}" in X|o|w|-|'?') ;; *) wc_why="${wc_why} gt" ;; esac
+  [ -n "${WC_GROUP[$wc_i]}" ] || wc_why="${wc_why} group"
+  [ -n "${WC_CMD[$wc_i]}" ] || wc_why="${wc_why} command"
+  case "${WC_ID[$wc_i]}" in
+    *'|'*|'') wc_why="${wc_why} id" ;;
+  esac
+  case "$wc_seen_ids" in
+    *"|${WC_ID[$wc_i]}|"*) wc_why="${wc_why} duplicate-id" ;;
+  esac
+  wc_seen_ids="${wc_seen_ids}${WC_ID[$wc_i]}|"
+  if [ "${WC_TWIN[$wc_i]}" != "-" ]; then
+    case "$wc_all_ids" in
+      *"|${WC_TWIN[$wc_i]}|"*) ;;
+      *) wc_why="${wc_why} twin" ;;
+    esac
+  fi
+  if [ -n "$wc_why" ]; then wc_badrows="${wc_badrows} ${WC_ID[$wc_i]}(${wc_why# })"; fi
+  wc_i=$((wc_i + 1))
+done
+if [ "$wc_n" -gt 0 ] && [ -z "$wc_badrows" ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-ROWS all %s rows are well formed (unique ids, closed verdict and ground-truth sets, twins resolve)\n' "$wc_n"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-ROWS malformed rows:%s\n' "${wc_badrows:- <no rows read>}"
+  FAIL=$((FAIL + 1))
+fi
+
+# The hermetic runtime.
+WC_ROOT="$(/usr/bin/mktemp -d)"
+WC_HOOKS="${WC_ROOT}/.claude/hooks"
+/bin/mkdir -p "${WC_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${WC_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${WC_HOOKS}/lib/" 2>/dev/null || true
+WC_D="/tmp/pmo-walk-corpus"
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${WC_HOOKS}/.mode"
+/bin/cp "$HOOK" "${WC_HOOKS}/block-destructive.sh"
+/usr/bin/sed \
+  -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
+  -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
+  "$HOOK" > "${WC_HOOKS}/block-destructive-mut.sh"
+/bin/chmod +x "${WC_HOOKS}/block-destructive.sh" "${WC_HOOKS}/block-destructive-mut.sh"
+WC_DRAIN="${WC_HOOKS}/destructive-warn-log.jsonl"
+WC_LONGX="$(/usr/bin/printf '%*s' 4100 '' | /usr/bin/tr ' ' 'x')"
+WC_LONGN="$(/usr/bin/printf '%*s' 4100 '' | /usr/bin/tr ' ' 'n')"
+WC_SHORTX="$(/usr/bin/printf '%*s' 4000 '' | /usr/bin/tr ' ' 'x')"
+WC_MIDX="$(/usr/bin/printf '%*s' 1000 '' | /usr/bin/tr ' ' 'x')"
+WC_MIDN="$(/usr/bin/printf '%*s' 1000 '' | /usr/bin/tr ' ' 'n')"
+WC_QPAD="$(/usr/bin/printf '%*s' 2050 '' | /usr/bin/sed 's/ /""/g')"
+
+wc_drain_rows() {
+  if [ -f "$WC_DRAIN" ]; then
+    /usr/bin/wc -l < "$WC_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+WC_CMDX=""
+wc_expand() { # $1 = command template -> WC_CMDX
+  local c="$1"
+  c="${c//@D@/$WC_D}"
+  c="${c//@LONGX@/$WC_LONGX}"
+  c="${c//@LONGN@/$WC_LONGN}"
+  c="${c//@SHORTX@/$WC_SHORTX}"
+  c="${c//@MIDX@/$WC_MIDX}"
+  c="${c//@MIDN@/$WC_MIDN}"
+  c="${c//@QPAD@/$WC_QPAD}"
+  WC_CMDX="$c"
+}
+
+WC_V=""
+wc_run() { # $1 = hook file in the hermetic hooks dir  $2 = command -> WC_V
+  local rc=0 before after
+  before="$(wc_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$WC_ROOT")" \
+      | /bin/bash "${WC_HOOKS}/$1" >/dev/null 2>&1 ) || rc="$?"
+  after="$(wc_drain_rows)"
+  case "$rc" in
+    2) WC_V="B" ;;
+    0) if [ "$after" -gt "$before" ]; then WC_V="W"; else WC_V="a"; fi ;;
+    *) WC_V="E${rc}" ;;
+  esac
+}
+
+# WALKCORPUS-SCOPE — the hermetic copy is in scope and enforcing, shown by a rule this
+# change never touches. An inert copy would allow every row and grade every recorded
+# allow as a pass.
+wc_scope_rc=0
+wc_scope_err="$(/usr/bin/mktemp)"
+( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+  /usr/bin/printf '%s' "$(bash_payload 'git push --force origin main' "$WC_ROOT")" \
+    | /bin/bash "${WC_HOOKS}/block-destructive.sh" >/dev/null 2>"$wc_scope_err" ) || wc_scope_rc="$?"
+if [ "$wc_scope_rc" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' "$wc_scope_err"; then
+  /usr/bin/printf 'PASS: WALKCORPUS-SCOPE hermetic copy is in scope and enforcing (unrelated rule -001 fires), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-SCOPE hermetic copy is not live (exit=%s, expected 2 naming BLOCK-DESTRUCTIVE-001); the verdicts below are unusable\n' "$wc_scope_rc"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$wc_scope_err"
+
+# Every row through the shipped hook, once.
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  wc_expand "${WC_CMD[$wc_i]}"
+  wc_run block-destructive.sh "$WC_CMDX"
+  WC_OBS[$wc_i]="$WC_V"
+  wc_i=$((wc_i + 1))
+done
+
+# WALKCORPUS-REC-<group> — one arm per group: each row returns its recorded verdict. A
+# failure names every row that moved, as id(recorded->observed), on the FAIL line itself,
+# because the runner forwards only that line.
+WC_GROUPS=()
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  wc_seen=0
+  for wc_g in ${WC_GROUPS[@]+"${WC_GROUPS[@]}"}; do
+    if [ "$wc_g" = "${WC_GROUP[$wc_i]}" ]; then wc_seen=1; fi
+  done
+  if [ "$wc_seen" -eq 0 ]; then WC_GROUPS+=("${WC_GROUP[$wc_i]}"); fi
+  wc_i=$((wc_i + 1))
+done
+for wc_g in ${WC_GROUPS[@]+"${WC_GROUPS[@]}"}; do
+  wc_rows=0
+  wc_moved=""
+  wc_i=0
+  while [ "$wc_i" -lt "$wc_n" ]; do
+    if [ "${WC_GROUP[$wc_i]}" = "$wc_g" ]; then
+      wc_rows=$((wc_rows + 1))
+      if [ "${WC_OBS[$wc_i]}" != "${WC_REC[$wc_i]}" ]; then
+        wc_moved="${wc_moved} ${WC_ID[$wc_i]}(${WC_REC[$wc_i]}->${WC_OBS[$wc_i]})"
+      fi
+    fi
+    wc_i=$((wc_i + 1))
+  done
+  if [ -z "$wc_moved" ]; then
+    /usr/bin/printf 'PASS: WALKCORPUS-REC-%s %s rows return their recorded verdicts\n' "$wc_g" "$wc_rows"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: WALKCORPUS-REC-%s rows moved from their recorded verdicts:%s\n' "$wc_g" "$wc_moved"
+    FAIL=$((FAIL + 1))
+  fi
+done
+
+# WALKCORPUS-OPEN — a row in an `open-` group records an execution the guard allows
+# today. It must stay a recorded allow of an executing payload: the change that closes it
+# moves its verdict AND drops the prefix, so a refused row still marked open is a
+# half-applied closure and fails here.
+wc_open=0
+wc_open_bad=""
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  case "${WC_GROUP[$wc_i]}" in
+    open-*)
+      wc_open=$((wc_open + 1))
+      if [ "${WC_REC[$wc_i]}" != "a" ] || [ "${WC_GT[$wc_i]}" != "X" ]; then
+        wc_open_bad="${wc_open_bad} ${WC_ID[$wc_i]}(${WC_REC[$wc_i]},gt=${WC_GT[$wc_i]})"
+      fi
+      ;;
+  esac
+  wc_i=$((wc_i + 1))
+done
+if [ -z "$wc_open_bad" ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-OPEN %s rows declared open, each a recorded allow of an executing payload\n' "$wc_open"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-OPEN rows marked open that are not a recorded allow of an executing payload:%s\n' "$wc_open_bad"
+  FAIL=$((FAIL + 1))
+fi
+
+# WALKCORPUS-DET-* — the detector, shown able to fire and shown alive. The same rows
+# through the operand-walk mutant (the walk reverted to its dash-anchored form): every row
+# recorded B or W is run, and the mutant must ALLOW at least one of them (the detector
+# fires) while still refusing or warning on at least one (it is a live hook, not a dead
+# copy that allows everything). A zero in the corpus's own comparison above is read only
+# after this pair is green.
+wc_det_fires=0
+wc_det_alive=0
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  case "${WC_REC[$wc_i]}" in
+    B|W)
+      wc_expand "${WC_CMD[$wc_i]}"
+      wc_run block-destructive-mut.sh "$WC_CMDX"
+      case "$WC_V" in
+        a) wc_det_fires=$((wc_det_fires + 1)) ;;
+        B|W) wc_det_alive=$((wc_det_alive + 1)) ;;
+      esac
+      ;;
+  esac
+  wc_i=$((wc_i + 1))
+done
+if [ "$wc_det_fires" -gt 0 ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-DET-fires the operand-walk mutant moves %s recorded refusals or warnings to an allow (the detector fires)\n' "$wc_det_fires"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-DET-fires the operand-walk mutant moved no recorded refusal to an allow; the comparison above cannot be read as clean\n'
+  FAIL=$((FAIL + 1))
+fi
+if [ "$wc_det_alive" -gt 0 ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-DET-alive the same mutant still refuses or warns on %s recorded rows (a live hook, not a dead copy)\n' "$wc_det_alive"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-DET-alive the mutant refused nothing; its allows above prove nothing\n'
+  FAIL=$((FAIL + 1))
+fi
+
+# The runner forwards RESIDUAL lines from a green run and discards the PASS lines, so
+# the corpus identity and what a green corpus does not speak for are stated here, where
+# every run's output carries them.
+/usr/bin/printf 'RESIDUAL: WALKCORPUS graded %s block-destructive rows of the corpus at sha256 %s (resolved via %s); %s of them are declared open — allowed executions a later change owns — and a green corpus speaks only for the rows it carries. The operand-walk mutant moved %s recorded refusals or warnings to an allow.\n' \
+  "$wc_n" "${wc_digest:-unresolved}" "${WC_RUNG:-no rung}" "$wc_open" "$wc_det_fires"
+
+/bin/rm -rf "$WC_ROOT"
+
 # --- Summary ---
 echo ""
 echo "================================"
