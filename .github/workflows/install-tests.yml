@@ -106,6 +106,21 @@ name: Install tests
 #                                  Ensure PyYAML step: the trigger read is
 #                                  STRUCTURAL, and it exits 2 rather than guessing
 #                                  if yaml is unimportable
+#   - test_install_tests_step_timeouts.py  every step of THIS workflow that invokes
+#                                  a core/deploy/tests shell suite carries
+#                                  timeout-minutes below its job's time limit.
+#                                  An invariant over the step list, not a list
+#                                  of names: the population is derived on every
+#                                  run and may not fall below a committed floor,
+#                                  so a suite step added without a timeout, or a
+#                                  suite invocation moved out of its sight, fails
+#                                  the job. Called from the falsification probe's
+#                                  first arm rather than from a step of its own.
+#                                  Its control arms run by DEFAULT, against a
+#                                  committed labeled fixture and against
+#                                  in-memory copies of this file. Depends on the
+#                                  Ensure PyYAML step, and exits 2 when it could
+#                                  not assert
 #
 # hook-tests — runs the core/hooks/tests/*.test.sh bypass-mode hook tests +
 # their test-runner.sh against a sandbox that materializes the DEPLOYED hook
@@ -264,6 +279,7 @@ jobs:
           echo "PYTHONPATH=$(/usr/bin/python3 -m site --user-site)${PYTHONPATH:+:${PYTHONPATH}}" >> "$GITHUB_ENV"
 
       - name: Run sandbox-roots regression (test_sandbox_roots.sh)
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_sandbox_roots.sh
 
       # ---------------------------------------------------------------------
@@ -297,6 +313,20 @@ jobs:
       # cold or contended runner narrows that, which is exactly why the budget is
       # the platform's existing per-tool figure rather than a tight fit to a local
       # timing.
+      #
+      # EVERY STEP THAT INVOKES A core/deploy/tests SHELL SUITE NOW CARRIES ONE, and the
+      # falsification probe below asserts that as an invariant over this file's own
+      # step list, not over a list of names. The budgets were sized by one rule: three
+      # times the slowest run observed in CI, rounded UP to a five-minute grain, and
+      # never below the five-minute per-tool figure above. A step that runs the same
+      # program as a step with a longer CI history takes that history's slowest run,
+      # because a short series under-reads the tail. The multiplier is not the
+      # five-fold used for the open-stdin harness at the end of this job: five-fold of
+      # a two-minute suite costs ten minutes, five-fold of the eighteen-minute
+      # regression runner would be ninety, and a budget that loose could not fail
+      # loudly. A step with no CI history takes the floor. The probe checks that a
+      # budget exists, not that it is the right size; a step whose observed run has
+      # passed a third of its budget is the signal to re-derive that budget.
       #
       # Security posture is unchanged: like every other step in this file, none of
       # the steps below consumes any github.event.* input. Each run: block is a
@@ -391,10 +421,9 @@ jobs:
         # ephemeral, the revert runs from a trap, and a revert that did not restore
         # the tree fails this step rather than leaking into a later one.
         #
-        # The open-stdin step at the end of this job is newly wired too. Its run:
-        # block names its suite below the run: line, so Arm 1 finds it by its step
-        # name; and it gates on a harness program rather than on the suite's own exit
-        # contract, so Arm 4 breaks that program instead of the suite.
+        # The open-stdin step at the end of this job is newly wired too. Arm 1 reads it
+        # like every other suite step; and it gates on a harness program rather than on
+        # the suite's own exit contract, so Arm 4 breaks that program instead of the suite.
         #
         # Consumes no github.event.* input; operates on workspace files only.
         timeout-minutes: 5
@@ -417,53 +446,22 @@ jobs:
           # shape aborts before `rc=$?` (no capture; step rc = the suite's own status),
           # the tested shape captures the same status and continues.
 
-          # --- Arm 1: the timeout guard is present on every step wired above ----
-          # Structural, block-scoped read of this workflow's own step list — not a
-          # substring count, which would happily match the word in this comment.
-          if ! python3 - <<'PY'
-          import re, sys
-          SUITES = ["test_verify_session_config.sh",
-                    "test_instance_path_roundtrip.sh",
-                    "test_check19_event_log_integrity.sh",
-                    "test_deploy_path_literals.sh"]
-          # A step whose run: block wraps its suite in a program names the suite on a
-          # later line, not on the run: line, so it is found by its step name instead.
-          NAMED_STEPS = ["Run refresh-hooks regression with stdin held open (test_refresh_hooks.sh, Case 12 observer)"]
-          text = open(".github/workflows/install-tests.yml", errors="replace").read()
-          # A step begins at exactly six spaces + "- "; everything up to the next
-          # such line is that step's block.
-          starts = [m.start() for m in re.finditer(r"(?m)^      - ", text)]
-          starts.append(len(text))
-          blocks = [text[starts[i]:starts[i + 1]] for i in range(len(starts) - 1)]
-          if not blocks:
-              print("::error::probe parsed 0 steps out of the workflow; the probe is broken, not the workflow.")
-              sys.exit(1)
-          missing = []
-          for s in SUITES:
-              owning = [b for b in blocks
-                        if re.search(r"(?m)^\s+run:.*" + re.escape(s), b)]
-              if not owning:
-                  missing.append("%s: no run: step invokes it" % s)
-                  continue
-              for b in owning:
-                  if not re.search(r"(?m)^        timeout-minutes:\s*\d+\s*$", b):
-                      missing.append("%s: owning step carries no timeout-minutes" % s)
-          for n in NAMED_STEPS:
-              owning = [b for b in blocks
-                        if re.search(r"(?m)^      - name: " + re.escape(n) + r"\s*$", b)]
-              if len(owning) != 1:
-                  missing.append("%s: %d steps carry this name, want exactly 1" % (n, len(owning)))
-                  continue
-              if not re.search(r"(?m)^        timeout-minutes:\s*\d+\s*$", owning[0]):
-                  missing.append("%s: step carries no timeout-minutes" % n)
-          if missing:
-              for m in missing:
-                  print("::error::timeout guard missing — %s" % m)
-              sys.exit(1)
-          print("Timeout guard OK — all %d newly-wired steps carry timeout-minutes "
-                "(parsed %d step blocks)." % (len(SUITES) + len(NAMED_STEPS), len(blocks)))
-          PY
-          then probe_fail=1; fi
+          # --- Arm 1: every suite-invoking step in this workflow carries a timeout ----
+          # THIN CALLER. The assertion lives in
+          # core/deploy/tests/test_install_tests_step_timeouts.py: one implementation,
+          # fixture-backed, and invocable outside CI (ADR-119, Decision 3). It is an
+          # INVARIANT over this file's own step list and names no suite and no step, so a
+          # suite step added without a timeout fails here instead of joining an unguarded
+          # majority, and the population it derives may not fall below a committed floor.
+          # The suite prints its denominator and runs its own control arms on every
+          # invocation; this block holds no pattern and no list, so nothing here can
+          # drift from what runs.
+          #
+          # /usr/bin/python3, not the PATH interpreter: the step read is a YAML parse, and
+          # the Ensure PyYAML step above asserts yaml against that interpreter by path.
+          if ! /usr/bin/python3 core/deploy/tests/test_install_tests_step_timeouts.py; then
+            probe_fail=1
+          fi
 
           # --- Arm 2: a broken suite must exit non-zero --------------------------
           for suite in \
@@ -576,11 +574,13 @@ jobs:
           exit "$probe_fail"
 
       - name: Run end-to-end install test (test_install_end_to_end.sh)
+        timeout-minutes: 10
         run: bash core/deploy/tests/test_install_end_to_end.sh
 
       - name: Run refresh-hooks regression (test_refresh_hooks.sh)
         # #3430: setup-workspace.sh --refresh-hooks + update.sh Phase 5c — a hook/helper
         # security fix must reach an already-installed workspace, preserving operator edits.
+        timeout-minutes: 15
         run: bash core/deploy/tests/test_refresh_hooks.sh
 
       - name: Run hook-wiring re-home regression (test_rehome_hook_wiring.sh)
@@ -590,6 +590,7 @@ jobs:
         # which is where the blast radius lives: PreToolUse ONLY (never the template's Stop
         # or SessionStart objects), unrelated operator keys preserved, idempotent, fails
         # closed on a corrupt target, and no OTHER flow performs the user-scope write.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_rehome_hook_wiring.sh
 
       - name: Run Check-49 mode-identifier regression (test_check49_mode_identifier_unification.sh)
@@ -601,30 +602,38 @@ jobs:
         # original defect as a PASS, because the defect was precisely that one arm worked.
         # Wired explicitly because this workflow enumerates its test files rather than
         # discovering them; an unwired fixture is an unrun fixture.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_check49_mode_identifier_unification.sh
 
       - name: Run composition-lib regression (test_lib_composition.sh)
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_lib_composition.sh
 
       - name: Run install exit-propagation test (test_install_exit_propagation.sh)
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_install_exit_propagation.sh
 
       - name: Run deploy-sandbox safety proof (test_deploy_sandbox.sh)
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_deploy_sandbox.sh
 
       - name: Run cowork-path-spaces regression (test_detect_install_path_spaces.sh)
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_detect_install_path_spaces.sh
 
       - name: Run compose.py units (test_compose.py)
         run: python3 -m pytest core/deploy/tests/test_compose.py -v
 
       - name: Run version-skew hook regression (test_notify_version_skew.sh)
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_notify_version_skew.sh
 
       - name: Run version-stamping regression (test_version_stamping.sh)
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_version_stamping.sh
 
       - name: Run agent-tools-conformance regression (test_agent_tools_conformance.sh)
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_agent_tools_conformance.sh
 
       - name: Run Check 36 drift-classes fixture self-test (test_check36_drift_classes.sh)
@@ -637,6 +646,7 @@ jobs:
         # memory store or a real operator.toml (neither exists in CI; the test
         # self-contains). Enumerated rather than counted on purpose — a bare count
         # goes stale silently the next time a class is added.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_check36_drift_classes.sh
 
       - name: Run package-freshness exit-code regression (test_package_freshness_exit_codes.sh)
@@ -648,6 +658,7 @@ jobs:
         # that sandbox to FRESH before injecting its own staleness, so it tests the
         # MAPPING and never double-gates committed-tree freshness (which Check 7 and
         # the skill-package-freshness CI gate already own).
+        timeout-minutes: 35
         run: bash core/deploy/tests/test_package_freshness_exit_codes.sh
 
       - name: Run template-sync resolver regression (test_resolve_canonical_source.sh)
@@ -656,6 +667,7 @@ jobs:
         # build-skill-packages.sh. This test sources the real fragment, pins the
         # 3-arm fixture table (incl. the #94 regression-checks.md case that broke the
         # rebuild), and drift-guards that neither consumer re-inlines a divergent copy.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_resolve_canonical_source.sh
 
       - name: Run Check 45(b) governing_doc name-match fixture self-test (test_check45_governing_doc_name_match.sh)
@@ -669,6 +681,7 @@ jobs:
         # greps deploy.sh by the `# (b) FMF-1` inline MARKER, never a line number, so
         # a silent edit to the live predicate fails this test rather than passing it
         # stale.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_check45_governing_doc_name_match.sh
 
       - name: Run Check 31 override-marker probe determinism test (test_check31_marker_probe_determinism.sh)
@@ -683,6 +696,7 @@ jobs:
         # Its T3 negative control runs the pre-fix form on the same above-capacity
         # fixture and requires it to FAIL, so a fixture that stopped reproducing the
         # defect fails the test rather than passing it vacuously.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_check31_marker_probe_determinism.sh
 
       - name: Run Check 73 bundle-metrics discrimination fixtures — G3-14 / G3-15 (test_check73_bundle_metrics_discrimination.sh)
@@ -700,8 +714,8 @@ jobs:
         # all four arms executed AND each gate produced an opposite-verdict pair,
         # so deleting the arm that contradicts another cannot green the suite.
         #
-        # THIS STEP IS THE UNCONDITIONALLY-BLOCKING HALF of Check 73. It carries no
-        # continue-on-error and this workflow carries no paths: filter, so a
+        # THIS STEP IS THE UNCONDITIONALLY-BLOCKING HALF of Check 73. It does not opt
+        # out of failing the job, and this workflow carries no paths: filter, so a
         # discrimination failure is a genuine red check-run on every pull request,
         # independent of the .github/deploy-check-ci.enforce sentinel that governs
         # the required-subset half. That is what lets this milestone ship a real
@@ -710,6 +724,7 @@ jobs:
         #
         # Security: consumes NO github.event.* input — a static invocation against
         # workspace files, no ${{ }} interpolation inside the run: block.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_check73_bundle_metrics_discrimination.sh
 
       - name: Run Check 54 ownership-collision teeth suite (test_check54_ownership_collision_teeth.sh)
@@ -738,6 +753,7 @@ jobs:
         # Hermetic: fixtures under mktemp -d, the durable corpus read-only, no gh,
         # no network. Consumes no workflow event input — a static invocation
         # against workspace files, no interpolation of any kind inside the run: block.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_check54_ownership_collision_teeth.sh
 
       - name: Run warn-log JSON-escape suite (test_warn_log_json_escape.sh)
@@ -764,6 +780,7 @@ jobs:
         # durable corpus read-only, no gh, no network. Consumes NO workflow event
         # input — a static invocation against workspace files, with no interpolation
         # of any kind inside the run: block.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_warn_log_json_escape.sh
 
       - name: Run Check 22 G1-06 priority-carrier regression (test_g1_06_priority_carrier.sh)
@@ -780,6 +797,7 @@ jobs:
         # network — which is the only option available, since Check 22 itself
         # requires a live tracker and is correctly excluded from the
         # network-free required-check subset. Consumes no workflow event input.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_g1_06_priority_carrier.sh
 
       - name: Run Check 22 G1-01 title-floor regression (test_g1_title_floor.sh)
@@ -787,6 +805,7 @@ jobs:
         # never executes cannot hold anything in place, so it is wired here
         # alongside its sibling rather than left as a file that only ever runs by
         # hand. No change to the test itself. Consumes no workflow event input.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_g1_title_floor.sh
 
       - name: Run Check 22 form-family scope regression (test_g1_form_family.sh)
@@ -805,6 +824,7 @@ jobs:
         # sentinels, so it exercises the shipped path rather than a copy, and it
         # reads its kind vocabulary from the pack SSOT so it names no kind either.
         # Hermetic: no gh, no network. Consumes no workflow event input.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_g1_form_family.sh
 
       - name: Run Check 22 release-identity resolver regression (test_g1_release_resolver.sh)
@@ -825,6 +845,7 @@ jobs:
         # and the three verdicts that must never be rendered as a missing
         # milestone: unreachable validator, empty read, unrecognized branch
         # form. Hermetic: no gh, no network. Consumes no workflow event input.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_g1_release_resolver.sh
 
       - name: Run Check 56 M2 advisory-class regression (test_check56_m2_advisory.sh)
@@ -843,6 +864,7 @@ jobs:
         # be an artefact of a mode file that was never read. Hermetic: no gh, no
         # network — the TSV under test is produced by the primitive's own
         # --fixture path. Consumes no workflow event input.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_check56_m2_advisory.sh
 
       - name: Run advisory-emitter contract regression (test_advisory_emitter_contract.sh)
@@ -875,6 +897,7 @@ jobs:
         # Hermetic: no gh, no network. Every region under assertion is extracted
         # from deploy.sh at run time, never pasted. Consumes no workflow event
         # input.
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_advisory_emitter_contract.sh
 
       - name: Run Check 16 status-label invariant fixture self-test (test-status-label-invariant.sh)
@@ -1022,10 +1045,11 @@ jobs:
         # The program is the open-stdin harness the durability suite's P-9 arms use,
         # inline. python3, already a hard prerequisite of the installer, supplies the
         # timeout, because coreutils timeout is not on this runner image. The 600 s
-        # budget is about five times the suite's measured run; timeout-minutes sits
-        # above it, so the harness rather than the runner reports a hang, by name. The
-        # falsification probe above finds this step by name for its timeout guard and
-        # runs this program against stubs, so the gating program is the falsified one.
+        # budget was about five times the suite's measured run when it was set;
+        # timeout-minutes sits above it, so the harness rather than the runner reports
+        # a hang, by name. The falsification probe above requires a timeout on this
+        # step as on every suite step, and finds it by name to run this program against
+        # stubs, so the gating program is the falsified one.
         #
         # LAST in the job, under !cancelled(): a red run here skips no step above it,
         # and a red step above does not skip this record.
@@ -1123,6 +1147,7 @@ jobs:
         # the test-run event emission (CI has no operator-instance event log).
         env:
           PMO_REGRESSION_EMIT: '0'
+        timeout-minutes: 55
         run: bash core/deploy/tests/run-install-regression.sh
 
       - name: Precision probe — a broken fixture MUST fail the suite
@@ -1132,6 +1157,7 @@ jobs:
         # reddening the gate, this step fails the PR.
         env:
           PMO_REGRESSION_EMIT: '0'
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
@@ -1199,6 +1225,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           PMO_REGRESSION_EMIT: '0'
+        timeout-minutes: 55
         run: |
           USER_BASE="$(/usr/bin/python3 -c 'import site; print(site.USER_BASE)')"
           override_home="$(mktemp -d)"
@@ -1222,6 +1249,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           PMO_REGRESSION_EMIT: '0'
+        timeout-minutes: 10
         run: |
           USER_BASE="$(/usr/bin/python3 -c 'import site; print(site.USER_BASE)')"
           override_home="$(mktemp -d)"
@@ -1315,6 +1343,7 @@ jobs:
         # deploy.sh Phase 5 (Darwin-only); it sandboxes via --workspace-root /
         # --config-root and never touches the live ~/.claude (R-8).
         if: runner.os == 'macOS'
+        timeout-minutes: 5
         run: bash core/deploy/tests/test_update_nonrepo_root_cwd.sh
 
       # --- Linux leg: DryRun/portable non-repo-root update (CIAC-3 portable) ---
