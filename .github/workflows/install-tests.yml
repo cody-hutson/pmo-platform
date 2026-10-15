@@ -114,8 +114,11 @@ name: Install tests
 #                                  run and may not fall below a committed floor,
 #                                  so a suite step added without a timeout, or a
 #                                  suite invocation moved out of its sight, fails
-#                                  the job. Called from the falsification probe's
-#                                  first arm rather than from a step of its own.
+#                                  the job; and every job carries a job-level
+#                                  timeout-minutes as an outer bound for the
+#                                  steps that run no suite. Called from the
+#                                  falsification probe's first arm rather than
+#                                  from a step of its own.
 #                                  Its control arms run by DEFAULT, against a
 #                                  committed labeled fixture and against
 #                                  in-memory copies of this file. Depends on the
@@ -181,6 +184,10 @@ jobs:
   shell-tests:
     name: Shell harness (macOS)
     runs-on: macos-latest
+    # Job-level OUTER bound (the timeout note above the session-config step says why
+    # it is not the bound that names a suite): three times this job's slowest observed
+    # run, rounded up to five minutes.
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v7
         with:
@@ -297,7 +304,9 @@ jobs:
       #     silently absent on the exact runner it exists to guard — which is the
       #     failure mode this whole change is about;
       #   - a job-level budget cannot say WHICH suite overran, so it cannot fail
-      #     informatively;
+      #     informatively — which is why each job's own timeout-minutes is only an
+      #     OUTER bound, for the steps here that run no suite and as a backstop
+      #     under the step budgets, never the bound that names the suite;
       #   - step-level timeout-minutes is runner-enforced, needs no binary, and
       #     turns an overrun into an ordinary step failure — and because no step in
       #     this file opts out of failing the job, a step failure fails the job.
@@ -1083,6 +1092,10 @@ jobs:
     # FAIL) fails this step → fails the job → red CI. Distinct job (not a step)
     # so a hook failure is attributable separately from a deploy-test failure.
     runs-on: macos-latest
+    # Job-level OUTER bound: three times this job's slowest observed run, rounded up
+    # to five minutes. Its gating step runs the hook harness, which is not a
+    # core/deploy/tests suite, so this is the only bound on it.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -1129,6 +1142,13 @@ jobs:
     # approved posture, so the suite runs unconditionally on PR/push to main like
     # its sibling jobs. The path-scoping optimization is intentionally deferred.
     runs-on: macos-latest
+    # Job-level OUTER bound, sized to CONTAIN this job's steps rather than from its own
+    # run time: the job runs the regression runner in two steps, so one hang in that
+    # program times both of them out in sequence. The limit is the sum of every step
+    # budget in the job plus three times the slowest observed total of its unbounded
+    # steps, rounded up to five minutes, so neither runner's own timeout, nor an
+    # observer step after it, is cut short by the job's.
+    timeout-minutes: 130
     steps:
       - uses: actions/checkout@v7
 
@@ -1313,6 +1333,12 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # Job-level OUTER bound, per leg, set as a floor of its own rather than by the
+    # step rule: the legs' unbounded steps include network-reaching actions (checkout,
+    # Python setup) whose tail that rule was not calibrated on. Fifteen minutes is
+    # three times the five-minute per-tool figure; the slowest leg observed in CI ran
+    # about one minute.
+    timeout-minutes: 15
     env:
       # #303 opt-in relaxation of the two non-Darwin gates (setup-workspace.sh
       # check_platform + validate-install.sh). A no-op on macOS (both gates only

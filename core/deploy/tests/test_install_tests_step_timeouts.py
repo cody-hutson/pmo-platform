@@ -43,6 +43,16 @@ starts after its job's, so a bound at or above the ceiling can never be the one 
 fires: the job ends first, as a cancellation that names no step, while the step would
 be counted as covered by a bound that cannot act.
 
+THE JOB-LEVEL BOUND
+-------------------
+Every job also carries a positive integer job-level `timeout-minutes` below the host's
+360-minute limit. It is an OUTER bound — for the steps that run no suite, which the
+step invariant does not reach, and as a backstop under the step budgets — never the
+bound that names a suite: a job that reaches its limit is cancelled, and the
+cancellation names no step. A job's limit is also the ceiling for each of its steps'
+own bounds (above). The suite checks that the limit exists and sits below the host's;
+how it was sized is stated beside it in the workflow.
+
 THE POPULATION FLOOR
 --------------------
 The derived population is held to a committed floor: the `live-population-floor`
@@ -89,14 +99,18 @@ nothing, so every run also proves the predicate still discriminates:
     ceiling itself among the values tried;
   - the live population is driven, in memory, to one below the floor by rewriting
     steps into a loop that names no suite path, and the floor must report it; driven
-    to exactly the floor, it must not.
+    to exactly the floor, it must not;
+  - the job-level limit is stripped from EACH bounded job in turn, and exactly that
+    job must be reported; a job limit set to the host's own limit must be rejected.
 
 EXIT CONTRACT
 -------------
     0  every suite-invoking step carries a bound below its ceiling, the population is
-       at or above the floor, AND every arm behaved
-    1  at least one suite-invoking step carries no bound below its ceiling, or the
-       population fell below the committed floor
+       at or above the floor, every job carries a job-level bound, AND every arm
+       behaved
+    1  at least one suite-invoking step carries no bound below its ceiling, the
+       population fell below the committed floor, or a job carries no job-level bound
+       below the host's limit
     2  the suite could not assert. Either nothing was measured (the workflow or the
        fixture is unreadable, the fixture carries no positive integer floor, or the
        population is empty), or an arm did not behave and the probe is unusable.
@@ -211,6 +225,38 @@ def judge(doc: dict):
                                     else "carries timeout-minutes %d, not below its ceiling of %d minutes (%s), so "
                                          "it can never be the bound that fires" % (value, ceiling, whose))
     return population, findings, run_steps, reasons
+
+
+def job_findings(doc: dict) -> list[str]:
+    """Jobs that carry no positive integer job-level timeout-minutes below the host's limit."""
+    return [job_id for job_id, job in (doc.get("jobs") or {}).items()
+            if not (positive_int(job.get("timeout-minutes")) and job["timeout-minutes"] < HOST_JOB_LIMIT)]
+
+
+def job_arms(doc: dict, unbounded_jobs):
+    """Strip each bounded job's limit in turn; reject a job limit at the host's own limit."""
+    errors: list[tuple[str, str]] = []
+    base = set(unbounded_jobs)
+    stripped = 0
+    for job_id in doc["jobs"]:
+        if job_id in base:
+            continue
+        mutated = copy.deepcopy(doc)
+        del mutated["jobs"][job_id]["timeout-minutes"]
+        stripped += 1
+        if set(job_findings(mutated)) != base | {job_id}:
+            errors.append(("BROKEN PROBE", "sensitivity: stripping job %s's limit did not produce exactly that "
+                                           "finding" % job_id))
+    if stripped == 0:
+        errors.append(("INDETERMINATE (PV-2)", "no job carries a job-level limit to strip"))
+    first_job = next(iter(doc["jobs"]))
+    mutated = copy.deepcopy(doc)
+    mutated["jobs"][first_job]["timeout-minutes"] = HOST_JOB_LIMIT
+    host_limit_rejected = first_job in job_findings(mutated)
+    if not host_limit_rejected:
+        errors.append(("BROKEN PROBE", "sensitivity: a job limit of %d minutes, the host's own, was accepted "
+                                       "as a bound" % HOST_JOB_LIMIT))
+    return errors, stripped, host_limit_rejected
 
 
 def below_floor(count: int, floor: int) -> bool:
@@ -345,10 +391,13 @@ def main(argv: list[str]) -> int:
 
     fixture_errors, seen = fixture_arms(fixture_text, fixture_doc)
     live_errors, stripped, bad_values, ceiling, floor_reported = live_arms(doc, population, findings, floor)
+    unbounded_jobs = job_findings(doc)
+    job_errors, jobs_stripped, host_limit_rejected = job_arms(doc, unbounded_jobs)
     drawn = [k for k in run_steps if k not in population
              and "core/deploy/tests/" in doc["jobs"][k[0]]["steps"][k[1]]["run"]]
     covered = len(population) - len(findings)
     breached = below_floor(len(population), floor)
+    jobs_bounded = len(doc["jobs"]) - len(unbounded_jobs)
 
     print("Timeout guard denominator: %d run: steps in %d jobs of %s (%d bytes read); %d invoke a "
           "core/deploy/tests shell suite and %d do not."
@@ -377,8 +426,13 @@ def main(argv: list[str]) -> int:
         slack = "at it"
     print("Timeout guard population floor: %d suite-invoking steps against a committed floor of %d — %s."
           % (len(population), floor, slack))
+    print("Timeout guard job limits: %d of %d jobs carry a job-level timeout-minutes below the host's %d-minute "
+          "limit; each job's limit stripped in turn flagged: %d of %d; a job limit at the host's own limit "
+          "rejected: %s."
+          % (jobs_bounded, len(doc["jobs"]), HOST_JOB_LIMIT, jobs_stripped, jobs_bounded,
+             "yes" if host_limit_rejected else "no"))
 
-    arm_errors = fixture_errors + live_errors
+    arm_errors = fixture_errors + live_errors + job_errors
     if arm_errors:
         for verdict, detail in arm_errors:
             print("::error::timeout guard arm — %s — %s" % (verdict, detail))
@@ -396,13 +450,19 @@ def main(argv: list[str]) -> int:
               "path) leaves this guard's sight, and the floor is what reports it. Restore a countable "
               "invocation, or lower the floor in the same change if the steps were removed on purpose."
               % (len(population), floor, FLOOR_KEY, fixture.name))
+    for job_id in unbounded_jobs:
+        print("::error::timeout guard — job %s carries no job-level timeout-minutes below the host's %d-minute "
+              "limit, so nothing bounds its steps that run no suite" % (job_id, HOST_JOB_LIMIT))
     if findings:
         print("Timeout guard FAILED — %d of %d suite-invoking steps carry timeout-minutes."
               % (covered, len(population)))
     if breached:
         print("Timeout guard FAILED — %d suite-invoking steps, below the committed floor of %d."
               % (len(population), floor))
-    if findings or breached:
+    if unbounded_jobs:
+        print("Timeout guard FAILED — %d of %d jobs carry a job-level timeout-minutes."
+              % (jobs_bounded, len(doc["jobs"])))
+    if findings or breached or unbounded_jobs:
         return 1
     print("Timeout guard OK — %d of %d suite-invoking steps carry timeout-minutes."
           % (covered, len(population)))
