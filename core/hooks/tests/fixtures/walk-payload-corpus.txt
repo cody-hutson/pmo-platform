@@ -12,7 +12,9 @@
 #   twin     the id of the same invocation with its quoting removed, or `-`
 #   gt       what the real interpreter did when the row was authored: X ran the unlisted
 #            script, o ran only the allowlisted one, w ran the extensionless wrapper,
-#            - ran nothing, ? not run
+#            e ran another extensionless file in the script's place (extglob, -n),
+#            s ran a program fed on stdin and no script named on the line, - ran
+#            nothing, ? not run
 #   verdict  the guard's recorded verdict: a allowed, B refused (exit 2), W warned at a
 #            rollout phase (exit 0 with a would-fire record)
 #   group    `open-<class>` marks an allowed execution declared open: the row records
@@ -225,9 +227,9 @@ O02|block-destructive|fp|-|?|a|bash -lc 'echo a; echo b'
 O03|block-destructive|fp|-|-|a|bash -ec 'echo a b'
 O04|block-destructive|fp|-|?|a|zsh -ic 'echo hello world'
 O05|block-destructive|fp|-|-|a|sh -ec 'echo a b'
-O06|block-destructive|fp|-|-|a|bash -ec 'cat @D@/na.sh'
-O07|block-destructive|fp|-|X|a|bash -ec 'bash @D@/na.sh'
-O08|block-destructive|fp|-|X|a|bash -xc 'bash @D@/na.sh'
+O06|block-destructive|fp|-|-|B|bash -ec 'cat @D@/na.sh'
+O07|block-destructive|fp|-|X|B|bash -ec 'bash @D@/na.sh'
+O08|block-destructive|fp|-|X|B|bash -xc 'bash @D@/na.sh'
 O09|block-destructive|fp|-|-|a|perl -e 'print 1'
 O10|block-destructive|fp|-|-|a|ruby -e 'puts 1'
 O11|block-destructive|fp|-|-|a|node -e 'console.log(1 + 1)'
@@ -244,9 +246,9 @@ O21|block-destructive|fp|-|-|a|sh -c "echo 'a b'"
 O22|block-destructive|fp|-|-|a|bash --norc -c 'echo a b'
 O23|block-destructive|fp|-|o|a|bash --rcfile '@D@/sp ace/rc' @D@/ok.sh
 O24|block-destructive|fp|-|-|B|bash -c 'cat @D@/na.sh'
-O25|block-destructive|fp|-|?|a|bash -lc 'bash @D@/na.sh'
-O26|block-destructive|fp|-|X|a|sh -ec "sh @D@/na.sh"
-O27|block-destructive|fp|-|X|a|zsh -ec 'zsh @D@/na.sh'
+O25|block-destructive|fp|-|?|B|bash -lc 'bash @D@/na.sh'
+O26|block-destructive|fp|-|X|B|sh -ec "sh @D@/na.sh"
+O27|block-destructive|fp|-|X|B|zsh -ec 'zsh @D@/na.sh'
 O28|block-destructive|fp|-|X|a|X='a b' Y=1 sh @D@/na.sh
 O29|block-destructive|fp|-|o|a|bash -x -e -u -o pipefail @D@/ok.sh 'arg one'
 Y01|block-destructive|nonflag|K15|w|B|bash '@D@/wr'ap @D@/na.sh
@@ -257,7 +259,7 @@ V02|block-destructive|verb|-|X|a|""bash @D@/na.sh
 V03|block-destructive|verb|-|o|a|'ba'sh @D@/ok.sh
 V04|block-destructive|verb|-|X|W|''@D@/na.sh
 U01|block-destructive|unq|-|X|B|bash $NOPE7019-x @D@/na.sh
-U02|block-destructive|unq|-|X|a|bash $NOPE7019--rcfile @D@/ok.sh @D@/na.sh
+U02|block-destructive|unq|-|X|B|bash $NOPE7019--rcfile @D@/ok.sh @D@/na.sh
 U03|block-destructive|unq|-|X|B|bash -n $NOPE7019+n @D@/na.sh
 U04|block-destructive|unq|-|-|B|bash $NOPE7019-n @D@/na.sh
 U05|block-destructive|unq|-|o|a|bash $NOPE7019-x @D@/ok.sh
@@ -301,9 +303,9 @@ H16|block-destructive|unk|H26|w|B|bash "$HOME"/wrap @D@/na.sh
 H17|block-destructive|unk|H27|w|a|bash "$HOME"/wrap @D@/ok.sh
 H18|block-destructive|unk|-|w|a|bash "$HOME"/wrap
 H19|block-destructive|unk|-|o|a|bash "$NOPE7019"-x @D@/ok.sh --flag value
-H21|block-destructive|unq2|-|X|a|zsh $NOPE7019--emulate -n @D@/na.sh
-H22|block-destructive|unq2|-|X|a|bash $NOPE7019--rcfile -n @D@/na.sh
-H23|block-destructive|unq2|-|o|a|bash $NOPE7019-x @D@/ok.sh @D@/na.sh
+H21|block-destructive|unq2|-|X|B|zsh $NOPE7019--emulate -n @D@/na.sh
+H22|block-destructive|unq2|-|X|B|bash $NOPE7019--rcfile -n @D@/na.sh
+H23|block-destructive|unq2|-|o|B|bash $NOPE7019-x @D@/ok.sh @D@/na.sh
 H24|block-destructive|unq2|-|-|B|bash -n $NOPE7019-x @D@/na.sh
 H25|block-destructive|unq2|-|X|W|python3 $NOPE7019-u @D@/na.py
 H26|block-destructive|unq2|-|w|B|bash "$HOME/wrap" @D@/na.sh
@@ -365,24 +367,24 @@ V23|block-destructive|srcunk|-|-|B|source ""-p pmo-a:pmo-b @D@/na.sh
 V24|block-destructive|srcunk|-|-|B|bash "$NOPE7019"-p pmo-a:pmo-b @D@/na.sh
 
 # --- seed 4: rows from the adversarial design review and the option-parse design (41 rows) ---
-RA01|block-destructive|open-rawflag|T24|X|a|bash --rcfile"" @D@/ok.sh @D@/na.sh
-RA02|block-destructive|open-rawflag|T26|X|a|zsh --emulate"" -n @D@/na.sh
-RA03|block-destructive|open-rawflag|RT03|X|a|bash --rcfile'' -n @D@/na.sh
-RA04|block-destructive|open-rawflag|T18|X|a|bash -c"" 'bash @D@/na.sh'
-RA05|block-destructive|open-rawflag|T18|X|a|bash -"c" 'bash @D@/na.sh'
-RA06|block-destructive|open-rawflag|T24|X|a|bash \--rcfile @D@/ok.sh @D@/na.sh
-RA07|block-destructive|open-rawflag|T18|X|a|bash \-c 'bash @D@/na.sh'
-RA08|block-destructive|open-rawflag|T26|X|a|zsh \--emulate -n @D@/na.sh
-RA09|block-destructive|open-rawflag|T27|X|a|zsh +-emu""late -n @D@/na.sh
-RA10|block-destructive|open-rawflag|T24|X|a|bash -"-rcfile" @D@/ok.sh @D@/na.sh
-RA11|block-destructive|open-rawflag|T24|X|a|bash --rc"fi"le @D@/ok.sh @D@/na.sh
-RA12|block-destructive|open-rawflag|T26|X|a|zsh --emu'la'te -n @D@/na.sh
-RA13|block-destructive|open-rawflag|RT13|X|a|sh -'c' 'sh @D@/na.sh'
-RA14|block-destructive|open-rawflag|RT14|X|a|zsh -c"" 'zsh @D@/na.sh'
-RA15|block-destructive|open-rawflag|RT15|X|a|bash --init-file"" @D@/ok.sh @D@/na.sh
-RA16|block-destructive|open-rawflag|T18|X|a|bash -\c 'bash @D@/na.sh'
-RA17|block-destructive|open-rawflag|T24|X|a|bash --rcfil\e @D@/ok.sh @D@/na.sh
-RA18|block-destructive|open-rawflag|T27|X|a|zsh +"-emulate" -n @D@/na.sh
+RA01|block-destructive|rawflag|T24|X|B|bash --rcfile"" @D@/ok.sh @D@/na.sh
+RA02|block-destructive|rawflag|T26|X|B|zsh --emulate"" -n @D@/na.sh
+RA03|block-destructive|rawflag|RT03|X|B|bash --rcfile'' -n @D@/na.sh
+RA04|block-destructive|rawflag|T18|X|B|bash -c"" 'bash @D@/na.sh'
+RA05|block-destructive|rawflag|T18|X|B|bash -"c" 'bash @D@/na.sh'
+RA06|block-destructive|rawflag|T24|X|B|bash \--rcfile @D@/ok.sh @D@/na.sh
+RA07|block-destructive|rawflag|T18|X|B|bash \-c 'bash @D@/na.sh'
+RA08|block-destructive|rawflag|T26|X|B|zsh \--emulate -n @D@/na.sh
+RA09|block-destructive|rawflag|T27|X|B|zsh +-emu""late -n @D@/na.sh
+RA10|block-destructive|rawflag|T24|X|B|bash -"-rcfile" @D@/ok.sh @D@/na.sh
+RA11|block-destructive|rawflag|T24|X|B|bash --rc"fi"le @D@/ok.sh @D@/na.sh
+RA12|block-destructive|rawflag|T26|X|B|zsh --emu'la'te -n @D@/na.sh
+RA13|block-destructive|rawflag|RT13|X|B|sh -'c' 'sh @D@/na.sh'
+RA14|block-destructive|rawflag|RT14|X|B|zsh -c"" 'zsh @D@/na.sh'
+RA15|block-destructive|rawflag|RT15|X|B|bash --init-file"" @D@/ok.sh @D@/na.sh
+RA16|block-destructive|rawflag|T18|X|B|bash -\c 'bash @D@/na.sh'
+RA17|block-destructive|rawflag|T24|X|B|bash --rcfil\e @D@/ok.sh @D@/na.sh
+RA18|block-destructive|rawflag|T27|X|B|zsh +"-emulate" -n @D@/na.sh
 RT03|block-destructive|twin|-|X|B|bash --rcfile -n @D@/na.sh
 RT13|block-destructive|twin|-|X|B|sh -c 'sh @D@/na.sh'
 RT14|block-destructive|twin|-|X|B|zsh -c 'zsh @D@/na.sh'
@@ -392,17 +394,319 @@ RN31|block-destructive|rv-near|-|-|a|bash -c"" 'echo a; echo b'
 RN32|block-destructive|rv-near|-|o|a|bash \--rcfile @D@/ok.sh @D@/ok.sh
 RN33|block-destructive|rv-near|-|o|a|bash -x"" @D@/ok.sh
 RN34|block-destructive|rv-near|-|o|a|bash \-x @D@/ok.sh
-RN35|block-destructive|rv-near|-|o|a|bash -e"" @D@/ok.sh @D@/na.sh
+RN35|block-destructive|rv-near|-|o|B|bash -e"" @D@/ok.sh @D@/na.sh
 RB01|block-destructive|rv-brace|RB02|X|B|bash ""--{norc,rcfile} @D@/ok.sh @D@/na.sh
-RB02|block-destructive|open-rawflag|-|X|a|bash --{norc,rcfile} @D@/ok.sh @D@/na.sh
+RB02|block-destructive|rawflag|-|X|B|bash --{norc,rcfile} @D@/ok.sh @D@/na.sh
 RB03|block-destructive|rv-brace|-|o|a|bash ""--{norc,rcfile} @D@/ok.sh @D@/ok.sh
-RB04|block-destructive|open-rawflag|-|X|a|bash --{norc,rcfile} -n @D@/na.sh
+RB04|block-destructive|rawflag|-|X|B|bash --{norc,rcfile} -n @D@/na.sh
 RB05|block-destructive|rv-brace|RB04|X|B|bash ""--{norc,rcfile} -n @D@/na.sh
-RB06|block-destructive|open-rawflag|-|X|a|bash --rcfil[e] @D@/ok.sh @D@/na.sh
+RB06|block-destructive|rawflag|-|X|B|bash --rcfil[e] @D@/ok.sh @D@/na.sh
 RB07|block-destructive|rv-brace|RB06|X|B|bash ""--rcfil[e] @D@/ok.sh @D@/na.sh
-RB08|block-destructive|open-rawflag|-|X|a|bash --rcfil[e] -n @D@/na.sh
-RX50|block-destructive|open-grant|-|X|a|bash $(echo -n @D@/na.sh)
+RB08|block-destructive|rawflag|-|X|B|bash --rcfil[e] -n @D@/na.sh
+RX50|block-destructive|grant|-|X|B|bash $(echo -n @D@/na.sh)
 RX52|block-destructive|rv-subst|RX50|X|B|bash ""$(echo -n @D@/na.sh)
 RD01|block-destructive|rv-source|-|-|a|. "$HOME"/.cargo/env
 RD02|block-destructive|rv-source|-|-|a|source "$VAR"/bin/activate
 RD03|block-destructive|rv-source|-|o|a|source "$VAR"/bin/activate; bash @D@/ok.sh
+
+# --- seed 5: card #7018 — the option-parse design's own rows (293 rows) ---
+# From that design's Stage-5 corpus of 374 payloads, whose ground truth was taken there on
+# the reference host (bash 3.2.57, zsh 5.9) with marker scripts and an empty environment.
+# Ids are Z plus the design's row id. Not carried: 78 payloads already present above,
+# character for character, and 3 that need a newline. The stdin program in the `s` rows
+# is written out in full and only prints a marker. Group `open-stdin` holds programs fed
+# on standard input that run the unlisted script: a PreToolUse hook does not see stdin,
+# so these are a declared limit, not rows this change closes.
+ZS01|block-destructive|term-card|-|s|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s -O extglob -n
+ZS02|block-destructive|term-card|-|s|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s +O extglob -n
+ZS03|block-destructive|term-card|-|-|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s -n
+ZS04|block-destructive|term-card|-|s|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s /dev/null
+ZS05|block-destructive|term-card|-|-|a|echo 'echo S_"$((1+1))"_RAN' | bash -s -O extglob -n
+ZS06|block-destructive|term-card|-|-|a|echo 'echo S_"$((1+1))"_RAN' | bash -s +O extglob -n
+ZS07|block-destructive|term-card|-|-|a|echo 'echo S_"$((1+1))"_RAN' | bash -s -n
+ZS08|block-destructive|term-card|-|s|a|echo 'echo S_"$((1+1))"_RAN' | bash -s /dev/null
+ZS09|block-destructive|term-card|-|-|a|echo 'echo S_"$((1+1))"_RAN' | sh -s -O extglob -n
+ZS10|block-destructive|term-card|-|-|a|echo 'echo S_"$((1+1))"_RAN' | sh -s +O extglob -n
+ZS11|block-destructive|term-card|-|-|a|echo 'echo S_"$((1+1))"_RAN' | sh -s -n
+ZS12|block-destructive|term-card|-|s|a|echo 'echo S_"$((1+1))"_RAN' | sh -s /dev/null
+ZS13|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s -O extglob -n @D@/na.sh
+ZS14|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s +O extglob -n @D@/na.sh
+ZS15|block-destructive|term-stdin|-|-|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s -n @D@/na.sh
+ZS16|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s @D@/na.sh
+ZS17|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s extglob -n @D@/na.sh
+ZS18|block-destructive|term-stdin|-|-|a|echo 'echo S_"$((1+1))"_RAN' | bash -s -O extglob -n @D@/na.sh
+ZS19|block-destructive|term-stdin|-|-|a|echo 'echo S_"$((1+1))"_RAN' | bash -s +O extglob -n @D@/na.sh
+ZS20|block-destructive|term-stdin|-|-|a|echo 'echo S_"$((1+1))"_RAN' | bash -s -n @D@/na.sh
+ZS21|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | bash -s @D@/na.sh
+ZS22|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | bash -s extglob -n @D@/na.sh
+ZS23|block-destructive|term-stdin|-|-|a|echo 'echo S_"$((1+1))"_RAN' | sh -s -O extglob -n @D@/na.sh
+ZS24|block-destructive|term-stdin|-|-|a|echo 'echo S_"$((1+1))"_RAN' | sh -s +O extglob -n @D@/na.sh
+ZS25|block-destructive|term-stdin|-|-|a|echo 'echo S_"$((1+1))"_RAN' | sh -s -n @D@/na.sh
+ZS26|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | sh -s @D@/na.sh
+ZS27|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | sh -s extglob -n @D@/na.sh
+ZS28|block-destructive|term-stdin|-|-|B|bash -s @D@/na.sh
+ZS29|block-destructive|term-stdin|-|-|a|bash -s @D@/ok.sh
+ZS30|block-destructive|term-stdin|-|-|B|zsh -s -O extglob -n @D@/na.sh
+ZS31|block-destructive|term-stdin|-|-|B|zsh -s +O extglob -n @D@/na.sh
+ZS32|block-destructive|term-stdin|-|s|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s -O extglob -n @D@/ok.sh
+ZS33|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s -x -O extglob -n @D@/na.sh
+ZS34|block-destructive|term-stdin|-|e|B|echo 'echo S_"$((1+1))"_RAN' | zsh -O extglob -s -n @D@/na.sh
+ZS35|block-destructive|term-stdin|-|s|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s -- -n @D@/na.sh
+ZS36|block-destructive|term-stdin|-|s|a|echo 'echo S_"$((1+1))"_RAN' | bash -s -- -n @D@/na.sh
+ZS37|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | bash -s -- @D@/na.sh
+ZS38|block-destructive|term-stdin|-|-|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s -o extendedglob -n @D@/na.sh
+ZS39|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -xs extglob -n @D@/na.sh
+ZS40|block-destructive|term-stdin|-|s|B|echo 'echo S_"$((1+1))"_RAN' | bash -xs extglob -n @D@/na.sh
+ZX01|block-destructive|stdin-line|-|X|B|echo 'bash "$1"' | bash -s @D@/na.sh
+ZX02|block-destructive|open-stdin|-|X|a|echo 'bash @D@/na.sh' | bash -s
+ZX03|block-destructive|open-stdin|-|X|a|echo 'bash @D@/na.sh' | bash
+ZX04|block-destructive|open-stdin|-|X|a|cat @D@/na.sh | bash
+ZX05|block-destructive|open-stdin|-|X|a|cat @D@/na.sh | bash -s
+ZX06|block-destructive|stdin-line|-|X|B|bash < @D@/na.sh
+ZX07|block-destructive|stdin-line|-|X|B|bash -s < @D@/na.sh
+ZX08|block-destructive|stdin-line|-|X|B|bash <@D@/na.sh
+ZX09|block-destructive|stdin-line|-|X|B|bash -s <@D@/na.sh
+ZX10|block-destructive|stdin-line|-|o|a|bash < @D@/ok.sh
+ZX11|block-destructive|stdin-line|-|o|B|bash <@D@/ok.sh
+ZX12|block-destructive|stdin-line|-|X|B|bash <<< 'bash @D@/na.sh'
+ZX13|block-destructive|stdin-line|-|X|B|bash -s <<< 'bash @D@/na.sh'
+ZX14|block-destructive|stdin-line|-|X|B|zsh -s < @D@/na.sh
+ZX15|block-destructive|stdin-line|-|X|B|echo '. "$1"' | bash -s @D@/na.sh
+ZX16|block-destructive|open-stdin|-|X|a|printf 'bash %s\n' @D@/na.sh | bash
+ZX17|block-destructive|stdin-line|-|X|B|echo 'bash "$1"' | bash -s -- @D@/na.sh
+ZX18|block-destructive|stdin-line|-|-|a|echo 'echo ok' | zsh -s
+ZX19|block-destructive|stdin-line|-|-|a|echo 'echo ok' | bash -s
+ZX20|block-destructive|stdin-line|-|-|a|echo 'echo ok' | sh -s
+ZX21|block-destructive|stdin-line|-|-|a|echo 'echo ok' | bash -s -- arg1 arg2
+ZX22|block-destructive|stdin-line|-|-|a|echo 'echo ok' | bash -s arg.txt
+ZX23|block-destructive|stdin-line|-|o|a|cat @D@/ok.sh | bash -s
+ZX24|block-destructive|stdin-line|-|X|B|echo 'bash "$1"' | zsh -s @D@/na.sh
+ZX28|block-destructive|stdin-line|-|o|a|echo 'bash "$1"' | bash -s @D@/ok.sh
+ZX29|block-destructive|stdin-line|-|X|B|sh < @D@/na.sh
+ZX30|block-destructive|stdin-line|-|X|B|zsh < @D@/na.sh
+ZX31|block-destructive|stdin-line|-|X|B|bash -s 0< @D@/na.sh
+ZX32|block-destructive|stdin-line|-|X|B|bash /dev/stdin < @D@/na.sh
+ZX33|block-destructive|open-stdin|-|X|a|cat @D@/na.sh | bash /dev/stdin
+ZX34|block-destructive|stdin-line|-|-|a|echo 'bash "$1"' | bash -s -n @D@/na.sh
+ZX35|block-destructive|stdin-line|-|X|B|echo 'bash "$2"' | zsh -s -O extglob @D@/na.sh
+ZX36|block-destructive|stdin-line|-|-|B|echo 'echo ok' | bash -s @D@/na.sh
+ZX37|block-destructive|stdin-line|-|-|a|echo 'echo ok' | bash -s -- -x @D@/na.sh
+ZT01|block-destructive|term-run|-|e|B|zsh -O extglob -n @D@/na.sh
+ZT02|block-destructive|term-run|-|e|B|zsh +O extglob -n @D@/na.sh
+ZT03|block-destructive|term-run|-|-|a|bash -O extglob -n @D@/na.sh
+ZT04|block-destructive|term-run|-|e|B|bash extglob -n @D@/na.sh
+ZT05|block-destructive|term-run|-|w|B|bash @D@/wrap -n @D@/na.sh
+ZT07|block-destructive|term-run|-|w|a|bash -- @D@/wrap -n @D@/na.sh
+ZT08|block-destructive|term-run|-|e|a|bash -- -n @D@/na.sh
+ZT09|block-destructive|term-run|-|e|B|bash - -n @D@/na.sh
+ZT10|block-destructive|term-run|-|e|B|zsh - -n @D@/na.sh
+ZT11|block-destructive|term-run|-|e|a|zsh -b -n @D@/na.sh
+ZT12|block-destructive|term-run|-|e|B|bash -x extglob -n @D@/na.sh
+ZT13|block-destructive|term-run|-|-|B|bash -eo pipefail -n @D@/na.sh
+ZT14|block-destructive|term-run|-|-|a|bash -o pipefail -n @D@/na.sh
+ZT15|block-destructive|term-run|-|-|a|bash +x -n @D@/na.sh
+ZT16|block-destructive|term-run|-|-|a|bash '+x' -n @D@/na.sh
+ZT18|block-destructive|term-run|-|-|B|bash -n extglob @D@/na.sh
+ZT19|block-destructive|term-run|-|X|B|bash -euo pipefail @D@/na.sh
+ZT20|block-destructive|term-run|-|o|a|bash -euo pipefail @D@/ok.sh
+ZT21|block-destructive|term-run|-|-|a|bash -O extglob -O nullglob -n @D@/na.sh
+ZT22|block-destructive|term-run|-|-|a|bash --norc --noprofile -n @D@/na.sh
+ZT23|block-destructive|term-run|-|-|a|zsh -f -n @D@/na.sh
+ZT24|block-destructive|term-run|-|-|a|zsh -o extendedglob -n @D@/na.sh
+ZT25|block-destructive|term-run|-|-|a|sh -e -n @D@/na.sh
+ZT26|block-destructive|term-run|-|-|a|bash --rcfile /dev/null -n @D@/na.sh
+ZT27|block-destructive|term-run|-|-|a|bash -n -- @D@/na.sh
+ZT28|block-destructive|term-run|-|e|a|bash extglob @D@/ok.sh @D@/na.sh
+ZT29|block-destructive|term-run|-|-|a|zsh -s -n @D@/na.sh
+ZT30|block-destructive|term-run|-|-|B|zsh -n -s @D@/na.sh
+ZT31|block-destructive|term-run|-|-|B|bash -ns @D@/na.sh
+ZT32|block-destructive|term-run|-|-|B|bash -sn @D@/na.sh
+ZT33|block-destructive|term-run|-|e|B|sh extglob -n @D@/na.sh
+ZT34|block-destructive|term-run|-|e|B|zsh extglob -n @D@/na.sh
+ZT35|block-destructive|term-run|-|e|B|bash "extglob" -n @D@/na.sh
+ZT36|block-destructive|term-run|-|-|a|bash +o pipefail -n @D@/na.sh
+ZT37|block-destructive|term-run|-|-|a|bash -x -v -n @D@/na.sh
+ZT39|block-destructive|term-run|-|-|a|zsh +x -n @D@/na.sh
+ZT40|block-destructive|term-run|-|-|a|bash "-x" -n @D@/na.sh
+ZT41|block-destructive|term-run|-|X|B|bash -eo pipefail @D@/na.sh
+ZT42|block-destructive|term-run|-|-|a|bash -n @D@/ok.sh
+ZT43|block-destructive|term-run|-|e|a|bash extglob -n @D@/ok.sh
+ZU01|block-destructive|term-unread|-|X|B|zsh $X--emulate -n @D@/na.sh
+ZU02|block-destructive|term-unread|-|X|B|bash $X--rcfile -n @D@/na.sh
+ZU03|block-destructive|term-unread|-|X|B|bash $X--rcfile @D@/ok.sh @D@/na.sh
+ZU04|block-destructive|term-unread|-|o|B|bash $X-x @D@/ok.sh @D@/na.sh
+ZU05|block-destructive|term-unread|-|o|a|bash $X-x @D@/ok.sh
+ZU06|block-destructive|term-unread|-|X|B|zsh "$X"--emulate -n @D@/na.sh
+ZU07|block-destructive|term-unread|-|X|B|bash "$X"--rcfile @D@/ok.sh @D@/na.sh
+ZU08|block-destructive|term-unread|-|X|B|bash $X-x @D@/na.sh
+ZU09|block-destructive|term-unread|-|-|B|bash $X-n @D@/na.sh
+ZU10|block-destructive|term-unread|-|X|B|bash --rcfile"" -n @D@/na.sh
+ZU12|block-destructive|term-unread|-|X|B|bash --rc"file" -n @D@/na.sh
+ZU13|block-destructive|term-unread|-|X|B|bash --rc\file -n @D@/na.sh
+ZU14|block-destructive|term-unread|-|X|B|bash --rcfile$X -n @D@/na.sh
+ZU15|block-destructive|term-unread|-|X|B|bash -$X-rcfile -n @D@/na.sh
+ZU17|block-destructive|term-unread|-|X|B|zsh -$X-emulate -n @D@/na.sh
+ZU19|block-destructive|term-unread|-|X|B|bash --rcfile$X @D@/ok.sh @D@/na.sh
+ZU20|block-destructive|term-unread|-|-|B|bash -o"" errexit -n @D@/na.sh
+ZU21|block-destructive|term-unread|-|X|B|bash "--rcfile" -n @D@/na.sh
+ZU22|block-destructive|term-unread|-|X|B|bash "--rcfile$X" -n @D@/na.sh
+ZU24|block-destructive|term-unread|-|X|B|bash -x"" @D@/na.sh
+ZU25|block-destructive|term-unread|-|-|B|bash -n"" @D@/na.sh
+ZU26|block-destructive|term-unread|-|-|B|bash +O"" extglob -n @D@/na.sh
+ZU27|block-destructive|term-unread|-|X|B|bash --rcfile"" /dev/null @D@/na.sh
+ZU28|block-destructive|term-unread|-|-|B|bash -O"" extglob -n @D@/na.sh
+ZU29|block-destructive|term-unread|-|X|B|zsh +-emulate"" -n @D@/na.sh
+ZU33|block-destructive|term-unread|-|-|a|bash --rcfile"" @D@/ok.sh
+ZU34|block-destructive|term-unread|-|o|B|bash -x$X @D@/ok.sh @D@/na.sh
+ZU35|block-destructive|term-unread|-|X|B|bash "--rcfile$X" @D@/ok.sh @D@/na.sh
+ZU36|block-destructive|term-unread|-|X|B|bash --init-file"" -n @D@/na.sh
+ZU37|block-destructive|term-unread|-|X|B|sh --rcfile"" -n @D@/na.sh
+ZU38|block-destructive|term-unread|-|o|B|bash -o"" errexit @D@/ok.sh @D@/na.sh
+ZU39|block-destructive|term-unread|-|-|B|bash -O"" @D@/ok.sh @D@/na.sh
+ZU40|block-destructive|term-unread|-|-|B|zsh -o"" @D@/ok.sh @D@/na.sh
+ZU41|block-destructive|term-unread|-|X|B|bash --rcfil? -n @D@/na.sh
+ZU42|block-destructive|term-unread|-|-|B|bash -x\ y @D@/ok.sh @D@/na.sh
+ZC05|block-destructive|cluster|-|X|B|bash -ce 'bash @D@/na.sh'
+ZC08|block-destructive|cluster|-|o|a|bash -ec 'bash @D@/ok.sh'
+ZC11|block-destructive|cluster|-|X|B|bash -e$C7018 'bash @D@/na.sh'
+ZC12|block-destructive|cluster|-|X|B|bash +ec 'bash @D@/na.sh'
+ZC14|block-destructive|cluster|-|-|a|python3 -Bc 'import os' @D@/na.py
+ZC15|block-destructive|cluster|-|-|B|bash -c'bash @D@/na.sh'
+ZC16|block-destructive|cluster|-|-|B|bash -nc 'bash @D@/na.sh'
+ZC17|block-destructive|cluster|-|X|B|zsh -fc 'zsh @D@/na.sh'
+ZC19|block-destructive|cluster|-|X|B|bash -euc 'bash @D@/na.sh'
+ZC20|block-destructive|cluster|-|X|B|bash -o pipefail -ec 'bash @D@/na.sh'
+ZC21|block-destructive|cluster|-|X|B|bash -ec "bash @D@/na.sh"
+ZC22|block-destructive|cluster|-|X|B|env bash -ec 'bash @D@/na.sh'
+ZC23|block-destructive|cluster|-|-|a|bash -ec 'echo a; echo b'
+ZC24|block-destructive|cluster|-|X|B|bash "-ec" 'bash @D@/na.sh'
+ZC25|block-destructive|cluster|-|X|B|bash -e"c" 'bash @D@/na.sh'
+ZC27|block-destructive|cluster|-|X|B|bash -ec @D@/na.sh
+ZC28|block-destructive|cluster|-|X|B|bash -x -ec 'bash @D@/na.sh'
+ZC29|block-destructive|cluster|-|-|B|source -ec @D@/na.sh
+ZC30|block-destructive|cluster|-|X|B|bash -ecx 'bash @D@/na.sh'
+ZC32|block-destructive|cluster|-|X|B|bash --rcfile /dev/null -ec 'bash @D@/na.sh'
+ZC33|block-destructive|cluster|-|o|B|bash -ec 'bash @D@/ok.sh' @D@/na.sh
+ZC34|block-destructive|cluster|-|?|B|bash -cl 'bash @D@/na.sh'
+ZP01|block-destructive|cluster-edge|-|X|B|bash +c 'bash @D@/na.sh'
+ZP02|block-destructive|cluster-edge|-|X|B|sh +ec 'sh @D@/na.sh'
+ZP03|block-destructive|cluster-edge|-|X|B|zsh +ec 'zsh @D@/na.sh'
+ZP04|block-destructive|cluster-edge|-|X|B|zsh +c 'zsh @D@/na.sh'
+ZP05|block-destructive|cluster-edge|-|X|B|bash +ce 'bash @D@/na.sh'
+ZP06|block-destructive|cluster-edge|-|X|B|zsh -ce 'zsh @D@/na.sh'
+ZP07|block-destructive|cluster-edge|-|X|B|sh -ce 'sh @D@/na.sh'
+ZP08|block-destructive|cluster-edge|-|X|B|bash '+ec' 'bash @D@/na.sh'
+ZP09|block-destructive|cluster-edge|-|-|B|bash '+c.sh'
+ZP10|block-destructive|cluster-edge|-|-|B|bash +c.sh
+ZP11|block-destructive|cluster-edge|-|-|a|bash -c.sh
+ZP12|block-destructive|cluster-edge|-|X|B|bash -check @D@/na.sh
+ZP13|block-destructive|cluster-edge|-|-|a|zsh -o correct -n @D@/na.sh
+ZP14|block-destructive|cluster-edge|-|-|a|bash -O checkwinsize -n @D@/na.sh
+ZP15|block-destructive|cluster-edge|-|-|a|zsh +-noexec -n @D@/na.sh
+ZP16|block-destructive|cluster-edge|-|X|B|bash --norc -c 'bash @D@/na.sh'
+ZP17|block-destructive|cluster-edge|-|X|B|zsh --emulate sh -c 'zsh @D@/na.sh'
+ZP18|block-destructive|cluster-edge|-|X|B|bash -ec 'bash @D@/ok.sh; bash @D@/na.sh'
+ZP19|block-destructive|cluster-edge|-|o|B|bash -ec 'bash @D@/ok.sh' -n @D@/na.sh
+ZP20|block-destructive|cluster-edge|-|-|a|zsh -ec 'echo a b'
+ZP22|block-destructive|cluster-edge|-|-|a|bash -ec "echo it's fine"
+ZP24|block-destructive|cluster-edge|-|X|B|bash -uec 'bash @D@/na.sh'
+ZP25|block-destructive|cluster-edge|-|X|B|zsh -xc 'zsh @D@/na.sh'
+ZP26|block-destructive|cluster-edge|-|X|B|sh -xc 'sh @D@/na.sh'
+ZL01|block-destructive|term-run2|-|s|a|echo 'echo S_"$((1+1))"_RAN' | bash -s -- extglob -n @D@/na.sh
+ZL02|block-destructive|term-run2|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s -O extglob -n -- @D@/na.sh
+ZL03|block-destructive|term-run2|-|-|B|echo 'echo S_"$((1+1))"_RAN' | bash -n -s @D@/na.sh
+ZL04|block-destructive|term-run2|-|-|a|echo 'echo S_"$((1+1))"_RAN' | bash -s -n -- @D@/na.sh
+ZL05|block-destructive|term-run2|-|e|B|bash -O extglob extglob -n @D@/na.sh
+ZL06|block-destructive|term-run2|-|e|B|bash --rcfile /dev/null extglob -n @D@/na.sh
+ZL08|block-destructive|term-run2|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s -o extendedglob extglob -n @D@/na.sh
+ZL09|block-destructive|term-run2|-|-|B|bash "" -n @D@/na.sh
+ZL10|block-destructive|term-run2|-|-|B|bash '' -n @D@/na.sh
+ZL11|block-destructive|term-run2|-|-|B|bash FOO=1 -n @D@/na.sh
+ZL12|block-destructive|term-run2|-|w|B|bash ./wrap -n @D@/na.sh
+ZL15|block-destructive|term-run2|-|-|B|bash -n "$X" @D@/na.sh
+ZL16|block-destructive|term-run2|-|-|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s $X -n @D@/na.sh
+ZL17|block-destructive|term-run2|-|-|B|bash -n $X @D@/na.sh
+ZL18|block-destructive|term-run2|-|-|a|bash -o errexit -n @D@/na.sh
+ZL19|block-destructive|term-run2|-|-|B|bash -o "$X" -n @D@/na.sh
+ZL20|block-destructive|term-run2|-|s|B|echo 'echo S_"$((1+1))"_RAN' | env zsh -s -O extglob -n @D@/na.sh
+ZL21|block-destructive|term-run2|-|s|B|echo 'echo S_"$((1+1))"_RAN' | FOO=1 zsh -s -O extglob -n @D@/na.sh
+ZL22|block-destructive|term-run2|-|-|B|echo hi && zsh -s -O extglob -n @D@/na.sh
+ZL23|block-destructive|term-run2|-|s|B|echo 'echo S_"$((1+1))"_RAN' | "zsh" -s -O extglob -n @D@/na.sh
+ZL24|block-destructive|term-run2|-|s|B|echo 'echo S_"$((1+1))"_RAN' | /bin/zsh -s -O extglob -n @D@/na.sh
+ZL26|block-destructive|term-run2|-|e|B|source extglob -n @D@/na.sh
+ZL27|block-destructive|term-run2|-|-|a|bash ""+x -n @D@/na.sh
+ZL30|block-destructive|term-run2|-|X|B|zsh +-emul""ate -n @D@/na.sh
+ZL32|block-destructive|term-run2|-|s|a|echo 'echo S_"$((1+1))"_RAN' | zsh -s -O extglob -n @D@/ok.sh @D@/na.sh
+ZL33|block-destructive|term-run2|-|s|B|echo 'echo S_"$((1+1))"_RAN' | zsh -s -O extglob @D@/na.sh
+ZL34|block-destructive|term-run2|-|-|a|bash -eu -n @D@/na.sh
+ZL35|block-destructive|term-run2|-|-|B|bash -euo pipefail -n @D@/na.sh
+ZL36|block-destructive|term-run2|-|-|a|zsh -f -o extendedglob -n @D@/na.sh
+ZL37|block-destructive|term-run2|-|-|a|zsh +-emulate zsh -n @D@/na.sh
+ZL40|block-destructive|term-run2|-|-|a|bash --rcfile @D@/ok.sh -n @D@/na.sh
+ZL42|block-destructive|term-run2|-|-|a|bash -n "$X/x.sh"
+ZQ02|block-destructive|stdin-pos|-|X|B|bash -s @D@/na.sh <<< 'bash "$1"'
+ZQ05|block-destructive|stdin-pos|-|X|B|echo 'bash "$1"' | bash -xs @D@/na.sh
+ZQ06|block-destructive|stdin-pos|-|X|B|echo 'bash "$1"' | bash -s -x @D@/na.sh
+ZQ07|block-destructive|stdin-pos|-|X|B|echo 'bash "$1"' | bash --rcfile"" -s @D@/na.sh
+ZQ08|block-destructive|stdin-pos|-|-|a|echo 'echo ok' | bash -s @D@/ok.sh
+ZQ11|block-destructive|stdin-pos|-|X|B|echo 'bash "$1"' | sh -s @D@/na.sh
+ZQ12|block-destructive|stdin-pos|-|X|B|echo 'bash "$2"' | bash -s arg1 @D@/na.sh
+ZQ13|block-destructive|stdin-pos|-|-|B|echo 'cat "$1"' | bash -s @D@/na.sh
+ZH01|block-destructive|unread-word|-|X|B|bash <<< "bash @D@/na.sh"
+ZH02|block-destructive|unread-word|-|-|a|bash -s <<< 'echo hi'
+ZH03|block-destructive|unread-word|-|-|a|bash < /dev/null
+ZH04|block-destructive|unread-word|-|o|a|bash 2>/dev/null @D@/ok.sh
+ZH05|block-destructive|unread-word|-|o|B|bash 2>/dev/null @D@/ok.sh @D@/na.sh
+ZH06|block-destructive|unread-word|-|-|a|bash "$X" @D@/ok.sh
+ZH07|block-destructive|unread-word|-|o|a|bash $X @D@/ok.sh
+ZH08|block-destructive|unread-word|-|X|B|bash $X @D@/na.sh
+ZH09|block-destructive|unread-word|-|-|B|bash ~/x @D@/ok.sh @D@/na.sh
+ZH10|block-destructive|unread-word|-|-|a|bash -- "$X" @D@/na.sh
+ZH11|block-destructive|unread-word|-|-|a|bash "$X"
+ZH12|block-destructive|unread-word|-|-|B|bash $X/x.sh
+ZH13|block-destructive|unread-word|-|-|B|source $X--x @D@/na.sh
+ZH14|block-destructive|unread-word|-|-|a|source --x"" @D@/ok.sh @D@/na.sh
+ZH15|block-destructive|unread-word|-|o|W|python3 $X-u @D@/ok.py @D@/na.py
+ZH16|block-destructive|unread-word|-|X|W|python3 -u"" @D@/na.py
+ZH17|block-destructive|unread-word|-|o|B|bash -x'' @D@/ok.sh @D@/na.sh
+ZH18|block-destructive|unread-word|-|o|a|bash '-x'"" @D@/ok.sh @D@/na.sh
+ZH19|block-destructive|unread-word|-|o|B|bash -o pipe"fail" @D@/ok.sh @D@/na.sh
+ZH20|block-destructive|unread-word|-|X|B|bash --rcfile @D@/ok.sh"" @D@/na.sh
+ZH21|block-destructive|unread-word|-|X|B|bash --rcfile "$X" @D@/na.sh
+ZH22|block-destructive|unread-word|-|-|B|bash -c "$X" @D@/na.sh
+ZH23|block-destructive|unread-word|-|o|a|bash @D@/ok.sh "$X" @D@/na.sh
+ZH24|block-destructive|unread-word|-|o|a|bash -x @D@/ok.sh --flag="$X" @D@/na.sh
+ZA41|block-destructive|rv-a-refused|-|X|B|bash -o"" errexit @D@/na.sh
+ZA42|block-destructive|rv-a-refused|-|X|B|bash \-x @D@/na.sh
+ZB10|block-destructive|rv-b|-|o|a|bash --{norc,rcfile} @D@/ok.sh @D@/ok.sh
+ZX51|block-destructive|subst|-|X|B|bash $(echo @D@/na.sh)
+ZX53|block-destructive|subst|-|o|a|bash $(echo -n @D@/ok.sh)
+ZG01|block-destructive|term-sign|-|-|B|bash + -n @D@/na.sh
+ZG02|block-destructive|term-sign|-|X|B|bash - @D@/na.sh
+ZG03|block-destructive|term-sign|-|e|a|zsh +b -n @D@/na.sh
+ZG04|block-destructive|term-sign|-|X|B|zsh -b @D@/na.sh
+ZG05|block-destructive|term-sign|-|e|a|bash - -n @D@/ok.sh
+ZG06|block-destructive|term-sign|-|e|B|sh - -n @D@/na.sh
+ZO01|block-destructive|optarg|-|X|B|bash --rcfile $X -n @D@/na.sh
+ZO02|block-destructive|optarg|-|X|B|zsh --emulate $X -n @D@/na.sh
+ZO03|block-destructive|optarg|-|X|B|bash --rcfile "$@" -n @D@/na.sh
+ZO04|block-destructive|optarg|-|-|B|bash -O $X -n @D@/na.sh
+ZO05|block-destructive|optarg|-|X|B|bash --rcfile $X @D@/ok.sh @D@/na.sh
+ZO06|block-destructive|optarg|-|-|B|bash --rcfile "$X" -n @D@/na.sh
+ZO07|block-destructive|optarg|-|-|a|bash -o 'pipefail' -n @D@/na.sh
+ZO08|block-destructive|optarg|-|-|a|bash --rcfile "" -n @D@/na.sh
+ZO09|block-destructive|optarg|-|-|a|bash --rcfile $X @D@/ok.sh
+ZO10|block-destructive|optarg|-|X|B|zsh +-emulate $X -n @D@/na.sh
+ZO11|block-destructive|optarg|-|-|B|bash -o $X -n @D@/na.sh
+ZO12|block-destructive|optarg|-|-|B|bash --rcfile ~/x -n @D@/na.sh
+ZO14|block-destructive|optarg|-|-|B|bash --rcfile {a,b} -n @D@/na.sh
+ZO15|block-destructive|optarg|-|X|B|bash --init-file $X -n @D@/na.sh
+ZO16|block-destructive|optarg|-|X|B|bash --rcfile "$@" @D@/ok.sh @D@/na.sh
+ZO17|block-destructive|optarg|-|o|a|bash --rcfile /dev/null @D@/ok.sh @D@/na.sh
+ZO18|block-destructive|optarg|-|-|a|bash --rcfile "/dev/null" -n @D@/na.sh
+ZD01|block-destructive|open-stdin|-|X|a|echo 'bash "$2"' | bash -s @D@/ok.sh @D@/na.sh
+ZD03|block-destructive|open-stdin|-|X|a|bash -s @D@/ok.sh @D@/na.sh <<< 'bash "$2"'
+ZR01|block-destructive|redir|-|-|B|bash 2>/dev/null -n @D@/na.sh
+ZR02|block-destructive|redir|-|-|a|bash -n @D@/na.sh 2>/dev/null
+ZR03|block-destructive|redir|-|-|a|bash -n "$X" 2>/dev/null
+ZR04|block-destructive|redir|-|-|a|bash -n @D@/na.sh > /dev/null 2>&1

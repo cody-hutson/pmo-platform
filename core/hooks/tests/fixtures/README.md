@@ -54,7 +54,7 @@ last field and may itself contain `|`. Lines starting with `#` and blank lines a
 | `hook` | The guard the row is run against, by basename without `.sh` (`block-destructive`). A suite runs only the rows that name its guard. |
 | `group` | A name the reader reports by: one arm per group. A group starting with `open-` records an execution the guard allows today, declared open. |
 | `twin` | The id of the same invocation with its quoting removed, or `-`. |
-| `gt` | Ground truth taken when the row was authored, by running the command under the real interpreters with marker scripts: `X` the unlisted script ran, `o` only the allowlisted one ran, `w` the extensionless wrapper ran, `-` nothing ran, `?` not run. The suite does not re-run ground truth. |
+| `gt` | Ground truth taken when the row was authored, by running the command under the real interpreters with marker scripts: `X` the unlisted script ran, `o` only the allowlisted one ran, `w` the extensionless wrapper ran, `e` another extensionless file in the fixture directory ran in the script's place (one named `extglob` or `-n`), `s` a program fed on standard input ran and no script named on the command line did, `-` nothing ran, `?` not run. The suite does not re-run ground truth. |
 | `verdict` | The guard's recorded verdict: `a` allowed, `B` refused (exit 2), `W` warned at a rollout phase (exit 0 and a would-fire record). |
 | `command` | The Bash command, with the placeholders below. |
 
