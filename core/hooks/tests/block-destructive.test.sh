@@ -3935,8 +3935,10 @@ test_case "NOEXEC-CTL-03: bash -n +n <allowed> allowed (revoked, but the allowli
 # rather than as a bug: the cost of the revoke being unconditional for every token the
 # walk STEPS OVER. That scope is the whole guarantee, and stating it unscoped — "nothing
 # to omit on the revoke side" — is false: a token that ENDS the walk does not revoke, so
-# an earlier grant survives it. NOEXEC-QSPLIT-* below pins the one family where that is
-# live, and NOEXEC-ORD-* pins the line order the scope depends on.
+# an earlier grant survives it. NOEXEC-QSPLIT-* below now asserts the block for the
+# quote-closes-early family, which the walk reads as a whole word; the surviving-grant
+# case is a fragment, pinned as FWALK-QWORD-ctl-fragment-noexec, and NOEXEC-ORD-* pins
+# the line order the scope depends on.
 test_case "NOEXEC-R1: bash -n -x <unlisted>.sh blocks (declared over-block; unrecognised token revokes)" \
   "$(bash_payload "bash -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
@@ -4151,22 +4153,21 @@ noexec_doc_control "NOEXEC-DOC-03b" "NO-QUALIFIER" \
 noexec_doc_control "NOEXEC-DOC-03c" "NO-REVOKE-RULE" \
   's|by every later token the walk steps over|by every later token the walk hops over|'
 
-# --- (7) THE DECLARED RESIDUAL OF THAT SCOPE — leading quote closes early ---
-# A token whose leading quote closes early is marked unresolvable by
-# normalize_script_token, so it BREAKS the walk above the revoke and an earlier `-n`
-# grant survives. These pin the behaviour as it stands today so a future change to it is
-# visible rather than silent. They are NOT assertions that the behaviour is correct.
-#
-# INHERITED, NOT INTRODUCED: the same shapes ALLOW on `origin/main`, measured through this
-# harness against main's hook as a sibling. The shape that locates the cause carries no
-# `-n` at all — `bash ""-x <unlisted>.sh` allows on main and here alike — so the ALLOW
-# comes from the unresolvable-operand path, not from the noexec predicate.
-test_case "NOEXEC-QSPLIT-01: bash -n \"\"+n <unlisted>.sh ALLOWED (inherited; the token ends the walk, so the grant survives)" \
-  "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
-test_case "NOEXEC-QSPLIT-02: bash -n ''+n <unlisted>.sh ALLOWED (same family, single quotes)" \
-  "$(bash_payload "bash -n ''+n $PARSE_UNLISTED")" 0
-test_case "NOEXEC-QSPLIT-03: bash \"\"-x <unlisted>.sh ALLOWED (no -n anywhere — the cause is the operand path, not noexec)" \
-  "$(bash_payload "bash \"\"-x $PARSE_UNLISTED")" 0
+# --- (7) THE CLOSED FAMILY OF THAT SCOPE, AND THE FRAGMENT THAT REMAINS ---
+# A token whose leading quote closes early is declined by normalize_script_token. While
+# the walk read tokens only through that function it broke above the revoke, an earlier
+# `-n` grant survived, and the script behind the token was adjudicated by nothing; these
+# three arms pinned that ALLOW. The walk now reads such a token through script_walk_view,
+# which reads a token that opens with a quote and closes every quote it opens as its
+# unquoted spelling, so the three arms below assert the verdict of that spelling. What
+# still ends the walk above the revoke is a FRAGMENT — a token that leaves a quote open —
+# and that case is pinned in block (7b) as FWALK-QWORD-ctl-fragment-noexec.
+test_case "NOEXEC-QSPLIT-01: bash -n \"\"+n <unlisted>.sh BLOCKS (the quoted clear is read as +n and revokes the grant)" \
+  "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-QSPLIT-02: bash -n ''+n <unlisted>.sh BLOCKS (same word, single quotes)" \
+  "$(bash_payload "bash -n ''+n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-QSPLIT-03: bash \"\"-x <unlisted>.sh BLOCKS (no -n anywhere — the quoted flag is stepped over and the operand adjudicated)" \
+  "$(bash_payload "bash \"\"-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
 # CONTROLS THAT MUST FIRE. Without these the three arms above would read green against a
 # harness that had stopped blocking anything at all. Each is the unquoted twin of the
@@ -4176,11 +4177,332 @@ test_case "NOEXEC-QSPLIT-ctl-unquoted: bash -n +n <unlisted>.sh BLOCKS (the twin
 test_case "NOEXEC-QSPLIT-ctl-flag: bash -x <unlisted>.sh BLOCKS (the twin of QSPLIT-03)" \
   "$(bash_payload "bash -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
+# --- (7b) THE WALK READS A WHOLE QUOTE-LED WORD AS ITS UNQUOTED SPELLING — FWALK-QWORD-* ---
+# The three QSPLIT arms above pinned an ALLOW until the flag walk began reading each
+# token the filename normalizer declines through script_walk_view. A token that opens
+# with a quote and closes every quote it opens is a WHOLE WORD, and the walk gives it the
+# verdict of its unquoted spelling. A token that leaves a quote open is a FRAGMENT and
+# still ends the walk. The arms below pin both directions. Every refusal in (a) and (b)
+# is an ALLOW on the pre-fix hook, which the revert mutant reproduces (FWALK-QWORD-M1*).
+# Every arm in (c) is refused by the deny mutant (FWALK-QWORD-M2*), which is what shows
+# that a must-allow arm can fail. A flag that begins with a sign or a backslash and
+# carries a quote is NOT this reading's subject and has no arm here: that class is open
+# and belongs to the option-parse change on this walk.
+QWORD_WRAP="/tmp/pmo-qword-wrap"
+QWORD_LONG="$(/usr/bin/printf '%*s' 1100 '' | /usr/bin/tr ' ' 'x')"
+
+test_case "NOEXEC-QSPLIT-04: bash -n '+'n <unlisted>.sh BLOCKS (the quote closes inside the word; it is still +n)" \
+  "$(bash_payload "bash -n '+'n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-QSPLIT-05: bash \"-\"n +n <unlisted>.sh BLOCKS (a quoted grant is revoked by the clear behind it)" \
+  "$(bash_payload "bash \"-\"n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (a) MUST REFUSE — one arm per way a quoted word can sit in front of the operand.
+test_case "FWALK-QWORD-plus: bash \"\"+x <unlisted>.sh blocks (plus-form, quoted)" \
+  "$(bash_payload "bash \"\"+x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-sh: sh \"\"-x <unlisted>.sh blocks (second shell)" \
+  "$(bash_payload "sh \"\"-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-zsh: zsh ''-x <unlisted>.sh blocks (third shell, single quotes)" \
+  "$(bash_payload "zsh ''-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-ddash: bash \"\"-- <unlisted>.sh blocks (a quoted -- still hands over the operand)" \
+  "$(bash_payload "bash \"\"-- $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-cmode: bash \"\"-c 'bash <unlisted>.sh' blocks (a quoted -c still opens the program string)" \
+  "$(bash_payload "bash \"\"-c 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-arity: bash \"\"--rcfile <allowed> <unlisted>.sh blocks (a quoted option keeps its arity)" \
+  "$(bash_payload "bash \"\"--rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-emulate: zsh \"\"--emulate -n <unlisted>.sh blocks (the -n is the option's argument, not a grant)" \
+  "$(bash_payload "zsh \"\"--emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-source: source \"\"-- <unlisted>.sh blocks (the source arm walks the same loop)" \
+  "$(bash_payload "source \"\"-- $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-chain: bash <allowed>; bash \"\"-x <unlisted>.sh blocks (second segment)" \
+  "$(bash_payload "bash $ARITY_ALLOWED; bash \"\"-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-extless: bash '<dir>/wr'ap <unlisted>.sh blocks on the argument, as its twin F2-FWALK-CONSEQ-extless does (declared over-block)" \
+  "$(bash_payload "bash '/tmp/pmo-qword-wr'ap $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (b) A WHOLE WORD WHOSE VALUE ARGV DOES NOT DETERMINE — it carries an expansion, or
+# it is over the read limit. It is neither a flag this hook can read nor an operand it
+# can name. Under an interpreter the walk ends on the route -c takes: no parse-only
+# exemption, and every claimed token after it adjudicated. Under source, which has no
+# such route, it is stepped over and the walk keeps looking. PMO_QWORD_UNSET is never
+# set and never expanded.
+test_case "FWALK-QWORD-expansion: bash \"\$VAR\"-x <unlisted>.sh blocks" \
+  "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-expansion-n: bash -n \"\$VAR\"+n <unlisted>.sh blocks (an earlier grant does not survive it)" \
+  "$(bash_payload "bash -n \"\$PMO_QWORD_UNSET\"+n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-nogrant: bash \"\$VAR\"-n <unlisted>.sh blocks (declared over-block; an unknown value is never read as a grant)" \
+  "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-unknown-arity: zsh \"\$VAR\"--emulate -n <unlisted>.sh blocks (not read for arity, so the -n behind it cannot grant)" \
+  "$(bash_payload "zsh \"\$PMO_QWORD_UNSET\"--emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-unknown-optarg: bash \"\$VAR\"--rcfile <allowed> <unlisted>.sh blocks (an allowlisted argument does not hide the operand)" \
+  "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"--rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-limit: bash \"\"-<1,100 x> <unlisted>.sh blocks (over the read limit degrades toward adjudication)" \
+  "$(bash_payload "bash \"\"-${QWORD_LONG} $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-source-unknown: source \"\$VAR\"-- <unlisted>.sh blocks (stepped over; the operand is adjudicated)" \
+  "$(bash_payload "source \"\$PMO_QWORD_UNSET\"-- $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-source-unknown-walk: source \"\$VAR\"-p <unclaimed> <unlisted>.sh blocks (under source the walk keeps looking; the -c label would stop one token on)" \
+  "$(bash_payload "source \"\$PMO_QWORD_UNSET\"-p pmo-qword-a:pmo-qword-b $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (c) MUST STAY ALLOWED. The first is the card's near miss. If any of these turns red
+# the fix has started refusing what it was required to admit.
+test_case "FWALK-QWORD-ctl-allow: bash \"\"-x <allowed>.sh allowed (THE NEAR MISS — the allowlist still governs)" \
+  "$(bash_payload "bash \"\"-x $ARITY_ALLOWED")" 0
+test_case "FWALK-QWORD-ctl-allow-n: bash -n \"\"+n <allowed>.sh allowed (revoked, and the allowlist still governs)" \
+  "$(bash_payload "bash -n \"\"+n $ARITY_ALLOWED")" 0
+test_case "FWALK-QWORD-grant: bash \"-\"n <unlisted>.sh allowed (the parse-only spelling, quoted — twin of NOEXEC-Q3)" \
+  "$(bash_payload "bash \"-\"n $PARSE_UNLISTED")" 0
+test_case "FWALK-QWORD-cmode-fp: bash \"\"-c 'echo a; echo b' allowed (twin of F1-FP-cmode)" \
+  "$(bash_payload "bash \"\"-c 'echo a; echo b'")" 0
+test_case "FWALK-QWORD-ddash-stop: bash \"\"-- <extensionless> <unlisted>.sh allowed (a quoted -- is the hard stop its twin is)" \
+  "$(bash_payload "bash \"\"-- $QWORD_WRAP $PARSE_UNLISTED")" 0
+test_case "FWALK-QWORD-expansion-allow: bash \"\$VAR\"-x <allowed>.sh allowed (the conservative route adjudicates; it does not deny)" \
+  "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $ARITY_ALLOWED")" 0
+test_case "FWALK-QWORD-limit-allow: bash \"\"-<1,100 x> <allowed>.sh allowed (same route, allowlisted operand)" \
+  "$(bash_payload "bash \"\"-${QWORD_LONG} $ARITY_ALLOWED")" 0
+test_case "FWALK-QWORD-ctl-cluster-fp: bash -ec 'echo a b' allowed (a fragment behind a flag is not refused)" \
+  "$(bash_payload "bash -ec 'echo a b'")" 0
+test_case "FWALK-QWORD-ctl-fragment-noexec (pin, not fix-evidence): bash -n '<path with spaces>.sh' allowed (a fragment still ends the walk and the grant survives)" \
+  "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 0
+
+# (d) A TOKEN A VIEW ALREADY PLACES IN THE OPERAND DOMAIN IS NOT RE-READ AS A WORD.
+# '<path>.sh'y is the word <path>.shy, which no suffix set claims — but the probe view
+# claims the token, and the pre-fix hook denies it as unresolvable. Reading it as a
+# word would step over it and move a BLOCK to ALLOW, the one direction this change may
+# not take. FWALK-QWORD-M3b is the mutant that does exactly that.
+test_case "FWALK-QWORD-ctl-claimed (pin, not fix-evidence): bash '<unlisted>.sh'y still blocks (a domain claim outranks the word reading)" \
+  "$(bash_payload "bash '${PARSE_UNLISTED}'y")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# RED-BEFORE, AS AN ARM. This mutant reverts the two call sites and nothing else, so
+# it IS the pre-fix walk with the new functions left in the file unused. M1a proves the
+# substitution matched exactly those two lines; M1b to M1e show the pre-fix ALLOW on
+# one payload per mechanism.
+QWORD_MUTANT="$(dirname "$HOOK")/block-destructive.QWORD-mutant.sh"
+/usr/bin/sed 's/script_walk_view "/normalize_script_token "/' "$HOOK" > "$QWORD_MUTANT"
+
+if [ "$(/usr/bin/diff "$HOOK" "$QWORD_MUTANT" | /usr/bin/grep -c '^<')" = "2" ]; then
+  /usr/bin/printf 'PASS: FWALK-QWORD-M1a revert mutation is live (exactly the two walk call sites differ)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QWORD-M1a revert mutation did not change exactly two lines — the M1 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-QWORD-M1b: the revert mutant ALLOWS bash \"\"-x <unlisted>.sh (the pre-fix verdict)" \
+  "$QWORD_MUTANT" "$(bash_payload "bash \"\"-x $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-QWORD-M1c: the revert mutant ALLOWS bash -n \"\"+n <unlisted>.sh" \
+  "$QWORD_MUTANT" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-QWORD-M1d: the revert mutant ALLOWS bash \"\"-c 'bash <unlisted>.sh'" \
+  "$QWORD_MUTANT" "$(bash_payload "bash \"\"-c 'bash $PARSE_UNLISTED'")" 0
+sandbox_case "FWALK-QWORD-M1e: the revert mutant ALLOWS bash \"\$VAR\"-x <unlisted>.sh" \
+  "$QWORD_MUTANT" "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$QWORD_MUTANT"
+
+# WHY THE WALK DOES NOT SIMPLY DENY, pinned so the proposal is not re-made. The
+# obvious remedy for this family is to refuse any token the normalizer declines and no
+# view claims. This mutant IS that remedy. It closes the family — and it refuses every
+# arm in (c), the card's own near miss first. M2b to M2j are those refusals, each one
+# matched on the mutant's own reason text so no other rule can satisfy it.
+QWORD_DENY="$(dirname "$HOOK")/block-destructive.QWORD-deny.sh"
+/usr/bin/sed 's|^  script_word_scan "\$1"$|  if ! script_operand_implicated "$script_interp_domain"; then block "BLOCK-DESTRUCTIVE-022" "QWORD deny mutant" "test only"; fi; script_word_scan "$1"|' \
+  "$HOOK" > "$QWORD_DENY"
+
+if [ "$(/usr/bin/diff "$HOOK" "$QWORD_DENY" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-QWORD-M2a deny mutation is live (exactly one line of the view differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QWORD-M2a deny mutation did not change exactly one line — the M2 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-QWORD-M2b: the deny mutant REFUSES the near miss bash \"\"-x <allowed>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\"-x $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2c: the deny mutant REFUSES bash -n \"\"+n <allowed>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash -n \"\"+n $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2d: the deny mutant REFUSES the parse-only spelling bash \"-\"n <unlisted>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"-\"n $PARSE_UNLISTED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2e: the deny mutant REFUSES bash \"\"-c 'echo a; echo b'" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\"-c 'echo a; echo b'")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2f: the deny mutant REFUSES bash \"\"-- <extensionless> <unlisted>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\"-- $QWORD_WRAP $PARSE_UNLISTED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2g: the deny mutant REFUSES bash \"\$VAR\"-x <allowed>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2h: the deny mutant REFUSES bash \"\"-<1,100 x> <allowed>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\"-${QWORD_LONG} $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2i: the deny mutant REFUSES bash -ec 'echo a b' (a deny at the walk reaches ordinary program strings)" \
+  "$QWORD_DENY" "$(bash_payload "bash -ec 'echo a b'")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2j: the deny mutant REFUSES bash -n '<path with spaces>.sh'" \
+  "$QWORD_DENY" "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 2 "QWORD deny mutant"
+
+/bin/rm -f "$QWORD_DENY"
+
+# THE LINE THAT KEEPS THE CHANGE MONOTONE, proved load-bearing. Deleting the view's
+# claim test lets a claimed token be read as a word; the payload of
+# FWALK-QWORD-ctl-claimed then steps over its own operand and is allowed.
+QWORD_BLIND="$(dirname "$HOOK")/block-destructive.QWORD-blind.sh"
+/usr/bin/sed '/^  if script_operand_implicated "\$script_interp_domain"; then return 0; fi$/d' "$HOOK" > "$QWORD_BLIND"
+
+if [ "$(/usr/bin/diff "$HOOK" "$QWORD_BLIND" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-QWORD-M3a claim-blind mutation is live (exactly one line of the view is gone)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QWORD-M3a claim-blind mutation did not remove exactly one line — M3b is unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-QWORD-M3b: the claim-blind mutant ALLOWS bash '<unlisted>.sh'y (the BLOCK the shipped view keeps)" \
+  "$QWORD_BLIND" "$(bash_payload "bash '${PARSE_UNLISTED}'y")" 0
+
+/bin/rm -f "$QWORD_BLIND"
+
+# THE SCANNER AGAINST THE SHELL. script_word_scan is a second reader of shell quoting,
+# and a reader that drifts from the shell reads some token wrongly. SCAN-01 lifts the
+# function's text out of the hook and compares it with /bin/bash over a fixed table: a
+# token it calls a whole exact word must be ONE word with exactly that value, and a
+# token it calls a fragment must NOT be one word. A token it reports as of unknown
+# value is counted and not compared — "unknown" claims nothing a shell can contradict.
+# The three counts are asserted exactly, so a scanner that called everything unknown
+# could not pass. The last three tokens carry an unquoted brace, glob or tilde
+# character, which the shell rewrites after quote removal: a scanner that reports them
+# exact is caught here, because the brace word is two words to /bin/bash. SCAN-02 is the
+# control: the same comparison over a scanner with one quoting rule broken must name a
+# disagreement, or SCAN-01's agreement proves nothing.
+QWORD_TOKFILE="$(/usr/bin/mktemp)"
+/bin/cat > "$QWORD_TOKFILE" <<'QWORD_TOKENS_EOF'
+""-x
+''-x
+"-"x
+'-'x
+"-x"""
+'-x'''
+""''-x
+''"-x"
+"-""x"
+""+n
+'+'n
+"+"n
+""--
+"-"-
+""-c
+"-"c
+""-o
+""--rcfile
+''+-emulate
+"-"\n
+"-\n"
+''\-x
+'\-x'
+"\-x"
+"-\"x"
+"-\\x"
+'-'\''x'
+"it's"x
+'say"hi"'x
+""-n
+"-"n
+"-n"''
+'-''n'
+""
+''
+''''
+"a"'b'"c"
+-x
++n
+plain
+a\ b
+'abc
+"abc
+'a'"b
+"a"'b
+'a'\
+"a\"
+'/tmp/pmo
+"it's
+'it"s
+""-x\
+"$NOPE7019"-x
+"${NOPE7019}"-x
+""$NOPE7019
+"-x"$NOPE7019
+"`true`"-x
+""$'-x'
+""$'a\'b'
+""$"-x"
+""$(true)
+""$(echo
+"$(echo
+'$NOPE7019'-x
+"\$NOPE7019"-x
+''\$x
+""--{norc,rcfile}
+""~
+""-x*
+QWORD_TOKENS_EOF
+
+qword_scan_compare() { # $1 = scanner source text; prints one verdict line
+  (
+    script_ws_complete=0; script_ws_exact=0; script_ws_out=""
+    eval "$1"
+    if ! type script_word_scan >/dev/null 2>&1; then /usr/bin/printf 'NO-SCANNER'; exit 0; fi
+    nx=0; nf=0; nu=0; sf="$(/usr/bin/mktemp)"
+    while IFS= read -r tok || [ -n "$tok" ]; do
+      [ -n "$tok" ] || continue
+      script_word_scan "$tok"
+      /usr/bin/printf "printf '%%s\\\\n' %s tail\n" "$tok" > "$sf"
+      got="$(/usr/bin/env -i PATH=/usr/bin:/bin /bin/bash "$sf" 2>/dev/null | /usr/bin/tr '\n' '|')"
+      if [ "$script_ws_complete" -eq 0 ]; then
+        nf=$((nf + 1))
+        case "$got" in
+          *"|tail|")
+            case "${got%|tail|}" in
+              *"|"*) ;;
+              *) /bin/rm -f "$sf"; /usr/bin/printf 'DISAGREE fragment-is-one-word %s' "$tok"; exit 0 ;;
+            esac
+            ;;
+        esac
+      elif [ "$script_ws_exact" -eq 1 ]; then
+        nx=$((nx + 1))
+        if [ "$got" != "${script_ws_out}|tail|" ]; then
+          /bin/rm -f "$sf"; /usr/bin/printf 'DISAGREE value %s' "$tok"; exit 0
+        fi
+      else
+        nu=$((nu + 1))
+      fi
+    done < "$QWORD_TOKFILE"
+    /bin/rm -f "$sf"
+    /usr/bin/printf 'agree exact=%s fragment=%s unknown=%s' "$nx" "$nf" "$nu"
+  )
+}
+
+QWORD_SCAN_SRC="$(/usr/bin/sed -n '/^script_word_scan() {/,/^}/p' "$HOOK")"
+qword_scan_verdict="$(qword_scan_compare "$QWORD_SCAN_SRC")"
+if [ "$qword_scan_verdict" = "agree exact=44 fragment=11 unknown=13" ]; then
+  /usr/bin/printf 'PASS: FWALK-QWORD-SCAN-01 the scanner agrees with /bin/bash over the token table (%s)\n' "$qword_scan_verdict"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QWORD-SCAN-01 the scanner and /bin/bash differ, or the table was classified differently — got: %s; want: agree exact=44 fragment=11 unknown=13\n' "$qword_scan_verdict"
+  FAIL=$((FAIL + 1))
+fi
+
+QWORD_SCAN_BROKEN="$(/usr/bin/printf '%s\n' "$QWORD_SCAN_SRC" | /usr/bin/sed 's|\*) out="${out}${bs}${t:1:1}" ;;|*) out="${out}${t:1:1}" ;;|')"
+qword_scan_verdict="$(qword_scan_compare "$QWORD_SCAN_BROKEN")"
+case "$qword_scan_verdict" in
+  "DISAGREE value "*)
+    /usr/bin/printf 'PASS: FWALK-QWORD-SCAN-02 [ctl] a scanner with the double-quote backslash rule broken is caught (%s)\n' "$qword_scan_verdict"
+    PASS=$((PASS + 1))
+    ;;
+  *)
+    /usr/bin/printf 'FAIL: FWALK-QWORD-SCAN-02 [ctl] a broken scanner was NOT caught — SCAN-01 cannot discriminate — got: %s\n' "$qword_scan_verdict"
+    FAIL=$((FAIL + 1))
+    ;;
+esac
+/bin/rm -f "$QWORD_TOKFILE"
+
 # WHY NO SYMMETRIC CLEAR IS SHIPPED, pinned so the proposal is not re-made. Dev testing
 # built the obvious remedy — revoke on the unresolvable break too — and measured it INERT.
-# This mutant IS that remedy, and QSPLIT-M1b shows the shape still ALLOWs under it, because
-# the allow originates in operand adjudication. Shipping it would add a fourth enumeration
-# and close nothing.
+# This mutant IS that remedy, and QSPLIT-M1b shows that a FRAGMENT behind a grant is still
+# ALLOWED under it, because the allow originates in operand adjudication. Shipping it
+# would add a fourth enumeration and close nothing. (The quote-closes-early family itself
+# no longer reaches that break: the walk reads a whole quote-led word through
+# script_walk_view, so M1b and M2b carry a fragment, the token that still does.)
 QSPLIT_MUTANT="$(dirname "$HOOK")/block-destructive.QSPLIT-mutant.sh"
 /usr/bin/sed 's|if \[ "$script_norm_ok" -eq 0 \]; then break; fi|if [ "$script_norm_ok" -eq 0 ]; then if [ "$script_verb" = "interp" ]; then script_noexec=0; fi; break; fi|' \
   "$HOOK" > "$QSPLIT_MUTANT"
@@ -4193,8 +4515,8 @@ else
   PASS=$((PASS + 1))
 fi
 
-sandbox_case "NOEXEC-QSPLIT-M1b: symmetric-clear mutant STILL ALLOWS bash -n \"\"+n <unlisted>.sh (the remedy is measurably inert)" \
-  "$QSPLIT_MUTANT" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
+sandbox_case "NOEXEC-QSPLIT-M1b: symmetric-clear mutant STILL ALLOWS a fragment behind a grant (the clear is inert for what still reaches that break)" \
+  "$QSPLIT_MUTANT" "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 0
 
 /bin/rm -f "$QSPLIT_MUTANT"
 
@@ -4215,8 +4537,8 @@ else
   PASS=$((PASS + 1))
 fi
 
-sandbox_case "NOEXEC-QSPLIT-M2b: the unresolvable-token break IS on the path of bash -n \"\"+n <unlisted>.sh (M1b is not vacuous)" \
-  "$QSPLIT_REACH" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0 "QSPLIT-REACH"
+sandbox_case "NOEXEC-QSPLIT-M2b: the first break IS on the path of that fragment (M1b is not vacuous)" \
+  "$QSPLIT_REACH" "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 0 "QSPLIT-REACH"
 
 qsplit_reach_err="$(/usr/bin/mktemp)"
 /usr/bin/printf '%s' "$(bash_payload "bash -n $PARSE_UNLISTED")" \
@@ -4923,6 +5245,12 @@ nsi_warn_case "FWALK-DOM-py must-flag: python3 +x <unlisted>.py is adjudicated (
 nsi_warn_case "FWALK-DOM-js must-flag: node +x <unlisted>.js is adjudicated (same re-point, second domain)" \
   "node +x $NSI_JS" 'not-allowlisted'
 
+# FWALK-QWORD on a phase-gated interpreter: the quoted flag is stepped over and the
+# operand reaches the interpreter arm's router. It sits here, not in block (7b),
+# because nsi_warn_case is defined above this point and not above that one.
+nsi_warn_case "FWALK-QWORD-py must-flag: python3 \"\"-u <unlisted>.py is adjudicated (the walk reads the quoted flag as -u)" \
+  "python3 \"\"-u $NSI_PY" 'not-allowlisted'
+
 # --- AC-1 CONTROL THAT MUST FIRE: an ALLOWLISTED operand writes NO row ---------
 # Without this, every arm above would pass against a router that logged
 # unconditionally and then allowed. The sandbox allowlist is appended to, the pair
@@ -5475,6 +5803,46 @@ if [ -z "$wc_open_bad" ]; then
   PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: WALKCORPUS-OPEN rows marked open that are not a recorded allow of an executing payload:%s\n' "$wc_open_bad"
+  FAIL=$((FAIL + 1))
+fi
+
+# WALKCORPUS-TWIN — a quoted row is never WEAKER than its unquoted twin. One-directional
+# on purpose: a quoted spelling may be stricter than its twin (a word whose value argv
+# does not determine takes the conservative route where its unquoted spelling is stepped
+# over), but it may never be allowed where the twin is refused or warned on, nor warned
+# where the twin is refused. Read on the OBSERVED verdicts, so it grades the hook in this
+# run and not the recorded column. Rows in an `open-` group are declared allows, left to
+# WALKCORPUS-OPEN.
+wc_twin_n=0
+wc_twin_bad=""
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  case "${WC_GROUP[$wc_i]}" in
+    open-*) ;;
+    *)
+      if [ "${WC_TWIN[$wc_i]}" != "-" ]; then
+        wc_twin_n=$((wc_twin_n + 1))
+        wc_tv=""
+        wc_j=0
+        while [ "$wc_j" -lt "$wc_n" ]; do
+          if [ "${WC_ID[$wc_j]}" = "${WC_TWIN[$wc_i]}" ]; then wc_tv="${WC_OBS[$wc_j]}"; break; fi
+          wc_j=$((wc_j + 1))
+        done
+        case "${WC_OBS[$wc_i]}" in a) wc_r1=0 ;; W) wc_r1=1 ;; B) wc_r1=2 ;; *) wc_r1=-1 ;; esac
+        case "$wc_tv" in a) wc_r2=0 ;; W) wc_r2=1 ;; B) wc_r2=2 ;; *) wc_r2=-1 ;; esac
+        if [ "$wc_r1" -lt 0 ] || [ "$wc_r2" -lt 0 ] || [ "$wc_r1" -lt "$wc_r2" ]; then
+          wc_twin_bad="${wc_twin_bad} ${WC_ID[$wc_i]}(${WC_OBS[$wc_i]}<${WC_TWIN[$wc_i]}:${wc_tv:-?})"
+        fi
+      fi
+      ;;
+  esac
+  wc_i=$((wc_i + 1))
+done
+if [ "$wc_twin_n" -gt 0 ] && [ -z "$wc_twin_bad" ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-TWIN all %s rows with an unquoted twin are at least as strict as it\n' "$wc_twin_n"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-TWIN rows weaker than their unquoted twin (row(observed<twin:observed)):%s\n' "${wc_twin_bad:- <no twin rows read>}"
   FAIL=$((FAIL + 1))
 fi
 

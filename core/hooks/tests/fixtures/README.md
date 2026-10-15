@@ -67,8 +67,10 @@ unexpanded. A command that needs a newline cannot be written in this format.
 
 **What the block-destructive reader asserts** (arms `WALKCORPUS-*`). The corpus resolves
 and its identity is printed; the hermetic hook is live; every row parses; each group's
-rows return their recorded verdicts; every `open-` row is still a recorded allow; and the
-suite's own operand-walk mutant (the `AC-D022` reversion) moves at least one recorded
+rows return their recorded verdicts; a quoted row is never weaker than its unquoted twin,
+on the verdicts observed in that run, outside the `open-` groups (a quoted spelling may
+be stricter than its twin, never looser); every `open-` row is still a recorded allow;
+and the suite's own operand-walk mutant (the `AC-D022` reversion) moves at least one recorded
 refusal to an allow, while still refusing others — the detector shown able to fire, and
 shown alive.
 

@@ -25,28 +25,28 @@
 # plain text to the guard: a PreToolUse hook sees argv unexpanded.
 
 # --- seed 1: the Stage-5 measurement corpus for the quote-closes-early family (304 rows) ---
-F01|block-destructive|fam-x|K07|X|a|bash ""-x @D@/na.sh
-F02|block-destructive|fam-x|K07|X|a|bash ''-x @D@/na.sh
-F03|block-destructive|fam-x|K07|X|a|bash "-"x @D@/na.sh
-F04|block-destructive|fam-x|K07|X|a|bash '-'x @D@/na.sh
-F05|block-destructive|fam-x|K07|X|a|bash "-x""" @D@/na.sh
-F06|block-destructive|fam-x|K07|X|a|bash '-x''' @D@/na.sh
-F07|block-destructive|fam-x|K07|X|a|bash ""''-x @D@/na.sh
-F08|block-destructive|fam-x|K07|X|a|bash ''"-x" @D@/na.sh
-F09|block-destructive|fam-x|K07|X|a|bash "-""x" @D@/na.sh
-F10|block-destructive|fam-x|K21|X|a|bash ""+x @D@/na.sh
-F11|block-destructive|fam-x|K21|X|a|bash '+'x @D@/na.sh
-F12|block-destructive|fam-x|T01|X|a|sh ""-x @D@/na.sh
-F13|block-destructive|fam-x|T02|X|a|zsh ''-x @D@/na.sh
-F14|block-destructive|fam-x|T03|X|a|bash ""-x ""-v @D@/na.sh
-F15|block-destructive|fam-x|T03|X|a|bash -x ""-v @D@/na.sh
-F16|block-destructive|fam-x|T03|X|a|bash ""-x -v @D@/na.sh
-F17|block-destructive|fam-x|K07|X|a|bash "-"\x @D@/na.sh
-F18|block-destructive|fam-x|K07|X|a|bash ''\-x @D@/na.sh
-F19|block-destructive|fam-x|K07|X|a|bash ""-x"" @D@/na.sh
-F20|block-destructive|fam-x|K07|X|a|bash '-''x' @D@/na.sh
-F21|block-destructive|fam-x|K07|X|a|bash "-"'x' @D@/na.sh
-F22|block-destructive|fam-x|K07|X|a|bash ""-"x" @D@/na.sh
+F01|block-destructive|fam-x|K07|X|B|bash ""-x @D@/na.sh
+F02|block-destructive|fam-x|K07|X|B|bash ''-x @D@/na.sh
+F03|block-destructive|fam-x|K07|X|B|bash "-"x @D@/na.sh
+F04|block-destructive|fam-x|K07|X|B|bash '-'x @D@/na.sh
+F05|block-destructive|fam-x|K07|X|B|bash "-x""" @D@/na.sh
+F06|block-destructive|fam-x|K07|X|B|bash '-x''' @D@/na.sh
+F07|block-destructive|fam-x|K07|X|B|bash ""''-x @D@/na.sh
+F08|block-destructive|fam-x|K07|X|B|bash ''"-x" @D@/na.sh
+F09|block-destructive|fam-x|K07|X|B|bash "-""x" @D@/na.sh
+F10|block-destructive|fam-x|K21|X|B|bash ""+x @D@/na.sh
+F11|block-destructive|fam-x|K21|X|B|bash '+'x @D@/na.sh
+F12|block-destructive|fam-x|T01|X|B|sh ""-x @D@/na.sh
+F13|block-destructive|fam-x|T02|X|B|zsh ''-x @D@/na.sh
+F14|block-destructive|fam-x|T03|X|B|bash ""-x ""-v @D@/na.sh
+F15|block-destructive|fam-x|T03|X|B|bash -x ""-v @D@/na.sh
+F16|block-destructive|fam-x|T03|X|B|bash ""-x -v @D@/na.sh
+F17|block-destructive|fam-x|K07|X|B|bash "-"\x @D@/na.sh
+F18|block-destructive|fam-x|K07|X|B|bash ''\-x @D@/na.sh
+F19|block-destructive|fam-x|K07|X|B|bash ""-x"" @D@/na.sh
+F20|block-destructive|fam-x|K07|X|B|bash '-''x' @D@/na.sh
+F21|block-destructive|fam-x|K07|X|B|bash "-"'x' @D@/na.sh
+F22|block-destructive|fam-x|K07|X|B|bash ""-"x" @D@/na.sh
 N01|block-destructive|near|K22|o|a|bash ""-x @D@/ok.sh
 N02|block-destructive|near|K22|o|a|bash ''-x @D@/ok.sh
 N03|block-destructive|near|K22|o|a|bash "-"x @D@/ok.sh
@@ -55,74 +55,74 @@ N05|block-destructive|near|T05|o|a|bash -n ""+n @D@/ok.sh
 N06|block-destructive|near|T06|o|a|sh ""-x @D@/ok.sh
 N07|block-destructive|near|T07|o|a|zsh ''-x @D@/ok.sh
 N08|block-destructive|near|T08|o|a|bash ""-x ""-v @D@/ok.sh
-P01|block-destructive|fam-n|K06|X|a|bash -n ""+n @D@/na.sh
-P02|block-destructive|fam-n|K06|X|a|bash -n ''+n @D@/na.sh
-P03|block-destructive|fam-n|K06|X|a|bash -n '+'n @D@/na.sh
-P04|block-destructive|fam-n|K06|X|a|bash -n "+"n @D@/na.sh
-P05|block-destructive|fam-n|T09|X|a|sh -n ""+n @D@/na.sh
-P06|block-destructive|fam-n|T10|X|a|zsh -n ''+n @D@/na.sh
-P07|block-destructive|fam-n|T11|X|a|bash -n ""+o noexec @D@/na.sh
-P08|block-destructive|fam-n|T12|X|a|zsh -n ""+-noexec @D@/na.sh
+P01|block-destructive|fam-n|K06|X|B|bash -n ""+n @D@/na.sh
+P02|block-destructive|fam-n|K06|X|B|bash -n ''+n @D@/na.sh
+P03|block-destructive|fam-n|K06|X|B|bash -n '+'n @D@/na.sh
+P04|block-destructive|fam-n|K06|X|B|bash -n "+"n @D@/na.sh
+P05|block-destructive|fam-n|T09|X|B|sh -n ""+n @D@/na.sh
+P06|block-destructive|fam-n|T10|X|B|zsh -n ''+n @D@/na.sh
+P07|block-destructive|fam-n|T11|X|B|bash -n ""+o noexec @D@/na.sh
+P08|block-destructive|fam-n|T12|X|B|zsh -n ""+-noexec @D@/na.sh
 Q01|block-destructive|twin-n|K05|-|a|bash "-"n @D@/na.sh
 Q02|block-destructive|twin-n|K05|-|a|bash ""-n @D@/na.sh
 Q03|block-destructive|twin-n|K05|-|a|bash '-'n @D@/na.sh
 Q04|block-destructive|twin-n|T13|-|a|bash -n "-"n @D@/na.sh
 Q05|block-destructive|twin-n|T14|-|a|bash +n "-"n @D@/na.sh
-Q06|block-destructive|twin-n|K06|X|a|bash "-"n +n @D@/na.sh
-Q07|block-destructive|twin-n|K06|X|a|bash "-"n ""+n @D@/na.sh
-Q08|block-destructive|twin-n|K16|-|a|bash -n ""-x @D@/na.sh
+Q06|block-destructive|twin-n|K06|X|B|bash "-"n +n @D@/na.sh
+Q07|block-destructive|twin-n|K06|X|B|bash "-"n ""+n @D@/na.sh
+Q08|block-destructive|twin-n|K16|-|B|bash -n ""-x @D@/na.sh
 Q09|block-destructive|twin-n|T15|-|a|bash ""-n ""+n ""-n @D@/na.sh
 Q10|block-destructive|twin-n|K05|-|a|bash "-"n"" @D@/na.sh
 Q11|block-destructive|twin-n|K05|-|a|bash "-n"'' @D@/na.sh
-Q12|block-destructive|twin-n|T49|-|a|bash ""-nx @D@/na.sh
-E01|block-destructive|ddash|T16|X|a|bash ""-- @D@/na.sh
-E02|block-destructive|ddash|T16|X|a|bash ''-- @D@/na.sh
-E03|block-destructive|ddash|T16|X|a|bash "-"- @D@/na.sh
+Q12|block-destructive|twin-n|T49|-|B|bash ""-nx @D@/na.sh
+E01|block-destructive|ddash|T16|X|B|bash ""-- @D@/na.sh
+E02|block-destructive|ddash|T16|X|B|bash ''-- @D@/na.sh
+E03|block-destructive|ddash|T16|X|B|bash "-"- @D@/na.sh
 E04|block-destructive|ddash|K14|w|a|bash ""-- @D@/wrap @D@/na.sh
 E05|block-destructive|ddash|T17|o|a|bash ""-- @D@/ok.sh
-C01|block-destructive|cmode|T18|X|a|bash ""-c 'bash @D@/na.sh'
-C02|block-destructive|cmode|T19|X|a|bash ''-c "bash @D@/na.sh"
-C03|block-destructive|cmode|T18|X|a|bash "-"c 'bash @D@/na.sh'
+C01|block-destructive|cmode|T18|X|B|bash ""-c 'bash @D@/na.sh'
+C02|block-destructive|cmode|T19|X|B|bash ''-c "bash @D@/na.sh"
+C03|block-destructive|cmode|T18|X|B|bash "-"c 'bash @D@/na.sh'
 C04|block-destructive|cmode|K03|-|a|bash ""-c 'echo a; echo b'
 C05|block-destructive|cmode|T20|o|a|bash ""-c 'bash @D@/ok.sh'
-C06|block-destructive|cmode|T21|X|a|bash ""-c @D@/na.sh
-A01|block-destructive|arity|T22|X|a|bash ""-o errexit @D@/na.sh
-A02|block-destructive|arity|T23|X|a|bash ''-O extglob @D@/na.sh
-A03|block-destructive|arity|T24|X|a|bash ""--rcfile @D@/ok.sh @D@/na.sh
-A04|block-destructive|arity|T25|o|a|bash ""--rcfile @D@/na.sh @D@/ok.sh
-A05|block-destructive|arity|T26|X|a|zsh ""--emulate -n @D@/na.sh
-A06|block-destructive|arity|T27|X|a|zsh ''+-emulate -n @D@/na.sh
+C06|block-destructive|cmode|T21|X|B|bash ""-c @D@/na.sh
+A01|block-destructive|arity|T22|X|B|bash ""-o errexit @D@/na.sh
+A02|block-destructive|arity|T23|X|B|bash ''-O extglob @D@/na.sh
+A03|block-destructive|arity|T24|X|B|bash ""--rcfile @D@/ok.sh @D@/na.sh
+A04|block-destructive|arity|T25|o|B|bash ""--rcfile @D@/na.sh @D@/ok.sh
+A05|block-destructive|arity|T26|X|B|zsh ""--emulate -n @D@/na.sh
+A06|block-destructive|arity|T27|X|B|zsh ''+-emulate -n @D@/na.sh
 A07|block-destructive|arity|T28|o|a|bash ""-o errexit @D@/ok.sh
-A08|block-destructive|arity|T29|-|a|bash -n ""-o errexit @D@/na.sh
-A09|block-destructive|arity|T24|X|a|bash "-"-rcfile @D@/ok.sh @D@/na.sh
-S01|block-destructive|source|T30|-|a|source ""-x @D@/na.sh
-S02|block-destructive|source|T31|-|a|. ''-x @D@/na.sh
+A08|block-destructive|arity|T29|-|B|bash -n ""-o errexit @D@/na.sh
+A09|block-destructive|arity|T24|X|B|bash "-"-rcfile @D@/ok.sh @D@/na.sh
+S01|block-destructive|source|T30|-|B|source ""-x @D@/na.sh
+S02|block-destructive|source|T31|-|B|. ''-x @D@/na.sh
 S03|block-destructive|source|T32|-|a|source ""-x @D@/ok.sh
-S04|block-destructive|source|T33|X|a|source ""-- @D@/na.sh
-S05|block-destructive|source|T34|X|a|. ""-- @D@/na.sh
-W01|block-destructive|prefix|T35|X|a|env bash ""-x @D@/na.sh
-W02|block-destructive|prefix|T36|X|a|FOO=1 bash ''-x @D@/na.sh
-W03|block-destructive|prefix|T37|X|a|"bash" ""-x @D@/na.sh
-W04|block-destructive|prefix|T38|X|a|/bin/bash ""-x @D@/na.sh
-W05|block-destructive|prefix|T39|?|a|sudo bash ""-x @D@/na.sh
-W06|block-destructive|prefix|T40|X|a|command bash "-"x @D@/na.sh
-H01|block-destructive|chain|T41|X|a|bash @D@/ok.sh; bash ""-x @D@/na.sh
-H02|block-destructive|chain|T42|X|a|echo hi && bash ''-x @D@/na.sh
+S04|block-destructive|source|T33|X|B|source ""-- @D@/na.sh
+S05|block-destructive|source|T34|X|B|. ""-- @D@/na.sh
+W01|block-destructive|prefix|T35|X|B|env bash ""-x @D@/na.sh
+W02|block-destructive|prefix|T36|X|B|FOO=1 bash ''-x @D@/na.sh
+W03|block-destructive|prefix|T37|X|B|"bash" ""-x @D@/na.sh
+W04|block-destructive|prefix|T38|X|B|/bin/bash ""-x @D@/na.sh
+W05|block-destructive|prefix|T39|?|B|sudo bash ""-x @D@/na.sh
+W06|block-destructive|prefix|T40|X|B|command bash "-"x @D@/na.sh
+H01|block-destructive|chain|T41|X|B|bash @D@/ok.sh; bash ""-x @D@/na.sh
+H02|block-destructive|chain|T42|X|B|echo hi && bash ''-x @D@/na.sh
 H03|block-destructive|chain|T43|o|a|bash ""-x @D@/ok.sh; echo done
-J01|block-destructive|nonshell|J06|X|a|python3 ""-u @D@/na.py
+J01|block-destructive|nonshell|J06|X|W|python3 ""-u @D@/na.py
 J02|block-destructive|nonshell|T44|o|a|python3 ''-B @D@/ok.py
-J03|block-destructive|nonshell|T45|X|a|perl ""-w @D@/na.pl
-J04|block-destructive|nonshell|T46|X|a|ruby ''-w @D@/na.rb
-J05|block-destructive|nonshell|T47|X|a|node ""--no-warnings @D@/na.js
+J03|block-destructive|nonshell|T45|X|W|perl ""-w @D@/na.pl
+J04|block-destructive|nonshell|T46|X|W|ruby ''-w @D@/na.rb
+J05|block-destructive|nonshell|T47|X|W|node ""--no-warnings @D@/na.js
 J06|block-destructive|nonshell|-|X|W|python3 -u @D@/na.py
-G01|block-destructive|expn|K07|X|a|bash "$NOPE7019"-x @D@/na.sh
-G02|block-destructive|expn|K06|X|a|bash -n "$NOPE7019"+n @D@/na.sh
-G03|block-destructive|expn|-|-|a|bash "$NOPE7019"-n @D@/na.sh
-G04|block-destructive|expn|K07|X|a|bash "`true`"-x @D@/na.sh
-G05|block-destructive|expn|K07|X|a|bash ""$'-x' @D@/na.sh
+G01|block-destructive|expn|K07|X|B|bash "$NOPE7019"-x @D@/na.sh
+G02|block-destructive|expn|K06|X|B|bash -n "$NOPE7019"+n @D@/na.sh
+G03|block-destructive|expn|-|-|B|bash "$NOPE7019"-n @D@/na.sh
+G04|block-destructive|expn|K07|X|B|bash "`true`"-x @D@/na.sh
+G05|block-destructive|expn|K07|X|B|bash ""$'-x' @D@/na.sh
 G06|block-destructive|expn|K22|o|a|bash "$NOPE7019"-x @D@/ok.sh
 G07|block-destructive|expn|-|-|B|bash "$NOPE7019"/na.sh
-G08|block-destructive|expn|T24|X|a|bash "$NOPE7019"--rcfile @D@/ok.sh @D@/na.sh
+G08|block-destructive|expn|T24|X|B|bash "$NOPE7019"--rcfile @D@/ok.sh @D@/na.sh
 I01|block-destructive|frag|-|-|a|bash '-x @D@/na.sh'
 I02|block-destructive|frag|-|-|a|bash "-x y" @D@/na.sh
 I03|block-destructive|frag|-|-|a|bash 'a b' @D@/na.sh
@@ -249,8 +249,8 @@ O26|block-destructive|fp|-|X|a|sh -ec "sh @D@/na.sh"
 O27|block-destructive|fp|-|X|a|zsh -ec 'zsh @D@/na.sh'
 O28|block-destructive|fp|-|X|a|X='a b' Y=1 sh @D@/na.sh
 O29|block-destructive|fp|-|o|a|bash -x -e -u -o pipefail @D@/ok.sh 'arg one'
-Y01|block-destructive|nonflag|K15|w|a|bash '@D@/wr'ap @D@/na.sh
-Y02|block-destructive|nonflag|K15|w|a|bash ''@D@/wrap @D@/na.sh
+Y01|block-destructive|nonflag|K15|w|B|bash '@D@/wr'ap @D@/na.sh
+Y02|block-destructive|nonflag|K15|w|B|bash ''@D@/wrap @D@/na.sh
 Y03|block-destructive|nonflag|T48|w|a|bash '@D@/wr'ap @D@/ok.sh
 V01|block-destructive|verb|-|X|a|'ba'sh @D@/na.sh
 V02|block-destructive|verb|-|X|a|""bash @D@/na.sh
@@ -262,42 +262,42 @@ U03|block-destructive|unq|-|X|B|bash -n $NOPE7019+n @D@/na.sh
 U04|block-destructive|unq|-|-|B|bash $NOPE7019-n @D@/na.sh
 U05|block-destructive|unq|-|o|a|bash $NOPE7019-x @D@/ok.sh
 U06|block-destructive|unq|-|X|B|bash $(echo -x) @D@/na.sh
-G11|block-destructive|expn2|U01|X|a|bash "$NOPE7019"-x @D@/na.sh
-G12|block-destructive|expn2|U02|X|a|bash "$NOPE7019"--rcfile @D@/ok.sh @D@/na.sh
-G13|block-destructive|expn2|U03|X|a|bash -n "$NOPE7019"+n @D@/na.sh
-G14|block-destructive|expn2|U04|-|a|bash "$NOPE7019"-n @D@/na.sh
+G11|block-destructive|expn2|U01|X|B|bash "$NOPE7019"-x @D@/na.sh
+G12|block-destructive|expn2|U02|X|B|bash "$NOPE7019"--rcfile @D@/ok.sh @D@/na.sh
+G13|block-destructive|expn2|U03|X|B|bash -n "$NOPE7019"+n @D@/na.sh
+G14|block-destructive|expn2|U04|-|B|bash "$NOPE7019"-n @D@/na.sh
 G15|block-destructive|expn2|U05|o|a|bash "$NOPE7019"-x @D@/ok.sh
-G16|block-destructive|expn2|U06|X|a|bash ""$(echo -x) @D@/na.sh
+G16|block-destructive|expn2|U06|X|B|bash ""$(echo -x) @D@/na.sh
 R01|block-destructive|resid|-|X|a|bash "$(echo -x)" @D@/na.sh
 R02|block-destructive|resid|-|o|a|bash "$(echo -x)" @D@/ok.sh
 R03|block-destructive|resid|-|X|a|bash -n "$(echo +n)" @D@/na.sh
 R04|block-destructive|resid|-|X|a|sh "$(echo -x)" @D@/na.sh
-L01|block-destructive|long|L06|X|a|bash ""-@LONGX@ @D@/na.sh
+L01|block-destructive|long|L06|X|B|bash ""-@LONGX@ @D@/na.sh
 L02|block-destructive|long|-|o|a|bash ""-@LONGX@ @D@/ok.sh
-L03|block-destructive|long|-|X|a|bash -n ""+@LONGN@ @D@/na.sh
+L03|block-destructive|long|-|X|B|bash -n ""+@LONGN@ @D@/na.sh
 L04|block-destructive|long|-|-|a|bash -c 'x=@LONGX@ ; echo done'
-L05|block-destructive|long|-|-|a|bash '@LONGX@ @D@/na.sh'
+L05|block-destructive|long|-|-|B|bash '@LONGX@ @D@/na.sh'
 L06|block-destructive|long|-|X|B|bash -@LONGX@ @D@/na.sh
-L07|block-destructive|long|L08|X|a|bash ""-@SHORTX@ @D@/na.sh
+L07|block-destructive|long|L08|X|B|bash ""-@SHORTX@ @D@/na.sh
 L08|block-destructive|long|-|X|B|bash -@SHORTX@ @D@/na.sh
 L09|block-destructive|long|-|o|a|bash ""-@SHORTX@ @D@/ok.sh
-L10|block-destructive|long|-|X|a|bash "$NOPE7019"-@LONGX@ @D@/na.sh
+L10|block-destructive|long|-|X|B|bash "$NOPE7019"-@LONGX@ @D@/na.sh
 M01|block-destructive|nonshell2|M02|-|a|python3 ""-c 'print(7019)'
 M02|block-destructive|nonshell2|-|-|a|python3 -c 'print(7019)'
 M03|block-destructive|nonshell2|M09|-|a|perl ""-e 'print 1'
 M04|block-destructive|nonshell2|M10|-|a|node ""-e 'console.log(1 + 1)'
-M05|block-destructive|nonshell2|M06|-|a|python3 ""-m json.tool @D@/na.py
+M05|block-destructive|nonshell2|M06|-|W|python3 ""-m json.tool @D@/na.py
 M06|block-destructive|nonshell2|-|-|W|python3 -m json.tool @D@/na.py
-M07|block-destructive|nonshell2|M08|-|a|python3 ""-c 'import os' @D@/na.py
+M07|block-destructive|nonshell2|M08|-|W|python3 ""-c 'import os' @D@/na.py
 M08|block-destructive|nonshell2|-|-|W|python3 -c 'import os' @D@/na.py
 M09|block-destructive|nonshell2|-|-|a|perl -e 'print 1'
 M10|block-destructive|nonshell2|-|-|a|node -e 'console.log(1 + 1)'
-H11|block-destructive|unk|H21|X|a|zsh "$NOPE7019"--emulate -n @D@/na.sh
-H12|block-destructive|unk|H22|X|a|bash "$NOPE7019"--rcfile -n @D@/na.sh
-H13|block-destructive|unk|H23|o|a|bash "$NOPE7019"-x @D@/ok.sh @D@/na.sh
-H14|block-destructive|unk|H24|-|a|bash -n "$NOPE7019"-x @D@/na.sh
-H15|block-destructive|unk|H25|X|a|python3 "$NOPE7019"-u @D@/na.py
-H16|block-destructive|unk|H26|w|a|bash "$HOME"/wrap @D@/na.sh
+H11|block-destructive|unk|H21|X|B|zsh "$NOPE7019"--emulate -n @D@/na.sh
+H12|block-destructive|unk|H22|X|B|bash "$NOPE7019"--rcfile -n @D@/na.sh
+H13|block-destructive|unk|H23|o|B|bash "$NOPE7019"-x @D@/ok.sh @D@/na.sh
+H14|block-destructive|unk|H24|-|B|bash -n "$NOPE7019"-x @D@/na.sh
+H15|block-destructive|unk|H25|X|W|python3 "$NOPE7019"-u @D@/na.py
+H16|block-destructive|unk|H26|w|B|bash "$HOME"/wrap @D@/na.sh
 H17|block-destructive|unk|H27|w|a|bash "$HOME"/wrap @D@/ok.sh
 H18|block-destructive|unk|-|w|a|bash "$HOME"/wrap
 H19|block-destructive|unk|-|o|a|bash "$NOPE7019"-x @D@/ok.sh --flag value
@@ -308,16 +308,16 @@ H24|block-destructive|unq2|-|-|B|bash -n $NOPE7019-x @D@/na.sh
 H25|block-destructive|unq2|-|X|W|python3 $NOPE7019-u @D@/na.py
 H26|block-destructive|unq2|-|w|B|bash "$HOME/wrap" @D@/na.sh
 H27|block-destructive|unq2|-|w|a|bash "$HOME/wrap" @D@/ok.sh
-H31|block-destructive|pad|-|X|a|zsh @QPAD@--emulate -n @D@/na.sh
-H32|block-destructive|pad|-|X|a|bash @QPAD@--rcfile @D@/ok.sh @D@/na.sh
+H31|block-destructive|pad|-|X|B|zsh @QPAD@--emulate -n @D@/na.sh
+H32|block-destructive|pad|-|X|B|bash @QPAD@--rcfile @D@/ok.sh @D@/na.sh
 H33|block-destructive|pad|-|o|a|bash @QPAD@-x @D@/ok.sh
-H34|block-destructive|pad|-|X|a|bash @QPAD@-x @D@/na.sh
-H35|block-destructive|pad|-|X|a|bash -n @QPAD@+n @D@/na.sh
-H36|block-destructive|pad|-|-|a|bash @QPAD@-n @D@/na.sh
-L21|block-destructive|long2|L22|X|a|bash ""-@MIDX@ @D@/na.sh
+H34|block-destructive|pad|-|X|B|bash @QPAD@-x @D@/na.sh
+H35|block-destructive|pad|-|X|B|bash -n @QPAD@+n @D@/na.sh
+H36|block-destructive|pad|-|-|B|bash @QPAD@-n @D@/na.sh
+L21|block-destructive|long2|L22|X|B|bash ""-@MIDX@ @D@/na.sh
 L22|block-destructive|long2|-|X|B|bash -@MIDX@ @D@/na.sh
 L23|block-destructive|long2|-|o|a|bash ""-@MIDX@ @D@/ok.sh
-L24|block-destructive|long2|L25|X|a|bash -n ""+@MIDN@ @D@/na.sh
+L24|block-destructive|long2|L25|X|B|bash -n ""+@MIDN@ @D@/na.sh
 L25|block-destructive|long2|-|X|B|bash -n +@MIDN@ @D@/na.sh
 R05|block-destructive|resid2|-|X|a|bash "$(echo @D@)/na.sh"
 R06|block-destructive|resid2|-|o|a|bash "$(echo @D@)/ok.sh"
@@ -346,23 +346,23 @@ CT12|block-destructive|claimed|-|-|B|bash "-"x.sh
 CT13|block-destructive|claimed|-|-|a|bash '-x.'sh
 CT14|block-destructive|claimed|-|-|a|bash -x.sh
 CT15|block-destructive|claimed|-|-|B|bash '@D@/na.sh'y @D@/na.sh
-CT16|block-destructive|claimed|-|-|a|bash ""-x '@D@/na.sh'y
+CT16|block-destructive|claimed|-|-|B|bash ""-x '@D@/na.sh'y
 
 # --- seed 3: a word of unknown value under source (14 rows) ---
-V11|block-destructive|srcunk|V19|X|a|source "$NOPE7019"-- @D@/na.sh
+V11|block-destructive|srcunk|V19|X|B|source "$NOPE7019"-- @D@/na.sh
 V12|block-destructive|srcunk|-|o|a|source "$NOPE7019"-- @D@/ok.sh
-V13|block-destructive|srcunk|V20|-|a|source "$NOPE7019"-p pmo-a:pmo-b @D@/na.sh
+V13|block-destructive|srcunk|V20|-|B|source "$NOPE7019"-p pmo-a:pmo-b @D@/na.sh
 V14|block-destructive|srcunk|-|-|a|source "$NOPE7019"-p pmo-a:pmo-b @D@/ok.sh
 V15|block-destructive|srcunk|-|-|a|source "$NOPE7019"-p pmo-a:pmo-b
-V16|block-destructive|srcunk|-|-|a|. "$NOPE7019"-x @D@/na.sh
-V17|block-destructive|srcunk|-|-|a|source "$NOPE7019"-- pmo-rel @D@/na.sh
-V18|block-destructive|srcunk|-|-|a|source "$NOPE7019"-a -b @D@/na.sh
+V16|block-destructive|srcunk|-|-|B|. "$NOPE7019"-x @D@/na.sh
+V17|block-destructive|srcunk|-|-|B|source "$NOPE7019"-- pmo-rel @D@/na.sh
+V18|block-destructive|srcunk|-|-|B|source "$NOPE7019"-a -b @D@/na.sh
 V19|block-destructive|srcunk|-|X|B|source $NOPE7019-- @D@/na.sh
 V20|block-destructive|srcunk|-|-|B|source $NOPE7019-p pmo-a:pmo-b @D@/na.sh
-V21|block-destructive|srcunk|-|-|a|source "$NOPE7019"/lib @D@/na.sh
+V21|block-destructive|srcunk|-|-|B|source "$NOPE7019"/lib @D@/na.sh
 V22|block-destructive|srcunk|-|-|B|source "$NOPE7019"/lib.sh
-V23|block-destructive|srcunk|-|-|a|source ""-p pmo-a:pmo-b @D@/na.sh
-V24|block-destructive|srcunk|-|-|a|bash "$NOPE7019"-p pmo-a:pmo-b @D@/na.sh
+V23|block-destructive|srcunk|-|-|B|source ""-p pmo-a:pmo-b @D@/na.sh
+V24|block-destructive|srcunk|-|-|B|bash "$NOPE7019"-p pmo-a:pmo-b @D@/na.sh
 
 # --- seed 4: rows from the adversarial design review and the option-parse design (41 rows) ---
 RA01|block-destructive|open-rawflag|T24|X|a|bash --rcfile"" @D@/ok.sh @D@/na.sh
@@ -393,16 +393,16 @@ RN32|block-destructive|rv-near|-|o|a|bash \--rcfile @D@/ok.sh @D@/ok.sh
 RN33|block-destructive|rv-near|-|o|a|bash -x"" @D@/ok.sh
 RN34|block-destructive|rv-near|-|o|a|bash \-x @D@/ok.sh
 RN35|block-destructive|rv-near|-|o|a|bash -e"" @D@/ok.sh @D@/na.sh
-RB01|block-destructive|rv-brace|RB02|X|a|bash ""--{norc,rcfile} @D@/ok.sh @D@/na.sh
+RB01|block-destructive|rv-brace|RB02|X|B|bash ""--{norc,rcfile} @D@/ok.sh @D@/na.sh
 RB02|block-destructive|open-rawflag|-|X|a|bash --{norc,rcfile} @D@/ok.sh @D@/na.sh
 RB03|block-destructive|rv-brace|-|o|a|bash ""--{norc,rcfile} @D@/ok.sh @D@/ok.sh
 RB04|block-destructive|open-rawflag|-|X|a|bash --{norc,rcfile} -n @D@/na.sh
-RB05|block-destructive|rv-brace|RB04|X|a|bash ""--{norc,rcfile} -n @D@/na.sh
+RB05|block-destructive|rv-brace|RB04|X|B|bash ""--{norc,rcfile} -n @D@/na.sh
 RB06|block-destructive|open-rawflag|-|X|a|bash --rcfil[e] @D@/ok.sh @D@/na.sh
-RB07|block-destructive|rv-brace|RB06|X|a|bash ""--rcfil[e] @D@/ok.sh @D@/na.sh
+RB07|block-destructive|rv-brace|RB06|X|B|bash ""--rcfil[e] @D@/ok.sh @D@/na.sh
 RB08|block-destructive|open-rawflag|-|X|a|bash --rcfil[e] -n @D@/na.sh
 RX50|block-destructive|open-grant|-|X|a|bash $(echo -n @D@/na.sh)
-RX52|block-destructive|rv-subst|RX50|X|a|bash ""$(echo -n @D@/na.sh)
+RX52|block-destructive|rv-subst|RX50|X|B|bash ""$(echo -n @D@/na.sh)
 RD01|block-destructive|rv-source|-|-|a|. "$HOME"/.cargo/env
 RD02|block-destructive|rv-source|-|-|a|source "$VAR"/bin/activate
 RD03|block-destructive|rv-source|-|o|a|source "$VAR"/bin/activate; bash @D@/ok.sh
