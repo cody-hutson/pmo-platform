@@ -406,10 +406,10 @@ Then return — do NOT close sub-task #{SUB_TASK_NUMBER}. Post your output comme
 - Discoveries outside scope → note in Recommendations.
 - Release plan prose that describes per-issue closure actions MUST use safe
   phrasing (`mark #N as closed at Stage 13`, not `close #N at Stage 13`) — the
-  release plan is transcribed into PR body Summary/Implementation sections at
-  Engineering, where GitHub's auto-close parser fires on close-family verbs +
-  `#N` regardless of section context. See Procedure 3 §PR Body Parser-Clean
-  Discipline.
+  release plan is transcribed into PR body Summary/Implementation sections and
+  quoted in commit messages at Engineering, and GitHub's auto-close parser
+  fires on close-family verbs + `#N` in both, regardless of section context.
+  See Procedure 3 § Close-Keyword Parser-Clean Discipline.
 ```
 
 ### D-Gate Template
@@ -980,56 +980,91 @@ This is the read-only sibling of the Worktree-discipline block above: where that
 
 **Cutover discipline:** Applies to all releases going forward.
 
-**PR Body Parser-Clean Discipline (engineering spokes):**
+**Close-Keyword Parser-Clean Discipline — PR title, PR body, commit messages (engineering spokes):**
 
-The `gh pr create` invocation submits a PR body that GitHub's auto-close parser scans
-lexically. Close-family verbs (`close`, `closes`, `closed`, `fix`, `fixes`, `fixed`,
-`resolve`, `resolves`, `resolved`) followed by `#N` trigger auto-close regardless of
-section context or surrounding negation. The PR body template
+GitHub's auto-close parser reads three inputs of a pull request lexically: its title, its
+body, and the message of every commit the merge brings onto the default branch.
+Close-family verbs (`close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`,
+`resolves`, `resolved`) followed by `#N` trigger auto-close in any of the three,
+regardless of section context or surrounding negation. The single statement of the rule
+is [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § PR Process
+step 5; this section is its projection into spoke prompts. The PR body template
 (`.github/PULL_REQUEST_TEMPLATE.md`) provides exactly one dedicated **Issue References**
-block at the bottom for these phrases; every other section uses safe phrasing.
+block at the bottom for these phrases. Every other body section, the PR title, and every
+commit message — which has no such block — use safe phrasing.
 
-Stage 6 chip prompts MUST instruct the spoke to run this self-check before
-`gh pr create`:
+Stage 6 chip prompts MUST instruct the spoke to run this two-arm self-check:
 
 ```bash
+# Arm 1 — commit messages. Before EVERY `git push`. Must exit 0.
+python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD
+
+# Arm 2 — PR body. Before `gh pr create`, and again after any body edit.
 grep -inE "(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved) +#?\[?[0-9]" \
   <pr-body-draft>
 ```
 
-Any match outside the dedicated Issue References block requires rewrite. Safe-phrasing
-replacements:
+A non-zero exit from Arm 1 requires rewording the commit message before the push. Any
+Arm 2 match outside the dedicated Issue References block requires rewrite. The spoke
+reports the result as one line in its sub-task output, so a skipped arm is visible:
+
+`Close-keyword self-check: commit arm exit 0 over <N> commits; body arm 0 matches outside Issue References`
+
+**Runner for the self-check itself: NONE — a registered named gap.** Nothing can observe
+whether a local check ran before a push; the gate-coverage register in
+[`core/standards/gate-efficacy-standard.md`](../../../core/standards/gate-efficacy-standard.md)
+records the gap, and the line above is its declared observable. What CI does catch is
+the consequence. Arm 1 is the same tool CI runs, as a step of the
+`Commit-message depersonalization gate` job, so a red result on that job has two possible
+causes — personal data in a commit message, or a close keyword in one — and the failed
+step's name and the run summary say which. A close keyword in the PR body is the
+`Close-keyword leak detection` job. Which of those block a merge, and on which pull
+requests, is recorded in the same register and is not restated here.
+
+Safe-phrasing replacements:
 - `close #N` / `closes #N` → `mark #N as closed` / `transition #N to closed` /
   `#N → Closed` / `Issue #N closes at Stage 13`
 - `fixes #N` → `addresses #N` / `corrects the regression in #N` (note: do not write
   `resolves #N`)
 - `resolves #N` → `completes the work on #N` / `wraps up the task in #N`
+- in a commit message, carry the work item as the trailing reference `(#N)`, or write
+  `the fix for #N` — and mind the typed prefix: a subject written `fix: #N …` is a
+  closing reference
 
 This discipline emerged from a PR (2026-05-03), where the Summary section
 correctly used `References ` per the D-Stage13Successor block-close protocol, but
 the test-plan section contained `Stage 13 Close: ... + close  + ...` — the parser
 matched the test-plan token and auto-closed  one second before the merge timestamp,
-preempting the operator-decision-style block-close ordering. Confirmed pattern:
-the PR-body close-keyword discipline (N=2 with prior-PR precedent on 2026-04-25).
+preempting the operator-decision-style block-close ordering. Confirmed pattern on the
+PR-body surface (N=2 with prior-PR precedent on 2026-04-25). It was widened to commit
+messages after a commit body on a release branch closed an issue three seconds after its
+release PR merged (2026-09-05) — a partitive phrase, with the PR body clean for that
+issue. A reading of the host's closing events then found the series behind it: 11
+commit-driven closures between 2026-06-19 and 2026-09-05, 7 of them through a pull
+request whose body declared no closure of that issue. Nine were a plain declaration line
+in a commit body; one was that partitive, and one a colon in the middle of a sentence
+(2026-09-02).
 
 For Stage 6 chips specifically, hub adds to `{ADDITIONAL_READS}`:
 - `6. .github/PULL_REQUEST_TEMPLATE.md (PR body skeleton — note the dedicated Issue References block)`
-- `7. release/references/how-to/hub-spoke-bridge.md § Procedure 3 §PR Body Parser-Clean Discipline (self-check command + safe-phrasing rules)`
+- `7. release/references/how-to/hub-spoke-bridge.md § Procedure 3 § Close-Keyword Parser-Clean Discipline (two-arm self-check + safe-phrasing rules)`
 
 The Spoke Template scope-control section gains an explicit bullet:
 
-- Before `gh pr create`, run the parser-clean self-check (per
-  `hub-spoke-bridge.md` Procedure 3 §PR Body Parser-Clean Discipline).
-  Any close-family verb + `#N` match outside the dedicated Issue References
-  block must be rewritten before PR creation.
+- Before every `git push`, and before `gh pr create`, run the close-keyword
+  parser-clean self-check (per `hub-spoke-bridge.md` Procedure 3
+  § Close-Keyword Parser-Clean Discipline). A close-family verb + `#N` in a commit
+  message, or in the PR body outside the dedicated Issue References block, must be
+  rewritten before the push or the PR creation.
 
 **Block-close protocol consumers** (D-Stage13Successor and any analogue D-decision that
 relies on manual closure timing at Stage 13) carry this as an explicit pre-condition:
-**"PR body must be parser-clean — close-family verbs + `#N` confined to the dedicated
-Issue References block."** Without parser-clean PR bodies, the auto-close fires at merge
-time and preempts the block-close protocol. This is the canonical pre-condition
-statement; future D-decision authors cite this section when their D-decision relies on
-manual closure timing.
+**"Every parser input of the release PR is parser-clean — close-family verbs + `#N`
+confined to the PR body's dedicated Issue References block; none in the title, none in
+any commit message on the branch."** Without that, the auto-close fires at merge time
+and preempts the block-close protocol. This is the canonical pre-condition statement;
+future D-decision authors cite this section when their D-decision relies on manual
+closure timing.
 
 **Repo-Integrity Authoring Discipline (ADR + content-modifying spokes):**
 
@@ -1039,7 +1074,7 @@ standards doc — has its changed files scanned by two PR-time gates in
 `repo-integrity.yml` (defined in [`core/rules/git-workflow.md` § Repository-Integrity
 Gates](../../../core/rules/git-workflow.md)): the **Issue-reference validity** gate
 and the **Depersonalization** gate. These are SEPARATE from, and broader than, the
-PR-body close-parser discipline above — they scan file *content*, not the PR body.
+close-keyword parser-clean discipline above — they scan file *content*, not the PR's title, body or commit messages.
 ADR files are the common tripwire because they carry `#N` in `source_observations:`
 frontmatter and `## Status` / `## Context` provenance prose — out-of-reference-block
 locations. The discipline (apply at authoring time, not after red CI):

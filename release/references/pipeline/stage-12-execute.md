@@ -162,7 +162,7 @@ gh pr merge <PR> --merge
 gh pr view <PR> --json state,mergeCommit
 ```
 
-Parser-clean PR body discipline applies per [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § PR Process. The Stage 12 chore PR does NOT auto-close any release issues — release-issue auto-close uses the release PR's standard auto-close keywords at Stage 12 Phase B1. Stage 12 chore PR bodies use safe phrasing throughout; the dedicated Issue References block is OPTIONAL and used only for cross-link traceability with safe phrasing (e.g., *"Cross-references: the codification ticket; D3 emit-format spec"*) rather than the standard auto-close keywords.
+The close-keyword parser-clean discipline applies per [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § PR Process, to all three inputs of this chore PR — its title, its body and its commit message. The fixed title and commit message in the example above carry no close-family verb and must not gain one. The Stage 12 chore PR does NOT auto-close any release issues — release-issue auto-close uses the release PR's standard auto-close keywords at Stage 12 Phase B1. Stage 12 chore PR bodies use safe phrasing throughout; the dedicated Issue References block is OPTIONAL and used only for cross-link traceability with safe phrasing (e.g., *"Cross-references: the codification ticket; D3 emit-format spec"*) rather than the standard auto-close keywords.
 
 Empirical motivation: a prior release's Stage 12 Finding F-1 (2026-05-15) — the hub-authored chip prompt implied direct-to-main commit; the spoke correctly self-repaired via the chore-PR pattern (precedents in earlier release PRs). A subsequent release PR (2026-05-16) is the canonical worked example of the Stage 12 chore PR shape codified here.
 
