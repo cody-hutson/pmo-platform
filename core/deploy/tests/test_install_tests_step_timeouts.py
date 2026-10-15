@@ -337,7 +337,10 @@ def live_arms(doc: dict, population, findings, floor: int):
     if stripped == 0:
         errors.append(("INDETERMINATE (PV-2)", "no bounded suite step exists to strip"))
     first_job = next(iter(doc["jobs"]))
-    ceiling = ceiling_of(doc["jobs"][first_job])
+    # The boundary is read from the job itself rather than through ceiling_of(), so a ceiling
+    # that stopped consulting the job's own limit would accept it and fail this arm.
+    job_limit = doc["jobs"][first_job].get("timeout-minutes")
+    ceiling = job_limit if positive_int(job_limit) and job_limit < HOST_JOB_LIMIT else HOST_JOB_LIMIT
     bad_values = (0, "5", True, ceiling)
     for bad in bad_values:
         mutated = copy.deepcopy(doc)
