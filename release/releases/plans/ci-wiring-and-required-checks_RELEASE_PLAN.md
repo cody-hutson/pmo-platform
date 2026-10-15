@@ -30,10 +30,10 @@ reversibility: MODERATE / Confidence HIGH — every card reverts CHEAP on the br
 | **Bump Class** | minor — the durable determination (D-Version: the members change rule and protocol text inside existing files and add checks; no member adds a skill or a governance file). Provisional display v4.75 (re-determined from v4.74, which the sibling `telemetry-is-computable` claimed); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-10-15 (Thursday) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) landed; cards 1–8 pending |
+| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) and card 1 (#7036) landed; cards 2–8 pending |
 | **Branch** | `release/ci-wiring-and-required-checks` |
 | **Branch base** | `origin/main` @ `201970851da959db01111ef155f2f96d6676bfeb` (`20197085`, the merge of the `v4.74` Stage-13 chore PR) |
-| **PR** | Draft, opened after Engineering Commit 0 (SINGLE topology); its number is recorded in the Commit-0 interim output on #8239 and written into this cell by #7036's plan-update commit; it transitions to ready-for-review at the Stage-9 gate |
+| **PR** | **#8305** — draft, opened after Engineering Commit 0 (SINGLE topology); it transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `ci-wiring-and-required-checks` (ms#396) |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-10-08, domain: software }`
@@ -774,14 +774,15 @@ N/A — enumerated over {event-log columns, the subtype enum, payload registries
 | **DEV-21** | **The sibling-merged-first reconcile.** `telemetry-is-computable` merged first (`ff3eecdf`), so this release reconciles one sentence of `release/references/standards/deployment-cycle-time.md` § 4 and refreshes the two embedded data-flow artifacts that sibling authored in that file (§ 2 and § 3.1; no separate artifact file was added — the sibling's merged diff adds 8 files, none an artifact) | #7491 scope-lock record (fold-in); carry-forward 6084324580 | **APPLIED** — § File Change Matrix |
 | **DEV-22** | **#6855 review (#8289) Minor findings:** P-2, F-2 and F-4 (folded); F-5 (folded through CR-25's reworded opening); C-2 (the rejected direction at full strength — recorded for the follow-on card, CR-3) | scope-lock record on #8267 | **RECORDED** |
 | **DEV-23** | **Lock condition 2(d) — the token.** "One runner-label token" reads as one token form in both passages: `**Runner: NONE — a registered named gap.**`, the form #6855's design grounded. #6855's third criterion's count therefore reads 2 once both passages land, as its scope-lock record states | lock condition 2(d); #6855 design (Evidence-Grounding) | **APPLIED** — § Verification Plan (#6855 AC-3) |
+| **DEV-24** | **`release/skills/release-hub/SKILL.md` — `CONDITIONAL:release-hub-version-bumped-in-sanctioned-session` — does not fire in card 1.** The sanctioned session's second edit is material by the effect test (it changes which Stage-12 mechanics the hub routes to the tail; `core/standards/version-field-semantics.md` § Bump Rules), but the release is pre-claim and no release tag exists to stamp, so `version:` stays `v4.46` and `SKILL.md` is unchanged. The bind to the claimed version is owed after the Stage-12 claim, the path the `v4.70` and `v4.72` close-outs took for skills edited pre-claim. The row stays in the CONDITIONAL block | `pmo-skill-editor` Mode A (#7036's sanctioned session) | **RECORDED** — the bind is a Stage-12/13 action item for the hub |
 
 ---
 
 ## Documentation Impact
 
-| Issue | Declared docs (the body's Documentation Impact field) | Status at Commit 0 | Lands in |
+| Issue | Declared docs (the body's Documentation Impact field) | Status | Lands in |
 |---|---|---|---|
-| #7036 | the discipline's name and scope — `core/rules/git-workflow.md`, `release/references/how-to/hub-spoke-bridge.md` and the downstream restatements | pending | card 1 |
+| #7036 | the discipline's name and scope — `core/rules/git-workflow.md`, `release/references/how-to/hub-spoke-bridge.md` and the downstream restatements | **UPDATED** — `d34fd634` (the rule, the bridge, the Stage-12 and Stage-13 specs, the personas, the operating model) and `09e346d1` (the release hub's playbook) | card 1 |
 | #7418 | None — no documentation impact (rationale: CI-internal guard and step timeouts; no K1 document describes them) | NONE | — |
 | #7423 | the graduation-form statement — home settled by the bounded revision (the generated rule fragment's rows do not fire; `core/standards/gate-efficacy-standard.md` § Flip-decision status) | pending (provisional) | card 3 or the late commit |
 | #6179 | `core/standards/gate-efficacy-standard.md` — the vocabulary's falsifiability against branch protection and the registration-disposition table | pending | the late commit |
@@ -799,17 +800,67 @@ N/A — enumerated over {event-log columns, the subtype enum, payload registries
 | Check | Result |
 |---|---|
 | **Commit-0 version half** | Both fetches exit 0; the adapter's dry-run recomputes **`v4.75`** for bump-class `minor` at `20197085`; the slot is free on the tag, Release and ledger arms (probe record above). **No HALT** |
-| **Commit-0 manifest half** | Recorded in the Commit-0 interim output on #8239 (run after this file was written and before it was committed) |
-| **CIAC lint** | Recorded in the Commit-0 interim output on #8239 |
+| **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp ci-wiring-and-required-checks` → exit 0, `verify-stamp OK` on a plan-only manifest, run after this file was written and before it was committed (control: a slug with no plan → exit 1, `NO PRE-CLAIM PLAN`); exactly one stamp placeholder, in the Header **Version** cell |
+| **CIAC lint** | `release/tools/verify-release-plan.sh --ciac-lint` → `CIAC-LINT-SUMMARY declared=2 parsed=2 clean=1 declared-deferral=1 flagged=0`, exit 0 |
 | **Baseline pin** | `4babbba9..20197085`: 61 commits, 39 files, 10 matrix paths (probe record in § Cross-PR Overlap Audit) |
 | **In-flight roster** | 1 sibling, `minor`, recomputing `v4.75`; EDITSET ∩ FCM = 12 paths |
 | **R-10 pre-flight** | PROCEED — § Commit-0 Version Re-Verify Record → pre-flight |
+| **Card 1 (#7036) — the tool** | `core/deploy/tools/check-commit-close-keywords.py` and its fixture transcribed from the design with both stated hashes reproduced (tool `0bb96087…`, 341 lines, 16,630 bytes; fixture `bdd7976a…`, 48 lines, 34 cases), then the printed remedy conditioned on single-writer state (review F-1 with ADR-052): post-edit `b94a00b1…`, 344 lines, 16,863 bytes, tracked `100755`. `--self-test` → 14/14 must-flag fired, 20/20 must-not-flag silent, the plumbing and degraded-read arms PASS |
+| **Card 1 — replays and range scans** | `--base '7f1d78ed^1' --head 7f1d78ed` → exit 1, 55 commits, 1 finding (`00cf9b2f36ba` line 25); `--base '438d5b38^' --head 438d5b38` → exit 1, 1 commit, 1 finding (line 18); an unreadable range → exit 3, NOT-EVALUATED. The pre-push arm over this branch read 0 findings before every push; the open sibling's range read 99 of 99 commits, 0 findings |
+| **Card 1 — the required job's first exercise** | On #8305 at head `d34fd634` the `Commit-message depersonalization gate` job ran the new step on the release head: self-test PASS on the hosted runner, `commits examined: 4`, `findings: 0`, `verdict: CLEAN`; job conclusion success |
+| **Card 1 — the old names** | Fixed-string scan of the seven old names over the seven files the design settled: 17 lines before the card, 0 after; the Gate-6 homonym in `stage-06-engineering.md` unchanged (1 line, the specificity arm). Over every tracked text file: 41 lines before, 28 after — release records (this file's own change specs among them), the PR-body workflow's own name, the Gate-6 criterion and the "parser-clean PR body" property phrase, and one test fixture; none of the 28 names the discipline |
+| **Card 1 — the sanctioned session** | `pmo-skill-editor` Mode A over `release/skills/release-hub/references/orchestration-playbook.md` (two edits, the commit's `Skill-Editor-Audit-Trail:` trailer); `build-skill-packages.sh --skills-for-paths` over the card's source paths names `release-hub` alone (control: `core/standards/regression-checks.md` → `pmo-skill-editor`); package rebuilt, its content baseline `13311b04…` → `2fb39226…`; `deploy.sh --check-package-freshness` → 55 of 55 rostered packages content-fresh; `SKILL.md` unchanged (DEV-24) |
+| **Card 1 — matrix conformance** | The card's diff from Commit 0 names 14 paths, equal to the 14 rows of its § File Change Matrix block (symmetric difference empty) |
+| **Card 1 — inventory and manifest** | `python3 release/tools/check-selftest-coverage.py --reconcile` → `ARM B PASSED` (78 paths), `ARM E PASSED` (46 of 46), `EXPECTED-RESIDUAL (exit 4)` — exit 1 is the failure |
+| **Card 1 — workflow lint** | local `actionlint` 1.7.12 with the CI ignore flag → exit 0; the job's `name:` and its `gate-efficacy:` declaration byte-identical to the base |
+| **Card 1 — links and budget** | `core/deploy/tools/check-doc-links.py --require-targets` over the seven edited documents → 0 findings (its `--self-test`: 11 fixtures passed); `core/deploy/tools/check-rules-budget.py` → `VERDICT WITHIN` |
+| **Card 1 — lock condition 2(c)** | `git rev-parse --local-env-vars` prints 15 names, every one prefixed `GIT_`; the self-test's throwaway repository drops every inherited `GIT_*` variable, a superset |
+| **Card 1 — `deploy.sh --check` (C4)** | Baseline taken at Commit 0 in this card's worktree with an isolated instance path: 2 FAIL lines (`release-body-drift`, 13 findings; `count-structure`, 5 locations, none in this card's files) and 175 WARN lines. The after-run at the card's final head, and its line-set comparison, are recorded in the card-1 output on #8239 |
 
 ---
 
 ## Change Description
 
-*Authored at Stage 6 Phase C1 per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol, started by card 1 and extended by each later card, before the Stage-9 draft→ready transition. Not authored at Commit 0: no card has landed, so there is no outcome to describe yet.*
+*Authored at Stage 6 Phase C1 per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol. Started by card 1 (#7036's Engineering spoke, sub-task #8239); each later card's Engineering spoke adds its row to § Issues resolved and extends the sub-sections its card changes, and the last Stage-6 run before the Stage-9 gate refreshes the whole section. Operator-facing.*
+
+### Outcome
+
+**Eight CI and pipeline controls are being taken from the instance first seen to the class they name** (§ Release Outcome Statement). **Landed so far — card 1 of 8: the close-keyword parser-clean discipline covers every input GitHub's auto-close parser reads.** The rule is stated once, in `core/rules/git-workflow.md`, for the PR title, the PR body and every commit message, and it is projected into the hub-spoke bridge, the Stage-12 and Stage-13 specs, the Engineering persona, the operating model and the release hub's playbook. The commit-message input is enforced: a new fixture-backed tool, `core/deploy/tools/check-commit-close-keywords.py`, runs as a step of the already-required `Commit-message depersonalization gate` job on release heads, so a release-branch commit message that pairs a close-family verb with an issue reference turns that required check red before the merge instead of closing the issue at it. The same tool is the pre-push check every Engineering spoke runs.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7036 | the discipline names the title, the body and every commit message; a commit-message pairing on a release head fails the required commit-message job; the tool reproduces both recorded closure shapes (the partitive, and the colon form the PR-body pattern cannot see) and reports an unreadable range as NOT-EVALUATED, never as clean | DONE at Stage 6 — Dev Testing and the Stage-8 acceptance review pending |
+
+Rows for the other seven cards are added by each card's Engineering spoke as it lands.
+
+### Key decisions
+
+- **D-2 option A** (Gate 1): the commit-message scan is folded into the already-required job — no new status context and no operator step — and the conditional new workflow is dropped (DEV-4).
+- **CR-6** — the scan runs on release heads only, as ratified; on any other head the rule is stated and not enforced, and the register row says so in terms.
+- **CR-7** — the gate enforces from its first run: its specificity was measured over the whole history first (22 of 22 firings true over 5,465 messages), which takes it outside ADR-135's ground for rejecting enforcement on day one.
+- **The scope-lock's fold-ins:** review P-1 (the recurrence is a series — 11 commit-driven closures, 7 of them undeclared — and the trap leads with the plain declaration line); review F-1 with ADR-052 (the rewrite remedy holds only while the branch has a single writer); lock condition 2(d) (one runner-label token shared with #6855's passage).
+- **CR-17** — the release hub's Stage-12 routing sentence names B4, the deploy, by role beside B1, B3 and B5 and points at the Stage-12 spec's Phase B4 for its form; edited in #7036's sanctioned `pmo-skill-editor` session.
+
+### Reversibility
+
+**CHEAP — HIGH confidence** for card 1: revert its commits and rebuild the `release-hub` package; reverting the workflow step alone restores the job to its one-property behaviour, and the rules mirror is re-laid by the next deploy. The release as a whole reads MODERATE (§ Rollback Strategy).
+
+### Downstream impact
+
+- From the commit that wired the step, the required commit-message job scans every commit message on this release head, so every later card's commits are held to the rule mechanically, not only by convention (edge E2).
+- Every other open release PR meets the step at its first pull-request event after this release merges. The one open sibling, `controls-fail-loud`, read clean during card 1 (99 of 99 commits at its head, 0 findings); the hub repeats that read immediately before the Stage-12 merge.
+- The gate-coverage register owes two rows for this card — the commit-message arm, and the named gap for the pre-push self-check — which land in the release-wide late register commit.
+- #6855's third criterion counts the runner-label token in `core/rules/git-workflow.md`; with this card's passage it reads 2 once #6855 lands (lock condition 2(d)).
+- The `release-hub` skill's `version:` field binds to the claimed release after the Stage-12 claim; its edit in this card is material and the release is pre-claim (DEV-24).
+
+### Cross-references
+
+- Release plan: this file — § Decision Record, § File Change Matrix, § Verification Plan, § Deviation Log.
+- Milestone: `ci-wiring-and-required-checks`.
+- Decision records: the Stage-4 records and the Collective Review scope-lock on #8160, and the per-card scope-lock records on the eight Stage-6 sub-tasks.
+- User-facing release notes: `release/releases/notes/vX.Y_RELEASE_NOTES.md`, authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`.
 
 ---
 
