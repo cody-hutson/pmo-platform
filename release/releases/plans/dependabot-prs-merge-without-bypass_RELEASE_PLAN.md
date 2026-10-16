@@ -8,9 +8,9 @@
 | **Bump Class** | minor — a new decision record plus a behavior change in a required CI gate. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
 | **Date Created** | 2026-10-16 (Friday) |
 | **Release Manager** | Agent-assisted |
-| **Status** | Executing |
+| **Status** | Executing — Stage 6 Engineering complete: Commit 0 (plan + decision record), the library and fixture suite (RED), Gate 1 (GREEN), and the documentation and label surfaces. Owed before Stage 9: the Phase A6.5 adversarial review and the Collective Review of the Stage-5 design |
 | **Branch** | release/dependabot-prs-merge-without-bypass |
-| **PR** | populated at Stage 6 |
+| **PR** | opened in **draft** immediately after the Stage-6 commits; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | dependabot-prs-merge-without-bypass |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-10-16, domain: software }`
@@ -220,9 +220,26 @@ The `dependabot` label is kept on rollback: harmless once declared. If it is dro
 
 N/A — enumerated over the pack-manifest schema, the label grammar and the workflow inputs; the pack row is additive inside an existing group, and no schema or grammar changes.
 
+## Deviation Log
+
+| # | Deviation | Source | Disposition |
+|---|---|---|---|
+| **DEV-1** | A third library function, `literal_set_verdict <is_canonical> <pattern-file>`, decides the empty-literal-set branch. The design named two functions and left D-3 inline in the workflow. Lifting it lets fixture arm (f) grade the D-3 failure as effect rather than as workflow text, which is D-4's own reason for extending the library | Stage 6, Tier 1 | **APPLIED** |
+| **DEV-2** | Gate 1 asserts, right after sourcing the library, that every decision it calls is defined, and fails closed otherwise. Each decision is read through `$(...)`, so a missing function would read as an empty verdict and fall through to a pass. The `literal_set_verdict` case also fails on an unrecognised token | Stage 6, Tier 1 | **APPLIED** |
+| **DEV-3** | The `dependabot` label description is 98 characters, not the design's longer text, because GitHub caps a label description at 100 and the parity gate compares descriptions exactly; the `.github/dependabot.yml` pointer lives in `applied_at` | Stage 6, Tier 1 | **APPLIED** |
+| **DEV-4** | Sub-task container: PR-body checklist rather than sub-issues (see § Delivery Strategy) | Stage 6, Tier 1 | **APPLIED** |
+| **DEV-5** | The bundle, the milestone and Stage 4 were authored directly, not through the Stage-3 and Stage-4 skills; Mode R readiness and the Parallelization Map were not run. The Phase A6.5 adversarial review and the Collective Review of the Stage-5 design remain owed before Stage 9 | Operator's single-issue-milestone choice, 2026-10-16 | **RECORDED** — owed |
+
 ## Verification Evidence
 
 (Populated after Stage 12 execution — see verification-checklist.md for format)
+
+**Stage 6 self-verification (pre-merge):**
+- Fixture suite: RED 50/56 at the library commit against the previous Gate 1 (the five call-shape bindings and the actor negative arm), GREEN 56/56 with the Gate 1 change; the pre-change baseline was 33/33. The new regexes were cross-checked under BSD grep: each binding matches the branch once and `origin/main` zero times; the actor negative arm reads branch 0, `origin/main` 2, fixture 2.
+- Local replay of Gate 1's run block (bash 3.2, with only the `mapfile` line shimmed): a bot's run with the identity set now BLOCKS an added handle and an added email, and passes clean content with a scan; a missing mirror and a missing human secret both fail loud; an opted-out fork passes empty; a library missing a function fails closed. The same replay of `origin/main`'s block passes the bot's handle and email additions, which is the silent pass the decision record names.
+- Bot-exemption restatement sweep: pre 7 / post 0 over the design's population.
+- `verify-release-plan.sh`: 7 PASS / 0 FAIL / 0 ERROR (AC-1 and AC-2 declared deferred; AC-3 and AC-4 UNRUNNABLE here, graded by the suite in CI).
+- `deploy.sh --check-required-subset`: all 4 load-bearing checks pass. `check-adr-numbers.py`: PASS. ADR durability lint on the new record with `--diff-base origin/main`: 0 findings. actionlint: the same 7 info-level findings as `origin/main`, none new. `check-label-parity.py`: `dependabot` MISSING (created by the operator after merge); the `dependencies` and `javascript` ORPHANs unchanged.
 
 ## Deployment Execution Log
 
@@ -240,4 +257,35 @@ N/A — enumerated over the pack-manifest schema, the label grammar and the work
 
 ## Change Description
 
-(Authored at PR creation.)
+### Outcome
+
+A Dependabot pull request now gets a real `Depersonalization gate` verdict on the bot's own run, with no maintainer push. The gate scans every run on the same literals, whoever started it: the handle comes from the repository owner, and the name and email from `OPERATOR_IDENTITY`, which the operator mirrors into the Dependabot secret store after merge. The silent pass behind the old red, where a bot's run scanned nothing, is gone: an empty literal set on canonical now fails.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8092 | Defects 2 and 3 plus the `SECURITY.md` reconciliation; defect 1 (AC-1, AC-2) stays with the required-checks release | PARTIAL — in-scope work DONE; AC-3 and AC-5 are confirmed live on the first Dependabot PR after the operator's two post-merge steps |
+
+### Key decisions (when applicable; omit this sub-section when no D-decisions were rendered)
+
+- **D-1:** option B, mirror the secret and delete the actor exemption (operator, 2026-10-16). The only option that gives a bot's run the human verdict and keeps a fail-loud arm on bot runs.
+- **D-2:** handle from the repository owner on every run, the resolution the ADR durability gate already uses.
+- **D-3:** an empty literal set on canonical fails; a fork keeps notice + pass.
+- **D-6:** create `dependabot` as a Provenance row (operator, 2026-10-16).
+
+### Reversibility
+
+**CHEAP — HIGH confidence.** Delete the Dependabot-store mirror first (`gh secret delete OPERATOR_IDENTITY --app dependabot`), then `git revert` the merge; the reverse order restores the exemption beside a present mirror, a silent pass on every Dependabot run. The live label is MODERATE once it has carriers.
+
+### Downstream impact
+
+- After merge, two operator steps, in this order and never before merge: `gh secret set OPERATOR_IDENTITY --app dependabot`, then the `gh label create` that `python3 core/deploy/tools/check-label-parity.py --emit-fix` renders. Then `./deploy.sh --deploy` refreshes the rules mirror.
+- The `Close-out automation smoke (macOS)` row in `SECURITY.md` is rewritten by whichever of this release and the required-checks release lands second.
+- Optional follow-up: a `deploy.sh --check` detector comparing the two secret stores (design D-5).
+
+### Cross-references
+
+- Release plan: this file, top section
+- Milestone: dependabot-prs-merge-without-bypass
+- Decision record: `{{ADR:depersonalization-gate-scans-bot-runs}}`
