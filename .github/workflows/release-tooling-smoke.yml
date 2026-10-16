@@ -1450,10 +1450,12 @@ jobs:
         # Arm F asserts that every invocation a pipeline spec PRESCRIBES is admitted by
         # the script-execution allowlist, adjudicated by the hook's own match rule rather
         # than by a row count. ITS SEVERITY IS PER FINDING, NOT PER ARM, and that is what
-        # makes "ADVISORY here" mechanically true rather than aspirational. It reports
-        # findings on arrival: most of what it names is a .py tool, and the allowlist's
-        # non-shell section is deliberately empty pending BLOCK-DESTRUCTIVE-022's drain,
-        # so those are unmatchable by construction rather than unregistered by oversight.
+        # makes "ADVISORY here" mechanically true rather than aspirational. It reported
+        # findings on arrival: most of what it named was a .py tool, while the allowlist's
+        # non-shell section was deliberately empty pending BLOCK-DESTRUCTIVE-022's drain.
+        # That section is now being filled from the drain and the prescribed .py tools
+        # hold rows; a finding in a suffix domain that still carries no row is
+        # unmatchable by construction rather than unregistered by oversight.
         # Those findings verdict EXPECTED-RESIDUAL and this job reports SUCCESS with a
         # warning. A finding that is remediable now — its suffix domain already carries
         # rows, or its operand is not on disk at all — verdicts BLOCKING and this job

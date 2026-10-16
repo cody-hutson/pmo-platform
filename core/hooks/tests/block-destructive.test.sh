@@ -1153,7 +1153,9 @@ test_case "BLOCK-022 prefix precision: flag-shaped =-bearing token does not adva
 # the invocation fell through to ALLOW with the allowlist never consulted. The
 # operation is identical to the bare form, so the verdict must be too.
 #
-# The set is a BOUNDED enumeration mirroring core/hooks/lib/command-position.awk.
+# The set is a BOUNDED enumeration, one of four lists of this vocabulary; they are not
+# one set, and the WRAPVOCAB-PARITY arms further down assert exactly how they differ. A
+# wrapper's own options are walked from its row; the WRAPOPT-* arms grade that.
 # Every must-flag case below is paired with the SAME wrapper spelling over an
 # ALLOWLISTED target, so an implementation that simply blocked anything carrying
 # a leading wrapper word would fail the controls rather than pass the suite.
@@ -1296,7 +1298,7 @@ test_case "BLOCK-022 wrapper precision: near-miss on a listed word does not adva
   "$(bash_payload 'sudoedit bash /tmp/evil.sh')" \
   0
 
-test_case "BLOCK-022 wrapper precision: wrapper flag terminates the walk" \
+test_case "BLOCK-022 wrapper precision: a describe-only wrapper option (command -v) executes nothing, so the segment is skipped" \
   "$(bash_payload 'command -v bash /tmp/evil.sh')" \
   0
 
@@ -1304,18 +1306,20 @@ test_case "BLOCK-022 wrapper precision: wrapper word off the segment head does n
   "$(bash_payload 'echo sudo bash /tmp/evil.sh')" \
   0
 
-# recorded residuals, asserted so the stated coverage boundary is measured rather
+# recorded residual, asserted so the stated coverage boundary is measured rather
 # than assumed. `eval` re-parses a program string this lexical matcher cannot
-# resolve; `timeout` carries an operand the walk would additionally have to
-# consume. Both are deliberately OUT of the bounded set. If either is ever added,
-# these two cases fail and the rule doc must be updated with them.
+# resolve, so it is deliberately OUT of the bounded set. If it is ever added, this
+# case fails and the rule doc must be updated with it. `timeout` used to be pinned
+# here beside it, for the duration operand the walk had no way to consume; its row
+# consumes that operand now, so the same payload is adjudicated and blocks
+# (WRAPOPT-row-timeout-* carry its other spellings).
 test_case "BLOCK-022 wrapper residual: eval is not a skipped prefix (allows)" \
   "$(bash_payload 'eval bash /tmp/evil.sh')" \
   0
 
-test_case "BLOCK-022 wrapper residual: timeout is not a skipped prefix (allows)" \
+test_case "BLOCK-022 wrapper: timeout before bash, its duration consumed by its row, non-allowlisted, blocks" \
   "$(bash_payload 'timeout 5 bash /tmp/evil.sh')" \
-  0
+  2 "BLOCK-DESTRUCTIVE-022"
 
 # false-positive controls -- the wrapper walk must not disturb the quoted-fragment
 # suppression that keeps DESCRIBED executions from being read as performed ones.
@@ -1504,9 +1508,21 @@ exec_notflag_case "T-EXEC-5 must-not-flag: allowlisted tool by direct execution 
 # fragments whose head token can contain `/` and end `.sh`. The arm is safe only
 # because it sits INSIDE the quoted-fragment suppression and is evaluated only
 # for segments at true command position. Hoist it above that block and this case
-# goes red -- which is the point of having it.
-exec_notflag_case "T-EXEC-6 must-not-flag: markdown table row with a backticked .sh path in a carrier argument" \
-  'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"'
+# goes red -- which is the point of having it (AC-ENCL-TEXEC6-pair shows it: with
+# the suppression switched off, this payload is recorded).
+#
+# RE-POINTED WHEN ENCLOSURE POSITIONS BECAME ADJUDICATED. The payload used to put
+# the code span's raw backticks inside the DOUBLE-quoted argument, where the shell
+# runs them as a command substitution: both real shells execute `./tmp/x.sh` for
+# that spelling, so "must not flag" asserted an allow on a real execution, and the
+# enclosure view now records it (T-EXEC-6b below). The table row is now
+# single-quoted, where the backticks are text and nothing runs, and the arm still
+# guards the suppression, as the paragraph above says.
+exec_notflag_case "T-EXEC-6 must-not-flag: markdown table row with a backticked .sh path in a carrier argument (single-quoted, so nothing runs)" \
+  "gh issue comment 1 --body '| step | \`./tmp/x.sh\` | run it |'"
+
+exec_warn_case "T-EXEC-6b must-flag: the same row double-quoted, where the shell runs the code span, is recorded from the position its backtick opens" \
+  'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"' 'not-allowlisted'
 
 # RETARGETED BY #6167, AND THE RETARGET IS THE POINT RATHER THAN A REPAIR. This arm
 # read `/usr/bin/python3 script.py` and asserted the EXEC arm does not flag it. That
@@ -2730,9 +2746,10 @@ test_case "AC-FP-2v control: parameter expansion carrying a substitution blocks"
   "$(bash_payload 'echo "${x:-$(cd /x; bash /tmp/evil.sh --f)}"')" \
   2 "BLOCK-DESTRUCTIVE-022"
 
-# (w) process substitution is valid only OUTSIDE quotes, so it lands at segment
-#     start state 0 and is adjudicated for a different reason. Pinning it anyway:
-#     the reason must stay true if the state model changes.
+# (w) process substitution. The `;` inside it starts a segment at state 0, and that
+#     is why this arm blocked before the enclosure view existed: the substitution
+#     itself opened no command position then. Pinning it anyway: the reason must
+#     stay true if the state model changes.
 test_case "AC-FP-2w control: process substitution blocks" \
   "$(bash_payload 'echo <(cd /x; bash /tmp/evil.sh --f)')" \
   2 "BLOCK-DESTRUCTIVE-022"
@@ -3935,8 +3952,10 @@ test_case "NOEXEC-CTL-03: bash -n +n <allowed> allowed (revoked, but the allowli
 # rather than as a bug: the cost of the revoke being unconditional for every token the
 # walk STEPS OVER. That scope is the whole guarantee, and stating it unscoped — "nothing
 # to omit on the revoke side" — is false: a token that ENDS the walk does not revoke, so
-# an earlier grant survives it. NOEXEC-QSPLIT-* below pins the one family where that is
-# live, and NOEXEC-ORD-* pins the line order the scope depends on.
+# an earlier grant survives it. NOEXEC-QSPLIT-* below now asserts the block for the
+# quote-closes-early family, which the walk reads as a whole word; the surviving-grant
+# case is a fragment, pinned as FWALK-QWORD-ctl-fragment-noexec, and NOEXEC-ORD-* pins
+# the line order the scope depends on.
 test_case "NOEXEC-R1: bash -n -x <unlisted>.sh blocks (declared over-block; unrecognised token revokes)" \
   "$(bash_payload "bash -n -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
@@ -4151,22 +4170,21 @@ noexec_doc_control "NOEXEC-DOC-03b" "NO-QUALIFIER" \
 noexec_doc_control "NOEXEC-DOC-03c" "NO-REVOKE-RULE" \
   's|by every later token the walk steps over|by every later token the walk hops over|'
 
-# --- (7) THE DECLARED RESIDUAL OF THAT SCOPE — leading quote closes early ---
-# A token whose leading quote closes early is marked unresolvable by
-# normalize_script_token, so it BREAKS the walk above the revoke and an earlier `-n`
-# grant survives. These pin the behaviour as it stands today so a future change to it is
-# visible rather than silent. They are NOT assertions that the behaviour is correct.
-#
-# INHERITED, NOT INTRODUCED: the same shapes ALLOW on `origin/main`, measured through this
-# harness against main's hook as a sibling. The shape that locates the cause carries no
-# `-n` at all — `bash ""-x <unlisted>.sh` allows on main and here alike — so the ALLOW
-# comes from the unresolvable-operand path, not from the noexec predicate.
-test_case "NOEXEC-QSPLIT-01: bash -n \"\"+n <unlisted>.sh ALLOWED (inherited; the token ends the walk, so the grant survives)" \
-  "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
-test_case "NOEXEC-QSPLIT-02: bash -n ''+n <unlisted>.sh ALLOWED (same family, single quotes)" \
-  "$(bash_payload "bash -n ''+n $PARSE_UNLISTED")" 0
-test_case "NOEXEC-QSPLIT-03: bash \"\"-x <unlisted>.sh ALLOWED (no -n anywhere — the cause is the operand path, not noexec)" \
-  "$(bash_payload "bash \"\"-x $PARSE_UNLISTED")" 0
+# --- (7) THE CLOSED FAMILY OF THAT SCOPE, AND THE FRAGMENT THAT REMAINS ---
+# A token whose leading quote closes early is declined by normalize_script_token. While
+# the walk read tokens only through that function it broke above the revoke, an earlier
+# `-n` grant survived, and the script behind the token was adjudicated by nothing; these
+# three arms pinned that ALLOW. The walk now reads such a token through script_walk_view,
+# which reads a token that opens with a quote and closes every quote it opens as its
+# unquoted spelling, so the three arms below assert the verdict of that spelling. What
+# still ends the walk above the revoke is a FRAGMENT — a token that leaves a quote open —
+# and that case is pinned in block (7b) as FWALK-QWORD-ctl-fragment-noexec.
+test_case "NOEXEC-QSPLIT-01: bash -n \"\"+n <unlisted>.sh BLOCKS (the quoted clear is read as +n and revokes the grant)" \
+  "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-QSPLIT-02: bash -n ''+n <unlisted>.sh BLOCKS (same word, single quotes)" \
+  "$(bash_payload "bash -n ''+n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-QSPLIT-03: bash \"\"-x <unlisted>.sh BLOCKS (no -n anywhere — the quoted flag is stepped over and the operand adjudicated)" \
+  "$(bash_payload "bash \"\"-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
 # CONTROLS THAT MUST FIRE. Without these the three arms above would read green against a
 # harness that had stopped blocking anything at all. Each is the unquoted twin of the
@@ -4176,11 +4194,340 @@ test_case "NOEXEC-QSPLIT-ctl-unquoted: bash -n +n <unlisted>.sh BLOCKS (the twin
 test_case "NOEXEC-QSPLIT-ctl-flag: bash -x <unlisted>.sh BLOCKS (the twin of QSPLIT-03)" \
   "$(bash_payload "bash -x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
+# --- (7b) THE WALK READS A WHOLE QUOTE-LED WORD AS ITS UNQUOTED SPELLING — FWALK-QWORD-* ---
+# The three QSPLIT arms above pinned an ALLOW until the flag walk began reading each
+# token the filename normalizer declines through script_walk_view. A token that opens
+# with a quote and closes every quote it opens is a WHOLE WORD, and the walk gives it the
+# verdict of its unquoted spelling. A token that leaves a quote open is a FRAGMENT and
+# still ends the walk. The arms below pin both directions. Every refusal in (a) and (b)
+# is an ALLOW on the pre-fix hook, which the revert mutant reproduces (FWALK-QWORD-M1*).
+# Every arm in (c) is refused by the deny mutant (FWALK-QWORD-M2*), which is what shows
+# that a must-allow arm can fail. A flag that begins with a sign or a backslash and
+# carries a quote is NOT this reading's subject and has no arm here: the option-parse
+# change on this walk closes that class, and its arms are the NOEXEC-TERM, FWALK-CLUSTER
+# and FWALK-OPAQUE blocks after the corpus reader.
+QWORD_WRAP="/tmp/pmo-qword-wrap"
+QWORD_LONG="$(/usr/bin/printf '%*s' 1100 '' | /usr/bin/tr ' ' 'x')"
+
+test_case "NOEXEC-QSPLIT-04: bash -n '+'n <unlisted>.sh BLOCKS (the quote closes inside the word; it is still +n)" \
+  "$(bash_payload "bash -n '+'n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-QSPLIT-05: bash \"-\"n +n <unlisted>.sh BLOCKS (a quoted grant is revoked by the clear behind it)" \
+  "$(bash_payload "bash \"-\"n +n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (a) MUST REFUSE — one arm per way a quoted word can sit in front of the operand.
+test_case "FWALK-QWORD-plus: bash \"\"+x <unlisted>.sh blocks (plus-form, quoted)" \
+  "$(bash_payload "bash \"\"+x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-sh: sh \"\"-x <unlisted>.sh blocks (second shell)" \
+  "$(bash_payload "sh \"\"-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-zsh: zsh ''-x <unlisted>.sh blocks (third shell, single quotes)" \
+  "$(bash_payload "zsh ''-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-ddash: bash \"\"-- <unlisted>.sh blocks (a quoted -- still hands over the operand)" \
+  "$(bash_payload "bash \"\"-- $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-cmode: bash \"\"-c 'bash <unlisted>.sh' blocks (a quoted -c still opens the program string)" \
+  "$(bash_payload "bash \"\"-c 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-arity: bash \"\"--rcfile <allowed> <unlisted>.sh blocks (a quoted option keeps its arity)" \
+  "$(bash_payload "bash \"\"--rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-emulate: zsh \"\"--emulate -n <unlisted>.sh blocks (the -n is the option's argument, not a grant)" \
+  "$(bash_payload "zsh \"\"--emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-source: source \"\"-- <unlisted>.sh blocks (the source arm walks the same loop)" \
+  "$(bash_payload "source \"\"-- $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-chain: bash <allowed>; bash \"\"-x <unlisted>.sh blocks (second segment)" \
+  "$(bash_payload "bash $ARITY_ALLOWED; bash \"\"-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-extless: bash '<dir>/wr'ap <unlisted>.sh blocks on the argument, as its twin F2-FWALK-CONSEQ-extless does (declared over-block)" \
+  "$(bash_payload "bash '/tmp/pmo-qword-wr'ap $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (b) A WHOLE WORD WHOSE VALUE ARGV DOES NOT DETERMINE — it carries an expansion, or
+# it is over the read limit. It is neither a flag this hook can read nor an operand it
+# can name. Under an interpreter the walk ends on the route -c takes: no parse-only
+# exemption, and every claimed token after it adjudicated. Under source, which has no
+# such route, it is stepped over and the walk keeps looking. PMO_QWORD_UNSET is never
+# set and never expanded.
+test_case "FWALK-QWORD-expansion: bash \"\$VAR\"-x <unlisted>.sh blocks" \
+  "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-expansion-n: bash -n \"\$VAR\"+n <unlisted>.sh blocks (an earlier grant does not survive it)" \
+  "$(bash_payload "bash -n \"\$PMO_QWORD_UNSET\"+n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-nogrant: bash \"\$VAR\"-n <unlisted>.sh blocks (declared over-block; an unknown value is never read as a grant)" \
+  "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-unknown-arity: zsh \"\$VAR\"--emulate -n <unlisted>.sh blocks (not read for arity, so the -n behind it cannot grant)" \
+  "$(bash_payload "zsh \"\$PMO_QWORD_UNSET\"--emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-unknown-optarg: bash \"\$VAR\"--rcfile <allowed> <unlisted>.sh blocks (an allowlisted argument does not hide the operand)" \
+  "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"--rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-limit: bash \"\"-<1,100 x> <unlisted>.sh blocks (over the read limit degrades toward adjudication)" \
+  "$(bash_payload "bash \"\"-${QWORD_LONG} $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-source-unknown: source \"\$VAR\"-- <unlisted>.sh blocks (stepped over; the operand is adjudicated)" \
+  "$(bash_payload "source \"\$PMO_QWORD_UNSET\"-- $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-QWORD-source-unknown-walk: source \"\$VAR\"-p <unclaimed> <unlisted>.sh blocks (under source the walk keeps looking; the -c label would stop one token on)" \
+  "$(bash_payload "source \"\$PMO_QWORD_UNSET\"-p pmo-qword-a:pmo-qword-b $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (c) MUST STAY ALLOWED. The first is the card's near miss. If any of these turns red
+# the fix has started refusing what it was required to admit.
+test_case "FWALK-QWORD-ctl-allow: bash \"\"-x <allowed>.sh allowed (THE NEAR MISS — the allowlist still governs)" \
+  "$(bash_payload "bash \"\"-x $ARITY_ALLOWED")" 0
+test_case "FWALK-QWORD-ctl-allow-n: bash -n \"\"+n <allowed>.sh allowed (revoked, and the allowlist still governs)" \
+  "$(bash_payload "bash -n \"\"+n $ARITY_ALLOWED")" 0
+test_case "FWALK-QWORD-grant: bash \"-\"n <unlisted>.sh allowed (the parse-only spelling, quoted — twin of NOEXEC-Q3)" \
+  "$(bash_payload "bash \"-\"n $PARSE_UNLISTED")" 0
+test_case "FWALK-QWORD-cmode-fp: bash \"\"-c 'echo a; echo b' allowed (twin of F1-FP-cmode)" \
+  "$(bash_payload "bash \"\"-c 'echo a; echo b'")" 0
+test_case "FWALK-QWORD-ddash-stop: bash \"\"-- <extensionless> <unlisted>.sh allowed (a quoted -- is the hard stop its twin is)" \
+  "$(bash_payload "bash \"\"-- $QWORD_WRAP $PARSE_UNLISTED")" 0
+test_case "FWALK-QWORD-expansion-allow: bash \"\$VAR\"-x <allowed>.sh allowed (the conservative route adjudicates; it does not deny)" \
+  "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $ARITY_ALLOWED")" 0
+test_case "FWALK-QWORD-limit-allow: bash \"\"-<1,100 x> <allowed>.sh allowed (same route, allowlisted operand)" \
+  "$(bash_payload "bash \"\"-${QWORD_LONG} $ARITY_ALLOWED")" 0
+test_case "FWALK-QWORD-ctl-cluster-fp: bash -ec 'echo a b' allowed (an ordinary program string behind a cluster: the cluster takes the -c route and nothing in the string is claimed)" \
+  "$(bash_payload "bash -ec 'echo a b'")" 0
+test_case "FWALK-QWORD-ctl-program-fp: perl -e 'print 1' allowed (a fragment behind a flag is not refused: a program string the walk still reads, since the cluster table leaves non-shell interpreters on its null)" \
+  "$(bash_payload "perl -e 'print 1'")" 0
+test_case "FWALK-QWORD-ctl-fragment-noexec (pin, not fix-evidence): bash -n '<path with spaces>.sh' allowed (a fragment still ends the walk and the grant survives)" \
+  "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 0
+
+# (d) A TOKEN A VIEW ALREADY PLACES IN THE OPERAND DOMAIN IS NOT RE-READ AS A WORD.
+# '<path>.sh'y is the word <path>.shy, which no suffix set claims — but the probe view
+# claims the token, and the pre-fix hook denies it as unresolvable. Reading it as a
+# word would step over it and move a BLOCK to ALLOW, the one direction this change may
+# not take. FWALK-QWORD-M3b is the mutant that does exactly that.
+test_case "FWALK-QWORD-ctl-claimed (pin, not fix-evidence): bash '<unlisted>.sh'y still blocks (a domain claim outranks the word reading)" \
+  "$(bash_payload "bash '${PARSE_UNLISTED}'y")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# RED-BEFORE, AS AN ARM. This mutant reverts the two call sites and nothing else, so
+# it IS the pre-fix walk with the new functions left in the file unused. M1a proves the
+# substitution matched exactly those two lines; M1b to M1e show the pre-fix ALLOW on
+# one payload per mechanism.
+QWORD_MUTANT="$(dirname "$HOOK")/block-destructive.QWORD-mutant.sh"
+/usr/bin/sed 's/script_walk_view "/normalize_script_token "/' "$HOOK" > "$QWORD_MUTANT"
+
+if [ "$(/usr/bin/diff "$HOOK" "$QWORD_MUTANT" | /usr/bin/grep -c '^<')" = "2" ]; then
+  /usr/bin/printf 'PASS: FWALK-QWORD-M1a revert mutation is live (exactly the two walk call sites differ)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QWORD-M1a revert mutation did not change exactly two lines — the M1 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-QWORD-M1b: the revert mutant ALLOWS bash \"\"-x <unlisted>.sh (the pre-fix verdict)" \
+  "$QWORD_MUTANT" "$(bash_payload "bash \"\"-x $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-QWORD-M1c: the revert mutant ALLOWS bash -n \"\"+n <unlisted>.sh" \
+  "$QWORD_MUTANT" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-QWORD-M1d: the revert mutant ALLOWS bash \"\"-c 'bash <unlisted>.sh'" \
+  "$QWORD_MUTANT" "$(bash_payload "bash \"\"-c 'bash $PARSE_UNLISTED'")" 0
+sandbox_case "FWALK-QWORD-M1e: the revert mutant ALLOWS bash \"\$VAR\"-x <unlisted>.sh" \
+  "$QWORD_MUTANT" "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$QWORD_MUTANT"
+
+# WHY THE WALK DOES NOT SIMPLY DENY, pinned so the proposal is not re-made. The
+# obvious remedy for this family is to refuse any token the normalizer declines and no
+# view claims. This mutant IS that remedy. It closes the family — and it refuses every
+# arm in (c) the walk reads, the card's own near miss first. M2b to M2j are those
+# refusals, each one matched on the mutant's own reason text so no other rule can
+# satisfy it. FWALK-QWORD-ctl-cluster-fp has no pair here: its cluster takes the `-c`
+# route before the walk reads the program string, so no deny at the walk reaches it, and
+# FWALK-CLUSTER-M2b is the deny mutant that refuses it. M2i reads the program string the
+# walk still reaches, behind a non-shell interpreter's `-e`.
+QWORD_DENY="$(dirname "$HOOK")/block-destructive.QWORD-deny.sh"
+/usr/bin/sed 's|^  script_word_scan "\$1"$|  if ! script_operand_implicated "$script_interp_domain"; then block "BLOCK-DESTRUCTIVE-022" "QWORD deny mutant" "test only"; fi; script_word_scan "$1"|' \
+  "$HOOK" > "$QWORD_DENY"
+
+if [ "$(/usr/bin/diff "$HOOK" "$QWORD_DENY" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-QWORD-M2a deny mutation is live (exactly one line of the view differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QWORD-M2a deny mutation did not change exactly one line — the M2 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-QWORD-M2b: the deny mutant REFUSES the near miss bash \"\"-x <allowed>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\"-x $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2c: the deny mutant REFUSES bash -n \"\"+n <allowed>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash -n \"\"+n $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2d: the deny mutant REFUSES the parse-only spelling bash \"-\"n <unlisted>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"-\"n $PARSE_UNLISTED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2e: the deny mutant REFUSES bash \"\"-c 'echo a; echo b'" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\"-c 'echo a; echo b'")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2f: the deny mutant REFUSES bash \"\"-- <extensionless> <unlisted>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\"-- $QWORD_WRAP $PARSE_UNLISTED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2g: the deny mutant REFUSES bash \"\$VAR\"-x <allowed>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2h: the deny mutant REFUSES bash \"\"-<1,100 x> <allowed>.sh" \
+  "$QWORD_DENY" "$(bash_payload "bash \"\"-${QWORD_LONG} $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+# Exit 2 under perl comes from the mutant calling `block` directly; a real perl refusal goes through the phase router (warn: exit 0).
+sandbox_case "FWALK-QWORD-M2i: the deny mutant REFUSES perl -e 'print 1' (a deny at the walk reaches ordinary program strings)" \
+  "$QWORD_DENY" "$(bash_payload "perl -e 'print 1'")" 2 "QWORD deny mutant"
+sandbox_case "FWALK-QWORD-M2j: the deny mutant REFUSES bash -n '<path with spaces>.sh'" \
+  "$QWORD_DENY" "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 2 "QWORD deny mutant"
+
+/bin/rm -f "$QWORD_DENY"
+
+# THE LINE THAT KEEPS THE CHANGE MONOTONE, proved load-bearing. Deleting the view's
+# claim test lets a claimed token be read as a word; the payload of
+# FWALK-QWORD-ctl-claimed then steps over its own operand and is allowed.
+QWORD_BLIND="$(dirname "$HOOK")/block-destructive.QWORD-blind.sh"
+/usr/bin/sed '/^  if script_operand_implicated "\$script_interp_domain"; then return 0; fi$/d' "$HOOK" > "$QWORD_BLIND"
+
+if [ "$(/usr/bin/diff "$HOOK" "$QWORD_BLIND" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-QWORD-M3a claim-blind mutation is live (exactly one line of the view is gone)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QWORD-M3a claim-blind mutation did not remove exactly one line — M3b is unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-QWORD-M3b: the claim-blind mutant ALLOWS bash '<unlisted>.sh'y (the BLOCK the shipped view keeps)" \
+  "$QWORD_BLIND" "$(bash_payload "bash '${PARSE_UNLISTED}'y")" 0
+
+/bin/rm -f "$QWORD_BLIND"
+
+# THE SCANNER AGAINST THE SHELL. script_word_scan is a second reader of shell quoting,
+# and a reader that drifts from the shell reads some token wrongly. SCAN-01 lifts the
+# function's text out of the hook and compares it with /bin/bash over a fixed table: a
+# token it calls a whole exact word must be ONE word with exactly that value, and a
+# token it calls a fragment must NOT be one word. A token it reports as of unknown
+# value is counted and not compared — "unknown" claims nothing a shell can contradict.
+# The three counts are asserted exactly, so a scanner that called everything unknown
+# could not pass. The last three tokens carry an unquoted brace, glob or tilde
+# character, which the shell rewrites after quote removal: a scanner that reports them
+# exact is caught here, because the brace word is two words to /bin/bash. SCAN-02 is the
+# control: the same comparison over a scanner with one quoting rule broken must name a
+# disagreement, or SCAN-01's agreement proves nothing.
+QWORD_TOKFILE="$(/usr/bin/mktemp)"
+/bin/cat > "$QWORD_TOKFILE" <<'QWORD_TOKENS_EOF'
+""-x
+''-x
+"-"x
+'-'x
+"-x"""
+'-x'''
+""''-x
+''"-x"
+"-""x"
+""+n
+'+'n
+"+"n
+""--
+"-"-
+""-c
+"-"c
+""-o
+""--rcfile
+''+-emulate
+"-"\n
+"-\n"
+''\-x
+'\-x'
+"\-x"
+"-\"x"
+"-\\x"
+'-'\''x'
+"it's"x
+'say"hi"'x
+""-n
+"-"n
+"-n"''
+'-''n'
+""
+''
+''''
+"a"'b'"c"
+-x
++n
+plain
+a\ b
+'abc
+"abc
+'a'"b
+"a"'b
+'a'\
+"a\"
+'/tmp/pmo
+"it's
+'it"s
+""-x\
+"$NOPE7019"-x
+"${NOPE7019}"-x
+""$NOPE7019
+"-x"$NOPE7019
+"`true`"-x
+""$'-x'
+""$'a\'b'
+""$"-x"
+""$(true)
+""$(echo
+"$(echo
+'$NOPE7019'-x
+"\$NOPE7019"-x
+''\$x
+""--{norc,rcfile}
+""~
+""-x*
+QWORD_TOKENS_EOF
+
+qword_scan_compare() { # $1 = scanner source text; prints one verdict line
+  (
+    script_ws_complete=0; script_ws_exact=0; script_ws_out=""
+    eval "$1"
+    if ! type script_word_scan >/dev/null 2>&1; then /usr/bin/printf 'NO-SCANNER'; exit 0; fi
+    nx=0; nf=0; nu=0; sf="$(/usr/bin/mktemp)"
+    while IFS= read -r tok || [ -n "$tok" ]; do
+      [ -n "$tok" ] || continue
+      script_word_scan "$tok"
+      /usr/bin/printf "printf '%%s\\\\n' %s tail\n" "$tok" > "$sf"
+      got="$(/usr/bin/env -i PATH=/usr/bin:/bin /bin/bash "$sf" 2>/dev/null | /usr/bin/tr '\n' '|')"
+      if [ "$script_ws_complete" -eq 0 ]; then
+        nf=$((nf + 1))
+        case "$got" in
+          *"|tail|")
+            case "${got%|tail|}" in
+              *"|"*) ;;
+              *) /bin/rm -f "$sf"; /usr/bin/printf 'DISAGREE fragment-is-one-word %s' "$tok"; exit 0 ;;
+            esac
+            ;;
+        esac
+      elif [ "$script_ws_exact" -eq 1 ]; then
+        nx=$((nx + 1))
+        if [ "$got" != "${script_ws_out}|tail|" ]; then
+          /bin/rm -f "$sf"; /usr/bin/printf 'DISAGREE value %s' "$tok"; exit 0
+        fi
+      else
+        nu=$((nu + 1))
+      fi
+    done < "$QWORD_TOKFILE"
+    /bin/rm -f "$sf"
+    /usr/bin/printf 'agree exact=%s fragment=%s unknown=%s' "$nx" "$nf" "$nu"
+  )
+}
+
+QWORD_SCAN_SRC="$(/usr/bin/sed -n '/^script_word_scan() {/,/^}/p' "$HOOK")"
+qword_scan_verdict="$(qword_scan_compare "$QWORD_SCAN_SRC")"
+if [ "$qword_scan_verdict" = "agree exact=44 fragment=11 unknown=13" ]; then
+  /usr/bin/printf 'PASS: FWALK-QWORD-SCAN-01 the scanner agrees with /bin/bash over the token table (%s)\n' "$qword_scan_verdict"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QWORD-SCAN-01 the scanner and /bin/bash differ, or the table was classified differently — got: %s; want: agree exact=44 fragment=11 unknown=13\n' "$qword_scan_verdict"
+  FAIL=$((FAIL + 1))
+fi
+
+QWORD_SCAN_BROKEN="$(/usr/bin/printf '%s\n' "$QWORD_SCAN_SRC" | /usr/bin/sed 's|\*) out="${out}${bs}${t:1:1}" ;;|*) out="${out}${t:1:1}" ;;|')"
+qword_scan_verdict="$(qword_scan_compare "$QWORD_SCAN_BROKEN")"
+case "$qword_scan_verdict" in
+  "DISAGREE value "*)
+    /usr/bin/printf 'PASS: FWALK-QWORD-SCAN-02 [ctl] a scanner with the double-quote backslash rule broken is caught (%s)\n' "$qword_scan_verdict"
+    PASS=$((PASS + 1))
+    ;;
+  *)
+    /usr/bin/printf 'FAIL: FWALK-QWORD-SCAN-02 [ctl] a broken scanner was NOT caught — SCAN-01 cannot discriminate — got: %s\n' "$qword_scan_verdict"
+    FAIL=$((FAIL + 1))
+    ;;
+esac
+/bin/rm -f "$QWORD_TOKFILE"
+
 # WHY NO SYMMETRIC CLEAR IS SHIPPED, pinned so the proposal is not re-made. Dev testing
 # built the obvious remedy — revoke on the unresolvable break too — and measured it INERT.
-# This mutant IS that remedy, and QSPLIT-M1b shows the shape still ALLOWs under it, because
-# the allow originates in operand adjudication. Shipping it would add a fourth enumeration
-# and close nothing.
+# This mutant IS that remedy, and QSPLIT-M1b shows that a FRAGMENT behind a grant is still
+# ALLOWED under it, because the allow originates in operand adjudication. Shipping it
+# would add a fourth enumeration and close nothing. (The quote-closes-early family itself
+# no longer reaches that break: the walk reads a whole quote-led word through
+# script_walk_view, so M1b and M2b carry a fragment, the token that still does.)
 QSPLIT_MUTANT="$(dirname "$HOOK")/block-destructive.QSPLIT-mutant.sh"
 /usr/bin/sed 's|if \[ "$script_norm_ok" -eq 0 \]; then break; fi|if [ "$script_norm_ok" -eq 0 ]; then if [ "$script_verb" = "interp" ]; then script_noexec=0; fi; break; fi|' \
   "$HOOK" > "$QSPLIT_MUTANT"
@@ -4193,8 +4540,8 @@ else
   PASS=$((PASS + 1))
 fi
 
-sandbox_case "NOEXEC-QSPLIT-M1b: symmetric-clear mutant STILL ALLOWS bash -n \"\"+n <unlisted>.sh (the remedy is measurably inert)" \
-  "$QSPLIT_MUTANT" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0
+sandbox_case "NOEXEC-QSPLIT-M1b: symmetric-clear mutant STILL ALLOWS a fragment behind a grant (the clear is inert for what still reaches that break)" \
+  "$QSPLIT_MUTANT" "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 0
 
 /bin/rm -f "$QSPLIT_MUTANT"
 
@@ -4215,8 +4562,8 @@ else
   PASS=$((PASS + 1))
 fi
 
-sandbox_case "NOEXEC-QSPLIT-M2b: the unresolvable-token break IS on the path of bash -n \"\"+n <unlisted>.sh (M1b is not vacuous)" \
-  "$QSPLIT_REACH" "$(bash_payload "bash -n \"\"+n $PARSE_UNLISTED")" 0 "QSPLIT-REACH"
+sandbox_case "NOEXEC-QSPLIT-M2b: the first break IS on the path of that fragment (M1b is not vacuous)" \
+  "$QSPLIT_REACH" "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 0 "QSPLIT-REACH"
 
 qsplit_reach_err="$(/usr/bin/mktemp)"
 /usr/bin/printf '%s' "$(bash_payload "bash -n $PARSE_UNLISTED")" \
@@ -4782,8 +5129,8 @@ test_case "HINT-05 [ctl]: the ABSOLUTE spelling of that same script is still ref
 # against the PRE-change hook, and it would keep passing if the widening were
 # reverted. The drain delta is what makes evaluation a necessary condition of green.
 #
-# WHY THE `arm` FIELD IS ASSERTED ON EVERY ROW. Two phase-gated arms now write to
-# one drain. Without the field their graduations are unapportionable — which is the
+# WHY THE `arm` FIELD IS ASSERTED ON EVERY ROW. Three phase-gated families now write
+# to one drain. Without the field their graduations are unapportionable — which is the
 # defect this card's own body reported against the 1,067 rows already collected.
 
 echo ""
@@ -4922,6 +5269,12 @@ nsi_warn_case "FWALK-DOM-py must-flag: python3 +x <unlisted>.py is adjudicated (
   "python3 +x $NSI_PY" 'not-allowlisted'
 nsi_warn_case "FWALK-DOM-js must-flag: node +x <unlisted>.js is adjudicated (same re-point, second domain)" \
   "node +x $NSI_JS" 'not-allowlisted'
+
+# FWALK-QWORD on a phase-gated interpreter: the quoted flag is stepped over and the
+# operand reaches the interpreter arm's router. It sits here, not in block (7b),
+# because nsi_warn_case is defined above this point and not above that one.
+nsi_warn_case "FWALK-QWORD-py must-flag: python3 \"\"-u <unlisted>.py is adjudicated (the walk reads the quoted flag as -u)" \
+  "python3 \"\"-u $NSI_PY" 'not-allowlisted'
 
 # --- AC-1 CONTROL THAT MUST FIRE: an ALLOWLISTED operand writes NO row ---------
 # Without this, every arm above would pass against a router that logged
@@ -5074,6 +5427,41 @@ nsi_warn_case "T-NSI-09b [flipped, was #6724-owned residual]: perl -I lib <unlis
 nsi_warn_case "T-NSI-09c [ctl]: the identical invocation without the flag IS adjudicated" \
   "python3 $NSI_PY" 'not-allowlisted'
 
+# --- NSI-ROW / NSI-F2 (#7026; the adversarial review's F-2, sub-task #8236): what the
+# first non-shell allowlist rows open ------------------------------------------------
+# The allowlist's non-shell section took its first rows on 2026-10-16, at the
+# graduation gate that kept this arm at `warn`: the tracked `.py` tools the drain
+# recorded. These arms read the REAL allowlist through the layout, so they bind the
+# rows, not a fixture.
+#
+# A ROW IS LIVE (NSI-ROW-01): the rowed tool alone is admitted silently — exit 0 and
+# no drain row, at every phase. It is also the sensitivity control for the two pins
+# below: were the row not matched, their lines would draw a row and fail.
+#
+# WHAT THE ROWS OPEN, PINNED AT ITS MEASURED VERDICT, NOT CLOSED. The walk stops at the
+# first token its operand domain claims, and the non-shell interpreters carry no arity
+# table, so an option's VALUE that is itself an allowlisted `.py` is taken as the
+# operand and admitted — and the script after it, the one the interpreter runs, is never
+# read (CPython accepts an unknown `-X` value and runs on). Before any `.py` row existed
+# the same line drew a would-fire row, for the option's value; now it allows with no
+# row. The verdict does not depend on the phase, so a graduation does not move these
+# pins; an arity table for these interpreters flips them deliberately instead of
+# drifting. A graduation of the interpreter arm owes this shape, and the readiness
+# fragment's decision sentence names it. Pinned for the two admitted interpreters whose
+# suffix domain holds rows; `perl`, `ruby` and `node` hold none yet, so the shape is
+# not open for them.
+NSI_ROWED_PY="core/deploy/tools/check-doc-links.py"
+exec_notflag_case "NSI-ROW-01 [ctl]: python3 <rowed>.py is admitted with no drain row — the first non-shell rows are live" \
+  "python3 $NSI_ROWED_PY"
+exec_notflag_case "NSI-F2-RESID-python3 [pin, declared residual]: python3 -X <rowed>.py <unlisted>.py allows with NO row — the script that runs is never read" \
+  "python3 -X $NSI_ROWED_PY $NSI_PY"
+exec_notflag_case "NSI-F2-RESID-python [pin, declared residual]: python -X <rowed>.py <unlisted>.py allows with NO row — the script that runs is never read" \
+  "python -X $NSI_ROWED_PY $NSI_PY"
+# CONTROL THAT MUST FIRE: the identical line with an UNROWED option value is still
+# recorded, so the pins measure the row and not a walk that stopped reading.
+nsi_warn_case "NSI-F2-ctl-unrowed [ctl]: python3 -X <unlisted>.py <unlisted>.py is still recorded" \
+  "python3 -X core/deploy/tools/no-such-tool-abc.py $NSI_PY" 'not-allowlisted'
+
 # --- AC-4 (RETARGETED): the phase gate is LOAD-BEARING, not decorative ---------
 # The original AC4 asserted a mode declaration this hook has never had — it is
 # MODE-INDEPENDENT and always-enforce. The mechanism it DOES have is the per-rule
@@ -5144,6 +5532,136 @@ case "$nsi_typo" in
     /usr/bin/printf 'FAIL: T-NSI-10e [ctl] an out-of-enum phase value did not fail closed, got %s\n' "$nsi_typo"; FAIL=$((FAIL + 1)) ;;
 esac
 
+# --- ROLLOUT-DOC-* (#7026, D-1): the readiness SOURCE and the generated index state
+# each phased arm's rollout constant in the form `DESTRUCTIVE_022_<FAM>_<NAME>` = value,
+# and every value they state is the hook's own ---------------------------------------
+# WHY THIS EXISTS. `DESTRUCTIVE_022_EXEC_ARMED` stood stale at 2026-08-24 for five weeks
+# while the hook carried 2026-09-03, because nothing compared the sentence to the
+# constant: the registry freshness check (build-hook-registry.py --check) compares two
+# copies of ONE claim and can never falsify it. These arms tie the sentence to the
+# constant it describes, read from the hook in the same run.
+#
+# BY AGREEMENT, NOT PRESENCE (the adversarial review's F-3, sub-task #8236). The scanner
+# reads EVERY `DESTRUCTIVE_022_<NAME>` = value occurrence and requires each to equal the
+# hook's value, so a STALE statement standing BESIDE a fresh one — the next shape this
+# defect takes — is caught (ROLLOUT-DOC-M2), where a presence check would pass. The scan
+# is family-agnostic, so DESTRUCTIVE_022_ENCL_ARMED is tied for free.
+#
+# FAILS CLOSED: a missing document reports MISSING and reddens; it never reads as
+# "nothing to check". NO PIPELINES ANYWHERE: one awk pass over the hook table and the
+# document, command-substitution capturing the whole result — never a writer piped into
+# a short-circuiting reader (the idiom the repo-integrity SIGPIPE gate matches by name).
+# The documents resolve by the same two-rung path the NOEXEC-DOC arms use
+# ($NOEXEC_DOC_FRAG / $NOEXEC_DOC_INDEX).
+rollout_doc_scan() {   # $1 = document -> "<scanned> <mismatch>", or MISSING
+  [ -f "$1" ] || { /usr/bin/printf 'MISSING'; return 0; }
+  /usr/bin/awk '
+    FNR==NR {
+      if ($0 ~ /^readonly DESTRUCTIVE_022_[A-Z_]+=/) {
+        rd_line = $0; sub(/^readonly /, "", rd_line)
+        rd_eq = index(rd_line, "=")
+        rd_nm = substr(rd_line, 1, rd_eq - 1)
+        rd_vv = substr(rd_line, rd_eq + 1)
+        gsub(/"/, "", rd_vv); sub(/[ \t].*$/, "", rd_vv)
+        rd_hook[rd_nm] = rd_vv
+      }
+      next
+    }
+    {
+      rd_s = $0
+      while (match(rd_s, /`DESTRUCTIVE_022_[A-Z_]+` = [A-Za-z0-9._-]+/)) {
+        rd_tok = substr(rd_s, RSTART, RLENGTH)
+        rd_s   = substr(rd_s, RSTART + RLENGTH)
+        rd_n   = split(rd_tok, rd_a, "`")
+        rd_name = rd_a[2]
+        rd_val  = rd_a[3]; sub(/^ = /, "", rd_val)
+        rd_scan++
+        if (!(rd_name in rd_hook))      { rd_mis++; next }
+        if (rd_hook[rd_name] != rd_val) { rd_mis++ }
+      }
+    }
+    END { printf "%d %d", rd_scan + 0, rd_mis + 0 }
+  ' "$HOOK" "$1"
+}
+
+rollout_doc_phased_present() {   # $1 = document -> count (0..4) of EXEC/INTERP PHASE+ARMED stated as ` = value`
+  [ -f "$1" ] || { /usr/bin/printf '0'; return 0; }
+  /usr/bin/awk '
+    index($0, "`DESTRUCTIVE_022_EXEC_PHASE` = ")   { rp_ep = 1 }
+    index($0, "`DESTRUCTIVE_022_EXEC_ARMED` = ")   { rp_ea = 1 }
+    index($0, "`DESTRUCTIVE_022_INTERP_PHASE` = ") { rp_ip = 1 }
+    index($0, "`DESTRUCTIVE_022_INTERP_ARMED` = ") { rp_ia = 1 }
+    END { printf "%d", rp_ep + rp_ea + rp_ip + rp_ia }
+  ' "$1"
+}
+
+rollout_doc_agree_arm() {   # $1 = arm id  $2 = label  $3 = document
+  local rd_r rd_scanned rd_mis
+  rd_r="$(rollout_doc_scan "$3")"
+  if [ "$rd_r" = "MISSING" ]; then
+    /usr/bin/printf 'FAIL: %s %s is MISSING — the tie cannot be read, and a documentation arm must never read as "nothing to check"\n  file=%s\n' "$1" "$2" "$3"
+    FAIL=$((FAIL + 1)); return 0
+  fi
+  rd_scanned="${rd_r% *}"; rd_mis="${rd_r#* }"
+  if [ "$rd_scanned" -gt 0 ] && [ "$rd_mis" -eq 0 ]; then
+    /usr/bin/printf 'PASS: %s %s — %s rollout-constant statement(s) read, all equal to the hook\n' "$1" "$2" "$rd_scanned"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s %s — %s statement(s) read, %s disagree with the hook (want scanned>0, mismatch=0)\n  file=%s\n' "$1" "$2" "$rd_scanned" "$rd_mis" "$3"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+rollout_doc_present_arm() {   # $1 = arm id  $2 = label  $3 = document
+  local rd_c; rd_c="$(rollout_doc_phased_present "$3")"
+  if [ "$rd_c" -eq 4 ]; then
+    /usr/bin/printf 'PASS: %s %s states all four phase-gated constants (EXEC/INTERP PHASE and ARMED) in the tied form\n' "$1" "$2"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s %s states %s of 4 phase-gated constants in the ` = value` form — a dropped statement is an untied constant\n  file=%s\n' "$1" "$2" "$rd_c" "$3"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+rollout_doc_agree_arm   "ROLLOUT-DOC-01" "readiness SOURCE" "$NOEXEC_DOC_FRAG"
+rollout_doc_agree_arm   "ROLLOUT-DOC-02" "generated index"  "$NOEXEC_DOC_INDEX"
+rollout_doc_present_arm "ROLLOUT-DOC-03" "readiness SOURCE" "$NOEXEC_DOC_FRAG"
+rollout_doc_present_arm "ROLLOUT-DOC-04" "generated index"  "$NOEXEC_DOC_INDEX"
+
+# RED-BEFORE CONTROLS — the scanner must be shown able to report a mismatch, or a clean
+# read proves nothing. Each mutates the SHIPPED source and asserts the mutant is LIVE
+# (differs) AND that the scan then reports a mismatch.
+rollout_doc_control() {   # $1 = arm id  $2 = description  $3 = sed script OR "append:<text>"
+  local rd_mut rd_r rd_mis
+  rd_mut="$(/usr/bin/mktemp)"
+  case "$3" in
+    append:*) /bin/cp "$NOEXEC_DOC_FRAG" "$rd_mut"; /usr/bin/printf '\n%s\n' "${3#append:}" >> "$rd_mut" ;;
+    *)        /usr/bin/sed "$3" "$NOEXEC_DOC_FRAG" > "$rd_mut" ;;
+  esac
+  if /usr/bin/cmp -s "$NOEXEC_DOC_FRAG" "$rd_mut"; then
+    /usr/bin/printf 'FAIL: %s mutation is INERT — mutant is byte-identical to the shipped source; re-point it\n' "$1"
+    FAIL=$((FAIL + 1)); /bin/rm -f "$rd_mut"; return 0
+  fi
+  rd_r="$(rollout_doc_scan "$rd_mut")"; /bin/rm -f "$rd_mut"
+  rd_mis="${rd_r#* }"
+  if [ "$rd_r" != "MISSING" ] && [ "$rd_mis" -gt 0 ]; then
+    /usr/bin/printf 'PASS: %s mutation is live AND the scan reports %s mismatch(es) (red-before control fires)\n' "$1" "$rd_mis"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s scanner did not report the planted drift (result=%s)\n' "$1" "$rd_r"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# (M1) a stated value changed to a wrong one — the drift the registry check cannot see.
+# Targets DESTRUCTIVE_022_EXEC_REVIEW_DAYS = 60, which the fragment carries in every state.
+rollout_doc_control "ROLLOUT-DOC-M1" "value changed" \
+  's|`DESTRUCTIVE_022_EXEC_REVIEW_DAYS` = 60|`DESTRUCTIVE_022_EXEC_REVIEW_DAYS` = 61|'
+# (M2) a STALE statement appended beside the fresh ones — F-3's shape, invisible to a
+# presence check. The retired 2026-08-24 arming date is the regression this arm exists for.
+rollout_doc_control "ROLLOUT-DOC-M2" "stale statement appended" \
+  'append:> A stray restatement left by a partial edit: `DESTRUCTIVE_022_EXEC_ARMED` = 2026-08-24 somewhere below the real one.'
+
 # --- AC-9: PAIRED MUTATION ARMS (REQUIRED) ------------------------------------
 # Three arms in this milestone's prior release read green while their mutation was
 # INERT, so each mutant is asserted to DIFFER from the shipped hook before anything
@@ -5207,6 +5725,2881 @@ else
   /usr/bin/printf 'FAIL: T-NSI-11e [ctl] mutant 2 stopped refusing the shell operand (rc=%s) — T-NSI-11d proves nothing\n' "$nsi_m2_sh_rc"; FAIL=$((FAIL + 1))
 fi
 /bin/rm -f "$NSI_MUT2"
+
+# ==========================================================================
+# WALKCORPUS-* — the tracked payload differential for the operand walk
+# ==========================================================================
+#
+# WHAT THIS IS. core/hooks/tests/fixtures/walk-payload-corpus.txt is the one committed
+# corpus that every change to this rule's token walk shares as its exit bar: no payload's
+# verdict may move from refused to allowed except as a declared precision improvement,
+# with the detector shown able to fire first. Each row records the verdict the hook
+# returns. This block runs every `block-destructive` row against the shipped hook and
+# fails a group whose rows return anything else, so the corpus diff of a change IS that
+# change's differential, and this block is what keeps the recorded column true. The row
+# format and the procedure for adding rows: core/hooks/tests/fixtures/README.md.
+#
+# HERMETIC, ON THE F2 BLOCK'S PATTERN AND FOR ITS REASON. The rows' allows turn on
+# allowlist membership, so this block owns its runtime: its own root, its own copy of
+# the hook and of the operand-walk mutant (the AC-D022 reversion, the same two sed
+# expressions), an allowlist naming exactly @D@/ok.sh and @D@/ok.py, its own .mode,
+# payload cwd inside the root, and PMO_SCOPE_GUARD_ROOT / CLAUDE_WORKSPACE_ROOT unset for
+# every run. WALKCORPUS-SCOPE asserts the copy is live before any verdict is read.
+#
+# THE CORPUS IS RESOLVED, NEVER ASSUMED, and an unresolved corpus is a FAIL rather than
+# an empty pass: (1) beside this file, the source-tree run; (2) the .source-repo-root
+# pointer setup-ci-layout.sh writes beside the materialized tests, the CI sandbox rung;
+# (3) the repository root above a default-site layout.
+#
+# A VERDICT IS READ FROM THE EXIT CODE AND THE DRAIN. Exit 2 is B. Exit 0 with a new row
+# in the hermetic drain is W, a would-fire at a rollout phase, whatever that phase prints.
+# Exit 0 with no new row is a. Anything else is reported as E<rc> and never matches.
+echo ""
+echo "BLOCK-022 walk-payload corpus (WALKCORPUS-*)"
+echo "---"
+
+WC_REL="core/hooks/tests/fixtures/walk-payload-corpus.txt"
+WC_FILE=""
+WC_RUNG=""
+wc_try() { # $1 = candidate file  $2 = rung label
+  if [ -z "$WC_FILE" ] && [ -n "$1" ] && [ -f "$1" ]; then WC_FILE="$1"; WC_RUNG="$2"; fi
+}
+wc_try "$(dirname "$0")/fixtures/walk-payload-corpus.txt" "beside the suite"
+wc_src_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  IFS= read -r wc_src_root < "$(dirname "$0")/.source-repo-root" || true
+fi
+if [ -n "$wc_src_root" ]; then wc_try "${wc_src_root}/${WC_REL}" ".source-repo-root pointer"; fi
+wc_up="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd -P)"
+if [ -n "$wc_up" ]; then wc_try "${wc_up}/${WC_REL}" "repository root above the layout"; fi
+
+# The rows this suite owns, loaded once into parallel arrays (bash 3.2: no associative
+# arrays). A row whose hook field names another guard is counted and left to that
+# guard's suite.
+WC_ID=(); WC_GROUP=(); WC_TWIN=(); WC_GT=(); WC_REC=(); WC_CMD=(); WC_OBS=()
+wc_total=0
+wc_other=0
+if [ -n "$WC_FILE" ]; then
+  while IFS='|' read -r f_id f_hook f_group f_twin f_gt f_rec f_cmd || [ -n "$f_id" ]; do
+    case "$f_id" in ''|'#'*) continue ;; esac
+    wc_total=$((wc_total + 1))
+    if [ "$f_hook" != "block-destructive" ]; then wc_other=$((wc_other + 1)); continue; fi
+    WC_ID+=("$f_id"); WC_GROUP+=("$f_group"); WC_TWIN+=("$f_twin")
+    WC_GT+=("$f_gt"); WC_REC+=("$f_rec"); WC_CMD+=("$f_cmd")
+  done < "$WC_FILE"
+fi
+wc_n=${#WC_ID[@]}
+
+# WALKCORPUS-00 — resolution and identity. The digest is the SHA-256 of the committed
+# file, printed here so every run's output carries the identity of the corpus it graded,
+# recomputable from the file itself (README.md beside the corpus).
+if [ -z "$WC_FILE" ]; then
+  /usr/bin/printf 'FAIL: WALKCORPUS-00 corpus UNRESOLVED — every rung missed (beside=%s pointer=%s root=%s); no row was graded\n' \
+    "$(dirname "$0")/fixtures" "${wc_src_root:-<none>}" "${wc_up:-<none>}"
+  FAIL=$((FAIL + 1))
+elif [ "$wc_n" -eq 0 ]; then
+  /usr/bin/printf 'FAIL: WALKCORPUS-00 corpus resolved via %s but carries no block-destructive row (%s rows in all)\n' "$WC_RUNG" "$wc_total"
+  FAIL=$((FAIL + 1))
+else
+  wc_digest="$(/usr/bin/shasum -a 256 "$WC_FILE")"
+  wc_digest="${wc_digest%% *}"
+  /usr/bin/printf 'PASS: WALKCORPUS-00 corpus resolved via %s: %s block-destructive rows of %s (%s for other guards), sha256 %s\n' \
+    "$WC_RUNG" "$wc_n" "$wc_total" "$wc_other" "$wc_digest"
+  PASS=$((PASS + 1))
+fi
+
+# WALKCORPUS-ROWS — every row is well formed: a unique id, a verdict and a ground-truth
+# class from their closed sets, a group, a command, and a twin that names a row of this
+# guard. A malformed row would otherwise grade as a mismatch, or not at all.
+wc_badrows=""
+wc_all_ids="|"
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  wc_all_ids="${wc_all_ids}${WC_ID[$wc_i]}|"
+  wc_i=$((wc_i + 1))
+done
+wc_seen_ids="|"
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  wc_why=""
+  case "${WC_REC[$wc_i]}" in a|B|W) ;; *) wc_why="${wc_why} verdict" ;; esac
+  case "${WC_GT[$wc_i]}" in X|o|w|e|s|-|'?') ;; *) wc_why="${wc_why} gt" ;; esac
+  [ -n "${WC_GROUP[$wc_i]}" ] || wc_why="${wc_why} group"
+  [ -n "${WC_CMD[$wc_i]}" ] || wc_why="${wc_why} command"
+  case "${WC_ID[$wc_i]}" in
+    *'|'*|'') wc_why="${wc_why} id" ;;
+  esac
+  case "$wc_seen_ids" in
+    *"|${WC_ID[$wc_i]}|"*) wc_why="${wc_why} duplicate-id" ;;
+  esac
+  wc_seen_ids="${wc_seen_ids}${WC_ID[$wc_i]}|"
+  if [ "${WC_TWIN[$wc_i]}" != "-" ]; then
+    case "$wc_all_ids" in
+      *"|${WC_TWIN[$wc_i]}|"*) ;;
+      *) wc_why="${wc_why} twin" ;;
+    esac
+  fi
+  if [ -n "$wc_why" ]; then wc_badrows="${wc_badrows} ${WC_ID[$wc_i]}(${wc_why# })"; fi
+  wc_i=$((wc_i + 1))
+done
+if [ "$wc_n" -gt 0 ] && [ -z "$wc_badrows" ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-ROWS all %s rows are well formed (unique ids, closed verdict and ground-truth sets, twins resolve)\n' "$wc_n"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-ROWS malformed rows:%s\n' "${wc_badrows:- <no rows read>}"
+  FAIL=$((FAIL + 1))
+fi
+
+# The hermetic runtime.
+WC_ROOT="$(/usr/bin/mktemp -d)"
+WC_HOOKS="${WC_ROOT}/.claude/hooks"
+/bin/mkdir -p "${WC_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${WC_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${WC_HOOKS}/lib/" 2>/dev/null || true
+WC_D="/tmp/pmo-walk-corpus"
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${WC_HOOKS}/.mode"
+/bin/cp "$HOOK" "${WC_HOOKS}/block-destructive.sh"
+/usr/bin/sed \
+  -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
+  -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
+  "$HOOK" > "${WC_HOOKS}/block-destructive-mut.sh"
+/bin/chmod +x "${WC_HOOKS}/block-destructive.sh" "${WC_HOOKS}/block-destructive-mut.sh"
+WC_DRAIN="${WC_HOOKS}/destructive-warn-log.jsonl"
+WC_LONGX="$(/usr/bin/printf '%*s' 4100 '' | /usr/bin/tr ' ' 'x')"
+WC_LONGN="$(/usr/bin/printf '%*s' 4100 '' | /usr/bin/tr ' ' 'n')"
+WC_SHORTX="$(/usr/bin/printf '%*s' 4000 '' | /usr/bin/tr ' ' 'x')"
+WC_MIDX="$(/usr/bin/printf '%*s' 1000 '' | /usr/bin/tr ' ' 'x')"
+WC_MIDN="$(/usr/bin/printf '%*s' 1000 '' | /usr/bin/tr ' ' 'n')"
+WC_QPAD="$(/usr/bin/printf '%*s' 2050 '' | /usr/bin/sed 's/ /""/g')"
+
+wc_drain_rows() {
+  if [ -f "$WC_DRAIN" ]; then
+    /usr/bin/wc -l < "$WC_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+WC_CMDX=""
+wc_expand() { # $1 = command template -> WC_CMDX
+  local c="$1"
+  c="${c//@D@/$WC_D}"
+  c="${c//@LONGX@/$WC_LONGX}"
+  c="${c//@LONGN@/$WC_LONGN}"
+  c="${c//@SHORTX@/$WC_SHORTX}"
+  c="${c//@MIDX@/$WC_MIDX}"
+  c="${c//@MIDN@/$WC_MIDN}"
+  c="${c//@QPAD@/$WC_QPAD}"
+  WC_CMDX="$c"
+}
+
+WC_V=""
+wc_run() { # $1 = hook file in the hermetic hooks dir  $2 = command -> WC_V
+  local rc=0 before after
+  before="$(wc_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$WC_ROOT")" \
+      | /bin/bash "${WC_HOOKS}/$1" >/dev/null 2>&1 ) || rc="$?"
+  after="$(wc_drain_rows)"
+  case "$rc" in
+    2) WC_V="B" ;;
+    0) if [ "$after" -gt "$before" ]; then WC_V="W"; else WC_V="a"; fi ;;
+    *) WC_V="E${rc}" ;;
+  esac
+}
+
+# WALKCORPUS-SCOPE — the hermetic copy is in scope and enforcing, shown by a rule this
+# change never touches. An inert copy would allow every row and grade every recorded
+# allow as a pass.
+wc_scope_rc=0
+wc_scope_err="$(/usr/bin/mktemp)"
+( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+  /usr/bin/printf '%s' "$(bash_payload 'git push --force origin main' "$WC_ROOT")" \
+    | /bin/bash "${WC_HOOKS}/block-destructive.sh" >/dev/null 2>"$wc_scope_err" ) || wc_scope_rc="$?"
+if [ "$wc_scope_rc" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' "$wc_scope_err"; then
+  /usr/bin/printf 'PASS: WALKCORPUS-SCOPE hermetic copy is in scope and enforcing (unrelated rule -001 fires), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-SCOPE hermetic copy is not live (exit=%s, expected 2 naming BLOCK-DESTRUCTIVE-001); the verdicts below are unusable\n' "$wc_scope_rc"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$wc_scope_err"
+
+# Every row through the shipped hook, once.
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  wc_expand "${WC_CMD[$wc_i]}"
+  wc_run block-destructive.sh "$WC_CMDX"
+  WC_OBS[$wc_i]="$WC_V"
+  wc_i=$((wc_i + 1))
+done
+
+# WALKCORPUS-REC-<group> — one arm per group: each row returns its recorded verdict. A
+# failure names every row that moved, as id(recorded->observed), on the FAIL line itself,
+# because the runner forwards only that line.
+WC_GROUPS=()
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  wc_seen=0
+  for wc_g in ${WC_GROUPS[@]+"${WC_GROUPS[@]}"}; do
+    if [ "$wc_g" = "${WC_GROUP[$wc_i]}" ]; then wc_seen=1; fi
+  done
+  if [ "$wc_seen" -eq 0 ]; then WC_GROUPS+=("${WC_GROUP[$wc_i]}"); fi
+  wc_i=$((wc_i + 1))
+done
+for wc_g in ${WC_GROUPS[@]+"${WC_GROUPS[@]}"}; do
+  wc_rows=0
+  wc_moved=""
+  wc_i=0
+  while [ "$wc_i" -lt "$wc_n" ]; do
+    if [ "${WC_GROUP[$wc_i]}" = "$wc_g" ]; then
+      wc_rows=$((wc_rows + 1))
+      if [ "${WC_OBS[$wc_i]}" != "${WC_REC[$wc_i]}" ]; then
+        wc_moved="${wc_moved} ${WC_ID[$wc_i]}(${WC_REC[$wc_i]}->${WC_OBS[$wc_i]})"
+      fi
+    fi
+    wc_i=$((wc_i + 1))
+  done
+  if [ -z "$wc_moved" ]; then
+    /usr/bin/printf 'PASS: WALKCORPUS-REC-%s %s rows return their recorded verdicts\n' "$wc_g" "$wc_rows"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: WALKCORPUS-REC-%s rows moved from their recorded verdicts:%s\n' "$wc_g" "$wc_moved"
+    FAIL=$((FAIL + 1))
+  fi
+done
+
+# WALKCORPUS-OPEN — a row in an `open-` group records an execution the guard allows
+# today. It must stay a recorded allow of an executing payload: the change that closes it
+# moves its verdict AND drops the prefix, so a refused row still marked open is a
+# half-applied closure and fails here.
+wc_open=0
+wc_open_bad=""
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  case "${WC_GROUP[$wc_i]}" in
+    open-*)
+      wc_open=$((wc_open + 1))
+      if [ "${WC_REC[$wc_i]}" != "a" ] || [ "${WC_GT[$wc_i]}" != "X" ]; then
+        wc_open_bad="${wc_open_bad} ${WC_ID[$wc_i]}(${WC_REC[$wc_i]},gt=${WC_GT[$wc_i]})"
+      fi
+      ;;
+  esac
+  wc_i=$((wc_i + 1))
+done
+if [ -z "$wc_open_bad" ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-OPEN %s rows declared open, each a recorded allow of an executing payload\n' "$wc_open"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-OPEN rows marked open that are not a recorded allow of an executing payload:%s\n' "$wc_open_bad"
+  FAIL=$((FAIL + 1))
+fi
+
+# WALKCORPUS-TWIN — a quoted row is never WEAKER than its unquoted twin. One-directional
+# on purpose: a quoted spelling may be stricter than its twin (a word whose value argv
+# does not determine takes the conservative route where its unquoted spelling is stepped
+# over), but it may never be allowed where the twin is refused or warned on, nor warned
+# where the twin is refused. Read on the OBSERVED verdicts, so it grades the hook in this
+# run and not the recorded column. Rows in an `open-` group are declared allows, left to
+# WALKCORPUS-OPEN.
+wc_twin_n=0
+wc_twin_bad=""
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  case "${WC_GROUP[$wc_i]}" in
+    open-*) ;;
+    *)
+      if [ "${WC_TWIN[$wc_i]}" != "-" ]; then
+        wc_twin_n=$((wc_twin_n + 1))
+        wc_tv=""
+        wc_j=0
+        while [ "$wc_j" -lt "$wc_n" ]; do
+          if [ "${WC_ID[$wc_j]}" = "${WC_TWIN[$wc_i]}" ]; then wc_tv="${WC_OBS[$wc_j]}"; break; fi
+          wc_j=$((wc_j + 1))
+        done
+        case "${WC_OBS[$wc_i]}" in a) wc_r1=0 ;; W) wc_r1=1 ;; B) wc_r1=2 ;; *) wc_r1=-1 ;; esac
+        case "$wc_tv" in a) wc_r2=0 ;; W) wc_r2=1 ;; B) wc_r2=2 ;; *) wc_r2=-1 ;; esac
+        if [ "$wc_r1" -lt 0 ] || [ "$wc_r2" -lt 0 ] || [ "$wc_r1" -lt "$wc_r2" ]; then
+          wc_twin_bad="${wc_twin_bad} ${WC_ID[$wc_i]}(${WC_OBS[$wc_i]}<${WC_TWIN[$wc_i]}:${wc_tv:-?})"
+        fi
+      fi
+      ;;
+  esac
+  wc_i=$((wc_i + 1))
+done
+if [ "$wc_twin_n" -gt 0 ] && [ -z "$wc_twin_bad" ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-TWIN all %s rows with an unquoted twin are at least as strict as it\n' "$wc_twin_n"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-TWIN rows weaker than their unquoted twin (row(observed<twin:observed)):%s\n' "${wc_twin_bad:- <no twin rows read>}"
+  FAIL=$((FAIL + 1))
+fi
+
+# WALKCORPUS-DET-* — the detector, shown able to fire and shown alive. The same rows
+# through the operand-walk mutant (the walk reverted to its dash-anchored form): every row
+# recorded B or W is run, and the mutant must ALLOW at least one of them (the detector
+# fires) while still refusing or warning on at least one (it is a live hook, not a dead
+# copy that allows everything). A zero in the corpus's own comparison above is read only
+# after this pair is green.
+wc_det_fires=0
+wc_det_alive=0
+wc_i=0
+while [ "$wc_i" -lt "$wc_n" ]; do
+  case "${WC_REC[$wc_i]}" in
+    B|W)
+      wc_expand "${WC_CMD[$wc_i]}"
+      wc_run block-destructive-mut.sh "$WC_CMDX"
+      case "$WC_V" in
+        a) wc_det_fires=$((wc_det_fires + 1)) ;;
+        B|W) wc_det_alive=$((wc_det_alive + 1)) ;;
+      esac
+      ;;
+  esac
+  wc_i=$((wc_i + 1))
+done
+if [ "$wc_det_fires" -gt 0 ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-DET-fires the operand-walk mutant moves %s recorded refusals or warnings to an allow (the detector fires)\n' "$wc_det_fires"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-DET-fires the operand-walk mutant moved no recorded refusal to an allow; the comparison above cannot be read as clean\n'
+  FAIL=$((FAIL + 1))
+fi
+if [ "$wc_det_alive" -gt 0 ]; then
+  /usr/bin/printf 'PASS: WALKCORPUS-DET-alive the same mutant still refuses or warns on %s recorded rows (a live hook, not a dead copy)\n' "$wc_det_alive"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WALKCORPUS-DET-alive the mutant refused nothing; its allows above prove nothing\n'
+  FAIL=$((FAIL + 1))
+fi
+
+# The runner forwards RESIDUAL lines from a green run and discards the PASS lines, so
+# the corpus identity and what a green corpus does not speak for are stated here, where
+# every run's output carries them.
+/usr/bin/printf 'RESIDUAL: WALKCORPUS graded %s block-destructive rows of the corpus at sha256 %s (resolved via %s); %s of them are declared open — allowed executions a later change owns — and a green corpus speaks only for the rows it carries. The operand-walk mutant moved %s recorded refusals or warnings to an allow.\n' \
+  "$wc_n" "${wc_digest:-unresolved}" "${WC_RUNG:-no rung}" "$wc_open" "$wc_det_fires"
+
+/bin/rm -rf "$WC_ROOT"
+
+echo ""
+echo "BLOCK-022 parse-only: where the option run ends (NOEXEC-TERM-* / STDIN-*)"
+echo "---"
+# SUBJECT. The parse-only exemption is granted by a bare `-n`, and the walk that grants
+# it keeps looking past every token the operand domain does not claim. So it granted on
+# a `-n` the interpreter never read as a flag: one that sits AFTER the first non-option
+# argument, where it is a positional parameter; or one that is the ARGUMENT of an option
+# whose text is not its value (`--rcfile""`, `--rcfile$X`), which the arity table is
+# asked about by its text and does not find. The first kind runs stdin, or a script the
+# operand domain does not claim, with the guard reading "parse-only". The second
+# EXECUTES the script behind the `-n`.
+#
+# Every arm in (1) is a BLOCK at the commit that predates the parse-only exemption and
+# an ALLOW on the hook as it stood before this change. The revert mutant
+# NOEXEC-TERM-M1* reproduces that ALLOW in this same run.
+TERM_WRAP="/tmp/pmo-term-wrapper"
+
+# (1a) A `-n` AFTER THE OPTION RUN HAS ENDED. Measured against the real shells: zsh's
+# `-O` and `+O` take no argument, so `extglob` is the first non-option argument and the
+# `-n` behind it is a positional parameter. Under `-s` the shell then runs its stdin;
+# without `-s` it runs the word as a script. bash and sh take `extglob` as the argument
+# of `-O`, so their arms put the word directly after `-s`.
+test_case "NOEXEC-TERM-01: zsh -s -O extglob -n <unlisted>.sh blocks (the card's shape: -n is a positional, stdin executes)" \
+  "$(bash_payload "zsh -s -O extglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-02: zsh -s +O extglob -n <unlisted>.sh blocks (the card's second shape)" \
+  "$(bash_payload "zsh -s +O extglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-03: bash -s extglob -n <unlisted>.sh blocks (the same class under bash)" \
+  "$(bash_payload "bash -s extglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-04: sh -s extglob -n <unlisted>.sh blocks (the same class under sh)" \
+  "$(bash_payload "sh -s extglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-05: zsh -O extglob -n <unlisted>.sh blocks (no stdin mode: the word is the script zsh runs)" \
+  "$(bash_payload "zsh -O extglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-06: bash <wrapper> -n <unlisted>.sh blocks (twin of F2-FWALK-CONSEQ-extless: a -n behind the wrapper is the wrapper's argument)" \
+  "$(bash_payload "bash $TERM_WRAP -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-13: bash - -n <unlisted>.sh blocks (a lone dash ends option reading; the -n behind it is not a flag)" \
+  "$(bash_payload "bash - -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-14: zsh - -n <unlisted>.sh blocks (the same under zsh)" \
+  "$(bash_payload "zsh - -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (1b) A `-n` BEHIND A TOKEN THE WALK CANNOT READ. THESE EXECUTE THE SCRIPT. In 07 to 17
+# each spelling is `--rcfile` or `--emulate` to the shell, which takes the `-n` as the
+# option's argument; the arity table is asked about the text and has no row for it. In
+# 18 the `-n` belongs to the command inside the substitution and the interpreter never
+# sees it. PMO_TERM_UNSET is never set and never expanded here.
+test_case "NOEXEC-TERM-07: bash --rcfile\"\" -n <unlisted>.sh blocks (an empty quoted string inside the option; -n is the rcfile NAME)" \
+  "$(bash_payload "bash --rcfile\"\" -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-08: bash --rc\\file -n <unlisted>.sh blocks (a backslash inside the option)" \
+  "$(bash_payload "bash --rc\\file -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-09: bash --rcfile\$VAR -n <unlisted>.sh blocks (an expansion behind the option)" \
+  "$(bash_payload "bash --rcfile\$PMO_TERM_UNSET -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-10: zsh \$VAR--emulate -n <unlisted>.sh blocks (an expansion ahead of the option)" \
+  "$(bash_payload "zsh \$PMO_TERM_UNSET--emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-11: zsh -\$VAR-emulate -n <unlisted>.sh blocks (an expansion between the dashes)" \
+  "$(bash_payload "zsh -\$PMO_TERM_UNSET-emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-12: bash \"--rcfile\$VAR\" -n <unlisted>.sh blocks (fully quoted, an expansion inside)" \
+  "$(bash_payload "bash \"--rcfile\$PMO_TERM_UNSET\" -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-15: zsh \\--emulate -n <unlisted>.sh blocks (a backslash AHEAD of the option)" \
+  "$(bash_payload "zsh \\--emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-16: zsh +-emu\"\"late -n <unlisted>.sh blocks (a plus-form option with a quote inside)" \
+  "$(bash_payload "zsh +-emu\"\"late -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+# The brace word reaches the payload through a variable, never as literal text inside
+# "$( … "…" )": bash 3.2 brace-expands there, and one arm silently becomes two payloads.
+TERM_BRACE='--{norc,rcfile}'
+test_case "NOEXEC-TERM-17: bash --{norc,rcfile} -n <unlisted>.sh blocks (a brace word is two options to the shell)" \
+  "$(bash_payload "bash $TERM_BRACE -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-18: bash \$(echo -n <unlisted>.sh) blocks (a -n inside a command substitution is not this interpreter's flag)" \
+  "$(bash_payload "bash \$(echo -n $PARSE_UNLISTED)")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (1c) A `-n` BEHIND AN OPTION ARGUMENT THAT MAY BE NO WORD AT ALL. THESE EXECUTE THE
+# SCRIPT TOO. The walk consumes the token after an argument-taking option as that
+# option's argument. An unquoted expansion of nothing is not a word, and neither is a
+# quoted list expansion of an empty list, so the shell gives the option the `-n` instead.
+test_case "NOEXEC-TERM-19: bash --rcfile \$VAR -n <unlisted>.sh blocks (an unset variable is no word: -n becomes the rcfile NAME)" \
+  "$(bash_payload "bash --rcfile \$PMO_TERM_UNSET -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-20: zsh --emulate \$VAR -n <unlisted>.sh blocks (the same under zsh)" \
+  "$(bash_payload "zsh --emulate \$PMO_TERM_UNSET -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-21: bash --rcfile \"\$@\" -n <unlisted>.sh blocks (a quoted list expansion can also be no word)" \
+  "$(bash_payload "bash --rcfile \"\$@\" -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (2) MUST STAY ALLOWED. Every one is genuinely inert under the real shell and is allowed
+# before and after. If one turns red the latch has started ending the option run on a
+# token that does not end it. The over-latch mutant NOEXEC-TERM-M2* refuses each of
+# them, which is what shows these arms can fail.
+test_case "NOEXEC-TERM-ctl-stdin: zsh -s -n <unlisted>.sh allowed (the card's control: -n directly after -s is a real flag)" \
+  "$(bash_payload "zsh -s -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-TERM-ctl-arity: bash -s -O extglob -n <unlisted>.sh allowed (bash's -O TAKES extglob, so the -n is a real flag)" \
+  "$(bash_payload "bash -s -O extglob -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-TERM-ctl-optarg: zsh -o extendedglob -n <unlisted>.sh allowed (a consumed argument does not end the run)" \
+  "$(bash_payload "zsh -o extendedglob -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-TERM-ctl-plus: bash +x -n <unlisted>.sh allowed (a plus-form option is an option word)" \
+  "$(bash_payload "bash +x -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-TERM-ctl-qplus: bash '+x' -n <unlisted>.sh allowed (a quoted option is read as its value)" \
+  "$(bash_payload "bash '+x' -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-TERM-ctl-qflag: bash \"-x\" -n <unlisted>.sh allowed (the same, dash form)" \
+  "$(bash_payload "bash \"-x\" -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-TERM-ctl-long: bash --norc --noprofile -n <unlisted>.sh allowed (long options are option words)" \
+  "$(bash_payload "bash --norc --noprofile -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-TERM-ctl-qarg: bash -o 'pipefail' -n <unlisted>.sh allowed (a quoted argument with plain text is one word the walk holds)" \
+  "$(bash_payload "bash -o 'pipefail' -n $PARSE_UNLISTED")" 0
+test_case "NOEXEC-TERM-ctl-emptyarg: bash --rcfile \"\" -n <unlisted>.sh allowed (a quoted empty argument is one word)" \
+  "$(bash_payload "bash --rcfile \"\" -n $PARSE_UNLISTED")" 0
+
+# (3) THE LATCH ADJUDICATES; IT DOES NOT DENY. The card's own shape in front of an
+# allowlisted path is allowed, and a positional parameter outside the operand domain is
+# never refused. The deny mutant refuses both: NOEXEC-TERM-M3b the first, -M3d the second.
+test_case "NOEXEC-TERM-ctl-allowlisted: zsh -s -O extglob -n <allowed> allowed (adjudicated, and the allowlist still governs)" \
+  "$(bash_payload "zsh -s -O extglob -n $ARITY_ALLOWED")" 0
+test_case "NOEXEC-TERM-ctl-word: zsh -s -O extglob -n allowed (the card's first measured line: no token lands in the operand domain)" \
+  "$(bash_payload "echo 'echo ok' | zsh -s -O extglob -n")" 0
+
+# (4) DECLARED OVER-BLOCK, pinned so it reads as intended. `bash -eo pipefail -n <script>`
+# is inert under bash: the cluster's `o` takes `pipefail`, and the `-n` is a real flag.
+# Only a bare `-o` is in the arity table, so the walk reads `pipefail` as a word and the
+# option run ends there. The direction is the safe one, and it is the same trade the
+# parse-only table already declares for a cluster. Each pin can fail: the revert mutant
+# allows the first (NOEXEC-TERM-M1d), the consumed-argument revert mutant the second (-M4d).
+test_case "NOEXEC-TERM-R1 (declared over-block): bash -eo pipefail -n <unlisted>.sh blocks (a cluster ending in an argument-taking letter)" \
+  "$(bash_payload "bash -eo pipefail -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "NOEXEC-TERM-R2 (declared over-block): bash -o \"\$VAR\" -n <unlisted>.sh blocks (a quoted expansion is one word here, but the walk does not hold its text)" \
+  "$(bash_payload "bash -o \"\$PMO_TERM_UNSET\" -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (4b) DECLARED LIMIT, pinned so it is a decision. zsh's `-b` ends option processing, as
+# `--` does, and it has the shape of an option word, so the walk keeps reading and grants
+# on the `-n` behind it. `+b` does the same, and corpus row ZG03 records it beside this
+# arm's row ZT11. What zsh then runs is a file named `-n` — an operand the shell
+# domain does not claim, the same limit `bash -- -n <script>.sh` has always had — and
+# the script-suffixed path is that file's argument. Modelling `-b` would be a list of
+# end-of-options spellings whose omissions fail open. The over-latch mutant refuses it
+# (NOEXEC-TERM-M2i), which shows the pin can fail.
+test_case "NOEXEC-TERM-P1 (pin, declared limit): zsh -b -n <unlisted>.sh allowed (an end-of-options letter the walk does not model)" \
+  "$(bash_payload "zsh -b -n $PARSE_UNLISTED")" 0
+
+# (5) STDIN MODE — the must-not-flag half the criterion names, and three pins of what
+# the rule does with a program that arrives on stdin. The pins are not fix-evidence:
+# they record today's verdicts so that a change to any of them is a decision. The
+# stdin-deny mutant refuses each must-not-flag arm (STDIN-M1*), and the three mutants
+# after it fail one pin each (STDIN-M2*, -M3*, -M4*).
+test_case "STDIN-ctl-01: echo '<program>' | zsh -s allowed (legitimate stdin usage: nothing on argv to adjudicate)" \
+  "$(bash_payload "echo 'echo ok' | zsh -s")" 0
+test_case "STDIN-ctl-02: echo '<program>' | bash -s allowed" \
+  "$(bash_payload "echo 'echo ok' | bash -s")" 0
+test_case "STDIN-ctl-03: echo '<program>' | sh -s allowed" \
+  "$(bash_payload "echo 'echo ok' | sh -s")" 0
+test_case "STDIN-ctl-04: echo '<program>' | bash -s arg.txt allowed (a positional parameter outside the operand domain)" \
+  "$(bash_payload "echo 'echo ok' | bash -s arg.txt")" 0
+test_case "STDIN-PIN-01 (pin, not fix-evidence): echo '<program>' | bash -s <unlisted>.sh blocks (a script-suffixed positional is adjudicated: the stdin program can run it, and this hook cannot read stdin)" \
+  "$(bash_payload "echo 'bash \"\$1\"' | bash -s $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "STDIN-PIN-02 (pin, not fix-evidence): bash -s < <unlisted>.sh blocks (a redirected file IS the program, and its path is on argv)" \
+  "$(bash_payload "bash -s < $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "STDIN-PIN-03 (pin, declared limit): cat <unlisted>.sh | bash allowed (a program that arrives through a pipe has no argv path in the interpreter's segment)" \
+  "$(bash_payload "cat $PARSE_UNLISTED | bash")" 0
+
+# RED-BEFORE, AS AN ARM. This mutant removes the latch's one conjunct from the grant and
+# nothing else, so it IS the pre-fix grant with the new functions left in the file. M1a
+# proves the substitution matched exactly that line; M1b and M1c show the pre-fix ALLOW.
+# M1d is not red-before evidence: it reads the declared over-block NOEXEC-TERM-R1, which
+# the conjunct alone refuses, so it shows that pin can fail.
+TERM_REVERT="$(dirname "$HOOK")/block-destructive.TERM-revert.sh"
+/usr/bin/sed 's/\[ "\$script_optrun" -eq 1 \] && script_interp_noexec_flag/script_interp_noexec_flag/' "$HOOK" > "$TERM_REVERT"
+
+if [ "$(/usr/bin/diff "$HOOK" "$TERM_REVERT" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-TERM-M1a revert mutation is live (exactly the grant line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-TERM-M1a revert mutation did not change exactly one line — the M1 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "NOEXEC-TERM-M1b: the revert mutant ALLOWS zsh -s -O extglob -n <unlisted>.sh (the pre-fix verdict)" \
+  "$TERM_REVERT" "$(bash_payload "zsh -s -O extglob -n $PARSE_UNLISTED")" 0
+sandbox_case "NOEXEC-TERM-M1c: the revert mutant ALLOWS bash <wrapper> -n <unlisted>.sh" \
+  "$TERM_REVERT" "$(bash_payload "bash $TERM_WRAP -n $PARSE_UNLISTED")" 0
+sandbox_case "NOEXEC-TERM-M1d: the revert mutant ALLOWS bash -eo pipefail -n <unlisted>.sh (NOEXEC-TERM-R1's payload)" \
+  "$TERM_REVERT" "$(bash_payload "bash -eo pipefail -n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$TERM_REVERT"
+
+# THE CONTROLS IN (2) CAN FAIL. This mutant ends the option run on EVERY token, which is
+# what a latch with the wrong test would do. Nothing is granted, and each arm in (2) is
+# refused. So is the declared limit in (4b): M2i reads NOEXEC-TERM-P1's payload.
+TERM_OVER="$(dirname "$HOOK")/block-destructive.TERM-over.sh"
+/usr/bin/sed 's/if ! script_option_word "\$script_fsub"; then script_optrun=0; fi   # M-OPTRUN/script_optrun=0   # M-OPTRUN/' "$HOOK" > "$TERM_OVER"
+
+if [ "$(/usr/bin/diff "$HOOK" "$TERM_OVER" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-TERM-M2a over-latch mutation is live (exactly the latch line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-TERM-M2a over-latch mutation did not change exactly one line — the M2 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "NOEXEC-TERM-M2b: the over-latch mutant REFUSES zsh -s -n <unlisted>.sh" \
+  "$TERM_OVER" "$(bash_payload "zsh -s -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M2c: the over-latch mutant REFUSES bash -s -O extglob -n <unlisted>.sh" \
+  "$TERM_OVER" "$(bash_payload "bash -s -O extglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M2d: the over-latch mutant REFUSES zsh -o extendedglob -n <unlisted>.sh" \
+  "$TERM_OVER" "$(bash_payload "zsh -o extendedglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M2e: the over-latch mutant REFUSES bash +x -n <unlisted>.sh" \
+  "$TERM_OVER" "$(bash_payload "bash +x -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M2f: the over-latch mutant REFUSES bash '+x' -n <unlisted>.sh" \
+  "$TERM_OVER" "$(bash_payload "bash '+x' -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M2g: the over-latch mutant REFUSES bash \"-x\" -n <unlisted>.sh" \
+  "$TERM_OVER" "$(bash_payload "bash \"-x\" -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M2h: the over-latch mutant REFUSES bash --norc --noprofile -n <unlisted>.sh" \
+  "$TERM_OVER" "$(bash_payload "bash --norc --noprofile -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M2i: the over-latch mutant REFUSES zsh -b -n <unlisted>.sh (NOEXEC-TERM-P1's payload)" \
+  "$TERM_OVER" "$(bash_payload "zsh -b -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+/bin/rm -f "$TERM_OVER"
+
+# THE CONSUMED-ARGUMENT TEST, BOTH WAYS. M4 deletes it: the pre-fix grant returns for
+# the shape in (1c) and for nothing in (1a) or (1b). It returns for the declared
+# over-block NOEXEC-TERM-R2 in (4) as well, which M4d reads, so that pin can fail. M5
+# makes it end the run on EVERY consumed argument: the three controls whose `-n` follows
+# a consumed argument are refused, which is what shows they can fail.
+#
+# M4 DELETES EVERY LINE THAT TESTS THE CONSUMED ARGUMENT, HOWEVER MANY THE HOOK CARRIES.
+# script_adjudicate_optarg holds the latch's line always, and the conservative route's
+# line beside it when that route is built. Either one alone keeps the shape in (1c)
+# refused, so a mutant that removes only the first proves nothing on a hook that has
+# both. The count of marker lines is read from the hook, and the liveness arm requires
+# that exactly that many are gone and that there is at least one.
+TERM_ARGREV="$(dirname "$HOOK")/block-destructive.TERM-argrev.sh"
+TERM_ARG_MARKS="$(/usr/bin/grep -c -e '# M-OPTARG' -e '# M-OPAQUE-ARG' "$HOOK")"
+/usr/bin/sed -e '/# M-OPTARG/d' -e '/# M-OPAQUE-ARG/d' "$HOOK" > "$TERM_ARGREV"
+
+if [ "$TERM_ARG_MARKS" -ge 1 ] && [ "$(/usr/bin/diff "$HOOK" "$TERM_ARGREV" | /usr/bin/grep -c '^<')" = "$TERM_ARG_MARKS" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-TERM-M4a consumed-argument revert mutation is live (every line that tests the consumed argument is gone: %s)\n' "$TERM_ARG_MARKS"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-TERM-M4a consumed-argument revert mutation did not remove exactly the marked lines — the M4 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "NOEXEC-TERM-M4b: the consumed-argument revert mutant ALLOWS bash --rcfile \$VAR -n <unlisted>.sh (the pre-fix verdict)" \
+  "$TERM_ARGREV" "$(bash_payload "bash --rcfile \$PMO_TERM_UNSET -n $PARSE_UNLISTED")" 0
+sandbox_case "NOEXEC-TERM-M4c: the consumed-argument revert mutant STILL REFUSES zsh -s -O extglob -n <unlisted>.sh (the two lines hold different shapes)" \
+  "$TERM_ARGREV" "$(bash_payload "zsh -s -O extglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M4d: the consumed-argument revert mutant ALLOWS bash -o \"\$VAR\" -n <unlisted>.sh (NOEXEC-TERM-R2's payload)" \
+  "$TERM_ARGREV" "$(bash_payload "bash -o \"\$PMO_TERM_UNSET\" -n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$TERM_ARGREV"
+
+TERM_ARGOVER="$(dirname "$HOOK")/block-destructive.TERM-argover.sh"
+/usr/bin/sed 's/if ! script_arg_exact; then script_optrun=0; fi   # M-OPTARG/script_optrun=0   # M-OPTARG/' "$HOOK" > "$TERM_ARGOVER"
+
+if [ "$(/usr/bin/diff "$HOOK" "$TERM_ARGOVER" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-TERM-M5a consumed-argument over-latch mutation is live (exactly one line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-TERM-M5a consumed-argument over-latch mutation did not change exactly one line — the M5 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "NOEXEC-TERM-M5b: the consumed-argument over-latch mutant REFUSES zsh -o extendedglob -n <unlisted>.sh" \
+  "$TERM_ARGOVER" "$(bash_payload "zsh -o extendedglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M5c: the consumed-argument over-latch mutant REFUSES bash -o 'pipefail' -n <unlisted>.sh" \
+  "$TERM_ARGOVER" "$(bash_payload "bash -o 'pipefail' -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M5d: the consumed-argument over-latch mutant REFUSES bash --rcfile \"\" -n <unlisted>.sh" \
+  "$TERM_ARGOVER" "$(bash_payload "bash --rcfile \"\" -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+/bin/rm -f "$TERM_ARGOVER"
+
+# WHY THE WALK DOES NOT DENY WHERE THE OPTION RUN ENDS, pinned so the proposal is not
+# re-made. Refusing at the first token that is not an option word closes every arm in
+# (1) — and refuses an allowlisted script and an ordinary positional parameter. M3b to
+# M3d are those refusals, each matched on the mutant's own reason text: M3b and M3d read
+# the two controls in (3), and M3c reads STDIN-ctl-04.
+TERM_DENY="$(dirname "$HOOK")/block-destructive.TERM-deny.sh"
+/usr/bin/sed 's/if ! script_option_word "\$script_fsub"; then script_optrun=0; fi   # M-OPTRUN/if ! script_option_word "$script_fsub"; then block "BLOCK-DESTRUCTIVE-022" "TERM deny mutant" "test only"; fi   # M-OPTRUN/' "$HOOK" > "$TERM_DENY"
+
+if [ "$(/usr/bin/diff "$HOOK" "$TERM_DENY" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: NOEXEC-TERM-M3a deny mutation is live (exactly the latch line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: NOEXEC-TERM-M3a deny mutation did not change exactly one line — the M3 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "NOEXEC-TERM-M3b: the deny mutant REFUSES zsh -s -O extglob -n <allowed>" \
+  "$TERM_DENY" "$(bash_payload "zsh -s -O extglob -n $ARITY_ALLOWED")" 2 "TERM deny mutant"
+sandbox_case "NOEXEC-TERM-M3c: the deny mutant REFUSES echo '<program>' | bash -s arg.txt" \
+  "$TERM_DENY" "$(bash_payload "echo 'echo ok' | bash -s arg.txt")" 2 "TERM deny mutant"
+sandbox_case "NOEXEC-TERM-M3d: the deny mutant REFUSES echo '<program>' | zsh -s -O extglob -n (NOEXEC-TERM-ctl-word's payload)" \
+  "$TERM_DENY" "$(bash_payload "echo 'echo ok' | zsh -s -O extglob -n")" 2 "TERM deny mutant"
+
+/bin/rm -f "$TERM_DENY"
+
+# AND WHY A STDIN-FED SHELL IS NOT REFUSED OUTRIGHT, pinned for the same reason. This
+# mutant refuses an interpreter segment whose walk finds no operand — the xargs rule
+# applied to every shell that reads its program from stdin. It refuses the criterion's
+# own must-not-flag case.
+STDIN_DENY="$(dirname "$HOOK")/block-destructive.STDIN-deny.sh"
+/usr/bin/sed 's/^\( *\)\[ "\$script_idx" -lt "\${#script_tokens\[@\]}" \] || continue$/\1[ "$script_idx" -lt "${#script_tokens[@]}" ] || block "BLOCK-DESTRUCTIVE-022" "STDIN deny mutant" "test only"/' "$HOOK" > "$STDIN_DENY"
+
+if [ "$(/usr/bin/diff "$HOOK" "$STDIN_DENY" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: STDIN-M1a stdin-deny mutation is live (exactly one line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: STDIN-M1a stdin-deny mutation did not change exactly one line — the M1 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "STDIN-M1b: the stdin-deny mutant REFUSES echo '<program>' | zsh -s" \
+  "$STDIN_DENY" "$(bash_payload "echo 'echo ok' | zsh -s")" 2 "STDIN deny mutant"
+sandbox_case "STDIN-M1c: the stdin-deny mutant REFUSES echo '<program>' | bash -s" \
+  "$STDIN_DENY" "$(bash_payload "echo 'echo ok' | bash -s")" 2 "STDIN deny mutant"
+sandbox_case "STDIN-M1d: the stdin-deny mutant REFUSES echo '<program>' | sh -s" \
+  "$STDIN_DENY" "$(bash_payload "echo 'echo ok' | sh -s")" 2 "STDIN deny mutant"
+sandbox_case "STDIN-M1e: the stdin-deny mutant REFUSES echo '<program>' | bash -s arg.txt" \
+  "$STDIN_DENY" "$(bash_payload "echo 'echo ok' | bash -s arg.txt")" 2 "STDIN deny mutant"
+
+/bin/rm -f "$STDIN_DENY"
+
+# THE THREE STDIN PINS CAN FAIL. Each mutant below removes what holds one pin's verdict,
+# and its arm reads that pin's payload.
+#
+# STDIN-PIN-03's allow is held by the no-operand branch: an interpreter segment with
+# nothing on argv after the verb leaves before the walk begins, with no operand to
+# adjudicate. The stdin-deny mutant above cannot fail this pin, because it edits the
+# check after the walk, which a bare `| bash` never reaches. This mutant refuses at that
+# branch instead. Its sed range runs from the xargs deny's test inside the branch to the
+# next `continue`, which is the branch's own, so no other `continue` in the hook matches.
+STDIN_NOOP="$(dirname "$HOOK")/block-destructive.STDIN-noop.sh"
+/usr/bin/sed '/if \[ "\$script_xargs" -eq 1 \]; then/,/^ *continue$/s/^\( *\)continue$/\1block "BLOCK-DESTRUCTIVE-022" "STDIN no-operand deny mutant" "test only"/' "$HOOK" > "$STDIN_NOOP"
+
+if [ "$(/usr/bin/diff "$HOOK" "$STDIN_NOOP" | /usr/bin/grep -c '^<')" = "1" ] && /bin/bash -n "$STDIN_NOOP" 2>/dev/null; then
+  /usr/bin/printf 'PASS: STDIN-M2a no-operand deny mutation is live (exactly one line differs, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: STDIN-M2a no-operand deny mutation did not change exactly one line, or the copy does not parse — M2b is unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "STDIN-M2b: the no-operand deny mutant REFUSES cat <unlisted>.sh | bash (STDIN-PIN-03's payload)" \
+  "$STDIN_NOOP" "$(bash_payload "cat $PARSE_UNLISTED | bash")" 2 "STDIN no-operand deny mutant"
+
+/bin/rm -f "$STDIN_NOOP"
+
+# STDIN-PIN-01's refusal is held by the walk adjudicating a script-suffixed word behind
+# `-s` as it would anywhere. The mutant is the design's positional model, scope option P,
+# which the Collective Review did not take: three edits that note a readable `-s` inside
+# the option run and then skip the adjudication of a plain operand behind it, reading the
+# word as a positional parameter. The stdin program runs that positional, and the mutant
+# allows it.
+STDIN_POS="$(dirname "$HOOK")/block-destructive.STDIN-positional.sh"
+/usr/bin/sed \
+  -e 's/^      script_optrun=1$/      script_optrun=1; script_stdin=0/' \
+  -e 's/^\( *\)if ! script_option_word "\$script_fsub"; then script_optrun=0; fi   # M-OPTRUN/\1if ! script_option_word "$script_fsub"; then script_optrun=0; fi; case "$script_interp_base" in bash|sh|zsh) if [ "$script_optrun" -eq 1 ] \&\& [ "$script_fsub" = "-s" ]; then script_stdin=1; fi ;; esac   # M-OPTRUN/' \
+  -e 's/^\( *\)if \[ "\$script_noexec" -eq 1 \] && \[ "\$script_cmode" -eq 0 \]; then$/\1if [ "$script_stdin" -eq 1 ] \&\& [ "$script_cmode" -eq 0 ] \&\& script_plain_word "${script_tokens[$script_idx]}"; then continue; fi; if [ "$script_noexec" -eq 1 ] \&\& [ "$script_cmode" -eq 0 ]; then/' \
+  "$HOOK" > "$STDIN_POS"
+
+if [ "$(/usr/bin/diff "$HOOK" "$STDIN_POS" | /usr/bin/grep -c '^<')" = "3" ] && /bin/bash -n "$STDIN_POS" 2>/dev/null; then
+  /usr/bin/printf 'PASS: STDIN-M3a positional-model mutation is live (exactly the three edited lines differ, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: STDIN-M3a positional-model mutation did not change exactly three lines, or the copy does not parse — M3b is unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "STDIN-M3b: the positional-model mutant ALLOWS echo '<program>' | bash -s <unlisted>.sh (STDIN-PIN-01's payload)" \
+  "$STDIN_POS" "$(bash_payload "echo 'bash \"\$1\"' | bash -s $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$STDIN_POS"
+
+# STDIN-PIN-02's refusal is held twice. The redirection operator is a token whose reading
+# is not plain, so the conservative route takes it; and without the route the walk would
+# advance past it to the file it names. So the mutant reverts both: the operand walk to
+# its dash-anchored form (the AC-D022 reversion, the same two sed expressions) and the
+# route's top-of-loop line. The walk then ends on `<` and adjudicates nothing.
+STDIN_WALK="$(dirname "$HOOK")/block-destructive.STDIN-walk.sh"
+/usr/bin/sed \
+  -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
+  -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
+  -e '/# M-OPAQUE (mutation/d' \
+  "$HOOK" > "$STDIN_WALK"
+STDIN_WALK_GONE=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "$STDIN_WALK") ))
+STDIN_WALK_MARKS="$(/usr/bin/grep -c -e 'M-FWALK' -e '# M-OPAQUE (mutation' "$STDIN_WALK")"
+
+if [ "$STDIN_WALK_GONE" = 21 ] && [ "$STDIN_WALK_MARKS" = 0 ] && /bin/bash -n "$STDIN_WALK" 2>/dev/null; then
+  /usr/bin/printf 'PASS: STDIN-M4a walk-and-route revert mutation is live (the 20 body lines and the route line are gone, no marker of either remains, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: STDIN-M4a walk-and-route revert mutation removed %s lines (expected 21) with %s markers left (expected 0), or the copy does not parse — M4b is unusable\n' "$STDIN_WALK_GONE" "$STDIN_WALK_MARKS"
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "STDIN-M4b: the walk-and-route revert mutant ALLOWS bash -s < <unlisted>.sh (STDIN-PIN-02's payload)" \
+  "$STDIN_WALK" "$(bash_payload "bash -s < $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$STDIN_WALK"
+
+echo ""
+echo "BLOCK-022 flag walk: the command-string letter inside a cluster (FWALK-CLUSTER-*)"
+echo "---"
+# SUBJECT. The walk's `-c)` label is an exact match, and the shells read one-letter
+# options as a cluster. `bash -ec '<program>'` is `bash -e -c '<program>'`: the next
+# argument is a program string and it executes. The label never saw the cluster, so it
+# was stepped over as a flag, the first piece of the program string became the operand,
+# and no word of the string was adjudicated — while the same program behind a bare `-c`
+# was. Every arm in (1) is an ALLOW on the hook as it stood before this change AND at
+# the commit that predates the parse-only exemption: this class is inherited, not
+# introduced. The revert mutant FWALK-CLUSTER-M1* reproduces the ALLOW in this run.
+
+# (1) MUST REFUSE.
+test_case "FWALK-CLUSTER-01: bash -ec 'bash <unlisted>.sh' blocks (a cluster carrying c opens a program string)" \
+  "$(bash_payload "bash -ec 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-02: bash -xc 'bash <unlisted>.sh' blocks" \
+  "$(bash_payload "bash -xc 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-03: sh -ec \"sh <unlisted>.sh\" blocks (second shell, double quotes)" \
+  "$(bash_payload "sh -ec \"sh $PARSE_UNLISTED\"")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-04: zsh -fc 'zsh <unlisted>.sh' blocks (third shell)" \
+  "$(bash_payload "zsh -fc 'zsh $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-05: bash -ce 'bash <unlisted>.sh' blocks (the letter leads the cluster)" \
+  "$(bash_payload "bash -ce 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-06: bash +ec 'bash <unlisted>.sh' blocks (bash takes the letter in a plus-form cluster too)" \
+  "$(bash_payload "bash +ec 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-07: bash \"-ec\" 'bash <unlisted>.sh' blocks (a quoted cluster is still that cluster)" \
+  "$(bash_payload "bash \"-ec\" 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-08: bash -o pipefail -ec 'bash <unlisted>.sh' blocks (behind an option and its consumed argument)" \
+  "$(bash_payload "bash -o pipefail -ec 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-09: bash -c\"\" 'bash <unlisted>.sh' blocks (an empty quoted string behind the letter: the token is not the label's exact text)" \
+  "$(bash_payload "bash -c\"\" 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-10: bash -\"c\" 'bash <unlisted>.sh' blocks (the letter inside quotes)" \
+  "$(bash_payload "bash -\"c\" 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (2) MUST STAY ALLOWED. The cluster takes the route a bare `-c` takes: it adjudicates
+# what lands in the operand domain and refuses nothing else. The deny mutant
+# FWALK-CLUSTER-M2* refuses the first two; the widened-pattern mutant FWALK-CLUSTER-M3*
+# refuses the third.
+test_case "FWALK-CLUSTER-ctl-fp: bash -ec 'echo a b' allowed (an ordinary program string)" \
+  "$(bash_payload "bash -ec 'echo a b'")" 0
+test_case "FWALK-CLUSTER-ctl-allow: bash -ec 'bash <allowed>' allowed (the allowlist still governs)" \
+  "$(bash_payload "bash -ec 'bash $ARITY_ALLOWED'")" 0
+test_case "FWALK-CLUSTER-ctl-long: bash --rcfile /dev/null -n <unlisted>.sh allowed (a long option containing c is not a cluster)" \
+  "$(bash_payload "bash --rcfile /dev/null -n $PARSE_UNLISTED")" 0
+
+# (3) PINS. A token a view already places in the operand domain is not re-read as a
+# cluster: `'+c.sh'` is the word +c.sh, which the shell domain claims, and it blocks
+# before and after. And the route's known cost: a script-suffixed word that the program
+# string only READS is refused, exactly as it is behind a bare `-c`. Each pin can fail:
+# the guardless-route mutant allows the first (FWALK-OPAQUE-M5c, built with the route's
+# other mutants below), and the revert mutant the second (FWALK-CLUSTER-M1d).
+test_case "FWALK-CLUSTER-ctl-claimed (pin, not fix-evidence): bash '+c.sh' still blocks (a domain claim outranks the cluster reading)" \
+  "$(bash_payload "bash '+c.sh'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-CLUSTER-R1 (declared over-block): bash -ec 'cat <unlisted>.sh' blocks (twin of the bare -c reading of the same string)" \
+  "$(bash_payload "bash -ec 'cat $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# RED-BEFORE, AS AN ARM. Deleting the one line that hands a cluster to the label
+# restores the pre-fix walk for this class. M1d is not red-before evidence: it reads the
+# declared over-block FWALK-CLUSTER-R1, which the same line refuses, so that pin can fail.
+CLUSTER_REVERT="$(dirname "$HOOK")/block-destructive.CLUSTER-revert.sh"
+/usr/bin/sed '/# M-CLUSTER/d' "$HOOK" > "$CLUSTER_REVERT"
+
+if [ "$(/usr/bin/diff "$HOOK" "$CLUSTER_REVERT" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-CLUSTER-M1a revert mutation is live (exactly one line is gone)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-CLUSTER-M1a revert mutation did not remove exactly one line — the M1 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-CLUSTER-M1b: the revert mutant ALLOWS bash -ec 'bash <unlisted>.sh' (the pre-fix verdict)" \
+  "$CLUSTER_REVERT" "$(bash_payload "bash -ec 'bash $PARSE_UNLISTED'")" 0
+sandbox_case "FWALK-CLUSTER-M1c: the revert mutant ALLOWS zsh -fc 'zsh <unlisted>.sh'" \
+  "$CLUSTER_REVERT" "$(bash_payload "zsh -fc 'zsh $PARSE_UNLISTED'")" 0
+sandbox_case "FWALK-CLUSTER-M1d: the revert mutant ALLOWS bash -ec 'cat <unlisted>.sh' (FWALK-CLUSTER-R1's payload)" \
+  "$CLUSTER_REVERT" "$(bash_payload "bash -ec 'cat $PARSE_UNLISTED'")" 0
+
+/bin/rm -f "$CLUSTER_REVERT"
+
+# THE CONTROLS CAN FAIL. A deny in place of the route refuses an ordinary program
+# string and an allowlisted one.
+CLUSTER_DENY="$(dirname "$HOOK")/block-destructive.CLUSTER-deny.sh"
+/usr/bin/sed 's/then script_take_cmode_route; fi   # M-CLUSTER/then block "BLOCK-DESTRUCTIVE-022" "CLUSTER deny mutant" "test only"; fi   # M-CLUSTER/' "$HOOK" > "$CLUSTER_DENY"
+
+if [ "$(/usr/bin/diff "$HOOK" "$CLUSTER_DENY" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-CLUSTER-M2a deny mutation is live (exactly one line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-CLUSTER-M2a deny mutation did not change exactly one line — the M2 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-CLUSTER-M2b: the deny mutant REFUSES bash -ec 'echo a b'" \
+  "$CLUSTER_DENY" "$(bash_payload "bash -ec 'echo a b'")" 2 "CLUSTER deny mutant"
+sandbox_case "FWALK-CLUSTER-M2c: the deny mutant REFUSES bash -ec 'bash <allowed>'" \
+  "$CLUSTER_DENY" "$(bash_payload "bash -ec 'bash $ARITY_ALLOWED'")" 2 "CLUSTER deny mutant"
+
+/bin/rm -f "$CLUSTER_DENY"
+
+# AND THE SECOND-CHARACTER EXCLUSION IS LOAD-BEARING. A table that claims any token
+# containing the letter claims `--rcfile` as well, takes the route, and loses the
+# parse-only exemption a real `-n` behind it had earned.
+CLUSTER_WIDE="$(dirname "$HOOK")/block-destructive.CLUSTER-wide.sh"
+/usr/bin/sed 's/case "\$2" in -c\*|-\[!-\]\*c\*|+c\*|+\[!-\]\*c\*) return 0 ;; esac/case "$2" in -*c*|+*c*) return 0 ;; esac/' "$HOOK" > "$CLUSTER_WIDE"
+
+if [ "$(/usr/bin/diff "$HOOK" "$CLUSTER_WIDE" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-CLUSTER-M3a widened-pattern mutation is live (exactly one line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-CLUSTER-M3a widened-pattern mutation did not change exactly one line — M3b is unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-CLUSTER-M3b: the widened-pattern mutant REFUSES bash --rcfile /dev/null -n <unlisted>.sh" \
+  "$CLUSTER_WIDE" "$(bash_payload "bash --rcfile /dev/null -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+/bin/rm -f "$CLUSTER_WIDE"
+
+echo ""
+echo "BLOCK-022 flag walk: an option the walk cannot read takes the conservative route (FWALK-OPAQUE-*)"
+echo "---"
+# SUBJECT. A token carrying a character outside the plain set has a value this hook
+# does not hold. Stepping over it is a guess that it consumes nothing. When the guess is
+# wrong, an allowlisted script sitting in its argument slot is adjudicated as the operand
+# and the script the shell actually runs is never read. The same top-of-loop line also
+# routes a QUOTED word of unknown value, which the quoted-word view reports by its raw
+# spelling (the FWALK-QWORD arms pin that); these arms pin the spellings that view is
+# never asked about — unquoted, and beginning with `-` on raw argv. Every arm in (1) is
+# an ALLOW on the hook as it stood before this change AND at the commit that predates
+# the parse-only exemption: inherited, not introduced.
+# PMO_OPAQUE_UNSET is never set and never expanded here.
+
+# (1) MUST REFUSE.
+test_case "FWALK-OPAQUE-01: bash \$VAR--rcfile <allowed> <unlisted>.sh blocks (an unquoted expansion ahead of the option)" \
+  "$(bash_payload "bash \$PMO_OPAQUE_UNSET--rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-OPAQUE-02: bash --rcfile\"\" <allowed> <unlisted>.sh blocks (an empty quoted string inside the option)" \
+  "$(bash_payload "bash --rcfile\"\" $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-OPAQUE-03: bash --rcfile\$VAR <allowed> <unlisted>.sh blocks (an expansion behind the option)" \
+  "$(bash_payload "bash --rcfile\$PMO_OPAQUE_UNSET $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-OPAQUE-04: bash \"--rcfile\$VAR\" <allowed> <unlisted>.sh blocks (fully quoted, an expansion inside)" \
+  "$(bash_payload "bash \"--rcfile\$PMO_OPAQUE_UNSET\" $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-OPAQUE-05: bash -e\$VAR 'bash <unlisted>.sh' blocks (a cluster whose letters are not on argv)" \
+  "$(bash_payload "bash -e\$PMO_OPAQUE_UNSET 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-OPAQUE-06: bash <<< 'bash <unlisted>.sh' blocks (a here-string program is read as a program string)" \
+  "$(bash_payload "bash <<< 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-OPAQUE-07: bash \\--rcfile <allowed> <unlisted>.sh blocks (a backslash AHEAD of the option: the token begins with neither sign nor quote)" \
+  "$(bash_payload "bash \\--rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-OPAQUE-08: bash \\-c 'bash <unlisted>.sh' blocks (the command-string letter behind a backslash)" \
+  "$(bash_payload "bash \\-c 'bash $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
+# The brace word reaches the payload through a variable, never as literal text inside
+# "$( … "…" )": bash 3.2 brace-expands there, and one arm silently becomes two payloads.
+OPAQUE_BRACE='--{norc,rcfile}'
+test_case "FWALK-OPAQUE-09: bash --{norc,rcfile} <allowed> <unlisted>.sh blocks (a brace word is two options to the shell)" \
+  "$(bash_payload "bash $OPAQUE_BRACE $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-OPAQUE-10: bash --rcfile \$VAR <allowed> <unlisted>.sh blocks (the option's argument may be no word at all, and the allowlisted script takes its place)" \
+  "$(bash_payload "bash --rcfile \$PMO_OPAQUE_UNSET $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# (2) MUST STAY ALLOWED. The route adjudicates; it does not deny. The deny mutant
+# FWALK-OPAQUE-M2* refuses each of these.
+test_case "FWALK-OPAQUE-ctl-allow: bash \$VAR-x <allowed> allowed (the allowlist still governs)" \
+  "$(bash_payload "bash \$PMO_OPAQUE_UNSET-x $ARITY_ALLOWED")" 0
+test_case "FWALK-OPAQUE-ctl-allow-q: bash --rcfile\"\" <allowed> allowed" \
+  "$(bash_payload "bash --rcfile\"\" $ARITY_ALLOWED")" 0
+test_case "FWALK-OPAQUE-ctl-redirect: bash < <allowed> allowed (a redirection is not an option word; the file it names is adjudicated and is allowlisted)" \
+  "$(bash_payload "bash < $ARITY_ALLOWED")" 0
+test_case "FWALK-OPAQUE-ctl-extless: bash \"\$VAR\" allowed (an unreadable word with nothing behind it: nothing lands in the operand domain)" \
+  "$(bash_payload "bash \"\$PMO_OPAQUE_UNSET\"")" 0
+test_case "FWALK-OPAQUE-ctl-bslash: bash \\-x <allowed> allowed (a backslash-led option in front of an allowlisted script)" \
+  "$(bash_payload "bash \\-x $ARITY_ALLOWED")" 0
+test_case "FWALK-OPAQUE-ctl-arg: bash --rcfile \$VAR <allowed> allowed (an unreadable option argument in front of an allowlisted script)" \
+  "$(bash_payload "bash --rcfile \$PMO_OPAQUE_UNSET $ARITY_ALLOWED")" 0
+
+# (3) PINS. A token a view places in the operand domain is the operand and is not
+# routed; and the route's known cost, the same over-block the quoted spelling of the
+# same word already carries. Each pin can fail: the guardless-route mutant allows the
+# first (FWALK-OPAQUE-M5b), and the revert mutant the second (FWALK-OPAQUE-M1d).
+test_case "FWALK-OPAQUE-ctl-claimed (pin, not fix-evidence): bash \$VAR/x.sh still blocks as variable-bearing (a domain claim outranks the route)" \
+  "$(bash_payload "bash \$PMO_OPAQUE_UNSET/x.sh")" 2 "variable-bearing"
+test_case "FWALK-OPAQUE-R1 (declared over-block): bash \$VAR-x <allowed> <unlisted>.sh blocks (the shell runs only the allowlisted script; the unread option might have taken it as its argument)" \
+  "$(bash_payload "bash \$PMO_OPAQUE_UNSET-x $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# RED-BEFORE, AS AN ARM. M1d and M1e are not red-before evidence: they read the declared
+# over-block FWALK-OPAQUE-R1 and the integration pin FWALK-INT-02, which the route's line
+# refuses, so each pin can fail.
+OPAQUE_REVERT="$(dirname "$HOOK")/block-destructive.OPAQUE-revert.sh"
+/usr/bin/sed '/# M-OPAQUE (mutation/d' "$HOOK" > "$OPAQUE_REVERT"
+
+if [ "$(/usr/bin/diff "$HOOK" "$OPAQUE_REVERT" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-OPAQUE-M1a revert mutation is live (exactly one line is gone)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-OPAQUE-M1a revert mutation did not remove exactly one line — the M1 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-OPAQUE-M1b: the revert mutant ALLOWS bash \$VAR--rcfile <allowed> <unlisted>.sh (the pre-fix verdict)" \
+  "$OPAQUE_REVERT" "$(bash_payload "bash \$PMO_OPAQUE_UNSET--rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-OPAQUE-M1c: the revert mutant ALLOWS bash --rcfile\"\" <allowed> <unlisted>.sh" \
+  "$OPAQUE_REVERT" "$(bash_payload "bash --rcfile\"\" $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-OPAQUE-M1d: the revert mutant ALLOWS bash \$VAR-x <allowed> <unlisted>.sh (FWALK-OPAQUE-R1's payload)" \
+  "$OPAQUE_REVERT" "$(bash_payload "bash \$PMO_OPAQUE_UNSET-x $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-OPAQUE-M1e: the revert mutant ALLOWS bash \"\"--{norc,rcfile} <allowed> <unlisted>.sh (FWALK-INT-02's payload)" \
+  "$OPAQUE_REVERT" "$(bash_payload "bash \"\"$OPAQUE_BRACE $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$OPAQUE_REVERT"
+
+# THE CONTROLS CAN FAIL. A deny in place of the route refuses every arm in (2), and M2g
+# refuses the integration control FWALK-INT-ctl-01, whose word the route also takes.
+OPAQUE_DENY="$(dirname "$HOOK")/block-destructive.OPAQUE-deny.sh"
+/usr/bin/sed 's/then script_take_cmode_route; fi   # M-OPAQUE/then block "BLOCK-DESTRUCTIVE-022" "OPAQUE deny mutant" "test only"; fi   # M-OPAQUE/' "$HOOK" > "$OPAQUE_DENY"
+
+if [ "$(/usr/bin/diff "$HOOK" "$OPAQUE_DENY" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-OPAQUE-M2a deny mutation is live (exactly one line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-OPAQUE-M2a deny mutation did not change exactly one line — the M2 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-OPAQUE-M2b: the deny mutant REFUSES bash \$VAR-x <allowed>" \
+  "$OPAQUE_DENY" "$(bash_payload "bash \$PMO_OPAQUE_UNSET-x $ARITY_ALLOWED")" 2 "OPAQUE deny mutant"
+sandbox_case "FWALK-OPAQUE-M2c: the deny mutant REFUSES bash --rcfile\"\" <allowed>" \
+  "$OPAQUE_DENY" "$(bash_payload "bash --rcfile\"\" $ARITY_ALLOWED")" 2 "OPAQUE deny mutant"
+sandbox_case "FWALK-OPAQUE-M2d: the deny mutant REFUSES bash < <allowed>" \
+  "$OPAQUE_DENY" "$(bash_payload "bash < $ARITY_ALLOWED")" 2 "OPAQUE deny mutant"
+sandbox_case "FWALK-OPAQUE-M2e: the deny mutant REFUSES bash \"\$VAR\"" \
+  "$OPAQUE_DENY" "$(bash_payload "bash \"\$PMO_OPAQUE_UNSET\"")" 2 "OPAQUE deny mutant"
+sandbox_case "FWALK-OPAQUE-M2f: the deny mutant REFUSES bash \\-x <allowed>" \
+  "$OPAQUE_DENY" "$(bash_payload "bash \\-x $ARITY_ALLOWED")" 2 "OPAQUE deny mutant"
+sandbox_case "FWALK-OPAQUE-M2g: the deny mutant REFUSES bash \"\"--{norc,rcfile} <allowed> (FWALK-INT-ctl-01's payload)" \
+  "$OPAQUE_DENY" "$(bash_payload "bash \"\"$OPAQUE_BRACE $ARITY_ALLOWED")" 2 "OPAQUE deny mutant"
+
+/bin/rm -f "$OPAQUE_DENY"
+
+# THE CONSUMED-ARGUMENT LINE, BOTH WAYS. M3 deletes it and the pre-fix ALLOW returns
+# for arm 10 alone. M4 turns it into a refusal, and the control in (2) whose option
+# argument is unreadable is refused.
+OPAQUE_ARGREV="$(dirname "$HOOK")/block-destructive.OPAQUE-argrev.sh"
+/usr/bin/sed '/# M-OPAQUE-ARG/d' "$HOOK" > "$OPAQUE_ARGREV"
+
+if [ "$(/usr/bin/diff "$HOOK" "$OPAQUE_ARGREV" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-OPAQUE-M3a consumed-argument revert mutation is live (exactly one line is gone)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-OPAQUE-M3a consumed-argument revert mutation did not remove exactly one line — the M3 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-OPAQUE-M3b: the consumed-argument revert mutant ALLOWS bash --rcfile \$VAR <allowed> <unlisted>.sh (the pre-fix verdict)" \
+  "$OPAQUE_ARGREV" "$(bash_payload "bash --rcfile \$PMO_OPAQUE_UNSET $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$OPAQUE_ARGREV"
+
+OPAQUE_ARGDENY="$(dirname "$HOOK")/block-destructive.OPAQUE-argdeny.sh"
+/usr/bin/sed 's/if ! script_arg_exact; then script_cmode=1; fi   # M-OPAQUE-ARG/if ! script_arg_exact; then block "BLOCK-DESTRUCTIVE-022" "OPAQUE-ARG deny mutant" "test only"; fi   # M-OPAQUE-ARG/' "$HOOK" > "$OPAQUE_ARGDENY"
+
+if [ "$(/usr/bin/diff "$HOOK" "$OPAQUE_ARGDENY" | /usr/bin/grep -c '^<')" = "1" ]; then
+  /usr/bin/printf 'PASS: FWALK-OPAQUE-M4a consumed-argument deny mutation is live (exactly one line differs)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-OPAQUE-M4a consumed-argument deny mutation did not change exactly one line — M4b is unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-OPAQUE-M4b: the consumed-argument deny mutant REFUSES bash --rcfile \$VAR <allowed>" \
+  "$OPAQUE_ARGDENY" "$(bash_payload "bash --rcfile \$PMO_OPAQUE_UNSET $ARITY_ALLOWED")" 2 "OPAQUE-ARG deny mutant"
+
+/bin/rm -f "$OPAQUE_ARGDENY"
+
+# THE DOMAIN-CLAIM GUARD IS WHAT HOLDS BOTH ctl-claimed PINS. script_take_cmode_route
+# leaves a token alone when a view places it in the operand domain; this mutant routes
+# every token it is handed. Two lines hand it a claimed token: this block's top-of-loop
+# line hands it `$VAR/x.sh`, and the cluster table hands it `'+c.sh'`. Routed, each is
+# read as the `-c` label, the walk ends on it, and nothing is adjudicated. M5b reads
+# FWALK-OPAQUE-ctl-claimed's payload and M5c reads FWALK-CLUSTER-ctl-claimed's, so both
+# pins are shown able to fail.
+ROUTE_NOGUARD="$(dirname "$HOOK")/block-destructive.ROUTE-noguard.sh"
+/usr/bin/sed 's/^\( *\)\*) if ! script_operand_implicated "\$script_interp_domain"; then script_ftok="-c"; fi ;;$/\1*) script_ftok="-c" ;;/' "$HOOK" > "$ROUTE_NOGUARD"
+
+if [ "$(/usr/bin/diff "$HOOK" "$ROUTE_NOGUARD" | /usr/bin/grep -c '^<')" = "1" ] && /bin/bash -n "$ROUTE_NOGUARD" 2>/dev/null; then
+  /usr/bin/printf 'PASS: FWALK-OPAQUE-M5a guardless-route mutation is live (exactly the guarded line of the route differs, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-OPAQUE-M5a guardless-route mutation did not change exactly one line, or the copy does not parse — the M5 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-OPAQUE-M5b: the guardless-route mutant ALLOWS bash \$VAR/x.sh (FWALK-OPAQUE-ctl-claimed's payload)" \
+  "$ROUTE_NOGUARD" "$(bash_payload "bash \$PMO_OPAQUE_UNSET/x.sh")" 0
+sandbox_case "FWALK-OPAQUE-M5c: the guardless-route mutant ALLOWS bash '+c.sh' (FWALK-CLUSTER-ctl-claimed's payload)" \
+  "$ROUTE_NOGUARD" "$(bash_payload "bash '+c.sh'")" 0
+
+/bin/rm -f "$ROUTE_NOGUARD"
+
+echo ""
+echo "BLOCK-022 flag walk: this change read through the quoted-word view (FWALK-INT-*)"
+echo "---"
+# SUBJECT. These arms hold only on a hook that already reads a whole quoted word as its
+# value. Each token below opens with a quote that closes early, so the walk that predates
+# that reading ends on it and none of this change is reached. They are the integration
+# evidence between the two changes: the quoted-word view produces a reading, and the
+# latch and the conservative route are asked about that reading — not about how the
+# token is spelled. PMO_INT_UNSET is never set and never expanded here.
+#
+# THEY ARE PINS ON THIS BRANCH, NOT RED-BEFORE EVIDENCE. The quoted-word view landed
+# with a scanner arm that reports an unquoted brace, glob or tilde character as a word
+# of unknown value, so on the hook as it stood before this change each must-refuse word
+# below was already routed and already refused (corpus rows RB01, RB05, RB07). What
+# these arms measure is that the refusal survives the route moving out of the view and
+# into the top of the walk's loop, and that the latch reads the view's reading.
+#
+# EACH IS SHOWN ABLE TO FAIL. FWALK-INT-02 by the route's revert mutant
+# (FWALK-OPAQUE-M1e) and FWALK-INT-ctl-01 by its deny mutant (FWALK-OPAQUE-M2g), both
+# built in the block above; FWALK-INT-ctl-02 carries NOEXEC-TERM-ctl-qflag's payload,
+# which the over-latch mutant refuses (NOEXEC-TERM-M2g); FWALK-INT-01 and -03 by the
+# mutant at the end of this block.
+#
+# The brace word reaches the payload through a variable, never as literal text inside
+# "$( … "…" )": bash 3.2 brace-expands there, and one arm silently becomes two payloads.
+INT_BRACE='""--{norc,rcfile}'
+
+# (1) Needs the quoted-word view and the option-run latch.
+test_case "FWALK-INT-01: bash \"\"--{norc,rcfile} -n <unlisted>.sh blocks (the view reads the word; its value is not plain, so the -n behind it is no grant)" \
+  "$(bash_payload "bash $INT_BRACE -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-INT-03: zsh \"\$VAR\"--emulate -n <unlisted>.sh blocks (a quoted expansion glued to the option: whichever way the view reads a word of unknown value, the -n is no grant)" \
+  "$(bash_payload "zsh \"\$PMO_INT_UNSET\"--emulate -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "FWALK-INT-ctl-02: bash \"-x\" -n <unlisted>.sh allowed (a quoted option with a plain value is still an option word)" \
+  "$(bash_payload "bash \"-x\" -n $PARSE_UNLISTED")" 0
+test_case "FWALK-INT-ctl-01: bash \"\"--{norc,rcfile} <allowed> allowed (nothing unlisted is on the line, with or without the conservative route)" \
+  "$(bash_payload "bash $INT_BRACE $ARITY_ALLOWED")" 0
+
+# (2) Needs the quoted-word view and the conservative route. This arm is added only
+# when that route is built; it follows the arms above and reads their INT_BRACE.
+test_case "FWALK-INT-02: bash \"\"--{norc,rcfile} <allowed> <unlisted>.sh blocks (the same word in front of an allowlisted script takes the conservative route)" \
+  "$(bash_payload "bash $INT_BRACE $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# THE TWO MECHANISMS THAT HOLD FWALK-INT-01 AND -03 ARE INDEPENDENT. Each word reads,
+# through the view, as a value that is not plain, so the route takes it and the latch
+# ends the option run on it; either alone refuses the script behind the `-n`. The mutant
+# removes both — the route's top-of-loop line and the latch's conjunct on the grant — and
+# the grant then fires on the `-n`.
+INT_REVERT="$(dirname "$HOOK")/block-destructive.INT-revert.sh"
+/usr/bin/sed \
+  -e '/# M-OPAQUE (mutation/d' \
+  -e 's/\[ "\$script_optrun" -eq 1 \] && script_interp_noexec_flag/script_interp_noexec_flag/' \
+  "$HOOK" > "$INT_REVERT"
+
+if [ "$(/usr/bin/diff "$HOOK" "$INT_REVERT" | /usr/bin/grep -c '^<')" = "2" ] && /bin/bash -n "$INT_REVERT" 2>/dev/null; then
+  /usr/bin/printf 'PASS: FWALK-INT-M1a route-and-latch revert mutation is live (exactly the route line and the grant line differ, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-INT-M1a route-and-latch revert mutation did not change exactly two lines, or the copy does not parse — the M1 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-INT-M1b: the route-and-latch revert mutant ALLOWS bash \"\"--{norc,rcfile} -n <unlisted>.sh (FWALK-INT-01's payload)" \
+  "$INT_REVERT" "$(bash_payload "bash $INT_BRACE -n $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-INT-M1c: the route-and-latch revert mutant ALLOWS zsh \"\$VAR\"--emulate -n <unlisted>.sh (FWALK-INT-03's payload)" \
+  "$INT_REVERT" "$(bash_payload "zsh \"\$PMO_INT_UNSET\"--emulate -n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$INT_REVERT"
+
+echo ""
+echo "BLOCK-022 wrapper walk: each wrapper's own options, and the lists of the vocabulary (WRAP*)"
+echo "---"
+# SUBJECT. A transparent wrapper execs the rest of its argv after its OWN options, and the
+# walk used to stop on the first of them: `nice -n 10 bash <unlisted>.sh` read `-n` as the
+# command word and adjudicated nothing. The walk now reads each wrapper's option grammar from
+# a row (script_wrapper_row), `nice`, `stdbuf` and `timeout` are walked with the other words,
+# and `if`, `while` and `until` join the keyword arm. These arms grade that, the build
+# conditions the scope was locked under, and the other lists of the same vocabulary.
+#
+# HERMETIC, ON THE F2 BLOCK'S PATTERN AND FOR ITS REASON: this block's own root, a one-entry
+# allowlist, its own .mode, the scope variables unset for every run, and a reverse mutant
+# beside the hook copy, so every verdict below turns on this fixture and nothing ambient. A
+# verdict is read as the corpus reader reads one: exit 2 is B, exit 0 with a new would-fire
+# row in this fixture's drain is W, exit 0 with none is a.
+#
+# THE REVERSE MUTANT is the hook with its marked lines reverted by sed and nothing else: the
+# three new words leave the M-WRAP-WORDS line, the three new keywords leave the
+# M-WRAP-KEYWORDS line, and the M-WRAP-OPTIONS call is deleted. The walk then behaves as it
+# did before this change, which is what lets a pair arm's mutant limb stand as red-before
+# evidence. WRAPOPT-M0 pins the mutant's exact difference, so a drifted marker turns red
+# instead of leaving every pair green for the wrong reason.
+#
+# ARM CLASSES, so the red-before obligation can be read off the label. A WRAPOPT- or WRAPKW-
+# arm whose hook limb and mutant limb differ is red before this change. A WRAPDIV- arm is a
+# pin — a declared divergence, residual or over-block — and is green before by design unless
+# its own label says the change introduced it. A -ctl- arm is a must-not-flag control,
+# allowed on both limbs. A WRAPPAIR- arm follows each control and pin and shows it able to
+# fail: it runs that arm's own command through a mutant built for the purpose and expects a
+# verdict the arm forbids (the pairing mutants, further down).
+#
+# NO PIPE INTO A SHORT-CIRCUITING READER ANYWHERE IN THIS BLOCK (the SIGPIPE-idiom gate):
+# extraction is one awk pass per file using index(), and stderr is matched from a
+# here-string, as f2_case does.
+WRAP_ROOT="$(/usr/bin/mktemp -d)"
+WRAP_CLAUDE="${WRAP_ROOT}/.claude"
+WRAP_HOOKS="${WRAP_CLAUDE}/hooks"
+/bin/mkdir -p "${WRAP_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${WRAP_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${WRAP_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '/tmp/pmo-wrap-allowed.sh\n' > "${WRAP_CLAUDE}/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${WRAP_HOOKS}/.mode"
+/bin/cp "$HOOK" "${WRAP_HOOKS}/block-destructive.sh"
+/usr/bin/sed \
+  -e '/# M-WRAP-WORDS/s/|nice|stdbuf|timeout)/)/' \
+  -e '/# M-WRAP-KEYWORDS/s/|if|while|until|/|/' \
+  -e '/# M-WRAP-OPTIONS/d' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-mut.sh"
+# THE ITERATION'S REVERSE MUTANT, for Stage 7's finding F-01 on this card: the hook with its
+# two M-WRAP-ABBREV lines reverted and nothing else. The line that resolves a long option is
+# deleted, so a long token is matched as written, and time's row takes back the spelling its
+# manual prints. That is the walk as it stood before a long option was read the way its
+# program's parser reads it; WRAPOPT-AB-M0 pins the difference.
+/usr/bin/sed \
+  -e '/# M-WRAP-ABBREV$/d' \
+  -e '/# M-WRAP-ABBREV-ROW/s/ --format --output-file / --format --output /' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-ab.sh"
+/bin/chmod +x "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/block-destructive-mut.sh" \
+  "${WRAP_HOOKS}/block-destructive-ab.sh"
+WRAP_DRAIN="${WRAP_HOOKS}/destructive-warn-log.jsonl"
+WRAP_NA='/tmp/pmo-wrap-na.sh'
+WRAP_OK='/tmp/pmo-wrap-allowed.sh'
+
+wrap_drain_rows() {
+  if [ -f "$WRAP_DRAIN" ]; then
+    /usr/bin/wc -l < "$WRAP_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+WRAP_EXIT=0
+WRAP_ERR=""
+WRAP_V=""
+WRAP_LAST=""
+# The copy a pair arm's second limb runs: the reverse mutant above, unless a block below says
+# otherwise. The block that grades Stage 7's finding F-01 on this card sets the iteration's
+# own reverse mutant and puts this one back after its last arm.
+WRAP_MUTANT="block-destructive-mut.sh"
+# The command and the hook verdict of the last arm wrap_arm graded, which a pairing arm reads
+# so that it runs that arm's command byte for byte rather than a retyped copy of it.
+WRAP_ARMCMD=""
+WRAP_ARMWANT=""
+# Run one payload through one of the sandbox copies -> WRAP_V (a|B|W|E<rc>), WRAP_ERR, and
+# WRAP_LAST, the would-fire row the call added (empty when it added none).
+wrap_run() { # $1 = hook file in the hermetic hooks dir  $2 = command
+  local tmp before after
+  tmp="$(/usr/bin/mktemp)"
+  WRAP_EXIT=0
+  WRAP_LAST=""
+  before="$(wrap_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$WRAP_ROOT")" \
+      | /bin/bash "${WRAP_HOOKS}/$1" 2>"$tmp" >/dev/null ) || WRAP_EXIT="$?"
+  after="$(wrap_drain_rows)"
+  WRAP_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  case "$WRAP_EXIT" in
+    2) WRAP_V="B" ;;
+    0)
+      if [ "$after" -gt "$before" ]; then
+        WRAP_V="W"
+        WRAP_LAST="$(/usr/bin/tail -n 1 "$WRAP_DRAIN")"
+      else
+        WRAP_V="a"
+      fi
+      ;;
+    *) WRAP_V="E${WRAP_EXIT}" ;;
+  esac
+}
+
+# $1 label  $2 command  $3 verdict wanted from the hook (a|B|W)  $4 verdict wanted from the
+# copy WRAP_MUTANT names (a|B|W), or - to skip that limb  $5 (optional) for a wanted B, a
+# pattern the hook's refusal must carry; for a wanted W, the arm its would-fire row must name.
+wrap_arm() {
+  local name="$1" cmd="$2" want="$3" wantm="$4" detail="${5:-}" got gotm="-" ok=1 why=""
+  WRAP_ARMCMD="$cmd"
+  WRAP_ARMWANT="$want"
+  wrap_run block-destructive.sh "$cmd"
+  got="$WRAP_V"
+  if [ "$got" != "$want" ]; then ok=0; why="hook=${got}"; fi
+  if [ "$ok" = 1 ] && [ -n "$detail" ]; then
+    case "$want" in
+      B) if ! /usr/bin/grep -qE "$detail" <<<"$WRAP_ERR"; then ok=0; why="refusal lacks /${detail}/"; fi ;;
+      W) case "$WRAP_LAST" in *"\"arm\":\"${detail}\""*) ;; *) ok=0; why="row arm is not ${detail}" ;; esac ;;
+    esac
+  fi
+  if [ "$wantm" != "-" ]; then
+    wrap_run "$WRAP_MUTANT" "$cmd"
+    gotm="$WRAP_V"
+    if [ "$gotm" != "$wantm" ]; then ok=0; why="${why} mutant=${gotm}"; fi
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (hook %s, mutant %s)\n' "$name" "$got" "$gotm"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted hook=%s mutant=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$wantm" "${why# }" "$WRAP_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- the fixture is live before any verdict is read -------------------------------------
+wrap_run block-destructive.sh 'git push --force origin main'
+wrap_scope_hook="$WRAP_V"
+wrap_scope_err="$WRAP_ERR"
+wrap_run block-destructive-mut.sh 'git push --force origin main'
+wrap_scope_mut="$WRAP_V"
+if [ "$wrap_scope_hook" = "B" ] && [ "$wrap_scope_mut" = "B" ] \
+   && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' <<<"$wrap_scope_err"; then
+  /usr/bin/printf 'PASS: WRAP-SCOPE the hook copy and its reverse mutant are in scope and enforcing (unrelated rule -001 fires on both), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAP-SCOPE fixture not live (hook=%s mutant=%s); the verdicts below are unusable\n' "$wrap_scope_hook" "$wrap_scope_mut"
+  FAIL=$((FAIL + 1))
+fi
+
+# WRAPOPT-M0 — the reverse mutant differs from the hook by exactly its three marked lines:
+# two changed (the word and keyword patterns) and one deleted (the option-walk call).
+wrap_m0_tmp="$(/usr/bin/mktemp)"
+/usr/bin/diff "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/block-destructive-mut.sh" > "$wrap_m0_tmp" 2>/dev/null
+wrap_m0_counts="$(/usr/bin/awk '/^</ { l++ } /^>/ { g++ } END { printf "%d %d", l, g }' "$wrap_m0_tmp")"
+/bin/rm -f "$wrap_m0_tmp"
+if [ "$wrap_m0_counts" = "3 2" ] && /bin/bash -n "${WRAP_HOOKS}/block-destructive-mut.sh" 2>/dev/null; then
+  /usr/bin/printf 'PASS: WRAPOPT-M0 the reverse mutant differs from the hook by exactly its marked lines (3 out, 2 in) and parses\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPOPT-M0 the reverse mutant does not differ by exactly the marked lines (removed/added = %s, wanted 3 2) or does not parse — every pair arm below is unusable\n' "$wrap_m0_counts"
+  FAIL=$((FAIL + 1))
+fi
+
+# WRAPOPT-AB-M0 — the iteration's reverse mutant differs from the hook by exactly its two marked
+# lines: one deleted (the resolution) and one changed (time's row).
+wrap_ab_tmp="$(/usr/bin/mktemp)"
+/usr/bin/diff "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/block-destructive-ab.sh" > "$wrap_ab_tmp" 2>/dev/null
+wrap_ab_counts="$(/usr/bin/awk '/^</ { l++ } /^>/ { g++ } END { printf "%d %d", l, g }' "$wrap_ab_tmp")"
+/bin/rm -f "$wrap_ab_tmp"
+if [ "$wrap_ab_counts" = "2 1" ] && /bin/bash -n "${WRAP_HOOKS}/block-destructive-ab.sh" 2>/dev/null; then
+  /usr/bin/printf 'PASS: WRAPOPT-AB-M0 the reverse mutant of the long-option iteration differs from the hook by exactly its marked lines (2 out, 1 in) and parses\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPOPT-AB-M0 the reverse mutant of the long-option iteration does not differ by exactly its marked lines (removed/added = %s, wanted 2 1) or does not parse — the WRAPOPT-ab arms below are unusable\n' "$wrap_ab_counts"
+  FAIL=$((FAIL + 1))
+fi
+
+# --- WRAPVOCAB-PARITY — every list of the vocabulary, in both directions -----------------
+# Four lists hold the words: this walk (the M-WRAP-WORDS and M-WRAP-KEYWORDS lines), the
+# egress rule's prefix-command walk (the first two pattern lines after its one
+# `case "${egress_raw##*/}" in`), the shared canonicalizer (every PREFIX["…"] key), and the
+# SIGPIPE-idiom lint of the repository-integrity workflow (its P_WRAP alternation). A word
+# is a keyword if it is one of WRAP_KW and a wrapper otherwise. They are compared word by
+# word against this walk, and the table below declares every difference with its reason. The
+# arms fail on a difference no row declares AND on a row whose difference no longer exists,
+# so a declaration cannot outlive the divergence it excuses. They compare WORDS: the walks
+# also differ in grammar (match form, a leading redirection, an escaped verb, dash-led
+# tokens), and the readiness text states that per list.
+WRAP_KW=" then do else elif in ! if while until { } {} "
+WRAP_DECL='egress|keyword|in|missing|no shell construct puts a command word directly after in; this walk and the canonicalizer over-reach harmlessly, and dropping it would narrow an enforced set
+egress|keyword|{|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
+egress|keyword|}|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
+egress|keyword|{}|extra|the egress walk resolves an xargs replacement token with it; this rule declares the replacement operand open
+canon|wrapper|nice|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|wrapper|stdbuf|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|wrapper|timeout|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|keyword|if|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|keyword|while|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|keyword|until|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+lint|wrapper|doas|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+lint|wrapper|setsid|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+lint|wrapper|ionice|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+lint|wrapper|chrt|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+lint|wrapper|xargs|missing|the lint excludes xargs for its own documented reason: the child stdin is not the pipe'
+
+wrap_words_hook() { # $1 = a copy of this hook -> one word per line, or EXTRACTION-FAILED
+  /usr/bin/awk -v q="'" '
+    index($0, "# M-WRAP-WORDS") || index($0, "# M-WRAP-KEYWORDS") {
+      if (index($0, "# M-WRAP-WORDS")) nw++; else nk++
+      line = $0
+      sub(/^[ \t]*/, "", line)
+      p = index(line, ")")
+      if (p == 0) { bad = 1; next }
+      pat = substr(line, 1, p - 1)
+      gsub(q, "", pat)
+      n = split(pat, w, "|")
+      for (i = 1; i <= n; i++) if (w[i] != "") print w[i]
+    }
+    END { if (nw != 1 || nk != 1 || bad) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+wrap_words_egress() { # $1 = a copy of the egress hook
+  /usr/bin/awk -v q="'" '
+    index($0, "case \"${egress_raw##*/}\" in") { anchors++; armed = 1; next }
+    armed && got < 2 && $0 ~ /^[ \t]*[^# \t][^ \t]*\)[ \t]*$/ {
+      line = $0
+      sub(/^[ \t]*/, "", line)
+      sub(/\)[ \t]*$/, "", line)
+      gsub(q, "", line)
+      n = split(line, w, "|")
+      for (i = 1; i <= n; i++) if (w[i] != "") print w[i]
+      got++
+    }
+    END { if (anchors != 1 || got != 2) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+wrap_words_canon() { # $1 = a copy of the canonicalizer
+  /usr/bin/awk '
+    {
+      line = $0
+      while ((p = index(line, "PREFIX[\"")) > 0) {
+        rest = substr(line, p + 8)
+        e = index(rest, "\"")
+        if (e == 0) break
+        print substr(rest, 1, e - 1)
+        found++
+        line = substr(rest, e + 1)
+      }
+    }
+    END { if (found == 0) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+wrap_words_lint() { # $1 = a copy of the repository-integrity workflow
+  /usr/bin/awk -v q="'" '
+    index($0, "P_WRAP=" q "(") {
+      p = index($0, "P_WRAP=" q "(")
+      rest = substr($0, p + 9)
+      e = index(rest, ")")
+      if (e == 0) { bad = 1; next }
+      n = split(substr(rest, 1, e - 1), w, "|")
+      for (i = 1; i <= n; i++) if (w[i] != "") print w[i]
+      hits++
+    }
+    END { if (hits != 1 || bad) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+
+WRAP_SET=""
+wrap_classify() { # $1 = words, whitespace-separated  $2 = wrapper|keyword -> WRAP_SET
+  local w
+  WRAP_SET=" "
+  for w in $1; do
+    case "$WRAP_KW" in
+      *" $w "*) if [ "$2" = "keyword" ]; then WRAP_SET="${WRAP_SET}${w} "; fi ;;
+      *) if [ "$2" = "wrapper" ]; then WRAP_SET="${WRAP_SET}${w} "; fi ;;
+    esac
+  done
+}
+wrap_declared() { # $1 copy  $2 class  $3 word  $4 extra|missing -> 0 if a row declares it
+  local c k w d r
+  while IFS='|' read -r c k w d r; do
+    if [ "$c" = "$1" ] && [ "$k" = "$2" ] && [ "$w" = "$3" ] && [ "$d" = "$4" ]; then return 0; fi
+  done <<<"$WRAP_DECL"
+  return 1
+}
+WRAP_PROBLEMS=""
+# Compare one list with this walk on one class; append UNDECLARED and STALE findings.
+wrap_parity_one() { # $1 copy  $2 class  $3 that copy's words  $4 this walk's words
+  local s h w c k dw d r
+  wrap_classify "$3" "$2"; s="$WRAP_SET"
+  wrap_classify "$4" "$2"; h="$WRAP_SET"
+  for w in $s; do
+    case "$h" in *" $w "*) continue ;; esac
+    wrap_declared "$1" "$2" "$w" extra || WRAP_PROBLEMS="${WRAP_PROBLEMS} UNDECLARED:${1}+${w}"
+  done
+  for w in $h; do
+    case "$s" in *" $w "*) continue ;; esac
+    wrap_declared "$1" "$2" "$w" missing || WRAP_PROBLEMS="${WRAP_PROBLEMS} UNDECLARED:${1}-${w}"
+  done
+  while IFS='|' read -r c k dw d r; do
+    if [ "$c" != "$1" ] || [ "$k" != "$2" ]; then continue; fi
+    case "$d" in
+      extra)
+        case "$s" in *" $dw "*) case "$h" in *" $dw "*) WRAP_PROBLEMS="${WRAP_PROBLEMS} STALE:${1}+${dw}" ;; esac ;;
+                    *) WRAP_PROBLEMS="${WRAP_PROBLEMS} STALE:${1}+${dw}" ;; esac
+        ;;
+      missing)
+        case "$h" in *" $dw "*) case "$s" in *" $dw "*) WRAP_PROBLEMS="${WRAP_PROBLEMS} STALE:${1}-${dw}" ;; esac ;;
+                    *) WRAP_PROBLEMS="${WRAP_PROBLEMS} STALE:${1}-${dw}" ;; esac
+        ;;
+    esac
+  done <<<"$WRAP_DECL"
+}
+
+# The fourth list lives outside the hook layout: resolved the way the corpus is, and never
+# assumed — an unresolved workflow file is a FAIL, not a skipped comparison.
+WRAP_LINT=""
+wrap_try_lint() { if [ -z "$WRAP_LINT" ] && [ -n "$1" ] && [ -f "$1" ]; then WRAP_LINT="$1"; fi; }
+wrap_try_lint "$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd -P)/.github/workflows/repo-integrity.yml"
+wrap_src_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  IFS= read -r wrap_src_root < "$(dirname "$0")/.source-repo-root" || true
+fi
+if [ -n "$wrap_src_root" ]; then wrap_try_lint "${wrap_src_root}/.github/workflows/repo-integrity.yml"; fi
+WRAP_EGRESS="${HOOK%/*}/block-egress.sh"
+WRAP_CANON="${HOOK%/*}/lib/command-position.awk"
+
+wrap_w_hook="$(wrap_words_hook "$HOOK")"
+wrap_w_egress="$(wrap_words_egress "$WRAP_EGRESS")"
+wrap_w_canon="$(wrap_words_canon "$WRAP_CANON")"
+wrap_w_lint="EXTRACTION-FAILED"
+if [ -n "$WRAP_LINT" ]; then wrap_w_lint="$(wrap_words_lint "$WRAP_LINT")"; fi
+
+# $1 = arm label  $2 = class  $3 = this walk's words (normally the shipped hook's) $4 = the
+# canonicalizer's words (normally the shipped copy's) -> PASS/FAIL line
+wrap_parity_arm() {
+  local name="$1" class="$2" hw="$3" cw="$4" kwlint
+  WRAP_PROBLEMS=""
+  case "${hw} ${wrap_w_egress} ${cw} ${wrap_w_lint}" in
+    *EXTRACTION-FAILED*) WRAP_PROBLEMS=" EXTRACTION-FAILED" ;;
+  esac
+  if [ -z "$WRAP_PROBLEMS" ]; then
+    wrap_parity_one egress "$class" "$wrap_w_egress" "$hw"
+    wrap_parity_one canon "$class" "$cw" "$hw"
+    if [ "$class" = "wrapper" ]; then
+      wrap_parity_one lint wrapper "$wrap_w_lint" "$hw"
+    else
+      # The lint's list holds no keyword: it names what may stand between a pipe and a reader.
+      wrap_classify "$wrap_w_lint" keyword
+      for kwlint in $WRAP_SET; do WRAP_PROBLEMS="${WRAP_PROBLEMS} UNDECLARED:lint+${kwlint}"; done
+    fi
+  fi
+  WRAP_PARITY_RESULT="${WRAP_PROBLEMS# }"
+}
+
+wrap_parity_arm "WRAPVOCAB-PARITY-wrappers" wrapper "$wrap_w_hook" "$wrap_w_canon"
+if [ -z "$WRAP_PARITY_RESULT" ]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-wrappers the wrapper words of this walk, the egress walk, the canonicalizer and the SIGPIPE lint differ exactly where the declared table says, in both directions (lint list via %s)\n' "$WRAP_LINT"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-wrappers %s\n' "$WRAP_PARITY_RESULT"
+  FAIL=$((FAIL + 1))
+fi
+wrap_parity_arm "WRAPVOCAB-PARITY-keywords" keyword "$wrap_w_hook" "$wrap_w_canon"
+if [ -z "$WRAP_PARITY_RESULT" ]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-keywords the keyword words of the three walks differ exactly where the declared table says, and the lint list holds none\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-keywords %s\n' "$WRAP_PARITY_RESULT"
+  FAIL=$((FAIL + 1))
+fi
+
+# The parity check is shown able to fail, three ways. Each mutation is asserted live first
+# (the mutated copy differs from its source), so a sed that matched nothing cannot pass.
+wrap_pm_hook1="${WRAP_ROOT}/parity-m1.sh"
+/usr/bin/sed -e '/# M-WRAP-WORDS/s/|timeout)/|timeout|zzwrapword)/' "$HOOK" > "$wrap_pm_hook1"
+wrap_parity_arm "M1" wrapper "$(wrap_words_hook "$wrap_pm_hook1")" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$HOOK" "$wrap_pm_hook1" && [[ "$WRAP_PARITY_RESULT" == *"UNDECLARED:egress-zzwrapword"* ]]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M1 a hook copy with one extra wrapper word is reported as an undeclared difference\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M1 an extra wrapper word was not reported (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+wrap_pm_canon2="${WRAP_ROOT}/parity-m2.awk"
+/usr/bin/sed -e '/PREFIX\["exec"\]=1/s/$/; PREFIX["nice"]=1/' "$WRAP_CANON" > "$wrap_pm_canon2"
+wrap_parity_arm "M2" wrapper "$wrap_w_hook" "$(wrap_words_canon "$wrap_pm_canon2")"
+if ! /usr/bin/cmp -s "$WRAP_CANON" "$wrap_pm_canon2" && [[ "$WRAP_PARITY_RESULT" == *"STALE:canon-nice"* ]]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M2 a canonicalizer copy that gains a declared-missing word is reported as a stale declaration\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M2 a stale declaration was not reported (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+wrap_pm_hook3="${WRAP_ROOT}/parity-m3.sh"
+/usr/bin/sed -e 's/# M-WRAP-WORDS//' "$HOOK" > "$wrap_pm_hook3"
+wrap_parity_arm "M3" wrapper "$(wrap_words_hook "$wrap_pm_hook3")" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$HOOK" "$wrap_pm_hook3" && [ "$WRAP_PARITY_RESULT" = "EXTRACTION-FAILED" ]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M3 a hook copy without its word marker reports an extraction failure, never parity\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M3 a missing marker did not report an extraction failure (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+
+# WRAPVOCAB-PARITY-DOC — the readiness item that declares the walked set names, as a
+# backticked word, every wrapper word any of the four lists holds: what the walk covers and
+# what another list holds that it does not. Read in the fragment and in the generated
+# registry, found by the same two-rung resolution the NOEXEC-DOC arms use.
+wrap_classify "$wrap_w_hook $wrap_w_egress $wrap_w_canon $wrap_w_lint" wrapper
+WRAP_DOC_WORDS="$WRAP_SET"
+wrap_doc_missing() { # $1 = readiness file -> the words item 2 does not name, ITEM2-MISSING(n) or DOC-MISSING
+  if [ ! -f "$1" ]; then /usr/bin/printf 'DOC-MISSING'; return 0; fi
+  /usr/bin/awk -v words="$WRAP_DOC_WORDS" -v bq='`' '
+    index($0, "2. **Wrapper-prefix residuals.**") { line = $0; hits++ }
+    END {
+      if (hits != 1) { printf "ITEM2-MISSING(%d)", hits; exit }
+      n = split(words, w, " ")
+      for (i = 1; i <= n; i++) if (w[i] != "" && w[i] != "EXTRACTION-FAILED" && index(line, bq w[i] bq) == 0) printf "%s ", w[i]
+    }
+  ' "$1"
+}
+wrap_doc_frag="$(wrap_doc_missing "$NOEXEC_DOC_FRAG")"
+wrap_doc_index="$(wrap_doc_missing "$NOEXEC_DOC_INDEX")"
+case "$WRAP_DOC_WORDS" in *EXTRACTION-FAILED*) wrap_doc_frag="EXTRACTION-FAILED" ;; esac
+if [ -z "$wrap_doc_frag" ] && [ -z "$wrap_doc_index" ]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-DOC readiness item 2 names every wrapper word of the four lists, in the fragment and in the generated registry\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-DOC readiness item 2 does not name: fragment [%s] registry [%s]\n' "$wrap_doc_frag" "$wrap_doc_index"
+  FAIL=$((FAIL + 1))
+fi
+
+# --- pairing mutants: every control and pin below is shown able to fail (Stage 7 F-02) -------
+# A control or a pin keeps its verdict across the change by design, so its two limbs cannot
+# show that it is able to fail. Each one in this block is followed by a pairing arm
+# (WRAPPAIR-*): the arm's own command, taken from wrap_arm and never retyped, run through a
+# mutant of the hook, expecting the verdict that mutant gives, which must differ from the one
+# the arm asserts. Each mutant is a design the walk could have had or a step it could have
+# missed, and each is shown live before it is used: it differs from the hook by exactly the
+# lines named, and it parses. Three reuse a mutation the suite already builds elsewhere: the
+# parse-only exemption reverted (PARSE-14), the stdin deny on an interpreter whose walk finds
+# no operand (STDIN-M1), and the operand walk reverted together with the conservative route for
+# a word the walk cannot read (STDIN-M4). The rest are built here:
+#   pscan     the verb-locator scan the decision record rejects: a word the prefix walk does
+#             not know is stepped over until an interpreter or `source` verb, or a word that
+#             holds `.sh`, so the walk reads on past where it must stop
+#   pallow    the allowlist never matches, so every near miss would be refused
+#   pnox      the describe-only letters no longer make the segment no execution
+#   ptrunc    a wrapper option whose value is missing is refused, not read as a run that ended
+#   pextless  the direct-execution arm adjudicates every target, the extensionless one too
+#   pxoff     the xargs stdin deny is switched off
+#   pxall     the xargs stdin deny refuses every interpreter xargs feeds, a token after it or
+#             not
+#   pnosplit  the split-string stop is removed from both of its lines
+#   pambig    a prefix of two or more long options is taken for one of them
+/usr/bin/sed '/# M-WRAP-OPTIONS/,/^        esac$/s@^          \*) break ;;$@          *) case "${script_ptok##*/}" in bash|sh|zsh|python|python3|perl|ruby|node|source|.) break ;; esac; case "$script_ptok" in *.sh*) break ;; esac; script_hidx=$(( script_hidx + 1 )) ;;@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pscan.sh"
+/usr/bin/sed 's@^  \[ -f "\$SCRIPT_ALLOWLIST" \] || return 1$@  return 1@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pallow.sh"
+/usr/bin/sed '/script_winert=1; return 0 ;;/d' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pnox.sh"
+/usr/bin/sed 's@if \[ -z "\$_rest" \] && \[ "\$script_hidx" -lt "\$_n" \]; then script_hidx=\$(( script_hidx + 1 )); fi@if [ -z "$_rest" ]; then if [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); else block "BLOCK-DESTRUCTIVE-022" "WRAP missing-value deny mutant" "test only"; fi; fi@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-ptrunc.sh"
+/usr/bin/sed 's@if script_operand_implicated exec; then@if true; then@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pextless.sh"
+/usr/bin/sed 's#\[ "\$script_noexec" -eq 1 \]#[ "$script_noexec" -eq 99 ]#' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pparse.sh"
+/usr/bin/sed 's/^\( *\)\[ "\$script_idx" -lt "\${#script_tokens\[@\]}" \] || continue$/\1[ "$script_idx" -lt "${#script_tokens[@]}" ] || block "BLOCK-DESTRUCTIVE-022" "STDIN deny mutant" "test only"/' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pstdin.sh"
+/usr/bin/sed 's@if \[ "\$script_xargs" -eq 1 \]; then@if [ "$script_xargs" -eq 9 ]; then@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pxoff.sh"
+/usr/bin/sed 's%if \[ \$(( script_hidx + 1 )) -ge "\${#script_tokens\[@\]}" \]; then%if [ "$script_xargs" -eq 1 ] || [ $(( script_hidx + 1 )) -ge "${#script_tokens[@]}" ]; then%' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pxall.sh"
+/usr/bin/sed \
+  -e '/if \[ "\$script_wsplit_cmd" -eq 1 \]; then return 0; fi/d' \
+  -e '/if \[ "\$script_wsplit_cmd" -eq 1 \]; then script_hidx=\$(( script_hidx - 1 )); return 0; fi/d' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pnosplit.sh"
+# splitcmd  script_split_scan always reports a command word, so every attached split value stops
+#           the walk — the behaviour before that helper, when an attached split string carrying no
+#           command word was stepped onto and the command that followed was never adjudicated
+/usr/bin/sed 's@^  script_wsplit_cmd=0   # M-WRAP-SPLITCMD$@  script_wsplit_cmd=1; return 0   # M-WRAP-SPLITCMD@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-splitcmd.sh"
+/usr/bin/sed \
+  -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
+  -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
+  -e '/# M-OPAQUE (mutation/d' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pwalkroute.sh"
+/usr/bin/sed '/# M-WRAP-ABBREV$/s/"\$_lk" -eq 1/"$_lk" -ge 1/' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pambig.sh"
+for wrap_pm in pscan pallow pnox ptrunc pextless pparse pstdin pxoff pxall pnosplit pwalkroute pambig splitcmd; do
+  /bin/chmod +x "${WRAP_HOOKS}/block-destructive-${wrap_pm}.sh"
+done
+
+wrap_mut_live() { # $1 label  $2 mutant file  $3 lines it removes  $4 lines it adds
+  local tmp counts
+  tmp="$(/usr/bin/mktemp)"
+  /usr/bin/diff "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/$2" > "$tmp" 2>/dev/null
+  counts="$(/usr/bin/awk '/^</ { l++ } /^>/ { g++ } END { printf "%d %d", l, g }' "$tmp")"
+  /bin/rm -f "$tmp"
+  if [ "$counts" = "$3 $4" ] && /bin/bash -n "${WRAP_HOOKS}/$2" 2>/dev/null; then
+    /usr/bin/printf 'PASS: %s differs from the hook by exactly the lines it names (%s out, %s in) and parses\n' "$1" "$3" "$4"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s does not differ by exactly the lines it names (removed/added = %s, wanted %s %s) or does not parse — its pairing arms are unusable\n' "$1" "$counts" "$3" "$4"
+    FAIL=$((FAIL + 1))
+  fi
+}
+wrap_mut_live "WRAPPAIR-M-scan: the verb-locator scan mutant" block-destructive-pscan.sh 1 1
+wrap_mut_live "WRAPPAIR-M-allow: the allowlist-blind mutant" block-destructive-pallow.sh 1 1
+wrap_mut_live "WRAPPAIR-M-nox: the describe-only-off mutant" block-destructive-pnox.sh 1 0
+wrap_mut_live "WRAPPAIR-M-trunc: the missing-value deny mutant" block-destructive-ptrunc.sh 1 1
+wrap_mut_live "WRAPPAIR-M-extless: the every-target mutant" block-destructive-pextless.sh 1 1
+wrap_mut_live "WRAPPAIR-M-parse: the parse-only revert (PARSE-14's mutation)" block-destructive-pparse.sh 1 1
+wrap_mut_live "WRAPPAIR-M-stdin: the stdin deny (STDIN-M1's mutation)" block-destructive-pstdin.sh 1 1
+wrap_mut_live "WRAPPAIR-M-xoff: the xargs-deny-off mutant" block-destructive-pxoff.sh 1 1
+wrap_mut_live "WRAPPAIR-M-xall: the every-xargs-interpreter deny mutant" block-destructive-pxall.sh 1 1
+wrap_mut_live "WRAPPAIR-M-nosplit: the no-split-stop mutant" block-destructive-pnosplit.sh 2 0
+wrap_mut_live "WRAPPAIR-M-walkroute: the operand-walk and conservative-route revert (STDIN-M4's mutation)" block-destructive-pwalkroute.sh 22 1
+wrap_mut_live "WRAPPAIR-M-ambig: the ambiguity-blind mutant" block-destructive-pambig.sh 1 1
+wrap_mut_live "WRAPPAIR-M-splitcmd: the always-a-command split-scan mutant (Stage 7 F-08 reverse)" block-destructive-splitcmd.sh 1 1
+
+# $1 label  $2 mutant file  $3 the verdict that mutant gives the arm's command (a|B|W). A
+# pairing that expects the verdict the arm itself asserts fails on its own: it could not show
+# the arm failing.
+wrap_pair() {
+  local name="$1" mut="$2" want="$3"
+  if [ "$want" = "$WRAP_ARMWANT" ]; then
+    /usr/bin/printf 'FAIL: %s expects the verdict the arm itself asserts (%s), so it cannot show the arm failing\n' "$name" "$want"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  wrap_run "$mut" "$WRAP_ARMCMD"
+  if [ "$WRAP_V" = "$want" ]; then
+    /usr/bin/printf 'PASS: %s (the arm asserts %s on the hook; %s gives %s)\n' "$name" "$WRAP_ARMWANT" "$mut" "$WRAP_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s — wanted %s from %s, observed %s\n  stderr: %s\n' "$name" "$want" "$mut" "$WRAP_V" "$WRAP_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- positions this walk does not reach: pins, routed to their own card -------------------
+wrap_arm "WRAPDIV-redirect: >/dev/null bash <unlisted>.sh allowed (a leading redirection is not walked)" \
+  ">/dev/null bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-redirect: the scan mutant reads past the redirection and refuses, so WRAPDIV-redirect can fail" block-destructive-pscan.sh B
+wrap_arm "WRAPDIV-escaped: \\bash <unlisted>.sh allowed (an escaped verb is not resolved)" \
+  "\\bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-escaped: the scan mutant reads on to the script and records it, so WRAPDIV-escaped can fail" block-destructive-pscan.sh W
+wrap_arm "WRAPDIV-quoted-word: \"sudo\" bash <unlisted>.sh allowed (the walk reads the raw wrapper token)" \
+  "\"sudo\" bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-quoted-word: the scan mutant reads past the quoted word and refuses, so WRAPDIV-quoted-word can fail" block-destructive-pscan.sh B
+
+# --- nice and stdbuf, with their options (AC-2) --------------------------------------------
+wrap_arm "WRAPOPT-AC2-nice: nice -n 10 bash <unlisted>.sh blocks" "nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-AC2-stdbuf: stdbuf -o0 bash <unlisted>.sh blocks" "stdbuf -o0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-AC2-near: nice -n 10 bash <allowlisted>.sh allowed (the allowlist was consulted)" "nice -n 10 bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-AC2-near: the allowlist-blind mutant refuses the allowlisted script, so WRAPOPT-AC2-near can fail" block-destructive-pallow.sh B
+wrap_arm "WRAPOPT-nice-bare: nice bash <unlisted>.sh blocks" "nice bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-bare: stdbuf bash <unlisted>.sh blocks" "stdbuf bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-n-att: nice -n10 bash <unlisted>.sh blocks" "nice -n10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-num: nice -10 bash <unlisted>.sh blocks (a digit is a flag)" "nice -10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-neg: nice -n -5 bash <unlisted>.sh blocks (the separate value is consumed, sign and all)" "nice -n -5 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-adj-eq: nice --adjustment=10 bash <unlisted>.sh blocks" "nice --adjustment=10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-adj-sep: nice --adjustment 10 bash <unlisted>.sh blocks" "nice --adjustment 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-dd: nice -n 10 -- bash <unlisted>.sh blocks" "nice -n 10 -- bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-o-sep: stdbuf -o 0 bash <unlisted>.sh blocks (AC-2's separate-argument spelling)" "stdbuf -o 0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-ioe: stdbuf -i0 -o0 -e0 bash <unlisted>.sh blocks" "stdbuf -i0 -o0 -e0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-e-sep: stdbuf -e 0 bash <unlisted>.sh blocks" "stdbuf -e 0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-out-eq: stdbuf --output=L bash <unlisted>.sh blocks" "stdbuf --output=L bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-out-sep: stdbuf --output L bash <unlisted>.sh blocks" "stdbuf --output L bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-abs: /usr/bin/nice -n 10 bash <unlisted>.sh blocks (basename match)" "/usr/bin/nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-source: nice -n 10 source <unlisted>.sh blocks" "nice -n 10 source ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nested: sudo nice -n 10 bash <unlisted>.sh blocks" "sudo nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-then: if true; then nice -n 5 bash <unlisted>.sh; fi blocks" "if true; then nice -n 5 bash ${WRAP_NA}; fi" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-exec: nice -n 10 <unlisted>.sh writes one exec row at its rollout phase" "nice -n 10 ${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-nonshell: stdbuf -oL node <unlisted>.js writes one interp-nonshell row at its rollout phase" "stdbuf -oL node /tmp/pmo-wrap-na.js" W a interp-nonshell
+wrap_arm "WRAPOPT-ctl-stdbuf-ok: stdbuf -o 0 bash <allowlisted>.sh allowed" "stdbuf -o 0 bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-ctl-stdbuf-ok: the allowlist-blind mutant refuses it, so WRAPOPT-ctl-stdbuf-ok can fail" block-destructive-pallow.sh B
+wrap_arm "WRAPOPT-ctl-grep: nice -n 10 grep -c bash <unlisted>.sh allowed (grep is the command)" "nice -n 10 grep -c bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ctl-grep: the scan mutant reads past grep to bash and refuses, so WRAPOPT-ctl-grep can fail" block-destructive-pscan.sh B
+wrap_arm "WRAPOPT-ctl-echo: echo nice -n 10 bash <unlisted>.sh allowed (off the segment head)" "echo nice -n 10 bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ctl-echo: the scan mutant reads past echo and refuses, so WRAPOPT-ctl-echo can fail" block-destructive-pscan.sh B
+wrap_arm "WRAPOPT-ctl-nearword: nicely -n 10 bash <unlisted>.sh allowed (a near-miss word is not a wrapper)" "nicely -n 10 bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ctl-nearword: the scan mutant reads past the near-miss word and refuses, so WRAPOPT-ctl-nearword can fail" block-destructive-pscan.sh B
+wrap_arm "WRAPOPT-ctl-end: nice -n allowed with no error (a consumed value past the end)" "nice -n" a a
+wrap_pair "WRAPPAIR-ctl-end: the missing-value deny mutant refuses it, so WRAPOPT-ctl-end can fail" block-destructive-ptrunc.sh B
+wrap_arm "WRAPOPT-ctl-extless: nice -n 10 ./pmo-wrap-tool allowed (an extensionless target, the shared residual)" "nice -n 10 ./pmo-wrap-tool" a a
+wrap_pair "WRAPPAIR-ctl-extless: the every-target mutant records the extensionless target, so WRAPOPT-ctl-extless can fail" block-destructive-pextless.sh W
+wrap_arm "WRAPOPT-ctl-parse-only: nice -n 10 bash -n <unlisted>.sh allowed (parse-only, behind the wrapper as without it)" "nice -n 10 bash -n ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ctl-parse-only: the parse-only revert refuses it, so WRAPOPT-ctl-parse-only can fail" block-destructive-pparse.sh B
+
+# --- every wrapper's row, one arm per spelling (whole set) ---------------------------------
+# Each prefix is followed by `bash <unlisted>.sh`. The hook refuses; the reverse mutant, the
+# walk as it stood, allows every one. sudo rows 14 to 16 are the two argument-taking options
+# the sudo manual names that the design's row, built from the reference host's synopsis, did
+# not list.
+WRAP_ROWS_TABLE='sudo|sudo -n
+sudo|sudo -u bot
+sudo|sudo -ubot
+sudo|sudo -nu bot
+sudo|sudo -u bot -g staff
+sudo|sudo -E -u bot
+sudo|sudo --user bot
+sudo|sudo --user=bot
+sudo|sudo -D /tmp
+sudo|sudo -u bot --
+sudo|sudo -k
+sudo|sudo -i
+sudo|sudo -h box1
+sudo|sudo -a bsdauth
+sudo|sudo -c staff
+sudo|sudo --login-class staff
+env|env -i
+env|env -u NAME
+env|env -uNAME
+env|env -u A -u B
+env|env --unset NAME
+env|env --unset=NAME
+env|env -C /tmp
+env|env -P /usr/bin
+env|env -u NAME FOO=1
+env|env a-b=1
+env|env -a zero
+command|command -p
+command|command --
+exec|exec -a myname
+exec|exec -c
+exec|exec -cl
+exec|exec -l -a myname
+nohup|nohup --
+time|time -p
+time|time -l
+time|time -o /tmp/out.txt
+time|time -f %e
+xargs|xargs -n1
+xargs|xargs -n 1
+xargs|xargs -0
+xargs|xargs -0 -n 1
+xargs|xargs -P 4
+xargs|xargs -n 1 -P 4
+xargs|xargs -L 1
+xargs|xargs -t
+xargs|xargs -r
+xargs|xargs -a /tmp/list.txt
+timeout|timeout 5s
+timeout|timeout -s KILL 5
+timeout|timeout -sKILL 5
+timeout|timeout -k 1 5
+timeout|timeout --signal=KILL 5
+timeout|timeout --signal KILL 5
+timeout|timeout --foreground -s 9 10
+nested|sudo -u bot env -u X nice -n 5
+nested|time -p nice -n 10 stdbuf -o0
+nested|ENVV=1 sudo -u bot'
+wrap_rprev=""
+wrap_rn=0
+while IFS='|' read -r wrap_rw wrap_rpfx; do
+  [ -n "$wrap_rw" ] || continue
+  if [ "$wrap_rw" != "$wrap_rprev" ]; then wrap_rn=0; wrap_rprev="$wrap_rw"; fi
+  wrap_rn=$((wrap_rn + 1))
+  wrap_arm "WRAPOPT-row-${wrap_rw}-${wrap_rn}: ${wrap_rpfx} bash <unlisted>.sh blocks" \
+    "${wrap_rpfx} bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+done <<<"$WRAP_ROWS_TABLE"
+
+# --- describe-only options execute nothing, and the long spellings do not inherit that ---
+wrap_arm "WRAPOPT-inert-command-V: command -V bash <unlisted>.sh allowed (describes, runs nothing)" "command -V bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-command-V: the describe-only-off mutant refuses it, so WRAPOPT-inert-command-V can fail" block-destructive-pnox.sh B
+wrap_arm "WRAPOPT-inert-command-pv: command -pv bash <unlisted>.sh allowed" "command -pv bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-command-pv: the describe-only-off mutant refuses it, so WRAPOPT-inert-command-pv can fail" block-destructive-pnox.sh B
+wrap_arm "WRAPOPT-inert-sudo-l: sudo -l bash <unlisted>.sh allowed (lists the policy, runs nothing)" "sudo -l bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-sudo-l: the describe-only-off mutant refuses it, so WRAPOPT-inert-sudo-l can fail" block-destructive-pnox.sh B
+wrap_arm "WRAPOPT-inert-sudo-v: sudo -v bash <unlisted>.sh allowed" "sudo -v bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-sudo-v: the describe-only-off mutant refuses it, so WRAPOPT-inert-sudo-v can fail" block-destructive-pnox.sh B
+wrap_arm "WRAPOPT-inert-sudo-e: sudo -e <unlisted>.sh allowed (edits, runs nothing)" "sudo -e ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-sudo-e: the describe-only-off mutant records the edited file as executed, so WRAPOPT-inert-sudo-e can fail" block-destructive-pnox.sh W
+wrap_arm "WRAPOPT-inert-sudo-lU: sudo -lU bot bash <unlisted>.sh allowed" "sudo -lU bot bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-sudo-lU: the describe-only-off mutant refuses it, so WRAPOPT-inert-sudo-lU can fail" block-destructive-pnox.sh B
+wrap_arm "WRAPDIV-sudo-long (declared over-block, introduced here): sudo --list bash <unlisted>.sh blocks — a long describe-only spelling is read as a flag" \
+  "sudo --list bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+
+# --- an option no row lists: the declared failure direction --------------------------------
+wrap_arm "WRAPOPT-unlisted-flag: sudo --zz-unlisted bash <unlisted>.sh blocks (an unlisted option is stepped over as a flag)" \
+  "sudo --zz-unlisted bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPDIV-unlisted-valued: sudo --zz-unlisted VALUE bash <unlisted>.sh allowed (its value is read as the command word)" \
+  "sudo --zz-unlisted VALUE bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-unlisted-valued: the scan mutant reads past the value and refuses, so WRAPDIV-unlisted-valued can fail" block-destructive-pscan.sh B
+
+# --- timeout -------------------------------------------------------------------------------
+wrap_arm "WRAPOPT-timeout-near: timeout 5 bash <allowlisted>.sh allowed" "timeout 5 bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-timeout-near: the allowlist-blind mutant refuses it, so WRAPOPT-timeout-near can fail" block-destructive-pallow.sh B
+wrap_arm "WRAPDIV-timeout-malformed (declared over-read): timeout bash <unlisted>.sh writes one exec row — with no duration the command is read one token late" \
+  "timeout bash ${WRAP_NA}" W a exec
+
+# --- the first build condition: a token that carries the command line stays the command word
+# env's split-string option takes the command line as its argument. Its ATTACHED spellings
+# keep exactly the verdict they had (the mutant limb is that verdict): the walk stops on the
+# token instead of stepping over an execution. The separate spelling is a flag, so the word
+# after it is the command word.
+wrap_arm "WRAPOPT-env-S: env -S bash <unlisted>.sh blocks" "env -S bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPDIV-env-S-quoted: env -S \"bash <unlisted>.sh\" allowed (a command line in one quoted string is not re-tokenized)" \
+  "env -S \"bash ${WRAP_NA}\"" a a
+wrap_pair "WRAPPAIR-env-S-quoted: the scan mutant reads on to the quoted script and records it, so WRAPDIV-env-S-quoted can fail" block-destructive-pscan.sh W
+wrap_arm "WRAPOPT-env-S-attached: env -S<unlisted>.sh keeps its exec row (the walk stops on the token)" "env -S${WRAP_NA}" W W exec
+wrap_pair "WRAPPAIR-env-S-attached: the no-split-stop mutant steps over the token and allows it, so WRAPOPT-env-S-attached can fail" block-destructive-pnosplit.sh a
+wrap_arm "WRAPOPT-env-S-attached-cluster: env -iS<unlisted>.sh keeps its exec row" "env -iS${WRAP_NA}" W W exec
+wrap_pair "WRAPPAIR-env-S-attached-cluster: the no-split-stop mutant allows it, so WRAPOPT-env-S-attached-cluster can fail" block-destructive-pnosplit.sh a
+wrap_arm "WRAPOPT-env-S-attached-long: env --split-string=<unlisted>.sh keeps its exec row" "env --split-string=${WRAP_NA}" W W exec
+wrap_pair "WRAPPAIR-env-S-attached-long: the no-split-stop mutant allows it, so WRAPOPT-env-S-attached-long can fail" block-destructive-pnosplit.sh a
+wrap_arm "WRAPDIV-env-S-attached-cmd: env -Sbash <unlisted>.sh allowed (an attached command line is not re-tokenized, as before)" \
+  "env -Sbash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-env-S-attached-cmd: the scan mutant reads on to the script and records it, so WRAPDIV-env-S-attached-cmd can fail" block-destructive-pscan.sh W
+# The two declared precision improvements: an option argument shaped like a script path, and
+# an env operand whose name is not a shell name. Neither path is executed by the program; the
+# walk used to read the whole token as a direct execution (the mutant limb records it).
+wrap_arm "WRAPOPT-optpath: env --chdir=/tmp/x.sh ls allowed with no row (precision: an option's argument)" "env --chdir=/tmp/x.sh ls" a W
+wrap_arm "WRAPOPT-optpath-short: sudo -D/tmp/x.sh ls allowed with no row (precision)" "sudo -D/tmp/x.sh ls" a W
+wrap_arm "WRAPOPT-envop-name: env a-b=/tmp/x.sh ls allowed with no row (precision: env sets a-b and runs ls)" "env a-b=/tmp/x.sh ls" a W
+
+# --- a long option, read the way its program's parser reads it (Stage 7 finding F-01) -----
+# Every row that lists a long option belongs to a getopt_long program, and getopt_long takes an
+# exact name, or any prefix that names exactly one of its long options, for that option. `env
+# --split=<path>` is env's split string and GNU env executes the path; matched as written it
+# was an option no row lists, so the walk stepped over it and a recorded execution became an
+# allow. A long token is now resolved against the program's own option table first, and the
+# row is asked about the option it resolves to. These arms run the iteration's reverse mutant
+# as their second limb — the walk before that change — so a pair arm whose limbs differ is red
+# before it.
+WRAP_MUTANT="block-destructive-ab.sh"
+WRAP_NA_PY='/tmp/pmo-wrap-na.py'
+wrap_arm "WRAPOPT-ab-split-01: env --split=<unlisted>.sh keeps its exec row (a prefix of --split-string)" "env --split=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-02: env --s=<unlisted>.sh keeps its exec row (the shortest prefix of --split-string)" "env --s=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-03: env --sp=<unlisted>.sh keeps its exec row" "env --sp=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-04: env --split-strin=<unlisted>.sh keeps its exec row (one character short of the name)" "env --split-strin=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-05: env --split=<unlisted>.py keeps its exec row" "env --split=${WRAP_NA_PY}" W a exec
+wrap_arm "WRAPOPT-ab-split-cluster: env -i --split=<unlisted>.sh keeps its exec row (behind a flag)" "env -i --split=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-ok: env --split=<allowlisted>.sh keeps the exec row the full spelling keeps" "env --split=${WRAP_OK}" W a exec
+
+# The shortest prefix of every long option a row lists as taking an argument, computed on the
+# program's own option table: each one IS that option, so the value after it is consumed and
+# the interpreter behind it is adjudicated. The walk before this change stepped over the prefix
+# as an option no row lists and read the value as the command word. The split string's own
+# shortest prefix, --s, is WRAPOPT-ab-split-02 above.
+WRAP_AB_TABLE='nice|--adjustment|nice --a 10
+stdbuf|--input|stdbuf --i 0
+stdbuf|--output|stdbuf --o 0
+stdbuf|--error|stdbuf --e 0
+sudo|--auth-type|sudo --au bsdauth
+sudo|--close-from|sudo --cl 3
+sudo|--login-class|sudo --login- staff
+sudo|--chdir|sudo --chd x
+sudo|--group|sudo --g staff
+sudo|--host|sudo --ho box1
+sudo|--prompt|sudo --pro p
+sudo|--chroot|sudo --chr x
+sudo|--role|sudo --ro r
+sudo|--command-timeout|sudo --co 5
+sudo|--type|sudo --t t
+sudo|--other-user|sudo --o bot
+sudo|--user|sudo --u bot
+env|--argv0|env --a zero
+env|--chdir|env --c x
+env|--unset|env --u X
+xargs|--arg-file|xargs --a list
+xargs|--delimiter|xargs --d x
+xargs|--max-args|xargs --max-a 1
+xargs|--max-chars|xargs --max-c 100
+xargs|--max-procs|xargs --max-p 4
+xargs|--process-slot-var|xargs --p VAR
+time|--format|time --f %e
+time|--output-file|time --o x
+timeout|--kill-after|timeout --k 1 5
+timeout|--signal|timeout --s KILL 5'
+while IFS='|' read -r wrap_abw wrap_abopt wrap_abpfx; do
+  [ -n "$wrap_abw" ] || continue
+  wrap_arm "WRAPOPT-ab-${wrap_abw}${wrap_abopt}: ${wrap_abpfx} bash <unlisted>.sh blocks (the shortest prefix of ${wrap_abopt})" \
+    "${wrap_abpfx} bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+done <<<"$WRAP_AB_TABLE"
+wrap_arm "WRAPOPT-ab-time-output-file: time --output-file x bash <unlisted>.sh blocks (the name GNU time's own option table gives -o)" \
+  "time --output-file x bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-ab-ctl-near: nice --a 10 bash <allowlisted>.sh allowed (the allowlist was consulted)" "nice --a 10 bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-ab-ctl-near: the allowlist-blind mutant refuses it, so WRAPOPT-ab-ctl-near can fail" block-destructive-pallow.sh B
+wrap_arm "WRAPDIV-ab-ambiguous: sudo --c x bash <unlisted>.sh allowed (--c prefixes four sudo options: the program rejects it and runs nothing, and the walk keeps it as written)" \
+  "sudo --c x bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ab-ambiguous: the ambiguity-blind mutant takes --c for one option, consumes x and refuses, so WRAPDIV-ab-ambiguous can fail" block-destructive-pambig.sh B
+wrap_arm "WRAPDIV-ab-split-cmd (declared, introduced here): env --s=bash <unlisted>.sh allowed — an attached command line written with a prefix takes the full spelling's verdict (WRAPDIV-env-S-attached-cmd)" \
+  "env --s=bash ${WRAP_NA}" a W
+WRAP_MUTANT="block-destructive-mut.sh"
+
+# --- the second and third build conditions: the xargs deny, behind xargs's own options ----
+wrap_arm "WRAPOPT-xargs-stdin-n: printf x | xargs -n 1 bash blocks as unresolvable" "printf x | xargs -n 1 bash" B a "unresolvable script target"
+wrap_arm "WRAPOPT-xargs-stdin-0: printf x | xargs -0 sh blocks as unresolvable" "printf x | xargs -0 sh" B a "unresolvable script target"
+wrap_arm "WRAPOPT-xargs-stdin-py (declared: no record-only stage): printf x | xargs -n 1 python3 blocks as unresolvable" \
+  "printf x | xargs -n 1 python3" B a "unresolvable script target"
+wrap_arm "WRAPDIV-xargs-stdin-py-bare: printf x | xargs python3 blocks, as it did before this change" "printf x | xargs python3" B B "unresolvable script target"
+wrap_pair "WRAPPAIR-xargs-stdin-py-bare: the xargs-deny-off mutant allows it, so WRAPDIV-xargs-stdin-py-bare can fail" block-destructive-pxoff.sh a
+wrap_arm "WRAPDIV-xargs-interp-flag (declared: the deny is narrowed, not closed): printf x | xargs -n 1 bash -x allowed — the flag is a token" \
+  "printf x | xargs -n 1 bash -x" a a
+wrap_pair "WRAPPAIR-xargs-interp-flag: the stdin deny, whose predicate is no operand on argv, refuses it, so WRAPDIV-xargs-interp-flag can fail" block-destructive-pstdin.sh B
+wrap_arm "WRAPDIV-xargs-interp-flag-bare: printf x | xargs bash -x allowed, as before" "printf x | xargs bash -x" a a
+wrap_pair "WRAPPAIR-xargs-interp-flag-bare: the stdin deny refuses it, so WRAPDIV-xargs-interp-flag-bare can fail" block-destructive-pstdin.sh B
+wrap_arm "WRAPOPT-xargs-ctl-c: ls | xargs -n1 bash -c 'echo hi' allowed" "ls | xargs -n1 bash -c 'echo hi'" a a
+wrap_pair "WRAPPAIR-xargs-ctl-c: the every-xargs-interpreter deny refuses it, so WRAPOPT-xargs-ctl-c can fail" block-destructive-pxall.sh B
+wrap_arm "WRAPOPT-xargs-ctl-grep: git ls-files | xargs -n1 grep -l bash allowed" "git ls-files | xargs -n1 grep -l bash" a a
+wrap_pair "WRAPPAIR-xargs-ctl-grep: the scan mutant reads past grep to an xargs-fed bash and refuses, so WRAPOPT-xargs-ctl-grep can fail" block-destructive-pscan.sh B
+wrap_arm "WRAPOPT-xargs-ctl-pycompile: git ls-files | xargs -n1 python3 -m py_compile allowed" "git ls-files | xargs -n1 python3 -m py_compile" a a
+wrap_pair "WRAPPAIR-xargs-ctl-pycompile: the stdin deny refuses it, so WRAPOPT-xargs-ctl-pycompile can fail" block-destructive-pstdin.sh B
+
+# --- if, while and until join the keyword arm ------------------------------------------------
+wrap_arm "WRAPKW-if: if bash <unlisted>.sh; then :; fi blocks" "if bash ${WRAP_NA}; then :; fi" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPKW-while: while bash <unlisted>.sh; do :; done blocks" "while bash ${WRAP_NA}; do :; done" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPKW-until: until bash <unlisted>.sh; do :; done blocks" "until bash ${WRAP_NA}; do :; done" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPKW-if-bang: if ! bash <unlisted>.sh; then :; fi blocks" "if ! bash ${WRAP_NA}; then :; fi" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPKW-ctl-test: if [ -f <unlisted>.sh ]; then :; fi allowed" "if [ -f ${WRAP_NA} ]; then :; fi" a a
+wrap_pair "WRAPPAIR-kw-ctl-test: the scan mutant reads the tested path as the command and records it, so WRAPKW-ctl-test can fail" block-destructive-pscan.sh W
+wrap_arm "WRAPKW-ctl-read: while read -r l; do :; done < <unlisted>.sh allowed" "while read -r l; do :; done < ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-kw-ctl-read: the scan mutant reads the redirected path as the command and records it, so WRAPKW-ctl-read can fail" block-destructive-pscan.sh W
+wrap_arm "WRAPKW-ctl-ok: if bash <allowlisted>.sh; then :; fi allowed" "if bash ${WRAP_OK}; then :; fi" a a
+wrap_pair "WRAPPAIR-kw-ctl-ok: the allowlist-blind mutant refuses it, so WRAPKW-ctl-ok can fail" block-destructive-pallow.sh B
+# The reviewer's pin: quoted prose after a separator, in an argument of a command that is no
+# carrier, is split and read as a condition. A declared over-block, introduced by this line
+# for three common words and already true of then and do.
+wrap_arm "WRAPDIV-kw-prose (declared over-block, introduced here): git commit -m \"note; if bash <unlisted>.sh then\" blocks" \
+  "git commit -m \"note; if bash ${WRAP_NA} then\"" B a "BLOCK-DESTRUCTIVE-022"
+
+# --- the quoted assignment value: declared here, its fix owned by its own card ------------
+# Pinned at the verdicts the walk gives today, in both directions, so a change is deliberate.
+wrap_arm "WRAPDIV-qval-sq: FOO='a b' bash <unlisted>.sh allowed (the value's second piece is read as the command word)" \
+  "FOO='a b' bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-qval-sq: the scan mutant reads past the value's second piece and refuses, so WRAPDIV-qval-sq can fail" block-destructive-pscan.sh B
+wrap_arm "WRAPDIV-qval-fp: MSG='run bash now' echo <unlisted>.sh blocks (the over-block twin of the same split)" \
+  "MSG='run bash now' echo ${WRAP_NA}" B B "BLOCK-DESTRUCTIVE-022"
+wrap_pair "WRAPPAIR-qval-fp: with the operand walk and the conservative route both reverted the walk ends on the value's last piece and allows it, so WRAPDIV-qval-fp can fail" block-destructive-pwalkroute.sh a
+wrap_arm "WRAPDIV-qval-sep: FOO='a;b' bash <unlisted>.sh allowed (a separator inside the quoted value splits the segment)" \
+  "FOO='a;b' bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-qval-sep: the scan mutant reads past the split piece and refuses, so WRAPDIV-qval-sep can fail" block-destructive-pscan.sh B
+
+# --- Stage 7 F-08: an attached split string carrying no command word, then the command -------
+# env's split string is its own argv prepended to what follows, so when the attached value is
+# empty, a flag, or an assignment, env's command is the token that FOLLOWS and the walk now goes
+# on to adjudicate it, where before it stepped onto the split token and read nothing further.
+# The table runs every prefix the parser takes for --split-string, against each of the three
+# values. These run the splitcmd reverse mutant (stop on any attached split value, the
+# pre-helper walk) as the second limb, so each is red before the fix.
+WRAP_MUTANT="block-destructive-splitcmd.sh"
+WRAP_SN_TABLE='s|--s=|shortest prefix of --split-string
+sp|--sp=|a prefix of --split-string
+spl|--spl=|a prefix of --split-string
+spli|--spli=|a prefix of --split-string
+split|--split=|a prefix of --split-string
+split-|--split-=|a prefix of --split-string
+split-s|--split-s=|a prefix of --split-string
+split-st|--split-st=|a prefix of --split-string
+split-str|--split-str=|a prefix of --split-string
+split-stri|--split-stri=|a prefix of --split-string
+split-strin|--split-strin=|the longest proper prefix of --split-string
+full|--split-string=|the full long spelling'
+while IFS='|' read -r wrap_sntag wrap_snp wrap_snd; do
+  [ -n "$wrap_sntag" ] || continue
+  wrap_arm "WRAPOPT-sn-empty-${wrap_sntag}: env ${wrap_snp} bash <unlisted>.sh blocks (${wrap_snd}, empty value)" \
+    "env ${wrap_snp} bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+  wrap_arm "WRAPOPT-sn-opt-${wrap_sntag}: env ${wrap_snp}-i bash <unlisted>.sh blocks (value is a flag)" \
+    "env ${wrap_snp}-i bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+  wrap_arm "WRAPOPT-sn-assign-${wrap_sntag}: env ${wrap_snp}FOO=1 bash <unlisted>.sh blocks (value is an assignment)" \
+    "env ${wrap_snp}FOO=1 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+done <<<"$WRAP_SN_TABLE"
+wrap_arm "WRAPOPT-sn-short-opt: env -S-i bash <unlisted>.sh blocks (the short form, a flag value)" \
+  "env -S-i bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-sn-short-assign: env -SFOO=1 bash <unlisted>.sh blocks (the short form, an assignment value)" \
+  "env -SFOO=1 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+# an arg-taking option in the split value consumes the token that follows, so the real command,
+# not the consumed token, is adjudicated: env --s=-u <allowlisted>.sh <unlisted>.sh records the
+# unlisted script (env runs it; the allowlisted path was -u's argument, never the command word)
+wrap_arm "WRAPOPT-sn-optarg: env --s=-u <allowlisted>.sh <unlisted>.sh records the unlisted script (the -u in the split value consumes the allowlisted path)" \
+  "env --s=-u ${WRAP_OK} ${WRAP_NA}" W a exec
+# near miss: the command that follows the empty split value is on the allowlist
+wrap_arm "WRAPOPT-sn-near: env --s= bash <allowlisted>.sh allowed (the following command is allowlisted)" \
+  "env --s= bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-sn-near: the allowlist-blind mutant refuses the allowlisted script the walk goes on to, so WRAPOPT-sn-near can fail" block-destructive-pallow.sh B
+WRAP_MUTANT="block-destructive-mut.sh"
+
+/bin/rm -rf "$WRAP_ROOT"
+
+echo ""
+echo "BLOCK-022 flag walk: a quote-led word that spells a dash flag, its quote closing inside the operand suffix (FWALK-QDASH-*)"
+echo "---"
+# SUBJECT. The flag walk reads a token that opens with a quote and closes every quote it opens
+# as the word the shell makes of it (block (7b), FWALK-QWORD-*). One subclass of that family
+# still ended the walk with nothing adjudicated: a word whose exact value begins with `-` and
+# ends in the arm's operand suffix, with the quote closing INSIDE the suffix. `'-x.s'h` is the
+# word `-x.sh`. Its probe (`-x.s`) and its raw token (ending `'h`) land in no domain, so only
+# the word's own value claimed it; the walk ended on it as the operand, and the operand path,
+# which reads the probe and the raw token and never the word, adjudicated nothing. Its unquoted
+# twin begins with `-`, so the raw view steps over it and the script behind it is adjudicated.
+# A word whose exact value begins with `-` is now stepped over the same way, even when that
+# value lands in the operand domain. The normalizer, the probe and the raw token still claim
+# first. These arms grade that, the controls and pins it must leave alone, and the two
+# residuals it leaves declared rather than closed.
+#
+# HERMETIC, ON THE WRAP BLOCK'S PATTERN AND FOR ITS REASON: this block's own root, an allowlist
+# naming one shell and one Python fixture, its own .mode, the scope variables unset for every
+# run, and mutant copies beside the hook copy, so every verdict below turns on this fixture and
+# nothing ambient. A verdict is read as the corpus reader reads one: exit 2 is B, exit 0 with a
+# new would-fire row in this fixture's drain is W, exit 0 with none is a.
+#
+# THE REVERSE MUTANT deletes the one marked line (M-QDASH) and nothing else, which is the walk
+# as it was before this change; FWALK-QDASH-M0 pins that difference. Every pair arm runs the
+# hook AND the reverse mutant, so the mutant limb of a must-refuse arm is its red-before
+# evidence in the same run.
+#
+# ARM CLASSES, so the red-before obligation can be read off the label. FWALK-QDASH-01 to -14
+# are the fourteen spellings the finding measured, must-refuse on the shell arms and must-flag
+# on the phase-gated non-shell arm: red before this change. A -ctl- arm must stay allowed and a
+# -pin- arm is a verdict this change does not move; both are green before by design, and each
+# is shown able to fail by a sibling mutant: the deny mutant (-M1*) refuses each control and the
+# declared residual, the claim-blind mutant (-M2*) allows each pin the probe or raw token holds,
+# and the top-rule mutant (-M3*) allows each pin the normalizer holds. -SCOPE, the -M*a shape
+# arms and the mutant payload arms read mutation sites or behaviour this change adds, and are
+# not red-before evidence.
+#
+# NO PIPE INTO A SHORT-CIRCUITING READER ANYWHERE IN THIS BLOCK (the SIGPIPE-idiom gate):
+# the diff shape is counted by one awk pass that reads to the end, and stderr is matched from a
+# here-string.
+QDASH_ROOT="$(/usr/bin/mktemp -d)"
+QDASH_CLAUDE="${QDASH_ROOT}/.claude"
+QDASH_HOOKS="${QDASH_CLAUDE}/hooks"
+/bin/mkdir -p "${QDASH_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${QDASH_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${QDASH_HOOKS}/lib/" 2>/dev/null || true
+QDASH_OK='/tmp/pmo-qdash-ok.sh'
+QDASH_OKPY='/tmp/pmo-qdash-ok.py'
+QDASH_NA='/tmp/pmo-qdash-na'
+/usr/bin/printf '%s\n' "$QDASH_OK" "$QDASH_OKPY" > "${QDASH_CLAUDE}/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${QDASH_HOOKS}/.mode"
+/bin/cp "$HOOK" "${QDASH_HOOKS}/block-destructive.sh"
+# The reverse mutant: the marked line deleted, so a word that spells a dash flag is claimed by
+# its value again and the walk ends on it.
+/usr/bin/sed '/# M-QDASH (mutation/d' "$HOOK" > "${QDASH_HOOKS}/block-destructive-rev.sh"
+# The deny mutant: the view refuses a token the normalizer declines and the probe and raw token
+# leave unclaimed (the FWALK-QWORD-M2 shape, with this block's own reason text).
+/usr/bin/sed 's|^  script_word_scan "\$1"$|  if ! script_operand_implicated "$script_interp_domain"; then block "BLOCK-DESTRUCTIVE-022" "QDASH deny mutant" "test only"; fi; script_word_scan "$1"|' \
+  "$HOOK" > "${QDASH_HOOKS}/block-destructive-deny.sh"
+# The claim-blind mutant: the view's probe-and-raw claim deleted (the FWALK-QWORD-M3 shape).
+/usr/bin/sed '/^  if script_operand_implicated "\$script_interp_domain"; then return 0; fi$/d' \
+  "$HOOK" > "${QDASH_HOOKS}/block-destructive-blind.sh"
+# The top-rule mutant: the walk's top-of-loop line rewrites every flag-shaped reading, with no
+# domain question asked of a token the normalizer resolved.
+/usr/bin/sed '/# M-QDASH-TOP (mutation/s/if .*; then/if true; then/' \
+  "$HOOK" > "${QDASH_HOOKS}/block-destructive-wide.sh"
+/bin/chmod +x "${QDASH_HOOKS}/block-destructive.sh" "${QDASH_HOOKS}/block-destructive-rev.sh" \
+  "${QDASH_HOOKS}/block-destructive-deny.sh" "${QDASH_HOOKS}/block-destructive-blind.sh" \
+  "${QDASH_HOOKS}/block-destructive-wide.sh"
+QDASH_DRAIN="${QDASH_HOOKS}/destructive-warn-log.jsonl"
+
+qdash_drain_rows() {
+  if [ -f "$QDASH_DRAIN" ]; then
+    /usr/bin/wc -l < "$QDASH_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+# The difference between the hook copy and one mutant, as "<lines removed>/<lines added>".
+qdash_diff_shape() { # $1 = mutant file in the hermetic hooks dir
+  /usr/bin/diff "${QDASH_HOOKS}/block-destructive.sh" "${QDASH_HOOKS}/$1" \
+    | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }'
+}
+
+QDASH_EXIT=0
+QDASH_ERR=""
+QDASH_V=""
+QDASH_LAST=""
+# Run one payload through one of the sandbox copies -> QDASH_V (a|B|W|E<rc>), QDASH_ERR, and
+# QDASH_LAST, the would-fire row the call added (empty when it added none).
+qdash_run() { # $1 = hook file in the hermetic hooks dir  $2 = command
+  local tmp before after
+  tmp="$(/usr/bin/mktemp)"
+  QDASH_EXIT=0
+  QDASH_LAST=""
+  before="$(qdash_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$QDASH_ROOT")" \
+      | /bin/bash "${QDASH_HOOKS}/$1" 2>"$tmp" >/dev/null ) || QDASH_EXIT="$?"
+  after="$(qdash_drain_rows)"
+  QDASH_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  case "$QDASH_EXIT" in
+    2) QDASH_V="B" ;;
+    0)
+      if [ "$after" -gt "$before" ]; then
+        QDASH_V="W"
+        QDASH_LAST="$(/usr/bin/tail -n 1 "$QDASH_DRAIN")"
+      else
+        QDASH_V="a"
+      fi
+      ;;
+    *) QDASH_V="E${QDASH_EXIT}" ;;
+  esac
+}
+
+# A pair arm. $1 label  $2 command  $3 verdict wanted from the hook (a|B|W)  $4 verdict wanted
+# from the reverse mutant (a|B|W)  $5 (optional) for a wanted B, a pattern the hook's refusal
+# must carry; for a wanted W, the arm its would-fire row must name.
+qdash_arm() {
+  local name="$1" cmd="$2" want="$3" wantm="$4" detail="${5:-}" got gotm ok=1 why=""
+  qdash_run block-destructive.sh "$cmd"
+  got="$QDASH_V"
+  if [ "$got" != "$want" ]; then ok=0; why="hook=${got}"; fi
+  if [ "$ok" = 1 ] && [ -n "$detail" ]; then
+    case "$want" in
+      B) if ! /usr/bin/grep -qE "$detail" <<<"$QDASH_ERR"; then ok=0; why="refusal lacks /${detail}/"; fi ;;
+      W) case "$QDASH_LAST" in *"\"arm\":\"${detail}\""*) ;; *) ok=0; why="row arm is not ${detail}" ;; esac ;;
+    esac
+  fi
+  qdash_run block-destructive-rev.sh "$cmd"
+  gotm="$QDASH_V"
+  if [ "$gotm" != "$wantm" ]; then ok=0; why="${why} reverse=${gotm}"; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (hook %s, reverse %s)\n' "$name" "$got" "$gotm"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted hook=%s reverse=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$wantm" "${why# }" "$QDASH_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# A mutant arm. $1 label  $2 mutant file  $3 command  $4 verdict wanted from the mutant
+# $5 (optional) for a wanted B, a pattern the mutant's refusal must carry.
+qdash_mut_arm() {
+  local name="$1" mut="$2" cmd="$3" want="$4" detail="${5:-}" ok=1 why=""
+  qdash_run "$mut" "$cmd"
+  if [ "$QDASH_V" != "$want" ]; then ok=0; why="mutant=${QDASH_V}"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && [ -n "$detail" ] \
+     && ! /usr/bin/grep -qE "$detail" <<<"$QDASH_ERR"; then
+    ok=0; why="refusal lacks /${detail}/"
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (mutant %s)\n' "$name" "$QDASH_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted mutant=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$why" "$QDASH_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# A mutant's shape arm. $1 label  $2 mutant file  $3 the shape it must have
+qdash_shape_arm() {
+  local got
+  got="$(qdash_diff_shape "$2")"
+  if [ "$got" = "$3" ]; then
+    /usr/bin/printf 'PASS: %s (removed/added %s)\n' "$1" "$got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  removed/added %s, wanted %s — the arms that read this mutant are unusable\n' "$1" "$got" "$3"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- the fixture is live before any verdict is read -------------------------------------
+qdash_run block-destructive.sh 'git push --force origin main'
+qdash_scope_hook="$QDASH_V"
+qdash_scope_err="$QDASH_ERR"
+qdash_run block-destructive-rev.sh 'git push --force origin main'
+qdash_scope_rev="$QDASH_V"
+if [ "$qdash_scope_hook" = "B" ] && [ "$qdash_scope_rev" = "B" ] \
+   && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' <<<"$qdash_scope_err"; then
+  /usr/bin/printf 'PASS: FWALK-QDASH-SCOPE the hook copy and its reverse mutant are in scope and enforcing (unrelated rule -001 fires on both), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QDASH-SCOPE fixture not live (hook=%s reverse=%s); the verdicts below are unusable\n' "$qdash_scope_hook" "$qdash_scope_rev"
+  FAIL=$((FAIL + 1))
+fi
+qdash_shape_arm "FWALK-QDASH-M0: the reverse mutant differs from the hook by the one marked line, removed" \
+  block-destructive-rev.sh "1/0"
+
+# --- MUST REFUSE: the always-enforce shell arms ---------------------------------------------
+qdash_arm "FWALK-QDASH-01: bash '-x.s'h <unlisted>.sh blocks (the word is -x.sh, a flag; the script behind it is adjudicated)" \
+  "bash '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-02: bash -n '-x.s'h <unlisted>.sh blocks (stepping over the word revokes the grant)" \
+  "bash -n '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-03: bash '--rcfile=x.s'h <unlisted>.sh blocks" \
+  "bash '--rcfile=x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-04: zsh '-oxtrace.s'h <unlisted>.sh blocks (the word is a cluster carrying c, as unquoted)" \
+  "zsh '-oxtrace.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-05: zsh '--emulate=sh.s'h <unlisted>.sh blocks" \
+  "zsh '--emulate=sh.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-06: source '-x.s'h <unlisted>.sh blocks (the source arm walks the same loop)" \
+  "source '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+
+# --- MUST FLAG: the phase-gated non-shell arm, at its rollout phase --------------------------
+qdash_arm "FWALK-QDASH-07: python3 '-Wx.p'y <unlisted>.py is adjudicated (the word is -Wx.py)" \
+  "python3 '-Wx.p'y ${QDASH_NA}.py" W a interp-nonshell
+qdash_arm "FWALK-QDASH-08: python3 '-Xfoo.p'y <unlisted>.py is adjudicated" \
+  "python3 '-Xfoo.p'y ${QDASH_NA}.py" W a interp-nonshell
+qdash_arm "FWALK-QDASH-09: python3 '-Wignore::x.p'y <unlisted>.py is adjudicated" \
+  "python3 '-Wignore::x.p'y ${QDASH_NA}.py" W a interp-nonshell
+qdash_arm "FWALK-QDASH-10: perl '-Ifoo.p'm <unlisted>.pl is adjudicated" \
+  "perl '-Ifoo.p'm ${QDASH_NA}.pl" W a interp-nonshell
+qdash_arm "FWALK-QDASH-11: perl '-Ifoo.p'l <unlisted>.pl is adjudicated" \
+  "perl '-Ifoo.p'l ${QDASH_NA}.pl" W a interp-nonshell
+qdash_arm "FWALK-QDASH-12: ruby '-Ifoo.r'b <unlisted>.rb is adjudicated" \
+  "ruby '-Ifoo.r'b ${QDASH_NA}.rb" W a interp-nonshell
+qdash_arm "FWALK-QDASH-13: node '--title=x.j's <unlisted>.js is adjudicated" \
+  "node '--title=x.j's ${QDASH_NA}.js" W a interp-nonshell
+qdash_arm "FWALK-QDASH-14: perl '-Mstrict.p'm <unlisted>.pl is adjudicated" \
+  "perl '-Mstrict.p'm ${QDASH_NA}.pl" W a interp-nonshell
+
+# --- MUST STAY ALLOWED: the allowlist still governs the script behind the word --------------
+qdash_arm "FWALK-QDASH-ctl-near: bash '-x.s'h <allowlisted>.sh allowed (the near miss)" \
+  "bash '-x.s'h ${QDASH_OK}" a a
+qdash_arm "FWALK-QDASH-ctl-near-py: python3 '-Wx.p'y <allowlisted>.py allowed (the near miss the finding named)" \
+  "python3 '-Wx.p'y ${QDASH_OKPY}" a a
+qdash_arm "FWALK-QDASH-ctl-near-n: bash -n '-x.s'h <allowlisted>.sh allowed (revoked, and the allowlist still governs)" \
+  "bash -n '-x.s'h ${QDASH_OK}" a a
+
+# --- PINS: a claim made before the word is read still ends the walk -------------------------
+# A token the normalizer resolves, or one the probe or the raw token places in the operand
+# domain, is the operand and is adjudicated as before: stricter than its unquoted twin, never
+# looser. A word that does not begin with `-` keeps the claim-order verdict.
+qdash_arm "FWALK-QDASH-pin-resolved (pin, not fix-evidence): bash '-x.sh' <allowlisted>.sh still blocks (the normalizer resolves the token; a domain claim beats a flag shape)" \
+  "bash '-x.sh' ${QDASH_OK}" B B "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-pin-raw (pin, not fix-evidence): bash \"-\"x.sh <allowlisted>.sh still blocks (the raw token claims it)" \
+  "bash \"-\"x.sh ${QDASH_OK}" B B "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-pin-empty (pin, not fix-evidence): bash ''-x.sh <allowlisted>.sh still blocks (the raw token claims it)" \
+  "bash ''-x.sh ${QDASH_OK}" B B "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-pin-resolved-py (pin, not fix-evidence): python3 '-Wx.py' still warns" \
+  "python3 '-Wx.py'" W W interp-nonshell
+qdash_arm "FWALK-QDASH-pin-raw-py (pin, not fix-evidence): python3 \"-W\"x.py still warns" \
+  "python3 \"-W\"x.py" W W interp-nonshell
+qdash_arm "FWALK-QDASH-pin-empty-py (pin, not fix-evidence): python3 ''-Wx.py still warns" \
+  "python3 ''-Wx.py" W W interp-nonshell
+qdash_arm "FWALK-QDASH-pin-raw-js (pin, not fix-evidence): node \"\"--title=x.js still warns" \
+  "node \"\"--title=x.js" W W interp-nonshell
+qdash_arm "FWALK-QDASH-pin-claimed (pin, not fix-evidence): bash '<unlisted>.sh'y still blocks (the claim-order example; the word does not begin with -)" \
+  "bash '${QDASH_NA}.sh'y" B B "BLOCK-DESTRUCTIVE-022"
+# The declared residual, pinned at today's verdict so a later change to it is deliberate. A
+# word whose own value lands in the domain without beginning with `-` is the operand, as its
+# unquoted spelling is, and the operand path reads only the probe and the raw token.
+qdash_arm "FWALK-QDASH-pin-plus (declared residual — pin, not fix-evidence): bash '+x.s'h <unlisted>.sh allowed (the word +x.sh is the operand; nothing adjudicates a split suffix)" \
+  "bash '+x.s'h ${QDASH_NA}.sh" a a
+
+# --- EACH CONTROL AND PIN, SHOWN ABLE TO FAIL -------------------------------------------------
+qdash_shape_arm "FWALK-QDASH-M1a: the deny mutant differs from the hook by one line, rewritten" \
+  block-destructive-deny.sh "1/1"
+qdash_mut_arm "FWALK-QDASH-M1b: the deny mutant REFUSES the near miss bash '-x.s'h <allowlisted>.sh" \
+  block-destructive-deny.sh "bash '-x.s'h ${QDASH_OK}" B "QDASH deny mutant"
+qdash_mut_arm "FWALK-QDASH-M1c: the deny mutant REFUSES python3 '-Wx.p'y <allowlisted>.py" \
+  block-destructive-deny.sh "python3 '-Wx.p'y ${QDASH_OKPY}" B "QDASH deny mutant"
+qdash_mut_arm "FWALK-QDASH-M1d: the deny mutant REFUSES bash -n '-x.s'h <allowlisted>.sh" \
+  block-destructive-deny.sh "bash -n '-x.s'h ${QDASH_OK}" B "QDASH deny mutant"
+qdash_mut_arm "FWALK-QDASH-M1e: the deny mutant REFUSES the declared residual bash '+x.s'h <unlisted>.sh" \
+  block-destructive-deny.sh "bash '+x.s'h ${QDASH_NA}.sh" B "QDASH deny mutant"
+qdash_shape_arm "FWALK-QDASH-M2a: the claim-blind mutant differs from the hook by one line, removed" \
+  block-destructive-blind.sh "1/0"
+qdash_mut_arm "FWALK-QDASH-M2b: the claim-blind mutant ALLOWS bash \"-\"x.sh <allowlisted>.sh (the raw token's claim is what holds a dash word as the operand)" \
+  block-destructive-blind.sh "bash \"-\"x.sh ${QDASH_OK}" a
+qdash_mut_arm "FWALK-QDASH-M2c: the claim-blind mutant ALLOWS bash ''-x.sh <allowlisted>.sh" \
+  block-destructive-blind.sh "bash ''-x.sh ${QDASH_OK}" a
+qdash_mut_arm "FWALK-QDASH-M2d: the claim-blind mutant ALLOWS python3 \"-W\"x.py (no row)" \
+  block-destructive-blind.sh "python3 \"-W\"x.py" a
+qdash_mut_arm "FWALK-QDASH-M2e: the claim-blind mutant ALLOWS python3 ''-Wx.py (no row)" \
+  block-destructive-blind.sh "python3 ''-Wx.py" a
+qdash_mut_arm "FWALK-QDASH-M2f: the claim-blind mutant ALLOWS node \"\"--title=x.js (no row)" \
+  block-destructive-blind.sh "node \"\"--title=x.js" a
+qdash_mut_arm "FWALK-QDASH-M2g: the claim-blind mutant ALLOWS bash '<unlisted>.sh'y" \
+  block-destructive-blind.sh "bash '${QDASH_NA}.sh'y" a
+qdash_shape_arm "FWALK-QDASH-M3a: the top-rule mutant differs from the hook by one line, rewritten" \
+  block-destructive-wide.sh "1/1"
+qdash_mut_arm "FWALK-QDASH-M3b: the top-rule mutant ALLOWS bash '-x.sh' <allowlisted>.sh (the domain question is what holds a resolved token)" \
+  block-destructive-wide.sh "bash '-x.sh' ${QDASH_OK}" a
+qdash_mut_arm "FWALK-QDASH-M3c: the top-rule mutant ALLOWS python3 '-Wx.py' (no row)" \
+  block-destructive-wide.sh "python3 '-Wx.py'" a
+
+/bin/rm -rf "$QDASH_ROOT"
+
+echo ""
+echo "BLOCK-022 enclosure positions: a second view of the segments (AC-ENCL-*)"
+echo "---"
+# SUBJECT. The rule splits a command on `;`, `&`, `|` and newline and walks each segment's
+# command position. An enclosure — `$( )`, backticks, `<( )`, `>( )`, `( )` — is not a
+# separator, so the verb inside one never starts a segment and was never adjudicated: a shell
+# interpreter or `source` inside one ran with nothing refused or recorded. The hook now runs a
+# second view of the same segments that opens one command position after every `(` and every
+# backtick (ENCLOSURE-VIEW in the hook). A shell or `source` finding there follows a third
+# rollout family, DESTRUCTIVE_022_ENCL_PHASE, which ships at `warn`: recorded, not refused.
+# These arms grade the shapes it closes, the two adjacent fail-opens closed with it, the near
+# misses it must leave alone, and the limits it declares.
+#
+# HERMETIC, ON THE QDASH BLOCK'S PATTERN AND FOR ITS REASON: this block's own root, an
+# allowlist naming one shell fixture, its own .mode, the scope variables unset for every run,
+# and every copy beside the hook copy. A verdict is read as the corpus reader reads one: exit
+# 2 is B, exit 0 with a new would-fire row in this fixture's drain is W, exit 0 with none is a.
+#
+# THREE COPIES GRADE EVERY SHAPE. The shipped copy, at the shipped phase (`warn`), must
+# RECORD a shape (W, and a row carrying the arm and `"pos":"enclosure"`). The FORCED copy —
+# the same hook with only DESTRUCTIVE_022_ENCL_PHASE set to `enforce` — must REFUSE it: that
+# is the refusal the rollout's graduation would turn on, and AC-2 asks for it. The REVERSE
+# mutant — the view's marked block, the pre-pass's ENCL-HDHEAD block and the three openers on
+# the pre-pass's M-ENCL-SCAN line removed — is the hook before this change, so its limb of a
+# shape arm is that arm's red-before evidence in the same run, and its limb of a pin is the
+# mutant that fails the pin.
+#
+# ARM CLASSES, so the red-before obligation can be read off the label. AC-ENCL-01 to -16 and
+# -TEXEC6b are the shapes: red before this change. An -N arm is a near miss that must stay
+# allowed and a -RESIDUAL arm pins a declared limit; both are green before by design, and each
+# is followed by a pairing arm (-pair) that runs its own command through a mutant of the hook
+# and shows the verdict it asserts is able to fail. -SCOPE, the -M*a shape arms, the -P* phase
+# arms and the mutant payload arms read mutation sites or behaviour this change adds, and are
+# not red-before evidence.
+#
+# NO PIPE INTO A SHORT-CIRCUITING READER ANYWHERE IN THIS BLOCK (the SIGPIPE-idiom gate): the
+# diff shape is counted by one awk pass that reads to the end, and stderr is matched from a
+# here-string. No payload here carries an unclosed run of openers: those are slow by design
+# (the readiness text states the cost), and the budget pins run on copies with the budget
+# lowered instead.
+ENCL_ROOT="$(/usr/bin/mktemp -d)"
+ENCL_CLAUDE="${ENCL_ROOT}/.claude"
+ENCL_HOOKS="${ENCL_CLAUDE}/hooks"
+/bin/mkdir -p "${ENCL_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${ENCL_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${ENCL_HOOKS}/lib/" 2>/dev/null || true
+ENCL_OK='/tmp/pmo-encl-ok.sh'
+ENCL_NA='/tmp/pmo-encl-na.sh'
+ENCL_NAPY='/tmp/pmo-encl-na.py'
+/usr/bin/printf '%s\n' "$ENCL_OK" > "${ENCL_CLAUDE}/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${ENCL_HOOKS}/.mode"
+/bin/cp "$HOOK" "${ENCL_HOOKS}/block-destructive.sh"
+# The phase copies: only the enclosure family's phase constant differs.
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="enforce"   # shadow | warn | enforce/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-forced.sh"
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="shadow"   # shadow | warn | enforce/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-shadow.sh"
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="bogus"   # shadow | warn | enforce/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-bogus.sh"
+# The reverse mutant: the hook before this change.
+/usr/bin/sed \
+  -e '/# >>> ENCLOSURE-VIEW-BEGIN/,/# >>> ENCLOSURE-VIEW-END/d' \
+  -e '/# >>> ENCL-HDHEAD-BEGIN/,/# >>> ENCL-HDHEAD-END/d' \
+  -e '/# M-ENCL-SCAN/s/ "\$_lp" "\$_rp" "\$script_qbt"//' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-rev.sh"
+# The design's five component mutants, one marked line or block each.
+/usr/bin/sed '/# M-ENCL-RESUPP/s/) : ;;/) continue ;;/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m1.sh"
+/usr/bin/sed '/# >>> ENCL-HDHEAD-BEGIN/,/# >>> ENCL-HDHEAD-END/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m2.sh"
+/usr/bin/sed '/# M-ENCL-TAIL/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m3.sh"
+/usr/bin/sed '/# M-ENCL-CUT/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m4.sh"
+/usr/bin/sed '/# M-ENCL-ESC/s/-eq 1 \]/-eq 9 ]/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m5.sh"
+# Pairing mutants, each a design the view could have had or a step it could have missed:
+#   deny     every position the view opens and adjudicates is refused outright
+#   openall  the escape rule off as well, so an escaped opener opens a position, and refused
+#   supp     a segment interior to a carrier's quote is not suppressed in the second view
+#   route    the shell-arm router sends a first-view finding to the enclosure phase too
+#   split    the first view reads `)` as a separator
+#   noex     the here-document pre-pass excises nothing
+#   suppall  the first view's carrier suppression is switched off
+#   smallp   the position ceiling lowered to 4
+#   smallb   the remainder budget lowered to 64 bytes
+/usr/bin/sed 's@script_rowpos="enclosure"   # M-ENCL-GATE@block "BLOCK-DESTRUCTIVE-022" "ENCL gate deny mutant" "test only"@' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-deny.sh"
+/usr/bin/sed \
+  -e 's@script_rowpos="enclosure"   # M-ENCL-GATE@block "BLOCK-DESTRUCTIVE-022" "ENCL gate deny mutant" "test only"@' \
+  -e '/# M-ENCL-ESC/s/-eq 1 \]/-eq 9 ]/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-openall.sh"
+/usr/bin/sed '/# M-ENCL-SUPP/s/if \[ "\$script_supp" -eq 1 \]; then/if [ "$script_supp" -eq 1 ] \&\& [ "$script_pass" -eq 1 ]; then/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-supp.sh"
+/usr/bin/sed '/# M-ENCL-ROUTE/s/-ne 2 \]/-eq 9 ]/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-route.sh"
+/usr/bin/sed 's@script_segments//|/@script_segments//[|)]/@' "$HOOK" > "${ENCL_HOOKS}/block-destructive-split.sh"
+/usr/bin/sed 's/^        gh|printf|echo|jq)$/        gh-never)/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-noex.sh"
+/usr/bin/sed 's/^      elif \[ "\$script_carrier" -eq 1 \]; then$/      elif false; then/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-suppall.sh"
+/usr/bin/sed 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-smallp.sh"
+/usr/bin/sed 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-smallb.sh"
+for encl_c in forced shadow bogus rev m1 m2 m3 m4 m5 deny openall supp route split noex suppall smallp smallb; do
+  /bin/chmod +x "${ENCL_HOOKS}/block-destructive-${encl_c}.sh"
+done
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive.sh"
+ENCL_DRAIN="${ENCL_HOOKS}/destructive-warn-log.jsonl"
+
+encl_drain_rows() {
+  if [ -f "$ENCL_DRAIN" ]; then
+    /usr/bin/wc -l < "$ENCL_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+# The difference between the hook copy and one copy, as "<lines removed>/<lines added>".
+encl_diff_shape() { # $1 = copy file in the hermetic hooks dir
+  /usr/bin/diff "${ENCL_HOOKS}/block-destructive.sh" "${ENCL_HOOKS}/$1" \
+    | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }'
+}
+
+ENCL_EXIT=0
+ENCL_ERR=""
+ENCL_V=""
+ENCL_ROWS=""
+ENCL_NROWS=0
+# Run one payload through one copy -> ENCL_V (a|B|W|E<rc>), ENCL_ERR, and ENCL_ROWS, the
+# would-fire rows the call added, one per line (empty when it added none).
+encl_run() { # $1 = copy file in the hermetic hooks dir  $2 = command
+  local tmp before after
+  tmp="$(/usr/bin/mktemp)"
+  ENCL_EXIT=0
+  ENCL_ROWS=""
+  before="$(encl_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$ENCL_ROOT")" \
+      | /bin/bash "${ENCL_HOOKS}/$1" 2>"$tmp" >/dev/null ) || ENCL_EXIT="$?"
+  after="$(encl_drain_rows)"
+  ENCL_NROWS=$(( after - before ))
+  ENCL_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  if [ "$ENCL_NROWS" -gt 0 ]; then
+    ENCL_ROWS="$(/usr/bin/tail -n "$ENCL_NROWS" "$ENCL_DRAIN")"
+  fi
+  case "$ENCL_EXIT" in
+    2) ENCL_V="B" ;;
+    0) if [ "$ENCL_NROWS" -gt 0 ]; then ENCL_V="W"; else ENCL_V="a"; fi ;;
+    *) ENCL_V="E${ENCL_EXIT}" ;;
+  esac
+}
+
+# Does one of the rows the last call added carry this arm AND the enclosure position key?
+encl_row_has() { # $1 = arm value
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      *"\"arm\":\"$1\""*'"pos":"enclosure"'*) return 0 ;;
+    esac
+  done <<<"$ENCL_ROWS"
+  return 1
+}
+
+# A shape arm. $1 label  $2 command  $3 shipped verdict (a|B|W)  $4 forced verdict (a|B|W, or
+# - to skip)  $5 reverse verdict (a|B|W, or - to skip)  $6 (optional) for a wanted W, the arm
+# a row written from an enclosure position must name, on the shipped copy and on the forced
+# one. A wanted B must carry BLOCK-DESTRUCTIVE-022. The reverse copy never writes the position
+# key, so a reverse W (a first-view row) is not mistaken for the view's.
+encl_arm() {
+  local name="$1" cmd="$2" want="$3" wantf="$4" wantr="$5" arm="${6:-}" got gotf gotr ok=1 why=""
+  encl_run block-destructive.sh "$cmd"
+  got="$ENCL_V"
+  if [ "$got" != "$want" ]; then ok=0; why="shipped=${got}"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "W" ] && [ -n "$arm" ] && ! encl_row_has "$arm"; then ok=0; why="shipped row lacks arm ${arm} at pos enclosure"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR"; then ok=0; why="shipped refusal is not -022"; fi
+  gotf="-"
+  if [ "$wantf" != "-" ]; then
+    encl_run block-destructive-forced.sh "$cmd"
+    gotf="$ENCL_V"
+    if [ "$gotf" != "$wantf" ]; then ok=0; why="${why} forced=${gotf}"; fi
+    if [ "$wantf" = "B" ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR"; then ok=0; why="${why} forced refusal is not -022"; fi
+    if [ "$wantf" = "W" ] && [ -n "$arm" ] && ! encl_row_has "$arm"; then ok=0; why="${why} forced row lacks arm ${arm} at pos enclosure"; fi
+  fi
+  gotr="-"
+  if [ "$wantr" != "-" ]; then
+    encl_run block-destructive-rev.sh "$cmd"
+    gotr="$ENCL_V"
+    if [ "$gotr" != "$wantr" ]; then ok=0; why="${why} reverse=${gotr}"; fi
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (shipped %s, forced %s, reverse %s)\n' "$name" "$got" "$gotf" "$gotr"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted shipped=%s forced=%s reverse=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$wantf" "$wantr" "${why# }" "$ENCL_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# A mutant arm. $1 label  $2 copy file  $3 command  $4 verdict wanted from that copy
+# $5 (optional) for a wanted B, a pattern the refusal must carry.
+encl_mut_arm() {
+  local name="$1" mut="$2" cmd="$3" want="$4" detail="${5:-}" ok=1 why=""
+  encl_run "$mut" "$cmd"
+  if [ "$ENCL_V" != "$want" ]; then ok=0; why="copy=${ENCL_V}"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && [ -n "$detail" ] \
+     && ! /usr/bin/grep -qE "$detail" <<<"$ENCL_ERR"; then
+    ok=0; why="refusal lacks /${detail}/"
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (copy %s)\n' "$name" "$ENCL_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted copy=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$why" "$ENCL_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# A copy's shape arm: it differs from the hook by the lines named, and it parses. A copy whose
+# sed matched nothing is a byte copy of the hook, and the arms that read it would be inert.
+encl_shape_arm() { # $1 label  $2 copy file  $3 the shape it must have
+  local got parse=0
+  got="$(encl_diff_shape "$2")"
+  /bin/bash -n "${ENCL_HOOKS}/$2" 2>/dev/null || parse=1
+  if [ "$got" = "$3" ] && [ "$parse" = 0 ]; then
+    /usr/bin/printf 'PASS: %s (removed/added %s, parses)\n' "$1" "$got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  removed/added %s (wanted %s), bash -n exit %s — the arms that read this copy are unusable\n' "$1" "$got" "$3" "$parse"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- the fixture is live before any verdict is read ------------------------------------------
+encl_scope_ok=1
+for encl_c in block-destructive.sh block-destructive-forced.sh block-destructive-rev.sh; do
+  encl_run "$encl_c" 'git push --force origin main'
+  if [ "$ENCL_V" != "B" ] || ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' <<<"$ENCL_ERR"; then encl_scope_ok=0; fi
+done
+if [ "$encl_scope_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-SCOPE the shipped copy, the forced copy and the reverse mutant are in scope and enforcing (unrelated rule -001 fires on each), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-SCOPE a copy is not live (an unrelated rule did not fire on it); the verdicts below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+# The reverse mutant removes exactly the two marked blocks and rewrites the one scan line. The
+# expected removal is counted from the shipped hook's own markers, and a hook that carries none
+# fails here rather than passing with a removal of zero.
+encl_view_lines="$(/usr/bin/awk 'index($0, "# >>> ENCLOSURE-VIEW-BEGIN") { f = 1 } f { n++ } index($0, "# >>> ENCLOSURE-VIEW-END") { f = 0 } END { printf "%d", n }' "$HOOK")"
+encl_hd_lines="$(/usr/bin/awk 'index($0, "# >>> ENCL-HDHEAD-BEGIN") { f = 1 } f { n++ } index($0, "# >>> ENCL-HDHEAD-END") { f = 0 } END { printf "%d", n }' "$HOOK")"
+encl_rev_left="$(/usr/bin/awk 'index($0, "ENCLOSURE-VIEW-") || index($0, "ENCL-HDHEAD-") { n++ } index($0, "# M-ENCL-SCAN") && index($0, "script_qbt") { n++ } END { printf "%d", n }' "${ENCL_HOOKS}/block-destructive-rev.sh")"
+encl_rev_want="$(( encl_view_lines + encl_hd_lines + 1 ))/1"
+encl_rev_got="$(encl_diff_shape block-destructive-rev.sh)"
+if [ "$encl_view_lines" -gt 0 ] && [ "$encl_hd_lines" -gt 0 ] && [ "$encl_rev_got" = "$encl_rev_want" ] && [ "$encl_rev_left" = 0 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-M0a the reverse mutant removes the view block (%s lines) and the receiver block (%s lines) and rewrites the scan line (removed/added %s), leaving no marker behind\n' "$encl_view_lines" "$encl_hd_lines" "$encl_rev_got"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-M0a reverse mutant shape %s (wanted %s, view %s lines, receiver %s lines, %s marker lines left) — the reverse limbs below are unusable\n' "$encl_rev_got" "$encl_rev_want" "$encl_view_lines" "$encl_hd_lines" "$encl_rev_left"
+  FAIL=$((FAIL + 1))
+fi
+encl_shape_arm "AC-ENCL-M0b the reverse mutant parses (shape restated)" block-destructive-rev.sh "$encl_rev_want"
+encl_mut_arm "AC-ENCL-M0c the reverse mutant still refuses bash <unlisted>.sh (it enforces the first view)" \
+  block-destructive-rev.sh "bash ${ENCL_NA}" B "BLOCK-DESTRUCTIVE-022"
+encl_shape_arm "AC-ENCL-P0a the forced copy differs from the hook by the phase constant alone" block-destructive-forced.sh "1/1"
+encl_shape_arm "AC-ENCL-P0b the shadow copy differs from the hook by the phase constant alone" block-destructive-shadow.sh "1/1"
+encl_shape_arm "AC-ENCL-P0c the out-of-enum copy differs from the hook by the phase constant alone" block-destructive-bogus.sh "1/1"
+encl_shape_arm "AC-ENCL-M1a the re-open mutant differs by one line, rewritten" block-destructive-m1.sh "1/1"
+encl_shape_arm "AC-ENCL-M2a the single-receiver mutant removes the receiver block" block-destructive-m2.sh "${encl_hd_lines}/0"
+encl_shape_arm "AC-ENCL-M3a the no-remainder mutant differs by one line, removed" block-destructive-m3.sh "1/0"
+encl_shape_arm "AC-ENCL-M4a the no-cut mutant differs by one line, removed" block-destructive-m4.sh "1/0"
+encl_shape_arm "AC-ENCL-M5a the escape-blind mutant differs by one line, rewritten" block-destructive-m5.sh "1/1"
+encl_shape_arm "AC-ENCL-DENY-a the gate-deny mutant differs by one line, rewritten" block-destructive-deny.sh "1/1"
+encl_shape_arm "AC-ENCL-OPENALL-a the escape-blind gate-deny mutant differs by two lines, rewritten" block-destructive-openall.sh "2/2"
+encl_shape_arm "AC-ENCL-SUPP-a the no-suppression mutant differs by one line, rewritten" block-destructive-supp.sh "1/1"
+encl_shape_arm "AC-ENCL-ROUTE-a the route mutant differs by one line, rewritten" block-destructive-route.sh "1/1"
+encl_shape_arm "AC-ENCL-SPLIT-a the paren-separator mutant differs by one line, rewritten" block-destructive-split.sh "1/1"
+encl_shape_arm "AC-ENCL-NOEX-a the excise-nothing mutant differs by one line, rewritten" block-destructive-noex.sh "1/1"
+encl_shape_arm "AC-ENCL-SUPPALL-a the first-view no-suppression mutant differs by one line, rewritten" block-destructive-suppall.sh "1/1"
+encl_shape_arm "AC-ENCL-SMALLP-a the low-ceiling copy differs by one line, rewritten" block-destructive-smallp.sh "1/1"
+encl_shape_arm "AC-ENCL-SMALLB-a the low-remainder-budget copy differs by one line, rewritten" block-destructive-smallb.sh "1/1"
+
+# --- SHAPES: a shell interpreter or `source` inside an enclosure ------------------------------
+encl_arm "AC-ENCL-01: echo \$(bash <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "echo \$(bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-02: echo \"\$(bash <unlisted>.sh)\" is recorded at warn and refused at enforce" \
+  "echo \"\$(bash ${ENCL_NA})\"" W B a shell-enclosure
+encl_arm "AC-ENCL-03: X=\$(bash <unlisted>.sh) is adjudicated by the arm that owns bash (the reverse copy records it only through the direct-execution arm)" \
+  "X=\$(bash ${ENCL_NA})" W B W shell-enclosure
+encl_arm "AC-ENCL-03b: OUT=\"\$(bash <unlisted>.sh --flag)\" with no slash in the path is adjudicated (the reverse copy records nothing)" \
+  'OUT="$(bash pmo-encl-na.sh --flag)"' W B a shell-enclosure
+encl_arm "AC-ENCL-04: the card's for-loop assignment is adjudicated by the arm that owns bash" \
+  'for i in 1 2; do X="$(bash "$D/evil.sh" arg)"; done' W B W shell-enclosure
+encl_arm "AC-ENCL-05: echo \`bash <unlisted>.sh\` is recorded at warn and refused at enforce" \
+  "echo \`bash ${ENCL_NA}\`" W B a shell-enclosure
+encl_arm "AC-ENCL-06: cat <(bash <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "cat <(bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-07: (bash <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "(bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-07b: time (bash \"\$D/evil.sh\" arg) is recorded at warn and refused at enforce" \
+  'time (bash "$D/evil.sh" arg)' W B a shell-enclosure
+encl_arm "AC-ENCL-08: (xargs bash \"\$D/evil.sh\" < /dev/null) is recorded at warn and refused at enforce" \
+  '(xargs bash "$D/evil.sh" < /dev/null)' W B a shell-enclosure
+encl_arm "AC-ENCL-08b: echo x | (xargs bash) — the stdin deny at an enclosure position — is recorded at warn and refused at enforce" \
+  'echo x | (xargs bash)' W B a shell-enclosure
+encl_arm "AC-ENCL-09: echo \$(source <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "echo \$(source ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-09b: (source <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "(source ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-10: X=\"\$(bash <unlisted>.sh)-suffix\" — a closer glued to the operand — is adjudicated" \
+  "X=\"\$(bash ${ENCL_NA})-suffix\"" W B a shell-enclosure
+encl_arm "AC-ENCL-10b: echo \"\${X:-\$(source <unlisted>.sh)}\" is adjudicated" \
+  "echo \"\${X:-\$(source ${ENCL_NA})}\"" W B a shell-enclosure
+encl_arm "AC-ENCL-11: echo \$(bash \$(echo -n) <unlisted>.sh) — an operand beyond a nested opener — is adjudicated" \
+  "echo \$(bash \$(echo -n) ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-11b: echo \$(bash \"\$(pwd)/evil.sh\") is adjudicated" \
+  'echo $(bash "$(pwd)/evil.sh")' W B a shell-enclosure
+encl_arm "AC-ENCL-12: (X=\$(date) bash <unlisted>.sh) is adjudicated" \
+  "(X=\$(date) bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-12b: echo \$(env X=\\) bash <unlisted>.sh) — a prefix word the walk lists, inside an enclosure — is adjudicated" \
+  "echo \$(env X=\\) bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-13: echo \$(bash -c 'cd /tmp; bash <unlisted>.sh') — a carrier's exemption crossing an enclosure — is adjudicated" \
+  "echo \$(bash -c 'cd /tmp; bash ${ENCL_NA}')" W B a shell-enclosure
+encl_arm "AC-ENCL-14: a here-document received by bash inside an enclosure under a carrier at the line head is recorded at warn and refused at enforce" \
+  "echo \$(bash <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" W B a shell-enclosure
+encl_arm "AC-ENCL-15: an unquoted here-document body carrying \$(bash <unlisted>.sh) is adjudicated" \
+  "cat <<EOF
+# note \$(bash ${ENCL_NA})
+EOF" W B a shell-enclosure
+# The direct-execution and non-shell arms keep their own phases at an enclosure position, so
+# their forced limb records, as the shipped one does; only the position key is new.
+encl_arm "AC-ENCL-16a: echo \$(<unlisted>.sh) is recorded by the direct-execution arm at its own phase, from the enclosure position" \
+  "echo \$(${ENCL_NA})" W W a exec
+encl_arm "AC-ENCL-16b: echo \$(python3 <unlisted>.py) is recorded by the non-shell arm at its own phase, from the enclosure position" \
+  "echo \$(python3 ${ENCL_NAPY})" W W a interp-nonshell
+encl_arm "AC-ENCL-TEXEC6b: T-EXEC-6's original payload — raw backticks inside a carrier's double-quoted argument, which the shell runs — is recorded from the enclosure position" \
+  'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"' W W a exec
+
+# --- MUST NOT FLAG: near misses, each followed by the mutant that fails it --------------------
+encl_arm "AC-ENCL-N01: echo \"\$(date)\" stays allowed (the card's near miss)" 'echo "$(date)"' a - a
+encl_mut_arm "AC-ENCL-N01-pair: the gate-deny mutant REFUSES echo \"\$(date)\"" block-destructive-deny.sh 'echo "$(date)"' B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N02: echo \$(bash <allowlisted>.sh --check) stays allowed" "echo \$(bash ${ENCL_OK} --check)" a - a
+encl_mut_arm "AC-ENCL-N02-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(bash ${ENCL_OK} --check)" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N03: X=\$(bash --version) stays allowed (no script operand)" 'X=$(bash --version)' a - a
+encl_mut_arm "AC-ENCL-N03-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh 'X=$(bash --version)' B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N04: echo \$(bash -n <unlisted>.sh) stays allowed (parse-only)" "echo \$(bash -n ${ENCL_NA})" a - a
+encl_mut_arm "AC-ENCL-N04-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(bash -n ${ENCL_NA})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N05: X=\$(wc -l < <unlisted>.sh) stays allowed (a read that names a script)" "X=\$(wc -l < ${ENCL_NA})" a - a
+encl_mut_arm "AC-ENCL-N05-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "X=\$(wc -l < ${ENCL_NA})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N06: diff <(sort <unlisted>.sh) <(sort <allowlisted>.sh) stays allowed" "diff <(sort ${ENCL_NA}) <(sort ${ENCL_OK})" a - a
+encl_mut_arm "AC-ENCL-N06-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "diff <(sort ${ENCL_NA}) <(sort ${ENCL_OK})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N07: echo \$(bash --version) <unlisted>.sh stays allowed (text after a closed enclosure)" "echo \$(bash --version) ${ENCL_NA}" a - a
+encl_arm "AC-ENCL-N08: echo \"\\\$(bash <unlisted>.sh)\" stays allowed (the substitution escaped, under a carrier)" "echo \"\\\$(bash ${ENCL_NA})\"" a - a
+encl_mut_arm "AC-ENCL-N08-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\\\$(bash ${ENCL_NA})\"" W
+encl_arm "AC-ENCL-N09: gh … --body 'see (bash <unlisted>.sh) for details; ok' stays allowed (a carrier's single-quoted argument)" "gh issue comment 1 --body 'see (bash ${ENCL_NA}) for details; ok'" a - a
+encl_mut_arm "AC-ENCL-N09-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "gh issue comment 1 --body 'see (bash ${ENCL_NA}) for details; ok'" W
+encl_arm "AC-ENCL-N10: echo \"note (bash <unlisted>.sh) end\" stays allowed (a carrier's untainted double-quoted argument)" "echo \"note (bash ${ENCL_NA}) end\"" a - a
+encl_mut_arm "AC-ENCL-N10-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"note (bash ${ENCL_NA}) end\"" W
+encl_arm "AC-ENCL-N11: git commit -m \"docs: run \\\`bash <unlisted>.sh --flag\\\` (see notes)\" stays allowed (escaped backticks open nothing)" \
+  "git commit -m \"docs: run \\\`bash ${ENCL_NA} --flag\\\` (see notes)\"" a - a
+encl_arm "AC-ENCL-N12: echo \\(bash <unlisted>.sh\\) stays allowed (escaped parentheses open nothing)" "echo \\(bash ${ENCL_NA}\\)" a - a
+encl_mut_arm "AC-ENCL-N12-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "echo \\(bash ${ENCL_NA}\\)" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N13: find . \\( -name '*.sh' -o -name x \\) -newer <unlisted>.sh stays allowed" "find . \\( -name '*.sh' -o -name x \\) -newer ${ENCL_NA}" a - a
+encl_mut_arm "AC-ENCL-N13-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "find . \\( -name '*.sh' -o -name x \\) -newer ${ENCL_NA}" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N14: a carrier receiving a here-document after a closed substitution stays allowed (the enclosure closed before the operator)" \
+  "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
+note; bash ${ENCL_NA}
+EOF" a - a
+encl_mut_arm "AC-ENCL-N14-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh \
+  "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
+note; bash ${ENCL_NA}
+EOF" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N15: echo \"\$(date)\" 'x; bash <unlisted>.sh' stays allowed (the enclosure inside quotes does not move the carrier)" "echo \"\$(date)\" 'x; bash ${ENCL_NA}'" a - a
+encl_mut_arm "AC-ENCL-N15-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\$(date)\" 'x; bash ${ENCL_NA}'" W
+
+# --- DECLARED OVER-MATCH, pinned: adjudicated although nothing runs ---------------------------
+# Each records at warn and is refused at enforce; its reverse limb, allowed, is the mutant that
+# fails the pin. The one exception is the array literal: before this change the direct-execution
+# arm already recorded it, reading `cmd=(bash` as an assignment and the path after it as the
+# command word, so its reverse limb records too, and its pairing arm reads the rows instead.
+encl_arm "AC-ENCL-RESIDUAL-noncarrier-text (pin, not fix-evidence): git commit -m 'fix (bash <unlisted>.sh was failing)'" \
+  "git commit -m 'fix (bash ${ENCL_NA} was failing)'" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-body-idiom (pin, not fix-evidence): the commit idiom with a code span naming a script in its body" \
+  "git commit -m \"\$(cat <<'EOF'
+Run \`bash ${ENCL_NA}\` to verify
+EOF
+)\"" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-heredoc-kept (pin, not fix-evidence): a body left in place with a code span naming a script" \
+  "cat > notes.md <<'EOF'
+Run \`bash ${ENCL_NA}\` to reproduce
+EOF" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-backtick-close (pin, not fix-evidence): text after a closing backtick" \
+  "echo \`date\` bash ${ENCL_NA}" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-carrier-moved (pin, not fix-evidence): a quoted argument after an unquoted enclosure, under a carrier" \
+  "echo \$(date) 'x; bash ${ENCL_NA}'" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-comment (pin, not fix-evidence): a comment naming a script in parentheses" \
+  "# setup (bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-array (pin, not fix-evidence): an array literal (the reverse copy records it through the direct-execution arm)" \
+  "cmd=(bash ${ENCL_NA} arg)" W B W shell-enclosure
+encl_run block-destructive-rev.sh "cmd=(bash ${ENCL_NA} arg)"
+if [ "$ENCL_V" = "W" ] && ! encl_row_has shell-enclosure; then
+  /usr/bin/printf 'PASS: AC-ENCL-RESIDUAL-array-pair: the reverse mutant records the array literal with no row from an enclosure position, so the pin fails on it\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-RESIDUAL-array-pair: reverse verdict %s, rows [%s] (wanted W with no shell-enclosure row at pos enclosure)\n' "$ENCL_V" "$ENCL_ROWS"
+  FAIL=$((FAIL + 1))
+fi
+encl_arm "AC-ENCL-RESIDUAL-escaped-dollar (pin, not fix-evidence): an escaped dollar under a non-carrier" \
+  "git commit -m \"explain \\\$(bash ${ENCL_NA}) literally\"" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-full-stop (pin, not fix-evidence): a sentence's full stop after a code span reads as the dot command" \
+  "git commit -m 'see \`x\`. Then /tmp/pmo-encl-y'" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-hd-cat (pin, not fix-evidence): a carrier's unquoted substitution reading a here-document through cat, where nothing runs, is newly flagged" \
+  "echo \$(cat <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" W B a shell-enclosure
+
+# --- DECLARED UNDER-MATCH, pinned: what the view does not reach ------------------------------
+encl_arm "AC-ENCL-RESIDUAL-case (pin, not fix-evidence): a case arm inside an enclosure — a pattern's ) ends the position's text" \
+  "echo \$(case x in x) bash ${ENCL_NA};; esac)" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-case-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(case x in x) bash ${ENCL_NA};; esac)" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-RESIDUAL-case-arm (pin, not fix-evidence): a case arm at top level — its command position follows a pattern's )" \
+  "case x in x) bash ${ENCL_NA} ;; esac" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-case-arm-pair: the paren-separator mutant REFUSES it" block-destructive-split.sh "case x in x) bash ${ENCL_NA} ;; esac" B "BLOCK-DESTRUCTIVE-022"
+encl_arm "AC-ENCL-RESIDUAL-nested-escaped (pin, not fix-evidence): backticks nested through escaped backticks" \
+  "echo \`echo \\\`bash ${ENCL_NA}\\\` \`" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-nested-escaped-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "echo \`echo \\\`bash ${ENCL_NA}\\\` \`" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-RESIDUAL-ansic (pin, not fix-evidence): ANSI-C quoting ahead of the verb ends the position's text early" \
+  "echo \$(X=\$'\\')' bash ${ENCL_NA})" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-ansic-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(X=\$'\\')' bash ${ENCL_NA})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-RESIDUAL-paramexp (pin, not fix-evidence): a ) inside a parameter expansion ends the position's text early" \
+  "echo \$(X=\${Y:-)} bash ${ENCL_NA})" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-paramexp-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(X=\${Y:-)} bash ${ENCL_NA})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-RESIDUAL-nested-apostrophe (pin, not fix-evidence): an apostrophe in a nested double-quoted string turns the carried quote state over" \
+  "echo \"\$(printf \"it's\" \$(bash ${ENCL_NA}))\"" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-nested-apostrophe-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\$(printf \"it's\" \$(bash ${ENCL_NA}))\"" W
+encl_arm "AC-ENCL-RESIDUAL-carrier-head (pin, not fix-evidence): a carrier at the head of an unquoted substitution lends its exemption to a later program string" \
+  "bash -c \$(echo -n) 'true; (bash ${ENCL_NA})'" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-carrier-head-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "bash -c \$(echo -n) 'true; (bash ${ENCL_NA})'" W
+encl_arm "AC-ENCL-RESIDUAL-hd-continuation (pin, not fix-evidence): a here-document receiver behind a line continuation is read from its physical line" \
+  "echo \$(bash -s \\
+echo <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-hd-continuation-pair: the excise-nothing mutant REFUSES it" block-destructive-noex.sh \
+  "echo \$(bash -s \\
+echo <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" B "BLOCK-DESTRUCTIVE-022"
+# The two work budgets. The shipped values are asserted, and each budget's behaviour is pinned
+# on a copy with only that budget lowered, where a short payload crosses it. The shipped hook on
+# the same payload is the copy that fails the pin: within its budget the position is seen.
+encl_budget_pos="$(/usr/bin/grep -c '^readonly SCRIPT_ENCL_POS_MAX=512$' "$HOOK" || true)"
+encl_budget_bytes="$(/usr/bin/grep -c '^readonly SCRIPT_ENCL_TAIL_BYTES=262144$' "$HOOK" || true)"
+if [ "$encl_budget_pos" = 1 ] && [ "$encl_budget_bytes" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-BUDGETS the hook declares a 512-position ceiling and a 262,144-byte remainder budget\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-BUDGETS the declared budgets moved (position lines %s, remainder lines %s, each wanted 1); restate the readiness text and these pins together\n' "$encl_budget_pos" "$encl_budget_bytes"
+  FAIL=$((FAIL + 1))
+fi
+encl_pos_cmd="echo \$(true) \$(true) \$(true) \$(true) \$(bash ${ENCL_NA})"
+encl_mut_arm "AC-ENCL-RESIDUAL-budget-positions (pin, not fix-evidence): past the position ceiling no further position is opened" \
+  block-destructive-smallp.sh "$encl_pos_cmd" a
+encl_mut_arm "AC-ENCL-RESIDUAL-budget-positions-pair: within the shipped ceiling the same payload is recorded" \
+  block-destructive.sh "$encl_pos_cmd" W
+encl_pad="$(/usr/bin/printf 'pad %.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30)"
+encl_bytes_cmd="echo \$(true) \$(bash \$(echo -n) ${ENCL_NA}) ${encl_pad}"
+encl_mut_arm "AC-ENCL-RESIDUAL-budget-bytes (pin, not fix-evidence): past the remainder budget an operand beyond a nested opener is not seen" \
+  block-destructive-smallb.sh "$encl_bytes_cmd" a
+encl_mut_arm "AC-ENCL-RESIDUAL-budget-bytes-pair: within the shipped budget the same payload is recorded" \
+  block-destructive.sh "$encl_bytes_cmd" W
+
+# --- EQUIVALENCES with the prefix walk -------------------------------------------------------
+# The view runs the walk the prefix vocabulary leaves: a keyword or a wrapper the walk lists is
+# honoured inside an enclosure as at top level. Compared on the FORCED copy, whose refusal is the
+# top-level verdict's; the shipped copy records; the reverse mutant allows, which fails the
+# equivalence.
+encl_eq_arm() { # $1 label  $2 enclosure form  $3 top-level form
+  local name="$1" encl="$2" top="$3" vf vt vs vr ok=1
+  encl_run block-destructive-forced.sh "$encl"; vf="$ENCL_V"
+  encl_run block-destructive.sh "$top"; vt="$ENCL_V"
+  encl_run block-destructive.sh "$encl"; vs="$ENCL_V"
+  encl_run block-destructive-rev.sh "$encl"; vr="$ENCL_V"
+  if [ "$vf" != "$vt" ] || [ "$vt" != "B" ] || [ "$vs" != "W" ] || [ "$vr" = "$vt" ]; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (forced %s = top-level %s; shipped %s; reverse %s)\n' "$name" "$vf" "$vt" "$vs" "$vr"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  forced=%s top-level=%s (want both B), shipped=%s (want W), reverse=%s (want not B)\n' "$name" "$vf" "$vt" "$vs" "$vr"
+    FAIL=$((FAIL + 1))
+  fi
+}
+encl_eq_arm "AC-ENCL-KW-eq: echo \$(if bash <unlisted>.sh; then :; fi) takes the verdict of the same condition at top level" \
+  "echo \$(if bash ${ENCL_NA}; then :; fi)" "if bash ${ENCL_NA}; then :; fi"
+encl_eq_arm "AC-ENCL-08c: (xargs -I{} bash \"\$D/evil.sh\" {} < /dev/null) takes the verdict of the same command without the group" \
+  '(xargs -I{} bash "$D/evil.sh" {} < /dev/null)' 'xargs -I{} bash "$D/evil.sh" {} < /dev/null'
+
+# --- THE PHASES ------------------------------------------------------------------------------
+encl_run block-destructive.sh "echo \$(bash ${ENCL_NA})"
+encl_p1_ok=1
+[ "$ENCL_V" = "W" ] || encl_p1_ok=0
+[ "$ENCL_NROWS" = 1 ] || encl_p1_ok=0
+case "$ENCL_ROWS" in *'"phase":"warn"'*'"reason":"would-fire"'*'"arm":"shell-enclosure"'*'"pos":"enclosure"'*) ;; *) encl_p1_ok=0 ;; esac
+/usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn' <<<"$ENCL_ERR" || encl_p1_ok=0
+if [ "$encl_p1_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-P1 at warn: exit 0, one row (phase warn, arm shell-enclosure, pos enclosure) and a notice on stderr\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P1 at warn: verdict %s, %s new rows, row [%s], stderr [%s]\n' "$ENCL_V" "$ENCL_NROWS" "$ENCL_ROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_run block-destructive-shadow.sh "echo \$(bash ${ENCL_NA})"
+encl_p2_ok=1
+[ "$ENCL_V" = "W" ] || encl_p2_ok=0
+[ "$ENCL_NROWS" = 1 ] || encl_p2_ok=0
+case "$ENCL_ROWS" in *'"phase":"shadow"'*'"arm":"shell-enclosure"'*) ;; *) encl_p2_ok=0 ;; esac
+if /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR"; then encl_p2_ok=0; fi
+if [ "$encl_p2_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-P2 at shadow: exit 0, one row (phase shadow), nothing on stderr\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P2 at shadow: verdict %s, %s new rows, row [%s], stderr [%s]\n' "$ENCL_V" "$ENCL_NROWS" "$ENCL_ROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_run block-destructive-forced.sh "echo \$(bash ${ENCL_NA})"
+encl_p3_ok=1
+[ "$ENCL_V" = "B" ] || encl_p3_ok=0
+case "$ENCL_ROWS" in *'"phase":"enforce"'*'"arm":"shell-enclosure"'*) ;; *) encl_p3_ok=0 ;; esac
+/usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR" || encl_p3_ok=0
+if [ "$encl_p3_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-P3 at enforce: refused by BLOCK-DESTRUCTIVE-022, the row written with phase enforce\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P3 at enforce: verdict %s, row [%s], stderr [%s]\n' "$ENCL_V" "$ENCL_ROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_mut_arm "AC-ENCL-P4 an unrecognised phase value falls through to enforce and refuses" \
+  block-destructive-bogus.sh "echo \$(bash ${ENCL_NA})" B "BLOCK-DESTRUCTIVE-022"
+encl_run block-destructive.sh "bash ${ENCL_NA}"
+if [ "$ENCL_V" = "B" ] && [ "$ENCL_NROWS" = 0 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR"; then
+  /usr/bin/printf 'PASS: AC-ENCL-P5 pass-through: bash <unlisted>.sh at a first-view position is refused with no drain row (the router leaves the always-enforce arm as it was)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P5 pass-through: verdict %s, %s new rows (want B and 0)\n  stderr: %s\n' "$ENCL_V" "$ENCL_NROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_mut_arm "AC-ENCL-P5-pair: the route mutant RECORDS bash <unlisted>.sh at a first-view position instead of refusing it" \
+  block-destructive-route.sh "bash ${ENCL_NA}" W
+encl_run block-destructive.sh "echo \$(bash <<'EOF'
+bash ${ENCL_NA}
+EOF
+)"
+encl_p6_ok=1
+[ "$ENCL_V" = "W" ] || encl_p6_ok=0
+[ "$ENCL_NROWS" = 1 ] || encl_p6_ok=0
+case "$ENCL_ROWS" in *'"arm":"shell-enclosure"'*'"cause":"heredoc-receiver"'*'"path":"bash"'*'"pos":"enclosure"'*) ;; *) encl_p6_ok=0 ;; esac
+/usr/bin/grep -q 'WARN (would-block, rollout=warn, cause=heredoc-receiver)' <<<"$ENCL_ERR" || encl_p6_ok=0
+if [ "$encl_p6_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-P6 the here-document receiver read from the enclosure is recorded at warn, naming that receiver, with a notice\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P6 receiver at warn: verdict %s, %s new rows, row [%s], stderr [%s]\n' "$ENCL_V" "$ENCL_NROWS" "$ENCL_ROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_run block-destructive.sh 'echo x | (xargs bash)'
+if [ "$ENCL_V" = "W" ] && [ "$ENCL_NROWS" = 1 ]; then
+  case "$ENCL_ROWS" in
+    *'"arm":"shell-enclosure"'*'"cause":"unresolvable"'*) /usr/bin/printf 'PASS: AC-ENCL-P7 the xargs stdin deny at an enclosure position is recorded at warn\n'; PASS=$((PASS + 1)) ;;
+    *) /usr/bin/printf 'FAIL: AC-ENCL-P7 xargs at warn: row [%s]\n' "$ENCL_ROWS"; FAIL=$((FAIL + 1)) ;;
+  esac
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P7 xargs at warn: verdict %s, %s new rows\n' "$ENCL_V" "$ENCL_NROWS"; FAIL=$((FAIL + 1))
+fi
+
+# --- EACH COMPONENT IS LOAD-BEARING: the design's one-line mutants ----------------------------
+encl_mut_arm "AC-ENCL-M1b: without the re-open, the carrier's exemption crossing an enclosure is allowed again" \
+  block-destructive-m1.sh "echo \$(bash -c 'cd /tmp; bash ${ENCL_NA}')" a
+encl_mut_arm "AC-ENCL-M2b: with one receiver reading, the here-document inside an enclosure is allowed again" \
+  block-destructive-m2.sh "echo \$(bash <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" a
+encl_mut_arm "AC-ENCL-M3b: without the appended remainder, an operand beyond a nested opener is not seen" \
+  block-destructive-m3.sh "echo \$(bash \$(echo -n) ${ENCL_NA})" a
+encl_mut_arm "AC-ENCL-M4b: without the cut, a closer glued to the operand hides it" \
+  block-destructive-m4.sh "X=\"\$(bash ${ENCL_NA})-suffix\"" a
+encl_mut_arm "AC-ENCL-M4c: without the cut, text after a closed enclosure is read as an operand (the near miss N07 fails)" \
+  block-destructive-m4.sh "echo \$(bash --version) ${ENCL_NA}" W
+encl_mut_arm "AC-ENCL-M5b: without the escape rule, an escaped backtick opens a position (the near miss N11 fails)" \
+  block-destructive-m5.sh "git commit -m \"docs: run \\\`bash ${ENCL_NA} --flag\\\` (see notes)\"" W
+encl_mut_arm "AC-ENCL-TEXEC6-pair: with the first view's carrier suppression off, T-EXEC-6's re-pointed payload is recorded (the arm guards that suppression)" \
+  block-destructive-suppall.sh "gh issue comment 1 --body '| step | \`./tmp/x.sh\` | run it |'" W
+
+/bin/rm -rf "$ENCL_ROOT"
 
 # --- Summary ---
 echo ""
