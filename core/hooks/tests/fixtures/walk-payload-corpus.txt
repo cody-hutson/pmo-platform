@@ -1135,3 +1135,15 @@ SN07|block-destructive|wrap-split-nocmd|-|?|B|env -S-i bash @D@/na.sh
 SN08|block-destructive|wrap-split-nocmd|-|?|B|env -SFOO=1 bash @D@/na.sh
 SN09|block-destructive|wrap-split-nocmd|-|?|W|env --s=-u @D@/ok.sh @D@/na.sh
 SN10|block-destructive|wrap-split-nocmd|-|?|a|env --s= bash @D@/ok.sh
+# Stage 7 F-09 (sub-task #8177, #7020 iteration 2): the third declared precision class — a
+# dash-led token whose option name no row lists, unknown or a prefix of two or more options,
+# carrying an attached script path behind a listed wrapper. The walk steps over it as a flag,
+# so the command is the token that follows; the program rejects the option and runs nothing.
+# Recorded at the current verdict; against the pre-fix hook of slice 3 these move from recorded
+# to allowed, a precision improvement beside wrap-prec. PN03's short cluster is read letter by
+# letter, so its verdict depends on the fixed fixture path, whose letter a takes the rest.
+# Ground truth ? — the parsers' documented rejection, not run here.
+PN01|block-destructive|wrap-prec-name|-|?|a|env --zz=@D@/x.sh ls
+PN02|block-destructive|wrap-prec-name|-|?|a|sudo --c=@D@/x.sh ls
+PN03|block-destructive|wrap-prec-name|-|?|a|env -Z@D@/x.sh ls
+PN04|block-destructive|wrap-prec-name|-|?|a|exec --zz=@D@/x.sh ls
