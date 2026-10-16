@@ -1230,9 +1230,12 @@ script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp
 # below. The table is the parser's, not the manual's: GNU time's own name for `-o`
 # is `--output-file`, and the `--output` its manual prints is a prefix of it.
 # exec, builtin and command are shell builtins that read no long option, so their
-# rows carry none and a long token is matched as written; the reference host's BSD
-# builds of env, nice, stdbuf, xargs and time read no long option either, so there
-# a long token is an error and runs nothing whichever way the walk reads it.
+# rows carry none and a long token is matched as written. The reference host's BSD
+# builds of env, nice, stdbuf, nohup and time read no long option either, so there
+# a long token is an error and runs nothing whichever way the walk reads it. Its
+# xargs reads eight of GNU's long options through getopt_long, each with the
+# argument GNU gives it, and for every prefix of them that it accepts, the walk,
+# reading GNU's larger table, decides as it does whether a value follows.
 #
 # FAILURE DIRECTION, STATED RATHER THAN ARGUED AWAY. A row closes what it lists, by
 # every spelling the program's parser takes for it. An option a row does not list

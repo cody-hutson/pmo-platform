@@ -715,9 +715,13 @@ ZR04|block-destructive|redir|-|-|a|bash -n @D@/na.sh > /dev/null 2>&1
 # Rows for the wrapper walk's option rows (nice, stdbuf, timeout, and every wrapper's own
 # options), the keyword line, and the rows of tables M-1 to M-3 of the card's adversarial
 # design review, which the card's differential criterion names. Ids are WR plus a number.
-# Ground truth is `?` on every row: no command that runs a script was executed for this
-# block outside the hook suite's own hermetic copies; the review's tables record what each
-# one runs. Groups: wrap-opt, wrap-optrec and wrap-xargs are what the change closes;
+# Ground truth is `?` on every row but six: no command that runs a script was executed for
+# this block outside the hook suite's own hermetic copies, and the review's tables record
+# what each one runs. The six are rows of wrap-prec, run at the card's Stage 7 on the
+# reference host's own programs, each in a fresh sandbox holding only two marker scripts
+# whose one effect is to create a sentinel elsewhere: no sentinel appeared, so `-` (WR73,
+# WR75 to WR78 as written; WR71 through the host's `-C` spelling of `--chdir`, because the
+# host's env reads no long option). WR72 and WR74 were not run and stay `?`. Groups: wrap-opt, wrap-optrec and wrap-xargs are what the change closes;
 # wrap-near, wrap-xargs-ctl, wrap-kw-ctl and wrap-qval-ctl are must-not-flag or unchanged
 # controls; wrap-env-s and wrap-qval keep the verdict they had; wrap-prec are declared
 # precision improvements (an option's argument, an env operand: the program executes
@@ -790,14 +794,14 @@ WR67|block-destructive|wrap-env-s|-|?|W|env -S@D@/ok.sh
 WR68|block-destructive|wrap-declared|-|?|a|env -Sbash @D@/na.sh
 WR69|block-destructive|wrap-declared|-|?|a|env -S"bash @D@/na.sh"
 WR70|block-destructive|wrap-declared|-|?|a|env -S "bash @D@/na.sh"
-WR71|block-destructive|wrap-prec|-|?|a|env --chdir=@D@/x.sh ls
+WR71|block-destructive|wrap-prec|-|-|a|env --chdir=@D@/x.sh ls
 WR72|block-destructive|wrap-prec|-|?|a|sudo -D@D@/x.sh ls
-WR73|block-destructive|wrap-prec|-|?|a|env -u@D@/x.sh ls
+WR73|block-destructive|wrap-prec|-|-|a|env -u@D@/x.sh ls
 WR74|block-destructive|wrap-prec|-|?|a|xargs -a@D@/x.sh echo
-WR75|block-destructive|wrap-prec|-|?|a|time -o@D@/x.sh ls
-WR76|block-destructive|wrap-prec|-|?|a|env a-b=@D@/x.sh ls
-WR77|block-destructive|wrap-prec|-|?|a|env FOO=1 a-b=@D@/x.sh ls
-WR78|block-destructive|wrap-prec|-|?|a|env ./x=y.sh
+WR75|block-destructive|wrap-prec|-|-|a|time -o@D@/x.sh ls
+WR76|block-destructive|wrap-prec|-|-|a|env a-b=@D@/x.sh ls
+WR77|block-destructive|wrap-prec|-|-|a|env FOO=1 a-b=@D@/x.sh ls
+WR78|block-destructive|wrap-prec|-|-|a|env ./x=y.sh
 WR80|block-destructive|wrap-kw|-|?|B|if bash @D@/na.sh; then :; fi
 WR81|block-destructive|wrap-kw|-|?|B|while bash @D@/na.sh; do :; done
 WR82|block-destructive|wrap-kw|-|?|B|until bash @D@/na.sh; do :; done
@@ -941,26 +945,29 @@ DS72|block-destructive|dash-suffix-decl|-|?|B|bash +x.sh @D@/na.sh
 DS73|block-destructive|dash-suffix-decl|-|?|a|bash --rcfile '-x.s'h @D@/ok.sh
 DS74|block-destructive|dash-suffix-decl|-|?|B|bash --rcfile -x.sh @D@/ok.sh
 
-# --- iteration 1 on card #7020, for its Stage 7 finding F-01: a long option read as its parser reads it, unique prefixes included (56 rows) ---
+# --- iteration 1 on card #7020, for its Stage 7 finding F-01: a long option read as its parser reads it, unique prefixes included (57 rows) ---
 # Every wrapper row that lists a long option belongs to a getopt_long program, and getopt_long
 # takes an exact name, or any prefix that names exactly one of its long options, for that
 # option. The walk matched a long option as written, so `env --split=<path>` — env's split
 # string, which GNU env executes — was stepped over as an option no row lists, and a recorded
 # execution became an allow. A long token is now resolved against the program's own option
 # table first, and the row is asked about the option it resolves to. Ids are GL plus a number.
-# Ground truth is `?` on every row: none of these programs reads a long option on the reference
-# host, whose builds are BSD, and no GNU build is installed there; what each row runs is taken
-# from the published manuals and the programs' option tables. Groups: wrap-abbrev is what the
-# change closes — the five measured spellings of the finding and the shortest prefix of every
-# long option a row lists as taking an argument, each now read as that option; WR150 and WR151,
-# which slice 3 declared, move into it in this commit. wrap-abbrev-same keep the verdict they
-# had (a separate split string, an option whose argument is optional, an exact name, a numeric
-# adjustment). wrap-abbrev-prec is an option's argument shaped like a script path, reached
-# through a prefix: nothing executes the path, as for wrap-prec. wrap-abbrev-exec is a prefix
-# whose argument was read as the interpreter; the program runs the script directly, so the
-# direct-execution arm's verdict applies. wrap-abbrev-declared is an attached command line
-# written with a prefix, which now takes the full spelling's verdict (WR68). wrap-abbrev-ambig
-# is a prefix of two or more options, which the program rejects and runs nothing for.
+# Ground truth is `?` on every row: no row was run. The reference host has no GNU build of env,
+# nice, stdbuf, timeout, xargs or time, and its own env, nice, stdbuf and time read no long
+# option; a sudo or xargs row runs a script, which is not run behind a walk the hook in force
+# does not adjudicate. What each row runs is taken from the published manuals and the
+# programs' option tables. Groups: wrap-abbrev is what the change closes — the five measured
+# spellings of the finding and the shortest prefix of every long option a row lists as taking
+# an argument, each now read as that option; WR150 and WR151, which slice 3 declared, move into
+# it in this commit. wrap-abbrev-same keep the verdict they had (a separate split string, an
+# option whose argument is optional, an exact name, a numeric adjustment, and the `--output`
+# GNU time's manual prints, now read as a prefix of its parser's `--output-file`).
+# wrap-abbrev-prec is an option's argument shaped like a script path, reached through a prefix:
+# nothing executes the path, as for wrap-prec. wrap-abbrev-exec is a prefix whose argument was
+# read as the interpreter; the program runs the script directly, so the direct-execution arm's
+# verdict applies. wrap-abbrev-declared is an attached command line written with a prefix,
+# which now takes the full spelling's verdict (WR68). wrap-abbrev-ambig is a prefix of two or
+# more options, which the program rejects and runs nothing for.
 GL01|block-destructive|wrap-abbrev|-|?|W|env --split=@D@/na.sh
 GL02|block-destructive|wrap-abbrev|-|?|W|env --s=@D@/na.sh
 GL03|block-destructive|wrap-abbrev|-|?|W|env --sp=@D@/na.sh
@@ -1008,6 +1015,7 @@ GL52|block-destructive|wrap-abbrev-same|-|?|B|env --def bash @D@/na.sh
 GL53|block-destructive|wrap-abbrev-same|-|?|B|xargs --rep bash @D@/na.sh
 GL54|block-destructive|wrap-abbrev-same|-|?|B|nice --5 bash @D@/na.sh
 GL55|block-destructive|wrap-abbrev-same|-|?|B|sudo --login bash @D@/na.sh
+GL56|block-destructive|wrap-abbrev-same|-|?|B|time --output x bash @D@/na.sh
 GL60|block-destructive|wrap-abbrev-prec|-|?|a|env --c @D@/x.sh ls
 GL61|block-destructive|wrap-abbrev-prec|-|?|a|sudo --chd @D@/x.sh ls
 GL62|block-destructive|wrap-abbrev-prec|-|?|a|env --u @D@/x.sh ls
