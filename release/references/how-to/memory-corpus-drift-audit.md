@@ -146,7 +146,7 @@ awk '
 
 | Class | Routing |
 |---|---|
-| **deployed-but-not-evicted** | Add the memory to the next release's **Phase B-OPS operational-deployment manifest** (ARCHIVE → VERIFY-CORPUS → EVICT). The corpus write already landed, so this is a clean eviction. |
+| **deployed-but-not-evicted** | Add a row for the memory's tie to the next release's **Phase B-OPS operational-deployment manifest** (VERIFY-CORPUS → EVICT → RE-POINT). The corpus write already landed, so this is a clean eviction. |
 | **dead-ref tie** | Operator decision: re-tie the pointer to the renumbered issue (if the encode is live) or evict (if the encoding already landed). Do not guess the new number — resolve it from the corpus encoding or the milestone. |
 | **untied-encodeable** | File an encode issue (the `improvement.yml` intake) so the rule gets a corpus home; until then the memory legitimately remains the SSOT. |
 | **dangling-wikilink-to-evicted-memory** | RE-POINT the surviving memory's `[[wikilink]]` to the corpus location now owning the evicted knowledge (the durable cross-reference form), or DROP the link (leaving prose intact) when the knowledge was split/absorbed with no single citable home. Operator-authorized memory edit (the §7 RE-POINT step), never a deploy-check action. |
@@ -171,7 +171,7 @@ A clean store returns no rows from §3a and only legitimate pointers from §5; a
 
 ## 6. Composition
 
-This procedure is the audit half of the encode-and-evict contract; the **Stage-13 Phase B-OPS** step (gate `G-CL5`) is the executor half — including the RE-POINT reconciliation after EVICT and the Phase B-OPS5 close-time absorption reconciliation. The two compose exactly as the skill↔reference single-source contract composes its procedure with its enforced-rebuild check: the procedure tells you *what is out of contract*; the executor (operator-authorized, archive-first, VERIFY-CORPUS-gated) brings it back into contract.
+This procedure is the audit half of the encode-and-evict contract; the **Stage-13 Phase B-OPS** step (gate `G-CL5`) is the executor half — including the RE-POINT reconciliation after EVICT and the Phase B-OPS5 close-time absorption reconciliation. The two compose exactly as the skill↔reference single-source contract composes its procedure with its enforced-rebuild check: the procedure tells you *what is out of contract*; the executor (operator-authorized, VERIFY-CORPUS-gated, evicting to the Trash) brings it back into contract.
 
 ## References
 
