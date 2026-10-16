@@ -173,8 +173,8 @@ name: Repository integrity
 # redundant runs (the shared-release-PR double-run the parser-clean workflow
 # incurs).
 #
-# Injection-safety: every github-context value (actor, sender type, base/head
-# SHA, secrets) is bound through env: and referenced as "$VAR" in run blocks;
+# Injection-safety: every github-context value (actor, repository owner, sender
+# type, base/head SHA, secrets) is bound through env: and referenced as "$VAR" in run blocks;
 # no github-context expression is ever inlined into a run command.
 
 on:
@@ -188,21 +188,32 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # GATE 1 — Depersonalization (C6-domain scope; github.actor + input identity;
-  #          bot-skip; fail-loud-on-canonical for BOTH required inputs).
+  # GATE 1 — Depersonalization (C6-domain scope; handle from the repository
+  #          owner + input identity on EVERY run, whoever triggered it;
+  #          fail-loud-on-canonical for the required identity input and for an
+  #          empty literal set). Decision record:
+  #          {{ADR:depersonalization-gate-scans-bot-runs}}.
   # ---------------------------------------------------------------------------
   depersonalization:
     name: Depersonalization gate
     runs-on: ubuntu-latest
     env:
       CANONICAL_REPO: cody-hutson/pmo-platform
-      # github.actor is the login that initiated the run — ALWAYS present, no
-      # checkout/config dependency, and yields the canonical handle. NOT git
-      # config user.name (unset on actions/checkout -> exit 1 under set -e) and
+      # The handle is the repository OWNER — the same resolution the ADR
+      # durability gate below uses: ALWAYS present, no checkout/config dependency,
+      # identical whoever triggered the run, and fork-correct. NOT github.actor
+      # (varies with the actor, so a run a bot starts would resolve the bot), NOT
+      # git config user.name (unset on actions/checkout -> exit 1 under set -e) and
       # NOT commit %an (may be a bot or a divergent literal).
+      REPO_OWNER: ${{ github.repository_owner }}
+      # The actor feeds ONLY the summary notice below; it never changes the scan.
       ACTOR: ${{ github.actor }}
       SENDER_TYPE: ${{ github.event.sender.type }}            # 'Bot' for dependabot/Claude
-      OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY }}     # operator full name + email (one per line); canonical FAILS LOUD if unset
+      # Operator full name + email (one per line); canonical FAILS LOUD if unset.
+      # A run Dependabot starts receives only Dependabot secrets, so this secret is
+      # MIRRORED into the Dependabot store (Actions store canonical) — see
+      # core/standards/secrets-handling-policy.md §2 and §5.
+      OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY }}
       COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
       FORK_OPTOUT: ${{ vars.REPO_INTEGRITY_FORK_OPTOUT }}     # fork-only: explicit opt-out of a dimension
     steps:
@@ -219,13 +230,25 @@ jobs:
 
           OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-depersonalization[[:space:]]*-->'
 
-          # The literal-escaper and the ADR `deciders:` carve-out decision are
+          # The literal-escaper, the run-level decisions (configuration preflight,
+          # operator-literal resolution, empty-literal-set verdict) and the ADR
+          # `deciders:` carve-out decision are
           # defined ONCE, in a sourced library that the committed fixture suite
           # (release/tools/tests/test_deciders_carveout.sh) exercises through the
           # same entry point. An inline copy here would pass its own tests while
           # this gate diverged — the shadow-source failure the carve-out
           # reconciliation exists to end.
           . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+          # Fail closed on a library that stopped defining a decision this gate
+          # calls: each one is read through $(...), so a missing function would
+          # read as an empty verdict and the run would fall through to a pass.
+          for fn in esc_lines identity_preflight handle_preflight resolve_operator_literals \
+                    literal_set_verdict depersonalization_line_verdict; do
+            if ! declare -F "$fn" >/dev/null; then
+              echo "::error::Depersonalization gate: release/tools/lib/deciders-carveout.sh does not define $fn"
+              exit 1
+            fi
+          done
 
           # --- 0. FAIL-LOUD-ON-CANONICAL (OPERATOR_IDENTITY required; ----------
           #        COLLABORATOR_NAMES optional — solo-operator). -----------------
@@ -237,29 +260,61 @@ jobs:
           IS_CANONICAL=0
           [ "${GITHUB_REPOSITORY:-}" = "$CANONICAL_REPO" ] && IS_CANONICAL=1
 
-          # Fork opt-out: a repo variable OR a committed sentinel disables a
-          # dimension on a fork (announced in the summary). Absent the marker, a
-          # fork with unset inputs ALSO fails loud.
+          # Fork opt-out: a repo variable OR a committed sentinel disables the
+          # operator dimension on a fork (announced in the summary); the collaborator
+          # dimension still runs when its input is set. Absent the marker, a fork
+          # scans its own owner's handle, plus the identity when one is set. Only
+          # the canonical repository fails loud on an unset identity.
           FORK_OPTED_OUT=0
           if [ "$IS_CANONICAL" -eq 0 ]; then
             if [ -n "${FORK_OPTOUT:-}" ] || [ -f .repo-integrity-fork ]; then
               FORK_OPTED_OUT=1
-              echo "::notice::repo-integrity depersonalization: fork opt-out active (REPO_INTEGRITY_FORK_OPTOUT or .repo-integrity-fork present); a dimension with an unset input is skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::notice::repo-integrity depersonalization: fork opt-out active (REPO_INTEGRITY_FORK_OPTOUT or .repo-integrity-fork present); the operator dimension is skipped." | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           fi
 
-          if [ "$IS_CANONICAL" -eq 1 ] && [ -z "${OPERATOR_IDENTITY:-}" ]; then
-            {
-              echo "## :x: Depersonalization gate misconfigured"
-              echo ""
-              echo "Required secret unset on the canonical repository: \`OPERATOR_IDENTITY\`."
-              echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
-              echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
-              echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
-            } | tee -a "$GITHUB_STEP_SUMMARY"
-            echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
-            exit 1
-          fi
+          # The decision is the shared library's identity_preflight, so the fixture
+          # suite exercises the same code path. It reads no actor: a run Dependabot
+          # starts reads the Dependabot secret store, and a missing mirror there
+          # fails here exactly as a missing Actions secret does on a human run. A
+          # verdict that is neither OK nor FAIL fails closed.
+          case "$(identity_preflight "$IS_CANONICAL" "${OPERATOR_IDENTITY:-}")" in
+            OK) : ;;
+            FAIL)
+              {
+                echo "## :x: Depersonalization gate misconfigured"
+                echo ""
+                echo "Required secret unset (or blank) on the canonical repository: \`OPERATOR_IDENTITY\`."
+                echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
+                echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
+                echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
+                echo "A run Dependabot starts reads the Dependabot secret store: if this run was started by"
+                echo "Dependabot, the mirrored copy is missing (\`gh secret set OPERATOR_IDENTITY --app dependabot\`;"
+                echo "see \`core/standards/secrets-handling-policy.md\` §5)."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: identity_preflight returned an unrecognised verdict"
+              exit 1 ;;
+          esac
+
+          # The handle the gate scans must be the canonical owner — the shared
+          # library's handle_preflight. REPO_OWNER is bound from
+          # github.repository_owner, so on canonical this cannot fail by
+          # configuration; it fails on an edit that re-binds the handle (to the
+          # actor, say) or on an empty expression, either of which would otherwise
+          # leave the handle silently unscanned behind a SCAN verdict.
+          case "$(handle_preflight "$IS_CANONICAL" "${REPO_OWNER:-}" "${GITHUB_REPOSITORY:-}")" in
+            OK) : ;;
+            FAIL)
+              echo "## :x: Depersonalization gate misconfigured — the operator handle did not resolve to the repository owner" | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate misconfigured: the operator handle is not the canonical repository owner"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: handle_preflight returned an unrecognised verdict"
+              exit 1 ;;
+          esac
 
           # Solo-operator: COLLABORATOR_NAMES is OPTIONAL. When unset on canonical,
           # the operator dimension still runs and collaborator scanning is dormant
@@ -289,38 +344,34 @@ jobs:
             exit 0
           fi
 
-          # --- 2. OPERATOR-SELF dimension (CD-B) -------------------------------
-          #     handle = $ACTOR (always present); name/email from OPERATOR_IDENTITY.
-          #     BOT-SKIP: a bot-authored PR must not blind the gate by resolving
-          #     the operator literal to the bot's identity.
-          BOT=0
-          case "$ACTOR" in *'[bot]') BOT=1 ;; esac
-          [ "${SENDER_TYPE:-}" = "Bot" ] && BOT=1
-
-          # Build the operator-literal pattern list (one literal per line). The
-          # handle comes from the actor; name/email lines come from the input.
+          # --- 2. OPERATOR dimension (CD-B) ------------------------------------
+          #     handle = $REPO_OWNER (always present); name/email from
+          #     OPERATOR_IDENTITY. The same literals on EVERY run, whoever triggered
+          #     it: the handle no longer comes from the actor, so a run a bot starts
+          #     has nothing to blind and is scanned exactly as a human's run is.
+          #     The resolution is the shared library's resolve_operator_literals.
+          #
           # HANDLE_LITERAL is tracked separately from OP_LITERALS because the ADR
           # `deciders:` carve-out partitions them: §1.2 sanctions the NAME there and
           # never the handle, so the handle must stay matchable inside the carve-out
           # branch. Same source, same resolution conditions — one variable, two uses.
-          OP_LITERALS=""
+          OP_LITERALS="$(resolve_operator_literals "$IS_CANONICAL" "$FORK_OPTED_OUT" "${REPO_OWNER:-}" "${OPERATOR_IDENTITY:-}")"
           HANDLE_LITERAL=""
-          if [ "$BOT" -eq 0 ]; then
-            if [ "$IS_CANONICAL" -eq 1 ] || [ "$FORK_OPTED_OUT" -eq 0 ]; then
-              if [ -n "${ACTOR:-}" ]; then
-                OP_LITERALS="$ACTOR"
-                HANDLE_LITERAL="$ACTOR"
-              fi
-              if [ -n "${OPERATOR_IDENTITY:-}" ]; then
-                OP_LITERALS="$(printf '%s\n%s\n' "$OP_LITERALS" "$OPERATOR_IDENTITY")"
-              fi
-            fi
-          else
-            echo "::notice::repo-integrity depersonalization: actor is a bot — operator-self matching skipped (collaborator dimension still runs)." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -n "$OP_LITERALS" ]; then
+            HANDLE_LITERAL="${REPO_OWNER:-}"
           fi
 
-          # Collaborator dimension reads a fixed input, not the actor — it runs
-          # regardless of bot status.
+          # Whether the actor is a bot no longer changes the literal set. It is
+          # reported, so a reader of the summary can see the run was not exempted.
+          BOT=0
+          case "$ACTOR" in *'[bot]') BOT=1 ;; esac
+          [ "${SENDER_TYPE:-}" = "Bot" ] && BOT=1
+          if [ "$BOT" -eq 1 ]; then
+            echo "::notice::repo-integrity depersonalization: the run's actor is a bot ($ACTOR) — scanned on the same literals as a human run." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Collaborator dimension reads a fixed input, not the actor — it runs on
+          # every run.
           COLLAB_LITERALS=""
           if [ -n "${COLLABORATOR_NAMES:-}" ]; then
             COLLAB_LITERALS="$COLLABORATOR_NAMES"
@@ -336,17 +387,39 @@ jobs:
 
           # NOT-CARVED partition — the literals the ADR `deciders:` carve-out does
           # NOT cover. Built through the SAME esc_lines helper as PATTERN_FILE, so
-          # the two sets cannot drift into different escaping. Empty when no handle
-          # resolves (bot actor / opted-out fork), which the carve-out predicate
+          # the two sets cannot drift into different escaping. Empty only when the
+          # operator dimension is opted out on a fork, which the carve-out predicate
           # treats as "fall back to the shipped whole-line behaviour" rather than
           # inventing a verdict for a dimension that is already dark.
           NOT_CARVED_FILE="$(mktemp)"
           esc_lines "$HANDLE_LITERAL" >> "$NOT_CARVED_FILE"
 
-          if [ ! -s "$PATTERN_FILE" ]; then
-            echo ":white_check_mark: Depersonalization — no operator/collaborator literals resolved for this run (bot actor and/or no inputs); nothing to match" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          # Empty literal set — the shared library's literal_set_verdict. On
+          # canonical this cannot be reached today (the identity and the owner
+          # handle are both required above), so it FAILS rather than passes: the
+          # branch used to exit 0 with "nothing to match", and an edit that re-opens
+          # a path to it must not re-arm a silent pass. A fork keeps notice + pass.
+          case "$(literal_set_verdict "$IS_CANONICAL" "$PATTERN_FILE")" in
+            FAIL-EMPTY)
+              {
+                echo "## :x: Depersonalization gate resolved no literals"
+                echo ""
+                echo "On the canonical repository the operator handle and \`OPERATOR_IDENTITY\` must always resolve."
+                echo "An empty pattern set would scan nothing, and a control that scans nothing is indistinguishable"
+                echo "from a passing one — so this is a hard failure, not a pass."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate resolved no literals on canonical"
+              rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE"
+              exit 1 ;;
+            PASS-EMPTY)
+              echo ":white_check_mark: Depersonalization — no operator/collaborator literals resolved for this run (fork with the operator dimension opted out and no collaborator list); nothing to match" | tee -a "$GITHUB_STEP_SUMMARY"
+              rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE"
+              exit 0 ;;
+            SCAN) : ;;
+            *)
+              echo "::error::Depersonalization gate: literal_set_verdict returned an unrecognised verdict"
+              exit 1 ;;
+          esac
 
           # --- 3 + 4. Scan each in-scope changed file (case-sensitive, word-
           #     boundary). Lines bearing the override marker are suppressed +

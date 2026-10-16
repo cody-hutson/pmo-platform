@@ -333,3 +333,10 @@ name = "auto-promoted-pattern"
 color = "D4C5F9"
 description = "Filed automatically by the release-learnings synthesizer's cross-release pattern detector; awaiting triage. Persists through close (the schema-maintenance trigger counts it)."
 applied_at = "Auto-promotion (synthesizer pattern-detect --apply)"
+
+[[labels]]
+group = "provenance"
+name = "dependabot"
+color = "1F6FEB"
+description = "Opened by Dependabot (version or security update); applied at PR creation. Persists through close."
+applied_at = "PR creation (Dependabot, per .github/dependabot.yml labels:)"
