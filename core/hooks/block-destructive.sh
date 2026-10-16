@@ -1534,9 +1534,17 @@ readonly DESTRUCTIVE_022_EXEC_PHASE="warn"   # shadow | warn | enforce
 # evidence. The DEADLINE arm reads a committed constant and today's date, so it
 # works in CI and in a fresh clone. deploy.sh Check 71 is its enforcement surface:
 # silent below threshold, warning at REVIEW_DAYS or REVIEW_ROWS, and at
-# ESCALATE_DAYS with this phase constant unchanged it increments ISSUES so
-# `--check --strict` exits 1. Doing nothing turns the pipeline red, and every way
-# of turning it green is a recorded decision.
+# ESCALATE_DAYS with this phase constant anything other than `enforce` it
+# increments ISSUES, so a strict full `deploy.sh --check` run exits 1. No
+# pull-request job runs that full check: a failure reaches whoever runs it, a
+# release-plan verification row that declares that run, and a strict run on any
+# published tag, whose committed arming date ages with it. Only two kinds of edit
+# turn it green, and each is a recorded decision: advancing this phase to
+# `enforce`, which discharges the gate for good; or keeping the elapsed days below
+# ESCALATE_DAYS — by re-dating the arming constant below forward (on its own, or
+# together with a retreat to `shadow`), or by raising ESCALATE_DAYS. A retreat to
+# `shadow` on its own does NOT: past the escalation day the check fails at
+# `shadow` exactly as it does at `warn`. Rows landing in the drain do not either.
 #
 # RE-DATED 2026-09-03, AND THE RE-DATE IS THE RECORDED DECISION RATHER THAN AN
 # INCIDENTAL EDIT. The exec arm's operand domain was widened in the same change
@@ -1544,9 +1552,24 @@ readonly DESTRUCTIVE_022_EXEC_PHASE="warn"   # shadow | warn | enforce
 # forward include `.py`/`.rb`/`.js`/`.pl` direct executions — traffic the original
 # 2026-08-24 arming was not measuring. Check 71 names this exact remedy in its own
 # failure text ("extend ONCE by re-dating"), and reading a graduation against a
-# population whose composition changed underneath it is the alternative. This is
-# the one extension; a second would be a decision to retreat or graduate instead.
-readonly DESTRUCTIVE_022_EXEC_ARMED="2026-09-03"
+# population whose composition changed underneath it is the alternative.
+#
+# RE-DATED A SECOND TIME 2026-10-16, AND THIS COMMENT USED TO SAY THERE WOULD BE NO
+# SECOND. It read: "This is the one extension; a second would be a decision to
+# retreat or graduate instead." The operator reversed that deliberately at the
+# graduation gate on 2026-10-16: the arm neither graduates nor retreats, it stays at
+# `warn`, and the arming date moves forward. Graduating was declined on the reading
+# taken that day: most of the arm's recorded hits carried the shape of text or named
+# a path no allowlist row can resolve, an allowlisted script inside an assignment's
+# substitution is recorded unresolvable, direct executions from other work areas
+# have no row form, and this release widens the walk to positions no instance has
+# recorded yet. Retreating was declined because the `warn` notice is written to
+# standard error by a hook that exits 0, which the harness does not show a session,
+# so `shadow` would silence nothing anyone reads and add a rung on the way back to
+# `enforce`. The re-date restarts the clock: a review warning from 2026-12-15 (Tue)
+# and a finding from 2027-01-14 (Thu). The prior wording is kept rather than
+# deleted, because a reader who remembers it needs to know it was reversed on purpose.
+readonly DESTRUCTIVE_022_EXEC_ARMED="2026-10-16"
 readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=60    # deadline arm — repo-derivable
 readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=25    # evidence arm — operator-local
 readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
@@ -1581,7 +1604,17 @@ readonly DESTRUCTIVE_022_INTERP_PHASE="warn"   # shadow | warn | enforce
 
 # Self-armed at the commit that introduced this family — never a placeholder for a
 # later editor to fill, for the reason recorded on the exec arming stamp above.
-readonly DESTRUCTIVE_022_INTERP_ARMED="2026-09-03"
+#
+# RE-DATED 2026-10-16, THE FAMILY'S FIRST RE-DATE, AND IT IS THE RECORDED DECISION:
+# at the graduation gate the operator kept this arm at `warn` rather than graduating
+# it. Graduating would refuse, from the first republish, every non-shell script the
+# allowlist does not list, and the class that blocks it has no sanctioned form yet: a
+# session's own multi-step logic run as a scratch script, which `enforce` would refuse
+# outright. An open card owns that form; the readiness fragment names it. The
+# extension is used rather than lapsed: the allowlist's non-shell section took its
+# first rows in the same change, read from the drain. The re-date restarts the clock:
+# a review warning from 2026-12-15 (Tue) and a finding from 2027-01-14 (Thu).
+readonly DESTRUCTIVE_022_INTERP_ARMED="2026-10-16"
 readonly DESTRUCTIVE_022_INTERP_REVIEW_DAYS=60    # deadline arm — repo-derivable
 readonly DESTRUCTIVE_022_INTERP_REVIEW_ROWS=25    # evidence arm — operator-local
 readonly DESTRUCTIVE_022_INTERP_ESCALATE_DAYS=90  # deadline arm turns ISSUES red

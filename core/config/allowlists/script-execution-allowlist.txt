@@ -1108,14 +1108,15 @@ core/deploy/tests/test_deploy_path_literals.sh
 # NON-SHELL SCRIPT ENTRIES (.py / .pl / .pm / .rb / .js / .mjs / .cjs)
 # ---------------------------------------------------------------------------
 #
-# DELIBERATELY EMPTY AT INTRODUCTION. DO NOT PRE-POPULATE THIS SECTION.
+# FILLED FROM DRAIN EVIDENCE, NEVER PRE-POPULATED FROM A SURVEY. This section was
+# deliberately empty at introduction and took its first rows on 2026-10-16.
 #
-# The non-shell interpreter arm ships at rollout phase `warn`
+# The non-shell interpreter arm runs at rollout phase `warn`
 # (DESTRUCTIVE_022_INTERP_PHASE in core/hooks/block-destructive.sh). At `warn`
 # nothing is refused: a would-fire is recorded to the drain, carrying
-# `"arm":"interp-nonshell"`, and the call proceeds. The rows below are to be added
-# FROM THAT DRAIN EVIDENCE during the warn phase — from invocations agents actually
-# make — and not from a survey of what the repository happens to contain.
+# `"arm":"interp-nonshell"`, and the call proceeds. Rows are added FROM THAT DRAIN
+# EVIDENCE during the warn phase — from invocations agents actually make — and not
+# from a survey of what the repository happens to contain.
 #
 # WHY THAT ORDER, MEASURED RATHER THAN ASSERTED. At the introducing commit all 289
 # non-comment entries above end in `.sh`, so zero of them could ever match a `.py`
@@ -1125,7 +1126,157 @@ core/deploy/tests/test_deploy_path_literals.sh
 # population nobody observed. The warn phase exists precisely to replace that guess
 # with a reading.
 #
-# The corresponding obligation is dated: deploy.sh Check 71 turns the pipeline red
-# at DESTRUCTIVE_022_INTERP_ARMED + 90 days unless rows land here or a decision to
-# retreat or extend is recorded in the hook. That is the mechanism working, not a
-# fault to route around.
+# THE FIRST ROWS, AND THE READING THEY CAME FROM. On 2026-10-16, at the graduation
+# gate that kept the arm at `warn`, the operator chose to fill this section from the
+# drain: one group in the four canonical forms for each tracked tool the interpreter
+# arm recorded from sessions outside spoke worktrees — 32 tools, every one a `.py`
+# under core/ or release/, read from the drain as it stood that day with spoke
+# worktree traffic set apart. Every `.py` tool a pipeline specification prescribes is
+# among them. NOT rowed, by the same rule: a tool seen only from spoke worktrees, any
+# script outside the repository's tracked files, and any path whose value argv does
+# not determine. Scratch logic run from a session or run directory is the class that
+# blocks graduation, and its remedy is a sanctioned form for that logic, not a row.
+# The `.pl`, `.pm`, `.rb`, `.js`, `.mjs` and `.cjs` domains hold no row yet.
+#
+# WHAT A ROW CHANGES. A row stops the drain recording that tool, so the next reading
+# measures what remains. It also opens one shape the walk does not see past: with no
+# arity table for these interpreters, an allowlisted script in an option's VALUE
+# position is taken as the operand, and the script after it is never read
+# (`python3 -X <allowlisted>.py <unlisted>.py`). That shape is pinned at its measured
+# verdict in core/hooks/tests/block-destructive.test.sh, and a graduation owes it.
+#
+# The corresponding obligation is dated: a strict full `deploy.sh --check` run fails
+# Check 71 at DESTRUCTIVE_022_INTERP_ARMED + 90 days unless the phase reads `enforce`
+# or the arming date has been moved forward (equivalently, the escalation day-count
+# raised). Rows landing here do not move it, and a retreat to `shadow` does not
+# either — rows are what make `enforce` survivable, not what satisfies the check.
+# That is the mechanism working, not a fault to route around.
+
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_compose.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_compose.py
+./core/deploy/tests/test_compose.py
+core/deploy/tests/test_compose.py
+[PMO_PLATFORM_ROOT]/core/deploy/tests/test_gate_efficacy_declarations.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tests/test_gate_efficacy_declarations.py
+./core/deploy/tests/test_gate_efficacy_declarations.py
+core/deploy/tests/test_gate_efficacy_declarations.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/_frontmatter.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/_frontmatter.py
+./core/deploy/tools/_frontmatter.py
+core/deploy/tools/_frontmatter.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/backfill-relationship-edges.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/backfill-relationship-edges.py
+./core/deploy/tools/backfill-relationship-edges.py
+core/deploy/tools/backfill-relationship-edges.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/build-doc-index.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/build-doc-index.py
+./core/deploy/tools/build-doc-index.py
+core/deploy/tools/build-doc-index.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/build-hook-registry.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/build-hook-registry.py
+./core/deploy/tools/build-hook-registry.py
+core/deploy/tools/build-hook-registry.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-approved-queue-depth.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-approved-queue-depth.py
+./core/deploy/tools/check-approved-queue-depth.py
+core/deploy/tools/check-approved-queue-depth.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-count-structure.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-count-structure.py
+./core/deploy/tools/check-count-structure.py
+core/deploy/tools/check-count-structure.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-doc-frontmatter.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-doc-frontmatter.py
+./core/deploy/tools/check-doc-frontmatter.py
+core/deploy/tools/check-doc-frontmatter.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-doc-links.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-doc-links.py
+./core/deploy/tools/check-doc-links.py
+core/deploy/tools/check-doc-links.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-label-parity.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-label-parity.py
+./core/deploy/tools/check-label-parity.py
+core/deploy/tools/check-label-parity.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-milestone-epic-membership.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-milestone-epic-membership.py
+./core/deploy/tools/check-milestone-epic-membership.py
+core/deploy/tools/check-milestone-epic-membership.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-mirror-pair-parity.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-mirror-pair-parity.py
+./core/deploy/tools/check-mirror-pair-parity.py
+core/deploy/tools/check-mirror-pair-parity.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-work-hierarchy.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-work-hierarchy.py
+./core/deploy/tools/check-work-hierarchy.py
+core/deploy/tools/check-work-hierarchy.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/compose-portfolio.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/compose-portfolio.py
+./core/deploy/tools/compose-portfolio.py
+core/deploy/tools/compose-portfolio.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/generate_release_index.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/generate_release_index.py
+./core/deploy/tools/generate_release_index.py
+core/deploy/tools/generate_release_index.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/lint_release_corpus.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/lint_release_corpus.py
+./core/deploy/tools/lint_release_corpus.py
+core/deploy/tools/lint_release_corpus.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/reconcile-gate-posture.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/reconcile-gate-posture.py
+./core/deploy/tools/reconcile-gate-posture.py
+core/deploy/tools/reconcile-gate-posture.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/repair-warn-log-escapes.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/repair-warn-log-escapes.py
+./core/deploy/tools/repair-warn-log-escapes.py
+core/deploy/tools/repair-warn-log-escapes.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/stamp-node-frontmatter.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/stamp-node-frontmatter.py
+./core/deploy/tools/stamp-node-frontmatter.py
+core/deploy/tools/stamp-node-frontmatter.py
+[PMO_PLATFORM_ROOT]/release/skills/pmo-skill-refiner/scripts/assert_branch_fresh.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/skills/pmo-skill-refiner/scripts/assert_branch_fresh.py
+./release/skills/pmo-skill-refiner/scripts/assert_branch_fresh.py
+release/skills/pmo-skill-refiner/scripts/assert_branch_fresh.py
+[PMO_PLATFORM_ROOT]/release/tools/bundle-issues-parser.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/bundle-issues-parser.py
+./release/tools/bundle-issues-parser.py
+release/tools/bundle-issues-parser.py
+[PMO_PLATFORM_ROOT]/release/tools/check-ac-binding.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-ac-binding.py
+./release/tools/check-ac-binding.py
+release/tools/check-ac-binding.py
+[PMO_PLATFORM_ROOT]/release/tools/check-adr-durability.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-adr-durability.py
+./release/tools/check-adr-durability.py
+release/tools/check-adr-durability.py
+[PMO_PLATFORM_ROOT]/release/tools/check-adr-numbers.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-adr-numbers.py
+./release/tools/check-adr-numbers.py
+release/tools/check-adr-numbers.py
+[PMO_PLATFORM_ROOT]/release/tools/check-line-range-overlap.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-line-range-overlap.py
+./release/tools/check-line-range-overlap.py
+release/tools/check-line-range-overlap.py
+[PMO_PLATFORM_ROOT]/release/tools/check-release-links.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-release-links.py
+./release/tools/check-release-links.py
+release/tools/check-release-links.py
+[PMO_PLATFORM_ROOT]/release/tools/check-selftest-coverage.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-selftest-coverage.py
+./release/tools/check-selftest-coverage.py
+release/tools/check-selftest-coverage.py
+[PMO_PLATFORM_ROOT]/release/tools/generate-adr-index.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/generate-adr-index.py
+./release/tools/generate-adr-index.py
+release/tools/generate-adr-index.py
+[PMO_PLATFORM_ROOT]/release/tools/native-dep-mirror.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/native-dep-mirror.py
+./release/tools/native-dep-mirror.py
+release/tools/native-dep-mirror.py
+[PMO_PLATFORM_ROOT]/release/tools/renumber-adr.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/renumber-adr.py
+./release/tools/renumber-adr.py
+release/tools/renumber-adr.py
+[PMO_PLATFORM_ROOT]/release/tools/sweep-release-corpus.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/sweep-release-corpus.py
+./release/tools/sweep-release-corpus.py
+release/tools/sweep-release-corpus.py

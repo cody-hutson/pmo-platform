@@ -5427,6 +5427,41 @@ nsi_warn_case "T-NSI-09b [flipped, was #6724-owned residual]: perl -I lib <unlis
 nsi_warn_case "T-NSI-09c [ctl]: the identical invocation without the flag IS adjudicated" \
   "python3 $NSI_PY" 'not-allowlisted'
 
+# --- NSI-ROW / NSI-F2 (#7026; the adversarial review's F-2, sub-task #8236): what the
+# first non-shell allowlist rows open ------------------------------------------------
+# The allowlist's non-shell section took its first rows on 2026-10-16, at the
+# graduation gate that kept this arm at `warn`: the tracked `.py` tools the drain
+# recorded. These arms read the REAL allowlist through the layout, so they bind the
+# rows, not a fixture.
+#
+# A ROW IS LIVE (NSI-ROW-01): the rowed tool alone is admitted silently — exit 0 and
+# no drain row, at every phase. It is also the sensitivity control for the two pins
+# below: were the row not matched, their lines would draw a row and fail.
+#
+# WHAT THE ROWS OPEN, PINNED AT ITS MEASURED VERDICT, NOT CLOSED. The walk stops at the
+# first token its operand domain claims, and the non-shell interpreters carry no arity
+# table, so an option's VALUE that is itself an allowlisted `.py` is taken as the
+# operand and admitted — and the script after it, the one the interpreter runs, is never
+# read (CPython accepts an unknown `-X` value and runs on). Before any `.py` row existed
+# the same line drew a would-fire row, for the option's value; now it allows with no
+# row. The verdict does not depend on the phase, so a graduation does not move these
+# pins; an arity table for these interpreters flips them deliberately instead of
+# drifting. A graduation of the interpreter arm owes this shape, and the readiness
+# fragment's decision sentence names it. Pinned for the two admitted interpreters whose
+# suffix domain holds rows; `perl`, `ruby` and `node` hold none yet, so the shape is
+# not open for them.
+NSI_ROWED_PY="core/deploy/tools/check-doc-links.py"
+exec_notflag_case "NSI-ROW-01 [ctl]: python3 <rowed>.py is admitted with no drain row — the first non-shell rows are live" \
+  "python3 $NSI_ROWED_PY"
+exec_notflag_case "NSI-F2-RESID-python3 [pin, declared residual]: python3 -X <rowed>.py <unlisted>.py allows with NO row — the script that runs is never read" \
+  "python3 -X $NSI_ROWED_PY $NSI_PY"
+exec_notflag_case "NSI-F2-RESID-python [pin, declared residual]: python -X <rowed>.py <unlisted>.py allows with NO row — the script that runs is never read" \
+  "python -X $NSI_ROWED_PY $NSI_PY"
+# CONTROL THAT MUST FIRE: the identical line with an UNROWED option value is still
+# recorded, so the pins measure the row and not a walk that stopped reading.
+nsi_warn_case "NSI-F2-ctl-unrowed [ctl]: python3 -X <unlisted>.py <unlisted>.py is still recorded" \
+  "python3 -X core/deploy/tools/no-such-tool-abc.py $NSI_PY" 'not-allowlisted'
+
 # --- AC-4 (RETARGETED): the phase gate is LOAD-BEARING, not decorative ---------
 # The original AC4 asserted a mode declaration this hook has never had — it is
 # MODE-INDEPENDENT and always-enforce. The mechanism it DOES have is the per-rule
