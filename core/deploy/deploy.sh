@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # deploy.sh — PMO Platform deployment and validation tool
-# Usage: ./deploy.sh [--init | --deploy [skill...] [--release <milestone-slug>] | --check [--warn] | --report]
+# Usage: ./deploy.sh [--init | --deploy [skill...] | --deploy --release <milestone-slug> (<skill>... | --no-targets) | --check [--warn] | --report]
 # Exit codes: 0 = success/clean, 1 = issues found or failure
 
 # ─── Constants ───────────────────────────────────────────────────────────────
@@ -718,6 +718,15 @@ log() {
 # permanently, because the log is append-only Vital-retention. Silence is the correct
 # default — and because a silent default is indistinguishable from a forgotten flag,
 # _ds_warn_unstamped below makes the omission OBSERVABLE rather than merely documented.
+#
+# A RELEASE-STAMPED DEPLOY STATES ITS TARGET SET. `--release <slug>` is accepted only
+# with named targets or with `--no-targets`; the bare form is refused in cmd_deploy
+# BEFORE the rules-mirror carrier runs, so a refused invocation writes no row at all.
+# An empty key is refused there too, in both spellings: it would otherwise run the
+# deploy unstamped. The detector's window is not the release's own change set: it reads
+# empty once HEAD has moved past the release tag, and it names a neighbouring merge's
+# skill when one sits inside it. A stamped row is permanent, so the target set is stated
+# by the caller and never inferred here. Stage 12 Phase B4 is the caller.
 
 # The release join key for this invocation — the milestone SLUG, never a version.
 # Empty means "not a Stage-12 deploy"; every emit is gated on it being non-empty.
@@ -6305,16 +6314,27 @@ cmd_deploy() {
   # so the flag is consumed HERE — no main() change, and the --all branch (which
   # calls cmd_deploy with no args) is untouched and correctly emits nothing.
   DEPLOY_RELEASE_SLUG=""
+  local _deploy_no_targets=false
   local -a _deploy_args=()
+  # An EMPTY key is refused at parse time, in both spellings — above the carrier, so it
+  # writes nothing. Left to the non-empty test further down, it would read as "no
+  # --release" and the deploy would run unstamped: exit 0, no row, the defect itself.
+  local _deploy_empty_key="--release was given an empty value: a release-stamped deploy needs its join key, the milestone slug. An empty key would run the deploy unstamped and write no row, which reads downstream exactly like a release that deployed nothing. Nothing was deployed and no row was written."
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --release)
         [[ $# -ge 2 ]] || die "--release requires a milestone-slug argument (the release join key; never a version)"
+        [[ -n "$2" ]] || die "$_deploy_empty_key"
         DEPLOY_RELEASE_SLUG="$2"
         shift 2
         ;;
       --release=*)
         DEPLOY_RELEASE_SLUG="${1#--release=}"
+        [[ -n "$DEPLOY_RELEASE_SLUG" ]] || die "$_deploy_empty_key"
+        shift
+        ;;
+      --no-targets)
+        _deploy_no_targets=true
         shift
         ;;
       *)
@@ -6324,6 +6344,23 @@ cmd_deploy() {
     esac
   done
   set -- ${_deploy_args[@]+"${_deploy_args[@]}"}
+
+  # ─── A release-stamped deploy states its target set ────────────────────────
+  # MUST run BEFORE the rules-mirror carrier below. The carrier writes its row on
+  # every stamped invocation it reaches, so a refusal placed after it would leave
+  # exactly the row set a declared zero-target release leaves — one mirror row and
+  # nothing else — and "the names were forgotten" would again be indistinguishable
+  # from "there were none". Refused here, a bare --release writes nothing.
+  if [[ -n "$DEPLOY_RELEASE_SLUG" ]]; then
+    if [[ $# -eq 0 && "$_deploy_no_targets" != "true" ]]; then
+      die "--release requires an explicit target set: name the release's skills (./deploy.sh --deploy --release <milestone-slug> <skill> [<skill> ...]) or declare that it has none (./deploy.sh --deploy --release <milestone-slug> --no-targets). A release-stamped deploy never auto-detects: its rows are append-only, and the detector's window is not the release. Nothing was deployed and no row was written."
+    fi
+    if [[ $# -gt 0 && "$_deploy_no_targets" == "true" ]]; then
+      die "--no-targets contradicts the named target(s): $*. Name the targets or declare none. Nothing was deployed and no row was written."
+    fi
+  elif [[ "$_deploy_no_targets" == "true" ]]; then
+    die "--no-targets is meaningful only with --release <milestone-slug>: it declares that a release has no skill, package or harness target. Nothing was deployed."
+  fi
 
   # ─── The rules mirror carrier — RUNS BEFORE THE E-02 EARLY EXIT ────────────
   #
@@ -6422,6 +6459,14 @@ cmd_deploy() {
     _dep_manual=true
     _dep_claimed=(${manual_skills[@]+"${manual_skills[@]}"})
   else
+    if [[ "$_deploy_no_targets" == "true" ]]; then
+      # Declared zero-target release. Select nothing: no tag window, no ground-truth
+      # union, no full-roster bootstrap. The carrier above already addressed the one
+      # target this invocation has.
+      CHANGED_SKILLS=()
+      CHANGED_PACKAGES=()
+      CHANGED_HARNESS=()
+      DELETED_SKILLS=()
     # A fresh clone whose install deployed nothing leaves the user-local skills
     # mirror empty. install.sh Phase 2 reaches here (orchestrate.sh runs
     # `deploy.sh --deploy` with NO args), and the tag-diff window is empty on a
@@ -6430,7 +6475,7 @@ cmd_deploy() {
     # deploy the FULL roster built from the per-module arrays + all packages
     # instead, so the documented `git clone && ./install.sh` path works
     # unattended. A populated mirror falls through to incremental tag-diff.
-    if should_full_roster; then
+    elif should_full_roster; then
       if [[ "${FORCE_ALL:-false}" == "true" ]]; then
         log "Full-roster deploy requested (--all) — deploying every skill + package."
       else
@@ -6529,7 +6574,13 @@ cmd_deploy() {
     # rewording the head of the line would have silently converted a passing
     # assertion into a skip — a coverage loss that reads as green. Add after the
     # existing sentence; do not rewrite it.
-    if [[ ${_gt_roster_n:-0} -gt 0 ]]; then
+    #
+    # A declared zero-target release takes a sentence of its own, placed FIRST: it says
+    # why nothing was selected, and the two consumer-matched sentences below are not
+    # reworded.
+    if [[ "$_deploy_no_targets" == "true" ]]; then
+      log "Release-stamped deploy with --no-targets: no skill, package or harness target was named, so none was selected. Nothing to deploy beyond the rules mirror."
+    elif [[ ${_gt_roster_n:-0} -gt 0 ]]; then
       log "No skill, package, or harness changes detected. Nothing to deploy. Verified current: ${_gt_roster_n} of ${_gt_roster_n} roster skills match source on ${_gt_targets} target(s)."
     else
       log "No skill, package, or harness changes detected. Nothing to deploy."
@@ -6544,7 +6595,7 @@ cmd_deploy() {
     # reads downstream as a release that legitimately deployed nothing.
     if [[ "$(_ds_warn_unstamped "${RULES_MIRROR_WROTE:-0}")" == "WARN" ]]; then
       log "WARN: deployed ${RULES_MIRROR_WROTE:-0} rules-mirror target(s) with no --release <slug> — ZERO deployment-status rows were emitted."
-      log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug>"
+      log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug> <skill> [<skill> ...]   (a release with no target: --no-targets)"
     fi
     log "  Note: composition surfaces (hook-tier allowlists, hub-state templates,"
     log "        platform-config seed) are OUT OF SCOPE for --deploy and were NOT"
@@ -6873,7 +6924,7 @@ cmd_deploy() {
     log "      Cycle-Time and the DORA deployment-frequency read N/A for this deploy, which is"
     log "      byte-identical to a release that legitimately deployed nothing. The two states are"
     log "      indistinguishable downstream, so this line is the only place the difference is visible."
-    log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug>"
+    log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug> <skill> [<skill> ...]   (a release with no target: --no-targets)"
     log "      A fresh install or an ad-hoc redeploy carries no release identity — for those this"
     log "      warning is expected and correct, and no row should be written."
   fi
@@ -6881,6 +6932,11 @@ cmd_deploy() {
   # ─── #4215: deliberate non-emission points (the complete inventory) ────────
   # Recorded so the absences read as decisions. NOTHING is emitted when:
   #   validate_workspace fails           — aborts before any target is known
+  #   the target-set contract refuses    — --release with no named target and no
+  #                                        --no-targets, --no-targets beside a name,
+  #                                        --no-targets without --release, or an empty
+  #                                        release key. Refused ABOVE the rules-mirror
+  #                                        carrier: not even the mirror row is written.
   # and NO skill, package or harness row is emitted when:
   #   die "Unknown artifact"             — argument validation; no deploy attempted
   #   die "Ambiguous artifact name"      — same
@@ -20460,11 +20516,16 @@ main() {
       echo "Modes:"
       echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
       echo "     --release <slug>          Stamp this deploy with a release join key (the MILESTONE SLUG, never a version)."
-      echo "                               Emits one deployment-status row per affected target, which is what gives"
-      echo "                               Cycle-Time and the DORA metrics a T_DEPLOY anchor. Omit it for a fresh install"
-      echo "                               or an ad-hoc redeploy: with no slug, NOTHING is emitted (deliberately — a"
-      echo "                               release-less row would inflate deployment-frequency permanently). Omitting it"
+      echo "                               A stamped deploy states its target set: name the release's skills, or pass"
+      echo "                               --no-targets for a release that has none. --release alone, or with an empty"
+      echo "                               value, is refused — a stamped deploy never auto-detects. Emits one"
+      echo "                               deployment-status row per named target plus one rules-mirror row, which is what"
+      echo "                               gives Cycle-Time and the DORA metrics a T_DEPLOY anchor. Omit it for a fresh"
+      echo "                               install or an ad-hoc redeploy: with no slug, NOTHING is emitted (deliberately —"
+      echo "                               a release-less row would inflate deployment-frequency permanently). Omitting it"
       echo "                               on a Stage-12 deploy is warned about at the end of the run."
+      echo "     --no-targets              With --release only: this release has no skill, package or harness target."
+      echo "                               Deploys and stamps the rules mirror, and nothing else."
       echo "  --all                        Deploy the full skill roster + all packages (explicit bootstrap / redeploy-everything)"
       echo "  --check [--warn]             Validate platform health (--warn exits 0 even with issues)"
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"
