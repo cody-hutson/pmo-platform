@@ -231,9 +231,13 @@ def on_track(fields: dict[str, str], parser) -> bool:
     """True iff a declaration is on the registration track, as the standard defines it.
 
     The posture test is the ratchet's own grammar (`required`, or `required(` followed
-    by a qualifier), never a leading-letters match, and the surface test is the
-    ratchet's own surface reader — so this tool and the ratchet cannot disagree about
-    which declarations claim a blocking posture.
+    by a qualifier), and the surface test is the ratchet's own surface reader — so this
+    tool and the ratchet cannot disagree about which declarations claim a blocking
+    posture. Both failure shapes it replaces are recorded here because each happened: a
+    space-intolerant match silently drops the compound form `required(enforce; ratified
+    …)`, which is exactly how an earlier measurement of this population came back one
+    short; and a leading-letters match sweeps in any posture word that merely begins
+    with them.
     """
     if not parser.POSTURE_REQUIRED_RE.match(fields.get("posture", "")):
         return False

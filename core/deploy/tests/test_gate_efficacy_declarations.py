@@ -17,6 +17,17 @@ change that breaks the invariant — adding a `paths:` key without touching the 
 or deleting one and leaving `skip-semantics=absent-is-pass` behind — was exactly the
 change no gate could see. A declaration nothing checks decays into a comment.
 
+One more pairing of header and trigger is graded by the same reader. A declaration whose
+posture is `required`, bare or qualified, and whose enforcement surface is
+`branch-protection` claims a registered context — and a registered context on a
+path-filtered workflow never reports on a pull request outside its roster, so the merge
+waits on a status that never arrives. `skip-semantics=absent-is-pass` is the correct
+spelling for a filtered file, so such a declaration passes every branch of the
+biconditional above; it is the FIFTH finding branch of `evaluate`, because it is the same
+pairing — a declaration against its own file's trigger. The standard's § Verdict-Input
+Closure makes removing the filter a prerequisite of a required posture; this branch is
+that prerequisite, given a runner.
+
 SECOND INVARIANT — THE DECLARATION'S REACH IS THE JOB, NOT THE FILE
 ------------------------------------------------------------------
 The same standard states the obligation as "every automated-assertion gate MUST
@@ -70,7 +81,8 @@ between these two files exists to prevent.
 
 This arm is STATIC. It grades the declaration against itself and never reads live
 branch protection — an out-of-tree verdict input must not gate a merge (Requirement (b)),
-which is precisely why the reconciler that DOES read it is report-only. The two are
+which is precisely why the reconciler that DOES read it is never a required context: it
+turns its own check red on a measured divergence and blocks nothing. The two are
 complements: this arm asserts the claim is well-formed, the reconciler asserts it is
 true today.
 
@@ -277,6 +289,23 @@ def evaluate(
                     findings.append(
                         f"{site}: carries a paths filter yet this declaration declares "
                         f"always-reports — the two fields are mutually exclusive"
+                    )
+                # FIFTH BRANCH — a registration-track declaration on a FILTERED file.
+                # `skip-semantics=absent-is-pass` is the right spelling here, so a
+                # required, branch-protection header that keeps it passes the four
+                # branches; only this one sees it. Same grammar `evaluate_posture` uses
+                # for a required posture and a blocking surface, so the two arms cannot
+                # disagree about which declarations those are.
+                if (POSTURE_REQUIRED_RE.match(fields.get("posture", ""))
+                        and (enforcement_surface(fields) or "").startswith(BLOCKING_SURFACE)):
+                    findings.append(
+                        f"{site}: declares a `required` posture on `branch-protection` "
+                        f"while the workflow carries a paths filter — a registered context "
+                        f"on a path-filtered workflow never reports on a pull request "
+                        f"outside its roster, so the merge waits on a status that never "
+                        f"arrives. Remove the filter (always-reports=yes), or declare the "
+                        f"posture this gate actually delivers (gate-efficacy-standard.md "
+                        f"§ Verdict-Input Closure)."
                     )
             else:
                 if fields.get("always-reports") != "yes":
@@ -793,13 +822,15 @@ def harness(sources: dict[str, str], filtered: list[str],
     """Anti-vacuity. Every arm mutates an in-memory copy of a LIVE workflow and
     requires the detector to react. An arm that cannot be BUILT is NOSET, not a skip.
 
-    ARM COVERAGE IS THE DESIGN CONSTRAINT, not arm count. `evaluate` has FOUR finding
+    ARM COVERAGE IS THE DESIGN CONSTRAINT, not arm count. `evaluate` has FIVE finding
     branches — filtered-without-`skip-semantics`, filtered-declaring-`always-reports`,
-    filter-free-without-`always-reports`, filter-free-declaring-`skip-semantics` —
-    plus the no-header branch. An earlier arm set covered only three of the five: A1
-    exercised the second, A2 the fourth, A4 the fifth, and A3's filter deletion was
-    ALSO caught by the fourth, so deleting either VALUE branch outright left the suite
-    green. That hole was found by mutation-grading this file against itself, not by
+    filter-free-without-`always-reports`, filter-free-declaring-`skip-semantics`, and a
+    `required` branch-protection declaration on a filtered file (A9 and A10) — plus the
+    no-header branch. An earlier arm set, written when the first four finding branches
+    and the no-header branch were all there was, covered only three of those five: A1
+    exercised the second, A2 the fourth, A4 the no-header branch, and A3's filter
+    deletion was ALSO caught by the fourth, so deleting either VALUE branch outright left
+    the suite green. That hole was found by mutation-grading this file against itself, not by
     reading it, which is why A6 and A7 exist and why the grading is recorded in the
     register row rather than the arm count.
     """
@@ -911,6 +942,47 @@ def harness(sources: dict[str, str], filtered: list[str],
                             "of its declarations, so arm A8 cannot be built — reported "
                             "rather than skipped")
 
+    # A9 / A10 — the FIFTH branch, as a sensitivity / specificity pair on ONE filtered
+    # declaration, the two arms differing in the posture token alone. A9 points the
+    # declaration at `branch-protection` with a required posture — bare, then qualified —
+    # while it keeps `skip-semantics=absent-is-pass`, the shape the four other branches
+    # all pass, so only the fifth can flag it. A10 makes the identical surface edit with
+    # an `advisory` posture, which the fifth branch does not govern, and must stay clean:
+    # without it a branch that ignored the posture and flagged every branch-protection
+    # surface on a filtered file would pass A9.
+    track_victim = None
+    for name in filtered:
+        declarations = parse_headers(sources[name])
+        if not declarations:
+            continue
+        fields = declarations[0][1]
+        key = next((k for k in ENFORCEMENT_KEYS if k in fields), None)
+        if fields.get("posture") and key:
+            track_victim = (name, fields["posture"], key, fields[key])
+            break
+    if not track_victim:
+        failures.append("NOSET: no path-filtered workflow carries a declaration with both "
+                        "a posture and an enforcement field, so arms A9/A10 cannot be "
+                        "built — reported rather than skipped")
+    else:
+        tname, tposture, tkey, tvalue = track_victim
+        onto = f'{tkey}={BLOCKING_SURFACE}:"zzz-filtered-required-context"'
+
+        def onto_track(posture: str):
+            return lambda t: edit_header(
+                edit_header(t, f"posture={tposture}", f"posture={posture}"),
+                f"{tkey}={tvalue}", onto)
+
+        for posture in ("required", "required(warn-mode-initial)"):
+            if not flags(tname, onto_track(posture)):
+                failures.append(f"A9: a `{posture}` declaration naming branch-protection "
+                                f"on filtered {tname} was NOT flagged — a registered "
+                                f"context on a path-filtered workflow passes every branch")
+        if flags(tname, onto_track("advisory")):
+            failures.append(f"A10: an ADVISORY declaration naming branch-protection on "
+                            f"filtered {tname} WAS flagged — the fifth branch over-matches "
+                            f"into postures it does not govern")
+
     return failures
 
 
@@ -994,10 +1066,11 @@ def main() -> int:
         for failure in harness_failures:
             print(f"  {failure}", file=sys.stderr)
         return 2
-    print("anti-vacuity: sensitivity arms A1/A2/A3/A4/A6/A7 all flagged — one per "
+    print("anti-vacuity: sensitivity arms A1/A2/A3/A4/A6/A7/A9 all flagged — one per "
           "finding branch, so no branch can be deleted silently; A8 flagged a mutation "
           "of a NON-FIRST declaration, so the grader's reach is the whole declaration "
-          "set; specificity arm A5 stayed clean on the same non-empty input")
+          "set; specificity arm A5 stayed clean on the same non-empty input, and A10 "
+          "stayed clean on A9's own edit with an advisory posture")
     print("anti-vacuity (per-job): B1 flagged an orphaned job after a declared context "
           "was renamed; B3 flagged a broken matrix leg, so `${{ matrix.* }}` is really "
           "expanded rather than exempted; specificity arm B2 stayed clean on a "
