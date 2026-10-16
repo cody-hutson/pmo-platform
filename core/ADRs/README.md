@@ -552,7 +552,8 @@ red CI:
 **Every PR-time durable-corpus gate and its override marker.** The two gate families
 (`repo-integrity` and `reference-durability`) carry the following per-file override
 markers — each an HTML comment declared once near the top of the file. Authoring
-discipline item 2 above generalizes to any of them: when an ADR (or skill file)
+discipline item 2's rationale clause binds the issue-ref marker alone; what
+generalizes to any of them is the declaration itself: when an ADR (or skill file)
 legitimately carries a flagged construct, declare the matching marker up front rather
 than letting CI go red. The one construct with **no** override marker is the bare-`#N`
 positional rule (last row) — its only remedy is to rewrite the reference inline.
