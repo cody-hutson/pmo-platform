@@ -584,14 +584,18 @@ def _tier1(failures: list[str], scratch: Path) -> None:
           "a non-held qualifier, or a mixed-posture context, was treated as held")
 
     # M1 / M2 — each non-measuring status publishes no table and no class section,
-    # carries the not-clean clause, and exits 3.
+    # carries the not-clean clause, and exits 3. The closed non-measurement vocabulary
+    # is asserted as LITERALS, never through the constants that render it: an oracle
+    # read from the tool's own constants moves with them, so a respelled or emptied
+    # token, clause or heading would pass.
     for arm, status in (("M1", STATUS_DEGRADED), ("M2", STATUS_NOT_RUN)):
         verdict, classes, body = _run(decl_h, status, [])
         sections = (TABLE_HEADER, SEC_UNREGISTERED, SEC_HELD_REGISTERED, SEC_UNDECLARED,
                     SEC_HELD, SEC_RECONCILED)
-        check(arm, verdict == VERDICT_NOT_EVALUATED and classes == {}
+        check(arm, verdict == "NOT-EVALUATED" and classes == {}
               and not any(s in body for s in sections)
-              and NOT_CLEAN_CLAUSE in body and SEC_NOT_MEASURED in body
+              and "**Verdict:** NOT-EVALUATED — this is not a clean result" in body
+              and "#### NOT-EVALUATED — the live read did not return" in body
               and EXIT_CODE[verdict] == 3,
               f"a `{status}` read published a class table or section, omitted the "
               f"not-clean clause, or did not map to exit 3")
