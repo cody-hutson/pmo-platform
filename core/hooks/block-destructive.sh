@@ -592,11 +592,27 @@ script_word_scan() {
 #   claims the token and it is denied today. Reading it as a word would step
 #   over it and move that BLOCK to ALLOW. Arm FWALK-QWORD-ctl-claimed pins the
 #   deny, and its mutant FWALK-QWORD-M3b deletes this test to show it is the
-#   line that holds it. The word's own value is asked second, so a caller may
-#   rely on script_norm_ok=1 meaning "no view places this token in the domain".
+#   line that holds it. The same line keeps `""-x.sh` and `"-"x.sh` the operand:
+#   read as words they spell a dash flag, which the class below steps over
+#   (FWALK-QDASH-M2b deletes the line and shows it). The word's own value is
+#   asked second, and claims the token too, unless it begins with `-`.
 #   A WHOLE WORD WITH AN EXACT VALUE that no view claims is read as that value. A
 #   quote-led `""-x`, `''+n`, `""--` or `""-c` is read as its unquoted spelling
 #   and takes that spelling's verdict, parse-only grant and option arity included.
+#   A WHOLE WORD WHOSE EXACT VALUE BEGINS WITH `-` SPELLS A FLAG, WHATEVER ITS
+#   SUFFIX, because that is how the walk reads its unquoted twin: the raw view
+#   steps over every `-`-led token without asking the domain. `'-x.s'h` is the
+#   word `-x.sh`. Its probe `-x.s` and its raw token, ending `'h`, land in no
+#   domain, so its own value used to be the only claim on it: the walk ended on
+#   it, and the operand branch, which asks the probe and the raw token and never
+#   the word, adjudicated nothing, while `bash -x.sh <script>` adjudicates the
+#   script. Such a word is read as its value and marked in script_wv_dashword,
+#   and the walk's top-of-loop line steps over a marked word as the raw view
+#   steps over its twin (FWALK-QDASH-01 to -14). A caller may therefore rely on
+#   script_norm_ok=1 meaning "no view places this token in the domain, or it is
+#   a marked word that spells a dash flag". A token the normalizer resolves,
+#   `'-x.sh'`, is not read as a word: it returns unmarked, and the domain
+#   question at the top of the loop keeps it the operand (F1-QFLAG-ctl-domain).
 #   A WHOLE WORD OF UNKNOWN VALUE that no view claims is neither a flag this hook
 #   can read nor an operand it can name. It is read as its RAW spelling, which
 #   opens with a quote and so is never plain, and what happens to it is decided at
@@ -615,15 +631,20 @@ script_word_scan() {
 # NET DIRECTION — MONOTONE ALLOW->BLOCK BY CONSTRUCTION. Every token whose reading
 # this function changes was, before it existed, a declined token no view claimed:
 # it ended the walk, became the operand, and was adjudicated by nothing. No block
-# was possible on that path, so none can be removed.
+# was possible on that path, so none can be removed. A marked word is one such
+# token: the probe and the raw token never claimed it, and the claim its own value
+# made ended the walk on it with nothing adjudicated, so stepping over it can only
+# add an adjudication, or revoke a grant that stood there.
 script_walk_view() {
+  script_wv_dashword=0
   normalize_script_token "$1"
   if [ "$script_norm_ok" -eq 1 ]; then return 0; fi
   script_word_scan "$1"
   if [ "$script_ws_complete" -eq 0 ]; then return 0; fi
   if script_operand_implicated "$script_interp_domain"; then return 0; fi
   if [ "$script_ws_exact" -eq 1 ]; then
-    if script_operand_domain_hit "$script_interp_domain" "$script_ws_out"; then return 0; fi
+    case "$script_ws_out" in -*) script_wv_dashword=1 ;; esac   # M-QDASH (mutation target; pinned by FWALK-QDASH-M0)
+    if [ "$script_wv_dashword" -eq 0 ] && script_operand_domain_hit "$script_interp_domain" "$script_ws_out"; then return 0; fi
     script_norm_out="$script_ws_out"
   else
     script_norm_out="$script_norm_raw"
@@ -3068,6 +3089,13 @@ case "$TOOL_NAME" in
       # that claims the token is the arm that will adjudicate it. Arm
       # F1-QFLAG-ctl-domain is that control and was green before this change.
       #
+      # THAT REASON HOLDS FOR A CLAIM THE OPERAND BRANCH READS — the normalizer's
+      # resolution, the probe, the raw token — AND DID NOT HOLD FOR A CLAIM MADE ONLY
+      # BY A QUOTE-LED WORD'S OWN VALUE, which that branch never reads: such a claim
+      # ended the walk on a token nothing then adjudicated. A word whose exact value
+      # begins with `-` is therefore not gated; it is stepped over as its unquoted
+      # twin is, whatever its suffix (the line marked M-QDASH-TOP below).
+      #
       # A FRAGMENT IS NEVER SKIPPED, for the reason every exemption in this file
       # already gives: a filename that cannot be determined from argv cannot be
       # shown to be a flag either. It breaks the walk and becomes the operand,
@@ -3129,7 +3157,19 @@ case "$TOOL_NAME" in
                   # the SHELL suffix set and find no claim, skipping a token the
                   # Python domain claims — the exemption widening this walk's own
                   # comment forbids.
-                  if ! script_operand_implicated "$script_interp_domain"; then
+                  #
+                  # A WORD THAT SPELLS A DASH FLAG IS NOT ASKED. The view marks a
+                  # quote-led whole word whose exact value begins with `-`
+                  # (script_wv_dashword), and the unquoted twin of such a word is a
+                  # `-`-led raw token, which the raw view above steps over without
+                  # asking the domain. So a marked word is stepped over the same way,
+                  # even when its value lands in the domain: `bash '-x.s'h <script>`
+                  # adjudicates the script, as `bash -x.sh <script>` does. The
+                  # question still decides a token the normalizer resolved, which is
+                  # never marked: `bash '-x.sh'` stays the operand. The mark is read
+                  # with a default because a mutant that calls the normalizer at this
+                  # site instead of the view never sets it.
+                  if [ "${script_wv_dashword:-0}" = 1 ] || ! script_operand_implicated "$script_interp_domain"; then   # M-QDASH-TOP (mutation target; pinned by FWALK-QDASH-M3a)
                     script_ftok="$script_norm_out"
                   fi
                   ;;
@@ -3323,7 +3363,8 @@ case "$TOOL_NAME" in
             #   bash -n   +n <unlisted>.sh  -> BLOCK     (same invocation, unquoted)
             # script_walk_view now reads such a token as the word the shell makes of it, so
             # a quoted clear revokes and a quoted flag is stepped over like its unquoted
-            # spelling. What still reaches that break is a FRAGMENT, and for a fragment a
+            # spelling, whatever its suffix. What still reaches that break with a grant the
+            # unquoted spelling would revoke is a FRAGMENT, and for a fragment a
             # symmetric clear there is still inert — the allow originates in the
             # unadjudicated operand — so it is still not shipped. Arms NOEXEC-QSPLIT-01 to
             # -05 pin the closed family, NOEXEC-QSPLIT-M* pins the inertness on a fragment,
