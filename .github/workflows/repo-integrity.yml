@@ -273,16 +273,43 @@ jobs:
           #     core/ release/ operations/ packages/ ONLY. Everything else
           #     (LICENSE, SECURITY.md, README.md, .github/*) is out of scope by
           #     secrets-handling-policy.md C6 — no per-file allowlist needed.
-          mapfile -t ALL_CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)
+          #
+          #     FAIL CLOSED on a listing that could not run. An empty listing from
+          #     a git that SUCCEEDED means nothing changed, and passes below. A git
+          #     that FAILED (a missing base commit, say) used to produce the same
+          #     empty list and the same pass; the shared library's
+          #     changed_files_verdict tells the two apart, and UNEVALUABLE is a red
+          #     run. A verdict that is neither fails closed too.
+          CHANGED_LIST_FILE="$(mktemp)"
+          case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$CHANGED_LIST_FILE")" in
+            LISTED) : ;;
+            UNEVALUABLE)
+              {
+                echo "## :x: Depersonalization gate could not list the changed files"
+                echo ""
+                echo "\`git diff --name-only\` failed for the pull request's base...head range, so the gate"
+                echo "cannot tell which files to scan. A scan that could not run is indistinguishable from"
+                echo "one that ran clean, so this is a hard failure, not a pass. A missing base commit is"
+                echo "the usual cause; the git error is in the job log above."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate could not evaluate: git could not list the changed files"
+              rm -f "$CHANGED_LIST_FILE"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: changed_files_verdict returned an unrecognised verdict"
+              rm -f "$CHANGED_LIST_FILE"
+              exit 1 ;;
+          esac
           CHANGED=()
-          for f in "${ALL_CHANGED[@]}"; do
+          while IFS= read -r f || [ -n "$f" ]; do
             [ -z "$f" ] && continue
             case "$f" in
               release/releases/*) : ;;   # tracking surface (RELEASE_LOG/INDEX/DIGEST/NOTES/plans) — PR-URLs (operator handle) + #N are native provenance; exempt, mirroring the reference-durability gate
               core/*|release/*|operations/*|packages/*) CHANGED+=("$f") ;;
               *) : ;;   # out of C6 scope — intentional-identity files exempt
             esac
-          done
+          done < "$CHANGED_LIST_FILE"
+          rm -f "$CHANGED_LIST_FILE"
 
           if [ "${#CHANGED[@]}" -eq 0 ]; then
             echo ":white_check_mark: Depersonalization — no changed files under the C6 domains (core/ release/ operations/ packages/)" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -354,23 +381,60 @@ jobs:
           FOUND=0
           REPORT=""
           SUPPRESSED=""
+          ADDED_FILE="$(mktemp)"
+          HITS_FILE="$(mktemp)"
           for f in "${CHANGED[@]}"; do
             [ -f "$f" ] || continue   # deleted file — nothing to scan
             # NET-NEW DELTA: scan only lines ADDED since the base (the same
             # added-lines posture the issue-ref + reference-durability gates use),
             # so a pre-existing operator/collaborator literal in a file the PR
             # touched for unrelated reasons is never re-flagged. Keyed by head-file line.
-            ADDED_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
-              | awk '
-                /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
-                /^\+\+\+/ { next }
-                /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
-                /^-/ { next }
-              ' || true)"
-            [ -z "$ADDED_LINES" ] && continue
+            #
+            # Both reads below FAIL CLOSED, through the shared library: a diff that
+            # could not run is not "nothing added", and a grep that could not run
+            # (exit 2 — a malformed or unreadable pattern file) is not "no match".
+            # Each used to be swallowed into an empty result and a pass. Only grep
+            # exit 1 means no match; UNEVALUABLE, or a verdict that is neither,
+            # is a red run.
+            case "$(added_lines_verdict . "$BASE_SHA" "$HEAD_SHA" "$f" "$ADDED_FILE")" in
+              LISTED) : ;;
+              UNEVALUABLE)
+                {
+                  echo "## :x: Depersonalization gate could not read the added lines"
+                  echo ""
+                  echo "\`git diff --unified=0\` failed for \`$f\`, so the gate cannot tell what the pull request"
+                  echo "added to it. A scan that could not run is indistinguishable from one that ran clean,"
+                  echo "so this is a hard failure, not a pass. The git error is in the job log above."
+                } | tee -a "$GITHUB_STEP_SUMMARY"
+                echo "::error::Depersonalization gate could not evaluate: git could not read a changed file's added lines"
+                rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
+                exit 1 ;;
+              *)
+                echo "::error::Depersonalization gate: added_lines_verdict returned an unrecognised verdict"
+                rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
+                exit 1 ;;
+            esac
+            [ -s "$ADDED_FILE" ] || continue
             # case-sensitive (no -i); match PII patterns against the added LINENO:CONTENT lines.
-            HITS="$(printf '%s\n' "$ADDED_LINES" | grep -E -f "$PATTERN_FILE" || true)"
-            [ -z "$HITS" ] && continue
+            case "$(literal_scan_verdict "$ADDED_FILE" "$PATTERN_FILE" "$HITS_FILE")" in
+              HITS) : ;;
+              NONE) continue ;;
+              UNEVALUABLE)
+                {
+                  echo "## :x: Depersonalization gate could not run its scan"
+                  echo ""
+                  echo "The literal scan of \`$f\` did not complete: grep exited with an error rather than"
+                  echo "\"match\" or \"no match\". A scan that could not run is indistinguishable from one that"
+                  echo "ran clean, so this is a hard failure, not a pass. The grep error is in the job log above."
+                } | tee -a "$GITHUB_STEP_SUMMARY"
+                echo "::error::Depersonalization gate could not evaluate: the literal scan did not complete"
+                rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
+                exit 1 ;;
+              *)
+                echo "::error::Depersonalization gate: literal_scan_verdict returned an unrecognised verdict"
+                rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
+                exit 1 ;;
+            esac
             while IFS= read -r hit; do
               [ -z "$hit" ] && continue
               LN="${hit%%:*}"
@@ -409,9 +473,9 @@ jobs:
               # the full PII value (mirror gitleaks --redact).
               FOUND=1
               REPORT="${REPORT}${f}:${LN}: <redacted — operator/collaborator personal data match>"$'\n'
-            done <<< "$HITS"
+            done < "$HITS_FILE"
           done
-          rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE"
+          rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
 
           if [ -n "$SUPPRESSED" ]; then
             {
