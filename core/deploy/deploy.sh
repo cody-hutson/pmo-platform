@@ -17042,6 +17042,124 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
     fi
   fi
 
+  # Check 81 — Tool exec-mode conformance (ENFORCING)
+  #
+  # WHAT IT ASSERTS. Every tracked file under release/tools/ and core/deploy/tools/
+  # whose content begins with an interpreter line is tracked executable (git mode
+  # 100755), unless core/deploy/allowlists/skip-tool-exec-mode-check.txt names it
+  # with a class and a reason; and every row of that list still names a tracked,
+  # interpreter-line-bearing, non-executable file under those trees.
+  #
+  # WHY IT EXISTS. A tracked file's mode is whatever the authoring path left: a file
+  # created by an editor or a write tool lands 100644, and nothing compared that to
+  # the invocability the file's own first line declares. A tool invoked by its own
+  # path then fails with a permission error instead of a verdict, and a caller that
+  # guards on the executable bit skips it without a word. The class was drained one
+  # file at a time while new members kept arriving. This is the class check.
+  #
+  # ENFORCING ON DAY ONE, AS AN OPERATOR-RATIFIED EXCEPTION. The rollout convention
+  # (ADR-034) advances a deploy check one rung at a time, and ADR-135 keeps arming
+  # and enforcement on separate dials (its clause 3), rejecting "ship armed AND
+  # enforcing on day one" as its alternative A2. This check is an exception to both,
+  # and the exception is the operator's: it was designed beside a warn-first
+  # alternative, and the operator ratified day-one enforce at the Collective Review
+  # scope-lock of the release that introduced it (2026-10-15), the way ADR-093 and
+  # ADR-094 record theirs. The basis, as read at that decision: the whole firing
+  # population was read rather than sampled (110 interpreter-line files under the
+  # two trees, 21 firings, 16 true positives and 5 named exemptions), and the remedy
+  # for a finding is one command, so no false-positive rate was left to calibrate.
+  # The population is clean in the change that adds this check: every member is
+  # made executable or named by the list in that same change. Note what is absent
+  # from the arms below: no `case` on any mode, no resolve_check_mode call, no
+  # shared warn emitter. A new non-executable tool increments ISSUES on every run.
+  # Retreat is a small edit: route the findings arm through the shared warn emitter
+  # on a dial of its own.
+  #
+  # THE INDEX, NEVER THE FILESYSTEM. The primitive reads the tracked mode, the first
+  # bytes of the tracked blob and the exemption list from the index. The bit a
+  # checkout has on disk follows umask and core.fileMode and is not what the
+  # repository ships. A deployed copy has no index at all, which is why the
+  # installed-tree checks read the disk and this one does not.
+  #
+  # THE CONTROL ARM IS INSIDE THE PRIMITIVE, NOT BESIDE IT. It counts conforming
+  # executable files on every run. A run that cannot vouch for its own reading exits
+  # 2 (a dead control arm, a root that enumerates no tracked file, an unparseable
+  # exemption list, a crash); a tree it could not read exits 3, NOT-EVALUATED. This
+  # block treats both as a FAIL, and an exit 1 that names no finding as one too: a
+  # zero-finding verdict is readable only if the read demonstrably reaches the
+  # population.
+  #
+  # NOT THE ONLY LOCUS, AND DELIBERATELY SO. `deploy.sh --check` runs on an operator
+  # machine, post-merge. The same primitive is wired as the `tool-exec-mode` job in
+  # .github/workflows/repo-integrity.yml, which runs pre-merge on every pull
+  # request. That job is the load-bearing leg; this one is the deploy-time
+  # companion, single-sourced on the same predicate (no predicate is re-encoded in
+  # either caller).
+  #
+  # DECLARED COVERAGE BOUNDARY. The two trees named above, recursively. It does NOT
+  # assert the mode of any file outside them, that an executable file is correct to
+  # execute, that a sourced library is non-executable, or the mode any checkout or
+  # deployed copy has on disk.
+  #
+  # Primitive: core/deploy/tools/check-tool-exec-mode.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 81: Tool exec-mode conformance (every interpreter-line file under release/tools/ and core/deploy/tools/ is tracked executable or carries a reasoned exemption; enforcing on day one, operator-ratified; whole-tree)"
+    local c81_script="core/deploy/tools/check-tool-exec-mode.py"
+    if [[ ! -f "$c81_script" ]]; then
+      log "  FAIL:  tool-exec-mode — primitive script missing: $c81_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    elif [[ ! -x "/usr/bin/python3" ]]; then
+      log "  FAIL:  tool-exec-mode — /usr/bin/python3 not executable, so the primitive cannot run and the tool trees are NOT-EVALUATED — this is not a clean result"
+      ISSUES=$((ISSUES + 1))
+    else
+      # ── control arms FIRST: a probe that cannot be shown to detect proves nothing ──
+      local c81_fx_out c81_fx_rc=0
+      c81_fx_out=$(/usr/bin/python3 "$c81_script" --self-test 2>&1) || c81_fx_rc=$?
+      log "  CTRL:  tool-exec-mode — $(echo "$c81_fx_out" | tail -1)"
+      if [[ $c81_fx_rc -ne 0 ]]; then
+        log "  FAIL:  tool-exec-mode-fixtures — fixture regression (exit $c81_fx_rc; hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c81_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then findings ──────────────────────────
+        local c81_out c81_rc=0
+        c81_out=$(/usr/bin/python3 "$c81_script" 2>&1) || c81_rc=$?
+        case "$c81_rc" in
+          0)
+            log "  DENOM: tool-exec-mode — $(echo "$c81_out" | sed -n 's/^DENOM: //p' | tail -1)"
+            log "  OK:    tool-exec-mode — every interpreter-line file under the two tool trees is tracked executable or carries a reasoned exemption"
+            ;;
+          1)
+            log "  DENOM: tool-exec-mode — $(echo "$c81_out" | sed -n 's/^DENOM: //p' | tail -1)"
+            local _c81_hit _c81_hits=0
+            while IFS= read -r _c81_hit; do
+              [[ -z "$_c81_hit" ]] && continue
+              log "  FAIL:  tool-exec-mode — ${_c81_hit#FAIL: }"
+              ISSUES=$((ISSUES + 1))
+              _c81_hits=$((_c81_hits + 1))
+            done < <(echo "$c81_out" | grep '^FAIL: ' || true)
+            if [[ $_c81_hits -eq 0 ]]; then
+              log "  FAIL:  tool-exec-mode — the primitive exited 1 and named no finding (an interpreter or start-up failure exits 1 too); a findings verdict that names nothing is unreadable, not a finding: $(echo "$c81_out" | tail -1)"
+              ISSUES=$((ISSUES + 1))
+            fi
+            ;;
+          2)
+            log "  FAIL:  tool-exec-mode — the instrument cannot assert (exit 2): $(echo "$c81_out" | grep '^SCAN-ERROR: ' | sed 's/^SCAN-ERROR: //' | paste -sd'; ' -)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+          3)
+            log "  FAIL:  tool-exec-mode — the tool trees could not be read (exit 3): $(echo "$c81_out" | grep '^SCAN-ERROR: ' | sed 's/^SCAN-ERROR: //' | paste -sd'; ' -)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+          *)
+            log "  FAIL:  tool-exec-mode — the primitive exited $c81_rc, outside its exit contract, so the verdict is unreadable: $(echo "$c81_out" | tail -1)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
+      fi
+    fi
+  fi
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
