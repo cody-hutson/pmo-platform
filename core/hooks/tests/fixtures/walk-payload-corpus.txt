@@ -723,6 +723,8 @@ ZR04|block-destructive|redir|-|-|a|bash -n @D@/na.sh > /dev/null 2>&1
 # precision improvements (an option's argument, an env operand: the program executes
 # neither path); wrap-overblock and wrap-overread are declared over-blocks; wrap-declared
 # are executions or shapes the walk does not reach, each declared in the readiness text.
+# WR150 and WR151, an abbreviated long option with a separate value, were declared here and
+# are closed by the card's iteration for its Stage 7 finding F-01 (group wrap-abbrev, below).
 WR01|block-destructive|wrap-opt|-|?|B|nice -n 10 bash @D@/na.sh
 WR02|block-destructive|wrap-opt|-|?|B|stdbuf -o0 bash @D@/na.sh
 WR03|block-destructive|wrap-opt|-|?|B|stdbuf -o 0 bash @D@/na.sh
@@ -859,8 +861,8 @@ WR146|block-destructive|wrap-declared|-|?|a|ionice -c 3 bash @D@/na.sh
 WR147|block-destructive|wrap-declared|-|?|a|chrt -b 0 bash @D@/na.sh
 WR148|block-destructive|wrap-declared|-|?|a|caffeinate -i bash @D@/na.sh
 WR149|block-destructive|wrap-declared|-|?|a|eval bash @D@/na.sh
-WR150|block-destructive|wrap-declared|-|?|a|nice --adj 10 bash @D@/na.sh
-WR151|block-destructive|wrap-declared|-|?|a|sudo --us bot bash @D@/na.sh
+WR150|block-destructive|wrap-abbrev|-|?|B|nice --adj 10 bash @D@/na.sh
+WR151|block-destructive|wrap-abbrev|-|?|B|sudo --us bot bash @D@/na.sh
 WR152|block-destructive|wrap-overread|-|?|W|timeout bash @D@/na.sh
 
 # --- iteration 1 on card #7019, for its Stage 7 finding F-01: a quote-led word that spells a dash flag, its quote closing inside the operand suffix (56 rows) ---
@@ -938,3 +940,80 @@ DS71|block-destructive|dash-suffix-decl|-|?|a|bash '+x.s'h @D@/na.sh
 DS72|block-destructive|dash-suffix-decl|-|?|B|bash +x.sh @D@/na.sh
 DS73|block-destructive|dash-suffix-decl|-|?|a|bash --rcfile '-x.s'h @D@/ok.sh
 DS74|block-destructive|dash-suffix-decl|-|?|B|bash --rcfile -x.sh @D@/ok.sh
+
+# --- iteration 1 on card #7020, for its Stage 7 finding F-01: a long option read as its parser reads it, unique prefixes included (56 rows) ---
+# Every wrapper row that lists a long option belongs to a getopt_long program, and getopt_long
+# takes an exact name, or any prefix that names exactly one of its long options, for that
+# option. The walk matched a long option as written, so `env --split=<path>` — env's split
+# string, which GNU env executes — was stepped over as an option no row lists, and a recorded
+# execution became an allow. A long token is now resolved against the program's own option
+# table first, and the row is asked about the option it resolves to. Ids are GL plus a number.
+# Ground truth is `?` on every row: none of these programs reads a long option on the reference
+# host, whose builds are BSD, and no GNU build is installed there; what each row runs is taken
+# from the published manuals and the programs' option tables. Groups: wrap-abbrev is what the
+# change closes — the five measured spellings of the finding and the shortest prefix of every
+# long option a row lists as taking an argument, each now read as that option; WR150 and WR151,
+# which slice 3 declared, move into it in this commit. wrap-abbrev-same keep the verdict they
+# had (a separate split string, an option whose argument is optional, an exact name, a numeric
+# adjustment). wrap-abbrev-prec is an option's argument shaped like a script path, reached
+# through a prefix: nothing executes the path, as for wrap-prec. wrap-abbrev-exec is a prefix
+# whose argument was read as the interpreter; the program runs the script directly, so the
+# direct-execution arm's verdict applies. wrap-abbrev-declared is an attached command line
+# written with a prefix, which now takes the full spelling's verdict (WR68). wrap-abbrev-ambig
+# is a prefix of two or more options, which the program rejects and runs nothing for.
+GL01|block-destructive|wrap-abbrev|-|?|W|env --split=@D@/na.sh
+GL02|block-destructive|wrap-abbrev|-|?|W|env --s=@D@/na.sh
+GL03|block-destructive|wrap-abbrev|-|?|W|env --sp=@D@/na.sh
+GL04|block-destructive|wrap-abbrev|-|?|W|env --split-strin=@D@/na.sh
+GL05|block-destructive|wrap-abbrev|-|?|W|env --split=@D@/na.py
+GL06|block-destructive|wrap-abbrev|-|?|W|env -i --split=@D@/na.sh
+GL07|block-destructive|wrap-abbrev|-|?|W|env --split=@D@/ok.sh
+GL10|block-destructive|wrap-abbrev|-|?|B|nice --a 10 bash @D@/na.sh
+GL11|block-destructive|wrap-abbrev|-|?|B|stdbuf --i 0 bash @D@/na.sh
+GL12|block-destructive|wrap-abbrev|-|?|B|stdbuf --o 0 bash @D@/na.sh
+GL13|block-destructive|wrap-abbrev|-|?|B|stdbuf --e 0 bash @D@/na.sh
+GL14|block-destructive|wrap-abbrev|-|?|B|sudo --au bsdauth bash @D@/na.sh
+GL15|block-destructive|wrap-abbrev|-|?|B|sudo --cl 3 bash @D@/na.sh
+GL16|block-destructive|wrap-abbrev|-|?|B|sudo --login- staff bash @D@/na.sh
+GL17|block-destructive|wrap-abbrev|-|?|B|sudo --chd x bash @D@/na.sh
+GL18|block-destructive|wrap-abbrev|-|?|B|sudo --g staff bash @D@/na.sh
+GL19|block-destructive|wrap-abbrev|-|?|B|sudo --ho box1 bash @D@/na.sh
+GL20|block-destructive|wrap-abbrev|-|?|B|sudo --pro p bash @D@/na.sh
+GL21|block-destructive|wrap-abbrev|-|?|B|sudo --chr x bash @D@/na.sh
+GL22|block-destructive|wrap-abbrev|-|?|B|sudo --ro r bash @D@/na.sh
+GL23|block-destructive|wrap-abbrev|-|?|B|sudo --co 5 bash @D@/na.sh
+GL24|block-destructive|wrap-abbrev|-|?|B|sudo --t t bash @D@/na.sh
+GL25|block-destructive|wrap-abbrev|-|?|B|sudo --o bot bash @D@/na.sh
+GL26|block-destructive|wrap-abbrev|-|?|B|sudo --u bot bash @D@/na.sh
+GL27|block-destructive|wrap-abbrev|-|?|B|env --a zero bash @D@/na.sh
+GL28|block-destructive|wrap-abbrev|-|?|B|env --c x bash @D@/na.sh
+GL29|block-destructive|wrap-abbrev|-|?|B|env --u X bash @D@/na.sh
+GL30|block-destructive|wrap-abbrev|-|?|B|xargs --a list bash @D@/na.sh
+GL31|block-destructive|wrap-abbrev|-|?|B|xargs --d x bash @D@/na.sh
+GL32|block-destructive|wrap-abbrev|-|?|B|xargs --max-a 1 bash @D@/na.sh
+GL33|block-destructive|wrap-abbrev|-|?|B|xargs --max-c 100 bash @D@/na.sh
+GL34|block-destructive|wrap-abbrev|-|?|B|xargs --max-p 4 bash @D@/na.sh
+GL35|block-destructive|wrap-abbrev|-|?|B|xargs --p VAR bash @D@/na.sh
+GL36|block-destructive|wrap-abbrev|-|?|B|time --f %e bash @D@/na.sh
+GL37|block-destructive|wrap-abbrev|-|?|B|time --o x bash @D@/na.sh
+GL38|block-destructive|wrap-abbrev|-|?|B|timeout --k 1 5 bash @D@/na.sh
+GL39|block-destructive|wrap-abbrev|-|?|B|timeout --s KILL 5 bash @D@/na.sh
+GL40|block-destructive|wrap-abbrev|-|?|B|time --output-file x bash @D@/na.sh
+GL41|block-destructive|wrap-abbrev|-|?|B|stdbuf --out L bash @D@/na.sh
+GL42|block-destructive|wrap-abbrev|-|?|B|env --uns FOO bash @D@/na.sh
+GL43|block-destructive|wrap-abbrev|-|?|B|timeout --sig KILL 5 bash @D@/na.sh
+GL50|block-destructive|wrap-abbrev-same|-|?|W|env --s @D@/na.sh
+GL51|block-destructive|wrap-abbrev-same|-|?|B|env --s bash @D@/na.sh
+GL52|block-destructive|wrap-abbrev-same|-|?|B|env --def bash @D@/na.sh
+GL53|block-destructive|wrap-abbrev-same|-|?|B|xargs --rep bash @D@/na.sh
+GL54|block-destructive|wrap-abbrev-same|-|?|B|nice --5 bash @D@/na.sh
+GL55|block-destructive|wrap-abbrev-same|-|?|B|sudo --login bash @D@/na.sh
+GL60|block-destructive|wrap-abbrev-prec|-|?|a|env --c @D@/x.sh ls
+GL61|block-destructive|wrap-abbrev-prec|-|?|a|sudo --chd @D@/x.sh ls
+GL62|block-destructive|wrap-abbrev-prec|-|?|a|env --u @D@/x.sh ls
+GL63|block-destructive|wrap-abbrev-prec|-|?|a|xargs --a @D@/x.sh echo
+GL64|block-destructive|wrap-abbrev-prec|-|?|a|time --o @D@/x.sh ls
+GL70|block-destructive|wrap-abbrev-exec|-|?|W|sudo --us bash @D@/na.sh
+GL80|block-destructive|wrap-abbrev-declared|-|?|a|env --s=bash @D@/na.sh
+GL90|block-destructive|wrap-abbrev-ambig|-|?|a|sudo --c x bash @D@/na.sh
+GL91|block-destructive|wrap-abbrev-ambig|-|?|a|xargs --max 1 bash @D@/na.sh

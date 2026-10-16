@@ -6703,7 +6703,17 @@ WRAP_HOOKS="${WRAP_CLAUDE}/hooks"
   -e '/# M-WRAP-KEYWORDS/s/|if|while|until|/|/' \
   -e '/# M-WRAP-OPTIONS/d' \
   "$HOOK" > "${WRAP_HOOKS}/block-destructive-mut.sh"
-/bin/chmod +x "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/block-destructive-mut.sh"
+# THE ITERATION'S REVERSE MUTANT, for Stage 7's finding F-01 on this card: the hook with its
+# two M-WRAP-ABBREV lines reverted and nothing else. The line that resolves a long option is
+# deleted, so a long token is matched as written, and time's row takes back the spelling its
+# manual prints. That is the walk as it stood before a long option was read the way its
+# program's parser reads it; WRAPOPT-AB-M0 pins the difference.
+/usr/bin/sed \
+  -e '/# M-WRAP-ABBREV$/d' \
+  -e '/# M-WRAP-ABBREV-ROW/s/ --format --output-file / --format --output /' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-ab.sh"
+/bin/chmod +x "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/block-destructive-mut.sh" \
+  "${WRAP_HOOKS}/block-destructive-ab.sh"
 WRAP_DRAIN="${WRAP_HOOKS}/destructive-warn-log.jsonl"
 WRAP_NA='/tmp/pmo-wrap-na.sh'
 WRAP_OK='/tmp/pmo-wrap-allowed.sh'
@@ -6720,8 +6730,12 @@ WRAP_EXIT=0
 WRAP_ERR=""
 WRAP_V=""
 WRAP_LAST=""
-# Run one payload through one of the two sandbox copies -> WRAP_V (a|B|W|E<rc>), WRAP_ERR,
-# and WRAP_LAST, the would-fire row the call added (empty when it added none).
+# The copy a pair arm's second limb runs: the reverse mutant above, unless a block below says
+# otherwise. The block that grades Stage 7's finding F-01 on this card sets the iteration's
+# own reverse mutant and puts this one back after its last arm.
+WRAP_MUTANT="block-destructive-mut.sh"
+# Run one payload through one of the sandbox copies -> WRAP_V (a|B|W|E<rc>), WRAP_ERR, and
+# WRAP_LAST, the would-fire row the call added (empty when it added none).
 wrap_run() { # $1 = hook file in the hermetic hooks dir  $2 = command
   local tmp before after
   tmp="$(/usr/bin/mktemp)"
@@ -6749,8 +6763,8 @@ wrap_run() { # $1 = hook file in the hermetic hooks dir  $2 = command
 }
 
 # $1 label  $2 command  $3 verdict wanted from the hook (a|B|W)  $4 verdict wanted from the
-# reverse mutant (a|B|W), or - to skip that limb  $5 (optional) for a wanted B, a pattern the
-# hook's refusal must carry; for a wanted W, the arm its would-fire row must name.
+# copy WRAP_MUTANT names (a|B|W), or - to skip that limb  $5 (optional) for a wanted B, a
+# pattern the hook's refusal must carry; for a wanted W, the arm its would-fire row must name.
 wrap_arm() {
   local name="$1" cmd="$2" want="$3" wantm="$4" detail="${5:-}" got gotm="-" ok=1 why=""
   wrap_run block-destructive.sh "$cmd"
@@ -6763,7 +6777,7 @@ wrap_arm() {
     esac
   fi
   if [ "$wantm" != "-" ]; then
-    wrap_run block-destructive-mut.sh "$cmd"
+    wrap_run "$WRAP_MUTANT" "$cmd"
     gotm="$WRAP_V"
     if [ "$gotm" != "$wantm" ]; then ok=0; why="${why} mutant=${gotm}"; fi
   fi
@@ -6802,6 +6816,20 @@ if [ "$wrap_m0_counts" = "3 2" ] && /bin/bash -n "${WRAP_HOOKS}/block-destructiv
   PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: WRAPOPT-M0 the reverse mutant does not differ by exactly the marked lines (removed/added = %s, wanted 3 2) or does not parse — every pair arm below is unusable\n' "$wrap_m0_counts"
+  FAIL=$((FAIL + 1))
+fi
+
+# WRAPOPT-AB-M0 — the iteration's reverse mutant differs from the hook by exactly its two marked
+# lines: one deleted (the resolution) and one changed (time's row).
+wrap_ab_tmp="$(/usr/bin/mktemp)"
+/usr/bin/diff "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/block-destructive-ab.sh" > "$wrap_ab_tmp" 2>/dev/null
+wrap_ab_counts="$(/usr/bin/awk '/^</ { l++ } /^>/ { g++ } END { printf "%d %d", l, g }' "$wrap_ab_tmp")"
+/bin/rm -f "$wrap_ab_tmp"
+if [ "$wrap_ab_counts" = "2 1" ] && /bin/bash -n "${WRAP_HOOKS}/block-destructive-ab.sh" 2>/dev/null; then
+  /usr/bin/printf 'PASS: WRAPOPT-AB-M0 the reverse mutant of the long-option iteration differs from the hook by exactly its marked lines (2 out, 1 in) and parses\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPOPT-AB-M0 the reverse mutant of the long-option iteration does not differ by exactly its marked lines (removed/added = %s, wanted 2 1) or does not parse — the WRAPOPT-ab arms below are unusable\n' "$wrap_ab_counts"
   FAIL=$((FAIL + 1))
 fi
 
@@ -7213,6 +7241,74 @@ wrap_arm "WRAPDIV-env-S-attached-cmd: env -Sbash <unlisted>.sh allowed (an attac
 wrap_arm "WRAPOPT-optpath: env --chdir=/tmp/x.sh ls allowed with no row (precision: an option's argument)" "env --chdir=/tmp/x.sh ls" a W
 wrap_arm "WRAPOPT-optpath-short: sudo -D/tmp/x.sh ls allowed with no row (precision)" "sudo -D/tmp/x.sh ls" a W
 wrap_arm "WRAPOPT-envop-name: env a-b=/tmp/x.sh ls allowed with no row (precision: env sets a-b and runs ls)" "env a-b=/tmp/x.sh ls" a W
+
+# --- a long option, read the way its program's parser reads it (Stage 7 finding F-01) -----
+# Every row that lists a long option belongs to a getopt_long program, and getopt_long takes an
+# exact name, or any prefix that names exactly one of its long options, for that option. `env
+# --split=<path>` is env's split string and GNU env executes the path; matched as written it
+# was an option no row lists, so the walk stepped over it and a recorded execution became an
+# allow. A long token is now resolved against the program's own option table first, and the
+# row is asked about the option it resolves to. These arms run the iteration's reverse mutant
+# as their second limb — the walk before that change — so a pair arm whose limbs differ is red
+# before it.
+WRAP_MUTANT="block-destructive-ab.sh"
+WRAP_NA_PY='/tmp/pmo-wrap-na.py'
+wrap_arm "WRAPOPT-ab-split-01: env --split=<unlisted>.sh keeps its exec row (a prefix of --split-string)" "env --split=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-02: env --s=<unlisted>.sh keeps its exec row (the shortest prefix of --split-string)" "env --s=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-03: env --sp=<unlisted>.sh keeps its exec row" "env --sp=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-04: env --split-strin=<unlisted>.sh keeps its exec row (one character short of the name)" "env --split-strin=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-05: env --split=<unlisted>.py keeps its exec row" "env --split=${WRAP_NA_PY}" W a exec
+wrap_arm "WRAPOPT-ab-split-cluster: env -i --split=<unlisted>.sh keeps its exec row (behind a flag)" "env -i --split=${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-ab-split-ok: env --split=<allowlisted>.sh keeps the exec row the full spelling keeps" "env --split=${WRAP_OK}" W a exec
+
+# The shortest prefix of every long option a row lists as taking an argument, computed on the
+# program's own option table: each one IS that option, so the value after it is consumed and
+# the interpreter behind it is adjudicated. The walk before this change stepped over the prefix
+# as an option no row lists and read the value as the command word. The split string's own
+# shortest prefix, --s, is WRAPOPT-ab-split-02 above.
+WRAP_AB_TABLE='nice|--adjustment|nice --a 10
+stdbuf|--input|stdbuf --i 0
+stdbuf|--output|stdbuf --o 0
+stdbuf|--error|stdbuf --e 0
+sudo|--auth-type|sudo --au bsdauth
+sudo|--close-from|sudo --cl 3
+sudo|--login-class|sudo --login- staff
+sudo|--chdir|sudo --chd x
+sudo|--group|sudo --g staff
+sudo|--host|sudo --ho box1
+sudo|--prompt|sudo --pro p
+sudo|--chroot|sudo --chr x
+sudo|--role|sudo --ro r
+sudo|--command-timeout|sudo --co 5
+sudo|--type|sudo --t t
+sudo|--other-user|sudo --o bot
+sudo|--user|sudo --u bot
+env|--argv0|env --a zero
+env|--chdir|env --c x
+env|--unset|env --u X
+xargs|--arg-file|xargs --a list
+xargs|--delimiter|xargs --d x
+xargs|--max-args|xargs --max-a 1
+xargs|--max-chars|xargs --max-c 100
+xargs|--max-procs|xargs --max-p 4
+xargs|--process-slot-var|xargs --p VAR
+time|--format|time --f %e
+time|--output-file|time --o x
+timeout|--kill-after|timeout --k 1 5
+timeout|--signal|timeout --s KILL 5'
+while IFS='|' read -r wrap_abw wrap_abopt wrap_abpfx; do
+  [ -n "$wrap_abw" ] || continue
+  wrap_arm "WRAPOPT-ab-${wrap_abw}${wrap_abopt}: ${wrap_abpfx} bash <unlisted>.sh blocks (the shortest prefix of ${wrap_abopt})" \
+    "${wrap_abpfx} bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+done <<<"$WRAP_AB_TABLE"
+wrap_arm "WRAPOPT-ab-time-output-file: time --output-file x bash <unlisted>.sh blocks (the name GNU time's own option table gives -o)" \
+  "time --output-file x bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-ab-ctl-near: nice --a 10 bash <allowlisted>.sh allowed (the allowlist was consulted)" "nice --a 10 bash ${WRAP_OK}" a a
+wrap_arm "WRAPDIV-ab-ambiguous: sudo --c x bash <unlisted>.sh allowed (--c prefixes four sudo options: the program rejects it and runs nothing, and the walk keeps it as written)" \
+  "sudo --c x bash ${WRAP_NA}" a a
+wrap_arm "WRAPDIV-ab-split-cmd (declared, introduced here): env --s=bash <unlisted>.sh allowed — an attached command line written with a prefix takes the full spelling's verdict (WRAPDIV-env-S-attached-cmd)" \
+  "env --s=bash ${WRAP_NA}" a W
+WRAP_MUTANT="block-destructive-mut.sh"
 
 # --- the second and third build conditions: the xargs deny, behind xargs's own options ----
 wrap_arm "WRAPOPT-xargs-stdin-n: printf x | xargs -n 1 bash blocks as unresolvable" "printf x | xargs -n 1 bash" B a "unresolvable script target"
