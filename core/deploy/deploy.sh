@@ -8062,9 +8062,70 @@ cmd_check() {
   # only the WARN-vs-FAIL escalation of an already-made finding. The `off` kill-switch
   # on the outer per-check block guards (`[[ "$DEPLOY_CHECK_MODE" != "off" ]]`) is a
   # DETECTION gate and is deliberately left reading the shared mode.
+  #
+  # THIS EMITTER ASSERTS ONLY PROPERTIES OF ITS OWN EMIT (ADR-193). "warn-mode" is
+  # one: it is the mode this call resolved. HOW A CHECK GRADUATES is not. That is a
+  # per-caller fact, so this body states no graduation form of its own and names
+  # no mode file (ADR-193 D1: a per-caller fact is deleted from shared code, not
+  # defaulted).
+  #
+  # CALLING CONTRACT — arity 2 or 3:
+  #
+  #   flag_warn_or_issue <check_id> <detail> [<graduation>]
+  #
+  #   <graduation> is a CLOSED one-member set, with the check_id as its subject
+  #   (ADR-193 D2):
+  #     committed-default  this emit sits on an arm the check's OWN dial governs
+  #                        (a local resolve_check_mode "<check_id>" read, tested
+  #                        inline against "enforce"), and the check graduates by
+  #                        the committed default resolve_check_mode "<check_id>"
+  #                        "enforce", never by a mode file. Rendered as
+  #                        "(warn-mode; graduates by the committed default
+  #                        resolve_check_mode "<check_id>" "enforce")", the id
+  #                        printed literally.
+  #   A caller with no such claim passes two arguments, and its line ends
+  #   "(warn-mode)". There is no "none" member: a sentinel that is the answer at
+  #   nearly every call site is a field that should not exist.
+  #
+  # REQUIRED WHERE OWED, GRADED OUTSIDE THIS BODY (ADR-193 D3). An arm the check's
+  # own dial governs owes the token, unless the check's flip-decision row in
+  # core/standards/gate-efficacy-standard.md records the flip as declined
+  # (RATIFIED ADVISORY, or a SPLIT DISPOSITION whose column 3 names a permanent
+  # advisory residual) or the harness's not-owed ledger names the check with a
+  # reason. core/deploy/tests/test_advisory_emitter_contract.sh fails the build on
+  # a token outside the set, on an owed token that is missing, and on a token that
+  # is false for its caller: on an arm the dial does not govern, on a check whose
+  # row declines the flip, beside a mode-file instruction in the same check's own
+  # detail, or on a check whose dial already carries the committed "enforce".
+  #
+  # THE FLIP COMMIT DROPS THE TOKEN. Graduating a check is one token in its dial
+  # call. The same commit removes "committed-default" from that check's calls:
+  # after the flip this warn line is reachable only through an operator's runtime
+  # override, and an instruction to graduate a check that already has is stale.
+  # The harness fails the build on the stale token, so the flip cannot land
+  # without the second edit.
+  #
+  # AN OMITTED OR UNKNOWN TOKEN IS SILENT AT RUNTIME, BY DESIGN. ${3:-} and not a
+  # bare $3: nounset stays armed inside cmd_check, so a bare $3 on a two-argument
+  # caller would abort the WHOLE check run rather than report one bad call. This
+  # body never guesses and never raises; the static gate is the only place a
+  # missing or misspelled token is seen.
+  #
+  # THE CLAUSE IS CONSOLE-ONLY. The jsonl row is built from <detail> alone, so the
+  # graduation claim never enters the drain the flip decision is read from
+  # (ADR-134 D4), and a FAIL line never carries it.
+  #
+  # NOT CHANGED: an arm routed here unconditionally (a missing primitive, an input
+  # failure) follows the SHARED mode even after its check graduates, because this
+  # helper re-resolves with one argument. Such an arm carries no token.
   flag_warn_or_issue() {
     local check_id="$1"
     local detail="$2"
+    local _graduation="${3:-}"
+    local _clause=""
+    if [[ "$_graduation" == "committed-default" ]]; then
+      _clause="; graduates by the committed default resolve_check_mode \"$check_id\" \"enforce\""
+    fi
     local _check_mode
     _check_mode="$(resolve_check_mode "$check_id")"
     case "$_check_mode" in
@@ -8073,7 +8134,7 @@ cmd_check() {
         ISSUES=$((ISSUES + 1))
         ;;
       warn)
-        log "  WARN:  $check_id — $detail (warn-mode; flip .claude/hooks/deploy-check.mode to 'enforce' after shakedown)"
+        log "  WARN:  $check_id — $detail (warn-mode$_clause)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         json_escape_detail "$detail"
@@ -14190,9 +14251,12 @@ sys.stdout.write("".join(out) + "|")
   # exit-1 "collision" finding is a non-blocking WARN during calibration. The
   # current suite has zero duplicate maintainers -> 0 collisions by construction,
   # so this check is silent-PASS on first run; warn-mode keeps a future finding
-  # non-blocking until the >=3-day review flips ownership-collision.mode to
-  # enforce (enforce = the finding increments ISSUES; the count of what is checked
-  # is unchanged). Primitive: core/deploy/tools/check-ownership-collision.py.
+  # non-blocking until the check graduates (enforce = the finding increments
+  # ISSUES; the count of what is checked is unchanged). The graduation is the
+  # one-token COMMITTED default resolve_check_mode "ownership-collision" "enforce",
+  # never an `ownership-collision.mode` file, which leaves no repo record; the flip
+  # decision is recorded in core/standards/gate-efficacy-standard.md § Flip-decision
+  # status. Primitive: core/deploy/tools/check-ownership-collision.py.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 54: Ownership-collision reconciliation (ADR-044 I1+I3+I4; warn-mode initial; enforce-flip deferred)"
     local c54_script="core/deploy/tools/check-ownership-collision.py"
@@ -14217,7 +14281,7 @@ sys.stdout.write("".join(out) + "|")
           log "  FAIL:  ownership-collision — $c54_count second-maintainer/contradiction collision(s): ${c54_detail:-(see detail)}"
           ISSUES=$((ISSUES + 1))
         else
-          flag_warn_or_issue "ownership-collision" "$c54_count ownership collision(s) (warn-mode; flip ownership-collision.mode to enforce after shakedown): ${c54_detail:-(see detail)}"
+          flag_warn_or_issue "ownership-collision" "$c54_count ownership collision(s): ${c54_detail:-(see detail)}" "committed-default"
         fi
       else
         flag_warn_or_issue "ownership-collision" "check errored (exit $c54_exit): $(head -1 <<<"$c54_out")"
@@ -14798,9 +14862,12 @@ sys.stdout.write("".join(out) + "|")
   # `log "Check 57:"` emitter, so it satisfies its own contract. Offline-capable
   # (reads deploy.sh itself; no gh). Fail-loud: a zero-check parse exits 3 rather than
   # reading green (the conventions moved). Warn-mode initial per bypass-mode-readiness.md
-  # §Shakedown (the 14/18/42/.../55/56 precedent); flip via an `extraction-contract.mode`
-  # file after the >=3-day warn-log review. The introducing release is itself exempt
-  # (reflexive-pipeline loop). Read-only; reversibility CHEAP (additive; git revert).
+  # §Shakedown (the 14/18/42/.../55/56 precedent). The graduation is the one-token
+  # COMMITTED default resolve_check_mode "extraction-contract" "enforce", never an
+  # `extraction-contract.mode` file, which leaves no repo record; the flip decision is
+  # recorded in core/standards/gate-efficacy-standard.md § Flip-decision status. The
+  # introducing release is itself exempt (reflexive-pipeline loop). Read-only;
+  # reversibility CHEAP (additive; git revert).
   # Primitive: core/deploy/tools/check-extraction-contract.py (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 57: Check-roster extraction-contract (emitters vs def-blocks minus retired; warn-mode initial; enforce-flip deferred)"
@@ -14828,9 +14895,9 @@ sys.stdout.write("".join(out) + "|")
           [[ -n "$c57_md" ]] && { log "  FAIL:  extraction-contract — check(s) that log but carry NO def-block: $c57_md"; ISSUES=$((ISSUES + 1)); }
           [[ -n "$c57_re" ]] && { log "  FAIL:  extraction-contract — RETIRED number(s) still emitting: $c57_re"; ISSUES=$((ISSUES + 1)); }
         else
-          [[ -n "$c57_me" ]] && flag_warn_or_issue "extraction-contract" "def-block without emitter (invisible to the documented derive command): Check(s) $c57_me (warn-mode; add a 'log \"Check N:\"' line or flip extraction-contract.mode)"
-          [[ -n "$c57_md" ]] && flag_warn_or_issue "extraction-contract" "emitter without def-block: Check(s) $c57_md (warn-mode; add a '# Check N' block)"
-          [[ -n "$c57_re" ]] && flag_warn_or_issue "extraction-contract" "RETIRED number still emitting: Check(s) $c57_re (warn-mode; retire the emitter or un-reserve the number)"
+          [[ -n "$c57_me" ]] && flag_warn_or_issue "extraction-contract" "def-block without emitter (invisible to the documented derive command): Check(s) $c57_me — add a 'log \"Check N:\"' line" "committed-default"
+          [[ -n "$c57_md" ]] && flag_warn_or_issue "extraction-contract" "emitter without def-block: Check(s) $c57_md — add a '# Check N' block" "committed-default"
+          [[ -n "$c57_re" ]] && flag_warn_or_issue "extraction-contract" "RETIRED number still emitting: Check(s) $c57_re — retire the emitter or un-reserve the number" "committed-default"
         fi
       else
         flag_warn_or_issue "extraction-contract" "check errored (exit $c57_exit): $(head -1 <<<"$c57_out")"
@@ -14910,8 +14977,11 @@ sys.stdout.write("".join(out) + "|")
   # gh, no origin/main needed to SKIP); on a release branch it diffs origin/main.
   # Fail-loud: a git/context failure exits 3 rather than reading green. Warn-mode
   # initial per bypass-mode-readiness.md §Shakedown (defaults to the shared
-  # DEPLOY_CHECK_MODE=warn; flip via an identity-conformance.mode file after the
-  # >=3-day warn-log review). The introducing release is itself exempt (reflexive-
+  # DEPLOY_CHECK_MODE=warn). The graduation is the one-token COMMITTED default
+  # resolve_check_mode "identity-conformance" "enforce", never an
+  # `identity-conformance.mode` file, which leaves no repo record; the flip decision
+  # is recorded in core/standards/gate-efficacy-standard.md § Flip-decision status.
+  # The introducing release is itself exempt (reflexive-
   # pipeline loop) — and its own identity is slug-primary, so it PASSES regardless.
   # Concrete Check number (NOT a {{CHECK_NUM}} token): Check 57's roster contract
   # requires a concrete integer in the def-block + emitter (AC5 is carved to #3713).
@@ -14934,7 +15004,7 @@ sys.stdout.write("".join(out) + "|")
         if [[ "$c59_mode" == "enforce" ]]; then
           log "  FAIL:  identity-conformance — $(head -1 <<<"$c59_out")"; ISSUES=$((ISSUES + 1))
         else
-          flag_warn_or_issue "identity-conformance" "$(head -1 <<<"$c59_out") (warn-mode; flip identity-conformance.mode to 'enforce' after the >=3-day warn-log review)"
+          flag_warn_or_issue "identity-conformance" "$(head -1 <<<"$c59_out")" "committed-default"
         fi
       else
         flag_warn_or_issue "identity-conformance" "check errored (exit $c59_exit): $(head -1 <<<"$c59_out")"
@@ -15588,7 +15658,7 @@ sys.stdout.write("".join(out) + "|")
               log "  FAIL:  citation-anchor — ${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number"
               ISSUES=$((ISSUES + 1))
             else
-              flag_warn_or_issue "citation-anchor" "${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number: a line anchor still resolves after the target is edited while pointing at the wrong content, so the drift is undetectable"
+              flag_warn_or_issue "citation-anchor" "${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number: a line anchor still resolves after the target is edited while pointing at the wrong content, so the drift is undetectable" "committed-default"
             fi
           done < <(echo "$c66_out" | grep '^FAIL: ' || true)
         else
@@ -15695,7 +15765,7 @@ sys.stdout.write("".join(out) + "|")
               log "  FAIL:  trigger-collision — ${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it"
               ISSUES=$((ISSUES + 1))
             else
-              flag_warn_or_issue "trigger-collision" "${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it: two skills competing for one request means the operator gets whichever the harness happens to pick"
+              flag_warn_or_issue "trigger-collision" "${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it: two skills competing for one request means the operator gets whichever the harness happens to pick" "committed-default"
             fi
           done < <(echo "$c67_out" | grep -E '^\s+\[(ESCALATE|WATCH)\]' || true)
         elif [[ $c67_rc -ne 0 ]]; then
@@ -16540,7 +16610,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
             log "  FAIL:  pack-conformance — pack(s) violate the meta-schema: $c75_findings"
             ISSUES=$((ISSUES + 1))
           else
-            flag_warn_or_issue "pack-conformance" "meta-schema violation(s): $c75_findings (warn-mode; graduate by recording resolve_check_mode \"pack-conformance\" \"enforce\" after the shakedown)"
+            flag_warn_or_issue "pack-conformance" "meta-schema violation(s): $c75_findings" "committed-default"
           fi
         else
           flag_warn_or_issue "pack-conformance" "check errored (exit $c75_exit): $(head -1 <<<"$c75_out")"
@@ -16963,7 +17033,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
             log "  FAIL:  pack-content-completeness — pack(s) carry incomplete content: $c80_findings"
             ISSUES=$((ISSUES + 1))
           else
-            flag_warn_or_issue "pack-content-completeness" "content-completeness finding(s): $c80_findings (warn-mode; graduate by recording resolve_check_mode \"pack-content-completeness\" \"enforce\" after the shakedown)"
+            flag_warn_or_issue "pack-content-completeness" "content-completeness finding(s): $c80_findings" "committed-default"
           fi
         else
           flag_warn_or_issue "pack-content-completeness" "check errored (exit $c80_exit): $(head -1 <<<"$c80_out")"
