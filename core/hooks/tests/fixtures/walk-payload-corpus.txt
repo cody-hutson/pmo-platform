@@ -2,7 +2,8 @@
 #
 # One row per payload. Every hook suite that owns rows reads this file through its own
 # harness and runs each row whose `hook` field names its guard; block-destructive.test.sh
-# reads the `block-destructive` rows (arms WALKCORPUS-*). The row format, the verdict
+# reads the `block-destructive` rows (arms WALKCORPUS-*) and block-egress.test.sh the
+# `block-egress` rows (arms EGRESSCORPUS-*). The row format, the verdict
 # classes, the placeholders, how the corpus identity is recomputed, and the procedure for
 # adding rows are in README.md beside this file. Lines starting with `#` and blank lines
 # are ignored.
@@ -24,7 +25,8 @@
 # Placeholders: @D@ is the fixture directory, in which ok.sh and ok.py are the only
 # allowlisted paths; @LONGX@ @LONGN@ are 4,100 x / n; @SHORTX@ 4,000 x; @MIDX@ @MIDN@
 # 1,000 x / n; @QPAD@ 2,050 pairs of empty double quotes. $NOPE7019, $VAR and $HOME are
-# plain text to the guard: a PreToolUse hook sees argv unexpanded.
+# plain text to the guard: a PreToolUse hook sees argv unexpanded. The block-egress rows use
+# @OK@, the one gh api path the egress reader's root allowlists, and @NO@, a path it does not.
 
 # --- seed 1: the Stage-5 measurement corpus for the quote-closes-early family (304 rows) ---
 F01|block-destructive|fam-x|K07|X|B|bash ""-x @D@/na.sh
@@ -1147,3 +1149,332 @@ PN01|block-destructive|wrap-prec-name|-|?|a|env --zz=@D@/x.sh ls
 PN02|block-destructive|wrap-prec-name|-|?|a|sudo --c=@D@/x.sh ls
 PN03|block-destructive|wrap-prec-name|-|?|a|env -Z@D@/x.sh ls
 PN04|block-destructive|wrap-prec-name|-|?|a|exec --zz=@D@/x.sh ls
+
+# --- seed 8: card #7004 — the egress prefix-command walk's look-ahead (310 rows) ---
+# Read by block-egress.test.sh (arms EGRESSCORPUS-*) at that rule's shipped rollout phase, in a
+# hermetic root at enforce mode: W is a gh api write the rule records and takes no action on,
+# refused only once the phase graduates, and B a refusal. @OK@ is the one gh api path that root
+# allowlists and @NO@ a path no row of it grants. Ids are EG plus a number. Ground truth is `?`
+# on every row: a row's outcome is a gh api write, which no suite performs. Groups: eg-look is
+# what the change closes — a write behind a prefix command's own option, option argument,
+# operand or an unlisted word, allowed with no record before it and recorded now; eg-text is
+# text the look-ahead evaluates as a write (a printed command, env -S's own argv), declared,
+# recorded now; eg-head is located by the head walk before and after; eg-day1 is refused before
+# and after; eg-near must stay allowed; open-eg-unreached is a write this rule's own walk does
+# not reach, declared open; open-eg-canon is a credential read behind a prefix command's
+# option, which the shared canonicalizer does not reach, declared open; eg-counter is the
+# design's generated then-write corpus — the prefix words none, env, sudo, xargs, timeout,
+# nice, stdbuf and nohup × the option shapes none, -u NAME, --zz VALUE, 5, a-b=1 and -x × four
+# gh shapes, each followed by `; gh api -X POST @NO@` — whose verdicts no correct change
+# moves, and whose day-one refusals a look-ahead that advanced the first-invocation counter
+# would withdraw. A command needing a newline (the heredoc prose line) is a suite arm only.
+EG001|block-egress|eg-look|-|?|W|env -u NAME gh api -X POST @NO@
+EG002|block-egress|eg-look|-|?|W|env -C /tmp gh api -X POST @NO@
+EG003|block-egress|eg-look|-|?|W|env -P /usr/bin gh api -X POST @NO@
+EG005|block-egress|eg-look|-|?|W|xargs -E EOF gh api -X POST @NO@
+EG006|block-egress|eg-look|-|?|W|xargs -I R gh api -X POST @NO@
+EG007|block-egress|eg-look|-|?|W|xargs -J R gh api -X POST @NO@
+EG008|block-egress|eg-look|-|?|W|xargs -L 1 gh api -X POST @NO@
+EG009|block-egress|eg-look|-|?|W|xargs -n 1 gh api -X POST @NO@
+EG010|block-egress|eg-look|-|?|W|xargs -P 2 gh api -X POST @NO@
+EG011|block-egress|eg-look|-|?|W|xargs -R 2 gh api -X POST @NO@
+EG012|block-egress|eg-look|-|?|W|xargs -S 255 gh api -X POST @NO@
+EG013|block-egress|eg-look|-|?|W|xargs -s 4096 gh api -X POST @NO@
+EG014|block-egress|eg-look|-|?|W|nice -n 5 gh api -X POST @NO@
+EG015|block-egress|eg-look|-|?|W|stdbuf -e 0 gh api -X POST @NO@
+EG016|block-egress|eg-look|-|?|W|stdbuf -i 0 gh api -X POST @NO@
+EG017|block-egress|eg-look|-|?|W|stdbuf -o L gh api -X POST @NO@
+EG018|block-egress|eg-look|-|?|W|time -o /tmp/t gh api -X POST @NO@
+EG019|block-egress|eg-look|-|?|W|exec -a name gh api -X POST @NO@
+EG020|block-egress|eg-look|-|?|W|sudo -C 3 gh api -X POST @NO@
+EG021|block-egress|eg-look|-|?|W|sudo -D /tmp gh api -X POST @NO@
+EG022|block-egress|eg-look|-|?|W|sudo -g staff gh api -X POST @NO@
+EG023|block-egress|eg-look|-|?|W|sudo -h localhost gh api -X POST @NO@
+EG024|block-egress|eg-look|-|?|W|sudo -p prompt gh api -X POST @NO@
+EG025|block-egress|eg-look|-|?|W|sudo -R /tmp gh api -X POST @NO@
+EG026|block-egress|eg-look|-|?|W|sudo -T 5 gh api -X POST @NO@
+EG027|block-egress|eg-look|-|?|W|sudo -u bot gh api -X POST @NO@
+EG028|block-egress|eg-look|-|?|W|sudo -U bot gh api -X POST @NO@
+EG029|block-egress|eg-look|-|?|W|timeout -k 1 5 gh api -X POST @NO@
+EG030|block-egress|eg-look|-|?|W|timeout -s KILL 5 gh api -X POST @NO@
+EG031|block-egress|eg-look|-|?|W|timeout 5 gh api -X POST @NO@
+EG032|block-egress|eg-look|-|?|W|env a-b=1 gh api -X POST @NO@
+EG033|block-egress|eg-look|-|?|W|env --zz-unlisted VALUE gh api -X POST @NO@
+EG034|block-egress|eg-look|-|?|W|nohup zz-launcher gh api -X POST @NO@
+EG035|block-egress|eg-look|-|?|W|sudo -u bot env -u X nice -n 5 gh api -X POST @NO@
+EG036|block-egress|eg-look|-|?|W|if env -u X gh api -X POST @NO@; then :; fi
+EG037|block-egress|eg-look|-|?|W|env -u NAME gh api @NO@ -f a=b
+EG038|block-egress|eg-look|-|?|W|env -u X gh api -X POST repos/{owner}/{repo}/issues
+EG039|block-egress|eg-look|-|?|W|env -u echo gh api -X POST @NO@
+EG040|block-egress|eg-look|-|?|W|env -u gh api=1 gh api -X POST @NO@
+EG041|block-egress|eg-look|EG001|?|W|env -u NAME gh api -X POST '@NO@'
+EG042|block-egress|eg-look|EG001|?|W|env -u NAME gh api -X POST "@NO@"
+EG043|block-egress|eg-look|-|?|W|env --unset NAME gh api -X POST @NO@
+EG044|block-egress|eg-look|-|?|W|env --un NAME gh api -X POST @NO@
+EG045|block-egress|eg-look|-|?|W|nice --adjustment 5 gh api -X POST @NO@
+EG046|block-egress|eg-look|-|?|W|nice --adj 5 gh api -X POST @NO@
+EG047|block-egress|eg-look|-|?|W|timeout --signal KILL 5 gh api -X POST @NO@
+EG048|block-egress|eg-look|-|?|W|timeout --sig KILL 5 gh api -X POST @NO@
+EG049|block-egress|eg-look|-|?|W|sudo --user bot gh api -X POST @NO@
+EG050|block-egress|eg-look|-|?|W|sudo --us bot gh api -X POST @NO@
+EG051|block-egress|eg-look|-|?|W|stdbuf --output L gh api -X POST @NO@
+EG052|block-egress|eg-look|-|?|W|xargs --max-args 1 gh api -X POST @NO@
+EG053|block-egress|eg-look|-|?|W|/usr/bin/env -u NAME gh api -X POST @NO@
+EG054|block-egress|eg-look|-|?|W|env -u NAME /usr/local/bin/gh api -X POST @NO@
+EG055|block-egress|eg-look|-|?|W|env -u NAME gh api -X DELETE @NO@/1
+EG056|block-egress|eg-look|-|?|W|env -u NAME gh api --method PATCH @NO@/1 -f state=closed
+EG057|block-egress|eg-look|-|?|W|env -u NAME gh api -X POST -- @NO@
+EG058|block-egress|eg-look|-|?|W|env -u NAME -u OTHER gh api -X POST @NO@
+EG059|block-egress|eg-look|-|?|W|env -uNAME timeout 5 gh api -X POST @NO@
+EG060|block-egress|eg-look|-|?|W|( env -u NAME gh api -X POST @NO@ )
+EG061|block-egress|eg-look|-|?|W|echo x $(env -u NAME gh api -X POST @NO@)
+EG062|block-egress|eg-look|-|?|W|env -u NAME gh api -X POST @NO@ # it's a note
+EG063|block-egress|eg-look|-|?|W|env -u NAME gh api -X POST -H 'Accept: text/x' @NO@
+EG064|block-egress|eg-look|-|?|W|env -u NAME gh api -X POST
+EG070|block-egress|eg-text|-|?|W|env X=1 echo gh api -X POST @NO@
+EG071|block-egress|eg-text|-|?|W|env -u NAME echo gh api -X POST @NO@
+EG072|block-egress|eg-text|-|?|W|xargs -I{} echo gh api -X DELETE @NO@/{}
+EG073|block-egress|eg-text|-|?|W|nice echo gh api -X POST @NO@
+EG074|block-egress|eg-text|-|?|W|time echo gh api -X POST @NO@
+EG075|block-egress|eg-text|-|?|W|env -S x gh api -X POST @NO@
+EG076|block-egress|eg-text|-|?|W|command printf %s gh api -X POST @NO@
+EG080|block-egress|eg-head|-|?|W|env gh api -X POST @NO@
+EG081|block-egress|eg-head|-|?|W|sudo gh api -X POST @NO@
+EG082|block-egress|eg-head|-|?|W|env -uNAME gh api -X POST @NO@
+EG083|block-egress|eg-head|-|?|W|nice -n5 gh api -X POST @NO@
+EG084|block-egress|eg-head|-|?|W|xargs -I{} gh api -X POST @NO@
+EG085|block-egress|eg-head|-|?|W|xargs -I {} gh api -X POST @NO@
+EG086|block-egress|eg-head|-|?|W|VAR=1 gh api -X POST @NO@
+EG087|block-egress|eg-head|-|?|W|( gh api -X POST @NO@ )
+EG088|block-egress|eg-head|-|?|W|echo x $(gh api -X DELETE @NO@)
+EG089|block-egress|eg-head|-|?|W|if true; then gh api -X POST @NO@; fi
+EG090|block-egress|eg-head|-|?|W|gh api @NO@ -f title=x
+EG091|block-egress|eg-head|EG080|?|W|env gh api -X POST "@NO@"
+EG100|block-egress|eg-day1|-|?|B|gh api -X POST @NO@
+EG101|block-egress|eg-day1|-|?|B|true && gh api -X POST @NO@
+EG102|block-egress|eg-day1|EG100|?|B|gh api -X POST '@NO@'
+EG103|block-egress|eg-day1|-|?|B|env -u X gh api @OK@ ; gh api -X POST @NO@
+EG104|block-egress|eg-day1|-|?|B|timeout 5 gh api @OK@ ; gh api -X POST @NO@
+EG105|block-egress|eg-day1|-|?|B|env -u X gh api -X POST @NO@ ; gh api -X POST @NO@
+EG106|block-egress|eg-day1|-|?|B|/usr/local/bin/gh api -X POST @NO@
+EG107|block-egress|eg-day1|-|?|B|cat ~/.ssh/id_rsa
+EG108|block-egress|eg-day1|-|?|B|gh api --method=DELETE @NO@
+EG109|block-egress|eg-day1|-|?|B|env -u X gh api -X POST @OK@ ; gh api -X POST @NO@
+EG120|block-egress|eg-near|-|?|a|env -u NAME ls
+EG121|block-egress|eg-near|-|?|a|env -u NAME gh api -X POST @OK@
+EG122|block-egress|eg-near|-|?|a|env -u NAME gh api @NO@
+EG123|block-egress|eg-near|-|?|a|env -u NAME gh pr list
+EG124|block-egress|eg-near|-|?|a|a-b=1 gh api -X POST @NO@
+EG125|block-egress|eg-near|-|?|a|echo env -u X gh api -X POST @NO@
+EG128|block-egress|eg-near|-|?|a|gh api -X GET @NO@
+EG129|block-egress|eg-near|-|?|a|gh api @NO@ -q .title
+EG130|block-egress|eg-near|-|?|a|git status
+EG131|block-egress|eg-near|-|?|a|nice -n 5 echo hello
+EG132|block-egress|eg-near|-|?|a|env X=1 echo "gh api -X POST @NO@"
+EG133|block-egress|eg-near|-|?|a|env -u NAME gh api -X POST @OK@/5541/comments -f body=x
+EG135|block-egress|eg-near|-|?|a|xargs -I R echo done
+EG140|block-egress|open-eg-unreached|-|?|a|>/dev/null gh api -X POST @NO@
+EG141|block-egress|open-eg-unreached|-|?|a|2>/dev/null env -u X gh api -X POST @NO@
+EG142|block-egress|open-eg-unreached|-|?|a|\gh api -X POST @NO@
+EG143|block-egress|open-eg-unreached|-|?|a|{gh,api} -X POST @NO@
+EG144|block-egress|open-eg-unreached|-|?|a|$'gh' api -X POST @NO@
+EG145|block-egress|open-eg-unreached|-|?|a|echo -X POST @NO@ | xargs gh api
+EG146|block-egress|open-eg-unreached|-|?|a|watch gh api -X POST @NO@
+EG147|block-egress|open-eg-unreached|-|?|a|bash -c 'gh api -X POST @NO@'
+EG148|block-egress|open-eg-unreached|-|?|a|env -S "gh api -X POST @NO@"
+EG149|block-egress|open-eg-unreached|-|?|a|env -u X $GH api -X POST @NO@
+EG160|block-egress|open-eg-canon|-|?|a|sudo -u nobody cat ~/.ssh/id_rsa
+EG161|block-egress|open-eg-canon|-|?|a|env -u X cat ~/.ssh/id_rsa
+EG162|block-egress|open-eg-canon|-|?|a|timeout 5 cat ~/.ssh/id_rsa
+EG200|block-egress|eg-counter|-|?|B|gh api -X POST @NO@ ; gh api -X POST @NO@
+EG201|block-egress|eg-counter|-|?|B|echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG202|block-egress|eg-counter|-|?|W|gh api -X POST @OK@ ; gh api -X POST @NO@
+EG203|block-egress|eg-counter|-|?|W|gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG204|block-egress|eg-counter|-|?|B|-u NAME gh api -X POST @NO@ ; gh api -X POST @NO@
+EG205|block-egress|eg-counter|-|?|B|-u NAME echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG206|block-egress|eg-counter|-|?|B|-u NAME gh api -X POST @OK@ ; gh api -X POST @NO@
+EG207|block-egress|eg-counter|-|?|B|-u NAME gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG208|block-egress|eg-counter|-|?|B|--zz VALUE gh api -X POST @NO@ ; gh api -X POST @NO@
+EG209|block-egress|eg-counter|-|?|B|--zz VALUE echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG210|block-egress|eg-counter|-|?|B|--zz VALUE gh api -X POST @OK@ ; gh api -X POST @NO@
+EG211|block-egress|eg-counter|-|?|B|--zz VALUE gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG212|block-egress|eg-counter|-|?|B|5 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG213|block-egress|eg-counter|-|?|B|5 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG214|block-egress|eg-counter|-|?|B|5 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG215|block-egress|eg-counter|-|?|B|5 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG216|block-egress|eg-counter|-|?|B|a-b=1 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG217|block-egress|eg-counter|-|?|B|a-b=1 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG218|block-egress|eg-counter|-|?|B|a-b=1 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG219|block-egress|eg-counter|-|?|B|a-b=1 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG220|block-egress|eg-counter|-|?|B|-x gh api -X POST @NO@ ; gh api -X POST @NO@
+EG221|block-egress|eg-counter|-|?|B|-x echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG222|block-egress|eg-counter|-|?|B|-x gh api -X POST @OK@ ; gh api -X POST @NO@
+EG223|block-egress|eg-counter|-|?|B|-x gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG224|block-egress|eg-counter|-|?|W|env gh api -X POST @NO@ ; gh api -X POST @NO@
+EG225|block-egress|eg-counter|-|?|B|env echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG226|block-egress|eg-counter|-|?|W|env gh api -X POST @OK@ ; gh api -X POST @NO@
+EG227|block-egress|eg-counter|-|?|W|env gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG228|block-egress|eg-counter|-|?|B|env -u NAME gh api -X POST @NO@ ; gh api -X POST @NO@
+EG229|block-egress|eg-counter|-|?|B|env -u NAME echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG230|block-egress|eg-counter|-|?|B|env -u NAME gh api -X POST @OK@ ; gh api -X POST @NO@
+EG231|block-egress|eg-counter|-|?|B|env -u NAME gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG232|block-egress|eg-counter|-|?|B|env --zz VALUE gh api -X POST @NO@ ; gh api -X POST @NO@
+EG233|block-egress|eg-counter|-|?|B|env --zz VALUE echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG234|block-egress|eg-counter|-|?|B|env --zz VALUE gh api -X POST @OK@ ; gh api -X POST @NO@
+EG235|block-egress|eg-counter|-|?|B|env --zz VALUE gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG236|block-egress|eg-counter|-|?|B|env 5 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG237|block-egress|eg-counter|-|?|B|env 5 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG238|block-egress|eg-counter|-|?|B|env 5 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG239|block-egress|eg-counter|-|?|B|env 5 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG240|block-egress|eg-counter|-|?|B|env a-b=1 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG241|block-egress|eg-counter|-|?|B|env a-b=1 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG242|block-egress|eg-counter|-|?|B|env a-b=1 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG243|block-egress|eg-counter|-|?|B|env a-b=1 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG244|block-egress|eg-counter|-|?|W|env -x gh api -X POST @NO@ ; gh api -X POST @NO@
+EG245|block-egress|eg-counter|-|?|B|env -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG246|block-egress|eg-counter|-|?|W|env -x gh api -X POST @OK@ ; gh api -X POST @NO@
+EG247|block-egress|eg-counter|-|?|W|env -x gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG248|block-egress|eg-counter|-|?|W|sudo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG249|block-egress|eg-counter|-|?|B|sudo echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG250|block-egress|eg-counter|-|?|W|sudo gh api -X POST @OK@ ; gh api -X POST @NO@
+EG251|block-egress|eg-counter|-|?|W|sudo gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG252|block-egress|eg-counter|-|?|B|sudo -u NAME gh api -X POST @NO@ ; gh api -X POST @NO@
+EG253|block-egress|eg-counter|-|?|B|sudo -u NAME echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG254|block-egress|eg-counter|-|?|B|sudo -u NAME gh api -X POST @OK@ ; gh api -X POST @NO@
+EG255|block-egress|eg-counter|-|?|B|sudo -u NAME gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG256|block-egress|eg-counter|-|?|B|sudo --zz VALUE gh api -X POST @NO@ ; gh api -X POST @NO@
+EG257|block-egress|eg-counter|-|?|B|sudo --zz VALUE echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG258|block-egress|eg-counter|-|?|B|sudo --zz VALUE gh api -X POST @OK@ ; gh api -X POST @NO@
+EG259|block-egress|eg-counter|-|?|B|sudo --zz VALUE gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG260|block-egress|eg-counter|-|?|B|sudo 5 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG261|block-egress|eg-counter|-|?|B|sudo 5 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG262|block-egress|eg-counter|-|?|B|sudo 5 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG263|block-egress|eg-counter|-|?|B|sudo 5 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG264|block-egress|eg-counter|-|?|B|sudo a-b=1 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG265|block-egress|eg-counter|-|?|B|sudo a-b=1 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG266|block-egress|eg-counter|-|?|B|sudo a-b=1 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG267|block-egress|eg-counter|-|?|B|sudo a-b=1 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG268|block-egress|eg-counter|-|?|W|sudo -x gh api -X POST @NO@ ; gh api -X POST @NO@
+EG269|block-egress|eg-counter|-|?|B|sudo -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG270|block-egress|eg-counter|-|?|W|sudo -x gh api -X POST @OK@ ; gh api -X POST @NO@
+EG271|block-egress|eg-counter|-|?|W|sudo -x gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG272|block-egress|eg-counter|-|?|W|xargs gh api -X POST @NO@ ; gh api -X POST @NO@
+EG273|block-egress|eg-counter|-|?|B|xargs echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG274|block-egress|eg-counter|-|?|W|xargs gh api -X POST @OK@ ; gh api -X POST @NO@
+EG275|block-egress|eg-counter|-|?|W|xargs gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG276|block-egress|eg-counter|-|?|B|xargs -u NAME gh api -X POST @NO@ ; gh api -X POST @NO@
+EG277|block-egress|eg-counter|-|?|B|xargs -u NAME echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG278|block-egress|eg-counter|-|?|B|xargs -u NAME gh api -X POST @OK@ ; gh api -X POST @NO@
+EG279|block-egress|eg-counter|-|?|B|xargs -u NAME gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG280|block-egress|eg-counter|-|?|B|xargs --zz VALUE gh api -X POST @NO@ ; gh api -X POST @NO@
+EG281|block-egress|eg-counter|-|?|B|xargs --zz VALUE echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG282|block-egress|eg-counter|-|?|B|xargs --zz VALUE gh api -X POST @OK@ ; gh api -X POST @NO@
+EG283|block-egress|eg-counter|-|?|B|xargs --zz VALUE gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG284|block-egress|eg-counter|-|?|B|xargs 5 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG285|block-egress|eg-counter|-|?|B|xargs 5 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG286|block-egress|eg-counter|-|?|B|xargs 5 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG287|block-egress|eg-counter|-|?|B|xargs 5 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG288|block-egress|eg-counter|-|?|B|xargs a-b=1 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG289|block-egress|eg-counter|-|?|B|xargs a-b=1 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG290|block-egress|eg-counter|-|?|B|xargs a-b=1 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG291|block-egress|eg-counter|-|?|B|xargs a-b=1 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG292|block-egress|eg-counter|-|?|W|xargs -x gh api -X POST @NO@ ; gh api -X POST @NO@
+EG293|block-egress|eg-counter|-|?|B|xargs -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG294|block-egress|eg-counter|-|?|W|xargs -x gh api -X POST @OK@ ; gh api -X POST @NO@
+EG295|block-egress|eg-counter|-|?|W|xargs -x gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG296|block-egress|eg-counter|-|?|W|timeout gh api -X POST @NO@ ; gh api -X POST @NO@
+EG297|block-egress|eg-counter|-|?|B|timeout echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG298|block-egress|eg-counter|-|?|W|timeout gh api -X POST @OK@ ; gh api -X POST @NO@
+EG299|block-egress|eg-counter|-|?|W|timeout gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG300|block-egress|eg-counter|-|?|B|timeout -u NAME gh api -X POST @NO@ ; gh api -X POST @NO@
+EG301|block-egress|eg-counter|-|?|B|timeout -u NAME echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG302|block-egress|eg-counter|-|?|B|timeout -u NAME gh api -X POST @OK@ ; gh api -X POST @NO@
+EG303|block-egress|eg-counter|-|?|B|timeout -u NAME gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG304|block-egress|eg-counter|-|?|B|timeout --zz VALUE gh api -X POST @NO@ ; gh api -X POST @NO@
+EG305|block-egress|eg-counter|-|?|B|timeout --zz VALUE echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG306|block-egress|eg-counter|-|?|B|timeout --zz VALUE gh api -X POST @OK@ ; gh api -X POST @NO@
+EG307|block-egress|eg-counter|-|?|B|timeout --zz VALUE gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG308|block-egress|eg-counter|-|?|B|timeout 5 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG309|block-egress|eg-counter|-|?|B|timeout 5 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG310|block-egress|eg-counter|-|?|B|timeout 5 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG311|block-egress|eg-counter|-|?|B|timeout 5 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG312|block-egress|eg-counter|-|?|B|timeout a-b=1 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG313|block-egress|eg-counter|-|?|B|timeout a-b=1 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG314|block-egress|eg-counter|-|?|B|timeout a-b=1 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG315|block-egress|eg-counter|-|?|B|timeout a-b=1 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG316|block-egress|eg-counter|-|?|W|timeout -x gh api -X POST @NO@ ; gh api -X POST @NO@
+EG317|block-egress|eg-counter|-|?|B|timeout -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG318|block-egress|eg-counter|-|?|W|timeout -x gh api -X POST @OK@ ; gh api -X POST @NO@
+EG319|block-egress|eg-counter|-|?|W|timeout -x gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG320|block-egress|eg-counter|-|?|W|nice gh api -X POST @NO@ ; gh api -X POST @NO@
+EG321|block-egress|eg-counter|-|?|B|nice echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG322|block-egress|eg-counter|-|?|W|nice gh api -X POST @OK@ ; gh api -X POST @NO@
+EG323|block-egress|eg-counter|-|?|W|nice gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG324|block-egress|eg-counter|-|?|B|nice -u NAME gh api -X POST @NO@ ; gh api -X POST @NO@
+EG325|block-egress|eg-counter|-|?|B|nice -u NAME echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG326|block-egress|eg-counter|-|?|B|nice -u NAME gh api -X POST @OK@ ; gh api -X POST @NO@
+EG327|block-egress|eg-counter|-|?|B|nice -u NAME gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG328|block-egress|eg-counter|-|?|B|nice --zz VALUE gh api -X POST @NO@ ; gh api -X POST @NO@
+EG329|block-egress|eg-counter|-|?|B|nice --zz VALUE echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG330|block-egress|eg-counter|-|?|B|nice --zz VALUE gh api -X POST @OK@ ; gh api -X POST @NO@
+EG331|block-egress|eg-counter|-|?|B|nice --zz VALUE gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG332|block-egress|eg-counter|-|?|B|nice 5 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG333|block-egress|eg-counter|-|?|B|nice 5 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG334|block-egress|eg-counter|-|?|B|nice 5 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG335|block-egress|eg-counter|-|?|B|nice 5 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG336|block-egress|eg-counter|-|?|B|nice a-b=1 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG337|block-egress|eg-counter|-|?|B|nice a-b=1 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG338|block-egress|eg-counter|-|?|B|nice a-b=1 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG339|block-egress|eg-counter|-|?|B|nice a-b=1 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG340|block-egress|eg-counter|-|?|W|nice -x gh api -X POST @NO@ ; gh api -X POST @NO@
+EG341|block-egress|eg-counter|-|?|B|nice -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG342|block-egress|eg-counter|-|?|W|nice -x gh api -X POST @OK@ ; gh api -X POST @NO@
+EG343|block-egress|eg-counter|-|?|W|nice -x gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG344|block-egress|eg-counter|-|?|W|stdbuf gh api -X POST @NO@ ; gh api -X POST @NO@
+EG345|block-egress|eg-counter|-|?|B|stdbuf echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG346|block-egress|eg-counter|-|?|W|stdbuf gh api -X POST @OK@ ; gh api -X POST @NO@
+EG347|block-egress|eg-counter|-|?|W|stdbuf gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG348|block-egress|eg-counter|-|?|B|stdbuf -u NAME gh api -X POST @NO@ ; gh api -X POST @NO@
+EG349|block-egress|eg-counter|-|?|B|stdbuf -u NAME echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG350|block-egress|eg-counter|-|?|B|stdbuf -u NAME gh api -X POST @OK@ ; gh api -X POST @NO@
+EG351|block-egress|eg-counter|-|?|B|stdbuf -u NAME gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG352|block-egress|eg-counter|-|?|B|stdbuf --zz VALUE gh api -X POST @NO@ ; gh api -X POST @NO@
+EG353|block-egress|eg-counter|-|?|B|stdbuf --zz VALUE echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG354|block-egress|eg-counter|-|?|B|stdbuf --zz VALUE gh api -X POST @OK@ ; gh api -X POST @NO@
+EG355|block-egress|eg-counter|-|?|B|stdbuf --zz VALUE gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG356|block-egress|eg-counter|-|?|B|stdbuf 5 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG357|block-egress|eg-counter|-|?|B|stdbuf 5 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG358|block-egress|eg-counter|-|?|B|stdbuf 5 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG359|block-egress|eg-counter|-|?|B|stdbuf 5 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG360|block-egress|eg-counter|-|?|B|stdbuf a-b=1 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG361|block-egress|eg-counter|-|?|B|stdbuf a-b=1 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG362|block-egress|eg-counter|-|?|B|stdbuf a-b=1 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG363|block-egress|eg-counter|-|?|B|stdbuf a-b=1 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG364|block-egress|eg-counter|-|?|W|stdbuf -x gh api -X POST @NO@ ; gh api -X POST @NO@
+EG365|block-egress|eg-counter|-|?|B|stdbuf -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG366|block-egress|eg-counter|-|?|W|stdbuf -x gh api -X POST @OK@ ; gh api -X POST @NO@
+EG367|block-egress|eg-counter|-|?|W|stdbuf -x gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG368|block-egress|eg-counter|-|?|W|nohup gh api -X POST @NO@ ; gh api -X POST @NO@
+EG369|block-egress|eg-counter|-|?|B|nohup echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG370|block-egress|eg-counter|-|?|W|nohup gh api -X POST @OK@ ; gh api -X POST @NO@
+EG371|block-egress|eg-counter|-|?|W|nohup gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG372|block-egress|eg-counter|-|?|B|nohup -u NAME gh api -X POST @NO@ ; gh api -X POST @NO@
+EG373|block-egress|eg-counter|-|?|B|nohup -u NAME echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG374|block-egress|eg-counter|-|?|B|nohup -u NAME gh api -X POST @OK@ ; gh api -X POST @NO@
+EG375|block-egress|eg-counter|-|?|B|nohup -u NAME gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG376|block-egress|eg-counter|-|?|B|nohup --zz VALUE gh api -X POST @NO@ ; gh api -X POST @NO@
+EG377|block-egress|eg-counter|-|?|B|nohup --zz VALUE echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG378|block-egress|eg-counter|-|?|B|nohup --zz VALUE gh api -X POST @OK@ ; gh api -X POST @NO@
+EG379|block-egress|eg-counter|-|?|B|nohup --zz VALUE gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG380|block-egress|eg-counter|-|?|B|nohup 5 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG381|block-egress|eg-counter|-|?|B|nohup 5 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG382|block-egress|eg-counter|-|?|B|nohup 5 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG383|block-egress|eg-counter|-|?|B|nohup 5 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG384|block-egress|eg-counter|-|?|B|nohup a-b=1 gh api -X POST @NO@ ; gh api -X POST @NO@
+EG385|block-egress|eg-counter|-|?|B|nohup a-b=1 echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG386|block-egress|eg-counter|-|?|B|nohup a-b=1 gh api -X POST @OK@ ; gh api -X POST @NO@
+EG387|block-egress|eg-counter|-|?|B|nohup a-b=1 gh api @NO@ -f a=b ; gh api -X POST @NO@
+EG388|block-egress|eg-counter|-|?|W|nohup -x gh api -X POST @NO@ ; gh api -X POST @NO@
+EG389|block-egress|eg-counter|-|?|B|nohup -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
+EG390|block-egress|eg-counter|-|?|W|nohup -x gh api -X POST @OK@ ; gh api -X POST @NO@
+EG391|block-egress|eg-counter|-|?|W|nohup -x gh api @NO@ -f a=b ; gh api -X POST @NO@
