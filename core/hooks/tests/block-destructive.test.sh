@@ -1153,7 +1153,9 @@ test_case "BLOCK-022 prefix precision: flag-shaped =-bearing token does not adva
 # the invocation fell through to ALLOW with the allowlist never consulted. The
 # operation is identical to the bare form, so the verdict must be too.
 #
-# The set is a BOUNDED enumeration mirroring core/hooks/lib/command-position.awk.
+# The set is a BOUNDED enumeration, one of four lists of this vocabulary; they are not
+# one set, and the WRAPVOCAB-PARITY arms further down assert exactly how they differ. A
+# wrapper's own options are walked from its row; the WRAPOPT-* arms grade that.
 # Every must-flag case below is paired with the SAME wrapper spelling over an
 # ALLOWLISTED target, so an implementation that simply blocked anything carrying
 # a leading wrapper word would fail the controls rather than pass the suite.
@@ -1296,7 +1298,7 @@ test_case "BLOCK-022 wrapper precision: near-miss on a listed word does not adva
   "$(bash_payload 'sudoedit bash /tmp/evil.sh')" \
   0
 
-test_case "BLOCK-022 wrapper precision: wrapper flag terminates the walk" \
+test_case "BLOCK-022 wrapper precision: a describe-only wrapper option (command -v) executes nothing, so the segment is skipped" \
   "$(bash_payload 'command -v bash /tmp/evil.sh')" \
   0
 
@@ -1304,18 +1306,20 @@ test_case "BLOCK-022 wrapper precision: wrapper word off the segment head does n
   "$(bash_payload 'echo sudo bash /tmp/evil.sh')" \
   0
 
-# recorded residuals, asserted so the stated coverage boundary is measured rather
+# recorded residual, asserted so the stated coverage boundary is measured rather
 # than assumed. `eval` re-parses a program string this lexical matcher cannot
-# resolve; `timeout` carries an operand the walk would additionally have to
-# consume. Both are deliberately OUT of the bounded set. If either is ever added,
-# these two cases fail and the rule doc must be updated with them.
+# resolve, so it is deliberately OUT of the bounded set. If it is ever added, this
+# case fails and the rule doc must be updated with it. `timeout` used to be pinned
+# here beside it, for the duration operand the walk had no way to consume; its row
+# consumes that operand now, so the same payload is adjudicated and blocks
+# (WRAPOPT-row-timeout-* carry its other spellings).
 test_case "BLOCK-022 wrapper residual: eval is not a skipped prefix (allows)" \
   "$(bash_payload 'eval bash /tmp/evil.sh')" \
   0
 
-test_case "BLOCK-022 wrapper residual: timeout is not a skipped prefix (allows)" \
+test_case "BLOCK-022 wrapper: timeout before bash, its duration consumed by its row, non-allowlisted, blocks" \
   "$(bash_payload 'timeout 5 bash /tmp/evil.sh')" \
-  0
+  2 "BLOCK-DESTRUCTIVE-022"
 
 # false-positive controls -- the wrapper walk must not disturb the quoted-fragment
 # suppression that keeps DESCRIBED executions from being read as performed ones.
@@ -6484,6 +6488,601 @@ test_case "FWALK-INT-ctl-01: bash \"\"--{norc,rcfile} <allowed> allowed (nothing
 # when that route is built; it follows the arms above and reads their INT_BRACE.
 test_case "FWALK-INT-02: bash \"\"--{norc,rcfile} <allowed> <unlisted>.sh blocks (the same word in front of an allowlisted script takes the conservative route)" \
   "$(bash_payload "bash $INT_BRACE $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+echo ""
+echo "BLOCK-022 wrapper walk: each wrapper's own options, and the lists of the vocabulary (WRAP*)"
+echo "---"
+# SUBJECT. A transparent wrapper execs the rest of its argv after its OWN options, and the
+# walk used to stop on the first of them: `nice -n 10 bash <unlisted>.sh` read `-n` as the
+# command word and adjudicated nothing. The walk now reads each wrapper's option grammar from
+# a row (script_wrapper_row), `nice`, `stdbuf` and `timeout` are walked with the other words,
+# and `if`, `while` and `until` join the keyword arm. These arms grade that, the build
+# conditions the scope was locked under, and the other lists of the same vocabulary.
+#
+# HERMETIC, ON THE F2 BLOCK'S PATTERN AND FOR ITS REASON: this block's own root, a one-entry
+# allowlist, its own .mode, the scope variables unset for every run, and a reverse mutant
+# beside the hook copy, so every verdict below turns on this fixture and nothing ambient. A
+# verdict is read as the corpus reader reads one: exit 2 is B, exit 0 with a new would-fire
+# row in this fixture's drain is W, exit 0 with none is a.
+#
+# THE REVERSE MUTANT is the hook with its marked lines reverted by sed and nothing else: the
+# three new words leave the M-WRAP-WORDS line, the three new keywords leave the
+# M-WRAP-KEYWORDS line, and the M-WRAP-OPTIONS call is deleted. The walk then behaves as it
+# did before this change, which is what lets a pair arm's mutant limb stand as red-before
+# evidence. WRAPOPT-M0 pins the mutant's exact difference, so a drifted marker turns red
+# instead of leaving every pair green for the wrong reason.
+#
+# ARM CLASSES, so the red-before obligation can be read off the label. A WRAPOPT- or WRAPKW-
+# arm whose hook limb and mutant limb differ is red before this change. A WRAPDIV- arm is a
+# pin — a declared divergence, residual or over-block — and is green before by design unless
+# its own label says the change introduced it. A -ctl- arm is a must-not-flag control,
+# allowed on both limbs.
+#
+# NO PIPE INTO A SHORT-CIRCUITING READER ANYWHERE IN THIS BLOCK (the SIGPIPE-idiom gate):
+# extraction is one awk pass per file using index(), and stderr is matched from a
+# here-string, as f2_case does.
+WRAP_ROOT="$(/usr/bin/mktemp -d)"
+WRAP_CLAUDE="${WRAP_ROOT}/.claude"
+WRAP_HOOKS="${WRAP_CLAUDE}/hooks"
+/bin/mkdir -p "${WRAP_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${WRAP_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${WRAP_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '/tmp/pmo-wrap-allowed.sh\n' > "${WRAP_CLAUDE}/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${WRAP_HOOKS}/.mode"
+/bin/cp "$HOOK" "${WRAP_HOOKS}/block-destructive.sh"
+/usr/bin/sed \
+  -e '/# M-WRAP-WORDS/s/|nice|stdbuf|timeout)/)/' \
+  -e '/# M-WRAP-KEYWORDS/s/|if|while|until|/|/' \
+  -e '/# M-WRAP-OPTIONS/d' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-mut.sh"
+/bin/chmod +x "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/block-destructive-mut.sh"
+WRAP_DRAIN="${WRAP_HOOKS}/destructive-warn-log.jsonl"
+WRAP_NA='/tmp/pmo-wrap-na.sh'
+WRAP_OK='/tmp/pmo-wrap-allowed.sh'
+
+wrap_drain_rows() {
+  if [ -f "$WRAP_DRAIN" ]; then
+    /usr/bin/wc -l < "$WRAP_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+WRAP_EXIT=0
+WRAP_ERR=""
+WRAP_V=""
+WRAP_LAST=""
+# Run one payload through one of the two sandbox copies -> WRAP_V (a|B|W|E<rc>), WRAP_ERR,
+# and WRAP_LAST, the would-fire row the call added (empty when it added none).
+wrap_run() { # $1 = hook file in the hermetic hooks dir  $2 = command
+  local tmp before after
+  tmp="$(/usr/bin/mktemp)"
+  WRAP_EXIT=0
+  WRAP_LAST=""
+  before="$(wrap_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$WRAP_ROOT")" \
+      | /bin/bash "${WRAP_HOOKS}/$1" 2>"$tmp" >/dev/null ) || WRAP_EXIT="$?"
+  after="$(wrap_drain_rows)"
+  WRAP_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  case "$WRAP_EXIT" in
+    2) WRAP_V="B" ;;
+    0)
+      if [ "$after" -gt "$before" ]; then
+        WRAP_V="W"
+        WRAP_LAST="$(/usr/bin/tail -n 1 "$WRAP_DRAIN")"
+      else
+        WRAP_V="a"
+      fi
+      ;;
+    *) WRAP_V="E${WRAP_EXIT}" ;;
+  esac
+}
+
+# $1 label  $2 command  $3 verdict wanted from the hook (a|B|W)  $4 verdict wanted from the
+# reverse mutant (a|B|W), or - to skip that limb  $5 (optional) for a wanted B, a pattern the
+# hook's refusal must carry; for a wanted W, the arm its would-fire row must name.
+wrap_arm() {
+  local name="$1" cmd="$2" want="$3" wantm="$4" detail="${5:-}" got gotm="-" ok=1 why=""
+  wrap_run block-destructive.sh "$cmd"
+  got="$WRAP_V"
+  if [ "$got" != "$want" ]; then ok=0; why="hook=${got}"; fi
+  if [ "$ok" = 1 ] && [ -n "$detail" ]; then
+    case "$want" in
+      B) if ! /usr/bin/grep -qE "$detail" <<<"$WRAP_ERR"; then ok=0; why="refusal lacks /${detail}/"; fi ;;
+      W) case "$WRAP_LAST" in *"\"arm\":\"${detail}\""*) ;; *) ok=0; why="row arm is not ${detail}" ;; esac ;;
+    esac
+  fi
+  if [ "$wantm" != "-" ]; then
+    wrap_run block-destructive-mut.sh "$cmd"
+    gotm="$WRAP_V"
+    if [ "$gotm" != "$wantm" ]; then ok=0; why="${why} mutant=${gotm}"; fi
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (hook %s, mutant %s)\n' "$name" "$got" "$gotm"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted hook=%s mutant=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$wantm" "${why# }" "$WRAP_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- the fixture is live before any verdict is read -------------------------------------
+wrap_run block-destructive.sh 'git push --force origin main'
+wrap_scope_hook="$WRAP_V"
+wrap_scope_err="$WRAP_ERR"
+wrap_run block-destructive-mut.sh 'git push --force origin main'
+wrap_scope_mut="$WRAP_V"
+if [ "$wrap_scope_hook" = "B" ] && [ "$wrap_scope_mut" = "B" ] \
+   && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' <<<"$wrap_scope_err"; then
+  /usr/bin/printf 'PASS: WRAP-SCOPE the hook copy and its reverse mutant are in scope and enforcing (unrelated rule -001 fires on both), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAP-SCOPE fixture not live (hook=%s mutant=%s); the verdicts below are unusable\n' "$wrap_scope_hook" "$wrap_scope_mut"
+  FAIL=$((FAIL + 1))
+fi
+
+# WRAPOPT-M0 — the reverse mutant differs from the hook by exactly its three marked lines:
+# two changed (the word and keyword patterns) and one deleted (the option-walk call).
+wrap_m0_tmp="$(/usr/bin/mktemp)"
+/usr/bin/diff "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/block-destructive-mut.sh" > "$wrap_m0_tmp" 2>/dev/null
+wrap_m0_counts="$(/usr/bin/awk '/^</ { l++ } /^>/ { g++ } END { printf "%d %d", l, g }' "$wrap_m0_tmp")"
+/bin/rm -f "$wrap_m0_tmp"
+if [ "$wrap_m0_counts" = "3 2" ] && /bin/bash -n "${WRAP_HOOKS}/block-destructive-mut.sh" 2>/dev/null; then
+  /usr/bin/printf 'PASS: WRAPOPT-M0 the reverse mutant differs from the hook by exactly its marked lines (3 out, 2 in) and parses\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPOPT-M0 the reverse mutant does not differ by exactly the marked lines (removed/added = %s, wanted 3 2) or does not parse — every pair arm below is unusable\n' "$wrap_m0_counts"
+  FAIL=$((FAIL + 1))
+fi
+
+# --- WRAPVOCAB-PARITY — every list of the vocabulary, in both directions -----------------
+# Four lists hold the words: this walk (the M-WRAP-WORDS and M-WRAP-KEYWORDS lines), the
+# egress rule's prefix-command walk (the first two pattern lines after its one
+# `case "${egress_raw##*/}" in`), the shared canonicalizer (every PREFIX["…"] key), and the
+# SIGPIPE-idiom lint of the repository-integrity workflow (its P_WRAP alternation). A word
+# is a keyword if it is one of WRAP_KW and a wrapper otherwise. They are compared word by
+# word against this walk, and the table below declares every difference with its reason. The
+# arms fail on a difference no row declares AND on a row whose difference no longer exists,
+# so a declaration cannot outlive the divergence it excuses. They compare WORDS: the walks
+# also differ in grammar (match form, a leading redirection, an escaped verb, dash-led
+# tokens), and the readiness text states that per list.
+WRAP_KW=" then do else elif in ! if while until { } {} "
+WRAP_DECL='egress|keyword|in|missing|no shell construct puts a command word directly after in; this walk and the canonicalizer over-reach harmlessly, and dropping it would narrow an enforced set
+egress|keyword|{|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
+egress|keyword|}|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
+egress|keyword|{}|extra|the egress walk resolves an xargs replacement token with it; this rule declares the replacement operand open
+canon|wrapper|nice|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|wrapper|stdbuf|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|wrapper|timeout|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|keyword|if|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|keyword|while|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+canon|keyword|until|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
+lint|wrapper|doas|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+lint|wrapper|setsid|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+lint|wrapper|ionice|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+lint|wrapper|chrt|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+lint|wrapper|xargs|missing|the lint excludes xargs for its own documented reason: the child stdin is not the pipe'
+
+wrap_words_hook() { # $1 = a copy of this hook -> one word per line, or EXTRACTION-FAILED
+  /usr/bin/awk -v q="'" '
+    index($0, "# M-WRAP-WORDS") || index($0, "# M-WRAP-KEYWORDS") {
+      if (index($0, "# M-WRAP-WORDS")) nw++; else nk++
+      line = $0
+      sub(/^[ \t]*/, "", line)
+      p = index(line, ")")
+      if (p == 0) { bad = 1; next }
+      pat = substr(line, 1, p - 1)
+      gsub(q, "", pat)
+      n = split(pat, w, "|")
+      for (i = 1; i <= n; i++) if (w[i] != "") print w[i]
+    }
+    END { if (nw != 1 || nk != 1 || bad) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+wrap_words_egress() { # $1 = a copy of the egress hook
+  /usr/bin/awk -v q="'" '
+    index($0, "case \"${egress_raw##*/}\" in") { anchors++; armed = 1; next }
+    armed && got < 2 && $0 ~ /^[ \t]*[^# \t][^ \t]*\)[ \t]*$/ {
+      line = $0
+      sub(/^[ \t]*/, "", line)
+      sub(/\)[ \t]*$/, "", line)
+      gsub(q, "", line)
+      n = split(line, w, "|")
+      for (i = 1; i <= n; i++) if (w[i] != "") print w[i]
+      got++
+    }
+    END { if (anchors != 1 || got != 2) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+wrap_words_canon() { # $1 = a copy of the canonicalizer
+  /usr/bin/awk '
+    {
+      line = $0
+      while ((p = index(line, "PREFIX[\"")) > 0) {
+        rest = substr(line, p + 8)
+        e = index(rest, "\"")
+        if (e == 0) break
+        print substr(rest, 1, e - 1)
+        found++
+        line = substr(rest, e + 1)
+      }
+    }
+    END { if (found == 0) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+wrap_words_lint() { # $1 = a copy of the repository-integrity workflow
+  /usr/bin/awk -v q="'" '
+    index($0, "P_WRAP=" q "(") {
+      p = index($0, "P_WRAP=" q "(")
+      rest = substr($0, p + 9)
+      e = index(rest, ")")
+      if (e == 0) { bad = 1; next }
+      n = split(substr(rest, 1, e - 1), w, "|")
+      for (i = 1; i <= n; i++) if (w[i] != "") print w[i]
+      hits++
+    }
+    END { if (hits != 1 || bad) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+
+WRAP_SET=""
+wrap_classify() { # $1 = words, whitespace-separated  $2 = wrapper|keyword -> WRAP_SET
+  local w
+  WRAP_SET=" "
+  for w in $1; do
+    case "$WRAP_KW" in
+      *" $w "*) if [ "$2" = "keyword" ]; then WRAP_SET="${WRAP_SET}${w} "; fi ;;
+      *) if [ "$2" = "wrapper" ]; then WRAP_SET="${WRAP_SET}${w} "; fi ;;
+    esac
+  done
+}
+wrap_declared() { # $1 copy  $2 class  $3 word  $4 extra|missing -> 0 if a row declares it
+  local c k w d r
+  while IFS='|' read -r c k w d r; do
+    if [ "$c" = "$1" ] && [ "$k" = "$2" ] && [ "$w" = "$3" ] && [ "$d" = "$4" ]; then return 0; fi
+  done <<<"$WRAP_DECL"
+  return 1
+}
+WRAP_PROBLEMS=""
+# Compare one list with this walk on one class; append UNDECLARED and STALE findings.
+wrap_parity_one() { # $1 copy  $2 class  $3 that copy's words  $4 this walk's words
+  local s h w c k dw d r
+  wrap_classify "$3" "$2"; s="$WRAP_SET"
+  wrap_classify "$4" "$2"; h="$WRAP_SET"
+  for w in $s; do
+    case "$h" in *" $w "*) continue ;; esac
+    wrap_declared "$1" "$2" "$w" extra || WRAP_PROBLEMS="${WRAP_PROBLEMS} UNDECLARED:${1}+${w}"
+  done
+  for w in $h; do
+    case "$s" in *" $w "*) continue ;; esac
+    wrap_declared "$1" "$2" "$w" missing || WRAP_PROBLEMS="${WRAP_PROBLEMS} UNDECLARED:${1}-${w}"
+  done
+  while IFS='|' read -r c k dw d r; do
+    if [ "$c" != "$1" ] || [ "$k" != "$2" ]; then continue; fi
+    case "$d" in
+      extra)
+        case "$s" in *" $dw "*) case "$h" in *" $dw "*) WRAP_PROBLEMS="${WRAP_PROBLEMS} STALE:${1}+${dw}" ;; esac ;;
+                    *) WRAP_PROBLEMS="${WRAP_PROBLEMS} STALE:${1}+${dw}" ;; esac
+        ;;
+      missing)
+        case "$h" in *" $dw "*) case "$s" in *" $dw "*) WRAP_PROBLEMS="${WRAP_PROBLEMS} STALE:${1}-${dw}" ;; esac ;;
+                    *) WRAP_PROBLEMS="${WRAP_PROBLEMS} STALE:${1}-${dw}" ;; esac
+        ;;
+    esac
+  done <<<"$WRAP_DECL"
+}
+
+# The fourth list lives outside the hook layout: resolved the way the corpus is, and never
+# assumed — an unresolved workflow file is a FAIL, not a skipped comparison.
+WRAP_LINT=""
+wrap_try_lint() { if [ -z "$WRAP_LINT" ] && [ -n "$1" ] && [ -f "$1" ]; then WRAP_LINT="$1"; fi; }
+wrap_try_lint "$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd -P)/.github/workflows/repo-integrity.yml"
+wrap_src_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  IFS= read -r wrap_src_root < "$(dirname "$0")/.source-repo-root" || true
+fi
+if [ -n "$wrap_src_root" ]; then wrap_try_lint "${wrap_src_root}/.github/workflows/repo-integrity.yml"; fi
+WRAP_EGRESS="${HOOK%/*}/block-egress.sh"
+WRAP_CANON="${HOOK%/*}/lib/command-position.awk"
+
+wrap_w_hook="$(wrap_words_hook "$HOOK")"
+wrap_w_egress="$(wrap_words_egress "$WRAP_EGRESS")"
+wrap_w_canon="$(wrap_words_canon "$WRAP_CANON")"
+wrap_w_lint="EXTRACTION-FAILED"
+if [ -n "$WRAP_LINT" ]; then wrap_w_lint="$(wrap_words_lint "$WRAP_LINT")"; fi
+
+# $1 = arm label  $2 = class  $3 = this walk's words (normally the shipped hook's) $4 = the
+# canonicalizer's words (normally the shipped copy's) -> PASS/FAIL line
+wrap_parity_arm() {
+  local name="$1" class="$2" hw="$3" cw="$4" kwlint
+  WRAP_PROBLEMS=""
+  case "${hw} ${wrap_w_egress} ${cw} ${wrap_w_lint}" in
+    *EXTRACTION-FAILED*) WRAP_PROBLEMS=" EXTRACTION-FAILED" ;;
+  esac
+  if [ -z "$WRAP_PROBLEMS" ]; then
+    wrap_parity_one egress "$class" "$wrap_w_egress" "$hw"
+    wrap_parity_one canon "$class" "$cw" "$hw"
+    if [ "$class" = "wrapper" ]; then
+      wrap_parity_one lint wrapper "$wrap_w_lint" "$hw"
+    else
+      # The lint's list holds no keyword: it names what may stand between a pipe and a reader.
+      wrap_classify "$wrap_w_lint" keyword
+      for kwlint in $WRAP_SET; do WRAP_PROBLEMS="${WRAP_PROBLEMS} UNDECLARED:lint+${kwlint}"; done
+    fi
+  fi
+  WRAP_PARITY_RESULT="${WRAP_PROBLEMS# }"
+}
+
+wrap_parity_arm "WRAPVOCAB-PARITY-wrappers" wrapper "$wrap_w_hook" "$wrap_w_canon"
+if [ -z "$WRAP_PARITY_RESULT" ]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-wrappers the wrapper words of this walk, the egress walk, the canonicalizer and the SIGPIPE lint differ exactly where the declared table says, in both directions (lint list via %s)\n' "$WRAP_LINT"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-wrappers %s\n' "$WRAP_PARITY_RESULT"
+  FAIL=$((FAIL + 1))
+fi
+wrap_parity_arm "WRAPVOCAB-PARITY-keywords" keyword "$wrap_w_hook" "$wrap_w_canon"
+if [ -z "$WRAP_PARITY_RESULT" ]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-keywords the keyword words of the three walks differ exactly where the declared table says, and the lint list holds none\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-keywords %s\n' "$WRAP_PARITY_RESULT"
+  FAIL=$((FAIL + 1))
+fi
+
+# The parity check is shown able to fail, three ways. Each mutation is asserted live first
+# (the mutated copy differs from its source), so a sed that matched nothing cannot pass.
+wrap_pm_hook1="${WRAP_ROOT}/parity-m1.sh"
+/usr/bin/sed -e '/# M-WRAP-WORDS/s/|timeout)/|timeout|zzwrapword)/' "$HOOK" > "$wrap_pm_hook1"
+wrap_parity_arm "M1" wrapper "$(wrap_words_hook "$wrap_pm_hook1")" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$HOOK" "$wrap_pm_hook1" && [[ "$WRAP_PARITY_RESULT" == *"UNDECLARED:egress-zzwrapword"* ]]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M1 a hook copy with one extra wrapper word is reported as an undeclared difference\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M1 an extra wrapper word was not reported (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+wrap_pm_canon2="${WRAP_ROOT}/parity-m2.awk"
+/usr/bin/sed -e '/PREFIX\["exec"\]=1/s/$/; PREFIX["nice"]=1/' "$WRAP_CANON" > "$wrap_pm_canon2"
+wrap_parity_arm "M2" wrapper "$wrap_w_hook" "$(wrap_words_canon "$wrap_pm_canon2")"
+if ! /usr/bin/cmp -s "$WRAP_CANON" "$wrap_pm_canon2" && [[ "$WRAP_PARITY_RESULT" == *"STALE:canon-nice"* ]]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M2 a canonicalizer copy that gains a declared-missing word is reported as a stale declaration\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M2 a stale declaration was not reported (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+wrap_pm_hook3="${WRAP_ROOT}/parity-m3.sh"
+/usr/bin/sed -e 's/# M-WRAP-WORDS//' "$HOOK" > "$wrap_pm_hook3"
+wrap_parity_arm "M3" wrapper "$(wrap_words_hook "$wrap_pm_hook3")" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$HOOK" "$wrap_pm_hook3" && [ "$WRAP_PARITY_RESULT" = "EXTRACTION-FAILED" ]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M3 a hook copy without its word marker reports an extraction failure, never parity\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M3 a missing marker did not report an extraction failure (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+
+# WRAPVOCAB-PARITY-DOC — the readiness item that declares the walked set names, as a
+# backticked word, every wrapper word any of the four lists holds: what the walk covers and
+# what another list holds that it does not. Read in the fragment and in the generated
+# registry, found by the same two-rung resolution the NOEXEC-DOC arms use.
+wrap_classify "$wrap_w_hook $wrap_w_egress $wrap_w_canon $wrap_w_lint" wrapper
+WRAP_DOC_WORDS="$WRAP_SET"
+wrap_doc_missing() { # $1 = readiness file -> the words item 2 does not name, ITEM2-MISSING(n) or DOC-MISSING
+  if [ ! -f "$1" ]; then /usr/bin/printf 'DOC-MISSING'; return 0; fi
+  /usr/bin/awk -v words="$WRAP_DOC_WORDS" -v bq='`' '
+    index($0, "2. **Wrapper-prefix residuals.**") { line = $0; hits++ }
+    END {
+      if (hits != 1) { printf "ITEM2-MISSING(%d)", hits; exit }
+      n = split(words, w, " ")
+      for (i = 1; i <= n; i++) if (w[i] != "" && w[i] != "EXTRACTION-FAILED" && index(line, bq w[i] bq) == 0) printf "%s ", w[i]
+    }
+  ' "$1"
+}
+wrap_doc_frag="$(wrap_doc_missing "$NOEXEC_DOC_FRAG")"
+wrap_doc_index="$(wrap_doc_missing "$NOEXEC_DOC_INDEX")"
+case "$WRAP_DOC_WORDS" in *EXTRACTION-FAILED*) wrap_doc_frag="EXTRACTION-FAILED" ;; esac
+if [ -z "$wrap_doc_frag" ] && [ -z "$wrap_doc_index" ]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-DOC readiness item 2 names every wrapper word of the four lists, in the fragment and in the generated registry\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-DOC readiness item 2 does not name: fragment [%s] registry [%s]\n' "$wrap_doc_frag" "$wrap_doc_index"
+  FAIL=$((FAIL + 1))
+fi
+
+# --- positions this walk does not reach: pins, routed to their own card -------------------
+wrap_arm "WRAPDIV-redirect: >/dev/null bash <unlisted>.sh allowed (a leading redirection is not walked)" \
+  ">/dev/null bash ${WRAP_NA}" a a
+wrap_arm "WRAPDIV-escaped: \\bash <unlisted>.sh allowed (an escaped verb is not resolved)" \
+  "\\bash ${WRAP_NA}" a a
+wrap_arm "WRAPDIV-quoted-word: \"sudo\" bash <unlisted>.sh allowed (the walk reads the raw wrapper token)" \
+  "\"sudo\" bash ${WRAP_NA}" a a
+
+# --- nice and stdbuf, with their options (AC-2) --------------------------------------------
+wrap_arm "WRAPOPT-AC2-nice: nice -n 10 bash <unlisted>.sh blocks" "nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-AC2-stdbuf: stdbuf -o0 bash <unlisted>.sh blocks" "stdbuf -o0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-AC2-near: nice -n 10 bash <allowlisted>.sh allowed (the allowlist was consulted)" "nice -n 10 bash ${WRAP_OK}" a a
+wrap_arm "WRAPOPT-nice-bare: nice bash <unlisted>.sh blocks" "nice bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-bare: stdbuf bash <unlisted>.sh blocks" "stdbuf bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-n-att: nice -n10 bash <unlisted>.sh blocks" "nice -n10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-num: nice -10 bash <unlisted>.sh blocks (a digit is a flag)" "nice -10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-neg: nice -n -5 bash <unlisted>.sh blocks (the separate value is consumed, sign and all)" "nice -n -5 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-adj-eq: nice --adjustment=10 bash <unlisted>.sh blocks" "nice --adjustment=10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-adj-sep: nice --adjustment 10 bash <unlisted>.sh blocks" "nice --adjustment 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nice-dd: nice -n 10 -- bash <unlisted>.sh blocks" "nice -n 10 -- bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-o-sep: stdbuf -o 0 bash <unlisted>.sh blocks (AC-2's separate-argument spelling)" "stdbuf -o 0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-ioe: stdbuf -i0 -o0 -e0 bash <unlisted>.sh blocks" "stdbuf -i0 -o0 -e0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-e-sep: stdbuf -e 0 bash <unlisted>.sh blocks" "stdbuf -e 0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-out-eq: stdbuf --output=L bash <unlisted>.sh blocks" "stdbuf --output=L bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-stdbuf-out-sep: stdbuf --output L bash <unlisted>.sh blocks" "stdbuf --output L bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-abs: /usr/bin/nice -n 10 bash <unlisted>.sh blocks (basename match)" "/usr/bin/nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-source: nice -n 10 source <unlisted>.sh blocks" "nice -n 10 source ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-nested: sudo nice -n 10 bash <unlisted>.sh blocks" "sudo nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-then: if true; then nice -n 5 bash <unlisted>.sh; fi blocks" "if true; then nice -n 5 bash ${WRAP_NA}; fi" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-exec: nice -n 10 <unlisted>.sh writes one exec row at its rollout phase" "nice -n 10 ${WRAP_NA}" W a exec
+wrap_arm "WRAPOPT-nonshell: stdbuf -oL node <unlisted>.js writes one interp-nonshell row at its rollout phase" "stdbuf -oL node /tmp/pmo-wrap-na.js" W a interp-nonshell
+wrap_arm "WRAPOPT-ctl-stdbuf-ok: stdbuf -o 0 bash <allowlisted>.sh allowed" "stdbuf -o 0 bash ${WRAP_OK}" a a
+wrap_arm "WRAPOPT-ctl-grep: nice -n 10 grep -c bash <unlisted>.sh allowed (grep is the command)" "nice -n 10 grep -c bash ${WRAP_NA}" a a
+wrap_arm "WRAPOPT-ctl-echo: echo nice -n 10 bash <unlisted>.sh allowed (off the segment head)" "echo nice -n 10 bash ${WRAP_NA}" a a
+wrap_arm "WRAPOPT-ctl-nearword: nicely -n 10 bash <unlisted>.sh allowed (a near-miss word is not a wrapper)" "nicely -n 10 bash ${WRAP_NA}" a a
+wrap_arm "WRAPOPT-ctl-end: nice -n allowed with no error (a consumed value past the end)" "nice -n" a a
+wrap_arm "WRAPOPT-ctl-extless: nice -n 10 ./pmo-wrap-tool allowed (an extensionless target, the shared residual)" "nice -n 10 ./pmo-wrap-tool" a a
+wrap_arm "WRAPOPT-ctl-parse-only: nice -n 10 bash -n <unlisted>.sh allowed (parse-only, behind the wrapper as without it)" "nice -n 10 bash -n ${WRAP_NA}" a a
+
+# --- every wrapper's row, one arm per spelling (whole set) ---------------------------------
+# Each prefix is followed by `bash <unlisted>.sh`. The hook refuses; the reverse mutant, the
+# walk as it stood, allows every one. sudo rows 14 to 16 are the two argument-taking options
+# the sudo manual names that the design's row, built from the reference host's synopsis, did
+# not list.
+WRAP_ROWS_TABLE='sudo|sudo -n
+sudo|sudo -u bot
+sudo|sudo -ubot
+sudo|sudo -nu bot
+sudo|sudo -u bot -g staff
+sudo|sudo -E -u bot
+sudo|sudo --user bot
+sudo|sudo --user=bot
+sudo|sudo -D /tmp
+sudo|sudo -u bot --
+sudo|sudo -k
+sudo|sudo -i
+sudo|sudo -h box1
+sudo|sudo -a bsdauth
+sudo|sudo -c staff
+sudo|sudo --login-class staff
+env|env -i
+env|env -u NAME
+env|env -uNAME
+env|env -u A -u B
+env|env --unset NAME
+env|env --unset=NAME
+env|env -C /tmp
+env|env -P /usr/bin
+env|env -u NAME FOO=1
+env|env a-b=1
+env|env -a zero
+command|command -p
+command|command --
+exec|exec -a myname
+exec|exec -c
+exec|exec -cl
+exec|exec -l -a myname
+nohup|nohup --
+time|time -p
+time|time -l
+time|time -o /tmp/out.txt
+time|time -f %e
+xargs|xargs -n1
+xargs|xargs -n 1
+xargs|xargs -0
+xargs|xargs -0 -n 1
+xargs|xargs -P 4
+xargs|xargs -n 1 -P 4
+xargs|xargs -L 1
+xargs|xargs -t
+xargs|xargs -r
+xargs|xargs -a /tmp/list.txt
+timeout|timeout 5s
+timeout|timeout -s KILL 5
+timeout|timeout -sKILL 5
+timeout|timeout -k 1 5
+timeout|timeout --signal=KILL 5
+timeout|timeout --signal KILL 5
+timeout|timeout --foreground -s 9 10
+nested|sudo -u bot env -u X nice -n 5
+nested|time -p nice -n 10 stdbuf -o0
+nested|ENVV=1 sudo -u bot'
+wrap_rprev=""
+wrap_rn=0
+while IFS='|' read -r wrap_rw wrap_rpfx; do
+  [ -n "$wrap_rw" ] || continue
+  if [ "$wrap_rw" != "$wrap_rprev" ]; then wrap_rn=0; wrap_rprev="$wrap_rw"; fi
+  wrap_rn=$((wrap_rn + 1))
+  wrap_arm "WRAPOPT-row-${wrap_rw}-${wrap_rn}: ${wrap_rpfx} bash <unlisted>.sh blocks" \
+    "${wrap_rpfx} bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+done <<<"$WRAP_ROWS_TABLE"
+
+# --- describe-only options execute nothing, and the long spellings do not inherit that ---
+wrap_arm "WRAPOPT-inert-command-V: command -V bash <unlisted>.sh allowed (describes, runs nothing)" "command -V bash ${WRAP_NA}" a a
+wrap_arm "WRAPOPT-inert-command-pv: command -pv bash <unlisted>.sh allowed" "command -pv bash ${WRAP_NA}" a a
+wrap_arm "WRAPOPT-inert-sudo-l: sudo -l bash <unlisted>.sh allowed (lists the policy, runs nothing)" "sudo -l bash ${WRAP_NA}" a a
+wrap_arm "WRAPOPT-inert-sudo-v: sudo -v bash <unlisted>.sh allowed" "sudo -v bash ${WRAP_NA}" a a
+wrap_arm "WRAPOPT-inert-sudo-e: sudo -e <unlisted>.sh allowed (edits, runs nothing)" "sudo -e ${WRAP_NA}" a a
+wrap_arm "WRAPOPT-inert-sudo-lU: sudo -lU bot bash <unlisted>.sh allowed" "sudo -lU bot bash ${WRAP_NA}" a a
+wrap_arm "WRAPDIV-sudo-long (declared over-block, introduced here): sudo --list bash <unlisted>.sh blocks — a long describe-only spelling is read as a flag" \
+  "sudo --list bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+
+# --- an option no row lists: the declared failure direction --------------------------------
+wrap_arm "WRAPOPT-unlisted-flag: sudo --zz-unlisted bash <unlisted>.sh blocks (an unlisted option is stepped over as a flag)" \
+  "sudo --zz-unlisted bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPDIV-unlisted-valued: sudo --zz-unlisted VALUE bash <unlisted>.sh allowed (its value is read as the command word)" \
+  "sudo --zz-unlisted VALUE bash ${WRAP_NA}" a a
+
+# --- timeout -------------------------------------------------------------------------------
+wrap_arm "WRAPOPT-timeout-near: timeout 5 bash <allowlisted>.sh allowed" "timeout 5 bash ${WRAP_OK}" a a
+wrap_arm "WRAPDIV-timeout-malformed (declared over-read): timeout bash <unlisted>.sh writes one exec row — with no duration the command is read one token late" \
+  "timeout bash ${WRAP_NA}" W a exec
+
+# --- the first build condition: a token that carries the command line stays the command word
+# env's split-string option takes the command line as its argument. Its ATTACHED spellings
+# keep exactly the verdict they had (the mutant limb is that verdict): the walk stops on the
+# token instead of stepping over an execution. The separate spelling is a flag, so the word
+# after it is the command word.
+wrap_arm "WRAPOPT-env-S: env -S bash <unlisted>.sh blocks" "env -S bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPDIV-env-S-quoted: env -S \"bash <unlisted>.sh\" allowed (a command line in one quoted string is not re-tokenized)" \
+  "env -S \"bash ${WRAP_NA}\"" a a
+wrap_arm "WRAPOPT-env-S-attached: env -S<unlisted>.sh keeps its exec row (the walk stops on the token)" "env -S${WRAP_NA}" W W exec
+wrap_arm "WRAPOPT-env-S-attached-cluster: env -iS<unlisted>.sh keeps its exec row" "env -iS${WRAP_NA}" W W exec
+wrap_arm "WRAPOPT-env-S-attached-long: env --split-string=<unlisted>.sh keeps its exec row" "env --split-string=${WRAP_NA}" W W exec
+wrap_arm "WRAPDIV-env-S-attached-cmd: env -Sbash <unlisted>.sh allowed (an attached command line is not re-tokenized, as before)" \
+  "env -Sbash ${WRAP_NA}" a a
+# The two declared precision improvements: an option argument shaped like a script path, and
+# an env operand whose name is not a shell name. Neither path is executed by the program; the
+# walk used to read the whole token as a direct execution (the mutant limb records it).
+wrap_arm "WRAPOPT-optpath: env --chdir=/tmp/x.sh ls allowed with no row (precision: an option's argument)" "env --chdir=/tmp/x.sh ls" a W
+wrap_arm "WRAPOPT-optpath-short: sudo -D/tmp/x.sh ls allowed with no row (precision)" "sudo -D/tmp/x.sh ls" a W
+wrap_arm "WRAPOPT-envop-name: env a-b=/tmp/x.sh ls allowed with no row (precision: env sets a-b and runs ls)" "env a-b=/tmp/x.sh ls" a W
+
+# --- the second and third build conditions: the xargs deny, behind xargs's own options ----
+wrap_arm "WRAPOPT-xargs-stdin-n: printf x | xargs -n 1 bash blocks as unresolvable" "printf x | xargs -n 1 bash" B a "unresolvable script target"
+wrap_arm "WRAPOPT-xargs-stdin-0: printf x | xargs -0 sh blocks as unresolvable" "printf x | xargs -0 sh" B a "unresolvable script target"
+wrap_arm "WRAPOPT-xargs-stdin-py (declared: no record-only stage): printf x | xargs -n 1 python3 blocks as unresolvable" \
+  "printf x | xargs -n 1 python3" B a "unresolvable script target"
+wrap_arm "WRAPDIV-xargs-stdin-py-bare: printf x | xargs python3 blocks, as it did before this change" "printf x | xargs python3" B B "unresolvable script target"
+wrap_arm "WRAPDIV-xargs-interp-flag (declared: the deny is narrowed, not closed): printf x | xargs -n 1 bash -x allowed — the flag is a token" \
+  "printf x | xargs -n 1 bash -x" a a
+wrap_arm "WRAPDIV-xargs-interp-flag-bare: printf x | xargs bash -x allowed, as before" "printf x | xargs bash -x" a a
+wrap_arm "WRAPOPT-xargs-ctl-c: ls | xargs -n1 bash -c 'echo hi' allowed" "ls | xargs -n1 bash -c 'echo hi'" a a
+wrap_arm "WRAPOPT-xargs-ctl-grep: git ls-files | xargs -n1 grep -l bash allowed" "git ls-files | xargs -n1 grep -l bash" a a
+wrap_arm "WRAPOPT-xargs-ctl-pycompile: git ls-files | xargs -n1 python3 -m py_compile allowed" "git ls-files | xargs -n1 python3 -m py_compile" a a
+
+# --- if, while and until join the keyword arm ------------------------------------------------
+wrap_arm "WRAPKW-if: if bash <unlisted>.sh; then :; fi blocks" "if bash ${WRAP_NA}; then :; fi" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPKW-while: while bash <unlisted>.sh; do :; done blocks" "while bash ${WRAP_NA}; do :; done" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPKW-until: until bash <unlisted>.sh; do :; done blocks" "until bash ${WRAP_NA}; do :; done" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPKW-if-bang: if ! bash <unlisted>.sh; then :; fi blocks" "if ! bash ${WRAP_NA}; then :; fi" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPKW-ctl-test: if [ -f <unlisted>.sh ]; then :; fi allowed" "if [ -f ${WRAP_NA} ]; then :; fi" a a
+wrap_arm "WRAPKW-ctl-read: while read -r l; do :; done < <unlisted>.sh allowed" "while read -r l; do :; done < ${WRAP_NA}" a a
+wrap_arm "WRAPKW-ctl-ok: if bash <allowlisted>.sh; then :; fi allowed" "if bash ${WRAP_OK}; then :; fi" a a
+# The reviewer's pin: quoted prose after a separator, in an argument of a command that is no
+# carrier, is split and read as a condition. A declared over-block, introduced by this line
+# for three common words and already true of then and do.
+wrap_arm "WRAPDIV-kw-prose (declared over-block, introduced here): git commit -m \"note; if bash <unlisted>.sh then\" blocks" \
+  "git commit -m \"note; if bash ${WRAP_NA} then\"" B a "BLOCK-DESTRUCTIVE-022"
+
+# --- the quoted assignment value: declared here, its fix owned by its own card ------------
+# Pinned at the verdicts the walk gives today, in both directions, so a change is deliberate.
+wrap_arm "WRAPDIV-qval-sq: FOO='a b' bash <unlisted>.sh allowed (the value's second piece is read as the command word)" \
+  "FOO='a b' bash ${WRAP_NA}" a a
+wrap_arm "WRAPDIV-qval-fp: MSG='run bash now' echo <unlisted>.sh blocks (the over-block twin of the same split)" \
+  "MSG='run bash now' echo ${WRAP_NA}" B B "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPDIV-qval-sep: FOO='a;b' bash <unlisted>.sh allowed (a separator inside the quoted value splits the segment)" \
+  "FOO='a;b' bash ${WRAP_NA}" a a
+
+/bin/rm -rf "$WRAP_ROOT"
 
 # --- Summary ---
 echo ""

@@ -710,3 +710,155 @@ ZR01|block-destructive|redir|-|-|B|bash 2>/dev/null -n @D@/na.sh
 ZR02|block-destructive|redir|-|-|a|bash -n @D@/na.sh 2>/dev/null
 ZR03|block-destructive|redir|-|-|a|bash -n "$X" 2>/dev/null
 ZR04|block-destructive|redir|-|-|a|bash -n @D@/na.sh > /dev/null 2>&1
+
+# --- seed 6: card #7020 — the wrapper walk's own options, and tables M-1 to M-3 of its adversarial review (139 rows) ---
+# Rows for the wrapper walk's option rows (nice, stdbuf, timeout, and every wrapper's own
+# options), the keyword line, and the rows of tables M-1 to M-3 of the card's adversarial
+# design review, which the card's differential criterion names. Ids are WR plus a number.
+# Ground truth is `?` on every row: no command that runs a script was executed for this
+# block outside the hook suite's own hermetic copies; the review's tables record what each
+# one runs. Groups: wrap-opt, wrap-optrec and wrap-xargs are what the change closes;
+# wrap-near, wrap-xargs-ctl, wrap-kw-ctl and wrap-qval-ctl are must-not-flag or unchanged
+# controls; wrap-env-s and wrap-qval keep the verdict they had; wrap-prec are declared
+# precision improvements (an option's argument, an env operand: the program executes
+# neither path); wrap-overblock and wrap-overread are declared over-blocks; wrap-declared
+# are executions or shapes the walk does not reach, each declared in the readiness text.
+WR01|block-destructive|wrap-opt|-|?|B|nice -n 10 bash @D@/na.sh
+WR02|block-destructive|wrap-opt|-|?|B|stdbuf -o0 bash @D@/na.sh
+WR03|block-destructive|wrap-opt|-|?|B|stdbuf -o 0 bash @D@/na.sh
+WR04|block-destructive|wrap-opt|-|?|B|nice bash @D@/na.sh
+WR05|block-destructive|wrap-opt|-|?|B|sudo -u bot bash @D@/na.sh
+WR06|block-destructive|wrap-opt|-|?|B|time -p bash @D@/na.sh
+WR07|block-destructive|wrap-opt|-|?|B|env -u X bash @D@/na.sh
+WR08|block-destructive|wrap-opt|-|?|B|exec -a n bash @D@/na.sh
+WR09|block-destructive|wrap-opt|-|?|B|timeout 5 bash @D@/na.sh
+WR10|block-destructive|wrap-opt|-|?|B|sudo -u bot env -u X nice -n 5 bash @D@/na.sh
+WR11|block-destructive|wrap-opt|-|?|B|env a-b=1 bash @D@/na.sh
+WR12|block-destructive|wrap-opt|-|?|B|nice -n 10 source @D@/na.sh
+WR13|block-destructive|wrap-opt|-|?|B|sudo -c staff bash @D@/na.sh
+WR14|block-destructive|wrap-opt|-|?|B|sudo -a bsdauth bash @D@/na.sh
+WR15|block-destructive|wrap-opt|-|?|B|env -S bash @D@/na.sh
+WR16|block-destructive|wrap-opt|-|?|B|xargs -n 1 bash @D@/na.sh
+WR17|block-destructive|wrap-optrec|-|?|W|nice -n 10 @D@/na.sh
+WR18|block-destructive|wrap-optrec|-|?|W|stdbuf -oL python3 @D@/na.py
+WR19|block-destructive|wrap-near|-|?|a|nice -n 10 bash @D@/ok.sh
+WR20|block-destructive|wrap-near|-|?|a|stdbuf -o 0 bash @D@/ok.sh
+WR21|block-destructive|wrap-near|-|?|a|timeout 5 bash @D@/ok.sh
+WR22|block-destructive|wrap-near|-|?|a|sudo -u bot bash @D@/ok.sh
+WR23|block-destructive|wrap-near|-|?|a|nice -n 10 grep -c bash @D@/na.sh
+WR24|block-destructive|wrap-near|-|?|a|command -v bash @D@/na.sh
+WR25|block-destructive|wrap-near|-|?|a|sudo -l bash @D@/na.sh
+WR30|block-destructive|wrap-xargs|-|?|B|printf x | xargs bash
+WR31|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n 1 bash
+WR32|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 sh
+WR33|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 zsh
+WR34|block-destructive|wrap-xargs|-|?|B|find @D@ -name '*.sh' | xargs -n1 bash
+WR35|block-destructive|wrap-xargs|-|?|B|printf x | xargs python3
+WR36|block-destructive|wrap-xargs|-|?|B|printf x | xargs perl
+WR37|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n 1 python3
+WR38|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n 1 node
+WR39|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 node
+WR40|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 perl
+WR41|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 ruby
+WR42|block-destructive|wrap-xargs|-|?|B|git ls-files '*.py' | xargs -n1 python3
+WR43|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -x
+WR44|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -e
+WR45|block-destructive|wrap-declared|-|?|a|printf x | xargs bash --
+WR46|block-destructive|wrap-declared|-|?|a|printf x | xargs bash --norc
+WR47|block-destructive|wrap-declared|-|?|a|printf x | xargs bash +x
+WR48|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -o errexit
+WR49|block-destructive|wrap-declared|-|?|a|printf x | xargs sh -e
+WR50|block-destructive|wrap-declared|-|?|a|printf x | xargs zsh -f
+WR51|block-destructive|wrap-declared|-|?|a|printf x | xargs -n 1 bash -e
+WR52|block-destructive|wrap-declared|-|?|a|printf x | xargs -n 1 bash -x
+WR53|block-destructive|wrap-declared|-|?|a|printf x | xargs -0 sh -x
+WR54|block-destructive|wrap-xargs-ctl|-|?|a|printf x | xargs bash -n
+WR55|block-destructive|wrap-xargs-ctl|-|?|a|find @D@ -print0 | xargs -0 bash -n
+WR56|block-destructive|wrap-xargs-ctl|-|?|a|printf x | xargs -n 1 bash -c 'echo hi'
+WR57|block-destructive|wrap-xargs-ctl|-|?|a|git ls-files '*.py' | xargs -n1 python3 -m py_compile
+WR58|block-destructive|wrap-xargs-ctl|-|?|a|ls | xargs -n1 basename
+WR60|block-destructive|wrap-env-s|-|?|W|env -S@D@/na.sh
+WR61|block-destructive|wrap-env-s|-|?|W|env -iS@D@/na.sh
+WR62|block-destructive|wrap-env-s|-|?|W|env -vS@D@/na.sh
+WR63|block-destructive|wrap-env-s|-|?|W|/usr/bin/env -S@D@/na.sh
+WR64|block-destructive|wrap-env-s|-|?|W|env -S@D@/na.sh arg
+WR65|block-destructive|wrap-env-s|-|?|W|env -S@D@/na.py
+WR66|block-destructive|wrap-env-s|-|?|W|env --split-string=@D@/na.sh
+WR67|block-destructive|wrap-env-s|-|?|W|env -S@D@/ok.sh
+WR68|block-destructive|wrap-declared|-|?|a|env -Sbash @D@/na.sh
+WR69|block-destructive|wrap-declared|-|?|a|env -S"bash @D@/na.sh"
+WR70|block-destructive|wrap-declared|-|?|a|env -S "bash @D@/na.sh"
+WR71|block-destructive|wrap-prec|-|?|a|env --chdir=@D@/x.sh ls
+WR72|block-destructive|wrap-prec|-|?|a|sudo -D@D@/x.sh ls
+WR73|block-destructive|wrap-prec|-|?|a|env -u@D@/x.sh ls
+WR74|block-destructive|wrap-prec|-|?|a|xargs -a@D@/x.sh echo
+WR75|block-destructive|wrap-prec|-|?|a|time -o@D@/x.sh ls
+WR76|block-destructive|wrap-prec|-|?|a|env a-b=@D@/x.sh ls
+WR77|block-destructive|wrap-prec|-|?|a|env FOO=1 a-b=@D@/x.sh ls
+WR78|block-destructive|wrap-prec|-|?|a|env ./x=y.sh
+WR80|block-destructive|wrap-kw|-|?|B|if bash @D@/na.sh; then :; fi
+WR81|block-destructive|wrap-kw|-|?|B|while bash @D@/na.sh; do :; done
+WR82|block-destructive|wrap-kw|-|?|B|until bash @D@/na.sh; do :; done
+WR83|block-destructive|wrap-kw|-|?|B|if ! bash @D@/na.sh; then :; fi
+WR84|block-destructive|wrap-kw|-|?|W|if @D@/na.sh; then :; fi
+WR85|block-destructive|wrap-kw-ctl|-|?|a|if [ -f @D@/na.sh ]; then :; fi
+WR86|block-destructive|wrap-kw-ctl|-|?|a|while read -r l; do :; done < @D@/na.sh
+WR87|block-destructive|wrap-kw-ctl|-|?|a|if bash @D@/ok.sh; then :; fi
+WR88|block-destructive|wrap-kw-ctl|-|?|a|echo "note; if bash @D@/na.sh then"
+WR89|block-destructive|wrap-overblock|-|?|B|git commit -m "note; if bash @D@/na.sh then"
+WR90|block-destructive|wrap-overblock|-|?|B|git commit -m "fix; while sh @D@/na.sh runs"
+WR91|block-destructive|wrap-overblock|-|?|B|git commit -m "note | until bash @D@/na.sh"
+WR92|block-destructive|wrap-overblock|-|?|B|git tag -a v1 -m "x; if source @D@/na.sh"
+WR93|block-destructive|wrap-overblock|-|?|W|git commit -m "note; if @D@/na.sh then"
+WR94|block-destructive|wrap-overblock|-|?|B|git commit -m "note; then bash @D@/na.sh"
+WR95|block-destructive|wrap-overblock|-|?|B|sudo --list bash @D@/na.sh
+WR100|block-destructive|wrap-qval|-|?|B|X='a; b=' bash @D@/na.sh
+WR101|block-destructive|wrap-qval|-|?|B|X="a; b=" bash @D@/na.sh
+WR102|block-destructive|wrap-qval|-|?|B|X='a;b=' bash @D@/na.sh
+WR103|block-destructive|wrap-qval|-|?|B|X='a | b=' bash @D@/na.sh
+WR104|block-destructive|wrap-qval|-|?|B|X='a && b=' bash @D@/na.sh
+WR105|block-destructive|wrap-qval|-|?|B|X='a & b=' bash @D@/na.sh
+WR106|block-destructive|wrap-qval|-|?|B|X='a;b='c bash @D@/na.sh
+WR107|block-destructive|wrap-qval|-|?|B|X='a; b=' Y=2 bash @D@/na.sh
+WR108|block-destructive|wrap-qval|-|?|B|FOO='a b' BAR='c; d=' bash @D@/na.sh
+WR109|block-destructive|wrap-qval|-|?|B|MSG='done; rc=' bash @D@/na.sh
+WR110|block-destructive|wrap-qval|-|?|B|MSG="status: ok; next=" bash @D@/na.sh
+WR111|block-destructive|wrap-qval|-|?|B|X='a; b=' source @D@/na.sh
+WR112|block-destructive|wrap-qval|-|?|B|X='a; b=' . @D@/na.sh
+WR113|block-destructive|wrap-qval|-|?|B|X='a; b=' sh @D@/na.sh
+WR114|block-destructive|wrap-qval|-|?|B|X='a; b=' zsh @D@/na.sh
+WR115|block-destructive|wrap-qval|-|?|W|X="a; b=" @D@/na.sh
+WR116|block-destructive|wrap-qval|-|?|W|X='a; b=' python3 @D@/na.py
+WR117|block-destructive|wrap-qval|-|?|B|env X='a; b=' bash @D@/na.sh
+WR118|block-destructive|wrap-qval|-|?|B|sudo X='a; b=' bash @D@/na.sh
+WR119|block-destructive|wrap-qval|-|?|B|X='a; b=' sudo bash @D@/na.sh
+WR120|block-destructive|wrap-qval|-|?|B|if X='a; b=' bash @D@/na.sh; then :; fi
+WR121|block-destructive|wrap-qval|-|?|B|echo ok; X='a; b=' bash @D@/na.sh
+WR122|block-destructive|wrap-qval|-|?|B|gh pr view; X='a; b=' bash @D@/na.sh
+WR123|block-destructive|wrap-qval|-|?|B|X="a; b=" bash "$D/x.sh"
+WR124|block-destructive|wrap-qval-ctl|-|?|a|X='a; b=' bash @D@/ok.sh
+WR125|block-destructive|wrap-qval-ctl|-|?|B|FOO='ab' bash @D@/na.sh
+WR126|block-destructive|wrap-declared|-|?|a|FOO='a b' bash @D@/na.sh
+WR127|block-destructive|wrap-declared|-|?|a|FOO="a b" bash @D@/na.sh
+WR128|block-destructive|wrap-declared|-|?|a|env FOO='a b' bash @D@/na.sh
+WR129|block-destructive|wrap-declared|-|?|a|X='a b' Y=1 sh @D@/na.sh
+WR130|block-destructive|wrap-declared|-|?|a|A=1; B='x y' bash @D@/na.sh
+WR131|block-destructive|wrap-declared|-|?|a|FOO=a\ b bash @D@/na.sh
+WR132|block-destructive|wrap-declared|-|?|a|TS=$(date +%s) bash @D@/na.sh
+WR133|block-destructive|wrap-declared|-|?|a|VERSION="$(git describe --tags)" bash @D@/na.sh
+WR134|block-destructive|wrap-overblock|-|?|B|MSG='run bash now' echo @D@/na.sh
+WR135|block-destructive|wrap-overblock|-|?|B|NOTE="see bash @D@/na.sh" true
+WR136|block-destructive|wrap-overblock|-|?|B|cat 'it; B=' bash @D@/na.sh
+WR140|block-destructive|wrap-declared|-|?|a|>/dev/null bash @D@/na.sh
+WR141|block-destructive|wrap-declared|-|?|a|\bash @D@/na.sh
+WR142|block-destructive|wrap-declared|-|?|a|"sudo" bash @D@/na.sh
+WR143|block-destructive|wrap-declared|-|?|a|sudo --zz-unlisted VALUE bash @D@/na.sh
+WR144|block-destructive|wrap-declared|-|?|a|doas bash @D@/na.sh
+WR145|block-destructive|wrap-declared|-|?|a|setsid bash @D@/na.sh
+WR146|block-destructive|wrap-declared|-|?|a|ionice -c 3 bash @D@/na.sh
+WR147|block-destructive|wrap-declared|-|?|a|chrt -b 0 bash @D@/na.sh
+WR148|block-destructive|wrap-declared|-|?|a|caffeinate -i bash @D@/na.sh
+WR149|block-destructive|wrap-declared|-|?|a|eval bash @D@/na.sh
+WR150|block-destructive|wrap-declared|-|?|a|nice --adj 10 bash @D@/na.sh
+WR151|block-destructive|wrap-declared|-|?|a|sudo --us bot bash @D@/na.sh
+WR152|block-destructive|wrap-overread|-|?|W|timeout bash @D@/na.sh
