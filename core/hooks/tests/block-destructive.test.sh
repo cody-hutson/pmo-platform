@@ -7155,6 +7155,11 @@ fi
   -e '/\*" \$script_wlname "\*) return 0 ;;/d' \
   -e '/if \[ -n "\$_rest" \]; then script_hidx=\$(( script_hidx - 1 )); return 0; fi/d' \
   "$HOOK" > "${WRAP_HOOKS}/block-destructive-pnosplit.sh"
+# splitcmd  script_split_scan always reports a command word, so every attached split value stops
+#           the walk — the behaviour before that helper, when an attached split string carrying no
+#           command word was stepped onto and the command that followed was never adjudicated
+/usr/bin/sed 's@^  script_wsplit_cmd=0   # M-WRAP-SPLITCMD$@  script_wsplit_cmd=1; return 0   # M-WRAP-SPLITCMD@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-splitcmd.sh"
 /usr/bin/sed \
   -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
   -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
@@ -7162,7 +7167,7 @@ fi
   "$HOOK" > "${WRAP_HOOKS}/block-destructive-pwalkroute.sh"
 /usr/bin/sed '/# M-WRAP-ABBREV$/s/"\$_lk" -eq 1/"$_lk" -ge 1/' \
   "$HOOK" > "${WRAP_HOOKS}/block-destructive-pambig.sh"
-for wrap_pm in pscan pallow pnox ptrunc pextless pparse pstdin pxoff pxall pnosplit pwalkroute pambig; do
+for wrap_pm in pscan pallow pnox ptrunc pextless pparse pstdin pxoff pxall pnosplit pwalkroute pambig splitcmd; do
   /bin/chmod +x "${WRAP_HOOKS}/block-destructive-${wrap_pm}.sh"
 done
 
@@ -7192,6 +7197,7 @@ wrap_mut_live "WRAPPAIR-M-xall: the every-xargs-interpreter deny mutant" block-d
 wrap_mut_live "WRAPPAIR-M-nosplit: the no-split-stop mutant" block-destructive-pnosplit.sh 2 0
 wrap_mut_live "WRAPPAIR-M-walkroute: the operand-walk and conservative-route revert (STDIN-M4's mutation)" block-destructive-pwalkroute.sh 22 1
 wrap_mut_live "WRAPPAIR-M-ambig: the ambiguity-blind mutant" block-destructive-pambig.sh 1 1
+wrap_mut_live "WRAPPAIR-M-splitcmd: the always-a-command split-scan mutant (Stage 7 F-08 reverse)" block-destructive-splitcmd.sh 1 1
 
 # $1 label  $2 mutant file  $3 the verdict that mutant gives the arm's command (a|B|W). A
 # pairing that expects the verdict the arm itself asserts fails on its own: it could not show
@@ -7507,6 +7513,41 @@ wrap_pair "WRAPPAIR-qval-fp: with the operand walk and the conservative route bo
 wrap_arm "WRAPDIV-qval-sep: FOO='a;b' bash <unlisted>.sh allowed (a separator inside the quoted value splits the segment)" \
   "FOO='a;b' bash ${WRAP_NA}" a a
 wrap_pair "WRAPPAIR-qval-sep: the scan mutant reads past the split piece and refuses, so WRAPDIV-qval-sep can fail" block-destructive-pscan.sh B
+
+# --- Stage 7 F-08: an attached split string carrying no command word, then the command -------
+# env's split string is its own argv prepended to what follows, so when the attached value is
+# empty, a flag, or an assignment, env's command is the token that FOLLOWS and the walk now goes
+# on to adjudicate it, where before it stepped onto the split token and read nothing further.
+# These run the splitcmd reverse mutant (stop on any attached split value, the pre-helper walk)
+# as the second limb, so each is red before the fix.
+WRAP_MUTANT="block-destructive-splitcmd.sh"
+WRAP_SN_TABLE='s|--s=|shortest prefix of --split-string
+sp|--sp=|a prefix of --split-string
+split|--split=|a prefix of --split-string
+full|--split-string=|the full long spelling'
+while IFS='|' read -r wrap_sntag wrap_snp wrap_snd; do
+  [ -n "$wrap_sntag" ] || continue
+  wrap_arm "WRAPOPT-sn-empty-${wrap_sntag}: env ${wrap_snp} bash <unlisted>.sh blocks (${wrap_snd}, empty value)" \
+    "env ${wrap_snp} bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+  wrap_arm "WRAPOPT-sn-opt-${wrap_sntag}: env ${wrap_snp}-i bash <unlisted>.sh blocks (value is a flag)" \
+    "env ${wrap_snp}-i bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+  wrap_arm "WRAPOPT-sn-assign-${wrap_sntag}: env ${wrap_snp}FOO=1 bash <unlisted>.sh blocks (value is an assignment)" \
+    "env ${wrap_snp}FOO=1 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+done <<<"$WRAP_SN_TABLE"
+wrap_arm "WRAPOPT-sn-short-opt: env -S-i bash <unlisted>.sh blocks (the short form, a flag value)" \
+  "env -S-i bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+wrap_arm "WRAPOPT-sn-short-assign: env -SFOO=1 bash <unlisted>.sh blocks (the short form, an assignment value)" \
+  "env -SFOO=1 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
+# an arg-taking option in the split value consumes the token that follows, so the real command,
+# not the consumed token, is adjudicated: env --s=-u <allowlisted>.sh <unlisted>.sh records the
+# unlisted script (env runs it; the allowlisted path was -u's argument, never the command word)
+wrap_arm "WRAPOPT-sn-optarg: env --s=-u <allowlisted>.sh <unlisted>.sh records the unlisted script (the -u in the split value consumes the allowlisted path)" \
+  "env --s=-u ${WRAP_OK} ${WRAP_NA}" W a exec
+# near miss: the command that follows the empty split value is on the allowlist
+wrap_arm "WRAPOPT-sn-near: env --s= bash <allowlisted>.sh allowed (the following command is allowlisted)" \
+  "env --s= bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-sn-near: the allowlist-blind mutant refuses the allowlisted script the walk goes on to, so WRAPOPT-sn-near can fail" block-destructive-pallow.sh B
+WRAP_MUTANT="block-destructive-mut.sh"
 
 /bin/rm -rf "$WRAP_ROOT"
 

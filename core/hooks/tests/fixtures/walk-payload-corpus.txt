@@ -1119,3 +1119,19 @@ EN85|block-destructive|open-encl|-|X|a|echo $(X=$'\')' bash @D@/na.sh)
 EN86|block-destructive|open-encl|-|X|a|echo "$(printf "it's" $(bash @D@/na.sh))"
 EN87|block-destructive|open-encl|-|X|a|bash -c $(echo -n) 'true; (bash @D@/na.sh)'
 EN88|block-destructive|open-encl|-|X|a|echo $(X=${Y:-)} bash @D@/na.sh)
+# Stage 7 F-08 (sub-task #8177, #7020 iteration 2): an attached split string that carries no
+# command word, then the command. GNU env prepends the split words to what follows and runs the
+# command that follows, so the walk now continues past the split token and adjudicates it.
+# Recorded at the fixed verdict; against the pre-fix hook of slice 3 (7301d635) these move toward
+# refusal, not allow. SN09 shows an arg-taking option in the value consuming the following token.
+# Ground truth ? — the reference host has no GNU env, so the split-string semantics are not run.
+SN01|block-destructive|wrap-split-nocmd|-|?|B|env --s= bash @D@/na.sh
+SN02|block-destructive|wrap-split-nocmd|-|?|B|env --s=-i bash @D@/na.sh
+SN03|block-destructive|wrap-split-nocmd|-|?|B|env --s=FOO=1 bash @D@/na.sh
+SN04|block-destructive|wrap-split-nocmd|-|?|B|env --split-string= bash @D@/na.sh
+SN05|block-destructive|wrap-split-nocmd|-|?|B|env --split-string=-i bash @D@/na.sh
+SN06|block-destructive|wrap-split-nocmd|-|?|B|env --sp=FOO=1 bash @D@/na.sh
+SN07|block-destructive|wrap-split-nocmd|-|?|B|env -S-i bash @D@/na.sh
+SN08|block-destructive|wrap-split-nocmd|-|?|B|env -SFOO=1 bash @D@/na.sh
+SN09|block-destructive|wrap-split-nocmd|-|?|W|env --s=-u @D@/ok.sh @D@/na.sh
+SN10|block-destructive|wrap-split-nocmd|-|?|a|env --s= bash @D@/ok.sh
