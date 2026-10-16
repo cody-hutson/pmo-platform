@@ -139,3 +139,162 @@ depersonalization_line_verdict() {
   printf 'BLOCKED\n'
   return 0
 }
+
+# ---------------------------------------------------------------------------------
+# FAIL-CLOSED EVALUATION — the gate's three reads of the change under review.
+#
+# The gate reads the change three times before any per-line verdict: it lists the
+# changed files, extracts each file's added lines, and scans those lines against the
+# literal set. Each read can end in one of three states, and only two of them are
+# answers:
+#
+#   found something       — the read ran and returned content
+#   found nothing         — the read ran and returned nothing (git exit 0 with empty
+#                           output; grep exit 1)
+#   could not evaluate    — the read did not run to completion (any other non-zero
+#                           exit, a missing input, a missing revision)
+#
+# The inline form these replace swallowed every non-zero exit, so "could not
+# evaluate" collapsed into "found nothing" and the gate passed: a missing base commit
+# read as "no changed files", and a grep exit 2 read as "no match". A control that
+# could not run must not look like one that ran clean, so each function below reports
+# the third state as its own verdict, UNEVALUABLE, and the gate turns it into a red
+# run.
+#
+# The same conventions as the functions above: explicit parameters, no caller
+# globals, one verdict token on stdout, return 0. Two more, specific to these three:
+#   - The repository is a PARAMETER, read with `git -C`, so the caller's working
+#     directory is not ambient input either.
+#   - No pipelines and no `cmd; rc=$?` after a bare command. Each status is read in
+#     an `if` condition, so the verdict is the same under the gate's
+#     `set -euo pipefail` and under the fixture suite's `set -uo pipefail`.
+#     Hiding a status behind a pipe or a process substitution is how the defect
+#     shipped, so none is used here.
+#
+# On every non-success path the out-file is truncated, so a caller that ignores the
+# verdict reads nothing rather than a stale partial result.
+#
+# KNOWN RESIDUAL, stated rather than implied: the per-line greps in
+# adr_deciders_carveout_suppresses and depersonalization_line_verdict above still
+# read a grep exit 2 as "no match". For a malformed pattern that is covered by
+# construction. literal_scan_verdict runs first over the same pattern file, and
+# the not-carved file's literal is byte-identical to a line in it, so a malformed
+# literal fails the scan before either per-line grep runs. A non-deterministic grep
+# failure between the scan and the per-line verdict is not covered.
+# ---------------------------------------------------------------------------------
+
+# changed_files_verdict <repo-dir> <base-sha> <head-sha> <out-file>
+#   LISTED       — git listed the changed files into <out-file>; empty is a valid
+#                  answer (no files changed)
+#   UNEVALUABLE  — base or head missing, or git exited non-zero; <out-file> empty
+changed_files_verdict() {
+  _cf_repo="${1?changed_files_verdict: repo dir required}"
+  _cf_base="${2-}"
+  _cf_head="${3-}"
+  _cf_out="${4?changed_files_verdict: out-file required}"
+
+  # An empty revision is not a missing commit to git: `A...` and `...B` default the
+  # missing side to HEAD and diff successfully against the wrong range.
+  if [ -z "$_cf_base" ] || [ -z "$_cf_head" ]; then
+    : > "$_cf_out"
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if git -C "$_cf_repo" diff --name-only "$_cf_base"..."$_cf_head" > "$_cf_out"; then
+    printf 'LISTED\n'
+  else
+    : > "$_cf_out"
+    printf 'UNEVALUABLE\n'
+  fi
+  return 0
+}
+
+# added_lines_verdict <repo-dir> <base-sha> <head-sha> <path> <out-file>
+#   LISTED       — <out-file> holds the lines <path> ADDED since the merge base, one
+#                  per line as HEAD-LINENO:CONTENT; empty is a valid answer
+#   UNEVALUABLE  — base or head missing, the diff failed, or the extraction failed;
+#                  <out-file> empty
+#
+#   The diff and the extraction are two commands with a file between them, not a
+#   pipeline, so a failed diff cannot hide behind a successful awk. The awk program
+#   is the gate's, moved here unchanged.
+added_lines_verdict() {
+  _al_repo="${1?added_lines_verdict: repo dir required}"
+  _al_base="${2-}"
+  _al_head="${3-}"
+  _al_path="${4?added_lines_verdict: path required}"
+  _al_out="${5?added_lines_verdict: out-file required}"
+
+  : > "$_al_out"
+  if [ -z "$_al_base" ] || [ -z "$_al_head" ]; then
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if ! _al_diff="$(mktemp)"; then
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if ! git -C "$_al_repo" diff --unified=0 "$_al_base"..."$_al_head" -- "$_al_path" > "$_al_diff"; then
+    rm -f "$_al_diff"
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if ! awk '
+      /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
+      /^\+\+\+/ { next }
+      /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
+      /^-/ { next }
+    ' "$_al_diff" > "$_al_out"; then
+    rm -f "$_al_diff"
+    : > "$_al_out"
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  rm -f "$_al_diff"
+  printf 'LISTED\n'
+  return 0
+}
+
+# literal_scan_verdict <added-lines-file> <pattern-file> <out-file>
+#   HITS         — grep exit 0; <out-file> holds the matching LINENO:CONTENT lines
+#   NONE         — grep exit 1, or an EMPTY added-lines file (nothing was added)
+#   UNEVALUABLE  — any other grep exit (2: a malformed or unreadable pattern), a
+#                  MISSING added-lines file, or a missing or EMPTY pattern file;
+#                  <out-file> empty
+#
+#   An empty pattern file is UNEVALUABLE, not NONE. The gate settles the empty
+#   literal set before it scans, so reaching the scan with one is an upstream
+#   defect. And grep -f against an empty file is not uniform across
+#   implementations, which is the hazard the carve-out predicate above guards
+#   against with its own -s test.
+#
+#   The added lines are read from a FILE argument, not a here-string or a pipe, so
+#   the empty-haystack hazard documented above does not arise.
+literal_scan_verdict() {
+  _ls_added="${1?literal_scan_verdict: added-lines file required}"
+  _ls_patterns="${2?literal_scan_verdict: pattern file required}"
+  _ls_out="${3?literal_scan_verdict: out-file required}"
+
+  : > "$_ls_out"
+  if [ ! -f "$_ls_added" ] || [ ! -s "$_ls_patterns" ]; then
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if [ ! -s "$_ls_added" ]; then
+    printf 'NONE\n'
+    return 0
+  fi
+  if grep -E -f "$_ls_patterns" "$_ls_added" > "$_ls_out"; then
+    printf 'HITS\n'
+    return 0
+  else
+    _ls_rc=$?
+  fi
+  : > "$_ls_out"
+  if [ "$_ls_rc" -eq 1 ]; then
+    printf 'NONE\n'
+  else
+    printf 'UNEVALUABLE\n'
+  fi
+  return 0
+}
