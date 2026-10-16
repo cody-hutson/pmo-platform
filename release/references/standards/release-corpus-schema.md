@@ -114,10 +114,10 @@ For a `versioned` row the two keys are **byte-identical**, so a reader that deri
 
 | Limb | Class `version-less` |
 |---|---|
-| INDEX row · DIGEST entry · notes file · CHANGELOG section · `#### ` Deployment-Log block · note-content lint | **ENUMERATED** — asserted identically for both classes |
-| signed tag · published GitHub Release · published-body drift · `.version` stamp equality | **DECLARED EXCLUDED** — counted and reported, never silently skipped |
+| INDEX row · DIGEST entry · notes file · `#### ` Deployment-Log block · note-content lint | **ENUMERATED** — asserted identically for both classes |
+| signed tag · published GitHub Release · published-body drift · `.version` stamp equality · CHANGELOG section | **DECLARED EXCLUDED** — counted and reported, never silently skipped |
 
-The four exclusions are structural, not conveniences. The determination that produces a version-less release assigns no version, and therefore cuts no signed tag, publishes no GitHub Release, and stamps no `.version`. A check asserting those on such a row asserts the existence of something that determination forbids — the finding would be accurate about the corpus and wrong about the contract.
+The five exclusions are structural, not conveniences. The determination that produces a version-less release assigns no version, and therefore cuts no signed tag, publishes no GitHub Release, stamps no `.version`, and writes no CHANGELOG section — the CHANGELOG is keyed on `## [vX.Y]`, and the close-out projector deliberately writes nothing for a version-less release. A check asserting those on such a row asserts the existence of something that determination forbids — the finding would be accurate about the corpus and wrong about the contract. Slug-keyed CHANGELOG sections written for early version-less releases, before the projector gained that behavior, remain as history; the exclusion neither demands nor forbids them.
 
 **An excluded class is reported, never absent.** Every enumerator over this table emits its denominator alongside its findings, in the form *enumerated / declared-excluded / not-in-scope / total*, such that the parts sum to the total. This is what makes a zero-finding result readable: without the denominator, "no findings on version-less rows" and "no version-less row was examined" produce identical output, and a reader has no way to tell a clean class from an unexamined one. A row that fell into no bucket at all shows up as arithmetic that does not balance, rather than as an absence nobody notices.
 

@@ -23,9 +23,9 @@ Skills exposed to other modules and to consumers:
 
 Canary (not part of Public API, source-only): `pmo-skill-refiner-selftest-canary`.
 
-**Public references:** `release/RELEASE_PROTOCOL.md`, `release/references/pipeline/stage-*.md` (13 stage shards), `release/references/how-to/hub-spoke-bridge.md`, `release/references/standards/*.md`, `release/references/protocols/*.md`, `release/references/specs/*.md`, `release/schemas/*`, `release/tools/*` (release engineering tools), `release/ADRs/*`.
+**Public references:** `release/governance/RELEASE_PROTOCOL.md`, `release/governance/release-process.md`, `release/references/pipeline/stage-*.md` (13 stage shards), `release/references/how-to/hub-spoke-bridge.md`, `release/references/standards/*.md`, `release/references/protocols/*.md`, `release/references/specs/*.md`, `release/tools/*` (release engineering tools), `release/ADRs/*`.
 
-**Public templates:** release plan template (under `release/references/templates/`), design review checklist, decision briefing template.
+**Public templates:** release plan template (`release/skills/release-planner/references/release-plan-template.md`), design review checklist, decision briefing template.
 
 ## Internal API
 
@@ -33,7 +33,7 @@ Files in the Release module that are NOT part of the public API and SHOULD NOT b
 
 - `release/references/_internal/` — module-private working refs (when added).
 - Per-skill `references/` subtrees — skill-internal.
-- `release/tools/_internal/*.sh` — engineering-tool helpers not invocable from outside the module.
+- `release/tools/_internal/*.sh` — engineering-tool helpers not invocable from outside the module (when added).
 
 Initial: empty internal-API list. Cross-module audit may surface additions over time.
 
@@ -49,7 +49,7 @@ Permitted cross-module references:
 - `core/disciplines/discovery-discipline.md`
 - `core/disciplines/review-discipline-principles.md`
 - `core/hooks/*`
-- `core/governance/CLAUDE.md`
+- `core/CLAUDE.md.template`
 - `core/schemas/*`
 - `core/deploy/deploy.sh` + `core/deploy/tools/*`
 
@@ -77,7 +77,7 @@ Re-verify at any SHA by running [`../core/deploy/tools/cross-module-audit.sh`](.
 
 ## Module contents
 
-This module hosts the release skills — the canonical roster is the `RELEASE_SKILLS` array in [`core/deploy/deploy.sh`](../core/deploy/deploy.sh), Check 5-asserted against the on-disk `release/skills/` directories — plus the pipeline-stage shards under `release/references/pipeline/`, the hub-spoke bridge how-to, the release-relevant standards and protocols, the release schemas, the release-governance protocol (`release/governance/RELEASE_PROTOCOL.md`), the release tools, and the release-scope ADRs.
+This module hosts the release skills — the canonical roster is the `RELEASE_SKILLS` array in [`core/deploy/deploy.sh`](../core/deploy/deploy.sh), Check 5-asserted against the on-disk `release/skills/` directories — plus the pipeline-stage shards under `release/references/pipeline/`, the hub-spoke bridge how-to, the release-relevant standards and protocols, the release-governance protocol (`release/governance/RELEASE_PROTOCOL.md`), the release tools, and the release-scope ADRs.
 
 The centralized structural map that depicts this module's place in the platform layout is the design artifact [`../core/diagrams/architecture-platform-structure.md`](../core/diagrams/architecture-platform-structure.md).
 
