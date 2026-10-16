@@ -40,6 +40,7 @@ release/tools/check-ac-binding.py
 release/tools/check-adr-durability.py
 release/tools/check-adr-numbers.py
 release/tools/check-analysis-staleness.py
+release/tools/check-dark-branch.py
 release/tools/check-line-range-overlap.py
 release/tools/check-release-links.py
 release/tools/check-selftest-coverage.py
