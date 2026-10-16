@@ -1025,3 +1025,97 @@ GL70|block-destructive|wrap-abbrev-exec|-|?|W|sudo --us bash @D@/na.sh
 GL80|block-destructive|wrap-abbrev-declared|-|?|a|env --s=bash @D@/na.sh
 GL90|block-destructive|wrap-abbrev-ambig|-|?|a|sudo --c x bash @D@/na.sh
 GL91|block-destructive|wrap-abbrev-ambig|-|?|a|xargs --max 1 bash @D@/na.sh
+
+# --- seed 7: card #7028 — enclosure positions adjudicated by a second view (69 rows) ---
+# A substitution, backticks, a process substitution or a parenthesised group is not a
+# separator, so the verb inside one never started a segment and was not adjudicated. The rule
+# now opens one command position after every `(` and every backtick and runs the same walk
+# there. A shell interpreter or `source` finding at such a position follows a third rollout
+# family, DESTRUCTIVE_022_ENCL_PHASE, which ships at `warn`, so those rows record W, not B; a
+# direct execution or a non-shell interpreter there is recorded at its own arm's phase. Ids
+# are EN plus a number. Ground truth is the Stage 5 design's and the independent review's
+# real-shell measurement (bash 3.2 and zsh 5.9, marker scripts) for each shape class those
+# records state a result for, and `?` where neither does; no row was run here, because every
+# Bash call this change's author made went through the hook before this change. Groups: encl
+# is what the change closes, each row allowed before it and recorded now; encl-assign is a
+# substitution in an assignment value, recorded before through the direct-execution arm and
+# now also by the arm that owns the interpreter, so its verdict letter does not move;
+# encl-carrier is a carrier's quoted-argument exemption crossing an enclosure, one of the two
+# adjacent fail-opens; encl-exec is a direct execution or a non-shell interpreter at an
+# enclosure position; encl-ctl is refused by the first view before and after, the controls
+# that a non-carrier head or a basename accident already reach; encl-near must stay allowed;
+# encl-overmatch is text nothing executes, declared, which records now and is refused once the
+# phase graduates; open-encl is an execution the second view does not reach, declared open —
+# a `case` arm, `coproc`, a brace group, backticks nested through escaped backticks, quoting
+# the cut does not model, an apostrophe in a nested string, and a carrier at the head of an
+# unquoted substitution. Commands needing a newline (the here-document shapes) are suite arms
+# only.
+EN01|block-destructive|encl|-|X|W|echo $(bash @D@/na.sh)
+EN02|block-destructive|encl|-|X|W|echo "$(bash @D@/na.sh)"
+EN03|block-destructive|encl|-|X|W|echo $(source @D@/na.sh)
+EN04|block-destructive|encl|-|X|W|echo $(. @D@/na.sh)
+EN07|block-destructive|encl|-|X|W|OUT="$(bash na.sh --flag)"
+EN09|block-destructive|encl|-|X|W|echo `bash @D@/na.sh`
+EN10|block-destructive|encl|-|X|W|echo "`bash @D@/na.sh`"
+EN11|block-destructive|encl|-|X|W|cat <(bash @D@/na.sh)
+EN12|block-destructive|encl|-|X|W|echo hi > >(bash @D@/na.sh)
+EN13|block-destructive|encl|-|X|W|(bash @D@/na.sh)
+EN14|block-destructive|encl|-|X|W|time (bash @D@/na.sh arg)
+EN15|block-destructive|encl|-|?|W|(xargs bash @D@/na.sh < /dev/null)
+EN16|block-destructive|encl|-|?|W|echo x | (xargs bash)
+EN17|block-destructive|encl|-|?|W|X="$(bash @D@/na.sh)-suffix"
+EN18|block-destructive|encl|-|?|W|echo "[$(bash @D@/na.sh)]"
+EN19|block-destructive|encl|-|?|W|echo ${X:-$(bash @D@/na.sh)}
+EN20|block-destructive|encl|-|?|W|echo $(bash $(echo -n) @D@/na.sh)
+EN21|block-destructive|encl|-|?|W|echo $(bash "$(pwd)/na.sh")
+EN22|block-destructive|encl|-|?|W|(X=$(date) bash @D@/na.sh)
+EN23|block-destructive|encl|-|?|W|echo $(env X=\) bash @D@/na.sh)
+EN24|block-destructive|encl|-|X|W|$(bash @D@/na.sh)
+EN26|block-destructive|encl|-|?|W|(source @D@/na.sh)
+EN05|block-destructive|encl-assign|-|X|W|X=$(bash @D@/na.sh)
+EN06|block-destructive|encl-assign|-|X|W|X="$(bash @D@/na.sh)"
+EN08|block-destructive|encl-assign|-|X|W|for i in 1 2; do X="$(bash "@D@/na.sh" arg)"; done
+EN30|block-destructive|encl-carrier|-|X|W|echo $(bash -c 'cd /tmp; bash @D@/na.sh')
+EN31|block-destructive|encl-carrier|-|X|W|echo `bash -c 'cd /tmp; bash @D@/na.sh'`
+EN33|block-destructive|encl-carrier|-|X|W|printf '%s' $(bash -c 'true; bash @D@/na.sh')
+EN34|block-destructive|encl-carrier|-|X|W|echo $(bash -c "cd /tmp; bash @D@/na.sh")
+EN40|block-destructive|encl-exec|-|X|W|echo $(@D@/na.sh)
+EN41|block-destructive|encl-exec|-|X|W|echo $(python3 @D@/na.py)
+EN42|block-destructive|encl-exec|-|?|W|echo `@D@/na.sh`
+EN25|block-destructive|encl-ctl|-|?|B|$(/bin/bash @D@/na.sh)
+EN32|block-destructive|encl-ctl|-|?|B|cat <(bash -c 'cd /tmp; bash @D@/na.sh')
+EN50|block-destructive|encl-near|-|?|a|echo "$(date)"
+EN51|block-destructive|encl-near|-|?|a|echo $(bash @D@/ok.sh --check)
+EN52|block-destructive|encl-near|-|?|a|X=$(bash --version)
+EN53|block-destructive|encl-near|-|?|a|echo $(bash -n @D@/na.sh)
+EN54|block-destructive|encl-near|-|?|a|X=$(wc -l < @D@/na.sh)
+EN55|block-destructive|encl-near|-|?|a|diff <(sort @D@/na.sh) <(sort @D@/ok.sh)
+EN56|block-destructive|encl-near|-|?|a|echo $(bash --version) @D@/na.sh
+EN57|block-destructive|encl-near|-|-|a|echo "\$(bash @D@/na.sh)"
+EN58|block-destructive|encl-near|-|?|a|gh issue comment 1 --body 'see (bash @D@/na.sh) for details; ok'
+EN59|block-destructive|encl-near|-|?|a|echo "note (bash @D@/na.sh) end"
+EN60|block-destructive|encl-near|-|?|a|git commit -m "docs: run \`bash @D@/na.sh --flag\` (see notes)"
+EN61|block-destructive|encl-near|-|?|a|echo \(bash @D@/na.sh\)
+EN62|block-destructive|encl-near|-|?|a|find . \( -name '*.sh' -o -name x \) -newer @D@/na.sh
+EN63|block-destructive|encl-near|-|?|a|echo "$(date)" 'x; bash @D@/na.sh'
+EN64|block-destructive|encl-near|-|?|a|echo $(bash @D@/ok.sh)
+EN65|block-destructive|encl-near|-|?|a|cat <(bash @D@/ok.sh)
+EN66|block-destructive|encl-near|-|?|a|(bash @D@/ok.sh)
+EN67|block-destructive|encl-near|-|?|a|echo $(source @D@/ok.sh)
+EN70|block-destructive|encl-overmatch|-|-|W|git commit -m 'fix (bash @D@/na.sh was failing)'
+EN71|block-destructive|encl-overmatch|-|-|W|echo `date` bash @D@/na.sh
+EN72|block-destructive|encl-overmatch|-|-|W|echo $(date) 'x; bash @D@/na.sh'
+EN73|block-destructive|encl-overmatch|-|-|W|# setup (bash @D@/na.sh)
+EN74|block-destructive|encl-overmatch|-|-|W|cmd=(bash @D@/na.sh arg)
+EN75|block-destructive|encl-overmatch|-|-|W|git commit -m "explain \$(bash @D@/na.sh) literally"
+EN76|block-destructive|encl-overmatch|-|-|W|grep -n '(bash @D@/na.sh)' f
+EN77|block-destructive|encl-overmatch|-|-|W|git commit -m 'see `x`. Then @D@/y'
+EN80|block-destructive|open-encl|-|X|a|case x in x) bash @D@/na.sh ;; esac
+EN81|block-destructive|open-encl|-|X|a|echo $(case x in x) bash @D@/na.sh;; esac)
+EN82|block-destructive|open-encl|-|X|a|echo `echo \`bash @D@/na.sh\` `
+EN83|block-destructive|open-encl|-|X|a|{ bash @D@/na.sh; }
+EN84|block-destructive|open-encl|-|X|a|coproc bash @D@/na.sh
+EN85|block-destructive|open-encl|-|X|a|echo $(X=$'\')' bash @D@/na.sh)
+EN86|block-destructive|open-encl|-|X|a|echo "$(printf "it's" $(bash @D@/na.sh))"
+EN87|block-destructive|open-encl|-|X|a|bash -c $(echo -n) 'true; (bash @D@/na.sh)'
+EN88|block-destructive|open-encl|-|X|a|echo $(X=${Y:-)} bash @D@/na.sh)

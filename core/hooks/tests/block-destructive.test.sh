@@ -1508,9 +1508,21 @@ exec_notflag_case "T-EXEC-5 must-not-flag: allowlisted tool by direct execution 
 # fragments whose head token can contain `/` and end `.sh`. The arm is safe only
 # because it sits INSIDE the quoted-fragment suppression and is evaluated only
 # for segments at true command position. Hoist it above that block and this case
-# goes red -- which is the point of having it.
-exec_notflag_case "T-EXEC-6 must-not-flag: markdown table row with a backticked .sh path in a carrier argument" \
-  'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"'
+# goes red -- which is the point of having it (AC-ENCL-TEXEC6-pair shows it: with
+# the suppression switched off, this payload is recorded).
+#
+# RE-POINTED WHEN ENCLOSURE POSITIONS BECAME ADJUDICATED. The payload used to put
+# the code span's raw backticks inside the DOUBLE-quoted argument, where the shell
+# runs them as a command substitution: both real shells execute `./tmp/x.sh` for
+# that spelling, so "must not flag" asserted an allow on a real execution, and the
+# enclosure view now records it (T-EXEC-6b below). The table row is now
+# single-quoted, where the backticks are text and nothing runs, and the arm still
+# guards the suppression, as the paragraph above says.
+exec_notflag_case "T-EXEC-6 must-not-flag: markdown table row with a backticked .sh path in a carrier argument (single-quoted, so nothing runs)" \
+  "gh issue comment 1 --body '| step | \`./tmp/x.sh\` | run it |'"
+
+exec_warn_case "T-EXEC-6b must-flag: the same row double-quoted, where the shell runs the code span, is recorded from the position its backtick opens" \
+  'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"' 'not-allowlisted'
 
 # RETARGETED BY #6167, AND THE RETARGET IS THE POINT RATHER THAN A REPAIR. This arm
 # read `/usr/bin/python3 script.py` and asserted the EXEC arm does not flag it. That
@@ -2734,9 +2746,10 @@ test_case "AC-FP-2v control: parameter expansion carrying a substitution blocks"
   "$(bash_payload 'echo "${x:-$(cd /x; bash /tmp/evil.sh --f)}"')" \
   2 "BLOCK-DESTRUCTIVE-022"
 
-# (w) process substitution is valid only OUTSIDE quotes, so it lands at segment
-#     start state 0 and is adjudicated for a different reason. Pinning it anyway:
-#     the reason must stay true if the state model changes.
+# (w) process substitution. The `;` inside it starts a segment at state 0, and that
+#     is why this arm blocked before the enclosure view existed: the substitution
+#     itself opened no command position then. Pinning it anyway: the reason must
+#     stay true if the state model changes.
 test_case "AC-FP-2w control: process substitution blocks" \
   "$(bash_payload 'echo <(cd /x; bash /tmp/evil.sh --f)')" \
   2 "BLOCK-DESTRUCTIVE-022"
@@ -5116,8 +5129,8 @@ test_case "HINT-05 [ctl]: the ABSOLUTE spelling of that same script is still ref
 # against the PRE-change hook, and it would keep passing if the widening were
 # reverted. The drain delta is what makes evaluation a necessary condition of green.
 #
-# WHY THE `arm` FIELD IS ASSERTED ON EVERY ROW. Two phase-gated arms now write to
-# one drain. Without the field their graduations are unapportionable — which is the
+# WHY THE `arm` FIELD IS ASSERTED ON EVERY ROW. Three phase-gated families now write
+# to one drain. Without the field their graduations are unapportionable — which is the
 # defect this card's own body reported against the 1,067 rows already collected.
 
 echo ""
@@ -7788,6 +7801,590 @@ qdash_mut_arm "FWALK-QDASH-M3c: the top-rule mutant ALLOWS python3 '-Wx.py' (no 
   block-destructive-wide.sh "python3 '-Wx.py'" a
 
 /bin/rm -rf "$QDASH_ROOT"
+
+echo ""
+echo "BLOCK-022 enclosure positions: a second view of the segments (AC-ENCL-*)"
+echo "---"
+# SUBJECT. The rule splits a command on `;`, `&`, `|` and newline and walks each segment's
+# command position. An enclosure — `$( )`, backticks, `<( )`, `>( )`, `( )` — is not a
+# separator, so the verb inside one never starts a segment and was never adjudicated: a shell
+# interpreter or `source` inside one ran with nothing refused or recorded. The hook now runs a
+# second view of the same segments that opens one command position after every `(` and every
+# backtick (ENCLOSURE-VIEW in the hook). A shell or `source` finding there follows a third
+# rollout family, DESTRUCTIVE_022_ENCL_PHASE, which ships at `warn`: recorded, not refused.
+# These arms grade the shapes it closes, the two adjacent fail-opens closed with it, the near
+# misses it must leave alone, and the limits it declares.
+#
+# HERMETIC, ON THE QDASH BLOCK'S PATTERN AND FOR ITS REASON: this block's own root, an
+# allowlist naming one shell fixture, its own .mode, the scope variables unset for every run,
+# and every copy beside the hook copy. A verdict is read as the corpus reader reads one: exit
+# 2 is B, exit 0 with a new would-fire row in this fixture's drain is W, exit 0 with none is a.
+#
+# THREE COPIES GRADE EVERY SHAPE. The shipped copy, at the shipped phase (`warn`), must
+# RECORD a shape (W, and a row carrying the arm and `"pos":"enclosure"`). The FORCED copy —
+# the same hook with only DESTRUCTIVE_022_ENCL_PHASE set to `enforce` — must REFUSE it: that
+# is the refusal the rollout's graduation would turn on, and AC-2 asks for it. The REVERSE
+# mutant — the view's marked block, the pre-pass's ENCL-HDHEAD block and the three openers on
+# the pre-pass's M-ENCL-SCAN line removed — is the hook before this change, so its limb of a
+# shape arm is that arm's red-before evidence in the same run, and its limb of a pin is the
+# mutant that fails the pin.
+#
+# ARM CLASSES, so the red-before obligation can be read off the label. AC-ENCL-01 to -16 and
+# -TEXEC6b are the shapes: red before this change. An -N arm is a near miss that must stay
+# allowed and a -RESIDUAL arm pins a declared limit; both are green before by design, and each
+# is followed by a pairing arm (-pair) that runs its own command through a mutant of the hook
+# and shows the verdict it asserts is able to fail. -SCOPE, the -M*a shape arms, the -P* phase
+# arms and the mutant payload arms read mutation sites or behaviour this change adds, and are
+# not red-before evidence.
+#
+# NO PIPE INTO A SHORT-CIRCUITING READER ANYWHERE IN THIS BLOCK (the SIGPIPE-idiom gate): the
+# diff shape is counted by one awk pass that reads to the end, and stderr is matched from a
+# here-string. No payload here carries an unclosed run of openers: those are slow by design
+# (the readiness text states the cost), and the budget pins run on copies with the budget
+# lowered instead.
+ENCL_ROOT="$(/usr/bin/mktemp -d)"
+ENCL_CLAUDE="${ENCL_ROOT}/.claude"
+ENCL_HOOKS="${ENCL_CLAUDE}/hooks"
+/bin/mkdir -p "${ENCL_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${ENCL_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${ENCL_HOOKS}/lib/" 2>/dev/null || true
+ENCL_OK='/tmp/pmo-encl-ok.sh'
+ENCL_NA='/tmp/pmo-encl-na.sh'
+ENCL_NAPY='/tmp/pmo-encl-na.py'
+/usr/bin/printf '%s\n' "$ENCL_OK" > "${ENCL_CLAUDE}/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${ENCL_HOOKS}/.mode"
+/bin/cp "$HOOK" "${ENCL_HOOKS}/block-destructive.sh"
+# The phase copies: only the enclosure family's phase constant differs.
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="enforce"   # shadow | warn | enforce/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-forced.sh"
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="shadow"   # shadow | warn | enforce/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-shadow.sh"
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="bogus"   # shadow | warn | enforce/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-bogus.sh"
+# The reverse mutant: the hook before this change.
+/usr/bin/sed \
+  -e '/# >>> ENCLOSURE-VIEW-BEGIN/,/# >>> ENCLOSURE-VIEW-END/d' \
+  -e '/# >>> ENCL-HDHEAD-BEGIN/,/# >>> ENCL-HDHEAD-END/d' \
+  -e '/# M-ENCL-SCAN/s/ "\$_lp" "\$_rp" "\$script_qbt"//' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-rev.sh"
+# The design's five component mutants, one marked line or block each.
+/usr/bin/sed '/# M-ENCL-RESUPP/s/) : ;;/) continue ;;/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m1.sh"
+/usr/bin/sed '/# >>> ENCL-HDHEAD-BEGIN/,/# >>> ENCL-HDHEAD-END/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m2.sh"
+/usr/bin/sed '/# M-ENCL-TAIL/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m3.sh"
+/usr/bin/sed '/# M-ENCL-CUT/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m4.sh"
+/usr/bin/sed '/# M-ENCL-ESC/s/-eq 1 \]/-eq 9 ]/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-m5.sh"
+# Pairing mutants, each a design the view could have had or a step it could have missed:
+#   deny     every position the view opens and adjudicates is refused outright
+#   openall  the escape rule off as well, so an escaped opener opens a position, and refused
+#   supp     a segment interior to a carrier's quote is not suppressed in the second view
+#   route    the shell-arm router sends a first-view finding to the enclosure phase too
+#   split    the first view reads `)` as a separator
+#   noex     the here-document pre-pass excises nothing
+#   suppall  the first view's carrier suppression is switched off
+#   smallp   the position ceiling lowered to 4
+#   smallb   the remainder budget lowered to 64 bytes
+/usr/bin/sed 's@script_rowpos="enclosure"   # M-ENCL-GATE@block "BLOCK-DESTRUCTIVE-022" "ENCL gate deny mutant" "test only"@' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-deny.sh"
+/usr/bin/sed \
+  -e 's@script_rowpos="enclosure"   # M-ENCL-GATE@block "BLOCK-DESTRUCTIVE-022" "ENCL gate deny mutant" "test only"@' \
+  -e '/# M-ENCL-ESC/s/-eq 1 \]/-eq 9 ]/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-openall.sh"
+/usr/bin/sed '/# M-ENCL-SUPP/s/if \[ "\$script_supp" -eq 1 \]; then/if [ "$script_supp" -eq 1 ] \&\& [ "$script_pass" -eq 1 ]; then/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-supp.sh"
+/usr/bin/sed '/# M-ENCL-ROUTE/s/-ne 2 \]/-eq 9 ]/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-route.sh"
+/usr/bin/sed 's@script_segments//|/@script_segments//[|)]/@' "$HOOK" > "${ENCL_HOOKS}/block-destructive-split.sh"
+/usr/bin/sed 's/^        gh|printf|echo|jq)$/        gh-never)/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-noex.sh"
+/usr/bin/sed 's/^      elif \[ "\$script_carrier" -eq 1 \]; then$/      elif false; then/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-suppall.sh"
+/usr/bin/sed 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-smallp.sh"
+/usr/bin/sed 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-smallb.sh"
+for encl_c in forced shadow bogus rev m1 m2 m3 m4 m5 deny openall supp route split noex suppall smallp smallb; do
+  /bin/chmod +x "${ENCL_HOOKS}/block-destructive-${encl_c}.sh"
+done
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive.sh"
+ENCL_DRAIN="${ENCL_HOOKS}/destructive-warn-log.jsonl"
+
+encl_drain_rows() {
+  if [ -f "$ENCL_DRAIN" ]; then
+    /usr/bin/wc -l < "$ENCL_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+# The difference between the hook copy and one copy, as "<lines removed>/<lines added>".
+encl_diff_shape() { # $1 = copy file in the hermetic hooks dir
+  /usr/bin/diff "${ENCL_HOOKS}/block-destructive.sh" "${ENCL_HOOKS}/$1" \
+    | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }'
+}
+
+ENCL_EXIT=0
+ENCL_ERR=""
+ENCL_V=""
+ENCL_ROWS=""
+ENCL_NROWS=0
+# Run one payload through one copy -> ENCL_V (a|B|W|E<rc>), ENCL_ERR, and ENCL_ROWS, the
+# would-fire rows the call added, one per line (empty when it added none).
+encl_run() { # $1 = copy file in the hermetic hooks dir  $2 = command
+  local tmp before after
+  tmp="$(/usr/bin/mktemp)"
+  ENCL_EXIT=0
+  ENCL_ROWS=""
+  before="$(encl_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$ENCL_ROOT")" \
+      | /bin/bash "${ENCL_HOOKS}/$1" 2>"$tmp" >/dev/null ) || ENCL_EXIT="$?"
+  after="$(encl_drain_rows)"
+  ENCL_NROWS=$(( after - before ))
+  ENCL_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  if [ "$ENCL_NROWS" -gt 0 ]; then
+    ENCL_ROWS="$(/usr/bin/tail -n "$ENCL_NROWS" "$ENCL_DRAIN")"
+  fi
+  case "$ENCL_EXIT" in
+    2) ENCL_V="B" ;;
+    0) if [ "$ENCL_NROWS" -gt 0 ]; then ENCL_V="W"; else ENCL_V="a"; fi ;;
+    *) ENCL_V="E${ENCL_EXIT}" ;;
+  esac
+}
+
+# Does one of the rows the last call added carry this arm AND the enclosure position key?
+encl_row_has() { # $1 = arm value
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      *"\"arm\":\"$1\""*'"pos":"enclosure"'*) return 0 ;;
+    esac
+  done <<<"$ENCL_ROWS"
+  return 1
+}
+
+# A shape arm. $1 label  $2 command  $3 shipped verdict (a|B|W)  $4 forced verdict (a|B|W, or
+# - to skip)  $5 reverse verdict (a|B|W, or - to skip)  $6 (optional) for a wanted W, the arm
+# a row written from an enclosure position must name, on the shipped copy and on the forced
+# one. A wanted B must carry BLOCK-DESTRUCTIVE-022. The reverse copy never writes the position
+# key, so a reverse W (a first-view row) is not mistaken for the view's.
+encl_arm() {
+  local name="$1" cmd="$2" want="$3" wantf="$4" wantr="$5" arm="${6:-}" got gotf gotr ok=1 why=""
+  encl_run block-destructive.sh "$cmd"
+  got="$ENCL_V"
+  if [ "$got" != "$want" ]; then ok=0; why="shipped=${got}"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "W" ] && [ -n "$arm" ] && ! encl_row_has "$arm"; then ok=0; why="shipped row lacks arm ${arm} at pos enclosure"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR"; then ok=0; why="shipped refusal is not -022"; fi
+  gotf="-"
+  if [ "$wantf" != "-" ]; then
+    encl_run block-destructive-forced.sh "$cmd"
+    gotf="$ENCL_V"
+    if [ "$gotf" != "$wantf" ]; then ok=0; why="${why} forced=${gotf}"; fi
+    if [ "$wantf" = "B" ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR"; then ok=0; why="${why} forced refusal is not -022"; fi
+    if [ "$wantf" = "W" ] && [ -n "$arm" ] && ! encl_row_has "$arm"; then ok=0; why="${why} forced row lacks arm ${arm} at pos enclosure"; fi
+  fi
+  gotr="-"
+  if [ "$wantr" != "-" ]; then
+    encl_run block-destructive-rev.sh "$cmd"
+    gotr="$ENCL_V"
+    if [ "$gotr" != "$wantr" ]; then ok=0; why="${why} reverse=${gotr}"; fi
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (shipped %s, forced %s, reverse %s)\n' "$name" "$got" "$gotf" "$gotr"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted shipped=%s forced=%s reverse=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$wantf" "$wantr" "${why# }" "$ENCL_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# A mutant arm. $1 label  $2 copy file  $3 command  $4 verdict wanted from that copy
+# $5 (optional) for a wanted B, a pattern the refusal must carry.
+encl_mut_arm() {
+  local name="$1" mut="$2" cmd="$3" want="$4" detail="${5:-}" ok=1 why=""
+  encl_run "$mut" "$cmd"
+  if [ "$ENCL_V" != "$want" ]; then ok=0; why="copy=${ENCL_V}"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && [ -n "$detail" ] \
+     && ! /usr/bin/grep -qE "$detail" <<<"$ENCL_ERR"; then
+    ok=0; why="refusal lacks /${detail}/"
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (copy %s)\n' "$name" "$ENCL_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted copy=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$why" "$ENCL_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# A copy's shape arm: it differs from the hook by the lines named, and it parses. A copy whose
+# sed matched nothing is a byte copy of the hook, and the arms that read it would be inert.
+encl_shape_arm() { # $1 label  $2 copy file  $3 the shape it must have
+  local got parse=0
+  got="$(encl_diff_shape "$2")"
+  /bin/bash -n "${ENCL_HOOKS}/$2" 2>/dev/null || parse=1
+  if [ "$got" = "$3" ] && [ "$parse" = 0 ]; then
+    /usr/bin/printf 'PASS: %s (removed/added %s, parses)\n' "$1" "$got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  removed/added %s (wanted %s), bash -n exit %s — the arms that read this copy are unusable\n' "$1" "$got" "$3" "$parse"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- the fixture is live before any verdict is read ------------------------------------------
+encl_scope_ok=1
+for encl_c in block-destructive.sh block-destructive-forced.sh block-destructive-rev.sh; do
+  encl_run "$encl_c" 'git push --force origin main'
+  if [ "$ENCL_V" != "B" ] || ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' <<<"$ENCL_ERR"; then encl_scope_ok=0; fi
+done
+if [ "$encl_scope_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-SCOPE the shipped copy, the forced copy and the reverse mutant are in scope and enforcing (unrelated rule -001 fires on each), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-SCOPE a copy is not live (an unrelated rule did not fire on it); the verdicts below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+# The reverse mutant removes exactly the two marked blocks and rewrites the one scan line. The
+# expected removal is counted from the shipped hook's own markers, and a hook that carries none
+# fails here rather than passing with a removal of zero.
+encl_view_lines="$(/usr/bin/awk 'index($0, "# >>> ENCLOSURE-VIEW-BEGIN") { f = 1 } f { n++ } index($0, "# >>> ENCLOSURE-VIEW-END") { f = 0 } END { printf "%d", n }' "$HOOK")"
+encl_hd_lines="$(/usr/bin/awk 'index($0, "# >>> ENCL-HDHEAD-BEGIN") { f = 1 } f { n++ } index($0, "# >>> ENCL-HDHEAD-END") { f = 0 } END { printf "%d", n }' "$HOOK")"
+encl_rev_left="$(/usr/bin/awk 'index($0, "ENCLOSURE-VIEW-") || index($0, "ENCL-HDHEAD-") { n++ } index($0, "# M-ENCL-SCAN") && index($0, "script_qbt") { n++ } END { printf "%d", n }' "${ENCL_HOOKS}/block-destructive-rev.sh")"
+encl_rev_want="$(( encl_view_lines + encl_hd_lines + 1 ))/1"
+encl_rev_got="$(encl_diff_shape block-destructive-rev.sh)"
+if [ "$encl_view_lines" -gt 0 ] && [ "$encl_hd_lines" -gt 0 ] && [ "$encl_rev_got" = "$encl_rev_want" ] && [ "$encl_rev_left" = 0 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-M0a the reverse mutant removes the view block (%s lines) and the receiver block (%s lines) and rewrites the scan line (removed/added %s), leaving no marker behind\n' "$encl_view_lines" "$encl_hd_lines" "$encl_rev_got"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-M0a reverse mutant shape %s (wanted %s, view %s lines, receiver %s lines, %s marker lines left) — the reverse limbs below are unusable\n' "$encl_rev_got" "$encl_rev_want" "$encl_view_lines" "$encl_hd_lines" "$encl_rev_left"
+  FAIL=$((FAIL + 1))
+fi
+encl_shape_arm "AC-ENCL-M0b the reverse mutant parses (shape restated)" block-destructive-rev.sh "$encl_rev_want"
+encl_mut_arm "AC-ENCL-M0c the reverse mutant still refuses bash <unlisted>.sh (it enforces the first view)" \
+  block-destructive-rev.sh "bash ${ENCL_NA}" B "BLOCK-DESTRUCTIVE-022"
+encl_shape_arm "AC-ENCL-P0a the forced copy differs from the hook by the phase constant alone" block-destructive-forced.sh "1/1"
+encl_shape_arm "AC-ENCL-P0b the shadow copy differs from the hook by the phase constant alone" block-destructive-shadow.sh "1/1"
+encl_shape_arm "AC-ENCL-P0c the out-of-enum copy differs from the hook by the phase constant alone" block-destructive-bogus.sh "1/1"
+encl_shape_arm "AC-ENCL-M1a the re-open mutant differs by one line, rewritten" block-destructive-m1.sh "1/1"
+encl_shape_arm "AC-ENCL-M2a the single-receiver mutant removes the receiver block" block-destructive-m2.sh "${encl_hd_lines}/0"
+encl_shape_arm "AC-ENCL-M3a the no-remainder mutant differs by one line, removed" block-destructive-m3.sh "1/0"
+encl_shape_arm "AC-ENCL-M4a the no-cut mutant differs by one line, removed" block-destructive-m4.sh "1/0"
+encl_shape_arm "AC-ENCL-M5a the escape-blind mutant differs by one line, rewritten" block-destructive-m5.sh "1/1"
+encl_shape_arm "AC-ENCL-DENY-a the gate-deny mutant differs by one line, rewritten" block-destructive-deny.sh "1/1"
+encl_shape_arm "AC-ENCL-OPENALL-a the escape-blind gate-deny mutant differs by two lines, rewritten" block-destructive-openall.sh "2/2"
+encl_shape_arm "AC-ENCL-SUPP-a the no-suppression mutant differs by one line, rewritten" block-destructive-supp.sh "1/1"
+encl_shape_arm "AC-ENCL-ROUTE-a the route mutant differs by one line, rewritten" block-destructive-route.sh "1/1"
+encl_shape_arm "AC-ENCL-SPLIT-a the paren-separator mutant differs by one line, rewritten" block-destructive-split.sh "1/1"
+encl_shape_arm "AC-ENCL-NOEX-a the excise-nothing mutant differs by one line, rewritten" block-destructive-noex.sh "1/1"
+encl_shape_arm "AC-ENCL-SUPPALL-a the first-view no-suppression mutant differs by one line, rewritten" block-destructive-suppall.sh "1/1"
+encl_shape_arm "AC-ENCL-SMALLP-a the low-ceiling copy differs by one line, rewritten" block-destructive-smallp.sh "1/1"
+encl_shape_arm "AC-ENCL-SMALLB-a the low-remainder-budget copy differs by one line, rewritten" block-destructive-smallb.sh "1/1"
+
+# --- SHAPES: a shell interpreter or `source` inside an enclosure ------------------------------
+encl_arm "AC-ENCL-01: echo \$(bash <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "echo \$(bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-02: echo \"\$(bash <unlisted>.sh)\" is recorded at warn and refused at enforce" \
+  "echo \"\$(bash ${ENCL_NA})\"" W B a shell-enclosure
+encl_arm "AC-ENCL-03: X=\$(bash <unlisted>.sh) is adjudicated by the arm that owns bash (the reverse copy records it only through the direct-execution arm)" \
+  "X=\$(bash ${ENCL_NA})" W B W shell-enclosure
+encl_arm "AC-ENCL-03b: OUT=\"\$(bash <unlisted>.sh --flag)\" with no slash in the path is adjudicated (the reverse copy records nothing)" \
+  'OUT="$(bash pmo-encl-na.sh --flag)"' W B a shell-enclosure
+encl_arm "AC-ENCL-04: the card's for-loop assignment is adjudicated by the arm that owns bash" \
+  'for i in 1 2; do X="$(bash "$D/evil.sh" arg)"; done' W B W shell-enclosure
+encl_arm "AC-ENCL-05: echo \`bash <unlisted>.sh\` is recorded at warn and refused at enforce" \
+  "echo \`bash ${ENCL_NA}\`" W B a shell-enclosure
+encl_arm "AC-ENCL-06: cat <(bash <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "cat <(bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-07: (bash <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "(bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-07b: time (bash \"\$D/evil.sh\" arg) is recorded at warn and refused at enforce" \
+  'time (bash "$D/evil.sh" arg)' W B a shell-enclosure
+encl_arm "AC-ENCL-08: (xargs bash \"\$D/evil.sh\" < /dev/null) is recorded at warn and refused at enforce" \
+  '(xargs bash "$D/evil.sh" < /dev/null)' W B a shell-enclosure
+encl_arm "AC-ENCL-08b: echo x | (xargs bash) — the stdin deny at an enclosure position — is recorded at warn and refused at enforce" \
+  'echo x | (xargs bash)' W B a shell-enclosure
+encl_arm "AC-ENCL-09: echo \$(source <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "echo \$(source ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-09b: (source <unlisted>.sh) is recorded at warn and refused at enforce" \
+  "(source ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-10: X=\"\$(bash <unlisted>.sh)-suffix\" — a closer glued to the operand — is adjudicated" \
+  "X=\"\$(bash ${ENCL_NA})-suffix\"" W B a shell-enclosure
+encl_arm "AC-ENCL-10b: echo \"\${X:-\$(source <unlisted>.sh)}\" is adjudicated" \
+  "echo \"\${X:-\$(source ${ENCL_NA})}\"" W B a shell-enclosure
+encl_arm "AC-ENCL-11: echo \$(bash \$(echo -n) <unlisted>.sh) — an operand beyond a nested opener — is adjudicated" \
+  "echo \$(bash \$(echo -n) ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-11b: echo \$(bash \"\$(pwd)/evil.sh\") is adjudicated" \
+  'echo $(bash "$(pwd)/evil.sh")' W B a shell-enclosure
+encl_arm "AC-ENCL-12: (X=\$(date) bash <unlisted>.sh) is adjudicated" \
+  "(X=\$(date) bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-12b: echo \$(env X=\\) bash <unlisted>.sh) — a prefix word the walk lists, inside an enclosure — is adjudicated" \
+  "echo \$(env X=\\) bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-13: echo \$(bash -c 'cd /tmp; bash <unlisted>.sh') — a carrier's exemption crossing an enclosure — is adjudicated" \
+  "echo \$(bash -c 'cd /tmp; bash ${ENCL_NA}')" W B a shell-enclosure
+encl_arm "AC-ENCL-14: a here-document received by bash inside an enclosure under a carrier at the line head is recorded at warn and refused at enforce" \
+  "echo \$(bash <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" W B a shell-enclosure
+encl_arm "AC-ENCL-15: an unquoted here-document body carrying \$(bash <unlisted>.sh) is adjudicated" \
+  "cat <<EOF
+# note \$(bash ${ENCL_NA})
+EOF" W B a shell-enclosure
+# The direct-execution and non-shell arms keep their own phases at an enclosure position, so
+# their forced limb records, as the shipped one does; only the position key is new.
+encl_arm "AC-ENCL-16a: echo \$(<unlisted>.sh) is recorded by the direct-execution arm at its own phase, from the enclosure position" \
+  "echo \$(${ENCL_NA})" W W a exec
+encl_arm "AC-ENCL-16b: echo \$(python3 <unlisted>.py) is recorded by the non-shell arm at its own phase, from the enclosure position" \
+  "echo \$(python3 ${ENCL_NAPY})" W W a interp-nonshell
+encl_arm "AC-ENCL-TEXEC6b: T-EXEC-6's original payload — raw backticks inside a carrier's double-quoted argument, which the shell runs — is recorded from the enclosure position" \
+  'gh issue comment 1 --body "| step | `./tmp/x.sh` | run it |"' W W a exec
+
+# --- MUST NOT FLAG: near misses, each followed by the mutant that fails it --------------------
+encl_arm "AC-ENCL-N01: echo \"\$(date)\" stays allowed (the card's near miss)" 'echo "$(date)"' a - a
+encl_mut_arm "AC-ENCL-N01-pair: the gate-deny mutant REFUSES echo \"\$(date)\"" block-destructive-deny.sh 'echo "$(date)"' B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N02: echo \$(bash <allowlisted>.sh --check) stays allowed" "echo \$(bash ${ENCL_OK} --check)" a - a
+encl_mut_arm "AC-ENCL-N02-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(bash ${ENCL_OK} --check)" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N03: X=\$(bash --version) stays allowed (no script operand)" 'X=$(bash --version)' a - a
+encl_mut_arm "AC-ENCL-N03-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh 'X=$(bash --version)' B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N04: echo \$(bash -n <unlisted>.sh) stays allowed (parse-only)" "echo \$(bash -n ${ENCL_NA})" a - a
+encl_mut_arm "AC-ENCL-N04-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(bash -n ${ENCL_NA})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N05: X=\$(wc -l < <unlisted>.sh) stays allowed (a read that names a script)" "X=\$(wc -l < ${ENCL_NA})" a - a
+encl_mut_arm "AC-ENCL-N05-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "X=\$(wc -l < ${ENCL_NA})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N06: diff <(sort <unlisted>.sh) <(sort <allowlisted>.sh) stays allowed" "diff <(sort ${ENCL_NA}) <(sort ${ENCL_OK})" a - a
+encl_mut_arm "AC-ENCL-N06-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "diff <(sort ${ENCL_NA}) <(sort ${ENCL_OK})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N07: echo \$(bash --version) <unlisted>.sh stays allowed (text after a closed enclosure)" "echo \$(bash --version) ${ENCL_NA}" a - a
+encl_arm "AC-ENCL-N08: echo \"\\\$(bash <unlisted>.sh)\" stays allowed (the substitution escaped, under a carrier)" "echo \"\\\$(bash ${ENCL_NA})\"" a - a
+encl_mut_arm "AC-ENCL-N08-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\\\$(bash ${ENCL_NA})\"" W
+encl_arm "AC-ENCL-N09: gh … --body 'see (bash <unlisted>.sh) for details; ok' stays allowed (a carrier's single-quoted argument)" "gh issue comment 1 --body 'see (bash ${ENCL_NA}) for details; ok'" a - a
+encl_mut_arm "AC-ENCL-N09-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "gh issue comment 1 --body 'see (bash ${ENCL_NA}) for details; ok'" W
+encl_arm "AC-ENCL-N10: echo \"note (bash <unlisted>.sh) end\" stays allowed (a carrier's untainted double-quoted argument)" "echo \"note (bash ${ENCL_NA}) end\"" a - a
+encl_mut_arm "AC-ENCL-N10-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"note (bash ${ENCL_NA}) end\"" W
+encl_arm "AC-ENCL-N11: git commit -m \"docs: run \\\`bash <unlisted>.sh --flag\\\` (see notes)\" stays allowed (escaped backticks open nothing)" \
+  "git commit -m \"docs: run \\\`bash ${ENCL_NA} --flag\\\` (see notes)\"" a - a
+encl_arm "AC-ENCL-N12: echo \\(bash <unlisted>.sh\\) stays allowed (escaped parentheses open nothing)" "echo \\(bash ${ENCL_NA}\\)" a - a
+encl_mut_arm "AC-ENCL-N12-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "echo \\(bash ${ENCL_NA}\\)" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N13: find . \\( -name '*.sh' -o -name x \\) -newer <unlisted>.sh stays allowed" "find . \\( -name '*.sh' -o -name x \\) -newer ${ENCL_NA}" a - a
+encl_mut_arm "AC-ENCL-N13-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "find . \\( -name '*.sh' -o -name x \\) -newer ${ENCL_NA}" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N14: a carrier receiving a here-document after a closed substitution stays allowed (the enclosure closed before the operator)" \
+  "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
+note; bash ${ENCL_NA}
+EOF" a - a
+encl_mut_arm "AC-ENCL-N14-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh \
+  "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
+note; bash ${ENCL_NA}
+EOF" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-N15: echo \"\$(date)\" 'x; bash <unlisted>.sh' stays allowed (the enclosure inside quotes does not move the carrier)" "echo \"\$(date)\" 'x; bash ${ENCL_NA}'" a - a
+encl_mut_arm "AC-ENCL-N15-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\$(date)\" 'x; bash ${ENCL_NA}'" W
+
+# --- DECLARED OVER-MATCH, pinned: adjudicated although nothing runs ---------------------------
+# Each records at warn and is refused at enforce; its reverse limb, allowed, is the mutant that
+# fails the pin. The one exception is the array literal: before this change the direct-execution
+# arm already recorded it, reading `cmd=(bash` as an assignment and the path after it as the
+# command word, so its reverse limb records too, and its pairing arm reads the rows instead.
+encl_arm "AC-ENCL-RESIDUAL-noncarrier-text (pin, not fix-evidence): git commit -m 'fix (bash <unlisted>.sh was failing)'" \
+  "git commit -m 'fix (bash ${ENCL_NA} was failing)'" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-body-idiom (pin, not fix-evidence): the commit idiom with a code span naming a script in its body" \
+  "git commit -m \"\$(cat <<'EOF'
+Run \`bash ${ENCL_NA}\` to verify
+EOF
+)\"" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-heredoc-kept (pin, not fix-evidence): a body left in place with a code span naming a script" \
+  "cat > notes.md <<'EOF'
+Run \`bash ${ENCL_NA}\` to reproduce
+EOF" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-backtick-close (pin, not fix-evidence): text after a closing backtick" \
+  "echo \`date\` bash ${ENCL_NA}" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-carrier-moved (pin, not fix-evidence): a quoted argument after an unquoted enclosure, under a carrier" \
+  "echo \$(date) 'x; bash ${ENCL_NA}'" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-comment (pin, not fix-evidence): a comment naming a script in parentheses" \
+  "# setup (bash ${ENCL_NA})" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-array (pin, not fix-evidence): an array literal (the reverse copy records it through the direct-execution arm)" \
+  "cmd=(bash ${ENCL_NA} arg)" W B W shell-enclosure
+encl_run block-destructive-rev.sh "cmd=(bash ${ENCL_NA} arg)"
+if [ "$ENCL_V" = "W" ] && ! encl_row_has shell-enclosure; then
+  /usr/bin/printf 'PASS: AC-ENCL-RESIDUAL-array-pair: the reverse mutant records the array literal with no row from an enclosure position, so the pin fails on it\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-RESIDUAL-array-pair: reverse verdict %s, rows [%s] (wanted W with no shell-enclosure row at pos enclosure)\n' "$ENCL_V" "$ENCL_ROWS"
+  FAIL=$((FAIL + 1))
+fi
+encl_arm "AC-ENCL-RESIDUAL-escaped-dollar (pin, not fix-evidence): an escaped dollar under a non-carrier" \
+  "git commit -m \"explain \\\$(bash ${ENCL_NA}) literally\"" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-full-stop (pin, not fix-evidence): a sentence's full stop after a code span reads as the dot command" \
+  "git commit -m 'see \`x\`. Then /tmp/pmo-encl-y'" W B a shell-enclosure
+encl_arm "AC-ENCL-RESIDUAL-hd-cat (pin, not fix-evidence): a carrier's unquoted substitution reading a here-document through cat, where nothing runs, is newly flagged" \
+  "echo \$(cat <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" W B a shell-enclosure
+
+# --- DECLARED UNDER-MATCH, pinned: what the view does not reach ------------------------------
+encl_arm "AC-ENCL-RESIDUAL-case (pin, not fix-evidence): a case arm inside an enclosure — a pattern's ) ends the position's text" \
+  "echo \$(case x in x) bash ${ENCL_NA};; esac)" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-case-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(case x in x) bash ${ENCL_NA};; esac)" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-RESIDUAL-case-arm (pin, not fix-evidence): a case arm at top level — its command position follows a pattern's )" \
+  "case x in x) bash ${ENCL_NA} ;; esac" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-case-arm-pair: the paren-separator mutant REFUSES it" block-destructive-split.sh "case x in x) bash ${ENCL_NA} ;; esac" B "BLOCK-DESTRUCTIVE-022"
+encl_arm "AC-ENCL-RESIDUAL-nested-escaped (pin, not fix-evidence): backticks nested through escaped backticks" \
+  "echo \`echo \\\`bash ${ENCL_NA}\\\` \`" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-nested-escaped-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "echo \`echo \\\`bash ${ENCL_NA}\\\` \`" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-RESIDUAL-ansic (pin, not fix-evidence): ANSI-C quoting ahead of the verb ends the position's text early" \
+  "echo \$(X=\$'\\')' bash ${ENCL_NA})" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-ansic-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(X=\$'\\')' bash ${ENCL_NA})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-RESIDUAL-paramexp (pin, not fix-evidence): a ) inside a parameter expansion ends the position's text early" \
+  "echo \$(X=\${Y:-)} bash ${ENCL_NA})" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-paramexp-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(X=\${Y:-)} bash ${ENCL_NA})" B "ENCL gate deny mutant"
+encl_arm "AC-ENCL-RESIDUAL-nested-apostrophe (pin, not fix-evidence): an apostrophe in a nested double-quoted string turns the carried quote state over" \
+  "echo \"\$(printf \"it's\" \$(bash ${ENCL_NA}))\"" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-nested-apostrophe-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\$(printf \"it's\" \$(bash ${ENCL_NA}))\"" W
+encl_arm "AC-ENCL-RESIDUAL-carrier-head (pin, not fix-evidence): a carrier at the head of an unquoted substitution lends its exemption to a later program string" \
+  "bash -c \$(echo -n) 'true; (bash ${ENCL_NA})'" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-carrier-head-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "bash -c \$(echo -n) 'true; (bash ${ENCL_NA})'" W
+encl_arm "AC-ENCL-RESIDUAL-hd-continuation (pin, not fix-evidence): a here-document receiver behind a line continuation is read from its physical line" \
+  "echo \$(bash -s \\
+echo <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" a - a
+encl_mut_arm "AC-ENCL-RESIDUAL-hd-continuation-pair: the excise-nothing mutant REFUSES it" block-destructive-noex.sh \
+  "echo \$(bash -s \\
+echo <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" B "BLOCK-DESTRUCTIVE-022"
+# The two work budgets. The shipped values are asserted, and each budget's behaviour is pinned
+# on a copy with only that budget lowered, where a short payload crosses it. The shipped hook on
+# the same payload is the copy that fails the pin: within its budget the position is seen.
+encl_budget_pos="$(/usr/bin/grep -c '^readonly SCRIPT_ENCL_POS_MAX=512$' "$HOOK" || true)"
+encl_budget_bytes="$(/usr/bin/grep -c '^readonly SCRIPT_ENCL_TAIL_BYTES=262144$' "$HOOK" || true)"
+if [ "$encl_budget_pos" = 1 ] && [ "$encl_budget_bytes" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-BUDGETS the hook declares a 512-position ceiling and a 262,144-byte remainder budget\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-BUDGETS the declared budgets moved (position lines %s, remainder lines %s, each wanted 1); restate the readiness text and these pins together\n' "$encl_budget_pos" "$encl_budget_bytes"
+  FAIL=$((FAIL + 1))
+fi
+encl_pos_cmd="echo \$(true) \$(true) \$(true) \$(true) \$(bash ${ENCL_NA})"
+encl_mut_arm "AC-ENCL-RESIDUAL-budget-positions (pin, not fix-evidence): past the position ceiling no further position is opened" \
+  block-destructive-smallp.sh "$encl_pos_cmd" a
+encl_mut_arm "AC-ENCL-RESIDUAL-budget-positions-pair: within the shipped ceiling the same payload is recorded" \
+  block-destructive.sh "$encl_pos_cmd" W
+encl_pad="$(/usr/bin/printf 'pad %.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30)"
+encl_bytes_cmd="echo \$(true) \$(bash \$(echo -n) ${ENCL_NA}) ${encl_pad}"
+encl_mut_arm "AC-ENCL-RESIDUAL-budget-bytes (pin, not fix-evidence): past the remainder budget an operand beyond a nested opener is not seen" \
+  block-destructive-smallb.sh "$encl_bytes_cmd" a
+encl_mut_arm "AC-ENCL-RESIDUAL-budget-bytes-pair: within the shipped budget the same payload is recorded" \
+  block-destructive.sh "$encl_bytes_cmd" W
+
+# --- EQUIVALENCES with the prefix walk -------------------------------------------------------
+# The view runs the walk the prefix vocabulary leaves: a keyword or a wrapper the walk lists is
+# honoured inside an enclosure as at top level. Compared on the FORCED copy, whose refusal is the
+# top-level verdict's; the shipped copy records; the reverse mutant allows, which fails the
+# equivalence.
+encl_eq_arm() { # $1 label  $2 enclosure form  $3 top-level form
+  local name="$1" encl="$2" top="$3" vf vt vs vr ok=1
+  encl_run block-destructive-forced.sh "$encl"; vf="$ENCL_V"
+  encl_run block-destructive.sh "$top"; vt="$ENCL_V"
+  encl_run block-destructive.sh "$encl"; vs="$ENCL_V"
+  encl_run block-destructive-rev.sh "$encl"; vr="$ENCL_V"
+  if [ "$vf" != "$vt" ] || [ "$vt" != "B" ] || [ "$vs" != "W" ] || [ "$vr" = "$vt" ]; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (forced %s = top-level %s; shipped %s; reverse %s)\n' "$name" "$vf" "$vt" "$vs" "$vr"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  forced=%s top-level=%s (want both B), shipped=%s (want W), reverse=%s (want not B)\n' "$name" "$vf" "$vt" "$vs" "$vr"
+    FAIL=$((FAIL + 1))
+  fi
+}
+encl_eq_arm "AC-ENCL-KW-eq: echo \$(if bash <unlisted>.sh; then :; fi) takes the verdict of the same condition at top level" \
+  "echo \$(if bash ${ENCL_NA}; then :; fi)" "if bash ${ENCL_NA}; then :; fi"
+encl_eq_arm "AC-ENCL-08c: (xargs -I{} bash \"\$D/evil.sh\" {} < /dev/null) takes the verdict of the same command without the group" \
+  '(xargs -I{} bash "$D/evil.sh" {} < /dev/null)' 'xargs -I{} bash "$D/evil.sh" {} < /dev/null'
+
+# --- THE PHASES ------------------------------------------------------------------------------
+encl_run block-destructive.sh "echo \$(bash ${ENCL_NA})"
+encl_p1_ok=1
+[ "$ENCL_V" = "W" ] || encl_p1_ok=0
+[ "$ENCL_NROWS" = 1 ] || encl_p1_ok=0
+case "$ENCL_ROWS" in *'"phase":"warn"'*'"reason":"would-fire"'*'"arm":"shell-enclosure"'*'"pos":"enclosure"'*) ;; *) encl_p1_ok=0 ;; esac
+/usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn' <<<"$ENCL_ERR" || encl_p1_ok=0
+if [ "$encl_p1_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-P1 at warn: exit 0, one row (phase warn, arm shell-enclosure, pos enclosure) and a notice on stderr\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P1 at warn: verdict %s, %s new rows, row [%s], stderr [%s]\n' "$ENCL_V" "$ENCL_NROWS" "$ENCL_ROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_run block-destructive-shadow.sh "echo \$(bash ${ENCL_NA})"
+encl_p2_ok=1
+[ "$ENCL_V" = "W" ] || encl_p2_ok=0
+[ "$ENCL_NROWS" = 1 ] || encl_p2_ok=0
+case "$ENCL_ROWS" in *'"phase":"shadow"'*'"arm":"shell-enclosure"'*) ;; *) encl_p2_ok=0 ;; esac
+if /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR"; then encl_p2_ok=0; fi
+if [ "$encl_p2_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-P2 at shadow: exit 0, one row (phase shadow), nothing on stderr\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P2 at shadow: verdict %s, %s new rows, row [%s], stderr [%s]\n' "$ENCL_V" "$ENCL_NROWS" "$ENCL_ROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_run block-destructive-forced.sh "echo \$(bash ${ENCL_NA})"
+encl_p3_ok=1
+[ "$ENCL_V" = "B" ] || encl_p3_ok=0
+case "$ENCL_ROWS" in *'"phase":"enforce"'*'"arm":"shell-enclosure"'*) ;; *) encl_p3_ok=0 ;; esac
+/usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR" || encl_p3_ok=0
+if [ "$encl_p3_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-P3 at enforce: refused by BLOCK-DESTRUCTIVE-022, the row written with phase enforce\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P3 at enforce: verdict %s, row [%s], stderr [%s]\n' "$ENCL_V" "$ENCL_ROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_mut_arm "AC-ENCL-P4 an unrecognised phase value falls through to enforce and refuses" \
+  block-destructive-bogus.sh "echo \$(bash ${ENCL_NA})" B "BLOCK-DESTRUCTIVE-022"
+encl_run block-destructive.sh "bash ${ENCL_NA}"
+if [ "$ENCL_V" = "B" ] && [ "$ENCL_NROWS" = 0 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$ENCL_ERR"; then
+  /usr/bin/printf 'PASS: AC-ENCL-P5 pass-through: bash <unlisted>.sh at a first-view position is refused with no drain row (the router leaves the always-enforce arm as it was)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P5 pass-through: verdict %s, %s new rows (want B and 0)\n  stderr: %s\n' "$ENCL_V" "$ENCL_NROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_mut_arm "AC-ENCL-P5-pair: the route mutant RECORDS bash <unlisted>.sh at a first-view position instead of refusing it" \
+  block-destructive-route.sh "bash ${ENCL_NA}" W
+encl_run block-destructive.sh "echo \$(bash <<'EOF'
+bash ${ENCL_NA}
+EOF
+)"
+encl_p6_ok=1
+[ "$ENCL_V" = "W" ] || encl_p6_ok=0
+[ "$ENCL_NROWS" = 1 ] || encl_p6_ok=0
+case "$ENCL_ROWS" in *'"arm":"shell-enclosure"'*'"cause":"heredoc-receiver"'*'"path":"bash"'*'"pos":"enclosure"'*) ;; *) encl_p6_ok=0 ;; esac
+/usr/bin/grep -q 'WARN (would-block, rollout=warn, cause=heredoc-receiver)' <<<"$ENCL_ERR" || encl_p6_ok=0
+if [ "$encl_p6_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-ENCL-P6 the here-document receiver read from the enclosure is recorded at warn, naming that receiver, with a notice\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P6 receiver at warn: verdict %s, %s new rows, row [%s], stderr [%s]\n' "$ENCL_V" "$ENCL_NROWS" "$ENCL_ROWS" "$ENCL_ERR"; FAIL=$((FAIL + 1))
+fi
+encl_run block-destructive.sh 'echo x | (xargs bash)'
+if [ "$ENCL_V" = "W" ] && [ "$ENCL_NROWS" = 1 ]; then
+  case "$ENCL_ROWS" in
+    *'"arm":"shell-enclosure"'*'"cause":"unresolvable"'*) /usr/bin/printf 'PASS: AC-ENCL-P7 the xargs stdin deny at an enclosure position is recorded at warn\n'; PASS=$((PASS + 1)) ;;
+    *) /usr/bin/printf 'FAIL: AC-ENCL-P7 xargs at warn: row [%s]\n' "$ENCL_ROWS"; FAIL=$((FAIL + 1)) ;;
+  esac
+else
+  /usr/bin/printf 'FAIL: AC-ENCL-P7 xargs at warn: verdict %s, %s new rows\n' "$ENCL_V" "$ENCL_NROWS"; FAIL=$((FAIL + 1))
+fi
+
+# --- EACH COMPONENT IS LOAD-BEARING: the design's one-line mutants ----------------------------
+encl_mut_arm "AC-ENCL-M1b: without the re-open, the carrier's exemption crossing an enclosure is allowed again" \
+  block-destructive-m1.sh "echo \$(bash -c 'cd /tmp; bash ${ENCL_NA}')" a
+encl_mut_arm "AC-ENCL-M2b: with one receiver reading, the here-document inside an enclosure is allowed again" \
+  block-destructive-m2.sh "echo \$(bash <<'EOF'
+bash ${ENCL_NA}
+EOF
+)" a
+encl_mut_arm "AC-ENCL-M3b: without the appended remainder, an operand beyond a nested opener is not seen" \
+  block-destructive-m3.sh "echo \$(bash \$(echo -n) ${ENCL_NA})" a
+encl_mut_arm "AC-ENCL-M4b: without the cut, a closer glued to the operand hides it" \
+  block-destructive-m4.sh "X=\"\$(bash ${ENCL_NA})-suffix\"" a
+encl_mut_arm "AC-ENCL-M4c: without the cut, text after a closed enclosure is read as an operand (the near miss N07 fails)" \
+  block-destructive-m4.sh "echo \$(bash --version) ${ENCL_NA}" W
+encl_mut_arm "AC-ENCL-M5b: without the escape rule, an escaped backtick opens a position (the near miss N11 fails)" \
+  block-destructive-m5.sh "git commit -m \"docs: run \\\`bash ${ENCL_NA} --flag\\\` (see notes)\"" W
+encl_mut_arm "AC-ENCL-TEXEC6-pair: with the first view's carrier suppression off, T-EXEC-6's re-pointed payload is recorded (the arm guards that suppression)" \
+  block-destructive-suppall.sh "gh issue comment 1 --body '| step | \`./tmp/x.sh\` | run it |'" W
+
+/bin/rm -rf "$ENCL_ROOT"
 
 # --- Summary ---
 echo ""
