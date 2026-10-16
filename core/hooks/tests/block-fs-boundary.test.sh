@@ -753,20 +753,22 @@ fi
 # an oversight — the readiness fragment declares it and says why. These arms PIN the
 # current verdicts so a later change to any of them is deliberate.
 #
-# Every verdict asserted in this section is LEXICAL. The hook never executes a payload,
-# so these arms are evaluable on any host. Whether the operator EXECUTES is a property
-# of the shell and is demonstrated separately by XFORM-SEM-01, which reports
-# NOT-EVALUATED — never a pass — on an interpreter that rejects the operator.
+# Every verdict the HOOK gives in this section is LEXICAL: the hook never executes a
+# payload, so the hook arms are evaluable on any host. Two arms assert shell behaviour
+# instead: XFORM-RESID-04 observes three value forms run on /bin/bash, and XFORM-SEM-01
+# demonstrates that the operator EXECUTES, reporting NOT-EVALUATED — never a pass — on an
+# interpreter that rejects it.
 #
-# A PIN SAYS WHICH VERDICT IT PINS. Each pin asserts the exit code AND either the number
-# of -004 records the call wrote or the rule its refusal names, because one exit code can
-# come from different guards: G6 admits with a record, G4 admits silently, a word the
-# token walk never hands to the cascade writes nothing, G1 refuses under -003 and G5 under
-# -001.
+# A PIN SAYS WHICH VERDICT IT PINS. Fourteen pins assert the exit code AND either the
+# number of -004 records the call wrote or the rule its refusal names, because one exit
+# code can come from different guards: G6 admits with a record, G4 admits silently, a word
+# the token walk never hands to the cascade writes nothing, G1 refuses under -003 and G5,
+# for a read verb, under -001. The three near misses assert only that they are admitted,
+# as the card's AC-3 asks.
 #
 # EVERY PIN IS PAIRED, ON EVERY DIMENSION IT ASSERTS. A pin is green on the shipped hook
 # by construction, so for each dimension it asserts a pairing arm runs the pin's OWN
-# predicate through a sandbox copy of the hook with one guard mutated, and passes only
+# predicate through a sandbox copy of the hook mutated for that dimension, and passes only
 # when that predicate FAILS there and the copy gives the verdict its mutation produces.
 # Every copy is shape-guarded (XFORM-MUT-SHAPE-*): exactly the lines it takes out and puts
 # in against the shipped hook, it parses, it still refuses an untouched out-of-root
@@ -1046,7 +1048,7 @@ xform_g6_pin "XFORM-NEST-01: operator nested in a default word \${A:-\${B@P}} AD
 # ----- XFORM-POS: words the token walk never hands to the cascade -----
 # The cascade sees only the target operands extract_target_tokens emits for a listed verb.
 # A flag-position word (it begins with `-`) is skipped there, and an assignment ahead of
-# the verb is a prefix the canonicalizer moves out of the verb's segment, so neither is
+# the verb is a prefix the canonicalizer separates from the verb's segment, so neither is
 # examined whatever it carries. Pinned, with the walk's own mutation as the pairing, so a
 # later change that examines either is a deliberate arm change.
 # shellcheck disable=SC2016
