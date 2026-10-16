@@ -8151,8 +8151,8 @@ cmd_check() {
   # reason. core/deploy/tests/test_advisory_emitter_contract.sh fails the build on
   # a token outside the set, on an owed token that is missing, and on a token that
   # is false for its caller: on an arm the dial does not govern, on a check whose
-  # row declines the flip, beside a mode-file instruction in the same check's own
-  # detail, or on a check whose dial already carries the committed "enforce".
+  # row is RATIFIED ADVISORY, beside a mode-file instruction in the same check's
+  # own detail, or on a check whose dial already carries the committed "enforce".
   #
   # THE FLIP COMMIT DROPS THE TOKEN. Graduating a check is one token in its dial
   # call. The same commit removes "committed-default" from that check's calls:
