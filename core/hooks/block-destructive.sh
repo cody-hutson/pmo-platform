@@ -1194,35 +1194,61 @@ script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp
 #   script_wopt    short options that take an argument: `x:` takes one, attached or
 #                  as the next token; `x::` takes one only when attached. A letter
 #                  that is not listed is a flag, and so is a digit (`nice -10`).
-#   script_wlarg   long options that may take their argument as the NEXT token. The
+#   script_wlarg   long options that may take their argument as the NEXT token, by
+#                  the name the program's own option table gives them. The
 #                  `--name=value` spelling needs no row: it is one token.
 #   script_wnox    short options under which the wrapper EXECUTES NOTHING and only
 #                  describes or edits its operand. The segment is not an execution
 #                  and is skipped, which is the verdict these spellings already had.
 #   script_wsplit  short options whose ATTACHED argument is the command line itself,
 #   script_wlsplit and the long spellings of the same (`env -S<string>`,
-#                  `env --split-string=<string>`). Such a token is NOT stepped over:
-#                  the walk stops on it, so it stays the command word and is
+#                  `env --split-string=<string>`, and every prefix of it the parser
+#                  takes for it, `env --split=<string>`). Such a token is NOT stepped
+#                  over: the walk stops on it, so it stays the command word and is
 #                  adjudicated exactly as it was before this table existed. Stepping
 #                  over it would take a command line out of adjudication, and a step
 #                  may move the verb later; it may never remove an execution.
+#   script_wlong   EVERY long option the program's parser defines, from its own option
+#                  table rather than its manual, or nothing when the program reads no
+#                  long option. Only the resolution below reads it.
 #   script_wpos    what follows the option run and precedes the command word:
 #                  `one` a single positional operand (the duration `timeout` takes),
 #                  `assign` a run of `name=value` operands (`env`), `none` nothing.
 #
-# FAILURE DIRECTION, STATED RATHER THAN ARGUED AWAY. A row closes what it lists.
-# An option a row does not list is stepped over as a flag, so if it takes a
-# separate value that value is read as the command word and nothing is
-# adjudicated: the verdict every wrapper option had before this table existed.
-# That is the fail-open-on-omission direction the operand walk's notes reject for
-# an arity table. It is accepted here on a measurement: the nothing-to-omit
-# alternative, scanning for the verb, refuses ordinary commands whose arguments
-# merely name an interpreter. So every row has an arm per spelling, and the one
-# allow-granting field, script_wnox, is two rows long with a near miss per letter.
+# A LONG OPTION IS READ THE WAY ITS PROGRAM'S PARSER READS IT, PREFIXES INCLUDED.
+# Every row that lists a long option belongs to a program whose parser is
+# getopt_long — GNU coreutils' env, nice, stdbuf, timeout and nohup, GNU findutils'
+# xargs, GNU time, and sudo — and getopt_long takes an exact name, or any prefix
+# that names exactly one of its long options, for that option. `env --split=<path>`
+# is `env --split-string=<path>`, and GNU env executes the path. Matched as written,
+# the prefix was an option no row lists, the walk stepped over it, and a recorded
+# execution became an allow. So a long token is resolved first
+# (script_wrapper_longname), and the fields above are asked about the option it
+# resolves to, never about its spelling. A prefix of two or more options, and a
+# name that is none, stay as written: the parser rejects both and runs nothing,
+# and no row lists either, so the walk steps over it as a flag, the status quo
+# below. The table is the parser's, not the manual's: GNU time's own name for `-o`
+# is `--output-file`, and the `--output` its manual prints is a prefix of it.
+# exec, builtin and command are shell builtins that read no long option, so their
+# rows carry none and a long token is matched as written; the reference host's BSD
+# builds of env, nice, stdbuf, xargs and time read no long option either, so there
+# a long token is an error and runs nothing whichever way the walk reads it.
 #
-# `env -S` is deliberately NOT listed as taking an argument: its argument is the
-# command line itself, so the token after it is read as the command word. The
-# ATTACHED spelling is the other case, and script_wsplit above is why.
+# FAILURE DIRECTION, STATED RATHER THAN ARGUED AWAY. A row closes what it lists, by
+# every spelling the program's parser takes for it. An option a row does not list
+# is stepped over as a flag, so if it takes a separate value that value is read as
+# the command word and nothing is adjudicated: the verdict every wrapper option had
+# before this table existed. That is the fail-open-on-omission direction the
+# operand walk's notes reject for an arity table. It is accepted here on a
+# measurement: the nothing-to-omit alternative, scanning for the verb, refuses
+# ordinary commands whose arguments merely name an interpreter. So every row has
+# an arm per spelling, and the one allow-granting field, script_wnox, is two rows
+# long with a near miss per letter.
+#
+# `env -S` is deliberately NOT listed as taking an argument, by any spelling: its
+# argument is the command line itself, so the token after it is read as the
+# command word. The ATTACHED spelling is the other case, and script_wsplit above is
+# why.
 # ---------------------------------------------------------------------------
 script_wrapper_row() {   # $1 = wrapper basename
   script_wrow=1
@@ -1231,20 +1257,49 @@ script_wrapper_row() {   # $1 = wrapper basename
   script_wnox=""
   script_wsplit=""
   script_wlsplit=" "
+  script_wlong=" "
   script_wpos="none"
   case "$1" in
-    nice)    script_wopt="n:"; script_wlarg=" --adjustment " ;;
-    stdbuf)  script_wopt="e:i:o:"; script_wlarg=" --error --input --output " ;;
-    sudo)    script_wopt="a:C:c:D:g:h:p:R:r:T:t:U:u:"; script_wlarg=" --auth-type --close-from --login-class --chdir --group --host --prompt --chroot --role --command-timeout --type --other-user --user "; script_wnox="elvVK" ;;
-    env)     script_wopt="a:C:P:u:"; script_wlarg=" --argv0 --chdir --unset "; script_wsplit="S"; script_wlsplit=" --split-string "; script_wpos="assign" ;;
-    xargs)   script_wopt="a:d:E:e::I:i::J:L:l::n:P:R:S:s:"; script_wlarg=" --arg-file --delimiter --max-args --max-procs --max-chars --process-slot-var " ;;
-    time)    script_wopt="f:o:"; script_wlarg=" --format --output " ;;
-    timeout) script_wopt="k:s:"; script_wlarg=" --kill-after --signal "; script_wpos="one" ;;
+    nice)    script_wopt="n:"; script_wlarg=" --adjustment "
+             script_wlong=" --adjustment --help --version " ;;
+    stdbuf)  script_wopt="e:i:o:"; script_wlarg=" --error --input --output "
+             script_wlong=" --error --help --input --output --version " ;;
+    sudo)    script_wopt="a:C:c:D:g:h:p:R:r:T:t:U:u:"; script_wlarg=" --auth-type --close-from --login-class --chdir --group --host --prompt --chroot --role --command-timeout --type --other-user --user "; script_wnox="elvVK"
+             script_wlong=" --askpass --auth-type --background --bell --chdir --chroot --close-from --command-timeout --edit --group --help --host --list --login --login-class --no-update --non-interactive --other-user --preserve-env --preserve-groups --prompt --remove-timestamp --reset-timestamp --role --set-home --shell --stdin --type --user --validate --version " ;;
+    env)     script_wopt="a:C:P:u:"; script_wlarg=" --argv0 --chdir --unset "; script_wsplit="S"; script_wlsplit=" --split-string "; script_wpos="assign"
+             script_wlong=" --argv0 --block-signal --chdir --debug --default-signal --help --ignore-environment --ignore-signal --list-signal-handling --null --split-string --unset --version " ;;
+    xargs)   script_wopt="a:d:E:e::I:i::J:L:l::n:P:R:S:s:"; script_wlarg=" --arg-file --delimiter --max-args --max-procs --max-chars --process-slot-var "
+             script_wlong=" --arg-file --delimiter --eof --exit --help --interactive --max-args --max-chars --max-lines --max-procs --no-run-if-empty --null --open-tty --process-slot-var --replace --show-limits --verbose --version " ;;
+    time)    script_wopt="f:o:"; script_wlarg=" --format --output-file "   # M-WRAP-ABBREV-ROW
+             script_wlong=" --append --format --help --output-file --portability --quiet --verbose --version " ;;
+    timeout) script_wopt="k:s:"; script_wlarg=" --kill-after --signal "; script_wpos="one"
+             script_wlong=" --foreground --help --kill-after --preserve-status --signal --verbose --version " ;;
     exec)    script_wopt="a:" ;;
-    builtin|nohup) : ;;
+    builtin) : ;;
+    nohup)   script_wlong=" --help --version " ;;
     command) script_wnox="vV" ;;
     *)       script_wrow=0 ;;
   esac
+}
+
+# Resolve one long-option token to the option the wrapper's parser takes it for, as
+# getopt_long does: an exact name wins, and otherwise a prefix names the one option
+# it begins. Leaves script_wlname on that option's full name, or on the token's own
+# name (the text before any `=`) when that names no option or more than one.
+script_wrapper_longname() {   # $1 = a token that begins with `--`
+  local _lname="${1#--}" _lw="" _lhit="" _lk=0
+  _lname="${_lname%%=*}"
+  script_wlname="--${_lname}"
+  case "$script_wlong" in
+    *" --${_lname} "*) return 0 ;;
+  esac
+  for _lw in $script_wlong; do
+    case "$_lw" in
+      "--${_lname}"*) _lk=$(( _lk + 1 )); _lhit="$_lw" ;;
+    esac
+  done
+  if [ "$_lk" -eq 1 ]; then script_wlname="$_lhit"; fi   # M-WRAP-ABBREV
+  return 0
 }
 
 # Step script_hidx over ONE wrapper's own option run and positional operands.
@@ -1264,15 +1319,17 @@ script_wrapper_options() {
         break
         ;;
       --*=*)
+        script_wrapper_longname "$_tok"
         case "$script_wlsplit" in
-          *" ${_tok%%=*} "*) return 0 ;;
+          *" $script_wlname "*) return 0 ;;
         esac
         script_hidx=$(( script_hidx + 1 ))
         ;;
       --*)
+        script_wrapper_longname "$_tok"
         script_hidx=$(( script_hidx + 1 ))
         case "$script_wlarg" in
-          *" $_tok "*)
+          *" $script_wlname "*)
             if [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
             ;;
         esac
