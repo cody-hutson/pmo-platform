@@ -732,19 +732,27 @@ egress_classify_api_path() {
 # reading this log needs to separate `not-allowlisted` (add an allowlist entry)
 # from `unresolvable` (spell out the owner and repository); conflating those two
 # is precisely the trap this rule was filed about.
+#
+# A row written for a verb the secondary locator found also carries
+# `pos: "look-ahead"`. A row without the key was written for an invocation the head
+# walk resolved, as every row written before the key existed was. The key names which
+# locator found the verb; it does not say whether the words there are executed, which a
+# lexical matcher cannot know, so a look-ahead row is not on its own a reason to add an
+# allowlist row.
 log_would_fire() {
   local rule_id="$1"
   local phase="$2"
   local cause="$3"
   local path="$4"
+  local pos="${5:-}"   # `look-ahead` for a verb the secondary locator found; else empty
   local ts; ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   # `-c` — one entry per LINE, which is what the .jsonl extension claims and what a
   # shakedown reading needs. The older writers in this file emit jq's default
   # pretty form, so their entries span several lines each; that is pre-existing and
   # is not changed here, because their consumers count lines as a growth signal.
   "$JQ" -nc --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
-    --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" --arg path "$path" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", cause:$cause, path:$path}' \
+    --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" --arg path "$path" --arg pos "$pos" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", cause:$cause, path:$path} + (if $pos == "" then {} else {pos:$pos} end)' \
     >> "$WARN_LOG" 2>/dev/null || true
 }
 
@@ -895,16 +903,17 @@ egress_007_verdict() {
   local path="$2"
   local widening="$3"
   local features="${4:-}"   # optional feature object — passed by the `unparseable` cause alone
+  local pos="${5:-}"        # `look-ahead` when the secondary locator found the verb; else empty
   local reason override
 
   if [ "$widening" -eq 1 ]; then
     case "$EGRESS_007_WIDENING_PHASE" in
       shadow)
-        log_would_fire "BLOCK-EGRESS-007" "shadow" "$cause" "$path"
+        log_would_fire "BLOCK-EGRESS-007" "shadow" "$cause" "$path" "$pos"
         return 0
         ;;
       warn)
-        log_would_fire "BLOCK-EGRESS-007" "warn" "$cause" "$path"
+        log_would_fire "BLOCK-EGRESS-007" "warn" "$cause" "$path" "$pos"
         "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-EGRESS-007] WARN (would-block, rollout=warn, cause=%s): gh api write to %s\n' \
           "$HOOK_NAME" "$cause" "$path" >&2
         return 0
@@ -1124,9 +1133,10 @@ case "$TOOL_NAME" in
         #
         # Consume, repeatedly and in any order: compound-command keywords, command
         # wrappers (each followed by its own leading flags), and variable-assignment
-        # prefixes. The command word is the first token that is none of these — which
-        # is how the shell itself resolves command position, rather than assuming
-        # index 0.
+        # prefixes. The walk stops at the first token that is none of these, rather than
+        # assuming index 0. That token is the command word unless a prefix command's own
+        # option argument or operand stands in front of it; the secondary locator below
+        # the walk finds the gated verb in that case.
         #
         # A keyword only counts at the HEAD of a segment, and a segment can no longer
         # begin inside a string literal, which is what makes this precise rather than
@@ -1139,6 +1149,9 @@ case "$TOOL_NAME" in
         # terminate the walk and the skip cannot degrade into "advance past any token
         # containing `=`". One vocabulary across both matcher surfaces, deliberately.
         egress_hidx=0
+        egress_pfxseen=0
+        egress_scanhit=0
+        egress_pos=""
         while [ "$egress_hidx" -lt "${#egress_toks[@]}" ]; do
           egress_raw="${egress_toks[$egress_hidx]}"
           case "$egress_raw" in
@@ -1155,6 +1168,7 @@ case "$TOOL_NAME" in
               egress_hidx=$(( egress_hidx + 1 ))
               ;;
             time|command|builtin|exec|nohup|env|sudo|xargs|timeout|nice|stdbuf)
+              egress_pfxseen=1
               egress_hidx=$(( egress_hidx + 1 ))
               while [ "$egress_hidx" -lt "${#egress_toks[@]}" ]; do
                 case "${egress_toks[$egress_hidx]}" in
@@ -1166,6 +1180,57 @@ case "$TOOL_NAME" in
             *) break ;;
           esac
         done
+
+        # >>> PREFIX-LOCATOR-BEGIN — core/hooks/tests/block-egress.test.sh (AC-E007-W*)
+        # ---- Secondary locator: the gated verb behind a prefix command's own grammar ----
+        #
+        # The walk above skips a prefix command's dash-led tokens and stops at the first
+        # token that is not one. That is the command word only when no option takes a
+        # separate argument and the prefix command has no operand of its own. Otherwise the
+        # walk lands on the argument (`env -u NAME`), the operand (`timeout 5`), or an
+        # assignment only that command accepts (`env a-b=1`), and the segment would be
+        # skipped with the real `gh api` behind it never examined.
+        #
+        # The remedy is a DOMAIN TEST, not a table of which options take an argument. When
+        # the segment's head resolved through a prefix command and the walk did not land on
+        # the gated verb, look for the first `gh` + `api` pair later in the same segment and
+        # adjudicate that. A table fails OPEN on omission: one unlisted option, one unlisted
+        # operand, or one launcher outside the prefix set strands the command again. The
+        # domain test interprets nothing it passes over, so no option, option argument,
+        # operand or launcher can end the search before the verb.
+        #
+        # What it costs, stated: the rule does not model the prefix command's grammar, so a
+        # `gh api` pair that is only TEXT behind a prefix command (`env X=1 echo gh api -X
+        # POST <path>`, or a heredoc body line that opens with a prefix word) is evaluated as
+        # a write. Every position this block reaches is a widening (the verb is never at the
+        # head of the segment), so it follows the rollout phase and is refused only once that
+        # phase is `enforce`. What the rule reaches is literal adjacent `gh` and `api` words
+        # at a position its walk resolves; anything else is undetermined, not covered — among
+        # others a command carried as a string (`bash -c '...'`, `env -S '...'`), a command
+        # word that is a variable, a leading word outside the prefix set, and a spelling the
+        # walk above does not resolve at all.
+        #
+        # The walk above is deliberately untouched, so every segment it already resolved is
+        # resolved identically. `egress_scanhit` records that the verb was found here and
+        # not by the walk; the first-invocation counter below reads it. `egress_pos` labels
+        # the would-fire row this hit writes (`pos: "look-ahead"`), so the drain can tell
+        # the two populations apart: it says which locator found the verb, never that the
+        # words it found are executed.
+        if [ "$egress_pfxseen" -eq 1 ]; then
+          egress_sidx="$egress_hidx"
+          while [ $(( egress_sidx + 1 )) -lt "${#egress_toks[@]}" ]; do
+            if [ "${egress_toks[$egress_sidx]##*/}" = "gh" ] && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then
+              if [ "$egress_sidx" -ne "$egress_hidx" ]; then
+                egress_hidx="$egress_sidx"
+                egress_scanhit=1
+                egress_pos="look-ahead"
+              fi
+              break
+            fi
+            egress_sidx=$(( egress_sidx + 1 ))
+          done
+        fi
+        # >>> PREFIX-LOCATOR-END
 
         # need a verb AND at least one token after it
         [ $(( egress_hidx + 1 )) -lt "${#egress_toks[@]}" ] || continue
@@ -1181,7 +1246,14 @@ case "$TOOL_NAME" in
           api) ;;
           *) continue ;;
         esac
-        egress_ghseen=$(( egress_ghseen + 1 ))
+        # A verb found by the secondary locator does not advance the first-invocation
+        # counter. The rollout classifier below can refuse from day one only the FIRST
+        # invocation the walk resolves; counting one that only the locator can see would
+        # move a later head-position write out of that refusal and into the rollout phase —
+        # a deny withdrawn by a change that was meant only to add evaluation. Holding the
+        # counter still keeps the shipped hook's verdict for every invocation the walk
+        # resolves; it is not a reconstruction of the replaced matcher's verdict.
+        if [ "$egress_scanhit" -eq 0 ]; then egress_ghseen=$(( egress_ghseen + 1 )); fi
 
         # ---- Walk the operands: method, write-ness, and the path ----
         #
@@ -1277,17 +1349,17 @@ case "$TOOL_NAME" in
         fi
 
         if [ -z "$egress_path" ]; then
-          egress_007_verdict "no-path" "unknown" "$egress_widening"
+          egress_007_verdict "no-path" "unknown" "$egress_widening" "" "$egress_pos"
           continue
         fi
 
         if ! egress_norm_path="$(egress_classify_api_path "$egress_path")"; then
-          egress_007_verdict "unresolvable" "$egress_path" "$egress_widening"
+          egress_007_verdict "unresolvable" "$egress_path" "$egress_widening" "" "$egress_pos"
           continue
         fi
 
         if ! is_allowlisted "$egress_norm_path" "$EGRESS_ALLOWLIST" gh-api-path; then
-          egress_007_verdict "not-allowlisted" "$egress_norm_path" "$egress_widening"
+          egress_007_verdict "not-allowlisted" "$egress_norm_path" "$egress_widening" "" "$egress_pos"
         fi
       done <<< "$egress_segs"
     fi
