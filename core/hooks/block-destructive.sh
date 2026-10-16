@@ -1150,6 +1150,155 @@ script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp
   esac
 }
 
+# ---------------------------------------------------------------------------
+# WRAPPER OPTION GRAMMAR for the BLOCK-DESTRUCTIVE-022 command-position walk.
+#
+# A transparent wrapper execs the rest of its argv, but only AFTER its own
+# options, and an option that takes a separate argument puts a second token
+# between the wrapper and the command word. A walk that knows the wrapper and not
+# its options stops on the first option, reads that option as the command word,
+# matches no verb, and adjudicates nothing: `nice -n 10 bash <script>` is the same
+# execution as `nice bash <script>` and was not the same verdict.
+#
+# ONE ROW PER WRAPPER, IN getopt NOTATION, beside the four per-interpreter tables
+# above and for the same reason they are tables: the arity of an option is a fact
+# about a program, not about shell grammar, so it is data and not control flow.
+#   script_wopt    short options that take an argument: `x:` takes one, attached or
+#                  as the next token; `x::` takes one only when attached. A letter
+#                  that is not listed is a flag, and so is a digit (`nice -10`).
+#   script_wlarg   long options that may take their argument as the NEXT token. The
+#                  `--name=value` spelling needs no row: it is one token.
+#   script_wnox    short options under which the wrapper EXECUTES NOTHING and only
+#                  describes or edits its operand. The segment is not an execution
+#                  and is skipped, which is the verdict these spellings already had.
+#   script_wsplit  short options whose ATTACHED argument is the command line itself,
+#   script_wlsplit and the long spellings of the same (`env -S<string>`,
+#                  `env --split-string=<string>`). Such a token is NOT stepped over:
+#                  the walk stops on it, so it stays the command word and is
+#                  adjudicated exactly as it was before this table existed. Stepping
+#                  over it would take a command line out of adjudication, and a step
+#                  may move the verb later; it may never remove an execution.
+#   script_wpos    what follows the option run and precedes the command word:
+#                  `one` a single positional operand (the duration `timeout` takes),
+#                  `assign` a run of `name=value` operands (`env`), `none` nothing.
+#
+# FAILURE DIRECTION, STATED RATHER THAN ARGUED AWAY. A row closes what it lists.
+# An option a row does not list is stepped over as a flag, so if it takes a
+# separate value that value is read as the command word and nothing is
+# adjudicated: the verdict every wrapper option had before this table existed.
+# That is the fail-open-on-omission direction the operand walk's notes reject for
+# an arity table. It is accepted here on a measurement: the nothing-to-omit
+# alternative, scanning for the verb, refuses ordinary commands whose arguments
+# merely name an interpreter. So every row has an arm per spelling, and the one
+# allow-granting field, script_wnox, is two rows long with a near miss per letter.
+#
+# `env -S` is deliberately NOT listed as taking an argument: its argument is the
+# command line itself, so the token after it is read as the command word. The
+# ATTACHED spelling is the other case, and script_wsplit above is why.
+# ---------------------------------------------------------------------------
+script_wrapper_row() {   # $1 = wrapper basename
+  script_wrow=1
+  script_wopt=""
+  script_wlarg=" "
+  script_wnox=""
+  script_wsplit=""
+  script_wlsplit=" "
+  script_wpos="none"
+  case "$1" in
+    nice)    script_wopt="n:"; script_wlarg=" --adjustment " ;;
+    stdbuf)  script_wopt="e:i:o:"; script_wlarg=" --error --input --output " ;;
+    sudo)    script_wopt="a:C:c:D:g:h:p:R:r:T:t:U:u:"; script_wlarg=" --auth-type --close-from --login-class --chdir --group --host --prompt --chroot --role --command-timeout --type --other-user --user "; script_wnox="elvVK" ;;
+    env)     script_wopt="a:C:P:u:"; script_wlarg=" --argv0 --chdir --unset "; script_wsplit="S"; script_wlsplit=" --split-string "; script_wpos="assign" ;;
+    xargs)   script_wopt="a:d:E:e::I:i::J:L:l::n:P:R:S:s:"; script_wlarg=" --arg-file --delimiter --max-args --max-procs --max-chars --process-slot-var " ;;
+    time)    script_wopt="f:o:"; script_wlarg=" --format --output " ;;
+    timeout) script_wopt="k:s:"; script_wlarg=" --kill-after --signal "; script_wpos="one" ;;
+    exec)    script_wopt="a:" ;;
+    builtin|nohup) : ;;
+    command) script_wnox="vV" ;;
+    *)       script_wrow=0 ;;
+  esac
+}
+
+# Step script_hidx over ONE wrapper's own option run and positional operands.
+# Entered with script_hidx on the token after the wrapper word and script_wrap
+# holding the wrapper's basename; leaves script_hidx on the first token that is
+# not part of the wrapper's own grammar. Sets script_winert=1 when a describe-only
+# option was seen. It steps and never adjudicates: see FAILURE DIRECTION above.
+script_wrapper_options() {
+  local _tok="" _rest="" _c="" _n="${#script_tokens[@]}"
+  script_wrapper_row "$script_wrap"
+  if [ "$script_wrow" -eq 0 ]; then return 0; fi
+  while [ "$script_hidx" -lt "$_n" ]; do
+    _tok="${script_tokens[$script_hidx]}"
+    case "$_tok" in
+      --)
+        script_hidx=$(( script_hidx + 1 ))
+        break
+        ;;
+      --*=*)
+        case "$script_wlsplit" in
+          *" ${_tok%%=*} "*) return 0 ;;
+        esac
+        script_hidx=$(( script_hidx + 1 ))
+        ;;
+      --*)
+        script_hidx=$(( script_hidx + 1 ))
+        case "$script_wlarg" in
+          *" $_tok "*)
+            if [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
+            ;;
+        esac
+        ;;
+      -?*)
+        script_hidx=$(( script_hidx + 1 ))
+        _rest="${_tok#-}"
+        while [ -n "$_rest" ]; do
+          _c="${_rest:0:1}"
+          _rest="${_rest:1}"
+          if [ "$_c" = ":" ]; then continue; fi
+          case "$script_wnox" in
+            *"$_c"*) script_winert=1; return 0 ;;
+          esac
+          case "$script_wsplit" in
+            *"$_c"*)
+              if [ -n "$_rest" ]; then script_hidx=$(( script_hidx - 1 )); return 0; fi
+              ;;
+          esac
+          case "$script_wopt" in
+            *"$_c::"*) _rest="" ;;
+            *"$_c:"*)
+              if [ -z "$_rest" ] && [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
+              _rest=""
+              ;;
+          esac
+        done
+        ;;
+      -)
+        script_hidx=$(( script_hidx + 1 ))
+        ;;
+      *) break ;;
+    esac
+  done
+  case "$script_wpos" in
+    one)
+      if [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
+      ;;
+    assign)
+      while [ "$script_hidx" -lt "$_n" ]; do
+        _tok="${script_tokens[$script_hidx]}"
+        case "$_tok" in
+          -*) break ;;
+          *=*)
+            script_hidx=$(( script_hidx + 1 ))
+            ;;
+          *) break ;;
+        esac
+      done
+      ;;
+  esac
+  return 0
+}
+
 # Adjudicate one candidate script path against the allowlist. Blocks (exit 2) on
 # a non-allowlisted target, and blocks on an UNRESOLVABLE one: this hook sees
 # unexpanded argv, so a variable-bearing path cannot be resolved here. Denying is
@@ -2531,21 +2680,35 @@ case "$TOOL_NAME" in
       #
       # A token is a prefix assignment IFF it contains `=` AND its NAME part
       # (everything before the FIRST `=`) is a valid shell name. A token that is
-      # neither an assignment nor a listed wrapper (below) TERMINATES the run and is
-      # the command word — so `a-b=1` and `--body=x` both stop the walk, and the skip
-      # cannot degrade into a general "advance past any token containing `=`". The
-      # two tests are ordered: `${tok%%=*}` returns the whole token when there is no
-      # `=`, so the pattern test must gate it.
+      # none of an assignment, a listed keyword or wrapper (below), or a token of a
+      # listed wrapper's own option grammar (the wrapper rows, script_wrapper_row)
+      # TERMINATES the run and is the command word — so `a-b=1` and `--body=x` both
+      # stop the walk here, and the skip cannot degrade into a general "advance past
+      # any token containing `=`". (Behind `env` the operand loop is env's own
+      # grammar, which takes any `name=value`: env sets `a-b=1` and runs what follows.)
+      # The two tests are ordered: `${tok%%=*}` returns the whole token when there is
+      # no `=`, so the pattern test must gate it.
       #
-      # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION
-      # that mirrors lib/command-position.awk's PREFIX set — one set, two walks, so
-      # the shared canonicalizer and this local walk cannot drift apart. `sudo bash
-      # <script>`, `env bash <script>` and `then bash <script>` are the SAME operation
-      # as `bash <script>`; without this the wrapper resolved as the command word, no
-      # verb matched, and the invocation fell through to ALLOW with the allowlist
-      # never consulted — the verdict tracking lexical position instead of the action.
-      # Matched on the BASENAME, as the verb below is, so `/usr/bin/env bash <script>`
-      # resolves too.
+      # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION,
+      # and each wrapper's own options and operands are walked from its row. `sudo
+      # bash <script>`, `nice -n 10 bash <script>` and `then bash <script>` are the
+      # SAME operation as `bash <script>`; without this the wrapper, or its first
+      # option, resolved as the command word, no verb matched, and the invocation fell
+      # through to ALLOW with the allowlist never consulted — the verdict tracking
+      # lexical position instead of the action. Matched on the BASENAME, as the verb
+      # below is, so `/usr/bin/env bash <script>` resolves too.
+      #
+      # THIS IS ONE OF FOUR LISTS OF THE VOCABULARY, AND THEY ARE NOT ONE SET. The
+      # egress rule's prefix-command walk and the shared canonicalizer
+      # lib/command-position.awk each hold a list and walk it with their own grammar,
+      # and the SIGPIPE-idiom lint of the repository-integrity workflow holds a fourth
+      # for a different question. This walk and the egress walk match the basename;
+      # the canonicalizer matches the exact token, and it alone steps over a leading
+      # redirection and an escaped verb; only the egress walk steps over every
+      # dash-led token. This rule is deliberately not routed through the
+      # canonicalizer. The suite's WRAPVOCAB-PARITY arms read every list and fail on a
+      # word-level difference their declared table does not carry, and on a
+      # declaration whose difference no longer exists.
       #
       # This is NOT the denylist-of-evaluating-verbs that the earlier note here ruled
       # out, and its failure direction is the opposite one. That note was reasoning
@@ -2556,13 +2719,15 @@ case "$TOOL_NAME" in
       # is recoverable. Membership criterion: the word must be a TRANSPARENT prefix —
       # a shell keyword, or a wrapper that execs the rest of the argv unchanged.
       #
-      # Still NOT skipped, deliberately: `eval` and `timeout`. `eval` re-parses a
-      # program string this lexical matcher cannot resolve (the same nested-shell
-      # residual lib/command-position.awk records for `bash -c '…'`), and `timeout`
-      # carries a duration operand the walk would additionally have to consume.
-      # Recorded residuals, not half-closed cases.
+      # Still NOT skipped, deliberately: `eval`. It re-parses a program string this
+      # lexical matcher cannot resolve (the same nested-shell residual
+      # lib/command-position.awk records for `bash -c '…'`). A recorded residual, not
+      # a half-closed case. `timeout` used to stand beside it, for the duration
+      # operand the walk would additionally have to consume; its row consumes it now.
       script_hidx=0
       script_xargs=0
+      script_wrap=""
+      script_winert=0
       while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
         script_ptok="${script_tokens[$script_hidx]}"
         case "$script_ptok" in
@@ -2575,13 +2740,22 @@ case "$TOOL_NAME" in
             ;;
         esac
         case "${script_ptok##*/}" in
-          sudo|env|command|builtin|exec|nohup|time|xargs|then|do|else|elif|'in'|'!')
-            if [ "${script_ptok##*/}" = "xargs" ]; then script_xargs=1; fi
+          then|do|else|elif|if|while|until|'in'|'!')   # M-WRAP-KEYWORDS
             script_hidx=$(( script_hidx + 1 ))
+            ;;
+          sudo|env|command|builtin|exec|nohup|time|xargs|nice|stdbuf|timeout)   # M-WRAP-WORDS
+            script_wrap="${script_ptok##*/}"
+            if [ "$script_wrap" = "xargs" ]; then script_xargs=1; fi
+            script_hidx=$(( script_hidx + 1 ))
+            script_wrapper_options   # M-WRAP-OPTIONS
+            if [ "$script_winert" -eq 1 ]; then break; fi
             ;;
           *) break ;;
         esac
       done
+      # A describe-only wrapper option was seen: the wrapper executes nothing, so
+      # this segment is not an execution of whatever follows it.
+      if [ "$script_winert" -eq 1 ]; then continue; fi
       # A command word must EXIST at command position -- an all-prefix segment
       # has none. The walk can consume every token (`FOO=1` as a whole segment,
       # or a segment that is nothing but wrapper prefixes), and this is the
