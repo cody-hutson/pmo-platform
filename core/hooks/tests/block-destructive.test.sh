@@ -5497,6 +5497,136 @@ case "$nsi_typo" in
     /usr/bin/printf 'FAIL: T-NSI-10e [ctl] an out-of-enum phase value did not fail closed, got %s\n' "$nsi_typo"; FAIL=$((FAIL + 1)) ;;
 esac
 
+# --- ROLLOUT-DOC-* (#7026, D-1): the readiness SOURCE and the generated index state
+# each phased arm's rollout constant in the form `DESTRUCTIVE_022_<FAM>_<NAME>` = value,
+# and every value they state is the hook's own ---------------------------------------
+# WHY THIS EXISTS. `DESTRUCTIVE_022_EXEC_ARMED` stood stale at 2026-08-24 for five weeks
+# while the hook carried 2026-09-03, because nothing compared the sentence to the
+# constant: the registry freshness check (build-hook-registry.py --check) compares two
+# copies of ONE claim and can never falsify it. These arms tie the sentence to the
+# constant it describes, read from the hook in the same run.
+#
+# BY AGREEMENT, NOT PRESENCE (the adversarial review's F-3, sub-task #8236). The scanner
+# reads EVERY `DESTRUCTIVE_022_<NAME>` = value occurrence and requires each to equal the
+# hook's value, so a STALE statement standing BESIDE a fresh one — the next shape this
+# defect takes — is caught (ROLLOUT-DOC-M2), where a presence check would pass. The scan
+# is family-agnostic, so DESTRUCTIVE_022_ENCL_ARMED is tied for free.
+#
+# FAILS CLOSED: a missing document reports MISSING and reddens; it never reads as
+# "nothing to check". NO PIPELINES ANYWHERE: one awk pass over the hook table and the
+# document, command-substitution capturing the whole result — never a writer piped into
+# a short-circuiting reader (the idiom the repo-integrity SIGPIPE gate matches by name).
+# The documents resolve by the same two-rung path the NOEXEC-DOC arms use
+# ($NOEXEC_DOC_FRAG / $NOEXEC_DOC_INDEX).
+rollout_doc_scan() {   # $1 = document -> "<scanned> <mismatch>", or MISSING
+  [ -f "$1" ] || { /usr/bin/printf 'MISSING'; return 0; }
+  /usr/bin/awk '
+    FNR==NR {
+      if ($0 ~ /^readonly DESTRUCTIVE_022_[A-Z_]+=/) {
+        rd_line = $0; sub(/^readonly /, "", rd_line)
+        rd_eq = index(rd_line, "=")
+        rd_nm = substr(rd_line, 1, rd_eq - 1)
+        rd_vv = substr(rd_line, rd_eq + 1)
+        gsub(/"/, "", rd_vv); sub(/[ \t].*$/, "", rd_vv)
+        rd_hook[rd_nm] = rd_vv
+      }
+      next
+    }
+    {
+      rd_s = $0
+      while (match(rd_s, /`DESTRUCTIVE_022_[A-Z_]+` = [A-Za-z0-9._-]+/)) {
+        rd_tok = substr(rd_s, RSTART, RLENGTH)
+        rd_s   = substr(rd_s, RSTART + RLENGTH)
+        rd_n   = split(rd_tok, rd_a, "`")
+        rd_name = rd_a[2]
+        rd_val  = rd_a[3]; sub(/^ = /, "", rd_val)
+        rd_scan++
+        if (!(rd_name in rd_hook))      { rd_mis++; next }
+        if (rd_hook[rd_name] != rd_val) { rd_mis++ }
+      }
+    }
+    END { printf "%d %d", rd_scan + 0, rd_mis + 0 }
+  ' "$HOOK" "$1"
+}
+
+rollout_doc_phased_present() {   # $1 = document -> count (0..4) of EXEC/INTERP PHASE+ARMED stated as ` = value`
+  [ -f "$1" ] || { /usr/bin/printf '0'; return 0; }
+  /usr/bin/awk '
+    index($0, "`DESTRUCTIVE_022_EXEC_PHASE` = ")   { rp_ep = 1 }
+    index($0, "`DESTRUCTIVE_022_EXEC_ARMED` = ")   { rp_ea = 1 }
+    index($0, "`DESTRUCTIVE_022_INTERP_PHASE` = ") { rp_ip = 1 }
+    index($0, "`DESTRUCTIVE_022_INTERP_ARMED` = ") { rp_ia = 1 }
+    END { printf "%d", rp_ep + rp_ea + rp_ip + rp_ia }
+  ' "$1"
+}
+
+rollout_doc_agree_arm() {   # $1 = arm id  $2 = label  $3 = document
+  local rd_r rd_scanned rd_mis
+  rd_r="$(rollout_doc_scan "$3")"
+  if [ "$rd_r" = "MISSING" ]; then
+    /usr/bin/printf 'FAIL: %s %s is MISSING — the tie cannot be read, and a documentation arm must never read as "nothing to check"\n  file=%s\n' "$1" "$2" "$3"
+    FAIL=$((FAIL + 1)); return 0
+  fi
+  rd_scanned="${rd_r% *}"; rd_mis="${rd_r#* }"
+  if [ "$rd_scanned" -gt 0 ] && [ "$rd_mis" -eq 0 ]; then
+    /usr/bin/printf 'PASS: %s %s — %s rollout-constant statement(s) read, all equal to the hook\n' "$1" "$2" "$rd_scanned"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s %s — %s statement(s) read, %s disagree with the hook (want scanned>0, mismatch=0)\n  file=%s\n' "$1" "$2" "$rd_scanned" "$rd_mis" "$3"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+rollout_doc_present_arm() {   # $1 = arm id  $2 = label  $3 = document
+  local rd_c; rd_c="$(rollout_doc_phased_present "$3")"
+  if [ "$rd_c" -eq 4 ]; then
+    /usr/bin/printf 'PASS: %s %s states all four phase-gated constants (EXEC/INTERP PHASE and ARMED) in the tied form\n' "$1" "$2"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s %s states %s of 4 phase-gated constants in the ` = value` form — a dropped statement is an untied constant\n  file=%s\n' "$1" "$2" "$rd_c" "$3"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+rollout_doc_agree_arm   "ROLLOUT-DOC-01" "readiness SOURCE" "$NOEXEC_DOC_FRAG"
+rollout_doc_agree_arm   "ROLLOUT-DOC-02" "generated index"  "$NOEXEC_DOC_INDEX"
+rollout_doc_present_arm "ROLLOUT-DOC-03" "readiness SOURCE" "$NOEXEC_DOC_FRAG"
+rollout_doc_present_arm "ROLLOUT-DOC-04" "generated index"  "$NOEXEC_DOC_INDEX"
+
+# RED-BEFORE CONTROLS — the scanner must be shown able to report a mismatch, or a clean
+# read proves nothing. Each mutates the SHIPPED source and asserts the mutant is LIVE
+# (differs) AND that the scan then reports a mismatch.
+rollout_doc_control() {   # $1 = arm id  $2 = description  $3 = sed script OR "append:<text>"
+  local rd_mut rd_r rd_mis
+  rd_mut="$(/usr/bin/mktemp)"
+  case "$3" in
+    append:*) /bin/cp "$NOEXEC_DOC_FRAG" "$rd_mut"; /usr/bin/printf '\n%s\n' "${3#append:}" >> "$rd_mut" ;;
+    *)        /usr/bin/sed "$3" "$NOEXEC_DOC_FRAG" > "$rd_mut" ;;
+  esac
+  if /usr/bin/cmp -s "$NOEXEC_DOC_FRAG" "$rd_mut"; then
+    /usr/bin/printf 'FAIL: %s mutation is INERT — mutant is byte-identical to the shipped source; re-point it\n' "$1"
+    FAIL=$((FAIL + 1)); /bin/rm -f "$rd_mut"; return 0
+  fi
+  rd_r="$(rollout_doc_scan "$rd_mut")"; /bin/rm -f "$rd_mut"
+  rd_mis="${rd_r#* }"
+  if [ "$rd_r" != "MISSING" ] && [ "$rd_mis" -gt 0 ]; then
+    /usr/bin/printf 'PASS: %s mutation is live AND the scan reports %s mismatch(es) (red-before control fires)\n' "$1" "$rd_mis"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s scanner did not report the planted drift (result=%s)\n' "$1" "$rd_r"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# (M1) a stated value changed to a wrong one — the drift the registry check cannot see.
+# Targets DESTRUCTIVE_022_EXEC_REVIEW_DAYS = 60, which the fragment carries in every state.
+rollout_doc_control "ROLLOUT-DOC-M1" "value changed" \
+  's|`DESTRUCTIVE_022_EXEC_REVIEW_DAYS` = 60|`DESTRUCTIVE_022_EXEC_REVIEW_DAYS` = 61|'
+# (M2) a STALE statement appended beside the fresh ones — F-3's shape, invisible to a
+# presence check. The retired 2026-08-24 arming date is the regression this arm exists for.
+rollout_doc_control "ROLLOUT-DOC-M2" "stale statement appended" \
+  'append:> A stray restatement left by a partial edit: `DESTRUCTIVE_022_EXEC_ARMED` = 2026-08-24 somewhere below the real one.'
+
 # --- AC-9: PAIRED MUTATION ARMS (REQUIRED) ------------------------------------
 # Three arms in this milestone's prior release read green while their mutation was
 # INERT, so each mutant is asserted to DIFFER from the shipped hook before anything
