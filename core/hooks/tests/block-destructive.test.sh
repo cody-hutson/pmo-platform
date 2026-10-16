@@ -7084,6 +7084,298 @@ wrap_arm "WRAPDIV-qval-sep: FOO='a;b' bash <unlisted>.sh allowed (a separator in
 
 /bin/rm -rf "$WRAP_ROOT"
 
+echo ""
+echo "BLOCK-022 flag walk: a quote-led word that spells a dash flag, its quote closing inside the operand suffix (FWALK-QDASH-*)"
+echo "---"
+# SUBJECT. The flag walk reads a token that opens with a quote and closes every quote it opens
+# as the word the shell makes of it (block (7b), FWALK-QWORD-*). One subclass of that family
+# still ended the walk with nothing adjudicated: a word whose exact value begins with `-` and
+# ends in the arm's operand suffix, with the quote closing INSIDE the suffix. `'-x.s'h` is the
+# word `-x.sh`. Its probe (`-x.s`) and its raw token (ending `'h`) land in no domain, so only
+# the word's own value claimed it; the walk ended on it as the operand, and the operand path,
+# which reads the probe and the raw token and never the word, adjudicated nothing. Its unquoted
+# twin begins with `-`, so the raw view steps over it and the script behind it is adjudicated.
+# A word whose exact value begins with `-` is now stepped over the same way, even when that
+# value lands in the operand domain. The normalizer, the probe and the raw token still claim
+# first. These arms grade that, the controls and pins it must leave alone, and the two
+# residuals it leaves declared rather than closed.
+#
+# HERMETIC, ON THE WRAP BLOCK'S PATTERN AND FOR ITS REASON: this block's own root, an allowlist
+# naming one shell and one Python fixture, its own .mode, the scope variables unset for every
+# run, and mutant copies beside the hook copy, so every verdict below turns on this fixture and
+# nothing ambient. A verdict is read as the corpus reader reads one: exit 2 is B, exit 0 with a
+# new would-fire row in this fixture's drain is W, exit 0 with none is a.
+#
+# THE REVERSE MUTANT deletes the one marked line (M-QDASH) and nothing else, which is the walk
+# as it was before this change; FWALK-QDASH-M0 pins that difference. Every pair arm runs the
+# hook AND the reverse mutant, so the mutant limb of a must-refuse arm is its red-before
+# evidence in the same run.
+#
+# ARM CLASSES, so the red-before obligation can be read off the label. FWALK-QDASH-01 to -14
+# are the fourteen spellings the finding measured, must-refuse on the shell arms and must-flag
+# on the phase-gated non-shell arm: red before this change. A -ctl- arm must stay allowed and a
+# -pin- arm is a verdict this change does not move; both are green before by design, and each
+# is shown able to fail by a sibling mutant: the deny mutant (-M1*) refuses each control and the
+# declared residual, the claim-blind mutant (-M2*) allows each pin the probe or raw token holds,
+# and the top-rule mutant (-M3*) allows each pin the normalizer holds. -SCOPE, the -M*a shape
+# arms and the mutant payload arms read mutation sites or behaviour this change adds, and are
+# not red-before evidence.
+#
+# NO PIPE INTO A SHORT-CIRCUITING READER ANYWHERE IN THIS BLOCK (the SIGPIPE-idiom gate):
+# the diff shape is counted by one awk pass that reads to the end, and stderr is matched from a
+# here-string.
+QDASH_ROOT="$(/usr/bin/mktemp -d)"
+QDASH_CLAUDE="${QDASH_ROOT}/.claude"
+QDASH_HOOKS="${QDASH_CLAUDE}/hooks"
+/bin/mkdir -p "${QDASH_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${QDASH_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${QDASH_HOOKS}/lib/" 2>/dev/null || true
+QDASH_OK='/tmp/pmo-qdash-ok.sh'
+QDASH_OKPY='/tmp/pmo-qdash-ok.py'
+QDASH_NA='/tmp/pmo-qdash-na'
+/usr/bin/printf '%s\n' "$QDASH_OK" "$QDASH_OKPY" > "${QDASH_CLAUDE}/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${QDASH_HOOKS}/.mode"
+/bin/cp "$HOOK" "${QDASH_HOOKS}/block-destructive.sh"
+# The reverse mutant: the marked line deleted, so a word that spells a dash flag is claimed by
+# its value again and the walk ends on it.
+/usr/bin/sed '/# M-QDASH (mutation/d' "$HOOK" > "${QDASH_HOOKS}/block-destructive-rev.sh"
+# The deny mutant: the view refuses a token the normalizer declines and the probe and raw token
+# leave unclaimed (the FWALK-QWORD-M2 shape, with this block's own reason text).
+/usr/bin/sed 's|^  script_word_scan "\$1"$|  if ! script_operand_implicated "$script_interp_domain"; then block "BLOCK-DESTRUCTIVE-022" "QDASH deny mutant" "test only"; fi; script_word_scan "$1"|' \
+  "$HOOK" > "${QDASH_HOOKS}/block-destructive-deny.sh"
+# The claim-blind mutant: the view's probe-and-raw claim deleted (the FWALK-QWORD-M3 shape).
+/usr/bin/sed '/^  if script_operand_implicated "\$script_interp_domain"; then return 0; fi$/d' \
+  "$HOOK" > "${QDASH_HOOKS}/block-destructive-blind.sh"
+# The top-rule mutant: the walk's top-of-loop line rewrites every flag-shaped reading, with no
+# domain question asked of a token the normalizer resolved.
+/usr/bin/sed '/# M-QDASH-TOP (mutation/s/if .*; then/if true; then/' \
+  "$HOOK" > "${QDASH_HOOKS}/block-destructive-wide.sh"
+/bin/chmod +x "${QDASH_HOOKS}/block-destructive.sh" "${QDASH_HOOKS}/block-destructive-rev.sh" \
+  "${QDASH_HOOKS}/block-destructive-deny.sh" "${QDASH_HOOKS}/block-destructive-blind.sh" \
+  "${QDASH_HOOKS}/block-destructive-wide.sh"
+QDASH_DRAIN="${QDASH_HOOKS}/destructive-warn-log.jsonl"
+
+qdash_drain_rows() {
+  if [ -f "$QDASH_DRAIN" ]; then
+    /usr/bin/wc -l < "$QDASH_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+# The difference between the hook copy and one mutant, as "<lines removed>/<lines added>".
+qdash_diff_shape() { # $1 = mutant file in the hermetic hooks dir
+  /usr/bin/diff "${QDASH_HOOKS}/block-destructive.sh" "${QDASH_HOOKS}/$1" \
+    | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }'
+}
+
+QDASH_EXIT=0
+QDASH_ERR=""
+QDASH_V=""
+QDASH_LAST=""
+# Run one payload through one of the sandbox copies -> QDASH_V (a|B|W|E<rc>), QDASH_ERR, and
+# QDASH_LAST, the would-fire row the call added (empty when it added none).
+qdash_run() { # $1 = hook file in the hermetic hooks dir  $2 = command
+  local tmp before after
+  tmp="$(/usr/bin/mktemp)"
+  QDASH_EXIT=0
+  QDASH_LAST=""
+  before="$(qdash_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$QDASH_ROOT")" \
+      | /bin/bash "${QDASH_HOOKS}/$1" 2>"$tmp" >/dev/null ) || QDASH_EXIT="$?"
+  after="$(qdash_drain_rows)"
+  QDASH_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  case "$QDASH_EXIT" in
+    2) QDASH_V="B" ;;
+    0)
+      if [ "$after" -gt "$before" ]; then
+        QDASH_V="W"
+        QDASH_LAST="$(/usr/bin/tail -n 1 "$QDASH_DRAIN")"
+      else
+        QDASH_V="a"
+      fi
+      ;;
+    *) QDASH_V="E${QDASH_EXIT}" ;;
+  esac
+}
+
+# A pair arm. $1 label  $2 command  $3 verdict wanted from the hook (a|B|W)  $4 verdict wanted
+# from the reverse mutant (a|B|W)  $5 (optional) for a wanted B, a pattern the hook's refusal
+# must carry; for a wanted W, the arm its would-fire row must name.
+qdash_arm() {
+  local name="$1" cmd="$2" want="$3" wantm="$4" detail="${5:-}" got gotm ok=1 why=""
+  qdash_run block-destructive.sh "$cmd"
+  got="$QDASH_V"
+  if [ "$got" != "$want" ]; then ok=0; why="hook=${got}"; fi
+  if [ "$ok" = 1 ] && [ -n "$detail" ]; then
+    case "$want" in
+      B) if ! /usr/bin/grep -qE "$detail" <<<"$QDASH_ERR"; then ok=0; why="refusal lacks /${detail}/"; fi ;;
+      W) case "$QDASH_LAST" in *"\"arm\":\"${detail}\""*) ;; *) ok=0; why="row arm is not ${detail}" ;; esac ;;
+    esac
+  fi
+  qdash_run block-destructive-rev.sh "$cmd"
+  gotm="$QDASH_V"
+  if [ "$gotm" != "$wantm" ]; then ok=0; why="${why} reverse=${gotm}"; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (hook %s, reverse %s)\n' "$name" "$got" "$gotm"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted hook=%s reverse=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$wantm" "${why# }" "$QDASH_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# A mutant arm. $1 label  $2 mutant file  $3 command  $4 verdict wanted from the mutant
+# $5 (optional) for a wanted B, a pattern the mutant's refusal must carry.
+qdash_mut_arm() {
+  local name="$1" mut="$2" cmd="$3" want="$4" detail="${5:-}" ok=1 why=""
+  qdash_run "$mut" "$cmd"
+  if [ "$QDASH_V" != "$want" ]; then ok=0; why="mutant=${QDASH_V}"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && [ -n "$detail" ] \
+     && ! /usr/bin/grep -qE "$detail" <<<"$QDASH_ERR"; then
+    ok=0; why="refusal lacks /${detail}/"
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (mutant %s)\n' "$name" "$QDASH_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted mutant=%s; observed %s\n  stderr: %s\n' "$name" "$want" "$why" "$QDASH_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# A mutant's shape arm. $1 label  $2 mutant file  $3 the shape it must have
+qdash_shape_arm() {
+  local got
+  got="$(qdash_diff_shape "$2")"
+  if [ "$got" = "$3" ]; then
+    /usr/bin/printf 'PASS: %s (removed/added %s)\n' "$1" "$got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  removed/added %s, wanted %s — the arms that read this mutant are unusable\n' "$1" "$got" "$3"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- the fixture is live before any verdict is read -------------------------------------
+qdash_run block-destructive.sh 'git push --force origin main'
+qdash_scope_hook="$QDASH_V"
+qdash_scope_err="$QDASH_ERR"
+qdash_run block-destructive-rev.sh 'git push --force origin main'
+qdash_scope_rev="$QDASH_V"
+if [ "$qdash_scope_hook" = "B" ] && [ "$qdash_scope_rev" = "B" ] \
+   && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-001' <<<"$qdash_scope_err"; then
+  /usr/bin/printf 'PASS: FWALK-QDASH-SCOPE the hook copy and its reverse mutant are in scope and enforcing (unrelated rule -001 fires on both), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-QDASH-SCOPE fixture not live (hook=%s reverse=%s); the verdicts below are unusable\n' "$qdash_scope_hook" "$qdash_scope_rev"
+  FAIL=$((FAIL + 1))
+fi
+qdash_shape_arm "FWALK-QDASH-M0: the reverse mutant differs from the hook by the one marked line, removed" \
+  block-destructive-rev.sh "1/0"
+
+# --- MUST REFUSE: the always-enforce shell arms ---------------------------------------------
+qdash_arm "FWALK-QDASH-01: bash '-x.s'h <unlisted>.sh blocks (the word is -x.sh, a flag; the script behind it is adjudicated)" \
+  "bash '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-02: bash -n '-x.s'h <unlisted>.sh blocks (stepping over the word revokes the grant)" \
+  "bash -n '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-03: bash '--rcfile=x.s'h <unlisted>.sh blocks" \
+  "bash '--rcfile=x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-04: zsh '-oxtrace.s'h <unlisted>.sh blocks (the word is a cluster carrying c, as unquoted)" \
+  "zsh '-oxtrace.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-05: zsh '--emulate=sh.s'h <unlisted>.sh blocks" \
+  "zsh '--emulate=sh.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-06: source '-x.s'h <unlisted>.sh blocks (the source arm walks the same loop)" \
+  "source '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+
+# --- MUST FLAG: the phase-gated non-shell arm, at its rollout phase --------------------------
+qdash_arm "FWALK-QDASH-07: python3 '-Wx.p'y <unlisted>.py is adjudicated (the word is -Wx.py)" \
+  "python3 '-Wx.p'y ${QDASH_NA}.py" W a interp-nonshell
+qdash_arm "FWALK-QDASH-08: python3 '-Xfoo.p'y <unlisted>.py is adjudicated" \
+  "python3 '-Xfoo.p'y ${QDASH_NA}.py" W a interp-nonshell
+qdash_arm "FWALK-QDASH-09: python3 '-Wignore::x.p'y <unlisted>.py is adjudicated" \
+  "python3 '-Wignore::x.p'y ${QDASH_NA}.py" W a interp-nonshell
+qdash_arm "FWALK-QDASH-10: perl '-Ifoo.p'm <unlisted>.pl is adjudicated" \
+  "perl '-Ifoo.p'm ${QDASH_NA}.pl" W a interp-nonshell
+qdash_arm "FWALK-QDASH-11: perl '-Ifoo.p'l <unlisted>.pl is adjudicated" \
+  "perl '-Ifoo.p'l ${QDASH_NA}.pl" W a interp-nonshell
+qdash_arm "FWALK-QDASH-12: ruby '-Ifoo.r'b <unlisted>.rb is adjudicated" \
+  "ruby '-Ifoo.r'b ${QDASH_NA}.rb" W a interp-nonshell
+qdash_arm "FWALK-QDASH-13: node '--title=x.j's <unlisted>.js is adjudicated" \
+  "node '--title=x.j's ${QDASH_NA}.js" W a interp-nonshell
+qdash_arm "FWALK-QDASH-14: perl '-Mstrict.p'm <unlisted>.pl is adjudicated" \
+  "perl '-Mstrict.p'm ${QDASH_NA}.pl" W a interp-nonshell
+
+# --- MUST STAY ALLOWED: the allowlist still governs the script behind the word --------------
+qdash_arm "FWALK-QDASH-ctl-near: bash '-x.s'h <allowlisted>.sh allowed (the near miss)" \
+  "bash '-x.s'h ${QDASH_OK}" a a
+qdash_arm "FWALK-QDASH-ctl-near-py: python3 '-Wx.p'y <allowlisted>.py allowed (the near miss the finding named)" \
+  "python3 '-Wx.p'y ${QDASH_OKPY}" a a
+qdash_arm "FWALK-QDASH-ctl-near-n: bash -n '-x.s'h <allowlisted>.sh allowed (revoked, and the allowlist still governs)" \
+  "bash -n '-x.s'h ${QDASH_OK}" a a
+
+# --- PINS: a claim made before the word is read still ends the walk -------------------------
+# A token the normalizer resolves, or one the probe or the raw token places in the operand
+# domain, is the operand and is adjudicated as before: stricter than its unquoted twin, never
+# looser. A word that does not begin with `-` keeps the claim-order verdict.
+qdash_arm "FWALK-QDASH-pin-resolved (pin, not fix-evidence): bash '-x.sh' <allowlisted>.sh still blocks (the normalizer resolves the token; a domain claim beats a flag shape)" \
+  "bash '-x.sh' ${QDASH_OK}" B B "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-pin-raw (pin, not fix-evidence): bash \"-\"x.sh <allowlisted>.sh still blocks (the raw token claims it)" \
+  "bash \"-\"x.sh ${QDASH_OK}" B B "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-pin-empty (pin, not fix-evidence): bash ''-x.sh <allowlisted>.sh still blocks (the raw token claims it)" \
+  "bash ''-x.sh ${QDASH_OK}" B B "BLOCK-DESTRUCTIVE-022"
+qdash_arm "FWALK-QDASH-pin-resolved-py (pin, not fix-evidence): python3 '-Wx.py' still warns" \
+  "python3 '-Wx.py'" W W interp-nonshell
+qdash_arm "FWALK-QDASH-pin-raw-py (pin, not fix-evidence): python3 \"-W\"x.py still warns" \
+  "python3 \"-W\"x.py" W W interp-nonshell
+qdash_arm "FWALK-QDASH-pin-empty-py (pin, not fix-evidence): python3 ''-Wx.py still warns" \
+  "python3 ''-Wx.py" W W interp-nonshell
+qdash_arm "FWALK-QDASH-pin-raw-js (pin, not fix-evidence): node \"\"--title=x.js still warns" \
+  "node \"\"--title=x.js" W W interp-nonshell
+qdash_arm "FWALK-QDASH-pin-claimed (pin, not fix-evidence): bash '<unlisted>.sh'y still blocks (the claim-order example; the word does not begin with -)" \
+  "bash '${QDASH_NA}.sh'y" B B "BLOCK-DESTRUCTIVE-022"
+# The declared residual, pinned at today's verdict so a later change to it is deliberate. A
+# word whose own value lands in the domain without beginning with `-` is the operand, as its
+# unquoted spelling is, and the operand path reads only the probe and the raw token.
+qdash_arm "FWALK-QDASH-pin-plus (declared residual — pin, not fix-evidence): bash '+x.s'h <unlisted>.sh allowed (the word +x.sh is the operand; nothing adjudicates a split suffix)" \
+  "bash '+x.s'h ${QDASH_NA}.sh" a a
+
+# --- EACH CONTROL AND PIN, SHOWN ABLE TO FAIL -------------------------------------------------
+qdash_shape_arm "FWALK-QDASH-M1a: the deny mutant differs from the hook by one line, rewritten" \
+  block-destructive-deny.sh "1/1"
+qdash_mut_arm "FWALK-QDASH-M1b: the deny mutant REFUSES the near miss bash '-x.s'h <allowlisted>.sh" \
+  block-destructive-deny.sh "bash '-x.s'h ${QDASH_OK}" B "QDASH deny mutant"
+qdash_mut_arm "FWALK-QDASH-M1c: the deny mutant REFUSES python3 '-Wx.p'y <allowlisted>.py" \
+  block-destructive-deny.sh "python3 '-Wx.p'y ${QDASH_OKPY}" B "QDASH deny mutant"
+qdash_mut_arm "FWALK-QDASH-M1d: the deny mutant REFUSES bash -n '-x.s'h <allowlisted>.sh" \
+  block-destructive-deny.sh "bash -n '-x.s'h ${QDASH_OK}" B "QDASH deny mutant"
+qdash_mut_arm "FWALK-QDASH-M1e: the deny mutant REFUSES the declared residual bash '+x.s'h <unlisted>.sh" \
+  block-destructive-deny.sh "bash '+x.s'h ${QDASH_NA}.sh" B "QDASH deny mutant"
+qdash_shape_arm "FWALK-QDASH-M2a: the claim-blind mutant differs from the hook by one line, removed" \
+  block-destructive-blind.sh "1/0"
+qdash_mut_arm "FWALK-QDASH-M2b: the claim-blind mutant ALLOWS bash \"-\"x.sh <allowlisted>.sh (the raw token's claim is what holds a dash word as the operand)" \
+  block-destructive-blind.sh "bash \"-\"x.sh ${QDASH_OK}" a
+qdash_mut_arm "FWALK-QDASH-M2c: the claim-blind mutant ALLOWS bash ''-x.sh <allowlisted>.sh" \
+  block-destructive-blind.sh "bash ''-x.sh ${QDASH_OK}" a
+qdash_mut_arm "FWALK-QDASH-M2d: the claim-blind mutant ALLOWS python3 \"-W\"x.py (no row)" \
+  block-destructive-blind.sh "python3 \"-W\"x.py" a
+qdash_mut_arm "FWALK-QDASH-M2e: the claim-blind mutant ALLOWS python3 ''-Wx.py (no row)" \
+  block-destructive-blind.sh "python3 ''-Wx.py" a
+qdash_mut_arm "FWALK-QDASH-M2f: the claim-blind mutant ALLOWS node \"\"--title=x.js (no row)" \
+  block-destructive-blind.sh "node \"\"--title=x.js" a
+qdash_mut_arm "FWALK-QDASH-M2g: the claim-blind mutant ALLOWS bash '<unlisted>.sh'y" \
+  block-destructive-blind.sh "bash '${QDASH_NA}.sh'y" a
+qdash_shape_arm "FWALK-QDASH-M3a: the top-rule mutant differs from the hook by one line, rewritten" \
+  block-destructive-wide.sh "1/1"
+qdash_mut_arm "FWALK-QDASH-M3b: the top-rule mutant ALLOWS bash '-x.sh' <allowlisted>.sh (the domain question is what holds a resolved token)" \
+  block-destructive-wide.sh "bash '-x.sh' ${QDASH_OK}" a
+qdash_mut_arm "FWALK-QDASH-M3c: the top-rule mutant ALLOWS python3 '-Wx.py' (no row)" \
+  block-destructive-wide.sh "python3 '-Wx.py'" a
+
+/bin/rm -rf "$QDASH_ROOT"
+
 # --- Summary ---
 echo ""
 echo "================================"

@@ -862,3 +862,79 @@ WR149|block-destructive|wrap-declared|-|?|a|eval bash @D@/na.sh
 WR150|block-destructive|wrap-declared|-|?|a|nice --adj 10 bash @D@/na.sh
 WR151|block-destructive|wrap-declared|-|?|a|sudo --us bot bash @D@/na.sh
 WR152|block-destructive|wrap-overread|-|?|W|timeout bash @D@/na.sh
+
+# --- iteration 1 on card #7019, for its Stage 7 finding F-01: a quote-led word that spells a dash flag, its quote closing inside the operand suffix (56 rows) ---
+# A token whose quote closes inside the arm's operand suffix, `'-x.s'h`, is the word `-x.sh`.
+# Its probe (`-x.s`) and its raw token (ending `'h`) land in no domain, so only the word's own
+# value claimed it: the walk ended on it as the operand, and the operand path, which reads the
+# probe and the raw token, adjudicated nothing. Its unquoted twin begins with `-`, so the raw
+# view steps over it and the script behind it is adjudicated. A word whose exact value begins
+# with `-` is now stepped over the same way, even when that value lands in the operand domain.
+# Ids are DS plus a number. Ground truth on DS01 to DS14 and on DS62 is the Stage 7 measurement
+# of the same spellings (bash 3.2.57 and zsh 5.9 as the outer shell, marker scripts): the shell
+# rejects the option on DS01 to DS06 and on DS14, the unlisted script runs on DS07 to DS13, and
+# the allowlisted script runs on DS62. Every other row of this block was not run, `?`.
+# Groups: dash-suffix is what the change closes (DS15 to DS17 are three more spellings of the
+# class); dash-suffix-twin are their unquoted twins; dash-suffix-ctl keep the verdict they had,
+# because the normalizer, the probe or the raw token claims the token before the word is read;
+# dash-suffix-near must stay allowed; dash-suffix-decl are two pairs this change leaves as they
+# were, each quoted row weaker than its unquoted spelling by declaration — a word whose own
+# value is the operand (`'+x.s'h`), and the same split suffix in an option's argument slot. Both
+# are the split-suffix operand the readiness text declares open, so their twin field is `-`
+# and WALKCORPUS-TWIN does not grade them; each pair is graded by its group's arm.
+DS01|block-destructive|dash-suffix|DS21|-|B|bash '-x.s'h @D@/na.sh
+DS02|block-destructive|dash-suffix|DS22|-|B|bash -n '-x.s'h @D@/na.sh
+DS03|block-destructive|dash-suffix|DS23|-|B|bash '--rcfile=x.s'h @D@/na.sh
+DS04|block-destructive|dash-suffix|DS24|-|B|zsh '-oxtrace.s'h @D@/na.sh
+DS05|block-destructive|dash-suffix|DS25|-|B|zsh '--emulate=sh.s'h @D@/na.sh
+DS06|block-destructive|dash-suffix|DS26|-|B|source '-x.s'h @D@/na.sh
+DS07|block-destructive|dash-suffix|DS27|X|W|python3 '-Wx.p'y @D@/na.py
+DS08|block-destructive|dash-suffix|DS28|X|W|python3 '-Xfoo.p'y @D@/na.py
+DS09|block-destructive|dash-suffix|DS29|X|W|python3 '-Wignore::x.p'y @D@/na.py
+DS10|block-destructive|dash-suffix|DS30|X|W|perl '-Ifoo.p'm @D@/na.pl
+DS11|block-destructive|dash-suffix|DS31|X|W|perl '-Ifoo.p'l @D@/na.pl
+DS12|block-destructive|dash-suffix|DS32|X|W|ruby '-Ifoo.r'b @D@/na.rb
+DS13|block-destructive|dash-suffix|DS33|X|W|node '--title=x.j's @D@/na.js
+DS14|block-destructive|dash-suffix|DS34|-|W|perl '-Mstrict.p'm @D@/na.pl
+DS15|block-destructive|dash-suffix|DS21|?|B|bash '-x.'sh @D@/na.sh
+DS16|block-destructive|dash-suffix|DS21|?|B|bash "-x.s"h @D@/na.sh
+DS17|block-destructive|dash-suffix|DS27|?|W|python3 "-Wx.p"y @D@/na.py
+DS21|block-destructive|dash-suffix-twin|-|?|B|bash -x.sh @D@/na.sh
+DS22|block-destructive|dash-suffix-twin|-|?|B|bash -n -x.sh @D@/na.sh
+DS23|block-destructive|dash-suffix-twin|-|?|B|bash --rcfile=x.sh @D@/na.sh
+DS24|block-destructive|dash-suffix-twin|-|?|B|zsh -oxtrace.sh @D@/na.sh
+DS25|block-destructive|dash-suffix-twin|-|?|B|zsh --emulate=sh.sh @D@/na.sh
+DS26|block-destructive|dash-suffix-twin|-|?|B|source -x.sh @D@/na.sh
+DS27|block-destructive|dash-suffix-twin|-|?|W|python3 -Wx.py @D@/na.py
+DS28|block-destructive|dash-suffix-twin|-|?|W|python3 -Xfoo.py @D@/na.py
+DS29|block-destructive|dash-suffix-twin|-|?|W|python3 -Wignore::x.py @D@/na.py
+DS30|block-destructive|dash-suffix-twin|-|?|W|perl -Ifoo.pm @D@/na.pl
+DS31|block-destructive|dash-suffix-twin|-|?|W|perl -Ifoo.pl @D@/na.pl
+DS32|block-destructive|dash-suffix-twin|-|?|W|ruby -Ifoo.rb @D@/na.rb
+DS33|block-destructive|dash-suffix-twin|-|?|W|node --title=x.js @D@/na.js
+DS34|block-destructive|dash-suffix-twin|-|?|W|perl -Mstrict.pm @D@/na.pl
+DS35|block-destructive|dash-suffix-twin|-|?|a|python3 -Wx.py
+DS36|block-destructive|dash-suffix-twin|-|?|a|node --title=x.js
+DS41|block-destructive|dash-suffix-ctl|DS27|?|W|python3 "-W"x.py @D@/na.py
+DS42|block-destructive|dash-suffix-ctl|DS27|?|W|python3 ''-Wx.py @D@/na.py
+DS43|block-destructive|dash-suffix-ctl|DS27|?|W|python3 '-Wx.py' @D@/na.py
+DS44|block-destructive|dash-suffix-ctl|DS33|?|W|node ""--title=x.js @D@/na.js
+DS45|block-destructive|dash-suffix-ctl|DS35|?|W|python3 "-W"x.py
+DS46|block-destructive|dash-suffix-ctl|DS35|?|W|python3 ''-Wx.py
+DS47|block-destructive|dash-suffix-ctl|DS35|?|W|python3 '-Wx.py'
+DS48|block-destructive|dash-suffix-ctl|DS36|?|W|node ""--title=x.js
+DS49|block-destructive|dash-suffix-ctl|DS64|?|B|bash "-"x.sh @D@/ok.sh
+DS50|block-destructive|dash-suffix-ctl|DS64|?|B|bash ''-x.sh @D@/ok.sh
+DS51|block-destructive|dash-suffix-ctl|DS64|?|B|bash '-x.sh' @D@/ok.sh
+DS52|block-destructive|dash-suffix-ctl|DS65|?|W|python3 "-W"x.py @D@/ok.py
+DS53|block-destructive|dash-suffix-ctl|DS65|?|W|python3 '-Wx.py' @D@/ok.py
+DS61|block-destructive|dash-suffix-near|DS64|?|a|bash '-x.s'h @D@/ok.sh
+DS62|block-destructive|dash-suffix-near|DS65|o|a|python3 '-Wx.p'y @D@/ok.py
+DS63|block-destructive|dash-suffix-near|DS66|?|a|bash -n '-x.s'h @D@/ok.sh
+DS64|block-destructive|dash-suffix-near|-|?|a|bash -x.sh @D@/ok.sh
+DS65|block-destructive|dash-suffix-near|-|?|a|python3 -Wx.py @D@/ok.py
+DS66|block-destructive|dash-suffix-near|-|?|a|bash -n -x.sh @D@/ok.sh
+DS71|block-destructive|dash-suffix-decl|-|?|a|bash '+x.s'h @D@/na.sh
+DS72|block-destructive|dash-suffix-decl|-|?|B|bash +x.sh @D@/na.sh
+DS73|block-destructive|dash-suffix-decl|-|?|a|bash --rcfile '-x.s'h @D@/ok.sh
+DS74|block-destructive|dash-suffix-decl|-|?|B|bash --rcfile -x.sh @D@/ok.sh
