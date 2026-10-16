@@ -7518,12 +7518,21 @@ wrap_pair "WRAPPAIR-qval-sep: the scan mutant reads past the split piece and ref
 # env's split string is its own argv prepended to what follows, so when the attached value is
 # empty, a flag, or an assignment, env's command is the token that FOLLOWS and the walk now goes
 # on to adjudicate it, where before it stepped onto the split token and read nothing further.
-# These run the splitcmd reverse mutant (stop on any attached split value, the pre-helper walk)
-# as the second limb, so each is red before the fix.
+# The table runs every prefix the parser takes for --split-string, against each of the three
+# values. These run the splitcmd reverse mutant (stop on any attached split value, the
+# pre-helper walk) as the second limb, so each is red before the fix.
 WRAP_MUTANT="block-destructive-splitcmd.sh"
 WRAP_SN_TABLE='s|--s=|shortest prefix of --split-string
 sp|--sp=|a prefix of --split-string
+spl|--spl=|a prefix of --split-string
+spli|--spli=|a prefix of --split-string
 split|--split=|a prefix of --split-string
+split-|--split-=|a prefix of --split-string
+split-s|--split-s=|a prefix of --split-string
+split-st|--split-st=|a prefix of --split-string
+split-str|--split-str=|a prefix of --split-string
+split-stri|--split-stri=|a prefix of --split-string
+split-strin|--split-strin=|the longest proper prefix of --split-string
 full|--split-string=|the full long spelling'
 while IFS='|' read -r wrap_sntag wrap_snp wrap_snd; do
   [ -n "$wrap_sntag" ] || continue
