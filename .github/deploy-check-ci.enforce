@@ -29,10 +29,12 @@
 # posture and the reflexive-pipeline-loop discipline (the introducing release
 # `governance-ci-gates` dogfoods this gate green on its own PR before any flip).
 # Flip the token below to `enforce` after a >=3-day warn-log review with zero false
-# positives AND after the operator adds the `deploy-check-ci` job to
-# `required_status_checks.contexts` via branch protection (the out-of-tree
-# enforcement surface). That single-token edit, plus the branch-protection change,
-# arms the gate. No code change is needed to graduate.
+# positives. The operator then registers the `Pre-merge load-bearing check subset`
+# context in `required_status_checks.contexts` via branch protection (the out-of-tree
+# enforcement surface) — after the flip, never before it: a context registered while
+# this token reads `warn` is a required check that cannot turn red. The single-token
+# edit, followed by the branch-protection change, arms the gate. No code change is
+# needed to graduate.
 #
 # (Token-flagged rather than presence-flagged so the file can ship now — the docs
 #  reference it — while the gate stays non-blocking; mirrors close-completeness.enforce.)
