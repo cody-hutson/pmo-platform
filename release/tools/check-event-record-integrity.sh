@@ -197,6 +197,16 @@ def parse_schema_enum(path):
         m = re.match(r'^`([a-z0-9.-]+)`$', c1)
         if not m:
             continue
+        # A parenthetical span of the cell is PROSE, never enum data — the same
+        # rule, applied the same way, as the writer's awk parser
+        # (append-pipeline-event.sh parse_schema_enum): remove balanced spans
+        # inside-out until none is left, each replaced by a SPACE so the text on
+        # either side cannot fuse into a token, then extract. An unbalanced
+        # parenthesis is left in place. Change both parsers or neither.
+        while True:
+            c3, _n = re.subn(r'\([^()]*\)', ' ', c3)
+            if not _n:
+                break
         out[m.group(1)] = set(re.findall(r'`([a-z0-9.-]+)`', c3))
     return out
 
@@ -721,6 +731,38 @@ if [[ "$SELF_TEST" == "true" ]]; then
   arm 0 "D-1 guard: escaped-pipe log is CLEAN"   "$F/log-escapedpipe-clean.md" "/nonexistent"     "/nonexistent"       "$PAST" log
   # C2 — both arms
   arm 1 "C2 enum-bad log fails"                  "$F/log-enum-bad.md"     "/nonexistent"          "/nonexistent"       "$PAST" log
+  # C2 — § 3 column-3 parenthetical seed. The fixture schema springs, in one cell,
+  # every shape the parenthetical rule must survive: a parenthetical that contains
+  # another, with a backticked file name in the OUTER span; a backticked token
+  # interrupted by a one-character parenthetical (the glue probe); a second,
+  # separate parenthetical; and legitimate subtypes before the first span, between
+  # the two and after the second. A second cell carries an UNCLOSED parenthesis
+  # ahead of its dotted subtype. ONE engine run carries the arm, and it binds the
+  # findings BY SUBTYPE NAME as well as by the C2 tally, because a compound
+  # regression can restore a tally: exactly the two prose-derived rows are C2
+  # violations — the file name, which the un-narrowed parser and a single-pass
+  # strip register, and the glued token, which an empty-string replacement
+  # manufactures — and none of the three legitimate rows is, which an over-strip
+  # or a cut from an unbalanced parenthesis to the end of the cell would break.
+  ARMS=$((ARMS + 1))
+  _ps_rc=0
+  _ps_out="$(run_engine "$F/log-s3-paren-seed.md" "/nonexistent" "/nonexistent" "$PAST" log table "$F/schema-s3-paren-seed.md" 2>&1)" || _ps_rc=$?
+  _ps_bad=""
+  [[ "$_ps_rc" -eq 1 ]] || _ps_bad="$_ps_bad engine-rc=$_ps_rc(expected-1)"
+  /usr/bin/grep -qF "C2  2 violation(s) + 0 legacy of 5 well-formed log rows" <<<"$_ps_out" || _ps_bad="$_ps_bad c2-tally"
+  for _ps_sub in zzz-cited-file.md zzz-glueseed; do
+    /usr/bin/grep -qF "undeclared event_subtype '$_ps_sub' on event_type 'decision'" <<<"$_ps_out" || _ps_bad="$_ps_bad must-flag:$_ps_sub"
+  done
+  for _ps_sub in delegation d-class phase-0.5-row; do
+    if /usr/bin/grep -qF "undeclared event_subtype '$_ps_sub'" <<<"$_ps_out"; then _ps_bad="$_ps_bad must-pass:$_ps_sub"; fi
+  done
+  if [[ -n "$_ps_bad" ]]; then
+    echo "ERROR: self-test arm FAILED: § 3 column-3 parenthetical seed —$_ps_bad" >&2
+    printf '%s\n' "$_ps_out" >&2
+    FAILED=$((FAILED + 1))
+  else
+    echo "self-test: § 3 column-3 parenthetical seed OK (C2 flags exactly the two prose-derived subtypes, zzz-cited-file.md and zzz-glueseed, of 5 well-formed rows; delegation, d-class and phase-0.5-row pass)"
+  fi
   # C3 — both arms, in BOTH directions, each on its own fixture
   arm 1 "C3 row-without-entry fails"             "$F/log-clean.md"        "$F/writelog-orphan-row.log"   "/nonexistent" "$PAST" log
   # THE DELIBERATELY FAILED WRITE: an entry with no row is the case a row-count
