@@ -4338,6 +4338,7 @@ sandbox_case "FWALK-QWORD-M2g: the deny mutant REFUSES bash \"\$VAR\"-x <allowed
   "$QWORD_DENY" "$(bash_payload "bash \"\$PMO_QWORD_UNSET\"-x $ARITY_ALLOWED")" 2 "QWORD deny mutant"
 sandbox_case "FWALK-QWORD-M2h: the deny mutant REFUSES bash \"\"-<1,100 x> <allowed>.sh" \
   "$QWORD_DENY" "$(bash_payload "bash \"\"-${QWORD_LONG} $ARITY_ALLOWED")" 2 "QWORD deny mutant"
+# Exit 2 under perl comes from the mutant calling `block` directly; a real perl refusal goes through the phase router (warn: exit 0).
 sandbox_case "FWALK-QWORD-M2i: the deny mutant REFUSES perl -e 'print 1' (a deny at the walk reaches ordinary program strings)" \
   "$QWORD_DENY" "$(bash_payload "perl -e 'print 1'")" 2 "QWORD deny mutant"
 sandbox_case "FWALK-QWORD-M2j: the deny mutant REFUSES bash -n '<path with spaces>.sh'" \
@@ -6006,7 +6007,7 @@ test_case "NOEXEC-TERM-ctl-emptyarg: bash --rcfile \"\" -n <unlisted>.sh allowed
 
 # (3) THE LATCH ADJUDICATES; IT DOES NOT DENY. The card's own shape in front of an
 # allowlisted path is allowed, and a positional parameter outside the operand domain is
-# never refused. The deny mutant NOEXEC-TERM-M3* refuses both.
+# never refused. The deny mutant refuses both: NOEXEC-TERM-M3b the first, -M3d the second.
 test_case "NOEXEC-TERM-ctl-allowlisted: zsh -s -O extglob -n <allowed> allowed (adjudicated, and the allowlist still governs)" \
   "$(bash_payload "zsh -s -O extglob -n $ARITY_ALLOWED")" 0
 test_case "NOEXEC-TERM-ctl-word: zsh -s -O extglob -n allowed (the card's first measured line: no token lands in the operand domain)" \
@@ -6016,7 +6017,8 @@ test_case "NOEXEC-TERM-ctl-word: zsh -s -O extglob -n allowed (the card's first 
 # is inert under bash: the cluster's `o` takes `pipefail`, and the `-n` is a real flag.
 # Only a bare `-o` is in the arity table, so the walk reads `pipefail` as a word and the
 # option run ends there. The direction is the safe one, and it is the same trade the
-# parse-only table already declares for a cluster.
+# parse-only table already declares for a cluster. Each pin can fail: the revert mutant
+# allows the first (NOEXEC-TERM-M1d), the consumed-argument revert mutant the second (-M4d).
 test_case "NOEXEC-TERM-R1 (declared over-block): bash -eo pipefail -n <unlisted>.sh blocks (a cluster ending in an argument-taking letter)" \
   "$(bash_payload "bash -eo pipefail -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 test_case "NOEXEC-TERM-R2 (declared over-block): bash -o \"\$VAR\" -n <unlisted>.sh blocks (a quoted expansion is one word here, but the walk does not hold its text)" \
@@ -6027,13 +6029,16 @@ test_case "NOEXEC-TERM-R2 (declared over-block): bash -o \"\$VAR\" -n <unlisted>
 # on the `-n` behind it. What zsh then runs is a file named `-n` — an operand the shell
 # domain does not claim, the same limit `bash -- -n <script>.sh` has always had — and
 # the script-suffixed path is that file's argument. Modelling `-b` would be a list of
-# end-of-options spellings whose omissions fail open.
+# end-of-options spellings whose omissions fail open. The over-latch mutant refuses it
+# (NOEXEC-TERM-M2i), which shows the pin can fail.
 test_case "NOEXEC-TERM-P1 (pin, declared limit): zsh -b -n <unlisted>.sh allowed (an end-of-options letter the walk does not model)" \
   "$(bash_payload "zsh -b -n $PARSE_UNLISTED")" 0
 
 # (5) STDIN MODE — the must-not-flag half the criterion names, and three pins of what
 # the rule does with a program that arrives on stdin. The pins are not fix-evidence:
-# they record today's verdicts so that a change to any of them is a decision.
+# they record today's verdicts so that a change to any of them is a decision. The
+# stdin-deny mutant refuses each must-not-flag arm (STDIN-M1*), and the three mutants
+# after it fail one pin each (STDIN-M2*, -M3*, -M4*).
 test_case "STDIN-ctl-01: echo '<program>' | zsh -s allowed (legitimate stdin usage: nothing on argv to adjudicate)" \
   "$(bash_payload "echo 'echo ok' | zsh -s")" 0
 test_case "STDIN-ctl-02: echo '<program>' | bash -s allowed" \
@@ -6052,6 +6057,8 @@ test_case "STDIN-PIN-03 (pin, declared limit): cat <unlisted>.sh | bash allowed 
 # RED-BEFORE, AS AN ARM. This mutant removes the latch's one conjunct from the grant and
 # nothing else, so it IS the pre-fix grant with the new functions left in the file. M1a
 # proves the substitution matched exactly that line; M1b and M1c show the pre-fix ALLOW.
+# M1d is not red-before evidence: it reads the declared over-block NOEXEC-TERM-R1, which
+# the conjunct alone refuses, so it shows that pin can fail.
 TERM_REVERT="$(dirname "$HOOK")/block-destructive.TERM-revert.sh"
 /usr/bin/sed 's/\[ "\$script_optrun" -eq 1 \] && script_interp_noexec_flag/script_interp_noexec_flag/' "$HOOK" > "$TERM_REVERT"
 
@@ -6067,12 +6074,14 @@ sandbox_case "NOEXEC-TERM-M1b: the revert mutant ALLOWS zsh -s -O extglob -n <un
   "$TERM_REVERT" "$(bash_payload "zsh -s -O extglob -n $PARSE_UNLISTED")" 0
 sandbox_case "NOEXEC-TERM-M1c: the revert mutant ALLOWS bash <wrapper> -n <unlisted>.sh" \
   "$TERM_REVERT" "$(bash_payload "bash $TERM_WRAP -n $PARSE_UNLISTED")" 0
+sandbox_case "NOEXEC-TERM-M1d: the revert mutant ALLOWS bash -eo pipefail -n <unlisted>.sh (NOEXEC-TERM-R1's payload)" \
+  "$TERM_REVERT" "$(bash_payload "bash -eo pipefail -n $PARSE_UNLISTED")" 0
 
 /bin/rm -f "$TERM_REVERT"
 
 # THE CONTROLS IN (2) CAN FAIL. This mutant ends the option run on EVERY token, which is
 # what a latch with the wrong test would do. Nothing is granted, and each arm in (2) is
-# refused.
+# refused. So is the declared limit in (4b): M2i reads NOEXEC-TERM-P1's payload.
 TERM_OVER="$(dirname "$HOOK")/block-destructive.TERM-over.sh"
 /usr/bin/sed 's/if ! script_option_word "\$script_fsub"; then script_optrun=0; fi   # M-OPTRUN/script_optrun=0   # M-OPTRUN/' "$HOOK" > "$TERM_OVER"
 
@@ -6098,13 +6107,16 @@ sandbox_case "NOEXEC-TERM-M2g: the over-latch mutant REFUSES bash \"-x\" -n <unl
   "$TERM_OVER" "$(bash_payload "bash \"-x\" -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 sandbox_case "NOEXEC-TERM-M2h: the over-latch mutant REFUSES bash --norc --noprofile -n <unlisted>.sh" \
   "$TERM_OVER" "$(bash_payload "bash --norc --noprofile -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M2i: the over-latch mutant REFUSES zsh -b -n <unlisted>.sh (NOEXEC-TERM-P1's payload)" \
+  "$TERM_OVER" "$(bash_payload "zsh -b -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
 /bin/rm -f "$TERM_OVER"
 
 # THE CONSUMED-ARGUMENT TEST, BOTH WAYS. M4 deletes it: the pre-fix grant returns for
-# the shape in (1c) and for nothing in (1a) or (1b). M5 makes it end the run on EVERY
-# consumed argument: the three controls whose `-n` follows a consumed argument are
-# refused, which is what shows they can fail.
+# the shape in (1c) and for nothing in (1a) or (1b). It returns for the declared
+# over-block NOEXEC-TERM-R2 in (4) as well, which M4d reads, so that pin can fail. M5
+# makes it end the run on EVERY consumed argument: the three controls whose `-n` follows
+# a consumed argument are refused, which is what shows they can fail.
 #
 # M4 DELETES EVERY LINE THAT TESTS THE CONSUMED ARGUMENT, HOWEVER MANY THE HOOK CARRIES.
 # script_adjudicate_optarg holds the latch's line always, and the conservative route's
@@ -6128,6 +6140,8 @@ sandbox_case "NOEXEC-TERM-M4b: the consumed-argument revert mutant ALLOWS bash -
   "$TERM_ARGREV" "$(bash_payload "bash --rcfile \$PMO_TERM_UNSET -n $PARSE_UNLISTED")" 0
 sandbox_case "NOEXEC-TERM-M4c: the consumed-argument revert mutant STILL REFUSES zsh -s -O extglob -n <unlisted>.sh (the two lines hold different shapes)" \
   "$TERM_ARGREV" "$(bash_payload "zsh -s -O extglob -n $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+sandbox_case "NOEXEC-TERM-M4d: the consumed-argument revert mutant ALLOWS bash -o \"\$VAR\" -n <unlisted>.sh (NOEXEC-TERM-R2's payload)" \
+  "$TERM_ARGREV" "$(bash_payload "bash -o \"\$PMO_TERM_UNSET\" -n $PARSE_UNLISTED")" 0
 
 /bin/rm -f "$TERM_ARGREV"
 
@@ -6153,8 +6167,9 @@ sandbox_case "NOEXEC-TERM-M5d: the consumed-argument over-latch mutant REFUSES b
 
 # WHY THE WALK DOES NOT DENY WHERE THE OPTION RUN ENDS, pinned so the proposal is not
 # re-made. Refusing at the first token that is not an option word closes every arm in
-# (1) — and refuses an allowlisted script and an ordinary positional parameter. M3b and
-# M3c are those refusals, each matched on the mutant's own reason text.
+# (1) — and refuses an allowlisted script and an ordinary positional parameter. M3b to
+# M3d are those refusals, each matched on the mutant's own reason text: M3b and M3d read
+# the two controls in (3), and M3c reads STDIN-ctl-04.
 TERM_DENY="$(dirname "$HOOK")/block-destructive.TERM-deny.sh"
 /usr/bin/sed 's/if ! script_option_word "\$script_fsub"; then script_optrun=0; fi   # M-OPTRUN/if ! script_option_word "$script_fsub"; then block "BLOCK-DESTRUCTIVE-022" "TERM deny mutant" "test only"; fi   # M-OPTRUN/' "$HOOK" > "$TERM_DENY"
 
@@ -6170,6 +6185,8 @@ sandbox_case "NOEXEC-TERM-M3b: the deny mutant REFUSES zsh -s -O extglob -n <all
   "$TERM_DENY" "$(bash_payload "zsh -s -O extglob -n $ARITY_ALLOWED")" 2 "TERM deny mutant"
 sandbox_case "NOEXEC-TERM-M3c: the deny mutant REFUSES echo '<program>' | bash -s arg.txt" \
   "$TERM_DENY" "$(bash_payload "echo 'echo ok' | bash -s arg.txt")" 2 "TERM deny mutant"
+sandbox_case "NOEXEC-TERM-M3d: the deny mutant REFUSES echo '<program>' | zsh -s -O extglob -n (NOEXEC-TERM-ctl-word's payload)" \
+  "$TERM_DENY" "$(bash_payload "echo 'echo ok' | zsh -s -O extglob -n")" 2 "TERM deny mutant"
 
 /bin/rm -f "$TERM_DENY"
 
@@ -6198,6 +6215,84 @@ sandbox_case "STDIN-M1e: the stdin-deny mutant REFUSES echo '<program>' | bash -
   "$STDIN_DENY" "$(bash_payload "echo 'echo ok' | bash -s arg.txt")" 2 "STDIN deny mutant"
 
 /bin/rm -f "$STDIN_DENY"
+
+# THE THREE STDIN PINS CAN FAIL. Each mutant below removes what holds one pin's verdict,
+# and its arm reads that pin's payload.
+#
+# STDIN-PIN-03's allow is held by the no-operand branch: an interpreter segment with
+# nothing on argv after the verb leaves before the walk begins, with no operand to
+# adjudicate. The stdin-deny mutant above cannot fail this pin, because it edits the
+# check after the walk, which a bare `| bash` never reaches. This mutant refuses at that
+# branch instead. Its sed range runs from the xargs deny's test inside the branch to the
+# next `continue`, which is the branch's own, so no other `continue` in the hook matches.
+STDIN_NOOP="$(dirname "$HOOK")/block-destructive.STDIN-noop.sh"
+/usr/bin/sed '/if \[ "\$script_xargs" -eq 1 \]; then/,/^ *continue$/s/^\( *\)continue$/\1block "BLOCK-DESTRUCTIVE-022" "STDIN no-operand deny mutant" "test only"/' "$HOOK" > "$STDIN_NOOP"
+
+if [ "$(/usr/bin/diff "$HOOK" "$STDIN_NOOP" | /usr/bin/grep -c '^<')" = "1" ] && /bin/bash -n "$STDIN_NOOP" 2>/dev/null; then
+  /usr/bin/printf 'PASS: STDIN-M2a no-operand deny mutation is live (exactly one line differs, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: STDIN-M2a no-operand deny mutation did not change exactly one line, or the copy does not parse — M2b is unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "STDIN-M2b: the no-operand deny mutant REFUSES cat <unlisted>.sh | bash (STDIN-PIN-03's payload)" \
+  "$STDIN_NOOP" "$(bash_payload "cat $PARSE_UNLISTED | bash")" 2 "STDIN no-operand deny mutant"
+
+/bin/rm -f "$STDIN_NOOP"
+
+# STDIN-PIN-01's refusal is held by the walk adjudicating a script-suffixed word behind
+# `-s` as it would anywhere. The mutant is the design's positional model, scope option P,
+# which the Collective Review did not take: three edits that note a readable `-s` inside
+# the option run and then skip the adjudication of a plain operand behind it, reading the
+# word as a positional parameter. The stdin program runs that positional, and the mutant
+# allows it.
+STDIN_POS="$(dirname "$HOOK")/block-destructive.STDIN-positional.sh"
+/usr/bin/sed \
+  -e 's/^      script_optrun=1$/      script_optrun=1; script_stdin=0/' \
+  -e 's/^\( *\)if ! script_option_word "\$script_fsub"; then script_optrun=0; fi   # M-OPTRUN/\1if ! script_option_word "$script_fsub"; then script_optrun=0; fi; case "$script_interp_base" in bash|sh|zsh) if [ "$script_optrun" -eq 1 ] \&\& [ "$script_fsub" = "-s" ]; then script_stdin=1; fi ;; esac   # M-OPTRUN/' \
+  -e 's/^\( *\)if \[ "\$script_noexec" -eq 1 \] && \[ "\$script_cmode" -eq 0 \]; then$/\1if [ "$script_stdin" -eq 1 ] \&\& [ "$script_cmode" -eq 0 ] \&\& script_plain_word "${script_tokens[$script_idx]}"; then continue; fi; if [ "$script_noexec" -eq 1 ] \&\& [ "$script_cmode" -eq 0 ]; then/' \
+  "$HOOK" > "$STDIN_POS"
+
+if [ "$(/usr/bin/diff "$HOOK" "$STDIN_POS" | /usr/bin/grep -c '^<')" = "3" ] && /bin/bash -n "$STDIN_POS" 2>/dev/null; then
+  /usr/bin/printf 'PASS: STDIN-M3a positional-model mutation is live (exactly the three edited lines differ, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: STDIN-M3a positional-model mutation did not change exactly three lines, or the copy does not parse — M3b is unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "STDIN-M3b: the positional-model mutant ALLOWS echo '<program>' | bash -s <unlisted>.sh (STDIN-PIN-01's payload)" \
+  "$STDIN_POS" "$(bash_payload "echo 'bash \"\$1\"' | bash -s $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$STDIN_POS"
+
+# STDIN-PIN-02's refusal is held twice. The redirection operator is a token whose reading
+# is not plain, so the conservative route takes it; and without the route the walk would
+# advance past it to the file it names. So the mutant reverts both: the operand walk to
+# its dash-anchored form (the AC-D022 reversion, the same two sed expressions) and the
+# route's top-of-loop line. The walk then ends on `<` and adjudicates nothing.
+STDIN_WALK="$(dirname "$HOOK")/block-destructive.STDIN-walk.sh"
+/usr/bin/sed \
+  -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
+  -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
+  -e '/# M-OPAQUE (mutation/d' \
+  "$HOOK" > "$STDIN_WALK"
+STDIN_WALK_GONE=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "$STDIN_WALK") ))
+STDIN_WALK_MARKS="$(/usr/bin/grep -c -e 'M-FWALK' -e '# M-OPAQUE (mutation' "$STDIN_WALK")"
+
+if [ "$STDIN_WALK_GONE" = 21 ] && [ "$STDIN_WALK_MARKS" = 0 ] && /bin/bash -n "$STDIN_WALK" 2>/dev/null; then
+  /usr/bin/printf 'PASS: STDIN-M4a walk-and-route revert mutation is live (the 20 body lines and the route line are gone, no marker of either remains, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: STDIN-M4a walk-and-route revert mutation removed %s lines (expected 21) with %s markers left (expected 0), or the copy does not parse — M4b is unusable\n' "$STDIN_WALK_GONE" "$STDIN_WALK_MARKS"
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "STDIN-M4b: the walk-and-route revert mutant ALLOWS bash -s < <unlisted>.sh (STDIN-PIN-02's payload)" \
+  "$STDIN_WALK" "$(bash_payload "bash -s < $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$STDIN_WALK"
 
 echo ""
 echo "BLOCK-022 flag walk: the command-string letter inside a cluster (FWALK-CLUSTER-*)"
@@ -6247,14 +6342,17 @@ test_case "FWALK-CLUSTER-ctl-long: bash --rcfile /dev/null -n <unlisted>.sh allo
 # (3) PINS. A token a view already places in the operand domain is not re-read as a
 # cluster: `'+c.sh'` is the word +c.sh, which the shell domain claims, and it blocks
 # before and after. And the route's known cost: a script-suffixed word that the program
-# string only READS is refused, exactly as it is behind a bare `-c`.
+# string only READS is refused, exactly as it is behind a bare `-c`. Each pin can fail:
+# the guardless-route mutant allows the first (FWALK-OPAQUE-M5c, built with the route's
+# other mutants below), and the revert mutant the second (FWALK-CLUSTER-M1d).
 test_case "FWALK-CLUSTER-ctl-claimed (pin, not fix-evidence): bash '+c.sh' still blocks (a domain claim outranks the cluster reading)" \
   "$(bash_payload "bash '+c.sh'")" 2 "BLOCK-DESTRUCTIVE-022"
 test_case "FWALK-CLUSTER-R1 (declared over-block): bash -ec 'cat <unlisted>.sh' blocks (twin of the bare -c reading of the same string)" \
   "$(bash_payload "bash -ec 'cat $PARSE_UNLISTED'")" 2 "BLOCK-DESTRUCTIVE-022"
 
 # RED-BEFORE, AS AN ARM. Deleting the one line that hands a cluster to the label
-# restores the pre-fix walk for this class.
+# restores the pre-fix walk for this class. M1d is not red-before evidence: it reads the
+# declared over-block FWALK-CLUSTER-R1, which the same line refuses, so that pin can fail.
 CLUSTER_REVERT="$(dirname "$HOOK")/block-destructive.CLUSTER-revert.sh"
 /usr/bin/sed '/# M-CLUSTER/d' "$HOOK" > "$CLUSTER_REVERT"
 
@@ -6270,6 +6368,8 @@ sandbox_case "FWALK-CLUSTER-M1b: the revert mutant ALLOWS bash -ec 'bash <unlist
   "$CLUSTER_REVERT" "$(bash_payload "bash -ec 'bash $PARSE_UNLISTED'")" 0
 sandbox_case "FWALK-CLUSTER-M1c: the revert mutant ALLOWS zsh -fc 'zsh <unlisted>.sh'" \
   "$CLUSTER_REVERT" "$(bash_payload "zsh -fc 'zsh $PARSE_UNLISTED'")" 0
+sandbox_case "FWALK-CLUSTER-M1d: the revert mutant ALLOWS bash -ec 'cat <unlisted>.sh' (FWALK-CLUSTER-R1's payload)" \
+  "$CLUSTER_REVERT" "$(bash_payload "bash -ec 'cat $PARSE_UNLISTED'")" 0
 
 /bin/rm -f "$CLUSTER_REVERT"
 
@@ -6368,13 +6468,16 @@ test_case "FWALK-OPAQUE-ctl-arg: bash --rcfile \$VAR <allowed> allowed (an unrea
 
 # (3) PINS. A token a view places in the operand domain is the operand and is not
 # routed; and the route's known cost, the same over-block the quoted spelling of the
-# same word already carries.
+# same word already carries. Each pin can fail: the guardless-route mutant allows the
+# first (FWALK-OPAQUE-M5b), and the revert mutant the second (FWALK-OPAQUE-M1d).
 test_case "FWALK-OPAQUE-ctl-claimed (pin, not fix-evidence): bash \$VAR/x.sh still blocks as variable-bearing (a domain claim outranks the route)" \
   "$(bash_payload "bash \$PMO_OPAQUE_UNSET/x.sh")" 2 "variable-bearing"
 test_case "FWALK-OPAQUE-R1 (declared over-block): bash \$VAR-x <allowed> <unlisted>.sh blocks (the shell runs only the allowlisted script; the unread option might have taken it as its argument)" \
   "$(bash_payload "bash \$PMO_OPAQUE_UNSET-x $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
 
-# RED-BEFORE, AS AN ARM.
+# RED-BEFORE, AS AN ARM. M1d and M1e are not red-before evidence: they read the declared
+# over-block FWALK-OPAQUE-R1 and the integration pin FWALK-INT-02, which the route's line
+# refuses, so each pin can fail.
 OPAQUE_REVERT="$(dirname "$HOOK")/block-destructive.OPAQUE-revert.sh"
 /usr/bin/sed '/# M-OPAQUE (mutation/d' "$HOOK" > "$OPAQUE_REVERT"
 
@@ -6390,10 +6493,15 @@ sandbox_case "FWALK-OPAQUE-M1b: the revert mutant ALLOWS bash \$VAR--rcfile <all
   "$OPAQUE_REVERT" "$(bash_payload "bash \$PMO_OPAQUE_UNSET--rcfile $ARITY_ALLOWED $PARSE_UNLISTED")" 0
 sandbox_case "FWALK-OPAQUE-M1c: the revert mutant ALLOWS bash --rcfile\"\" <allowed> <unlisted>.sh" \
   "$OPAQUE_REVERT" "$(bash_payload "bash --rcfile\"\" $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-OPAQUE-M1d: the revert mutant ALLOWS bash \$VAR-x <allowed> <unlisted>.sh (FWALK-OPAQUE-R1's payload)" \
+  "$OPAQUE_REVERT" "$(bash_payload "bash \$PMO_OPAQUE_UNSET-x $ARITY_ALLOWED $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-OPAQUE-M1e: the revert mutant ALLOWS bash \"\"--{norc,rcfile} <allowed> <unlisted>.sh (FWALK-INT-02's payload)" \
+  "$OPAQUE_REVERT" "$(bash_payload "bash \"\"$OPAQUE_BRACE $ARITY_ALLOWED $PARSE_UNLISTED")" 0
 
 /bin/rm -f "$OPAQUE_REVERT"
 
-# THE CONTROLS CAN FAIL. A deny in place of the route refuses every arm in (2).
+# THE CONTROLS CAN FAIL. A deny in place of the route refuses every arm in (2), and M2g
+# refuses the integration control FWALK-INT-ctl-01, whose word the route also takes.
 OPAQUE_DENY="$(dirname "$HOOK")/block-destructive.OPAQUE-deny.sh"
 /usr/bin/sed 's/then script_take_cmode_route; fi   # M-OPAQUE/then block "BLOCK-DESTRUCTIVE-022" "OPAQUE deny mutant" "test only"; fi   # M-OPAQUE/' "$HOOK" > "$OPAQUE_DENY"
 
@@ -6415,6 +6523,8 @@ sandbox_case "FWALK-OPAQUE-M2e: the deny mutant REFUSES bash \"\$VAR\"" \
   "$OPAQUE_DENY" "$(bash_payload "bash \"\$PMO_OPAQUE_UNSET\"")" 2 "OPAQUE deny mutant"
 sandbox_case "FWALK-OPAQUE-M2f: the deny mutant REFUSES bash \\-x <allowed>" \
   "$OPAQUE_DENY" "$(bash_payload "bash \\-x $ARITY_ALLOWED")" 2 "OPAQUE deny mutant"
+sandbox_case "FWALK-OPAQUE-M2g: the deny mutant REFUSES bash \"\"--{norc,rcfile} <allowed> (FWALK-INT-ctl-01's payload)" \
+  "$OPAQUE_DENY" "$(bash_payload "bash \"\"$OPAQUE_BRACE $ARITY_ALLOWED")" 2 "OPAQUE deny mutant"
 
 /bin/rm -f "$OPAQUE_DENY"
 
@@ -6453,6 +6563,31 @@ sandbox_case "FWALK-OPAQUE-M4b: the consumed-argument deny mutant REFUSES bash -
 
 /bin/rm -f "$OPAQUE_ARGDENY"
 
+# THE DOMAIN-CLAIM GUARD IS WHAT HOLDS BOTH ctl-claimed PINS. script_take_cmode_route
+# leaves a token alone when a view places it in the operand domain; this mutant routes
+# every token it is handed. Two lines hand it a claimed token: this block's top-of-loop
+# line hands it `$VAR/x.sh`, and the cluster table hands it `'+c.sh'`. Routed, each is
+# read as the `-c` label, the walk ends on it, and nothing is adjudicated. M5b reads
+# FWALK-OPAQUE-ctl-claimed's payload and M5c reads FWALK-CLUSTER-ctl-claimed's, so both
+# pins are shown able to fail.
+ROUTE_NOGUARD="$(dirname "$HOOK")/block-destructive.ROUTE-noguard.sh"
+/usr/bin/sed 's/^\( *\)\*) if ! script_operand_implicated "\$script_interp_domain"; then script_ftok="-c"; fi ;;$/\1*) script_ftok="-c" ;;/' "$HOOK" > "$ROUTE_NOGUARD"
+
+if [ "$(/usr/bin/diff "$HOOK" "$ROUTE_NOGUARD" | /usr/bin/grep -c '^<')" = "1" ] && /bin/bash -n "$ROUTE_NOGUARD" 2>/dev/null; then
+  /usr/bin/printf 'PASS: FWALK-OPAQUE-M5a guardless-route mutation is live (exactly the guarded line of the route differs, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-OPAQUE-M5a guardless-route mutation did not change exactly one line, or the copy does not parse — the M5 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-OPAQUE-M5b: the guardless-route mutant ALLOWS bash \$VAR/x.sh (FWALK-OPAQUE-ctl-claimed's payload)" \
+  "$ROUTE_NOGUARD" "$(bash_payload "bash \$PMO_OPAQUE_UNSET/x.sh")" 0
+sandbox_case "FWALK-OPAQUE-M5c: the guardless-route mutant ALLOWS bash '+c.sh' (FWALK-CLUSTER-ctl-claimed's payload)" \
+  "$ROUTE_NOGUARD" "$(bash_payload "bash '+c.sh'")" 0
+
+/bin/rm -f "$ROUTE_NOGUARD"
+
 echo ""
 echo "BLOCK-022 flag walk: this change read through the quoted-word view (FWALK-INT-*)"
 echo "---"
@@ -6469,6 +6604,12 @@ echo "---"
 # below was already routed and already refused (corpus rows RB01, RB05, RB07). What
 # these arms measure is that the refusal survives the route moving out of the view and
 # into the top of the walk's loop, and that the latch reads the view's reading.
+#
+# EACH IS SHOWN ABLE TO FAIL. FWALK-INT-02 by the route's revert mutant
+# (FWALK-OPAQUE-M1e) and FWALK-INT-ctl-01 by its deny mutant (FWALK-OPAQUE-M2g), both
+# built in the block above; FWALK-INT-ctl-02 carries NOEXEC-TERM-ctl-qflag's payload,
+# which the over-latch mutant refuses (NOEXEC-TERM-M2g); FWALK-INT-01 and -03 by the
+# mutant at the end of this block.
 #
 # The brace word reaches the payload through a variable, never as literal text inside
 # "$( … "…" )": bash 3.2 brace-expands there, and one arm silently becomes two payloads.
@@ -6488,6 +6629,32 @@ test_case "FWALK-INT-ctl-01: bash \"\"--{norc,rcfile} <allowed> allowed (nothing
 # when that route is built; it follows the arms above and reads their INT_BRACE.
 test_case "FWALK-INT-02: bash \"\"--{norc,rcfile} <allowed> <unlisted>.sh blocks (the same word in front of an allowlisted script takes the conservative route)" \
   "$(bash_payload "bash $INT_BRACE $ARITY_ALLOWED $PARSE_UNLISTED")" 2 "BLOCK-DESTRUCTIVE-022"
+
+# THE TWO MECHANISMS THAT HOLD FWALK-INT-01 AND -03 ARE INDEPENDENT. Each word reads,
+# through the view, as a value that is not plain, so the route takes it and the latch
+# ends the option run on it; either alone refuses the script behind the `-n`. The mutant
+# removes both — the route's top-of-loop line and the latch's conjunct on the grant — and
+# the grant then fires on the `-n`.
+INT_REVERT="$(dirname "$HOOK")/block-destructive.INT-revert.sh"
+/usr/bin/sed \
+  -e '/# M-OPAQUE (mutation/d' \
+  -e 's/\[ "\$script_optrun" -eq 1 \] && script_interp_noexec_flag/script_interp_noexec_flag/' \
+  "$HOOK" > "$INT_REVERT"
+
+if [ "$(/usr/bin/diff "$HOOK" "$INT_REVERT" | /usr/bin/grep -c '^<')" = "2" ] && /bin/bash -n "$INT_REVERT" 2>/dev/null; then
+  /usr/bin/printf 'PASS: FWALK-INT-M1a route-and-latch revert mutation is live (exactly the route line and the grant line differ, and the copy parses)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FWALK-INT-M1a route-and-latch revert mutation did not change exactly two lines, or the copy does not parse — the M1 arms below are unusable\n'
+  FAIL=$((FAIL + 1))
+fi
+
+sandbox_case "FWALK-INT-M1b: the route-and-latch revert mutant ALLOWS bash \"\"--{norc,rcfile} -n <unlisted>.sh (FWALK-INT-01's payload)" \
+  "$INT_REVERT" "$(bash_payload "bash $INT_BRACE -n $PARSE_UNLISTED")" 0
+sandbox_case "FWALK-INT-M1c: the route-and-latch revert mutant ALLOWS zsh \"\$VAR\"--emulate -n <unlisted>.sh (FWALK-INT-03's payload)" \
+  "$INT_REVERT" "$(bash_payload "zsh \"\$PMO_INT_UNSET\"--emulate -n $PARSE_UNLISTED")" 0
+
+/bin/rm -f "$INT_REVERT"
 
 echo ""
 echo "BLOCK-022 wrapper walk: each wrapper's own options, and the lists of the vocabulary (WRAP*)"
