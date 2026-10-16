@@ -898,12 +898,18 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # THE TEST IS A CHARACTER ALLOWLIST, AND ITS DIRECTION IS THE WHOLE DESIGN. A text
 # is PLAIN when it carries nothing but the characters below: no quote, no
 # backslash, no `$`, no backtick, no glob, brace or tilde character, no
-# redirection. Those are the characters no shell rewrites, so a plain text IS the
-# argv word and is exactly one word. Everything else is "not a text this walk can
-# read", and that answer grants nothing. There is no list of option names, of
-# words that end option parsing, or of quoting and expansion constructs to keep
-# complete. A spelling these functions have never seen costs an over-block, never
-# an exemption.
+# redirection. Those are characters no shell rewrites inside a word, so a plain
+# text IS the argv word and is exactly one word. Everything else is "not a text
+# this walk can read", and that answer grants nothing. There is no list of option
+# names, of words that end option parsing, or of quoting and expansion constructs
+# to keep complete. A spelling these functions have never seen costs an
+# over-block, never an exemption.
+#
+# ONE OF THOSE CHARACTERS IS REWRITTEN AT THE START OF A WORD. zsh expands a word
+# that begins with `=` to the path of the command it names, so the walk does not
+# hold that word's text. The latch is unaffected, because an option word begins
+# with a sign and a consumed argument zsh rewrites is still one word, or nothing
+# runs.
 #
 # THE EMPTY TEXT IS PLAIN, AND TWO CALLERS RELY ON IT. The walk gives the empty
 # reading to a token whose quote it could not resolve. Such a token is not an
@@ -914,9 +920,10 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # this hook holds, and reads as exact for the same reason.
 #
 # `~` IS OUTSIDE THE SET ALTHOUGH A LEADING TILDE IS ALWAYS ONE WORD. The set is
-# "characters that are never special", which a reader can check without knowing
-# any expansion rule. Admitting a character that is special in one position and
-# not another would trade that for a precision nobody has asked for.
+# "characters that are never special inside a word", which a reader can check
+# without knowing any expansion rule. Admitting a character that is special in one
+# position inside a word and not another would trade that for a precision nobody
+# has asked for.
 #
 # NOT CLAIMED: that an option word which passes takes no argument. That is still
 # the arity table's measured answer for the literal spellings. These functions
@@ -3187,9 +3194,9 @@ case "$TOOL_NAME" in
         #
         # IT IS A LATCH, AND THAT IS RIGHT HERE WHERE IT WAS WRONG FOR PARSE-ONLY
         # ITSELF. noexec is a mode the shells resolve last-one-wins, so its state is
-        # reassigned by every token. Where option parsing ENDS is not a mode: once the
-        # interpreter has stopped reading options, or this walk has lost track of
-        # what it is reading, nothing later on argv restores it.
+        # reassigned by every token the walk steps over. Where option parsing ENDS is
+        # not a mode: once the interpreter has stopped reading options, or this walk
+        # has lost track of what it is reading, nothing later on argv restores it.
         #
         # THE SUBJECT IS THE WALK'S OWN READING OF THE TOKEN, WHATEVER PRODUCED IT.
         # script_ftok is the raw spelling for a token that begins with `-`, which the

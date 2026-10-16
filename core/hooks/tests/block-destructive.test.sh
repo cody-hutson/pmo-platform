@@ -6026,7 +6026,8 @@ test_case "NOEXEC-TERM-R2 (declared over-block): bash -o \"\$VAR\" -n <unlisted>
 
 # (4b) DECLARED LIMIT, pinned so it is a decision. zsh's `-b` ends option processing, as
 # `--` does, and it has the shape of an option word, so the walk keeps reading and grants
-# on the `-n` behind it. What zsh then runs is a file named `-n` — an operand the shell
+# on the `-n` behind it. `+b` does the same, and corpus row ZG03 records it beside this
+# arm's row ZT11. What zsh then runs is a file named `-n` — an operand the shell
 # domain does not claim, the same limit `bash -- -n <script>.sh` has always had — and
 # the script-suffixed path is that file's argument. Modelling `-b` would be a list of
 # end-of-options spellings whose omissions fail open. The over-latch mutant refuses it
