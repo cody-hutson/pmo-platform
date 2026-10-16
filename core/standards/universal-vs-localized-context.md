@@ -15,7 +15,7 @@ reversibility: CHEAP / Confidence HIGH
 
 ## Purpose
 
-This standard is the **enforcement layer** on the universality axis. It does **not** define the axis, the tier classifier, or the leakage rubric — those are owned by [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md), which [§5 Boundaries](../disciplines/knowledge-architecture.md#boundaries) of that document explicitly contracts: *knowledge-architecture owns the model; this standard owns the audit + enforcement layer on it.*
+This standard is the **enforcement layer** on the universality axis. It does **not** define the axis, the tier classifier, or the leakage rubric — those are owned by [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md), which [§ Boundaries](../disciplines/knowledge-architecture.md) of that document explicitly contracts: *knowledge-architecture owns the model; this standard owns the audit + enforcement layer on it.*
 
 The division of ownership is fixed and non-negotiable (restating knowledge-architecture here would violate [`duplicate-source-discipline.md`](duplicate-source-discipline.md) — register-or-remove):
 
@@ -163,7 +163,7 @@ Compose, do not restate. Each row names a doc this standard touches and the acti
 
 | Boundary | Relationship | Action |
 |---|---|---|
-| [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | Owns the model: universality axis, K1–K5 classifier, parameterization seam, 4-class rubric, the bounded §4 snapshot register. | **Cite only.** This standard is the enforcement layer that knowledge-architecture §5 explicitly contracts. No redefinition. |
+| [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | Owns the model: universality axis, K1–K5 classifier, parameterization seam, 4-class rubric, the bounded §4 snapshot register. | **Cite only.** This standard is the enforcement layer that [knowledge-architecture § Boundaries](../disciplines/knowledge-architecture.md) explicitly contracts. No redefinition. |
 | [`applicability-framework.md`](../disciplines/applicability-framework.md) | Owns *model* methodology-portability (is the pipeline/scaffold itself portable?). DC4's deferred half. | Cross-reference. DC4 bounds out the model-portability question. |
 | [`anthropic-base-vs-build-registry.md`](../specs/anthropic-base-vs-build-registry.md) | Owns the orthogonal *authorship* axis (base ↔ custom). | Cross-reference; the base-vs-build registry already proves authorship cannot detect leaks. |
 | [`duplicate-source-discipline.md`](duplicate-source-discipline.md) | Register-or-remove. The reason this standard cites knowledge-architecture instead of restating it. | Comply. No parallel taxonomy; no separate ADR for the §3 cut. |
