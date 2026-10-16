@@ -20,11 +20,13 @@
 # gates are NOT co-extensive scanners: the durability lint's subject is the operator
 # handle; the depersonalization gate also scans the name, the email and the collaborator
 # dimensions. Their differing verdicts on those other dimensions are correct, not
-# disagreement. Agreement is asserted on the shared subject only. The two gates also
-# resolve the handle from different sources by deliberate design (the lint from the
-# repository owner, the gate from the run's actor), so on a bot-authored PR the gate's
-# operator dimension is skipped and the two correctly differ; this suite drives a
-# synthetic handle directly and so is unaffected.
+# disagreement. Agreement is asserted on the shared subject only. Both gates resolve the
+# handle from the SAME source, the repository owner, on every run — whoever triggered
+# it — so the agreement holds on a run a bot started as well as on a human's. (The
+# depersonalization gate used to resolve it from the run's actor and skip its operator
+# dimension when the actor was a bot; decision record
+# {{ADR:depersonalization-gate-scans-bot-runs}} retired that.) This suite drives a
+# synthetic handle directly, and the run-level arms below assert the resolution itself.
 #
 # EVERY LITERAL HERE IS SYNTHETIC. Nothing is resolved from a secret or from the run's
 # actor. See fixtures/deciders-carveout/README.md.
@@ -79,7 +81,8 @@ check() { if [ "$2" = "$3" ]; then ok "$1 (= $3)"; else bad "$1 — expected [$3
 # Do not "simplify" this back into a pipeline.
 # shellcheck source=/dev/null
 . "$LIB"
-for fn in esc_lines adr_deciders_carveout_suppresses depersonalization_line_verdict; do
+for fn in esc_lines identity_preflight resolve_operator_literals literal_set_verdict \
+          adr_deciders_carveout_suppresses depersonalization_line_verdict; do
   if ! declare -F "$fn" >/dev/null; then
     echo "FATAL: $LIB did not define $fn"; exit 1
   fi
@@ -246,6 +249,90 @@ blank="$(esc_lines "$(printf '\n   \n')" | wc -l | tr -d ' ')"
 check "esc_lines drops blank/whitespace-only lines" "$blank" "0"
 
 echo
+echo "--- Run-level decisions: the literal set a run scans (fixture arms a-f) ---"
+# The three run-level functions take NO actor parameter: who triggered the run cannot
+# change what it scans, which is the decision record
+# {{ADR:depersonalization-gate-scans-bot-runs}} in executable form. Each arm calls them
+# with the arguments the workflow passes on that kind of run — the repository owner as
+# the handle, never the actor — and the structural bindings further down assert that
+# the workflow really passes those arguments. Effect here, call shape there.
+FIXTURE_BOT="dependabot[bot]"
+FIXTURE_IDENTITY="$(printf '%s\n%s' "$FIXTURE_NAME" "$FIXTURE_EMAIL")"
+flat() { printf '%s' "$1" | tr '\n' '|'; }
+EMPTY_PATTERNS="$TMP/patterns_run_empty"
+: > "$EMPTY_PATTERNS"
+
+# (a) SENSITIVITY, AC 3 — a run Dependabot started, on canonical, with the mirrored
+# identity present. The workflow passes REPO_OWNER, so the set is the owner plus the
+# identity lines, and the bot's own login is not in it.
+ACTOR_A="$FIXTURE_BOT"; REPO_OWNER_A="$FIXTURE_HANDLE"
+set_a="$(resolve_operator_literals 1 0 "$REPO_OWNER_A" "$FIXTURE_IDENTITY")"
+check "(a) bot's run, canonical, identity set — literal set is owner + identity lines" \
+  "$(flat "$set_a")" "$FIXTURE_HANDLE|$FIXTURE_NAME|$FIXTURE_EMAIL"
+case "$set_a" in
+  *"$ACTOR_A"*) bad "(a) the bot's login ($ACTOR_A) leaked into the literal set" ;;
+  *)            ok  "(a) the bot's login is not in the literal set" ;;
+esac
+# …and the set is not decorative: a pattern file built from it BLOCKS the handle and
+# the email on a body line, which is the measured verdict AC 3 asks for.
+PATTERNS_A="$TMP/patterns_run_a"
+esc_lines "$set_a" > "$PATTERNS_A"
+check "(a) effect — the owner handle on a body line is BLOCKED on a bot's run" \
+  "$(depersonalization_line_verdict "core/standards/x.md" "by $FIXTURE_HANDLE" "$PATTERNS_A" "" "$OVERRIDE_RE")" "BLOCKED"
+check "(a) effect — the operator email on a body line is BLOCKED on a bot's run" \
+  "$(depersonalization_line_verdict "core/standards/x.md" "mail $FIXTURE_EMAIL" "$PATTERNS_A" "" "$OVERRIDE_RE")" "BLOCKED"
+check "(a) literal_set_verdict on that set is SCAN" "$(literal_set_verdict 1 "$PATTERNS_A")" "SCAN"
+
+# (b) CONTROL, AC 4 — a human's run on canonical with the identity genuinely unset
+# still fails loud.
+check "(b) human's run, canonical, identity unset — preflight FAILs" "$(identity_preflight 1 "")" "FAIL"
+
+# (c) MISSING-MIRROR arm — a run Dependabot started reads the Dependabot store; with
+# the mirror absent the identity is unset there, and the preflight FAILs exactly as
+# (b) does. The call is the same call: nothing in it can tell the two runs apart.
+check "(c) bot's run, canonical, identity unset (mirror missing) — preflight FAILs" "$(identity_preflight 1 "")" "FAIL"
+# Non-vacuity for (b)/(c): the preflight can say OK, so FAIL above is a decision.
+check "(b/c control) canonical with the identity set — preflight is OK" "$(identity_preflight 1 "$FIXTURE_IDENTITY")" "OK"
+
+# (d) FORK OPT-OUT — a fork that opted the operator dimension out, identity unset:
+# the preflight passes, the set is empty, and the empty set passes with a notice.
+check "(d) fork opted out, identity unset — preflight OK" "$(identity_preflight 0 "")" "OK"
+set_d="$(resolve_operator_literals 0 1 "$FIXTURE_HANDLE" "")"
+check "(d) fork opted out — literal set is empty" "$(flat "$set_d")" ""
+check "(d) fork opted out — the empty set PASSes with a notice" "$(literal_set_verdict 0 "$EMPTY_PATTERNS")" "PASS-EMPTY"
+# Pre-change behaviour preserved on the other fork path: not opted out, identity
+# unset, so only the owner handle resolves.
+set_d2="$(resolve_operator_literals 0 0 "$FIXTURE_HANDLE" "")"
+check "(d control) fork NOT opted out, identity unset — the owner handle alone" "$(flat "$set_d2")" "$FIXTURE_HANDLE"
+
+# (e) NO REGRESSION — actor = owner, canonical, identity set: the ordinary human run.
+# The new set must equal, byte for byte, the inline construction it replaced, once
+# each is captured by $(...).
+set_e="$(resolve_operator_literals 1 0 "$FIXTURE_HANDLE" "$FIXTURE_IDENTITY")"
+pre_e="$(printf '%s\n%s\n' "$FIXTURE_HANDLE" "$FIXTURE_IDENTITY")"
+if [ "$set_e" = "$pre_e" ]; then
+  ok "(e) actor = owner — literal set byte-identical to the pre-change construction"
+else
+  bad "(e) actor = owner — literal set differs from the pre-change construction: [$(flat "$set_e")] vs [$(flat "$pre_e")]"
+fi
+if [ "$(esc_lines "$set_e")" = "$(esc_lines "$pre_e")" ]; then
+  ok "(e) …and so is the escaped pattern set built from it"
+else
+  bad "(e) the escaped pattern set differs from the pre-change one"
+fi
+
+# (f) THE EMPTY-SET GUARD — on canonical an empty literal set FAILs. Reproduce the
+# retired resolution (an exemption that emptied the set when the actor was a bot,
+# with no collaborator list) and confirm the gate would now fail loud on it rather
+# than pass with "nothing to match".
+check "(f) canonical with an empty literal set — FAIL-EMPTY" "$(literal_set_verdict 1 "$EMPTY_PATTERNS")" "FAIL-EMPTY"
+RETIRED="$TMP/patterns_retired_exemption"
+esc_lines "" > "$RETIRED"
+esc_lines "" >> "$RETIRED"
+check "(f) the retired exemption's empty set now fails on canonical instead of passing" \
+  "$(literal_set_verdict 1 "$RETIRED")" "FAIL-EMPTY"
+
+echo
 echo "--- Structural binding: the workflow uses this library, not a private copy ---"
 # ALL THREE binding patterns below are ANCHORED at `^[[:space:]]*` and reject a
 # leading `#`. The unanchored forms they replace asked "does this string APPEAR in
@@ -301,6 +388,51 @@ if grep -qE '^[[:space:]]*esc_lines[[:space:]]+"\$HANDLE_LITERAL"[[:space:]]*>>[
 else
   ok "construction-assertion control — a nonexistent redirect target is absent (the construction grep is shaped, not loose)"
 fi
+
+# RUN-LEVEL CALL SHAPE. The arms (a)-(f) grade the functions given the arguments the
+# workflow is supposed to pass; these grade that it passes them. Same anchoring as the
+# bindings above: an executable line, not a mention.
+if grep -qE '^[[:space:]]*REPO_OWNER:[[:space:]]*[$][{][{][[:space:]]*github[.]repository_owner[[:space:]]*[}][}]' "$WORKFLOW"; then
+  ok "repo-integrity.yml binds REPO_OWNER from github.repository_owner"
+else
+  bad "repo-integrity.yml no longer binds REPO_OWNER from github.repository_owner"
+fi
+if grep -qE '^[[:space:]]*if [[] "[$][(]identity_preflight "[$]IS_CANONICAL" "[$][{]OPERATOR_IDENTITY:-[}]"[)]" = "FAIL" []]' "$WORKFLOW"; then
+  ok "repo-integrity.yml decides the preflight through identity_preflight (no actor argument)"
+else
+  bad "repo-integrity.yml no longer calls identity_preflight \"\$IS_CANONICAL\" \"\${OPERATOR_IDENTITY:-}\" on an executable line"
+fi
+if grep -qE '^[[:space:]]*OP_LITERALS="[$][(]resolve_operator_literals "[$]IS_CANONICAL" "[$]FORK_OPTED_OUT" "[$][{]REPO_OWNER:-[}]" "[$][{]OPERATOR_IDENTITY:-[}]"[)]"' "$WORKFLOW"; then
+  ok "repo-integrity.yml resolves OP_LITERALS through resolve_operator_literals with the owner as the handle"
+else
+  bad "repo-integrity.yml no longer resolves OP_LITERALS through resolve_operator_literals with \${REPO_OWNER:-}"
+fi
+if grep -qE '^[[:space:]]*HANDLE_LITERAL="[$][{]REPO_OWNER:-[}]"' "$WORKFLOW"; then
+  ok "repo-integrity.yml sets HANDLE_LITERAL to the owner"
+else
+  bad "repo-integrity.yml no longer sets HANDLE_LITERAL=\"\${REPO_OWNER:-}\" on an executable line"
+fi
+if grep -qE '^[[:space:]]*case "[$][(]literal_set_verdict "[$]IS_CANONICAL" "[$]PATTERN_FILE"[)]" in' "$WORKFLOW"; then
+  ok "repo-integrity.yml decides the empty-set branch through literal_set_verdict"
+else
+  bad "repo-integrity.yml no longer routes the empty-set branch through literal_set_verdict"
+fi
+# NEGATIVE: no executable line takes a literal from the actor. The actor may feed the
+# summary notice only. "Executable" here means no `#` ahead of the assignment, so the
+# pattern matches an assignment at the start of a line — which is where the retired
+# lines sat. Control: the same pattern MUST find both retired lines in a synthetic
+# copy, and must NOT find a commented-out one, or this zero proves nothing.
+ACTOR_LITERAL_RE='^[^#]*(OP_LITERALS|HANDLE_LITERAL)="[^"]*[$][{]?ACTOR'
+actor_hits="$(grep -cE "$ACTOR_LITERAL_RE" "$WORKFLOW" || true)"
+check "no executable line in repo-integrity.yml builds a literal from the actor" "$actor_hits" "0"
+RETIRED_FIXTURE="$TMP/retired_actor_shape"
+{
+  printf '                OP_LITERALS="$ACTOR"\n'
+  printf '                HANDLE_LITERAL="$ACTOR"\n'
+  printf '                # HANDLE_LITERAL="$ACTOR"\n'
+} > "$RETIRED_FIXTURE"
+check "…control — the pattern finds both retired actor lines and skips the commented one" \
+  "$(grep -cE "$ACTOR_LITERAL_RE" "$RETIRED_FIXTURE" || true)" "2"
 
 # THE ANCHOR'S OWN REGRESSION ARM. Everything above measures the three patterns
 # against the LIVE workflow, where anchored and unanchored forms agree — so nothing

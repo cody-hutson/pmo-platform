@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# deciders-carveout.sh — Shared per-line decision for the depersonalization gate.
+# deciders-carveout.sh — Shared decisions for the depersonalization gate.
 #
-# The SINGLE home of the ADR `deciders:` carve-out predicate. Both callers source
-# this library, so the decision is made in ONE place:
+# The SINGLE home of the gate's decisions: the configuration preflight, the
+# operator-literal resolution, the empty-literal-set verdict, and the per-line ADR
+# `deciders:` carve-out predicate. Both callers source this library, so each
+# decision is made in ONE place:
 #   - .github/workflows/repo-integrity.yml           job `depersonalization` (the live gate)
 #   - release/tools/tests/test_deciders_carveout.sh  the committed fixture suite
 #
@@ -52,6 +54,94 @@ esc_lines() {
   done
 }
 
+# THE THREE RUN-LEVEL DECISIONS BELOW are the gate's resolution of WHAT it matches,
+# made before any file is read. They were inline in the workflow, so the only proof
+# of them was a live remote run; the decision record
+# {{ADR:depersonalization-gate-scans-bot-runs}} moves them here for the same reason
+# the per-line verdict lives here. None of them takes the run's actor as a parameter,
+# and that is the decision rather than an omission: who triggered the run must not
+# change what the run scans.
+
+# identity_preflight <is_canonical> <identity>
+#   Echoes exactly one token on stdout and returns 0:
+#     OK    — the gate is configured to scan the operator's name and email
+#     FAIL  — canonical repository with OPERATOR_IDENTITY unset: the designed loud
+#             failure, because a personal-data control that scans nothing cannot be
+#             told apart from one that passed
+#
+#   This is a CONFIGURATION check and is independent of content: the gate runs it
+#   before the scope filter, so a misconfigured secret is reported on every pull
+#   request, including one that changes no scanned file. The test is the same on
+#   every run. A run Dependabot starts reads the Dependabot secret store, so a FAIL
+#   there means the mirrored copy is missing (secrets-handling-policy.md §5). A fork
+#   never fails here: its identity dimension is governed by its opt-out instead.
+identity_preflight() {
+  _ip_canonical="${1?identity_preflight: is_canonical required}"
+  _ip_identity="${2-}"
+  if [ "$_ip_canonical" = "1" ] && [ -z "$_ip_identity" ]; then
+    printf 'FAIL\n'
+  else
+    printf 'OK\n'
+  fi
+  return 0
+}
+
+# resolve_operator_literals <is_canonical> <fork_opted_out> <owner> <identity>
+#   Prints the operator-literal set on stdout, one literal per line, and returns 0:
+#   the owner handle first, then each line of the identity block. Prints nothing on
+#   a fork that opted the operator dimension out.
+#
+#   The handle is the repository OWNER, on every run, never the run's actor. That is
+#   the resolution the ADR durability gate in the same workflow already uses: it is
+#   the same whoever triggered the run, and correct on a fork. Resolving it from the
+#   actor made the handle vary with the actor, which is why a bot's run used to be
+#   exempted from the operator dimension altogether — and why, with no collaborator
+#   list set, such a run scanned nothing and passed.
+#
+#   For a canonical run with an owner, the output equals the pre-change inline
+#   construction byte for byte once captured by $(...): printf '%s\n%s\n' then
+#   trailing-newline stripping. The fixture suite asserts that equality (arm e).
+resolve_operator_literals() {
+  _rl_canonical="${1?resolve_operator_literals: is_canonical required}"
+  _rl_opted_out="${2?resolve_operator_literals: fork_opted_out required}"
+  _rl_owner="${3-}"
+  _rl_identity="${4-}"
+  if [ "$_rl_canonical" != "1" ] && [ "$_rl_opted_out" = "1" ]; then
+    return 0
+  fi
+  if [ -n "$_rl_owner" ]; then
+    printf '%s\n' "$_rl_owner"
+  fi
+  if [ -n "$_rl_identity" ]; then
+    printf '%s\n' "$_rl_identity"
+  fi
+  return 0
+}
+
+# literal_set_verdict <is_canonical> <pattern-file>
+#   Echoes exactly one token on stdout and returns 0:
+#     SCAN        — the pattern file holds at least one pattern; scan the files
+#     FAIL-EMPTY  — canonical repository and nothing resolved: fail loud
+#     PASS-EMPTY  — a fork and nothing resolved: report it and pass
+#
+#   On canonical, identity_preflight has already required the identity and
+#   resolve_operator_literals always emits the owner, so FAIL-EMPTY cannot be reached
+#   today. It is a guard, not dead code: the branch used to exit 0 with "nothing to
+#   match", and an edit that re-opened a path to it would have re-armed a silent pass
+#   in a branch-protection required check.
+literal_set_verdict() {
+  _ls_canonical="${1?literal_set_verdict: is_canonical required}"
+  _ls_patterns="${2?literal_set_verdict: pattern file required}"
+  if [ -s "$_ls_patterns" ]; then
+    printf 'SCAN\n'
+  elif [ "$_ls_canonical" = "1" ]; then
+    printf 'FAIL-EMPTY\n'
+  else
+    printf 'PASS-EMPTY\n'
+  fi
+  return 0
+}
+
 # adr_deciders_carveout_suppresses <path> <line-content> <not-carved-pattern-file>
 #   Exit 0 — the ADR `deciders:` carve-out SUPPRESSES this line.
 #   Exit 1 — it does not; the line stays subject to the gate.
@@ -62,10 +152,12 @@ esc_lines() {
 #   whole behavioural difference this predicate exists to make.
 #
 #   An EMPTY (or absent) not-carved file means "no un-carved literal resolved for
-#   this run" — e.g. a bot-authored PR, where the operator-self dimension is skipped
-#   upstream by design. Falling back to suppression there reproduces the shipped
-#   whole-line behaviour rather than inventing a new verdict for a dimension that is
-#   already dark. It is also why the -s test is explicit and comes FIRST: `grep -f`
+#   this run". The handle is resolved from the repository owner on every run (see
+#   resolve_operator_literals below), so in the live gate that happens only on a fork
+#   that opted the operator dimension out — never because of who triggered the run.
+#   Falling back to suppression there reproduces the shipped whole-line behaviour
+#   rather than inventing a new verdict for a dimension that is already dark. It is
+#   also why the -s test is explicit and comes FIRST: `grep -f`
 #   against an empty file, or one carrying a blank line, matches EVERY line on some
 #   implementations, which would silently invert the carve-out into a blanket block.
 #
