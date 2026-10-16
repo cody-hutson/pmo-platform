@@ -52,7 +52,7 @@ runner as a workflow command.
 
 INTERFACE
   --base <rev> --head <rev>   scan every commit in <base>..<head>
-  --self-test                 fixture arms, plumbing arm, degraded-read arm
+  --self-test                 fixture arms, plumbing arm, degraded-read arm, CLI exit arm
   exit 0 = clean · 1 = finding(s) · 3 = the range could not be read (NOT-EVALUATED)
 """
 from __future__ import annotations
@@ -303,6 +303,26 @@ def self_test() -> int:
                 failures.append("degraded: an unreadable range returned a verdict")
             except RangeUnreadable:
                 print("self-test: degraded arm — unreadable range -> NOT-EVALUATED, no verdict")
+
+            # Arm 4 — the command line's exit code. The arms above call the functions;
+            # this one runs this file as its own process over the same throwaway
+            # repository, so a main() that maps a finding or an unreadable range to
+            # exit 0 fails here. The child's environment also drops the runner's
+            # annotation and step-summary variables, so the findings it is shown never
+            # reach the real job's log or summary.
+            cli_env = {key: value for key, value in env.items()
+                       if key not in ("GITHUB_ACTIONS", "GITHUB_STEP_SUMMARY")}
+            cli = [sys.executable, os.path.abspath(__file__)]
+            flagged = subprocess.run(cli + ["--base", base, "--head", "HEAD"], cwd=repo,
+                                     env=cli_env, capture_output=True)
+            unreadable = subprocess.run(cli + ["--base", "0" * 40, "--head", "HEAD"],
+                                        cwd=repo, env=cli_env, capture_output=True)
+            if flagged.returncode != EXIT_FINDING or unreadable.returncode != EXIT_CONTEXT:
+                failures.append(f"cli: exit {flagged.returncode} on the flagged range (want "
+                                f"{EXIT_FINDING}), exit {unreadable.returncode} on an "
+                                f"unreadable range (want {EXIT_CONTEXT})")
+            print(f"self-test: cli arm — exit {flagged.returncode} on the flagged range, "
+                  f"exit {unreadable.returncode} on an unreadable range")
         except RangeUnreadable as error:
             failures.append(f"plumbing: the throwaway repository could not be built ({error})")
 
