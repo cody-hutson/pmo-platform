@@ -155,6 +155,38 @@ name: Repository integrity
 #                 Requirement (b') makes `required` unavailable until the context is
 #                 registered in branch protection, which a PR cannot do. The gate is
 #                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Tool exec-mode gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+#   invariant: every tracked file under release/tools/ and core/deploy/tools/ whose
+#              content begins with an interpreter line is tracked executable (git mode
+#              100755), unless core/deploy/allowlists/skip-tool-exec-mode-check.txt
+#              names it with a class and a reason; and every row of that list still
+#              names a tracked, interpreter-line-bearing, non-executable file under
+#              those trees. The scan is WHOLE-TREE rather than changed-files, and it
+#              reads what git tracks — the mode, the first bytes and the list itself —
+#              never the runner's filesystem.
+#   falsification: add a file beginning `#!/usr/bin/env bash` under either tree and
+#                  leave its tracked mode at 100644 -> the job FAILS (exit 1) naming
+#                  the path and the one command that fixes it; add an exemption row
+#                  naming a file that is tracked executable -> the job FAILS naming
+#                  the stale row. The committed --self-test carries the sensitivity
+#                  arm (a non-executable CLI), the specificity arm (an exempted
+#                  library) beside its paired control (the same tree with the row
+#                  removed), and the fail-loud dead-control arm, and hard-fails ahead
+#                  of the scan.
+#   scope note: WHOLE-TREE is load-bearing, not incidental. A file reaches a release
+#               branch by a merge from main as often as by a commit on the branch;
+#               relative to the pull request's base such a file is unchanged, so the
+#               changed-file shape most sibling gates on this workflow use would
+#               report green on the event this gate exists to catch.
+#   posture note: `advisory`, not `required`, is the HONEST declaration today —
+#                 Requirement (b') makes `required` unavailable until the context is
+#                 registered in branch protection, which a PR cannot do. The gate is
+#                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
+#                 An `advisory` declaration is off the registration track that
+#                 core/standards/gate-efficacy-standard.md § Declared-required
+#                 contexts — registration disposition defines, so this gate has no
+#                 row in that section's table.
 
 # Three PR-time integrity gates as three named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
@@ -2084,6 +2116,126 @@ jobs:
             echo "declaration — is deliberately **not** in this job. CI has no operator"
             echo "instance to read, and a gate must never assert over a population it cannot"
             echo "observe. That leg runs warn-mode at \`deploy.sh --check\`."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Tool exec-mode gate — every interpreter-line-bearing tracked file under the
+  # two tool trees is tracked executable, or carries an explicit exemption.
+  # Consumes NO github.event.* input: every step is a static invocation against
+  # the checked-out tree (the workflow-wide injection-safety rule). The default
+  # shallow checkout is sufficient — the scan reads the index, not history.
+  # ---------------------------------------------------------------------------
+  tool-exec-mode:
+    name: Tool exec-mode gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assert every interpreter-line tool file is tracked executable or exempted
+        run: |
+          set -euo pipefail
+
+          # Self-test FIRST — the fixture arms prove the probe can DETECT and can
+          # DISCRIMINATE. A scan whose probe cannot be shown to do both proves
+          # nothing by returning zero. Hard-fails unconditionally.
+          python3 core/deploy/tools/check-tool-exec-mode.py --self-test \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+          set +e
+          python3 core/deploy/tools/check-tool-exec-mode.py | tee /tmp/tool-exec-mode.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Tool exec-mode scan"
+            echo '```'
+            cat /tmp/tool-exec-mode.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: Tool exec-mode — every interpreter-line file under the two tool trees is tracked executable or carries a reasoned exemption" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Exit 2: the instrument cannot assert (a dead control arm, a root that
+          # enumerates no tracked file, an unparseable exemption list, a crash).
+          # Exit 3: NOT-EVALUATED, the tree could not be read. Neither is a clean
+          # result and neither is a finding, so each fails loud on its own message.
+          if [ "$RC" -eq 2 ]; then
+            echo "::error::Tool exec-mode gate cannot assert (exit 2) — the scan is unusable, not clean. Its SCAN-ERROR line is in the run summary."
+            exit 1
+          fi
+          if [ "$RC" -eq 3 ]; then
+            echo "::error::Tool exec-mode gate: NOT-EVALUATED (exit 3) — the tree could not be read; this is not a clean result."
+            exit 1
+          fi
+          if [ "$RC" -ne 1 ]; then
+            echo "::error::Tool exec-mode gate exited ${RC}, outside its exit contract — the verdict is unreadable, not clean."
+            exit 1
+          fi
+
+          # Exit 1 is the findings verdict only when it names a finding: an
+          # interpreter or start-up failure exits 1 too.
+          if [ "$(grep -c '^FAIL: ' /tmp/tool-exec-mode.out || true)" -eq 0 ]; then
+            echo "::error::Tool exec-mode gate exited 1 and named no finding — a findings verdict that names nothing is unreadable, not a finding."
+            exit 1
+          fi
+
+          {
+            echo "## :x: Tool exec-mode gate FAILED"
+            echo ""
+            echo "A tracked file under \`release/tools/\` or \`core/deploy/tools/\` begins with an"
+            echo "interpreter line and is tracked non-executable, or an exemption row no longer"
+            echo "describes the tree. See the scan output above for each path."
+            echo ""
+            echo "### Why this is gated"
+            echo ""
+            echo "A tracked file's mode is whatever the authoring path left: a file created by"
+            echo "an editor or a write tool lands \`100644\`. A tool that declares an interpreter"
+            echo "on its first line and cannot be invoked by its own path fails with a"
+            echo "permission error instead of a verdict, and callers that guard on the"
+            echo "executable bit skip it silently."
+            echo ""
+            echo "### When this pull request touches no tool"
+            echo ""
+            echo "A red row here on a pull request that adds or changes no file under the two"
+            echo "trees means \`main\` carries the file: it arrived through a merge from \`main\`."
+            echo "The remedy belongs on \`main\`, in a pull request of its own. Until it lands,"
+            echo "every pull request carries this red row, the close-out tool's own chore pull"
+            echo "requests among them, and that tool merges a chore pull request only from a"
+            echo "clean merge state."
+            echo ""
+            echo "### The fix"
+            echo ""
+            echo "**NOT-EXECUTABLE — the file is a tool someone runs:**"
+            echo ""
+            echo '```bash'
+            echo "git update-index --chmod=+x <path>"
+            echo '```'
+            echo ""
+            echo "**NOT-EXECUTABLE — the file is a sourced library, an imported module or a"
+            echo "fixture:** add one row to"
+            echo "\`core/deploy/allowlists/skip-tool-exec-mode-check.txt\`, in the form"
+            echo "\`<path>  # <class>: <reason>\`, and stage it — the list is read from the"
+            echo "index. The class is one of \`sourced-library\`, \`imported-module\`,"
+            echo "\`fixture\`; the reason names what reads the file."
+            echo ""
+            echo "**STALE-EXEMPTION:** the row no longer describes the tree. If the file is now"
+            echo "executable, read the row's reason first (the scan output prints it): restore"
+            echo "the file's \`100644\` mode if that reason still holds, or delete the row if"
+            echo "it does not. If the file is gone or no longer begins with an interpreter"
+            echo "line, delete the row."
+            echo ""
+            echo "### Scope note"
+            echo ""
+            echo "This gate is **whole-tree**, not changed-files, and that is deliberate: a"
+            echo "file that arrives by merging \`main\` into a branch is unchanged relative to"
+            echo "the pull request's base, and a changed-file gate would not see it. It reads"
+            echo "the mode git tracks, never the mode a checkout happens to have on disk."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           exit 1
