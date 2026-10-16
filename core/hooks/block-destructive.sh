@@ -1200,14 +1200,17 @@ script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp
 #   script_wnox    short options under which the wrapper EXECUTES NOTHING and only
 #                  describes or edits its operand. The segment is not an execution
 #                  and is skipped, which is the verdict these spellings already had.
-#   script_wsplit  short options whose ATTACHED argument is the command line itself,
-#   script_wlsplit and the long spellings of the same (`env -S<string>`,
-#                  `env --split-string=<string>`, and every prefix of it the parser
-#                  takes for it, `env --split=<string>`). Such a token is NOT stepped
-#                  over: the walk stops on it, so it stays the command word and is
-#                  adjudicated exactly as it was before this table existed. Stepping
-#                  over it would take a command line out of adjudication, and a step
-#                  may move the verb later; it may never remove an execution.
+#   script_wsplit  short options whose ATTACHED argument is env's own argv, prepended
+#   script_wlsplit to what follows (`env -S<string>`, `env --split-string=<string>`,
+#                  and every prefix of the long name the parser takes for it,
+#                  `env --split=<string>`). script_split_scan reads that value. When it
+#                  carries a command word of its own, the walk STOPS on the split token
+#                  and adjudicates it as it did before this table existed: the command
+#                  is inside the string, out of this walk's reach. When it carries only
+#                  options, an assignment or nothing, env's command is the token that
+#                  FOLLOWS, so the walk steps past the split token and goes on to it.
+#                  Stopping there would leave that command unadjudicated, and GNU env
+#                  runs it: a step may move the verb later; it may never remove one.
 #   script_wlong   EVERY long option the program's parser defines, from its own option
 #                  table rather than its manual, or nothing when the program reads no
 #                  long option. Only the resolution below reads it.
@@ -1249,9 +1252,10 @@ script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp
 # long with a near miss per letter.
 #
 # `env -S` is deliberately NOT listed as taking an argument, by any spelling: its
-# argument is the command line itself, so the token after it is read as the
-# command word. The ATTACHED spelling is the other case, and script_wsplit above is
-# why.
+# argument is env's own argv. The SEPARATE spelling leaves the token after it as the
+# command word. The ATTACHED spelling is script_split_scan's case: the walk stops on
+# it only when its value carries a command word, and otherwise goes on to the command
+# that the value's options or assignment precede.
 # ---------------------------------------------------------------------------
 script_wrapper_row() {   # $1 = wrapper basename
   script_wrow=1
@@ -1305,6 +1309,43 @@ script_wrapper_longname() {   # $1 = a token that begins with `--`
   return 0
 }
 
+# An attached split-string value is env's own argv, prepended to what follows, so when
+# it carries no command word of its own env's command is the token that FOLLOWS and the
+# walk must go on to it. Decide which: script_wsplit_cmd=1 when the value is itself a
+# command word (the command is inside the string and this walk cannot reach it, so the
+# caller stops on the split token exactly as it did before this helper), 0 when the
+# value is only options, an assignment, or empty (the caller consumes the split token
+# and walks on to adjudicate the command that follows). In the second case, when the
+# value is an option run, consume any following argv token an arg-taking option takes
+# as its separate argument, reading the row's own arity (script_wopt) the way the
+# cluster loop does, so `env --s=-u <ok> <na>` adjudicates <na> and not <ok>. The hook
+# tokenizes on whitespace, so the value is one word. A value holding a `/` is read as a
+# command word: a path is the command, and an option carrying a path keeps the verdict
+# it had before this helper (a declared residual, readiness item 2).
+script_split_scan() {   # $1 = the attached split value
+  local _v="$1" _c2="" _n="${#script_tokens[@]}"
+  script_wsplit_cmd=0   # M-WRAP-SPLITCMD
+  case "$_v" in
+    "")   return 0 ;;
+    */*)  script_wsplit_cmd=1; return 0 ;;
+    -*)   : ;;
+    *=*)  case "${_v%%=*}" in ''|*[!A-Za-z0-9_]*) script_wsplit_cmd=1 ;; esac
+          return 0 ;;
+    *)    script_wsplit_cmd=1; return 0 ;;
+  esac
+  _v="${_v#-}"
+  while [ -n "$_v" ]; do
+    _c2="${_v:0:1}"; _v="${_v:1}"
+    case "$script_wopt" in
+      *"${_c2}::"*) _v="" ;;
+      *"${_c2}:"*)
+        if [ -z "$_v" ] && [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
+        _v="" ;;
+    esac
+  done
+  return 0
+}
+
 # Step script_hidx over ONE wrapper's own option run and positional operands.
 # Entered with script_hidx on the token after the wrapper word and script_wrap
 # holding the wrapper's basename; leaves script_hidx on the first token that is
@@ -1324,7 +1365,10 @@ script_wrapper_options() {
       --*=*)
         script_wrapper_longname "$_tok"
         case "$script_wlsplit" in
-          *" $script_wlname "*) return 0 ;;
+          *" $script_wlname "*)
+            script_split_scan "${_tok#*=}"
+            if [ "$script_wsplit_cmd" -eq 1 ]; then return 0; fi
+            ;;
         esac
         script_hidx=$(( script_hidx + 1 ))
         ;;
@@ -1349,7 +1393,11 @@ script_wrapper_options() {
           esac
           case "$script_wsplit" in
             *"$_c"*)
-              if [ -n "$_rest" ]; then script_hidx=$(( script_hidx - 1 )); return 0; fi
+              if [ -n "$_rest" ]; then
+                script_split_scan "$_rest"
+                if [ "$script_wsplit_cmd" -eq 1 ]; then script_hidx=$(( script_hidx - 1 )); return 0; fi
+                _rest=""
+              fi
               ;;
           esac
           case "$script_wopt" in

@@ -7152,8 +7152,8 @@ fi
 /usr/bin/sed 's%if \[ \$(( script_hidx + 1 )) -ge "\${#script_tokens\[@\]}" \]; then%if [ "$script_xargs" -eq 1 ] || [ $(( script_hidx + 1 )) -ge "${#script_tokens[@]}" ]; then%' \
   "$HOOK" > "${WRAP_HOOKS}/block-destructive-pxall.sh"
 /usr/bin/sed \
-  -e '/\*" \$script_wlname "\*) return 0 ;;/d' \
-  -e '/if \[ -n "\$_rest" \]; then script_hidx=\$(( script_hidx - 1 )); return 0; fi/d' \
+  -e '/if \[ "\$script_wsplit_cmd" -eq 1 \]; then return 0; fi/d' \
+  -e '/if \[ "\$script_wsplit_cmd" -eq 1 \]; then script_hidx=\$(( script_hidx - 1 )); return 0; fi/d' \
   "$HOOK" > "${WRAP_HOOKS}/block-destructive-pnosplit.sh"
 # splitcmd  script_split_scan always reports a command word, so every attached split value stops
 #           the walk — the behaviour before that helper, when an attached split string carrying no
