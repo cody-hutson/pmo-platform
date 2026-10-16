@@ -81,7 +81,7 @@ check() { if [ "$2" = "$3" ]; then ok "$1 (= $3)"; else bad "$1 — expected [$3
 # Do not "simplify" this back into a pipeline.
 # shellcheck source=/dev/null
 . "$LIB"
-for fn in esc_lines identity_preflight resolve_operator_literals literal_set_verdict \
+for fn in esc_lines identity_preflight handle_preflight resolve_operator_literals literal_set_verdict \
           adr_deciders_carveout_suppresses depersonalization_line_verdict; do
   if ! declare -F "$fn" >/dev/null; then
     echo "FATAL: $LIB did not define $fn"; exit 1
@@ -250,7 +250,7 @@ check "esc_lines drops blank/whitespace-only lines" "$blank" "0"
 
 echo
 echo "--- Run-level decisions: the literal set a run scans (fixture arms a-f) ---"
-# The three run-level functions take NO actor parameter: who triggered the run cannot
+# The run-level functions take NO actor parameter: who triggered the run cannot
 # change what it scans, which is the decision record
 # {{ADR:depersonalization-gate-scans-bot-runs}} in executable form. Each arm calls them
 # with the arguments the workflow passes on that kind of run — the repository owner as
@@ -264,15 +264,13 @@ EMPTY_PATTERNS="$TMP/patterns_run_empty"
 
 # (a) SENSITIVITY, AC 3 — a run Dependabot started, on canonical, with the mirrored
 # identity present. The workflow passes REPO_OWNER, so the set is the owner plus the
-# identity lines, and the bot's own login is not in it.
-ACTOR_A="$FIXTURE_BOT"; REPO_OWNER_A="$FIXTURE_HANDLE"
+# identity lines. (That the bot's own login cannot enter the set is not asserted
+# here: the function has no actor parameter, so such an arm could not fail. The
+# call-shape bindings below assert the workflow passes the owner, not the actor.)
+REPO_OWNER_A="$FIXTURE_HANDLE"
 set_a="$(resolve_operator_literals 1 0 "$REPO_OWNER_A" "$FIXTURE_IDENTITY")"
 check "(a) bot's run, canonical, identity set — literal set is owner + identity lines" \
   "$(flat "$set_a")" "$FIXTURE_HANDLE|$FIXTURE_NAME|$FIXTURE_EMAIL"
-case "$set_a" in
-  *"$ACTOR_A"*) bad "(a) the bot's login ($ACTOR_A) leaked into the literal set" ;;
-  *)            ok  "(a) the bot's login is not in the literal set" ;;
-esac
 # …and the set is not decorative: a pattern file built from it BLOCKS the handle and
 # the email on a body line, which is the measured verdict AC 3 asks for.
 PATTERNS_A="$TMP/patterns_run_a"
@@ -293,6 +291,22 @@ check "(b) human's run, canonical, identity unset — preflight FAILs" "$(identi
 check "(c) bot's run, canonical, identity unset (mirror missing) — preflight FAILs" "$(identity_preflight 1 "")" "FAIL"
 # Non-vacuity for (b)/(c): the preflight can say OK, so FAIL above is a decision.
 check "(b/c control) canonical with the identity set — preflight is OK" "$(identity_preflight 1 "$FIXTURE_IDENTITY")" "OK"
+# A whitespace-only identity is UNSET: esc_lines would drop it, so it would scan no
+# name or email behind an OK — the hand-set Dependabot mirror is where it can slip in.
+check "(b) canonical with a whitespace-only identity — preflight FAILs" \
+  "$(identity_preflight 1 "$(printf ' \n\t ')")" "FAIL"
+
+# (b') HANDLE PREFLIGHT — on canonical the handle must be the owner segment of the
+# repository. Reachable only by an edit that re-binds the handle (to the actor, say)
+# or an empty expression; either would leave the handle silently unscanned.
+check "(b') canonical, owner = the repository's owner — OK" \
+  "$(handle_preflight 1 "$FIXTURE_HANDLE" "$FIXTURE_HANDLE/pmo-platform")" "OK"
+check "(b') canonical, handle re-bound to the bot's login — FAIL" \
+  "$(handle_preflight 1 "$FIXTURE_BOT" "$FIXTURE_HANDLE/pmo-platform")" "FAIL"
+check "(b') canonical, empty handle — FAIL" \
+  "$(handle_preflight 1 "" "$FIXTURE_HANDLE/pmo-platform")" "FAIL"
+check "(b') a fork — OK whatever its owner" \
+  "$(handle_preflight 0 "fork-owner" "$FIXTURE_HANDLE/pmo-platform")" "OK"
 
 # (d) FORK OPT-OUT — a fork that opted the operator dimension out, identity unset:
 # the preflight passes, the set is empty, and the empty set passes with a notice.
@@ -321,16 +335,11 @@ else
   bad "(e) the escaped pattern set differs from the pre-change one"
 fi
 
-# (f) THE EMPTY-SET GUARD — on canonical an empty literal set FAILs. Reproduce the
-# retired resolution (an exemption that emptied the set when the actor was a bot,
-# with no collaborator list) and confirm the gate would now fail loud on it rather
-# than pass with "nothing to match".
+# (f) THE EMPTY-SET GUARD — on canonical an empty literal set FAILs. That is the set
+# the retired exemption produced on a bot's run with no collaborator list, which the
+# gate used to pass with "nothing to match". Controls for the other two verdicts are
+# (a) (SCAN) and (d) (PASS-EMPTY on a fork).
 check "(f) canonical with an empty literal set — FAIL-EMPTY" "$(literal_set_verdict 1 "$EMPTY_PATTERNS")" "FAIL-EMPTY"
-RETIRED="$TMP/patterns_retired_exemption"
-esc_lines "" > "$RETIRED"
-esc_lines "" >> "$RETIRED"
-check "(f) the retired exemption's empty set now fails on canonical instead of passing" \
-  "$(literal_set_verdict 1 "$RETIRED")" "FAIL-EMPTY"
 
 echo
 echo "--- Structural binding: the workflow uses this library, not a private copy ---"
@@ -390,23 +399,36 @@ else
 fi
 
 # RUN-LEVEL CALL SHAPE. The arms (a)-(f) grade the functions given the arguments the
-# workflow is supposed to pass; these grade that it passes them. Same anchoring as the
-# bindings above: an executable line, not a mention.
+# workflow is supposed to pass; these grade that it passes them, and that the branch
+# each verdict selects still ends the run the way the verdict says. Same anchoring as
+# the bindings above: an executable line, not a mention.
 if grep -qE '^[[:space:]]*REPO_OWNER:[[:space:]]*[$][{][{][[:space:]]*github[.]repository_owner[[:space:]]*[}][}]' "$WORKFLOW"; then
   ok "repo-integrity.yml binds REPO_OWNER from github.repository_owner"
 else
   bad "repo-integrity.yml no longer binds REPO_OWNER from github.repository_owner"
 fi
-if grep -qE '^[[:space:]]*if [[] "[$][(]identity_preflight "[$]IS_CANONICAL" "[$][{]OPERATOR_IDENTITY:-[}]"[)]" = "FAIL" []]' "$WORKFLOW"; then
+# …exactly once, so a step-level REPO_OWNER cannot shadow the job binding unseen.
+check "REPO_OWNER is bound exactly once in repo-integrity.yml" \
+  "$(grep -cE '^[[:space:]]*REPO_OWNER:' "$WORKFLOW" || true)" "1"
+if grep -qE '^[[:space:]]*case "[$][(]identity_preflight "[$]IS_CANONICAL" "[$][{]OPERATOR_IDENTITY:-[}]"[)]" in' "$WORKFLOW"; then
   ok "repo-integrity.yml decides the preflight through identity_preflight (no actor argument)"
 else
-  bad "repo-integrity.yml no longer calls identity_preflight \"\$IS_CANONICAL\" \"\${OPERATOR_IDENTITY:-}\" on an executable line"
+  bad "repo-integrity.yml no longer routes the preflight through case \"\$(identity_preflight \"\$IS_CANONICAL\" \"\${OPERATOR_IDENTITY:-}\")\" on an executable line"
+fi
+if grep -qE '^[[:space:]]*case "[$][(]handle_preflight "[$]IS_CANONICAL" "[$][{]REPO_OWNER:-[}]" "[$][{]GITHUB_REPOSITORY:-[}]"[)]" in' "$WORKFLOW"; then
+  ok "repo-integrity.yml checks the handle through handle_preflight"
+else
+  bad "repo-integrity.yml no longer routes the handle check through handle_preflight"
 fi
 if grep -qE '^[[:space:]]*OP_LITERALS="[$][(]resolve_operator_literals "[$]IS_CANONICAL" "[$]FORK_OPTED_OUT" "[$][{]REPO_OWNER:-[}]" "[$][{]OPERATOR_IDENTITY:-[}]"[)]"' "$WORKFLOW"; then
   ok "repo-integrity.yml resolves OP_LITERALS through resolve_operator_literals with the owner as the handle"
 else
   bad "repo-integrity.yml no longer resolves OP_LITERALS through resolve_operator_literals with \${REPO_OWNER:-}"
 fi
+# …and that is the ONLY executable assignment to OP_LITERALS, so a later line cannot
+# quietly empty or replace the set the library resolved (the retired exemption's shape).
+check "OP_LITERALS is assigned exactly once on an executable line" \
+  "$(grep -cE '^[^#]*OP_LITERALS=' "$WORKFLOW" || true)" "1"
 if grep -qE '^[[:space:]]*HANDLE_LITERAL="[$][{]REPO_OWNER:-[}]"' "$WORKFLOW"; then
   ok "repo-integrity.yml sets HANDLE_LITERAL to the owner"
 else
@@ -417,22 +439,63 @@ if grep -qE '^[[:space:]]*case "[$][(]literal_set_verdict "[$]IS_CANONICAL" "[$]
 else
   bad "repo-integrity.yml no longer routes the empty-set branch through literal_set_verdict"
 fi
+
 # NEGATIVE: no executable line takes a literal from the actor. The actor may feed the
 # summary notice only. "Executable" here means no `#` ahead of the assignment, so the
-# pattern matches an assignment at the start of a line — which is where the retired
-# lines sat. Control: the same pattern MUST find both retired lines in a synthetic
-# copy, and must NOT find a commented-out one, or this zero proves nothing.
-ACTOR_LITERAL_RE='^[^#]*(OP_LITERALS|HANDLE_LITERAL)="[^"]*[$][{]?ACTOR'
+# pattern matches an assignment at the start of a line, which is where the retired
+# lines sat, and it reads the WHOLE line, so an actor passed as an argument inside a
+# command substitution is caught too. Control: the same pattern MUST find all three
+# retired or regressed shapes in a synthetic copy, and must NOT find a commented one.
+ACTOR_LITERAL_RE='^[^#]*(OP_LITERALS|HANDLE_LITERAL)=.*[$][{]?ACTOR([^A-Za-z0-9_]|$)'
 actor_hits="$(grep -cE "$ACTOR_LITERAL_RE" "$WORKFLOW" || true)"
 check "no executable line in repo-integrity.yml builds a literal from the actor" "$actor_hits" "0"
 RETIRED_FIXTURE="$TMP/retired_actor_shape"
 {
   printf '                OP_LITERALS="$ACTOR"\n'
   printf '                HANDLE_LITERAL="$ACTOR"\n'
+  printf '          OP_LITERALS="$(resolve_operator_literals "$IS_CANONICAL" "$FORK_OPTED_OUT" "${ACTOR:-}" "${OPERATOR_IDENTITY:-}")"\n'
   printf '                # HANDLE_LITERAL="$ACTOR"\n'
 } > "$RETIRED_FIXTURE"
-check "…control — the pattern finds both retired actor lines and skips the commented one" \
-  "$(grep -cE "$ACTOR_LITERAL_RE" "$RETIRED_FIXTURE" || true)" "2"
+check "…control — the pattern finds the three actor shapes and skips the commented one" \
+  "$(grep -cE "$ACTOR_LITERAL_RE" "$RETIRED_FIXTURE" || true)" "3"
+
+# EACH FAILING VERDICT STILL FAILS THE RUN. A binding that proves the verdict is read
+# proves nothing if the arm it selects was edited to `exit 0`. arm_exits_1 reads the
+# workflow from the first line matching <case-start>, finds the first arm line matching
+# <arm>, and reports whether that arm reaches `exit 1` by its `;;`. It reads a file
+# argument — no pipe, so no short-circuiting reader.
+arm_exits_1() {
+  awk -v start="$2" -v arm="$3" '
+    !inside && $0 ~ start { inside = 1; next }
+    inside && !inarm && $0 ~ arm { inarm = 1 }
+    inarm {
+      if ($0 ~ /exit 1/) { found = 1 }
+      if ($0 ~ /;;/) { print (found ? "yes" : "no"); done = 1; exit }
+    }
+    END { if (!done) { print "absent" } }
+  ' "$1"
+}
+for spec in \
+  'identity_preflight|^[[:space:]]*FAIL[)]' \
+  'identity_preflight|^[[:space:]]*[*][)]' \
+  'handle_preflight|^[[:space:]]*FAIL[)]' \
+  'handle_preflight|^[[:space:]]*[*][)]' \
+  'literal_set_verdict|^[[:space:]]*FAIL-EMPTY[)]' \
+  'literal_set_verdict|^[[:space:]]*[*][)]'; do
+  fn_name="${spec%%|*}"; arm_re="${spec#*|}"
+  check "the $fn_name arm /$arm_re/ ends in exit 1" \
+    "$(arm_exits_1 "$WORKFLOW" "^[[:space:]]*case \"[\$][(]$fn_name " "$arm_re")" "yes"
+done
+# Control: the reader must say "no" for an arm edited to exit 0, and "yes" for the
+# same arm intact, or the six PASSes above are not measuring.
+ARM_FIXTURE_BAD="$TMP/arm_exit0"
+ARM_FIXTURE_OK="$TMP/arm_exit1"
+printf '          case "$(literal_set_verdict "$IS_CANONICAL" "$PATTERN_FILE")" in\n            FAIL-EMPTY)\n              echo "::error::x"\n              exit 0 ;;\n          esac\n' > "$ARM_FIXTURE_BAD"
+printf '          case "$(literal_set_verdict "$IS_CANONICAL" "$PATTERN_FILE")" in\n            FAIL-EMPTY)\n              echo "::error::x"\n              exit 1 ;;\n          esac\n' > "$ARM_FIXTURE_OK"
+check "…control — an arm edited to exit 0 reads no" \
+  "$(arm_exits_1 "$ARM_FIXTURE_BAD" '^[[:space:]]*case "[$][(]literal_set_verdict ' '^[[:space:]]*FAIL-EMPTY[)]')" "no"
+check "…control — the same arm intact reads yes" \
+  "$(arm_exits_1 "$ARM_FIXTURE_OK" '^[[:space:]]*case "[$][(]literal_set_verdict ' '^[[:space:]]*FAIL-EMPTY[)]')" "yes"
 
 # THE ANCHOR'S OWN REGRESSION ARM. Everything above measures the three patterns
 # against the LIVE workflow, where anchored and unanchored forms agree — so nothing

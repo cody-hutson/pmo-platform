@@ -242,7 +242,7 @@ jobs:
           # Fail closed on a library that stopped defining a decision this gate
           # calls: each one is read through $(...), so a missing function would
           # read as an empty verdict and the run would fall through to a pass.
-          for fn in esc_lines identity_preflight resolve_operator_literals \
+          for fn in esc_lines identity_preflight handle_preflight resolve_operator_literals \
                     literal_set_verdict depersonalization_line_verdict; do
             if ! declare -F "$fn" >/dev/null; then
               echo "::error::Depersonalization gate: release/tools/lib/deciders-carveout.sh does not define $fn"
@@ -260,36 +260,61 @@ jobs:
           IS_CANONICAL=0
           [ "${GITHUB_REPOSITORY:-}" = "$CANONICAL_REPO" ] && IS_CANONICAL=1
 
-          # Fork opt-out: a repo variable OR a committed sentinel disables a
-          # dimension on a fork (announced in the summary). Absent the marker, a
-          # fork with unset inputs ALSO fails loud.
+          # Fork opt-out: a repo variable OR a committed sentinel disables the
+          # operator dimension on a fork (announced in the summary); the collaborator
+          # dimension still runs when its input is set. Absent the marker, a fork
+          # scans its own owner's handle, plus the identity when one is set. Only
+          # the canonical repository fails loud on an unset identity.
           FORK_OPTED_OUT=0
           if [ "$IS_CANONICAL" -eq 0 ]; then
             if [ -n "${FORK_OPTOUT:-}" ] || [ -f .repo-integrity-fork ]; then
               FORK_OPTED_OUT=1
-              echo "::notice::repo-integrity depersonalization: fork opt-out active (REPO_INTEGRITY_FORK_OPTOUT or .repo-integrity-fork present); a dimension with an unset input is skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::notice::repo-integrity depersonalization: fork opt-out active (REPO_INTEGRITY_FORK_OPTOUT or .repo-integrity-fork present); the operator dimension is skipped." | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           fi
 
           # The decision is the shared library's identity_preflight, so the fixture
           # suite exercises the same code path. It reads no actor: a run Dependabot
           # starts reads the Dependabot secret store, and a missing mirror there
-          # fails here exactly as a missing Actions secret does on a human run.
-          if [ "$(identity_preflight "$IS_CANONICAL" "${OPERATOR_IDENTITY:-}")" = "FAIL" ]; then
-            {
-              echo "## :x: Depersonalization gate misconfigured"
-              echo ""
-              echo "Required secret unset on the canonical repository: \`OPERATOR_IDENTITY\`."
-              echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
-              echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
-              echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
-              echo "A run Dependabot starts reads the Dependabot secret store: if this run was started by"
-              echo "Dependabot, the mirrored copy is missing (\`gh secret set OPERATOR_IDENTITY --app dependabot\`;"
-              echo "see \`core/standards/secrets-handling-policy.md\` §5)."
-            } | tee -a "$GITHUB_STEP_SUMMARY"
-            echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
-            exit 1
-          fi
+          # fails here exactly as a missing Actions secret does on a human run. A
+          # verdict that is neither OK nor FAIL fails closed.
+          case "$(identity_preflight "$IS_CANONICAL" "${OPERATOR_IDENTITY:-}")" in
+            OK) : ;;
+            FAIL)
+              {
+                echo "## :x: Depersonalization gate misconfigured"
+                echo ""
+                echo "Required secret unset (or blank) on the canonical repository: \`OPERATOR_IDENTITY\`."
+                echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
+                echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
+                echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
+                echo "A run Dependabot starts reads the Dependabot secret store: if this run was started by"
+                echo "Dependabot, the mirrored copy is missing (\`gh secret set OPERATOR_IDENTITY --app dependabot\`;"
+                echo "see \`core/standards/secrets-handling-policy.md\` §5)."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: identity_preflight returned an unrecognised verdict"
+              exit 1 ;;
+          esac
+
+          # The handle the gate scans must be the canonical owner — the shared
+          # library's handle_preflight. REPO_OWNER is bound from
+          # github.repository_owner, so on canonical this cannot fail by
+          # configuration; it fails on an edit that re-binds the handle (to the
+          # actor, say) or on an empty expression, either of which would otherwise
+          # leave the handle silently unscanned behind a SCAN verdict.
+          case "$(handle_preflight "$IS_CANONICAL" "${REPO_OWNER:-}" "${GITHUB_REPOSITORY:-}")" in
+            OK) : ;;
+            FAIL)
+              echo "## :x: Depersonalization gate misconfigured — the operator handle did not resolve to the repository owner" | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate misconfigured: the operator handle is not the canonical repository owner"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: handle_preflight returned an unrecognised verdict"
+              exit 1 ;;
+          esac
 
           # Solo-operator: COLLABORATOR_NAMES is OPTIONAL. When unset on canonical,
           # the operator dimension still runs and collaborator scanning is dormant
@@ -370,8 +395,8 @@ jobs:
           esc_lines "$HANDLE_LITERAL" >> "$NOT_CARVED_FILE"
 
           # Empty literal set — the shared library's literal_set_verdict. On
-          # canonical this cannot be reached today (the identity is required above
-          # and the owner always resolves), so it FAILS rather than passes: the
+          # canonical this cannot be reached today (the identity and the owner
+          # handle are both required above), so it FAILS rather than passes: the
           # branch used to exit 0 with "nothing to match", and an edit that re-opens
           # a path to it must not re-arm a silent pass. A fork keeps notice + pass.
           case "$(literal_set_verdict "$IS_CANONICAL" "$PATTERN_FILE")" in

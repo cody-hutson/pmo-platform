@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # deciders-carveout.sh — Shared decisions for the depersonalization gate.
 #
-# The SINGLE home of the gate's decisions: the configuration preflight, the
+# The SINGLE home of the gate's decisions: the configuration preflights, the
 # operator-literal resolution, the empty-literal-set verdict, and the per-line ADR
 # `deciders:` carve-out predicate. Both callers source this library, so each
 # decision is made in ONE place:
@@ -54,7 +54,7 @@ esc_lines() {
   done
 }
 
-# THE THREE RUN-LEVEL DECISIONS BELOW are the gate's resolution of WHAT it matches,
+# THE RUN-LEVEL DECISIONS BELOW are the gate's resolution of WHAT it matches,
 # made before any file is read. They were inline in the workflow, so the only proof
 # of them was a live remote run; the decision record
 # {{ADR:depersonalization-gate-scans-bot-runs}} moves them here for the same reason
@@ -75,10 +75,42 @@ esc_lines() {
 #   every run. A run Dependabot starts reads the Dependabot secret store, so a FAIL
 #   there means the mirrored copy is missing (secrets-handling-policy.md §5). A fork
 #   never fails here: its identity dimension is governed by its opt-out instead.
+#
+#   A whitespace-only identity counts as UNSET. esc_lines drops blank lines, so such
+#   a value would pass a bare -z test and then scan no name or email at all; the
+#   hand-set Dependabot mirror is exactly where such a value can slip in.
 identity_preflight() {
   _ip_canonical="${1?identity_preflight: is_canonical required}"
   _ip_identity="${2-}"
-  if [ "$_ip_canonical" = "1" ] && [ -z "$_ip_identity" ]; then
+  _ip_has_value=0
+  case "$_ip_identity" in *[![:space:]]*) _ip_has_value=1 ;; esac
+  if [ "$_ip_canonical" = "1" ] && [ "$_ip_has_value" -eq 0 ]; then
+    printf 'FAIL\n'
+  else
+    printf 'OK\n'
+  fi
+  return 0
+}
+
+# handle_preflight <is_canonical> <owner> <repository>
+#   Echoes exactly one token on stdout and returns 0:
+#     OK    — the handle the gate will scan is the canonical repository's owner
+#     FAIL  — canonical repository, and the owner handle is empty or is not the
+#             owner segment of <repository> (the run's owner/name)
+#
+#   The handle is bound from github.repository_owner, which on the canonical
+#   repository IS the owner segment of the repository name, so FAIL cannot be reached
+#   by configuration. It is reached by an edit that re-binds the handle to something
+#   else — the run's actor, say, at step level where it would shadow the job env —
+#   or by an empty expression. Without this check either one leaves the identity
+#   lines in the set, the verdict reads SCAN, and the handle is silently unscanned.
+#   On a fork the owner is whatever the fork's owner is, so there is nothing to check.
+handle_preflight() {
+  _hp_canonical="${1?handle_preflight: is_canonical required}"
+  _hp_owner="${2-}"
+  _hp_repository="${3-}"
+  if [ "$_hp_canonical" = "1" ] \
+     && { [ -z "$_hp_owner" ] || [ "$_hp_owner" != "${_hp_repository%%/*}" ]; }; then
     printf 'FAIL\n'
   else
     printf 'OK\n'
@@ -124,9 +156,9 @@ resolve_operator_literals() {
 #     FAIL-EMPTY  — canonical repository and nothing resolved: fail loud
 #     PASS-EMPTY  — a fork and nothing resolved: report it and pass
 #
-#   On canonical, identity_preflight has already required the identity and
-#   resolve_operator_literals always emits the owner, so FAIL-EMPTY cannot be reached
-#   today. It is a guard, not dead code: the branch used to exit 0 with "nothing to
+#   On canonical, identity_preflight has already required the identity,
+#   handle_preflight has required the owner, and resolve_operator_literals emits both,
+#   so FAIL-EMPTY cannot be reached today. It is a guard, not dead code: the branch used to exit 0 with "nothing to
 #   match", and an edit that re-opened a path to it would have re-armed a silent pass
 #   in a branch-protection required check.
 literal_set_verdict() {
@@ -153,7 +185,7 @@ literal_set_verdict() {
 #
 #   An EMPTY (or absent) not-carved file means "no un-carved literal resolved for
 #   this run". The handle is resolved from the repository owner on every run (see
-#   resolve_operator_literals below), so in the live gate that happens only on a fork
+#   resolve_operator_literals above), so in the live gate that happens only on a fork
 #   that opted the operator dimension out — never because of who triggered the run.
 #   Falling back to suppression there reproduces the shipped whole-line behaviour
 #   rather than inventing a new verdict for a dimension that is already dark. It is
