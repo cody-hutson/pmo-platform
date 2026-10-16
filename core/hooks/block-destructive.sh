@@ -1538,6 +1538,42 @@ readonly DESTRUCTIVE_022_INTERP_REVIEW_DAYS=60    # deadline arm — repo-deriva
 readonly DESTRUCTIVE_022_INTERP_REVIEW_ROWS=25    # evidence arm — operator-local
 readonly DESTRUCTIVE_022_INTERP_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
 
+# The enclosure view (see ENCLOSURE-VIEW in the script-execution rule). Three
+# entry markers, and two work budgets a hook that runs before every Bash call
+# owes: a ceiling on the positions it opens and a ceiling on the remainder text
+# it copies. Both degrade to "this position is not seen" and both are pinned.
+readonly SCRIPT_BND_OLD=$'\002'    # a first-view segment start
+readonly SCRIPT_BND_PAREN=$'\003'  # a position opened by `(`
+readonly SCRIPT_BND_TICK=$'\004'   # a position opened by a backtick
+readonly SCRIPT_ENCL_POS_MAX=512
+readonly SCRIPT_ENCL_TAIL_BYTES=262144
+
+# ── THE ENCLOSURE VIEW'S SHELL FINDINGS: A THIRD FAMILY, AND A SIBLING FOR THE REASON
+# THE NON-SHELL FAMILY IS ONE.
+#
+# WHAT THIS FAMILY GATES. A shell interpreter or `source` finding at a command position
+# the enclosure view opens (ENCLOSURE-VIEW, in the script-execution rule), together with
+# the two decisions that view carries with it — the `xargs` standard-input deny and the
+# here-document receiver read from inside an enclosure. All of them are routed through
+# script_shell_verdict. At a first-view position the same arms never read this phase:
+# they stay always-enforce.
+#
+# WHY A PHASE AND NOT ENFORCE ON LANDING. The view adjudicates text a lexical matcher
+# cannot tell from a command — a quoted argument of a command outside the carrier set, a
+# kept here-document body, a comment — and its cost on inline pull-request bodies was
+# measured at several times what the commit-message corpus suggested. The operator chose
+# a phased rollout: findings enter at `warn`, and a later graduation decision is owed.
+# The warn phase measures how often the view WOULD refuse, never how often it would be
+# right; nothing in a row can say whether the text at its position runs.
+#
+# Self-armed at the commit that introduced this family, never a placeholder for a later
+# editor to fill, for the reason recorded on the exec arming stamp above.
+readonly DESTRUCTIVE_022_ENCL_PHASE="warn"   # shadow | warn | enforce
+readonly DESTRUCTIVE_022_ENCL_ARMED="2026-10-16"
+readonly DESTRUCTIVE_022_ENCL_REVIEW_DAYS=60    # deadline arm — repo-derivable
+readonly DESTRUCTIVE_022_ENCL_REVIEW_ROWS=25    # evidence arm — operator-local
+readonly DESTRUCTIVE_022_ENCL_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
+
 # Rollout telemetry for the exec arm: evaluate, record, take no action. Carries
 # the CAUSE CLASS as well as the path, because an operator reading this drain must
 # separate `not-allowlisted` (add an allowlist entry) from `unresolvable` (spell
@@ -1553,9 +1589,13 @@ readonly DESTRUCTIVE_022_INTERP_ESCALATE_DAYS=90  # deadline arm turns ISSUES re
 # it, every row carried the bare reason `would-fire` and nothing naming WHICH
 # widening produced it — so a reading of 1,067 rows could size the rule and could
 # not apportion a single row to the arm whose graduation it was supposed to inform.
-# With two phase-gated arms writing to one drain that stops being an inconvenience
-# and becomes unusable: two independent graduation decisions, one undifferentiated
-# population. One `--arg` makes both readable from the same file.
+# With three phase-gated arms writing to one drain that stops being an inconvenience
+# and becomes unusable: three independent graduation decisions, one undifferentiated
+# population. One `--arg` makes each readable from the same file. A row written from a
+# command position the enclosure view opened also carries `pos: "enclosure"`, so a
+# reader can split any arm's population by where its rows came from. The key says
+# nothing about whether the text at that position runs, which a lexical matcher
+# cannot know.
 #
 # ROWS WRITTEN BEFORE THIS CHANGE CARRY NO `arm` FIELD, and a reader must treat an
 # absent field as `exec` — which is factually correct, because the exec arm was the
@@ -1569,17 +1609,19 @@ log_would_fire_022() {
   ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo 'unknown')"
   "$JQ" -nc --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "BLOCK-DESTRUCTIVE-022" \
     --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" \
-    --arg arm "$arm" --arg path "$path" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", arm:$arm, cause:$cause, path:$path, cwd:$cwd}' \
+    --arg arm "$arm" --arg path "$path" --arg cwd "$CWD" --arg pos "${script_rowpos:-}" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", arm:$arm, cause:$cause, path:$path, cwd:$cwd} + (if $pos != "" then {pos:$pos} else {} end)' \
     >> "$WARN_LOG" 2>/dev/null || true
 }
 
 # Adjudicate one direct-execution candidate under the rollout phase.
 #
-# THE TWO EXISTING ARMS DO NOT ROUTE THROUGH THIS. They keep calling
-# check_script_target directly, with their call sites unedited, so their verdicts
-# are byte-preserved rather than argued to be equivalent. This function is reached
-# only from the exec arm.
+# THE TWO EXISTING ARMS DO NOT ROUTE THROUGH THIS. The shell interpreter and
+# `source` arms route through script_shell_verdict below, which hands a first-view
+# finding straight to check_script_target, so their verdicts there are unchanged —
+# arm AC-ENCL-P5 asserts it, where an unedited call site used to carry it — and gives
+# a finding at a position the enclosure view opened that view's rollout phase. This
+# function is reached only from the exec arm.
 #
 # An allowlisted, resolvable path returns silently and writes NOTHING. A drain
 # that records permitted traffic measures the corpus rather than the widening, and
@@ -1627,15 +1669,16 @@ destructive_022_exec_verdict() {
 # Adjudicate one NON-SHELL INTERPRETER operand under its own rollout phase.
 #
 # THE SHELL TRIO DOES NOT ROUTE THROUGH THIS, and that is the same discipline the
-# exec router states one function above. `bash`, `sh`, `zsh`, `source` and `.` keep
-# calling check_script_target directly from their unedited call-site branch, so
-# their always-enforce verdicts are byte-preserved rather than argued to be
-# equivalent. That unconditional posture is the basis on which the mode-capable
-# hook cohort was permitted to degrade at all; softening it as a side effect of
-# admitting python would be the one change this widening must not make. The
-# `[ "$script_interp_domain" = "interp" ]` test at each call site is what enforces
-# it, and it is a positive test for the shipped domain rather than a negative test
-# against a list that could grow.
+# exec router states one function above. `bash`, `sh`, `zsh`, `source` and `.` route
+# through script_shell_verdict, which at a first-view position is a pass-through to
+# check_script_target, so their always-enforce verdicts there are unchanged — arms
+# AC-ENCL-P5 and T-NSI-04a to -04d assert it, where an unedited call-site branch
+# used to carry it by construction. That unconditional posture is the basis on which
+# the mode-capable hook cohort was permitted to degrade at all; softening it as a
+# side effect of admitting python would be the one change this widening must not
+# make. The `[ "$script_interp_domain" = "interp" ]` test at each call site is what
+# keeps the shell trio off this router, and it is a positive test for the shipped
+# domain rather than a negative test against a list that could grow.
 #
 # An allowlisted, resolvable path returns silently and writes NOTHING — a drain
 # that records permitted traffic measures the corpus rather than the widening.
@@ -1669,6 +1712,41 @@ destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
       ;;
   esac
   log_would_fire_022 "enforce" "$cause" "$path" "interp-nonshell"
+  check_script_target "$path" "$resolved"
+}
+
+# Verdict router for the always-enforce shell and source arms. First view: the shipped
+# call, unchanged — a pass-through to check_script_target, which arm AC-ENCL-P5
+# asserts. Second view (a command position behind a substitution or group opener):
+# the enclosure family's rollout phase. An unrecognised phase value falls through to
+# enforce, the direction the other two routers take.
+script_shell_verdict() {   # $1 = path  $2 = resolved
+  local path="$1" resolved="${2:-1}"
+  if [ "${script_pass:-1}" -ne 2 ]; then   # M-ENCL-ROUTE
+    check_script_target "$path" "$resolved"
+    return 0
+  fi
+  local cause="not-allowlisted"
+  case "$path" in
+    *'$'*) cause="unresolvable" ;;
+  esac
+  if [ "$resolved" -eq 0 ]; then cause="unresolvable"; fi
+  if [ "$cause" = "not-allowlisted" ] && is_script_allowlisted "$path"; then
+    return 0
+  fi
+  case "$DESTRUCTIVE_022_ENCL_PHASE" in
+    shadow)
+      log_would_fire_022 "shadow" "$cause" "$path" "shell-enclosure"
+      return 0
+      ;;
+    warn)
+      log_would_fire_022 "warn" "$cause" "$path" "shell-enclosure"
+      "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): script execution inside a substitution or group %s\n' \
+        "$HOOK_NAME" "$cause" "$path" >&2
+      return 0
+      ;;
+  esac
+  log_would_fire_022 "enforce" "$cause" "$path" "shell-enclosure"
   check_script_target "$path" "$resolved"
 }
 
@@ -1735,7 +1813,7 @@ script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argum
   if ! script_arg_exact; then script_cmode=1; fi   # M-OPAQUE-ARG (mutation target; pinned by FWALK-OPAQUE-M3a)
   if script_operand_implicated "$script_interp_domain"; then
     if [ "$script_interp_domain" = "interp" ]; then
-      check_script_target "$script_norm_out" "$script_norm_ok"
+      script_shell_verdict "$script_norm_out" "$script_norm_ok"
     else
       destructive_022_interp_verdict "$script_norm_out" "$script_norm_ok"
     fi
@@ -1882,6 +1960,56 @@ script_qadvance() {
   return 0
 }
 
+# The text of a second-view position ends where its own enclosure closes: for a
+# parenthesis, the first `)` at depth 0 outside quotes; for a backtick, the next
+# unescaped backtick. Scanned LOCALLY from a fresh quote state, because the inside
+# of an enclosure is a fresh quoting context and the carried state can be wrong
+# about it. No close found, or the work budget spent: the text is left WHOLE —
+# the direction that adjudicates more, never less.
+script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> script_cut_out
+  script_cut_out="$1"
+  script_qt="$1"
+  local _used=0 _q=0 _d=0 _n=0 _lp='(' _rp=')'
+  while [ -n "$script_qt" ]; do
+    _n=$(( _n + 1 ))
+    if [ "$_n" -gt 200 ]; then return 0; fi
+    if [ "$2" -eq 2 ]; then
+      script_qnext "$script_bs" "$script_qbt"
+    elif [ "$_q" -eq 1 ]; then
+      script_qnext "$script_q1"
+    elif [ "$_q" -eq 2 ]; then
+      script_qnext "$script_bs" "$script_q2" "$_lp" "$_rp"
+    else
+      script_qnext "$script_bs" "$script_q1" "$script_q2" "$_lp" "$_rp"
+    fi
+    if [ "$script_qi" -lt 0 ]; then return 0; fi
+    _used=$(( _used + script_qi + 1 ))
+    script_qt="${script_qt:$(( script_qi + 1 ))}"
+    case "$script_qc" in
+      "$script_bs")
+        _used=$(( _used + 1 ))
+        script_qt="${script_qt:1}"
+        ;;
+      "$script_q1") if [ "$_q" -eq 1 ]; then _q=0; else _q=1; fi ;;
+      "$script_q2") if [ "$_q" -eq 2 ]; then _q=0; else _q=2; fi ;;
+      "$_lp") _d=$(( _d + 1 )) ;;
+      "$_rp")
+        if [ "$_d" -gt 0 ]; then
+          _d=$(( _d - 1 ))
+        elif [ "$_q" -eq 0 ]; then
+          script_cut_out="${1:0:$(( _used - 1 ))}"
+          return 0
+        fi
+        ;;
+      *)
+        script_cut_out="${1:0:$(( _used - 1 ))}"
+        return 0
+        ;;
+    esac
+  done
+  return 0
+}
+
 # --------------------------------------------------------------------------
 # HERE-DOCUMENT PRE-PASS (POSIX Shell Command Language 2.7.4)
 #
@@ -1928,7 +2056,14 @@ script_qadvance() {
 # The receiving command is resolved from the text between the last SEPARATOR at
 # quote-state 0 and the operator, not from the head of the line. `gh x ; bash
 # <<'E'` must resolve to `bash`, not to `gh`; reading the line head would hand a
-# real interpreter's stdin the carrier's exemption.
+# real interpreter's stdin the carrier's exemption. It is resolved a second time
+# from the innermost enclosure still open at the operator — `echo $(bash <<'E'`
+# hands the body to `bash`, not to `echo` — and a body is excised only when both
+# readings are carriers (ENCL-HDHEAD below). Below `enforce` on the enclosure
+# family's phase that finding is recorded and the body is still excised. Two limits
+# are measured and declared: a receiver behind a line continuation is not reached,
+# because this pass reads physical lines; and a carrier's unquoted substitution that
+# reads a here-document through `cat`, which runs nothing, is newly flagged.
 #
 # ALL-OR-NOTHING, BY DESIGN. If ANY here-document in the command fails either
 # condition, NOTHING is excised and the caller latches script_qbail — so every
@@ -1979,11 +2114,11 @@ script_heredoc_prescan() {
     *) return 0 ;;
   esac
 
-  local _lt='<' _sc=';' _amp='&' _bar='|'
-  local -a _lines _qdelim _qquoted _qstrip _qhead
+  local _lt='<' _sc=';' _amp='&' _bar='|' _lp='(' _rp=')'
+  local -a _lines _qdelim _qquoted _qstrip _qhead _qhead2 _ostk
   local _tmp="" _opline="" _cmp="" _pre="" _ch=""
   local _delim="" _delimline="" _body="" _bodyraw="" _headtxt=""
-  local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0
+  local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0 _od=0 _bt=-1 _h2=0 _c2=0 _j=0 _rh2=""
   local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out=""
 
   # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
@@ -2004,6 +2139,10 @@ script_heredoc_prescan() {
     _qn=0
     _pos=0
     _lastsep=0
+    # an enclosure still open from an earlier line opens this line at its start
+    _j=0
+    while [ "$_j" -lt "$_od" ]; do _ostk[$_j]=0; _j=$(( _j + 1 )); done
+    if [ "$_bt" -ge 0 ]; then _bt=0; fi
     script_qt="$_opline"
 
     # ---- scan this line for here-document operators at quote-state 0 ----
@@ -2037,7 +2176,7 @@ script_heredoc_prescan() {
           _qs=0
         fi
       else
-        script_qnext "$script_bs" "$script_q1" "$script_q2" "$_lt" "$_sc" "$_amp" "$_bar"
+        script_qnext "$script_bs" "$script_q1" "$script_q2" "$_lt" "$_sc" "$_amp" "$_bar" "$_lp" "$_rp" "$script_qbt"   # M-ENCL-SCAN
         if [ "$script_qi" -lt 0 ]; then break; fi
         _pre="$script_qpre"
         _ch="$script_qc"
@@ -2059,6 +2198,13 @@ script_heredoc_prescan() {
           # A separator OUTSIDE any quote starts a new simple command, so the
           # receiving command of any operator after it is resolved from here.
           _lastsep="$_pos"
+        elif [ "$_ch" = "$_lp" ]; then
+          _ostk[$_od]="$_pos"
+          _od=$(( _od + 1 ))
+        elif [ "$_ch" = "$_rp" ]; then
+          if [ "$_od" -gt 0 ]; then _od=$(( _od - 1 )); fi
+        elif [ "$_ch" = "$script_qbt" ]; then
+          if [ "$_bt" -ge 0 ]; then _bt=-1; else _bt="$_pos"; fi
         else
           # `<`. Three distinct constructs share the character.
           case "$script_qt" in
@@ -2133,6 +2279,12 @@ script_heredoc_prescan() {
               _qquoted[$_qn]="$_quoted"
               _qstrip[$_qn]="$_strip"
               _qhead[$_qn]="${_opline:$_lastsep:$(( _abs - _lastsep ))}"
+              # second view of the receiver: the text after the innermost enclosure
+              # still OPEN at the operator, when that lies after the last separator
+              _h2="$_lastsep"
+              if [ "$_od" -gt 0 ] && [ "${_ostk[$(( _od - 1 ))]}" -gt "$_h2" ]; then _h2="${_ostk[$(( _od - 1 ))]}"; fi
+              if [ "$_bt" -gt "$_h2" ]; then _h2="$_bt"; fi
+              _qhead2[$_qn]="${_opline:$_h2:$(( _abs - _h2 ))}"
               _qn=$(( _qn + 1 ))
               ;;
             *)
@@ -2180,6 +2332,12 @@ script_heredoc_prescan() {
       if [ "$_total" -gt 8 ]; then script_hdbail=1; return 0; fi
 
       _ex=0
+      _c2=0
+      script_resolve_head "${_qhead2[$_k]}"
+      _rh2="$script_head"
+      case "${script_head##*/}" in
+        gh|printf|echo|jq) _c2=1 ;;
+      esac
       script_resolve_head "$_headtxt"
       case "${script_head##*/}" in
         gh|printf|echo|jq)
@@ -2194,6 +2352,28 @@ script_heredoc_prescan() {
           ;;
       esac
 
+      # >>> ENCL-HDHEAD-BEGIN — core/hooks/tests/block-destructive.test.sh
+      # A body is excised only when the receiver read from the line head AND the one
+      # read from the innermost enclosure still open at the operator are both
+      # carriers. Where only the line head is a carrier, the finding follows the
+      # enclosure family's phase: below `enforce` the finding is recorded, naming the
+      # receiver read from the enclosure, and the body is still excised; at `enforce`,
+      # or on an unrecognised value, it is not excised and the first view reads it.
+      if [ "$_c2" -eq 0 ] && [ "$_ex" -eq 1 ]; then
+        case "$DESTRUCTIVE_022_ENCL_PHASE" in
+          shadow|warn)
+            script_rowpos="enclosure"
+            log_would_fire_022 "$DESTRUCTIVE_022_ENCL_PHASE" "heredoc-receiver" "${_rh2:-}" "shell-enclosure"
+            script_rowpos=""
+            if [ "$DESTRUCTIVE_022_ENCL_PHASE" = "warn" ]; then
+              "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): here-document received inside a substitution or group by %s\n' \
+                "$HOOK_NAME" "heredoc-receiver" "${_rh2:-}" >&2
+            fi
+            ;;
+          *) _ex=0 ;;
+        esac
+      fi
+      # >>> ENCL-HDHEAD-END
       if [ "$_ex" -eq 1 ]; then
         _excised=$(( _excised + 1 ))
         _out="${_out}${_delimline}"$'\n'
@@ -2565,19 +2745,24 @@ case "$TOOL_NAME" in
     # A segment whose start state is 0 still begins at COMMAND POSITION and is
     # ALWAYS adjudicated.
     #
-    # THAT IS NOT TRUE OF ENCLOSURE, and an earlier version of this comment said it
-    # was. It claimed unquoted `$( )`, backticks and `<( )` "all land there, so they
-    # need no separate rule". Measured, they do not: `$(bash <x>.sh)`,
-    # `` `bash <x>.sh` ``, `cat <( bash <x>.sh )` and `echo "$(bash <x>.sh)"` are all
-    # ALLOWED today. The inner command word sits at token index >= 1 of its segment,
-    # where the command-position walk never looks — a substitution is not a
-    # SEPARATOR, so it never starts a new segment and the inner word never reaches
-    # command position. (Adding a `;` inside the substitution blocks, but only
-    # incidentally: the separator shreds the substitution into a fresh segment.)
-    # This is a live fail-open in an always-enforce arm. It is a WIDENING to close
-    # and is tracked separately; the false claim is corrected here so a reader does
-    # not infer coverage the code does not have. Condition (2) below is unaffected —
-    # it governs what may be SUPPRESSED, and it is why `echo "$(…)"` is not.
+    # THAT WAS NOT TRUE OF ENCLOSURE in the first view, and an earlier version of
+    # this comment said it was. It claimed unquoted `$( )`, backticks and `<( )`
+    # "all land there, so they need no separate rule". They do not: a substitution
+    # is not a SEPARATOR, so it never starts a segment, and the inner command word
+    # sits at token index >= 1, where the command-position walk never looks. (A
+    # `;` inside the substitution blocked, but only incidentally: the separator
+    # shredded the substitution into a fresh segment.)
+    #
+    # ENCLOSURE POSITIONS ARE ADJUDICATED BY A SECOND VIEW of the same segments —
+    # see ENCLOSURE-VIEW below. Every `(` and every backtick opens a command
+    # position there, so `$(bash <x>.sh)`, `` `bash <x>.sh` ``, `cat <( bash <x>.sh )`,
+    # `( bash <x>.sh )` and `echo "$(bash <x>.sh)"` reach the same walk a verb
+    # behind `;` reaches. A shell or `source` finding there follows the enclosure
+    # family's rollout phase (DESTRUCTIVE_022_ENCL_PHASE), which entered at `warn`:
+    # recorded, not yet refused. The first view's segmentation and walk are not
+    # modified, so the second view can only ADD an adjudication. Condition (2) below
+    # is unaffected — it governs what may be SUPPRESSED, and it is why
+    # `echo "$(…)"` is not.
     #
     # HERE-DOCUMENTS ARE MODELLED, by a pre-pass that runs before the separator
     # substitution and excises only PROVABLY-INERT bodies — see the
@@ -2595,9 +2780,11 @@ case "$TOOL_NAME" in
     #   R-2 A BARE-DELIMITER EXPANSION INTRODUCED BY NEITHER `$` NOR A BACKTICK.
     #       None exists in POSIX; this is the same claim condition (2) already
     #       makes for `"…"`, so both break together if a shell ever adds one.
-    #   R-3 THE COMMAND-SUBSTITUTION FAIL-OPEN above is UNTOUCHED and remains live.
-    #       The pre-pass neither creates nor widens it, and a here-document arm
-    #       reading green is not evidence of its absence.
+    #   R-3 WHAT THE SECOND VIEW DOES NOT REACH, AND WHAT IT ADJUDICATES ALTHOUGH
+    #       NOTHING RUNS, is stated once, as an open list of the limits known and
+    #       measured, in item 3 of the readiness fragment's residual list. Each limit
+    #       there is pinned by an AC-ENCL-RESIDUAL arm, and a green here-document arm
+    #       is still not evidence about any of them.
     #   R-4 A NON-CARRIER RECEIVER KEEPS THE FALSE POSITIVE. `cat <<'RPT'` still
     #       blocks. Deliberate: a missing carrier entry costs a false positive and
     #       can never admit an evasion, which is the fail direction this block
@@ -2639,6 +2826,24 @@ case "$TOOL_NAME" in
     script_qtaint=0
     script_carrier=0
     script_head=""
+    script_pass=1
+    script_segno=0
+    script_oldno=0
+    script_newpos=0
+    script_p1n=0
+    script_p1supp=":"
+    script_supp=0
+    script_rowpos=""
+    script_encl=""
+    script_tail=""
+    script_lift=0
+    script_liftb=0
+    script_rest=""
+    script_piece=""
+    script_hold=""
+    script_esc=""
+    script_mark=""
+    script_cut_out=""
     # The flag walk's effective subject (raw token, or its normalized view when
     # that view is a flag outside every operand domain). Initialised for the same
     # reason as the three below: an unset read under `set -u` exits 1, and exit 1
@@ -2684,7 +2889,94 @@ case "$TOOL_NAME" in
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
 
+    # >>> ENCLOSURE-VIEW-BEGIN — core/hooks/tests/block-destructive.test.sh
+    # SECOND VIEW. The loop below runs twice over one text. Its first pass is the
+    # shipped segmentation, untouched. Its second pass sees the same segments again
+    # with one extra command position after every `(` and every backtick — the two
+    # characters every substitution, process substitution and subshell group opens
+    # with — so a verb behind an enclosure is adjudicated by the same walk as a verb
+    # behind a separator. The second pass can only ADD an adjudication: it runs after
+    # the first pass has finished, and nothing the first pass decided is revisited.
+    # Removing this block, the ENCL-HDHEAD block of the here-document pre-pass and the
+    # three openers on the pre-pass's M-ENCL-SCAN line restores the previous verdict;
+    # the suite's reverse mutant does exactly that. A shell or `source` finding at a
+    # position this block opens follows DESTRUCTIVE_022_ENCL_PHASE (through
+    # script_shell_verdict), and every other arm keeps its own phase.
+    #
+    # Each entry is two lines: a marker plus the text up to and including the next
+    # opener (scanned once, so the carried quote state stays exact), then the rest
+    # of the segment (appended for adjudication only, so an operand lying beyond a
+    # nested opener is still seen). An opener behind an odd run of backslashes is a
+    # literal character to this shell and opens no position.
+    case "$script_hdstripped" in
+      *'('*|*'`'*)
+        while IFS= read -r script_seg; do
+          script_p1n=$(( script_p1n + 1 ))
+          script_rest="$script_seg"
+          script_mark="$SCRIPT_BND_OLD"
+          script_hold=""
+          while :; do
+            case "$script_rest" in
+              *'('*|*'`'*) ;;
+              *) break ;;
+            esac
+            # TWO BUDGETS, both declared limits pinned by AC-ENCL-RESIDUAL-budget-*.
+            # Past the position ceiling no further position is opened; past the
+            # remainder budget a position is opened without its appended remainder.
+            if [ "$script_lift" -ge "$SCRIPT_ENCL_POS_MAX" ]; then break; fi
+            script_lift=$(( script_lift + 1 ))
+            script_piece="${script_rest%%[\(\`]*}"
+            script_esc="${script_piece##*[!\\]}"
+            script_piece="${script_rest:0:$(( ${#script_piece} + 1 ))}"
+            script_rest="${script_rest:${#script_piece}}"
+            if [ $(( ${#script_esc} % 2 )) -eq 1 ]; then   # M-ENCL-ESC
+              script_hold="${script_hold}${script_piece}"
+              continue
+            fi
+            if [ "$script_liftb" -lt "$SCRIPT_ENCL_TAIL_BYTES" ]; then
+              script_liftb=$(( script_liftb + ${#script_rest} ))
+              script_encl="${script_encl}${script_mark}${script_hold}${script_piece}"$'\n'"${script_rest}"$'\n'
+            else
+              script_encl="${script_encl}${script_mark}${script_hold}${script_piece}"$'\n'$'\n'
+            fi
+            script_hold=""
+            case "$script_piece" in
+              *'(') script_mark="$SCRIPT_BND_PAREN" ;;
+              *) script_mark="$SCRIPT_BND_TICK" ;;
+            esac
+          done
+          script_encl="${script_encl}${script_mark}${script_hold}${script_rest}"$'\n'$'\n'
+        done <<< "$script_segments"
+        script_segments="${script_segments}"$'\n'"${script_encl%$'\n'}"
+        ;;
+    esac
+    # >>> ENCLOSURE-VIEW-END
+
     while IFS= read -r script_seg; do
+      script_segno=$(( script_segno + 1 ))
+      if [ "$script_pass" -eq 1 ] && [ "$script_p1n" -gt 0 ] && [ "$script_segno" -gt "$script_p1n" ]; then
+        # the second view starts from the same clean state the first view started from
+        script_pass=2
+        script_qstate=0
+        script_qtaint=0
+        script_qwork=0
+        script_carrier=0
+        script_oldno=0
+      fi
+      script_newpos=0
+      script_tail=""
+      script_rowpos=""
+      if [ "$script_pass" -eq 2 ]; then
+        IFS= read -r script_tail || script_tail=""
+        case "${script_seg:0:1}" in
+          "$SCRIPT_BND_OLD") script_oldno=$(( script_oldno + 1 )) ;;
+          "$SCRIPT_BND_TICK") script_newpos=2 ;;
+          *) script_newpos=1 ;;
+        esac
+        script_seg="${script_seg:1}"
+      else
+        script_oldno=$(( script_oldno + 1 ))
+      fi
       # Quote state at the START of this segment, carried in from everything before
       # it. Captured BEFORE the segment is scanned, because a segment that opens a
       # quote is itself still at command position. The taint is captured with it:
@@ -2718,10 +3010,31 @@ case "$TOOL_NAME" in
         # condition (1). Condition (2) is the construct test: `'…'` (state 1) and
         # `$'…'` (state 3) expand nothing, so they are inert unconditionally; a
         # double-quoted run (state 2) is inert only while untainted.
+        script_supp=0
         case "$script_segstart" in
-          1|3) continue ;;
-          2) if [ "$script_segtaint" -eq 0 ]; then continue; fi ;;
+          1|3) script_supp=1 ;;
+          2) if [ "$script_segtaint" -eq 0 ]; then script_supp=1; fi ;;
         esac
+        if [ "$script_supp" -eq 1 ]; then   # M-ENCL-SUPP
+          if [ "$script_pass" -eq 1 ]; then script_p1supp="${script_p1supp}${script_oldno}:"; fi
+          continue
+        fi
+      fi
+
+      if [ "$script_pass" -eq 2 ]; then
+        # A segment START was adjudicated by the first view unless that view
+        # suppressed it. Re-open only those: the carrier that suppressed them was
+        # the line's, and inside an enclosure the command that owns the quote can
+        # be a different one (`echo $(bash -c '…; bash <x>.sh')`).
+        if [ "$script_newpos" -eq 0 ]; then
+          case "$script_p1supp" in
+            *":${script_oldno}:"*) : ;;   # M-ENCL-RESUPP
+            *) continue ;;
+          esac
+        fi
+        script_rowpos="enclosure"   # M-ENCL-GATE
+        script_seg="${script_seg}${script_tail}"   # M-ENCL-TAIL
+        if [ "$script_newpos" -ne 0 ]; then script_encl_cut "$script_seg" "$script_newpos"; script_seg="$script_cut_out"; fi   # M-ENCL-CUT
       fi
 
       [ -n "$script_seg" ] || continue
@@ -3117,9 +3430,19 @@ case "$TOOL_NAME" in
       # ordinary adjudication below is correct and an allowlisted target still allows.
       if [ $(( script_hidx + 1 )) -ge "${#script_tokens[@]}" ]; then
         if [ "$script_xargs" -eq 1 ]; then
-          block "BLOCK-DESTRUCTIVE-022" \
-            "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' from stdin, so no argv path exists for this hook to adjudicate." \
-            "pass the script path on the command line (xargs <interpreter> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
+          # At a position the enclosure view opened, the deny follows that view's
+          # rollout phase (script_shell_verdict) below `enforce`; at `enforce`, and at
+          # every first-view position, it is the unconditional refusal it always was.
+          # An else, not an early `continue`: the branch's own `continue` below stays
+          # the first one after this test, which is the line the suite's no-operand
+          # deny mutant (STDIN-M2) rewrites.
+          if [ "$script_pass" -eq 2 ] && [ "$DESTRUCTIVE_022_ENCL_PHASE" != "enforce" ]; then
+            script_shell_verdict '$XARGS-STDIN' 1
+          else
+            block "BLOCK-DESTRUCTIVE-022" \
+              "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' from stdin, so no argv path exists for this hook to adjudicate." \
+              "pass the script path on the command line (xargs <interpreter> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
+          fi
         fi
         continue
       fi
@@ -3680,7 +4003,7 @@ case "$TOOL_NAME" in
           # ends `.sh` is still adjudicated.
           if script_operand_implicated "$script_interp_domain"; then
             if [ "$script_interp_domain" = "interp" ]; then
-              check_script_target "$script_cand" "$script_norm_ok"
+              script_shell_verdict "$script_cand" "$script_norm_ok"
             else
               destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
             fi
@@ -3708,18 +4031,20 @@ case "$TOOL_NAME" in
           # `/*`, `~/*` and `*.bash` coverage, and widening the interpreter arm to
           # `/*` opens a false-positive surface with no defect behind it.
           if script_operand_implicated source; then
-            check_script_target "$script_cand" "$script_norm_ok"
+            script_shell_verdict "$script_cand" "$script_norm_ok"
           fi
         else
-          # THE SHELL TRIO'S PATH IS THE UNEDITED ONE, AND THE BRANCH IS HOW THAT IS
-          # ENFORCED RATHER THAN ASSERTED. Domain `interp` — `bash`, `sh`, `zsh` and
-          # every basename script_set_interp_domain does not name — still calls
-          # check_script_target directly and still blocks unconditionally. Only a
-          # newly-admitted interpreter reaches the phase-gated router, so admitting
+          # THE SHELL TRIO'S PATH STAYS OFF THE NON-SHELL ROUTER, AND THE BRANCH IS
+          # HOW. Domain `interp` — `bash`, `sh`, `zsh` and every basename
+          # script_set_interp_domain does not name — calls script_shell_verdict,
+          # which at a first-view position is check_script_target and still blocks
+          # unconditionally (arm AC-ENCL-P5); only at a position the enclosure view
+          # opened does that view's rollout phase apply. Only a newly-admitted
+          # interpreter reaches the phase-gated non-shell router, so admitting
           # python cannot soften the arm that was always-enforce before it.
           if script_operand_implicated "$script_interp_domain"; then
             if [ "$script_interp_domain" = "interp" ]; then
-              check_script_target "$script_cand" "$script_norm_ok"
+              script_shell_verdict "$script_cand" "$script_norm_ok"
             else
               destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
             fi
