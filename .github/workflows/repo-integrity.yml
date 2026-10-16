@@ -580,11 +580,28 @@ jobs:
           set -euo pipefail
 
           OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-dead-file-ref[[:space:]]*-->'
+          GATE='Dead-file-reference gate'
+
+          # FAIL CLOSED on a listing that could not run. An empty listing from a git
+          # that SUCCEEDED means no markdown changed, and passes below. A git that
+          # FAILED (a missing base commit, say) used to produce the same empty list
+          # and the same pass. The shared library's changed_files_verdict tells the
+          # two apart, and anything but LISTED is a red run.
+          . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+          for fn in changed_files_verdict report_unevaluable; do
+            declare -F "$fn" >/dev/null || { echo "::error::${GATE}: the shared library did not define $fn"; exit 1; }
+          done
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
 
           # Changed markdown in this PR; drop deleted files and per-file overrides.
-          mapfile -t CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' 2>/dev/null || true)
+          case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$WORK/changed" '*.md')" in
+            LISTED) : ;;
+            UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not list the changed markdown files"; exit 1 ;;
+            *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "changed_files_verdict returned an unrecognised verdict"; exit 1 ;;
+          esac
           FILES=()
-          for f in "${CHANGED[@]}"; do
+          while IFS= read -r f || [ -n "$f" ]; do
             [ -z "$f" ] && continue
             [ -f "$f" ] || continue
             if grep -qE "$OVERRIDE" "$f"; then
@@ -592,7 +609,7 @@ jobs:
               continue
             fi
             FILES+=("$f")
-          done
+          done < "$WORK/changed"
 
           if [ "${#FILES[@]}" -eq 0 ]; then
             echo ":white_check_mark: Dead-file-reference — no changed markdown to check" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -805,17 +822,46 @@ jobs:
           DRAFT_SEG='(^|/)(proposals|drafts|draft|scratch|sandbox|wip)/'
           GOVERNED='^(core|release|operations|packages|docs|\.github)/'
           TOPLEVEL='^(README\.md|CHANGELOG\.md|LICENSE|SECURITY\.md|CONTRIBUTING\.md|install\.sh|update\.sh|\.gitignore|\.version)$'
+          GATE='Draft-file gate'
 
-          mapfile -t ADDED < <(git diff --name-only --diff-filter=A "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)
+          # FAIL CLOSED on a listing that could not run, and regardless of WARN_MODE:
+          # a run that could not list the added files has no findings to warn about,
+          # and it is not a clean run either. An empty listing from a git that
+          # SUCCEEDED means nothing was added, and passes below. added_files_verdict
+          # in the shared library tells the two apart.
+          . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+          for fn in added_files_verdict ere_line_verdict report_unevaluable; do
+            declare -F "$fn" >/dev/null || { echo "::error::${GATE}: the shared library did not define $fn"; exit 1; }
+          done
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+
+          # rx <ere> <string> — 0 on a match, 1 on no match. The path-shape tests
+          # decide findings, so a test that could not run (grep exit 2) is neither:
+          # it fails the job instead of returning. ere_line_verdict keeps the three
+          # states apart; reading them through `echo | grep -q` merged two of them.
+          rx() {
+            case "$(ere_line_verdict "$1" "$2")" in
+              MATCH) return 0 ;;
+              NOMATCH) return 1 ;;
+              *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "a path-shape test did not complete (grep exited with an error)"; exit 1 ;;
+            esac
+          }
+
+          case "$(added_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$WORK/added")" in
+            LISTED) : ;;
+            UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not list the files this pull request adds"; exit 1 ;;
+            *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "added_files_verdict returned an unrecognised verdict"; exit 1 ;;
+          esac
           FINDINGS=""
-          for f in "${ADDED[@]}"; do
+          while IFS= read -r f || [ -n "$f" ]; do
             [ -z "$f" ] && continue
-            if echo "$f" | grep -qE "$DRAFT_SEG"; then
+            if rx "$DRAFT_SEG" "$f"; then
               FINDINGS="${FINDINGS}- \`$f\` — draft-shaped path segment in tracked corpus"$'\n'
-            elif ! echo "$f" | grep -qE "$GOVERNED" && ! echo "$f" | grep -qE "$TOPLEVEL"; then
+            elif ! rx "$GOVERNED" "$f" && ! rx "$TOPLEVEL" "$f"; then
               FINDINGS="${FINDINGS}- \`$f\` — new tracked file outside the governed-corpus roots"$'\n'
             fi
-          done
+          done < "$WORK/added"
 
           if [ -z "$FINDINGS" ]; then
             echo ":white_check_mark: Draft-file gate — no draft/scratch files added outside the governed corpus" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -1002,9 +1048,37 @@ jobs:
           # PR is not re-flagged. If the PR did not touch the map file, the added
           # set is empty and the FAIL assertion is a clean no-op (the inverse WARN
           # still runs).
-          ADDED_MAP_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$MAP_FILE" \
-            | awk '/^\+/ && !/^\+\+\+/ { print substr($0, 2) }' || true)"
-          ADDED_CLAIMS="$(printf '%s\n' "$ADDED_MAP_LINES" | extract_location_paths | sort -u || true)"
+          #
+          # FAIL CLOSED, regardless of WARN_MODE. The added lines used to come from
+          # `git diff | awk … || true` and the claims from `… | sort -u || true`, so
+          # a failed diff, extractor or sort read as "no claims added" and passed.
+          # Now each step is its own command with its status read. An empty but
+          # successful read still means "no claims added". Anything else is a red
+          # run, because a check that could not run has nothing to warn about.
+          GATE='Governance-file-map cross-check gate'
+          . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+          for fn in added_lines_verdict report_unevaluable; do
+            declare -F "$fn" >/dev/null || { echo "::error::${GATE}: the shared library did not define $fn"; exit 1; }
+          done
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+          case "$(added_lines_verdict . "$BASE_SHA" "$HEAD_SHA" "$MAP_FILE" "$WORK/added")" in
+            LISTED) : ;;
+            UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not read the lines this pull request adds to $MAP_FILE"; exit 1 ;;
+            *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "added_lines_verdict returned an unrecognised verdict"; exit 1 ;;
+          esac
+          # added_lines_verdict keys each line HEAD-LINENO:CONTENT, and the extractor
+          # reads bare table rows, so the key comes off first.
+          if ! sed -E 's/^[0-9]+://' "$WORK/added" > "$WORK/added-content"; then
+            report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "the added map lines could not be prepared for the extractor"; exit 1
+          fi
+          if ! extract_location_paths < "$WORK/added-content" > "$WORK/claims-raw"; then
+            report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "the location-path extractor did not complete"; exit 1
+          fi
+          if ! sort -u "$WORK/claims-raw" > "$WORK/claims"; then
+            report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "the claimed paths could not be sorted"; exit 1
+          fi
+          ADDED_CLAIMS="$(cat "$WORK/claims")"
 
           FAIL_REPORT=""
           FAILED=0
@@ -1142,11 +1216,39 @@ jobs:
           # The operator-instance schema literal is content-exempt.
           SCHEMA_EXEMPT='Projects/\[Project\]'
 
+          # FAIL CLOSED, regardless of WARN_MODE. The listing, each file's added
+          # lines and each casing test can fail to run: a git failure used to read
+          # as "nothing changed" or "nothing added", and a grep exit 2 as "no
+          # Projects/ on this line". The shared library's verdicts tell those apart
+          # from the real answers, which pass exactly as before. A check that could
+          # not run has nothing to warn about, so it fails the job.
+          GATE='Projects/ casing canonicalization gate'
+          . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+          for fn in changed_files_verdict added_lines_verdict ere_line_verdict report_unevaluable; do
+            declare -F "$fn" >/dev/null || { echo "::error::${GATE}: the shared library did not define $fn"; exit 1; }
+          done
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+
+          # rx <ere> <string> — 0 on a match, 1 on no match. A casing test that could
+          # not run is neither: it fails the job instead of returning.
+          rx() {
+            case "$(ere_line_verdict "$1" "$2")" in
+              MATCH) return 0 ;;
+              NOMATCH) return 1 ;;
+              *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "a casing test did not complete (grep exited with an error)"; exit 1 ;;
+            esac
+          }
+
           # Scope: changed *.md PLUS the two named legitimate-uppercase hook files
           # (in-scope so the allowlist marker is demonstrably honored).
-          mapfile -t ALL_CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)
+          case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$WORK/changed")" in
+            LISTED) : ;;
+            UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not list the changed files"; exit 1 ;;
+            *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "changed_files_verdict returned an unrecognised verdict"; exit 1 ;;
+          esac
           FILES=()
-          for f in "${ALL_CHANGED[@]}"; do
+          while IFS= read -r f || [ -n "$f" ]; do
             [ -z "$f" ] && continue
             [ -f "$f" ] || continue
             case "$f" in
@@ -1155,7 +1257,7 @@ jobs:
               core/hooks/block-destructive.sh|core/hooks/tests/block-destructive.test.sh) FILES+=("$f") ;;
               *) : ;;  # out of scope
             esac
-          done
+          done < "$WORK/changed"
 
           if [ "${#FILES[@]}" -eq 0 ]; then
             echo ":white_check_mark: Projects/ casing — no in-scope changed files" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -1172,31 +1274,31 @@ jobs:
             fi
 
             # NET-NEW DELTA: only lines ADDED since the base, keyed by head-file line.
-            ADDED_LINES="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
-              | awk '
-                /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
-                /^\+\+\+/ { next }
-                /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
-                /^-/ { next }
-              ' || true)"
-            [ -z "$ADDED_LINES" ] && continue
+            case "$(added_lines_verdict . "$BASE_SHA" "$HEAD_SHA" "$f" "$WORK/added")" in
+              LISTED) : ;;
+              UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not read the lines this pull request adds to $f"; exit 1 ;;
+              *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "added_lines_verdict returned an unrecognised verdict"; exit 1 ;;
+            esac
+            [ -s "$WORK/added" ] || continue
 
             while IFS= read -r entry || [ -n "$entry" ]; do
               [ -z "$entry" ] && continue
               LN="${entry%%:*}"
               line="${entry#*:}"
               # capital-P Projects/ present?
-              printf '%s' "$line" | grep -qE "$CASING_RE" || continue
+              rx "$CASING_RE" "$line" || continue
               # content-exempt: the operator-instance schema literal
-              if printf '%s' "$line" | grep -qE "$SCHEMA_EXEMPT"; then
+              if rx "$SCHEMA_EXEMPT" "$line"; then
                 # exempt ONLY if every Projects/ occurrence on the line is the schema literal;
                 # strip the schema literal and re-test for any remaining bare Projects/.
-                residual="$(printf '%s' "$line" | sed -E 's#Projects/\[Project\][^[:space:]]*##g')"
-                printf '%s' "$residual" | grep -qE "$CASING_RE" || continue
+                if ! residual="$(sed -E 's#Projects/\[Project\][^[:space:]]*##g' <<<"$line")"; then
+                  report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "the schema-literal strip did not complete on ${f}:${LN}"; exit 1
+                fi
+                rx "$CASING_RE" "$residual" || continue
               fi
               FOUND=1
               REPORT="${REPORT}${f}:${LN}: ${line}"$'\n'
-            done <<< "$ADDED_LINES"
+            done < "$WORK/added"
           done
 
           if [ "$FOUND" -eq 0 ]; then
@@ -1309,11 +1411,28 @@ jobs:
           python3 release/tools/check-adr-durability.py --self-test
 
           OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-adr-durability[[:space:]]*-->'
+          GATE='ADR durability gate'
 
-          mapfile -t CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" \
-            -- 'core/ADRs/ADR-*.md' 'release/ADRs/ADR-*.md' 2>/dev/null || true)
+          # FAIL CLOSED on a listing that could not run, regardless of WARN_MODE (the
+          # same posture as the checker's own exit 3 below). An empty listing from a
+          # git that SUCCEEDED means no ADR changed, and passes below. A git that
+          # FAILED used to produce the same empty list and the same pass. The shared
+          # library's changed_files_verdict tells the two apart.
+          . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+          for fn in changed_files_verdict report_unevaluable; do
+            declare -F "$fn" >/dev/null || { echo "::error::${GATE}: the shared library did not define $fn"; exit 1; }
+          done
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+
+          case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$WORK/changed" \
+                    'core/ADRs/ADR-*.md' 'release/ADRs/ADR-*.md')" in
+            LISTED) : ;;
+            UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not list the changed ADR files"; exit 1 ;;
+            *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "changed_files_verdict returned an unrecognised verdict"; exit 1 ;;
+          esac
           FILES=()
-          for f in "${CHANGED[@]}"; do
+          while IFS= read -r f || [ -n "$f" ]; do
             [ -z "$f" ] && continue
             [ -f "$f" ] || continue
             if grep -qE "$OVERRIDE" "$f"; then
@@ -1321,7 +1440,7 @@ jobs:
               continue
             fi
             FILES+=("$f")
-          done
+          done < "$WORK/changed"
 
           if [ "${#FILES[@]}" -eq 0 ]; then
             echo ":white_check_mark: ADR durability — no changed ADR files to lint" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -1634,6 +1753,32 @@ jobs:
           LINE_MARK='sigpipe-idiom:[[:space:]]*allow'
           FILE_MARK='repo-integrity:[[:space:]]*allow-sigpipe-idiom'
 
+          # FAIL CLOSED. Every read below can fail to run, and each used to read as
+          # "nothing found": a git failure as "no changed files" or "nothing added",
+          # a grep exit 2 inside the matcher as "no idiom", a failed line read as
+          # "not a continued pipeline". The shared library's verdicts tell those apart
+          # from the real answers, which pass exactly as before. Anything else fails
+          # the job.
+          GATE='SIGPIPE-idiom gate'
+          . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+          for fn in changed_files_verdict file_status_verdict added_lines_verdict ere_line_verdict report_unevaluable; do
+            declare -F "$fn" >/dev/null || { echo "::error::${GATE}: the shared library did not define $fn"; exit 1; }
+          done
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+
+          # rx <ere> <string> — 0 on a match, 1 on no match. Every regex test that
+          # decides a finding goes through here. A test that could not run is neither,
+          # so it fails the job instead of returning; a caller can therefore keep the
+          # plain `if rx …` shape without ever reading "could not run" as "no match".
+          rx() {
+            case "$(ere_line_verdict "$1" "$2")" in
+              MATCH) return 0 ;;
+              NOMATCH) return 1 ;;
+              *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "a detection regex test did not complete (grep exited with an error)"; exit 1 ;;
+            esac
+          }
+
           # ONE matcher, THREE call sites: the initial detect, the continuation join,
           # and the T1 re-test. A single definition is what makes the re-test provably
           # symmetric with the detection it re-tests -- an asymmetry between those two
@@ -1643,17 +1788,20 @@ jobs:
           # inside the reader's own quoted PROGRAM operand. Globals rather than
           # stdout: a command substitution would run this in a subshell and lose them.
           idiom_match() {
-            local _s="$1"
+            local _s="$1" _stripped
             MATCH_LABEL=""; MATCH_PROG=0
-            if grep -qE "$IDIOM_Q" <<<"$_s"; then MATCH_LABEL='writer | grep -q/-mN'; return 0; fi
-            if grep -qE "$IDIOM_H" <<<"$_s"; then MATCH_LABEL='writer | head'; return 0; fi
-            if grep -qE "$IDIOM_S" <<<"$_s"; then MATCH_LABEL='writer | sed (q)'; MATCH_PROG=1; return 0; fi
-            if grep -qE "$IDIOM_A" <<<"$_s"; then
-              if grep -qE "$IDIOM_A" <<<"$(sed -E "s/${AWK_END}//g" <<<"$_s")"; then
+            if rx "$IDIOM_Q" "$_s"; then MATCH_LABEL='writer | grep -q/-mN'; return 0; fi
+            if rx "$IDIOM_H" "$_s"; then MATCH_LABEL='writer | head'; return 0; fi
+            if rx "$IDIOM_S" "$_s"; then MATCH_LABEL='writer | sed (q)'; MATCH_PROG=1; return 0; fi
+            if rx "$IDIOM_A" "$_s"; then
+              if ! _stripped="$(sed -E "s/${AWK_END}//g" <<<"$_s")"; then
+                report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "the awk END-block strip did not complete"; exit 1
+              fi
+              if rx "$IDIOM_A" "$_stripped"; then
                 MATCH_LABEL='writer | awk (exit)'; MATCH_PROG=1; return 0
               fi
             fi
-            if grep -qE "$IDIOM_R" <<<"$_s"; then MATCH_LABEL='writer | read'; return 0; fi
+            if rx "$IDIOM_R" "$_s"; then MATCH_LABEL='writer | read'; return 0; fi
             return 1
           }
 
@@ -1676,7 +1824,11 @@ jobs:
           # *proved* by re-implementing it, which is the shadow-source failure the
           # deciders-carveout library was extracted to end. This form lets the
           # both-direction proof run the SHIPPED body verbatim.
-          CHANGED_LIST="$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" 2>/dev/null || true)"
+          case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$WORK/changed")" in
+            LISTED) : ;;
+            UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not list the changed files"; exit 1 ;;
+            *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "changed_files_verdict returned an unrecognised verdict"; exit 1 ;;
+          esac
           FILES=()
           while IFS= read -r f; do
             [ -z "$f" ] && continue
@@ -1696,7 +1848,7 @@ jobs:
                 FILES+=("$f") ;;
               *) : ;;
             esac
-          done <<<"$CHANGED_LIST"
+          done < "$WORK/changed"
 
           if [ "${#FILES[@]}" -eq 0 ]; then
             echo ":white_check_mark: SIGPIPE idiom — no in-scope changed shell files" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -1722,7 +1874,12 @@ jobs:
             # body 49 lines below the comment that forbids it is the declared-vs-shipped
             # gap this release exists to close, and the `.github/workflows/*.yml`
             # exclusion means no gate could ever have caught it.
-            STATUS_ALL="$(git diff --name-status "$BASE_SHA"..."$HEAD_SHA" -- "$f" 2>/dev/null || true)"
+            case "$(file_status_verdict . "$BASE_SHA" "$HEAD_SHA" "$f" "$WORK/status")" in
+              LISTED) : ;;
+              UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not read the change status of $f"; exit 1 ;;
+              *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "file_status_verdict returned an unrecognised verdict"; exit 1 ;;
+            esac
+            STATUS_ALL="$(cat "$WORK/status")"
             STATUS="${STATUS_ALL%%$'\n'*}"
             STATUS="${STATUS%%$'\t'*}"
             case "$STATUS" in
@@ -1730,13 +1887,12 @@ jobs:
                 SCAN="$(awk '{ print NR ":" $0 }' "$f")"
                 ;;
               *)
-                SCAN="$(git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
-                  | awk '
-                    /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
-                    /^\+\+\+/ { next }
-                    /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
-                    /^-/ { next }
-                  ' || true)"
+                case "$(added_lines_verdict . "$BASE_SHA" "$HEAD_SHA" "$f" "$WORK/added")" in
+                  LISTED) : ;;
+                  UNEVALUABLE) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "git could not read the lines this pull request adds to $f"; exit 1 ;;
+                  *) report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "added_lines_verdict returned an unrecognised verdict"; exit 1 ;;
+                esac
+                SCAN="$(cat "$WORK/added")"
                 ;;
             esac
             [ -z "$SCAN" ] && continue
@@ -1762,7 +1918,11 @@ jobs:
               # overwhelming majority of lines.
               if [ -z "$MATCHED" ] && [ "$LN" -gt 1 ] 2>/dev/null; then
                 if idiom_match " | ${line}"; then
-                  PREVJ="$(sed -n "$((LN - 1))p" "$f" 2>/dev/null || true)"
+                  # A failed read used to leave PREVJ empty, so a split pipeline
+                  # was not joined and its finding was missed.
+                  if ! PREVJ="$(sed -n "$((LN - 1))p" "$f")"; then
+                    report_unevaluable "$GATE" "$GITHUB_STEP_SUMMARY" "line $((LN - 1)) of $f could not be read for the continuation join"; exit 1
+                  fi
                   # Right-trim first. Trailing whitespace after the continuation
                   # operator is invisible in a diff and fatal to a suffix test:
                   # `cat f | ` does not end in `|`, so the arm silently lapsed.
@@ -1827,7 +1987,7 @@ jobs:
               #     short-circuit inside the quotes. Stripping would exempt every one
               #     of them, and the reader-class widening would have shipped
               #     detecting nothing at all (MATCH_PROG).
-              if [ "$MATCH_PROG" -eq 1 ] || grep -qE '(^|[^[:alnum:]_./-])(eval|[a-z]*sh[[:space:]]+-c)([[:space:]]|$)' <<<"$line"; then
+              if [ "$MATCH_PROG" -eq 1 ] || rx '(^|[^[:alnum:]_./-])(eval|[a-z]*sh[[:space:]]+-c)([[:space:]]|$)' "$line"; then
                 RESIDUAL="$line"
               else
                 RESIDUAL="$(sed -E "s/'[^']*'//g" <<<"$line")"
