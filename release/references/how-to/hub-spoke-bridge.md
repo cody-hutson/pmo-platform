@@ -1434,6 +1434,20 @@ This discipline emerged from a Stage 12 sub-task (2026-04-20), where merging a P
 
 **Cutover discipline:** Applies to all releases going forward.
 
+**Stage 12 Chip Pattern — Sibling Dark-Branch Sweep Discipline (Phase B1.1):**
+
+When the hub authors a Stage 12 Execute chip prompt, the prompt MUST prescribe the Phase B1.1 sibling dark-branch sweep per [`pipeline/stage-12-execute.md § Phase B1.1`](../pipeline/stage-12-execute.md). The sweep runs after the merge and only reports: the chip prompt MUST NOT turn a sweep finding into a HALT, a retry of this release's merge, or a write of any kind to another release's pull request.
+
+Required chip-prompt content — Stage 12 chip prompts MUST embed these three additions:
+
+1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"Immediately after the Phase B1 merge verification captures `$MERGE_SHA`, and before Phase B3, run Phase B1.1 per [`pipeline/stage-12-execute.md § Phase B1.1`](../pipeline/stage-12-execute.md): read the open pull requests on the base with their mergeability on the Phase A.6.4 backoff, fetch their heads as objects, and run `python3 release/tools/check-dark-branch.py sweep` with `--before` the merge commit's first parent (or `--census` after a rebase merge) and `--after \"$MERGE_SHA\"`. Record its output verbatim with its exit code. It never HALTs and never writes to another pull request."*
+2. **Output deliverables block** (entry in the chip's required-deliverables list): *"Phase B1.1 sweep: the tool's summary line, every line naming a pull request and its `state=` line, verbatim, with the exit code; each `FINDING newly-dark` pull request carried into Decisions & Recommendations with its remedy and owner — and, in census mode, each `FINDING dark` pull request carried the same way, as dark at this merge and not attributed to it."*
+3. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/pipeline/stage-12-execute.md § Phase B1.1 (sibling dark-branch sweep — tips, read, classify, report; never HALTs; cutover)`
+
+This is the reader at the merge for a branch a sibling's merge darkens; the push-triggered workflow is the same detection in CI, and the Spoke Template's Post-Push Mergeability Discipline is the reader at the darkened branch's own next push.
+
+**Cutover discipline:** Applies with Phase B1.1 — to releases entering Stage 12 strictly AFTER its introducing-release merge.
+
 **Stage 7/8/9 Entry Divergence Re-Check Discipline:**
 
 When the hub authors a Stage 7 Dev Testing, Stage 8 QA Testing, or Stage 9 Plan Review chip prompt, the chip prompt MUST embed a mid-pipeline divergence re-check per [`release-process.md § Mid-Pipeline Divergence Re-Check (G-PR8 — Phase A6.5)`](../../governance/release-process.md) and [`pipeline/stage-09-plan-review.md § Phase A6.5`](../pipeline/stage-09-plan-review.md). The check fires at stage-entry, before the chip's main work. The chip prompt MUST NOT skip the check on the grounds that "Stage 12 Phase A.5 will catch it" — Stage 12 catch is post-GO and forces full re-baseline.
@@ -1932,6 +1946,71 @@ another run's artifacts. Full rule and the observed failure it encodes:
 
 **Cutover discipline:** Applies to all releases going forward.
 
+## Post-Push Mergeability Discipline (all spokes)
+
+A release branch can stop receiving its gates without any push of its own: a sibling
+release merges into the base, the release pull request becomes unmergeable, and the host
+dispatches none of its `pull_request`-triggered gates. The next head pushed to it then
+carries only the few checks triggered another way, every one of them passing, so a read
+of conclusions alone reports it green. Your push is the moment that false green is
+produced, so check for it there.
+
+After every `git push` that updates the release branch, read the release pull request's
+mergeability (resolve its number with `gh pr list --repo {REPO} --head <release-branch>
+--state open --json number` when your brief does not name it):
+
+    gh pr view <release-PR> --repo {REPO} --json headRefOid,mergeable,mergeStateStatus
+
+Re-read on the Stage 12 Phase A.6.4 backoff (3s, 5s, 10s, 12s; 30s in all) until
+`headRefOid` equals the commit you just pushed and `mergeable` is not `UNKNOWN`. Then
+render one line in your output's Evidence section for every such push:
+
+    Post-push mergeability: #<release-PR> head <sha7> → CLEAR | DARK | NOT-EVALUATED
+
+- **DARK** — `mergeable` is `CONFLICTING`, or `mergeStateStatus` is `DIRTY`.
+- **CLEAR** — `mergeable` is `MERGEABLE` and the state is not `DIRTY`.
+- **NOT-EVALUATED** — the host did not show your commit, or did not settle, within the
+  backoff. It is not CLEAR: say so, and carry on.
+- Before the release pull request exists — Engineering Commit 0, and anything before
+  Stage 6 Phase C2 opens the draft — the line reads
+  `Post-push mergeability: no release pull request yet`.
+- A spoke that pushed nothing to a release branch renders
+  `Post-push mergeability: no push to a release branch`.
+
+**Render the line on every spoke output, including when nothing was pushed.** As with
+`Control firings: none`, the null line is what tells a spoke that had nothing to check
+from a spoke that skipped the check; an output with no `Post-push mergeability:` line
+is the second.
+
+**This check never waits on CI.** It reads mergeability only, which the host settles in
+seconds. It never reads the check roster, so a run still in progress is not its input
+and cannot hold it; Stage 7 and Stage 8 read the roster at Phase A, under their own
+settling rules.
+
+**On DARK, keep working, and say so.** A push to a dark branch still banks your work,
+and nothing pushed while dark escapes the gates: they run over the whole head once the
+base is merged in. So: (1) make no CI-backed claim for a head pushed while dark — a
+check that never dispatched is not a pass, so record each verification that depends on
+one as `NOT-EVALUATED — dark head`; (2) do not merge the base, rebase, or force-push to
+clear it — merging `origin/main` into the release branch is the hub's to route, and a
+history rewrite of the shared branch is never the remedy; (3) run this check again
+after each later push; (4) record one finding in `### Decisions & Recommendations` —
+the branch is dark and the base must be merged in before the next stage — and return
+`verdict: CONDITIONAL` (or the stronger verdict your run already carries) with your
+stage's usual `next:`.
+
+**Scope.** At Stage 12, Phase A.6 reads the same two fields before the merge, after any
+Phase A.5 sync, and HALTs on a conflict; that read discharges this one there, and its
+result is the line the Stage 12 output renders. A push to a chore branch at Stage 12 or
+13 is out of scope: a chore pull request is not the release pull request, and its own
+merge wait already stops on a conflict.
+
+**Runner: NONE — a registered named gap.** Nothing observes whether this check ran
+after a push. The `Post-push mergeability:` line is the declared observable: every
+spoke output carries one, and an output without it is the gap made visible.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -1940,7 +2019,7 @@ Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 ### Detail
 ### Evidence
 
-This section carries one MANDATORY line, rendered on every spoke output:
+This section carries a MANDATORY line, rendered on every spoke output:
 
     Control firings: none
 
@@ -1952,6 +2031,10 @@ a control and said nothing, and a spoke that met no control at all, otherwise
 emit byte-identical output; the null line is what makes the second case
 distinguishable from the first. Omission is a structural defect a QA pass can
 see, not a silent pass. Full rule: § Hook-Response Discipline (all spokes).
+
+It also carries the `Post-push mergeability:` line on every spoke output — one per
+push to a release branch, or `Post-push mergeability: no push to a release branch`.
+Full rule: § Post-Push Mergeability Discipline (all spokes).
 
 ### Decisions & Recommendations
 For each finding requiring operator judgment:
