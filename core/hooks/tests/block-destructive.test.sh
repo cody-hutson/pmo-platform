@@ -6684,7 +6684,9 @@ echo "---"
 # arm whose hook limb and mutant limb differ is red before this change. A WRAPDIV- arm is a
 # pin — a declared divergence, residual or over-block — and is green before by design unless
 # its own label says the change introduced it. A -ctl- arm is a must-not-flag control,
-# allowed on both limbs.
+# allowed on both limbs. A WRAPPAIR- arm follows each control and pin and shows it able to
+# fail: it runs that arm's own command through a mutant built for the purpose and expects a
+# verdict the arm forbids (the pairing mutants, further down).
 #
 # NO PIPE INTO A SHORT-CIRCUITING READER ANYWHERE IN THIS BLOCK (the SIGPIPE-idiom gate):
 # extraction is one awk pass per file using index(), and stderr is matched from a
@@ -6734,6 +6736,10 @@ WRAP_LAST=""
 # otherwise. The block that grades Stage 7's finding F-01 on this card sets the iteration's
 # own reverse mutant and puts this one back after its last arm.
 WRAP_MUTANT="block-destructive-mut.sh"
+# The command and the hook verdict of the last arm wrap_arm graded, which a pairing arm reads
+# so that it runs that arm's command byte for byte rather than a retyped copy of it.
+WRAP_ARMCMD=""
+WRAP_ARMWANT=""
 # Run one payload through one of the sandbox copies -> WRAP_V (a|B|W|E<rc>), WRAP_ERR, and
 # WRAP_LAST, the would-fire row the call added (empty when it added none).
 wrap_run() { # $1 = hook file in the hermetic hooks dir  $2 = command
@@ -6767,6 +6773,8 @@ wrap_run() { # $1 = hook file in the hermetic hooks dir  $2 = command
 # pattern the hook's refusal must carry; for a wanted W, the arm its would-fire row must name.
 wrap_arm() {
   local name="$1" cmd="$2" want="$3" wantm="$4" detail="${5:-}" got gotm="-" ok=1 why=""
+  WRAP_ARMCMD="$cmd"
+  WRAP_ARMWANT="$want"
   wrap_run block-destructive.sh "$cmd"
   got="$WRAP_V"
   if [ "$got" != "$want" ]; then ok=0; why="hook=${got}"; fi
@@ -7089,18 +7097,125 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+# --- pairing mutants: every control and pin below is shown able to fail (Stage 7 F-02) -------
+# A control or a pin keeps its verdict across the change by design, so its two limbs cannot
+# show that it is able to fail. Each one in this block is followed by a pairing arm
+# (WRAPPAIR-*): the arm's own command, taken from wrap_arm and never retyped, run through a
+# mutant of the hook, expecting the verdict that mutant gives, which must differ from the one
+# the arm asserts. Each mutant is a design the walk could have had or a step it could have
+# missed, and each is shown live before it is used: it differs from the hook by exactly the
+# lines named, and it parses. Three reuse a mutation the suite already builds elsewhere: the
+# parse-only exemption reverted (PARSE-14), the stdin deny on an interpreter whose walk finds
+# no operand (STDIN-M1), and the operand walk reverted together with the conservative route for
+# a word the walk cannot read (STDIN-M4). The rest are built here:
+#   pscan     the verb-locator scan the decision record rejects: a word the prefix walk does
+#             not know is stepped over until an interpreter or `source` verb, or a word that
+#             holds `.sh`, so the walk reads on past where it must stop
+#   pallow    the allowlist never matches, so every near miss would be refused
+#   pnox      the describe-only letters no longer make the segment no execution
+#   ptrunc    a wrapper option whose value is missing is refused, not read as a run that ended
+#   pextless  the direct-execution arm adjudicates every target, the extensionless one too
+#   pxoff     the xargs stdin deny is switched off
+#   pxall     the xargs stdin deny refuses every interpreter xargs feeds, a token after it or
+#             not
+#   pnosplit  the split-string stop is removed from both of its lines
+#   pambig    a prefix of two or more long options is taken for one of them
+/usr/bin/sed '/# M-WRAP-OPTIONS/,/^        esac$/s@^          \*) break ;;$@          *) case "${script_ptok##*/}" in bash|sh|zsh|python|python3|perl|ruby|node|source|.) break ;; esac; case "$script_ptok" in *.sh*) break ;; esac; script_hidx=$(( script_hidx + 1 )) ;;@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pscan.sh"
+/usr/bin/sed 's@^  \[ -f "\$SCRIPT_ALLOWLIST" \] || return 1$@  return 1@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pallow.sh"
+/usr/bin/sed '/script_winert=1; return 0 ;;/d' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pnox.sh"
+/usr/bin/sed 's@if \[ -z "\$_rest" \] && \[ "\$script_hidx" -lt "\$_n" \]; then script_hidx=\$(( script_hidx + 1 )); fi@if [ -z "$_rest" ]; then if [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); else block "BLOCK-DESTRUCTIVE-022" "WRAP missing-value deny mutant" "test only"; fi; fi@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-ptrunc.sh"
+/usr/bin/sed 's@if script_operand_implicated exec; then@if true; then@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pextless.sh"
+/usr/bin/sed 's#\[ "\$script_noexec" -eq 1 \]#[ "$script_noexec" -eq 99 ]#' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pparse.sh"
+/usr/bin/sed 's/^\( *\)\[ "\$script_idx" -lt "\${#script_tokens\[@\]}" \] || continue$/\1[ "$script_idx" -lt "${#script_tokens[@]}" ] || block "BLOCK-DESTRUCTIVE-022" "STDIN deny mutant" "test only"/' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pstdin.sh"
+/usr/bin/sed 's@if \[ "\$script_xargs" -eq 1 \]; then@if [ "$script_xargs" -eq 9 ]; then@' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pxoff.sh"
+/usr/bin/sed 's%if \[ \$(( script_hidx + 1 )) -ge "\${#script_tokens\[@\]}" \]; then%if [ "$script_xargs" -eq 1 ] || [ $(( script_hidx + 1 )) -ge "${#script_tokens[@]}" ]; then%' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pxall.sh"
+/usr/bin/sed \
+  -e '/\*" \$script_wlname "\*) return 0 ;;/d' \
+  -e '/if \[ -n "\$_rest" \]; then script_hidx=\$(( script_hidx - 1 )); return 0; fi/d' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pnosplit.sh"
+/usr/bin/sed \
+  -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
+  -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
+  -e '/# M-OPAQUE (mutation/d' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pwalkroute.sh"
+/usr/bin/sed '/# M-WRAP-ABBREV$/s/"\$_lk" -eq 1/"$_lk" -ge 1/' \
+  "$HOOK" > "${WRAP_HOOKS}/block-destructive-pambig.sh"
+for wrap_pm in pscan pallow pnox ptrunc pextless pparse pstdin pxoff pxall pnosplit pwalkroute pambig; do
+  /bin/chmod +x "${WRAP_HOOKS}/block-destructive-${wrap_pm}.sh"
+done
+
+wrap_mut_live() { # $1 label  $2 mutant file  $3 lines it removes  $4 lines it adds
+  local tmp counts
+  tmp="$(/usr/bin/mktemp)"
+  /usr/bin/diff "${WRAP_HOOKS}/block-destructive.sh" "${WRAP_HOOKS}/$2" > "$tmp" 2>/dev/null
+  counts="$(/usr/bin/awk '/^</ { l++ } /^>/ { g++ } END { printf "%d %d", l, g }' "$tmp")"
+  /bin/rm -f "$tmp"
+  if [ "$counts" = "$3 $4" ] && /bin/bash -n "${WRAP_HOOKS}/$2" 2>/dev/null; then
+    /usr/bin/printf 'PASS: %s differs from the hook by exactly the lines it names (%s out, %s in) and parses\n' "$1" "$3" "$4"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s does not differ by exactly the lines it names (removed/added = %s, wanted %s %s) or does not parse — its pairing arms are unusable\n' "$1" "$counts" "$3" "$4"
+    FAIL=$((FAIL + 1))
+  fi
+}
+wrap_mut_live "WRAPPAIR-M-scan: the verb-locator scan mutant" block-destructive-pscan.sh 1 1
+wrap_mut_live "WRAPPAIR-M-allow: the allowlist-blind mutant" block-destructive-pallow.sh 1 1
+wrap_mut_live "WRAPPAIR-M-nox: the describe-only-off mutant" block-destructive-pnox.sh 1 0
+wrap_mut_live "WRAPPAIR-M-trunc: the missing-value deny mutant" block-destructive-ptrunc.sh 1 1
+wrap_mut_live "WRAPPAIR-M-extless: the every-target mutant" block-destructive-pextless.sh 1 1
+wrap_mut_live "WRAPPAIR-M-parse: the parse-only revert (PARSE-14's mutation)" block-destructive-pparse.sh 1 1
+wrap_mut_live "WRAPPAIR-M-stdin: the stdin deny (STDIN-M1's mutation)" block-destructive-pstdin.sh 1 1
+wrap_mut_live "WRAPPAIR-M-xoff: the xargs-deny-off mutant" block-destructive-pxoff.sh 1 1
+wrap_mut_live "WRAPPAIR-M-xall: the every-xargs-interpreter deny mutant" block-destructive-pxall.sh 1 1
+wrap_mut_live "WRAPPAIR-M-nosplit: the no-split-stop mutant" block-destructive-pnosplit.sh 2 0
+wrap_mut_live "WRAPPAIR-M-walkroute: the operand-walk and conservative-route revert (STDIN-M4's mutation)" block-destructive-pwalkroute.sh 22 1
+wrap_mut_live "WRAPPAIR-M-ambig: the ambiguity-blind mutant" block-destructive-pambig.sh 1 1
+
+# $1 label  $2 mutant file  $3 the verdict that mutant gives the arm's command (a|B|W). A
+# pairing that expects the verdict the arm itself asserts fails on its own: it could not show
+# the arm failing.
+wrap_pair() {
+  local name="$1" mut="$2" want="$3"
+  if [ "$want" = "$WRAP_ARMWANT" ]; then
+    /usr/bin/printf 'FAIL: %s expects the verdict the arm itself asserts (%s), so it cannot show the arm failing\n' "$name" "$want"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  wrap_run "$mut" "$WRAP_ARMCMD"
+  if [ "$WRAP_V" = "$want" ]; then
+    /usr/bin/printf 'PASS: %s (the arm asserts %s on the hook; %s gives %s)\n' "$name" "$WRAP_ARMWANT" "$mut" "$WRAP_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s — wanted %s from %s, observed %s\n  stderr: %s\n' "$name" "$want" "$mut" "$WRAP_V" "$WRAP_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 # --- positions this walk does not reach: pins, routed to their own card -------------------
 wrap_arm "WRAPDIV-redirect: >/dev/null bash <unlisted>.sh allowed (a leading redirection is not walked)" \
   ">/dev/null bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-redirect: the scan mutant reads past the redirection and refuses, so WRAPDIV-redirect can fail" block-destructive-pscan.sh B
 wrap_arm "WRAPDIV-escaped: \\bash <unlisted>.sh allowed (an escaped verb is not resolved)" \
   "\\bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-escaped: the scan mutant reads on to the script and records it, so WRAPDIV-escaped can fail" block-destructive-pscan.sh W
 wrap_arm "WRAPDIV-quoted-word: \"sudo\" bash <unlisted>.sh allowed (the walk reads the raw wrapper token)" \
   "\"sudo\" bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-quoted-word: the scan mutant reads past the quoted word and refuses, so WRAPDIV-quoted-word can fail" block-destructive-pscan.sh B
 
 # --- nice and stdbuf, with their options (AC-2) --------------------------------------------
 wrap_arm "WRAPOPT-AC2-nice: nice -n 10 bash <unlisted>.sh blocks" "nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPOPT-AC2-stdbuf: stdbuf -o0 bash <unlisted>.sh blocks" "stdbuf -o0 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPOPT-AC2-near: nice -n 10 bash <allowlisted>.sh allowed (the allowlist was consulted)" "nice -n 10 bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-AC2-near: the allowlist-blind mutant refuses the allowlisted script, so WRAPOPT-AC2-near can fail" block-destructive-pallow.sh B
 wrap_arm "WRAPOPT-nice-bare: nice bash <unlisted>.sh blocks" "nice bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPOPT-stdbuf-bare: stdbuf bash <unlisted>.sh blocks" "stdbuf bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPOPT-nice-n-att: nice -n10 bash <unlisted>.sh blocks" "nice -n10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
@@ -7121,12 +7236,19 @@ wrap_arm "WRAPOPT-then: if true; then nice -n 5 bash <unlisted>.sh; fi blocks" "
 wrap_arm "WRAPOPT-exec: nice -n 10 <unlisted>.sh writes one exec row at its rollout phase" "nice -n 10 ${WRAP_NA}" W a exec
 wrap_arm "WRAPOPT-nonshell: stdbuf -oL node <unlisted>.js writes one interp-nonshell row at its rollout phase" "stdbuf -oL node /tmp/pmo-wrap-na.js" W a interp-nonshell
 wrap_arm "WRAPOPT-ctl-stdbuf-ok: stdbuf -o 0 bash <allowlisted>.sh allowed" "stdbuf -o 0 bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-ctl-stdbuf-ok: the allowlist-blind mutant refuses it, so WRAPOPT-ctl-stdbuf-ok can fail" block-destructive-pallow.sh B
 wrap_arm "WRAPOPT-ctl-grep: nice -n 10 grep -c bash <unlisted>.sh allowed (grep is the command)" "nice -n 10 grep -c bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ctl-grep: the scan mutant reads past grep to bash and refuses, so WRAPOPT-ctl-grep can fail" block-destructive-pscan.sh B
 wrap_arm "WRAPOPT-ctl-echo: echo nice -n 10 bash <unlisted>.sh allowed (off the segment head)" "echo nice -n 10 bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ctl-echo: the scan mutant reads past echo and refuses, so WRAPOPT-ctl-echo can fail" block-destructive-pscan.sh B
 wrap_arm "WRAPOPT-ctl-nearword: nicely -n 10 bash <unlisted>.sh allowed (a near-miss word is not a wrapper)" "nicely -n 10 bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ctl-nearword: the scan mutant reads past the near-miss word and refuses, so WRAPOPT-ctl-nearword can fail" block-destructive-pscan.sh B
 wrap_arm "WRAPOPT-ctl-end: nice -n allowed with no error (a consumed value past the end)" "nice -n" a a
+wrap_pair "WRAPPAIR-ctl-end: the missing-value deny mutant refuses it, so WRAPOPT-ctl-end can fail" block-destructive-ptrunc.sh B
 wrap_arm "WRAPOPT-ctl-extless: nice -n 10 ./pmo-wrap-tool allowed (an extensionless target, the shared residual)" "nice -n 10 ./pmo-wrap-tool" a a
+wrap_pair "WRAPPAIR-ctl-extless: the every-target mutant records the extensionless target, so WRAPOPT-ctl-extless can fail" block-destructive-pextless.sh W
 wrap_arm "WRAPOPT-ctl-parse-only: nice -n 10 bash -n <unlisted>.sh allowed (parse-only, behind the wrapper as without it)" "nice -n 10 bash -n ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ctl-parse-only: the parse-only revert refuses it, so WRAPOPT-ctl-parse-only can fail" block-destructive-pparse.sh B
 
 # --- every wrapper's row, one arm per spelling (whole set) ---------------------------------
 # Each prefix is followed by `bash <unlisted>.sh`. The hook refuses; the reverse mutant, the
@@ -7203,11 +7325,17 @@ done <<<"$WRAP_ROWS_TABLE"
 
 # --- describe-only options execute nothing, and the long spellings do not inherit that ---
 wrap_arm "WRAPOPT-inert-command-V: command -V bash <unlisted>.sh allowed (describes, runs nothing)" "command -V bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-command-V: the describe-only-off mutant refuses it, so WRAPOPT-inert-command-V can fail" block-destructive-pnox.sh B
 wrap_arm "WRAPOPT-inert-command-pv: command -pv bash <unlisted>.sh allowed" "command -pv bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-command-pv: the describe-only-off mutant refuses it, so WRAPOPT-inert-command-pv can fail" block-destructive-pnox.sh B
 wrap_arm "WRAPOPT-inert-sudo-l: sudo -l bash <unlisted>.sh allowed (lists the policy, runs nothing)" "sudo -l bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-sudo-l: the describe-only-off mutant refuses it, so WRAPOPT-inert-sudo-l can fail" block-destructive-pnox.sh B
 wrap_arm "WRAPOPT-inert-sudo-v: sudo -v bash <unlisted>.sh allowed" "sudo -v bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-sudo-v: the describe-only-off mutant refuses it, so WRAPOPT-inert-sudo-v can fail" block-destructive-pnox.sh B
 wrap_arm "WRAPOPT-inert-sudo-e: sudo -e <unlisted>.sh allowed (edits, runs nothing)" "sudo -e ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-sudo-e: the describe-only-off mutant records the edited file as executed, so WRAPOPT-inert-sudo-e can fail" block-destructive-pnox.sh W
 wrap_arm "WRAPOPT-inert-sudo-lU: sudo -lU bot bash <unlisted>.sh allowed" "sudo -lU bot bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-inert-sudo-lU: the describe-only-off mutant refuses it, so WRAPOPT-inert-sudo-lU can fail" block-destructive-pnox.sh B
 wrap_arm "WRAPDIV-sudo-long (declared over-block, introduced here): sudo --list bash <unlisted>.sh blocks — a long describe-only spelling is read as a flag" \
   "sudo --list bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
 
@@ -7216,9 +7344,11 @@ wrap_arm "WRAPOPT-unlisted-flag: sudo --zz-unlisted bash <unlisted>.sh blocks (a
   "sudo --zz-unlisted bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPDIV-unlisted-valued: sudo --zz-unlisted VALUE bash <unlisted>.sh allowed (its value is read as the command word)" \
   "sudo --zz-unlisted VALUE bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-unlisted-valued: the scan mutant reads past the value and refuses, so WRAPDIV-unlisted-valued can fail" block-destructive-pscan.sh B
 
 # --- timeout -------------------------------------------------------------------------------
 wrap_arm "WRAPOPT-timeout-near: timeout 5 bash <allowlisted>.sh allowed" "timeout 5 bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-timeout-near: the allowlist-blind mutant refuses it, so WRAPOPT-timeout-near can fail" block-destructive-pallow.sh B
 wrap_arm "WRAPDIV-timeout-malformed (declared over-read): timeout bash <unlisted>.sh writes one exec row — with no duration the command is read one token late" \
   "timeout bash ${WRAP_NA}" W a exec
 
@@ -7230,11 +7360,16 @@ wrap_arm "WRAPDIV-timeout-malformed (declared over-read): timeout bash <unlisted
 wrap_arm "WRAPOPT-env-S: env -S bash <unlisted>.sh blocks" "env -S bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPDIV-env-S-quoted: env -S \"bash <unlisted>.sh\" allowed (a command line in one quoted string is not re-tokenized)" \
   "env -S \"bash ${WRAP_NA}\"" a a
+wrap_pair "WRAPPAIR-env-S-quoted: the scan mutant reads on to the quoted script and records it, so WRAPDIV-env-S-quoted can fail" block-destructive-pscan.sh W
 wrap_arm "WRAPOPT-env-S-attached: env -S<unlisted>.sh keeps its exec row (the walk stops on the token)" "env -S${WRAP_NA}" W W exec
+wrap_pair "WRAPPAIR-env-S-attached: the no-split-stop mutant steps over the token and allows it, so WRAPOPT-env-S-attached can fail" block-destructive-pnosplit.sh a
 wrap_arm "WRAPOPT-env-S-attached-cluster: env -iS<unlisted>.sh keeps its exec row" "env -iS${WRAP_NA}" W W exec
+wrap_pair "WRAPPAIR-env-S-attached-cluster: the no-split-stop mutant allows it, so WRAPOPT-env-S-attached-cluster can fail" block-destructive-pnosplit.sh a
 wrap_arm "WRAPOPT-env-S-attached-long: env --split-string=<unlisted>.sh keeps its exec row" "env --split-string=${WRAP_NA}" W W exec
+wrap_pair "WRAPPAIR-env-S-attached-long: the no-split-stop mutant allows it, so WRAPOPT-env-S-attached-long can fail" block-destructive-pnosplit.sh a
 wrap_arm "WRAPDIV-env-S-attached-cmd: env -Sbash <unlisted>.sh allowed (an attached command line is not re-tokenized, as before)" \
   "env -Sbash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-env-S-attached-cmd: the scan mutant reads on to the script and records it, so WRAPDIV-env-S-attached-cmd can fail" block-destructive-pscan.sh W
 # The two declared precision improvements: an option argument shaped like a script path, and
 # an env operand whose name is not a shell name. Neither path is executed by the program; the
 # walk used to read the whole token as a direct execution (the mutant limb records it).
@@ -7304,8 +7439,10 @@ done <<<"$WRAP_AB_TABLE"
 wrap_arm "WRAPOPT-ab-time-output-file: time --output-file x bash <unlisted>.sh blocks (the name GNU time's own option table gives -o)" \
   "time --output-file x bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPOPT-ab-ctl-near: nice --a 10 bash <allowlisted>.sh allowed (the allowlist was consulted)" "nice --a 10 bash ${WRAP_OK}" a a
+wrap_pair "WRAPPAIR-ab-ctl-near: the allowlist-blind mutant refuses it, so WRAPOPT-ab-ctl-near can fail" block-destructive-pallow.sh B
 wrap_arm "WRAPDIV-ab-ambiguous: sudo --c x bash <unlisted>.sh allowed (--c prefixes four sudo options: the program rejects it and runs nothing, and the walk keeps it as written)" \
   "sudo --c x bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-ab-ambiguous: the ambiguity-blind mutant takes --c for one option, consumes x and refuses, so WRAPDIV-ab-ambiguous can fail" block-destructive-pambig.sh B
 wrap_arm "WRAPDIV-ab-split-cmd (declared, introduced here): env --s=bash <unlisted>.sh allowed — an attached command line written with a prefix takes the full spelling's verdict (WRAPDIV-env-S-attached-cmd)" \
   "env --s=bash ${WRAP_NA}" a W
 WRAP_MUTANT="block-destructive-mut.sh"
@@ -7316,12 +7453,18 @@ wrap_arm "WRAPOPT-xargs-stdin-0: printf x | xargs -0 sh blocks as unresolvable" 
 wrap_arm "WRAPOPT-xargs-stdin-py (declared: no record-only stage): printf x | xargs -n 1 python3 blocks as unresolvable" \
   "printf x | xargs -n 1 python3" B a "unresolvable script target"
 wrap_arm "WRAPDIV-xargs-stdin-py-bare: printf x | xargs python3 blocks, as it did before this change" "printf x | xargs python3" B B "unresolvable script target"
+wrap_pair "WRAPPAIR-xargs-stdin-py-bare: the xargs-deny-off mutant allows it, so WRAPDIV-xargs-stdin-py-bare can fail" block-destructive-pxoff.sh a
 wrap_arm "WRAPDIV-xargs-interp-flag (declared: the deny is narrowed, not closed): printf x | xargs -n 1 bash -x allowed — the flag is a token" \
   "printf x | xargs -n 1 bash -x" a a
+wrap_pair "WRAPPAIR-xargs-interp-flag: the stdin deny, whose predicate is no operand on argv, refuses it, so WRAPDIV-xargs-interp-flag can fail" block-destructive-pstdin.sh B
 wrap_arm "WRAPDIV-xargs-interp-flag-bare: printf x | xargs bash -x allowed, as before" "printf x | xargs bash -x" a a
+wrap_pair "WRAPPAIR-xargs-interp-flag-bare: the stdin deny refuses it, so WRAPDIV-xargs-interp-flag-bare can fail" block-destructive-pstdin.sh B
 wrap_arm "WRAPOPT-xargs-ctl-c: ls | xargs -n1 bash -c 'echo hi' allowed" "ls | xargs -n1 bash -c 'echo hi'" a a
+wrap_pair "WRAPPAIR-xargs-ctl-c: the every-xargs-interpreter deny refuses it, so WRAPOPT-xargs-ctl-c can fail" block-destructive-pxall.sh B
 wrap_arm "WRAPOPT-xargs-ctl-grep: git ls-files | xargs -n1 grep -l bash allowed" "git ls-files | xargs -n1 grep -l bash" a a
+wrap_pair "WRAPPAIR-xargs-ctl-grep: the scan mutant reads past grep to an xargs-fed bash and refuses, so WRAPOPT-xargs-ctl-grep can fail" block-destructive-pscan.sh B
 wrap_arm "WRAPOPT-xargs-ctl-pycompile: git ls-files | xargs -n1 python3 -m py_compile allowed" "git ls-files | xargs -n1 python3 -m py_compile" a a
+wrap_pair "WRAPPAIR-xargs-ctl-pycompile: the stdin deny refuses it, so WRAPOPT-xargs-ctl-pycompile can fail" block-destructive-pstdin.sh B
 
 # --- if, while and until join the keyword arm ------------------------------------------------
 wrap_arm "WRAPKW-if: if bash <unlisted>.sh; then :; fi blocks" "if bash ${WRAP_NA}; then :; fi" B a "BLOCK-DESTRUCTIVE-022"
@@ -7329,8 +7472,11 @@ wrap_arm "WRAPKW-while: while bash <unlisted>.sh; do :; done blocks" "while bash
 wrap_arm "WRAPKW-until: until bash <unlisted>.sh; do :; done blocks" "until bash ${WRAP_NA}; do :; done" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPKW-if-bang: if ! bash <unlisted>.sh; then :; fi blocks" "if ! bash ${WRAP_NA}; then :; fi" B a "BLOCK-DESTRUCTIVE-022"
 wrap_arm "WRAPKW-ctl-test: if [ -f <unlisted>.sh ]; then :; fi allowed" "if [ -f ${WRAP_NA} ]; then :; fi" a a
+wrap_pair "WRAPPAIR-kw-ctl-test: the scan mutant reads the tested path as the command and records it, so WRAPKW-ctl-test can fail" block-destructive-pscan.sh W
 wrap_arm "WRAPKW-ctl-read: while read -r l; do :; done < <unlisted>.sh allowed" "while read -r l; do :; done < ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-kw-ctl-read: the scan mutant reads the redirected path as the command and records it, so WRAPKW-ctl-read can fail" block-destructive-pscan.sh W
 wrap_arm "WRAPKW-ctl-ok: if bash <allowlisted>.sh; then :; fi allowed" "if bash ${WRAP_OK}; then :; fi" a a
+wrap_pair "WRAPPAIR-kw-ctl-ok: the allowlist-blind mutant refuses it, so WRAPKW-ctl-ok can fail" block-destructive-pallow.sh B
 # The reviewer's pin: quoted prose after a separator, in an argument of a command that is no
 # carrier, is split and read as a condition. A declared over-block, introduced by this line
 # for three common words and already true of then and do.
@@ -7341,10 +7487,13 @@ wrap_arm "WRAPDIV-kw-prose (declared over-block, introduced here): git commit -m
 # Pinned at the verdicts the walk gives today, in both directions, so a change is deliberate.
 wrap_arm "WRAPDIV-qval-sq: FOO='a b' bash <unlisted>.sh allowed (the value's second piece is read as the command word)" \
   "FOO='a b' bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-qval-sq: the scan mutant reads past the value's second piece and refuses, so WRAPDIV-qval-sq can fail" block-destructive-pscan.sh B
 wrap_arm "WRAPDIV-qval-fp: MSG='run bash now' echo <unlisted>.sh blocks (the over-block twin of the same split)" \
   "MSG='run bash now' echo ${WRAP_NA}" B B "BLOCK-DESTRUCTIVE-022"
+wrap_pair "WRAPPAIR-qval-fp: with the operand walk and the conservative route both reverted the walk ends on the value's last piece and allows it, so WRAPDIV-qval-fp can fail" block-destructive-pwalkroute.sh a
 wrap_arm "WRAPDIV-qval-sep: FOO='a;b' bash <unlisted>.sh allowed (a separator inside the quoted value splits the segment)" \
   "FOO='a;b' bash ${WRAP_NA}" a a
+wrap_pair "WRAPPAIR-qval-sep: the scan mutant reads past the split piece and refuses, so WRAPDIV-qval-sep can fail" block-destructive-pscan.sh B
 
 /bin/rm -rf "$WRAP_ROOT"
 
