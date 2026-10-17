@@ -553,7 +553,7 @@ def self_test():
             # The leak must be live while the fixture runs, or "unchanged" below proves
             # nothing: an arm whose hazard was never applied passes vacuously.
             want("%sL the leaked %s is live while the fixture runs" % (arm, "+".join(keys)),
-                 all(os.environ.get(k) == v for k, v in leaked.items()))
+                 set(leaked) == set(keys) and all(os.environ.get(k) == v for k, v in leaked.items()))
             try:
                 t = _fixture(inner)
                 inner_answer = conflicted_paths(inner, t["sibling"], t["victim"])
