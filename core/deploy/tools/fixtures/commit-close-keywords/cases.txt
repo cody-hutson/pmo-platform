@@ -1,0 +1,48 @@
+# Labeled cases for check-commit-close-keywords.py.
+#
+# Each line: <id> <FLAG|PASS> <message>. Inside a message, \n is a line break and
+# \t is a tab. FLAG = the scan must report a pairing. PASS = a near miss the scan
+# must leave alone.
+#
+# Every number here is synthetic and sits far above any issue number this
+# repository has — or the documentation placeholder repository some cases name —
+# so a line quoted by accident into a commit message or a pull request body can
+# close nothing.
+#
+# S-cases are the sensitivity arm, P-cases the specificity arm. Add a case when the
+# grammar changes or when a real message is misjudged; never delete one to make a
+# change pass.
+S01 FLAG chore: tidy\n\nalso closes #900001's partial criterion by moving the figure
+S02 FLAG docs: note\n\nverified after the fix: #900002 rows pass on all four arms
+S03 FLAG CLOSES #900003
+S04 FLAG Resolves: #900004
+S05 FLAG fixes octo-org/octo-repo#900005
+S06 FLAG this does not close #900006
+S07 FLAG fix: #900007 rows mis-parsed
+S08 FLAG fixed\t#900008
+S09 FLAG feat: thing\n\n- Resolves #900009
+S10 FLAG Fixes:#900010
+S11 FLAG resolves #900011, resolves #900012
+S12 FLAG pre-fix the arm failed; post-fix #900013 rows pass
+S13 FLAG fixes https://github.com/octo-org/octo-repo/issues/900014
+S14 FLAG Resolves GH-900015
+P01 PASS fix(scope): trailing reference only (#900101)
+P02 PASS renumber --stamp --apply resolved 17 tokens on 15 lines
+P03 PASS Pre-fix 18 fail / post-fix 0 fail, both measured
+P04 PASS the closed 5-bin project taxonomy
+P05 PASS FIX 1 (F1, HIGH) - allowlist entry
+P06 PASS mark #900104 as closed at Stage 13
+P07 PASS #900105 -> Closed
+P08 PASS fixes the regression in #900106
+P09 PASS References #900107; Related to #900108
+P10 PASS work item (#900109)
+P11 PASS Issue #900110 closes at Stage 13
+P12 PASS write closes #N only in the Issue References block
+P13 PASS feat: wrap\n\nthe keyword ends this line: closes\n#900111 opens the next one
+P14 PASS fixing #900112 and closing #900113 are not keywords
+P15 PASS leaves it unresolved #900114
+P16 PASS the prefix #900115 is not a keyword
+P17 PASS the fix is tracked at https://github.com/octo-org/octo-repo/issues/900117
+P18 PASS fixes gh-pages deploy ordering
+P19 PASS fixes [#900120](https://example.invalid/tracker)
+P20 PASS fixes https://github.com/octo-org/octo-repo/pull/900121

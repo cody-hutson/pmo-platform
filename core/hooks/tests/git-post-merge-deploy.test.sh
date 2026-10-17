@@ -24,6 +24,23 @@
 
 set -u
 
+# A fixture builder clears every repository-location variable git itself publishes,
+# so an inherited GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE — a caller running this
+# suite from inside a git hook, for one — cannot point a fixture's git calls at another
+# repository. The list is asked of git at run time, from an environment holding only
+# PATH, so nothing inherited shapes the answer. A list that does not name GIT_DIR means
+# the strip cannot be shown to have run, so the suite stops rather than build fixtures.
+_git_loc_vars="$(env -i PATH="$PATH" git rev-parse --local-env-vars 2>/dev/null)" || _git_loc_vars=""
+_git_dir_listed=0
+for _gv in $_git_loc_vars; do
+  [ "$_gv" = "GIT_DIR" ] && _git_dir_listed=1
+  unset "$_gv"
+done
+[ "$_git_dir_listed" = 1 ] || {
+  echo "FAIL: git rev-parse --local-env-vars did not name GIT_DIR; the fixture repositories cannot be isolated" >&2
+  exit 1
+}
+
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
 HOOK_SRC="${SRC_DIR}/git-post-merge-deploy.sh"
 
@@ -342,6 +359,56 @@ if [ "$_line" = "--deploy demo-skill" ]; then
 else
   report "E4b: a name whose source dir is absent is filtered, the rest still deploy" 0 \
     "expected '--deploy demo-skill', got: ${_line}"
+fi
+
+# ===========================================================================
+# F — RELEASE IDENTITY. The hook never stamps. A release merge is deployed by
+#     name exactly as any other merge is, and neither invocation site forwards a
+#     release join key.
+#
+#     These arms pass on the hook as it stands; what they pin is a decision. The
+#     tempting repair for "the hook's deploy writes no deployment-status row" is
+#     to teach the hook to recognise a release merge and pass --release. That was
+#     weighed and rejected: the hook fires on every checkout that observes a merge
+#     and for merges that are not releases, the merge subject is not a uniform
+#     signal, and a stamped row cannot be deleted. The stamped deploy is Stage
+#     12's — see the hook-owner rule.
+#
+#     WHY THESE ARMS, BESIDE THE EXACT-VECTOR ARMS ABOVE. A2, E2, E3, E4a and E4b
+#     already compare the whole argument vector on both sites, so an UNCONDITIONAL
+#     --release on either site turns them red too. What they cannot see is the
+#     realistic shape of the rejected repair: a stamp GATED on recognising a
+#     release merge. Their merges are not release-shaped, so a classifier leaves
+#     them green. These two merge a release/* branch under a release-shaped
+#     subject, so a classifier-gated stamp turns F1 red on the named site and F2
+#     red on the fallback site while every arm above stays green.
+# ===========================================================================
+R="${SBX}/f1"; mk_repo "$R"
+git -C "$R" checkout -q -b release/some-slug
+printf 'release edit\n' > "${R}/operations/skills/demo-skill/SKILL.md"
+git -C "$R" add -A; git -C "$R" commit -qm "release work"
+git -C "$R" checkout -q main
+git -C "$R" merge -q --no-ff -m "Merge pull request #1 from fixture/release/some-slug" release/some-slug >/dev/null 2>&1
+_line="$(/usr/bin/tail -n1 "$LOG")"
+if [ "$_line" = "--deploy demo-skill" ]; then
+  report "F1: a release merge is deployed by name and forwards no --release (named site)" 1
+else
+  report "F1: a release merge is deployed by name and forwards no --release (named site)" 0 "got: ${_line}"
+fi
+
+# F2 — the fallback site. A release merge that deletes a skill takes the
+#      no-arguments form, and that form carries no release identity either.
+R="${SBX}/f2"; mk_repo "$R"
+git -C "$R" checkout -q -b release/other-slug
+git -C "$R" rm -q -r operations/skills/demo-skill
+git -C "$R" commit -qm "release removes demo-skill"
+git -C "$R" checkout -q main
+git -C "$R" merge -q --no-ff -m "Merge pull request #1 from fixture/release/other-slug" release/other-slug >/dev/null 2>&1
+_line="$(/usr/bin/tail -n1 "$LOG")"
+if [ "$_line" = "--deploy" ]; then
+  report "F2: a release merge on the fallback site forwards no --release either" 1
+else
+  report "F2: a release merge on the fallback site forwards no --release either" 0 "got: ${_line}"
 fi
 
 printf '\nRESIDUAL: these arms exercise the hook decision logic against a stub deploy.\n'

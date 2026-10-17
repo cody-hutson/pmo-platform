@@ -217,6 +217,19 @@ obligation of the change that edited the skill, enforced by the package-freshnes
 gate. A merge whose package was never rebuilt still carries a stale package
 afterwards, and the hook is not a substitute for that step.
 
+**The hook carries no release identity, and must not gain one.** It never passes
+`--release`, on either of its two invocation forms, so the deploy it runs writes no
+`deployment-status` row. That is the design, not an omission. The hook fires on every
+checkout that observes a merge — a second machine, an adopter's clone, a session that
+syncs before the release's own Stage 12 has reached its deploy step — and for merges
+that are not releases; a release join key is held by exactly one actor, the Stage 12
+executor; and a stamped row can never be deleted. Recording that a release was deployed
+is therefore Stage 12's step — the release-stamped deploy in
+[`pipeline/stage-12-execute.md`](/release/references/pipeline/stage-12-execute.md)
+Phase B4 — and it yields the same rows whether or not the hook has already made the
+install current. The decision and its rejected alternative are recorded in
+{{ADR:release-identity-is-stamped-at-stage-12}}.
+
 **The hook is inert until it is installed, and it only repairs merges it observes.**
 Drift from a merge that predates the install, or on a machine where the install has
 not been run, is not closed by it; the manual step-1 deploy remains the repair.
@@ -233,10 +246,11 @@ mechanism) and the `.skill` package carries it. A references-only change is
 therefore NOT a no-op — it MUST resolve to one of two dispositions, and the
 default is to propagate:
 
-- **(a) Propagate (DEFAULT, primary).** Run `deploy.sh --deploy <skill>` (which
-  re-mirrors `references/` per Deployment Step 1) AND rebuild the skill's `.skill`
-  package per Deployment Step 3 (`bash core/deploy/tools/build-skill-packages.sh
-  <skill>`), at Stage 12, so the mirror and the package stay current with source.
+- **(a) Propagate (DEFAULT, primary).** At Stage 12 the release-stamped deploy of
+  Phase B4 names `<skill>` (which re-mirrors `references/` per Deployment Step 1) AND
+  the skill's `.skill` package is rebuilt per Deployment Step 3 (`bash
+  core/deploy/tools/build-skill-packages.sh <skill>`), so the mirror and the package
+  stay current with source.
   This is the default because the platform value is no-silent-drift: a
   references-only edit that does not propagate leaves the installed mirror and the
   distributed package stale against source.
@@ -259,7 +273,7 @@ lives in [`pipeline/stage-12-execute.md`](/release/references/pipeline/stage-12-
 which skills changed since the last deployment reference. Mechanism:
 
 1. Compute `tag = git describe --tags --abbrev=0` (most-recent tag reachable from HEAD).
-2. If `tag` points **exactly at HEAD** (standard Stage 12 Chip Pattern — tag pushed before deploy), use the **second-most-recent tag** (`git describe --tags --abbrev=0 HEAD^`) as the diff base. This catches all changes since the prior release, which is the operationally correct window when tagging precedes deployment.
+2. If `tag` points **exactly at HEAD** (the tag was pushed before the deploy runs), use the **second-most-recent tag** (`git describe --tags --abbrev=0 HEAD^`) as the diff base. This catches all changes since the prior release, which is the correct currency window when tagging precedes deployment.
 3. Otherwise, use `tag` as the diff base.
 4. If no tag exists, fall back to `HEAD~1`.
 
@@ -267,6 +281,14 @@ The diff is filtered by directory (`-- {core,operations,release}/skills/` for
 skills, `packages/` for packages, `harness/` for harness
 artifacts) — any file change under these trees, including `references/*.md`,
 surfaces the parent skill/package/harness in `CHANGED_*` output. 
+
+**A release-stamped deploy never auto-detects.** The window above answers "what
+changed since the last deployment reference", which is the right question for a
+currency deploy and the wrong one for a release: it reads empty once `HEAD` has moved
+past the release tag, and it names a neighbouring merge's skill when one sits inside
+it. `--release <milestone-slug>` is therefore accepted only with named targets or with
+`--no-targets`, and `--release` alone, or with an empty value, is refused before
+anything is written.
 
 ## Initial bootstrap
 

@@ -1,8 +1,8 @@
 name: Release tooling smoke
 
-# gate-efficacy: posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass
+# gate-efficacy: posture=required  enforcement=branch-protection:"Close-out automation smoke (macOS)"  always-reports=yes
 #   invariant: the release tooling that must not rot unexercised runs its offline
-#              checks when release tooling or the RELEASE_LOG schema changes — (1) the
+#              checks on every pull request — (1) the
 #              Stage 13 close-out automation (self-test + corpus-path smoke), the
 #              version allocator claim-version.sh --self-test, the release-body drift
 #              check check-release-body-drift.sh --self-test, the Stage-13 close-out
@@ -104,11 +104,11 @@ name: Release tooling smoke
 #              instead and names every unwired suite on each in-scope PR; (3) the CIAC-3 relation holds — the
 #              class set a downstream gate ASSERTS on is a subset of the MUST rows the
 #              orchestration playbook INSTRUCTS (check-emission-contract-subset.sh over
-#              the committed asserted set), with the lint's own --self-test run in the
-#              same step so the lint cannot drift into always-passing; AND (4) each of
+#              the committed asserted set), with the lint's own --self-test run by the
+#              selftest-discovery job so the lint cannot drift into always-passing; AND (4) each of
 #              the four finops-usage-extractor scripts runs its committed --self-test —
 #              the executable home of the store's conservation invariants and of the
-#              CIAC / SM / SE fail-closed assertions — when that skill changes, in
+#              CIAC / SM / SE fail-closed assertions — in
 #              the finops-selftest job — all asserted behaviorally by executing
 #              the scripts' checks and gating on exit code.
 #   falsification: on a PR touching the close-out tooling, break a corpus path the
@@ -181,12 +181,21 @@ name: Release tooling smoke
 #                  respectively), each in a temp copy and each proven in BOTH directions
 #                  before it was committed; regress a node-graph tool's
 #                  --self-test -> the selftest-discovery job fails (those six tools are
-#                  now covered by discovery rather than by the retired roster); on an
-#                  unrelated PR all three jobs are skipped and absence is treated as pass.
-# Path-filtered, so ADVISORY by skip-semantics. (Per gate-efficacy-standard.md (b).)
+#                  now covered by discovery rather than by the retired roster); every pull
+#                  request runs all three jobs; there is no path filter.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Discovered tool self-tests (Ubuntu)","FinOps usage-extractor script self-tests (Ubuntu)" (no warn-mode — a finding turns the check RED)  always-reports=yes
+#   invariant: the share of the invariant above that these two jobs run — clause (2),
+#              every discovered tool's --self-test (the CIAC-3 lint's own among them), and
+#              clause (4), the finops script self-tests. Clauses (1) and (3) run in the
+#              closeout-smoke job, which the declaration above binds.
+#   falsification: the selftest-discovery and finops-selftest recipes in the block above.
+#   posture note: the macOS job is a registered required context, so a red there blocks a
+#                 merge. These two jobs are ENFORCING and not BLOCKING: neither context is
+#                 in main's required status checks.
 
-# Smoke-tests the Stage 13 close-out automation on any PR that touches release
-# tooling (or the RELEASE_LOG schema), so the script cannot rot unexercised — the
+# Smoke-tests the Stage 13 close-out automation on every pull request, so the script
+# cannot rot unexercised — the
 # exact failure mode where stale paths / a stale column index / de-identification
 # escapes hid for several releases until the close-out was finally run.
 #
@@ -217,12 +226,12 @@ name: Release tooling smoke
 # tool that loses one is never removed. The tool set now comes from four '# scope:'
 # globs in a committed manifest and a predicate over the tools' own text, computed by
 # release/tools/check-selftest-coverage.py. Those tools are pure-stdlib and
-# OS-agnostic, so the job runs on ubuntu-latest, offline and credential-free, gating
+# OS-agnostic, so the job runs on ubuntu-latest and credential-free, gating
 # on exit code. A tool with a genuine OS requirement declares it AT THE TOOL with
 # '# selftest-runner: macos' and is executed by the macOS job instead — a declaration,
 # not a workflow exclusion, so a runner constraint can never masquerade as a coverage
-# decision. NOTE: path filters are workflow-scoped, so a core/deploy/tools change also
-# triggers the macOS closeout-smoke job below — a harmless, fast, offline over-trigger.
+# decision. NOTE: the workflow carries no path filter, so all three jobs run on every
+# pull request.
 #
 # Platform (closeout-smoke): macos-latest. automated-closeout.sh pins PATH to
 # /usr/bin:/bin and resolves `gh` at the Homebrew (/opt/homebrew/bin) or Intel
@@ -233,163 +242,16 @@ name: Release tooling smoke
 # titles, PR bodies, comment bodies, head refs). Every run: block is a static
 # shell invocation against workspace files only.
 
+# NO PATH FILTER. The macOS job below publishes a context that is registered in main's
+# required status checks, and a required context on a path-filtered workflow leaves every
+# non-matching pull request waiting on a status that never arrives
+# (core/standards/gate-efficacy-standard.md § Verdict-Input Closure makes filter removal a
+# prerequisite of a required posture). Measured before the filter was removed, it excluded
+# about one pull-request push in a hundred, and those were dependency and policy updates.
 on:
   pull_request:
-    paths:
-      - 'release/tools/**'
-      - 'release/releases/RELEASE_LOG.md'
-      # The plans corpus is what the plan-identity check READS. Without it a PR
-      # that adds a mis-named plan would not trigger the gate built to catch it.
-      - 'release/releases/plans/**'
-      - 'core/deploy/tools/**'
-      # CIAC-3 inputs: the playbook owns the INSTRUCTED set, the allowlist file owns
-      # the ASSERTED set. Without these two entries a PR that edits only the contract
-      # block (or only the asserted set) would not trigger the subset check — the
-      # residual path-filter gap, closed here rather than deferred.
-      - 'release/skills/release-hub/references/orchestration-playbook.md'
-      - 'core/deploy/allowlists/decision-emission-asserted-set.txt'
-      # selftest-discovery inputs: the manifest owns the scope globs AND the expected
-      # set; the exclusions file owns the suppressions. Without these two entries a PR
-      # that narrowed a '# scope:' glob, or added a suppression, would not trigger the
-      # gate that reads them — the same residual-path-filter reasoning as the CIAC-3
-      # entries above, and the one that matters most here because narrowing the scope
-      # is precisely the disposition this gate forbids.
-      - 'core/deploy/allowlists/selftest-coverage-manifest.txt'
-      - 'core/deploy/allowlists/selftest-coverage-exclusions.txt'
-      # Procedure 7a gate-predicate inputs: the predicate itself is prose-embedded
-      # in the bridge doc and the fixtures are built from the ledger template's
-      # 13-field header. Without these two entries an edit to either could regress
-      # the HARD GATE without ever triggering its regression suite.
-      - 'release/references/how-to/hub-spoke-bridge.md'
-      - 'release/releases/hub-state/action-items.md.template'
-      # AER-1 inputs: the agent-editability suite derives its Tier-0 union from the
-      # hook and its execution-path map from the planning spec, and asserts the
-      # bypass token's absence across four delivered surfaces. Without these three
-      # entries an edit to a graded subject would change what the arms assert while
-      # not triggering the job that asserts it — the same trigger-vs-verdict
-      # disagreement the CIAC-3 and selftest-discovery entries above each close.
-      # (hub-spoke-bridge.md, the fourth graded surface, is already on the roster.)
-      - 'core/hooks/block-autonomy-ceiling.sh'
-      - 'release/references/pipeline/stage-04-planning.md'
-      - 'release/skills/release-planner/**'
-      # finops-selftest inputs: the four scripts and the store schema they encode.
-      - 'core/skills/finops-usage-extractor/**'
-      - 'core/schemas/finops-usage-store-schema.md'
-      # deciders carve-out input: the suite asserts STRUCTURALLY that this workflow
-      # still sources the shared decision library. Without this entry, a change that
-      # dropped the sourcing (or the verdict call) would never re-run the assertion
-      # that catches it — the library itself is already covered by 'release/tools/**'.
-      - '.github/workflows/repo-integrity.yml'
-      - '.github/workflows/release-tooling-smoke.yml'
-      # R8 arming-declaration input: 'release/tools/**' above covers the tolerance
-      # suite, which is the CODE rule R8 grades — but the sentinel is the
-      # DECLARATION it grades that code against. Without this entry a PR that flips
-      # the token from 'armed' back to 'pending', or deletes the sentinel outright,
-      # would not trigger the job that runs R8: the one change most able to defeat
-      # the gate would merge un-graded, which is the exact reversibility the
-      # sentinel exists to close. Same residual-path-filter reasoning as the CIAC-3
-      # and selftest-discovery entries above, and closed here rather than deferred.
-      - '.github/corpus-home-tolerance.arming'
-      # VIC engine member — THE LAST RESIDUAL PATH-FILTER GAP IN THIS ROSTER, and the
-      # one this workflow had already ADMITTED rather than closed (see the note above
-      # the release/tools/tests/ steps below). Three suites this workflow invokes read
-      # deploy.sh as their SUBJECT: automated-closeout.sh (42 references),
-      # tests/test_structural_blast_radius.sh (4) and tests/test_verify_release_plan.sh
-      # (5), all measured at the commit that added this line against a control that
-      # returned 0. A deploy.sh edit therefore changes what this job asserts while —
-      # until this line — not triggering it, which is exactly the trigger-vs-verdict
-      # disagreement the CIAC-3, selftest-discovery and R8 entries above each close for
-      # their own inputs. Closed here on the same reasoning rather than worked around a
-      # fourth time.
-      #
-      # COST, STATED NOT HIDDEN: deploy.sh is among the most frequently edited files in
-      # the tree, so this workflow's three jobs — one of them macOS — now run on those
-      # pull requests too. That is the largest single cost consequence of the
-      # disposition sweep that added this line, and it belongs to a roster widening
-      # rather than to a conversion. It is accepted deliberately: the alternative was
-      # converting a 3-job workflow to filter-free to close a ONE-FILE gap that one
-      # roster line closes completely.
-      - 'core/deploy/deploy.sh'
-      # Arm F inputs (selftest-discovery): the arm asserts that every invocation a
-      # pipeline spec PRESCRIBES is admitted by the script-execution allowlist, so it
-      # reads BOTH sides — the spec corpus and the allowlist. Without these two entries
-      # a PR that edits only a spec (adding a mandated command) or only the allowlist
-      # (removing the row that admitted one) would not trigger the arm that reads them,
-      # which is the trigger-vs-verdict disagreement the CIAC-3, selftest-discovery, R8
-      # and VIC entries above each close for their own inputs. LOAD-BEARING, not a
-      # nicety: those are exactly the two edits able to create the defect Arm F exists
-      # to catch. The narrower stage-04-planning.md entry above is retained because the
-      # AER-1 note names it as an AER-1 input; the glob here subsumes it for Arm F.
-      - 'release/references/pipeline/**'
-      - 'core/config/allowlists/script-execution-allowlist.txt'
-      # Scenario-G input (#6251): release-notes-standard.md §2.4 PUBLISHES the
-      # banned-jargon list, and lint_release_corpus.py --self-test asserts its
-      # enforcing patterns against that table row for row. Without this entry a PR
-      # that adds a §2.4 row and nothing else would not trigger the arm built to
-      # catch a published-but-unenforced row — the same trigger-vs-verdict
-      # disagreement the CIAC-3, selftest-discovery, R8, VIC and Arm F entries
-      # above each close for their own inputs.
-      # What it buys is REACHABILITY, not enforcement, and the difference matters:
-      # this workflow declares posture=advisory (see :3), and the arm RUNS on the
-      # edit it exists to catch in the selftest-discovery job. Whether that job is a
-      # required status check on main — and so whether the arm blocks the merge — is
-      # branch-protection configuration on the host, which this file cannot pin and
-      # which changes without a commit. Read it live rather than from this comment:
-      #   gh api repos/:owner/:repo/branches/main/protection --jq '.required_status_checks.contexts'
-      - 'release/references/standards/release-notes-standard.md'
-      # FM-1 input (the host-API axis evaluator's ENUM-PARITY arm): the arm grades the
-      # [adapters].repo_host value space the operator key declaration publishes against
-      # the probe arms release/tools/host-api-axis-verdict.sh implements, and the
-      # evaluator runs in this workflow's macOS job. A pull request that adds a
-      # repo_host value edits only the declaration, which no entry above matches, so
-      # without this entry the arm would not run on the one pull request it exists for —
-      # the trigger-vs-verdict disagreement the CIAC-3, selftest-discovery, R8, VIC,
-      # Arm F and Scenario-G entries above each close for their own inputs.
-      - 'core/config/operator-toml-schema.json'
   push:
     branches: [main]
-    paths:
-      - 'release/tools/**'
-      - 'release/releases/RELEASE_LOG.md'
-      # The plans corpus is what the plan-identity check READS. Without it a PR
-      # that adds a mis-named plan would not trigger the gate built to catch it.
-      - 'release/releases/plans/**'
-      - 'core/deploy/tools/**'
-      # CIAC-3 inputs: the playbook owns the INSTRUCTED set, the allowlist file owns
-      # the ASSERTED set. Without these two entries a PR that edits only the contract
-      # block (or only the asserted set) would not trigger the subset check — the
-      # residual path-filter gap, closed here rather than deferred.
-      - 'release/skills/release-hub/references/orchestration-playbook.md'
-      - 'core/deploy/allowlists/decision-emission-asserted-set.txt'
-      # selftest-discovery inputs — see the pull_request block above.
-      - 'core/deploy/allowlists/selftest-coverage-manifest.txt'
-      - 'core/deploy/allowlists/selftest-coverage-exclusions.txt'
-      # Procedure 7a gate-predicate inputs — see the pull_request block above.
-      - 'release/references/how-to/hub-spoke-bridge.md'
-      - 'release/releases/hub-state/action-items.md.template'
-      # AER-1 inputs — see the pull_request block above.
-      - 'core/hooks/block-autonomy-ceiling.sh'
-      - 'release/references/pipeline/stage-04-planning.md'
-      - 'release/skills/release-planner/**'
-      # finops-selftest inputs — see the pull_request block above.
-      - 'core/skills/finops-usage-extractor/**'
-      - 'core/schemas/finops-usage-store-schema.md'
-      # deciders carve-out input — see the pull_request block above.
-      - '.github/workflows/repo-integrity.yml'
-      # R8 arming-declaration input — see the pull_request block above.
-      - '.github/corpus-home-tolerance.arming'
-      # Arm F inputs — see the pull_request block above.
-      - 'release/references/pipeline/**'
-      - 'core/config/allowlists/script-execution-allowlist.txt'
-      # VIC engine member — see the pull_request block above.
-      - 'core/deploy/deploy.sh'
-      # Scenario-G input (#6251) — see the pull_request block above. Rostered in
-      # BOTH lists deliberately: they are two holders of one roster, and adding to
-      # one alone is the same divergence class #6251 exists to remove.
-      - 'release/references/standards/release-notes-standard.md'
-      # FM-1 input — see the pull_request block above. Rostered in both lists, for the
-      # same two-holders-of-one-roster reason as the Scenario-G entry.
-      - 'core/config/operator-toml-schema.json'
 
 permissions:
   contents: read
@@ -849,8 +711,9 @@ jobs:
       # placement STANDS, but ONE of the two grounds originally given for it no longer
       # holds and is corrected here rather than left to read as current: the trigger
       # ground — "its subject is deploy.sh, which THIS workflow's paths: filter does
-      # not list" — was retired when core/deploy/deploy.sh was added to both rosters
-      # above, so this workflow now does fire on a deploy.sh edit. What still decides
+      # not list" — was retired when core/deploy/deploy.sh joined this workflow's former
+      # path rosters, and the workflow now carries no path filter at all, so it fires on
+      # a deploy.sh edit like any other. What still decides
       # the placement is GENRE: install-tests.yml's shell-tests job is the established
       # home for deploy.sh check-fixture suites, and "close-out automation smoke" is
       # not. The suite is NOT moved; only the stale half of its rationale is removed.)
@@ -990,23 +853,22 @@ jobs:
         # No workflow-context interpolation: the command is a fixed literal, so no
         # untrusted event input can reach the shell.
         #
-        # POSTURE, DECLARED RATHER THAN INHERITED — this workflow's header reads
-        # `posture=advisory  enforcement=path-filtered  skip-semantics=absent-is-pass`,
-        # and that applies to this step: a red run here is a FAST SIGNAL, it does not
-        # block a merge, and no job in this workflow is a branch-protection context.
-        # The ENFORCING surface for this assertion is automated-closeout.sh Phase 9.3,
-        # which halts the Stage-13 close before the chore PR is created, plus the
-        # event-bound Step 4 command that covers the close paths running no script
-        # (stage-13-close.md Phase A8.3). Stated explicitly because a check whose own
-        # design vocabulary says "blocking" otherwise silently inherits a posture that
-        # contradicts it, and the reader cannot tell from the step alone.
+        # POSTURE, DECLARED RATHER THAN INHERITED — this step runs in the closeout-smoke
+        # job, whose context is a registered required check (the first declaration in
+        # this workflow's header), so a red run here blocks the merge of the pull
+        # request it runs on. The event-bound ENFORCING surface for the release itself
+        # is automated-closeout.sh Phase 9.3, which halts the Stage-13 close before the
+        # chore PR is created, plus the event-bound Step 4 command that covers the close
+        # paths running no script (stage-13-close.md Phase A8.3). Stated explicitly
+        # because a step silently inherits its job's posture, and the reader cannot tell
+        # from the step alone.
         #
         # What rots without it: the corpus lint validates a plan filename's SHAPE and
         # has never validated its TRUTHFULNESS — a plan named for a version the release
         # did not ship as matches the canonical regex perfectly. That defect class
         # shipped twice past the gate and was caught both times by human reading. This
-        # step is the fast signal on the PR that introduces one; the close-out phase is
-        # what actually stops it.
+        # step is the signal on the PR that introduces one, and as a step of a required
+        # job it holds that PR; the close-out phase is what stops it at the release.
         #
         # Exit contract: 0 clean / 1 blocking finding / 3 corpus unverifiable (fail-loud).
         # The two known pre-existing mis-named plans are printed ADVISORY residuals and
@@ -1168,10 +1030,9 @@ jobs:
         # checkout. Stdlib-only, Python 3.9 floor.
         #
         # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
-        # it does not gate. This step is what actually runs the suite. Note also that
-        # THIS WORKFLOW IS posture=advisory (see the header) and is already red on
-        # main, so its colour cannot be read as a verdict on this suite — the step
-        # makes the assertion RUN, it does not make it gate.
+        # it does not gate. This step is what actually runs the suite, and it runs in
+        # the closeout-smoke job, whose context is a registered required check (see the
+        # header) — so the step makes the assertion RUN, and its job makes it GATE.
         run: python3 core/deploy/tools/tests/test_corpus_walker_parity.py
 
   selftest-discovery:
@@ -1203,8 +1064,14 @@ jobs:
     # it produced two wrong published figures for this very tree before the engine was
     # written. Comment-only mentions are not advertisers.
     #
-    # Pure-stdlib and OS-agnostic, so ubuntu-latest — no pip install, no network, no
-    # gh/credentials, no git-history read, so the default shallow checkout suffices.
+    # Pure-stdlib and OS-agnostic, so ubuntu-latest — no gh/credentials and no
+    # git-history read, so the default shallow checkout suffices. ONE pip install, and
+    # with it the job's one network call: PyYAML, for the one discovered tool whose
+    # self-test imports the conformance ratchet's header parser
+    # (core/deploy/tools/reconcile-gate-posture.py). Without it that tool's
+    # parser-backed arms report NOT-EVALUATED and its exit is the stdlib arms' — a
+    # self-test that skipped arms exiting 0 to a consumer that reads only the exit
+    # code. The self-tests themselves stay offline.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -1234,6 +1101,12 @@ jobs:
         # This is the affordance the retired roster provided by accident; here it is
         # derived, so it cannot disagree with what actually executes.
         run: python3 release/tools/check-selftest-coverage.py --list --explain
+
+      - name: Ensure PyYAML (the reconciler's parser-backed self-test arms)
+        # See the job note above. Installed before Arm A so the one discovered tool
+        # whose self-test loads the conformance ratchet's header parser runs every arm
+        # here, rather than reporting its parser-backed arms NOT-EVALUATED and exiting 0.
+        run: python3 -m pip install --quiet pyyaml
 
       - name: Arm A — run every discovered --self-test (offline, stdlib-only)
         # No fail-fast: one run reports every regression, not just the first, matching
