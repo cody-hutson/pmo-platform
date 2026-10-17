@@ -46,3 +46,4 @@ release/tools/lib/frontmatter-strip.sh  # sourced-library: read with `source` by
 core/deploy/tools/path-leak-patterns.sh  # sourced-library: sourced by the hooks, its command arm reached through `bash`; copied beside the hooks at install, where a suite asserts the deployed copy is non-executable
 core/deploy/tools/_frontmatter.py  # imported-module: the shared frontmatter reader its sibling deploy tools import; a library, not a check
 core/deploy/tools/fixtures/issue-body-anchors/targets/fx-gamma.sh  # fixture: a target file the issue-body anchor check reads as data; never executed
+release/tools/lib/host-refusal-class.sh  # sourced-library: read with `source` by the host-API axis evaluator and the close-out automation; defines functions and has no main or exit
