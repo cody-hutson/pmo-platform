@@ -1075,6 +1075,13 @@ locations. The discipline (apply at authoring time, not after red CI):
   fix is to rewrite it inline (move it into a reference block with a summary, or
   de-reference it in prose). The full author-time check set is in
   [`reference-durability-standard.md` § Authoring around the gate](../../../core/standards/reference-durability-standard.md).
+  One authoring rule sits beside those checks and **no gate checks it**: a
+  citation of a section of another document names the section by its heading
+  text and carries no section number — as the link label over a plain file link
+  with no fragment, or, where no link is written, in a `§` segment after the
+  target's backticked file path — the citation form in
+  [`reference-durability-standard.md` § Reference durability versus link resolution](../../../core/standards/reference-durability-standard.md).
+  Apply it as you write: review is the only place a numbered citation is caught.
 - **Every PR-time gate + its override marker (the complete set).** The two gate
   families carry these per-file override markers — declare the matching one (an HTML
   comment, once near the top of the file) when the file legitimately carries a flagged

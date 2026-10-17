@@ -5,7 +5,7 @@
 
 > Standing how-to for auditing the auto-memory store (`~/.claude/memory/`) against the codified corpus for SSOT drift. It is the human-runnable companion to `deploy.sh --check` Check 36 (`memory-corpus-tie-drift`) — run it on demand to reproduce what the standing backstop reports continuously.
 
-**Governing contract:** [`core/disciplines/knowledge-architecture.md` §7 Memory↔corpus boundary](../../../core/disciplines/knowledge-architecture.md#memory-corpus-boundary) (the two-tier SSOT assignment, the no-shadow-SSOT invariant, the encode-and-evict lifecycle). **Decision record:** [ADR-029](../../../core/ADRs/ADR-029-memory-corpus-ssot-boundary.md), generalized across all four memory types by [ADR-045](../../../core/ADRs/ADR-045-cross-surface-memory-contract.md). **Sibling pattern:** the single-source + enforced-rebuild deploy check on the skill↔reference surface — this is the same idea on the memory↔corpus surface.
+**Governing contract:** [`core/disciplines/knowledge-architecture.md` § Memory↔corpus boundary](../../../core/disciplines/knowledge-architecture.md) (the two-tier SSOT assignment, the no-shadow-SSOT invariant, the encode-and-evict lifecycle). **Decision record:** [ADR-029](../../../core/ADRs/ADR-029-memory-corpus-ssot-boundary.md), generalized across all four memory types by [ADR-045](../../../core/ADRs/ADR-045-cross-surface-memory-contract.md). **Sibling pattern:** the single-source + enforced-rebuild deploy check on the skill↔reference surface — this is the same idea on the memory↔corpus surface.
 
 ---
 
@@ -26,9 +26,9 @@ Re-versioning renumbers issues. An eviction-pointer that cited a given issue num
 | **deployed-but-not-evicted** | a memory's tied issue is CLOSED, the corpus encoding is present on `main`, but the memory file still exists | `gh issue view N --json state` == `CLOSED` **AND** a corpus grep of the encoded phrase succeeds **AND** the memory file is still present ⇒ flag |
 | **dead-ref tie** | a memory's eviction-pointer cites an issue # that no longer resolves (re-versioning renumbered it away) | `gh issue view N` returns NOT_FOUND / non-zero (resolution-failure) ⇒ flag. NEVER digit-match |
 | **untied-encodeable** | a memory the §1 Q1 classifier marks K1-encodeable, but carrying no issue tie and no corpus pointer | memory body matches encodeable signatures (discipline / reference / methodology / gate / CI) with no `#N` tie and no corpus-path pointer ⇒ flag for operator routing |
-| **dangling-wikilink-to-evicted-memory** | a surviving memory body links a `[[target]]` whose `<target>.md` no longer exists — left dangling by an EVICT that did not RE-POINT (downstream gap) | for each `[[target]]` wikilink → if `$MEM/<target>.md` is absent ⇒ flag (re-point to its corpus home or drop, per §7 RE-POINT). Local-only (no `gh`); warn-only routing signal, never a FAIL |
+| **dangling-wikilink-to-evicted-memory** | a surviving memory body links a `[[target]]` whose `<target>.md` no longer exists — left dangling by an EVICT that did not RE-POINT (downstream gap) | for each `[[target]]` wikilink → if `$MEM/<target>.md` is absent ⇒ flag (re-point to its corpus home or drop, per the RE-POINT phase of [§ Encode-and-evict lifecycle](../../../core/disciplines/knowledge-architecture.md)). Local-only (no `gh`); warn-only routing signal, never a FAIL |
 | **ledger-pointer-to-closed-issue** | a `MEMORY.md` ledger ("Temporary enhancement pointers") row ties a `#N` that is CLOSED yet the memory was not absorbed/evicted — the partial-absorption residue (upstream gap) | scan the ledger section; for each row's resolving `#N` tie where `gh issue view N --json state` == `CLOSED` ⇒ flag (re-home to a live issue per Phase B-OPS5). Disambiguated from `deployed-but-not-evicted` by file-section (ledger row vs standalone topic file) |
-| **external-target-referent-stored** | a surface of this install holds a resolved target-side referent as a value instead of reading it live, in breach of the §7.1 external-target scope | **declaration-scoped, never content-scoped** — a stored target referent and an operator-side practice statement are not lexically distinguishable, so the check holds an artifact to its own declaration rather than judging content. **Arm 1 (memory store):** the file must carry a live-read declaration (`ADR-109`, else a closed fallback phrase set); the declaration's own parenthetical names the referent **kinds**, and each kind is probed for a value-bearing occurrence outside the declaration window ⇒ flag. A declaring file with no extractable kind list is not evaluated (tallied only). **Arm 2 (operator config):** any key in a `[trackers.<id>]` subtable outside `{id, platform, identifier, scope}` ⇒ flag; the sanctioned `identifier` is *on* the whitelist and cannot flag. Local-only (no `gh`), read-only on both roots |
+| **external-target-referent-stored** | a surface of this install holds a resolved target-side referent as a value instead of reading it live, in breach of [§ External-target scope](../../../core/disciplines/knowledge-architecture.md) | **declaration-scoped, never content-scoped** — a stored target referent and an operator-side practice statement are not lexically distinguishable, so the check holds an artifact to its own declaration rather than judging content. **Arm 1 (memory store):** the file must carry a live-read declaration (`ADR-109`, else a closed fallback phrase set); the declaration's own parenthetical names the referent **kinds**, and each kind is probed for a value-bearing occurrence outside the declaration window ⇒ flag. A declaring file with no extractable kind list is not evaluated (tallied only). **Arm 2 (operator config):** any key in a `[trackers.<id>]` subtable outside `{id, platform, identifier, scope}` ⇒ flag; the sanctioned `identifier` is *on* the whitelist and cannot flag. Local-only (no `gh`), read-only on both roots |
 
 ### 3a. Per-class commands
 
@@ -105,7 +105,7 @@ awk '/^## Temporary enhancement pointers/{b=1;next} /^## /{b=0} b&&/^- /{print}'
 done
 ```
 
-**external-target-referent-stored** — hold each declaring memory to its own declaration, and hold `operator.toml`'s tracker subtables to their closed schema (the §7.1 external-target backstop; local-only, no `gh`):
+**external-target-referent-stored** — hold each declaring memory to its own declaration, and hold `operator.toml`'s tracker subtables to their closed schema (the [§ External-target scope](../../../core/disciplines/knowledge-architecture.md) backstop; local-only, no `gh`):
 
 ```bash
 # Arm 1 — memory store. A file is IN the population only if it declares a
@@ -146,12 +146,12 @@ awk '
 
 | Class | Routing |
 |---|---|
-| **deployed-but-not-evicted** | Add the memory to the next release's **Phase B-OPS operational-deployment manifest** (ARCHIVE → VERIFY-CORPUS → EVICT). The corpus write already landed, so this is a clean eviction. |
+| **deployed-but-not-evicted** | Add a row for the memory's tie to the next release's **Phase B-OPS operational-deployment manifest** (VERIFY-CORPUS → EVICT → RE-POINT). The corpus write already landed, so this is a clean eviction. |
 | **dead-ref tie** | Operator decision: re-tie the pointer to the renumbered issue (if the encode is live) or evict (if the encoding already landed). Do not guess the new number — resolve it from the corpus encoding or the milestone. |
 | **untied-encodeable** | File an encode issue (the `improvement.yml` intake) so the rule gets a corpus home; until then the memory legitimately remains the SSOT. |
-| **dangling-wikilink-to-evicted-memory** | RE-POINT the surviving memory's `[[wikilink]]` to the corpus location now owning the evicted knowledge (the durable cross-reference form), or DROP the link (leaving prose intact) when the knowledge was split/absorbed with no single citable home. Operator-authorized memory edit (the §7 RE-POINT step), never a deploy-check action. |
+| **dangling-wikilink-to-evicted-memory** | RE-POINT the surviving memory's `[[wikilink]]` to the corpus location now owning the evicted knowledge (the durable cross-reference form), or DROP the link (leaving prose intact) when the knowledge was split/absorbed with no single citable home. Operator-authorized memory edit (the RE-POINT step of [§ Encode-and-evict lifecycle](../../../core/disciplines/knowledge-architecture.md)), never a deploy-check action. |
 | **ledger-pointer-to-closed-issue** | Re-home the stranded memory: re-tie its ledger pointer to a still-open codification issue, or file a new encode issue. The close-time gate (Phase B-OPS5) blocks a release's close until each unmatched memory is re-homed. |
-| **external-target-referent-stored** | **Decompose, then delete the referent half.** Split the fused fact per the §7.1 Q0 rule: the operator-side practice (the operator's own decision about working with that target, stated *without* the referent) stays and homes normally; the target-side referent is removed outright and read live from the target at every use. Do NOT relocate it to `operator.toml` or to any other surface — that is the Alternative C the decision record rejected, and it leaves the drift class intact. If the practice cannot be stated without the referent, the whole fact is target-side and nothing is retained. Operator-authorized memory or config edit; never a deploy-check action. |
+| **external-target-referent-stored** | **Decompose, then delete the referent half.** Split the fused fact per the Q0 rule of [§ External-target scope](../../../core/disciplines/knowledge-architecture.md): the operator-side practice (the operator's own decision about working with that target, stated *without* the referent) stays and homes normally; the target-side referent is removed outright and read live from the target at every use. Do NOT relocate it to `operator.toml` or to any other surface — that is the Alternative C the decision record rejected, and it leaves the drift class intact. If the practice cannot be stated without the referent, the whole fact is target-side and nothing is retained. Operator-authorized memory or config edit; never a deploy-check action. |
 
 ## 5. Reproduce this session's findings (worked run)
 
@@ -171,13 +171,13 @@ A clean store returns no rows from §3a and only legitimate pointers from §5; a
 
 ## 6. Composition
 
-This procedure is the audit half of the encode-and-evict contract; the **Stage-13 Phase B-OPS** step (gate `G-CL5`) is the executor half — including the RE-POINT reconciliation after EVICT and the Phase B-OPS5 close-time absorption reconciliation. The two compose exactly as the skill↔reference single-source contract composes its procedure with its enforced-rebuild check: the procedure tells you *what is out of contract*; the executor (operator-authorized, archive-first, VERIFY-CORPUS-gated) brings it back into contract.
+This procedure is the audit half of the encode-and-evict contract; the **Stage-13 Phase B-OPS** step (gate `G-CL5`) is the executor half — including the RE-POINT reconciliation after EVICT and the Phase B-OPS5 close-time absorption reconciliation. The two compose exactly as the skill↔reference single-source contract composes its procedure with its enforced-rebuild check: the procedure tells you *what is out of contract*; the executor (operator-authorized, VERIFY-CORPUS-gated, evicting to the Trash) brings it back into contract.
 
 ## References
 
 <!-- repo-integrity: allow-issue-ref -->
 
-- **Contract:** `core/disciplines/knowledge-architecture.md` §7; **decision:** ADR-029, generalized by ADR-045.
+- **Contract:** [`core/disciplines/knowledge-architecture.md` § Memory↔corpus boundary](../../../core/disciplines/knowledge-architecture.md); **decision:** ADR-029, generalized by ADR-045.
 - **Standing backstop:** `core/deploy/deploy.sh` Check 36 (`memory-corpus-tie-drift`, warn-mode-initial); fixture self-test `core/deploy/tests/test_check36_drift_classes.sh`.
 - **Executor:** `release/references/pipeline/stage-13-close.md` §5 Phase B-OPS (gate `G-CL5`) + Phase B-OPS5 (close-time absorption reconciliation).
-- **Provenance:** see the `## Provenance` block in `knowledge-architecture.md` §7 (the lifecycle's canonical home).
+- **Provenance:** see [`knowledge-architecture.md` § Provenance](../../../core/disciplines/knowledge-architecture.md), which records how the encode-and-evict lifecycle gained its two reference-integrity closures.

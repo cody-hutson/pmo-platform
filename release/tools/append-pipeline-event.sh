@@ -81,20 +81,25 @@ WRITE_LOG="$EVALS_RESULTS_PATH/pipeline-event-log-write.log"
 #
 # The event-type enum and per-type literal subtypes are read DATA-DRIVEN from the
 # schema's § 3 table (the source of truth) so the validator cannot drift out of
-# sync with the doc. Only backtick-wrapped tokens are extracted, so parenthetical
-# prose in a cell (which may itself contain "/" — e.g. ALIGNED/DIVERGED/MISALIGNED)
-# never leaks into the enum. Falls back to a static mirror if the schema is
+# sync with the doc. Only backtick-wrapped tokens OUTSIDE parentheses are
+# extracted: a parenthetical span of a cell is prose, so neither its words (which
+# may contain "/" — e.g. ALIGNED/DIVERGED/MISALIGNED) nor a backticked citation
+# inside it can leak into the enum. Falls back to a static mirror if the schema is
 # unreadable (e.g. invoked outside the repo tree). The `iteration` subtypes are a
 # PREFIX pattern (`dt-eng-pass-N` / `qa-dt-pass-N`), not literal enum members, so
 # they remain a hardcoded prefix list — validated by starts-with, below.
 
 # Parse the schema § 3 table → "type|subtype subtype …" lines on stdout.
 # Each data row: | `type` | description | `s1` / `s2` / … |
-# We extract col-1's backtick token as the type and col-3's backtick tokens as
-# the literal subtypes. The `iteration` row's subtypes are ignored here (prefix-
-# validated separately).
+# We extract col-1's backtick token as the type and col-3's backtick tokens
+# outside every parenthetical span as the literal subtypes. The `iteration`
+# row's subtypes are ignored here (prefix-validated separately).
+#
+# Optional $1: the schema file to parse (default $SCHEMA_FILE) — the seam
+# --self-test uses to parse a seeded private copy.
 parse_schema_enum() {
-  [[ -r "$SCHEMA_FILE" ]] || return 1
+  local _schema="${1:-$SCHEMA_FILE}"
+  [[ -r "$_schema" ]] || return 1
   # Field map with FS="|" on a leading-pipe row "| col1 | col2 | col3 |":
   #   $1="" (before leading pipe)  $2=col1 (type)  $3=col2 (description)
   #   $4=col3 (subtypes)  $5="" (after trailing pipe)
@@ -111,6 +116,21 @@ parse_schema_enum() {
     in_s3 && $2 ~ /^ *`[a-z0-9.-]+` *$/ {
       t = $2; sub(/^ *`/, "", t); sub(/` *$/, "", t)   # type from col-1
       rest = $4                                          # subtypes from col-3 ONLY
+      # A parenthetical span of the cell is PROSE, never enum data: remove every
+      # balanced "( ... )" before extracting, so a backticked citation inside one
+      # cannot register as a subtype. Three properties are load-bearing:
+      #  - LOOP TO A FIXED POINT. One pass removes only innermost spans, which
+      #    leaves the outer span of a nested pair, and any token in it, in place.
+      #  - REPLACE WITH A SPACE, never the empty string, or the text on either
+      #    side of a span fuses into a token the cell does not contain.
+      #  - LEAVE AN UNBALANCED PARENTHESIS ALONE. Cutting to end-of-cell would drop
+      #    the live subtypes after it and reject valid events at emit time; left in
+      #    place the worst case is an extra token, which --self-test reports.
+      # check-event-record-integrity.sh carries the same rule in its own
+      # parse_schema_enum: change both or neither. The label-table loop in
+      # parse_schema_labels, below, still reads every backticked token of its
+      # col-3, parentheses included: narrowing it too is a recorded deferral.
+      while (gsub(/\([^()]*\)/, " ", rest) > 0) { }
       subs = ""
       while (match(rest, /`[a-z0-9.-]+`/)) {
         tok = substr(rest, RSTART+1, RLENGTH-2)
@@ -119,7 +139,7 @@ parse_schema_enum() {
       }
       print t "|" subs
     }
-  ' "$SCHEMA_FILE"
+  ' "$_schema"
 }
 
 # Build the enum from the schema (or static fallback). bash 3.2 (the macOS system
@@ -828,6 +848,90 @@ if [[ "$SELF_TEST" == "true" ]]; then
     echo "self-test: § 3 <-> static-fallback lockstep SKIP (schema unreadable) — degraded-availability path; equality not evaluable"
   fi
 
+  # ── § 3 column-3 parenthetical seed (the phantom-subtype guard) ───────────
+  # A backticked token inside a column-3 parenthetical is prose and must NOT
+  # register as a subtype; the same token outside a parenthetical, and the same
+  # token after a parenthesis left UNCLOSED, MUST. Every arm parses a PRIVATE
+  # SEEDED COPY of the schema under $_guard_tmp — the tracked schema is never
+  # edited. The three copies are shaped so that a regression of each of the
+  # three properties parse_schema_enum documents fails a named arm here:
+  #   - the in-parenthetical seed is NESTED, with the token in the OUTER span
+  #     after an inner one, so the un-narrowed loop and a single-pass strip
+  #     both register it (the phantom arm);
+  #   - it also carries a glue probe, a token interrupted by a one-character
+  #     parenthetical, which an empty-string replacement fuses into one token
+  #     (the phantom arm);
+  #   - the unclosed-parenthesis control places the token after an unbalanced
+  #     "(", which a cut from it to the end of the cell drops (that control).
+  #
+  # Keyed on READABILITY, not on a non-empty parse. A readable schema that
+  # parses to nothing means parse_schema_enum itself is broken: the tool has
+  # silently fallen back to the static mirror and the lockstep above reported
+  # SKIP. That state is an error here, never a skip. An UNREADABLE schema is
+  # the legitimate degraded-availability path (the forced-fallback child).
+  if [[ -r "$SCHEMA_FILE" ]]; then
+    [[ -n "$_schema_rows" ]] \
+      || die "self-test: § 3 parse returned nothing against a READABLE schema — parse_schema_enum is broken and the tool silently fell back to the static mirror, so the lockstep above did not run"
+    _seed_tok='bogus-citation.md'
+    _seed_rows="$(printf '%s\n' "$_schema_rows" | /usr/bin/grep -c .)"
+    # _seed_schema <text appended to column 3 of every § 3 data row> <out-file>
+    # Same section bound and the same row test as parse_schema_enum, so the seed
+    # lands in exactly the cell the parser reads.
+    _seed_schema() {
+      /usr/bin/awk -F'|' -v OFS='|' -v add="$1" '
+        /^## 3\./        { in_s3 = 1; print; next }
+        in_s3 && /^## /  { in_s3 = 0 }
+        in_s3 && $2 ~ /^ *`[a-z0-9.-]+` *$/ { $4 = $4 add; n++ }
+        { print }
+        END { if (n == 0) exit 3 }
+      ' "$SCHEMA_FILE" > "$2"
+    }
+    # _seed_parse <seeded copy> — its enum tokens, flattened as the lockstep's are.
+    _seed_parse() { parse_schema_enum "$1" | /usr/bin/sed 's/|/\t/' | enum_tokens; }
+    # _seed_count <tokens> — how many rows registered $_seed_tok, by EXACT suffix:
+    # the token is dotted, so a split or truncated capture does not count.
+    _seed_count() {
+      /usr/bin/awk -v s="/$_seed_tok" 'length($0) > length(s) && substr($0, length($0) - length(s) + 1) == s { n++ } END { print n + 0 }' <<<"$1"
+    }
+    _seed_schema "$(printf '(seeded (nested) citation `%s`) `bogus-glue(x)seed` ' "$_seed_tok")" "$_guard_tmp/schema-seed-in-paren.md" \
+      || die "self-test: column-3 parenthetical seed — seeding matched no § 3 row (in-parenthetical copy)"
+    _seed_schema "$(printf '/ `%s` ' "$_seed_tok")" "$_guard_tmp/schema-seed-outside-paren.md" \
+      || die "self-test: column-3 parenthetical seed — seeding matched no § 3 row (outside-parenthetical copy)"
+    _seed_schema "$(printf '/ (unclosed `%s` ' "$_seed_tok")" "$_guard_tmp/schema-seed-unclosed-paren.md" \
+      || die "self-test: column-3 parenthetical seed — seeding matched no § 3 row (unclosed-parenthesis copy)"
+    _seed_out_tokens="$(_seed_parse "$_guard_tmp/schema-seed-outside-paren.md")" \
+      || die "self-test: column-3 parenthetical seed — the outside-parenthetical copy could not be parsed"
+    _seed_unc_tokens="$(_seed_parse "$_guard_tmp/schema-seed-unclosed-paren.md")" \
+      || die "self-test: column-3 parenthetical seed — the unclosed-parenthesis copy could not be parsed"
+    _seed_in_tokens="$(_seed_parse "$_guard_tmp/schema-seed-in-paren.md")" \
+      || die "self-test: column-3 parenthetical seed — the in-parenthetical copy could not be parsed"
+    # Control arms FIRST (must-register). Each proves the seed token is inside the
+    # parser's token class, that the parser read the seeded copy and not the live
+    # schema, and that the narrowing discriminates on a BALANCED parenthesis and
+    # on nothing else. Without them the zero below would also be produced by a
+    # seed the parser could never have matched.
+    _seed_out_n="$(_seed_count "$_seed_out_tokens")"
+    [[ "$_seed_out_n" -eq "$_seed_rows" ]] \
+      || die "self-test: column-3 parenthetical seed — control arm: '$_seed_tok' OUTSIDE a parenthetical registered on $_seed_out_n of $_seed_rows § 3 rows (expected all); the arm cannot discriminate, so the phantom check below would be vacuous"
+    _seed_unc_n="$(_seed_count "$_seed_unc_tokens")"
+    [[ "$_seed_unc_n" -eq "$_seed_rows" ]] \
+      || die "self-test: column-3 parenthetical seed — unclosed-parenthesis control: '$_seed_tok' after an UNCLOSED parenthesis registered on $_seed_unc_n of $_seed_rows § 3 rows (expected all); an unbalanced parenthesis must be left in place, because cutting from it to the end of the cell drops every live subtype after it"
+    # Subject arm (must-not-register).
+    case "$_seed_in_tokens" in
+      *"/bogus-"*) die "self-test: column-3 parenthetical seed — a backticked token inside a column-3 parenthetical registered as a subtype (phantom): $(/usr/bin/awk '/\/bogus-/' <<<"$_seed_in_tokens" | /usr/bin/tr '\n' ' ')" ;;
+    esac
+    # The lockstep on the seeded copy. $_schema_tokens is the unseeded parse the
+    # block above just proved equal to the static mirror, in both directions.
+    if [[ "$_seed_in_tokens" != "$_schema_tokens" ]]; then
+      echo "ERROR: self-test: column-3 parenthetical seed — the seeded copy's enum differs from the unseeded schema's, so the § 3 <-> static-fallback lockstep would not hold on it" >&2
+      LC_ALL=C /usr/bin/comm -3 <(printf '%s\n' "$_schema_tokens") <(printf '%s\n' "$_seed_in_tokens") >&2
+      exit 1
+    fi
+    echo "self-test: § 3 column-3 parenthetical seed OK ($_seed_rows rows seeded per copy; in-parenthetical: 0 phantom, enum identical to the unseeded schema; outside-parenthetical control: registered on $_seed_out_n of $_seed_rows rows; unclosed-parenthesis control: registered on $_seed_unc_n of $_seed_rows rows)"
+  else
+    echo "self-test: § 3 column-3 parenthetical seed SKIP (schema unreadable) — degraded-availability path; nothing to seed"
+  fi
+
   # ── Forced-fallback path: run the FULL self-test out-of-tree ─────────────
   # Copying the script two levels deep in a throwaway tree makes its REPO_ROOT
   # resolve there, so SCHEMA_FILE cannot be found and the static-fallback branch
@@ -1107,9 +1211,11 @@ if [[ "$SELF_TEST" == "true" ]]; then
   if validate_subtype "test-run" "suite-bogus" 2>/dev/null; then
     die "self-test: test-run subtype rejection check failed (suite-bogus accepted)"
   fi
-  # Guards the § 3 parse against prose leakage: the session-retro row's col-3
-  # parenthetical names the decision-anchored delta path, so a backtick around
-  # that name would silently admit it as a session-retro subtype.
+  # Guards the § 3 enum against prose leakage: the session-retro row's col-3
+  # parenthetical names the decision-anchored delta path. parse_schema_enum no
+  # longer reads parenthetical spans, so a backtick around that name there is
+  # inert; this arm holds the row's remaining exposure — the same name
+  # backticked OUTSIDE a parenthetical, or the parenthesis left unbalanced.
   if validate_subtype "session-retro" "recommendation-choice-delta" 2>/dev/null; then
     die "self-test: session-retro subtype rejection check failed (prose token leaked into the § 3 enum)"
   fi
