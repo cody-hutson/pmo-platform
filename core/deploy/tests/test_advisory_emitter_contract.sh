@@ -916,7 +916,7 @@ fi
 if [[ "$(wf W_TOKEN_SITES)" -lt 1 ]]; then
   fail "WE-E VACUOUS — no call site carries a graduation token, so there is no claim to grade; a check whose record states the committed default carries one (WE-K)"
 elif [[ "$(wf W_CONTRA)" == 0 ]]; then
-  pass "WE-E 0 of $(wf W_TOKEN_SITES) graduation tokens ($(wf W_TOKEN_IDS) check ids) false for their caller — each on an arm its own dial governs; no such dial already enforce; no row declines the flip; no such check names a mode file in its own detail"
+  pass "WE-E 0 of $(wf W_TOKEN_SITES) graduation tokens ($(wf W_TOKEN_IDS) check ids) false for their caller — each on an arm its own dial governs; no such dial already enforce; no such check's row is RATIFIED ADVISORY; no such check names a mode file in its own detail"
 else
   fail "WE-E $(wf W_CONTRA) graduation token(s) false for their caller: $(wf W_CONTRA_DETAIL). A flip commit drops the token; an arm the dial does not govern carries none"
 fi
