@@ -1,5 +1,5 @@
 ---
-title: "ADR-217 — Release identity is stamped at Stage 12, and a stamped deploy states its target set"
+title: "ADR-219 — Release identity is stamped at Stage 12, and a stamped deploy states its target set"
 status: Proposed
 date: 2026-10-16
 release: ci-wiring-and-required-checks
@@ -16,13 +16,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-217 — Release identity is stamped at Stage 12, and a stamped deploy states its target set
+# ADR-219 — Release identity is stamped at Stage 12, and a stamped deploy states its target set
 
 ## Status
 
 **Proposed.** Authored at Stage 6 Engineering for the `ci-wiring-and-required-checks` release. The operator rendered the decision at the release's Stage 5 Collective Review scope-lock: Stage 12 owns the stamped deploy, a stamped deploy states its target set, the target set is filtered by deploy-roster membership, and an empty release key is refused. The `Proposed → Accepted` transition belongs to that release's Stage 13 Close ratification beat (Phase A13); the frontmatter `status:` field is where it is recorded, and where it is read.
 
 **Numbering provenance.** This record was claimed as **217** against an anchor of **216** on `origin/main`, read from the repository's ADR-numbering detector at authorship. A sibling release branch holds the same number branch-only, which does not bind. The number binds at the Stage 12 claim; if the mainline claims it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Branch prose cites this record by its slug token, which resolves at the claim.
+
+**Numbering provenance — `217 → 219`.** Held **ADR-217** branch-local; renumbered to **ADR-219** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 217. In-release citations that read "ADR-217" denote this record.
 
 ## Context
 
