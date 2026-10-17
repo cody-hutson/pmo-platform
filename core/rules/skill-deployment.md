@@ -228,7 +228,7 @@ is therefore Stage 12's step — the release-stamped deploy in
 [`pipeline/stage-12-execute.md`](/release/references/pipeline/stage-12-execute.md)
 Phase B4 — and it yields the same rows whether or not the hook has already made the
 install current. The decision and its rejected alternative are recorded in
-{{ADR:release-identity-is-stamped-at-stage-12}}.
+ADR-219.
 
 **The hook is inert until it is installed, and it only repairs merges it observes.**
 Drift from a merge that predates the install, or on a machine where the install has
