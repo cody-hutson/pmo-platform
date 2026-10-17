@@ -75,7 +75,7 @@ if [ -z "$(printf '%s' "$MODE_FILE_NAMES" | tr -d '[:space:]')" ]; then
 fi
 
 # build_layout <dir> <mode> <awk:0|1|empty|trunc> <primitive:0|1|empty> <deplib: ok|stale|trunc|noop>
-#              [patterns: 1|0|empty|trunc]   (default 1 = present and valid)
+#              [patterns: 1|0|empty|trunc|badsyntax|badere|nopred]   (default 1 = present and valid)
 #              [allowlist: 1|0]              (default 1 = present)
 # The 6th argument is the co-shipped detector-constant lib (lib/fragile-ref-patterns.sh).
 # It defaults to PRESENT so every pre-existing case keeps testing the primitive it names —
@@ -103,6 +103,12 @@ build_layout() {
     empty) : > "$d/lib/fragile-ref-patterns.sh" ;;                       # present-but-empty (constants unset)
     trunc) head -c 200 "$SRC_PATTERNS" > "$d/lib/fragile-ref-patterns.sh" ;;  # truncated mid-comment
     badsyntax) printf "LINK_RE='unterminated\n" > "$d/lib/fragile-ref-patterns.sh" ;;  # parse error
+    badere) { /bin/cat "$SRC_PATTERNS"; printf "LINK_RE='('\n"; } > "$d/lib/fragile-ref-patterns.sh" ;;  # parses; LINK_RE is not a valid ERE
+    nopred) # the constants WITHOUT is_durable: a stale copy deployed beside a newer hook
+            /usr/bin/awk 'BEGIN{skip=0}
+              /^is_durable\(\) \{/{skip=1}
+              skip==0{print}
+              skip==1 && /^\}/{skip=0}' "$SRC_PATTERNS" > "$d/lib/fragile-ref-patterns.sh" ;;
     # 0 = absent
   esac
   case "$deplib" in
@@ -138,14 +144,20 @@ NOOP
   done
 }
 
-# assert <desc> <expected_exit> <hook_basename> <layout_dir> <json>
+# assert <desc> <expected_exit> <hook_basename> <layout_dir> <json> [stderr_ere]
+# The optional 6th argument is an ERE the hook's stderr must also match. It exists for the
+# warn-mode arms, where the exit code alone cannot tell two cases apart: a gate that stood
+# the hook down and a hook that ran and found nothing both exit 0, and only the notice
+# separates them. With five arguments the verdict and its output are what they always were.
 assert() {
-  local desc="$1" exp="$2" hook="$3" d="$4" json="$5" rc
+  local desc="$1" exp="$2" hook="$3" d="$4" json="$5" must="${6:-}" rc ok=1
   printf '%s' "$json" | /bin/bash "$d/$hook" >/dev/null 2>"$d/_err"; rc=$?
-  if [ "$rc" = "$exp" ]; then
+  [ "$rc" = "$exp" ] || ok=0
+  if [ -n "$must" ] && ! /usr/bin/grep -qE -- "$must" "$d/_err"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
     printf 'PASS: %s [exit %s]\n' "$desc" "$rc"; PASS=$((PASS + 1))
   else
-    printf 'FAIL: %s [exit %s, want %s]\n  stderr: %s\n' "$desc" "$rc" "$exp" "$(head -1 "$d/_err")"; FAIL=$((FAIL + 1))
+    printf 'FAIL: %s [exit %s, want %s%s]\n  stderr: %s\n' "$desc" "$rc" "$exp" "${must:+ with stderr /$must/}" "$(head -1 "$d/_err")"; FAIL=$((FAIL + 1))
   fi
 }
 
@@ -205,6 +217,20 @@ build_layout "$D" enforce 1 1 ok empty;     assert "enforce+constants-EMPTY(pres
 build_layout "$D" enforce 1 1 ok trunc;     assert "enforce+constants-TRUNCATED(present) -> FAIL-CLOSED" 2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
 build_layout "$D" enforce 1 1 ok badsyntax; assert "enforce+constants-PARSE-ERROR -> FAIL-CLOSED at bash -n" 2 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
 build_layout "$D" warn    1 1 ok empty;     assert "warn+constants-EMPTY -> STAND DOWN"                  0 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")"
+# PRESENT, PARSEABLE, NON-EMPTY — and still unusable. A constant that is valid bash but not a
+# valid ERE passes `bash -n` and the non-empty test, and every detector's grep would exit 2 on
+# it. The gate's ERE compile canary catches it once, before any detector, so it takes the same
+# mode-coupled path as an absent lib: fail closed in enforce, stand down with the notice in
+# warn — never a HOOK-ERROR block in warn, never read as "no findings". The warn arm asserts
+# the notice, because a stood-down hook and a hook that ran and found nothing both exit 0.
+build_layout "$D" enforce 1 1 ok badere; assert "enforce+invalid-ERE detector constant+CLEAN -> FAIL-CLOSED (detector cannot evaluate)" 2 block-fragile-refs.sh "$D" "$(frag_json "$CLEAN")" 'PRIMITIVE-MISSING'
+build_layout "$D" warn    1 1 ok badere; assert "warn+invalid-ERE detector constant -> STAND DOWN with the PRIMITIVE-MISSING notice" 0 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")" 'PRIMITIVE-MISSING'
+# The scope predicate is_durable ships in the same file. A copy carrying the constants but not
+# the predicate (a stale lib deployed beside a newer hook) must fail closed in enforce and
+# stand down in warn: at the scope gate an undefined predicate would otherwise read every path
+# as "not durable" and pass it unexamined.
+build_layout "$D" enforce 1 1 ok nopred; assert "enforce+constants-present+predicate-ABSENT+CLEAN -> FAIL-CLOSED (stale lib)" 2 block-fragile-refs.sh "$D" "$(frag_json "$CLEAN")" 'PRIMITIVE-MISSING'
+build_layout "$D" warn    1 1 ok nopred; assert "warn+constants-present+predicate-ABSENT -> STAND DOWN with the PRIMITIVE-MISSING notice" 0 block-fragile-refs.sh "$D" "$(frag_json "$FRAGILE")" 'PRIMITIVE-MISSING'
 # CONTROL (specificity): the same layout with a VALID constants lib must reach the real
 # detectors — BLOCK on a fragile payload, ALLOW on a clean one. Without this pair the cases
 # above would pass for any hook that always exits 2.

@@ -1,10 +1,11 @@
 #!/bin/bash
-# fragile-ref-patterns.sh — the reference-durability detector constants
+# fragile-ref-patterns.sh — the reference-durability detector constants and scope predicate
 #
 # This file is the CANONICAL declaration of the seven constants the reference-durability
-# detectors evaluate. Every surface named under `Sourced by:` reads it (sourced, never
-# executed) at run time, so those surfaces cannot differ: there is one set of bytes, read
-# by all of them.
+# detectors evaluate, and of is_durable, the durable-corpus scope predicate that decides
+# which paths they evaluate. Every surface named under `Sourced by:` reads it (sourced,
+# never executed) at run time, so those surfaces cannot differ: there is one set of bytes,
+# read by all of them.
 #
 # THAT CLAIM IS ABOUT AN ENUMERATED SET, NOT ABOUT THE WHOLE REPOSITORY. A surface that
 # declares its own copy sits outside the sourcing set by construction, so "canonical" is
@@ -15,15 +16,17 @@
 # these bytes; a companion advisory arm reports the same pattern shape carried under a
 # different variable name, which is the class a name-anchored probe structurally cannot see.
 # The other six constants are covered only by that runner's three-file redeclaration scan,
-# so for those the lists below remain a hand-maintained claim. A header asserting sole
-# declaration while an unlisted divergent copy existed is exactly the state the identity
-# scan now prevents, and it is why the exclusion set below is written down rather than left
-# implied.
+# so for those the lists below remain a hand-maintained claim. is_durable has no
+# redeclaration scan at all: that no surface carries its own copy is a claim of the same
+# kind. A header asserting sole declaration while an unlisted divergent copy existed is
+# exactly the state the identity scan now prevents, and it is why the exclusion set below is
+# written down rather than left implied.
 #
 # Sourced by:
-#   - core/hooks/block-fragile-refs.sh          (PreToolUse hook)
+#   - core/hooks/block-fragile-refs.sh          (PreToolUse hook; its scope gate calls is_durable)
 #   - core/hooks/run-fragile-ref-fixtures.sh    (fixture self-test; deploy.sh Check 31)
-#   - .github/workflows/reference-durability.yml (PR-time CI)
+#   - .github/workflows/reference-durability.yml (PR-time CI; its changed-file selection calls
+#     is_durable)
 #   - core/deploy/tools/check-issue-ref-validity.sh (Issue-reference validity gate, a
 #     REQUIRED status check; sources REFBLOCK_RE and fails closed when it is unset)
 #
@@ -159,3 +162,33 @@ HEXCOLOR_RE='(:#[0-9A-Fa-f]{3,8}|#[0-9A-Fa-f]*[A-Fa-f][0-9A-Fa-f]*|#[[][0-9A-Fa-
 # Minimum non-reference word count required on an in-block issue-reference line for it to
 # count as self-describing (operationalizes the durability-ladder rung-5 "summarize inline").
 MIN_SELFDESCRIBE_WORDS=3
+
+# Durable-corpus scope predicate: returns 0 when a path is in the durable corpus (the files the
+# detectors above evaluate), 1 otherwise. Its two callers see different path forms. The hook's
+# scope gate receives an absolute path from a Write or Edit (a worktree or the primary checkout)
+# or a repository-relative one; the CI workflow's changed-file selection receives
+# repository-relative paths from its diff. Every arm therefore names both forms, and the `*/`
+# form is the one an absolute path reaches.
+#
+# The two callers once carried a hand-copied case list each, kept equal only by a comment saying
+# they mirrored each other, and both copies still listed three roots that had never existed. A
+# root is listed here only once it exists: an arm for a directory nothing has created reads as
+# coverage while covering nothing, and nothing reads this list to report such an arm. The CI
+# workflow declares the same roots literally in its `#   population:` lines, where the
+# gate-efficacy conformance suite does resolve each one against the tracked tree. Nothing
+# compares those lines with this list, so a root added here is added there in the same change.
+is_durable() {
+  case "$1" in
+    */core/rules/*.md|core/rules/*.md) return 0 ;;
+    */core/standards/*.md|core/standards/*.md) return 0 ;;
+    */core/specs/*.md|core/specs/*.md) return 0 ;;
+    */core/disciplines/*.md|core/disciplines/*.md) return 0 ;;
+    */core/schemas/*.md|core/schemas/*.md) return 0 ;;
+    */release/references/*.md|release/references/*.md) return 0 ;;
+    */release/governance/*.md|release/governance/*.md) return 0 ;;
+    */skills/*/SKILL.md|skills/*/SKILL.md) return 0 ;;
+    */skills/*/references/*.md|skills/*/references/*.md) return 0 ;;
+    */release/releases/plans/*_RELEASE_PLAN.md|release/releases/plans/*_RELEASE_PLAN.md) return 0 ;;
+    *) return 1 ;;
+  esac
+}
