@@ -126,6 +126,7 @@ ADR-207 (`census-asserts-exit-consumer-and-executor-populations`) → **ADR-211*
 ADR-208 (`checkpoint-b-host-api-axis-reads-its-own-probe-in-band`) → **ADR-212** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 208; the record's Status section carries the provenance note.
 ADR-211 (`census-asserts-exit-consumer-and-executor-populations`) → **ADR-217** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 211; the record's Status section carries the provenance note.
 ADR-212 (`checkpoint-b-host-api-axis-reads-its-own-probe-in-band`) → **ADR-218** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 212; the record's Status section carries the provenance note.
+ADR-217 (`release-identity-is-stamped-at-stage-12`) → **ADR-219** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 217; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
@@ -556,7 +557,8 @@ red CI:
 **Every PR-time durable-corpus gate and its override marker.** The two gate families
 (`repo-integrity` and `reference-durability`) carry the following per-file override
 markers — each an HTML comment declared once near the top of the file. Authoring
-discipline item 2 above generalizes to any of them: when an ADR (or skill file)
+discipline item 2's rationale clause binds the issue-ref marker alone; what
+generalizes to any of them is the declaration itself: when an ADR (or skill file)
 legitimately carries a flagged construct, declare the matching marker up front rather
 than letting CI go red. The one construct with **no** override marker is the bare-`#N`
 positional rule (last row) — its only remedy is to rewrite the reference inline.

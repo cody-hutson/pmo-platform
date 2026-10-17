@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # deploy.sh — PMO Platform deployment and validation tool
-# Usage: ./deploy.sh [--init | --deploy [skill...] [--release <milestone-slug>] | --check [--warn] | --report]
+# Usage: ./deploy.sh [--init | --deploy [skill...] | --deploy --release <milestone-slug> (<skill>... | --no-targets) | --check [--warn] | --report]
 # Exit codes: 0 = success/clean, 1 = issues found or failure
 
 # ─── Constants ───────────────────────────────────────────────────────────────
@@ -718,6 +718,15 @@ log() {
 # permanently, because the log is append-only Vital-retention. Silence is the correct
 # default — and because a silent default is indistinguishable from a forgotten flag,
 # _ds_warn_unstamped below makes the omission OBSERVABLE rather than merely documented.
+#
+# A RELEASE-STAMPED DEPLOY STATES ITS TARGET SET. `--release <slug>` is accepted only
+# with named targets or with `--no-targets`; the bare form is refused in cmd_deploy
+# BEFORE the rules-mirror carrier runs, so a refused invocation writes no row at all.
+# An empty key is refused there too, in both spellings: it would otherwise run the
+# deploy unstamped. The detector's window is not the release's own change set: it reads
+# empty once HEAD has moved past the release tag, and it names a neighbouring merge's
+# skill when one sits inside it. A stamped row is permanent, so the target set is stated
+# by the caller and never inferred here. Stage 12 Phase B4 is the caller.
 
 # The release join key for this invocation — the milestone SLUG, never a version.
 # Empty means "not a Stage-12 deploy"; every emit is gated on it being non-empty.
@@ -6560,16 +6569,27 @@ cmd_deploy() {
   # so the flag is consumed HERE — no main() change, and the --all branch (which
   # calls cmd_deploy with no args) is untouched and correctly emits nothing.
   DEPLOY_RELEASE_SLUG=""
+  local _deploy_no_targets=false
   local -a _deploy_args=()
+  # An EMPTY key is refused at parse time, in both spellings — above the carrier, so it
+  # writes nothing. Left to the non-empty test further down, it would read as "no
+  # --release" and the deploy would run unstamped: exit 0, no row, the defect itself.
+  local _deploy_empty_key="--release was given an empty value: a release-stamped deploy needs its join key, the milestone slug. An empty key would run the deploy unstamped and write no row, which reads downstream exactly like a release that deployed nothing. Nothing was deployed and no row was written."
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --release)
         [[ $# -ge 2 ]] || die "--release requires a milestone-slug argument (the release join key; never a version)"
+        [[ -n "$2" ]] || die "$_deploy_empty_key"
         DEPLOY_RELEASE_SLUG="$2"
         shift 2
         ;;
       --release=*)
         DEPLOY_RELEASE_SLUG="${1#--release=}"
+        [[ -n "$DEPLOY_RELEASE_SLUG" ]] || die "$_deploy_empty_key"
+        shift
+        ;;
+      --no-targets)
+        _deploy_no_targets=true
         shift
         ;;
       *)
@@ -6579,6 +6599,23 @@ cmd_deploy() {
     esac
   done
   set -- ${_deploy_args[@]+"${_deploy_args[@]}"}
+
+  # ─── A release-stamped deploy states its target set ────────────────────────
+  # MUST run BEFORE the rules-mirror carrier below. The carrier writes its row on
+  # every stamped invocation it reaches, so a refusal placed after it would leave
+  # exactly the row set a declared zero-target release leaves — one mirror row and
+  # nothing else — and "the names were forgotten" would again be indistinguishable
+  # from "there were none". Refused here, a bare --release writes nothing.
+  if [[ -n "$DEPLOY_RELEASE_SLUG" ]]; then
+    if [[ $# -eq 0 && "$_deploy_no_targets" != "true" ]]; then
+      die "--release requires an explicit target set: name the release's skills (./deploy.sh --deploy --release <milestone-slug> <skill> [<skill> ...]) or declare that it has none (./deploy.sh --deploy --release <milestone-slug> --no-targets). A release-stamped deploy never auto-detects: its rows are append-only, and the detector's window is not the release. Nothing was deployed and no row was written."
+    fi
+    if [[ $# -gt 0 && "$_deploy_no_targets" == "true" ]]; then
+      die "--no-targets contradicts the named target(s): $*. Name the targets or declare none. Nothing was deployed and no row was written."
+    fi
+  elif [[ "$_deploy_no_targets" == "true" ]]; then
+    die "--no-targets is meaningful only with --release <milestone-slug>: it declares that a release has no skill, package or harness target. Nothing was deployed."
+  fi
 
   # ─── The rules mirror carrier — RUNS BEFORE THE E-02 EARLY EXIT ────────────
   #
@@ -6677,6 +6714,14 @@ cmd_deploy() {
     _dep_manual=true
     _dep_claimed=(${manual_skills[@]+"${manual_skills[@]}"})
   else
+    if [[ "$_deploy_no_targets" == "true" ]]; then
+      # Declared zero-target release. Select nothing: no tag window, no ground-truth
+      # union, no full-roster bootstrap. The carrier above already addressed the one
+      # target this invocation has.
+      CHANGED_SKILLS=()
+      CHANGED_PACKAGES=()
+      CHANGED_HARNESS=()
+      DELETED_SKILLS=()
     # A fresh clone whose install deployed nothing leaves the user-local skills
     # mirror empty. install.sh Phase 2 reaches here (orchestrate.sh runs
     # `deploy.sh --deploy` with NO args), and the tag-diff window is empty on a
@@ -6685,7 +6730,7 @@ cmd_deploy() {
     # deploy the FULL roster built from the per-module arrays + all packages
     # instead, so the documented `git clone && ./install.sh` path works
     # unattended. A populated mirror falls through to incremental tag-diff.
-    if should_full_roster; then
+    elif should_full_roster; then
       if [[ "${FORCE_ALL:-false}" == "true" ]]; then
         log "Full-roster deploy requested (--all) — deploying every skill + package."
       else
@@ -6784,7 +6829,13 @@ cmd_deploy() {
     # rewording the head of the line would have silently converted a passing
     # assertion into a skip — a coverage loss that reads as green. Add after the
     # existing sentence; do not rewrite it.
-    if [[ ${_gt_roster_n:-0} -gt 0 ]]; then
+    #
+    # A declared zero-target release takes a sentence of its own, placed FIRST: it says
+    # why nothing was selected, and the two consumer-matched sentences below are not
+    # reworded.
+    if [[ "$_deploy_no_targets" == "true" ]]; then
+      log "Release-stamped deploy with --no-targets: no skill, package or harness target was named, so none was selected. Nothing to deploy beyond the rules mirror."
+    elif [[ ${_gt_roster_n:-0} -gt 0 ]]; then
       log "No skill, package, or harness changes detected. Nothing to deploy. Verified current: ${_gt_roster_n} of ${_gt_roster_n} roster skills match source on ${_gt_targets} target(s)."
     else
       log "No skill, package, or harness changes detected. Nothing to deploy."
@@ -6799,7 +6850,7 @@ cmd_deploy() {
     # reads downstream as a release that legitimately deployed nothing.
     if [[ "$(_ds_warn_unstamped "${RULES_MIRROR_WROTE:-0}")" == "WARN" ]]; then
       log "WARN: deployed ${RULES_MIRROR_WROTE:-0} rules-mirror target(s) with no --release <slug> — ZERO deployment-status rows were emitted."
-      log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug>"
+      log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug> <skill> [<skill> ...]   (a release with no target: --no-targets)"
     fi
     log "  Note: composition surfaces (hook-tier allowlists, hub-state templates,"
     log "        platform-config seed) are OUT OF SCOPE for --deploy and were NOT"
@@ -7128,7 +7179,7 @@ cmd_deploy() {
     log "      Cycle-Time and the DORA deployment-frequency read N/A for this deploy, which is"
     log "      byte-identical to a release that legitimately deployed nothing. The two states are"
     log "      indistinguishable downstream, so this line is the only place the difference is visible."
-    log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug>"
+    log "      Stage-12 invocation form: ./deploy.sh --deploy --release <milestone-slug> <skill> [<skill> ...]   (a release with no target: --no-targets)"
     log "      A fresh install or an ad-hoc redeploy carries no release identity — for those this"
     log "      warning is expected and correct, and no row should be written."
   fi
@@ -7136,6 +7187,11 @@ cmd_deploy() {
   # ─── #4215: deliberate non-emission points (the complete inventory) ────────
   # Recorded so the absences read as decisions. NOTHING is emitted when:
   #   validate_workspace fails           — aborts before any target is known
+  #   the target-set contract refuses    — --release with no named target and no
+  #                                        --no-targets, --no-targets beside a name,
+  #                                        --no-targets without --release, or an empty
+  #                                        release key. Refused ABOVE the rules-mirror
+  #                                        carrier: not even the mirror row is written.
   # and NO skill, package or harness row is emitted when:
   #   die "Unknown artifact"             — argument validation; no deploy attempted
   #   die "Ambiguous artifact name"      — same
@@ -8545,9 +8601,70 @@ cmd_check() {
   # only the WARN-vs-FAIL escalation of an already-made finding. The `off` kill-switch
   # on the outer per-check block guards (`[[ "$DEPLOY_CHECK_MODE" != "off" ]]`) is a
   # DETECTION gate and is deliberately left reading the shared mode.
+  #
+  # THIS EMITTER ASSERTS ONLY PROPERTIES OF ITS OWN EMIT (ADR-193). "warn-mode" is
+  # one: it is the mode this call resolved. HOW A CHECK GRADUATES is not. That is a
+  # per-caller fact, so this body states no graduation form of its own and names
+  # no mode file (ADR-193 D1: a per-caller fact is deleted from shared code, not
+  # defaulted).
+  #
+  # CALLING CONTRACT — arity 2 or 3:
+  #
+  #   flag_warn_or_issue <check_id> <detail> [<graduation>]
+  #
+  #   <graduation> is a CLOSED one-member set, with the check_id as its subject
+  #   (ADR-193 D2):
+  #     committed-default  this emit sits on an arm the check's OWN dial governs
+  #                        (a local resolve_check_mode "<check_id>" read, tested
+  #                        inline against "enforce"), and the check graduates by
+  #                        the committed default resolve_check_mode "<check_id>"
+  #                        "enforce", never by a mode file. Rendered as
+  #                        "(warn-mode; graduates by the committed default
+  #                        resolve_check_mode "<check_id>" "enforce")", the id
+  #                        printed literally.
+  #   A caller with no such claim passes two arguments, and its line ends
+  #   "(warn-mode)". There is no "none" member: a sentinel that is the answer at
+  #   nearly every call site is a field that should not exist.
+  #
+  # REQUIRED WHERE OWED, GRADED OUTSIDE THIS BODY (ADR-193 D3). An arm the check's
+  # own dial governs owes the token, unless the check's flip-decision row in
+  # core/standards/gate-efficacy-standard.md records the flip as declined
+  # (RATIFIED ADVISORY, or a SPLIT DISPOSITION whose column 3 names a permanent
+  # advisory residual) or the harness's not-owed ledger names the check with a
+  # reason. core/deploy/tests/test_advisory_emitter_contract.sh fails the build on
+  # a token outside the set, on an owed token that is missing, and on a token that
+  # is false for its caller: on an arm the dial does not govern, on a check whose
+  # row is RATIFIED ADVISORY, beside a mode-file instruction in the same check's
+  # own detail, or on a check whose dial already carries the committed "enforce".
+  #
+  # THE FLIP COMMIT DROPS THE TOKEN. Graduating a check is one token in its dial
+  # call. The same commit removes "committed-default" from that check's calls:
+  # after the flip this warn line is reachable only through an operator's runtime
+  # override, and an instruction to graduate a check that already has is stale.
+  # The harness fails the build on the stale token, so the flip cannot land
+  # without the second edit.
+  #
+  # AN OMITTED OR UNKNOWN TOKEN IS SILENT AT RUNTIME, BY DESIGN. ${3:-} and not a
+  # bare $3: nounset stays armed inside cmd_check, so a bare $3 on a two-argument
+  # caller would abort the WHOLE check run rather than report one bad call. This
+  # body never guesses and never raises; the static gate is the only place a
+  # missing or misspelled token is seen.
+  #
+  # THE CLAUSE IS CONSOLE-ONLY. The jsonl row is built from <detail> alone, so the
+  # graduation claim never enters the drain the flip decision is read from
+  # (ADR-134 D4), and a FAIL line never carries it.
+  #
+  # NOT CHANGED: an arm routed here unconditionally (a missing primitive, an input
+  # failure) follows the SHARED mode even after its check graduates, because this
+  # helper re-resolves with one argument. Such an arm carries no token.
   flag_warn_or_issue() {
     local check_id="$1"
     local detail="$2"
+    local _graduation="${3:-}"
+    local _clause=""
+    if [[ "$_graduation" == "committed-default" ]]; then
+      _clause="; graduates by the committed default resolve_check_mode \"$check_id\" \"enforce\""
+    fi
     local _check_mode
     _check_mode="$(resolve_check_mode "$check_id")"
     case "$_check_mode" in
@@ -8556,7 +8673,7 @@ cmd_check() {
         ISSUES=$((ISSUES + 1))
         ;;
       warn)
-        log "  WARN:  $check_id — $detail (warn-mode; flip .claude/hooks/deploy-check.mode to 'enforce' after shakedown)"
+        log "  WARN:  $check_id — $detail (warn-mode$_clause)"
         local _ts
         _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         json_escape_detail "$detail"
@@ -14735,9 +14852,12 @@ sys.stdout.write("".join(out) + "|")
   # exit-1 "collision" finding is a non-blocking WARN during calibration. The
   # current suite has zero duplicate maintainers -> 0 collisions by construction,
   # so this check is silent-PASS on first run; warn-mode keeps a future finding
-  # non-blocking until the >=3-day review flips ownership-collision.mode to
-  # enforce (enforce = the finding increments ISSUES; the count of what is checked
-  # is unchanged). Primitive: core/deploy/tools/check-ownership-collision.py.
+  # non-blocking until the check graduates (enforce = the finding increments
+  # ISSUES; the count of what is checked is unchanged). The graduation is the
+  # one-token COMMITTED default resolve_check_mode "ownership-collision" "enforce",
+  # never an `ownership-collision.mode` file, which leaves no repo record; the flip
+  # decision is recorded in core/standards/gate-efficacy-standard.md § Flip-decision
+  # status. Primitive: core/deploy/tools/check-ownership-collision.py.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 54: Ownership-collision reconciliation (ADR-044 I1+I3+I4; warn-mode initial; enforce-flip deferred)"
     local c54_script="core/deploy/tools/check-ownership-collision.py"
@@ -14762,7 +14882,7 @@ sys.stdout.write("".join(out) + "|")
           log "  FAIL:  ownership-collision — $c54_count second-maintainer/contradiction collision(s): ${c54_detail:-(see detail)}"
           ISSUES=$((ISSUES + 1))
         else
-          flag_warn_or_issue "ownership-collision" "$c54_count ownership collision(s) (warn-mode; flip ownership-collision.mode to enforce after shakedown): ${c54_detail:-(see detail)}"
+          flag_warn_or_issue "ownership-collision" "$c54_count ownership collision(s): ${c54_detail:-(see detail)}" "committed-default"
         fi
       else
         flag_warn_or_issue "ownership-collision" "check errored (exit $c54_exit): $(head -1 <<<"$c54_out")"
@@ -15343,9 +15463,12 @@ sys.stdout.write("".join(out) + "|")
   # `log "Check 57:"` emitter, so it satisfies its own contract. Offline-capable
   # (reads deploy.sh itself; no gh). Fail-loud: a zero-check parse exits 3 rather than
   # reading green (the conventions moved). Warn-mode initial per bypass-mode-readiness.md
-  # §Shakedown (the 14/18/42/.../55/56 precedent); flip via an `extraction-contract.mode`
-  # file after the >=3-day warn-log review. The introducing release is itself exempt
-  # (reflexive-pipeline loop). Read-only; reversibility CHEAP (additive; git revert).
+  # §Shakedown (the 14/18/42/.../55/56 precedent). The graduation is the one-token
+  # COMMITTED default resolve_check_mode "extraction-contract" "enforce", never an
+  # `extraction-contract.mode` file, which leaves no repo record; the flip decision is
+  # recorded in core/standards/gate-efficacy-standard.md § Flip-decision status. The
+  # introducing release is itself exempt (reflexive-pipeline loop). Read-only;
+  # reversibility CHEAP (additive; git revert).
   # Primitive: core/deploy/tools/check-extraction-contract.py (carries --self-test).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 57: Check-roster extraction-contract (emitters vs def-blocks minus retired; warn-mode initial; enforce-flip deferred)"
@@ -15373,9 +15496,9 @@ sys.stdout.write("".join(out) + "|")
           [[ -n "$c57_md" ]] && { log "  FAIL:  extraction-contract — check(s) that log but carry NO def-block: $c57_md"; ISSUES=$((ISSUES + 1)); }
           [[ -n "$c57_re" ]] && { log "  FAIL:  extraction-contract — RETIRED number(s) still emitting: $c57_re"; ISSUES=$((ISSUES + 1)); }
         else
-          [[ -n "$c57_me" ]] && flag_warn_or_issue "extraction-contract" "def-block without emitter (invisible to the documented derive command): Check(s) $c57_me (warn-mode; add a 'log \"Check N:\"' line or flip extraction-contract.mode)"
-          [[ -n "$c57_md" ]] && flag_warn_or_issue "extraction-contract" "emitter without def-block: Check(s) $c57_md (warn-mode; add a '# Check N' block)"
-          [[ -n "$c57_re" ]] && flag_warn_or_issue "extraction-contract" "RETIRED number still emitting: Check(s) $c57_re (warn-mode; retire the emitter or un-reserve the number)"
+          [[ -n "$c57_me" ]] && flag_warn_or_issue "extraction-contract" "def-block without emitter (invisible to the documented derive command): Check(s) $c57_me — add a 'log \"Check N:\"' line" "committed-default"
+          [[ -n "$c57_md" ]] && flag_warn_or_issue "extraction-contract" "emitter without def-block: Check(s) $c57_md — add a '# Check N' block" "committed-default"
+          [[ -n "$c57_re" ]] && flag_warn_or_issue "extraction-contract" "RETIRED number still emitting: Check(s) $c57_re — retire the emitter or un-reserve the number" "committed-default"
         fi
       else
         flag_warn_or_issue "extraction-contract" "check errored (exit $c57_exit): $(head -1 <<<"$c57_out")"
@@ -15455,8 +15578,11 @@ sys.stdout.write("".join(out) + "|")
   # gh, no origin/main needed to SKIP); on a release branch it diffs origin/main.
   # Fail-loud: a git/context failure exits 3 rather than reading green. Warn-mode
   # initial per bypass-mode-readiness.md §Shakedown (defaults to the shared
-  # DEPLOY_CHECK_MODE=warn; flip via an identity-conformance.mode file after the
-  # >=3-day warn-log review). The introducing release is itself exempt (reflexive-
+  # DEPLOY_CHECK_MODE=warn). The graduation is the one-token COMMITTED default
+  # resolve_check_mode "identity-conformance" "enforce", never an
+  # `identity-conformance.mode` file, which leaves no repo record; the flip decision
+  # is recorded in core/standards/gate-efficacy-standard.md § Flip-decision status.
+  # The introducing release is itself exempt (reflexive-
   # pipeline loop) — and its own identity is slug-primary, so it PASSES regardless.
   # Concrete Check number (NOT a {{CHECK_NUM}} token): Check 57's roster contract
   # requires a concrete integer in the def-block + emitter (AC5 is carved to #3713).
@@ -15479,7 +15605,7 @@ sys.stdout.write("".join(out) + "|")
         if [[ "$c59_mode" == "enforce" ]]; then
           log "  FAIL:  identity-conformance — $(head -1 <<<"$c59_out")"; ISSUES=$((ISSUES + 1))
         else
-          flag_warn_or_issue "identity-conformance" "$(head -1 <<<"$c59_out") (warn-mode; flip identity-conformance.mode to 'enforce' after the >=3-day warn-log review)"
+          flag_warn_or_issue "identity-conformance" "$(head -1 <<<"$c59_out")" "committed-default"
         fi
       else
         flag_warn_or_issue "identity-conformance" "check errored (exit $c59_exit): $(head -1 <<<"$c59_out")"
@@ -16133,7 +16259,7 @@ sys.stdout.write("".join(out) + "|")
               log "  FAIL:  citation-anchor — ${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number"
               ISSUES=$((ISSUES + 1))
             else
-              flag_warn_or_issue "citation-anchor" "${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number: a line anchor still resolves after the target is edited while pointing at the wrong content, so the drift is undetectable"
+              flag_warn_or_issue "citation-anchor" "${_c66_hit#FAIL: } — cite the composed section by name (a \`§ <verbatim heading>\` segment over a plain link), not by line number: a line anchor still resolves after the target is edited while pointing at the wrong content, so the drift is undetectable" "committed-default"
             fi
           done < <(echo "$c66_out" | grep '^FAIL: ' || true)
         else
@@ -16240,7 +16366,7 @@ sys.stdout.write("".join(out) + "|")
               log "  FAIL:  trigger-collision — ${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it"
               ISSUES=$((ISSUES + 1))
             else
-              flag_warn_or_issue "trigger-collision" "${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it: two skills competing for one request means the operator gets whichever the harness happens to pick"
+              flag_warn_or_issue "trigger-collision" "${_c67_hit# } — narrow the triggers (function-skills take mechanic phrasing, role-Specialists take domain-anchored ownership phrasing per canonical-skill-structure.md § 3); do NOT widen the exemption to hide it: two skills competing for one request means the operator gets whichever the harness happens to pick" "committed-default"
             fi
           done < <(echo "$c67_out" | grep -E '^\s+\[(ESCALATE|WATCH)\]' || true)
         elif [[ $c67_rc -ne 0 ]]; then
@@ -17085,7 +17211,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
             log "  FAIL:  pack-conformance — pack(s) violate the meta-schema: $c75_findings"
             ISSUES=$((ISSUES + 1))
           else
-            flag_warn_or_issue "pack-conformance" "meta-schema violation(s): $c75_findings (warn-mode; graduate by recording resolve_check_mode \"pack-conformance\" \"enforce\" after the shakedown)"
+            flag_warn_or_issue "pack-conformance" "meta-schema violation(s): $c75_findings" "committed-default"
           fi
         else
           flag_warn_or_issue "pack-conformance" "check errored (exit $c75_exit): $(head -1 <<<"$c75_out")"
@@ -17508,11 +17634,129 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
             log "  FAIL:  pack-content-completeness — pack(s) carry incomplete content: $c80_findings"
             ISSUES=$((ISSUES + 1))
           else
-            flag_warn_or_issue "pack-content-completeness" "content-completeness finding(s): $c80_findings (warn-mode; graduate by recording resolve_check_mode \"pack-content-completeness\" \"enforce\" after the shakedown)"
+            flag_warn_or_issue "pack-content-completeness" "content-completeness finding(s): $c80_findings" "committed-default"
           fi
         else
           flag_warn_or_issue "pack-content-completeness" "check errored (exit $c80_exit): $(head -1 <<<"$c80_out")"
         fi
+      fi
+    fi
+  fi
+
+  # Check 81 — Tool exec-mode conformance (ENFORCING)
+  #
+  # WHAT IT ASSERTS. Every tracked file under release/tools/ and core/deploy/tools/
+  # whose content begins with an interpreter line is tracked executable (git mode
+  # 100755), unless core/deploy/allowlists/skip-tool-exec-mode-check.txt names it
+  # with a class and a reason; and every row of that list still names a tracked,
+  # interpreter-line-bearing, non-executable file under those trees.
+  #
+  # WHY IT EXISTS. A tracked file's mode is whatever the authoring path left: a file
+  # created by an editor or a write tool lands 100644, and nothing compared that to
+  # the invocability the file's own first line declares. A tool invoked by its own
+  # path then fails with a permission error instead of a verdict, and a caller that
+  # guards on the executable bit skips it without a word. The class was drained one
+  # file at a time while new members kept arriving. This is the class check.
+  #
+  # ENFORCING ON DAY ONE, AS AN OPERATOR-RATIFIED EXCEPTION. The rollout convention
+  # (ADR-034) advances a deploy check one rung at a time, and ADR-135 keeps arming
+  # and enforcement on separate dials (its clause 3), rejecting "ship armed AND
+  # enforcing on day one" as its alternative A2. This check is an exception to both,
+  # and the exception is the operator's: it was designed beside a warn-first
+  # alternative, and the operator ratified day-one enforce at the Collective Review
+  # scope-lock of the release that introduced it (2026-10-15), the way ADR-093 and
+  # ADR-094 record theirs. The basis, as read at that decision: the whole firing
+  # population was read rather than sampled (110 interpreter-line files under the
+  # two trees, 21 firings, 16 true positives and 5 named exemptions), and the remedy
+  # for a finding is one command, so no false-positive rate was left to calibrate.
+  # The population is clean in the change that adds this check: every member is
+  # made executable or named by the list in that same change. Note what is absent
+  # from the arms below: no `case` on any mode, no resolve_check_mode call, no
+  # shared warn emitter. A new non-executable tool increments ISSUES on every run.
+  # Retreat is a small edit: route the findings arm through the shared warn emitter
+  # on a dial of its own.
+  #
+  # THE INDEX, NEVER THE FILESYSTEM. The primitive reads the tracked mode, the first
+  # bytes of the tracked blob and the exemption list from the index. The bit a
+  # checkout has on disk follows umask and core.fileMode and is not what the
+  # repository ships. A deployed copy has no index at all, which is why the
+  # installed-tree checks read the disk and this one does not.
+  #
+  # THE CONTROL ARM IS INSIDE THE PRIMITIVE, NOT BESIDE IT. It counts conforming
+  # executable files on every run. A run that cannot vouch for its own reading exits
+  # 2 (a dead control arm, a root that enumerates no tracked file, an unparseable
+  # exemption list, a crash); a tree it could not read exits 3, NOT-EVALUATED. This
+  # block treats both as a FAIL, and an exit 1 that names no finding as one too: a
+  # zero-finding verdict is readable only if the read demonstrably reaches the
+  # population.
+  #
+  # NOT THE ONLY LOCUS, AND DELIBERATELY SO. `deploy.sh --check` runs on an operator
+  # machine, post-merge. The same primitive is wired as the `tool-exec-mode` job in
+  # .github/workflows/repo-integrity.yml, which runs pre-merge on every pull
+  # request. That job is the load-bearing leg; this one is the deploy-time
+  # companion, single-sourced on the same predicate (no predicate is re-encoded in
+  # either caller).
+  #
+  # DECLARED COVERAGE BOUNDARY. The two trees named above, recursively. It does NOT
+  # assert the mode of any file outside them, that an executable file is correct to
+  # execute, that a sourced library is non-executable, or the mode any checkout or
+  # deployed copy has on disk.
+  #
+  # Primitive: core/deploy/tools/check-tool-exec-mode.py (carries --self-test).
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    log "Check 81: Tool exec-mode conformance (every interpreter-line file under release/tools/ and core/deploy/tools/ is tracked executable or carries a reasoned exemption; enforcing on day one, operator-ratified; whole-tree)"
+    local c81_script="core/deploy/tools/check-tool-exec-mode.py"
+    if [[ ! -f "$c81_script" ]]; then
+      log "  FAIL:  tool-exec-mode — primitive script missing: $c81_script (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
+      ISSUES=$((ISSUES + 1))
+    elif [[ ! -x "/usr/bin/python3" ]]; then
+      log "  FAIL:  tool-exec-mode — /usr/bin/python3 not executable, so the primitive cannot run and the tool trees are NOT-EVALUATED — this is not a clean result"
+      ISSUES=$((ISSUES + 1))
+    else
+      # ── control arms FIRST: a probe that cannot be shown to detect proves nothing ──
+      local c81_fx_out c81_fx_rc=0
+      c81_fx_out=$(/usr/bin/python3 "$c81_script" --self-test 2>&1) || c81_fx_rc=$?
+      log "  CTRL:  tool-exec-mode — $(echo "$c81_fx_out" | tail -1)"
+      if [[ $c81_fx_rc -ne 0 ]]; then
+        log "  FAIL:  tool-exec-mode-fixtures — fixture regression (exit $c81_fx_rc; hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+        echo "$c81_fx_out" | sed 's/^/         /'
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── the scan: denominator first, then findings ──────────────────────────
+        local c81_out c81_rc=0
+        c81_out=$(/usr/bin/python3 "$c81_script" 2>&1) || c81_rc=$?
+        case "$c81_rc" in
+          0)
+            log "  DENOM: tool-exec-mode — $(echo "$c81_out" | sed -n 's/^DENOM: //p' | tail -1)"
+            log "  OK:    tool-exec-mode — every interpreter-line file under the two tool trees is tracked executable or carries a reasoned exemption"
+            ;;
+          1)
+            log "  DENOM: tool-exec-mode — $(echo "$c81_out" | sed -n 's/^DENOM: //p' | tail -1)"
+            local _c81_hit _c81_hits=0
+            while IFS= read -r _c81_hit; do
+              [[ -z "$_c81_hit" ]] && continue
+              log "  FAIL:  tool-exec-mode — ${_c81_hit#FAIL: }"
+              ISSUES=$((ISSUES + 1))
+              _c81_hits=$((_c81_hits + 1))
+            done < <(echo "$c81_out" | grep '^FAIL: ' || true)
+            if [[ $_c81_hits -eq 0 ]]; then
+              log "  FAIL:  tool-exec-mode — the primitive exited 1 and named no finding (an interpreter or start-up failure exits 1 too); a findings verdict that names nothing is unreadable, not a finding: $(echo "$c81_out" | tail -1)"
+              ISSUES=$((ISSUES + 1))
+            fi
+            ;;
+          2)
+            log "  FAIL:  tool-exec-mode — the instrument cannot assert (exit 2): $(echo "$c81_out" | grep '^SCAN-ERROR: ' | sed 's/^SCAN-ERROR: //' | paste -sd'; ' -)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+          3)
+            log "  FAIL:  tool-exec-mode — the tool trees could not be read (exit 3): $(echo "$c81_out" | grep '^SCAN-ERROR: ' | sed 's/^SCAN-ERROR: //' | paste -sd'; ' -)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+          *)
+            log "  FAIL:  tool-exec-mode — the primitive exited $c81_rc, outside its exit contract, so the verdict is unreadable: $(echo "$c81_out" | tail -1)"
+            ISSUES=$((ISSUES + 1))
+            ;;
+        esac
       fi
     fi
   fi
@@ -21816,11 +22060,16 @@ main() {
       echo "Modes:"
       echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
       echo "     --release <slug>          Stamp this deploy with a release join key (the MILESTONE SLUG, never a version)."
-      echo "                               Emits one deployment-status row per affected target, which is what gives"
-      echo "                               Cycle-Time and the DORA metrics a T_DEPLOY anchor. Omit it for a fresh install"
-      echo "                               or an ad-hoc redeploy: with no slug, NOTHING is emitted (deliberately — a"
-      echo "                               release-less row would inflate deployment-frequency permanently). Omitting it"
+      echo "                               A stamped deploy states its target set: name the release's skills, or pass"
+      echo "                               --no-targets for a release that has none. --release alone, or with an empty"
+      echo "                               value, is refused — a stamped deploy never auto-detects. Emits one"
+      echo "                               deployment-status row per named target plus one rules-mirror row, which is what"
+      echo "                               gives Cycle-Time and the DORA metrics a T_DEPLOY anchor. Omit it for a fresh"
+      echo "                               install or an ad-hoc redeploy: with no slug, NOTHING is emitted (deliberately —"
+      echo "                               a release-less row would inflate deployment-frequency permanently). Omitting it"
       echo "                               on a Stage-12 deploy is warned about at the end of the run."
+      echo "     --no-targets              With --release only: this release has no skill, package or harness target."
+      echo "                               Deploys and stamps the rules mirror, and nothing else."
       echo "  --all                        Deploy the full skill roster + all packages (explicit bootstrap / redeploy-everything)"
       echo "  --check [--warn]             Validate platform health (--warn exits 0 even with issues)"
       echo "  --check-lifecycle            List retired/dormant checks + dispositions + reactivation anchors"

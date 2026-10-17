@@ -1,10 +1,22 @@
 name: PR body parser-clean
 
-# gate-efficacy: posture=required  enforcement=branch-protection:"Close-keyword leak detection"  always-reports=yes
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Close-keyword leak detection" (no warn-mode — a finding turns the check RED)  always-reports=yes
 #   invariant: the PR body carries no close-family verb + #N outside the dedicated
 #              Issue References block (GitHub's lexical auto-close parser is
 #              negation-blind and section-blind), asserted by scanning the body text.
 #   falsification: write "closes #123" in the PR Summary section -> this gate red.
+#   posture note: `advisory`, not `required`, is the HONEST declaration. The gate is
+#                 ENFORCING (a finding exits non-zero) and not BLOCKING: its context is not
+#                 in main's required status checks, and it is not fit to be while two
+#                 defects stand, both recorded in core/standards/gate-efficacy-standard.md
+#                 § Declared-required contexts. The step receives the body as one
+#                 environment string, so a body past 131,072 bytes stops the step before
+#                 it scans and the check reads red with no finding. And the scan pattern
+#                 accepts a keyword followed by a bare number, so it fires on text that
+#                 carries no issue reference. Registration follows the repair of both, in
+#                 the order the standard fixes for a registration: the change that returns
+#                 this header to `required` is opened, the context is registered
+#                 immediately before it merges, and the check is re-run on it.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
 on:

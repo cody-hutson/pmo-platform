@@ -6766,7 +6766,9 @@ phase_await_merge_chore_pr() {
   # was reached only by accident — by timing out, or by tripping the conflict arm.
   #
   # DO NOT harmonize the other mergeStateStatus readers in the corpus to this arm.
-  # They read an OPEN, pre-merge PR: Stage 12 Phase A.6, and also the Stage 7 / 8 / 9
+  # They read an OPEN, pre-merge PR: Stage 12 Phase A.6 and Phase B1.1, the sweep in
+  # .github/workflows/sibling-merge-dark-branch.yml, the bridge's post-push
+  # mergeability check, and also the Stage 7 / 8 / 9
   # mergeability preflights (release/references/pipeline/stage-07-dev-testing.md,
   # stage-08-qa-testing.md, and release/references/how-to/hub-spoke-bridge.md, whose
   # read labels itself "Stage 9 ONLY"). For all of those, */UNKNOWN genuinely does

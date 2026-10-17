@@ -13,18 +13,40 @@
 # operator-specific case without naming one. (This replaces the retired public-flip
 # leak ratchet, preserving its one unique surface: commit-message scope.)
 #
-# Security: the only external inputs are base/head commit SHAs, passed via env: and
+# SECOND PROPERTY, SAME JOB: close keywords. The repository host's auto-close parser
+# reads every commit message that reaches the default branch, so a close-family keyword
+# directly before an issue reference closes that issue at merge, whatever the sentence
+# around it meant. The last step of this job asserts that no commit in the PR range
+# carries one. It lives in THIS job, under this job's name, on purpose: this job is the
+# registered required check, and a new job would be a status context that blocks
+# nothing until it is registered. The predicate is not written in this file. The step
+# is a thin caller of core/deploy/tools/check-commit-close-keywords.py, which is
+# fixture-backed and is the same file an author runs before pushing. A failure names
+# itself: its own step, its own annotation title, its own summary heading.
+#
+# Security: the external inputs are the base/head commit SHAs, passed via env: and
 # referenced as quoted shell vars (never interpolated into run:) per the Actions
-# injection-hardening guidance.
+# injection-hardening guidance, and the head branch name, which is read only inside an
+# `if:` expression and never reaches a shell.
 name: Commit-message depersonalization
 
 # gate-efficacy: posture=required  enforcement=branch-protection:"Commit-message depersonalization gate"  always-reports=yes
-#   invariant: no commit message in the PR range carries personal data (a generic
+#   invariant: (1) no commit message in the PR range carries personal data (a generic
 #              personal-email domain, a macOS home path, or a suffixed private-repo
 #              slug) in its body, trailers, or author/committer identity — asserted
-#              by scanning every commit message in the base..head range.
-#   falsification: add a commit whose trailer co-author is an @gmail.com address ->
-#                  this gate turns red (redacted) on that commit.
+#              by scanning every commit message in the base..head range. (2) On a
+#              pull request whose head is a release branch, no commit message in that
+#              range — subject or body — puts a close-family keyword directly before
+#              an issue reference: the commit-message arm of the close-keyword
+#              parser-clean discipline, asserted over the same range by
+#              core/deploy/tools/check-commit-close-keywords.py.
+#   falsification: (1) add a commit whose trailer co-author is an @gmail.com address ->
+#                  this gate turns red (redacted) on that commit. (2) On a release
+#                  head, add a commit whose body puts a close-family keyword directly
+#                  before an issue reference -> the close-keyword step turns this gate
+#                  red, naming that commit and line. The same predicate runs with no
+#                  live branch at all:
+#                  python3 core/deploy/tools/check-commit-close-keywords.py --self-test
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 on:
   pull_request:
@@ -107,3 +129,20 @@ jobs:
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           exit 1
+      - name: Close-keyword scan of PR commit messages (parser-clean, commit-message arm)
+        # Scope: pull requests whose head is a release branch. Scope lives in this one
+        # condition and nowhere else — the tool takes a range and knows nothing of
+        # branches. !cancelled() lets this step report even when the step above failed,
+        # so one push shows both properties and neither masks the other.
+        if: ${{ !cancelled() && startsWith(github.head_ref, 'release/') }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # THIN CALLER. No pattern, keyword list or message handling lives in this file.
+          # The self-test runs first, so a broken tool reports as a broken tool and never
+          # as a clean range. Exit 0 = clean, 1 = finding, 3 = the range could not be
+          # read; any non-zero exit fails this job.
+          python3 core/deploy/tools/check-commit-close-keywords.py --self-test
+          python3 core/deploy/tools/check-commit-close-keywords.py --base "$BASE_SHA" --head "$HEAD_SHA"
