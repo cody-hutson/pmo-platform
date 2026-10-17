@@ -765,7 +765,7 @@ def main() -> int:
     live = ap.add_mutually_exclusive_group()
     live.add_argument("--live", default=None,
                       help="file of live required_status_checks contexts, one per line; "
-                           "an empty file, or one holding a response body, is degraded")
+                           "an empty file, or one holding a JSON response body, is degraded; a non-JSON body (an HTML page, a stderr line) is not detected — use --live-branch-json")
     live.add_argument("--live-branch-json", default=None,
                       help="the response body of GET /repos/{owner}/{repo}/branches/main; "
                            "anything but a branch object carrying the context list is "
