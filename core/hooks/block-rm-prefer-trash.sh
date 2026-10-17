@@ -270,6 +270,15 @@ block() {
   exit 2
 }
 
+# block_cwd_unknown(rule_id, token) — the strict-policy refusal for a relative operand whose
+#   working directory cannot be determined (resolve_and_classify class 3). Same rule IDs as
+#   the unresolvable-token refusal; the reason names the basis instead of the token's form.
+block_cwd_unknown() {
+  block "$1" \
+    "path is unresolvable under strict policy: this command changes directory in a form the hook cannot follow, so the working directory for relative target '$2' cannot be determined" \
+    "name the target by absolute path, or make the directory change a literal path, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+}
+
 # Pattern match against the canonicalized command. Rule patterns are unchanged; only the
 # text they read is, so a verb at any genuine command start is now anchored. Direct
 # "$COMMAND" readers below (the osascript POSIX-file extractor) deliberately keep the RAW
@@ -279,12 +288,36 @@ matches() {
   "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
 }
 
-# resolve_and_classify(token)
+# classify_path(path) — Steps 5-6 below: normalize an absolute path and prefix-match it
+#   against WORKSPACE_ROOT. Prints the normalized path; returns 0 inside, 1 outside.
+classify_path() {
+  local resolved="$1"
+  # Normalize via Python os.path.realpath — collapses ../ and ./,
+  # does not require existence, follows symlinks (intentional for strict-
+  # boundary enforcement). Python 3.9+ is system-default on macOS 12+.
+  # Stage 5 spec referenced /usr/bin/realpath -m (GNU); macOS ships BSD
+  # realpath without -m, so Python 3 is the portable equivalent.
+  if [ -x "$PYTHON3" ]; then
+    resolved="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$resolved" 2>/dev/null || echo "$resolved")"
+  fi
+  "$PRINTF" '%s' "$resolved"
+  case "$resolved" in
+    "${WORKSPACE_ROOT}"|"${WORKSPACE_ROOT}/"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# resolve_and_classify(token, [seg])
 #   Resolve a path token and classify against workspace boundary.
-#   Returns: 0 = inside workspace, 1 = outside workspace, 2 = unresolvable (strict)
-#   Outputs the resolved absolute path on stdout (when return is 0 or 1).
+#   Returns: 0 = inside workspace, 1 = outside workspace, 2 = unresolvable (strict),
+#            3 = relative operand whose working directory cannot be determined (strict)
+#   Outputs the resolved absolute path on stdout (when return is 0 or 1). For a relative
+#   operand, a newline and the directory it was judged from follow (see split_verdict).
+#   seg is the operand's segment number (SEGMENT_WALK_AWK); empty means "after every
+#   segment". ensure_cwd_table must have run in the hook's own shell first.
 resolve_and_classify() {
   local token="$1"
+  local seg="${2:-}"
   local resolved=""
 
   # Step 1: strip surrounding single/double quotes
@@ -312,36 +345,38 @@ resolve_and_classify() {
 
   # Step 4: absolute vs cwd-relative
   case "$token" in
-    /*) resolved="$token";;
-    *)
-      if [ -z "$CWD" ]; then
-        # No cwd available — treat as unresolvable
-        return 2
-      fi
-      resolved="${CWD}/${token}"
-      ;;
-  esac
-
-  # Step 5: normalize via Python os.path.realpath — collapses ../ and ./,
-  # does not require existence, follows symlinks (intentional for strict-
-  # boundary enforcement). Python 3.9+ is system-default on macOS 12+.
-  # Stage 5 spec referenced /usr/bin/realpath -m (GNU); macOS ships BSD
-  # realpath without -m, so Python 3 is the portable equivalent.
-  if [ -x "$PYTHON3" ]; then
-    resolved="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$resolved" 2>/dev/null || echo "$resolved")"
-  fi
-
-  # Step 6: prefix-match against WORKSPACE_ROOT
-  case "$resolved" in
-    "${WORKSPACE_ROOT}"|"${WORKSPACE_ROOT}/"*)
-      "$PRINTF" '%s' "$resolved"
+    /*)
+      # Steps 5-6 (classify_path); the || keeps a non-zero class out of errexit's reach
+      classify_path "$token" || return "$?"
       return 0
       ;;
-    *)
-      "$PRINTF" '%s' "$resolved"
-      return 1
-      ;;
   esac
+  if [ -z "$CWD" ]; then
+    # No cwd available — treat as unresolvable
+    return 2
+  fi
+
+  # Step 4b: a relative operand lands under the directory the command is in when the verb
+  # runs (see IN-COMMAND WORKING DIRECTORY). Judge it from every such directory; the worst
+  # class decides, and the message names the first directory that reached it — the
+  # nearest earlier change, else the payload cwd. With no change on the line the only
+  # candidate is the payload cwd, which is the join this step has always made.
+  local bases="" brc=0 base c p worst=-1 worst_path="" worst_base=""
+  bases="$(cwd_candidates_for "$seg")" || brc="$?"
+  if [ "$brc" != 0 ]; then
+    return 3
+  fi
+  while IFS= read -r base; do
+    [ -n "$base" ] || continue
+    c=0
+    p="$(classify_path "${base}/${token}")" || c="$?"
+    if [ "$c" -gt "$worst" ]; then worst="$c"; worst_path="$p"; worst_base="$base"; fi
+  done <<< "$bases"
+  if [ "$worst" -lt 0 ]; then
+    return 3
+  fi
+  "$PRINTF" '%s\n%s' "$worst_path" "$worst_base"
+  return "$worst"
 }
 
 # --- MEMORY-STORE ARM: the one admitted class outside ${WORKSPACE_ROOT}/ ---
@@ -493,39 +528,262 @@ suggest_trash_command() {
 #   only the regex at the canonical form would fire the gate and then
 #   extract nothing (silent no-op); pointing only this one would leave
 #   the regex gating first and close a fraction of the positions.
-extract_target_tokens() {
-  local verb="$1"
-  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v v="$verb" '
-    {
-      # Split on command separators first; each segment is separator-free.
-      n = split($0, segments, /[;&|]+/);
-      for (s = 1; s <= n; s++) {
-        m = split(segments[s], tokens, /[[:space:]]+/);
-        first = 0;
-        for (i = 1; i <= m; i++) {
-          if (tokens[i] != "") { first = i; break; }
-        }
-        if (first == 0) continue;
-        # Strip canonical absolute-path prefix from first token before
-        # verb-equality check. Matches the 5 macOS/Linux paths
-        # captured by ANCHOR_PREFIX_BASH at the regex-anchor site.
-        first_token = tokens[first];
-        sub(/^\/(usr\/(local\/)?|opt\/(homebrew|local)\/)?bin\//, "", first_token);
-        if (first_token != v) continue;
-        for (i = first + 1; i <= m; i++) {
-          t = tokens[i];
-          if (t == "") continue;
-          # Skip flags (start with -) and -- separator
-          if (substr(t, 1, 1) == "-") continue;
-          # Skip bare shell structure. A subshell leaves its closing `)` inside
-          # the segment, and without this `( rm -rf )` would resolve `)` as a
-          # relative path and block a targetless no-op (#5644).
-          if (t ~ /^[(){}]+$/) continue;
-          print t;
-        }
+#
+#   Each token is emitted as `<segment-number><TAB><token>`. Segments are
+#   numbered across the whole command, lines included, by the SAME walk that
+#   extract_dir_events() runs, so a target and a directory change are ordered
+#   against one numbering: a third reader of the canonical form, under the
+#   same coupling. A `--` ends option parsing, so a dash-led token after it is
+#   an operand, and a redirection is not an operand at all.
+#
+# SEGMENT_WALK_AWK — the one segmentation both readers share.
+#   mode "targets": print `<seg><TAB><token>` for each operand of verb v.
+#   mode "dirs":    print `<seg><TAB><kind><TAB><operand>` for each directory change,
+#                   kind DIR (one literal operand), HOME (bare cd) or UNKNOWN (a form
+#                   whose destination cannot be read from the line), plus a
+#                   `0<TAB>REENTRANT` line when a loop or function definition can run a
+#                   segment again after a later one (so order on the line is not order
+#                   of execution).
+# shellcheck disable=SC2016  # awk program — single quotes intentional
+readonly SEGMENT_WALK_AWK='
+  function skip_redirect(t) {
+    # A redirection is not an operand; a bare operator takes the next token with it.
+    if (t ~ /^[0-9]*(>>|>|<)/) { if (t ~ /(>>|>|<)$/) skipnext = 1; return 1; }
+    return 0;
+  }
+  function dir_event(   w, i, t, nops, op, bad, endopts, flags) {
+    w = tokens[first];
+    if (w ~ /^(for|while|until|select|repeat|foreach|function)$/ || segments[s] ~ /\(\)/) reentrant = 1;
+    if (w != "cd" && w != "chdir" && w != "pushd" && w != "popd") return;
+    # popd returns to a directory-stack entry, which can predate this command.
+    if (w == "popd") { print seg "\tUNKNOWN\t"; return; }
+    flags = (w == "pushd") ? "^-[LPqs]+$" : "^-[LPeqs@]+$";
+    nops = 0; bad = 0; endopts = 0; skipnext = 0; op = "";
+    for (i = first + 1; i <= m; i++) {
+      t = tokens[i];
+      if (t == "") continue;
+      if (skipnext) { skipnext = 0; continue; }
+      if (skip_redirect(t)) continue;
+      if (t ~ /^[(){}]+$/) continue;
+      if (!endopts && t == "--") { endopts = 1; continue; }
+      # `-`, a stack form (`-N`, `+N`) or an unknown option: destination unreadable.
+      if (!endopts && t ~ /^[-+]/) { if (t !~ flags) bad = 1; continue; }
+      nops++; op = t;
+    }
+    if (bad || nops > 1) print seg "\tUNKNOWN\t";
+    else if (nops == 0) print seg "\t" ((w == "pushd") ? "UNKNOWN" : "HOME") "\t";
+    else print seg "\tDIR\t" op;
+  }
+  {
+    # Split on command separators first; each segment is separator-free.
+    n = split($0, segments, /[;&|]+/);
+    for (s = 1; s <= n; s++) {
+      seg++;
+      m = split(segments[s], tokens, /[[:space:]]+/);
+      first = 0;
+      for (i = 1; i <= m; i++) {
+        if (tokens[i] != "") { first = i; break; }
+      }
+      if (first == 0) continue;
+      if (mode == "dirs") { dir_event(); continue; }
+      # Strip canonical absolute-path prefix from first token before
+      # verb-equality check. Matches the 5 macOS/Linux paths
+      # captured by ANCHOR_PREFIX_BASH at the regex-anchor site.
+      first_token = tokens[first];
+      sub(/^\/(usr\/(local\/)?|opt\/(homebrew|local)\/)?bin\//, "", first_token);
+      if (first_token != v) continue;
+      endopts = 0; skipnext = 0;
+      for (i = first + 1; i <= m; i++) {
+        t = tokens[i];
+        if (t == "") continue;
+        if (skipnext) { skipnext = 0; continue; }
+        if (skip_redirect(t)) continue;
+        # Skip bare shell structure. A subshell leaves its closing `)` inside
+        # the segment, and without this `( rm -rf )` would resolve `)` as a
+        # relative path and block a targetless no-op (#5644).
+        if (t ~ /^[(){}]+$/) continue;
+        # Skip flags (start with -) until a `--` ends option parsing.
+        if (!endopts && t == "--") { endopts = 1; continue; }
+        if (!endopts && substr(t, 1, 1) == "-") continue;
+        print seg "\t" t;
       }
     }
-  '
+  }
+  END { if (mode == "dirs" && reentrant) print "0\tREENTRANT\t"; }
+'
+
+extract_target_tokens() {
+  local verb="$1"
+  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v mode="targets" -v v="$verb" "$SEGMENT_WALK_AWK"
+}
+
+# extract_dir_events — the directory changes on the line, in SEGMENT_WALK_AWK's "dirs" form.
+extract_dir_events() {
+  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v mode="dirs" -v v="" "$SEGMENT_WALK_AWK"
+}
+
+# --- IN-COMMAND WORKING DIRECTORY ---
+# The payload cwd is where the call STARTS. A directory change earlier on the line moves
+# where a relative operand lands, so a relative target is judged from every directory the
+# command can be in when its verb runs: the payload cwd, plus each directory a change in an
+# EARLIER segment can lead to. The set only grows — a failed `cd` before `;`, a subshell, a
+# pipeline stage all leave an earlier directory in effect, so none is ever dropped — and the
+# worst class over the set decides. Where a loop or function definition can re-run a
+# segment, every change on the line counts, whatever its position.
+#
+# CWD_TABLE_PY turns the dirs-mode events into that set. One python3 program; it ends its
+# output with an END line, and output without one is read as failure, so a normalizer that
+# cannot run never yields a raw-joined directory. Per event it prints each NEW directory as
+# `<seg><TAB>DIR<TAB><dir>`, or `<seg><TAB>UNKNOWN` when the destination cannot be read:
+#   - the operand is not literal: a variable, a substitution, a glob or brace, an escape,
+#     a quote that does not wrap the whole word, a `~user` or zsh `=cmd` word;
+#   - the operand is relative and cannot be anchored: the payload cwd is unknown, a loop or
+#     function can repeat the change, or the line names CDPATH (a bare name is then searched
+#     for along it);
+#   - the set would pass LIMIT directories.
+# Each destination is recorded in BOTH readings: the lexical one (`cd` is logical by
+# default, so `..` climbs the path as typed) and the resolved one (`cd -P`, and what the
+# operating system resolves a relative operand against). Either can be the true one.
+readonly CWD_TABLE_PY='
+import os, re, sys
+cwd, home = sys.argv[1], sys.argv[2]
+reentrant, cdpath = sys.argv[3] == "1", sys.argv[4] == "1"
+LIMIT = 64
+LITERAL = re.compile("[A-Za-z0-9._/+@,:%~-][A-Za-z0-9._/+@,:%=~-]*")
+cands = [cwd] if cwd.startswith("/") else []
+
+def literal(raw):
+    q = raw[:1]
+    if len(raw) >= 2 and q in ("\x27", "\x22") and raw[-1] == q:
+        body = raw[1:-1]
+        banned = "\x27\x01" if q == "\x27" else "\x22$`\\\x01"
+        if not body or any(c in banned for c in body):
+            return None
+        return body
+    if not LITERAL.fullmatch(raw):
+        return None
+    if raw == "~" or raw.startswith("~/"):
+        return home + raw[1:] if home.startswith("/") else None
+    if raw.startswith("~"):
+        return None
+    return raw
+
+def land(path):
+    if path.startswith("/"):
+        joined = [path]
+    else:
+        if reentrant or cwd[:1] != "/":
+            return None
+        if cdpath and not (path in (".", "..") or path.startswith(("./", "../"))):
+            return None
+        joined = [os.path.join(c, path) for c in cands]
+    out = []
+    for p in joined:
+        for form in (os.path.normpath(p), os.path.realpath(p)):
+            if form not in out:
+                out.append(form)
+    return out
+
+try:
+    for line in sys.stdin:
+        seg, kind, raw = (line.rstrip("\n").split("\t") + ["", ""])[:3]
+        if kind == "REENTRANT":
+            continue
+        if kind == "HOME":
+            path = home if home.startswith("/") else None
+        elif kind == "DIR":
+            path = literal(raw)
+        else:
+            path = None
+        dirs = land(path) if path is not None else None
+        new = [d for d in dirs if d not in cands] if dirs is not None else None
+        if new is None or len(cands) + len(new) > LIMIT:
+            print(seg + "\tUNKNOWN")
+            continue
+        cands = new + cands
+        for d in new:
+            print(seg + "\tDIR\t" + d)
+    print("-\tEND")
+except Exception:
+    print("0\tUNKNOWN")
+'
+
+readonly TAB=$'\t'
+readonly NL=$'\n'
+CWD_TABLE_READY=0
+CWD_EVT_SEG=()        # segment of each directory a change can lead to
+CWD_EVT_DIR=()        # ... and the directory
+CWD_UNKNOWN_SEG=""    # first segment whose change cannot be followed, if any
+CWD_REENTRANT=0       # 1 when a loop or function can re-run a segment
+
+# ensure_cwd_table — build the in-command working-directory table once. Call it in the
+# hook's own shell (never inside $( )), before the first relative target is judged. A
+# command with no directory change builds nothing and judges exactly as before.
+ensure_cwd_table() {
+  local events="" table="" cdpath=0 eseg ekind edir
+  if [ "$CWD_TABLE_READY" = 1 ]; then return 0; fi
+  CWD_TABLE_READY=1
+  events="$(extract_dir_events)" || events="0${TAB}UNKNOWN${TAB}"
+  case "$events" in *"${TAB}REENTRANT${TAB}"*) CWD_REENTRANT=1 ;; esac
+  case "$events" in *"${TAB}DIR${TAB}"*|*"${TAB}HOME${TAB}"*|*"${TAB}UNKNOWN${TAB}"*) ;; *) return 0 ;; esac
+  case "$COMMAND" in *CDPATH*) cdpath=1 ;; esac
+  if [ -x "$PYTHON3" ]; then
+    table="$("$PRINTF" '%s\n' "$events" | "$PYTHON3" -c "$CWD_TABLE_PY" "$CWD" "${HOME:-}" "$CWD_REENTRANT" "$cdpath" 2>/dev/null)" || table=""
+  fi
+  if [ "${table##*"$NL"}" != "-${TAB}END" ]; then
+    # The normalizer could not run, or did not finish: no change on this line is followed.
+    CWD_UNKNOWN_SEG=0
+    return 0
+  fi
+  while IFS="$TAB" read -r eseg ekind edir; do
+    case "$ekind" in
+      DIR)
+        CWD_EVT_SEG[${#CWD_EVT_SEG[@]}]="$eseg"
+        CWD_EVT_DIR[${#CWD_EVT_DIR[@]}]="$edir"
+        ;;
+      UNKNOWN)
+        if [ -z "$CWD_UNKNOWN_SEG" ] || [ "$eseg" -lt "$CWD_UNKNOWN_SEG" ]; then CWD_UNKNOWN_SEG="$eseg"; fi
+        ;;
+    esac
+  done <<< "$table"
+  return 0
+}
+
+# cwd_candidates_for(seg) — print, one per line, every directory a relative operand in
+#   segment seg can land under: changes from earlier segments, nearest first (all of them
+#   when the line is re-entrant), then the payload cwd. An empty seg means "after every
+#   segment". Returns 3, printing nothing, when an earlier change cannot be followed.
+cwd_candidates_for() {
+  local seg="$1" i
+  if [ -n "$CWD_UNKNOWN_SEG" ]; then
+    if [ "$CWD_REENTRANT" = 1 ] || [ -z "$seg" ] || [ "$CWD_UNKNOWN_SEG" -lt "$seg" ]; then
+      return 3
+    fi
+  fi
+  i=$(( ${#CWD_EVT_SEG[@]} - 1 ))
+  while [ "$i" -ge 0 ]; do
+    if [ "$CWD_REENTRANT" = 1 ] || [ -z "$seg" ] || [ "${CWD_EVT_SEG[$i]}" -lt "$seg" ]; then
+      "$PRINTF" '%s\n' "${CWD_EVT_DIR[$i]}"
+    fi
+    i=$((i - 1))
+  done
+  "$PRINTF" '%s\n' "$CWD"
+}
+
+# split_verdict(out) — resolve_and_classify prints the judged path, then, for a relative
+#   operand, a newline and the directory it was judged from. Sets RESOLVED and BASIS.
+split_verdict() {
+  RESOLVED="${1%%"$NL"*}"
+  BASIS=""
+  case "$1" in *"$NL"*) BASIS="${1#*"$NL"}" ;; esac
+}
+
+# basis_note — the clause a refusal appends when its relative operand was judged from a
+#   directory a change in the command leads to, so the message names its own basis.
+basis_note() {
+  if [ -n "$BASIS" ] && [ "$BASIS" != "$CWD" ]; then
+    "$PRINTF" ' (relative operand judged from %s, which a directory change earlier in this command leads to)' "$BASIS"
+  fi
 }
 
 # ==========================================================================
@@ -554,19 +812,21 @@ if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
   if [ -z "$verb" ] && matches "${ANCHOR_PREFIX_BASH}"'unlink([[:space:]]+|$)'; then verb="unlink"; fi
 
   if [ -n "$verb" ]; then
+    ensure_cwd_table
     # Iterate target tokens
     found_target=0
-    while IFS= read -r token; do
+    while IFS="$TAB" read -r tseg token; do
       [ -z "$token" ] && continue
       found_target=1
       classification=0
-      resolved="$(resolve_and_classify "$token")" || classification="$?"
+      verdict="$(resolve_and_classify "$token" "$tseg")" || classification="$?"
+      split_verdict "$verdict"; resolved="$RESOLVED"
       case "$classification" in
         0)
           # Inside workspace — block with Trash suggestion
           suggestion="$(suggest_trash_command "$resolved")"
           block "BLOCK-TRASH-002" \
-            "permanent deletion inside workspace blocked: $resolved" \
+            "permanent deletion inside workspace blocked: $resolved$(basis_note)" \
             "use Trash instead: $suggestion (or set CLAUDE_HOOK_BYPASS=1 only if intentional)"
           ;;
         1)
@@ -579,7 +839,7 @@ if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
               "eviction is a Trash move (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary, EVICT); no bypass is needed"
           fi
           block "BLOCK-TRASH-001" \
-            "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved" \
+            "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved$(basis_note)" \
             "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
           ;;
         2)
@@ -587,6 +847,10 @@ if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
           block "BLOCK-TRASH-001" \
             "path is unresolvable under strict policy (variable/subshell/backtick token): $token" \
             "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+          ;;
+        3)
+          # Relative operand after a directory change the hook cannot follow
+          block_cwd_unknown "BLOCK-TRASH-001" "$token"
           ;;
       esac
     done < <(extract_target_tokens "$verb")
@@ -602,12 +866,14 @@ fi
 # Step 3 — trash invocation detection
 # Absolute-path-aware: also detects /opt/homebrew/bin/trash, /usr/bin/trash, etc.
 if matches "${ANCHOR_PREFIX_BASH}"'trash([[:space:]]+|$)'; then
+  ensure_cwd_table
   found_target=0
-  while IFS= read -r token; do
+  while IFS="$TAB" read -r tseg token; do
     [ -z "$token" ] && continue
     found_target=1
     classification=0
-    resolved="$(resolve_and_classify "$token")" || classification="$?"
+    verdict="$(resolve_and_classify "$token" "$tseg")" || classification="$?"
+    split_verdict "$verdict"; resolved="$RESOLVED"
     case "$classification" in
       0)
         # Inside workspace — approved deletion mechanism, allow
@@ -625,7 +891,7 @@ if matches "${ANCHOR_PREFIX_BASH}"'trash([[:space:]]+|$)'; then
             "evict it through the Hook-Blocked → User-Side Handoff (the operator runs the same command), or the operator declares the store in user-scope settings"
         else
           block "BLOCK-TRASH-003" \
-            "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved" \
+            "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved$(basis_note)" \
             "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
         fi
         ;;
@@ -633,6 +899,9 @@ if matches "${ANCHOR_PREFIX_BASH}"'trash([[:space:]]+|$)'; then
         block "BLOCK-TRASH-003" \
           "path is unresolvable under strict policy (variable/subshell/backtick token): $token" \
           "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+        ;;
+      3)
+        block_cwd_unknown "BLOCK-TRASH-003" "$token"
         ;;
     esac
   done < <(extract_target_tokens "trash")
@@ -645,10 +914,14 @@ if matches "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)'; then
   if matches 'delete[[:space:]]+POSIX[[:space:]]+file' || matches 'move[[:space:]]+.*[[:space:]]+to[[:space:]]+trash'; then
     # Extract POSIX file paths from the AppleScript source.
     # Pattern: delete POSIX file "/abs/path"
+    # The extractor reads the raw command and carries no segment number, so a relative path
+    # is judged from every directory any change on the line can lead to.
+    ensure_cwd_table
     while IFS= read -r osa_path; do
       [ -z "$osa_path" ] && continue
       classification=0
-      resolved="$(resolve_and_classify "$osa_path")" || classification="$?"
+      verdict="$(resolve_and_classify "$osa_path")" || classification="$?"
+      split_verdict "$verdict"; resolved="$RESOLVED"
       case "$classification" in
         0)
           # Inside workspace — approved deletion, allow
@@ -666,7 +939,7 @@ if matches "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)'; then
               "evict it through the Hook-Blocked → User-Side Handoff (the operator runs the same command), or the operator declares the store in user-scope settings"
           else
             block "BLOCK-TRASH-003" \
-              "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved" \
+              "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved$(basis_note)" \
               "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
           fi
           ;;
@@ -674,6 +947,9 @@ if matches "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)'; then
           block "BLOCK-TRASH-003" \
             "path is unresolvable under strict policy (variable/subshell/backtick token): $osa_path" \
             "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+          ;;
+        3)
+          block_cwd_unknown "BLOCK-TRASH-003" "$osa_path"
           ;;
       esac
     done < <("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE 'POSIX[[:space:]]+file[[:space:]]+"[^"]*"' | "$GREP" -oE '"[^"]*"' | /usr/bin/sed 's/^"//; s/"$//')
