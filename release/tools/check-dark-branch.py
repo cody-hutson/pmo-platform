@@ -58,7 +58,7 @@ MEASURING = ("fetched", "fixture")           # the two statuses that carry count
 STATUSES = ("fetched", "truncated", "degraded", "not-run", "fixture")
 NOT_CLEAN = "NOT-EVALUATED - this is not a clean result"
 RECORD_HEADER = "dark-branch roster record v1"
-ARMS_DEFINED = 62                            # the self-test fails if fewer arms ran
+ARMS_DEFINED = 65                            # the self-test fails if fewer arms ran
 # Used only when `git rev-parse --local-env-vars` cannot be read. The live list is
 # preferred because it is git-version-dependent; this is what git 2.54 prints.
 _FALLBACK_LOCAL_ENV_VARS = (
@@ -460,6 +460,13 @@ def self_test():
         measured_summary = out[0]        # kept as the S5s pair's sensitivity input
         want("S1 newly-dark exits 1", rc == 1 and out[-1] == "state=newly-dark")
         want("S1b names #1 newly-dark", any(l.startswith("FINDING newly-dark #1 ") and "register.md" in l for l in out))
+        # S1c - the clear predicate's DIRTY exclusion, alone: a victim the host answers
+        # MERGEABLE but DIRTY is not clear, so the sibling push still flags it newly dark.
+        # Without this arm, dropping the exclusion from is_clear passes every other arm.
+        rc, out = sweep([_pull(1, s["victim"], "MERGEABLE", "DIRTY"), ok], "fixture", "main",
+                        s["quiet"], s["sibling"], repo)
+        want("S1c a MERGEABLE but DIRTY victim is still flagged newly-dark",
+             rc == 1 and out[-1] == "state=newly-dark")
         # S2 - SPECIFICITY, same non-empty input: the green pull request is not flagged.
         want("S2 green #2 is in no detail line", not any("#2 " in l for l in out[1:-1]))
         want("S2b summary counts clear=1", " clear=1 " in out[0])
@@ -625,6 +632,12 @@ def self_test():
     # R1 - SENSITIVITY: a conflicting pull request reads DARK whatever its roster shows.
     rc, line = read(dict(live, mergeable="CONFLICTING", mergeStateStatus="DIRTY"), healthy, "fixture", rec, 18)
     want("R1 conflict reads DARK", rc == 1 and "→ DARK" in line)
+    # R1u / R1v - each limb of the dark predicate, alone. Every other fixture sets both
+    # limbs or neither, so without these two arms dropping either limb of is_dark passes.
+    rc, line = read(dict(live, mergeable="UNKNOWN", mergeStateStatus="DIRTY"), healthy, "fixture", rec, 18)
+    want("R1u a DIRTY state alone reads DARK", rc == 1 and "→ DARK" in line)
+    rc, line = read(dict(live, mergeable="CONFLICTING", mergeStateStatus="UNKNOWN"), healthy, "fixture", rec, 18)
+    want("R1v a CONFLICTING mergeable alone reads DARK", rc == 1 and "→ DARK" in line)
     # R2 - SENSITIVITY, the false green: four passing rows, none triggered on pull_request.
     rc, line = read(live, collapsed, "fixture", rec, 18)
     want("R2 a collapsed all-green roster reads SHORTFALL", rc == 1 and "SHORTFALL" in line
