@@ -1,6 +1,6 @@
 ---
 title: ADR-217 — The exit-consumer and executor census is keyed on provenance and shape, and asserted on every run
-status: Proposed — the design was locked at the controls-fail-loud Collective Review scope lock; the transition to Accepted belongs to the release's Stage 13 ratification beat
+status: Accepted — operator-ratified at the controls-fail-loud Stage 13 Close ratification beat (Phase A13), 2026-10-17
 date: 2026-09-27
 release: controls-fail-loud
 deciders: "Workspace owner (operator) — decisions rendered at the release's Stage-5 Collective Review scope lock, with the independent adversarial review's findings folded in; design by the Stage 5 Solutioning spoke; authored by the Stage 6 Engineering spoke"
@@ -19,7 +19,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** The design was locked by the operator at the controls-fail-loud Collective Review scope lock, together with the adversarial review's findings routed there; the transition to Accepted belongs to the release's Stage 13 ratification beat, not to authoring.
+**Accepted** — operator-ratified at the `controls-fail-loud` Stage 13 Close ratification beat (Phase A13), 2026-10-17, as one record of a decision rendered per record. Authored at Stage 6 Engineering as `Proposed`, after the operator locked the design at the release's Collective Review scope lock, together with the adversarial review's findings routed there; the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.75**.
 
 **Numbering provenance.** Claimed as **207** against a mainline anchor of **206**, read from the repository's ADR-numbering detector as its next-free number rather than computed as one past the highest number visible on any branch; another release's open branch carries 207 to 210 as a detection-only claim. The number binds at the Stage-12 claim; if the mainline claims it first, the renumbering tool moves this record at merge and appends a provenance note here.
 
