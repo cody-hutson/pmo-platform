@@ -388,7 +388,7 @@ git -C "$R" checkout -q -b release/some-slug
 printf 'release edit\n' > "${R}/operations/skills/demo-skill/SKILL.md"
 git -C "$R" add -A; git -C "$R" commit -qm "release work"
 git -C "$R" checkout -q main
-git -C "$R" merge -q --no-ff -m "Merge pull request from fixture/release/some-slug" release/some-slug >/dev/null 2>&1
+git -C "$R" merge -q --no-ff -m "Merge pull request #1 from fixture/release/some-slug" release/some-slug >/dev/null 2>&1
 _line="$(/usr/bin/tail -n1 "$LOG")"
 if [ "$_line" = "--deploy demo-skill" ]; then
   report "F1: a release merge is deployed by name and forwards no --release (named site)" 1
@@ -403,7 +403,7 @@ git -C "$R" checkout -q -b release/other-slug
 git -C "$R" rm -q -r operations/skills/demo-skill
 git -C "$R" commit -qm "release removes demo-skill"
 git -C "$R" checkout -q main
-git -C "$R" merge -q --no-ff -m "Merge pull request from fixture/release/other-slug" release/other-slug >/dev/null 2>&1
+git -C "$R" merge -q --no-ff -m "Merge pull request #1 from fixture/release/other-slug" release/other-slug >/dev/null 2>&1
 _line="$(/usr/bin/tail -n1 "$LOG")"
 if [ "$_line" = "--deploy" ]; then
   report "F2: a release merge on the fallback site forwards no --release either" 1
