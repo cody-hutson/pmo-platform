@@ -294,11 +294,29 @@ OUTPUT (TSV) / EXIT CODES
   R5-NEW    <path>:1\t<detail>           # net-new ADR missing a §3 section (file-scoped)
   R5-LOST   <path>:1\t<detail>           # changed ADR lost a §3 section it had (file-scoped)
   EXEMPT    <path>\t<reason>             # whole-file exemption applied
+  UNEVALUABLE <path>\t<read>: <detail>   # a read the file's evaluation needs did not
+                                         # run (exit 3)
   COUNT     <n>                          # total violations
 
   exit 0 — clean
   exit 1 — violation(s) present (or self-test failure)
-  exit 3 — input failure (no ADR files resolved; the tree moved)
+  exit 3 — input failure: no ADR files resolved (the tree moved), or a scanned ADR
+           could not be opened, or a `--diff-base` git read did not run for a
+           changed ADR, so that file was not evaluated
+
+Every run first reads each scanned ADR's own text, once, before any rule runs; every
+rule, R6's scoping included, evaluates that one copy. A file that cannot be opened —
+no read permission, a directory named like an ADR — was not examined, so it stops the
+run with UNEVALUABLE and exit 3 rather than being counted as scanned and clean.
+
+A `--diff-base` run then reads two things from git per file: the lines the change
+added (R1-R4 are scoped to them) and the file's text at the base (R5 and R6 are scoped
+to it). A read that FAILED is not an empty answer. An empty diff from a git that ran
+means nothing was added; a diff that did not run means nothing is known. The same
+holds for the base: a path absent at the base (asked of `git ls-tree`, which answers
+that with an empty listing and exit 0) is net-new, and every other failure is a read
+that did not run. Every failure, of these reads or of the file's own text, stops the
+run with UNEVALUABLE and exit 3, which the CI job fails on regardless of WARN_MODE.
 
 Python 3.9-compatible — matches /usr/bin/python3 on the operator baseline.
 """
@@ -306,6 +324,7 @@ Python 3.9-compatible — matches /usr/bin/python3 on the operator baseline.
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -1175,48 +1194,104 @@ def collect_adrs(root, explicit_files):
     return out
 
 
+class CannotEvaluate(Exception):
+    """A read one file's evaluation needs did not run, so that file was not evaluated.
+
+    The reads are the file's own text, and under `--diff-base` the two git reads.
+    Raised instead of returning an empty answer. An empty answer is what a clean file
+    produces, so a failed read returned as one makes a file the run never examined
+    read as clean. `main` reports it as an UNEVALUABLE row and exits 3.
+    """
+
+    def __init__(self, rel, read, detail):
+        Exception.__init__(self, "%s: %s: %s" % (rel, read, detail))
+        self.rel = rel
+        self.read = read
+        self.detail = detail
+
+
+def head_text_map(paths, root):
+    """{path: text} — each scanned ADR's own text, read once, before any rule runs.
+
+    A file that cannot be opened raises CannotEvaluate. Skipping it would count it as
+    scanned and report no findings for it, which is the answer a clean file gets.
+    Every consumer — the per-file rules and R6's scoping alike — reads this one map, so
+    no rule evaluates a different copy of a file than another rule did.
+    """
+    result = {}
+    for p in paths:
+        try:
+            with open(p, "r", encoding="utf-8", errors="replace") as fh:
+                result[p] = fh.read()
+        except OSError as exc:
+            raise CannotEvaluate(os.path.relpath(p, root), "open (the file's own text)",
+                                 exc.strerror or str(exc)) from exc
+    return result
+
+
+def _git_read(args, root, rel, read):
+    """Run one git read for `rel` and return its stdout, or raise CannotEvaluate.
+
+    Only a zero exit is an answer. A non-zero exit, or a git that could not be
+    started, is a read that did not run, whatever its stdout happens to hold.
+    """
+    try:
+        proc = subprocess.run(["git"] + args, capture_output=True, text=True, cwd=root)
+    except Exception as exc:
+        raise CannotEvaluate(rel, read, "git could not be run (%s)" % exc) from exc
+    if proc.returncode != 0:
+        first = next((ln.strip() for ln in proc.stderr.splitlines() if ln.strip()),
+                     "no message")
+        raise CannotEvaluate(rel, read, "git exited %d (%s)" % (proc.returncode, first))
+    return proc.stdout
+
+
 def base_blob_map(diff_base, paths, root):
     """{path: (is_new, base_text_or_None)} at `diff_base` — R5's delta substrate.
+
+    Presence at the base is asked of `git ls-tree`, which answers a path absent from a
+    valid base with an EMPTY listing and exit 0, and an unreadable base with a non-zero
+    exit. So "absent at the base" (net-new, the R5-NEW population) is read from a
+    listing that succeeded, and is never inferred from a failure. A present path is
+    then read with `git show`. Any read that does not run raises CannotEvaluate.
+
+    Neither failure shape has a safe silent answer. Inferring "absent" from a failed
+    `git show` calls an existing record net-new: a removed section then reads as
+    R5-NEW rather than R5-LOST, and a legacy record's pre-existing gap draws a false
+    R5-NEW. Answering a failure with `(False, None)` silences both R5 limbs, so a
+    change whose only defect is a removed section exits 0.
 
     `git show <base>:<path>` is invoked through a subprocess ARGUMENT LIST, never a
     shell string: some shells apply their own history/modifier expansion to a
     `rev:path` word and silently mangle it, which reads back as a file that does not
-    exist at the base — i.e. as a false "net-new". A read error is reported as
-    `(False, None)`, which makes BOTH R5 limbs silent for that file rather than
-    inventing a net-new verdict from a failed read.
+    exist at the base — i.e. as a false "net-new".
     """
     result = {}
     for p in paths:
         rel = os.path.relpath(p, root)
-        try:
-            proc = subprocess.run(["git", "show", "%s:%s" % (diff_base, rel)],
-                                  capture_output=True, text=True, cwd=root)
-        except Exception:
-            result[p] = (False, None)
+        listed = _git_read(["ls-tree", "--name-only", diff_base, "--", rel], root, rel,
+                           "git ls-tree (is the file at the diff base)")
+        if not listed.strip():
+            result[p] = (True, None)          # absent at a base that resolved: net-new
             continue
-        if proc.returncode == 0:
-            result[p] = (False, proc.stdout)
-            continue
-        # Distinguish "absent at the base" (net-new — the R5-NEW population) from
-        # any other git failure (bad ref, not a repo), which must stay silent.
-        exists = subprocess.run(["git", "cat-file", "-e", "%s^{commit}" % diff_base],
-                                capture_output=True, text=True, cwd=root).returncode == 0
-        result[p] = (True, None) if exists else (False, None)
+        result[p] = (False, _git_read(["show", "%s:%s" % (diff_base, rel)], root, rel,
+                                      "git show (the file's text at the diff base)"))
     return result
 
 
 def added_line_map(diff_base, paths, root):
-    """{path: set(1-based added line numbers)} since `diff_base` (net-new posture)."""
+    """{path: set(1-based added line numbers)} since `diff_base` (net-new posture).
+
+    An empty set means git ran and the change added no line to the file. A diff that
+    did not run raises CannotEvaluate instead of standing in as that empty set: R1-R4
+    are scoped to the added lines, so an empty answer for a failed read silences every
+    line-scoped rule for the file.
+    """
     result = {}
     for p in paths:
         rel = os.path.relpath(p, root)
-        try:
-            diff = subprocess.run(
-                ["git", "diff", "--unified=0", diff_base + "...HEAD", "--", rel],
-                capture_output=True, text=True, cwd=root).stdout
-        except Exception:
-            result[p] = None      # cannot compute -> scan whole file (fail loud, not blind)
-            continue
+        diff = _git_read(["diff", "--unified=0", diff_base + "...HEAD", "--", rel],
+                         root, rel, "git diff (the lines the change added)")
         lines = set()
         newln = 0
         for dl in diff.splitlines():
@@ -1387,6 +1462,192 @@ def _mutation_revert_line_scoped_bound(fn):
         return fn()
     finally:
         frontmatter_bounds = live
+
+
+def _fail_closed_read_arms(check, clean):
+    """The reads a file's evaluation needs, each pinned on a throwaway repository.
+
+    For each of the two `--diff-base` git reads there is a positive arm (a real answer
+    is still found), a control arm (an empty answer from a git that RAN is still an
+    answer, not a failure) and a sensitivity arm per failure shape: a base git does not
+    have, a `git` first on PATH that fails only that read, and no git at all.
+    End-to-end arms then run `main` in a subprocess, because a CannotEvaluate that
+    escapes `main` exits 1, which the warn-mode CI job passes. The file's own text is
+    pinned end to end only: a file that cannot be opened, under `--diff-base --files`
+    and in a whole-corpus run, each with a readable control. Never call this outside
+    the self-test.
+    """
+    real_git = shutil.which("git")
+    if real_git is None:
+        check("fail-closed reads — NO git ON PATH, the fixture repository could not be "
+              "built, so none of the read arms ran", None)
+        return
+    saved = dict(os.environ)
+    tmp = tempfile.mkdtemp()
+    try:
+        # An inherited GIT_DIR / GIT_WORK_TREE (a hook sets them) would aim the fixture's
+        # git calls at the real repository.
+        for key in [k for k in os.environ if k.startswith("GIT_")]:
+            del os.environ[key]
+        repo = os.path.join(tmp, "repo")
+        os.makedirs(os.path.join(repo, "core", "ADRs"))
+
+        def git(*a):
+            return subprocess.run(
+                [real_git, "-C", repo, "-c", "user.name=Fixture",
+                 "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false",
+                 "-c", "core.hooksPath=" + os.devnull] + list(a),
+                capture_output=True, text=True, check=True).stdout.strip()
+
+        old_rel = "core/ADRs/ADR-001-old.md"     # present at the base, one line added
+        new_rel = "core/ADRs/ADR-002-new.md"     # absent at the base
+        old, new = os.path.join(repo, old_rel), os.path.join(repo, new_rel)
+        with open(old, "w") as fh:
+            fh.write(clean)
+        git("init", "-q")
+        git("add", "-A")
+        git("commit", "-q", "-m", "base")
+        base = git("rev-parse", "HEAD")
+        with open(old, "a") as fh:
+            fh.write("\nOne more sentence of context.\n")
+        with open(new, "w") as fh:
+            fh.write(clean)
+        git("add", "-A")
+        git("commit", "-q", "-m", "head")
+        head = git("rev-parse", "HEAD")
+        absent = "0" * 39 + "1"                  # well-formed; no repository has it
+        n = len(clean.splitlines())
+        added = {n + 1, n + 2}                   # the appended blank line and sentence
+
+        def outcome(fn):
+            try:
+                return ("ok", fn())
+            except CannotEvaluate:
+                return ("unevaluable", None)
+            except Exception as exc:             # any other escape is itself a defect
+                return ("crashed", repr(exc))
+
+        def with_path(path, fn):
+            os.environ["PATH"] = path
+            try:
+                return outcome(fn)
+            finally:
+                os.environ["PATH"] = saved.get("PATH", "")
+
+        def shim(trigger):
+            d = os.path.join(tmp, "shim-" + trigger.lstrip("-").replace("=", "-"))
+            os.makedirs(d, exist_ok=True)
+            exe = os.path.join(d, "git")
+            with open(exe, "w") as fh:
+                fh.write('#!/bin/sh\nfor a in "$@"; do\n'
+                         '  if [ "$a" = "%s" ]; then\n'
+                         '    echo "fatal: forced failure (self-test shim)" >&2; exit 128\n'
+                         '  fi\ndone\nexec "%s" "$@"\n' % (trigger, real_git))
+            os.chmod(exe, 0o755)
+            return d + os.pathsep + saved.get("PATH", "")
+
+        no_git = os.path.join(tmp, "empty-path")
+        os.makedirs(no_git)
+
+        # added_line_map — positive, control, sensitivity.
+        check("--diff-base: added_line_map still finds a line the change added",
+              outcome(lambda: added_line_map(base, [old], repo)) == ("ok", {old: added}))
+        check("--diff-base: an empty diff from a git that RAN is 'nothing added', not "
+              "a failure (control)",
+              outcome(lambda: added_line_map(head, [old], repo)) == ("ok", {old: set()}))
+        check("--diff-base: added_line_map fails closed on a base git does not have",
+              outcome(lambda: added_line_map(absent, [old], repo))[0] == "unevaluable")
+        check("--diff-base: added_line_map fails closed when only the per-file diff "
+              "fails (valid base)",
+              with_path(shim("--unified=0"),
+                        lambda: added_line_map(base, [old], repo))[0] == "unevaluable")
+        check("--diff-base: added_line_map fails closed when git cannot be run at all",
+              with_path(no_git,
+                        lambda: added_line_map(base, [old], repo))[0] == "unevaluable")
+
+        # base_blob_map — positive, control, sensitivity.
+        check("--diff-base: base_blob_map still reads a file present at the base",
+              outcome(lambda: base_blob_map(base, [old], repo)) == ("ok", {old: (False, clean)}))
+        check("--diff-base: base_blob_map still calls a file absent from a base that "
+              "resolved net-new (control)",
+              outcome(lambda: base_blob_map(base, [new], repo)) == ("ok", {new: (True, None)}))
+        check("--diff-base: base_blob_map fails closed on a base git does not have",
+              outcome(lambda: base_blob_map(absent, [old, new], repo))[0] == "unevaluable")
+        check("--diff-base: base_blob_map fails closed, and never calls the record net-new, "
+              "when only `git show` fails (valid base)",
+              with_path(shim("show"),
+                        lambda: base_blob_map(base, [old], repo))[0] == "unevaluable")
+        check("--diff-base: base_blob_map fails closed, and never calls the record net-new, "
+              "when only `git ls-tree` fails (valid base)",
+              with_path(shim("ls-tree"),
+                        lambda: base_blob_map(base, [new], repo))[0] == "unevaluable")
+        check("--diff-base: base_blob_map fails closed when git cannot be run at all",
+              with_path(no_git,
+                        lambda: base_blob_map(base, [old], repo))[0] == "unevaluable")
+
+        # End to end — main must turn CannotEvaluate into UNEVALUABLE + exit 3.
+        def run_main(diff_base, path, files=(old_rel,)):
+            env = dict(os.environ)
+            env["PATH"] = path
+            argv = [sys.executable, os.path.abspath(__file__), "--root", repo,
+                    "--handle", FIXTURE_HANDLE]
+            if diff_base is not None:
+                argv += ["--diff-base", diff_base]
+            if files:
+                argv += ["--files"] + list(files)
+            proc = subprocess.run(argv, capture_output=True, text=True, cwd=repo, env=env)
+            return proc.returncode, proc.stdout
+        plain = saved.get("PATH", "")
+        rc, so = run_main(head, plain)
+        check("--diff-base end to end: an empty but successful delta exits 0 (control)",
+              rc == 0 and "UNEVALUABLE" not in so)
+        rc, so = run_main(absent, plain)
+        check("--diff-base end to end: a base git does not have exits 3 with an "
+              "UNEVALUABLE row naming the file",
+              rc == 3 and ("UNEVALUABLE\t%s\t" % old_rel) in so)
+        rc, so = run_main(base, shim("--unified=0"))
+        check("--diff-base end to end: a per-file diff failure on a valid base exits 3",
+              rc == 3 and ("UNEVALUABLE\t%s\t" % old_rel) in so)
+
+        # The file's own text, end to end. Its CI shape is a changed ADR that the step
+        # passes under `--diff-base --files` and that cannot be opened. Root opens a
+        # mode-000 file, so as root that arm would prove nothing and is skipped visibly.
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            check("file's own text: a changed ADR at mode 000 exits 3 — RUNNING AS ROOT, "
+                  "the permission arm did not run", None)
+        else:
+            os.chmod(old, 0)
+            try:
+                rc, so = run_main(base, plain)
+            finally:
+                os.chmod(old, 0o644)
+            check("file's own text: a changed ADR that cannot be opened (mode 000) exits "
+                  "3 with an UNEVALUABLE row naming the file",
+                  rc == 3 and ("UNEVALUABLE\t%s\topen" % old_rel) in so)
+        rc, so = run_main(base, plain)
+        check("file's own text: the same changed ADR, readable, exits 0 and is scanned "
+              "(control)",
+              rc == 0 and "UNEVALUABLE" not in so and "SCANNED\t1" in so)
+        # Every mode, as root too: nobody can open a directory as a file, and a
+        # whole-corpus listing, unlike `--files`, does not filter an ADR-named one out.
+        stray = os.path.join(repo, "core", "ADRs", "ADR-003-stray.md")
+        os.makedirs(stray)
+        try:
+            rc, so = run_main(None, plain, files=())
+        finally:
+            os.rmdir(stray)
+        check("file's own text: a whole-corpus run exits 3 on an ADR-named entry that "
+              "cannot be opened (a directory), and names it",
+              rc == 3 and ("UNEVALUABLE\t%s\topen"
+                           % os.path.relpath(stray, repo)) in so)
+        rc, so = run_main(None, plain, files=())
+        check("file's own text: the same whole-corpus run without that entry exits 0 "
+              "and scans both records (control)",
+              rc == 0 and "UNEVALUABLE" not in so and "SCANNED\t2" in so)
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def self_test():
@@ -1732,6 +1993,11 @@ def self_test():
         check("collect_adrs ignores non-ADR filenames",
               collect_adrs(tmp, ["core/ADRs/README.md"]) == [])
 
+    # The reads fail closed — a read that did not run is never a clean answer, whether
+    # it is a --diff-base git read or the file's own text. Real git, a throwaway
+    # repository, and a shim or an unreadable entry per failure shape.
+    _fail_closed_read_arms(check, CLEAN)
+
     # ── R5 STRUCT — delta-scoped structural conformance ──────────────────────────
     # The full §3 set, plus a deliberately-noisy shape: an out-of-position section, an
     # H3 sub-heading beneath a canonical H2, and an EXTRA H2. All three must pass, or
@@ -2032,8 +2298,19 @@ def main():
                    "run inside a clone with an origin remote); the handle dimension "
                    "scanned nothing")
 
-    delta = added_line_map(args.diff_base, paths, root) if args.diff_base else {}
-    base_blobs = base_blob_map(args.diff_base, paths, root) if args.diff_base else None
+    # A read that did not run must reach exit 3 here, and must not escape as a traceback:
+    # an uncaught exception exits 1, which the warn-mode CI job reports as findings and
+    # passes. The file's own text is read first, in every mode, so a file that cannot be
+    # opened stops a whole-corpus run the same way it stops a `--diff-base` one.
+    try:
+        texts = head_text_map(paths, root)
+        delta = added_line_map(args.diff_base, paths, root) if args.diff_base else {}
+        base_blobs = base_blob_map(args.diff_base, paths, root) if args.diff_base else None
+    except CannotEvaluate as exc:
+        out.append("UNEVALUABLE\t%s\t%s: %s — this file was not evaluated, so the run "
+                   "can say nothing about it (exit 3)" % (exc.rel, exc.read, exc.detail))
+        print("\n".join(out))
+        return 3
     if base_blobs is None:
         out.append("CONFIG\tR5 SKIPPED — no --diff-base, so the structural rule has no "
                    "delta to scope to; the structural dimension scanned nothing. R5 is "
@@ -2052,12 +2329,7 @@ def main():
     findings = []
     records = {}
     for p in paths:
-        try:
-            with open(p, "r", encoding="utf-8", errors="replace") as fh:
-                text = fh.read()
-        except OSError as exc:
-            out.append("CONFIG\tunreadable: %s (%s)" % (p, exc))
-            continue
+        text = texts[p]
         allowed = delta.get(p) if args.diff_base else None
         struct = None
         if base_blobs is not None:
@@ -2098,12 +2370,8 @@ def main():
             num = adr_number_from_path(p)
             if num is None:
                 continue
-            try:
-                with open(p, "r", encoding="utf-8", errors="replace") as fh:
-                    head_text = fh.read()
-            except OSError:
-                continue
-            if is_new or base_text != head_text:
+            # The text the rules above evaluated, never a second read of the file.
+            if is_new or base_text != texts[p]:
                 scoped.add(num)
         for rule, num, detail in reciprocity_findings(records, scoped):
             rec = records.get(num)
