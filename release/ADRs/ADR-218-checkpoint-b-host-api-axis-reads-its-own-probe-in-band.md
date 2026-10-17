@@ -1,6 +1,6 @@
 ---
 title: ADR-218 — Checkpoint B's host-API axis reads its own probe, in-band
-status: Proposed — the design was locked at the controls-fail-loud Collective Review and at the short scope lock that followed its scoped re-design; the transition to Accepted belongs to the release's Stage 13 ratification beat
+status: Accepted — operator-ratified at the controls-fail-loud Stage 13 Close ratification beat (Phase A13), 2026-10-17
 date: 2026-09-27
 release: controls-fail-loud
 deciders: "Workspace owner (operator) — decisions rendered at the release's Stage-5 Collective Review, which returned the design for a scoped re-design, and at the short scope lock that followed it, with two independent adversarial reviews folded in; design by the Stage 5 Solutioning spoke; authored by the Stage 6 Engineering spoke"
@@ -20,7 +20,7 @@ source_observations:
 
 ## Status
 
-**Proposed.** The design was locked by the operator at the controls-fail-loud Collective Review, which returned it for a scoped re-design, and at the short scope lock that followed; the transition to Accepted belongs to the release's Stage 13 ratification beat, not to authoring.
+**Accepted** — operator-ratified at the `controls-fail-loud` Stage 13 Close ratification beat (Phase A13), 2026-10-17, as one record of a decision rendered per record. Authored at Stage 6 Engineering as `Proposed`, after the operator locked the design at the release's Collective Review, which returned it for a scoped re-design, and at the short scope lock that followed; the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. It makes this record's partial supersession of ADR-156 effective. The decision this record documents shipped in **v4.75**.
 
 **Numbering provenance.** Claimed as **208** against a mainline anchor of **206** plus this release branch's own ADR-207, read from the repository's ADR-numbering detector as the next free number rather than computed as one past the highest number visible on any branch; other open release branches carry 207 to 210 as detection-only claims. The number binds at the Stage-12 claim; if the mainline claims it first, the renumbering tool moves this record at merge and appends a provenance note here.
 
