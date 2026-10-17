@@ -1,63 +1,87 @@
 name: Gate posture reconciliation
 
-# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Gate posture reconciliation (declared vs live)" (report-only — this job NEVER exits non-zero on a finding)  always-reports=yes
-#   invariant: every context declaring `posture=required enforcement=branch-protection`
-#              in .github/workflows/* appears in main's live
-#              required_status_checks.contexts, and every live context is declared by
-#              some header. This is the Requirement (c) coverage audit that
-#              core/standards/gate-efficacy-standard.md § Requirement (b) NAMES —
-#              "reconciling a declared `required` posture against the actual
-#              branch-protection configuration is a coverage-audit item under
-#              Requirement (c), not a file edit any single gate performs" — and until
-#              this job existed that audit had NO runner: every occurrence of the
-#              branch-protection API in an executable surface across the tracked tree
-#              was a comment describing the operator step, and nothing asserted it.
-#   falsification: this job CANNOT be falsified by a repository edit, and saying so is
-#                  the point — its verdict input is out-of-tree GitHub state, so no
-#                  branch change alters what it reads. What IS falsifiable is the
-#                  reconciler's discrimination, and that is asserted by its committed
-#                  --self-test (run by the selftest-discovery job): S1/S2 require each
-#                  delta direction to be reported, S3 requires a fully reconciled set to
-#                  report NEITHER, and S4 requires a live read that did not return to
-#                  publish NO delta at all. Add a `posture=required
-#                  enforcement=branch-protection` header naming an unregistered context
-#                  -> it appears under Unregistered on the next run; register it
-#                  operator-side -> the report reconciles.
-#   posture note: `advisory` here is STRUCTURAL and PERMANENT, not a shakedown that
-#                 graduates. This job must never become a required context and must
-#                 never join `deploy.sh --check-required-subset` (`rs_checks`). Its
-#                 Verdict-Input Closure over repository paths is EMPTY, so a transient
-#                 gh, auth or rate-limit failure would become merge-blocking —
-#                 declaring an enforcement the surface cannot deliver, which
-#                 Requirement (b) forbids. That is verbatim the reason `deploy.sh`
-#                 Check 51 (label-parity) was declined for `required` and ratified
-#                 permanently advisory. `rs_checks` additionally fail-closes on an
-#                 unexpected verdict REGARDLESS of its warn/enforce sentinel, so a
-#                 network-dependent member there would block a merge for a reason no PR
-#                 author can see or repair.
-#   scope note: the reconciliation is reported, never enforced, and the job exits 0 on
-#               every path — INCLUDING the path where the live read fails. Reading
-#               branch protection is admin-scoped and the default GITHUB_TOKEN is not
-#               guaranteed to hold it, so a 403 is an EXPECTED outcome. That case is
-#               reported as a NON-MEASUREMENT and publishes no delta, rather than
-#               printing the clean zero it did not measure.
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Gate posture reconciliation (declared vs live)" (never a required context — a MEASURED divergence turns this check RED)  always-reports=yes
+#   invariant: on a run whose live read returned, the declared and live required-context
+#              sets do not diverge. "Diverge" is defined in
+#              core/standards/gate-efficacy-standard.md § Requirement (b), over the
+#              registration track that § Declared-required contexts of the same standard
+#              defines, and computed by core/deploy/tools/reconcile-gate-posture.py. Three
+#              classes: UNREGISTERED — a declared-required context that claims delivery is
+#              absent from main's live required_status_checks.contexts; HELD AND
+#              REGISTERED — a context declared `required(warn-mode-initial)` is present in
+#              it; UNDECLARED — a live context is named by no declaration on the
+#              registration track. A context declared `required(warn-mode-initial)` and
+#              absent from the live set is HELD: listed on every measured run, never a
+#              divergence.
+#   falsification: add a `posture=required  enforcement=branch-protection:"<a context that
+#                  is not registered>"` header -> this check goes RED on that pull request
+#                  and names the context; correct the header to `advisory`, or have the
+#                  operator register the context, and re-run -> green. A failed live read
+#                  cannot turn this check red and cannot turn it green: see the three
+#                  states below.
+#   posture note: `advisory` is STRUCTURAL and PERMANENT. This context must never be
+#                 registered in branch protection, and its tool must never join
+#                 `deploy.sh --check-required-subset` (`rs_checks`), whose verdict enum
+#                 fail-closes on an unexpected verdict REGARDLESS of its warn/enforce
+#                 sentinel. The verdict input includes out-of-tree repository settings, and
+#                 Requirement (b) bars such a verdict from blocking a merge. What is NOT
+#                 permanent, and was once folded into the same sentence, is the exit
+#                 behaviour. Posture says whether a red verdict BLOCKS; mode says whether a
+#                 finding turns the check RED. This gate is enforcing and non-blocking: it
+#                 fails, and it stops nobody merging. A pre-merge reader that lists EVERY
+#                 check row rather than the required rows applies its own criterion:
+#                 required rows govern the merge, and a red verdict here is read and
+#                 recorded at the merge — never waived unread, and never a block.
+#   three states: at the level a reviewer reads, this check concludes SUCCESS (measured,
+#                 reconciled), FAILURE (measured, diverged) or SKIPPED (NOT-EVALUATED — the
+#                 live read did not return). A skipped verdict is not a clean result; the
+#                 measurement job below carries a warning annotation when it happens.
 #
-# WHY A SEPARATE SURFACE FROM THE CONFORMANCE RATCHET. The predicate this release closes
-# splits on VERDICT-INPUT CLOSURE, and the two halves must not share a host. Half A —
-# "every job publishing a named check-run is declared" — reads tracked workflow text
-# only: deterministic and network-free, so it rides the existing ratchet at
-# core/deploy/tests/test_gate_efficacy_declarations.py, which is where it lives. Half B
-# is this job, and its only oracle is the GitHub API. Admitting Half B to any repo-closed
-# host would import a non-deterministic verdict into a deterministic one. One invariant
-# family, two closures, two surfaces.
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Gate posture reconciliation (measurement)" (red only when the instrument itself is broken)  always-reports=yes
+#   invariant: the reconciler discriminates — its committed --self-test passes with the
+#              shared header parser loaded — and the declared set is readable. This job
+#              performs the live read and the comparison and publishes the report. It does
+#              NOT carry the verdict.
+#   falsification: break one --self-test arm, or make the declared set unreadable -> this
+#                  job goes RED (exit 2) and the verdict job is skipped. Make the live read
+#                  fail -> this job stays GREEN with a warning annotation and the verdict
+#                  job is SKIPPED: an outage turns nothing red and nothing green. The
+#                  self-test step's --require-parser is what makes the parser-backed arms
+#                  mandatory; this job is their one mandatory runner, so dropping the flag
+#                  leaves them able to report NOT-EVALUATED and pass.
 #
-# SINGLE PARSER. The declared set is extracted by importing the ratchet's header parser
-# rather than re-implementing the grammar. Two parsers over one header format is a second
-# thing to keep in agreement, and the agreement is exactly what would rot.
+# WHY TWO JOBS AND NOT ONE. One job has two conclusions, and this gate has three states. A
+# single job would have to file a read that did not return under SUCCESS or under FAILURE
+# — a non-measurement rendered as agreement, or as the failing verdict. The check-run list
+# is the only level a reviewer actually reads, so that is where the third state has to be
+# visible. The cost is one lightweight check-run per pull request, accepted. Same shape,
+# and the same reason, as decision-emission.yml.
 #
-# Runs on EVERY pull request (NO paths filter): the delta this reports is a property of
-# the whole workflow tree AND of out-of-tree repository settings, neither of which is
-# expressible as a path filter. Also runs on push to main as a post-merge report.
+# WHY THE READ IS OF THE BRANCH OBJECT. `GET /repos/{owner}/{repo}/branches/main` returns
+# `protection.required_status_checks.contexts` to any caller that can read the repository.
+# The admin-scoped `.../branches/main/protection` endpoint returns the same list and
+# refuses the workflow token, which is why this job once reported a non-measurement on
+# every run. The response body is handed to the reconciler whole: the decision "is this
+# body a measurement" is verdict-bearing, so it lives in the tool, under its self-test,
+# and not in this file's shell. STATED LIMIT: this is a read of classic branch
+# protection. A required check delivered by a ruleset is outside it.
+#
+# WHY A SEPARATE SURFACE FROM THE CONFORMANCE RATCHET. The predicate splits on
+# VERDICT-INPUT CLOSURE, and the two halves must not share a host. Half A — "every job
+# publishing a named check-run is declared", and every declaration agrees with its own
+# file — reads tracked workflow text only: deterministic and network-free, so it rides
+# the ratchet at core/deploy/tests/test_gate_efficacy_declarations.py, which is where it
+# lives. Half B is this workflow, and part of its input is the GitHub API. Admitting
+# Half B to any repo-closed host would import a non-deterministic verdict into a
+# deterministic one. One invariant family, two closures, two surfaces.
+#
+# SINGLE PARSER. The declared set is extracted by importing the conformance ratchet's
+# header grammar rather than re-implementing it. Two parsers over one header format is a
+# second thing to keep in agreement, and the agreement is exactly what would rot.
+#
+# Runs on EVERY pull request (NO paths filter): what this compares is a property of the
+# whole workflow tree AND of out-of-tree repository settings, neither of which is
+# expressible as a path filter. Also runs on push to main.
 
 on:
   pull_request:
@@ -69,9 +93,11 @@ permissions:
   contents: read
 
 jobs:
-  gate-posture-reconciliation:
-    name: Gate posture reconciliation (declared vs live)
+  measurement:
+    name: Gate posture reconciliation (measurement)
     runs-on: ubuntu-latest
+    outputs:
+      verdict: ${{ steps.reconcile.outputs.verdict }}
     steps:
       - uses: actions/checkout@v7
 
@@ -85,40 +111,82 @@ jobs:
         # yaml-free copy of the header grammar.
         run: python3 -m pip install --quiet pyyaml
 
-      - name: Reconciler self-test (hard-fails independent of the report posture)
-        # The report is advisory; the reconciler's ability to DISCRIMINATE is not. A
-        # detector that cannot be shown to distinguish a delta from a clean set proves
-        # nothing by reporting a clean set, so this step gates on the exit code.
-        run: python3 core/deploy/tools/reconcile-gate-posture.py --self-test
+      - name: Reconciler self-test (hard-fails; the shared parser is REQUIRED here)
+        # --require-parser makes the parser-backed arms mandatory: an unloadable parser
+        # is exit 2 here, where elsewhere those arms report NOT-EVALUATED. A detector
+        # that cannot be shown to discriminate proves nothing by reporting a clean set,
+        # so this step gates on the exit code and runs before anything is measured.
+        run: python3 core/deploy/tools/reconcile-gate-posture.py --self-test --require-parser
 
-      - name: Read live required_status_checks from branch protection
-        # Report-only and deliberately un-gated. Branch protection is an admin-scoped
-        # read the default GITHUB_TOKEN is not guaranteed to hold, so a 403 is an
-        # EXPECTED outcome rather than a defect. It is recorded by the ABSENCE of the
-        # live file, and the reconciler then refuses to publish a delta it could not
-        # measure. github.repository is a trusted context and is bound through env:
-        # and referenced as a quoted shell variable, never inlined into the command.
+      - name: Read main's branch object (no admin scope needed)
+        # Un-gated on purpose: a read that does not return is a NON-MEASUREMENT, and
+        # the reconciler — not this step — decides what the body is. github.repository
+        # is a trusted context, bound through env: and referenced as a quoted shell
+        # variable, never inlined into the command.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
-          if gh api "repos/${REPO}/branches/main/protection" \
-               --jq '.required_status_checks.contexts[]' > live-contexts.txt 2> live-error.txt
+          rm -f branch.json
+          if gh api "repos/${REPO}/branches/main" > branch.json 2> live-error.txt
           then
-            echo "live read: OK"
+            echo "live read: the request returned"
           else
-            rm -f live-contexts.txt
-            echo "live read: UNAVAILABLE (reported as a non-measurement, not a delta)"
+            rm -f branch.json
+            echo "live read: the request did not return"
             sed -n '1,5p' live-error.txt || true
           fi
 
       - name: Reconcile declared-required contexts against live branch protection
-        # Exit 3 (the declared set could not be read at all) is a BROKEN-PROBE signal
-        # and is allowed to surface; every other path exits 0 by contract. The `|| true`
-        # would be wrong here: it would also swallow a broken probe, which is the one
-        # condition this job must never report as clean.
+        id: reconcile
+        # The tool's exit code is the transport, and this handler is the consuming rule:
+        #   0 RECONCILED / 1 DIVERGED  -> a measurement; the verdict job publishes it
+        #   3 NOT-EVALUATED            -> no verdict is published; warn, stay green
+        #   2 (or anything else)       -> the instrument cannot assert; fail THIS job
+        # The step shell runs with errexit, so the pipeline is bracketed: without the
+        # bracket a DIVERGED exit would abort the step before the status is read.
         run: |
           set -uo pipefail
+          set +e
           python3 core/deploy/tools/reconcile-gate-posture.py \
-            --live live-contexts.txt | tee -a "$GITHUB_STEP_SUMMARY"
+            --live-branch-json branch.json \
+            --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
+          rc=${PIPESTATUS[0]}
+          set -e
+          case "$rc" in
+            0|1)
+              exit 0
+              ;;
+            3)
+              echo "::warning title=Gate posture reconciliation::NOT-EVALUATED — the live read did not return, so no verdict is published. This is not a clean result."
+              exit 0
+              ;;
+            *)
+              exit "$rc"
+              ;;
+          esac
+
+  verdict:
+    name: Gate posture reconciliation (declared vs live)
+    needs: measurement
+    if: needs.measurement.outputs.verdict == 'RECONCILED' || needs.measurement.outputs.verdict == 'DIVERGED'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the measured verdict
+        env:
+          VERDICT: ${{ needs.measurement.outputs.verdict }}
+        run: |
+          set -euo pipefail
+          case "$VERDICT" in
+            RECONCILED)
+              echo "RECONCILED — the declared and live required-context sets agree. Held contexts, if any, are listed in the measurement job's summary." | tee -a "$GITHUB_STEP_SUMMARY"
+              ;;
+            DIVERGED)
+              echo "::error title=Gate posture reconciliation::DIVERGED — the declared and live required-context sets diverge. The measurement job's summary names each context, its class and its repair."
+              exit 1
+              ;;
+            *)
+              echo "::warning title=Gate posture reconciliation::unrecognised verdict token; treated as not measured"
+              ;;
+          esac

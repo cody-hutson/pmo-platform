@@ -60,7 +60,7 @@ Permitted cross-module references:
 - `core/disciplines/discovery-discipline.md`
 - `core/disciplines/review-discipline-principles.md`
 - `core/hooks/*`
-- `core/governance/CLAUDE.md`
+- `core/CLAUDE.md.template`
 - `core/schemas/*`
 - `core/deploy/deploy.sh`
 

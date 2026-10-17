@@ -1,0 +1,49 @@
+# skip-tool-exec-mode-check.txt — the exemption list read by
+# core/deploy/tools/check-tool-exec-mode.py.
+#
+# WHAT A ROW SAYS. The named file begins with an interpreter line and is tracked
+# non-executable (100644) on purpose: its consumers read it rather than run it,
+# by the membership rule below.
+#
+# FORMAT. One file per row:
+#
+#     <repo-relative path>  # <class>: <reason>
+#
+# The class is one of:
+#     sourced-library   read into a shell with `source` or `.`
+#     imported-module   imported by another program; not a command
+#     fixture           test data that happens to begin with an interpreter line
+#
+# The reason names what reads the file. A row with no class, an unknown class or
+# no reason is a parse error, and so is a pattern: a row names exactly one file,
+# and a directory cannot be exempted.
+#
+# MEMBERSHIP RULE. A file belongs here when its consumers read it into their own
+# process — with `source`, `.` or `import` — or read it as data. A guarded
+# self-test or command arm that a caller reaches through an interpreter does not
+# change that. Independently, a row is mandatory where a copy of the file is
+# deployed and that copy's mode is asserted non-executable. Every other file that
+# begins with an interpreter line is a tool, run as a program by its callers:
+# make it executable instead, with `git update-index --chmod=+x <path>`.
+#
+# THE LIST IS READ FROM THE INDEX, like the modes and first bytes it is checked
+# against, so a row takes effect when it is staged. A row written and not staged
+# changes nothing, and the verdict a local scan reports is the one a commit
+# carries.
+#
+# THE LIST CANNOT GO STALE QUIETLY. A row naming a file that is now tracked
+# executable, that no longer begins with an interpreter line, that is no longer
+# tracked, or that sits outside the scanned trees is itself a finding. When a
+# file changes role, delete its row — unless the row's reason says a copy's mode
+# is asserted, in which case restore the file's 100644 mode instead.
+#
+# NO OPERATOR-INSTANCE LAYER. Whether a tracked file is a library is a fact about
+# the repository, so it is recorded once, here, and read identically at deploy
+# time and at pull-request time.
+
+release/tools/version-grammar.sh  # sourced-library: read with `source` by the version-claim and close-out tools; its self-test is run through an interpreter
+release/tools/lib/frontmatter-strip.sh  # sourced-library: read with `source` by the release-body and close-out tools; defines one function and has no main
+core/deploy/tools/path-leak-patterns.sh  # sourced-library: sourced by the hooks, its command arm reached through `bash`; copied beside the hooks at install, where a suite asserts the deployed copy is non-executable
+core/deploy/tools/_frontmatter.py  # imported-module: the shared frontmatter reader its sibling deploy tools import; a library, not a check
+core/deploy/tools/fixtures/issue-body-anchors/targets/fx-gamma.sh  # fixture: a target file the issue-body anchor check reads as data; never executed
+release/tools/lib/host-refusal-class.sh  # sourced-library: read with `source` by the host-API axis evaluator and the close-out automation; defines functions and has no main or exit
