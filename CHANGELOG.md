@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.75] - 2026-10-17
+
+Checks, hooks and gates that cannot evaluate what they check now say so, instead of reporting a pass or a verdict about it.
+
+[Full notes](release/releases/notes/v4.75_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.75)
+
 ## [v4.74] - 2026-10-09
 
 Cycle time, plan survival and close-quality figures now read the right rows or name why they have no value; the Stage 9 verdict is bound.
