@@ -356,12 +356,19 @@ changed_files_verdict() {
 # added_lines_verdict <repo-dir> <base-sha> <head-sha> <path> <out-file>
 #   LISTED       — <out-file> holds the lines <path> ADDED since the merge base, one
 #                  per line as HEAD-LINENO:CONTENT; empty is a valid answer
+#   BINARY       — git rendered the change as binary ("Binary files … differ"), so it
+#                  printed no lines to extract; <out-file> empty. The read ran and
+#                  evaluated nothing, so this is not "nothing added": the caller
+#                  decides whether a binary file is expected at <path>
 #   UNEVALUABLE  — base or head missing, the diff failed, or the extraction failed;
 #                  <out-file> empty
 #
 #   The diff and the extraction are two commands with a file between them, not a
 #   pipeline, so a failed diff cannot hide behind a successful awk. The awk program
-#   is the gate's, moved here unchanged.
+#   is the gate's, moved here unchanged. git renders a file as binary when its
+#   content carries a NUL byte, and also when a `.gitattributes` line marks it
+#   `-diff` — which the pull request under review can add — so a text file can
+#   reach this function looking binary.
 added_lines_verdict() {
   _al_repo="${1?added_lines_verdict: repo dir required}"
   _al_base="${2-}"
@@ -381,6 +388,19 @@ added_lines_verdict() {
   if ! git -C "$_al_repo" diff --unified=0 "$_al_base"..."$_al_head" -- "$_al_path" > "$_al_diff"; then
     rm -f "$_al_diff"
     printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  # A diff header line, never a content line: content lines start with `+`, `-`,
+  # a space or `@@`, so a line that STARTS with "Binary files " is git's own.
+  _al_binary=0
+  while IFS= read -r _al_line || [ -n "$_al_line" ]; do
+    case "$_al_line" in
+      "Binary files "*) _al_binary=1 ;;
+    esac
+  done < "$_al_diff"
+  if [ "$_al_binary" -eq 1 ]; then
+    rm -f "$_al_diff"
+    printf 'BINARY\n'
     return 0
   fi
   if ! awk '

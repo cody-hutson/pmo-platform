@@ -241,12 +241,6 @@ jobs:
       # The actor feeds ONLY the summary notice below; it never changes the scan.
       ACTOR: ${{ github.actor }}
       SENDER_TYPE: ${{ github.event.sender.type }}            # 'Bot' for dependabot/Claude
-      # Operator full name + email (one per line); canonical FAILS LOUD if unset.
-      # A run Dependabot starts receives only Dependabot secrets, so this secret is
-      # MIRRORED into the Dependabot store (Actions store canonical) — see
-      # core/standards/secrets-handling-policy.md §2 and §5.
-      OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY }}
-      COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
       FORK_OPTOUT: ${{ vars.REPO_INTEGRITY_FORK_OPTOUT }}     # fork-only: explicit opt-out of a dimension
     steps:
       - uses: actions/checkout@v7
@@ -257,6 +251,20 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Operator full name + email (one per line); canonical FAILS LOUD if unset.
+          # Bound to THIS step only, so no other step of the job (the checkout action,
+          # whose pin Dependabot bumps) runs with personal data in its environment.
+          # A run Dependabot starts receives only Dependabot secrets, so the value is
+          # MIRRORED into the Dependabot store under a DISTINCT name,
+          # OPERATOR_IDENTITY_DEPENDABOT (Actions store canonical) — see
+          # core/standards/secrets-handling-policy.md §2 and §5. The distinct name is
+          # the ordering guard: workflow code that reads only OPERATOR_IDENTITY (the
+          # pre-release gate, a revert to it, or a re-run of a run it recorded) never
+          # sees the mirror, so it keeps failing loud on a bot's run instead of
+          # passing it unscanned. A human run reads the Actions store, where the
+          # _DEPENDABOT name does not exist, so an unset canonical copy still fails.
+          OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY || secrets.OPERATOR_IDENTITY_DEPENDABOT }}
+          COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES || secrets.COLLABORATOR_NAMES_DEPENDABOT }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
         run: |
           set -euo pipefail
 
@@ -322,7 +330,7 @@ jobs:
                 echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
                 echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
                 echo "A run Dependabot starts reads the Dependabot secret store: if this run was started by"
-                echo "Dependabot, the mirrored copy is missing (\`gh secret set OPERATOR_IDENTITY --app dependabot\`;"
+                echo "Dependabot, the mirrored copy is missing (\`gh secret set OPERATOR_IDENTITY_DEPENDABOT --app dependabot\`;"
                 echo "see \`core/standards/secrets-handling-policy.md\` §5)."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
@@ -518,6 +526,25 @@ jobs:
                   echo "so this is a hard failure, not a pass. The git error is in the job log above."
                 } | tee -a "$GITHUB_STEP_SUMMARY"
                 echo "::error::Depersonalization gate could not evaluate: git could not read a changed file's added lines"
+                rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
+                exit 1 ;;
+              BINARY)
+                # git printed "Binary files … differ" and no lines. A compiled skill
+                # package is binary by construction, and its sources are scanned where
+                # they live, so it is the one expected case. Anything else rendered
+                # binary — content with a NUL byte, or a file the pull request marks
+                # `-diff` in .gitattributes — was not read, and a file that was not
+                # read is not a file found clean.
+                if [ "${f#packages/}" != "$f" ] && [ "${f%.skill}" != "$f" ]; then continue; fi
+                {
+                  echo "## :x: Depersonalization gate could not read the added lines"
+                  echo ""
+                  echo "git rendered \`$f\` as a binary file, so it printed no lines for the gate to scan. Only a"
+                  echo "compiled skill package under \`packages/\` is binary by design. A NUL byte in the content,"
+                  echo "or a \`.gitattributes\` entry marking the file \`-diff\`, hides a text file from the scan, so"
+                  echo "this is a hard failure, not a pass."
+                } | tee -a "$GITHUB_STEP_SUMMARY"
+                echo "::error::Depersonalization gate could not evaluate: a changed C6 file outside packages/*.skill diffs as binary"
                 rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
                 exit 1 ;;
               *)

@@ -492,6 +492,7 @@ for arm_spec in \
   'changed_files_verdict|^[[:space:]]*UNEVALUABLE[)]' \
   'changed_files_verdict|^[[:space:]]*[*][)]' \
   'added_lines_verdict|^[[:space:]]*UNEVALUABLE[)]' \
+  'added_lines_verdict|^[[:space:]]*BINARY[)]' \
   'added_lines_verdict|^[[:space:]]*[*][)]' \
   'literal_scan_verdict|^[[:space:]]*UNEVALUABLE[)]' \
   'literal_scan_verdict|^[[:space:]]*[*][)]'; do
@@ -500,7 +501,7 @@ for arm_spec in \
     "$(arm_exits_1 "$WORKFLOW" "^[[:space:]]*case \"[\$][(]$fn_name " "$arm_re")" "yes"
 done
 # Control: the reader must say "no" for an arm edited to exit 0, and "yes" for the
-# same arm intact, or the twelve PASSes above are not measuring.
+# same arm intact, or the thirteen PASSes above are not measuring.
 ARM_FIXTURE_BAD="$TMP/arm_exit0"
 ARM_FIXTURE_OK="$TMP/arm_exit1"
 printf '          case "$(literal_set_verdict "$IS_CANONICAL" "$PATTERN_FILE")" in\n            FAIL-EMPTY)\n              echo "::error::x"\n              exit 0 ;;\n          esac\n' > "$ARM_FIXTURE_BAD"
@@ -660,6 +661,39 @@ v="$(added_lines_verdict "$FC_REPO" "$FC_HEAD" "$FC_HEAD" core/a.md "$FC_OUT")"
 check "AL control — an empty but successful diff is LISTED, not UNEVALUABLE" "$v" "LISTED"
 check "AL control — …and yields no added lines" "$(wc -l < "$FC_OUT" | tr -d ' ')" "0"
 
+# A file git renders as binary prints "Binary files … differ" and no lines, so the
+# extraction finds nothing although the read evaluated nothing. Two ways a TEXT file
+# gets there: a `.gitattributes` line marking it `-diff`, which the pull request can
+# add itself, and a NUL byte in its content. Both carry the handle.
+printf 'core/hidden.md -diff\n' > "$FC_REPO/.gitattributes"
+printf 'Authored by %s.\n' "$FIXTURE_HANDLE" > "$FC_REPO/core/hidden.md"
+if ! { fc_git add .gitattributes core/hidden.md && fc_git commit -q -m hidden; }; then
+  echo "FATAL: could not commit the -diff fixture"; exit 1
+fi
+FC_B1="$(fc_git rev-parse HEAD)"
+printf 'Authored by %s.\000\n' "$FIXTURE_HANDLE" > "$FC_REPO/core/nul.md"
+if ! { fc_git add core/nul.md && fc_git commit -q -m nul; }; then
+  echo "FATAL: could not commit the NUL-byte fixture"; exit 1
+fi
+FC_B2="$(fc_git rev-parse HEAD)"
+# Non-vacuity: git really renders both as binary, and the hidden file really carries
+# the handle as text.
+check "AL control — git renders the -diff file as binary" \
+  "$(fc_git diff --unified=0 "$FC_Q"..."$FC_B1" -- core/hidden.md | grep -c '^Binary files ')" "1"
+check "AL control — …and its text carries the handle" \
+  "$(fc_git diff --text --unified=0 "$FC_Q"..."$FC_B1" -- core/hidden.md | grep -c "^+Authored by $FIXTURE_HANDLE")" "1"
+check "AL control — git renders the NUL-byte file as binary" \
+  "$(fc_git diff --unified=0 "$FC_B1"..."$FC_B2" -- core/nul.md | grep -c '^Binary files ')" "1"
+
+printf 'stale\n' > "$FC_OUT"
+v="$(added_lines_verdict "$FC_REPO" "$FC_Q" "$FC_B1" core/hidden.md "$FC_OUT")"
+check "AL sensitivity — a text file marked -diff is BINARY, not 'nothing added'" "$v" "BINARY"
+check "AL sensitivity — …and the out-file is truncated" "$(wc -l < "$FC_OUT" | tr -d ' ')" "0"
+v="$(added_lines_verdict "$FC_REPO" "$FC_B1" "$FC_B2" core/nul.md "$FC_OUT")"
+check "AL sensitivity — a file carrying a NUL byte is BINARY, not 'nothing added'" "$v" "BINARY"
+v="$(added_lines_verdict "$FC_REPO" "$FC_BASE" "$FC_HEAD" core/a.md "$FC_OUT")"
+check "AL control — a text file beside them is still LISTED" "$v" "LISTED"
+
 # --- literal_scan_verdict -----------------------------------------------------------
 FC_HITS="$TMP/fail-closed-hits"
 FC_MALFORMED="$TMP/fail-closed-malformed-patterns"
@@ -807,6 +841,42 @@ GUARD_FIXTURE="$TMP/guard-fixture"
 printf '          for fn in esc_lines identity_preflight \\\n                    changed_files_verdict; do\n          case "$(literal_scan_verdict "$A" "$B" "$C")" in\n' > "$GUARD_FIXTURE"
 check "…control — the guard reader parses a continued list" "$(guard_names "$GUARD_FIXTURE")" "esc_lines identity_preflight changed_files_verdict"
 check "…control — a called function missing from the guard is reported" "$(guard_missing "$GUARD_FIXTURE")" "literal_scan_verdict"
+
+# --- The pass arms, the binary exception, the scope list and the exit-0 count -------
+# An arm label merged into a pass arm (`LISTED|UNEVALUABLE) : ;;`) leaves the failing
+# arm in place and unreachable, so the exit-arm reader above still reads "yes". Each
+# pass arm must therefore appear exactly as written, as many times as the gate has it.
+check "Gate 1 carries the LISTED pass arm exactly twice" "$(line_count "$GATE1_BLOCK" 'LISTED) : ;;')" "2"
+check "Gate 1 carries the NONE skip arm exactly once" "$(line_count "$GATE1_BLOCK" 'NONE) continue ;;')" "1"
+check "Gate 1 carries the packages/*.skill binary exception exactly once" \
+  "$(line_count "$GATE1_BLOCK" 'if [ "${f#packages/}" != "$f" ] && [ "${f%.skill}" != "$f" ]; then continue; fi')" "1"
+check "Gate 1 carries the C6 scope list exactly once" \
+  "$(line_count "$GATE1_BLOCK" 'core/*|release/*|operations/*|packages/*) CHANGED+=("$f") ;;')" "1"
+check "Gate 1 exempts only release/releases/ ahead of the scope list" \
+  "$(grep -cE '^[[:space:]]*release/releases/[*][)] : ;;' "$GATE1_BLOCK")" "1"
+# Every executable `exit 0` in the job, counted: the out-of-scope pass, the opted-out
+# fork's empty set, and the clean verdict. An early `exit 0` inserted anywhere — the
+# retired bot exemption returning as control flow, say — changes the count.
+EXIT0_RE='^[^#]*(^|[^[:alnum:]_])exit 0([^0-9]|$)'
+check "Gate 1 has exactly three executable exit 0 lines" "$(grep -cE "$EXIT0_RE" "$GATE1_BLOCK")" "3"
+EXIT0_FIXTURE="$TMP/exit0-fixture"
+printf '          [ "$BOT" -eq 1 ] && exit 0\n            exit 0\n          # exit 0 in a comment\n          exit 10\n' > "$EXIT0_FIXTURE"
+check "…control — the exit 0 count reads code, not comments or exit 10" "$(grep -cE "$EXIT0_RE" "$EXIT0_FIXTURE")" "2"
+
+# --- The secrets: step-scoped, and the mirror under its own name --------------------
+# The identity is bound to the scan step only, never at job level, where the checkout
+# action would run with it. And the Dependabot-store mirror is read under its own
+# name: a single-name binding would let a mirror stored as OPERATOR_IDENTITY reach
+# workflow code that still carries the bot exemption — the ordering hazard.
+GATE1_JOB_ENV="$TMP/gate1-job-env"
+awk '/^  depersonalization:$/ { on = 1; next } on && /^    steps:$/ { exit } on' "$WORKFLOW" > "$GATE1_JOB_ENV"
+check "Gate 1's job-level env binds no secret" "$(grep -c 'secrets\.' "$GATE1_JOB_ENV")" "0"
+check "…control — the job-level extraction holds the job's env" "$(grep -c 'REPO_OWNER: ' "$GATE1_JOB_ENV")" "1"
+check "Gate 1 reads the identity from the canonical name or the mirror's own name, once" \
+  "$(line_count "$GATE1_BLOCK" 'OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY || secrets.OPERATOR_IDENTITY_DEPENDABOT }}')" "1"
+check "Gate 1 reads the collaborator list the same way, once" \
+  "$(grep -cF 'COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES || secrets.COLLABORATOR_NAMES_DEPENDABOT }}' "$GATE1_BLOCK")" "1"
+check "Gate 1 has no single-name identity binding" "$(grep -cE 'secrets[.]OPERATOR_IDENTITY[[:space:]]*[}][}]' "$GATE1_BLOCK")" "0"
 
 echo
 echo "=== Result ==="
