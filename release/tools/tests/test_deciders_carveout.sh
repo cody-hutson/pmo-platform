@@ -1170,6 +1170,28 @@ check "AL control — …and every added line is extracted" "$(wc -l < "$TMP/pp-
 check "run block — the handle on an added line starting with ++ fails" \
   "$(gate_run "$RUN_BLOCK" "$FC_R" "$FC_PP" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 
+# A per-path diff with two sections: a directory replaced by a file of the same
+# name. The second section's "+++ /dev/null" header is a header again, not an added
+# line, so only the new file's own lines are extracted.
+mkdir -p "$FC_REPO/core/dd"
+printf 'nothing to see\n' > "$FC_REPO/core/dd/inner.md"
+if ! { fc_git add core/dd/inner.md && fc_git commit -q -m dd-dir; }; then
+  echo "FATAL: could not commit the directory fixture"; exit 1
+fi
+FC_DD1="$(fc_git rev-parse HEAD)"
+if ! fc_git rm -q -r core/dd; then
+  echo "FATAL: could not remove the fixture directory"; exit 1
+fi
+printf 'a file now\n' > "$FC_REPO/core/dd"
+if ! { fc_git add core/dd && fc_git commit -q -m dd-file; }; then
+  echo "FATAL: could not commit the directory-to-file fixture"; exit 1
+fi
+FC_DD2="$(fc_git rev-parse HEAD)"
+check "…control — that path's diff holds two sections" \
+  "$(fc_git diff --unified=0 "$FC_DD1"..."$FC_DD2" -- core/dd | grep -c '^diff --git ')" "2"
+check "AL control — a second section's header is not extracted as an added line" \
+  "$(added_lines_verdict "$FC_REPO" "$FC_DD1" "$FC_DD2" core/dd "$TMP/dd-added" >/dev/null; cat "$TMP/dd-added")" "1:a file now"
+
 # The NUL check's own failure branches, each forced by shadowing one command with a
 # shell function inside a subshell, over a range that otherwise reads LISTED. The
 # mktemp shadow counts its calls in a file (each $(mktemp) runs in a subshell) and
@@ -1208,11 +1230,11 @@ rm -f "$FC_K_OBJ"
 check "…control — the blob is gone from the object store" \
   "$(fc_git cat-file -e "$FC_K_BLOB" 2>/dev/null && echo present || echo gone)" "gone"
 check "…control — the listing still succeeds over that commit" \
-  "$(changed_files_verdict "$FC_REPO" "$FC_PP" "$FC_K" "$TMP/broken-list")" "LISTED"
+  "$(changed_files_verdict "$FC_REPO" "$FC_DD2" "$FC_K" "$TMP/broken-list")" "LISTED"
 check "…control — the per-file diff over it is UNEVALUABLE" \
-  "$(added_lines_verdict "$FC_REPO" "$FC_PP" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
+  "$(added_lines_verdict "$FC_REPO" "$FC_DD2" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
 check "run block — a per-file diff that fails fails closed" \
-  "$(gate_run "$RUN_BLOCK" "$FC_PP" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+  "$(gate_run "$RUN_BLOCK" "$FC_DD2" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 # Control: the replay reads the block it is given. A copy whose first line after
 # `set -euo pipefail` exits 0 must pass the case the real block fails, and a copy
 # whose quoted-name arm continues instead of failing must pass the quoted case.

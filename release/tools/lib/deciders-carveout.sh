@@ -450,10 +450,14 @@ added_lines_verdict() {
     fi
     return 0
   fi
-  # The file header's "+++ b/<path>" line comes before the first hunk, so a "+++"
-  # line is skipped as a header there only. Inside a hunk it is an ADDED line whose
-  # content starts with "++", and it is extracted and scanned like any other.
+  # The file header's "+++ b/<path>" line comes before a section's first hunk, so a
+  # "+++" line is skipped as a header there only. Inside a hunk it is an ADDED line
+  # whose content starts with "++", and it is extracted and scanned like any other.
+  # A per-path diff can hold more than one section (a directory replaced by a file
+  # of the same name, or a name the pathspec reads as a glob), so each section's
+  # "diff --git" line starts it outside a hunk again.
   if ! awk '
+      /^diff --git / { inhunk = 0; next }
       /^@@/ { inhunk = 1; plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
       !inhunk && /^\+\+\+/ { next }
       /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
