@@ -1,6 +1,6 @@
 ---
 title: "ADR-219 — Release identity is stamped at Stage 12, and a stamped deploy states its target set"
-status: Proposed
+status: Accepted — operator-ratified at the ci-wiring-and-required-checks Stage 13 Close ratification beat (Phase A13), 2026-10-17
 date: 2026-10-16
 release: ci-wiring-and-required-checks
 deciders: "Workspace owner (operator) — the shape and the target-set contract rendered at the release's Stage 5 Collective Review scope-lock, with the adversarial review's roster-membership filter and empty-key fold-in taken; design by the Stage 5 Solutioning spoke (Principal Engineer persona); authored by the Stage 6 Engineering spoke"
@@ -20,7 +20,7 @@ supersedes: none
 
 ## Status
 
-**Proposed.** Authored at Stage 6 Engineering for the `ci-wiring-and-required-checks` release. The operator rendered the decision at the release's Stage 5 Collective Review scope-lock: Stage 12 owns the stamped deploy, a stamped deploy states its target set, the target set is filtered by deploy-roster membership, and an empty release key is refused. The `Proposed → Accepted` transition belongs to that release's Stage 13 Close ratification beat (Phase A13); the frontmatter `status:` field is where it is recorded, and where it is read.
+**Accepted** — operator-ratified at the `ci-wiring-and-required-checks` Stage 13 Close ratification beat (Phase A13), 2026-10-17, as one record of a decision rendered per record. Authored at Stage 6 Engineering as `Proposed`, after the operator rendered the decision at the release's Stage 5 Collective Review scope-lock: Stage 12 owns the stamped deploy, a stamped deploy states its target set, the target set is filtered by deploy-roster membership, and an empty release key is refused. The ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.76**.
 
 **Numbering provenance.** This record was claimed as **217** against an anchor of **216** on `origin/main`, read from the repository's ADR-numbering detector at authorship. A sibling release branch holds the same number branch-only, which does not bind. The number binds at the Stage 12 claim; if the mainline claims it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Branch prose cites this record by its slug token, which resolves at the claim.
 

@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.76 | ci-wiring-and-required-checks | 2026-10-17 | — | #8305 | [notes/v4.76_RELEASE_NOTES.md](notes/v4.76_RELEASE_NOTES.md) |
 | v4.75 | controls-fail-loud | 2026-10-16 | — | #7919 | [notes/v4.75_RELEASE_NOTES.md](notes/v4.75_RELEASE_NOTES.md) |
 | v4.74 | telemetry-is-computable | 2026-10-09 | — | #7901 | [notes/v4.74_RELEASE_NOTES.md](notes/v4.74_RELEASE_NOTES.md) |
 | v4.73 | install-resolves-identically | 2026-10-03 | — | #7931 | [notes/v4.73_RELEASE_NOTES.md](notes/v4.73_RELEASE_NOTES.md) |
