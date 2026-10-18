@@ -8,6 +8,11 @@
 #   - .github/workflows/repo-integrity.yml           job `depersonalization` (the live gate)
 #   - release/tools/tests/test_deciders_carveout.sh  the committed fixture suite
 #
+# The fail-closed reads at the end of this file are shared more widely. The
+# dead-file-ref, draft-file, governance-file-map, projects-casing, adr-durability
+# and sigpipe-idiom jobs of the same workflow source this file for them too, and
+# the same suite exercises them.
+#
 # WHY A LIBRARY AND NOT A COPY. The gate's decision was inline in the workflow,
 # reachable only by a remote CI trigger, so the only way to exercise it locally was
 # to re-implement it — and a re-implemented copy passes while the real gate
@@ -307,16 +312,21 @@ depersonalization_line_verdict() {
 # failure between the scan and the per-line verdict is not covered.
 # ---------------------------------------------------------------------------------
 
-# changed_files_verdict <repo-dir> <base-sha> <head-sha> <out-file>
+# changed_files_verdict <repo-dir> <base-sha> <head-sha> <out-file> [<pathspec>...]
 #   LISTED       — git listed the changed files into <out-file>; empty is a valid
 #                  answer (no files changed)
 #   UNEVALUABLE  — base or head missing, git exited non-zero, or git listed a path
 #                  it had to quote (see below); <out-file> empty
+#
+#   Optional trailing <pathspec> arguments narrow the listing exactly as they would
+#   after `--` on the git command line (for example '*.md'). With none, every
+#   changed path is listed.
 changed_files_verdict() {
   _cf_repo="${1?changed_files_verdict: repo dir required}"
   _cf_base="${2-}"
   _cf_head="${3-}"
   _cf_out="${4?changed_files_verdict: out-file required}"
+  shift 4
 
   # An empty revision is not a missing commit to git: `A...` and `...B` default the
   # missing side to HEAD and diff successfully against the wrong range.
@@ -333,7 +343,7 @@ changed_files_verdict() {
   # quoting off for the high bytes, which then arrive as their real names, and a line
   # git still had to quote is a path this listing cannot name: UNEVALUABLE. Only a
   # quoted path can start with `"`, since a `"` anywhere in a name makes git quote it.
-  if git -C "$_cf_repo" -c core.quotePath=false diff --name-only "$_cf_base"..."$_cf_head" > "$_cf_out"; then
+  if git -C "$_cf_repo" -c core.quotePath=false diff --name-only "$_cf_base"..."$_cf_head" -- "$@" > "$_cf_out"; then
     _cf_quoted=0
     while IFS= read -r _cf_line || [ -n "$_cf_line" ]; do
       case "$_cf_line" in
@@ -522,5 +532,134 @@ literal_scan_verdict() {
   else
     printf 'UNEVALUABLE\n'
   fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------------
+# FAIL-CLOSED READS FOR THE OTHER REPO-INTEGRITY JOBS.
+#
+# The dead-file-ref, draft-file, governance-file-map, projects-casing,
+# adr-durability and sigpipe-idiom jobs read the change the same way the
+# depersonalization gate does, and they swallowed the same failures. They use
+# changed_files_verdict and added_lines_verdict above, plus three functions below
+# for the reads those two do not cover: the files a range ADDED, one file's change
+# status, and a single regex test against a single line. report_unevaluable, last,
+# writes the red report every job emits when a read comes back UNEVALUABLE.
+#
+# Same three states, same conventions: explicit parameters, no caller globals, one
+# verdict token on stdout, return 0, every status read in an `if` condition, and
+# the out-file truncated on every non-success path.
+# ---------------------------------------------------------------------------------
+
+# added_files_verdict <repo-dir> <base-sha> <head-sha> <out-file>
+#   LISTED       — git listed the files the range ADDED (status A) into <out-file>;
+#                  empty is a valid answer (nothing was added)
+#   UNEVALUABLE  — base or head missing, or git exited non-zero; <out-file> empty
+added_files_verdict() {
+  _af_repo="${1?added_files_verdict: repo dir required}"
+  _af_base="${2-}"
+  _af_head="${3-}"
+  _af_out="${4?added_files_verdict: out-file required}"
+
+  if [ -z "$_af_base" ] || [ -z "$_af_head" ]; then
+    : > "$_af_out"
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if git -C "$_af_repo" diff --name-only --diff-filter=A "$_af_base"..."$_af_head" > "$_af_out"; then
+    printf 'LISTED\n'
+  else
+    : > "$_af_out"
+    printf 'UNEVALUABLE\n'
+  fi
+  return 0
+}
+
+# file_status_verdict <repo-dir> <base-sha> <head-sha> <path> <out-file>
+#   LISTED       — <out-file> holds `git diff --name-status` for <path> over the
+#                  range, one STATUS<TAB>PATH line per entry; empty is a valid answer
+#                  (<path> did not change)
+#   UNEVALUABLE  — base or head missing, or git exited non-zero; <out-file> empty
+file_status_verdict() {
+  _fs_repo="${1?file_status_verdict: repo dir required}"
+  _fs_base="${2-}"
+  _fs_head="${3-}"
+  _fs_path="${4?file_status_verdict: path required}"
+  _fs_out="${5?file_status_verdict: out-file required}"
+
+  if [ -z "$_fs_base" ] || [ -z "$_fs_head" ]; then
+    : > "$_fs_out"
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if git -C "$_fs_repo" diff --name-status "$_fs_base"..."$_fs_head" -- "$_fs_path" > "$_fs_out"; then
+    printf 'LISTED\n'
+  else
+    : > "$_fs_out"
+    printf 'UNEVALUABLE\n'
+  fi
+  return 0
+}
+
+# ere_line_verdict <ere> <line>
+#   MATCH        — grep -E matched <line> (exit 0)
+#   NOMATCH      — it did not (exit 1)
+#   UNEVALUABLE  — any other grep exit (2: a malformed pattern), or an EMPTY <ere>
+#
+#   For a job that decides a finding one line at a time with a regex test. The inline
+#   form, `grep -qE "$re" <<<"$line" || continue`, reads exit 2 as exit 1, so a test
+#   that could not run skips the line as if it were clean.
+#
+#   An empty ERE matches every line, so it is UNEVALUABLE rather than MATCH. Reaching
+#   a test with no pattern is an upstream defect, the posture literal_scan_verdict
+#   takes on an empty pattern file.
+#
+#   <line> reaches grep on a here-string, which supplies ONE line even when <line> is
+#   empty, where `printf '%s' ""` would supply none. The two disagree only for an ERE
+#   that can match an empty line; a caller with such a pattern guards the empty case
+#   itself, as depersonalization_line_verdict does above. A <line> that holds newlines
+#   is several lines to grep, and MATCH means any one of them matched.
+ere_line_verdict() {
+  _el_re="${1?ere_line_verdict: ere required}"
+  _el_line="${2?ere_line_verdict: line required}"
+
+  if [ -z "$_el_re" ]; then
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if grep -qE -e "$_el_re" <<<"$_el_line"; then
+    printf 'MATCH\n'
+    return 0
+  else
+    _el_rc=$?
+  fi
+  if [ "$_el_rc" -eq 1 ]; then
+    printf 'NOMATCH\n'
+  else
+    printf 'UNEVALUABLE\n'
+  fi
+  return 0
+}
+
+# report_unevaluable <gate-name> <summary-file> <what-could-not-run>
+#   Reports a run that could not evaluate: one summary block, appended to
+#   <summary-file> and printed, then one `::error::` annotation. It returns 0 and
+#   does NOT exit. The caller exits 1 on the next statement, so the decision to fail
+#   stays visible where it is made.
+report_unevaluable() {
+  _ru_gate="${1?report_unevaluable: gate name required}"
+  _ru_summary="${2?report_unevaluable: summary file required}"
+  _ru_what="${3?report_unevaluable: reason required}"
+
+  _ru_block="## :x: ${_ru_gate} could not evaluate
+
+${_ru_what}.
+
+A check that could not run is indistinguishable from one that ran clean, so this
+fails the job, including in a job whose findings would only warn. The underlying
+error is in the job log above."
+  printf '%s\n' "$_ru_block" >> "$_ru_summary"
+  printf '%s\n' "$_ru_block"
+  printf '::error::%s could not evaluate: %s\n' "$_ru_gate" "$_ru_what"
   return 0
 }
