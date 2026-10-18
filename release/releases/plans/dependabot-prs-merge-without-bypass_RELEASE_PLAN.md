@@ -8,7 +8,7 @@
 | **Bump Class** | minor — a new decision record plus a behavior change in a required CI gate. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
 | **Date Created** | 2026-10-16 (Friday) |
 | **Release Manager** | Agent-assisted |
-| **Status** | Executing — Stages 6–8 complete: the #8454 fold-in (DEV-7) and main sync (DEV-8); Stage 7 iterated through pass 7 (DEV-9, DEV-11, DEV-13, DEV-14, DEV-15, DEV-16, DEV-17), the A6.5 review consumed (DEV-10), Stage 8 CONDITIONAL ACCEPT with iteration 3 (DEV-12). Next: the Stage 9 gate |
+| **Status** | Executing — Stages 6–8 complete with eight Stage 7 iterations (DEV-9 … DEV-17); at the Stage 9 review the operator switched D-1 to the scope-first, no-mirror design (DEV-18), now engineered and re-entering Stage 7 and Stage 8 before Stage 9 is re-presented |
 | **Branch** | release/dependabot-prs-merge-without-bypass |
 | **PR** | opened in **draft** immediately after the Stage-6 commits; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | dependabot-prs-merge-without-bypass |
@@ -110,7 +110,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 ### Exclusions
 
 - Defect 1 of #8092 (acceptance criteria 1 and 2): owned by #6179 / `ci-wiring-and-required-checks`, per the ownership note recorded on #8092 on 2026-10-08.
-- The `deploy.sh --check` detector for the two-store coupling (design D-5): an optional follow-up, not in scope.
+- The `deploy.sh --check` detector for a two-store coupling (design D-5): moot under DEV-18 — there is no second store.
 - The ORPHAN live labels `dependencies` and `javascript`: label-parity hygiene owned by the parity gate's owner, not this release.
 
 ## Implementation Sequence
@@ -124,10 +124,11 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 - **`release/tools/tests/test_deciders_carveout.sh`:** fixture arms (a)–(f) per the design, the two new functions added to the definition guard, and the header's agreement-scope note rewritten (both gates now resolve the handle from the repository owner).
 - **`.github/workflows/repo-integrity.yml`, Gate 1 only:** bind `REPO_OWNER` from `github.repository_owner` through `env:`; step 0 calls `identity_preflight`, same message, same position before the scope filter; step 2 resolves literals through `resolve_operator_literals` and sets the handle literal to the owner on every run that resolves literals; the actor exemption is deleted and the bot flag survives only for a summary notice; an empty literal set on canonical is `::error` + `exit 1`, a fork is unchanged.
 - **`core/rules/git-workflow.md`:** the § Repository-Integrity Gates "CI configuration (one-time)" paragraph only. A mirror pair: `./deploy.sh --deploy` after merge; Check 9 confirms the mirror.
-- **`core/standards/secrets-handling-policy.md`:** §2 one mapping-rule note (Actions store canonical, Dependabot store mirror); §5 the C6 row gains the two-store update procedure for `OPERATOR_IDENTITY` and `COLLABORATOR_NAMES`.
+- **`core/standards/secrets-handling-policy.md`:** §2 the identity's storage note; §5 the C6 row's update procedure. (Written for a two-store mirror at Stage 6; rewritten to the Actions store only by DEV-18.)
 - **`SECURITY.md`:** § Automated Security PRs — the three required checks a Dependabot PR can fail, each with its remedy; "no secrets" corrected to "only Dependabot secrets"; the labeling statements kept true.
 - **`core/packs/_common/pack.toml`:** one Provenance `[[labels]]` row for `dependabot`.
 - **Stage 7 iteration (DEV-9, DEV-10):** the Dependabot-store mirror is read under its own name, `OPERATOR_IDENTITY_DEPENDABOT`, through `secrets.OPERATOR_IDENTITY || secrets.OPERATOR_IDENTITY_DEPENDABOT` bound on the scan step only; the listing and added-line reads fail closed on a quoted name and on a binary rendering outside `packages/*.skill`; the suite pins the call sites, arms, scope list, exit-0 count and secret bindings line by line; ADR-220, the rules row, the secrets policy and `SECURITY.md` follow.
+- **Stage 9 redesign (DEV-18, operator, 2026-10-18):** D-1 switched to the adversarial review's CD-1. Gate 1 settles the C6 scope before the identity preflight, so a run that changes no C6 file passes without reading the identity; there is no Dependabot-store copy, and the step binds `OPERATOR_IDENTITY` and `COLLABORATOR_NAMES` from their canonical names only. A run Dependabot starts that changes a C6 file fails closed until a maintainer's push re-runs the gate. This supersedes the mirror elements of the bullets above.
 
 - **Acceptance criteria:** the six on #8092; in scope here are AC-3 through AC-6.
 - **Estimated complexity:** Medium.
@@ -176,9 +177,9 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 
 | # | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|------|-----------|--------|-----------|-------|
-| 1 | The Dependabot-store mirror meets workflow code that still exempts bot runs (set before merge, a revert, or a re-run of a pre-merge run), and a Dependabot run passes unscanned | Low | High | Structural since DEV-10: the mirror is `OPERATOR_IDENTITY_DEPENDABOT`, which code reading only `OPERATOR_IDENTITY` never sees; the suite pins the two-name binding and the absence of a single-name one. The residual is an operator storing the mirror under the canonical name, which the secrets policy §5 forbids | Operator |
+| 1 | A Dependabot PR that changes a file in the gate's domains stays red on the bot's own run | Med | Low | By design (DEV-18): it fails closed, never passes unscanned; a maintainer's push re-runs the gate with the canonical secret. Today that class is a manifest inside a rostered skill package, which needs that push for its rebuild anyway | Operator |
 | 2 | A Gate 1 regression blocks every pull request or passes one unscanned | Low | High | Fixture arm (e) asserts the new resolution is byte-identical to the old one for a human run; this PR's own gate run observes it live before merge | Engineering |
-| 3 | Value drift between the two secret stores (one store updated, the other not) is silent on bot runs | Low | Med | §5 two-store update procedure; detector deferred as an optional follow-up (design D-5) | Operator |
+| 3 | A misconfigured identity secret is not reported on a PR that changes no scanned file | Low | Low | It is reported, as a failure, on the next PR that changes one (DEV-18 trade-off, ADR-220 consequences) | Operator |
 | 4 | #8305 lands first and its edits to the same two files conflict on rebase | Low | Low | Hunks are disjoint; rebase on whichever lands second | Engineering |
 | 5 | The ADR number is claimed on the mainline first | Med | Low | Cited by slug token; `renumber-adr.py` moves the record at merge (occurred: ADR-217 → ADR-220, DEV-8) | Engineering |
 | 6 | A legitimate change trips the new fail-closed reads: a changed file in any directory whose name git must quote (the listing precedes the scope filter), or a non-package binary under a C6 domain | Low | Low | The failure message names the cause and the remedy (rename, or drop the `-diff` attribute); every one of the 55 binary files in scope today is a `packages/*.skill`, which passes | Engineering |
@@ -203,7 +204,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 |-------|----|-------------------|----------------|
 | #8092 | AC-1 | [DEFERRED — defect 1, owned by #6179 in the ci-wiring-and-required-checks release, which shipped it: the close-out smoke workflow carries no paths filter, so its required context reports on a PR that touches none of its former paths, and the required-versus-present diff is empty] | Verified by that release |
 | #8092 | AC-2 | [DEFERRED — defect 1, owned by #6179 in the ci-wiring-and-required-checks release, which shipped it: the gate-efficacy standard's declared posture for the close-out smoke workflow agrees with live branch protection] | Verified by that release |
-| #8092 | AC-3 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read fixture arm (a): a bot's run on canonical with identity set resolves the owner plus the identity lines. Post-merge, after the operator's secret step: [READER-GRADED — the `Depersonalization gate` on the bot's own commit of the next Dependabot PR reports success after a scan, once the operator's mirror step is done] | Suite exits 0 with arm (a) PASS |
+| #8092 | AC-3 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read the run-block arms `a bot's run with no identity and no C6 change passes, by scope` and `a bot's run with no identity, on a C6 change, fails closed`: a Dependabot-triggered run gets a measured verdict without a maintainer push when it changes no C6 file, and fails closed when it does [READER-GRADED — on the next Dependabot PR, the `Depersonalization gate` on the bot's own commit passes by scope when the PR is outside the C6 domains, or fails closed inside them until a maintainer push] | Both arms PASS |
 | #8092 | AC-4 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read fixture arms (b) and (c): identity unset on canonical returns `FAIL` for a human run and for a bot's run | Both arms PASS · control: arm (d), a fork opted out with identity unset, returns `OK` |
 | #8092 | AC-5 | `grep -c 'name = "dependabot"' core/packs/_common/pack.toml` ≥ 1 [READER-GRADED — after the Stage 13 label create, the next Dependabot PR carries `dependabot` and `cluster: security` with no comment that its labels could not be found] | 1 |
 | #8092 | AC-6 | `grep -c 'only Dependabot secrets' SECURITY.md` ≥ 1 [READER-GRADED — after the Stage 13 label create, the next Dependabot PR carries the `dependabot` label that § Automated Security PRs says these PRs carry] | 1, and § Automated Security PRs carries the three-row table naming the freshness gate, the depersonalization gate and the close-out smoke check, each with its remedy |
@@ -234,7 +235,7 @@ Per verification-checklist.md:
 
 | Issue | Rollback Method | Rollback Complexity |
 |-------|----------------|-------------------|
-| #8092 | `git revert` the merge, and `gh secret delete OPERATOR_IDENTITY_DEPENDABOT --app dependabot` | Low — the order is free: the reverted gate reads only `OPERATOR_IDENTITY`, which the Dependabot store does not hold, so it fails loud on a bot run instead of passing it |
+| #8092 | `git revert` the merge | Low — there is no out-of-tree state to withdraw (DEV-18) |
 | #8454 | `git revert` the merge | Low — the reads return to swallowing a failure as an empty result |
 
 ### Whole-Release Rollback
@@ -242,7 +243,7 @@ Per verification-checklist.md:
 | Strategy | Trigger | Procedure |
 |----------|---------|-----------|
 | **Partial Revert** | A documentation surface is wrong | Revert the documentation commit only; the gate change stands |
-| **Full Restore** | Gate 1 misbehaves on main | Revert the merge commit per rollback-protocol.md and delete the `OPERATOR_IDENTITY_DEPENDABOT` mirror, in either order |
+| **Full Restore** | Gate 1 misbehaves on main | Revert the merge commit per rollback-protocol.md |
 | **Forward Fix** | Minor issue, fix well-understood | Fix branch per rollback-protocol.md |
 
 The `dependabot` label is kept on rollback: harmless once declared. If it is dropped instead, withdraw the pack row in the same change.
@@ -252,7 +253,7 @@ The `dependabot` label is kept on rollback: harmless once declared. If it is dro
 | # | Source (Layer 1) | Target (Layer 2) | Mechanism | Verification |
 |---|-----------------|-----------------|-----------|-------------|
 | 1 | core/rules/git-workflow.md | `<deploy-root>/.claude/rules/git-workflow.md` | `./deploy.sh --deploy` (rules mirror) | `./deploy.sh --check` Check 9 reports the mirror in sync |
-| 2 | `OPERATOR_IDENTITY` (Actions store, canonical) | Dependabot secret store, as `OPERATOR_IDENTITY_DEPENDABOT` | Operator, any time (the name makes the order free): `gh secret set OPERATOR_IDENTITY_DEPENDABOT --app dependabot`, with the canonical value | `gh secret list --app dependabot` lists `OPERATOR_IDENTITY_DEPENDABOT`; the next Dependabot PR's gate passes on the bot commit after a scan |
+| 2 | — | — | None: DEV-18 removed the Dependabot-store copy, so there is no out-of-tree secret step | `gh secret list --app dependabot` lists no copy of the identity |
 | 3 | core/packs/_common/pack.toml `dependabot` row | Repository label | Hub at Stage 13: `gh label create 'dependabot' --color '1F6FEB' --description 'Opened by Dependabot (version or security update); applied at PR creation. Persists through close.'` — the one line this release needs. (The bare `check-label-parity.py --emit-fix` exits 3 on its default source, and the sourced form also emits creates, edits and deletes outside this release.) | `gh label view dependabot` resolves with that color and description |
 
 ### Schema Migrations (if applicable)
@@ -279,6 +280,7 @@ N/A — enumerated over the pack-manifest schema, the label grammar and the work
 | **DEV-15** | Stage 7 pass 5 at `2f6311c4` (PASS-WITH-FINDINGS: 0 Blocker, 0 Major, 1 Minor, 1 Cosmetic, 1 Informational; P4-1..P4-4 verified resolved, cleanup verified on all 10 paths), iteration 6. P5-2: the late-NUL check read the whole diff, so removing a NUL line or editing after one read BINARY; it now reads only the added lines. P5-1: the check's failure branches are forced by shadowing one command in a subshell and each reads UNEVALUABLE. P5-3: the BINARY arm's text says the change cannot be read as text | Stage 7 → Engineering, Tier 1 | **APPLIED** |
 | **DEV-16** | Stage 7 pass 6 at `0c2112a1` (PASS-WITH-FINDINGS: 0 Blocker, 1 Major, 1 Informational; P5-1..P5-3 verified resolved, the added-line filter correct on all 16 paths, 79 of 81 mutants killed), iteration 7. P6-1 (Major, Tier 2, pre-existing on main, resolved under the operator's directive): the extraction skipped every `+++` line as the file header, so an added line whose content starts with `++` went unscanned; the header is now skipped only before the first hunk. The same unguarded rule at five other sites is routed to #8482 | Stage 7 → Engineering, Tier 1 (P6-1 Tier 2) | **APPLIED** |
 | **DEV-17** | Stage 7 pass 7 at `d495c76f` (PASS-WITH-FINDINGS: 0 Blocker, 0 Major, 1 Minor, 2 Informational; P6-1 verified resolved in Gate 1, 83 of 85 mutants killed — the survivors an optional cleanup count and a duplicate YAML key actionlint rejects), iteration 8. P7-1: the in-hunk flag did not reset between diff sections, so a later section's `+++` header could be extracted as an added line (an extra hit only, never a hidden one); each `diff --git` line now resets it. P7-2: #8482 corrected to seven sites — the two thought guarded skip `+++` inside hunks, the inverse rule | Stage 7 → Engineering, Tier 1 | **APPLIED** |
+| **DEV-18** | Stage 9 review (2026-10-18): the operator switched D-1 from option B (mirror the identity into the Dependabot store, under its own name since DEV-10) to the adversarial review's CD-1. Gate 1 now settles the C6 scope before the identity preflight; the step binds the canonical secret names only; there is no Dependabot-store copy and no operator secret step (AI-001 cancelled). #8092 AC-3 is reworded to the outcome — a measured verdict without a maintainer push when the PR changes no C6 file, fail closed when it does. ADR-220 decisions 2 and 4 rewritten and the mirror-name decision removed (the fail-closed-reads decision is now 7); the rules row, secrets policy, `SECURITY.md`, the milestone's Outcome Statement and the PR body follow. Suite 233/233; the pre-change gate fails seven of its checks. Re-enters Stage 7 and Stage 8 before Stage 9 is re-presented | Operator, Stage 9 | **APPLIED** |
 | **DEV-5** | The bundle, the milestone and Stage 4 were authored directly, not through the Stage-3 and Stage-4 skills; Mode R readiness and the Parallelization Map were not run. The Phase A6.5 adversarial review and the Collective Review of the Stage-5 design remained owed before Stage 9. Discharged 2026-10-17: A6.5 ran (DEV-10). The Collective Review's trigger needs two Solutioning-activated issues; #8454 entered without a Stage-5 design, so it does not fire, and its cross-release coherence row is recorded in the File Contention Map | Operator's single-issue-milestone choice, 2026-10-16 | **RESOLVED** |
 
 ## Verification Evidence
@@ -325,26 +327,26 @@ N/A — enumerated over the pack-manifest schema, the label grammar and the work
 
 ### Outcome
 
-A Dependabot pull request now gets a real `Depersonalization gate` verdict on the bot's own run, with no maintainer push. The gate scans every run on the same literals, whoever started it: the handle comes from the repository owner, and the name and email from `OPERATOR_IDENTITY`, which the operator mirrors into the Dependabot secret store under its own name, `OPERATOR_IDENTITY_DEPENDABOT`, at any time — no ordering of setting it, merging and reverting can pair it with the old exemption. The silent pass behind the old red, where a bot's run scanned nothing, is gone: an empty literal set on canonical now fails. So does a run in which the gate could not read a changed file — a failed listing, diff or scan, a name git must quote, a non-package file git renders as binary — each of which used to read as "nothing found" and pass; and a symlink, once skipped as if deleted, is now read.
+A Dependabot pull request that changes no file in the gate's domains now passes the `Depersonalization gate` on the bot's own run, measured, with no maintainer push; one that changes such a file fails closed until a maintainer's push re-runs the gate with the canonical secret. The gate settles its scope first, and scans every run that reaches the scan on the same literals, whoever started it: the handle comes from the repository owner, and the name and email from `OPERATOR_IDENTITY`, in the Actions store only. The silent pass behind the old red, where a bot's run scanned nothing, is gone: an empty literal set on canonical now fails. So does a run in which the gate could not read a changed file — a failed listing, diff or scan, a name git must quote, a non-package file git renders as binary — each of which used to read as "nothing found" and pass; and a symlink, once skipped as if deleted, is now read.
 
 ### Issues resolved
 
 | # | Outcome (one line) | Status |
 |---|---|---|
 | #8454 | The depersonalization gate fails closed when it cannot list the changed files, read a file's added lines, or run its scan | DONE |
-| #8092 | Defects 2 and 3 plus the `SECURITY.md` reconciliation; defect 1 (AC-1, AC-2) stays with the required-checks release | PARTIAL — in-scope work DONE; AC-3, AC-5 and AC-6's labeling clause are confirmed live on the first Dependabot PR after the operator's mirror step and the Stage 13 label create |
+| #8092 | Defects 2 and 3 plus the `SECURITY.md` reconciliation; defect 1 (AC-1, AC-2) stays with the required-checks release | PARTIAL — in-scope work DONE; AC-3, AC-5 and AC-6's labeling clause are confirmed live on the first Dependabot PR after the Stage 13 label create |
 
 ### Key decisions (when applicable; omit this sub-section when no D-decisions were rendered)
 
-- **D-1:** option B, mirror the secret and delete the actor exemption (operator, 2026-10-16). The only option that gives a bot's run the human verdict and keeps a fail-loud arm on bot runs.
+- **D-1:** the scope-first design with no Dependabot-store copy (the adversarial review's CD-1), selected by the operator at the Stage 9 review on 2026-10-18 (DEV-18), in place of option B (mirror the secret), selected on 2026-10-16 and engineered through Stage 8. The actor exemption is deleted under both.
 - **D-2:** handle from the repository owner on every run, the resolution the ADR durability gate already uses.
 - **D-3:** an empty literal set on canonical fails; a fork keeps notice + pass.
 - **D-6:** create `dependabot` as a Provenance row (operator, 2026-10-16).
-- **D-1 refinement (Stage 7, DEV-10):** the mirror is stored under its own name and bound on the scan step only. Option B stands; the adversarial review's counter-design (no mirror, scope before the preflight) is surfaced at Stage 9.
+- **D-1 refinement history:** DEV-10 stored the mirror under its own name; DEV-18 removed the mirror.
 
 ### Reversibility
 
-**CHEAP — HIGH confidence.** `git revert` the merge and delete the Dependabot-store mirror (`gh secret delete OPERATOR_IDENTITY_DEPENDABOT --app dependabot`), in either order: the reverted gate reads only `OPERATOR_IDENTITY`, which the Dependabot store does not hold, so it fails loud on a bot run rather than passing it. The live label is MODERATE once it has carriers.
+**CHEAP — HIGH confidence.** `git revert` the merge; there is no out-of-tree state to withdraw. The live label is MODERATE once it has carriers.
 
 ### Downstream impact
 
