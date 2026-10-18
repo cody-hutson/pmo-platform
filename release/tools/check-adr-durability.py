@@ -294,22 +294,29 @@ OUTPUT (TSV) / EXIT CODES
   R5-NEW    <path>:1\t<detail>           # net-new ADR missing a §3 section (file-scoped)
   R5-LOST   <path>:1\t<detail>           # changed ADR lost a §3 section it had (file-scoped)
   EXEMPT    <path>\t<reason>             # whole-file exemption applied
-  UNEVALUABLE <path>\t<read>: <detail>   # a --diff-base git read did not run (exit 3)
+  UNEVALUABLE <path>\t<read>: <detail>   # a read the file's evaluation needs did not
+                                         # run (exit 3)
   COUNT     <n>                          # total violations
 
   exit 0 — clean
   exit 1 — violation(s) present (or self-test failure)
-  exit 3 — input failure: no ADR files resolved (the tree moved), or a `--diff-base`
-           git read did not run for a changed ADR, so that file was not evaluated
+  exit 3 — input failure: no ADR files resolved (the tree moved), or a scanned ADR
+           could not be opened, or a `--diff-base` git read did not run for a
+           changed ADR, so that file was not evaluated
 
-A `--diff-base` run reads two things from git per file: the lines the change added
-(R1-R4 are scoped to them) and the file's text at the base (R5 and R6 are scoped to
-it). A read that FAILED is not an empty answer. An empty diff from a git that ran
+Every run first reads each scanned ADR's own text, once, before any rule runs; every
+rule, R6's scoping included, evaluates that one copy. A file that cannot be opened —
+no read permission, a directory named like an ADR — was not examined, so it stops the
+run with UNEVALUABLE and exit 3 rather than being counted as scanned and clean.
+
+A `--diff-base` run then reads two things from git per file: the lines the change
+added (R1-R4 are scoped to them) and the file's text at the base (R5 and R6 are scoped
+to it). A read that FAILED is not an empty answer. An empty diff from a git that ran
 means nothing was added; a diff that did not run means nothing is known. The same
 holds for the base: a path absent at the base (asked of `git ls-tree`, which answers
 that with an empty listing and exit 0) is net-new, and every other failure is a read
-that did not run. Either failure stops the run with UNEVALUABLE and exit 3, which the
-CI job fails on regardless of WARN_MODE.
+that did not run. Every failure, of these reads or of the file's own text, stops the
+run with UNEVALUABLE and exit 3, which the CI job fails on regardless of WARN_MODE.
 
 Python 3.9-compatible — matches /usr/bin/python3 on the operator baseline.
 """
@@ -1188,8 +1195,9 @@ def collect_adrs(root, explicit_files):
 
 
 class CannotEvaluate(Exception):
-    """A `--diff-base` git read did not run for one file, so that file was not evaluated.
+    """A read one file's evaluation needs did not run, so that file was not evaluated.
 
+    The reads are the file's own text, and under `--diff-base` the two git reads.
     Raised instead of returning an empty answer. An empty answer is what a clean file
     produces, so a failed read returned as one makes a file the run never examined
     read as clean. `main` reports it as an UNEVALUABLE row and exits 3.
@@ -1200,6 +1208,25 @@ class CannotEvaluate(Exception):
         self.rel = rel
         self.read = read
         self.detail = detail
+
+
+def head_text_map(paths, root):
+    """{path: text} — each scanned ADR's own text, read once, before any rule runs.
+
+    A file that cannot be opened raises CannotEvaluate. Skipping it would count it as
+    scanned and report no findings for it, which is the answer a clean file gets.
+    Every consumer — the per-file rules and R6's scoping alike — reads this one map, so
+    no rule evaluates a different copy of a file than another rule did.
+    """
+    result = {}
+    for p in paths:
+        try:
+            with open(p, "r", encoding="utf-8", errors="replace") as fh:
+                result[p] = fh.read()
+        except OSError as exc:
+            raise CannotEvaluate(os.path.relpath(p, root), "open (the file's own text)",
+                                 exc.strerror or str(exc)) from exc
+    return result
 
 
 def _git_read(args, root, rel, read):
@@ -1437,20 +1464,23 @@ def _mutation_revert_line_scoped_bound(fn):
         frontmatter_bounds = live
 
 
-def _diff_base_read_arms(check, clean):
-    """The two `--diff-base` git reads, each pinned on a throwaway repository.
+def _fail_closed_read_arms(check, clean):
+    """The reads a file's evaluation needs, each pinned on a throwaway repository.
 
-    For each read there is a positive arm (a real answer is still found), a control
-    arm (an empty answer from a git that RAN is still an answer, not a failure) and a
-    sensitivity arm per failure shape: a base git does not have, a `git` first on PATH
-    that fails only that read, and no git at all. Two end-to-end arms then run `main`
-    in a subprocess, because a CannotEvaluate that escapes `main` exits 1, which the
-    warn-mode CI job passes. Never call this outside the self-test.
+    For each of the two `--diff-base` git reads there is a positive arm (a real answer
+    is still found), a control arm (an empty answer from a git that RAN is still an
+    answer, not a failure) and a sensitivity arm per failure shape: a base git does not
+    have, a `git` first on PATH that fails only that read, and no git at all.
+    End-to-end arms then run `main` in a subprocess, because a CannotEvaluate that
+    escapes `main` exits 1, which the warn-mode CI job passes. The file's own text is
+    pinned end to end only: a file that cannot be opened, under `--diff-base --files`
+    and in a whole-corpus run, each with a readable control. Never call this outside
+    the self-test.
     """
     real_git = shutil.which("git")
     if real_git is None:
-        check("--diff-base git reads — NO git ON PATH, the fail-closed arms did not run",
-              None)
+        check("fail-closed reads — NO git ON PATH, the fixture repository could not be "
+              "built, so none of the read arms ran", None)
         return
     saved = dict(os.environ)
     tmp = tempfile.mkdtemp()
@@ -1556,13 +1586,16 @@ def _diff_base_read_arms(check, clean):
                         lambda: base_blob_map(base, [old], repo))[0] == "unevaluable")
 
         # End to end — main must turn CannotEvaluate into UNEVALUABLE + exit 3.
-        def run_main(diff_base, path):
+        def run_main(diff_base, path, files=(old_rel,)):
             env = dict(os.environ)
             env["PATH"] = path
-            proc = subprocess.run(
-                [sys.executable, os.path.abspath(__file__), "--root", repo,
-                 "--handle", FIXTURE_HANDLE, "--diff-base", diff_base, "--files", old_rel],
-                capture_output=True, text=True, cwd=repo, env=env)
+            argv = [sys.executable, os.path.abspath(__file__), "--root", repo,
+                    "--handle", FIXTURE_HANDLE]
+            if diff_base is not None:
+                argv += ["--diff-base", diff_base]
+            if files:
+                argv += ["--files"] + list(files)
+            proc = subprocess.run(argv, capture_output=True, text=True, cwd=repo, env=env)
             return proc.returncode, proc.stdout
         plain = saved.get("PATH", "")
         rc, so = run_main(head, plain)
@@ -1575,6 +1608,42 @@ def _diff_base_read_arms(check, clean):
         rc, so = run_main(base, shim("--unified=0"))
         check("--diff-base end to end: a per-file diff failure on a valid base exits 3",
               rc == 3 and ("UNEVALUABLE\t%s\t" % old_rel) in so)
+
+        # The file's own text, end to end. Its CI shape is a changed ADR that the step
+        # passes under `--diff-base --files` and that cannot be opened. Root opens a
+        # mode-000 file, so as root that arm would prove nothing and is skipped visibly.
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            check("file's own text: a changed ADR at mode 000 exits 3 — RUNNING AS ROOT, "
+                  "the permission arm did not run", None)
+        else:
+            os.chmod(old, 0)
+            try:
+                rc, so = run_main(base, plain)
+            finally:
+                os.chmod(old, 0o644)
+            check("file's own text: a changed ADR that cannot be opened (mode 000) exits "
+                  "3 with an UNEVALUABLE row naming the file",
+                  rc == 3 and ("UNEVALUABLE\t%s\topen" % old_rel) in so)
+        rc, so = run_main(base, plain)
+        check("file's own text: the same changed ADR, readable, exits 0 and is scanned "
+              "(control)",
+              rc == 0 and "UNEVALUABLE" not in so and "SCANNED\t1" in so)
+        # Every mode, as root too: nobody can open a directory as a file, and a
+        # whole-corpus listing, unlike `--files`, does not filter an ADR-named one out.
+        stray = os.path.join(repo, "core", "ADRs", "ADR-003-stray.md")
+        os.makedirs(stray)
+        try:
+            rc, so = run_main(None, plain, files=())
+        finally:
+            os.rmdir(stray)
+        check("file's own text: a whole-corpus run exits 3 on an ADR-named entry that "
+              "cannot be opened (a directory), and names it",
+              rc == 3 and ("UNEVALUABLE\t%s\topen"
+                           % os.path.relpath(stray, repo)) in so)
+        rc, so = run_main(None, plain, files=())
+        check("file's own text: the same whole-corpus run without that entry exits 0 "
+              "and scans both records (control)",
+              rc == 0 and "UNEVALUABLE" not in so and "SCANNED\t2" in so)
     finally:
         os.environ.clear()
         os.environ.update(saved)
@@ -1924,9 +1993,10 @@ def self_test():
         check("collect_adrs ignores non-ADR filenames",
               collect_adrs(tmp, ["core/ADRs/README.md"]) == [])
 
-    # The --diff-base git reads fail closed — a read that did not run is never a clean
-    # delta. Real git, a throwaway repository, and a shim per failure shape.
-    _diff_base_read_arms(check, CLEAN)
+    # The reads fail closed — a read that did not run is never a clean answer, whether
+    # it is a --diff-base git read or the file's own text. Real git, a throwaway
+    # repository, and a shim or an unreadable entry per failure shape.
+    _fail_closed_read_arms(check, CLEAN)
 
     # ── R5 STRUCT — delta-scoped structural conformance ──────────────────────────
     # The full §3 set, plus a deliberately-noisy shape: an out-of-position section, an
@@ -2230,8 +2300,10 @@ def main():
 
     # A read that did not run must reach exit 3 here, and must not escape as a traceback:
     # an uncaught exception exits 1, which the warn-mode CI job reports as findings and
-    # passes.
+    # passes. The file's own text is read first, in every mode, so a file that cannot be
+    # opened stops a whole-corpus run the same way it stops a `--diff-base` one.
     try:
+        texts = head_text_map(paths, root)
         delta = added_line_map(args.diff_base, paths, root) if args.diff_base else {}
         base_blobs = base_blob_map(args.diff_base, paths, root) if args.diff_base else None
     except CannotEvaluate as exc:
@@ -2257,12 +2329,7 @@ def main():
     findings = []
     records = {}
     for p in paths:
-        try:
-            with open(p, "r", encoding="utf-8", errors="replace") as fh:
-                text = fh.read()
-        except OSError as exc:
-            out.append("CONFIG\tunreadable: %s (%s)" % (p, exc))
-            continue
+        text = texts[p]
         allowed = delta.get(p) if args.diff_base else None
         struct = None
         if base_blobs is not None:
@@ -2303,12 +2370,8 @@ def main():
             num = adr_number_from_path(p)
             if num is None:
                 continue
-            try:
-                with open(p, "r", encoding="utf-8", errors="replace") as fh:
-                    head_text = fh.read()
-            except OSError:
-                continue
-            if is_new or base_text != head_text:
+            # The text the rules above evaluated, never a second read of the file.
+            if is_new or base_text != texts[p]:
                 scoped.add(num)
         for rule, num, detail in reciprocity_findings(records, scoped):
             rec = records.get(num)
