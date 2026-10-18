@@ -1101,7 +1101,7 @@ def scan_text(path, text, handle, allowed_lines=None, struct=None):
 def derive_handle(explicit):
     """Operator GitHub handle — NEVER hardcoded.
 
-    `--handle` wins (CI passes the run actor). Otherwise the owner segment of the
+    `--handle` wins (CI passes the repository owner). Otherwise the owner segment of the
     running clone's origin remote, which is fork-correct and operator-neutral in
     source. Returns None when neither resolves.
     """

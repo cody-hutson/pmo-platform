@@ -173,13 +173,13 @@ The `cluster: security` label is retained on these PRs — by that same `updates
 
 ### Dependency PRs and the required checks they can fail
 
-Three required status checks on `main` can stop a Dependabot PR. Each fails for its own reason and has its own remedy:
+Three required status checks on `main` can stop a Dependabot PR for a reason other than the bump itself. Each fails for its own reason and has its own remedy:
 
 | Required check | Why a Dependabot PR fails it | Remedy |
 |---|---|---|
 | `Pre-merge .skill package content-freshness gate` | The PR rewrites a file inside a rostered skill's compiled-package content set, and Dependabot does not rebuild packages | Rebuild by hand on the bot's own branch, as described below |
-| `Depersonalization gate` | A run Dependabot starts receives only Dependabot secrets, never Actions secrets, so the gate reads its identity input from the Dependabot secret store | None in the normal case: the gate scans the bot's own run on the same literals as a human's run and reports a measured verdict. A failure reading `OPERATOR_IDENTITY unset` means the Dependabot-store copy is missing; the operator re-sets it per [`core/standards/secrets-handling-policy.md`](core/standards/secrets-handling-policy.md) §5 |
-| `Close-out automation smoke (macOS)` | Its workflow is no longer path-filtered, so it runs on every pull request and reports on a Dependabot PR like on any other. It fails only when the close-out automation itself breaks on macOS. A PR whose last run predates the filter's removal has no check run at all and waits for one | A missing check run: start a new run by updating the branch — on a Dependabot PR, comment `@dependabot rebase`. A failure: read the job log; the bump is not the cause unless it touches the release tooling |
+| `Depersonalization gate` | A run Dependabot starts receives only Dependabot secrets, never Actions secrets, so the gate reads its identity input from the Dependabot secret store | None in the normal case: the gate scans the bot's own run on the same literals as a human's run and reports a measured verdict. A failure reading `OPERATOR_IDENTITY unset` means the Dependabot-store copy, `OPERATOR_IDENTITY_DEPENDABOT`, is missing; the operator sets it per [`core/standards/secrets-handling-policy.md`](core/standards/secrets-handling-policy.md) §5 |
+| `Close-out automation smoke (macOS)` | Its workflow is no longer path-filtered, so it runs on every pull request and reports on a Dependabot PR like on any other. It fails when the close-out automation, or one of the release-tooling suites that job hosts, breaks on macOS. A PR whose last run predates the filter's removal has no check run at all and waits for one | A missing check run: start a new run by updating the branch — on a Dependabot PR, comment `@dependabot rebase`. A failure: read the job log; the bump is not the cause unless it touches the release tooling |
 
 #### The package-freshness gate
 
