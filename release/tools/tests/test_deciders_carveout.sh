@@ -694,6 +694,27 @@ check "AL sensitivity — a file carrying a NUL byte is BINARY, not 'nothing add
 v="$(added_lines_verdict "$FC_REPO" "$FC_BASE" "$FC_HEAD" core/a.md "$FC_OUT")"
 check "AL control — a text file beside them is still LISTED" "$v" "LISTED"
 
+# Three more commits, used by the run-block replay at the end of this suite: a clean
+# C6 change, a compiled package (binary by construction), and an out-of-scope change
+# that carries the handle.
+printf 'nothing to see\n' > "$FC_REPO/core/clean.md"
+if ! { fc_git add core/clean.md && fc_git commit -q -m clean; }; then
+  echo "FATAL: could not commit the clean fixture"; exit 1
+fi
+FC_C="$(fc_git rev-parse HEAD)"
+mkdir -p "$FC_REPO/packages"
+printf 'PK\003\004\000\001by %s\n\000' "$FIXTURE_HANDLE" > "$FC_REPO/packages/x.skill"
+if ! { fc_git add packages/x.skill && fc_git commit -q -m package; }; then
+  echo "FATAL: could not commit the package fixture"; exit 1
+fi
+FC_S="$(fc_git rev-parse HEAD)"
+mkdir -p "$FC_REPO/docs"
+printf 'Authored by %s.\n' "$FIXTURE_HANDLE" > "$FC_REPO/docs/note.md"
+if ! { fc_git add docs/note.md && fc_git commit -q -m out-of-scope; }; then
+  echo "FATAL: could not commit the out-of-scope fixture"; exit 1
+fi
+FC_O="$(fc_git rev-parse HEAD)"
+
 # --- literal_scan_verdict -----------------------------------------------------------
 FC_HITS="$TMP/fail-closed-hits"
 FC_MALFORMED="$TMP/fail-closed-malformed-patterns"
@@ -854,6 +875,21 @@ check "Gate 1 carries the C6 scope list exactly once" \
   "$(line_count "$GATE1_BLOCK" 'core/*|release/*|operations/*|packages/*) CHANGED+=("$f") ;;')" "1"
 check "Gate 1 exempts only release/releases/ ahead of the scope list" \
   "$(grep -cE '^[[:space:]]*release/releases/[*][)] : ;;' "$GATE1_BLOCK")" "1"
+# The scope `case` must hold exactly these three arms, in this order: an extra arm —
+# another exemption ahead of the scope list — leaves a C6 subtree unscanned while
+# every line pinned above still matches. The reader takes the first `case "$f" in`
+# and prints each arm label up to its `)`.
+scope_arms() {   # <file>
+  awk 'index($0, "case \"$f\" in") && !on { on = 1; next }
+       on && /^[[:space:]]*esac/ { exit }
+       on && /^[[:space:]]*[^#[:space:]][^)]*[)]/ { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[)].*$/, "", l); printf "%s ", l }' "$1"
+}
+check "Gate 1's scope case holds exactly the exemption, the C6 list and the default" \
+  "$(scope_arms "$GATE1_BLOCK")" "release/releases/* core/*|release/*|operations/*|packages/* * "
+SCOPE_FIXTURE="$TMP/scope-fixture"
+printf '            case "$f" in\n              release/releases/*) : ;;\n              core/private/*) : ;;\n              core/*|release/*|operations/*|packages/*) CHANGED+=("$f") ;;\n              *) : ;;\n            esac\n' > "$SCOPE_FIXTURE"
+check "…control — an extra exemption arm is seen" \
+  "$(scope_arms "$SCOPE_FIXTURE")" "release/releases/* core/private/* core/*|release/*|operations/*|packages/* * "
 # Every executable `exit 0` in the job, counted: the out-of-scope pass, the opted-out
 # fork's empty set, and the clean verdict. An early `exit 0` inserted anywhere — the
 # retired bot exemption returning as control flow, say — changes the count.
@@ -870,13 +906,75 @@ check "…control — the exit 0 count reads code, not comments or exit 10" "$(g
 # workflow code that still carries the bot exemption — the ordering hazard.
 GATE1_JOB_ENV="$TMP/gate1-job-env"
 awk '/^  depersonalization:$/ { on = 1; next } on && /^    steps:$/ { exit } on' "$WORKFLOW" > "$GATE1_JOB_ENV"
-check "Gate 1's job-level env binds no secret" "$(grep -c 'secrets\.' "$GATE1_JOB_ENV")" "0"
+SECRET_REF_RE='secrets[.][A-Za-z_]|secrets\['
+check "Gate 1's job-level env binds no secret" "$(grep -cE "$SECRET_REF_RE" "$GATE1_JOB_ENV")" "0"
+check "Gate 1 references secrets on exactly two lines, the scan step's two bindings" \
+  "$(grep -cE "$SECRET_REF_RE" "$GATE1_BLOCK")" "2"
+SECRET_FIXTURE="$TMP/secret-fixture"
+printf '        env:\n          X: ${{ secrets.OPERATOR_IDENTITY_DEPENDABOT }}\n          Y: ${{ secrets['"'"'OPERATOR_IDENTITY'"'"'] }}\n          echo "set it in repo secrets."\n' > "$SECRET_FIXTURE"
+check "…control — both reference syntaxes count, prose does not" "$(grep -cE "$SECRET_REF_RE" "$SECRET_FIXTURE")" "2"
 check "…control — the job-level extraction holds the job's env" "$(grep -c 'REPO_OWNER: ' "$GATE1_JOB_ENV")" "1"
 check "Gate 1 reads the identity from the canonical name or the mirror's own name, once" \
   "$(line_count "$GATE1_BLOCK" 'OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY || secrets.OPERATOR_IDENTITY_DEPENDABOT }}')" "1"
 check "Gate 1 reads the collaborator list the same way, once" \
   "$(grep -cF 'COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES || secrets.COLLABORATOR_NAMES_DEPENDABOT }}' "$GATE1_BLOCK")" "1"
 check "Gate 1 has no single-name identity binding" "$(grep -cE 'secrets[.]OPERATOR_IDENTITY[[:space:]]*[}][}]' "$GATE1_BLOCK")" "0"
+
+# --- Gate 1's run block, executed ---------------------------------------------------
+# Everything above reads the workflow as text. An edit inside an arm — a `continue`
+# or `break` ahead of its `exit 1` — keeps every pinned line and changes what the job
+# does. So the scan step's own run block is extracted and executed against the
+# fixture repository, with synthetic literals, and graded by its exit status: the
+# job's verdict, not its wording. The library is supplied through GITHUB_WORKSPACE,
+# exactly as the step sources it; the environment is cleared except for what the
+# step's env: block and the runner provide.
+RUN_BLOCK="$TMP/gate1-run.sh"
+awk '
+  index($0, "- name: Scan C6-domain changed files for operator and collaborator personal data") { step = 1; next }
+  step && !body && /^[[:space:]]+run: [|][[:space:]]*$/ { body = 1; next }
+  body { if ($0 != "" && $0 !~ /^          /) exit; sub(/^          /, ""); print }
+' "$WORKFLOW" > "$RUN_BLOCK"
+check "run-block extraction holds the scan step's script" \
+  "$(grep -cF 'case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$CHANGED_LIST_FILE")" in' "$RUN_BLOCK")" "1"
+RB_WS="$TMP/gate1-workspace"
+mkdir -p "$RB_WS/release/tools/lib"
+cp "$LIB" "$RB_WS/release/tools/lib/deciders-carveout.sh"
+RB_REPO="$FIXTURE_HANDLE/fixture-repository"
+RB_IDENTITY="$(printf '%s\n%s' "$FIXTURE_NAME" "$FIXTURE_EMAIL")"
+gate_run() {   # <run-block> <base> <head> <actor> <sender-type> <identity> — prints the exit status
+  ( cd "$FC_REPO" && env -i PATH="$PATH" HOME="$TMP" LC_ALL=C \
+      GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+      GITHUB_WORKSPACE="$RB_WS" GITHUB_REPOSITORY="$RB_REPO" CANONICAL_REPO="$RB_REPO" \
+      GITHUB_STEP_SUMMARY="$TMP/gate1-summary.md" \
+      REPO_OWNER="$FIXTURE_HANDLE" ACTOR="$4" SENDER_TYPE="$5" \
+      OPERATOR_IDENTITY="$6" COLLABORATOR_NAMES="" FORK_OPTOUT="" \
+      BASE_SHA="$2" HEAD_SHA="$3" bash "$1" >/dev/null 2>&1 )
+  printf '%s\n' "$?"
+}
+BOT="dependabot[bot]"
+check "run block — a clean C6 change passes"                     "$(gate_run "$RUN_BLOCK" "$FC_B2" "$FC_C" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+check "run block — the handle added under core/ fails"           "$(gate_run "$RUN_BLOCK" "$FC_BASE" "$FC_HEAD" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+check "run block — a bot's run is scanned and fails on the handle" "$(gate_run "$RUN_BLOCK" "$FC_BASE" "$FC_HEAD" "$BOT" Bot "$RB_IDENTITY")" "1"
+check "run block — a bot's clean run passes after a scan"         "$(gate_run "$RUN_BLOCK" "$FC_B2" "$FC_C" "$BOT" Bot "$RB_IDENTITY")" "0"
+check "run block — an unset identity fails loud"                 "$(gate_run "$RUN_BLOCK" "$FC_B2" "$FC_C" "$BOT" Bot "")" "1"
+check "run block — a base commit git does not have fails closed" "$(gate_run "$RUN_BLOCK" "$FC_ABSENT" "$FC_HEAD" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+check "run block — a name git must quote fails closed"           "$(gate_run "$RUN_BLOCK" "$FC_U" "$FC_Q" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+check "run block — a non-ASCII name is scanned and fails on the handle" "$(gate_run "$RUN_BLOCK" "$FC_HEAD" "$FC_U" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+check "run block — a text file marked -diff fails closed"        "$(gate_run "$RUN_BLOCK" "$FC_Q" "$FC_B1" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+check "run block — a compiled package passes as binary"          "$(gate_run "$RUN_BLOCK" "$FC_C" "$FC_S" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+check "run block — the handle outside the C6 domains passes by scope" "$(gate_run "$RUN_BLOCK" "$FC_S" "$FC_O" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+# Control: the replay reads the block it is given. A copy whose first line after
+# `set -euo pipefail` exits 0 must pass the case the real block fails, and a copy
+# whose quoted-name arm continues instead of failing must pass the quoted case.
+RB_EXIT0="$TMP/gate1-run-exit0.sh"
+awk '{ print } /^set -euo pipefail$/ && !d { print "exit 0"; d = 1 }' "$RUN_BLOCK" > "$RB_EXIT0"
+check "…control — a block that exits 0 at once passes the handle case" \
+  "$(gate_run "$RB_EXIT0" "$FC_BASE" "$FC_HEAD" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+RB_CONT="$TMP/gate1-run-continue.sh"
+awk '{ print } /^  UNEVALUABLE[)]$/ && !d { print "    exit 0"; d = 1 }' "$RUN_BLOCK" > "$RB_CONT"
+check "…control — the edited copy differs from the block" "$(cmp -s "$RUN_BLOCK" "$RB_CONT" && echo same || echo differs)" "differs"
+check "…control — a listing arm edited to exit 0 passes the quoted case" \
+  "$(gate_run "$RB_CONT" "$FC_U" "$FC_Q" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
 
 echo
 echo "=== Result ==="
