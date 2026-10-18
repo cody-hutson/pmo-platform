@@ -8,7 +8,7 @@
 | **Bump Class** | minor — a new decision record plus a behavior change in a required CI gate. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
 | **Date Created** | 2026-10-16 (Friday) |
 | **Release Manager** | Agent-assisted |
-| **Status** | Executing — Stage 6 Engineering complete: Commit 0 (plan + decision record), the library and fixture suite (RED), Gate 1 (GREEN), the documentation and label surfaces, and the review-driven hardening (DEV-6). Owed before Stage 9: the Phase A6.5 adversarial review and the Collective Review of the Stage-5 design |
+| **Status** | Executing — Stage 6 complete, including the #8454 fold-in (DEV-7) and the main sync with the record renumbered to ADR-220 (DEV-8). Owed before Stage 9: the Phase A6.5 adversarial review and the Collective Review (DEV-5), then Stage 7 and Stage 8 |
 | **Branch** | release/dependabot-prs-merge-without-bypass |
 | **PR** | opened in **draft** immediately after the Stage-6 commits; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | dependabot-prs-merge-without-bypass |
@@ -24,8 +24,11 @@
 | # | Issue | Title | Priority | Category | Labels |
 |---|-------|-------|----------|----------|--------|
 | 1 | #8092 | Dependabot security PRs cannot merge without an admin bypass | P2 | bug | bug, cluster: security, status: approved, project:platform-quality |
+| 2 | #8454 | Depersonalization gate passes when it cannot list changed files or run its scan | P2 | bug | status: bundled (folded in by DEV-7) |
 
 **Scope narrowing (triage, operator-approved 2026-10-16):** defects 2 (the depersonalization gate fails every run Dependabot starts) and 3 (the `dependabot` label does not exist), plus the `SECURITY.md` reconciliation. Defect 1, the required close-out smoke context that never reports on a path-filtered pull request, is owned by #6179 in the `ci-wiring-and-required-checks` release (draft PR #8305). Acceptance criteria 1 and 2 belong to that defect.
+
+**Fold-in (operator directive, 2026-10-17):** #8454 joins the release. It is the follow-up DEV-6 recorded — the changed-file listing and the literal scan in the same gate each swallowed a non-zero exit into a pass — built on main as `fix/depersonalization-gate-fail-closed` and merged into this branch (DEV-7). It touches three of this release's nine files and adds none.
 
 ### Dependency Graph
 
@@ -52,9 +55,9 @@ No issue→issue edges: a single-issue bundle.
 |-----------|--------|------------|------|
 | release/releases/plans/dependabot-prs-merge-without-bypass_RELEASE_PLAN.md | #8092 | Create | Low |
 | core/ADRs/ADR-220-depersonalization-gate-scans-bot-runs.md | #8092 | Create | Low |
-| release/tools/lib/deciders-carveout.sh | #8092 | Modify | Medium |
-| release/tools/tests/test_deciders_carveout.sh | #8092 | Modify | Low |
-| .github/workflows/repo-integrity.yml | #8092 | Modify | High |
+| release/tools/lib/deciders-carveout.sh | #8092, #8454 | Modify | Medium |
+| release/tools/tests/test_deciders_carveout.sh | #8092, #8454 | Modify | Low |
+| .github/workflows/repo-integrity.yml | #8092, #8454 | Modify | High |
 | core/rules/git-workflow.md | #8092 | Modify | Low |
 | core/standards/secrets-handling-policy.md | #8092 | Modify | Low |
 | SECURITY.md | #8092 | Modify | Low |
@@ -120,6 +123,18 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 - **Estimated complexity:** Medium.
 - **Dependencies:** None.
 
+### Issue #8454: Depersonalization gate passes when it cannot list changed files or run its scan
+
+**Change Specification** (the fix's own PR description is the authority; merged here by DEV-7):
+
+- **`release/tools/lib/deciders-carveout.sh`:** three verdict functions — `changed_files_verdict`, `added_lines_verdict`, `literal_scan_verdict` — each reporting `UNEVALUABLE` when its read did not run to completion, distinct from an empty answer. Repository as a parameter; no pipelines.
+- **`release/tools/tests/test_deciders_carveout.sh`:** a sensitivity and a control arm per function, and a structural arm asserting Gate 1 carries no executable line that swallows a non-zero exit.
+- **`.github/workflows/repo-integrity.yml`, Gate 1 only:** the changed-file listing, the per-file added-line read and the literal scan routed through the three verdicts; `UNEVALUABLE` and an unrecognised verdict each fail the run with an `::error::`. The three functions join the definition guard (DEV-7).
+
+- **Acceptance criteria:** the seven on #8454, all in scope.
+- **Estimated complexity:** Small.
+- **Dependencies:** #8092's Gate 1 rewrite (same job); textual merge only.
+
 ### Agent-Editability Read
 
 **Derivation** — controls read at commit `20197085`:
@@ -176,10 +191,17 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 | #8092 | AC-4 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read fixture arms (b) and (c): identity unset on canonical returns `FAIL` for a human run and for a bot's run | Both arms PASS · control: arm (d), a fork opted out with identity unset, returns `OK` |
 | #8092 | AC-5 | `grep -c 'name = "dependabot"' core/packs/_common/pack.toml` ≥ 1. Post-merge, after the operator runs the `--emit-fix` label create: read the labels and comments on the next Dependabot PR | 1; post-merge, the PR carries `dependabot` and `cluster: security` with no "labels could not be found" comment |
 | #8092 | AC-6 | `grep -c 'only Dependabot secrets' SECURITY.md` ≥ 1 | 1, and § Automated Security PRs carries the three-row table naming the freshness gate, the depersonalization gate and the close-out smoke check, each with its remedy |
+| #8454 | AC-1 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read arm `CF sensitivity — a base commit git does not have is UNEVALUABLE`, and the structural arm `repo-integrity.yml calls changed_files_verdict` | Both PASS; mutating the verdict to `LISTED` turns the suite red (4 arms, observed at the fold) |
+| #8454 | AC-2 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read arm `LS sensitivity — a grep exit 2 (malformed pattern) is UNEVALUABLE` | PASS |
+| #8454 | AC-3 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read arm `AL sensitivity — a diff against a missing base is UNEVALUABLE` | PASS |
+| #8454 | AC-4 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read arms `CF control — an empty but successful diff is LISTED` and `LS control — a grep exit 1 (no match) is NONE` | Both PASS |
+| #8454 | AC-5 | Run `bash release/tools/tests/test_deciders_carveout.sh` under bash 3.2 with BSD grep and read its summary line | Exits 0; each of the three functions has at least one sensitivity and one control arm |
+| #8454 | AC-6 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read arm `Gate-1 has no executable line that swallows a non-zero exit` | PASS; reverting the listing to its old swallowed form turns it red (2 arms, observed at the fold) |
+| #8454 | AC-7 | `gh pr checks 8453 --repo cody-hutson/pmo-platform` and read the `Depersonalization gate` row | pass |
 
 **AC baseline** — per-issue criterion counts as read at plan time.
 
-`ac_baseline: { #8092: 6, read_at: 20197085 }`
+`ac_baseline: { #8092: 6, #8454: 7, read_at: 20197085 }`
 
 ### Release-Level Verification
 
@@ -228,7 +250,9 @@ N/A — enumerated over the pack-manifest schema, the label grammar and the work
 | **DEV-2** | Gate 1 asserts, right after sourcing the library, that every decision it calls is defined, and fails closed otherwise. Each decision is read through `$(...)`, so a missing function would read as an empty verdict and fall through to a pass. The `literal_set_verdict` case also fails on an unrecognised token | Stage 6, Tier 1 | **APPLIED** |
 | **DEV-3** | The `dependabot` label description is 98 characters, not the design's longer text, because GitHub caps a label description at 100 and the parity gate compares descriptions exactly; the `.github/dependabot.yml` pointer lives in `applied_at` | Stage 6, Tier 1 | **APPLIED** |
 | **DEV-4** | Sub-task container: PR-body checklist rather than sub-issues (see § Delivery Strategy) | Stage 6, Tier 1 | **APPLIED** |
-| **DEV-6** | An independent review of the Gate 1 change (silent-failure focus) found no live fail-open on canonical, but five workflow regressions the suite would not catch and three runtime gaps. Closed in this release: a fourth library function, `handle_preflight`, requires the scanned handle to be the canonical repository's owner (a re-bound or empty handle now fails loud rather than leaving the handle silently unscanned); `identity_preflight` treats a whitespace-only identity as unset; the preflight is a `case` with a fail-closed default; the suite asserts REPO_OWNER is bound once, OP_LITERALS is assigned once, no assignment line carries the actor, and every failing arm still ends in `exit 1`, each with a control; two arms that could not fail are removed; comments that misdescribed the fork paths are corrected. Two fail-open paths the review found OUTSIDE this diff (the changed-file `git diff … \|\| true` and the scan's `grep … \|\| true`, both pre-existing) are a follow-up | Stage 6 review, Tier 1 | **APPLIED** (follow-up recorded) |
+| **DEV-6** | An independent review of the Gate 1 change (silent-failure focus) found no live fail-open on canonical, but five workflow regressions the suite would not catch and three runtime gaps. Closed in this release: a fourth library function, `handle_preflight`, requires the scanned handle to be the canonical repository's owner (a re-bound or empty handle now fails loud rather than leaving the handle silently unscanned); `identity_preflight` treats a whitespace-only identity as unset; the preflight is a `case` with a fail-closed default; the suite asserts REPO_OWNER is bound once, OP_LITERALS is assigned once, no assignment line carries the actor, and every failing arm still ends in `exit 1`, each with a control; two arms that could not fail are removed; comments that misdescribed the fork paths are corrected. Two fail-open paths the review found OUTSIDE this diff (the changed-file `git diff … \|\| true` and the scan's `grep … \|\| true`, both pre-existing) are a follow-up | Stage 6 review, Tier 1 | **APPLIED** (follow-up resolved in this release by DEV-7) |
+| **DEV-7** | #8454 folded into the release: `fix/depersonalization-gate-fail-closed` merged into this branch (a clean textual merge of three files), and the three new verdict functions added to Gate 1's definition guard, which is an enumerated list. Its standalone PR closes once this branch carries it through CI. Resolves the follow-up DEV-6 recorded | Operator directive in chat, 2026-10-17: resolve what is still tied to the security fix in this release | **APPLIED** |
+| **DEV-8** | `main` merged into the branch (204 commits behind; `repo-integrity.yml` and `core/rules/git-workflow.md` auto-merged, the diff against main still the nine files). `main` already claimed ADR-217, so `renumber-adr.py` moved the record to ADR-220. The `SECURITY.md` smoke-check row is rewritten: the required-checks release landed first and removed the path filter, so this release is the one that lands second | Stage 6 sync, Tier 1 | **APPLIED** |
 | **DEV-5** | The bundle, the milestone and Stage 4 were authored directly, not through the Stage-3 and Stage-4 skills; Mode R readiness and the Parallelization Map were not run. The Phase A6.5 adversarial review and the Collective Review of the Stage-5 design remain owed before Stage 9 | Operator's single-issue-milestone choice, 2026-10-16 | **RECORDED** — owed |
 
 ## Verification Evidence
@@ -260,12 +284,13 @@ N/A — enumerated over the pack-manifest schema, the label grammar and the work
 
 ### Outcome
 
-A Dependabot pull request now gets a real `Depersonalization gate` verdict on the bot's own run, with no maintainer push. The gate scans every run on the same literals, whoever started it: the handle comes from the repository owner, and the name and email from `OPERATOR_IDENTITY`, which the operator mirrors into the Dependabot secret store after merge. The silent pass behind the old red, where a bot's run scanned nothing, is gone: an empty literal set on canonical now fails.
+A Dependabot pull request now gets a real `Depersonalization gate` verdict on the bot's own run, with no maintainer push. The gate scans every run on the same literals, whoever started it: the handle comes from the repository owner, and the name and email from `OPERATOR_IDENTITY`, which the operator mirrors into the Dependabot secret store after merge. The silent pass behind the old red, where a bot's run scanned nothing, is gone: an empty literal set on canonical now fails. So does a run in which the gate could not list the changed files, read a file's added lines, or complete its scan: each of those used to read as "nothing found" and pass.
 
 ### Issues resolved
 
 | # | Outcome (one line) | Status |
 |---|---|---|
+| #8454 | The depersonalization gate fails closed when it cannot list the changed files, read a file's added lines, or run its scan | DONE |
 | #8092 | Defects 2 and 3 plus the `SECURITY.md` reconciliation; defect 1 (AC-1, AC-2) stays with the required-checks release | PARTIAL — in-scope work DONE; AC-3 and AC-5 are confirmed live on the first Dependabot PR after the operator's two post-merge steps |
 
 ### Key decisions (when applicable; omit this sub-section when no D-decisions were rendered)
@@ -282,7 +307,7 @@ A Dependabot pull request now gets a real `Depersonalization gate` verdict on th
 ### Downstream impact
 
 - After merge, two operator steps, in this order and never before merge: `gh secret set OPERATOR_IDENTITY --app dependabot`, then the `gh label create` that `python3 core/deploy/tools/check-label-parity.py --emit-fix` renders. Then `./deploy.sh --deploy` refreshes the rules mirror.
-- The `Close-out automation smoke (macOS)` row in `SECURITY.md` is rewritten by whichever of this release and the required-checks release lands second.
+- The `Close-out automation smoke (macOS)` row in `SECURITY.md` is rewritten here (DEV-8): the required-checks release landed first.
 - Optional follow-up: a `deploy.sh --check` detector comparing the two secret stores (design D-5).
 
 ### Cross-references
