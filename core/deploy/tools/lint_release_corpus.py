@@ -2589,9 +2589,9 @@ def _self_test() -> int:
     #
     # POSTURE, stated only as far as this repository can pin it. What the repository
     # pins: this suite reaches CI only through
-    # .github/workflows/release-tooling-smoke.yml, which declares
-    # `posture=advisory`, and there only in the `selftest-discovery` job, whose
-    # discovery engine runs it; a failing arm surfaces as that engine's `::error::`
+    # .github/workflows/release-tooling-smoke.yml, and there only in the
+    # `selftest-discovery` job, which that workflow declares `posture=advisory` and
+    # whose discovery engine runs it; a failing arm surfaces as that engine's `::error::`
     # annotation naming this file. Read that annotation, not the job's colour — the
     # job runs other arms too, so its colour is not this suite's verdict. What the
     # repository CANNOT pin is whether that job is a required status check on

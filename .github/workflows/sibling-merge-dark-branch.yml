@@ -1,0 +1,224 @@
+name: Sibling-merge dark-branch detector
+
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Sibling-merge dark-branch detector (verdict)" (enforcing mode — a pull request newly darkened by this push turns the check RED; skipped, never green, when the sweep could not measure or could not attribute)  always-reports=yes
+#   invariant: no push to the default branch leaves an open pull request on that base
+#              newly unmergeable without saying so. A pull request the host reports as
+#              conflicting gets none of its pull_request-triggered gates dispatched, and
+#              the push that causes this is made by ANOTHER branch — so the affected
+#              branch has no event of its own to hang a detector on. This job runs on the
+#              causing event instead.
+#   falsification: open two pull requests that each append a row to the same table;
+#                  merge one. The run on that merge commit MUST turn this check RED and
+#                  name the other pull request and the conflicted path. A pull request
+#                  touching an unrelated file MUST NOT be named, and the next push after
+#                  that MUST NOT name the first one again (it is then `still-dark`).
+#                  Asserted offline on every run by the classifier's --self-test, which
+#                  builds exactly that repository: arms S1 (flagged), S2 and S3 (not
+#                  flagged), S4 (not re-flagged), S6, S6c, S6d and S6e (a conflict the
+#                  local merge cannot attribute or cannot compute, a host answer that
+#                  predates the push, and a host answer the local merge could not
+#                  cross-check, are never green).
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Sibling-merge dark-branch detector (measurement)" (RED only when the instrument is broken — the classifier self-test fails or its input is unusable)  always-reports=yes
+#   invariant: the classifier that renders the verdict above still discriminates, and
+#              the sweep it ran is published with its measurement status.
+#   falsification: change the classifier so a conflicting pull request no longer reads
+#                  dark -> the self-test step fails and this check turns RED.
+#   posture note: `advisory` here is STRUCTURAL and PERMANENT, not a shakedown that
+#                 graduates. Neither context can become a required status: this workflow
+#                 has no pull_request trigger, so it publishes nothing on any pull
+#                 request, and its verdict input is out-of-tree host state (the
+#                 mergeability of OTHER pull requests), which no pull-request author can
+#                 change by editing their branch. Neither job may join
+#                 `deploy.sh --check-required-subset`.
+#   scope note: `always-reports=yes` says what the conformance ratchet reads it to say —
+#               no `paths:` filter can make this workflow silent on a push it is
+#               subscribed to. It does NOT say this workflow reports on pull requests.
+#               It reports on pushes to the default branch and on manual dispatch, and
+#               on nothing else.
+#
+# WHAT IS VERDICT-BEARING. The host's own mergeability value, polled to a definitive
+# state. `git merge-tree` does two things only: it decides whether THIS push is the one
+# that darkened a pull request (it merged cleanly into the earlier tip and conflicts
+# with the new one), and it cross-checks a host answer of "mergeable" that may predate
+# the push. Where the two disagree, or the local merge cannot be computed (a head that
+# could not be fetched), the pull request is reported `dark-unattributed`,
+# `clear-disagrees` or `clear-unchecked`, a warning annotation is raised, and the
+# verdict is skipped — never green, never red. A host answer of "mergeable" that the
+# local merge could not cross-check does NOT count toward a green verdict.
+#
+# WHAT THIS WORKFLOW MAY NOT DO. It holds no write scope. It checks out the default
+# branch only; pull-request heads are fetched as objects and are never checked out,
+# sourced or executed. No host-supplied string (a branch name, a title) reaches a shell
+# word or opens a log line: numbers and 40-hex SHAs are the only values passed on, and
+# the classifier sanitises everything it prints.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Base branch whose open pull requests are swept
+        required: false
+        default: main
+        type: string
+      before:
+        description: Earlier tip of that base (40 hex). Empty = a census of every dark pull request
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  measurement:
+    name: Sibling-merge dark-branch detector (measurement)
+    if: github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      state: ${{ steps.sweep.outputs.state }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: attributing a conflict to a push needs the merge base of each
+          # pull-request head with two tips of the base.
+          fetch-depth: 0
+
+      - name: Classifier self-test (hard-fails independent of the advisory posture)
+        run: python3 release/tools/check-dark-branch.py --self-test
+
+      - name: Sweep the open pull requests on the pushed base
+        id: sweep
+        # Every `github.*` and `inputs.*` value is bound through env: and referenced as
+        # a quoted shell variable, never inlined into the script.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_REF_NAME: ${{ github.ref_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          INPUT_BASE_REF: ${{ inputs.base_ref }}
+          INPUT_BEFORE: ${{ inputs.before }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            BASE_REF="${INPUT_BASE_REF:-main}"
+            BEFORE="${INPUT_BEFORE:-}"
+          else
+            BASE_REF="$PUSH_REF_NAME"
+            BEFORE="$PUSH_BEFORE"
+          fi
+          case "$BASE_REF" in
+            ''|*[!A-Za-z0-9._/-]*) echo "unusable base ref"; exit 2 ;;
+          esac
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            AFTER="$(git rev-parse --verify --quiet "refs/remotes/origin/${BASE_REF}^{commit}" || true)"
+          else
+            AFTER="$PUSH_AFTER"
+          fi
+          # A census is chosen here, explicitly, and never inferred by the classifier:
+          # no earlier tip (a manual dispatch without one) or the all-zero tip a
+          # first push carries. Any other value is passed through and the classifier
+          # refuses one that is not a full commit id.
+          TIPS=(--before "$BEFORE")
+          case "$BEFORE" in
+            ''|0000000000000000000000000000000000000000) TIPS=(--census) ;;
+          esac
+
+          # Mergeability is computed by the host asynchronously after a base push, so a
+          # first read can say UNKNOWN. Re-read on the Stage 12 backoff (3s, 5s, 10s,
+          # 12s; 30s in all) until no pull request is undetermined. Whatever is still
+          # undetermined after that is reported NOT-EVALUATED by the classifier.
+          LIMIT=300
+          status=degraded
+          for pause in 0 3 5 10 12; do
+            if [ "$pause" -ne 0 ]; then sleep "$pause"; fi
+            if gh pr list --repo "$REPO" --state open --base "$BASE_REF" --limit "$LIMIT" \
+                 --json number,state,isDraft,headRefName,headRefOid,baseRefName,mergeable,mergeStateStatus \
+                 > pulls.json 2> pulls-error.txt
+            then
+              status=fetched
+            else
+              status=degraded
+              sed -n '1,5p' pulls-error.txt || true
+              break
+            fi
+            if ! jq -e 'any(.[]; .mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN")' pulls.json > /dev/null; then
+              break
+            fi
+          done
+          if [ "$status" = "fetched" ]; then
+            count="$(jq 'length' pulls.json)"
+            if [ "$count" -ge "$LIMIT" ]; then status=truncated; fi
+            # Every open head, not only the conflicting ones: a host answer of
+            # "mergeable" is cross-checked against the local merge into the new tip.
+            # Objects only: nothing fetched here is checked out or run.
+            jq -r '.[] | .number' pulls.json > pull-numbers.txt
+            while IFS= read -r number; do
+              case "$number" in ''|*[!0-9]*) continue ;; esac
+              git fetch --no-tags --quiet origin "refs/pull/${number}/head" \
+                || echo "the head of pull request ${number} could not be fetched; it is reported unattributed or unchecked"
+            done < pull-numbers.txt
+          fi
+
+          rc=0
+          python3 release/tools/check-dark-branch.py sweep \
+            --pulls pulls.json --pulls-status "$status" --base-ref "$BASE_REF" \
+            "${TIPS[@]}" --after "$AFTER" --repo . > sweep.txt || rc=$?
+          cat sweep.txt
+          state="$(sed -n 's/^state=//p' sweep.txt | tail -n 1)"
+          case "$state" in
+            newly-dark) headline='A pull request on this base was newly darkened by this push.' ;;
+            census-dark) headline='Census: at least one open pull request on this base is unmergeable (not attributed to a push).' ;;
+            dark-unattributed) headline='NOT A CLEAN RESULT: the host reports a conflict this sweep could not attribute to this push.' ;;
+            not-evaluated) headline='NOT A CLEAN RESULT: at least one open pull request could not be evaluated.' ;;
+            none-new) headline='No open pull request on this base was darkened by this push.' ;;
+            census-clear) headline='Census: no open pull request on this base is unmergeable.' ;;
+            *) headline='The classifier did not report a state.' ;;
+          esac
+          {
+            echo '### Sibling-merge dark-branch sweep'
+            echo
+            echo "$headline"
+            echo
+            echo '```'
+            cat sweep.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$rc:$state" in
+            0:none-new|0:census-clear|1:newly-dark|1:census-dark)
+              echo "state=${state}" >> "$GITHUB_OUTPUT" ;;
+            3:dark-unattributed|3:not-evaluated)
+              echo "::warning::${headline} The verdict check is skipped, not passed. See the measurement summary."
+              echo "state=${state}" >> "$GITHUB_OUTPUT" ;;
+            *) echo "the classifier could not assert (exit ${rc}, state '${state}')"; exit 2 ;;
+          esac
+
+  verdict:
+    name: Sibling-merge dark-branch detector (verdict)
+    needs: measurement
+    # Three-valued on purpose. `dark-unattributed` and `not-evaluated` leave this job
+    # SKIPPED: a sweep that could not measure or attribute must be distinguishable, in
+    # the check-run list, from one that measured and found nothing.
+    if: contains(fromJSON('["none-new","newly-dark","census-clear","census-dark"]'), needs.measurement.outputs.state)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verdict
+        env:
+          STATE: ${{ needs.measurement.outputs.state }}
+        run: |
+          case "$STATE" in
+            newly-dark)
+              echo "::error::This push left at least one open pull request unmergeable. Its pull_request gates will not dispatch until the base is merged into its branch. The measurement job's summary names it and the conflicted paths."
+              exit 1 ;;
+            census-dark)
+              echo "::error::At least one open pull request on this base is unmergeable (a census, not attributed to a push). Its pull_request gates will not dispatch until the base is merged into its branch. The measurement job's summary names it."
+              exit 1 ;;
+            census-clear) echo "Census: no open pull request on this base is unmergeable." ;;
+            *) echo "No open pull request on this base was darkened by this push." ;;
+          esac
