@@ -955,6 +955,21 @@ check "Gate 1 reads the identity from the canonical name or the mirror's own nam
   "$(line_count "$GATE1_BLOCK" 'OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY || secrets.OPERATOR_IDENTITY_DEPENDABOT }}')" "1"
 check "Gate 1 reads the collaborator list the same way, once" \
   "$(grep -cF 'COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES || secrets.COLLABORATOR_NAMES_DEPENDABOT }}' "$GATE1_BLOCK")" "1"
+# The range the gate reads and the literal assignments it builds, pinned. The
+# replay below injects BASE_SHA and HEAD_SHA itself, so only a pin sees the step's
+# own binding drift (a base bound to the head lists nothing and passes); and a
+# second, emptying assignment to a literal after it is built undoes the carve-out's
+# handle block while every other line still matches.
+check "Gate 1 binds BASE_SHA to the pull request's base, once" \
+  "$(line_count "$GATE1_BLOCK" 'BASE_SHA: ${{ github.event.pull_request.base.sha }}')" "1"
+check "Gate 1 binds HEAD_SHA to the pull request's head, once" \
+  "$(line_count "$GATE1_BLOCK" 'HEAD_SHA: ${{ github.event.pull_request.head.sha }}')" "1"
+check "Gate 1 assigns HANDLE_LITERAL on exactly two executable lines" \
+  "$(grep -cE '^[[:space:]]*HANDLE_LITERAL=' "$GATE1_BLOCK")" "2"
+check "Gate 1 assigns COLLAB_LITERALS on exactly two executable lines" \
+  "$(grep -cE '^[[:space:]]*COLLAB_LITERALS=' "$GATE1_BLOCK")" "2"
+check "Gate 1 skips only a path with nothing at it, once" \
+  "$(line_count "$GATE1_BLOCK" 'if [ ! -e "$f" ] && [ ! -L "$f" ]; then continue; fi')" "1"
 check "Gate 1 has no single-name identity binding" "$(grep -cE 'secrets[.]OPERATOR_IDENTITY[[:space:]]*[}][}]' "$GATE1_BLOCK")" "0"
 
 # --- Gate 1's run block, executed ---------------------------------------------------
@@ -978,13 +993,13 @@ mkdir -p "$RB_WS/release/tools/lib"
 cp "$LIB" "$RB_WS/release/tools/lib/deciders-carveout.sh"
 RB_REPO="$FIXTURE_HANDLE/fixture-repository"
 RB_IDENTITY="$(printf '%s\n%s' "$FIXTURE_NAME" "$FIXTURE_EMAIL")"
-gate_run() {   # <run-block> <base> <head> <actor> <sender-type> <identity> — prints the exit status
+gate_run() {   # <run-block> <base> <head> <actor> <sender-type> <identity> [<collaborators>] — prints the exit status
   ( cd "$FC_REPO" && env -i PATH="$PATH" HOME="$TMP" LC_ALL=C \
       GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
       GITHUB_WORKSPACE="$RB_WS" GITHUB_REPOSITORY="$RB_REPO" CANONICAL_REPO="$RB_REPO" \
       GITHUB_STEP_SUMMARY="$TMP/gate1-summary.md" \
       REPO_OWNER="$FIXTURE_HANDLE" ACTOR="$4" SENDER_TYPE="$5" \
-      OPERATOR_IDENTITY="$6" COLLABORATOR_NAMES="" FORK_OPTOUT="" \
+      OPERATOR_IDENTITY="$6" COLLABORATOR_NAMES="${7:-}" FORK_OPTOUT="" \
       BASE_SHA="$2" HEAD_SHA="$3" bash "$1" >/dev/null 2>&1 )
   printf '%s\n' "$?"
 }
@@ -1000,6 +1015,53 @@ check "run block — a non-ASCII name is scanned and fails on the handle" "$(gat
 check "run block — a text file marked -diff fails closed"        "$(gate_run "$RUN_BLOCK" "$FC_Q" "$FC_B1" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 check "run block — a compiled package passes as binary"          "$(gate_run "$RUN_BLOCK" "$FC_C" "$FC_S" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
 check "run block — the handle outside the C6 domains passes by scope" "$(gate_run "$RUN_BLOCK" "$FC_S" "$FC_O" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+# Five more commits for the cases the text pins cannot grade by effect.
+#   D1 — an ADR whose `deciders:` line carries the handle: blocked (the carve-out is
+#        name-only, ADR-116).  D2 — the same line carrying only the name: passes.
+#   G  — a collaborator's name under core/: blocked when the list is set.
+#   L  — a dangling symlink whose target text carries the handle: read, and blocked.
+#   X  — only a deletion: nothing to scan, passes.
+mkdir -p "$FC_REPO/core/ADRs"
+printf -- '---\ntitle: fixture\ndeciders: "%s"\n---\n' "$FIXTURE_HANDLE" > "$FC_REPO/core/ADRs/ADR-999-fixture.md"
+if ! { fc_git add core/ADRs/ADR-999-fixture.md && fc_git commit -q -m adr-handle; }; then
+  echo "FATAL: could not commit the deciders-handle fixture"; exit 1
+fi
+FC_D1="$(fc_git rev-parse HEAD)"
+printf -- '---\ntitle: fixture\ndeciders: "%s"\n---\n' "$FIXTURE_NAME" > "$FC_REPO/core/ADRs/ADR-998-fixture.md"
+if ! { fc_git add core/ADRs/ADR-998-fixture.md && fc_git commit -q -m adr-name; }; then
+  echo "FATAL: could not commit the deciders-name fixture"; exit 1
+fi
+FC_D2="$(fc_git rev-parse HEAD)"
+FC_COLLAB="Grace Hopper"
+printf 'Reviewed by %s.\n' "$FC_COLLAB" > "$FC_REPO/core/collab.md"
+if ! { fc_git add core/collab.md && fc_git commit -q -m collab; }; then
+  echo "FATAL: could not commit the collaborator fixture"; exit 1
+fi
+FC_G="$(fc_git rev-parse HEAD)"
+ln -s "../$FIXTURE_HANDLE-elsewhere" "$FC_REPO/core/link.md"
+if ! { fc_git add core/link.md && fc_git commit -q -m link; }; then
+  echo "FATAL: could not commit the symlink fixture"; exit 1
+fi
+FC_L="$(fc_git rev-parse HEAD)"
+check "…control — the symlink fixture is a link whose target does not exist" \
+  "$([ -L "$FC_REPO/core/link.md" ] && [ ! -e "$FC_REPO/core/link.md" ] && echo dangling || echo other)" "dangling"
+if ! fc_git rm -q core/clean.md || ! fc_git commit -q -m delete; then
+  echo "FATAL: could not commit the deletion fixture"; exit 1
+fi
+FC_X="$(fc_git rev-parse HEAD)"
+check "run block — the handle on an ADR deciders: line fails (the carve-out is name-only)" \
+  "$(gate_run "$RUN_BLOCK" "$FC_O" "$FC_D1" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+check "run block — the name alone on an ADR deciders: line passes (the carve-out)" \
+  "$(gate_run "$RUN_BLOCK" "$FC_D1" "$FC_D2" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+check "run block — a collaborator's name fails when the list is set" \
+  "$(gate_run "$RUN_BLOCK" "$FC_D2" "$FC_G" "$FIXTURE_HANDLE" User "$RB_IDENTITY" "$FC_COLLAB")" "1"
+check "…control — the same change passes with no collaborator list" \
+  "$(gate_run "$RUN_BLOCK" "$FC_D2" "$FC_G" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+check "run block — a dangling symlink is read, and its target text fails on the handle" \
+  "$(gate_run "$RUN_BLOCK" "$FC_G" "$FC_L" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+check "run block — a deletion alone passes, with nothing to scan" \
+  "$(gate_run "$RUN_BLOCK" "$FC_L" "$FC_X" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+
 # A per-file diff that fails while the listing succeeds: the listing compares trees,
 # the per-file diff reads blobs, so a commit whose new blob is then removed from the
 # fixture's object store lists fine and cannot be diffed. This is the last use of
@@ -1016,11 +1078,11 @@ rm -f "$FC_K_OBJ"
 check "…control — the blob is gone from the object store" \
   "$(fc_git cat-file -e "$FC_K_BLOB" 2>/dev/null && echo present || echo gone)" "gone"
 check "…control — the listing still succeeds over that commit" \
-  "$(changed_files_verdict "$FC_REPO" "$FC_O" "$FC_K" "$TMP/broken-list")" "LISTED"
+  "$(changed_files_verdict "$FC_REPO" "$FC_X" "$FC_K" "$TMP/broken-list")" "LISTED"
 check "…control — the per-file diff over it is UNEVALUABLE" \
-  "$(added_lines_verdict "$FC_REPO" "$FC_O" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
+  "$(added_lines_verdict "$FC_REPO" "$FC_X" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
 check "run block — a per-file diff that fails fails closed" \
-  "$(gate_run "$RUN_BLOCK" "$FC_O" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+  "$(gate_run "$RUN_BLOCK" "$FC_X" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 # Control: the replay reads the block it is given. A copy whose first line after
 # `set -euo pipefail` exits 0 must pass the case the real block fails, and a copy
 # whose quoted-name arm continues instead of failing must pass the quoted case.

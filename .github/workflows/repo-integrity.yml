@@ -503,7 +503,10 @@ jobs:
           ADDED_FILE="$(mktemp)"
           HITS_FILE="$(mktemp)"
           for f in "${CHANGED[@]}"; do
-            [ -f "$f" ] || continue   # deleted file — nothing to scan
+            # A deleted file has nothing to scan, and only a deleted file is skipped:
+            # nothing at the path, not even a symlink. A symlink's diff is its target
+            # text, so a link — a dangling one included — is read like any file.
+            if [ ! -e "$f" ] && [ ! -L "$f" ]; then continue; fi
             # NET-NEW DELTA: scan only lines ADDED since the base (the same
             # added-lines posture the issue-ref + reference-durability gates use),
             # so a pre-existing operator/collaborator literal in a file the PR
