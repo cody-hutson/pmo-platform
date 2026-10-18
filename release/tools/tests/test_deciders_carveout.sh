@@ -1156,6 +1156,20 @@ check "AL control — removing the NUL line is LISTED" \
 check "run block — removing a line that carries a NUL passes" \
   "$(gate_run "$RUN_BLOCK" "$FC_E" "$FC_R" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
 
+# An added line whose own content starts with "++" shows in the diff as "+++…", the
+# same prefix as the file header. Only the header — before the first hunk — is
+# skipped; inside a hunk the line is extracted under its own line number.
+printf 'intro\n++ Authored by %s.\nline three\n' "$FIXTURE_HANDLE" > "$FC_REPO/core/plusplus.md"
+if ! { fc_git add core/plusplus.md && fc_git commit -q -m plusplus; }; then
+  echo "FATAL: could not commit the plus-plus fixture"; exit 1
+fi
+FC_PP="$(fc_git rev-parse HEAD)"
+check "AL sensitivity — an added line starting with ++ is extracted, under its own line number" \
+  "$(added_lines_verdict "$FC_REPO" "$FC_R" "$FC_PP" core/plusplus.md "$TMP/pp-added" >/dev/null; sed -n '2p' "$TMP/pp-added")" "2:++ Authored by $FIXTURE_HANDLE."
+check "AL control — …and every added line is extracted" "$(wc -l < "$TMP/pp-added" | tr -d ' ')" "3"
+check "run block — the handle on an added line starting with ++ fails" \
+  "$(gate_run "$RUN_BLOCK" "$FC_R" "$FC_PP" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+
 # The NUL check's own failure branches, each forced by shadowing one command with a
 # shell function inside a subshell, over a range that otherwise reads LISTED. The
 # mktemp shadow counts its calls in a file (each $(mktemp) runs in a subshell) and
@@ -1194,11 +1208,11 @@ rm -f "$FC_K_OBJ"
 check "…control — the blob is gone from the object store" \
   "$(fc_git cat-file -e "$FC_K_BLOB" 2>/dev/null && echo present || echo gone)" "gone"
 check "…control — the listing still succeeds over that commit" \
-  "$(changed_files_verdict "$FC_REPO" "$FC_R" "$FC_K" "$TMP/broken-list")" "LISTED"
+  "$(changed_files_verdict "$FC_REPO" "$FC_PP" "$FC_K" "$TMP/broken-list")" "LISTED"
 check "…control — the per-file diff over it is UNEVALUABLE" \
-  "$(added_lines_verdict "$FC_REPO" "$FC_R" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
+  "$(added_lines_verdict "$FC_REPO" "$FC_PP" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
 check "run block — a per-file diff that fails fails closed" \
-  "$(gate_run "$RUN_BLOCK" "$FC_R" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+  "$(gate_run "$RUN_BLOCK" "$FC_PP" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 # Control: the replay reads the block it is given. A copy whose first line after
 # `set -euo pipefail` exits 0 must pass the case the real block fails, and a copy
 # whose quoted-name arm continues instead of failing must pass the quoted case.

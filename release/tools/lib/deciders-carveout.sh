@@ -366,7 +366,8 @@ changed_files_verdict() {
 #
 #   The diff and the extraction are two commands with a file between them, not a
 #   pipeline, so a failed diff cannot hide behind a successful awk. The awk program
-#   is the gate's, moved here unchanged. git renders a file as binary when a NUL
+#   is the gate's, moved here, with its header rule narrowed to the lines before
+#   the first hunk. git renders a file as binary when a NUL
 #   byte falls in its first 8000 bytes, and also when a `.gitattributes` line
 #   marks it `-diff` — which the pull request under review can add — so a text
 #   file can reach this function looking binary. A NUL further in, on an added
@@ -449,9 +450,12 @@ added_lines_verdict() {
     fi
     return 0
   fi
+  # The file header's "+++ b/<path>" line comes before the first hunk, so a "+++"
+  # line is skipped as a header there only. Inside a hunk it is an ADDED line whose
+  # content starts with "++", and it is extracted and scanned like any other.
   if ! awk '
-      /^@@/ { plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
-      /^\+\+\+/ { next }
+      /^@@/ { inhunk = 1; plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next }
+      !inhunk && /^\+\+\+/ { next }
       /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
       /^-/ { next }
     ' "$_al_diff" > "$_al_out"; then
