@@ -988,7 +988,7 @@ check "Gate 1 assigns HANDLE_LITERAL on exactly two executable lines" \
   "$(grep -cE '^[[:space:]]*HANDLE_LITERAL=' "$GATE1_BLOCK")" "2"
 check "Gate 1 assigns COLLAB_LITERALS on exactly two executable lines" \
   "$(grep -cE '^[[:space:]]*COLLAB_LITERALS=' "$GATE1_BLOCK")" "2"
-check "Gate 1 skips only a deleted path (nothing there, or a real directory), never a symlink, once" \
+check "Gate 1 skips only a path with nothing to read (nothing there, or a real directory), never a symlink, once" \
   "$(line_count "$GATE1_BLOCK" 'if { [ ! -e "$f" ] || [ -d "$f" ]; } && [ ! -L "$f" ]; then continue; fi')" "1"
 check "Gate 1 has no single-name identity binding" "$(grep -cE 'secrets[.]OPERATOR_IDENTITY[[:space:]]*[}][}]' "$GATE1_BLOCK")" "0"
 
@@ -1136,6 +1136,47 @@ check "AL sensitivity — a NUL past git's binary window is BINARY, not text" \
   "$(added_lines_verdict "$FC_REPO" "$FC_PD" "$FC_N" core/latenul.md "$TMP/latenul-added")" "BINARY"
 check "run block — a NUL past git's binary window fails closed" \
   "$(gate_run "$RUN_BLOCK" "$FC_PD" "$FC_N" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+# Only ADDED lines are read for a NUL. Appending a clean line after the NUL line
+# (whose text can surface in the hunk header) and then removing the NUL line are
+# both readable changes, and both pass.
+printf 'clean tail\n' >> "$FC_REPO/core/latenul.md"
+if ! { fc_git add core/latenul.md && fc_git commit -q -m nul-append; }; then
+  echo "FATAL: could not commit the append-after-NUL fixture"; exit 1
+fi
+FC_E="$(fc_git rev-parse HEAD)"
+awk 'BEGIN { for (i = 0; i < 9000; i++) printf "a"; printf "\nclean tail\n" }' > "$FC_REPO/core/latenul.md"
+if ! { fc_git add core/latenul.md && fc_git commit -q -m nul-remove; }; then
+  echo "FATAL: could not commit the remove-NUL fixture"; exit 1
+fi
+FC_R="$(fc_git rev-parse HEAD)"
+check "AL control — a clean line added after a NUL line is LISTED" \
+  "$(added_lines_verdict "$FC_REPO" "$FC_N" "$FC_E" core/latenul.md "$TMP/nul-append")" "LISTED"
+check "AL control — removing the NUL line is LISTED" \
+  "$(added_lines_verdict "$FC_REPO" "$FC_E" "$FC_R" core/latenul.md "$TMP/nul-remove")" "LISTED"
+check "run block — removing a line that carries a NUL passes" \
+  "$(gate_run "$RUN_BLOCK" "$FC_E" "$FC_R" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+
+# The NUL check's own failure branches, each forced by shadowing one command with a
+# shell function inside a subshell, over a range that otherwise reads LISTED. The
+# mktemp shadow counts its calls in a file (each $(mktemp) runs in a subshell) and
+# fails only the Nth; `command mktemp` reaches the real one.
+al_shadow_mktemp() {   # <zero-based call to fail>
+  ( MKC="$TMP/mktemp-count"; printf '0\n' > "$MKC"; FAILAT="$1"
+    mktemp() { _c="$(cat "$MKC")"; printf '%s\n' "$((_c + 1))" > "$MKC"
+               [ "$_c" -eq "$FAILAT" ] && return 1; command mktemp "$@"; }
+    added_lines_verdict "$FC_REPO" "$FC_BASE" "$FC_HEAD" core/a.md "$TMP/al-shadow" )
+}
+check "AL sensitivity — the NUL check's first scratch file failing is UNEVALUABLE"  "$(al_shadow_mktemp 1)" "UNEVALUABLE"
+check "AL sensitivity — the NUL check's second scratch file failing is UNEVALUABLE" "$(al_shadow_mktemp 2)" "UNEVALUABLE"
+check "…control — with no failure the shadowed run is LISTED" "$(al_shadow_mktemp 99)" "LISTED"
+check "AL sensitivity — the added-line filter failing is UNEVALUABLE" \
+  "$( grep() { return 2; }; added_lines_verdict "$FC_REPO" "$FC_BASE" "$FC_HEAD" core/a.md "$TMP/al-shadow" )" "UNEVALUABLE"
+check "AL sensitivity — the NUL strip failing is UNEVALUABLE" \
+  "$( tr() { return 1; }; added_lines_verdict "$FC_REPO" "$FC_BASE" "$FC_HEAD" core/a.md "$TMP/al-shadow" )" "UNEVALUABLE"
+check "AL sensitivity — a comparison that cannot run is UNEVALUABLE" \
+  "$( cmp() { return 2; }; added_lines_verdict "$FC_REPO" "$FC_BASE" "$FC_HEAD" core/a.md "$TMP/al-shadow" )" "UNEVALUABLE"
+check "…control — a comparison shadowed to differ reads BINARY" \
+  "$( cmp() { return 1; }; added_lines_verdict "$FC_REPO" "$FC_BASE" "$FC_HEAD" core/a.md "$TMP/al-shadow" )" "BINARY"
 
 # A per-file diff that fails while the listing succeeds: the listing compares trees,
 # the per-file diff reads blobs, so a commit whose new blob is then removed from the
@@ -1153,11 +1194,11 @@ rm -f "$FC_K_OBJ"
 check "…control — the blob is gone from the object store" \
   "$(fc_git cat-file -e "$FC_K_BLOB" 2>/dev/null && echo present || echo gone)" "gone"
 check "…control — the listing still succeeds over that commit" \
-  "$(changed_files_verdict "$FC_REPO" "$FC_N" "$FC_K" "$TMP/broken-list")" "LISTED"
+  "$(changed_files_verdict "$FC_REPO" "$FC_R" "$FC_K" "$TMP/broken-list")" "LISTED"
 check "…control — the per-file diff over it is UNEVALUABLE" \
-  "$(added_lines_verdict "$FC_REPO" "$FC_N" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
+  "$(added_lines_verdict "$FC_REPO" "$FC_R" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
 check "run block — a per-file diff that fails fails closed" \
-  "$(gate_run "$RUN_BLOCK" "$FC_N" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+  "$(gate_run "$RUN_BLOCK" "$FC_R" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 # Control: the replay reads the block it is given. A copy whose first line after
 # `set -euo pipefail` exits 0 must pass the case the real block fails, and a copy
 # whose quoted-name arm continues instead of failing must pass the quoted case.

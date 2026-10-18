@@ -535,22 +535,23 @@ jobs:
                 rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
                 exit 1 ;;
               BINARY)
-                # git printed "Binary files … differ" and no lines. A compiled skill
-                # package is binary by construction, and its sources are scanned where
-                # they live, so it is the one expected case. Anything else rendered
-                # binary — content with a NUL byte anywhere, or a file the pull
+                # The change cannot be read as text: git printed "Binary files …
+                # differ" and no lines, or an added line carries a NUL byte past git's
+                # 8000-byte detection window. A compiled skill package is binary by
+                # construction, and its sources are scanned where they live, so it is
+                # the one expected case. Anything else — a NUL byte, or a file the pull
                 # request marks `-diff` in .gitattributes — was not read, and a file
                 # that was not read is not a file found clean.
                 if [ "${f#packages/}" != "$f" ] && [ "${f%.skill}" != "$f" ]; then continue; fi
                 {
                   echo "## :x: Depersonalization gate could not read the added lines"
                   echo ""
-                  echo "git rendered \`$f\` as a binary file, so it printed no lines for the gate to scan. Only a"
-                  echo "compiled skill package under \`packages/\` is binary by design. A NUL byte in the content,"
-                  echo "or a \`.gitattributes\` entry marking the file \`-diff\`, hides a text file from the scan, so"
-                  echo "this is a hard failure, not a pass."
+                  echo "\`$f\` cannot be read as text: git rendered it binary, or an added line carries a NUL"
+                  echo "byte. Only a compiled skill package under \`packages/\` is binary by design. A NUL byte in"
+                  echo "the content, or a \`.gitattributes\` entry marking the file \`-diff\`, hides a text file from"
+                  echo "the scan, so this is a hard failure, not a pass."
                 } | tee -a "$GITHUB_STEP_SUMMARY"
-                echo "::error::Depersonalization gate could not evaluate: a changed C6 file outside packages/*.skill diffs as binary"
+                echo "::error::Depersonalization gate could not evaluate: a changed C6 file outside packages/*.skill cannot be read as text"
                 rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
                 exit 1 ;;
               *)
