@@ -267,8 +267,8 @@ flat() { printf '%s' "$1" | tr '\n' '|'; }
 EMPTY_PATTERNS="$TMP/patterns_run_empty"
 : > "$EMPTY_PATTERNS"
 
-# (a) SENSITIVITY, AC 3 — a run Dependabot started, on canonical, with the mirrored
-# identity present. The workflow passes REPO_OWNER, so the set is the owner plus the
+# (a) SENSITIVITY — a run on canonical with the identity present, whoever started it
+# (a maintainer's push on a Dependabot branch included); the actor never enters. The workflow passes REPO_OWNER, so the set is the owner plus the
 # identity lines. (That the bot's own login cannot enter the set is not asserted
 # here: the function has no actor parameter, so such an arm could not fail. The
 # call-shape bindings below assert the workflow passes the owner, not the actor.)
@@ -290,14 +290,15 @@ check "(a) literal_set_verdict on that set is SCAN" "$(literal_set_verdict 1 "$P
 # still fails loud.
 check "(b) human's run, canonical, identity unset — preflight FAILs" "$(identity_preflight 1 "")" "FAIL"
 
-# (c) MISSING-MIRROR arm — a run Dependabot started reads the Dependabot store; with
-# the mirror absent the identity is unset there, and the preflight FAILs exactly as
-# (b) does. The call is the same call: nothing in it can tell the two runs apart.
-check "(c) bot's run, canonical, identity unset (mirror missing) — preflight FAILs" "$(identity_preflight 1 "")" "FAIL"
+# (c) A run Dependabot started has no copy of the identity (it receives only
+# Dependabot secrets), so on a C6 change the preflight FAILs exactly as (b) does —
+# closed, not passed unscanned. The call is the same call: nothing in it can tell the
+# two runs apart.
+check "(c) bot's run on a C6 change, canonical, identity unset — preflight FAILs" "$(identity_preflight 1 "")" "FAIL"
 # Non-vacuity for (b)/(c): the preflight can say OK, so FAIL above is a decision.
 check "(b/c control) canonical with the identity set — preflight is OK" "$(identity_preflight 1 "$FIXTURE_IDENTITY")" "OK"
 # A whitespace-only identity is UNSET: esc_lines would drop it, so it would scan no
-# name or email behind an OK — the hand-set Dependabot mirror is where it can slip in.
+# name or email behind an OK.
 check "(b) canonical with a whitespace-only identity — preflight FAILs" \
   "$(identity_preflight 1 "$(printf ' \n\t ')")" "FAIL"
 
@@ -956,11 +957,10 @@ EXIT0_FIXTURE="$TMP/exit0-fixture"
 printf '          [ "$BOT" -eq 1 ] && exit 0\n            exit 0\n          # exit 0 in a comment\n          exit 10\n' > "$EXIT0_FIXTURE"
 check "…control — the exit 0 count reads code, not comments or exit 10" "$(grep -cE "$EXIT0_RE" "$EXIT0_FIXTURE")" "2"
 
-# --- The secrets: step-scoped, and the mirror under its own name --------------------
+# --- The secrets: step-scoped, canonical names only, and scope before identity ----
 # The identity is bound to the scan step only, never at job level, where the checkout
-# action would run with it. And the Dependabot-store mirror is read under its own
-# name: a single-name binding would let a mirror stored as OPERATOR_IDENTITY reach
-# workflow code that still carries the bot exemption — the ordering hazard.
+# action would run with it. It is read from the Actions store under its canonical
+# name; there is deliberately no Dependabot-store copy, so no other name may appear.
 GATE1_JOB_ENV="$TMP/gate1-job-env"
 awk '/^  depersonalization:$/ { on = 1; next } on && /^    steps:$/ { exit } on' "$WORKFLOW" > "$GATE1_JOB_ENV"
 SECRET_REF_RE='secrets[.][A-Za-z_]|secrets\['
@@ -971,10 +971,23 @@ SECRET_FIXTURE="$TMP/secret-fixture"
 printf '        env:\n          X: ${{ secrets.OPERATOR_IDENTITY_DEPENDABOT }}\n          Y: ${{ secrets['"'"'OPERATOR_IDENTITY'"'"'] }}\n          echo "set it in repo secrets."\n' > "$SECRET_FIXTURE"
 check "…control — both reference syntaxes count, prose does not" "$(grep -cE "$SECRET_REF_RE" "$SECRET_FIXTURE")" "2"
 check "…control — the job-level extraction holds the job's env" "$(grep -c 'REPO_OWNER: ' "$GATE1_JOB_ENV")" "1"
-check "Gate 1 reads the identity from the canonical name or the mirror's own name, once" \
-  "$(line_count "$GATE1_BLOCK" 'OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY || secrets.OPERATOR_IDENTITY_DEPENDABOT }}')" "1"
-check "Gate 1 reads the collaborator list the same way, once" \
-  "$(grep -cF 'COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES || secrets.COLLABORATOR_NAMES_DEPENDABOT }}' "$GATE1_BLOCK")" "1"
+check "Gate 1 reads the identity from its canonical name, once" \
+  "$(line_count "$GATE1_BLOCK" 'OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY }}')" "1"
+check "Gate 1 reads the collaborator list from its canonical name, once" \
+  "$(grep -cF 'COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES }}' "$GATE1_BLOCK")" "1"
+check "Gate 1 names no Dependabot-store copy of either secret" "$(grep -c '_DEPENDABOT' "$GATE1_BLOCK")" "0"
+# Scope first: the C6 listing and its no-C6-change pass come before the identity
+# check, so a run that changes no C6 file passes without reading the identity.
+first_line() {   # <file> <fixed text> — the line number of its first occurrence, or 0
+  awk -v want="$2" 'index($0, want) { print NR; found = 1; exit } END { if (!found) print 0 }' "$1"
+}
+L_SCOPE="$(first_line "$GATE1_BLOCK" 'case "$(changed_files_verdict ')"
+L_PASS="$(first_line "$GATE1_BLOCK" 'no changed files under the C6 domains')"
+L_IDENT="$(first_line "$GATE1_BLOCK" 'case "$(identity_preflight ')"
+check "Gate 1 lists the C6 changes before it checks the identity" \
+  "$([ "$L_SCOPE" -gt 0 ] && [ "$L_IDENT" -gt "$L_SCOPE" ] && echo yes || echo no)" "yes"
+check "Gate 1 passes a run with no C6 change before it checks the identity" \
+  "$([ "$L_PASS" -gt 0 ] && [ "$L_IDENT" -gt "$L_PASS" ] && echo yes || echo no)" "yes"
 # The range the gate reads and the literal assignments it builds, pinned. The
 # replay below injects BASE_SHA and HEAD_SHA itself, so only a pin sees the step's
 # own binding drift (a base bound to the head lists nothing and passes); and a
@@ -990,7 +1003,6 @@ check "Gate 1 assigns COLLAB_LITERALS on exactly two executable lines" \
   "$(grep -cE '^[[:space:]]*COLLAB_LITERALS=' "$GATE1_BLOCK")" "2"
 check "Gate 1 skips only a path with nothing to read (nothing there, or a real directory), never a symlink, once" \
   "$(line_count "$GATE1_BLOCK" 'if { [ ! -e "$f" ] || [ -d "$f" ]; } && [ ! -L "$f" ]; then continue; fi')" "1"
-check "Gate 1 has no single-name identity binding" "$(grep -cE 'secrets[.]OPERATOR_IDENTITY[[:space:]]*[}][}]' "$GATE1_BLOCK")" "0"
 
 # --- Gate 1's run block, executed ---------------------------------------------------
 # Everything above reads the workflow as text. An edit inside an arm — a `continue`
@@ -1028,7 +1040,10 @@ check "run block — a clean C6 change passes"                     "$(gate_run "
 check "run block — the handle added under core/ fails"           "$(gate_run "$RUN_BLOCK" "$FC_BASE" "$FC_HEAD" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 check "run block — a bot's run is scanned and fails on the handle" "$(gate_run "$RUN_BLOCK" "$FC_BASE" "$FC_HEAD" "$BOT" Bot "$RB_IDENTITY")" "1"
 check "run block — a bot's clean run passes after a scan"         "$(gate_run "$RUN_BLOCK" "$FC_B2" "$FC_C" "$BOT" Bot "$RB_IDENTITY")" "0"
-check "run block — an unset identity fails loud"                 "$(gate_run "$RUN_BLOCK" "$FC_B2" "$FC_C" "$BOT" Bot "")" "1"
+check "run block — a bot's run with no identity, on a C6 change, fails closed" "$(gate_run "$RUN_BLOCK" "$FC_B2" "$FC_C" "$BOT" Bot "")" "1"
+check "run block — a human's run with no identity, on a C6 change, fails closed" "$(gate_run "$RUN_BLOCK" "$FC_B2" "$FC_C" "$FIXTURE_HANDLE" User "")" "1"
+check "run block — a bot's run with no identity and no C6 change passes, by scope" "$(gate_run "$RUN_BLOCK" "$FC_S" "$FC_O" "$BOT" Bot "")" "0"
+check "run block — a human's run with no identity and no C6 change passes, by scope" "$(gate_run "$RUN_BLOCK" "$FC_S" "$FC_O" "$FIXTURE_HANDLE" User "")" "0"
 check "run block — a base commit git does not have fails closed" "$(gate_run "$RUN_BLOCK" "$FC_ABSENT" "$FC_HEAD" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 check "run block — a name git must quote fails closed"           "$(gate_run "$RUN_BLOCK" "$FC_U" "$FC_Q" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 check "run block — a non-ASCII name is scanned and fails on the handle" "$(gate_run "$RUN_BLOCK" "$FC_HEAD" "$FC_U" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"

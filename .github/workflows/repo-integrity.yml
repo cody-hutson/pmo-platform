@@ -220,10 +220,11 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # GATE 1 — Depersonalization (C6-domain scope; handle from the repository
-  #          owner + input identity on EVERY run, whoever triggered it;
-  #          fail-loud-on-canonical for the required identity input and for an
-  #          empty literal set). Decision record:
+  # GATE 1 — Depersonalization (C6-domain scope, settled FIRST; handle from the
+  #          repository owner + input identity on EVERY run that changes a C6
+  #          file, whoever triggered it; fail-closed-on-canonical for the
+  #          required identity input on such a run and for an empty literal
+  #          set). Decision record:
   #          {{ADR:depersonalization-gate-scans-bot-runs}}.
   # ---------------------------------------------------------------------------
   depersonalization:
@@ -251,20 +252,16 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          # Operator full name + email (one per line); canonical FAILS LOUD if unset.
-          # Bound to THIS step only, so no other step of the job (the checkout action,
-          # whose pin Dependabot bumps) runs with personal data in its environment.
-          # A run Dependabot starts receives only Dependabot secrets, so the value is
-          # MIRRORED into the Dependabot store under a DISTINCT name,
-          # OPERATOR_IDENTITY_DEPENDABOT (Actions store canonical) — see
-          # core/standards/secrets-handling-policy.md §2 and §5. The distinct name is
-          # the ordering guard: workflow code that reads only OPERATOR_IDENTITY (the
-          # pre-release gate, a revert to it, or a re-run of a run it recorded) never
-          # sees the mirror, so it keeps failing loud on a bot's run instead of
-          # passing it unscanned. A human run reads the Actions store, where the
-          # _DEPENDABOT name does not exist, so an unset canonical copy still fails.
-          OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY || secrets.OPERATOR_IDENTITY_DEPENDABOT }}
-          COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES || secrets.COLLABORATOR_NAMES_DEPENDABOT }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
+          # Operator full name + email (one per line), from the Actions store only;
+          # on canonical a C6 change with this unset FAILS CLOSED. Bound to THIS
+          # step only, so no other step of the job (the checkout action, whose pin
+          # Dependabot bumps) runs with personal data in its environment. A run
+          # Dependabot starts receives only Dependabot secrets, so it reads this as
+          # empty; there is deliberately no Dependabot-store copy. The scope filter
+          # runs first, so such a run passes when it changes no C6 file and fails
+          # closed when it does.
+          OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY }}
+          COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
         run: |
           set -euo pipefail
 
@@ -291,13 +288,12 @@ jobs:
             fi
           done
 
-          # --- 0. FAIL-LOUD-ON-CANONICAL (OPERATOR_IDENTITY required; ----------
-          #        COLLABORATOR_NAMES optional — solo-operator). -----------------
+          # --- 0. CANONICAL OR FORK -----------------------------------------
           # A PII control that silently scans nothing is indistinguishable from a
-          # passing one. On the canonical repo, an unset OPERATOR_IDENTITY is the
-          # DESIGNED loud failure (the same posture the gitleaks secret-scan uses)
-          # — not a set -e abort. COLLABORATOR_NAMES is optional: unset is the
-          # solo-operator state (collaborator scanning dormant, surfaced as a notice).
+          # passing one. On the canonical repo, a C6 change with OPERATOR_IDENTITY
+          # unset is the DESIGNED failure below (step 1b) — not a set -e abort.
+          # COLLABORATOR_NAMES is optional: unset is the solo-operator state
+          # (collaborator scanning dormant, surfaced as a notice).
           IS_CANONICAL=0
           [ "${GITHUB_REPOSITORY:-}" = "$CANONICAL_REPO" ] && IS_CANONICAL=1
 
@@ -314,58 +310,11 @@ jobs:
             fi
           fi
 
-          # The decision is the shared library's identity_preflight, so the fixture
-          # suite exercises the same code path. It reads no actor: a run Dependabot
-          # starts reads the Dependabot secret store, and a missing mirror there
-          # fails here exactly as a missing Actions secret does on a human run. A
-          # verdict that is neither OK nor FAIL fails closed.
-          case "$(identity_preflight "$IS_CANONICAL" "${OPERATOR_IDENTITY:-}")" in
-            OK) : ;;
-            FAIL)
-              {
-                echo "## :x: Depersonalization gate misconfigured"
-                echo ""
-                echo "Required secret unset (or blank) on the canonical repository: \`OPERATOR_IDENTITY\`."
-                echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
-                echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
-                echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
-                echo "A run Dependabot starts reads the Dependabot secret store: if this run was started by"
-                echo "Dependabot, the mirrored copy is missing (\`gh secret set OPERATOR_IDENTITY_DEPENDABOT --app dependabot\`;"
-                echo "see \`core/standards/secrets-handling-policy.md\` §5)."
-              } | tee -a "$GITHUB_STEP_SUMMARY"
-              echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
-              exit 1 ;;
-            *)
-              echo "::error::Depersonalization gate: identity_preflight returned an unrecognised verdict"
-              exit 1 ;;
-          esac
-
-          # The handle the gate scans must be the canonical owner — the shared
-          # library's handle_preflight. REPO_OWNER is bound from
-          # github.repository_owner, so on canonical this cannot fail by
-          # configuration; it fails on an edit that re-binds the handle (to the
-          # actor, say) or on an empty expression, either of which would otherwise
-          # leave the handle silently unscanned behind a SCAN verdict.
-          case "$(handle_preflight "$IS_CANONICAL" "${REPO_OWNER:-}" "${GITHUB_REPOSITORY:-}")" in
-            OK) : ;;
-            FAIL)
-              echo "## :x: Depersonalization gate misconfigured — the operator handle did not resolve to the repository owner" | tee -a "$GITHUB_STEP_SUMMARY"
-              echo "::error::Depersonalization gate misconfigured: the operator handle is not the canonical repository owner"
-              exit 1 ;;
-            *)
-              echo "::error::Depersonalization gate: handle_preflight returned an unrecognised verdict"
-              exit 1 ;;
-          esac
-
-          # Solo-operator: COLLABORATOR_NAMES is OPTIONAL. When unset on canonical,
-          # the operator dimension still runs and collaborator scanning is dormant
-          # (the scan below is guarded on a non-empty COLLABORATOR_NAMES). Surfaced
-          # as a notice so the dormant state is observable.
-          if [ "$IS_CANONICAL" -eq 1 ] && [ -z "${COLLABORATOR_NAMES:-}" ]; then
-            echo "::notice::repo-integrity depersonalization: COLLABORATOR_NAMES unset — solo-operator mode (collaborator scanning dormant; set the secret if collaborators are added)." | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # --- 1. SCOPE (per-gate): changed files INTERSECTED with C6 domains --
+          # --- 1. SCOPE FIRST (per-gate): changed files INTERSECTED with C6 ---
+          #     domains, ahead of the identity check ({{ADR:depersonalization-gate-scans-bot-runs}}).
+          #     A pull request that changes no C6 file has nothing to scan and so
+          #     needs no identity: it passes here, measured, whoever started it —
+          #     including a run Dependabot starts, which cannot read Actions secrets.
           #     core/ release/ operations/ packages/ ONLY. Everything else
           #     (LICENSE, SECURITY.md, README.md, .github/*) is out of scope by
           #     secrets-handling-policy.md C6 — no per-file allowlist needed.
@@ -415,6 +364,59 @@ jobs:
           if [ "${#CHANGED[@]}" -eq 0 ]; then
             echo ":white_check_mark: Depersonalization — no changed files under the C6 domains (core/ release/ operations/ packages/)" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
+          fi
+
+          # The decision is the shared library's identity_preflight, so the fixture
+          # suite exercises the same code path. It runs only when the pull request
+          # changes a C6 file, and it reads no actor: a run Dependabot starts cannot
+          # read Actions secrets, so on such a change it fails closed here, exactly
+          # as a human run with the secret unset does — never a pass unscanned. A
+          # verdict that is neither OK nor FAIL fails closed.
+          case "$(identity_preflight "$IS_CANONICAL" "${OPERATOR_IDENTITY:-}")" in
+            OK) : ;;
+            FAIL)
+              {
+                echo "## :x: Depersonalization gate misconfigured"
+                echo ""
+                echo "Required secret unset (or blank) on the canonical repository: \`OPERATOR_IDENTITY\`."
+                echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
+                echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
+                echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
+                echo "A run Dependabot starts receives only Dependabot secrets and cannot read this one; it"
+                echo "reaches this check only when the pull request changes a file under a C6 domain. Such a"
+                echo "run stays red until a maintainer pushes to the branch, which re-runs this gate with the"
+                echo "canonical secret (the rebuild push a rostered skill package needs does exactly that)."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: identity_preflight returned an unrecognised verdict"
+              exit 1 ;;
+          esac
+
+          # The handle the gate scans must be the canonical owner — the shared
+          # library's handle_preflight. REPO_OWNER is bound from
+          # github.repository_owner, so on canonical this cannot fail by
+          # configuration; it fails on an edit that re-binds the handle (to the
+          # actor, say) or on an empty expression, either of which would otherwise
+          # leave the handle silently unscanned behind a SCAN verdict.
+          case "$(handle_preflight "$IS_CANONICAL" "${REPO_OWNER:-}" "${GITHUB_REPOSITORY:-}")" in
+            OK) : ;;
+            FAIL)
+              echo "## :x: Depersonalization gate misconfigured — the operator handle did not resolve to the repository owner" | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate misconfigured: the operator handle is not the canonical repository owner"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: handle_preflight returned an unrecognised verdict"
+              exit 1 ;;
+          esac
+
+          # Solo-operator: COLLABORATOR_NAMES is OPTIONAL. When unset on canonical,
+          # the operator dimension still runs and collaborator scanning is dormant
+          # (the scan below is guarded on a non-empty COLLABORATOR_NAMES). Surfaced
+          # as a notice so the dormant state is observable.
+          if [ "$IS_CANONICAL" -eq 1 ] && [ -z "${COLLABORATOR_NAMES:-}" ]; then
+            echo "::notice::repo-integrity depersonalization: COLLABORATOR_NAMES unset — solo-operator mode (collaborator scanning dormant; set the secret if collaborators are added)." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
           # --- 2. OPERATOR dimension (CD-B) ------------------------------------

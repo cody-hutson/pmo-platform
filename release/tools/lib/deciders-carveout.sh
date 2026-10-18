@@ -69,16 +69,16 @@ esc_lines() {
 #             failure, because a personal-data control that scans nothing cannot be
 #             told apart from one that passed
 #
-#   This is a CONFIGURATION check and is independent of content: the gate runs it
-#   before the scope filter, so a misconfigured secret is reported on every pull
-#   request, including one that changes no scanned file. The test is the same on
-#   every run. A run Dependabot starts reads the Dependabot secret store, so a FAIL
-#   there means the mirrored copy is missing (secrets-handling-policy.md §5). A fork
-#   never fails here: its identity dimension is governed by its opt-out instead.
+#   This is a CONFIGURATION check, and the gate runs it after the scope filter: a
+#   pull request that changes no scanned file has passed already and never reaches
+#   it. The test is the same on every run that does. A run Dependabot starts
+#   receives only Dependabot secrets and has no copy of the identity, so on a C6
+#   change it FAILs here — closed, until a maintainer's push re-runs the gate with
+#   the canonical secret. A fork never fails here: its identity dimension is
+#   governed by its opt-out instead.
 #
 #   A whitespace-only identity counts as UNSET. esc_lines drops blank lines, so such
-#   a value would pass a bare -z test and then scan no name or email at all; the
-#   hand-set Dependabot mirror is exactly where such a value can slip in.
+#   a value would pass a bare -z test and then scan no name or email at all.
 identity_preflight() {
   _ip_canonical="${1?identity_preflight: is_canonical required}"
   _ip_identity="${2-}"
