@@ -500,6 +500,43 @@ for arm_spec in \
   check "the $fn_name arm /$arm_re/ ends in exit 1" \
     "$(arm_exits_1 "$WORKFLOW" "^[[:space:]]*case \"[\$][(]$fn_name " "$arm_re")" "yes"
 done
+# REACHING `exit 1` IS NOT ENOUGH: an arm that leaves first — a `continue`, `break`,
+# `return` or `exit 0` ahead of its `exit 1` — still contains the line the check
+# above looks for. arm_leaves_early prints the arm's lines up to its `;;` and reports
+# whether any of them leaves. The BINARY arm's one legitimate `continue`, the
+# compiled-package exception pinned below, is set aside by exact text.
+PKG_EXCEPTION='if [ "${f#packages/}" != "$f" ] && [ "${f%.skill}" != "$f" ]; then continue; fi'
+arm_leaves_early() {   # <file> <case-start> <arm>
+  awk -v start="$2" -v arm="$3" -v keep="$PKG_EXCEPTION" '
+    !inside && $0 ~ start { inside = 1; next }
+    inside && !inarm && $0 ~ arm { inarm = 1 }
+    inarm {
+      l = $0; sub(/^[[:space:]]+/, "", l)
+      if (l != keep && l !~ /^#/ && l ~ /(^|[^[:alnum:]_])(continue|break|return|exit 0)([^[:alnum:]_]|$)/) { leaves = 1 }
+      if ($0 ~ /;;/) { print (leaves ? "yes" : "no"); done = 1; exit }
+    }
+    END { if (!done) { print "absent" } }
+  ' "$1"
+}
+for arm_spec in \
+  'identity_preflight|^[[:space:]]*FAIL[)]' \
+  'handle_preflight|^[[:space:]]*FAIL[)]' \
+  'literal_set_verdict|^[[:space:]]*FAIL-EMPTY[)]' \
+  'changed_files_verdict|^[[:space:]]*UNEVALUABLE[)]' \
+  'added_lines_verdict|^[[:space:]]*UNEVALUABLE[)]' \
+  'added_lines_verdict|^[[:space:]]*BINARY[)]' \
+  'literal_scan_verdict|^[[:space:]]*UNEVALUABLE[)]'; do
+  fn_name="${arm_spec%%|*}"; arm_re="${arm_spec#*|}"
+  check "the $fn_name arm /$arm_re/ does not leave before its exit 1" \
+    "$(arm_leaves_early "$WORKFLOW" "^[[:space:]]*case \"[\$][(]$fn_name " "$arm_re")" "no"
+done
+ARM_FIXTURE_BREAK="$TMP/arm_break"
+printf '            case "$(added_lines_verdict . "$B" "$H" "$f" "$A")" in\n              UNEVALUABLE)\n                echo "::error::x"\n                break\n                exit 1 ;;\n            esac\n' > "$ARM_FIXTURE_BREAK"
+check "…control — an arm with a break ahead of its exit 1 reads yes" \
+  "$(arm_leaves_early "$ARM_FIXTURE_BREAK" '^[[:space:]]*case "[$][(]added_lines_verdict ' '^[[:space:]]*UNEVALUABLE[)]')" "yes"
+check "…control — the pinned package exception does not read as leaving" \
+  "$(printf '            case "$(added_lines_verdict . "$B" "$H" "$f" "$A")" in\n              BINARY)\n                %s\n                exit 1 ;;\n            esac\n' "$PKG_EXCEPTION" > "$TMP/arm_pkg"; arm_leaves_early "$TMP/arm_pkg" '^[[:space:]]*case "[$][(]added_lines_verdict ' '^[[:space:]]*BINARY[)]')" "no"
+
 # Control: the reader must say "no" for an arm edited to exit 0, and "yes" for the
 # same arm intact, or the thirteen PASSes above are not measuring.
 ARM_FIXTURE_BAD="$TMP/arm_exit0"
@@ -963,6 +1000,27 @@ check "run block — a non-ASCII name is scanned and fails on the handle" "$(gat
 check "run block — a text file marked -diff fails closed"        "$(gate_run "$RUN_BLOCK" "$FC_Q" "$FC_B1" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 check "run block — a compiled package passes as binary"          "$(gate_run "$RUN_BLOCK" "$FC_C" "$FC_S" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
 check "run block — the handle outside the C6 domains passes by scope" "$(gate_run "$RUN_BLOCK" "$FC_S" "$FC_O" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+# A per-file diff that fails while the listing succeeds: the listing compares trees,
+# the per-file diff reads blobs, so a commit whose new blob is then removed from the
+# fixture's object store lists fine and cannot be diffed. This is the last use of
+# the fixture repository.
+printf 'line\n' > "$FC_REPO/core/broken.md"
+if ! { fc_git add core/broken.md && fc_git commit -q -m broken; }; then
+  echo "FATAL: could not commit the broken-blob fixture"; exit 1
+fi
+FC_K="$(fc_git rev-parse HEAD)"
+FC_K_BLOB="$(fc_git rev-parse "$FC_K:core/broken.md")"
+FC_K_OBJ="$FC_REPO/.git/objects/$(printf '%s' "$FC_K_BLOB" | cut -c1-2)/$(printf '%s' "$FC_K_BLOB" | cut -c3-)"
+check "…control — the broken-blob fixture's object is loose" "$([ -f "$FC_K_OBJ" ] && echo loose || echo missing)" "loose"
+rm -f "$FC_K_OBJ"
+check "…control — the blob is gone from the object store" \
+  "$(fc_git cat-file -e "$FC_K_BLOB" 2>/dev/null && echo present || echo gone)" "gone"
+check "…control — the listing still succeeds over that commit" \
+  "$(changed_files_verdict "$FC_REPO" "$FC_O" "$FC_K" "$TMP/broken-list")" "LISTED"
+check "…control — the per-file diff over it is UNEVALUABLE" \
+  "$(added_lines_verdict "$FC_REPO" "$FC_O" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
+check "run block — a per-file diff that fails fails closed" \
+  "$(gate_run "$RUN_BLOCK" "$FC_O" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 # Control: the replay reads the block it is given. A copy whose first line after
 # `set -euo pipefail` exits 0 must pass the case the real block fails, and a copy
 # whose quoted-name arm continues instead of failing must pass the quoted case.
