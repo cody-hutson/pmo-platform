@@ -65,12 +65,13 @@ Four forces met on a Dependabot pull request:
 - **+** The configuration check keeps a fail-loud arm on bot runs: a missing mirror is loud, not dark.
 - **+** The latent silent pass is closed for every bot, not only Dependabot: no actor can empty the literal set on canonical, and an empty set fails.
 - **+** The handle is resolved once across the workflow, and the depersonalization gate restores the handle block on an ADR `deciders:` line on bot runs, which the name-only carve-out relies on.
-- **+** The two decisions are now reachable by the fixture suite, closing a shadow-source gap: before this, the literal resolution was provable only by a live remote run.
+- **+** The gate's decisions are now reachable by the fixture suite, which also executes the scan step's own run block against a fixture repository and grades it by exit status, closing a shadow-source gap: before this, the literal resolution was provable only by a live remote run.
 - **+** The order of setting the mirror, merging, reverting and withdrawing the mirror is not load-bearing: no ordering of them pairs the mirror with code that exempts bot runs.
 - **+** A changed file the gate cannot read — a quoted name, a binary rendering outside the compiled packages, a failed listing, diff or scan — fails the run.
 - **−** The identity now lives in two write-only stores, under two names. Absence of the mirror is loud. A value changed in one store only is silent: bot runs scan the stale value while human runs scan the new one. The same holds for a collaborator list later set in the Actions store only, and its summary notice then misreads as solo-operator mode. The secrets-handling policy carries the two-store update procedure; a deploy-time detector comparing the two stores is an optional follow-up.
 - **−** A second copy of C6 personal data exists, in an encrypted store. Exposure is limited to the one step that binds it, the gate's own scan, which runs the gate's shell and git and no dependency or action code.
-- **−** A file whose name git must quote — one carrying a `"`, a backslash or a control character — cannot be committed past the gate in a scanned domain; it fails as unreadable until renamed.
+- **−** A changed file whose name git must quote — one carrying a `"`, a backslash or a control character — fails the gate as unreadable until renamed, in any directory: the listing reads every changed file before the scope filter.
+- **−** A compiled skill package passes the gate unread. Its coverage rests on the package being built from sources the gate scans, which the package-freshness gate asserts for rostered packages only.
 - **−** Every change to the identity value now costs one out-of-tree operator step per store.
 - **−** A collaborator's own GitHub handle is no longer scanned on runs that collaborator triggers. Collaborators remain covered by name.
 

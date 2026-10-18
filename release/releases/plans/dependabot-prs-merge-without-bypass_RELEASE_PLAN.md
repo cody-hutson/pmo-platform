@@ -8,7 +8,7 @@
 | **Bump Class** | minor — a new decision record plus a behavior change in a required CI gate. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
 | **Date Created** | 2026-10-16 (Friday) |
 | **Release Manager** | Agent-assisted |
-| **Status** | Executing — Stage 6 complete, including the #8454 fold-in (DEV-7) and the main sync with the record renumbered to ADR-220 (DEV-8). Owed before Stage 9: the Phase A6.5 adversarial review and the Collective Review (DEV-5), then Stage 7 and Stage 8 |
+| **Status** | Executing — Stage 6 complete with the #8454 fold-in (DEV-7) and the main sync (DEV-8); Stage 7 iterated twice (DEV-9, DEV-11) and the A6.5 review consumed (DEV-10); Stage 8 QA next, then the Stage 9 gate |
 | **Branch** | release/dependabot-prs-merge-without-bypass |
 | **PR** | opened in **draft** immediately after the Stage-6 commits; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | dependabot-prs-merge-without-bypass |
@@ -181,7 +181,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 | 3 | Value drift between the two secret stores (one store updated, the other not) is silent on bot runs | Low | Med | §5 two-store update procedure; detector deferred as an optional follow-up (design D-5) | Operator |
 | 4 | #8305 lands first and its edits to the same two files conflict on rebase | Low | Low | Hunks are disjoint; rebase on whichever lands second | Engineering |
 | 5 | The ADR number is claimed on the mainline first | Med | Low | Cited by slug token; `renumber-adr.py` moves the record at merge (occurred: ADR-217 → ADR-220, DEV-8) | Engineering |
-| 6 | A legitimate change trips the new fail-closed reads: a C6 file whose name git must quote, or a non-package binary under a C6 domain | Low | Low | The failure message names the cause and the remedy (rename, or drop the `-diff` attribute); every one of the 55 binary files in scope today is a `packages/*.skill`, which passes | Engineering |
+| 6 | A legitimate change trips the new fail-closed reads: a changed file in any directory whose name git must quote (the listing precedes the scope filter), or a non-package binary under a C6 domain | Low | Low | The failure message names the cause and the remedy (rename, or drop the `-diff` attribute); every one of the 55 binary files in scope today is a `packages/*.skill`, which passes | Engineering |
 
 ## Delivery Strategy
 
@@ -190,7 +190,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 | **Implementation approach** | Sequential |
 | **Commit strategy** | Grouped commits: Commit 0 (plan + ADR), then library + suite, then Gate 1, then documentation + label |
 | **Review approach** | Single PR for entire release |
-| **Deployment mechanism** | Git merge + `./deploy.sh --deploy` (rules mirror) + two operator out-of-tree steps |
+| **Deployment mechanism** | Git merge + `./deploy.sh --deploy` (rules mirror) + the label create (hub) + one operator out-of-tree step (the Dependabot-store mirror) |
 | **Stacked-base cleanup posture** | Phase B0 base-shift per dep (default — Option A); no stacked bases planned |
 
 **Sub-task container:** PR-body checklist. Deviation, stated: the A2 threshold predicate counts eleven file-level units, above the ≤5 checklist bound, so the default is GitHub sub-issues. The checklist is used because the release is two issues on one design and one gate, executed on one branch; per-unit sub-issues would add persistent tracker records with no independent closure state. The special rows (sync, plan update, verification) are kept.
@@ -272,6 +272,7 @@ N/A — enumerated over the pack-manifest schema, the label grammar and the work
 | **DEV-8** | `main` merged into the branch (204 commits behind; `repo-integrity.yml` and `core/rules/git-workflow.md` auto-merged; the diff against main still the release's own files). `main` already claimed ADR-217, so `renumber-adr.py` moved the record to ADR-220. The `SECURITY.md` smoke-check row is rewritten: the required-checks release landed first and removed the path filter, so this release is the one that lands second | Stage 6 sync, Tier 1 | **APPLIED** |
 | **DEV-9** | Stage 7 Dev Testing, pass 1 (FAIL: 1 Blocker, 4 Major), iteration 1. Fixed: the rules row's stale handle source (F-06); the suite now pins each #8454 call site's failing arms, exact arguments, the `HITS` arm, both read-backs and the definition guard, killing all eight surviving workflow mutants (F-02); the plan reconciled to the delivered eleven files and two issues (F-03); the operator label command replaced by the one `gh label create` line (F-04); a C6 name git quotes is scanned under its real name or fails closed (F-05, Tier 2, resolved under the operator's 2026-10-17 directive); `domain: security` (F-07); reader-graded post-merge limbs declared (F-08); `SECURITY.md` wording (F-09); the summary's control variable (F-01); ADR-220 decision 6 (F-12). Logged, not fixed here: F-10 and F-11 | Stage 7 → Engineering, Tier 1 (F-05 Tier 2) | **APPLIED** |
 | **DEV-10** | Phase A6.5 adversarial review (COMPLETE: 0 Blocker, 5 Major, 6 Minor). Adopted: CD-2, the mirror under its own name, which turns risk 1 from a prose ordering rule into a property of the binding and covers re-runs; PR-2, the secrets bound to the scan step only; FM-3's binary half, a binary rendering outside `packages/*.skill` fails closed; FM-1 and FM-2's scope half, pass arms, scope list and exit-0 count pinned; FM-5 and FM-6; PR-1, ADR-220's corrected premise. Not adopted: CD-1 (scope before the preflight with no mirror), which would reverse the operator's D-1 selection — surfaced at Stage 9. Routed as follow-ups: FM-1's committed run-block replay, FM-2's canonical-identity half, FM-7's #8457 resync | Adversarial review → hub, Tier 1 | **APPLIED** |
+| **DEV-11** | Stage 7 pass 2 at `198448e5` (PASS-WITH-FINDINGS: 0 Blocker, 0 Major, 4 Minor, 2 Informational), iteration 2. N-1: the scope case's arms are read in full and every secret reference is counted. N-2: the suite now executes the scan step's run block against the fixture repository (twelve exit-status cases, including a real failed per-file diff), and every failing arm is checked for an early `continue`/`break`/`return`/`exit 0`; the pass-2 mutation set dies 42/42. N-3 and N-4: the quoted-name scope and the stale Status, deployment and outcome wording corrected. N-5: the unread-package residual recorded in ADR-220. F-10 stays a follow-up | Stage 7 → Engineering, Tier 1 | **APPLIED** |
 | **DEV-5** | The bundle, the milestone and Stage 4 were authored directly, not through the Stage-3 and Stage-4 skills; Mode R readiness and the Parallelization Map were not run. The Phase A6.5 adversarial review and the Collective Review of the Stage-5 design remained owed before Stage 9. Discharged 2026-10-17: A6.5 ran (DEV-10). The Collective Review's trigger needs two Solutioning-activated issues; #8454 entered without a Stage-5 design, so it does not fire, and its cross-release coherence row is recorded in the File Contention Map | Operator's single-issue-milestone choice, 2026-10-16 | **RESOLVED** |
 
 ## Verification Evidence
@@ -290,6 +291,7 @@ N/A — enumerated over the pack-manifest schema, the label grammar and the work
 - Fixture suite: 116/116 → 138/138 (`fefd5406`) → 158/158 (`3fae3de1`).
 - Mutation: Stage 7's 24 mutants (12 library, 12 workflow) all killed, including the eight that survived at `f119fcbb`. The hub's 11 further mutants all killed: the adversarial review's M1–M5 (merged pass arms, an early bot `exit 0`, a narrowed scope list), a single-name identity binding, a job-level identity binding, a pass-everything binary exception, and the library ignoring a binary diff, ignoring a quoted name, or listing with quoting on. Not covered, routed as a follow-up: a typo in the canonical repository literal.
 - Gate 1 run-block replay (Stage 7's harness, re-run on the head): 23/23 cases as expected, including a non-ASCII name now scanned and blocked, a name git must quote failing closed, a non-package binary failing closed, a `packages/*.skill` change passing, and a `.skill` beside an added handle still blocked.
+- Stage 7 pass 2 at `198448e5`: PASS-WITH-FINDINGS (4 Minor, 2 Informational) — all twelve pass-1 findings verified resolved at the head. Iteration 2 (`23aa3356`, `17cb44c9`): suite 158/158 → 191/191, the scan step's run block executed in-suite, the pass-2 mutation set 42/42 killed (its control 191/191).
 - `check-ac-binding.py --fetch`: BOUND (13 rows). `verify-release-plan.sh`: 0 FAIL, 0 ERROR over 20 records. ADR durability lint: 0. Doc links over the four changed docs: 0. `deploy.sh --check-required-subset`: 4/4. Commit close-keyword check: clean.
 - Retired-handle-source sweep (`run actor|github.actor`): pre 2 stale lines, post 0.
 
@@ -318,7 +320,7 @@ A Dependabot pull request now gets a real `Depersonalization gate` verdict on th
 | # | Outcome (one line) | Status |
 |---|---|---|
 | #8454 | The depersonalization gate fails closed when it cannot list the changed files, read a file's added lines, or run its scan | DONE |
-| #8092 | Defects 2 and 3 plus the `SECURITY.md` reconciliation; defect 1 (AC-1, AC-2) stays with the required-checks release | PARTIAL — in-scope work DONE; AC-3 and AC-5 are confirmed live on the first Dependabot PR after the operator's two post-merge steps |
+| #8092 | Defects 2 and 3 plus the `SECURITY.md` reconciliation; defect 1 (AC-1, AC-2) stays with the required-checks release | PARTIAL — in-scope work DONE; AC-3 and AC-5 are confirmed live on the first Dependabot PR after the operator's mirror step and the Stage 13 label create |
 
 ### Key decisions (when applicable; omit this sub-section when no D-decisions were rendered)
 
