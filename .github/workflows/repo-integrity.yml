@@ -504,10 +504,11 @@ jobs:
           HITS_FILE="$(mktemp)"
           for f in "${CHANGED[@]}"; do
             # A deleted file has nothing to scan, and only a deleted file is skipped:
-            # nothing at the path, or a real directory where a file was (the files
-            # inside it are listed, and scanned, under their own names). A symlink is
-            # never skipped: its diff is its target text, so a link — a dangling one,
-            # or one to a directory — is read like any file.
+            # nothing at the path, or a real directory: a folder that replaced a file,
+            # whose files are listed and scanned under their own names, or a
+            # submodule's checkout, which holds no content of this repository. A
+            # symlink is never skipped: its diff is its target text, so a link — a
+            # dangling one, or one to a directory — is read like any file.
             if { [ ! -e "$f" ] || [ -d "$f" ]; } && [ ! -L "$f" ]; then continue; fi
             # NET-NEW DELTA: scan only lines ADDED since the base (the same
             # added-lines posture the issue-ref + reference-durability gates use),
@@ -537,9 +538,9 @@ jobs:
                 # git printed "Binary files … differ" and no lines. A compiled skill
                 # package is binary by construction, and its sources are scanned where
                 # they live, so it is the one expected case. Anything else rendered
-                # binary — content with a NUL byte, or a file the pull request marks
-                # `-diff` in .gitattributes — was not read, and a file that was not
-                # read is not a file found clean.
+                # binary — content with a NUL byte anywhere, or a file the pull
+                # request marks `-diff` in .gitattributes — was not read, and a file
+                # that was not read is not a file found clean.
                 if [ "${f#packages/}" != "$f" ] && [ "${f%.skill}" != "$f" ]; then continue; fi
                 {
                   echo "## :x: Depersonalization gate could not read the added lines"
@@ -566,9 +567,10 @@ jobs:
                 {
                   echo "## :x: Depersonalization gate could not run its scan"
                   echo ""
-                  echo "The literal scan of \`$f\` did not complete: grep exited with an error rather than"
-                  echo "\"match\" or \"no match\". A scan that could not run is indistinguishable from one that"
-                  echo "ran clean, so this is a hard failure, not a pass. The grep error is in the job log above."
+                  echo "The literal scan of \`$f\` did not give a usable answer: grep exited with an error, or"
+                  echo "reported a match without printing the matching line. A scan that could not run is"
+                  echo "indistinguishable from one that ran clean, so this is a hard failure, not a pass. Any"
+                  echo "grep error is in the job log above."
                 } | tee -a "$GITHUB_STEP_SUMMARY"
                 echo "::error::Depersonalization gate could not evaluate: the literal scan did not complete"
                 rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"

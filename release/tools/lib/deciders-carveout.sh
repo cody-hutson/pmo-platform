@@ -357,7 +357,8 @@ changed_files_verdict() {
 #   LISTED       — <out-file> holds the lines <path> ADDED since the merge base, one
 #                  per line as HEAD-LINENO:CONTENT; empty is a valid answer
 #   BINARY       — git rendered the change as binary ("Binary files … differ"), so it
-#                  printed no lines to extract; <out-file> empty. The read ran and
+#                  printed no lines to extract, or the diff carries a NUL byte past
+#                  git's 8000-byte detection window; <out-file> empty. The read ran and
 #                  evaluated nothing, so this is not "nothing added": the caller
 #                  decides whether a binary file is expected at <path>
 #   UNEVALUABLE  — base or head missing, the diff failed, or the extraction failed;
@@ -365,10 +366,11 @@ changed_files_verdict() {
 #
 #   The diff and the extraction are two commands with a file between them, not a
 #   pipeline, so a failed diff cannot hide behind a successful awk. The awk program
-#   is the gate's, moved here unchanged. git renders a file as binary when its
-#   content carries a NUL byte, and also when a `.gitattributes` line marks it
-#   `-diff` — which the pull request under review can add — so a text file can
-#   reach this function looking binary.
+#   is the gate's, moved here unchanged. git renders a file as binary when a NUL
+#   byte falls in its first 8000 bytes, and also when a `.gitattributes` line
+#   marks it `-diff` — which the pull request under review can add — so a text
+#   file can reach this function looking binary. A NUL further in, which git
+#   renders as text, is caught here and reported BINARY too.
 added_lines_verdict() {
   _al_repo="${1?added_lines_verdict: repo dir required}"
   _al_base="${2-}"
@@ -401,6 +403,37 @@ added_lines_verdict() {
   if [ "$_al_binary" -eq 1 ]; then
     rm -f "$_al_diff"
     printf 'BINARY\n'
+    return 0
+  fi
+  # git looks for a NUL only in a file's first 8000 bytes, so a NUL further in
+  # reaches here as a text diff. A NUL does not survive the gate's line handling —
+  # a shell variable cannot hold one — so a literal beside it can be lost from the
+  # per-line re-check. Such a diff is binary for this gate's purposes: it cannot be
+  # read as text the gate can scan. The comparison is two commands with a file
+  # between them; cmp exits 0 same, 1 different, anything else unreadable.
+  if ! _al_nonul="$(mktemp)"; then
+    rm -f "$_al_diff"
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if ! tr -d '\000' < "$_al_diff" > "$_al_nonul"; then
+    rm -f "$_al_diff" "$_al_nonul"
+    printf 'UNEVALUABLE\n'
+    return 0
+  fi
+  if cmp -s "$_al_diff" "$_al_nonul"; then
+    _al_cmp=0
+  else
+    _al_cmp=$?
+  fi
+  rm -f "$_al_nonul"
+  if [ "$_al_cmp" -ne 0 ]; then
+    rm -f "$_al_diff"
+    if [ "$_al_cmp" -eq 1 ]; then
+      printf 'BINARY\n'
+    else
+      printf 'UNEVALUABLE\n'
+    fi
     return 0
   fi
   if ! awk '

@@ -798,6 +798,14 @@ check "LS control — an empty added-lines file (nothing added) is NONE" "$v" "N
 # the shadow is the grep the function calls. (Whether such a line MATCHES at all is
 # grep- and locale-dependent — BSD grep in a UTF-8 locale does not match it — and is
 # a recorded follow-up, not asserted here.)
+# The scan reads its input as text whatever bytes it carries (-a). On a hit line that
+# also carries a NUL, the out-file holds the line itself, LINENO first; a grep
+# without -a writes a "Binary file … matches" notice there instead, in either locale.
+FC_NUL_ADDED="$TMP/fc-nul-added"
+printf '2:Authored by %s.\000tail\n' "$FIXTURE_HANDLE" > "$FC_NUL_ADDED"
+v="$(literal_scan_verdict "$FC_NUL_ADDED" "$PATTERN_FILE" "$FC_HITS")"
+check "LS sensitivity — a hit line carrying a NUL is HITS" "$v" "HITS"
+check "LS sensitivity — …and the out-file holds the line, not a binary notice" "$(cut -c1-2 "$FC_HITS")" "2:"
 v="$( grep() { return 0; }; literal_scan_verdict "$FC_CLEAN_ADDED" "$PATTERN_FILE" "$FC_HITS" )"
 check "LS sensitivity — a match that printed no line is UNEVALUABLE, not HITS" "$v" "UNEVALUABLE"
 v="$( grep() { return 1; }; literal_scan_verdict "$FC_CLEAN_ADDED" "$PATTERN_FILE" "$FC_HITS" )"
@@ -1112,6 +1120,23 @@ check "run block — a symlink to a directory is read, and its target text fails
 check "run block — a file replaced by a directory holding a package passes" \
   "$(gate_run "$RUN_BLOCK" "$FC_PF" "$FC_PD" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
 
+# git looks for a NUL only in a file's first 8000 bytes. A text file whose NUL sits
+# past that window is diffed as text, and the NUL then cannot survive the gate's
+# line handling, so the literal beside it could be lost. The read reports it BINARY,
+# and the run block fails closed on it.
+awk 'BEGIN { for (i = 0; i < 9000; i++) printf "a"; printf "\n" }' > "$FC_REPO/core/latenul.md"
+printf 'x\000 Authored by %s.\n' "$FIXTURE_HANDLE" >> "$FC_REPO/core/latenul.md"
+if ! { fc_git add core/latenul.md && fc_git commit -q -m late-nul; }; then
+  echo "FATAL: could not commit the late-NUL fixture"; exit 1
+fi
+FC_N="$(fc_git rev-parse HEAD)"
+check "…control — git diffs the late-NUL file as text, not binary" \
+  "$(fc_git diff --unified=0 "$FC_PD"..."$FC_N" -- core/latenul.md | grep -c '^Binary files ')" "0"
+check "AL sensitivity — a NUL past git's binary window is BINARY, not text" \
+  "$(added_lines_verdict "$FC_REPO" "$FC_PD" "$FC_N" core/latenul.md "$TMP/latenul-added")" "BINARY"
+check "run block — a NUL past git's binary window fails closed" \
+  "$(gate_run "$RUN_BLOCK" "$FC_PD" "$FC_N" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+
 # A per-file diff that fails while the listing succeeds: the listing compares trees,
 # the per-file diff reads blobs, so a commit whose new blob is then removed from the
 # fixture's object store lists fine and cannot be diffed. This is the last use of
@@ -1128,11 +1153,11 @@ rm -f "$FC_K_OBJ"
 check "…control — the blob is gone from the object store" \
   "$(fc_git cat-file -e "$FC_K_BLOB" 2>/dev/null && echo present || echo gone)" "gone"
 check "…control — the listing still succeeds over that commit" \
-  "$(changed_files_verdict "$FC_REPO" "$FC_PD" "$FC_K" "$TMP/broken-list")" "LISTED"
+  "$(changed_files_verdict "$FC_REPO" "$FC_N" "$FC_K" "$TMP/broken-list")" "LISTED"
 check "…control — the per-file diff over it is UNEVALUABLE" \
-  "$(added_lines_verdict "$FC_REPO" "$FC_PD" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
+  "$(added_lines_verdict "$FC_REPO" "$FC_N" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
 check "run block — a per-file diff that fails fails closed" \
-  "$(gate_run "$RUN_BLOCK" "$FC_PD" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+  "$(gate_run "$RUN_BLOCK" "$FC_N" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 # Control: the replay reads the block it is given. A copy whose first line after
 # `set -euo pipefail` exits 0 must pass the case the real block fails, and a copy
 # whose quoted-name arm continues instead of failing must pass the quoted case.
