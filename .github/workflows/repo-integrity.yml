@@ -367,7 +367,10 @@ jobs:
           #     that FAILED (a missing base commit, say) used to produce the same
           #     empty list and the same pass; the shared library's
           #     changed_files_verdict tells the two apart, and UNEVALUABLE is a red
-          #     run. A verdict that is neither fails closed too.
+          #     run. So is a listing that names a path git had to quote (a `"`, a
+          #     backslash or a control character in the name): the quoted string is
+          #     not the file's name and used to read as out of scope, unscanned. A
+          #     verdict that is neither fails closed too.
           CHANGED_LIST_FILE="$(mktemp)"
           case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$CHANGED_LIST_FILE")" in
             LISTED) : ;;
@@ -375,10 +378,12 @@ jobs:
               {
                 echo "## :x: Depersonalization gate could not list the changed files"
                 echo ""
-                echo "\`git diff --name-only\` failed for the pull request's base...head range, so the gate"
-                echo "cannot tell which files to scan. A scan that could not run is indistinguishable from"
-                echo "one that ran clean, so this is a hard failure, not a pass. A missing base commit is"
-                echo "the usual cause; the git error is in the job log above."
+                echo "\`git diff --name-only\` failed for the pull request's base...head range, or listed a"
+                echo "path it had to quote (a \`\"\`, a backslash or a control character in the name), so the"
+                echo "gate cannot tell which files to scan. A scan that could not run is indistinguishable"
+                echo "from one that ran clean, so this is a hard failure, not a pass. A missing base commit"
+                echo "is the usual cause, and the git error is then in the job log above; otherwise rename"
+                echo "the quoted path."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               echo "::error::Depersonalization gate could not evaluate: git could not list the changed files"
               rm -f "$CHANGED_LIST_FILE"

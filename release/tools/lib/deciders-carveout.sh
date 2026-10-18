@@ -310,7 +310,8 @@ depersonalization_line_verdict() {
 # changed_files_verdict <repo-dir> <base-sha> <head-sha> <out-file>
 #   LISTED       — git listed the changed files into <out-file>; empty is a valid
 #                  answer (no files changed)
-#   UNEVALUABLE  — base or head missing, or git exited non-zero; <out-file> empty
+#   UNEVALUABLE  — base or head missing, git exited non-zero, or git listed a path
+#                  it had to quote (see below); <out-file> empty
 changed_files_verdict() {
   _cf_repo="${1?changed_files_verdict: repo dir required}"
   _cf_base="${2-}"
@@ -324,8 +325,27 @@ changed_files_verdict() {
     printf 'UNEVALUABLE\n'
     return 0
   fi
-  if git -C "$_cf_repo" diff --name-only "$_cf_base"..."$_cf_head" > "$_cf_out"; then
-    printf 'LISTED\n'
+  # A listed path must be the file's real name, or the caller's scope test reads the
+  # wrong string. git C-quotes a path it cannot print raw: under the default
+  # core.quotePath, any byte above 0x7F, and under every setting a `"`, a backslash or
+  # a control character. A quoted line starts with `"`, matches no C6 prefix, and was
+  # read as out of scope — a file never scanned, and a pass. So the listing switches
+  # quoting off for the high bytes, which then arrive as their real names, and a line
+  # git still had to quote is a path this listing cannot name: UNEVALUABLE. Only a
+  # quoted path can start with `"`, since a `"` anywhere in a name makes git quote it.
+  if git -C "$_cf_repo" -c core.quotePath=false diff --name-only "$_cf_base"..."$_cf_head" > "$_cf_out"; then
+    _cf_quoted=0
+    while IFS= read -r _cf_line || [ -n "$_cf_line" ]; do
+      case "$_cf_line" in
+        \"*) _cf_quoted=1 ;;
+      esac
+    done < "$_cf_out"
+    if [ "$_cf_quoted" -eq 0 ]; then
+      printf 'LISTED\n'
+    else
+      : > "$_cf_out"
+      printf 'UNEVALUABLE\n'
+    fi
   else
     : > "$_cf_out"
     printf 'UNEVALUABLE\n'

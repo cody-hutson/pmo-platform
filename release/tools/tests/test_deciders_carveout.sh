@@ -480,19 +480,27 @@ arm_exits_1() {
     END { if (!done) { print "absent" } }
   ' "$1"
 }
-for spec in \
+# The loop variable is arm_spec, not spec: `spec` holds the specificity control's
+# verdict, which the summary line prints.
+for arm_spec in \
   'identity_preflight|^[[:space:]]*FAIL[)]' \
   'identity_preflight|^[[:space:]]*[*][)]' \
   'handle_preflight|^[[:space:]]*FAIL[)]' \
   'handle_preflight|^[[:space:]]*[*][)]' \
   'literal_set_verdict|^[[:space:]]*FAIL-EMPTY[)]' \
-  'literal_set_verdict|^[[:space:]]*[*][)]'; do
-  fn_name="${spec%%|*}"; arm_re="${spec#*|}"
+  'literal_set_verdict|^[[:space:]]*[*][)]' \
+  'changed_files_verdict|^[[:space:]]*UNEVALUABLE[)]' \
+  'changed_files_verdict|^[[:space:]]*[*][)]' \
+  'added_lines_verdict|^[[:space:]]*UNEVALUABLE[)]' \
+  'added_lines_verdict|^[[:space:]]*[*][)]' \
+  'literal_scan_verdict|^[[:space:]]*UNEVALUABLE[)]' \
+  'literal_scan_verdict|^[[:space:]]*[*][)]'; do
+  fn_name="${arm_spec%%|*}"; arm_re="${arm_spec#*|}"
   check "the $fn_name arm /$arm_re/ ends in exit 1" \
     "$(arm_exits_1 "$WORKFLOW" "^[[:space:]]*case \"[\$][(]$fn_name " "$arm_re")" "yes"
 done
 # Control: the reader must say "no" for an arm edited to exit 0, and "yes" for the
-# same arm intact, or the six PASSes above are not measuring.
+# same arm intact, or the twelve PASSes above are not measuring.
 ARM_FIXTURE_BAD="$TMP/arm_exit0"
 ARM_FIXTURE_OK="$TMP/arm_exit1"
 printf '          case "$(literal_set_verdict "$IS_CANONICAL" "$PATTERN_FILE")" in\n            FAIL-EMPTY)\n              echo "::error::x"\n              exit 0 ;;\n          esac\n' > "$ARM_FIXTURE_BAD"
@@ -599,6 +607,38 @@ printf 'stale\n' > "$FC_OUT"
 v="$(changed_files_verdict "$FC_REPO" "$FC_HEAD" "$FC_HEAD" "$FC_OUT")"
 check "CF control — an empty but successful diff is LISTED, not UNEVALUABLE" "$v" "LISTED"
 check "CF control — …and lists no files" "$(wc -l < "$FC_OUT" | tr -d ' ')" "0"
+
+# A listed path must be the file's real name. Two commits on top of FC_HEAD: one adds a
+# file whose name carries a byte above 0x7F, one adds a file whose name carries a `"`.
+# Under the default core.quotePath git C-quotes both; the gate's scope test then read
+# the quoted string as out of scope and never scanned the file.
+FC_U_NAME="$(printf 'core/caf\303\251.md')"
+FC_Q_NAME='core/a"b.md'
+printf 'Authored by %s.\n' "$FIXTURE_HANDLE" > "$FC_REPO/$FC_U_NAME"
+if ! { fc_git add -- "$FC_U_NAME" && fc_git commit -q -m unicode; }; then
+  echo "FATAL: could not commit the non-ASCII-name fixture"; exit 1
+fi
+FC_U="$(fc_git rev-parse HEAD)"
+printf 'Authored by %s.\n' "$FIXTURE_HANDLE" > "$FC_REPO/$FC_Q_NAME"
+if ! { fc_git add -- "$FC_Q_NAME" && fc_git commit -q -m quote; }; then
+  echo "FATAL: could not commit the quote-name fixture"; exit 1
+fi
+FC_Q="$(fc_git rev-parse HEAD)"
+# Non-vacuity: with quoting on, git really does quote both names, so these fixtures
+# force the shape that used to read as out of scope.
+check "CF control — git quotes the non-ASCII name under core.quotePath=true" \
+  "$(fc_git -c core.quotePath=true diff --name-only "$FC_HEAD"..."$FC_U" | cut -c1)" '"'
+check "CF control — git quotes the name carrying a quote under core.quotePath=false too" \
+  "$(fc_git -c core.quotePath=false diff --name-only "$FC_U"..."$FC_Q" | cut -c1)" '"'
+
+v="$(changed_files_verdict "$FC_REPO" "$FC_HEAD" "$FC_U" "$FC_OUT")"
+check "CF control — a non-ASCII path is LISTED" "$v" "LISTED"
+check "CF control — …under its real name, not git's quoted form" "$(cat "$FC_OUT")" "$FC_U_NAME"
+
+printf 'stale\n' > "$FC_OUT"
+v="$(changed_files_verdict "$FC_REPO" "$FC_U" "$FC_Q" "$FC_OUT")"
+check "CF sensitivity — a path git must quote is UNEVALUABLE, not an out-of-scope name" "$v" "UNEVALUABLE"
+check "CF sensitivity — …and the out-file is truncated" "$(wc -l < "$FC_OUT" | tr -d ' ')" "0"
 
 # --- added_lines_verdict ------------------------------------------------------------
 printf 'stale\n' > "$FC_OUT"
@@ -716,6 +756,57 @@ cat > "$SWALLOW_FIXTURE" <<'EOF'
           # a comment that mentions || true is not a swallow
 EOF
 check "swallow detector catches the three removed shapes and skips the comment" "$(grep -cE "$SWALLOW_RE" "$SWALLOW_FIXTURE")" "3"
+
+# --- Exact call shapes, the scan's hit arm, and the two read-backs ------------------
+# A call that is present but aimed at the wrong range or file is a silent pass as
+# surely as a missing one: `changed_files_verdict . "$HEAD_SHA" "$HEAD_SHA" …` lists
+# nothing and passes, and a loop that reads /dev/null scans nothing. Each line below
+# must appear in Gate 1 exactly once, compared whole after its indentation, so no
+# argument can drift without failing here.
+line_count() {   # <file> <exact line, leading whitespace ignored>
+  awk -v want="$2" '{ sub(/^[[:space:]]+/, ""); if ($0 == want) n++ } END { print n + 0 }' "$1"
+}
+for want in \
+  'case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$CHANGED_LIST_FILE")" in' \
+  'done < "$CHANGED_LIST_FILE"' \
+  'case "$(added_lines_verdict . "$BASE_SHA" "$HEAD_SHA" "$f" "$ADDED_FILE")" in' \
+  'case "$(literal_scan_verdict "$ADDED_FILE" "$PATTERN_FILE" "$HITS_FILE")" in' \
+  'HITS) : ;;' \
+  'done < "$HITS_FILE"'; do
+  check "Gate 1 carries exactly once: $want" "$(line_count "$GATE1_BLOCK" "$want")" "1"
+done
+# Control: the comparison must miss a drifted argument and a skipped hit arm.
+DRIFT_FIXTURE="$TMP/drift-fixture"
+printf '          case "$(changed_files_verdict . "$HEAD_SHA" "$HEAD_SHA" "$CHANGED_LIST_FILE")" in\n              HITS) continue ;;\n' > "$DRIFT_FIXTURE"
+check "…control — a drifted range and a skipped hit arm are not counted" \
+  "$(line_count "$DRIFT_FIXTURE" 'case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$CHANGED_LIST_FILE")" in')$(line_count "$DRIFT_FIXTURE" 'HITS) : ;;')" "00"
+
+# The definition guard must name every library function the gate calls. A function
+# missing from the guard but still called reads as an empty verdict if the library
+# ever stops defining it; the call sites' `*)` arms catch that today, and this keeps
+# the guard true to its own claim. The guard is the `for fn in … ; do` list that
+# follows the library's `.` line.
+guard_names() {   # <file> — the names in the first `for fn in … ; do` list, one space apart
+  awk '/^[[:space:]]*for fn in / { on = 1 }
+       on { line = $0; sub(/^[[:space:]]*for fn in /, "", line); sub(/;[[:space:]]*do.*$/, "", line)
+            gsub(/\\/, " ", line); out = out " " line; if ($0 ~ /;[[:space:]]*do/) exit }
+       END { gsub(/[[:space:]]+/, " ", out); sub(/^ /, "", out); sub(/ $/, "", out); print out }' "$1"
+}
+guard_missing() {   # <block-file> — library functions the block calls that its guard omits
+  _gm_guard=" $(guard_names "$1") "
+  _gm_missing=""
+  for _gm_fn in $(sed -nE 's/^([a-z_][a-z0-9_]*)\(\)[[:space:]]*\{.*/\1/p' "$LIB"); do
+    if grep -qE "^[[:space:]]*[^#[:space:]][^#]*\\\$\(${_gm_fn}[[:space:]]" "$1"; then
+      case "$_gm_guard" in *" $_gm_fn "*) : ;; *) _gm_missing="$_gm_missing $_gm_fn" ;; esac
+    fi
+  done
+  printf '%s\n' "${_gm_missing# }"
+}
+check "Gate 1's definition guard names every library function the gate calls" "$(guard_missing "$GATE1_BLOCK")" ""
+GUARD_FIXTURE="$TMP/guard-fixture"
+printf '          for fn in esc_lines identity_preflight \\\n                    changed_files_verdict; do\n          case "$(literal_scan_verdict "$A" "$B" "$C")" in\n' > "$GUARD_FIXTURE"
+check "…control — the guard reader parses a continued list" "$(guard_names "$GUARD_FIXTURE")" "esc_lines identity_preflight changed_files_verdict"
+check "…control — a called function missing from the guard is reported" "$(guard_missing "$GUARD_FIXTURE")" "literal_scan_verdict"
 
 echo
 echo "=== Result ==="
