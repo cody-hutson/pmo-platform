@@ -218,7 +218,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 
 **AC baseline** — per-issue criterion counts as read at plan time.
 
-`ac_baseline: { #8092: 6, #8454: 7, read_at: 1dae933f }`
+`ac_baseline: { #8092: 6, #8454: 7, read_at: fbc6d8b6 }`
 
 ### Release-Level Verification
 
@@ -306,6 +306,7 @@ N/A — enumerated over the pack-manifest schema, the label grammar and the work
 - Stage 7 pass 5 at `2f6311c4`: PASS-WITH-FINDINGS (1 Minor) — 67 of 73 mutants killed, the survivors in the NUL check's untested failure branches. Iteration 6 (`8f6a421b`): suite 223/223 in a UTF-8 locale and under `LC_ALL=C`; six iteration-6 mutants killed, including pass 5's NC3 and NC8.
 - Stage 7 pass 6 at `0c2112a1`: PASS-WITH-FINDINGS (1 Major, Tier 2) — 79 of 81 mutants killed. Iteration 7 (`7d85ba9b`): suite 226/226 in a UTF-8 locale and under `LC_ALL=C`; reverting the header rule fails three arms.
 - Stage 7 pass 7 at `d495c76f`: PASS-WITH-FINDINGS (1 Minor). Iteration 8 (`ca70f516`): suite 228/228 in a UTF-8 locale and under `LC_ALL=C`; removing the section reset fails the two-section arm. The reviewer had verified the same one-line fix in a copy (T1–T6 unchanged).
+- Stage 9 redesign (DEV-18) re-reviewed: Stage 7 pass 8 at `ec1bf06f` FAIL on plan text only (the removed mirror step still prescribed; AC-4's arms) — fixed in `fbc6d8b6`, the gate, suite and docs verified (90 of 92 applicable mutants killed); Stage 8 at `ec1bf06f` CONDITIONAL ACCEPT — #8454 ACCEPT 7/7, #8092 AC-1, AC-2, AC-4 MET and AC-3's pre-merge half MET by the replay arms; 53 of 54 mutants killed (CL, #8479). AC baseline re-read after the AC-3/AC-4 rewording.
 - `check-ac-binding.py --fetch`: BOUND (13 rows). `verify-release-plan.sh`: 0 FAIL, 0 ERROR over 20 records. ADR durability lint: 0. Doc links over the four changed docs: 0. `deploy.sh --check-required-subset`: 4/4. Commit close-keyword check: clean.
 - Retired-handle-source sweep (`run actor|github.actor`): pre 2 stale lines, post 0.
 
