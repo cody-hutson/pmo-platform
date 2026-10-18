@@ -135,6 +135,14 @@ The `Issue-reference validity gate` is the worked example: the two classes it en
 are a bare `#N`-form issue reference placed outside a designated reference block with no
 inline provenance marker, and a deprecated `IMP-NNN` reference.
 
+Where the Stage 7 sub-task output carries the informational roster record that
+[`stage-07-dev-testing.md`](stage-07-dev-testing.md) § Required-gate + mergeability read
+specifies, Stage 8 also renders the comparison —
+`release/tools/check-dark-branch.py read --pull <pull.json> --checks <checks.json> --record <saved record> --required-contexts <N>`,
+its two input files read in the form that block specifies — beside its P1 and P2 result.
+The comparison names rows missing from the current roster and never fails entry, which P1
+and P2 alone decide; a missing or unusable record is stated rather than inferred.
+
 **Disposition.** A P1 conflict, a settled row count below the required-context count (the
 predicate above, evaluated ahead of § 5.1), or § 5.1 state 2 `checks-unreadable` — a read
 that did not complete — **fails Phase A entry validation** and routes per the Inter-Stage

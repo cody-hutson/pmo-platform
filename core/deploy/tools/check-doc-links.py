@@ -247,8 +247,6 @@ def classify_severity(source_file: Path) -> str:
         "/core/schemas/",
         "/core/specs/",
         "/core/standards/",
-        "/release/standards/",
-        "/release/specs/",
         "/release/references/",
         "/operations/standards/",
         "/operations/references/",

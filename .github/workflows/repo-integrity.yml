@@ -155,6 +155,38 @@ name: Repository integrity
 #                 Requirement (b') makes `required` unavailable until the context is
 #                 registered in branch protection, which a PR cannot do. The gate is
 #                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Tool exec-mode gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+#   invariant: every tracked file under release/tools/ and core/deploy/tools/ whose
+#              content begins with an interpreter line is tracked executable (git mode
+#              100755), unless core/deploy/allowlists/skip-tool-exec-mode-check.txt
+#              names it with a class and a reason; and every row of that list still
+#              names a tracked, interpreter-line-bearing, non-executable file under
+#              those trees. The scan is WHOLE-TREE rather than changed-files, and it
+#              reads what git tracks — the mode, the first bytes and the list itself —
+#              never the runner's filesystem.
+#   falsification: add a file beginning `#!/usr/bin/env bash` under either tree and
+#                  leave its tracked mode at 100644 -> the job FAILS (exit 1) naming
+#                  the path and the one command that fixes it; add an exemption row
+#                  naming a file that is tracked executable -> the job FAILS naming
+#                  the stale row. The committed --self-test carries the sensitivity
+#                  arm (a non-executable CLI), the specificity arm (an exempted
+#                  library) beside its paired control (the same tree with the row
+#                  removed), and the fail-loud dead-control arm, and hard-fails ahead
+#                  of the scan.
+#   scope note: WHOLE-TREE is load-bearing, not incidental. A file reaches a release
+#               branch by a merge from main as often as by a commit on the branch;
+#               relative to the pull request's base such a file is unchanged, so the
+#               changed-file shape most sibling gates on this workflow use would
+#               report green on the event this gate exists to catch.
+#   posture note: `advisory`, not `required`, is the HONEST declaration today —
+#                 Requirement (b') makes `required` unavailable until the context is
+#                 registered in branch protection, which a PR cannot do. The gate is
+#                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
+#                 An `advisory` declaration is off the registration track that
+#                 core/standards/gate-efficacy-standard.md § Declared-required
+#                 contexts — registration disposition defines, so this gate has no
+#                 row in that section's table.
 
 # Three PR-time integrity gates as three named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
@@ -173,8 +205,8 @@ name: Repository integrity
 # redundant runs (the shared-release-PR double-run the parser-clean workflow
 # incurs).
 #
-# Injection-safety: every github-context value (actor, sender type, base/head
-# SHA, secrets) is bound through env: and referenced as "$VAR" in run blocks;
+# Injection-safety: every github-context value (actor, repository owner, sender
+# type, base/head SHA, secrets) is bound through env: and referenced as "$VAR" in run blocks;
 # no github-context expression is ever inlined into a run command.
 
 on:
@@ -188,22 +220,28 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # GATE 1 — Depersonalization (C6-domain scope; github.actor + input identity;
-  #          bot-skip; fail-loud-on-canonical for BOTH required inputs).
+  # GATE 1 — Depersonalization (C6-domain scope, settled FIRST; handle from the
+  #          repository owner + input identity on EVERY run that changes a C6
+  #          file, whoever triggered it; fail-closed-on-canonical for the
+  #          required identity input on such a run and for an empty literal
+  #          set). Decision record:
+  #          ADR-220.
   # ---------------------------------------------------------------------------
   depersonalization:
     name: Depersonalization gate
     runs-on: ubuntu-latest
     env:
       CANONICAL_REPO: cody-hutson/pmo-platform
-      # github.actor is the login that initiated the run — ALWAYS present, no
-      # checkout/config dependency, and yields the canonical handle. NOT git
-      # config user.name (unset on actions/checkout -> exit 1 under set -e) and
+      # The handle is the repository OWNER — the same resolution the ADR
+      # durability gate below uses: ALWAYS present, no checkout/config dependency,
+      # identical whoever triggered the run, and fork-correct. NOT github.actor
+      # (varies with the actor, so a run a bot starts would resolve the bot), NOT
+      # git config user.name (unset on actions/checkout -> exit 1 under set -e) and
       # NOT commit %an (may be a bot or a divergent literal).
+      REPO_OWNER: ${{ github.repository_owner }}
+      # The actor feeds ONLY the summary notice below; it never changes the scan.
       ACTOR: ${{ github.actor }}
       SENDER_TYPE: ${{ github.event.sender.type }}            # 'Bot' for dependabot/Claude
-      OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY }}     # operator full name + email (one per line); canonical FAILS LOUD if unset
-      COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
       FORK_OPTOUT: ${{ vars.REPO_INTEGRITY_FORK_OPTOUT }}     # fork-only: explicit opt-out of a dimension
     steps:
       - uses: actions/checkout@v7
@@ -214,62 +252,69 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Operator full name + email (one per line), from the Actions store only;
+          # on canonical a C6 change with this unset FAILS CLOSED. Bound to THIS
+          # step only, so no other step of the job (the checkout action, whose pin
+          # Dependabot bumps) runs with personal data in its environment. A run
+          # Dependabot starts receives only Dependabot secrets, so it reads this as
+          # empty; there is deliberately no Dependabot-store copy. The scope filter
+          # runs first, so such a run passes when it changes no C6 file and fails
+          # closed when it does.
+          OPERATOR_IDENTITY: ${{ secrets.OPERATOR_IDENTITY }}
+          COLLABORATOR_NAMES: ${{ secrets.COLLABORATOR_NAMES }}   # OPTIONAL full-name entries (one per line); unset = solo-operator (collaborator scanning dormant)
         run: |
           set -euo pipefail
 
           OVERRIDE='<!--[[:space:]]*repo-integrity:[[:space:]]*allow-depersonalization[[:space:]]*-->'
 
-          # The literal-escaper and the ADR `deciders:` carve-out decision are
+          # The literal-escaper, the run-level decisions (configuration preflight,
+          # operator-literal resolution, empty-literal-set verdict) and the ADR
+          # `deciders:` carve-out decision are
           # defined ONCE, in a sourced library that the committed fixture suite
           # (release/tools/tests/test_deciders_carveout.sh) exercises through the
           # same entry point. An inline copy here would pass its own tests while
           # this gate diverged — the shadow-source failure the carve-out
           # reconciliation exists to end.
           . "${GITHUB_WORKSPACE:-.}/release/tools/lib/deciders-carveout.sh"
+          # Fail closed on a library that stopped defining a decision this gate
+          # calls: each one is read through $(...), so a missing function would
+          # read as an empty verdict and the run would fall through to a pass.
+          for fn in esc_lines identity_preflight handle_preflight resolve_operator_literals \
+                    literal_set_verdict depersonalization_line_verdict \
+                    changed_files_verdict added_lines_verdict literal_scan_verdict; do
+            if ! declare -F "$fn" >/dev/null; then
+              echo "::error::Depersonalization gate: release/tools/lib/deciders-carveout.sh does not define $fn"
+              exit 1
+            fi
+          done
 
-          # --- 0. FAIL-LOUD-ON-CANONICAL (OPERATOR_IDENTITY required; ----------
-          #        COLLABORATOR_NAMES optional — solo-operator). -----------------
+          # --- 0. CANONICAL OR FORK -----------------------------------------
           # A PII control that silently scans nothing is indistinguishable from a
-          # passing one. On the canonical repo, an unset OPERATOR_IDENTITY is the
-          # DESIGNED loud failure (the same posture the gitleaks secret-scan uses)
-          # — not a set -e abort. COLLABORATOR_NAMES is optional: unset is the
-          # solo-operator state (collaborator scanning dormant, surfaced as a notice).
+          # passing one. On the canonical repo, a C6 change with OPERATOR_IDENTITY
+          # unset is the DESIGNED failure below (step 1b) — not a set -e abort.
+          # COLLABORATOR_NAMES is optional: unset is the solo-operator state
+          # (collaborator scanning dormant, surfaced as a notice).
           IS_CANONICAL=0
           [ "${GITHUB_REPOSITORY:-}" = "$CANONICAL_REPO" ] && IS_CANONICAL=1
 
-          # Fork opt-out: a repo variable OR a committed sentinel disables a
-          # dimension on a fork (announced in the summary). Absent the marker, a
-          # fork with unset inputs ALSO fails loud.
+          # Fork opt-out: a repo variable OR a committed sentinel disables the
+          # operator dimension on a fork (announced in the summary); the collaborator
+          # dimension still runs when its input is set. Absent the marker, a fork
+          # scans its own owner's handle, plus the identity when one is set. Only
+          # the canonical repository fails loud on an unset identity.
           FORK_OPTED_OUT=0
           if [ "$IS_CANONICAL" -eq 0 ]; then
             if [ -n "${FORK_OPTOUT:-}" ] || [ -f .repo-integrity-fork ]; then
               FORK_OPTED_OUT=1
-              echo "::notice::repo-integrity depersonalization: fork opt-out active (REPO_INTEGRITY_FORK_OPTOUT or .repo-integrity-fork present); a dimension with an unset input is skipped." | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::notice::repo-integrity depersonalization: fork opt-out active (REPO_INTEGRITY_FORK_OPTOUT or .repo-integrity-fork present); the operator dimension is skipped." | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           fi
 
-          if [ "$IS_CANONICAL" -eq 1 ] && [ -z "${OPERATOR_IDENTITY:-}" ]; then
-            {
-              echo "## :x: Depersonalization gate misconfigured"
-              echo ""
-              echo "Required secret unset on the canonical repository: \`OPERATOR_IDENTITY\`."
-              echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
-              echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
-              echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
-            } | tee -a "$GITHUB_STEP_SUMMARY"
-            echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
-            exit 1
-          fi
-
-          # Solo-operator: COLLABORATOR_NAMES is OPTIONAL. When unset on canonical,
-          # the operator dimension still runs and collaborator scanning is dormant
-          # (the scan below is guarded on a non-empty COLLABORATOR_NAMES). Surfaced
-          # as a notice so the dormant state is observable.
-          if [ "$IS_CANONICAL" -eq 1 ] && [ -z "${COLLABORATOR_NAMES:-}" ]; then
-            echo "::notice::repo-integrity depersonalization: COLLABORATOR_NAMES unset — solo-operator mode (collaborator scanning dormant; set the secret if collaborators are added)." | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # --- 1. SCOPE (per-gate): changed files INTERSECTED with C6 domains --
+          # --- 1. SCOPE FIRST (per-gate): changed files INTERSECTED with C6 ---
+          #     domains, ahead of the identity check (ADR-220).
+          #     A pull request that changes no C6 file has nothing to scan and so
+          #     needs no identity: it passes here, measured, whoever started it —
+          #     including a run Dependabot starts, which cannot read Actions secrets.
           #     core/ release/ operations/ packages/ ONLY. Everything else
           #     (LICENSE, SECURITY.md, README.md, .github/*) is out of scope by
           #     secrets-handling-policy.md C6 — no per-file allowlist needed.
@@ -279,7 +324,10 @@ jobs:
           #     that FAILED (a missing base commit, say) used to produce the same
           #     empty list and the same pass; the shared library's
           #     changed_files_verdict tells the two apart, and UNEVALUABLE is a red
-          #     run. A verdict that is neither fails closed too.
+          #     run. So is a listing that names a path git had to quote (a `"`, a
+          #     backslash or a control character in the name): the quoted string is
+          #     not the file's name and used to read as out of scope, unscanned. A
+          #     verdict that is neither fails closed too.
           CHANGED_LIST_FILE="$(mktemp)"
           case "$(changed_files_verdict . "$BASE_SHA" "$HEAD_SHA" "$CHANGED_LIST_FILE")" in
             LISTED) : ;;
@@ -287,10 +335,12 @@ jobs:
               {
                 echo "## :x: Depersonalization gate could not list the changed files"
                 echo ""
-                echo "\`git diff --name-only\` failed for the pull request's base...head range, so the gate"
-                echo "cannot tell which files to scan. A scan that could not run is indistinguishable from"
-                echo "one that ran clean, so this is a hard failure, not a pass. A missing base commit is"
-                echo "the usual cause; the git error is in the job log above."
+                echo "\`git diff --name-only\` failed for the pull request's base...head range, or listed a"
+                echo "path it had to quote (a \`\"\`, a backslash or a control character in the name), so the"
+                echo "gate cannot tell which files to scan. A scan that could not run is indistinguishable"
+                echo "from one that ran clean, so this is a hard failure, not a pass. A missing base commit"
+                echo "is the usual cause, and the git error is then in the job log above; otherwise rename"
+                echo "the quoted path."
               } | tee -a "$GITHUB_STEP_SUMMARY"
               echo "::error::Depersonalization gate could not evaluate: git could not list the changed files"
               rm -f "$CHANGED_LIST_FILE"
@@ -316,38 +366,87 @@ jobs:
             exit 0
           fi
 
-          # --- 2. OPERATOR-SELF dimension (CD-B) -------------------------------
-          #     handle = $ACTOR (always present); name/email from OPERATOR_IDENTITY.
-          #     BOT-SKIP: a bot-authored PR must not blind the gate by resolving
-          #     the operator literal to the bot's identity.
-          BOT=0
-          case "$ACTOR" in *'[bot]') BOT=1 ;; esac
-          [ "${SENDER_TYPE:-}" = "Bot" ] && BOT=1
+          # The decision is the shared library's identity_preflight, so the fixture
+          # suite exercises the same code path. It runs only when the pull request
+          # changes a C6 file, and it reads no actor: a run Dependabot starts cannot
+          # read Actions secrets, so on such a change it fails closed here, exactly
+          # as a human run with the secret unset does — never a pass unscanned. A
+          # verdict that is neither OK nor FAIL fails closed.
+          case "$(identity_preflight "$IS_CANONICAL" "${OPERATOR_IDENTITY:-}")" in
+            OK) : ;;
+            FAIL)
+              {
+                echo "## :x: Depersonalization gate cannot read its identity input for a C6 change"
+                echo ""
+                echo "Required secret unset (or blank) on the canonical repository: \`OPERATOR_IDENTITY\`."
+                echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
+                echo "A depersonalization control that scans nothing is indistinguishable from a passing one,"
+                echo "so on canonical an unset OPERATOR_IDENTITY is a hard failure — set it in repo secrets."
+                echo "A run Dependabot starts receives only Dependabot secrets and cannot read this one; it"
+                echo "reaches this check only when the pull request changes a file under a C6 domain. Such a"
+                echo "run stays red until a maintainer pushes to the branch, which re-runs this gate with the"
+                echo "canonical secret (the rebuild push a rostered skill package needs does exactly that)."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate could not evaluate: OPERATOR_IDENTITY is unset for this run on the canonical repo (a run Dependabot starts cannot read it)"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: identity_preflight returned an unrecognised verdict"
+              exit 1 ;;
+          esac
 
-          # Build the operator-literal pattern list (one literal per line). The
-          # handle comes from the actor; name/email lines come from the input.
+          # The handle the gate scans must be the canonical owner — the shared
+          # library's handle_preflight. REPO_OWNER is bound from
+          # github.repository_owner, so on canonical this cannot fail by
+          # configuration; it fails on an edit that re-binds the handle (to the
+          # actor, say) or on an empty expression, either of which would otherwise
+          # leave the handle silently unscanned behind a SCAN verdict.
+          case "$(handle_preflight "$IS_CANONICAL" "${REPO_OWNER:-}" "${GITHUB_REPOSITORY:-}")" in
+            OK) : ;;
+            FAIL)
+              echo "## :x: Depersonalization gate misconfigured — the operator handle did not resolve to the repository owner" | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate misconfigured: the operator handle is not the canonical repository owner"
+              exit 1 ;;
+            *)
+              echo "::error::Depersonalization gate: handle_preflight returned an unrecognised verdict"
+              exit 1 ;;
+          esac
+
+          # Solo-operator: COLLABORATOR_NAMES is OPTIONAL. When unset on canonical,
+          # the operator dimension still runs and collaborator scanning is dormant
+          # (the scan below is guarded on a non-empty COLLABORATOR_NAMES). Surfaced
+          # as a notice so the dormant state is observable.
+          if [ "$IS_CANONICAL" -eq 1 ] && [ -z "${COLLABORATOR_NAMES:-}" ]; then
+            echo "::notice::repo-integrity depersonalization: COLLABORATOR_NAMES unset — solo-operator mode (collaborator scanning dormant; set the secret if collaborators are added)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # --- 2. OPERATOR dimension (CD-B) ------------------------------------
+          #     handle = $REPO_OWNER (always present); name/email from
+          #     OPERATOR_IDENTITY. The same literals on EVERY run, whoever triggered
+          #     it: the handle no longer comes from the actor, so a run a bot starts
+          #     has nothing to blind and is scanned exactly as a human's run is.
+          #     The resolution is the shared library's resolve_operator_literals.
+          #
           # HANDLE_LITERAL is tracked separately from OP_LITERALS because the ADR
           # `deciders:` carve-out partitions them: §1.2 sanctions the NAME there and
           # never the handle, so the handle must stay matchable inside the carve-out
           # branch. Same source, same resolution conditions — one variable, two uses.
-          OP_LITERALS=""
+          OP_LITERALS="$(resolve_operator_literals "$IS_CANONICAL" "$FORK_OPTED_OUT" "${REPO_OWNER:-}" "${OPERATOR_IDENTITY:-}")"
           HANDLE_LITERAL=""
-          if [ "$BOT" -eq 0 ]; then
-            if [ "$IS_CANONICAL" -eq 1 ] || [ "$FORK_OPTED_OUT" -eq 0 ]; then
-              if [ -n "${ACTOR:-}" ]; then
-                OP_LITERALS="$ACTOR"
-                HANDLE_LITERAL="$ACTOR"
-              fi
-              if [ -n "${OPERATOR_IDENTITY:-}" ]; then
-                OP_LITERALS="$(printf '%s\n%s\n' "$OP_LITERALS" "$OPERATOR_IDENTITY")"
-              fi
-            fi
-          else
-            echo "::notice::repo-integrity depersonalization: actor is a bot — operator-self matching skipped (collaborator dimension still runs)." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ -n "$OP_LITERALS" ]; then
+            HANDLE_LITERAL="${REPO_OWNER:-}"
           fi
 
-          # Collaborator dimension reads a fixed input, not the actor — it runs
-          # regardless of bot status.
+          # Whether the actor is a bot no longer changes the literal set. It is
+          # reported, so a reader of the summary can see the run was not exempted.
+          BOT=0
+          case "$ACTOR" in *'[bot]') BOT=1 ;; esac
+          [ "${SENDER_TYPE:-}" = "Bot" ] && BOT=1
+          if [ "$BOT" -eq 1 ]; then
+            echo "::notice::repo-integrity depersonalization: the run's actor is a bot ($ACTOR) — scanned on the same literals as a human run." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Collaborator dimension reads a fixed input, not the actor — it runs on
+          # every run.
           COLLAB_LITERALS=""
           if [ -n "${COLLABORATOR_NAMES:-}" ]; then
             COLLAB_LITERALS="$COLLABORATOR_NAMES"
@@ -363,17 +462,39 @@ jobs:
 
           # NOT-CARVED partition — the literals the ADR `deciders:` carve-out does
           # NOT cover. Built through the SAME esc_lines helper as PATTERN_FILE, so
-          # the two sets cannot drift into different escaping. Empty when no handle
-          # resolves (bot actor / opted-out fork), which the carve-out predicate
+          # the two sets cannot drift into different escaping. Empty only when the
+          # operator dimension is opted out on a fork, which the carve-out predicate
           # treats as "fall back to the shipped whole-line behaviour" rather than
           # inventing a verdict for a dimension that is already dark.
           NOT_CARVED_FILE="$(mktemp)"
           esc_lines "$HANDLE_LITERAL" >> "$NOT_CARVED_FILE"
 
-          if [ ! -s "$PATTERN_FILE" ]; then
-            echo ":white_check_mark: Depersonalization — no operator/collaborator literals resolved for this run (bot actor and/or no inputs); nothing to match" | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          # Empty literal set — the shared library's literal_set_verdict. On
+          # canonical this cannot be reached today (the identity and the owner
+          # handle are both required above), so it FAILS rather than passes: the
+          # branch used to exit 0 with "nothing to match", and an edit that re-opens
+          # a path to it must not re-arm a silent pass. A fork keeps notice + pass.
+          case "$(literal_set_verdict "$IS_CANONICAL" "$PATTERN_FILE")" in
+            FAIL-EMPTY)
+              {
+                echo "## :x: Depersonalization gate resolved no literals"
+                echo ""
+                echo "On the canonical repository the operator handle and \`OPERATOR_IDENTITY\` must always resolve."
+                echo "An empty pattern set would scan nothing, and a control that scans nothing is indistinguishable"
+                echo "from a passing one — so this is a hard failure, not a pass."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::error::Depersonalization gate resolved no literals on canonical"
+              rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE"
+              exit 1 ;;
+            PASS-EMPTY)
+              echo ":white_check_mark: Depersonalization — no operator/collaborator literals resolved for this run (fork with the operator dimension opted out and no collaborator list); nothing to match" | tee -a "$GITHUB_STEP_SUMMARY"
+              rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE"
+              exit 0 ;;
+            SCAN) : ;;
+            *)
+              echo "::error::Depersonalization gate: literal_set_verdict returned an unrecognised verdict"
+              exit 1 ;;
+          esac
 
           # --- 3 + 4. Scan each in-scope changed file (case-sensitive, word-
           #     boundary). Lines bearing the override marker are suppressed +
@@ -384,7 +505,13 @@ jobs:
           ADDED_FILE="$(mktemp)"
           HITS_FILE="$(mktemp)"
           for f in "${CHANGED[@]}"; do
-            [ -f "$f" ] || continue   # deleted file — nothing to scan
+            # A deleted file has nothing to scan, and only a deleted file is skipped:
+            # nothing at the path, or a real directory: a folder that replaced a file,
+            # whose files are listed and scanned under their own names, or a
+            # submodule's checkout, which holds no content of this repository. A
+            # symlink is never skipped: its diff is its target text, so a link — a
+            # dangling one, or one to a directory — is read like any file.
+            if { [ ! -e "$f" ] || [ -d "$f" ]; } && [ ! -L "$f" ]; then continue; fi
             # NET-NEW DELTA: scan only lines ADDED since the base (the same
             # added-lines posture the issue-ref + reference-durability gates use),
             # so a pre-existing operator/collaborator literal in a file the PR
@@ -409,6 +536,26 @@ jobs:
                 echo "::error::Depersonalization gate could not evaluate: git could not read a changed file's added lines"
                 rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
                 exit 1 ;;
+              BINARY)
+                # The change cannot be read as text: git printed "Binary files …
+                # differ" and no lines, or an added line carries a NUL byte past git's
+                # 8000-byte detection window. A compiled skill package is binary by
+                # construction, and its sources are scanned where they live, so it is
+                # the one expected case. Anything else — a NUL byte, or a file the pull
+                # request marks `-diff` in .gitattributes — was not read, and a file
+                # that was not read is not a file found clean.
+                if [ "${f#packages/}" != "$f" ] && [ "${f%.skill}" != "$f" ]; then continue; fi
+                {
+                  echo "## :x: Depersonalization gate could not read the added lines"
+                  echo ""
+                  echo "\`$f\` cannot be read as text: git rendered it binary, or an added line carries a NUL"
+                  echo "byte. Only a compiled skill package under \`packages/\` is binary by design. A NUL byte in"
+                  echo "the content, or a \`.gitattributes\` entry marking the file \`-diff\`, hides a text file from"
+                  echo "the scan, so this is a hard failure, not a pass."
+                } | tee -a "$GITHUB_STEP_SUMMARY"
+                echo "::error::Depersonalization gate could not evaluate: a changed C6 file outside packages/*.skill cannot be read as text"
+                rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
+                exit 1 ;;
               *)
                 echo "::error::Depersonalization gate: added_lines_verdict returned an unrecognised verdict"
                 rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
@@ -423,9 +570,10 @@ jobs:
                 {
                   echo "## :x: Depersonalization gate could not run its scan"
                   echo ""
-                  echo "The literal scan of \`$f\` did not complete: grep exited with an error rather than"
-                  echo "\"match\" or \"no match\". A scan that could not run is indistinguishable from one that"
-                  echo "ran clean, so this is a hard failure, not a pass. The grep error is in the job log above."
+                  echo "The literal scan of \`$f\` did not give a usable answer: grep exited with an error, or"
+                  echo "reported a match without printing the matching line. A scan that could not run is"
+                  echo "indistinguishable from one that ran clean, so this is a hard failure, not a pass. Any"
+                  echo "grep error is in the job log above."
                 } | tee -a "$GITHUB_STEP_SUMMARY"
                 echo "::error::Depersonalization gate could not evaluate: the literal scan did not complete"
                 rm -f "$PATTERN_FILE" "$NOT_CARVED_FILE" "$ADDED_FILE" "$HITS_FILE"
@@ -2308,6 +2456,126 @@ jobs:
             echo "declaration — is deliberately **not** in this job. CI has no operator"
             echo "instance to read, and a gate must never assert over a population it cannot"
             echo "observe. That leg runs warn-mode at \`deploy.sh --check\`."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Tool exec-mode gate — every interpreter-line-bearing tracked file under the
+  # two tool trees is tracked executable, or carries an explicit exemption.
+  # Consumes NO github.event.* input: every step is a static invocation against
+  # the checked-out tree (the workflow-wide injection-safety rule). The default
+  # shallow checkout is sufficient — the scan reads the index, not history.
+  # ---------------------------------------------------------------------------
+  tool-exec-mode:
+    name: Tool exec-mode gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assert every interpreter-line tool file is tracked executable or exempted
+        run: |
+          set -euo pipefail
+
+          # Self-test FIRST — the fixture arms prove the probe can DETECT and can
+          # DISCRIMINATE. A scan whose probe cannot be shown to do both proves
+          # nothing by returning zero. Hard-fails unconditionally.
+          python3 core/deploy/tools/check-tool-exec-mode.py --self-test \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+          set +e
+          python3 core/deploy/tools/check-tool-exec-mode.py | tee /tmp/tool-exec-mode.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Tool exec-mode scan"
+            echo '```'
+            cat /tmp/tool-exec-mode.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: Tool exec-mode — every interpreter-line file under the two tool trees is tracked executable or carries a reasoned exemption" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Exit 2: the instrument cannot assert (a dead control arm, a root that
+          # enumerates no tracked file, an unparseable exemption list, a crash).
+          # Exit 3: NOT-EVALUATED, the tree could not be read. Neither is a clean
+          # result and neither is a finding, so each fails loud on its own message.
+          if [ "$RC" -eq 2 ]; then
+            echo "::error::Tool exec-mode gate cannot assert (exit 2) — the scan is unusable, not clean. Its SCAN-ERROR line is in the run summary."
+            exit 1
+          fi
+          if [ "$RC" -eq 3 ]; then
+            echo "::error::Tool exec-mode gate: NOT-EVALUATED (exit 3) — the tree could not be read; this is not a clean result."
+            exit 1
+          fi
+          if [ "$RC" -ne 1 ]; then
+            echo "::error::Tool exec-mode gate exited ${RC}, outside its exit contract — the verdict is unreadable, not clean."
+            exit 1
+          fi
+
+          # Exit 1 is the findings verdict only when it names a finding: an
+          # interpreter or start-up failure exits 1 too.
+          if [ "$(grep -c '^FAIL: ' /tmp/tool-exec-mode.out || true)" -eq 0 ]; then
+            echo "::error::Tool exec-mode gate exited 1 and named no finding — a findings verdict that names nothing is unreadable, not a finding."
+            exit 1
+          fi
+
+          {
+            echo "## :x: Tool exec-mode gate FAILED"
+            echo ""
+            echo "A tracked file under \`release/tools/\` or \`core/deploy/tools/\` begins with an"
+            echo "interpreter line and is tracked non-executable, or an exemption row no longer"
+            echo "describes the tree. See the scan output above for each path."
+            echo ""
+            echo "### Why this is gated"
+            echo ""
+            echo "A tracked file's mode is whatever the authoring path left: a file created by"
+            echo "an editor or a write tool lands \`100644\`. A tool that declares an interpreter"
+            echo "on its first line and cannot be invoked by its own path fails with a"
+            echo "permission error instead of a verdict, and callers that guard on the"
+            echo "executable bit skip it silently."
+            echo ""
+            echo "### When this pull request touches no tool"
+            echo ""
+            echo "A red row here on a pull request that adds or changes no file under the two"
+            echo "trees means \`main\` carries the file: it arrived through a merge from \`main\`."
+            echo "The remedy belongs on \`main\`, in a pull request of its own. Until it lands,"
+            echo "every pull request carries this red row, the close-out tool's own chore pull"
+            echo "requests among them, and that tool merges a chore pull request only from a"
+            echo "clean merge state."
+            echo ""
+            echo "### The fix"
+            echo ""
+            echo "**NOT-EXECUTABLE — the file is a tool someone runs:**"
+            echo ""
+            echo '```bash'
+            echo "git update-index --chmod=+x <path>"
+            echo '```'
+            echo ""
+            echo "**NOT-EXECUTABLE — the file is a sourced library, an imported module or a"
+            echo "fixture:** add one row to"
+            echo "\`core/deploy/allowlists/skip-tool-exec-mode-check.txt\`, in the form"
+            echo "\`<path>  # <class>: <reason>\`, and stage it — the list is read from the"
+            echo "index. The class is one of \`sourced-library\`, \`imported-module\`,"
+            echo "\`fixture\`; the reason names what reads the file."
+            echo ""
+            echo "**STALE-EXEMPTION:** the row no longer describes the tree. If the file is now"
+            echo "executable, read the row's reason first (the scan output prints it): restore"
+            echo "the file's \`100644\` mode if that reason still holds, or delete the row if"
+            echo "it does not. If the file is gone or no longer begins with an interpreter"
+            echo "line, delete the row."
+            echo ""
+            echo "### Scope note"
+            echo ""
+            echo "This gate is **whole-tree**, not changed-files, and that is deliberate: a"
+            echo "file that arrives by merging \`main\` into a branch is unchanged relative to"
+            echo "the pull request's base, and a changed-file gate would not see it. It reads"
+            echo "the mode git tracks, never the mode a checkout happens to have on disk."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           exit 1

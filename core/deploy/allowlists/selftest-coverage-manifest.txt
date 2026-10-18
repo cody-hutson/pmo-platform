@@ -29,6 +29,7 @@ release/tools/compute-dora-metrics.sh
 release/tools/compute-front-cluster-telemetry.sh
 release/tools/compute-middle-cluster-telemetry.sh
 release/tools/compute-release-velocity.sh
+release/tools/host-api-axis-verdict.sh
 release/tools/produce-learnings-register.sh
 release/tools/reemit-release-bodies.sh
 release/tools/synthesize-release-learnings.sh
@@ -40,6 +41,7 @@ release/tools/check-ac-binding.py
 release/tools/check-adr-durability.py
 release/tools/check-adr-numbers.py
 release/tools/check-analysis-staleness.py
+release/tools/check-dark-branch.py
 release/tools/check-line-range-overlap.py
 release/tools/check-release-links.py
 release/tools/check-selftest-coverage.py
@@ -56,6 +58,7 @@ core/deploy/tools/build-doc-index.py
 core/deploy/tools/build-hook-registry.py
 core/deploy/tools/check-adr-flip.py
 core/deploy/tools/check-approved-queue-depth.py
+core/deploy/tools/check-commit-close-keywords.py
 core/deploy/tools/check-count-structure.py
 core/deploy/tools/check-doc-frontmatter.py
 core/deploy/tools/check-doc-links.py
@@ -69,6 +72,7 @@ core/deploy/tools/check-mode-declaration-residual.py
 core/deploy/tools/check-ownership-collision.py
 core/deploy/tools/check-rules-budget.py
 core/deploy/tools/check-skill-count-imp.py
+core/deploy/tools/check-tool-exec-mode.py
 core/deploy/tools/check-version-anchors.py
 core/deploy/tools/check-work-hierarchy.py
 core/deploy/tools/compose-portfolio.py

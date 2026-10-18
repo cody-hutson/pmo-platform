@@ -8,6 +8,10 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.76 (2026-10-18) — Eight CI and pipeline checks now cover the whole class they name
+
+### v4.75 (2026-10-17) — A check that could not measure now says so, instead of reporting a pass
+
 ### v4.74 (2026-10-09) — Pipeline telemetry reads the right rows, or says why it has no value
 
 ### v4.73 (2026-10-04) — Updates and safety guards now follow what they govern, not where they start
