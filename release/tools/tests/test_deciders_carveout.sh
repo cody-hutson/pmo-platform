@@ -791,6 +791,18 @@ check "LS control — …and reports no hits" "$(wc -l < "$FC_HITS" | tr -d ' ')
 v="$(literal_scan_verdict "$FC_EMPTY_ADDED" "$PATTERN_FILE" "$FC_HITS")"
 check "LS control — an empty added-lines file (nothing added) is NONE" "$v" "NONE"
 
+# A grep that says "matched" but prints no line is not a result the gate can act on:
+# GNU grep, reading a line whose bytes are invalid in the locale as binary data, can
+# do exactly that without -a. A grep function shadows the command inside a subshell
+# to force that exit-0-and-silent shape; its twin returning 1 is the control that
+# the shadow is the grep the function calls. (Whether such a line MATCHES at all is
+# grep- and locale-dependent — BSD grep in a UTF-8 locale does not match it — and is
+# a recorded follow-up, not asserted here.)
+v="$( grep() { return 0; }; literal_scan_verdict "$FC_CLEAN_ADDED" "$PATTERN_FILE" "$FC_HITS" )"
+check "LS sensitivity — a match that printed no line is UNEVALUABLE, not HITS" "$v" "UNEVALUABLE"
+v="$( grep() { return 1; }; literal_scan_verdict "$FC_CLEAN_ADDED" "$PATTERN_FILE" "$FC_HITS" )"
+check "LS control — the shadowing grep is the one called (exit 1 reads NONE)" "$v" "NONE"
+
 # --- Shell-option independence ------------------------------------------------------
 # The library promises the same verdict whatever the caller's shell options. This
 # suite and the gate both run with pipefail on and (inside a command substitution)
@@ -968,8 +980,8 @@ check "Gate 1 assigns HANDLE_LITERAL on exactly two executable lines" \
   "$(grep -cE '^[[:space:]]*HANDLE_LITERAL=' "$GATE1_BLOCK")" "2"
 check "Gate 1 assigns COLLAB_LITERALS on exactly two executable lines" \
   "$(grep -cE '^[[:space:]]*COLLAB_LITERALS=' "$GATE1_BLOCK")" "2"
-check "Gate 1 skips only a path with nothing at it, once" \
-  "$(line_count "$GATE1_BLOCK" 'if [ ! -e "$f" ] && [ ! -L "$f" ]; then continue; fi')" "1"
+check "Gate 1 skips only a deleted path (nothing there, or a real directory), never a symlink, once" \
+  "$(line_count "$GATE1_BLOCK" 'if { [ ! -e "$f" ] || [ -d "$f" ]; } && [ ! -L "$f" ]; then continue; fi')" "1"
 check "Gate 1 has no single-name identity binding" "$(grep -cE 'secrets[.]OPERATOR_IDENTITY[[:space:]]*[}][}]' "$GATE1_BLOCK")" "0"
 
 # --- Gate 1's run block, executed ---------------------------------------------------
@@ -1062,6 +1074,44 @@ check "run block — a dangling symlink is read, and its target text fails on th
 check "run block — a deletion alone passes, with nothing to scan" \
   "$(gate_run "$RUN_BLOCK" "$FC_L" "$FC_X" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
 
+# Two shapes a skip test can get wrong, from Stage 7 pass 3:
+#   LD — a symlink to a DIRECTORY whose target text carries the handle: read and
+#        blocked (a bare `-d` test would skip it).
+#   PD — a file under packages/ replaced by a directory holding a compiled package:
+#        the old path is a directory now and is skipped; the package inside passes.
+mkdir -p "$FC_REPO/core/$FIXTURE_HANDLE-dir"
+printf 'nothing to see\n' > "$FC_REPO/core/$FIXTURE_HANDLE-dir/x.md"
+if ! { fc_git add "core/$FIXTURE_HANDLE-dir/x.md" && fc_git commit -q -m dir; }; then
+  echo "FATAL: could not commit the directory fixture"; exit 1
+fi
+FC_DA="$(fc_git rev-parse HEAD)"
+ln -s "$FIXTURE_HANDLE-dir" "$FC_REPO/core/dirlink"
+if ! { fc_git add core/dirlink && fc_git commit -q -m dirlink; }; then
+  echo "FATAL: could not commit the directory-symlink fixture"; exit 1
+fi
+FC_LD="$(fc_git rev-parse HEAD)"
+check "…control — the directory-symlink fixture is a link to an existing directory" \
+  "$([ -L "$FC_REPO/core/dirlink" ] && [ -d "$FC_REPO/core/dirlink" ] && echo dirlink || echo other)" "dirlink"
+mkdir -p "$FC_REPO/packages"
+printf 'plain text\n' > "$FC_REPO/packages/foo"
+if ! { fc_git add packages/foo && fc_git commit -q -m pkgfile; }; then
+  echo "FATAL: could not commit the package-path file fixture"; exit 1
+fi
+FC_PF="$(fc_git rev-parse HEAD)"
+if ! fc_git rm -q packages/foo; then
+  echo "FATAL: could not remove the package-path file"; exit 1
+fi
+mkdir -p "$FC_REPO/packages/foo"
+printf 'PK\003\004\000\001\000' > "$FC_REPO/packages/foo/x.skill"
+if ! { fc_git add packages/foo/x.skill && fc_git commit -q -m pkgdir; }; then
+  echo "FATAL: could not commit the file-to-directory fixture"; exit 1
+fi
+FC_PD="$(fc_git rev-parse HEAD)"
+check "run block — a symlink to a directory is read, and its target text fails on the handle" \
+  "$(gate_run "$RUN_BLOCK" "$FC_DA" "$FC_LD" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+check "run block — a file replaced by a directory holding a package passes" \
+  "$(gate_run "$RUN_BLOCK" "$FC_PF" "$FC_PD" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "0"
+
 # A per-file diff that fails while the listing succeeds: the listing compares trees,
 # the per-file diff reads blobs, so a commit whose new blob is then removed from the
 # fixture's object store lists fine and cannot be diffed. This is the last use of
@@ -1078,11 +1128,11 @@ rm -f "$FC_K_OBJ"
 check "…control — the blob is gone from the object store" \
   "$(fc_git cat-file -e "$FC_K_BLOB" 2>/dev/null && echo present || echo gone)" "gone"
 check "…control — the listing still succeeds over that commit" \
-  "$(changed_files_verdict "$FC_REPO" "$FC_X" "$FC_K" "$TMP/broken-list")" "LISTED"
+  "$(changed_files_verdict "$FC_REPO" "$FC_PD" "$FC_K" "$TMP/broken-list")" "LISTED"
 check "…control — the per-file diff over it is UNEVALUABLE" \
-  "$(added_lines_verdict "$FC_REPO" "$FC_X" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
+  "$(added_lines_verdict "$FC_REPO" "$FC_PD" "$FC_K" core/broken.md "$TMP/broken-added" 2>/dev/null)" "UNEVALUABLE"
 check "run block — a per-file diff that fails fails closed" \
-  "$(gate_run "$RUN_BLOCK" "$FC_X" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
+  "$(gate_run "$RUN_BLOCK" "$FC_PD" "$FC_K" "$FIXTURE_HANDLE" User "$RB_IDENTITY")" "1"
 # Control: the replay reads the block it is given. A copy whose first line after
 # `set -euo pipefail` exits 0 must pass the case the real block fails, and a copy
 # whose quoted-name arm continues instead of failing must pass the quoted case.

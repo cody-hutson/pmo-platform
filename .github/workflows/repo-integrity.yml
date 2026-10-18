@@ -504,9 +504,11 @@ jobs:
           HITS_FILE="$(mktemp)"
           for f in "${CHANGED[@]}"; do
             # A deleted file has nothing to scan, and only a deleted file is skipped:
-            # nothing at the path, not even a symlink. A symlink's diff is its target
-            # text, so a link — a dangling one included — is read like any file.
-            if [ ! -e "$f" ] && [ ! -L "$f" ]; then continue; fi
+            # nothing at the path, or a real directory where a file was (the files
+            # inside it are listed, and scanned, under their own names). A symlink is
+            # never skipped: its diff is its target text, so a link — a dangling one,
+            # or one to a directory — is read like any file.
+            if { [ ! -e "$f" ] || [ -d "$f" ]; } && [ ! -L "$f" ]; then continue; fi
             # NET-NEW DELTA: scan only lines ADDED since the base (the same
             # added-lines posture the issue-ref + reference-durability gates use),
             # so a pre-existing operator/collaborator literal in a file the PR

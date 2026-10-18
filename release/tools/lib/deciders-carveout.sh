@@ -423,8 +423,8 @@ added_lines_verdict() {
 #   HITS         — grep exit 0; <out-file> holds the matching LINENO:CONTENT lines
 #   NONE         — grep exit 1, or an EMPTY added-lines file (nothing was added)
 #   UNEVALUABLE  — any other grep exit (2: a malformed or unreadable pattern), a
-#                  MISSING added-lines file, or a missing or EMPTY pattern file;
-#                  <out-file> empty
+#                  match (exit 0) that printed no line, a MISSING added-lines
+#                  file, or a missing or EMPTY pattern file; <out-file> empty
 #
 #   An empty pattern file is UNEVALUABLE, not NONE. The gate settles the empty
 #   literal set before it scans, so reaching the scan with one is an upstream
@@ -448,8 +448,16 @@ literal_scan_verdict() {
     printf 'NONE\n'
     return 0
   fi
-  if grep -E -f "$_ls_patterns" "$_ls_added" > "$_ls_out"; then
-    printf 'HITS\n'
+  # -a: the added lines are text whatever bytes they carry. Without it GNU grep
+  # reads a line with bytes invalid in the locale as binary data, and can report
+  # a match while printing no line. And a match that printed no line is still not
+  # a result the gate can act on, so it reads UNEVALUABLE, not HITS.
+  if grep -a -E -f "$_ls_patterns" "$_ls_added" > "$_ls_out"; then
+    if [ -s "$_ls_out" ]; then
+      printf 'HITS\n'
+    else
+      printf 'UNEVALUABLE\n'
+    fi
     return 0
   else
     _ls_rc=$?
