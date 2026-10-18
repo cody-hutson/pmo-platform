@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.76] - 2026-10-18
+
+Eight CI and pipeline checks now cover the whole class of problem they name, and four more checks are required on every pull request.
+
+[Full notes](release/releases/notes/v4.76_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.76)
+
 ## [v4.75] - 2026-10-17
 
 Checks, hooks and gates that cannot evaluate what they check now say so, instead of reporting a pass or a verdict about it.
