@@ -74,6 +74,8 @@ Five storage locations, with declared "right home" per category:
 | C6 Personal data | Outside the workspace OR encrypted-at-rest | None — never inline in tracked files | Any tracked file in `core/`, `release/`, `operations/`, `packages/` |
 | C7 Tooling tokens | `~/.claude/settings.local.json` or per-tool config dir | Env var | Repo files |
 
+**C6 — the depersonalization gate's CI identity input.** The gate's copy of the operator's name and email (`OPERATOR_IDENTITY`, and the optional `COLLABORATOR_NAMES`) lives in GitHub's encrypted **Actions** secret store, which satisfies C6's canonical "outside the workspace OR encrypted-at-rest" without adding a storage location. It lives in that one store only. There is deliberately no copy in the Dependabot secret store. A workflow run Dependabot starts therefore cannot read it, and the gate handles that by settling its scope first: such a run passes when the pull request changes no file in the gate's domains, and fails closed when it does, until a maintainer's push re-runs the gate with the canonical secret. Neither store can be read back, only listed.
+
 ---
 
 ## §3 Gitignore Policy
@@ -124,7 +126,7 @@ The setup-workspace.sh implementation of this flow is **owned by a follow-up tic
 | C3 MCP | Per-integration cadence (varies); on suspected leak | Revoke at integration; update `~/.claude/settings.local.json`; restart MCP-using sessions |
 | C4 Cloud | Per provider policy (often 90 days); on suspected leak | Rotate at provider (IAM); update keychain or `~/.aws/credentials`; verify with provider CLI |
 | C5 Project | Per source agreement; on project close | Revoke at source; purge `.env`/encrypted-at-rest entries; verify against §7 audit |
-| C6 Personal | n/a — personal data is not "rotated"; it's owned | Inventory periodically; ensure no drift into tracked files |
+| C6 Personal | n/a — personal data is not "rotated"; it's owned. The gate's CI identity input changes when the operator's name or email, or the collaborator list, changes | Inventory periodically; ensure no drift into tracked files. **Update for the gate's CI identity input** (§2): `gh secret set OPERATOR_IDENTITY` (and `COLLABORATOR_NAMES` when it is set), in the Actions store only. Never add a Dependabot-store copy: the gate's design for runs Dependabot starts is to settle scope first and fail closed on a C6 change |
 | C7 Tooling | Per-tool cadence; on suspected leak | Revoke at tool; update storage; restart tool-using sessions |
 
 **General rule:** Rotation procedures MUST be **runnable from documentation alone**. If a procedure requires tribal knowledge ("ask the operator"), it's a documentation gap, not an operational reality.

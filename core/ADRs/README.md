@@ -127,6 +127,7 @@ ADR-208 (`checkpoint-b-host-api-axis-reads-its-own-probe-in-band`) → **ADR-212
 ADR-211 (`census-asserts-exit-consumer-and-executor-populations`) → **ADR-217** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 211; the record's Status section carries the provenance note.
 ADR-212 (`checkpoint-b-host-api-axis-reads-its-own-probe-in-band`) → **ADR-218** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 212; the record's Status section carries the provenance note.
 ADR-217 (`release-identity-is-stamped-at-stage-12`) → **ADR-219** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 217; the record's Status section carries the provenance note.
+ADR-217 (`depersonalization-gate-scans-bot-runs`) → **ADR-220** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 217; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
