@@ -171,7 +171,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 | #8454 | release/tools/tests/test_deciders_carveout.sh | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8454 | .github/workflows/repo-integrity.yml | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 
-`core/rules/git-workflow.md` is the repository source; its deployed mirror under `.claude/rules/` is written by `./deploy.sh --deploy` at Stage 12, not by this branch. Two steps sit outside the tree: the operator sets the Dependabot-store mirror at any time, and the hub creates the `dependabot` label at Stage 13.
+`core/rules/git-workflow.md` is the repository source; its deployed mirror under `.claude/rules/` is written by `./deploy.sh --deploy` at Stage 12, not by this branch. One step sits outside the tree: the hub creates the `dependabot` label at Stage 13. There is no secret step — DEV-18 removed the Dependabot-store copy.
 
 ## Risk Register
 
@@ -191,7 +191,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 | **Implementation approach** | Sequential |
 | **Commit strategy** | Grouped commits: Commit 0 (plan + ADR), then library + suite, then Gate 1, then documentation + label |
 | **Review approach** | Single PR for entire release |
-| **Deployment mechanism** | Git merge + `./deploy.sh --deploy` (rules mirror) + the label create (hub) + one operator out-of-tree step (the Dependabot-store mirror) |
+| **Deployment mechanism** | Git merge + `./deploy.sh --deploy` (rules mirror) + the label create (hub); no secret step (DEV-18) |
 | **Stacked-base cleanup posture** | Phase B0 base-shift per dep (default — Option A); no stacked bases planned |
 
 **Sub-task container:** PR-body checklist. Deviation, stated: the A2 threshold predicate counts eleven file-level units, above the ≤5 checklist bound, so the default is GitHub sub-issues. The checklist is used because the release is two issues on one design and one gate, executed on one branch; per-unit sub-issues would add persistent tracker records with no independent closure state. The special rows (sync, plan update, verification) are kept.
@@ -205,7 +205,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 | #8092 | AC-1 | [DEFERRED — defect 1, owned by #6179 in the ci-wiring-and-required-checks release, which shipped it: the close-out smoke workflow carries no paths filter, so its required context reports on a PR that touches none of its former paths, and the required-versus-present diff is empty] | Verified by that release |
 | #8092 | AC-2 | [DEFERRED — defect 1, owned by #6179 in the ci-wiring-and-required-checks release, which shipped it: the gate-efficacy standard's declared posture for the close-out smoke workflow agrees with live branch protection] | Verified by that release |
 | #8092 | AC-3 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read the run-block arms `a bot's run with no identity and no C6 change passes, by scope` and `a bot's run with no identity, on a C6 change, fails closed`: a Dependabot-triggered run gets a measured verdict without a maintainer push when it changes no C6 file, and fails closed when it does [READER-GRADED — on the next Dependabot PR, the `Depersonalization gate` on the bot's own commit passes by scope when the PR is outside the C6 domains, or fails closed inside them until a maintainer push] | Both arms PASS |
-| #8092 | AC-4 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read fixture arms (b) and (c): identity unset on canonical returns `FAIL` for a human run and for a bot's run | Both arms PASS · control: arm (d), a fork opted out with identity unset, returns `OK` |
+| #8092 | AC-4 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read the run-block arm `a human's run with no identity, on a C6 change, fails closed`: a canonical-repository run that changes a C6-domain file with the identity input genuinely unset still fails loud | PASS · control: the arm `a human's run with no identity and no C6 change passes, by scope` |
 | #8092 | AC-5 | `grep -c 'name = "dependabot"' core/packs/_common/pack.toml` ≥ 1 [READER-GRADED — after the Stage 13 label create, the next Dependabot PR carries `dependabot` and `cluster: security` with no comment that its labels could not be found] | 1 |
 | #8092 | AC-6 | `grep -c 'only Dependabot secrets' SECURITY.md` ≥ 1 [READER-GRADED — after the Stage 13 label create, the next Dependabot PR carries the `dependabot` label that § Automated Security PRs says these PRs carry] | 1, and § Automated Security PRs carries the three-row table naming the freshness gate, the depersonalization gate and the close-out smoke check, each with its remedy |
 | #8454 | AC-1 | Run `bash release/tools/tests/test_deciders_carveout.sh` and read arms `CF sensitivity — a base commit git does not have is UNEVALUABLE`, `the changed_files_verdict arm /^[[:space:]]*UNEVALUABLE[)]/ ends in exit 1` and the exactly-once call-shape arm: a failing changed-file listing (a nonexistent base SHA) fails the job with an `::error::` annotation and exit 1 | All PASS. A replay of the job's run block with a nonexistent `BASE_SHA` returned exit 1 with the `::error::` annotation (Stage 7 case C2; the hub re-ran it at `3fae3de1`) |
@@ -350,9 +350,8 @@ A Dependabot pull request that changes no file in the gate's domains now passes 
 
 ### Downstream impact
 
-- One operator step, at any time: `gh secret set OPERATOR_IDENTITY_DEPENDABOT --app dependabot`, with the canonical value. The hub creates the `dependabot` label at Stage 13 and runs `./deploy.sh --deploy` to refresh the rules mirror.
+- No operator step (DEV-18). The hub creates the `dependabot` label at Stage 13 and runs `./deploy.sh --deploy` to refresh the rules mirror.
 - The `Close-out automation smoke (macOS)` row in `SECURITY.md` is rewritten here (DEV-8): the required-checks release landed first.
-- Optional follow-up: a `deploy.sh --check` detector comparing the two secret stores (design D-5).
 - Follow-ups routed out of this release: #8479 (decide canonical-ness from an immutable identifier; Stage 8 mutant CL, A6.5 FM-2), #8481 (a changed line with bytes invalid in the locale matches or not by grep implementation; Stage 7 R3-4), #8482 (seven other added-line extractions drop a `++`-prefixed added line; Stage 7 P6-1, P7-2), #8480 (two process docs give a bare `check-label-parity.py --emit-fix` that exits 3; Stage 7 F-04). Stage 7 F-10 is owned by #6224. After merge, #8457 rebases onto this release and needs a fresh green run (A6.5 FM-7).
 
 ### Cross-references

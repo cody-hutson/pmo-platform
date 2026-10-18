@@ -376,7 +376,7 @@ jobs:
             OK) : ;;
             FAIL)
               {
-                echo "## :x: Depersonalization gate misconfigured"
+                echo "## :x: Depersonalization gate cannot read its identity input for a C6 change"
                 echo ""
                 echo "Required secret unset (or blank) on the canonical repository: \`OPERATOR_IDENTITY\`."
                 echo "This gate enforces C6 Personal data (see \`core/standards/secrets-handling-policy.md\`)."
@@ -387,7 +387,7 @@ jobs:
                 echo "run stays red until a maintainer pushes to the branch, which re-runs this gate with the"
                 echo "canonical secret (the rebuild push a rostered skill package needs does exactly that)."
               } | tee -a "$GITHUB_STEP_SUMMARY"
-              echo "::error::Depersonalization gate misconfigured: OPERATOR_IDENTITY unset on canonical repo"
+              echo "::error::Depersonalization gate could not evaluate: OPERATOR_IDENTITY is unset for this run on the canonical repo (a run Dependabot starts cannot read it)"
               exit 1 ;;
             *)
               echo "::error::Depersonalization gate: identity_preflight returned an unrecognised verdict"

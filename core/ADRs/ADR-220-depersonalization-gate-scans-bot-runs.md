@@ -68,7 +68,7 @@ Four forces met on a Dependabot pull request:
 - **+** The gate's decisions are reachable by the fixture suite, closing a shadow-source gap: before this, the literal resolution was provable only by a live remote run.
 - **+** A changed file the gate cannot read — a quoted name, a binary rendering outside the compiled packages, a failed listing, diff or scan — fails the run.
 - **−** A Dependabot pull request that changes a file in the gate's domains stays red until a maintainer pushes to its branch. Today that class is a manifest inside a rostered skill package, which needs that push for its rebuild anyway.
-- **−** A misconfigured identity secret is no longer reported on a pull request that changes no scanned file. It is reported on the next one that does.
+- **−** A misconfigured identity secret, or a re-bound handle, is no longer reported on a pull request that changes no scanned file: both checks follow the scope filter. Each is reported, as a failure, on the next pull request that does.
 - **−** A changed file whose name git must quote — one carrying a `"`, a backslash or a control character — fails the gate as unreadable until renamed, in any directory: the listing reads every changed file before the scope filter.
 - **−** A compiled skill package passes the gate unread. Its coverage rests on the package being built from sources the gate scans, which the package-freshness gate asserts for rostered packages only.
 - **−** A collaborator's own GitHub handle is no longer scanned on runs that collaborator triggers. Collaborators remain covered by name.
