@@ -119,7 +119,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 
 **Change Specification** (Solutioning-level; the Stage-5 design on #8092 is the authority, its "Output for Stage 6" table the file spec):
 
-- **Commit 0:** this plan and the decision record `{{ADR:depersonalization-gate-scans-bot-runs}}` (D-1 option B, D-2 (b), D-3).
+- **Commit 0:** this plan and the decision record `ADR-220` (D-1 option B, D-2 (b), D-3).
 - **`release/tools/lib/deciders-carveout.sh`:** add `identity_preflight <is_canonical> <identity>` (prints `OK` or `FAIL`) and `resolve_operator_literals <is_canonical> <fork_opted_out> <owner> <identity>` (prints one literal per line, owner first). Explicit parameters, no caller globals. Widen the header to "shared decisions for the depersonalization gate"; rewrite the empty-not-carved rationale (now empty only on an opted-out fork).
 - **`release/tools/tests/test_deciders_carveout.sh`:** fixture arms (a)–(f) per the design, the two new functions added to the definition guard, and the header's agreement-scope note rewritten (both gates now resolve the handle from the repository owner).
 - **`.github/workflows/repo-integrity.yml`, Gate 1 only:** bind `REPO_OWNER` from `github.repository_owner` through `env:`; step 0 calls `identity_preflight`, same message, same position before the scope filter; step 2 resolves literals through `resolve_operator_literals` and sets the handle literal to the owner on every run that resolves literals; the actor exemption is deleted and the bot flag survives only for a summary notice; an empty literal set on canonical is `::error` + `exit 1`, a fork is unchanged.
@@ -360,4 +360,4 @@ A Dependabot pull request that changes no file in the gate's domains now passes 
 
 - Release plan: this file, top section
 - Milestone: dependabot-prs-merge-without-bypass
-- Decision record: `{{ADR:depersonalization-gate-scans-bot-runs}}`
+- Decision record: `ADR-220`

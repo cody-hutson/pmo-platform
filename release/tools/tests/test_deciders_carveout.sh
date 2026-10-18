@@ -30,7 +30,7 @@
 # it — so the agreement holds on a run a bot started as well as on a human's. (The
 # depersonalization gate used to resolve it from the run's actor and skip its operator
 # dimension when the actor was a bot; decision record
-# {{ADR:depersonalization-gate-scans-bot-runs}} retired that.) This suite drives a
+# ADR-220 retired that.) This suite drives a
 # synthetic handle directly, and the run-level arms below assert the resolution itself.
 #
 # EVERY LITERAL HERE IS SYNTHETIC. Nothing is resolved from a secret or from the run's
@@ -257,7 +257,7 @@ echo
 echo "--- Run-level decisions: the literal set a run scans (fixture arms a-f) ---"
 # The run-level functions take NO actor parameter: who triggered the run cannot
 # change what it scans, which is the decision record
-# {{ADR:depersonalization-gate-scans-bot-runs}} in executable form. Each arm calls them
+# ADR-220 in executable form. Each arm calls them
 # with the arguments the workflow passes on that kind of run — the repository owner as
 # the handle, never the actor — and the structural bindings further down assert that
 # the workflow really passes those arguments. Effect here, call shape there.

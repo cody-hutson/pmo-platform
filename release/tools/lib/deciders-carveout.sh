@@ -57,7 +57,7 @@ esc_lines() {
 # THE RUN-LEVEL DECISIONS BELOW are the gate's resolution of WHAT it matches,
 # made before any file is read. They were inline in the workflow, so the only proof
 # of them was a live remote run; the decision record
-# {{ADR:depersonalization-gate-scans-bot-runs}} moves them here for the same reason
+# ADR-220 moves them here for the same reason
 # the per-line verdict lives here. None of them takes the run's actor as a parameter,
 # and that is the decision rather than an omission: who triggered the run must not
 # change what the run scans.

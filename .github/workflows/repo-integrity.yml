@@ -225,7 +225,7 @@ jobs:
   #          file, whoever triggered it; fail-closed-on-canonical for the
   #          required identity input on such a run and for an empty literal
   #          set). Decision record:
-  #          {{ADR:depersonalization-gate-scans-bot-runs}}.
+  #          ADR-220.
   # ---------------------------------------------------------------------------
   depersonalization:
     name: Depersonalization gate
@@ -311,7 +311,7 @@ jobs:
           fi
 
           # --- 1. SCOPE FIRST (per-gate): changed files INTERSECTED with C6 ---
-          #     domains, ahead of the identity check ({{ADR:depersonalization-gate-scans-bot-runs}}).
+          #     domains, ahead of the identity check (ADR-220).
           #     A pull request that changes no C6 file has nothing to scan and so
           #     needs no identity: it passes here, measured, whoever started it —
           #     including a run Dependabot starts, which cannot read Actions secrets.
