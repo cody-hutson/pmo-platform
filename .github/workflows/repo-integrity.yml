@@ -1609,9 +1609,11 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # exit 3 = input failure (the ADR tree moved) — fail loud regardless of warn-mode.
+          # exit 3 = input failure — a changed ADR could not be opened or one of its git
+          # reads did not run (an UNEVALUABLE row), or no ADR file resolved (an ERROR line
+          # on stderr). Fail loud regardless of warn-mode.
           if [ "$RC" -eq 3 ]; then
-            echo "::error::ADR durability lint could not resolve the ADR tree — the checker scanned nothing."
+            echo "::error::ADR durability lint could not evaluate its input (exit 3) — a changed ADR could not be opened, one of its git reads against the base (diff, ls-tree or show) did not run, or no ADR file resolved. The UNEVALUABLE row in the step summary names the file and the read; with no such row, see the checker's ERROR line in this job's log."
             exit 1
           fi
 
