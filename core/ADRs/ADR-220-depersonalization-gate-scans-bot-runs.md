@@ -1,5 +1,5 @@
 ---
-title: "ADR-217 — The depersonalization gate scans a bot's run on the same literals as a human's"
+title: "ADR-220 — The depersonalization gate scans a bot's run on the same literals as a human's"
 status: Proposed
 date: 2026-10-16
 release: dependabot-prs-merge-without-bypass
@@ -15,13 +15,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-217 — The depersonalization gate scans a bot's run on the same literals as a human's
+# ADR-220 — The depersonalization gate scans a bot's run on the same literals as a human's
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering Commit 0 of the `dependabot-prs-merge-without-bypass` release, from its Stage 5 design. The operator selected the mirror-and-delete option and the label-create option on 2026-10-16.
 
 **Numbering provenance.** This record was authored at the next free number computed from the mainline anchor plus one, read from the repository's ADR-numbering detector. The detector reported sibling claims on this number and the two above it, all branch-only; per the numbering rule a branch claim is detection only and never binds, so this record takes the slot. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `{{ADR:depersonalization-gate-scans-bot-runs}}`, which carries no number shape and resolves at the claim.
+
+**Numbering provenance — `217 → 220`.** Held **ADR-217** branch-local; renumbered to **ADR-220** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 217. In-release citations that read "ADR-217" denote this record.
 
 ## Context
 

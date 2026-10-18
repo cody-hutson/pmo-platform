@@ -41,7 +41,7 @@ Per ADR-1 — Kahn's BFS topological sort, priority-desc → issue-asc tie-break
 
 | Source | Type | Target | Direction | Derived from |
 |---|---|---|---|---|
-| #8092 | GENERATES | core/ADRs/ADR-217-depersonalization-gate-scans-bot-runs.md | #8092 → file | File Change Matrix (Create) |
+| #8092 | GENERATES | core/ADRs/ADR-220-depersonalization-gate-scans-bot-runs.md | #8092 → file | File Change Matrix (Create) |
 | #8092 | GENERATES | release/releases/plans/dependabot-prs-merge-without-bypass_RELEASE_PLAN.md | #8092 → file | File Change Matrix (Create) |
 
 No issue→issue edges: a single-issue bundle.
@@ -51,7 +51,7 @@ No issue→issue edges: a single-issue bundle.
 | File Path | Issues | Change Type | Risk |
 |-----------|--------|------------|------|
 | release/releases/plans/dependabot-prs-merge-without-bypass_RELEASE_PLAN.md | #8092 | Create | Low |
-| core/ADRs/ADR-217-depersonalization-gate-scans-bot-runs.md | #8092 | Create | Low |
+| core/ADRs/ADR-220-depersonalization-gate-scans-bot-runs.md | #8092 | Create | Low |
 | release/tools/lib/deciders-carveout.sh | #8092 | Modify | Medium |
 | release/tools/tests/test_deciders_carveout.sh | #8092 | Modify | Low |
 | .github/workflows/repo-integrity.yml | #8092 | Modify | High |
@@ -65,7 +65,7 @@ Machine-readable form — one path per line, `<path>  <verb>`, fence-delimited f
 ```
 # ── #8092 — the depersonalization gate gives a Dependabot run a measured verdict; the dependabot label ──
 release/releases/plans/dependabot-prs-merge-without-bypass_RELEASE_PLAN.md          add
-core/ADRs/ADR-217-depersonalization-gate-scans-bot-runs.md                          add
+core/ADRs/ADR-220-depersonalization-gate-scans-bot-runs.md                          add
 release/tools/lib/deciders-carveout.sh                                              edit
 release/tools/tests/test_deciders_carveout.sh                                       edit
 .github/workflows/repo-integrity.yml                                                edit
@@ -131,7 +131,7 @@ N/A — enumerated over triggers T1–T4; the milestone was created on 2026-10-1
 | Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
 |------|----------------|----------|--------------|-----------|-----------|----------------|
 | #8092 | release/releases/plans/dependabot-prs-merge-without-bypass_RELEASE_PLAN.md | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
-| #8092 | core/ADRs/ADR-217-depersonalization-gate-scans-bot-runs.md | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8092 | core/ADRs/ADR-220-depersonalization-gate-scans-bot-runs.md | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8092 | release/tools/lib/deciders-carveout.sh | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8092 | release/tools/tests/test_deciders_carveout.sh | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8092 | .github/workflows/repo-integrity.yml | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
