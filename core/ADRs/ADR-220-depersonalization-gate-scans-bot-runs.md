@@ -1,6 +1,6 @@
 ---
 title: "ADR-220 — The depersonalization gate settles its scope first, scans every run on the same literals, and fails closed on a change it cannot scan"
-status: Proposed
+status: Accepted — operator-ratified at the dependabot-prs-merge-without-bypass Stage 13 Close ratification beat (Phase A13), 2026-10-18
 date: 2026-10-16
 release: dependabot-prs-merge-without-bypass
 deciders: "Workspace owner (operator) — selected the label-create option on 2026-10-16, directed on 2026-10-17 that what the security fix still left open be resolved in this release, and at the Stage 9 review on 2026-10-18 selected the scope-first design with no Dependabot-store copy over the mirror option first chosen; design by the Stage 5 Solutioning session (Principal Engineer persona); authored by the Stage 6 Engineering session; the distinct mirror name, the step-scoped binding and the fail-closed reads adopted at Stage 7 from the independent adversarial design review"
@@ -19,7 +19,7 @@ supersedes: none
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering Commit 0 of the `dependabot-prs-merge-without-bypass` release, from its Stage 5 design. The operator selected the label-create option on 2026-10-16 and, at the Stage 9 review on 2026-10-18, the scope-first design with no Dependabot-store copy, in place of the mirror option first selected.
+**Accepted** — operator-ratified at the `dependabot-prs-merge-without-bypass` Stage 13 Close ratification beat (Phase A13), 2026-10-18, as one record of a decision rendered per record. Authored at Stage 6 Engineering Commit 0 of that release as `Proposed`, from its Stage 5 design. The operator selected the label-create option on 2026-10-16 and, at the Stage 9 review on 2026-10-18, the scope-first design with no Dependabot-store copy, in place of the mirror option first selected. The ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.77**.
 
 **Numbering provenance.** This record was authored at the next free number computed from the mainline anchor plus one, read from the repository's ADR-numbering detector. The detector reported sibling claims on this number and the two above it, all branch-only; per the numbering rule a branch claim is detection only and never binds, so this record takes the slot. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `ADR-220`, which carries no number shape and resolves at the claim.
 
