@@ -1,7 +1,8 @@
 #!/bin/bash
 # tests/block-rm-prefer-trash.test.sh — synthetic Bash-tool payload tests
 # for block-rm-prefer-trash.sh. Covers BLOCK-TRASH-001..003 ACs, the
-# auto-memory Trash arm (MEM-*), CLAUDE_HOOK_BYPASS bypass + edge/regression cases.
+# auto-memory Trash arm (MEM-*), the in-command working directory (CWD-*),
+# CLAUDE_HOOK_BYPASS bypass + edge/regression cases.
 #
 # Coverage map: grouped below by rule and case family; the Summary block prints the
 # live total (a hardcoded count here drifted before — do not reintroduce one).
@@ -333,6 +334,96 @@ test_case "EXT-FP7: escaped parens are literal, not grouping" \
 # silent behaviour change nobody notices.
 test_case "EXT-RES1: nested-shell program string allows (documented residual, not a defect)" \
   "$(bash_payload 'bash -c '"'"'rm /tmp/foo'"'"'')" 0
+
+# ----- CWD-*: a relative target is judged from the directory the command can be in -----
+#
+# The payload cwd is where the call STARTS; a directory change earlier on the same line
+# moves where a relative operand lands. Each arm runs under the fixture home
+# (HOME-FIXTURE-01) from the fixture's worktree cwd, which is inside the workspace, so a
+# verdict that names RMT_OUTSIDE can only come from following the in-command change. The
+# outside directory sits under /nonexistent so realpath leaves it as typed (on macOS /tmp
+# would come back as /private/tmp and the path assertions would test that instead).
+RMT_OUTSIDE="/nonexistent/rm-trash-outside"
+RMT_INSIDE_SUB="${RMT_FIXTURE_HOME}/Claude/sub"
+
+# -- Followed: a change into a directory outside the workspace root --
+test_case "CWD-01: trash of a relative target after cd outside the workspace blocks (BLOCK-TRASH-003)" \
+  "$(bash_payload 'cd '"$RMT_OUTSIDE"' && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_OUTSIDE}/victim" "$RMT_HOME_ENV"
+test_case "CWD-02: rm -r of a relative target after cd outside names the outside path (BLOCK-TRASH-001)" \
+  "$(bash_payload 'cd '"$RMT_OUTSIDE"' && rm -r victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-001.*Path: ${RMT_OUTSIDE}/victim" "$RMT_HOME_ENV"
+test_case "CWD-03: pushd outside then trash a relative target blocks" \
+  "$(bash_payload 'pushd '"$RMT_OUTSIDE"' && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_OUTSIDE}/victim" "$RMT_HOME_ENV"
+test_case "CWD-04: a subshell group that changes directory outside blocks its relative trash" \
+  "$(bash_payload '( cd '"$RMT_OUTSIDE"' && trash victim )' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_OUTSIDE}/victim" "$RMT_HOME_ENV"
+test_case "CWD-05: cd -- outside then trash a relative target blocks (option terminator on cd)" \
+  "$(bash_payload 'cd -- '"$RMT_OUTSIDE"' && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_OUTSIDE}/victim" "$RMT_HOME_ENV"
+test_case "CWD-06: cd outside then trash -- relative target blocks (option terminator on trash)" \
+  "$(bash_payload 'cd '"$RMT_OUTSIDE"' && trash -- victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_OUTSIDE}/victim" "$RMT_HOME_ENV"
+test_case "CWD-07: rm -- of a dash-led operand is judged as an operand, not skipped as a flag" \
+  "$(bash_payload 'cd '"$RMT_OUTSIDE"' && rm -- -victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-001.*Path: ${RMT_OUTSIDE}/-victim" "$RMT_HOME_ENV"
+test_case "CWD-08: a chain of relative cd .. that climbs out of the workspace blocks" \
+  "$(bash_payload 'cd ../../.. && cd .. && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_FIXTURE_HOME}/victim" "$RMT_HOME_ENV"
+test_case "CWD-09: bare cd goes to HOME, outside the workspace, and blocks a relative trash" \
+  "$(bash_payload 'cd && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_FIXTURE_HOME}/victim" "$RMT_HOME_ENV"
+test_case "CWD-10: cd to a home-relative directory outside the workspace blocks a relative trash" \
+  "$(bash_payload 'cd ~/elsewhere && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_FIXTURE_HOME}/elsewhere/victim" "$RMT_HOME_ENV"
+test_case "CWD-11: a semicolon-joined cd outside still blocks the relative trash after it" \
+  "$(bash_payload 'cd '"$RMT_OUTSIDE"'; trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_OUTSIDE}/victim" "$RMT_HOME_ENV"
+test_case "CWD-12: a change repeated by a function call blocks a relative trash in the function body" \
+  "$(bash_payload 'f() { trash victim; }; cd '"$RMT_OUTSIDE"'; f' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*Path: ${RMT_OUTSIDE}/victim" "$RMT_HOME_ENV"
+
+# -- Undeterminable: a change the hook cannot follow refuses a relative target under the
+#    existing strict policy, with the same rule ID and a reason naming the basis --
+test_case "CWD-13: cd to a variable operand makes a relative trash unresolvable" \
+  "$(bash_payload 'cd "$SCRATCH" && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*working directory" "$RMT_HOME_ENV"
+test_case "CWD-14: cd - (previous directory) makes a relative trash unresolvable" \
+  "$(bash_payload 'cd - && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*working directory" "$RMT_HOME_ENV"
+test_case "CWD-15: a directory-stack pushd form makes a relative trash unresolvable" \
+  "$(bash_payload 'pushd +1 && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*working directory" "$RMT_HOME_ENV"
+test_case "CWD-16: popd makes a relative trash after it unresolvable" \
+  "$(bash_payload 'pushd '"$RMT_INSIDE_SUB"' && popd && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*working directory" "$RMT_HOME_ENV"
+test_case "CWD-17: a relative cd repeated by a loop makes a relative trash unresolvable" \
+  "$(bash_payload 'for i in 1 2 3 4 5; do cd ..; done; trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*working directory" "$RMT_HOME_ENV"
+test_case "CWD-18: a command that sets CDPATH makes a bare-name cd unresolvable" \
+  "$(bash_payload 'CDPATH=/nonexistent cd sub && trash victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-003.*working directory" "$RMT_HOME_ENV"
+test_case "CWD-19: rm after an undeterminable cd is refused under BLOCK-TRASH-001" \
+  "$(bash_payload 'cd "$SCRATCH" && rm victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-001.*working directory" "$RMT_HOME_ENV"
+
+# -- Controls: what must keep its verdict --
+test_case "CWD-20 (control): trash of a relative target after cd inside the workspace allows" \
+  "$(bash_payload 'cd '"$RMT_INSIDE_SUB"' && trash victim' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "CWD-21 (control): rm after cd inside redirects to Trash naming the path under that directory" \
+  "$(bash_payload 'cd '"$RMT_INSIDE_SUB"' && rm victim' "$RMT_FIXTURE_CWD")" 2 \
+  "BLOCK-TRASH-002.*: ${RMT_INSIDE_SUB}/victim" "$RMT_HOME_ENV"
+test_case "CWD-22 (control): a relative trash with no directory change allows, judged from the payload cwd" \
+  "$(bash_payload 'trash victim' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "CWD-23 (control): an absolute inside target is unaffected by a cd outside" \
+  "$(bash_payload 'cd '"$RMT_OUTSIDE"' && trash '"$RMT_FIXTURE_HOME"'/Claude/foo.txt' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "CWD-24 (control): a cd that comes AFTER the target on the line does not move it" \
+  "$(bash_payload 'cd '"$RMT_INSIDE_SUB"' && trash victim; cd '"$RMT_OUTSIDE"' && ls' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "CWD-25 (control): cd text inside a quoted string is content, not a directory change" \
+  "$(bash_payload 'echo "cd '"$RMT_OUTSIDE"' && x" && trash victim' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "CWD-26 (control): a relative cd that stays inside the workspace allows" \
+  "$(bash_payload 'cd .. && trash victim' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 
 # ----- CLAUDE_HOOK_BYPASS escape hatch -----
 
@@ -774,6 +865,56 @@ else
     /usr/bin/printf 'PASS: %s\n' "MEM-FM3 a store declared outside user scope gets the memory-specific refusal"; PASS=$((PASS + 1))
   else
     /usr/bin/printf 'FAIL: %s\n%s' "MEM-FM3 a store declared outside user scope gets the memory-specific refusal" "$fm3_fail"
+    FAIL=$((FAIL + 1))
+  fi
+
+  # CWD-27/28: the CWD-* family on a real filesystem, which the fixture home cannot give.
+  # They reuse this block's canonical sandbox because each needs a directory the hook can
+  # resolve: a symlink inside the workspace, and a hook copy with its normalizer swapped.
+  #
+  # CWD-27: a shell's cd is LOGICAL by default, so `..` from a directory reached through a
+  # symlink climbs the path as typed, not the directory the link points to. Here the payload
+  # cwd is a link to a directory two levels deeper; `cd ../..` lands the shell at the
+  # sandbox home (outside the workspace) while the physical reading lands inside it. The arm
+  # passes only if the logical reading is judged too. The control arm climbs one level,
+  # where both readings stay inside, and must allow.
+  /bin/mkdir -p "${MB}/Claude/deep/a/b"
+  /bin/ln -s "${MB}/Claude/deep/a/b" "${MB}/Claude/lnk"
+  mem_case "CWD-27 a logical cd .. through a symlinked cwd that leaves the workspace blocks" base \
+    "cd ../.. && trash victim" 2 "BLOCK-TRASH-003.*Path: ${MB}/victim" "${MB}/Claude/lnk"
+  mem_case "CWD-27b (control) a logical cd .. through a symlinked cwd that stays inside allows" base \
+    "cd .. && trash victim" 0 "" "${MB}/Claude/lnk"
+
+  # CWD-28: a directory change the hook cannot normalize is not followed on a raw join. A
+  # sandbox copy whose pinned python3 is unusable must refuse a relative target after any
+  # directory change (fail closed); the same copy with a usable python3 allows it (control).
+  # FAILs if the copy does not carry exactly the pinned path (anti-vacuous).
+  cwd28_fail=""
+  for cwd28_case in "/nonexistent/python3|2" "/usr/bin/python3|0"; do
+    cwd28_py="${cwd28_case%%|*}"; cwd28_want="${cwd28_case#*|}"
+    cwd28_sbx="$(mem_hook_copy)" || cwd28_sbx=""
+    if [ -z "$cwd28_sbx" ]; then
+      cwd28_fail="${cwd28_fail}  ${cwd28_py}: no sandbox copy of the hook"$'\n'; continue
+    fi
+    /usr/bin/sed -e 's#^readonly PYTHON3="/usr/bin/python3"$#readonly PYTHON3="'"$cwd28_py"'"#' \
+      "$HOOK" > "${cwd28_sbx}/block-rm-prefer-trash.sh"
+    if [ "$(/usr/bin/grep -c -x -F "readonly PYTHON3=\"$cwd28_py\"" "${cwd28_sbx}/block-rm-prefer-trash.sh")" != 1 ]; then
+      cwd28_fail="${cwd28_fail}  ${cwd28_py}: the sandbox copy does not pin python3 to that path"$'\n'
+    else
+      mem_run "${cwd28_sbx}/block-rm-prefer-trash.sh" "$MB" "" \
+        "$(bash_payload "cd ${MB}/Claude/deep && trash victim" "${MB}/Claude/.claude/worktrees/planning")"
+      if [ "$MEM_EXIT" != "$cwd28_want" ]; then
+        cwd28_fail="${cwd28_fail}  ${cwd28_py}: exit=${MEM_EXIT} (expected ${cwd28_want}): $(/bin/cat "$MEM_ERR_FILE")"$'\n'
+      elif [ "$cwd28_want" = 2 ] && ! /usr/bin/grep -qE 'BLOCK-TRASH-003.*working directory' "$MEM_ERR_FILE"; then
+        cwd28_fail="${cwd28_fail}  ${cwd28_py}: refused, but not for the undeterminable working directory: $(/bin/cat "$MEM_ERR_FILE")"$'\n'
+      fi
+    fi
+    mem_drop_copy "$cwd28_sbx"
+  done
+  if [ -z "$cwd28_fail" ]; then
+    /usr/bin/printf 'PASS: %s\n' "CWD-28 an unusable normalizer refuses a relative target after a directory change, a usable one allows it"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n%s' "CWD-28 an unusable normalizer refuses a relative target after a directory change, a usable one allows it" "$cwd28_fail"
     FAIL=$((FAIL + 1))
   fi
 

@@ -479,8 +479,12 @@ PV-7  MEASUREMENT STATE.
                Register A - machine-readable status field, read by a caller:
                  fetched    the population was examined in full
                  truncated  examined, but the enumeration is a SAMPLE
-                 degraded   the read FAILED; the population is UNMEASURED, never 0
-                 not-run    deliberately not attempted on this path
+                 degraded   the read FAILED, or was PARTIAL. A failed read leaves the
+                            population UNMEASURED, never 0; a partial read's counters
+                            describe ONLY the measured subset, and the unmeasured part
+                            is named, never counted
+                 not-run    not attempted on this path - deliberately, or because the
+                            population left no member to attempt it on
                  fixture    self-test input, not live state
                Register B - the human-readable emitted token:
                  NOT-EVALUATED   the whole leg or indicator was not measured
@@ -490,10 +494,12 @@ PV-7  MEASUREMENT STATE.
              amends this rider; it does not coin a local token.
 
       PV-7b  ABSENCE, NOT ZERO. On a non-measuring status the counters are ABSENT
-             from the emit, not zero. Absence from a source is information; a zero
-             is a measurement. A CONSUMER MUST BRANCH ON THE STATUS FIELD BEFORE
-             READING ANY COUNTER - reading the count alone consumes "nothing was
-             examined" as "nothing was found".
+             from the emit, not zero; a PARTIAL `degraded` read carries counters for
+             its measured subset only, and the part it could not read stays absent.
+             Absence from a source is information; a zero is a measurement. A
+             CONSUMER MUST BRANCH ON THE STATUS FIELD BEFORE READING ANY COUNTER -
+             reading the count alone consumes "nothing was examined" as "nothing was
+             found".
 
       PV-7c  FAN IN, NEVER OUT, AND NEVER GATE. A degraded measurement emits EXACTLY
              ONE finding naming the cause; per-item verdicts are WITHHELD, never

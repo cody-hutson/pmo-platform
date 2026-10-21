@@ -171,11 +171,21 @@ Rationale: dependency bumps are self-contained, reversible, and CI-validated. Su
 
 The `cluster: security` label is retained on these PRs — by that same `updates:` entry, and subject to that same condition — so they remain discoverable in security audits.
 
-### Dependency PRs and the package-freshness gate
+### Dependency PRs and the required checks they can fail
+
+Three required status checks on `main` can stop a Dependabot PR for a reason other than the bump itself. Each fails for its own reason and has its own remedy:
+
+| Required check | Why a Dependabot PR fails it | Remedy |
+|---|---|---|
+| `Pre-merge .skill package content-freshness gate` | The PR rewrites a file inside a rostered skill's compiled-package content set, and Dependabot does not rebuild packages | Rebuild by hand on the bot's own branch, as described below |
+| `Depersonalization gate` | A run Dependabot starts receives only Dependabot secrets, never Actions secrets, so it cannot read the gate's identity input. The gate settles its scope first: a PR that changes no scanned file — one under `core/`, `release/`, `operations/` or `packages/`, outside the exempt `release/releases/` — passes on the bot's own run. A PR that changes one fails closed, because the identity cannot be read to scan it | None for a PR outside those directories. A PR inside them — in practice a manifest inside a rostered skill package, which needs the hand rebuild below anyway — passes once a maintainer pushes to the branch: that push re-runs the gate with the canonical secret and scans the bot's changes. A later `@dependabot rebase` replaces that push and turns the check red again, so push again after a rebase |
+| `Close-out automation smoke (macOS)` | Its workflow is no longer path-filtered, so it runs on every pull request and reports on a Dependabot PR like on any other. It fails when the close-out automation, or one of the release-tooling suites that job hosts, breaks on macOS. A PR whose last run predates the filter's removal has no check run at all and waits for one | A missing check run: start a new run by updating the branch — on a Dependabot PR, comment `@dependabot rebase`. A failure: read the job log; the bump is not the cause unless it touches the release tooling |
+
+#### The package-freshness gate
 
 A dependency PR that rewrites a file inside a rostered skill's compiled-package content set turns the pre-merge `.skill` package-freshness gate red: the committed package no longer matches what its source would build. Today that is one skill and two manifests, under `release/skills/pmo-skill-refiner/eval-viewer/tests/`.
 
-**Dependabot cannot clear it.** It rewrites the manifest; it does not rebuild packages. Workflows it triggers receive a read-only token and no secrets, and a commit pushed by Actions using `GITHUB_TOKEN` starts no new workflow run — so the check would never re-report, and when the sentinel at `.github/skill-package-freshness.enforce` reads `enforce` and that check is among the required status checks on `main`, the PR would stay blocked. There is no automated path.
+**Dependabot cannot clear it.** It rewrites the manifest; it does not rebuild packages. Workflows it triggers receive a read-only token and only Dependabot secrets, and a commit pushed by Actions using `GITHUB_TOKEN` starts no new workflow run — so the check would never re-report, and when the sentinel at `.github/skill-package-freshness.enforce` reads `enforce` and that check is among the required status checks on `main`, the PR would stay blocked. There is no automated path.
 
 **Clear it by hand, on the bot's own branch:** fetch the `dependabot/…` branch (it lives in this repository, not a fork, so anyone with write access can push to it); run the rebuild the gate's own failure output names, and commit the package together with its `.sha256` sidecar; push to that same branch. The push re-runs every check, and Dependabot stops rebasing a branch once a commit has been pushed to it, so the rebuild is not overwritten.
 

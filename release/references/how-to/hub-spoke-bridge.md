@@ -406,10 +406,10 @@ Then return — do NOT close sub-task #{SUB_TASK_NUMBER}. Post your output comme
 - Discoveries outside scope → note in Recommendations.
 - Release plan prose that describes per-issue closure actions MUST use safe
   phrasing (`mark #N as closed at Stage 13`, not `close #N at Stage 13`) — the
-  release plan is transcribed into PR body Summary/Implementation sections at
-  Engineering, where GitHub's auto-close parser fires on close-family verbs +
-  `#N` regardless of section context. See Procedure 3 §PR Body Parser-Clean
-  Discipline.
+  release plan is transcribed into PR body Summary/Implementation sections and
+  quoted in commit messages at Engineering, and GitHub's auto-close parser
+  fires on close-family verbs + `#N` in both, regardless of section context.
+  See Procedure 3 § Close-Keyword Parser-Clean Discipline.
 ```
 
 ### D-Gate Template
@@ -867,7 +867,7 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
 
    Before issuing **any** Agent invocation — N in one hub response, or a single one at any stage including the write-serialized 6 / 13 — the hub runs **Checkpoint B** of the quota-budget protocol ([`../standards/quota-budget-protocol.md`](../standards/quota-budget-protocol.md) § 4) against the *remaining* per-account 5-hour usage-window envelope. This is the load-bearing, ongoing check — it fires before *every launch*, not once at Stage 4, because each launch faces a potentially different remaining envelope (mid-release quota drift; 5-hour boundary crosses; per-spoke costs varying from the Stage 4 baseline). A singleton is gated too: being serial bounds the concurrent-batch surface, not the envelope, and a lone spoke on a near-tail window dies mid-run exactly the way the gate exists to prevent. Verdict depth varies by launch shape — the full PROCEED / SERIALIZE / DEFER / REDUCE-scope hierarchy for a wave (§ 4.3), the reduced PROCEED / DEFER form for a singleton (§ 4.3a).
 
-   **Two axes, either sufficient to block.** Checkpoint B weighs **two independent axes**: the per-account usage-window envelope (above) and the **host-API quota** — the host's separate REST (`core`) and GraphQL pools, read with `gh api rate_limit` once per routing turn and reused for every launch issued in that turn. The host-API axis renders PROCEED / DEFER on a 20 %-remaining floor (protocol § 4.3b) and combines with the usage-window verdict by **DEFER-dominant disjunction**: a host-API DEFER makes Checkpoint B render DEFER; otherwise the usage-window verdict passes through unchanged. **No new verdict token is minted**, so behavior is unchanged whenever the pools are healthy. The axis matters because a depleted GraphQL pool does not slow a Stage 5 / 7 / 8 spoke down — it destroys the deliverable, whose entire output channel is a GitHub Issue comment, *after* the usage-window draw is already spent. A probe that fails **fails open** (basis `UNSTATED`, axis PROCEED, reason rendered): a failed read evidences an instrument or auth fault and carries no exhaustion signal at all, and failing closed would deadlock the pipeline on a fault that says nothing about capacity. **A successful read can also carry no signal** — exhaustion has *two* successful-read presentations, and the unstarted-window one (a full pool, `used = 0`) renders PROCEED wrongly and is not detectable from a single sample, so the fail-open residual is wider than "probe failed" (protocol § 4.3b). **Cost:** the usage-window axis is zero tool calls — a hub-side reasoning step, not an instrument. The host-API axis is one read per routing turn; whether that read is *also* free against the pools it measures is **unverified** and no longer claimed, and its certain cost is **cross-axis** — one call spends the usage-window axis to read the host-API axis. Even bounding the self-cost at one whole request per routing turn, per-launch firing stays affordable, so no launch shape is too small to gate.
+   **Two axes, either sufficient to block.** Checkpoint B weighs **two independent axes**: the per-account usage-window envelope (above) and the **host-API quota** — the host's separate REST (`core`) and GraphQL pools. The host-API axis is evaluated **once per routing turn**, and reused for every launch issued in that turn, by running `release/tools/host-api-axis-verdict.sh` from the repository root: it probes the pools with metered calls through the repo-host adapter — one REST probe and two GraphQL probes — and reads each pool's counter from the probe's own response (protocol § 4.3b). It renders DEFER for a pool below the 20 % floor, for a quota refusal (basis `CONTRADICTED`), or for a reading that does not reflect the probe's own draw (basis `UNANCHORED`), and combines with the usage-window verdict by **DEFER-dominant disjunction**: a host-API DEFER makes Checkpoint B render DEFER; otherwise the usage-window verdict passes through unchanged. **No new verdict token is minted**, so behavior is unchanged whenever the pools are healthy. The axis matters because a depleted GraphQL pool does not slow a Stage 5 / 7 / 8 spoke down — it destroys the deliverable, whose entire output channel is a GitHub Issue comment, *after* the usage-window draw is already spent. **The hub reads the verdict only from the evaluator's `HOST-API` record, and only when the evaluator exits 0.** It **fails open, and only there**: a probe that failed in transport or for a non-quota reason, a probe answered with no counter, or an evaluator that exits non-zero gives basis `UNSTATED`, PROCEED, and the reason rendered — such a fault carries no exhaustion signal at all, and failing closed would deadlock the pipeline on a fault that says nothing about capacity. A quota refusal never fails open: the classifier is the refusal reason, read from the refusing call's own response and never from quota wording found anywhere else (protocol § 4.3b — Refusal-reason classifier). A host-API PROCEED attests that reads were available at the probe, not that writes will be; the write-scoped limits stay a named residual (protocol § 4.3b). **Cost:** the usage-window axis is zero tool calls — a hub-side reasoning step, not an instrument. The host-API axis draws three metered requests per routing turn — one REST, two GraphQL, at most five with re-probes — and costs one hub tool call against the usage window; the hub passes `--prior-refusals` from the open host-API DEFER action item (below). Per-launch firing stays affordable, so no launch shape is too small to gate.
 
    The hub computes `N_planned × per-spoke-cost-estimate` (Checkpoint A baseline refined by observed per-spoke actuals from prior waves this release) and compares it against the remaining envelope (operator-stated state at hub start, adjusted for elapsed-window time and any per-batch override — see the protocol § 6), then renders one verdict on the usage-window axis:
 
@@ -878,9 +878,9 @@ A skipped **release-scoped** sub-task uses the same format with the milestone na
    | **DEFER** | Hold the batch for the next window; surface a reset-time estimate (reduces cumulative draw entirely) |
    | **REDUCE-scope** | Launch with a smaller per-wave footprint — compact prompts, narrower scope, fewer canonical reads (reduces per-wave consumption) |
 
-   On **SERIALIZE / DEFER / REDUCE-scope**, the hub produces a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke in the wave. A **host-API DEFER routes into this same briefing path with no new token** — it renders as DEFER, which this rule already enumerates, so nothing here changes to accommodate the second axis. **STAGGER** (an in-prompt `sleep` stagger) is a *labeled secondary* rate-limit-only defense — it does not change cumulative consumption and is never the mitigation for a usage-window overrun (§ Per-Account Usage Window Constraint).
+   On **SERIALIZE / DEFER / REDUCE-scope**, the hub produces a Decision Briefing surfacing the verdict + recommendation to the operator **BEFORE** launching any spoke in the wave. A **host-API DEFER routes into this same briefing path with no new token** — it renders as DEFER, which this rule already enumerates, so nothing here changes to accommodate the second axis. The briefing names the recovery the evaluator reports (protocol § 4.3b), never a reset read from a pool that is not the binding constraint. **STAGGER** (an in-prompt `sleep` stagger) is a *labeled secondary* rate-limit-only defense — it does not change cumulative consumption and is never the mitigation for a usage-window overrun (§ Per-Account Usage Window Constraint).
 
-   On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed.
+   On **DEFER**, the hub offers the operator an explicit **override-to-PROCEED exit** — the escape hatch for a wrong-stated-envelope deadlock. The override is operator-initiated (the hub renders DEFER as *recommended*; the operator chooses to override), is **deviation-logged** as a recorded auditable choice, and is a one-batch exit (it does not reopen the gate at every wave). When DEFER holds, the hub MAY emit an action-item entry per [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) (e.g., "Resume Stage N batch after window-reset at HH:MM") so the deferred batch is tracked and resumed. **When the host-API axis DEFERs on a quota refusal, the hub MUST open that action item, or supersede the open one, carrying the evaluator's `refusals_in_a_row` and rendered recovery; it passes the count back as `--prior-refusals` at the next routing turn and marks the item done when a run reports `refusals_in_a_row=0`** (protocol § 4.3b and § 8; hub-action-tracking § 2.3). A calibration event the evaluator reports is recorded as a `verification` action item for Stage 13.
 
    **Ongoing-gate discipline.** This check is a standing pre-launch step for **every launch**, not a one-time Stage 4 estimate — running it once and treating the release as cleared is the failure mode the runtime checkpoint exists to prevent. **The verdict is rendered every time, including on PROCEED**: a gate that was skipped and a gate that cleared are otherwise indistinguishable after the fact, and the rendered line is this check's whole audit surface (it emits no pipeline event — see the protocol § 6.1). **No Autonomy-Tier downgrade.** The verdict is a decision about *whether and when* to launch; it does not reclassify any stage's Autonomy Tier (Stage 5 / 7 / 8 remain auto-launch, and gating a Stage-6 singleton is not a downgrade either). **Cutover:** applies to releases entering the pipeline on or after this gate's introducing-release merge SHA recorded in [`<OPERATOR_INSTANCE_RELEASE_LOG_PATH>`](<OPERATOR_INSTANCE_RELEASE_LOG_PATH>); the introducing release itself is exempt (the gate cannot fire on the release that introduces it).
 
@@ -980,56 +980,91 @@ This is the read-only sibling of the Worktree-discipline block above: where that
 
 **Cutover discipline:** Applies to all releases going forward.
 
-**PR Body Parser-Clean Discipline (engineering spokes):**
+**Close-Keyword Parser-Clean Discipline — PR title, PR body, commit messages (engineering spokes):**
 
-The `gh pr create` invocation submits a PR body that GitHub's auto-close parser scans
-lexically. Close-family verbs (`close`, `closes`, `closed`, `fix`, `fixes`, `fixed`,
-`resolve`, `resolves`, `resolved`) followed by `#N` trigger auto-close regardless of
-section context or surrounding negation. The PR body template
+GitHub's auto-close parser reads three inputs of a pull request lexically: its title, its
+body, and the message of every commit the merge brings onto the default branch.
+Close-family verbs (`close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`,
+`resolves`, `resolved`) followed by `#N` trigger auto-close in any of the three,
+regardless of section context or surrounding negation. The single statement of the rule
+is [`core/rules/git-workflow.md`](../../../core/rules/git-workflow.md) § PR Process
+step 5; this section is its projection into spoke prompts. The PR body template
 (`.github/PULL_REQUEST_TEMPLATE.md`) provides exactly one dedicated **Issue References**
-block at the bottom for these phrases; every other section uses safe phrasing.
+block at the bottom for these phrases. Every other body section, the PR title, and every
+commit message — which has no such block — use safe phrasing.
 
-Stage 6 chip prompts MUST instruct the spoke to run this self-check before
-`gh pr create`:
+Stage 6 chip prompts MUST instruct the spoke to run this two-arm self-check:
 
 ```bash
+# Arm 1 — commit messages. Before EVERY `git push`. Must exit 0.
+python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD
+
+# Arm 2 — PR body. Before `gh pr create`, and again after any body edit.
 grep -inE "(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved) +#?\[?[0-9]" \
   <pr-body-draft>
 ```
 
-Any match outside the dedicated Issue References block requires rewrite. Safe-phrasing
-replacements:
+A non-zero exit from Arm 1 requires rewording the commit message before the push. Any
+Arm 2 match outside the dedicated Issue References block requires rewrite. The spoke
+reports the result as one line in its sub-task output, so a skipped arm is visible:
+
+`Close-keyword self-check: commit arm exit 0 over <N> commits; body arm 0 matches outside Issue References`
+
+**Runner for the self-check itself: NONE — a registered named gap.** Nothing can observe
+whether a local check ran before a push; the gate-coverage register in
+[`core/standards/gate-efficacy-standard.md`](../../../core/standards/gate-efficacy-standard.md)
+records the gap, and the line above is its declared observable. What CI does catch is
+the consequence. Arm 1 is the same tool CI runs, as a step of the
+`Commit-message depersonalization gate` job, so a red result on that job has two possible
+causes — personal data in a commit message, or a close keyword in one — and the failed
+step's name and the run summary say which. A close keyword in the PR body is the
+`Close-keyword leak detection` job. Which of those block a merge, and on which pull
+requests, is recorded in the same register and is not restated here.
+
+Safe-phrasing replacements:
 - `close #N` / `closes #N` → `mark #N as closed` / `transition #N to closed` /
   `#N → Closed` / `Issue #N closes at Stage 13`
 - `fixes #N` → `addresses #N` / `corrects the regression in #N` (note: do not write
   `resolves #N`)
 - `resolves #N` → `completes the work on #N` / `wraps up the task in #N`
+- in a commit message, carry the work item as the trailing reference `(#N)`, or write
+  `the fix for #N` — and mind the typed prefix: a subject written `fix: #N …` is a
+  closing reference
 
 This discipline emerged from a PR (2026-05-03), where the Summary section
 correctly used `References ` per the D-Stage13Successor block-close protocol, but
 the test-plan section contained `Stage 13 Close: ... + close  + ...` — the parser
 matched the test-plan token and auto-closed  one second before the merge timestamp,
-preempting the operator-decision-style block-close ordering. Confirmed pattern:
-the PR-body close-keyword discipline (N=2 with prior-PR precedent on 2026-04-25).
+preempting the operator-decision-style block-close ordering. Confirmed pattern on the
+PR-body surface (N=2 with prior-PR precedent on 2026-04-25). It was widened to commit
+messages after a commit body on a release branch closed an issue three seconds after its
+release PR merged (2026-09-05) — a partitive phrase, with the PR body clean for that
+issue. A reading of the host's closing events then found the series behind it: 11
+commit-driven closures between 2026-06-19 and 2026-09-05, 7 of them through a pull
+request whose body declared no closure of that issue. Nine were a plain declaration line
+in a commit body; one was that partitive, and one a colon in the middle of a sentence
+(2026-09-02).
 
 For Stage 6 chips specifically, hub adds to `{ADDITIONAL_READS}`:
 - `6. .github/PULL_REQUEST_TEMPLATE.md (PR body skeleton — note the dedicated Issue References block)`
-- `7. release/references/how-to/hub-spoke-bridge.md § Procedure 3 §PR Body Parser-Clean Discipline (self-check command + safe-phrasing rules)`
+- `7. release/references/how-to/hub-spoke-bridge.md § Procedure 3 § Close-Keyword Parser-Clean Discipline (two-arm self-check + safe-phrasing rules)`
 
 The Spoke Template scope-control section gains an explicit bullet:
 
-- Before `gh pr create`, run the parser-clean self-check (per
-  `hub-spoke-bridge.md` Procedure 3 §PR Body Parser-Clean Discipline).
-  Any close-family verb + `#N` match outside the dedicated Issue References
-  block must be rewritten before PR creation.
+- Before every `git push`, and before `gh pr create`, run the close-keyword
+  parser-clean self-check (per `hub-spoke-bridge.md` Procedure 3
+  § Close-Keyword Parser-Clean Discipline). A close-family verb + `#N` in a commit
+  message, or in the PR body outside the dedicated Issue References block, must be
+  rewritten before the push or the PR creation.
 
 **Block-close protocol consumers** (D-Stage13Successor and any analogue D-decision that
 relies on manual closure timing at Stage 13) carry this as an explicit pre-condition:
-**"PR body must be parser-clean — close-family verbs + `#N` confined to the dedicated
-Issue References block."** Without parser-clean PR bodies, the auto-close fires at merge
-time and preempts the block-close protocol. This is the canonical pre-condition
-statement; future D-decision authors cite this section when their D-decision relies on
-manual closure timing.
+**"Every parser input of the release PR is parser-clean — close-family verbs + `#N`
+confined to the PR body's dedicated Issue References block; none in the title, none in
+any commit message on the branch."** Without that, the auto-close fires at merge time
+and preempts the block-close protocol. This is the canonical pre-condition statement;
+future D-decision authors cite this section when their D-decision relies on manual
+closure timing.
 
 **Repo-Integrity Authoring Discipline (ADR + content-modifying spokes):**
 
@@ -1039,7 +1074,7 @@ standards doc — has its changed files scanned by two PR-time gates in
 `repo-integrity.yml` (defined in [`core/rules/git-workflow.md` § Repository-Integrity
 Gates](../../../core/rules/git-workflow.md)): the **Issue-reference validity** gate
 and the **Depersonalization** gate. These are SEPARATE from, and broader than, the
-PR-body close-parser discipline above — they scan file *content*, not the PR body.
+close-keyword parser-clean discipline above — they scan file *content*, not the PR's title, body or commit messages.
 ADR files are the common tripwire because they carry `#N` in `source_observations:`
 frontmatter and `## Status` / `## Context` provenance prose — out-of-reference-block
 locations. The discipline (apply at authoring time, not after red CI):
@@ -1405,6 +1440,20 @@ Required chip-prompt content — Stage 12 chip prompts MUST embed these three ad
 This discipline emerged from a Stage 12 sub-task (2026-04-20), where merging a PR with `--delete-branch` auto-deleted the base branch of a dependent PR, triggering GitHub auto-close and a recreate-and-recover dance. This discipline codifies the pre-merge enumeration + base-shift mechanism at [`pipeline/stage-12-execute.md § Phase B0`](../pipeline/stage-12-execute.md).
 
 **Cutover discipline:** Applies to all releases going forward.
+
+**Stage 12 Chip Pattern — Sibling Dark-Branch Sweep Discipline (Phase B1.1):**
+
+When the hub authors a Stage 12 Execute chip prompt, the prompt MUST prescribe the Phase B1.1 sibling dark-branch sweep per [`pipeline/stage-12-execute.md § Phase B1.1`](../pipeline/stage-12-execute.md). The sweep runs after the merge and only reports: the chip prompt MUST NOT turn a sweep finding into a HALT, a retry of this release's merge, or a write of any kind to another release's pull request.
+
+Required chip-prompt content — Stage 12 chip prompts MUST embed these three additions:
+
+1. **Step-by-step item** (numbered step within the chip's "Step-by-step (in order)" block): *"Immediately after the Phase B1 merge verification captures `$MERGE_SHA`, and before Phase B3, run Phase B1.1 per [`pipeline/stage-12-execute.md § Phase B1.1`](../pipeline/stage-12-execute.md): read the open pull requests on the base with their mergeability on the Phase A.6.4 backoff, fetch their heads as objects, and run `python3 release/tools/check-dark-branch.py sweep` with `--before` the merge commit's first parent (or `--census` after a rebase merge) and `--after \"$MERGE_SHA\"`. Record its output verbatim with its exit code. It never HALTs and never writes to another pull request."*
+2. **Output deliverables block** (entry in the chip's required-deliverables list): *"Phase B1.1 sweep: the tool's summary line, every line naming a pull request and its `state=` line, verbatim, with the exit code; each `FINDING newly-dark` pull request carried into Decisions & Recommendations with its remedy and owner — and, in census mode, each `FINDING dark` pull request carried the same way, as dark at this merge and not attributed to it."*
+3. **`{ADDITIONAL_READS}` entry** (line in the chip's reading list): `release/references/pipeline/stage-12-execute.md § Phase B1.1 (sibling dark-branch sweep — tips, read, classify, report; never HALTs; cutover)`
+
+This is the reader at the merge for a branch a sibling's merge darkens; the push-triggered workflow is the same detection in CI, and the Spoke Template's Post-Push Mergeability Discipline is the reader at the darkened branch's own next push.
+
+**Cutover discipline:** Applies with Phase B1.1 — to releases entering Stage 12 strictly AFTER its introducing-release merge.
 
 **Stage 7/8/9 Entry Divergence Re-Check Discipline:**
 
@@ -1904,6 +1953,71 @@ another run's artifacts. Full rule and the observed failure it encodes:
 
 **Cutover discipline:** Applies to all releases going forward.
 
+## Post-Push Mergeability Discipline (all spokes)
+
+A release branch can stop receiving its gates without any push of its own: a sibling
+release merges into the base, the release pull request becomes unmergeable, and the host
+dispatches none of its `pull_request`-triggered gates. The next head pushed to it then
+carries only the few checks triggered another way, every one of them passing, so a read
+of conclusions alone reports it green. Your push is the moment that false green is
+produced, so check for it there.
+
+After every `git push` that updates the release branch, read the release pull request's
+mergeability (resolve its number with `gh pr list --repo {REPO} --head <release-branch>
+--state open --json number` when your brief does not name it):
+
+    gh pr view <release-PR> --repo {REPO} --json headRefOid,mergeable,mergeStateStatus
+
+Re-read on the Stage 12 Phase A.6.4 backoff (3s, 5s, 10s, 12s; 30s in all) until
+`headRefOid` equals the commit you just pushed and `mergeable` is not `UNKNOWN`. Then
+render one line in your output's Evidence section for every such push:
+
+    Post-push mergeability: #<release-PR> head <sha7> → CLEAR | DARK | NOT-EVALUATED
+
+- **DARK** — `mergeable` is `CONFLICTING`, or `mergeStateStatus` is `DIRTY`.
+- **CLEAR** — `mergeable` is `MERGEABLE` and the state is not `DIRTY`.
+- **NOT-EVALUATED** — the host did not show your commit, or did not settle, within the
+  backoff. It is not CLEAR: say so, and carry on.
+- Before the release pull request exists — Engineering Commit 0, and anything before
+  Stage 6 Phase C2 opens the draft — the line reads
+  `Post-push mergeability: no release pull request yet`.
+- A spoke that pushed nothing to a release branch renders
+  `Post-push mergeability: no push to a release branch`.
+
+**Render the line on every spoke output, including when nothing was pushed.** As with
+`Control firings: none`, the null line is what tells a spoke that had nothing to check
+from a spoke that skipped the check; an output with no `Post-push mergeability:` line
+is the second.
+
+**This check never waits on CI.** It reads mergeability only, which the host settles in
+seconds. It never reads the check roster, so a run still in progress is not its input
+and cannot hold it; Stage 7 and Stage 8 read the roster at Phase A, under their own
+settling rules.
+
+**On DARK, keep working, and say so.** A push to a dark branch still banks your work,
+and nothing pushed while dark escapes the gates: they run over the whole head once the
+base is merged in. So: (1) make no CI-backed claim for a head pushed while dark — a
+check that never dispatched is not a pass, so record each verification that depends on
+one as `NOT-EVALUATED — dark head`; (2) do not merge the base, rebase, or force-push to
+clear it — merging `origin/main` into the release branch is the hub's to route, and a
+history rewrite of the shared branch is never the remedy; (3) run this check again
+after each later push; (4) record one finding in `### Decisions & Recommendations` —
+the branch is dark and the base must be merged in before the next stage — and return
+`verdict: CONDITIONAL` (or the stronger verdict your run already carries) with your
+stage's usual `next:`.
+
+**Scope.** At Stage 12, Phase A.6 reads the same two fields before the merge, after any
+Phase A.5 sync, and HALTs on a conflict; that read discharges this one there, and its
+result is the line the Stage 12 output renders. A push to a chore branch at Stage 12 or
+13 is out of scope: a chore pull request is not the release pull request, and its own
+merge wait already stops on a conflict.
+
+**Runner: NONE — a registered named gap.** Nothing observes whether this check ran
+after a push. The `Post-push mergeability:` line is the declared observable: every
+spoke output carries one, and an output without it is the gap made visible.
+
+**Cutover discipline:** Applies to all releases going forward.
+
 ## Output
 Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 
@@ -1912,7 +2026,7 @@ Post your output as a comment on sub-task #{SUB_TASK_NUMBER}:
 ### Detail
 ### Evidence
 
-This section carries one MANDATORY line, rendered on every spoke output:
+This section carries a MANDATORY line, rendered on every spoke output:
 
     Control firings: none
 
@@ -1924,6 +2038,10 @@ a control and said nothing, and a spoke that met no control at all, otherwise
 emit byte-identical output; the null line is what makes the second case
 distinguishable from the first. Omission is a structural defect a QA pass can
 see, not a silent pass. Full rule: § Hook-Response Discipline (all spokes).
+
+It also carries the `Post-push mergeability:` line on every spoke output — one per
+push to a release branch, or `Post-push mergeability: no push to a release branch`.
+Full rule: § Post-Push Mergeability Discipline (all spokes).
 
 ### Decisions & Recommendations
 For each finding requiring operator judgment:
@@ -2255,7 +2373,7 @@ This mandate is consistent with — and bounded by — the **operator-agency car
 
 **Two gates enforce completeness at different moments.** (1) **Close-time, on-main, full set:** the Step 4 completion-verification table runs before milestone-close and asserts every canonical output is present on main — including the RELEASE_LOG row itself. This gate blocks an incomplete close. (2) **CI regression catch:** `deploy.sh --check` Check 32 is LOG-row-driven and asserts, for each already-landed RELEASE_LOG row, that its INDEX / DIGEST / NOTES (plus post-cutover tag / Release) companions exist (warn-mode-initial during shakedown, per the bypass-mode-readiness ladder). Check 32 cannot flag a release whose LOG row was never written (it iterates LOG rows); LOG-row presence is the Step 4 table's responsibility, not Check 32's.
 
-**Scaffold-independent enforcement of this Step 4 table (Check 48).** The Step 4 completion-verification above is hub-narrative-executed — it fires only if the hub remembers to run Procedure 7. `deploy.sh --check` **Check 48** is its scaffold-independent mirror: it iterates every `VERIFIED` `RELEASE_LOG` row at/after its cutover and asserts the complete canonical Stage 13 output-set (this table's machine-checkable rows) is present on main, **delegating** the note-content sub-assertion to `lint_release_corpus.py --check note-content`, the body-drift sub-assertion to `check-release-body-drift.sh`, and companion-presence to the same path resolution Check 32 uses — no logic is re-implemented. Check 48 fires on a plain `git`-checkout + `deploy.sh --check` with no scaffold, no sub-task body, and no hub session in the loop; the `--check-close-completeness` verdict-driven probe maps the result to a CI exit (fail-closed at the gate surface, swallowed non-blocking by a committed `.github/close-completeness.enforce` sentinel during calibration). Check 48 sits in lane (2) with Check 32 and **inherits the same LOG-row blind spot** — a release whose LOG row was never written is invisible to it; LOG-row presence remains the Step 4 table's responsibility. This is the scaffold-independent completeness gate the Rigor-Invariance Principle (Procedure 1) names as the machine backstop.
+**Scaffold-independent enforcement of this Step 4 table (Check 48).** The Step 4 completion-verification above is hub-narrative-executed — it fires only if the hub remembers to run Procedure 7. `deploy.sh --check` **Check 48** is its scaffold-independent mirror: it iterates every `VERIFIED` `RELEASE_LOG` row at/after its cutover and asserts the complete canonical Stage 13 output-set (this table's machine-checkable rows) is present on main, **delegating** the note-content sub-assertion to `lint_release_corpus.py --check note-content`, the body-drift sub-assertion to `check-release-body-drift.sh`, and companion-presence to the same path resolution Check 32 uses — no logic is re-implemented. Check 48 fires on a plain `git`-checkout + `deploy.sh --check` with no scaffold, no sub-task body, and no hub session in the loop; the `--check-close-completeness` verdict-driven probe maps the verdict to a CI exit on which `0` means CLEAN and nothing else (a real finding exits `2` and a withheld verdict — the network leg unmeasured, or the gate skipped — exits `3`, both reported non-blocking during calibration; when the committed `.github/close-completeness.enforce` sentinel reads `enforce` it escalates a finding and a skipped gate to `1`, while an unmeasured network leg never blocks). Check 48 sits in lane (2) with Check 32 and **inherits the same LOG-row blind spot** — a release whose LOG row was never written is invisible to it; LOG-row presence remains the Step 4 table's responsibility. This is the scaffold-independent completeness gate the Rigor-Invariance Principle (Procedure 1) names as the machine backstop.
 
 **Merge-ahead close-out (operator direct-merge does NOT waive the close outputs):** When the operator merges the release PR directly — bypassing the Stage 12 gate (e.g., an early-merge under Procedure 6, or a direct UI merge to main) — the completeness binding is unchanged: a direct merge satisfies only the "merge to main" step (the one genuinely-consequential, hard-to-reverse action under the Stage 9 GO); it does NOT satisfy, and does NOT waive, the downstream close outputs. The hub still produces the complete canonical Stage 13 output set (the Step 4 Verification table) — default path the automated close-out, fallback the Phase B chore-PR mechanism when preflight blocks (per the outcome-bound mandate above). Where the merge-ahead skipped the signed-annotated tag (per Stage 12 Phase B3) or the published GitHub Release (Surface 1), those are backfilled. Empirical motivation: the recent incomplete closes all originated from a release PR merged directly, after which the close was improvised and dropped outputs. The merge-ahead path is therefore an explicit, supported close path — not an exception that licenses hand-assembly. `automated-closeout.sh` is the re-entry path after a merge-ahead, and re-running it after a halt is its supported recovery, but it does not assert that every phase is idempotent: the re-run behaviour its `--self-test` pins is listed in its header, which `--help` prints. The Step 4 completion-verification (below) proves all outputs landed regardless of whether the merge went through the Stage 12 gate or ahead of it.
 
@@ -3045,9 +3163,10 @@ canonical anchor for the cumulative-draw failure mode.
    references this constraint — is designed to provide. Until it is queryable,
    the hub relies on the budgeting and timing mitigations below plus
    serialize-on-failure. The **host-API** quota is a different matter and IS
-   queryable today — `gh api rate_limit` returns the REST and GraphQL pools —
-   which is why the quota-budget protocol's second axis can measure where this
-   one can only project.)*
+   measurable today, in-band — a metered probe's own response reports the
+   pool's counter (quota-budget protocol § 4.3b) — which is why the
+   quota-budget protocol's second axis can measure where this one can only
+   project.)*
 2. **Quota-budgeting per release.** Estimate `tokens_per_spoke × N` against the
    typical 5-hour-window allotment. If that estimate exceeds a fresh window's
    allotment, split the batch across multiple windows rather than launching all

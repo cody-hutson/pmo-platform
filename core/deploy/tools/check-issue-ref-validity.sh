@@ -352,11 +352,33 @@ is_test_fixture_path() {
   return 1
 }
 
+# cannot_evaluate <what-could-not-run>
+#   A read that could not run is neither a clean result nor a finding. Report it as
+#   red and stop with this file's input/config failure code, 3 (see INTERFACE).
+#   Every read that decides which files or lines are scanned, or whether a line holds
+#   a reference, sends its could-not-run outcome here. Each one used to read that
+#   outcome as "nothing found", and the gate passed.
+cannot_evaluate() {
+  {
+    echo "## :x: Issue-reference validity gate could not evaluate"
+    echo ""
+    echo "$1."
+    echo ""
+    echo "A scan that could not run is indistinguishable from one that ran clean, so"
+    echo "this is a hard failure, not a pass. The underlying error is in the log above."
+  } >> "$GITHUB_STEP_SUMMARY"
+  echo "::error::Issue-reference validity gate could not evaluate: $1"
+  if [ -n "$CACHE_DIR" ]; then rm -rf "$CACHE_DIR"; fi
+  exit 3
+}
+
+# No `2>/dev/null || true` on the git read: git's status is this function's
+# status, and run_scan reads it.
 collect_files() {
   if [ "$INPUT_MODE" = "path" ]; then
     if [ "${#PATHS[@]}" -gt 0 ]; then printf '%s\n' "${PATHS[@]}"; fi
   else
-    git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' 2>/dev/null || true
+    git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md'
   fi
 }
 
@@ -367,23 +389,27 @@ collect_files() {
 #            reasons is never re-flagged. The added text is keyed by its
 #            head-file line number.
 #   path  -> every line, keyed by its line number.
+#
+# Returns non-zero when the lines could not be read, and run_scan reads that status.
+# In delta mode the diff and the extraction are two commands with a file between
+# them, not a pipeline, so a failed diff cannot hide behind a successful awk.
 scan_lines_for() {
-  local f="$1"
+  local f="$1" diff_file
   if [ "$INPUT_MODE" = "path" ]; then
-    awk '{ print NR ":" $0 }' "$f" || true
-  else
-    git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" \
-      | awk '
-        /^@@/ {
-          # @@ -a,b +c,d @@ -> new-file hunk starts at c
-          plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next
-        }
-        /^\+\+\+/ { next }
-        /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
-        /^-/ { next }
-      ' || true
+    awk '{ print NR ":" $0 }' "$f"
+    return
   fi
-  return 0
+  diff_file="$CACHE_DIR/.diff"
+  git diff --unified=0 "$BASE_SHA"..."$HEAD_SHA" -- "$f" > "$diff_file" || return 1
+  awk '
+    /^@@/ {
+      # @@ -a,b +c,d @@ -> new-file hunk starts at c
+      plus = $3; sub(/^\+/, "", plus); split(plus, pc, ","); newln = pc[1] + 0; next
+    }
+    /^\+\+\+/ { next }
+    /^\+/ { print newln ":" substr($0, 2); newln++ ; next }
+    /^-/ { next }
+  ' "$diff_file"
 }
 
 FOUND=0
@@ -397,6 +423,14 @@ run_scan() {
 
   local f REFBLOCK_HIT REFBLOCK_LINE ADDED_LINES IN_FENCE entry LN line
   local IMPS imp HAS_PROVENANCE NUMS n V
+
+  # FAIL CLOSED on the listing. Its status is read here, where it used to be lost
+  # inside a here-string, so a git that could not list the changed files no longer
+  # scans nothing and passes. An empty listing from a git that succeeded still
+  # means nothing to scan.
+  if ! collect_files > "$CACHE_DIR/.changed"; then
+    cannot_evaluate "git could not list the changed markdown files"
+  fi
 
   while IFS= read -r f || [ -n "$f" ]; do
     [ -z "$f" ] && continue
@@ -444,7 +478,9 @@ run_scan() {
     REFBLOCK_LINE="${REFBLOCK_HIT%%:*}"
     [ -z "$REFBLOCK_LINE" ] && REFBLOCK_LINE=0
 
-    ADDED_LINES="$(scan_lines_for "$f")"
+    if ! ADDED_LINES="$(scan_lines_for "$f")"; then
+      cannot_evaluate "the lines added to ${f} could not be read"
+    fi
     [ -z "$ADDED_LINES" ] && continue
 
     IN_FENCE=0
@@ -462,12 +498,16 @@ run_scan() {
       # SIGPIPE-REWRITE. Was: `printf '%s' "$line" | grep -qE …`. In an `if`
       # condition this is the exact shape whose broken-pipe status inverts to
       # the else branch — a missed detection, non-deterministically.
-      if grep -qE '\bIMP-[0-9]+\b' <<<"$line"; then
-        IMPS="$(printf '%s' "$line" | grep -oE '\bIMP-[0-9]+\b' || true)"
+      # FAIL CLOSED. One grep now both tests and extracts, and its status is read:
+      # exit 1 is "no IMP-NNN on this line", and any other non-zero status is a test
+      # that did not run, which used to read as "no IMP-NNN" too.
+      if IMPS="$(grep -oE '\bIMP-[0-9]+\b' <<<"$line")"; then
         for imp in $IMPS; do
           FOUND=1
           REPORT="${REPORT}${f}:${LN}: ${imp} — deprecated IMP-NNN reference (use a GitHub issue number)"$'\n'
         done
+      elif [ "$?" -ne 1 ]; then
+        cannot_evaluate "the IMP-NNN test did not complete on ${f}:${LN}"
       fi
 
       # A #N rendered as a markdown link (e.g. [#N](...) or any
@@ -480,9 +520,16 @@ run_scan() {
       # The AND-list shape is preserved exactly so `set -e` behaves as before.
       grep -qE '\]\([^)]*\)' <<<"$line" && HAS_PROVENANCE=1
 
-      # #NNNN tokens on this line.
-      NUMS="$(printf '%s' "$line" | grep -oE '#[0-9]+' | tr -d '#' || true)"
-      [ -z "$NUMS" ] && continue
+      # #NNNN tokens on this line. FAIL CLOSED, as for IMP-NNN above: exit 1 is
+      # "no #N on this line", and any other non-zero status is an extraction that
+      # did not run, which used to skip the line as if it held no reference.
+      if NUMS="$(grep -oE '#[0-9]+' <<<"$line")"; then
+        NUMS="${NUMS//[#]/}"
+      elif [ "$?" -eq 1 ]; then
+        continue
+      else
+        cannot_evaluate "the #N extraction did not complete on ${f}:${LN}"
+      fi
       for n in $NUMS; do
         V="$(resolve_issue "$n")"
         case "$V" in
@@ -510,7 +557,7 @@ run_scan() {
         esac
       done
     done <<< "$ADDED_LINES"
-  done <<< "$(collect_files)"
+  done < "$CACHE_DIR/.changed"
   rm -rf "$CACHE_DIR"
   return 0
 }
@@ -1621,6 +1668,115 @@ run_self_test() {
     echo "    PASS  [exact-match]  must-accept=${xm_accept}  must-flag=${xm_flagged}  message-phrases=${xm_msg}  guard=${xm_guard}  inertness=${xm_inert}"
   else
     echo "    ---   [exact-match]  ${xm_fail} failure(s)"
+  fi
+
+  # ── Fail-closed reads: a read that could not run is exit 3, never a pass ────────
+  # Four reads decide what this gate scans and whether a line holds a reference: the
+  # changed-file listing, a file's added lines, the IMP-NNN test and the #N
+  # extraction. Each used to read its own failure as "nothing found", so a scan that
+  # could not run exited 0. Each now stops with exit 3 through cannot_evaluate().
+  #
+  # Every row below is a SENSITIVITY arm or a CONTROL arm. A sensitivity arm forces
+  # one read to fail and expects exit 3 AND that read's own message, so a red raised
+  # by some other read does not count. A control arm is the same run with nothing
+  # forced and expects the clean verdict, exit 0, so a checker that failed every run
+  # would fail here too. The forced failures come from PATH shims that fail one call
+  # shape and hand every other call to the real binary.
+  #
+  # Corpus-free, per the rule in the header: everything lives under $td/fail-closed
+  # and nothing under $FX_REPO, so the equivalence arm's frozen corpus is untouched.
+  # The fixture lines carry no reference at all; the IMP-NNN test and the #N
+  # extraction run on every added line, so a clean line reaches both.
+  local fc_dir="$td/fail-closed" fc_repo fc_base fc_head fc_real_git fc_real_grep
+  local fc_out fc_rc fc_label fc_from fc_to fc_shim fc_want_rc fc_want_msg fc_b fc_h
+  local fc_ok=0 fc_fail=0
+  echo "--- fail-closed reads: a read that could not run is exit 3, not a pass ---"
+  fc_repo="$fc_dir/repo"
+  mkdir -p "$fc_repo/docs" "$fc_dir/no-shim" "$fc_dir/shim-git" "$fc_dir/shim-imp" "$fc_dir/shim-nums"
+  fc_real_git="$(command -v git)"
+  fc_real_grep="$(command -v grep)"
+  fc_git() {
+    git -C "$fc_repo" -c user.name="issue-ref fixture harness" -c user.email="fixtures@example.invalid" \
+      -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+  }
+  if ! { fc_git init -q \
+         && printf 'Fail-closed fixture.\n' > "$fc_repo/docs/a.md" \
+         && fc_git add docs/a.md && fc_git commit -q -m base \
+         && fc_base="$(fc_git rev-parse HEAD)" \
+         && printf 'Fail-closed fixture.\nA clean added line.\n' > "$fc_repo/docs/a.md" \
+         && fc_git add docs/a.md && fc_git commit -q -m head \
+         && fc_head="$(fc_git rev-parse HEAD)"; }; then
+    echo "    FAIL  [fail-closed] could not build the fixture repository"
+    failures=$((failures + 1))
+  else
+    # git: fail only the per-file added-lines read (`diff --unified=0`).
+    cat > "$fc_dir/shim-git/git" <<EOF
+#!/bin/sh
+for a in "\$@"; do
+  case "\$a" in --unified=0) echo "fatal: forced failure (self-test shim)" >&2; exit 128 ;; esac
+done
+exec "$fc_real_git" "\$@"
+EOF
+    # grep: exit 2 only for the IMP-NNN pattern, or only for the #N pattern.
+    cat > "$fc_dir/shim-imp/grep" <<EOF
+#!/bin/sh
+for a in "\$@"; do
+  case "\$a" in *IMP-*) echo "grep: forced failure (self-test shim)" >&2; exit 2 ;; esac
+done
+exec "$fc_real_grep" "\$@"
+EOF
+    cat > "$fc_dir/shim-nums/grep" <<EOF
+#!/bin/sh
+for a in "\$@"; do
+  case "\$a" in *'#[0-9]+'*) echo "grep: forced failure (self-test shim)" >&2; exit 2 ;; esac
+done
+exec "$fc_real_grep" "\$@"
+EOF
+    chmod +x "$fc_dir/shim-git/git" "$fc_dir/shim-imp/grep" "$fc_dir/shim-nums/grep"
+
+    # label | from | to | shim dir | expected exit | expected message (empty: none)
+    while IFS='|' read -r fc_label fc_from fc_to fc_shim fc_want_rc fc_want_msg; do
+      [ -n "$fc_label" ] || continue
+      case "$fc_from" in ABSENT) fc_b="0000000000000000000000000000000000000001" ;; BASE) fc_b="$fc_base" ;; *) fc_b="$fc_head" ;; esac
+      case "$fc_to" in BASE) fc_h="$fc_base" ;; *) fc_h="$fc_head" ;; esac
+      set +e
+      fc_out="$( cd "$fc_repo" && env -u GITHUB_STEP_SUMMARY -u BASE_SHA -u HEAD_SHA \
+          GITHUB_REPOSITORY=fixture-owner/fixture-repo PATH="$fc_dir/$fc_shim:$PATH" \
+          bash "$SCRIPT_PATH" --base "$fc_b" --head "$fc_h" --resolver fixture --fixture-map "$FX_MAP" 2>&1 )"
+      fc_rc=$?
+      set -e
+      assertions=$((assertions + 1))
+      if [ "$fc_rc" -ne "$fc_want_rc" ]; then
+        echo "    FAIL  [fail-closed] ${fc_label}: expected exit ${fc_want_rc}, got ${fc_rc}"
+        printf '%s\n' "$fc_out" | sed -e 's/^/            /'
+        fc_fail=$((fc_fail + 1)); failures=$((failures + 1))
+        continue
+      fi
+      if [ -n "$fc_want_msg" ]; then
+        assertions=$((assertions + 1))
+        case "$fc_out" in
+          *"::error::Issue-reference validity gate could not evaluate: "*"$fc_want_msg"*) : ;;
+          *)
+            echo "    FAIL  [fail-closed] ${fc_label}: exit ${fc_rc}, but not from this read (no '${fc_want_msg}' error)"
+            printf '%s\n' "$fc_out" | sed -e 's/^/            /'
+            fc_fail=$((fc_fail + 1)); failures=$((failures + 1))
+            continue ;;
+        esac
+      fi
+      fc_ok=$((fc_ok + 1))
+    done <<'FC_ROWS'
+listing sensitivity — a base commit git does not have|ABSENT|HEAD|no-shim|3|git could not list the changed markdown files
+listing control — an empty but successful diff passes|HEAD|HEAD|no-shim|0|
+added-lines sensitivity — the per-file diff fails|BASE|HEAD|shim-git|3|could not be read
+IMP-NNN sensitivity — the test's grep exits 2|BASE|HEAD|shim-imp|3|the IMP-NNN test did not complete
+#N sensitivity — the extraction's grep exits 2|BASE|HEAD|shim-nums|3|the #N extraction did not complete
+control — the same range with nothing forced passes|BASE|HEAD|no-shim|0|
+FC_ROWS
+  fi
+  if [ "$fc_fail" -eq 0 ]; then
+    echo "    PASS  [fail-closed]  arms=${fc_ok}  (4 sensitivity, 2 control)"
+  else
+    echo "    ---   [fail-closed]  ${fc_fail} failure(s)"
   fi
 
   echo "--- fixture matrix: 2 invocation forms x 2 input modes x 2 resolvers = 8 cells ---"

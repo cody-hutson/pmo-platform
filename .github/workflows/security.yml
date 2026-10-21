@@ -76,9 +76,13 @@ jobs:
     #              R3 script-context placeholder) over the HTML-emitting surface.
     #   falsification: revert generate_review.py's < > & escape chain, OR add a new un-annotated
     #                  raw-HTML sink assignment / script-context placeholder -> the semgrep job fails.
-    #   posture note: posture=required records intent per gate-efficacy-standard.md Requirement (b);
-    #                 the branch-protection required-set registration + the file-level header list
-    #                 above are an operator repo-settings action (Stage 12), reconciled by audit.
+    #   posture note: `required` here is DERIVED from the surface, not a statement of intent
+    #                 (gate-efficacy-standard.md § Requirement (b)): it holds while this context
+    #                 is registered in main's required status checks, where a red verdict blocks
+    #                 the merge. The evidence is a live read-back of the required set, never this
+    #                 comment, and the reconciliation check names the context unregistered on
+    #                 every run where it is not. If the context leaves the required set, this
+    #                 header returns to `advisory` in the same change.
     # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
     runs-on: ubuntu-latest
     env:

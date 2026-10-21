@@ -44,11 +44,10 @@
 # one observed FLAG is proof the CLEAN rows were adjudicated rather than skipped. The runner
 # fails the run when no row flags, so that proof is asserted and not assumed.
 #
-# @@BULK@@ expands at run time to a filler block sized into a measured two-sided window: above
-# the ~64 KB pipe buffer, so the defect fires, and below the 131,072 B per-argument cap Linux
-# imposes, which the hook trips on a different code path entirely and which would make this row
-# fail for a reason other than the one it names. Both bounds and the chosen size live beside
-# MARKER_BULK_LINES in the runner, measured rather than asserted.
+# @@BULK@@ expands at run time to a filler block sized above the ~64 KB pipe buffer, so the
+# defect fires. No upper bound applies: the hook reads its input by here-string, so no
+# argument-size cap is in play. The chosen size and the measurement behind it live beside
+# MARKER_BULK_LINES in the runner.
 #
 # It is a sentinel and not literal bytes for the same reason @@CANONICAL@@ is one in the
 # refblock fixture: committing ~100 KB of padding to make one row large would make this file
