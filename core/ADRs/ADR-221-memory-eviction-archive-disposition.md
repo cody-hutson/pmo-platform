@@ -1,5 +1,5 @@
 ---
-title: "ADR-217 — An evicted auto-memory entry is archived nowhere by default, and only operator-locally when elected"
+title: "ADR-221 — An evicted auto-memory entry is archived nowhere by default, and only operator-locally when elected"
 status: Proposed
 date: 2026-10-16
 release: authoring-conventions-enforced-or-retired
@@ -15,11 +15,13 @@ source_observations:
 supersedes: ADR-045 in-part (Decision item 4) — the archive-first property only; the graduation framing of item 4 and every other item stand
 ---
 
-# ADR-217 — An evicted auto-memory entry is archived nowhere by default, and only operator-locally when elected
+# ADR-221 — An evicted auto-memory entry is archived nowhere by default, and only operator-locally when elected
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering of the `authoring-conventions-enforced-or-retired` release. The operator rendered the decision at that release's Stage-5 Collective Review scope-lock. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter `status:` field.
+
+**Numbering provenance — `217 → 221`.** Held **ADR-217** branch-local; renumbered to **ADR-221** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 217. In-release citations that read "ADR-217" denote this record.
 
 ## Context
 
