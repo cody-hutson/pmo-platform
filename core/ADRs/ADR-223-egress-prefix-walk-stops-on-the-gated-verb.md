@@ -1,5 +1,5 @@
 ---
-title: ADR-219 — The egress prefix walk stops on the gated verb
+title: ADR-223 — The egress prefix walk stops on the gated verb
 status: Proposed — authored at Stage 6 Engineering under the release's Collective Review scope-lock; the transition to Accepted belongs to the Stage 13 ratification beat
 date: 2026-10-16
 release: hook-walk-adjudicates-every-operand
@@ -13,13 +13,15 @@ source_observations:
   - "The replaced matcher, read at its last commit, gated on an anchored command position but took its path from an unanchored grep over the whole command, so for env -u X gh api <allowlisted> ; gh api -X POST <unlisted> it adjudicated the allowlisted path and allowed. The shipped hook refuses that command because its head walk cannot see the first segment's invocation. Holding the counter still keeps the shipped hook's verdict; it is not derived from the replaced matcher's."
 ---
 
-# ADR-219 — The egress prefix walk stops on the gated verb
+# ADR-223 — The egress prefix walk stops on the gated verb
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering, after the operator's Collective Review scope-lock rendered the scope this record documents. The Stage 13 ratification beat owns the transition to Accepted; this record is not written Accepted at authoring.
 
 **Numbering provenance.** Claimed as **219** against an anchor of **216** on `origin/main`, read from the repository's own ADR-numbering detector, which reported 217 and 218 as this branch's earlier claims; 217 and 218 are also held on sibling branches, and 219 on none at authorship (detection only, never binding). The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, which carries no number shape and resolves at the claim.
+
+**Numbering provenance — `219 → 223`.** Held **ADR-219** branch-local; renumbered to **ADR-223** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 219. In-release citations that read "ADR-219" denote this record.
 
 ## Context
 
