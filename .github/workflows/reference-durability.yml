@@ -6,13 +6,19 @@ name: Reference durability
 #              ref, or raw github.com issue/pull/milestone URL) on its added lines.
 #   falsification: add a markdown link sequence or a version-cutover clause to a
 #                  durable-corpus file in a PR -> this gate turns red on that line.
+#   population: roots=core/rules,core/standards,core/specs,core/disciplines,core/schemas,release/references,release/governance  filter=*.md  exempts=file,file/class — the path allowlist exempts whole files, each entry stating its structural reason (a navigation map, frozen history, a file that documents the reference shapes it would be flagged for), and a per-file override marker exempts one fragile-reference class of a file, because the reference-durability standard treats a legitimately construct-carrying file as a property of the whole file, class by class
+#   population: roots=core/skills,operations/skills,release/skills  filter=SKILL.md|*/references/*.md  exempts=file,file/class — the same allowlist and markers as the declaration above
+#   population: roots=release/releases/plans  filter=*_RELEASE_PLAN.md  exempts=file — the path allowlist exempts this whole root, because a release plan carries release-scope issue references by construction, so no release plan is examined
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
 # Runs on EVERY pull request (no paths filter), so this required status check always
 # reports a result and never blocks a PR as required-but-absent. The job's internal
 # is_durable() predicate selects which changed files to scan, so a PR that changes no
 # durable-corpus file completes as a clean empty scan and passes; durable-corpus PRs
-# scan identically. Scans ONLY added lines (the net-new delta), so pre-existing corpus
+# scan identically. A PR that examines no file while the path allowlist exempts at least
+# one of its in-scope files (every in-scope file exempted, as in a plan-only PR, or some
+# exempted and the rest deleted) passes with a NOT-EVALUATED notice in place of the
+# clean line. Scans ONLY added lines (the net-new delta), so pre-existing corpus
 # rot does not fail an unrelated PR. Drops the `edited` trigger (a PR-body-only edit
 # never touches a durable file), avoiding the shared-release-PR double-run that the
 # parser-clean workflow incurs. Enforces the reference-durability standard: Class L
@@ -85,6 +91,14 @@ jobs:
             echo "::error::reference-durability: MIN_SELFDESCRIBE_WORDS is not numeric (got '${MIN_SELFDESCRIBE_WORDS}')"
             exit 1
           fi
+          # The scope predicate is_durable comes from the same file. An undefined function
+          # returns non-zero, which the selection loop below would read as "not durable" for
+          # every changed file and then print the clean line, so its absence fails the step as
+          # loudly as an unset constant does.
+          if ! command -v is_durable >/dev/null 2>&1; then
+            echo "::error::reference-durability: scope predicate is_durable undefined after sourcing ${PATTERNS_LIB}"
+            exit 1
+          fi
           ALLOWLIST='core/config/allowlists/reference-durability-allowlist.txt'
           # Shared positional-issue-ref classifier (single source of the positional
           # decision; the hook and the fixture-runner invoke this same file via `awk -f`).
@@ -125,26 +139,19 @@ jobs:
             '
           }
 
-          # Durable-corpus path predicate (mirrors the hook scope gate).
-          is_durable() {
-            case "$1" in
-              core/rules/*.md|core/standards/*.md|core/specs/*.md|core/disciplines/*.md|core/schemas/*.md) return 0 ;;
-              release/references/*.md|release/governance/*.md|release/standards/*.md|release/specs/*.md|release/schemas/*.md) return 0 ;;
-              */skills/*/SKILL.md|skills/*/SKILL.md) return 0 ;;
-              */skills/*/references/*.md|skills/*/references/*.md) return 0 ;;
-              release/releases/plans/*_RELEASE_PLAN.md) return 0 ;;
-              *) return 1 ;;
-            esac
-          }
+          # Durable-corpus path predicate: is_durable, sourced above from ${PATTERNS_LIB}. The
+          # hook's scope gate calls the same function, so the two surfaces select the same path
+          # set by construction rather than by two copies kept in step.
 
           # Ledger-surface exemption predicate (Class U scope guard). The ref-permitted
           # ledger surfaces (the five named in the universal-vs-release-pipeline split
           # rule) are categorically exempt from the raw-URL class — a ledger URL is native
           # provenance there, exactly like the release/releases/* exemption the
-          # repo-integrity gates carry. is_durable() already excludes release/releases/*
-          # and top-level CHANGELOG.md (neither matches a durable glob), so at today's
-          # scope this predicate is defense-in-depth + self-documentation: it stays the
-          # active Class-U guard if raw-URL scanning is ever widened beyond is_durable().
+          # repo-integrity gates carry. is_durable() excludes top-level CHANGELOG.md and every
+          # release/releases/* path except the release plans, which it includes and the path
+          # allowlist then exempts whole-file, so at today's scope this predicate is
+          # defense-in-depth + self-documentation: it stays the active Class-U guard if
+          # raw-URL scanning is ever widened beyond is_durable().
           is_ledger_exempt() {
             case "$1" in
               release/releases/*) return 0 ;;
@@ -168,19 +175,41 @@ jobs:
             return 1
           }
 
-          # Changed durable files in this PR.
-          mapfile -t CHANGED < <(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md' 2>/dev/null || true)
+          # Changed .md files in this PR. The diff is this gate's whole input, so a diff that
+          # fails leaves every durable-corpus file unexamined: the step reports NOT-EVALUATED and
+          # fails the job instead of reaching the clean line below, because a required gate that
+          # could not read its input must not read as a pass (ADR-134 D5 — an input failure
+          # crosses the step boundary as a non-zero exit). The diff's stderr stays visible so the
+          # cause reaches the log.
+          if ! CHANGED_LIST="$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- '*.md')"; then
+            {
+              echo "## :no_entry: Reference durability — NOT-EVALUATED"
+              echo ""
+              echo "The changed-file list could not be read: \`git diff\` between the pull request's base and head failed, so no durable-corpus file was examined. This is not a clean result."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error::reference-durability: NOT-EVALUATED — the changed-file list could not be read (git diff failed); this is not a clean result"
+            exit 1
+          fi
+          mapfile -t CHANGED <<<"$CHANGED_LIST"
 
           FOUND=0
           REPORT=""
           URL_FOUND=0      # Class U is warn-mode-initial — tracked separately from FOUND
           URL_REPORT=""
+          # The population this run examined, reported beside the verdict so "nothing found" is
+          # never read without "out of how many" (gate-efficacy standard, Requirement (c)
+          # § Population shortfall). Each changed .md file lands in exactly one bucket: outside
+          # the durable corpus, exempted by the path allowlist, deleted, or examined.
+          N_CHANGED=0; N_SCOPE=0; N_EXEMPT=0; N_DELETED=0; N_EXAMINED=0
 
           for f in "${CHANGED[@]}"; do
             [ -z "$f" ] && continue
+            N_CHANGED=$((N_CHANGED + 1))
             is_durable "$f" || continue
-            is_allowlisted "$f" && continue
-            [ -f "$f" ] || continue   # deleted file — nothing to scan
+            N_SCOPE=$((N_SCOPE + 1))
+            if is_allowlisted "$f"; then N_EXEMPT=$((N_EXEMPT + 1)); continue; fi
+            if [ ! -f "$f" ]; then N_DELETED=$((N_DELETED + 1)); continue; fi   # deleted file — nothing to scan
+            N_EXAMINED=$((N_EXAMINED + 1))
 
             # Per-file override markers — fence-stripped, on the head version.
             # A marker in a fenced code block OR an inline code span ILLUSTRATES the syntax; not
@@ -262,6 +291,11 @@ jobs:
             fi
           done
 
+          # Emitted on every run that read its input, whatever the verdict. A PR that changes no
+          # durable-corpus file examines none: that is a complete scan of an empty delta, stated
+          # as such, not a failed read — a failed read already exited above as NOT-EVALUATED.
+          echo "Population: ${N_CHANGED} changed .md file(s); ${N_SCOPE} in the durable corpus, of which ${N_EXEMPT} exempted by the path allowlist, ${N_DELETED} deleted (nothing to scan) and ${N_EXAMINED} examined" | tee -a "$GITHUB_STEP_SUMMARY"
+
           # Class U — raw ledger URL findings (WARN-MODE-INITIAL): reported in the run
           # summary but NON-FAILING. Emitted regardless of FOUND so the warning surfaces
           # even on a PR that otherwise passes the enforcing classes. Flip-to-enforce
@@ -286,7 +320,24 @@ jobs:
           fi
 
           if [ "$FOUND" -eq 0 ]; then
-            echo ":white_check_mark: Reference durability — no net-new fragile references in durable corpus (enforcing classes L/V/issue-ref)" | tee -a "$GITHUB_STEP_SUMMARY"
+            # A change set that examined no file while the path allowlist exempted at least
+            # one in-scope file (every in-scope file exempted, or some exempted and the rest
+            # deleted) would print the clean line as a pass over no examined file. That is
+            # the gate-efficacy standard's `not-run` state read for a diff-scoped gate: the
+            # clean line is withheld and a not-evaluated notice printed in its place. The job
+            # does not fail, because `not-run` never gates through the population record. An
+            # empty in-scope set, or one of deletions only, is a complete scan of the delta and
+            # keeps the clean line below.
+            if [ "$N_EXAMINED" -eq 0 ] && [ "$N_EXEMPT" -gt 0 ]; then
+              {
+                echo "## :grey_question: Reference durability — NOT-EVALUATED"
+                echo ""
+                echo "No in-scope durable-corpus file in this change set was examined (${N_EXEMPT} of ${N_SCOPE} exempted by the path allowlist, ${N_DELETED} deleted). This is not a clean result; it does not fail the job."
+              } | tee -a "$GITHUB_STEP_SUMMARY"
+              echo "::notice::reference-durability: NOT-EVALUATED — no in-scope durable-corpus file was examined (${N_EXEMPT} of ${N_SCOPE} exempted by the path allowlist, ${N_DELETED} deleted); this is not a clean result"
+              exit 0
+            fi
+            echo ":white_check_mark: Reference durability — no net-new fragile references on the added lines of ${N_EXAMINED} examined durable-corpus file(s) (enforcing classes L/V/issue-ref)" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 

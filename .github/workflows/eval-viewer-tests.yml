@@ -11,9 +11,13 @@ name: Eval Viewer Tests
 #                  the transport job (raw metachar survives) or the DOM job (an injected
 #                  element node appears in a sink) fails RED. A self-contained positive
 #                  control (positive_control.html) proves the DOM detector is non-vacuous.
-#   posture note: posture=required records intent per gate-efficacy-standard.md Requirement (b);
-#                 the branch-protection required-set registration is an operator repo-settings
-#                 action (Stage 12), reconciled by audit.
+#   posture note: `required` here is DERIVED from the surface, not a statement of intent
+#                 (gate-efficacy-standard.md § Requirement (b)): it holds while these contexts
+#                 are registered in main's required status checks, where a red verdict blocks
+#                 the merge. The evidence is a live read-back of the required set, never this
+#                 comment, and the reconciliation check names a context unregistered on every
+#                 run where it is not. If a context leaves the required set, this header
+#                 returns to `advisory` in the same change.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 #
 # This workflow brings the eval-viewer test surface under CI. It ADDS the GHSA-rw36 XSS

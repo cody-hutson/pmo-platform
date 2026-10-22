@@ -107,7 +107,7 @@ Triggered by Check 5 = partial-failure AND operator-authorized "fix-forward" dec
 
 1. **Identify failed copies** from Check 1 / Check 3 / Check 4 outcome enums (the per-skill / per-mirror divergence list).
 2. **Retry per failure class:**
-   - **S-2 SKILL.md copy failure** → `core/deploy/deploy.sh --deploy <name1> <name2> ...` with explicit skill list (manual mode, not auto-detect).
+   - **S-2 SKILL.md copy failure** → re-run the Stage 12 Phase B4 stamped form for the failed names — `core/deploy/deploy.sh --deploy --release <milestone-slug> <name1> <name2> ...` — so each recovered target gains a `resolved` row beside its failed one; an unstamped retry repairs the copy and leaves the release's record reading failed.
    - **Package staleness** → re-run `python3 -m scripts.package_skill <skill-dir> packages/` per affected skill; commit per Phase J.5 rebuild-then-commit pattern (chore PR with message `chore(<version>): rebuilt skill packages from Phase H deploy` — the canonical precedent message form).
    - **Mirror divergence (`core/rules/` ↔ `engineering/rules/`)** → manual `cp` of the canonical source over the divergent mirror; commit per Stage 12 chore-PR pattern.
 3. **Re-verify via Check 1 + Check 3 + Check 4 + Check 5** until aggregator returns full-success.
