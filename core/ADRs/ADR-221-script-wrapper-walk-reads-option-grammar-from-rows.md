@@ -1,5 +1,5 @@
 ---
-title: ADR-217 — The script-execution wrapper walk reads each wrapper's option grammar from rows
+title: ADR-221 — The script-execution wrapper walk reads each wrapper's option grammar from rows
 status: Proposed — authored at Stage 6 Engineering under the release's Collective Review scope-lock; the transition to Accepted belongs to the Stage 13 ratification beat
 date: 2026-10-16
 release: hook-walk-adjudicates-every-operand
@@ -18,13 +18,15 @@ source_observations:
   - "The same pass found a third class moving toward allow against the hook before the rows: a dash-led token whose option name no row lists, unknown or a prefix of two or more options, carrying an attached script path behind a listed wrapper. The parsers reject such an option and run nothing."
 ---
 
-# ADR-217 — The script-execution wrapper walk reads each wrapper's option grammar from rows
+# ADR-221 — The script-execution wrapper walk reads each wrapper's option grammar from rows
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering, after the operator's Collective Review scope-lock rendered the scope this record documents. The Stage 13 ratification beat owns the transition to Accepted; this record is not written Accepted at authoring.
 
 **Numbering provenance.** Claimed as **217** against an anchor of **216** on `origin/main`, read from the repository's own ADR-numbering detector, which also reported 217 and 218 held on sibling branches (detection only, never binding). The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, which carries no number shape and resolves at the claim.
+
+**Numbering provenance — `217 → 221`.** Held **ADR-217** branch-local; renumbered to **ADR-221** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 217. In-release citations that read "ADR-217" denote this record.
 
 ## Context
 
