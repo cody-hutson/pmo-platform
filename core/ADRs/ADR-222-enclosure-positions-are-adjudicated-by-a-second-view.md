@@ -1,5 +1,5 @@
 ---
-title: ADR-218 — Enclosure positions are adjudicated by a second view
+title: ADR-222 — Enclosure positions are adjudicated by a second view
 status: Proposed — authored at Stage 6 Engineering under the release's Collective Review scope-lock; the transition to Accepted belongs to the Stage 13 ratification beat
 date: 2026-10-16
 release: hook-walk-adjudicates-every-operand
@@ -14,13 +14,15 @@ source_observations:
   - "The review also found two first-view corners the design had called untouched: adding the openers to the here-document pre-pass's scan spends its shared work budget sooner, and the receiver conjunction keeps in place a carrier's unquoted substitution that reads a here-document through cat, where nothing runs. Both move toward refusal."
 ---
 
-# ADR-218 — Enclosure positions are adjudicated by a second view
+# ADR-222 — Enclosure positions are adjudicated by a second view
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering, after the operator's Collective Review scope-lock rendered the scope this record documents. The Stage 13 ratification beat owns the transition to Accepted; this record is not written Accepted at authoring.
 
 **Numbering provenance.** Claimed as **218** against an anchor of **216** on `origin/main`, read from the repository's own ADR-numbering detector, which reported 217 as this branch's earlier claim and 217 and 218 also held on sibling branches (detection only, never binding). The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, which carries no number shape and resolves at the claim.
+
+**Numbering provenance — `218 → 222`.** Held **ADR-218** branch-local; renumbered to **ADR-222** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 218. In-release citations that read "ADR-218" denote this record.
 
 ## Context
 
