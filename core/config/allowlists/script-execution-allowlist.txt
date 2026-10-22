@@ -1150,6 +1150,12 @@ core/deploy/tests/test_deploy_path_literals.sh
 # blocks graduation, and its remedy is a sanctioned form for that logic, not a row.
 # The `.pl`, `.pm`, `.rb`, `.js`, `.mjs` and `.cjs` domains hold no row yet.
 #
+# ONE GROUP SINCE, NOT READ FROM THE DRAIN. release/tools/check-dark-branch.py was
+# rowed when this section first met a mainline that added it: a pipeline
+# specification mandates that tool, and with this section holding `.py` rows Arm F
+# of release/tools/check-selftest-coverage.py grades an unrowed mandated tool as
+# remediable now. It is the one group below that did not come from the drain.
+#
 # WHAT A ROW CHANGES. A row stops the drain recording that tool, so the next reading
 # measures what remains. It also opens one shape the walk does not see past: with no
 # arity table for these interpreters, an allowlisted script in an option's VALUE
@@ -1264,6 +1270,10 @@ release/tools/check-adr-durability.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-adr-numbers.py
 ./release/tools/check-adr-numbers.py
 release/tools/check-adr-numbers.py
+[PMO_PLATFORM_ROOT]/release/tools/check-dark-branch.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-dark-branch.py
+./release/tools/check-dark-branch.py
+release/tools/check-dark-branch.py
 [PMO_PLATFORM_ROOT]/release/tools/check-line-range-overlap.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-line-range-overlap.py
 ./release/tools/check-line-range-overlap.py
