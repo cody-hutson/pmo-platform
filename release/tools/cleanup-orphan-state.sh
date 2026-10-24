@@ -112,6 +112,17 @@
 #     when lsof runs but returns a map missing the script's own cwd (the
 #     self-canary). Either leaves every residual REMOVE converted to
 #     "SKIP — liveness oracle unavailable (fail-closed)"
+#     ACTIVE — a worktree or branch is never REMOVE, never WILL-DRAIN, and no flag
+#     (--force included) overrides it when ANY of these holds: (a) its HEAD (for a
+#     branch, its ref) moved, or a file under one of its ignored paths was
+#     written, within the active window — the traces a session leaves when it
+#     reaches its tree by absolute path or `git -C` from a working directory
+#     outside it, which the LIVE scan cannot see; (b) its branch, or the release
+#     it belongs to, has an open PR; (c) it has uncommitted changes. Labelled
+#     "SKIP — active: …" (or "SKIP — uncommitted changes"); a trace that cannot
+#     be read reads "SKIP — active-state unknown: … (fail-closed)". Re-checked at
+#     apply time, immediately before each removal
+#     --active-window-hours N  Widen the active window (default and floor: 24)
 #   META:
 #     --help, -h               Usage
 #     --self-test              Validate detection logic + apply path + post-apply verify +
@@ -220,6 +231,11 @@ MODE="dry-run"            # dry-run | apply
 OUTPUT="markdown"         # markdown | json
 FORCE=0
 SELF_TEST=0
+# Active window for the recent-activity exclusion (see "Active exclusions" below).
+# --active-window-hours can WIDEN it; the floor is the operator's definition of
+# active, so no invocation can narrow it.
+ACTIVE_WINDOW_FLOOR_HOURS=24
+ACTIVE_WINDOW_HOURS=$ACTIVE_WINDOW_FLOOR_HOURS
 
 # Re-version recovery (--reap-orphan-tags scope). The tool consumes the
 # machine-readable re-version ledger to learn which abandoned-version tags an
@@ -578,10 +594,19 @@ worktree_size_mb() {
   echo $((kb / 1024))
 }
 
-worktree_is_clean() {
-  local path="$1"
-  [[ -d "$path" ]] || return 0
-  [[ -z "$(git -C "$path" status --porcelain 2>/dev/null)" ]]
+# Tree state as ONE token: clean | dirty | unreadable. The former two-state test
+# read an empty capture as clean, so a `git status` that FAILED (exit 128 on an
+# unreadable index, with nothing on stdout) reported the tree clean — fail-open on
+# the uncommitted-work exclusion. `unreadable` is a third state the classifier
+# fails closed on. --no-optional-locks keeps this a pure read: without it status
+# refreshes the index and takes index.lock in another session's tree, where it
+# can collide with that session's own git command. A registration whose
+# directory is gone holds no work, so it reads clean (git's prunable class).
+worktree_state() {
+  local path="$1" out
+  [[ -d "$path" ]] || { printf 'clean'; return 0; }
+  out=$(git --no-optional-locks -C "$path" status --porcelain 2>/dev/null) || { printf 'unreadable'; return 0; }
+  if [[ -z "$out" ]]; then printf 'clean'; else printf 'dirty'; fi
 }
 
 # ─── Self-worktree + path normalization (#333) ──────────────────────────────
@@ -740,6 +765,302 @@ worktree_is_live() {
   return 1
 }
 
+# ─── Active exclusions ───────────────────────────────────────────────────────
+#
+# A worktree or branch is ACTIVE when ANY of these holds, and an active item is
+# never REMOVE, never projected WILL-DRAIN, and no flag overrides it — --force
+# included:
+#   (a) recent or held — its HEAD (for a branch, its ref) moved within the active
+#       window, a file under one of its ignored paths was written within the
+#       window, or a live process or a worktree lock holds it;
+#   (b) open PR — its branch, or the release it belongs to, has an OPEN pull
+#       request;
+#   (c) uncommitted work — it has uncommitted changes.
+# The live and locked limbs of (a) and the dirty limb of (c) are classes
+# classify_worktree already carried. What this section adds is the case the cwd
+# oracle cannot see: a session rooted OUTSIDE the repository that reaches its
+# worktree by absolute path or `git -C` leaves no process cwd in the tree. The
+# traces it does leave are HEAD movement, recorded in the reflog, and file writes.
+# The design record is release/ADRs/ADR-223.
+#
+# Every reader here FAILS CLOSED: a trace that cannot be read makes the item
+# active, never quiet. Each sets ACTIVE_REASON to a wholly script-controlled
+# label — it reaches unescaped JSON — beginning "SKIP — active: " or, for a trace
+# that could not be read, "SKIP — active-state unknown: ", so the report can count
+# the class. Both prefixes carry a colon, which keeps them apart from the older
+# "SKIP — active worktree attached" label.
+ACTIVE_REASON=""
+NOW_EPOCH=""                         # one clock read per pass, so every row is judged against one instant
+HEAD_SIGNAL_STATE="not-consulted"    # not-consulted | ok | unavailable (reflogs switched off)
+OPEN_PR_ENTRIES=()                   # "headRefName<TAB>number" for every OPEN pull request
+OPEN_PR_BUILT=0
+OPEN_PR_STATE="unavailable"          # unavailable | ok — FAIL-CLOSED default, like ORACLE_STATE
+
+# HEAD movement is only a trace where git records it. core.logAllRefUpdates
+# defaults on in a non-bare repository; switched off, no reflog moves and every
+# tree would read quiet, so the signal declares itself unavailable and the
+# classifier converts residual REMOVEs fail-closed (the liveness oracle's
+# posture). `tr` drains its input, so this pipe has no early-closing reader.
+ensure_head_signal() {
+  [[ -n "$NOW_EPOCH" ]] || NOW_EPOCH=$(date +%s)
+  [[ "$HEAD_SIGNAL_STATE" != "not-consulted" ]] && return 0
+  local v
+  v=$(git config --get core.logAllRefUpdates 2>/dev/null || true)
+  v=$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')
+  case "$v" in
+    false|no|off|0)
+      HEAD_SIGNAL_STATE="unavailable"
+      echo "WARN HEAD-movement signal unavailable — core.logAllRefUpdates is off, so no reflog records movement; fail-closed (would-be-REMOVE items will be conservatively SKIPPED)" >&2 ;;
+    *) HEAD_SIGNAL_STATE="ok" ;;
+  esac
+  return 0
+}
+
+# Epoch of the newest reflog entry for <ref>, read from <path>. Prints the epoch,
+# or nothing when the reflog holds no entry; returns 1 when git cannot read it, and
+# the caller fails closed. `--date=unix` makes git print the entry as
+# `<ref>@{<epoch>}` on every platform this runs on — a file mtime would not serve,
+# because BSD and GNU `stat` disagree on flags, and the index mtime is refreshed by
+# any `git status`. awk's early exit reads a here-string, not a live pipe.
+reflog_epoch() {
+  local path="$1" ref="$2" out e
+  out=$(git -C "$path" reflog show --date=unix -1 "$ref" -- 2>/dev/null) || return 1
+  [[ -z "$out" ]] && return 0
+  e=$(awk -F'[{}]' 'NR==1 { print $2; exit }' <<<"$out")
+  case "$e" in ""|*[!0-9]*) return 1 ;; esac
+  printf '%s' "$e"
+}
+
+# Returns 0 when <epoch> falls inside the window. A future epoch (an entry written
+# after NOW_EPOCH was read — the apply-time case) is inside it by construction.
+epoch_within_window() {
+  [[ $(( NOW_EPOCH - $1 )) -lt $(( ACTIVE_WINDOW_HOURS * 3600 )) ]]
+}
+
+age_phrase() {
+  local s=$(( NOW_EPOCH - $1 ))
+  [[ "$s" -lt 0 ]] && s=0
+  if [[ "$s" -lt 3600 ]]; then printf '%sm ago' "$(( s / 60 ))"; else printf '%sh ago' "$(( s / 3600 ))"; fi
+}
+
+# (a) for a worktree: HEAD movement, then writes under ignored paths. Sets
+# ACTIVE_REASON and returns 0 when active, 1 when quiet. Only IGNORED paths are
+# scanned for writes, for two reasons: a modified or untracked file already reads
+# dirty, and a checkout's fresh mtimes coincide with the HEAD movement read first.
+# Ignored paths are the gap: a session can work for days in an in-repo ignored home
+# without moving HEAD or dirtying the tree, and `git worktree remove` deletes
+# ignored files WITHOUT --force. Ignored content written outside the window is not
+# activity — this repository's trees carry install copies there routinely, and
+# treating their mere presence as active would strand every such tree.
+worktree_recent_reason() {
+  local path="$1" e rc=0 ign line hit
+  local -a ign_paths=()
+  ACTIVE_REASON=""
+  [[ -d "$path" ]] || return 1
+  ensure_head_signal
+  e=$(reflog_epoch "$path" HEAD) || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    ACTIVE_REASON="SKIP — active-state unknown: HEAD reflog unreadable (fail-closed)"; return 0
+  fi
+  if [[ -n "$e" ]] && epoch_within_window "$e"; then
+    ACTIVE_REASON="SKIP — active: recent HEAD movement ($(age_phrase "$e"))"; return 0
+  fi
+  ign=$(git -C "$path" ls-files --others --ignored --exclude-standard --directory 2>/dev/null) || {
+    ACTIVE_REASON="SKIP — active-state unknown: ignored-path listing failed (fail-closed)"; return 0; }
+  [[ -z "$ign" ]] && return 1
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && ign_paths+=("${path}/${line%/}")
+  done <<<"$ign"
+  [[ "${#ign_paths[@]}" -eq 0 ]] && return 1   # bash 3.2 + set -u: never expand an empty array
+  rc=0
+  hit=$(find "${ign_paths[@]}" -type f -mmin "-$(( ACTIVE_WINDOW_HOURS * 60 ))" -print -quit 2>/dev/null) || rc=$?
+  if [[ -n "$hit" ]]; then
+    ACTIVE_REASON="SKIP — active: ignored files written within ${ACTIVE_WINDOW_HOURS}h"; return 0
+  fi
+  if [[ "$rc" -ne 0 ]]; then
+    ACTIVE_REASON="SKIP — active-state unknown: ignored-path scan incomplete (fail-closed)"; return 0
+  fi
+  return 1
+}
+
+# (a) for a local branch: its own ref's reflog, read in the script's repository.
+branch_recent_reason() {
+  local b="$1" e rc=0
+  ACTIVE_REASON=""
+  ensure_head_signal
+  e=$(reflog_epoch . "refs/heads/${b}") || rc=$?
+  if [[ "$rc" -ne 0 ]]; then
+    ACTIVE_REASON="SKIP — active-state unknown: branch reflog unreadable (fail-closed)"; return 0
+  fi
+  if [[ -n "$e" ]] && epoch_within_window "$e"; then
+    ACTIVE_REASON="SKIP — active: recent branch movement ($(age_phrase "$e"))"; return 0
+  fi
+  return 1
+}
+
+# (a) for a remote branch. The server keeps no reflog this tool can read, so the
+# local view stands in for it, and only while it is current: the server tip
+# (ls-remote) must equal the local remote-tracking tip — a mismatch means the branch
+# moved since the last fetch, so how recently is unknown — and both that tip's
+# committer time and the tracking ref's newest reflog entry must sit outside the
+# window.
+remote_recent_reason() {
+  local b="$1" srv loc ct e rc=0
+  ACTIVE_REASON=""
+  ensure_head_signal
+  srv=$(git ls-remote --heads "$REMOTE_NAME" "refs/heads/${b}" 2>/dev/null) || {
+    ACTIVE_REASON="SKIP — active-state unknown: remote unreadable (fail-closed)"; return 0; }
+  srv="${srv%%	*}"
+  loc=$(git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${b}" 2>/dev/null || true)
+  if [[ -z "$srv" || -z "$loc" || "$srv" != "$loc" ]]; then
+    ACTIVE_REASON="SKIP — active-state unknown: remote branch moved since the last fetch (fail-closed)"; return 0
+  fi
+  ct=$(git log -1 --format=%ct "$loc" 2>/dev/null || true)
+  case "$ct" in ""|*[!0-9]*)
+    ACTIVE_REASON="SKIP — active-state unknown: remote tip unreadable (fail-closed)"; return 0 ;;
+  esac
+  if epoch_within_window "$ct"; then
+    ACTIVE_REASON="SKIP — active: recent remote commit ($(age_phrase "$ct"))"; return 0
+  fi
+  e=$(reflog_epoch . "refs/remotes/${REMOTE_NAME}/${b}") || rc=$?
+  if [[ "$rc" -eq 0 && -n "$e" ]] && epoch_within_window "$e"; then
+    ACTIVE_REASON="SKIP — active: remote branch updated within ${ACTIVE_WINDOW_HOURS}h"; return 0
+  fi
+  return 1
+}
+
+# (b) needs only the OPEN pull requests, read by their own query rather than out
+# of the all-states map above. That map degrades on truncation and falls back to
+# per-branch lookups, which can answer "does THIS branch have a PR" but never
+# "which releases have an open one" — and the open set is small, so one query
+# answers both completely. Truncation-guarded like the map (git-workflow.md
+# § Batch CLI Query Limits); any failure leaves OPEN_PR_STATE unavailable, and
+# every reader below then fails closed.
+build_open_pr_list() {
+  OPEN_PR_ENTRIES=(); OPEN_PR_STATE="unavailable"; OPEN_PR_BUILT=1
+  local raw line n=0
+  ensure_gh_bin
+  if [[ -z "$GH_BIN" ]]; then
+    echo "WARN open-PR list unavailable — gh not resolvable under the pinned PATH; fail-closed (would-be-REMOVE items will be conservatively SKIPPED)" >&2
+    return 0
+  fi
+  raw=$("$GH_BIN" pr list --repo "$REPO_SLUG" --state open --limit "$PR_MAP_CEILING" --json headRefName,number --jq '.[] | [.headRefName, (.number|tostring)] | @tsv' 2>/dev/null) || {
+    echo "WARN open-PR list unavailable — gh pr list failed; fail-closed (would-be-REMOVE items will be conservatively SKIPPED)" >&2
+    return 0; }
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    OPEN_PR_ENTRIES+=("$line"); n=$((n + 1))
+  done <<<"$raw"
+  if [[ "$n" -ge "$PR_MAP_CEILING" ]]; then
+    echo "WARN open-PR list unavailable — ${n} rows reached the ${PR_MAP_CEILING} ceiling (truncation-suspect); fail-closed" >&2
+    OPEN_PR_ENTRIES=(); return 0
+  fi
+  OPEN_PR_STATE="ok"
+  echo "PASS open-PR list — ${n} open PR(s) read in one gh list" >&2
+  return 0
+}
+
+ensure_open_pr_list() {
+  if [[ "$OPEN_PR_BUILT" -eq 0 ]]; then build_open_pr_list; fi
+  return 0
+}
+
+# Does <branch> belong to the release whose branch is release/<slug>? The families
+# detect_release_close sweeps for that release (release/<slug>*, chore/<slug>*,
+# chore/v*-<slug>*, and chore/vX.Y-stage-* when the slug carries a version), plus
+# spoke/<slug>*; a version-prefixed slug is matched in its bare form too. A sibling
+# release whose slug merely extends this one also matches — over-matching excludes
+# MORE, the safe direction for an exclusion, where under-matching would not be.
+branch_in_release_family() {
+  local b="$1" s="$2" vp bare x
+  vp=$(version_prefix_of "$s")
+  bare="$s"; [[ -n "$vp" ]] && bare="${s#"${vp}"-}"
+  if [[ -n "$vp" ]]; then
+    case "$b" in chore/${vp}-stage-*) return 0 ;; esac
+  fi
+  for x in "$s" "$bare"; do
+    case "$b" in release/${x}*|chore/${x}*|chore/v*-${x}*|spoke/${x}*) return 0 ;; esac
+  done
+  return 1
+}
+
+# (b) for a branch (local, remote, or a worktree's). Sets ACTIVE_REASON, returns 0
+# when active.
+branch_open_pr_reason() {
+  local branch="$1" e head num
+  ACTIVE_REASON=""
+  ensure_open_pr_list
+  if [[ "$OPEN_PR_STATE" != "ok" ]]; then
+    ACTIVE_REASON="SKIP — active-state unknown: open-PR list unavailable (fail-closed)"; return 0
+  fi
+  for e in "${OPEN_PR_ENTRIES[@]:-}"; do
+    [[ -z "$e" ]] && continue
+    head="${e%%	*}"; num="${e#*	}"
+    if [[ "$head" == "$branch" ]]; then
+      ACTIVE_REASON="SKIP — active: open PR #${num}"; return 0
+    fi
+    case "$head" in
+      release/*)
+        if branch_in_release_family "$branch" "${head#release/}"; then
+          ACTIVE_REASON="SKIP — active: release has an open PR #${num}"; return 0
+        fi ;;
+    esac
+  done
+  return 1
+}
+
+# (b) for a DETACHED worktree carrying commits not on the mainline: no branch to
+# look up, but those commits can still be an open PR's — HEAD reachable from the
+# PR head's remote-tracking ref. Consulted only for a detached tree with commits
+# ahead of the mainline: a tree sitting on mainline history is reachable from every
+# PR head, which would mark every such tree active and say nothing. A head whose
+# tracking ref is absent cannot be checked, and fails closed.
+detached_open_pr_reason() {
+  local path="$1" e head num
+  ACTIVE_REASON=""
+  ensure_open_pr_list
+  if [[ "$OPEN_PR_STATE" != "ok" ]]; then
+    ACTIVE_REASON="SKIP — active-state unknown: open-PR list unavailable (fail-closed)"; return 0
+  fi
+  for e in "${OPEN_PR_ENTRIES[@]:-}"; do
+    [[ -z "$e" ]] && continue
+    head="${e%%	*}"; num="${e#*	}"
+    if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${head}" >/dev/null 2>&1; then
+      ACTIVE_REASON="SKIP — active-state unknown: open PR #${num} head not fetched (fail-closed)"; return 0
+    fi
+    if git -C "$path" merge-base --is-ancestor HEAD "refs/remotes/${REMOTE_NAME}/${head}" 2>/dev/null; then
+      ACTIVE_REASON="SKIP — active: commits belong to open PR #${num}"; return 0
+    fi
+  done
+  return 1
+}
+
+# Nothing in git forbids a worktree directory from containing another registered
+# worktree, and removing the outer tree deletes the inner tree's directory whatever
+# the inner tree's own classification says. An outer tree is therefore never
+# removable while it contains one. awk reads the whole here-string (END), so there
+# is no early exit and no live pipe. [WTPIPEGUARD]
+worktree_contains_other() {
+  local path="$1"
+  [[ "$WT_SNAPSHOT_BUILT" == "1" ]] || refresh_wt_snapshot
+  awk -v p="worktree ${path}/" 'index($0, p) == 1 { found = 1 } END { exit !found }' <<<"$WT_SNAPSHOT"
+}
+
+# Every worktree exclusion that can change after classification, re-read at apply
+# time: a fresh HEAD movement or write, new uncommitted work, a nested tree, an open
+# PR. Sets ACTIVE_REASON and returns 0 when the tree must be skipped. Called only for
+# rows still reading REMOVE, after the liveness re-check.
+worktree_active_now() {
+  local path="$1" branch="$2" st
+  if worktree_recent_reason "$path"; then return 0; fi
+  st=$(worktree_state "$path")
+  if [[ "$st" == "unreadable" ]]; then ACTIVE_REASON="SKIP — active-state unknown: git status unreadable (fail-closed)"; return 0; fi
+  if [[ "$st" == "dirty" ]]; then ACTIVE_REASON="SKIP — uncommitted changes"; return 0; fi
+  if worktree_contains_other "$path"; then ACTIVE_REASON="SKIP — contains another registered worktree"; return 0; fi
+  if [[ -n "$branch" ]] && branch_open_pr_reason "$branch"; then return 0; fi
+  return 1
+}
+
 # ─── Outcome detection ───────────────────────────────────────────────────────
 
 # Populated by detect_*. Format per record: tab-separated fields.
@@ -788,6 +1109,11 @@ classify_local() {
   done
 
   if is_protected "$branch"; then action="SKIP — protected"; fi
+  # Active exclusions (a) and (b) precede the attachment skip. That skip is the one
+  # label the resolve pass drains, so an active branch must never carry it — labelled
+  # active here, it is not the resolve pass's business at all.
+  if [[ "$action" == "REMOVE" ]] && branch_recent_reason "$branch"; then action="$ACTIVE_REASON"; fi
+  if [[ "$action" == "REMOVE" ]] && branch_open_pr_reason "$branch"; then action="$ACTIVE_REASON"; fi
   if [[ "$action" == "REMOVE" ]] && branch_has_worktree "$branch"; then action="SKIP — active worktree attached"; fi
 
   unique=$(git rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..${branch}" 2>/dev/null || echo "?")
@@ -848,6 +1174,11 @@ classify_remote() {
   pr_n="$PR_LOOKUP_N"
   pr_s="$PR_LOOKUP_S"
   if [[ "$action" == "REMOVE" && "$pr_s" != "MERGED" ]]; then action="SKIP — PR not merged ($pr_s)"; fi
+  # Active exclusions (b) then (a). A newest-PR MERGED head can still carry a newer
+  # open PR, or belong to a release that has one; and work pushed after the merge is
+  # read through the tracking ref (remote_recent_reason).
+  if [[ "$action" == "REMOVE" ]] && branch_open_pr_reason "$branch"; then action="$ACTIVE_REASON"; fi
+  if [[ "$action" == "REMOVE" ]] && remote_recent_reason "$branch"; then action="$ACTIVE_REASON"; fi
 
   REMOTE_BRANCH_CANDIDATES+=("${branch}	${pr_n}	${pr_s}	${action}")
 }
@@ -871,7 +1202,7 @@ classify_worktree() {
   ensure_liveness_map
   cand_phys="$(physical_path "$path")"
 
-  worktree_is_clean "$path" || status="dirty"
+  status=$(worktree_state "$path")
   disk=$(worktree_size_mb "$path")
 
   # Lock label resolved up-front so the precedence chain below stays one
@@ -887,9 +1218,10 @@ classify_worktree() {
     fi
   fi
 
-  # Clause precedence (v1.11 combined design spec, D-3; #6411 inserts LOCKED):
-  # protective context classes first (primary → SELF → locked → live), tree-state
-  # classes second (dirty →
+  # Clause precedence (v1.11 combined design spec, D-3; #6411 inserts LOCKED; the
+  # active exclusions insert recent activity, unreadable status, nesting and open
+  # PR): protective context classes first (primary → SELF → locked → live → recent
+  # activity), tree-state classes second (unreadable → dirty → nested → open PR →
   # protected → not-merged). A dirty SELF tree reports SELF; a dirty live-held
   # tree reports the live session. Protective classes are facts about WHO holds
   # the tree, are stable across tree-state changes, and are never overridden by
@@ -927,8 +1259,20 @@ classify_worktree() {
     action="$lock_label"
   elif [[ "$ORACLE_STATE" == "ok" ]] && worktree_is_live "$cand_phys"; then
     action="SKIP — live session (${LIVE_HIT})"
+  elif worktree_recent_reason "$path"; then
+    # The active exclusions (see "Active exclusions"). Recent activity follows the
+    # live clause because it is the holder class the cwd oracle cannot see, and it
+    # precedes every tree-state clause for the reason the protective classes do:
+    # it is a fact about WHO may be using the tree.
+    action="$ACTIVE_REASON"
+  elif [[ "$status" == "unreadable" ]]; then
+    action="SKIP — active-state unknown: git status unreadable (fail-closed)"
   elif [[ "$status" == "dirty" ]]; then
     action="SKIP — uncommitted changes"
+  elif worktree_contains_other "$path"; then
+    action="SKIP — contains another registered worktree"
+  elif [[ -n "$branch" ]] && branch_open_pr_reason "$branch"; then
+    action="$ACTIVE_REASON"
   elif [[ -n "$branch" ]] && is_protected "$branch"; then
     action="SKIP — protected branch"
   elif [[ -n "$branch" ]] && ! is_fully_merged "$branch"; then
@@ -954,10 +1298,19 @@ classify_worktree() {
     # If squash-merge is ever adopted, switch to content-aware detection
     # (git cherry / patch-id) to avoid a false-positive pileup.
     action="SKIP — detached, unmerged commits (${detached_ahead})"
+  elif [[ -z "$branch" && "$FORCE" == "1" ]] && [[ -d "$path" ]] \
+       && { detached_ahead=$(git -C "$path" rev-list --count "${REMOTE_NAME}/${MAIN_BRANCH}..HEAD" 2>/dev/null || echo "?"); [[ "$detached_ahead" != "0" ]]; } \
+       && detached_open_pr_reason "$path"; then
+    # --force re-promotes a detached-unmerged tree (the clause above), but not one
+    # whose commits are an open PR's: that tree is active, and nothing overrides it.
+    action="$ACTIVE_REASON"
   fi
 
   if [[ "$action" == "REMOVE" && "$ORACLE_STATE" != "ok" ]]; then
     action="SKIP — liveness oracle unavailable (fail-closed)"
+  fi
+  if [[ "$action" == "REMOVE" && "$HEAD_SIGNAL_STATE" == "unavailable" ]]; then
+    action="SKIP — active-state unknown: HEAD-movement signal off (fail-closed)"
   fi
 
   WORKTREE_CANDIDATES+=("${path}	${branch}	${status}	${disk}	${action}")
@@ -1422,6 +1775,9 @@ emit_markdown() {
   local lc=${#LOCAL_BRANCH_CANDIDATES[@]} rc=${#REMOTE_BRANCH_CANDIDATES[@]} wc=${#WORKTREE_CANDIDATES[@]}
   local pc=${#PRUNED_TRACKING_REFS[@]} pi=${#PRUNE_INDUCED_REFS[@]} ps=${#PRUNE_SURVIVORS[@]} pline ptot=""
   local lr=0 rr=0 wr=0 disk_total=0 bfails=0 wfails=0 sc=0 lvc=0 fcc=0 lkc=0 pd=0 a ref
+  # Active exclusions: worktrees / local / remote rows excluded as active, and how
+  # many of those failed closed because a trace could not be read.
+  local axw=0 axl=0 axr=0 axu=0
 
   # Mode-aware report vocabulary. In --apply, apply_removals (which now runs BEFORE this
   # emitter) has rewritten each acted-on candidate's action field to REMOVED (deleted) or
@@ -1442,12 +1798,20 @@ emit_markdown() {
     # subtraction is how a report ends up asserting removable + skipped != total.
     # pd carries only the explanatory split for the Totals line below.
     [[ "$a" == WILL-DRAIN* ]] && { ((lr++)) || true; ((pd++)) || true; }
+    case "$a" in
+      "SKIP — active: "*) ((axl++)) || true ;;
+      "SKIP — active-state unknown: "*) ((axl++)) || true; ((axu++)) || true ;;
+    esac
   done
   for r in "${REMOTE_BRANCH_CANDIDATES[@]:-}"; do
     [[ -z "$r" ]] && continue
     a=$(awk -F'\t' '{print $4}' <<<"$r")
     [[ "$a" == "$want" ]] && ((rr++)) || true
     [[ "$a" == FAILED* ]] && ((bfails++)) || true
+    case "$a" in
+      "SKIP — active: "*) ((axr++)) || true ;;
+      "SKIP — active-state unknown: "*) ((axr++)) || true; ((axu++)) || true ;;
+    esac
   done
   for r in "${WORKTREE_CANDIDATES[@]:-}"; do
     [[ -z "$r" ]] && continue
@@ -1460,6 +1824,8 @@ emit_markdown() {
       "SKIP — worktree locked"*) ((lkc++)) || true ;;
       "SKIP — live session"*) ((lvc++)) || true ;;
       "SKIP — liveness oracle unavailable"*) ((fcc++)) || true ;;
+      "SKIP — active: "*|"SKIP — uncommitted changes") ((axw++)) || true ;;
+      "SKIP — active-state unknown: "*) ((axw++)) || true; ((axu++)) || true ;;
     esac
   done
 
@@ -1495,6 +1861,7 @@ emit_markdown() {
 - **Stale remote-tracking refs:** $pline
 - **Worktrees:** $wc total ($wr $verb, ≈${disk_total} MB disk $recov)
 - **Protected worktrees:** $sc SELF (script's own runtime), $lkc locked, $lvc held by live sessions$([[ "$ORACLE_BUILT" -eq 1 && "$ORACLE_STATE" != "ok" ]] && echo " — liveness oracle UNAVAILABLE (fail-closed; $fcc removal(s) blocked)")
+- **Excluded as active:** $axw worktree(s), $axl local branch(es), $axr remote branch(es) — HEAD, branch or ignored-file activity within ${ACTIVE_WINDOW_HOURS}h, an open PR, or uncommitted work; never removable, and no flag overrides it$([[ "$axu" -gt 0 ]] && echo " ($axu of them fail-closed: a trace could not be read)")
 
 ## Detail — Local branches
 
@@ -1617,6 +1984,12 @@ EOF
   if [[ "$fcc" -gt 0 ]]; then
     echo "- $fcc removal(s) blocked — liveness oracle unavailable (fail-closed)"
   fi
+  if [[ $((axw + axl + axr)) -gt 0 ]]; then
+    echo "- $axw worktree(s), $axl local and $axr remote branch(es) excluded as active — each row's Action names the trace; no flag, \`--force\` included, makes an active item removable"
+  fi
+  if [[ "$axu" -gt 0 ]]; then
+    echo "- $axu of those failed closed: a trace (reflog, \`git status\`, the open-PR list, or the remote) could not be read, so the item is treated as active"
+  fi
   if [[ "$MODE" == "apply" && "$FREED_RESOLVED" -gt 0 ]]; then
     echo "- $FREED_RESOLVED branch(es) removed after being freed by this run's worktree removals (resolve pass)"
   fi
@@ -1649,9 +2022,10 @@ emit_json() {
   # Never-consulted must not read "unavailable" (DT F-01): a never-built map
   # carries no host-health evidence in either direction, so report the third
   # state rather than overclaiming degradation (or health).
-  local oracle_field="$ORACLE_STATE"
+  local oracle_field="$ORACLE_STATE" open_pr_field="$OPEN_PR_STATE"
   if [[ "$ORACLE_BUILT" -eq 0 ]]; then oracle_field="not-consulted"; fi
-  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,"liveness_oracle":"%s","tracking_ref_enumeration":"%s",\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE" "$oracle_field" "$STALE_ENUM_STATE"
+  if [[ "$OPEN_PR_BUILT" -eq 0 ]]; then open_pr_field="not-consulted"; fi
+  printf '{"timestamp":"%s","scope":"%s","milestone_slug":"%s","mode":"%s","force":%s,"liveness_oracle":"%s","tracking_ref_enumeration":"%s","active_window_hours":%s,"head_movement_signal":"%s","open_pr_list":"%s",\n' "$ts" "$SCOPE" "$MILESTONE_SLUG" "$MODE" "$FORCE" "$oracle_field" "$STALE_ENUM_STATE" "$ACTIVE_WINDOW_HOURS" "$HEAD_SIGNAL_STATE" "$open_pr_field"
   printf '  "local_branches":[\n'
   local first=1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
@@ -1718,7 +2092,15 @@ apply_removals() {
   local wt_flag=""
   if [[ "$FORCE" == "1" ]]; then wt_flag="--force"; fi
 
-  local r name path action idx unique del_flag wt_err wt_cause
+  local r name path action idx unique del_flag wt_err wt_cause wbranch
+
+  # Apply-time re-read of the active exclusions, mirroring the liveness re-check
+  # below: enumeration and removal are minutes apart, and an exclusion that became
+  # true in between must still stop the removal. A fresh clock and a fresh open-PR
+  # list, then every row still REMOVE is re-checked immediately before git acts on
+  # it. An item found active is rewritten in place to its SKIP label.
+  NOW_EPOCH=$(date +%s)
+  OPEN_PR_BUILT=0; ensure_open_pr_list
 
   idx=-1
   for r in "${LOCAL_BRANCH_CANDIDATES[@]:-}"; do
@@ -1727,6 +2109,11 @@ apply_removals() {
     name=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $6}' <<<"$r")
     unique=$(awk -F'\t' '{print $2}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED local $name — $action" >&2; continue; }
+    if branch_recent_reason "$name" || branch_open_pr_reason "$name"; then
+      echo "SKIPPED local $name — active at apply time (${ACTIVE_REASON})" >&2
+      LOCAL_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"$ACTIVE_REASON"
+      continue
+    fi
     # #683 (#2780 Option A') deletability-baseline fix: classification proves
     # merged-ness against origin/main (is_fully_merged / field-2 unique==0), but
     # `git branch -d` is HEAD-relative — from a behind-HEAD checkout (the Stage 13
@@ -1757,6 +2144,11 @@ apply_removals() {
     [[ -z "$r" ]] && continue
     name=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $4}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && { echo "SKIPPED remote $name — $action" >&2; continue; }
+    if branch_open_pr_reason "$name" || remote_recent_reason "$name"; then
+      echo "SKIPPED remote $name — active at apply time (${ACTIVE_REASON})" >&2
+      REMOTE_BRANCH_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"$ACTIVE_REASON"
+      continue
+    fi
     ensure_gh_bin
     if [[ -z "$GH_BIN" ]]; then
       echo "FAIL remote $name — gh unavailable under the pinned PATH; cannot delete remote ref" >&2
@@ -1787,15 +2179,25 @@ apply_removals() {
     ((idx++)) || true
     [[ -z "$r" ]] && continue
     path=$(awk -F'\t' '{print $1}' <<<"$r"); action=$(awk -F'\t' '{print $5}' <<<"$r")
+    wbranch=$(awk -F'\t' '{print $2}' <<<"$r")
     [[ "$action" != "REMOVE" ]] && continue
     if [[ "$ORACLE_STATE" == "ok" ]]; then
       if worktree_is_live "$path"; then
         echo "SKIPPED worktree $path — live session detected at apply time (${LIVE_HIT})" >&2
         WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"SKIP — live session (${LIVE_HIT})"
+        continue
       fi
     else
       echo "SKIPPED worktree $path — liveness oracle unavailable at apply time; fail-closed" >&2
       WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"SKIP — liveness oracle unavailable (fail-closed)"
+      continue
+    fi
+    # The rest of the active exclusions. The uncommitted-work limb is what keeps
+    # `--apply --force` from deleting a tree that picked up changes after
+    # classification — git refuses a dirty tree without --force, but not with it.
+    if worktree_active_now "$path" "$wbranch"; then
+      echo "SKIPPED worktree $path — active at apply time (${ACTIVE_REASON})" >&2
+      WORKTREE_CANDIDATES[$idx]="${r%$'\t'*}"$'\t'"$ACTIVE_REASON"
     fi
   done
 
@@ -2133,7 +2535,8 @@ branch_holders_all_in_removal_set() {
   [[ "$holders" -le "$removing" ]]
 }
 
-# The gates, shared by both passes. Sets no globals.
+# The gates, shared by both passes. Sets no globals other than the active
+# exclusions' ACTIVE_REASON scratch label, which no caller reads after it returns.
 #   rc 0 — this run frees <branch> and it is removable
 #   rc 1 — the row IS the attachment skip but a gate refused; the reason is already
 #          reported here, so the caller continues without a second message
@@ -2150,6 +2553,13 @@ branch_freed_by_this_run() {
   [[ "$recorded_action" != "SKIP — active worktree attached" ]] && return 2
   if is_protected "$b"; then
     echo "SKIPPED resolve $b — protected" >&2; return 1
+  fi
+  # Active exclusions, in BOTH consumers: the projection must never report an active
+  # branch WILL-DRAIN, and the apply must never drain one. classify_local already
+  # labels a branch that was active at enumeration; this catches one that became
+  # active afterwards.
+  if branch_recent_reason "$b" || branch_open_pr_reason "$b"; then
+    echo "SKIPPED resolve $b — ${ACTIVE_REASON}" >&2; return 1
   fi
   if ! branch_holders_all_in_removal_set "$b" "$removed_token"; then
     echo "SKIPPED resolve $b — still attached to a worktree" >&2; return 1
@@ -2468,7 +2878,7 @@ verify_apply() {
 # never exceed its denominator. Every recording site either returns immediately or
 # returns after its cleanup, and the only two sites that do not end their check
 # (selftest_verify_and_prune) are mutually exclusive branches of a single if/else.
-SELFTEST_CHECK_COUNT=22
+SELFTEST_CHECK_COUNT=23
 SELFTEST_SKIPS=()
 
 # Records a check-level SKIP and emits the historical message shape VERBATIM:
@@ -2488,6 +2898,24 @@ selftest_skip_ledger() {
     [[ -z "$s" ]] && continue
     echo "self-test:   SKIPPED ${s}" >&2
   done
+}
+
+# In-process arms whose subject is NOT the open-PR exclusion run their apply through
+# this, so the exclusion reads "no open PR" for their throwaway refs — true of every
+# such ref — rather than failing closed on a host with no gh credential (a CI runner),
+# which would turn those arms into measurements of the exclusion instead of their own
+# subject. The real reader is restored on every path; group AX tests the reader
+# itself. The stub replaces the BUILDER, which the apply-time re-read calls, so the
+# code under test is the shipped apply path.
+selftest_with_no_open_prs() {
+  local real rc=0
+  real=$(declare -f build_open_pr_list)
+  build_open_pr_list() { OPEN_PR_ENTRIES=(); OPEN_PR_STATE="ok"; OPEN_PR_BUILT=1; }
+  OPEN_PR_BUILT=0
+  "$@" || rc=$?
+  eval "$real"
+  OPEN_PR_BUILT=0
+  return "$rc"
 }
 
 # Apply-path regression guard. Reproduces the v1.02 defect class in miniature: an
@@ -2516,7 +2944,7 @@ selftest_apply_path() {
 
   local saved_mode="$MODE"
   MODE="apply"
-  apply_removals >/dev/null 2>&1 || true          # exercises the real `git branch -d`
+  selftest_with_no_open_prs apply_removals >/dev/null 2>&1 || true   # exercises the real `git branch -d`
 
   # Guard 1 — emitters must NOT abort under set -e in --apply (the core v1.02 defect).
   if ! emit_markdown >/dev/null 2>&1; then
@@ -2996,7 +3424,7 @@ selftest_liveness_gate() {
 #        directory in place and removes the control — the removal is what makes
 #        "the held tree survived" non-vacuous
 selftest_path_reaching_holder() {
-  local script_abs slug base br_h br_c wt_h wt_c out holder="" fail=0 old_date has_main=0
+  local script_abs="" slug="" base="" br_h="" br_c="" wt_h="" wt_c="" out="" holder="" fail=0 old_date="" has_main=0
   script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
   slug="cleanup-selftest-reach-$$"
   br_h="chore/${slug}-held"; br_c="chore/${slug}-ctrl"
@@ -3077,6 +3505,252 @@ selftest_path_reaching_holder() {
   git branch -D "$br_c" >/dev/null 2>&1 || true
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
   echo "self-test: path-reaching holder check PASS — PH-1 a live holder with its cwd outside the tree is invisible to the cwd oracle / PH-2 the tree it moved by path reads active / PH-3 a backdated sibling does not / PH-4 a real --apply --force keeps the held tree and removes the control" >&2
+  return 0
+}
+
+# Group AX — each active exclusion and its control, in-process. Group PH carries the
+# end-to-end reproduction; these arms pin every limb, each beside a control, so a
+# green run cannot come from an exclusion that fires on everything or on nothing.
+# Fixtures inherit the suite-wide backdated committer date (self_test()), so each
+# starts QUIET; an arm writes exactly the one trace it tests, with that date unset.
+#
+# Arms:
+#   AX-1 a write under an ignored path inside the window reads active; the same file
+#        backdated past the window reads quiet (control)
+#   AX-2 an unreadable index reads `unreadable` and classifies fail-closed; restored,
+#        it reads clean (control)
+#   AX-3 an open PR's head branch and a branch in an open release's family both read
+#        active; an unrelated branch does not (control); an unavailable open-PR list
+#        fails closed for that same unrelated branch
+#   AX-4 a freshly moved branch ref reads active; a backdated one does not (control)
+#   AX-5 THE APPLY-TIME CLAIM, under a REAL in-process `--apply --force`: a REMOVE row
+#        whose tree picked up an untracked file after classification, and one whose
+#        HEAD moved by path, both survive and are relabelled; a clean quiet control
+#        row in the same apply IS removed, so the survivals are not an apply that
+#        removed nothing
+#   AX-6 a tree containing another registered worktree reads nested; the inner tree
+#        does not (control)
+#   AX-7 --active-window-hours below the floor, or non-numeric, is refused; at or
+#        above the floor it is accepted
+#   AX-8 the drain gate refuses an active branch; a quiet merged one passes (control,
+#        needs the mainline ref)
+selftest_active_exclusions() {
+  local script_abs="" slug="" base="" has_main=0 fail=0 rc=0
+  local wt1="" wtd="" wth="" wtg="" wto="" inner="" b_fresh="" b_old="" cand="" f="" ix="" st="" row=""
+  local saved_mode="$MODE" saved_force="$FORCE"
+  local saved_open_state="$OPEN_PR_STATE" saved_open_built="$OPEN_PR_BUILT"
+  local -a saved_open=("${OPEN_PR_ENTRIES[@]:-}") saved_local=("${LOCAL_BRANCH_CANDIDATES[@]:-}")
+  local -a saved_remote=("${REMOTE_BRANCH_CANDIDATES[@]:-}") saved_wt=("${WORKTREE_CANDIDATES[@]:-}")
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-ax-$$"
+  wt1="${REPO_ROOT}/.claude/worktrees/${slug}-1"
+  wtd="${REPO_ROOT}/.claude/worktrees/${slug}-dirty"
+  wth="${REPO_ROOT}/.claude/worktrees/${slug}-head"
+  wtg="${REPO_ROOT}/.claude/worktrees/${slug}-ctrl"
+  wto="${REPO_ROOT}/.claude/worktrees/${slug}-outer"
+  inner="${wto}/ax-nested-$$"
+  b_fresh="chore/${slug}-fresh"; b_old="chore/${slug}-old"
+  if git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    has_main=1
+    base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  else
+    base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
+  fi
+  if [[ -z "$base" ]]; then
+    selftest_skip "active-exclusions check" "no base commit"; return 0
+  fi
+  for f in "$wt1" "$wtd" "$wth" "$wtg" "$wto"; do
+    if ! git worktree add --detach "$f" "$base" >/dev/null 2>&1; then
+      echo "self-test: active-exclusions FAILED — could not create fixture worktree $f" >&2
+      fail=1; break
+    fi
+  done
+  [[ "$fail" -eq 0 ]] && ! git worktree add --detach "$inner" "$base" >/dev/null 2>&1 && {
+    echo "self-test: active-exclusions FAILED — could not create the nested fixture worktree" >&2; fail=1; }
+  [[ "$fail" -eq 0 ]] && ! git branch "$b_old" "$base" >/dev/null 2>&1 && fail=1
+  [[ "$fail" -eq 0 ]] && ! /usr/bin/env -u GIT_COMMITTER_DATE git branch "$b_fresh" "$base" >/dev/null 2>&1 && fail=1
+  NOW_EPOCH=$(date +%s); HEAD_SIGNAL_STATE="not-consulted"; ensure_head_signal
+
+  # AX-1
+  if [[ "$fail" -eq 0 ]]; then
+    f=""
+    for cand in "analysis/ax-$$.md" "pmo-instance/ax-$$.md" "roadmaps/ax-$$.md" ".claude/ax-$$.log"; do
+      if git -C "$wt1" check-ignore -q "$cand" 2>/dev/null; then f="${wt1}/${cand}"; break; fi
+    done
+    if [[ -z "$f" ]]; then
+      selftest_skip "active-exclusions AX-1" "no candidate path is ignored in this checkout"
+    else
+      /bin/mkdir -p "$(/usr/bin/dirname -- "$f")" && printf 'ax\n' > "$f"
+      if ! worktree_recent_reason "$wt1" || [[ "$ACTIVE_REASON" != "SKIP — active: ignored files written"* ]]; then
+        echo "self-test: active-exclusions FAILED — a write under an ignored path did not read active (got '${ACTIVE_REASON}') (AX-1)" >&2
+        fail=1
+      fi
+      /usr/bin/touch -t 200001010000 "$f"
+      if worktree_recent_reason "$wt1"; then
+        echo "self-test: active-exclusions FAILED — the same file backdated past the window still read active ('${ACTIVE_REASON}') (AX-1 control)" >&2
+        fail=1
+      fi
+    fi
+  fi
+
+  # AX-2
+  if [[ "$fail" -eq 0 ]]; then
+    if [[ "$(id -u)" == "0" ]]; then
+      selftest_skip "active-exclusions AX-2" "running as root, which reads a mode-000 index anyway"
+    else
+      ix=$(git -C "$wt1" rev-parse --path-format=absolute --git-path index 2>/dev/null || true)
+      if [[ -z "$ix" || ! -f "$ix" ]]; then
+        selftest_skip "active-exclusions AX-2" "could not locate the fixture's index"
+      else
+        /bin/chmod 000 "$ix"
+        st=$(worktree_state "$wt1")
+        WORKTREE_CANDIDATES=()
+        classify_worktree "$wt1" ""
+        row="${WORKTREE_CANDIDATES[0]:-}"
+        /bin/chmod 644 "$ix"
+        if [[ "$st" != "unreadable" ]]; then
+          echo "self-test: active-exclusions FAILED — an unreadable index read '${st}', not unreadable (AX-2)" >&2
+          fail=1
+        elif [[ "${row##*	}" != "SKIP — active-state unknown: "* ]]; then
+          echo "self-test: active-exclusions FAILED — a tree whose status cannot be read classified '${row##*	}', not fail-closed (AX-2)" >&2
+          fail=1
+        fi
+        if [[ "$(worktree_state "$wt1")" != "clean" ]]; then
+          echo "self-test: active-exclusions FAILED — the restored index did not read clean, so AX-2 proves nothing (AX-2 control)" >&2
+          fail=1
+        fi
+      fi
+    fi
+  fi
+
+  # AX-3
+  if [[ "$fail" -eq 0 ]]; then
+    OPEN_PR_BUILT=1; OPEN_PR_STATE="ok"
+    OPEN_PR_ENTRIES=("chore/${slug}-pr	990001" "release/${slug}-rel	990002")
+    if ! branch_open_pr_reason "chore/${slug}-pr" || [[ "$ACTIVE_REASON" != "SKIP — active: open PR #990001" ]]; then
+      echo "self-test: active-exclusions FAILED — an open PR's head branch did not read active (got '${ACTIVE_REASON}') (AX-3)" >&2
+      fail=1
+    fi
+    if ! branch_open_pr_reason "chore/${slug}-rel-stage-13" || [[ "$ACTIVE_REASON" != "SKIP — active: release has an open PR #990002" ]]; then
+      echo "self-test: active-exclusions FAILED — a branch in an open release's family did not read active (got '${ACTIVE_REASON}') (AX-3)" >&2
+      fail=1
+    fi
+    if branch_open_pr_reason "chore/${slug}-other"; then
+      echo "self-test: active-exclusions FAILED — an unrelated branch read active ('${ACTIVE_REASON}'); the open-PR match fires on everything (AX-3 control)" >&2
+      fail=1
+    fi
+    OPEN_PR_STATE="unavailable"
+    if ! branch_open_pr_reason "chore/${slug}-other" || [[ "$ACTIVE_REASON" != "SKIP — active-state unknown: "* ]]; then
+      echo "self-test: active-exclusions FAILED — an unavailable open-PR list did not fail closed (got '${ACTIVE_REASON}') (AX-3)" >&2
+      fail=1
+    fi
+    OPEN_PR_BUILT="$saved_open_built"; OPEN_PR_STATE="$saved_open_state"; OPEN_PR_ENTRIES=("${saved_open[@]:-}")
+  fi
+
+  # AX-4
+  if [[ "$fail" -eq 0 ]]; then
+    if ! branch_recent_reason "$b_fresh" || [[ "$ACTIVE_REASON" != "SKIP — active: recent branch movement"* ]]; then
+      echo "self-test: active-exclusions FAILED — a freshly moved branch did not read active (got '${ACTIVE_REASON}') (AX-4)" >&2
+      fail=1
+    fi
+    if branch_recent_reason "$b_old"; then
+      echo "self-test: active-exclusions FAILED — a backdated branch read active ('${ACTIVE_REASON}') (AX-4 control)" >&2
+      fail=1
+    fi
+  fi
+
+  # AX-5
+  if [[ "$fail" -eq 0 ]]; then
+    build_liveness_map >/dev/null 2>&1 || true
+    if [[ "$ORACLE_STATE" != "ok" ]]; then
+      selftest_skip "active-exclusions AX-5" "liveness oracle unavailable on this host, so every apply row fails closed and the control cannot be removed"
+    else
+      LOCAL_BRANCH_CANDIDATES=(); REMOTE_BRANCH_CANDIDATES=()
+      WORKTREE_CANDIDATES=("${wtd}		clean	0	REMOVE" "${wth}		clean	0	REMOVE" "${wtg}		clean	0	REMOVE")
+      # The changes land AFTER classification, as in the race this arm guards.
+      printf 'ax\n' > "${wtd}/ax-untracked-$$.txt"
+      ( cd "${TMPDIR:-/tmp}" && /usr/bin/env -u GIT_COMMITTER_DATE git -C "$wth" reset -q HEAD )
+      MODE="apply"; FORCE=1
+      selftest_with_no_open_prs apply_removals >/dev/null 2>&1 || true
+      MODE="$saved_mode"; FORCE="$saved_force"
+      if [[ ! -d "$wtd" ]] || [[ "${WORKTREE_CANDIDATES[0]##*	}" != "SKIP — uncommitted changes" ]]; then
+        echo "self-test: active-exclusions FAILED — --apply --force removed, or did not relabel, a tree that picked up uncommitted work after classification (AX-5)" >&2
+        fail=1
+      fi
+      if [[ ! -d "$wth" ]] || [[ "${WORKTREE_CANDIDATES[1]##*	}" != "SKIP — active: recent HEAD movement"* ]]; then
+        echo "self-test: active-exclusions FAILED — --apply --force removed, or did not relabel, a tree whose HEAD moved after classification (AX-5)" >&2
+        fail=1
+      fi
+      if [[ -d "$wtg" ]]; then
+        echo "self-test: active-exclusions FAILED — the clean quiet control tree also survived, so AX-5 proves nothing about the re-check (AX-5)" >&2
+        fail=1
+      fi
+    fi
+  fi
+
+  # AX-6
+  if [[ "$fail" -eq 0 ]]; then
+    refresh_wt_snapshot
+    if ! worktree_contains_other "$wto"; then
+      echo "self-test: active-exclusions FAILED — a tree containing a registered worktree did not read nested (AX-6)" >&2
+      fail=1
+    fi
+    if worktree_contains_other "$inner"; then
+      echo "self-test: active-exclusions FAILED — the inner tree read nested; the match fires on any tree (AX-6 control)" >&2
+      fail=1
+    fi
+  fi
+
+  # AX-7
+  if [[ "$fail" -eq 0 ]]; then
+    for cand in "$(( ACTIVE_WINDOW_FLOOR_HOURS - 1 ))" "x"; do
+      rc=0; "$script_abs" --active-window-hours "$cand" --help >/dev/null 2>&1 || rc=$?
+      if [[ "$rc" -eq 0 ]]; then
+        echo "self-test: active-exclusions FAILED — --active-window-hours ${cand} was accepted; the window must never narrow below ${ACTIVE_WINDOW_FLOOR_HOURS}h (AX-7)" >&2
+        fail=1
+      fi
+    done
+    rc=0; "$script_abs" --active-window-hours "$(( ACTIVE_WINDOW_FLOOR_HOURS * 2 ))" --help >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      echo "self-test: active-exclusions FAILED — a widened window was refused, so AX-7's refusals prove nothing (AX-7 control)" >&2
+      fail=1
+    fi
+  fi
+
+  # AX-8
+  if [[ "$fail" -eq 0 ]]; then
+    OPEN_PR_BUILT=1; OPEN_PR_STATE="ok"; OPEN_PR_ENTRIES=()
+    WORKTREE_CANDIDATES=(); refresh_wt_snapshot
+    rc=0; branch_freed_by_this_run "$b_fresh" "REMOVE" "SKIP — active worktree attached" 0 >/dev/null 2>&1 || rc=$?
+    if [[ "$rc" -ne 1 ]]; then
+      echo "self-test: active-exclusions FAILED — the drain gate passed a branch that moved inside the window (rc ${rc}) (AX-8)" >&2
+      fail=1
+    fi
+    if [[ "$has_main" -eq 1 ]]; then
+      rc=0; branch_freed_by_this_run "$b_old" "REMOVE" "SKIP — active worktree attached" 0 >/dev/null 2>&1 || rc=$?
+      if [[ "$rc" -ne 0 ]]; then
+        echo "self-test: active-exclusions FAILED — the drain gate refused a quiet merged branch (rc ${rc}), so AX-8 proves nothing (AX-8 control)" >&2
+        fail=1
+      fi
+    else
+      selftest_skip "active-exclusions AX-8 control" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref to prove the quiet branch merged"
+    fi
+    OPEN_PR_BUILT="$saved_open_built"; OPEN_PR_STATE="$saved_open_state"; OPEN_PR_ENTRIES=("${saved_open[@]:-}")
+  fi
+
+  # Teardown — the nested tree first, so the outer one can go
+  [[ -f "$ix" ]] && /bin/chmod 644 "$ix" 2>/dev/null || true
+  git worktree remove --force "$inner" >/dev/null 2>&1 || true
+  for f in "$wt1" "$wtd" "$wth" "$wtg" "$wto"; do
+    git worktree remove --force "$f" >/dev/null 2>&1 || true
+  done
+  git branch -D "$b_fresh" >/dev/null 2>&1 || true
+  git branch -D "$b_old" >/dev/null 2>&1 || true
+  LOCAL_BRANCH_CANDIDATES=("${saved_local[@]:-}"); REMOTE_BRANCH_CANDIDATES=("${saved_remote[@]:-}")
+  WORKTREE_CANDIDATES=("${saved_wt[@]:-}")
+  refresh_wt_snapshot
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: active-exclusions check PASS — AX-1 ignored-path writes / AX-2 unreadable status fails closed / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force keeps a newly dirty and a newly moved tree while removing the control / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate — each beside its control" >&2
   return 0
 }
 
@@ -3426,7 +4100,7 @@ selftest_behind_head_apply() {
       REMOTE_BRANCH_CANDIDATES=()
       WORKTREE_CANDIDATES=()
       MODE="apply"
-      apply_removals >/dev/null 2>&1 || true
+      selftest_with_no_open_prs apply_removals >/dev/null 2>&1 || true
       MODE="$saved_mode"
       action=$(awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}")
       if git show-ref --verify --quiet "refs/heads/${ub}"; then
@@ -3804,7 +4478,7 @@ selftest_help_surface() {
     echo "self-test: help-surface check FAILED — --help exited non-zero" >&2
     exit 1
   }
-  for tok in "--force" "SELF" "--self-test"; do
+  for tok in "--force" "SELF" "ACTIVE" "--active-window-hours" "--self-test"; do
     if ! grep -qF -- "$tok" <<<"$help"; then
       echo "self-test: help-surface check FAILED — --help omits the protective token '$tok' (#669 / #1678 regression)" >&2
       fail=1
@@ -3817,7 +4491,7 @@ selftest_help_surface() {
     fail=1
   fi
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: help-surface check PASS — --help surfaces --force / SELF / --self-test; bounded at the Hook-compatibility divider" >&2
+  echo "self-test: help-surface check PASS — --help surfaces --force / SELF / ACTIVE / --active-window-hours / --self-test; bounded at the Hook-compatibility divider" >&2
   return 0
 }
 
@@ -4635,6 +5309,13 @@ selftest_protect_list_parse() {
 }
 
 self_test() {
+  # Every fixture this suite creates must start QUIET under the active exclusions'
+  # recent-activity limb, or each would read active and every removal arm would
+  # measure that exclusion instead of the class it targets. Reflog entries carry the
+  # committer date, so one suite-wide backdated committer date does it; inner
+  # invocations inherit it. The arms that need a FRESH trace (groups PH and AX)
+  # unset it for that one command.
+  export GIT_COMMITTER_DATE="@$(( $(date +%s) - 30 * 86400 )) +0000"
   echo "self-test: running detection logic against current workspace (read-only)..." >&2
   workspace_boundary_check
   load_protect_list
@@ -4651,6 +5332,8 @@ self_test() {
   selftest_liveness_gate
   echo "self-test: exercising a path-reaching holder (live, cwd outside the tree, moves HEAD by path) (group PH)..." >&2
   selftest_path_reaching_holder
+  echo "self-test: exercising each active exclusion and its control (ignored writes, unreadable status, open PR, branch movement, apply-time re-check, nesting, window floor, drain gate) (group AX)..." >&2
+  selftest_active_exclusions
   echo "self-test: exercising fixed-point apply (worktree + freed branch in one run)..." >&2
   selftest_fixed_point
   echo "self-test: exercising version-prefixed release matcher (release/vX.Y-<slug>; EDIT 1/2/3)..." >&2
@@ -4707,6 +5390,14 @@ while [[ $# -gt 0 ]]; do
     --markdown)      OUTPUT="markdown"; shift ;;
     --json)          OUTPUT="json"; shift ;;
     --force)         FORCE=1; shift ;;
+    --active-window-hours)
+      ACTIVE_WINDOW_HOURS="${2:-}"; shift 2
+      case "$ACTIVE_WINDOW_HOURS" in
+        ""|*[!0-9]*) die "--active-window-hours needs a whole number of hours, at least ${ACTIVE_WINDOW_FLOOR_HOURS}" ;;
+      esac
+      [[ "$ACTIVE_WINDOW_HOURS" -ge "$ACTIVE_WINDOW_FLOOR_HOURS" ]] \
+        || die "--active-window-hours ${ACTIVE_WINDOW_HOURS} is below the ${ACTIVE_WINDOW_FLOOR_HOURS}h floor — the window can be widened, never narrowed"
+      ;;
     --self-test)     SELF_TEST=1; shift ;;
     --help|-h)       usage ;;
     *) die "unknown flag: $1 (try --help)" ;;
