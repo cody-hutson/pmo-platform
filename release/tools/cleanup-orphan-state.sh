@@ -3559,12 +3559,18 @@ selftest_active_exclusions() {
   if [[ -z "$base" ]]; then
     selftest_skip "active-exclusions check" "no base commit"; return 0
   fi
-  for f in "$wt1" "$wtd" "$wth" "$wtg" "$wto"; do
+  for f in "$wt1" "$wtd" "$wtg" "$wto"; do
     if ! git worktree add --detach "$f" "$base" >/dev/null 2>&1; then
       echo "self-test: active-exclusions FAILED — could not create fixture worktree $f" >&2
       fail=1; break
     fi
   done
+  # The HEAD-movement tree starts ON a branch, so AX-5 can move HEAD the way a
+  # finished session does after its merge: a detach from the branch. A reset to the
+  # same commit on an already-detached HEAD writes no reflog entry (measured), so it
+  # would not be a movement at all.
+  [[ "$fail" -eq 0 ]] && ! git worktree add -b "chore/${slug}-head" "$wth" "$base" >/dev/null 2>&1 && {
+    echo "self-test: active-exclusions FAILED — could not create fixture worktree $wth" >&2; fail=1; }
   [[ "$fail" -eq 0 ]] && ! git worktree add --detach "$inner" "$base" >/dev/null 2>&1 && {
     echo "self-test: active-exclusions FAILED — could not create the nested fixture worktree" >&2; fail=1; }
   [[ "$fail" -eq 0 ]] && ! git branch "$b_old" "$base" >/dev/null 2>&1 && fail=1
@@ -3669,7 +3675,7 @@ selftest_active_exclusions() {
       WORKTREE_CANDIDATES=("${wtd}		clean	0	REMOVE" "${wth}		clean	0	REMOVE" "${wtg}		clean	0	REMOVE")
       # The changes land AFTER classification, as in the race this arm guards.
       printf 'ax\n' > "${wtd}/ax-untracked-$$.txt"
-      ( cd "${TMPDIR:-/tmp}" && /usr/bin/env -u GIT_COMMITTER_DATE git -C "$wth" reset -q HEAD )
+      ( cd "${TMPDIR:-/tmp}" && /usr/bin/env -u GIT_COMMITTER_DATE git -C "$wth" checkout -q --detach )
       MODE="apply"; FORCE=1
       selftest_with_no_open_prs apply_removals >/dev/null 2>&1 || true
       MODE="$saved_mode"; FORCE="$saved_force"
@@ -3746,6 +3752,7 @@ selftest_active_exclusions() {
   done
   git branch -D "$b_fresh" >/dev/null 2>&1 || true
   git branch -D "$b_old" >/dev/null 2>&1 || true
+  git branch -D "chore/${slug}-head" >/dev/null 2>&1 || true
   LOCAL_BRANCH_CANDIDATES=("${saved_local[@]:-}"); REMOTE_BRANCH_CANDIDATES=("${saved_remote[@]:-}")
   WORKTREE_CANDIDATES=("${saved_wt[@]:-}")
   refresh_wt_snapshot
