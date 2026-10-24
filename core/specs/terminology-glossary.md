@@ -1,18 +1,18 @@
 ---
 title: Terminology Glossary
-purpose: The shared terminology contract between governance docs, skills, and execution tools across the pmo-platform — defines how six categories of terms (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown units, Scope/Time boxes) plus first-class actor terms are used canonically, each mapped to an authoritative-file owner.
+purpose: The shared terminology contract between governance docs, skills, and execution tools across the pmo-platform — defines how seven categories of terms (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown units, Scope/Time boxes, Process Catalog) plus first-class actor terms are used canonically, each mapped to an authoritative-file owner.
 type: reference
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 source: "Pre-triage terminology-collision audit (2026-03-29); actor-term + tier-anchoring + frontmatter refresh for cold-agent comprehension as Autonomy Tier 2/3 expands."
-consumers: "All agents resolving platform vocabulary; execution-framework.md (Role/Function/Persona/Work-Breakdown anchors); hub-spoke-bridge.md (Hub/Spoke/Sub-agent/Task/Role); registry.md (Skill); release-process.md + pipeline/ (Stage/Phase/Step/Deliverable); methodology-parameterization-v1.md (Methodology)."
+consumers: "All agents resolving platform vocabulary; execution-framework.md (Role/Function/Persona/Work-Breakdown anchors); hub-spoke-bridge.md (Hub/Spoke/Sub-agent/Task/Role); registry.md (Skill); release-process.md + pipeline/ (Stage/Phase/Step/Deliverable); methodology-parameterization-v1.md (Methodology); design-artifact-standard.md § 13 (Process Catalog terms)."
 ---
 <!-- reference-durability: allow-link -->
 # Terminology Glossary
 
 ## Purpose
 
-The Terminology Glossary is the shared terminology contract between governance docs, skills, and execution tools across the pmo-platform. It defines how six categories of terms (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown units, and Scope/Time boxes) are used canonically — grounded in real-world PMO practice and mapped to concrete platform artifacts. Authored to resolve terminology collisions identified in pre-triage (2026-03-29).
+The Terminology Glossary is the shared terminology contract between governance docs, skills, and execution tools across the pmo-platform. It defines how seven categories of terms (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown units, Scope/Time boxes, and the Process Catalog) are used canonically — grounded in real-world PMO practice and mapped to concrete platform artifacts. Authored to resolve terminology collisions identified in pre-triage (2026-03-29).
 
 ## How to Use
 
@@ -26,6 +26,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 4. [Stage / Phase / Step](#category-4--stage--phase--step)
 5. [Work Breakdown Terms](#category-5--work-breakdown-terms)
 6. [Scope / Time Boxes](#category-6--scope--time-boxes)
+7. [Process Catalog](#category-7--process-catalog)
 
 ---
 
@@ -188,7 +189,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 
 - **Definition:** A single numbered operational action inside a Phase (e.g., A1, B3) OR a numbered instruction inside a Procedure or workflow.
 - **Real-world PMO equivalent:** Task-level activity (lowest meaningful unit of agent/operator work).
-- **Platform equivalent:** A1/A2/A3… B1/B2/B3 numbering inside stage Process sections; numbered Steps 1-7 inside `implementation-execution-pattern.md`; numbered Steps in `hub-spoke-bridge.md` Procedures.
+- **Platform equivalent:** A1/A2/A3… B1/B2/B3 numbering inside stage Process sections; numbered Steps 1-7 inside `implementation-execution-pattern.md`; numbered Steps in `hub-spoke-bridge.md` Procedures. In the process catalog a step is level L4: one row of an activity page's Steps table, never a page of its own (`core/standards/design-artifact-standard.md` § 13.2).
 - **Authoritative file:** Per-document — the doc enumerating the steps is the authority.
 - **Consumers:** All procedural documentation, all skill operational sections.
 
@@ -280,6 +281,62 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 
 ---
 
+## Category 7 — Process Catalog
+
+> The catalog's levels nest Universe > Value Stream > Sub-process > Activity > Step. They map onto the pipeline's own nest without replacing it: the 13-stage [Process](#term-process) is not itself a catalog level; each [Stage](#term-stage) is a sub-process within a value stream of the universe that holds the release pipeline, each [Phase](#term-phase) is an activity, and each numbered [Step](#term-step) is a step.
+
+### term: Process Catalog {#term-process-catalog}
+
+- **Definition:** The platform's system documentation: one page per process node (universe, value stream, sub-process, activity), each activity's steps as rows in its page, and an index, a graph and cross-cutting views generated from the pages' frontmatter, never hand-maintained.
+- **Real-world PMO equivalent:** A process architecture, the linked process map a business-process-management practice keeps (for example, a process classification framework held as one connected set rather than as separate diagrams).
+- **Platform equivalent:** `core/process-catalog/`: written pages under `<universe-id>/`, and the generated `INDEX.md`, `graph.json` and `views/`. Decision record: {{ADR:system-documentation-is-a-generated-process-catalog}}.
+- **Authoritative file:** `core/standards/design-artifact-standard.md` § 13.
+- **Consumers:** Catalog pages and their generator; the Stage 2 and Stage 5 planning reads; the Stage 13 documentation gates.
+
+### term: Universe {#term-universe}
+
+- **Definition:** The top level of the process catalog (L0): an operating domain that could be adopted, replaced or retired as a whole, with its own owners and lifecycle.
+- **Real-world PMO equivalent:** The scope of one operating model, the boundary within which its value streams run.
+- **Platform equivalent:** One L0 page, `core/process-catalog/<universe-id>/<universe-id>.md`. The release pipeline belongs to one universe. Catalog pages use the field name `universe` because [Domain](#term-domain) and [Area](#term-area) are already defined here.
+- **Authoritative file:** `core/standards/design-artifact-standard.md` § 13.2.
+- **Consumers:** Catalog pages; the generator; the generated index.
+
+### term: Value Stream {#term-value-stream}
+
+- **Definition:** Level L1 of the process catalog: a flow that starts on a trigger from outside the platform's own flow and ends in an outcome someone values (an approved work item, a shipped release, a sent status).
+- **Real-world PMO equivalent:** An operational value stream in the ITIL 4 and SAFe sense, an end-to-end flow from a trigger to delivered value. It is not SAFe's development value stream, the flow that builds a solution.
+- **Platform equivalent:** One L1 page per value stream. A value stream may span several pipeline Stages.
+- **Authoritative file:** `core/standards/design-artifact-standard.md` § 13.2.
+- **Consumers:** Catalog pages; the generator.
+
+### term: Sub-process {#term-sub-process}
+
+- **Definition:** Level L2 of the process catalog: a governed sequence bounded by a gate or a handoff at both ends.
+- **Real-world PMO equivalent:** A BPMN sub-process, a process nested inside a larger one.
+- **Platform equivalent:** Each pipeline [Stage](#term-stage) is a sub-process. The lowercase "sub-processes" of the [Process](#term-process) term and Appendix A are this family.
+- **Authoritative file:** `core/standards/design-artifact-standard.md` § 13.2.
+- **Consumers:** Catalog pages; the generator; the planning reads that cite a page.
+
+### term: Activity {#term-activity}
+
+- **Definition:** Level L3 of the process catalog: work that one primary actor carries out for one purpose. Its steps are rows in its page.
+- **Real-world PMO equivalent:** A BPMN activity, a unit of work performed by one participant.
+- **Platform equivalent:** Each [Phase](#term-phase) of a pipeline Stage, each mode of a [Skill](#term-skill), and each hook rule family.
+- **Authoritative file:** `core/standards/design-artifact-standard.md` § 13.2.
+- **Consumers:** Catalog pages; the generator; the planning reads that cite a page.
+
+### term: Enforcement Class {#term-enforcement-class}
+
+- **Definition:** The effective behaviour of a control on a default install, recorded on a catalog page's Controls row: `code-enforce`, `code-warn`, `code-off`, `prose-only`, `tacit` or `host-config`.
+- **Real-world PMO equivalent:** Control classification in internal-control practice: automated versus manual controls, preventive versus detective controls.
+- **Platform equivalent:** The Controls column of catalog pages and the catalog's controls register. It is distinct from the `posture` and `enforcement` workflow annotations the gate-efficacy standard reads, which record how a gate is wired.
+- **Authoritative file:** `core/standards/design-artifact-standard.md` § 13.7.
+- **Consumers:** Catalog pages; the generated controls view; the validator that checks a row's class against the register.
+
+**Distinguishing the catalog terms:** Universe, Value Stream, Sub-process and Activity are the catalog's page levels (L0–L3); a step (L4) is a row in an activity page, not a page; an Enforcement Class describes a control, not a level.
+
+---
+
 ## Appendix A — Conflicting-Usage Register
 
 Terms the platform historically used for two distinct concepts — this glossary resolves each by assigning one canonical meaning and directing the other usage to a different term.
@@ -289,7 +346,7 @@ Terms the platform historically used for two distinct concepts — this glossary
 | "Planning" | Meant both release-level (Stage 4 Planning) and issue-level (breaking one issue into work chunks) | Release-level = **Stage 4 Planning** (produces the release plan file). Issue-level = **Work Breakdown Decomposition** (happens during Stage 6 Engineering, produces Deliverables and Steps, NOT named "Planning"). |
 | "Sub-task" | Meant both the tracking artifact (GitHub sub-task Issue) AND the unit produced by engineer work-breakdown decomposition | **Sub-task = tracking artifact only** (one GitHub Issue per stage per parent, labeled `sub-task`). Work-breakdown decomposition chunks are **Deliverables** or **Steps**, not Sub-tasks. |
 | "Framework" | Used loosely to mean both "delivery approach" (e.g., "the Scrum framework") and "tool-agnostic pattern set" | **Framework = tool-agnostic pattern set** (this glossary Category 3). Delivery approaches (Scrum / Kanban / Waterfall / etc.) are **Methodologies**, not Frameworks. |
-| "Process" | Used both for the 13-stage pipeline AND for any governed sequence (e.g., "triage process," "review process") | **Process** refers to the 13-stage pipeline as the canonical delivery Process. Smaller governed sequences are **sub-processes** (lowercase), named by their function (triage protocol, gate evaluation protocol). |
+| "Process" | Used both for the 13-stage pipeline AND for any governed sequence (e.g., "triage process," "review process") | **Process** refers to the 13-stage pipeline as the canonical delivery Process. Smaller governed sequences are **sub-processes** (lowercase), named by their function (triage protocol, gate evaluation protocol); in the process catalog, [Sub-process](#term-sub-process) is the registered L2 level, and each Stage is one. |
 | "Stage" vs. "Phase" | Occasionally conflated in PMBOK-style references | **Stage = top-level pipeline division** (13 of them, numbered 1-13). **Phase = sub-division within a single Stage**. Nest as Stage > Phase > Step. |
 | "agent" | Used for (i) a [Role](#term-role) in orchestration ("the Hub agent"), (ii) any generic autonomous actor ("an agent reading the corpus"), and (iii) a future-workforce identity ("agents cover BA/PO/Eng roles") | **(i) Role sense → name the specific role:** [Hub](#term-hub) / [Spoke](#term-spoke) / Operator, not bare "agent". **(ii) Generic-actor sense → "autonomous agent" / "reader"** is acceptable as gloss when no specific role is meant (e.g., "an autonomous agent reading the corpus cold"). **(iii) Future workforce-identity sense → out of scope of this glossary** — when the agent-workforce model is canonicalized it gets its own term; until then do NOT overload "agent" to mean a persistent workforce identity. The deployable-capability unit is a [Skill](#term-skill); the component an actor is instantiated as is a [Sub-agent](#term-sub-agent). **Target-state note (cross-reference, not a term registration):** the forward-looking three-actor model that fills this reserved slot — **orchestrator** (conducts; distinct from the [Hub](#term-hub) session and the human orchestrator), **specialist skill** (performs one bounded capability; maps to the role-Specialist of ADR-019), and **free AI agent** (owns the irreducible judgment; the workforce-identity term) — bound by governance-as-contract, is stated in [`../disciplines/actor-model-and-governance-as-contract.md`](../disciplines/actor-model-and-governance-as-contract.md). These remain target-marked there, not registered as canonical `### term:` entries here (Total-terms count unchanged). |
 
@@ -318,7 +375,7 @@ Terms NOT used in the platform (with reason) and the canonical term that replace
 - **Authoritative-file delegation:** Glossary entries name the authoritative file but do NOT duplicate its schema. If the authoritative file changes a definition, the glossary is updated in the same commit (cross-reference integrity check QC3-03).
 - **Adding new terms:** New terms added to this glossary require a Collective Review pass or an ADR Issue — this is a governance file and falls under "No ungoverned changes."
 
-**Total terms:** **25 terms** across the six categories (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown, Scope/Time boxes) — the per-category counts vary (some categories carry more than four terms: Category 2 also holds the four first-class actor terms Hub/Spoke/Skill/Sub-agent, and Category 6 also holds the grouping terms Initiative/Roadmap). Authoritative count = `grep -cE '^### term:.*\{#term-' core/specs/terminology-glossary.md` (heading-scoped — prose mentions of `{#term-…}` in this file are not term entries and are correctly excluded).
+**Total terms:** **31 terms** across the seven categories (Area/Domain, Function/Role/Persona, Process/Methodology/Framework, Stage/Phase/Step, Work Breakdown, Scope/Time boxes, Process Catalog) — the per-category counts vary (some categories carry more than four terms: Category 2 also holds the four first-class actor terms Hub/Spoke/Skill/Sub-agent, Category 6 also holds the grouping terms Initiative/Roadmap, and Category 7 holds the six process-catalog terms). Authoritative count = `grep -cE '^### term:.*\{#term-' core/specs/terminology-glossary.md` (heading-scoped — prose mentions of `{#term-…}` in this file are not term entries and are correctly excluded).
 
 ## See Also
 
