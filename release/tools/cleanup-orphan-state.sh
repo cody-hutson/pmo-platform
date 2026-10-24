@@ -3383,7 +3383,8 @@ selftest_liveness_gate() {
   if [[ "$fail" -eq 1 ]]; then
     echo "self-test: liveness end-to-end FAILED — inner dry-run exited non-zero" >&2
   elif ! grep -q '"action":"SKIP — active — live process' <<<"$(grep -F "${slug}" <<<"$out" || true)"; then
-    echo "self-test: liveness end-to-end FAILED — live-held worktree not labeled live-session" >&2
+    echo "self-test: liveness end-to-end FAILED — live-held worktree not labeled live-session; holder $(kill -0 "$holder" 2>/dev/null && echo alive || echo GONE); rows seen:" >&2
+    grep -F "${slug}" <<<"$out" | sed 's/"path":"[^"]*"/"path":"…"/; s/^/self-test:   /' >&2 || true
     fail=1
   fi
 
@@ -3550,6 +3551,16 @@ selftest_path_reaching_holder() {
 #   AX-13 the fail-closed tails: an unavailable liveness oracle, and reflogs switched
 #         off, each make a quiet clean tree read status-unreadable; with both healthy
 #         the same tree does not (control)
+#   AX-14 classify_local is WIRED to the readers: a moved branch and an open PR's
+#         branch classify active; a quiet branch with no PR does not (control)
+#   AX-15 classify_remote is wired too: with a MERGED PR, a remote that moved since the
+#         last fetch, a fresh tip, and an open PR on a newer head classify active; a
+#         quiet fetched tip classifies REMOVE (control)
+#   AX-16 THE APPLY-TIME BRANCH CLAIM, under a REAL in-process --apply: a REMOVE row for
+#         a moved local branch, and one for a fresh remote branch, are re-checked and
+#         left in place; a quiet local branch and a quiet remote branch in the same
+#         apply ARE removed (controls). The remote delete goes through a recording gh
+#         stand-in, so no call reaches a real host
 #
 # Helpers. selftest_ax_reason runs an exclusion reader in a SUBSHELL and prints its
 # label, or "(not active)"; selftest_ax_classify classifies one tree in a subshell and
@@ -3575,7 +3586,8 @@ selftest_ax_not() {    # <arm> <what> <got> <label prefix it must NOT carry>
 selftest_active_exclusions() {
   local script_abs="" slug="" base="" has_main=0 fail=0 rc=0 ax_skipped="" got=""
   local wt1="" wtd="" wth="" wtg="" wto="" wtp="" inner="" b_fresh="" b_old="" b_dirty="" b_head=""
-  local cand="" f="" ix="" st="" fixdir="" rname="" rb="" old_sha="" new_sha="" pr_sha=""
+  local cand="" f="" ix="" st="" fixdir="" rname="" rb="" rb_old="" old_sha="" new_sha="" pr_sha="" b_apply=""
+  local saved_gh="$GH_BIN" saved_gh_resolved="$GH_BIN_RESOLVED"
   local L_HEAD="SKIP — active — recent HEAD activity (HEAD moved "
   local L_BRANCH="SKIP — active — recent HEAD activity (branch moved "
   local L_REMOTE="SKIP — active — recent HEAD activity (remote commit "
@@ -3599,7 +3611,8 @@ selftest_active_exclusions() {
   wtp="${REPO_ROOT}/.claude/worktrees/${slug}-pr"
   inner="${wto}/ax-nested-$$"
   b_fresh="chore/${slug}-fresh"; b_old="chore/${slug}-old"; b_dirty="chore/${slug}-dirty"; b_head="chore/${slug}-head"
-  fixdir="${TMPDIR:-/tmp}/cleanup-selftest-ax-$$"; rname="cleanup-selftest-ax-$$"; rb="chore/${slug}-remote"
+  b_apply="chore/${slug}-apply"
+  fixdir="${TMPDIR:-/tmp}/cleanup-selftest-ax-$$"; rname="cleanup-selftest-ax-$$"; rb="chore/${slug}-remote"; rb_old="chore/${slug}-remote-old"
   if git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
     has_main=1
     base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
@@ -3626,11 +3639,15 @@ selftest_active_exclusions() {
   [[ "$fail" -eq 0 ]] && ! git worktree add --detach "$inner" "$base" >/dev/null 2>&1 && {
     echo "self-test: active-exclusions FAILED — could not create the nested fixture worktree" >&2; fail=1; }
   [[ "$fail" -eq 0 ]] && ! git branch "$b_old" "$base" >/dev/null 2>&1 && fail=1
+  [[ "$fail" -eq 0 ]] && ! git branch "$b_apply" "$base" >/dev/null 2>&1 && fail=1
   [[ "$fail" -eq 0 ]] && ! /usr/bin/env -u GIT_COMMITTER_DATE git branch "$b_fresh" "$base" >/dev/null 2>&1 && fail=1
   NOW_EPOCH=$(date +%s); HEAD_SIGNAL_STATE="not-consulted"; ensure_head_signal
   # Every arm below reads the open-PR list from this stub unless it sets its own: an
   # empty, readable list, so no arm fails closed on a host with no gh credential.
   OPEN_PR_BUILT=1; OPEN_PR_STATE="ok"; OPEN_PR_ENTRIES=()
+  # classify_local and classify_remote read the all-states PR map for their row data;
+  # build it once here, so the subshell classifications below do not each rebuild it.
+  ensure_pr_map >/dev/null 2>&1 || true
 
   # AX-1
   if [[ "$fail" -eq 0 ]]; then
@@ -3697,6 +3714,36 @@ selftest_active_exclusions() {
     selftest_ax_want AX-4 "a freshly moved branch" "$got" "$L_BRANCH" || fail=1
     got=$(selftest_ax_reason branch_recent_reason "$b_old")
     selftest_ax_not AX-4 "a backdated branch" "$got" "$L_ANY" || fail=1
+  fi
+
+  # AX-14
+  if [[ "$fail" -eq 0 ]]; then
+    got=$( LOCAL_BRANCH_CANDIDATES=(); classify_local "$b_fresh" 0 >/dev/null 2>&1; printf '%s' "${LOCAL_BRANCH_CANDIDATES[0]##*	}" )
+    selftest_ax_want AX-14 "classify_local on a freshly moved branch" "$got" "$L_BRANCH" || fail=1
+    got=$( OPEN_PR_ENTRIES=("${b_old}	990004"); LOCAL_BRANCH_CANDIDATES=(); classify_local "$b_old" 0 >/dev/null 2>&1; printf '%s' "${LOCAL_BRANCH_CANDIDATES[0]##*	}" )
+    selftest_ax_want AX-14 "classify_local on an open PR's branch" "$got" "SKIP — active — open PR #990004" || fail=1
+    got=$( LOCAL_BRANCH_CANDIDATES=(); classify_local "$b_old" 0 >/dev/null 2>&1; printf '%s' "${LOCAL_BRANCH_CANDIDATES[0]##*	}" )
+    selftest_ax_not AX-14 "classify_local on a quiet branch with no PR" "$got" "$L_ANY" || fail=1
+  fi
+
+  # AX-16, local half — before AX-11 builds the fixture remote
+  if [[ "$fail" -eq 0 ]]; then
+    LOCAL_BRANCH_CANDIDATES=("${b_fresh}	0	2026-01-01		(none)	REMOVE" "${b_apply}	0	2026-01-01		(none)	REMOVE")
+    REMOTE_BRANCH_CANDIDATES=(); WORKTREE_CANDIDATES=()
+    MODE="apply"; FORCE=0
+    selftest_with_no_open_prs apply_removals >/dev/null 2>&1 || true
+    MODE="$saved_mode"; FORCE="$saved_force"
+    OPEN_PR_BUILT=1; OPEN_PR_STATE="ok"; OPEN_PR_ENTRIES=()
+    if ! git show-ref --verify --quiet "refs/heads/${b_fresh}"; then
+      echo "self-test: active-exclusions FAILED — --apply deleted a local branch that moved inside the window (AX-16)" >&2
+      fail=1
+    fi
+    selftest_ax_want AX-16 "the moved branch's row after --apply" "${LOCAL_BRANCH_CANDIDATES[0]##*	}" "$L_BRANCH" || fail=1
+    if git show-ref --verify --quiet "refs/heads/${b_apply}"; then
+      echo "self-test: active-exclusions FAILED — the quiet control branch also survived --apply, so AX-16 proves nothing (AX-16 control)" >&2
+      fail=1
+    fi
+    LOCAL_BRANCH_CANDIDATES=()
   fi
 
   # AX-10 — before AX-9 dirties the tree, though the rows here are synthetic anyway
@@ -3821,19 +3868,54 @@ selftest_active_exclusions() {
        && git remote add "$rname" "${fixdir}/r.git" >/dev/null 2>&1 \
        && old_sha=$(git "${ident[@]}" commit-tree "${base}^{tree}" -p "$base" -m "cleanup-selftest ax-11 old" 2>/dev/null) \
        && git push -q "$rname" "${old_sha}:refs/heads/${rb}" >/dev/null 2>&1 \
+       && git push -q "$rname" "${old_sha}:refs/heads/${rb_old}" >/dev/null 2>&1 \
        && git fetch -q "$rname" >/dev/null 2>&1; then
       REMOTE_NAME="$rname"
       got=$(selftest_ax_reason remote_recent_reason "$rb")
       selftest_ax_not AX-11 "a fetched remote branch with a backdated tip" "$got" "$L_ANY" || fail=1
+      # AX-15 control and open-PR limb, on the quiet branch, with its PR MERGED in a
+      # stubbed all-states map so the open-PR and recency limbs are what decide
+      got=$( PR_MAP_BUILT=1; PR_MAP_STATE="ok"; PR_MAP_ENTRIES=("${rb_old}	990006	MERGED"); REMOTE_BRANCH_CANDIDATES=(); classify_remote "$rb_old" >/dev/null 2>&1; printf '%s' "${REMOTE_BRANCH_CANDIDATES[0]##*	}" )
+      selftest_ax_want AX-15 "classify_remote on a quiet fetched branch with a merged PR" "$got" "REMOVE" || fail=1
+      got=$( PR_MAP_BUILT=1; PR_MAP_STATE="ok"; PR_MAP_ENTRIES=("${rb_old}	990006	MERGED"); OPEN_PR_ENTRIES=("${rb_old}	990007"); REMOTE_BRANCH_CANDIDATES=(); classify_remote "$rb_old" >/dev/null 2>&1; printf '%s' "${REMOTE_BRANCH_CANDIDATES[0]##*	}" )
+      selftest_ax_want AX-15 "classify_remote on a merged branch that has a newer open PR" "$got" "SKIP — active — open PR #990007" || fail=1
       new_sha=$(/usr/bin/env -u GIT_COMMITTER_DATE git "${ident[@]}" commit-tree "${base}^{tree}" -p "$old_sha" -m "cleanup-selftest ax-11 new" 2>/dev/null || true)
       # Pushed by URL, not by remote name, so the tracking ref is NOT updated — the
       # state of a branch someone else pushed after this host's last fetch.
       if [[ -n "$new_sha" ]] && git push -q "${fixdir}/r.git" "${new_sha}:refs/heads/${rb}" >/dev/null 2>&1; then
         got=$(selftest_ax_reason remote_recent_reason "$rb")
         selftest_ax_want AX-11 "a remote branch that moved since the last fetch" "$got" "$L_MOVED" || fail=1
+        got=$( PR_MAP_BUILT=1; PR_MAP_STATE="ok"; PR_MAP_ENTRIES=("${rb}	990005	MERGED"); REMOTE_BRANCH_CANDIDATES=(); classify_remote "$rb" >/dev/null 2>&1; printf '%s' "${REMOTE_BRANCH_CANDIDATES[0]##*	}" )
+        selftest_ax_want AX-15 "classify_remote on a merged branch that moved since the last fetch" "$got" "$L_MOVED" || fail=1
         git fetch -q "$rname" >/dev/null 2>&1 || true
         got=$(selftest_ax_reason remote_recent_reason "$rb")
         selftest_ax_want AX-11 "a fetched remote branch with a fresh commit" "$got" "$L_REMOTE" || fail=1
+        got=$( PR_MAP_BUILT=1; PR_MAP_STATE="ok"; PR_MAP_ENTRIES=("${rb}	990005	MERGED"); REMOTE_BRANCH_CANDIDATES=(); classify_remote "$rb" >/dev/null 2>&1; printf '%s' "${REMOTE_BRANCH_CANDIDATES[0]##*	}" )
+        selftest_ax_want AX-15 "classify_remote on a merged branch with a fresh tip" "$got" "$L_REMOTE" || fail=1
+        # AX-16, remote half. The delete goes through a gh stand-in that only RECORDS
+        # its arguments, so no request reaches a real host whatever the outcome.
+        if [[ "$fail" -eq 0 ]]; then
+          : > "${fixdir}/gh-calls"
+          _selftest_ax_gh_record() { printf '%s\n' "$*" >> "${fixdir}/gh-calls"; return 0; }
+          GH_BIN="_selftest_ax_gh_record"; GH_BIN_RESOLVED=1
+          REMOTE_BRANCH_CANDIDATES=("${rb}	990005	MERGED	REMOVE" "${rb_old}	990006	MERGED	REMOVE")
+          LOCAL_BRANCH_CANDIDATES=(); WORKTREE_CANDIDATES=()
+          MODE="apply"; FORCE=0
+          selftest_with_no_open_prs apply_removals >/dev/null 2>&1 || true
+          MODE="$saved_mode"; FORCE="$saved_force"; GH_BIN="$saved_gh"; GH_BIN_RESOLVED="$saved_gh_resolved"
+          OPEN_PR_BUILT=1; OPEN_PR_STATE="ok"; OPEN_PR_ENTRIES=()
+          if grep -qF "git/refs/heads/${rb} " <<<"$(cat "${fixdir}/gh-calls" 2>/dev/null || true) "; then
+            echo "self-test: active-exclusions FAILED — --apply sent a delete for a remote branch with a fresh tip (AX-16)" >&2
+            fail=1
+          fi
+          selftest_ax_want AX-16 "the fresh remote branch's row after --apply" "${REMOTE_BRANCH_CANDIDATES[0]##*	}" "$L_REMOTE" || fail=1
+          if ! grep -qF "git/refs/heads/${rb_old}" <<<"$(cat "${fixdir}/gh-calls" 2>/dev/null || true)"; then
+            echo "self-test: active-exclusions FAILED — --apply sent no delete for the quiet remote control branch, so AX-16 proves nothing (AX-16 control)" >&2
+            fail=1
+          fi
+          REMOTE_BRANCH_CANDIDATES=()
+          unset -f _selftest_ax_gh_record
+        fi
       else
         echo "self-test: active-exclusions FAILED — could not push the fresh fixture commit (AX-11)" >&2
         fail=1
@@ -3877,7 +3959,7 @@ selftest_active_exclusions() {
   for f in "$wt1" "$wtd" "$wth" "$wtg" "$wto" "$wtp"; do
     git worktree remove --force "$f" >/dev/null 2>&1 || true
   done
-  for f in "$b_fresh" "$b_old" "$b_dirty" "$b_head"; do
+  for f in "$b_fresh" "$b_old" "$b_dirty" "$b_head" "$b_apply"; do
     git branch -D "$f" >/dev/null 2>&1 || true
   done
   git update-ref -d "refs/remotes/${saved_remote}/chore/${slug}-prhead" >/dev/null 2>&1 || true
@@ -3886,12 +3968,13 @@ selftest_active_exclusions() {
     "${TMPDIR:-/tmp}/cleanup-selftest-ax-$$") /bin/rm -rf "$fixdir" 2>/dev/null || true ;;
   esac
   REMOTE_NAME="$saved_remote"; MODE="$saved_mode"; FORCE="$saved_force"
+  GH_BIN="$saved_gh"; GH_BIN_RESOLVED="$saved_gh_resolved"
   OPEN_PR_BUILT="$saved_open_built"; OPEN_PR_STATE="$saved_open_state"; OPEN_PR_ENTRIES=("${saved_open[@]:-}")
   LOCAL_BRANCH_CANDIDATES=("${saved_local[@]:-}"); REMOTE_BRANCH_CANDIDATES=("${saved_remote_rows[@]:-}")
   WORKTREE_CANDIDATES=("${saved_wt[@]:-}")
   refresh_wt_snapshot
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: active-exclusions check PASS — AX-1 git-ignored files present / AX-2 status unreadable / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate / AX-9 uncommitted changes / AX-10 WILL-DRAIN projection / AX-11 remote moved-since-fetch and fresh commit / AX-12 detached commits held by an open PR / AX-13 fail-closed tails — each beside its control${ax_skipped:+ — SKIPPED on this host:${ax_skipped} (see the skip ledger)}" >&2
+  echo "self-test: active-exclusions check PASS — AX-1 git-ignored files present / AX-2 status unreadable / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate / AX-9 uncommitted changes / AX-10 WILL-DRAIN projection / AX-11 remote moved-since-fetch and fresh commit / AX-12 detached commits held by an open PR / AX-13 fail-closed tails / AX-14 classify_local wiring / AX-15 classify_remote wiring / AX-16 apply-time branch re-check, local and remote — each beside its control${ax_skipped:+ — SKIPPED on this host:${ax_skipped} (see the skip ledger)}" >&2
   return 0
 }
 
