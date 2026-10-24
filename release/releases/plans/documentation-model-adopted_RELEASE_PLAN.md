@@ -8,9 +8,9 @@
 | **Bump Class** | minor — protocol text and references plus one decision record, with no new skill or governance file; the v4.77 plan landed a decision record as `minor`. Provisional v4.78 (anchor v4.77), re-verified at Engineering Commit 0 on 2026-10-24: `claim-version.sh --sha cebcf6c2 --bump minor --dry-run` → v4.78, and v4.78 is absent from the tag, published-release and ledger arms. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
 | **Date Created** | 2026-10-24 (Saturday) |
 | **Release Manager** | Agent-assisted |
-| **Status** | Executing — Stage 6 Engineering; Engineering Commit 0 landed, #8117 next |
+| **Status** | Executing — Stage 6 Engineering; Engineering Commit 0 and #8117 landed, #8494 next |
 | **Branch** | release/documentation-model-adopted |
-| **PR** | opened in **draft** after #8117's commit; ready for review at the Stage-9 gate |
+| **PR** | #8534 — opened in **draft** after #8117's commit; ready for review at the Stage-9 gate |
 | **Milestone** | documentation-model-adopted |
 | **Release Class** | cross-cutting (D-ReleaseClass, operator, 2026-10-24) |
 | **Release Identity** | versioned (D-ReleaseIdentity, operator, 2026-10-24) |
@@ -285,6 +285,8 @@ Per-card header (8 fields authored at A0; rows adopted verbatim below):
 - **Acceptance criteria:** four, per the card (AC2 and AC3 as re-worded by the operator on 2026-10-24).
 - **Estimated complexity:** Low — one new file, mechanical edits.
 - **Dependencies:** none.
+- **Landed:** `c79ac3fe` (Stage 6). The file is the Stage 5 literal (134 lines) with exactly two lines changed, the `status:` line and the first `## Status` sentence (DEV-9).
+- **Deliverable state:** `deliverable_state: artifact-accepted` — a decision record is a task-class deliverable whose definition of done is the artifact; its Artifact-Acceptance Record row is in § Verification Evidence (ADDITIVE mode).
 
 ### Issue #8494: Extend the design-artifact standard to the generated process catalog the documentation-model ADR chose
 
@@ -506,6 +508,23 @@ N/A — enumerated over frontmatter schemas, issue-form field schemas and gate-r
 
 (Populated at Stage 6 C4 self-verification onward, and after Stage 12 execution — see verification-checklist.md for format)
 
+**Stage 6 self-verification — Engineering Commit 0 (`e745054e`) and #8117 (`c79ac3fe`), 2026-10-24:**
+- **Commit-0 re-verify.** Version half: `git fetch --tags origin && git fetch origin main` (`origin/main` = `cebcf6c2`, 0 commits behind); `claim-version.sh --sha cebcf6c2 --bump minor --dry-run` → v4.78, equal to the planned version; v4.78 is absent from the tag arm (control v4.77 present), the published-release arm (control v4.77 present) and the ledger on `origin/main` (0 rows; control v4.77 → 7). PROCEED. Manifest half: `claim-version.sh --verify-stamp documentation-model-adopted` → exit 0 (`verify-stamp OK`), before the commit.
+- **Plan lints.** `verify-release-plan.sh --ciac-lint` → `declared=3 parsed=3 clean=3 declared-deferral=0 flagged=0`. `check-release-links.py --plan-depth-lint --files <plan>` → 0 depth-sensitive links (sensitivity: a planted relative link → 1, exit 1; the plan was restored byte-identical). `verify-release-plan.sh --stage4-comment <the Stage 4 comment>` → PROV-PRESENCE, PROV-GRAMMAR and PROV-DELTA PASS (`comment_elements=5 all present in the plan`); FCM coverage `declared=38 interpreted=38 uninterpreted=0`; FCM-1 (this plan) and FCM-2 (the ADR) delivered.
+- **#8117 — the Stage 5 verification set**, on the committed branch: `check-issue-ref-validity.sh` path mode on the ADR → exit 0, and commit range `origin/main..HEAD` with the `gh` resolver → exit 0 (sensitivity: the ADR with one bare issue reference added to Context → exit 1). `check-adr-durability.py --diff-base origin/main --files <ADR>` → `SCANNED 1`, `COUNT 0` over 117 added non-blank lines, handle rule resolved (sensitivity, in a scratch repository with the same base-plus-added-file shape: an injected count and SHA → `R2-COUNT`, `R2-SHA`, `COUNT 2`; specificity: the record's historically anchored "83 checks" line is not flagged; a pre-commit run read no added lines because the lint diffs committed `...HEAD`, and was discarded as a broken probe). `check-adr-numbers.py` → PASS, 221 ADRs, contiguous 001..221. `generate-adr-index.py --verify` → `COUNT 0`. `renumber-adr.py --detect` → `CLAIM ADR-221 … BINDS` against `origin/main`; the siblings' branch-only claims read `221,222,223`. The three tools' self-tests PASS.
+- **#8117 acceptance probes** (`verify-release-plan.sh`): AC-1, AC-2 and AC-3 grep limbs PASS, count 1 each; their reader-graded limbs are Stage 8's; AC-4 is declared-deferred to the merged `status:` read.
+- **Rows for cards not yet built.** The #8494, #8119 and #8495 per-issue rows, CIAC-1 to CIAC-3 and FCM-3 (`core/<catalog-folder>/README.md`) read FAIL at this head because those cards have not landed. That is the expected state of a serial release after its first card; each is re-read as its card lands.
+- **ADR index: N/A — this release adds no record under `release/ADRs/`** (`generate-adr-index.py --verify` → `COUNT 0`).
+- **Skill-package freshness:** `printf '%s\n' <changed paths> | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` → 0 skills for this slice and 0 over the whole matrix (control: `release/skills/release-hub/SKILL.md` → `release-hub`).
+- **Runtime suite:** no `runtime-suite-selection-map.md` row matches `core/ADRs/*.md` or `release/releases/plans/*.md`, so row 8 (no match) applies → `test-run/suite-skip`, the honest no-op for a decision record and a plan.
+- **Repository-integrity gates and link checks, over both commits:** issue-reference validity exit 0 (the plan passes by the `release/releases/*` path exemption; the same content outside that path → exit 1); dead-file-reference over `core release docs .github` plus top-level markdown, anchors and images → 0 broken, neither file carrying a markdown link (sensitivity: a planted link to a missing file → exit 1); depersonalization → 0 operator-identity hits over 522 non-blank added lines (control: the repository README → 1); the doc-link checker over the shared scope list with `--require-targets` → exit 0, 0 findings, self-test 11 of 11; commit messages → the close-keyword check CLEAN over 2 commits and the commit-message depersonalization replay 0 hits; both commits signed.
+
+**Artifact-Acceptance Record — ADDITIVE mode.** This release resolves **DEPLOYABLE** at close (rung 1: `domain_practice.domain` reads `governance`, not `task-artifact`), so `G-CL3` takes the deployable path. The ADR is a task-artifact deliverable riding that release, so its acceptance is recorded here and read by `G-CL4`. Seeded at Stage 6 with the fields known now; the verdict and the acceptor are completed when Stage 8 QA grades the reader limbs and the Stage 9 GO ratifies.
+
+| `deliverable` | `canonical_path` | `landing_commit` | `acceptance_verdict` | `acceptor` |
+|---|---|---|---|---|
+| #8117 — ADR-221, the documentation-model decision record | `core/ADRs/ADR-221-system-documentation-is-a-generated-process-catalog.md` | `c79ac3fe` | owed — Stage 8 QA, then the Stage 9 GO | owed — Stage 8 QA; ratified at the Stage 9 GO. The decision text itself was ratified by the operator at the process-baseline planning gate (2026-10-23), the card's ratifying review |
+
 ## Deployment Execution Log
 
 (Populated during Stage 12 — see execution-checklist.md)
@@ -519,3 +538,45 @@ N/A — enumerated over frontmatter schemas, issue-form field schemas and gate-r
 | Manifest execution | | | |
 | State anchor update | | | |
 | Post-execution verification | | | |
+
+## Change Description
+
+*Interim — authored when the draft PR opened, after the first of three scope-locked cards landed. The Engineering commits for #8494 and #8119 each extend it, and it is complete before the Stage-9 ready-for-review transition.*
+
+### Outcome
+
+How a repository's system documentation is modelled is now a recorded, `Accepted` architecture decision on this branch: ADR-221 chooses one generated catalog of text process pages, with each page's visual written as text beside its prose, one page per node plus generated views, in a folder outside the durable-corpus paths. Every later card in the system-documentation initiative builds against it. The release goes on to extend the design-artifact standard to that catalog and to carry a Documentation Impact declaration, with a retire action, on every shipping work-item form.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8117 | The documentation-model decision lands as ADR-221 (`Accepted`): D1 a generated catalog over text pages, D2 visuals as text in the same page, D6 one page per node plus generated views, with placement, identity, lifecycle and generation rules | DONE |
+
+Rows for #8494 and #8119 are added by their Engineering commits. #8495 is back in Stage 5 Solutioning and joins only after its re-spec clears Collective Review.
+
+### Key decisions (when applicable; omit this sub-section when no D-decisions were rendered)
+
+- **D-ReleaseClass:** cross-cutting — five pipeline stage specs are in the matrix. See § Hub-Rendered D-Decisions.
+- **D-ReleaseIdentity:** versioned; bump-class minor, provisional v4.78, binding only at the Stage-12 claim.
+- **D-RetireSemantics:** (A) — a document carrying the platform-doc `status` field retires by a status move with inbound links re-pointed; one without the field is deleted with zero inbound references left.
+- **D-Concurrency Posture:** P0 fully serial; no force-push on the release branch.
+- **D-CR1, D-CR2:** scope locked for #8117, #8494 and #8119; #8495 returned to Stage 5.
+- **D-CR5 (applied to #8117):** the ADR names its ratifying review as the operator's planning-gate ratification, without an undefined gate label.
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** `git revert -m 1` of the merge removes the ADR and every other change in one step; the version tag is retained and the rollback recorded. The decision the ADR records is itself EXPENSIVE to change later, because every catalog page and generator is shaped by it.
+
+### Downstream impact
+
+- #8494 cites the ADR by its slug token and extends the design-artifact standard with the catalog layer, the link types, the state and lifecycle flow class and the reciprocal-link exception (ADR Consequence 1).
+- #8495's re-spec cites ADR decisions 2, 6 and 10.
+- At the Stage-12 claim, the ADR keeps 221 if this release merges first among the three in-flight releases that add an ADR-221; otherwise `renumber-adr.py` renumbers it and appends the core README's renumber-log line.
+
+### Cross-references
+
+- Release plan: this file, top section
+- Milestone: documentation-model-adopted
+- Decision record: `core/ADRs/ADR-221-system-documentation-is-a-generated-process-catalog.md`
+- User-facing release notes: authored at Stage 13 Close per the release-notes standard
