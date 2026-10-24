@@ -122,7 +122,10 @@
 #     git-ignored files present. Every such row reads "SKIP — active — <reason>",
 #     and a trace that cannot be read reads "SKIP — active — status unreadable
 #     (<trace>)" (fail-closed). Re-checked at apply time, immediately before each
-#     removal
+#     removal. The open-PR list is read for REPO_SLUG, which must name the swept
+#     repository's origin; when it does not, the list is unavailable and every
+#     would-be removal fails closed — export REPO_SLUG=<owner>/<repo> to sweep a
+#     repository other than the configured one
 #     --active-window-hours N  Widen the active window (default and floor: 24)
 #   META:
 #     --help, -h               Usage
@@ -938,9 +941,32 @@ remote_recent_reason() {
 # answers both completely. Truncation-guarded like the map (git-workflow.md
 # § Batch CLI Query Limits); any failure leaves OPEN_PR_STATE unavailable, and
 # every reader below then fails closed.
+# owner/repo of this repository's GitHub remote, or empty when the remote is not on
+# GitHub. Parameter expansion only, over the three URL shapes git writes:
+# https://github.com/o/r(.git), git@github.com:o/r(.git), ssh://git@github.com/o/r(.git).
+repo_origin_slug() {
+  local u
+  u=$(git remote get-url "$REMOTE_NAME" 2>/dev/null || true)
+  case "$u" in
+    *github.com[:/]*) u="${u#*github.com}"; u="${u#[:/]}"; u="${u%/}"; u="${u%.git}"; printf '%s' "$u" ;;
+  esac
+}
+
 build_open_pr_list() {
   OPEN_PR_ENTRIES=(); OPEN_PR_STATE="unavailable"; OPEN_PR_BUILT=1
-  local raw line n=0
+  local raw line n=0 origin_slug want have
+  # The list must be the SWEPT repository's. REPO_SLUG comes from operator config,
+  # not from the checkout this run is in, so run inside another repository it would
+  # name this one: that repository's open PRs would be read as this one's, and a
+  # branch with an open PR here would read as having none. Compared before any gh
+  # call; GitHub slugs are case-insensitive.
+  origin_slug=$(repo_origin_slug)
+  want=$(printf '%s' "$REPO_SLUG" | tr '[:upper:]' '[:lower:]')
+  have=$(printf '%s' "$origin_slug" | tr '[:upper:]' '[:lower:]')
+  if [[ -z "$have" || "$have" != "$want" ]]; then
+    echo "WARN open-PR list unavailable — REPO_SLUG '${REPO_SLUG}' does not name this repository's origin ('${origin_slug:-not a GitHub remote}'), so its open PRs would be another repository's; fail-closed (export REPO_SLUG=<owner>/<repo> for the repository being swept)" >&2
+    return 0
+  fi
   ensure_gh_bin
   if [[ -z "$GH_BIN" ]]; then
     echo "WARN open-PR list unavailable — gh not resolvable under the pinned PATH; fail-closed (would-be-REMOVE items will be conservatively SKIPPED)" >&2
