@@ -2468,7 +2468,7 @@ verify_apply() {
 # never exceed its denominator. Every recording site either returns immediately or
 # returns after its cleanup, and the only two sites that do not end their check
 # (selftest_verify_and_prune) are mutually exclusive branches of a single if/else.
-SELFTEST_CHECK_COUNT=21
+SELFTEST_CHECK_COUNT=22
 SELFTEST_SKIPS=()
 
 # Records a check-level SKIP and emits the historical message shape VERBATIM:
@@ -2970,6 +2970,113 @@ selftest_liveness_gate() {
   git branch -D "$branch" >/dev/null 2>&1 || true
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
   echo "self-test: liveness check PASS — canaries + synthetic-holder end-to-end" >&2
+  return 0
+}
+
+# Group PH — the PATH-REACHING holder, the case the cwd oracle above cannot see.
+# A session rooted outside the repository (the workspace root) reaches its
+# worktree by absolute path or `git -C`, so no process has its cwd inside the
+# tree and the cwd scan returns nothing for it — while the session is live. This
+# fixture builds exactly that: a live holder whose cwd is OUTSIDE the tree moves
+# the tree's HEAD by path, then stays alive for the run.
+#
+# Both fixture trees are created with a backdated committer date, so their reflog
+# entries sit outside the active window; the ONLY recent trace on the held tree is
+# the one the holder writes. Base is merge-base(HEAD, <remote>/<main>) when that
+# ref exists (both trees REMOVE-eligible by every other clause, as in group LK),
+# else HEAD — the arms that need a removable control say so and skip on that host.
+#
+# Arms:
+#   PH-1 REPRODUCTION: the holder is alive and the cwd oracle reads the held tree
+#        NOT live — without which the arms below prove nothing about this case
+#   PH-2 the held tree reads `SKIP — active: recent HEAD movement`
+#   PH-3 CONTROL, same run: the backdated sibling does NOT read recent movement, so
+#        the window bounds the class rather than the class matching everything
+#   PH-4 THE PROTECTIVE CLAIM: a REAL `--apply --force` leaves the held tree's
+#        directory in place and removes the control — the removal is what makes
+#        "the held tree survived" non-vacuous
+selftest_path_reaching_holder() {
+  local script_abs slug base br_h br_c wt_h wt_c out holder="" fail=0 old_date has_main=0
+  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  slug="cleanup-selftest-reach-$$"
+  br_h="chore/${slug}-held"; br_c="chore/${slug}-ctrl"
+  wt_h="${REPO_ROOT}/.claude/worktrees/${slug}-held"
+  wt_c="${REPO_ROOT}/.claude/worktrees/${slug}-ctrl"
+  old_date="@$(( $(date +%s) - 30 * 86400 )) +0000"
+  if git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
+    has_main=1
+    base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
+  else
+    base=$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)
+  fi
+  if [[ -z "$base" ]]; then
+    selftest_skip "path-reaching holder check" "no base commit"; return 0
+  fi
+  if ! GIT_COMMITTER_DATE="$old_date" git worktree add -b "$br_h" "$wt_h" "$base" >/dev/null 2>&1; then
+    selftest_skip "path-reaching holder check" "could not create throwaway worktree"; return 0
+  fi
+  if ! GIT_COMMITTER_DATE="$old_date" git worktree add -b "$br_c" "$wt_c" "$base" >/dev/null 2>&1; then
+    git worktree remove --force "$wt_h" >/dev/null 2>&1 || true
+    git branch -D "$br_h" >/dev/null 2>&1 || true
+    selftest_skip "path-reaching holder check" "could not create control worktree"; return 0
+  fi
+
+  # The holder: cwd outside the tree, one HEAD movement by path, then alive.
+  ( cd "${TMPDIR:-/tmp}" && /usr/bin/env -u GIT_COMMITTER_DATE git -C "$wt_h" reset -q HEAD && exec /bin/sleep 20 ) & holder=$!
+  /bin/sleep 1
+
+  # PH-1
+  build_liveness_map >/dev/null 2>&1 || true
+  if ! kill -0 "$holder" 2>/dev/null; then
+    echo "self-test: path-reaching holder FAILED — the holder exited before the run, so the fixture reproduces nothing (PH-1)" >&2
+    fail=1
+  elif [[ "$ORACLE_STATE" == "ok" ]] && worktree_is_live "$wt_h"; then
+    echo "self-test: path-reaching holder FAILED — the cwd oracle saw a holder whose cwd is outside the tree; the fixture is not the path-reaching case (PH-1)" >&2
+    fail=1
+  fi
+
+  if [[ "$fail" -eq 0 ]]; then
+    out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+    if [[ "$fail" -eq 1 ]]; then
+      echo "self-test: path-reaching holder FAILED — inner dry-run exited non-zero" >&2
+    else
+      # PH-2
+      if ! grep -q '"action":"SKIP — active: recent HEAD movement' <<<"$(grep -F "${slug}-held" <<<"$out" || true)"; then
+        echo "self-test: path-reaching holder FAILED — a tree whose HEAD a live holder moved by path did not read active (PH-2)" >&2
+        fail=1
+      fi
+      # PH-3
+      if grep -q 'recent HEAD movement' <<<"$(grep -F "${slug}-ctrl" <<<"$out" || true)"; then
+        echo "self-test: path-reaching holder FAILED — the backdated control tree read recent HEAD movement; the window bounds nothing (PH-3)" >&2
+        fail=1
+      fi
+    fi
+  fi
+
+  # PH-4 — needs a control that is removable on this host
+  if [[ "$fail" -eq 0 ]]; then
+    if [[ "$has_main" -eq 1 ]] && grep -q '"action":"REMOVE"' <<<"$(grep -F "${slug}-ctrl" <<<"$out" || true)"; then
+      out=$("$script_abs" --release-close "$slug" --apply --force --json 2>/dev/null) || true
+      if [[ ! -d "$wt_h" ]]; then
+        echo "self-test: path-reaching holder FAILED — --apply --force removed a tree a live holder was using by path (PH-4)" >&2
+        fail=1
+      elif [[ -d "$wt_c" ]]; then
+        echo "self-test: path-reaching holder FAILED — the control tree also survived, so PH-4 proves nothing about the held tree (PH-4)" >&2
+        fail=1
+      fi
+    else
+      selftest_skip "path-reaching holder PH-4" "the control tree is not removable on this host (needs ${REMOTE_NAME}/${MAIN_BRANCH} and a readable PR-state map)"
+    fi
+  fi
+
+  kill "$holder" >/dev/null 2>&1 || true
+  wait "$holder" 2>/dev/null || true
+  git worktree remove "$wt_h" >/dev/null 2>&1 || git worktree remove --force "$wt_h" >/dev/null 2>&1 || true
+  git worktree remove "$wt_c" >/dev/null 2>&1 || git worktree remove --force "$wt_c" >/dev/null 2>&1 || true
+  git branch -D "$br_h" >/dev/null 2>&1 || true
+  git branch -D "$br_c" >/dev/null 2>&1 || true
+  if [[ "$fail" -ne 0 ]]; then exit 1; fi
+  echo "self-test: path-reaching holder check PASS — PH-1 a live holder with its cwd outside the tree is invisible to the cwd oracle / PH-2 the tree it moved by path reads active / PH-3 a backdated sibling does not / PH-4 a real --apply --force keeps the held tree and removes the control" >&2
   return 0
 }
 
@@ -4542,6 +4649,8 @@ self_test() {
   selftest_self_guard
   echo "self-test: exercising liveness gate (oracle canaries + synthetic live holder)..." >&2
   selftest_liveness_gate
+  echo "self-test: exercising a path-reaching holder (live, cwd outside the tree, moves HEAD by path) (group PH)..." >&2
+  selftest_path_reaching_holder
   echo "self-test: exercising fixed-point apply (worktree + freed branch in one run)..." >&2
   selftest_fixed_point
   echo "self-test: exercising version-prefixed release matcher (release/vX.Y-<slug>; EDIT 1/2/3)..." >&2
