@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.78] - 2026-10-24
+
+Seven authoring conventions each have a disposition you can check: one fails when broken, six are restated where they bind.
+
+[Full notes](release/releases/notes/v4.78_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.78)
+
 ## [v4.77] - 2026-10-18
 
 A Dependabot update outside the scanned folders passes the personal-data check on its own run, and a change it cannot read now fails.

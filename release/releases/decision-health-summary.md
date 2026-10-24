@@ -22,32 +22,36 @@
 
 | Field | Value |
 |---|---|
-| Status | **RUN 2 COMPLETE (independent re-run of the same window)** — six seams `measured` and graded `partial`, one `uninstrumented`; 8 findings, 3 systemic patterns |
-| Audit date (UTC) | 2026-09-18 |
-| Resolved window — `from_release` | v4.60 (`deploy-checks-hardening-batch`) |
-| Resolved window — `from` merge anchor | `aea98ac15f84813a847ffcc666d3926fa7f23c00` |
-| Resolved window — `to_release` | v4.65 (`deploy-tools-and-tests-batch`) |
-| Resolved window — `to` merge anchor | `0c4f0a4d6210bff9413c2ff1ab2f8bd1d438a2da` |
-| Releases spanned | 5 (v4.61, v4.62, v4.63, v4.64, v4.65 — ordered by merge anchor, verified by ancestry with a reverse control arm) |
-| Decision-health posture | **Observable, incompletely recorded, and the gap concentrates at one gate.** Every seam the platform can see was measurable over this window and none reached full capture. The Stage-9 GO gate is the locus of the window's highest-severity finding and of its largest systemic pattern: v4.65 carries no gate-verdict row at all, and no release in the window carries a recommendation-choice delta at any GO firing. One seam is a standing blind spot. |
-| `coverage_index` | **0/7 = 0.000** (counts only `measured` + `captured` seams; a lower bound on decision-observability, not a health score) |
+| Status | **RUN 3 COMPLETE (T1 release close + T2 decision-oracle change), window of one release.** One seam `captured`, five `partial`, one `uninstrumented`. 16 findings (none HIGH or CRITICAL; 5 MEDIUM). 0 in-window systemic patterns, because a one-release window cannot carry a cross-release recurrence; two cross-run recurrences recorded |
+| Audit date (UTC) | 2026-10-24 |
+| Evidence cut | event log read 2026-10-24T21:14Z (241 rows for the release slug); stage sub-tasks and the hub-state ledgers read 21:03–21:08Z. Stage 13 of `to_release` was still running at the cut, and its later rows are outside this run |
+| Resolved window — `from_release` | v4.77 (`dependabot-prs-merge-without-bypass`) — **supplied by the caller**, not defaulted |
+| Resolved window — `from` merge anchor | `0324b97f483c523eb0af5fce739f2ffb56ae669b` |
+| Resolved window — `to_release` | v4.78 (`authoring-conventions-enforced-or-retired`) — release-log row `DEPLOYED` at the cut |
+| Resolved window — `to` merge anchor | `aa1e8ffe629e584e0d65ff73e5ff35387c10331d` |
+| Releases spanned | 1 (ordered by merge anchor, with ancestry verified and a reverse control arm) |
+| **Untiled span (no decision-health run covers it)** | **13 release-log rows, v4.66 through v4.77, merge anchors `d97584e4…` through `0324b97f…`.** The previous run's window ended at v4.65 (`0c4f0a4d…`). This run's lower bound was narrowed explicitly to the one release its caller scoped, so a run that defaults `from_release` from this surface (to v4.78) does not reach that span |
+| Decision-health posture | **The gates held and were recorded; the record between them is incomplete.** Every operator stop the Hub Gate Register names was rendered and recorded on both surfaces, and gate verdicts were captured in full for the first time on this axis (DS2). The shortfalls sit in the connective records: choice deltas at aligned answers and at the Stage-9 GO (the GO gap recurs from the prior run), the commitment sweep's zero-state row (none emitted in the release), and self-repair terminal and companion rows. The release-hub failure mode added by this release's T2 change fired, undetected, on the three hub records posted after its deploy |
+| `coverage_index` | **1/7 ≈ 0.143** (counts only `measured` + `captured` seams; a lower bound on decision-observability, not a health score) |
 | `instrumentation_ceiling` | **6/7 ≈ 0.857** (every seam with a declared producer; no window term) |
-| Coverage distribution — `captured` | 0 |
-| Coverage distribution — `partial` | 6 |
+| Coverage distribution — `captured` | 1 (DS2) |
+| Coverage distribution — `partial` | 5 (DS1, DS3, DS4, DS5, DS6) |
 | Coverage distribution — `unexercised` | 0 — *quiet*; none occurred |
 | Coverage distribution — `undecidable` | 0 — *blind for this window only*; none occurred |
 | Coverage distribution — `uninstrumented` | 1 (DS7) — *standing blind*; carried by the residual-risk register |
-| Classification counts | `unrecorded-decision` 3 · `malformed-record` 2 · `non-terminal-disposition` 1 · `absent-evidence-surface` 1 · `oracle-coverage-gap` 1 |
-| Undeclared-producer detection | neither arm fired — per-seam arm not fired (the only `¬instrumented` seam returned zero rows); aggregate arm not fired (0.000 ≯ 0.857) |
-| Index re-based this run? | **NO** — the seam-identifier set `{DS1…DS7}` is unchanged against the prior pin, so § 3.3's guard does not fire. (The prior run rendered `re-based` under § 3.4's one-time first-run clause, which does not reach this run.) |
+| Classification counts | `unrecorded-decision` 7 · `malformed-record` 3 · `non-terminal-disposition` 3 · `oracle-coverage-gap` 1 · `undetected-named-failure-mode` 1 · `detected-deviation` 1 · `absent-evidence-surface` 0. The labels are run-carried: no corpus surface defines a classification vocabulary, and the last two are new at this run |
+| Undeclared-producer detection | neither arm fired. Per-seam arm: the only `¬instrumented` seam, DS7, returned zero rows. Aggregate arm: 0.143 is not above 0.857 |
+| Index re-based this run? | **NO** — the seam-identifier set `{DS1…DS7}` is unchanged against the prior pin. The T2 change moved the **detection oracle**, not the seam set: see the roster-delta notice |
+| Movement against the prior run | index 0.000 → 0.143 (DS2 partial → captured); ceiling unchanged; DS4 0 → 20 rows. Read it with the window-size caveat: the prior window spanned five releases and this one spans one |
 | Oracle pin — roster membership | `build-reviewer`, `implementation-planner`, `pipeline-triage`, `pmo-architect`, `pmo-data-engineer`, `pmo-devops-sre`, `pmo-principal-engineer`, `pmo-qa-lead`, `pmo-release-manager`, `pmo-skill-editor`, `pmo-skill-refiner`, `pmo-software-engineer`, `release-executor`, `release-hub`, `release-planner`, `roadmap-curator` |
+| Oracle pin — derivation anchor | `aa1e8ffe` (the oracle after the T2 change); unchanged at the run's `main` head |
 | Oracle pin — per-source path · content hash · entry count · entry-title set | entry-title sets recorded in full in the run folder's `SUMMARY.md` § Oracle derivation and pin; per-source hashes and counts in the table below |
-| Oracle pin — derivation date | 2026-09-18 |
-| Oracle pin — derivation control | bounding control **PASS** on all 16 sources (section-scoped count strictly < whole-file heading count everywhere; zero degenerate) |
-| Roster-delta notice | **no delta** — membership identical to the prior pin, none added, none removed; per-source content hashes also identical, so the oracle has not drifted in content |
-| Evidence-bar pass rate | **8 of 8 (100%)**; zero unpinnable observations |
-| Systemic patterns | 3 — the Stage-9 gate recording nothing; recovery recorded at the symptom locus not the election locus; the Stage-13 Surface-1 deferral taken on every release |
-| Latest analysis folder | `analysis/decision-audit-2026-09-18/` (operator-instance, git-ignored) |
+| Oracle pin — derivation date | 2026-10-24 |
+| Oracle pin — derivation control | bounding control **PASS** on all 16 sources (section-scoped count strictly below the whole-file heading count everywhere; zero degenerate) |
+| Roster-delta notice | **No membership delta.** Three sources changed content since the prior pin. `release-hub` gained one entry, *Grounded claim cited in prose and left unlabeled — OUT*: the T2 change, with the hub Output Contract's per-emission evidence-label requirement. `release-executor` and `release-planner` changed content with identical entry counts and title sets, which is the case the hash field exists to show |
+| Evidence-bar pass rate | **16 of 16 (100%)**; zero unpinnable observations |
+| Systemic patterns | 0 in-window (one-release window). Cross-run recurrences: the Stage-9 GO carries no choice-delta row (the prior run's largest pattern), and the Stage-12 Surface-1 step defers to the Stage-13 backstop by construction (the prior run's third pattern). In-window cluster that is a candidate for the next window: hub-brief premises overturned downstream, seven instances |
+| Latest analysis folder | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/decision-audit-2026-10-24/` (operator-instance, git-ignored) |
 
 ### Oracle pin — per source
 
@@ -65,26 +69,27 @@
 | `release/skills/pmo-skill-editor/SKILL.md` | `d7992351414dc01d` | 6 |
 | `release/skills/pmo-skill-refiner/SKILL.md` | `99e4966a83dfdc7b` | 6 |
 | `release/skills/pmo-software-engineer/SKILL.md` | `ff360c227b864ea8` | 4 |
-| `release/skills/release-executor/SKILL.md` | `3be07cbd8d85f281` | 13 |
-| `release/skills/release-hub/SKILL.md` | `379af3079936c3f0` | 9 |
-| `release/skills/release-planner/SKILL.md` | `1e403b00bbdfdf40` | 17 |
+| `release/skills/release-executor/SKILL.md` | `13ecc8addbc08873` | 13 |
+| `release/skills/release-hub/SKILL.md` | `99344ca2a747828b` | 10 |
+| `release/skills/release-planner/SKILL.md` | `5255d3699abb377c` | 17 |
 | `release/skills/roadmap-curator/SKILL.md` | `4b9383855ff24b8b` | 5 |
 
 ### Per-seam result
 
 | Seam | `rows(s,W)` | `occasions(s,W)` | coverage state | grade |
 |---|---|---|---|---|
-| **DS1** | 218 | ≥ 10 | `measured` | partial |
-| **DS2** | 22 | ≥ 5 | `measured` | partial |
-| **DS3** | 80 events + 15 ledger | ≥ 15 | `measured` | partial |
-| **DS4** | 0 | 4 | `measured` | partial |
-| **DS5** | 2 | 4 | `measured` | partial |
-| **DS6** | 3 | 3 | `measured` | partial |
+| **DS1** | 50 | 17 contract occasions (15 rows present) + the stage-spec decisions | `measured` | partial |
+| **DS2** | 21 | 21 | `measured` | **captured** |
+| **DS3** | 100 events + 27 ledger | ≥ 27 items' transitions + the tiered findings | `measured` | partial |
+| **DS4** | 20 | ≥ 24 | `measured` | partial |
+| **DS5** | 4 | ≥ 5 | `measured` | partial |
+| **DS6** | 4 | ≥ 5 | `measured` | partial |
 | **DS7** | 0 | — | `uninstrumented` | — (no grade — a non-graded state is never a passing grade) |
 
-**DS4 is the instrumented-owed-and-silent case**, routed to `measured`/`partial` by § 2.1's first
-predicate rather than to `unexercised` or `uninstrumented`, so a live emission gap reads as a shortfall
-rather than as an absence.
+**DS2 is the first `captured` seam on this axis.** Every stage gate the release traversed carries
+the verdict row its spec assigns, and the Stage-9 GO row is present. Four of those rows were written
+after the routing point that consumed them, and each carries a disclosure token. That disclosure is
+what keeps them well-formed.
 
 ## How to read this surface
 
