@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.78 (2026-10-24) — Seven authoring conventions each get a disposition you can check
+
 ### v4.77 (2026-10-18) — Dependabot pull requests get the personal-data check's verdict on their own run
 
 ### v4.76 (2026-10-18) — Eight CI and pipeline checks now cover the whole class they name
