@@ -1,5 +1,5 @@
 ---
-title: "ADR-221 — A repository's system documentation is one generated catalog of process pages, written as text, placed outside the durable-corpus paths"
+title: "ADR-223 — A repository's system documentation is one generated catalog of process pages, written as text, placed outside the durable-corpus paths"
 status: Accepted — operator-ratified at the process-baseline planning gate, 2026-10-23; numbered and landed through the release pipeline
 date: 2026-10-22
 release: documentation-model-adopted
@@ -10,13 +10,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-221 — A repository's system documentation is one generated catalog of process pages, written as text, placed outside the durable-corpus paths
+# ADR-223 — A repository's system documentation is one generated catalog of process pages, written as text, placed outside the durable-corpus paths
 
 ## Status
 
 Accepted by the operator at the process-baseline planning gate (2026-10-23); it lands as a tracked ADR through the release pipeline, numbered by adr-helper. Answers the documentation-model spike: D1 the model, D2 the written-to-visual rule, D6 the minimal
 set — plus the placement, identity, lifecycle and generation questions the process baseline surfaced. It is an
 EXPENSIVE scope-lock: every page, check and view is shaped by it.
+
+**Numbering provenance — `221 → 223`.** Held **ADR-221** branch-local; renumbered to **ADR-223** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 221. In-release citations that read "ADR-221" denote this record.
 
 ## Context
 
