@@ -870,12 +870,14 @@ worktree_recent_reason() {
 # copy from a session's work product written into an ignored home (an analysis
 # folder, an instance container), so presence is enough. Sets ACTIVE_REASON and
 # returns 0 when active, 1 when the tree holds none. `--directory` collapses an
-# ignored directory to one line, so the listing stays small.
+# ignored directory to one line, so the listing stays small; `--no-empty-directory`
+# leaves out an ignored directory that holds no file, which carries nothing to lose
+# (without it, trees whose only ignored entry is an empty directory read active).
 worktree_ignored_reason() {
   local path="$1" ign
   ACTIVE_REASON=""
   [[ -d "$path" ]] || return 1
-  ign=$(git -C "$path" ls-files --others --ignored --exclude-standard --directory 2>/dev/null) || {
+  ign=$(git -C "$path" ls-files --others --ignored --exclude-standard --directory --no-empty-directory 2>/dev/null) || {
     ACTIVE_REASON="SKIP — active — status unreadable (git-ignored listing)"; return 0; }
   if [[ -n "$ign" ]]; then
     ACTIVE_REASON="SKIP — active — git-ignored files present"; return 0
