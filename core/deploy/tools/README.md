@@ -143,7 +143,7 @@ python3 core/deploy/tools/check-doc-links.py \
 - `1` — broken refs found (count in TSV body)
 - `2` — argparse failure (missing `--target-paths` or `--self-test`)
 
-**Categories:** `broken-cross-ref`, `broken-anchor`, `deleted-target`.
+**Categories:** `broken-cross-ref`, `broken-anchor`, `deleted-target`. `broken-anchor` is a line anchor (`#L<n>` / `#L<n>-L<m>`) out of range for its target file; heading anchors are not checked by this primitive.
 
 **Severity tiers:**
 - **P1** (must-fix): active governance + skill SKILL.md + per-module rules
@@ -370,7 +370,7 @@ and as the deployed `CLAUDE.md`.
 python3 core/deploy/tools/check-doc-links.py --self-test
 ```
 
-Runs 9 fixtures sequentially. Each fixture uses its own tmpdir scope;
+Runs 12 fixtures sequentially. Each fixture uses its own tmpdir scope;
 failure on any → exit 1 with explicit assertion message.
 
 | # | Fixture | Verifies |
@@ -386,8 +386,9 @@ failure on any → exit 1 with explicit assertion message.
 | 9 | relocatable workspace-root + precedence | a `/`-rooted link re-roots under a sandbox root; CLI > `$CLAUDE_WORKSPACE_ROOT` > default |
 | 10 | `--target-paths-file` loader (shared scan-scope SSOT) | one-glob-per-line parsing; blank/comment lines ignored; missing or comment-only file returns `[]` (which `main()` converts to a hard error, never a silent empty scan) |
 | 11 | repeatable `--allowlist` UNION (shared tracked base + instance additions) | two allowlist files concatenate in argument order and neither shadows the other; a missing file does not discard the present one; the union actually suppresses (with an unallowlisted control that still fires) |
+| 12 | line anchors (one rule with `check-release-links.py`) | `#L<n>` / `#L<n>-L<m>` is valid when the target file holds every line named (lines counted as git numbers them), and line 0, a line past the end or a non-file target is `broken-anchor`; heading fragments and near-misses (`#l9`, `#L9x`) are not claimed as line anchors |
 
-Expected output: `self-test OK (11 fixtures passed)`.
+Expected output: `self-test OK (12 fixtures passed)`.
 
 ## Check 14 (deploy.sh) Invocation
 

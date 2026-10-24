@@ -10,12 +10,23 @@ reports any link target that:
 - Escapes the repo root (`../` past the top)
 - (when --check-anchors) carries a `#fragment` that names no heading in the
   target file, where the fragment is resolved by a faithful github-slugger port
+- (when --check-anchors) carries a line anchor (`#L<n>` or `#L<n>-L<m>`) that
+  names a line past the end of the target file
 
 Path resolution (canonical rule, ADR-085 — identical to check-doc-links.py, see
 core/standards/doc-link-maintenance-protocol.md § Path resolution): a link
 resolves relative to the source file's directory; a leading `/` denotes the
 workspace (repo) root; there is NO bare module-prefix fallback (a bare `core/…`
 from a non-root file is an ordinary relative path, so it is broken).
+
+Line anchors (the same rule as check-doc-links.py): a fragment matching
+`^L[0-9]+(-L[0-9]+)?$` is GitHub's link to a line or a span of lines, never a
+heading. It is valid when the target is a file with at least that many lines,
+counted as git numbers them (for a span, both line numbers must exist); line 0
+or a line past the end is a finding. It is never reported as a missing heading.
+The predicate is shared with check-doc-links.py; only the severity is this
+checker's own: a line-anchor finding joins the other anchor findings, so it is
+warn-mode under --check-anchors and fails the run only with --anchors-hard-fail.
 
 Skips (treated as intentional non-links):
 
@@ -164,6 +175,42 @@ def _line_of(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
+# --- Line anchors (one rule, shared with check-doc-links.py) -----------------
+# `#L<n>` / `#L<n>-L<m>` is GitHub's link to a line or a span of lines. It names
+# a line, not a heading: resolving it against heading slugs reports every one as
+# a missing anchor, and a slug can never equal it (slugs are lower-cased). The
+# match is case-sensitive and anchored, so `#l5`, `#L5x` and `#L5-6` stay
+# heading fragments.
+LINE_ANCHOR_RE = re.compile(r'^L([0-9]+)(?:-L([0-9]+))?$')
+
+
+def line_count(path: Path) -> int:
+    """Lines in a file as git and GitHub number them: split on line feeds, and
+    a last line with no trailing line feed still counts. 0 for an empty file,
+    a directory, or a file that cannot be read."""
+    try:
+        data = path.read_bytes()
+    except Exception:
+        return 0
+    if not data:
+        return 0
+    return data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
+
+
+def line_anchor_in_range(frag: str, path: Path) -> bool | None:
+    """None when `frag` is not a line anchor. Otherwise True when `path` is a
+    file holding every line the anchor names (both ends of a span), and False
+    for line 0, a line past the end, or a target that is not a file."""
+    m = LINE_ANCHOR_RE.match(frag)
+    if not m:
+        return None
+    start = int(m.group(1))
+    end = int(m.group(2)) if m.group(2) is not None else start
+    if not path.is_file():
+        return False
+    return min(start, end) >= 1 and max(start, end) <= line_count(path)
+
+
 def check_file(md: Path, *, check_anchors: bool, images: bool,
                anchor_warns: list[str],
                added: set[int] | None = None) -> list[str]:
@@ -199,6 +246,14 @@ def check_file(md: Path, *, check_anchors: bool, images: bool,
             # Pure in-file anchor (`#frag`) — only meaningful with --check-anchors,
             # resolved against THIS file's own headings.
             if check_anchors and frag:
+                in_range = line_anchor_in_range(unquote(frag), md)
+                if in_range is not None:
+                    if not in_range:
+                        anchor_warns.append(
+                            f"  line-anchor-out-of-range (in-file): {target} "
+                            f"-> #{unquote(frag)} is out of range for "
+                            f"{md.name} ({line_count(md)} lines)")
+                    continue
                 this_slugs = slug_cache.get(md)
                 if this_slugs is None:
                     this_slugs = slug_set(text)
@@ -225,6 +280,16 @@ def check_file(md: Path, *, check_anchors: bool, images: bool,
         if not resolved.exists():
             broken.append(f"  broken: {target} -> {resolved.relative_to(REPO_ROOT)}")
             continue
+        if check_anchors and frag:
+            in_range = line_anchor_in_range(unquote(frag), resolved)
+            if in_range is not None:
+                if not in_range:
+                    anchor_warns.append(
+                        f"  line-anchor-out-of-range: {target} -> #{unquote(frag)} "
+                        f"is out of range for "
+                        f"{resolved.relative_to(REPO_ROOT)} "
+                        f"({line_count(resolved)} lines)")
+                continue
         if check_anchors and frag and resolved.is_file():
             target_slugs = slug_cache.get(resolved)
             if target_slugs is None:
@@ -619,10 +684,99 @@ def run_self_test() -> int:
         f"self-test: depth lint flagged the prescribed workspace-rooted form or "
         f"an ordinary skip class: {clean_findings!r}")
 
+    # -- Line anchors: one rule, shared with check-doc-links.py --------------
+    # `#L<n>` / `#L<n>-L<m>` is valid when the target file holds every line it
+    # names, and is never a missing heading. The predicate arms pin the line
+    # count (git's numbering, with and without a trailing newline) on temp
+    # files; the end-to-end arm runs real links through check_file, so the new
+    # branch is reached, and pins that a heading fragment is still resolved as a
+    # heading and that a near-miss is not claimed as a line anchor. The same
+    # case set is pinned in check-doc-links.py's self-test (fixture 12).
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        three = tdp / "three.md"
+        three.write_bytes(b"# Head\nb\nc\n")
+        no_final_newline = tdp / "no-final-newline.txt"
+        no_final_newline.write_bytes(b"a\nb")
+        empty = tdp / "empty.txt"
+        empty.write_bytes(b"")
+        crlf = tdp / "crlf.txt"
+        crlf.write_bytes(b"a\r\nb\r\n")
+        counts = [line_count(p) for p in (three, no_final_newline, empty, crlf, tdp)]
+        assert counts == [3, 2, 0, 2, 0], (
+            f"self-test: line_count must number lines as git does; got {counts!r}")
+        line_cases = [
+            ("L1", three, True), ("L3", three, True), ("L4", three, False),
+            ("L0", three, False), ("L2-L3", three, True), ("L2-L4", three, False),
+            ("L1-L3", three, True), ("L2", no_final_newline, True),
+            ("L3", no_final_newline, False), ("L1", empty, False),
+            ("L1", tdp, False),
+        ]
+        for frag, path, want in line_cases:
+            got = line_anchor_in_range(frag, path)
+            assert got is want, (
+                f"self-test: line anchor #{frag} on {path.name!r} expected "
+                f"{want}, got {got!r}")
+        # Near-misses the rule must NOT claim: each stays a heading fragment.
+        for frag in ("l1", "L1x", "L", "L-L2", "L1-2", "L1-L", "5-process",
+                     "head", "L1 "):
+            assert line_anchor_in_range(frag, three) is None, (
+                f"self-test: #{frag} wrongly read as a line anchor")
+
+    line_target = real_note
+    n_lines = line_count(line_target)
+    real_slugs = sorted(slug_set(line_target.read_text()))
+    assert n_lines >= 2 and real_slugs, (
+        f"self-test: the line-anchor arm needs a target with at least two "
+        f"lines and one heading; {line_target.name!r} has {n_lines} lines and "
+        f"{len(real_slugs)} headings")
+    rel = "/" + line_target.relative_to(REPO_ROOT).as_posix()
+    with tempfile.TemporaryDirectory() as td:
+        probe = Path(td) / "line-anchor-probe.md"
+        probe.write_text(
+            f"[first]({rel}#L1)\n"
+            f"[last]({rel}#L{n_lines})\n"
+            f"[span]({rel}#L1-L{n_lines})\n"
+            f"[heading]({rel}#{real_slugs[0]})\n"
+            f"[past]({rel}#L{n_lines + 1})\n"
+            f"[span-past]({rel}#L1-L{n_lines + 1})\n"
+            f"[no-heading]({rel}#no-such-heading-zzqx)\n"
+            f"[near-miss]({rel}#L1x)\n",
+            encoding="utf-8")
+        line_warns_all: list[str] = []
+        line_broken = check_file(probe, check_anchors=True, images=False,
+                                 anchor_warns=line_warns_all)
+        off_warns: list[str] = []
+        check_file(probe, check_anchors=False, images=False,
+                   anchor_warns=off_warns)
+    assert not line_broken, (
+        f"self-test: a line anchor must never be a broken path: {line_broken!r}")
+    out_of_range = [w for w in line_warns_all if "line-anchor-out-of-range" in w]
+    missing_heading = [w for w in line_warns_all if "missing-anchor" in w]
+    assert len(out_of_range) == 2 and len(missing_heading) == 2, (
+        f"self-test: line-anchor arm expected 2 out-of-range (past, span-past) "
+        f"and 2 missing headings (no-heading, near-miss); got "
+        f"{line_warns_all!r}")
+    for expected in (f"{rel}#L{n_lines + 1} ", f"{rel}#L1-L{n_lines + 1} "):
+        assert any(expected in w for w in out_of_range), (
+            f"self-test: out-of-range line anchor not reported: {expected!r}")
+    for expected in ("#no-such-heading-zzqx ", "#L1x "):
+        assert any(expected in w for w in missing_heading), (
+            f"self-test: heading fragment no longer resolved as a heading: "
+            f"{expected!r}")
+    for valid in (f"{rel}#L1 ", f"{rel}#L{n_lines} ", f"{rel}#L1-L{n_lines} ",
+                  f"{rel}#{real_slugs[0]} "):
+        assert not any(valid in w for w in line_warns_all), (
+            f"self-test: a valid anchor was reported: {valid!r}")
+    assert not off_warns, (
+        f"self-test: without --check-anchors no fragment may be checked: "
+        f"{off_warns!r}")
+
     print("self-test OK (release-plan/notes refs are checked not skipped, "
           "placeholder forms still skip, fail-closed fixture reports the "
           "absent note, skip classes + test-fixture path exclusion hold, "
-          "plan depth-invariance lint scopes and fires correctly)")
+          "plan depth-invariance lint scopes and fires correctly, line "
+          "anchors resolve against the file's length and never as headings)")
     return 0
 
 
