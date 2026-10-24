@@ -2,7 +2,7 @@
 title: Bundle Composition Doctrine
 type: standard
 version: v11.28
-purpose: Codifies the agent-readable methodology for deciding WHAT belongs in a given milestone and WHY those items cohere as a shippable unit — the 7-step vertical capability slice method + tight-merge mechanics + naming convention + size-target heuristics + risk-weighted capacity model + sequence rules + the retention guardrails constraining a recommendation to remove work from the backlog
+purpose: Codifies the agent-readable methodology for deciding WHAT belongs in a given milestone and WHY those items cohere as a shippable unit — the 7-step vertical capability slice method + tight-merge mechanics + naming convention + size-target heuristics + size-class assignment rubric + risk-weighted capacity model + sequence rules + the retention guardrails constraining a recommendation to remove work from the backlog
 parallel_to:
   - reference/explanation/discovery-discipline.md
   - reference/specs/release-class-taxonomy.md
@@ -15,7 +15,8 @@ consumers:
   - release/governance/RELEASE_PROTOCOL.md (Implementation Plan Format section cross-reference)
   - release/references/pipeline/stage-02-triage.md (§ 12 read when A6.5 Pattern (1) surfaces a removal candidate)
   - release/skills/roadmap-curator/SKILL.md (§ 12 read at Mode B re-baseline and Mode C drift audit)
-last-updated: 2026-09-06
+  - core/schemas/gate-criteria-spec.md (G3-09 remedy — § 3 Step 5 Size-Class Assignment)
+last-updated: 2026-10-22
 ---
 <!-- reference-durability: allow-link -->
 
@@ -145,7 +146,7 @@ Pipeline-definition + protocol + template + reference tickets the slice depends 
 
 ### Step 5 — Size-check at 15-25 pts target
 
-Total story points (XS=1 / S=2 / M=4 / L=8 / XL=16). Target **15-25 pts per slice**.
+Total story points (XS=1 / S=2 / M=4 / L=8 / XL=16). Each member's class comes from the size-class assignment rubric — the *Step 5 — Size-Class Assignment* sub-block below. Target **15-25 pts per slice**.
 
 | Total pts | Disposition |
 |---|---|
@@ -164,6 +165,60 @@ Thresholds are MEDIUM confidence — **`[CALIBRATE-AFTER-3]`** per the RELEASE_L
 - **Composes with:** decomposition-review enforcement — G2-11 (Triage) + G3-12 (Bundle) COMPOSITE-OR predicate fires on `size:XL` OR declared decomposition hooks OR AC count ≥ 7 OR Affected Files count ≥ 5. This doctrine is **positive guidance** (target band); gate enforcement (positive guidance vs predicate firing) is the decomposition-review gate.
 - **Per-milestone enforcement:** the risk-weighted membership sum (`effective_pts`, defined in the Step 5 Risk-Weighting sub-block below) is gated by **G3-15** (`gate-criteria-spec.md § Gate 3`) at the Bundle→Planning boundary — the per-milestone-sum complement to the per-issue G2-11 / G3-12 decomposition predicate. On breach G3-15 routes to the § 4 tight-merge or the § 3 Step 5 split/merge/reframe disposition above (not a dead-end fail), reading the SAME `release_size_target_pts` band and `release_class_capacity_weights` config so the modeled target and the enforced bound are a single source. **The gate fires once, at that boundary; its inputs do not stop changing there.** `class_weight` is one of its two inputs, and the release class is re-classifiable at any later stage — so a class change after Bundle alters the multiplier on a figure this gate has already evaluated and will not evaluate again. That event carries its own recompute obligation at the point of decision, stated in `release-class-taxonomy.md § Re-Classification Protocol`; it does not re-fire G3-15, and nothing downstream re-asserts the bound on the gate's behalf.
 - **Output:** total pts + disposition + (if split) sub-slice list.
+
+#### Step 5 — Size-Class Assignment
+<!-- design-artifact: flow-class=decision-tree; name=size-class-assignment; depicts=release/references/standards/bundle-composition-doctrine.md -->
+
+The point scale converts a size class into points; this sub-block defines the class, the input to the point scale. A size class states **how much of the corpus a change touches** — the complexity axis. It is read from observable properties of the work, so that two people sizing the same issue against the same repository reach the same class. Assigning a class is not one of the seven steps: a member arrives at this step already sized, and this sub-block is the definition its class is read against.
+
+**The unit is a surface: one tracked file the change modifies, creates or removes.** A test or fixture file is a surface like any other. Not counted: the release's own records (its plan, the release log, notes and changelog entries), built packages and their digests, and deployed mirrors of a file already counted.
+
+**The count is taken by searching, not by reading the issue's file list.** The repository is searched for what the issue changes — the identifier, string, section or pattern it names — and the class is read from the number of files that have to change. Where the issue names a directory or a pattern, the count is what the search returns. Where the scope turns on a population nobody has counted, the class follows the count once it is made; sizes set from a body's stated scope are the ones later corrected. Where the file set turns on a design choice not yet made, the count is taken over the largest option still open, so making the choice can lower the class and never raises it.
+
+| Class | Points | Surfaces | What else is typically true |
+|---|---|---|---|
+| **XS** | 1 | one, corrected in place — a value, a citation, a row or a sentence is replaced or removed and nothing is added | one module; no new file |
+| **S** | 2 | two or three; or one that gains new content — a rule, a section, a step, a function, a check or a test | usually one module; no new file |
+| **M** | 4 | four to six; or up to three where the change creates a new file | about half cross a module boundary; about half create a file |
+| **L** | 8 | seven to fifteen | most create files and cross a module boundary; a decision record is common |
+| **XL** | 16 | more than fifteen; or more than one capability that could ship separately, whatever the count | routed for decomposition before it is bundled (gates G2-10 and G3-09) |
+
+Read the table from the bottom: the first row whose **Surfaces** cell is true is the class. The last column is a cross-check, not a second test — an issue that fits a row's count and none of its typical properties has usually been under-counted. A decision record and its index entry are surfaces, as is the registration site a new file usually needs.
+
+**For this count, a module boundary is crossed** when the surfaces span more than one of the repository's top-level trees — `core`, `operations`, `release`, `docs`, the CI workflows, or the repository root.
+
+**Work with no tracked-file surface has no row.** A spike whose product is a decision, the composition of a milestone, a label or other repository-state write: its count is zero, and zero is not XS, which is a one-file correction. Such work is not classed by this table; a class it carries is a judgment with its own stated reason, not a reading of any row.
+
+**What a size is not.** It does not rise for risk, reversibility, priority, review depth or the number of acceptance criteria. Ceremony is carried by the Release Class multiplier in the Risk-Weighting sub-block below, priority by the issue body, reversibility by its own tier. A one-file change to a critical script is still one surface. Nor is a size a delivery team's estimate: the size class is the release pipeline's carrier, and G3-15 reads only it. A kind-level estimate a methodology pack declares — the Scrum pack's story points on a story — is the delivery team's, shares only a name with the points above, and substitutes for no size class.
+
+**What a size cannot do.** It makes the class reproducible from a count. It does not make the count right when the scope itself is unknown: a class describes the scope of record on the day it is assigned.
+
+**Each class's one-line anchor** — the text a `size:*` label's description takes — states the class's points and its anchor in words, with no cut-point number while the cut points are seeds, and names this document as the rubric.
+
+| Label | Description |
+|---|---|
+| `size:XS` | `1 pt. A correction in place; nothing added. Rubric: bundle-composition-doctrine.md` |
+| `size:S` | `2 pts. A few files, or new content in a file. Rubric: bundle-composition-doctrine.md` |
+| `size:M` | `4 pts. Several files, or a new file. Rubric: bundle-composition-doctrine.md` |
+| `size:L` | `8 pts. Many files, often new ones across modules. Rubric: bundle-composition-doctrine.md` |
+| `size:XL` | `16 pts. More than L, or more than one shippable capability. Rubric: bundle-composition-doctrine.md` |
+
+**Worked examples** — already-shipped work, described by what was delivered. The issues are listed under § References at the foot of this document.
+
+| Class | Example, by its observable properties |
+|---|---|
+| XS | The hard-coded repository owner in one pipeline stage spec's command example replaced with a placeholder; one line changed, nothing added. |
+| XS | A placeholder in one project template replaced with the template variable for the same value, at each of its three sites; nothing added. |
+| S | Two documents in the release module amended so a scan stops missing relocated paths; no new file. |
+| S | A defect corrected in one tool and in the sibling tool that shared it; two files, one module, no new file. |
+| M | A release-title defect corrected across two tools, an executor skill, two pipeline stage specs and the gate register; six files in two modules, no new file. |
+| M | A plan-verification executor wired to a field it parsed and ignored — the tool, its stage spec, its test file and two fixtures, one of them new; five files in one module. |
+| L | Divergent copies of one schema made visible to three checks; eleven files across two modules, one new registry file. |
+| L | Record-number collisions between concurrent releases closed off; twelve files across three modules, four of them new, with a decision record. |
+| XL | The default home of operator-instance state relocated; about fifty files across every module, delivered as a sequence of separately reviewable commits. |
+| XL | Every decision record brought to one structural standard; more than a hundred files, delivered as a sequence of sweeps. |
+
+**Calibration basis — the cut points are seeds.** The method above — surfaces counted by search, the table read from the bottom, and what a size is and is not — is the rule. The numbers in the **Surfaces** column, the new-file floor in the M row among them, are seeds. They were set against delivered work: for shut issues that carried a size, the files changed by the commits citing each issue were counted, and the count rose with the assigned class, as did module crossing, file creation and added decision records; new tests or fixtures, and the number of acceptance criteria, did not separate the classes and are not anchors. That is a measurement after delivery, and the cut points are untested before it: a rater counts from a forecast, and how closely a forecast reaches the delivered count has not been measured. The seeds bind only after an ex-ante backtest — shut work sized from its title and body against the repository as it stood before the work, by raters who do not see its label, their classes compared with each other and with what was delivered — has run and this paragraph records its result. Until then they are a provisional reading of the count, and no label description, label-grammar row or decision record carries them. Their effect on the target band is unmeasured per milestone: the cut points and the band share one calibration standing — MEDIUM confidence, **`[CALIBRATE-AFTER-3]`** — and the largest class rests on the fewest observations.
 
 #### Step 5 — Risk-Weighting (Release-Class capacity multiplier)
 
@@ -626,3 +681,19 @@ Any agent producing a **removal recommendation** over the platform's own backlog
 | — | 2026-08-03 | Adds § 12 Backlog-Retention Guardrails (BRG-1..BRG-4) — the restraints on a recommendation to REMOVE work from the backlog, complementing § 3's what-enters method: no delivery-team backlog model as a sizing yardstick for the multi-role product backlog (with the altitude boundary stated against the delivery-engine backlog-health reference § 1.1 + § 3); no "aspirational"/"zombie" label on a queued milestone, with both live in-corpus senses of *zombie* named and each shown not to license the label; concrete evidence (never age) required for a closure recommendation; retired-milestone history amended by appending, never deleted or rewritten. Carries a two-neighbour disambiguation clause covering both same-vocabulary collisions — the Stage-2 Triage A6.5 Pattern (1) "Backlog hygiene" per-issue detector, and the `RECORDS_POLICY.md` § Retention Schedule preservation-floor sense of *retention*. Renumbers Cross-Reference § 12 → § 13 and Version History § 13 → § 14 (§ 10 and § 11 unchanged — `§ 11.8` is externally cited); widens the frontmatter `purpose` by one clause, adds two consumers, and reconciles a `last-updated` field three prior amendments left stale. Additive; no existing rule restated; no gate added. | Stage 5 Solutioning design + Collective Review scope-lock (Tier-1 [ADJUST] amendments from the adversarial design review); Stage 6 Engineering (milestone governance-hardening) |
 | — | 2026-09-06 | Amends both § 3 Step 5 sites that scope the risk-weighted size bound to one boundary — the Per-milestone-enforcement bullet and the Risk-Weighting sub-block's Enforcement-layer paragraph. Each stated the bound as asserted at the Bundle→Planning boundary without stating that `class_weight`, one of the bound's two inputs, is re-classifiable at any later stage; a class change after Bundle therefore altered the multiplier on a figure the gate had already evaluated and would not evaluate again, and nothing said so. Both sites now state that the gate fires once at that boundary while its inputs keep changing, and point at the recompute obligation that now lives at the point of decision in `release-class-taxonomy.md § Re-Classification Protocol`, which reads these same config fields so the boundary evaluation and the re-classification recompute remain a single source. The gate's own runner, locus, and permanently-advisory live-half posture are unchanged — the amendment states the boundary, it does not widen it. Additive at both sites; no existing rule restated, no rounding mode or magnitude re-derived, no gate, criterion, or step added. | Stage 5 Solutioning design; Stage 6 Engineering (milestone governance-docs-reconciled) |
 | — | 2026-09-06 | Corrects § 3 Step 3's frame-anchor bullet. The bullet stated the Vertical Slice principle without its `to deliver end-user observable change` clause and then presented the backward dep walk as the principle's operationalization — a layer-spanning property of the walk standing in for a conformance test the walk cannot perform, so a set of prerequisites delivering no observable capability read as conforming. The bullet now states the principle in full, names Step 3 as prerequisite **discovery** rather than conformance, and points conformance at Step 1's AFTER/BEFORE question, whose existing failure branch already rejects that shape. A new boundary paragraph in the same step scopes the `layer:foundation` / `layer:infrastructure` / skill-core / eval taxonomy to discovery-and-sequencing (this step, Step 6, § 9) and states that it is not the meaning of "all architectural layers", which the active frame supplies — restoring the § 1 frame-pluggability contract that the hardcoded operationalization had broken. § 9 Sequence Rules unchanged; § 1.1's source lineage unchanged; Step 3's discovery bullets, Composes-with and Output lines unchanged. Corrective; no new rule, gate, criterion, or step added. | Stage 5 Solutioning design + Collective Review scope-lock; Stage 6 Engineering (milestone governance-docs-reconciled) |
+| — | 2026-10-22 | Adds the § 3 Step 5 Size-Class Assignment sub-block — the rubric that assigns the class the point scale converts: the surface as the unit, counted by search; the counting rules for an uncounted population and for a design choice not yet made; five class rows read from the bottom; work with no tracked-file surface left unclassed; what a size is not, a delivery team's estimate included; each class's one-line label anchor in words; worked examples described by what was delivered, with their issues in a final unnumbered `## References` section; and the calibration basis, whose cut points are seeds that bind only after an ex-ante backtest. The point-scale line points at the sub-block, and the frontmatter gains the gate spec as a consumer. The scale, the band, the oversize predicate and every gate threshold are unchanged. | Stage 5 Solutioning design + adversarial design review + Collective Review scope-lock (host H2; the method ratified, the cut points held as seeds); Stage 6 Engineering (milestone authoring-conventions-enforced-or-retired) |
+
+## References
+
+Size-class reference examples for the Step 5 Size-Class Assignment sub-block. Each is shut; each line says what the work was.
+
+- XS — #1098 — the hard-coded repository owner in a stage spec's command example replaced with a placeholder.
+- XS — #1827 — a project template's placeholder replaced with the template variable for its value.
+- S — #5582 — the deprecated-path scan made to see relocated files.
+- S — #5832 — a self-referential edge removed from the edge planner.
+- M — #6204 — the release title and the note's heading composed consistently across stages.
+- M — #6837 — the plan verifier wired to its declared predicate class.
+- L — #4178 — divergent schema copies made visible to the deploy checks.
+- L — #3713 — record numbering made collision-safe across concurrent releases.
+- XL — #3382 — operator-instance state relocated to a workspace-root home.
+- XL — #1488 — every decision record brought to the canonical record standard.

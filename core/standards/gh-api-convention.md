@@ -328,7 +328,7 @@ each site will eventually be forgotten at one.
   the per-agent behavioral memory that carried it first.** Both incidents above
   were captured as an agent-memory correction before any standard existed; that
   capture is the *bridge*, and this file is the *destination*. Per
-  [knowledge-architecture.md](../disciplines/knowledge-architecture.md) § 6, the
+  [knowledge-architecture.md § Memory↔corpus boundary](../disciplines/knowledge-architecture.md), the
   pointer runs one way — a memory entry may hold a temporary pointer to its
   corpus home, and the corpus never points back. The tied memory is evicted once
   this standard ships (encode-then-evict; the corpus write lands first), so the

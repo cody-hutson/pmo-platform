@@ -240,7 +240,7 @@ Every design artifact carries bidirectional links between itself and the source 
 **Embedded artifact (section in a parent doc):**
 
 - The parent doc IS the source-of-truth; no separate file exists.
-- When the same concept is referenced from other docs, the citing doc links to the parent doc's section anchor (e.g., `[knowledge-architecture.md § Tier Map](../disciplines/knowledge-architecture.md#tier-map)`).
+- When the same concept is referenced from other docs, the citing doc names the parent doc's section by its heading text in the link label, over a plain link to the parent doc with no fragment (e.g., `[knowledge-architecture.md § Five-Tier Classification](../disciplines/knowledge-architecture.md)`, the section that carries that doc's embedded concept model) — the corpus citation form `reference-durability-standard.md` states, which a renumber of the parent doc cannot make wrong.
 - **Declaration marker (REQUIRED — this is what distinguishes an artifact section from ordinary prose).** An embedded design artifact declares itself with a **section-level HTML-comment marker** placed on its own line immediately BELOW the artifact's section heading:
 
   ```
