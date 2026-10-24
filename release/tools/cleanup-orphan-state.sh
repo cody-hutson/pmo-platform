@@ -2427,8 +2427,8 @@ ledger_mark_retained() {
 # ONE bounded re-evaluation pass: worktree removal frees branches; branch
 # removal frees nothing further, so a single pass reaches the fixed point for
 # the enumerated input. Invariant: ONLY worktrees this run actually REMOVED
-# free their branches — SELF / locked / live-session / dirty / FAILED worktrees
-# keep their branches attached-and-skipped.
+# free their branches — SELF / locked / live-session / active / dirty / FAILED
+# worktrees keep their branches attached-and-skipped.
 #
 # The pass has TWO consumers (#6207). resolve_freed_branches EXECUTES it in
 # --apply, running between apply_removals and verify_apply; verify then re-checks
@@ -3425,6 +3425,7 @@ selftest_liveness_gate() {
 #        "the held tree survived" non-vacuous
 selftest_path_reaching_holder() {
   local script_abs="" slug="" base="" br_h="" br_c="" wt_h="" wt_c="" out="" holder="" fail=0 old_date="" has_main=0
+  local ph4="PH-4 a real --apply --force keeps the held tree and removes the control"
   script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
   slug="cleanup-selftest-reach-$$"
   br_h="chore/${slug}-held"; br_c="chore/${slug}-ctrl"
@@ -3493,7 +3494,8 @@ selftest_path_reaching_holder() {
         fail=1
       fi
     else
-      selftest_skip "path-reaching holder PH-4" "the control tree is not removable on this host (needs ${REMOTE_NAME}/${MAIN_BRANCH} and a readable PR-state map)"
+      selftest_skip "path-reaching holder PH-4" "the control tree is not removable on this host (needs ${REMOTE_NAME}/${MAIN_BRANCH} and a readable open-PR list)"
+      ph4="PH-4 SKIPPED (see the skip ledger)"
     fi
   fi
 
@@ -3504,7 +3506,7 @@ selftest_path_reaching_holder() {
   git branch -D "$br_h" >/dev/null 2>&1 || true
   git branch -D "$br_c" >/dev/null 2>&1 || true
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: path-reaching holder check PASS — PH-1 a live holder with its cwd outside the tree is invisible to the cwd oracle / PH-2 the tree it moved by path reads active / PH-3 a backdated sibling does not / PH-4 a real --apply --force keeps the held tree and removes the control" >&2
+  echo "self-test: path-reaching holder check PASS — PH-1 a live holder with its cwd outside the tree is invisible to the cwd oracle / PH-2 the tree it moved by path reads active / PH-3 a backdated sibling does not / ${ph4}" >&2
   return 0
 }
 
@@ -3535,7 +3537,7 @@ selftest_path_reaching_holder() {
 #   AX-8 the drain gate refuses an active branch; a quiet merged one passes (control,
 #        needs the mainline ref)
 selftest_active_exclusions() {
-  local script_abs="" slug="" base="" has_main=0 fail=0 rc=0
+  local script_abs="" slug="" base="" has_main=0 fail=0 rc=0 ax_skipped=""
   local wt1="" wtd="" wth="" wtg="" wto="" inner="" b_fresh="" b_old="" cand="" f="" ix="" st="" row=""
   local saved_mode="$MODE" saved_force="$FORCE"
   local saved_open_state="$OPEN_PR_STATE" saved_open_built="$OPEN_PR_BUILT"
@@ -3584,7 +3586,7 @@ selftest_active_exclusions() {
       if git -C "$wt1" check-ignore -q "$cand" 2>/dev/null; then f="${wt1}/${cand}"; break; fi
     done
     if [[ -z "$f" ]]; then
-      selftest_skip "active-exclusions AX-1" "no candidate path is ignored in this checkout"
+      selftest_skip "active-exclusions AX-1" "no candidate path is ignored in this checkout"; ax_skipped="${ax_skipped} AX-1"
     else
       /bin/mkdir -p "$(/usr/bin/dirname -- "$f")" && printf 'ax\n' > "$f"
       if ! worktree_recent_reason "$wt1" || [[ "$ACTIVE_REASON" != "SKIP — active: ignored files written"* ]]; then
@@ -3602,11 +3604,11 @@ selftest_active_exclusions() {
   # AX-2
   if [[ "$fail" -eq 0 ]]; then
     if [[ "$(id -u)" == "0" ]]; then
-      selftest_skip "active-exclusions AX-2" "running as root, which reads a mode-000 index anyway"
+      selftest_skip "active-exclusions AX-2" "running as root, which reads a mode-000 index anyway"; ax_skipped="${ax_skipped} AX-2"
     else
       ix=$(git -C "$wt1" rev-parse --path-format=absolute --git-path index 2>/dev/null || true)
       if [[ -z "$ix" || ! -f "$ix" ]]; then
-        selftest_skip "active-exclusions AX-2" "could not locate the fixture's index"
+        selftest_skip "active-exclusions AX-2" "could not locate the fixture's index"; ax_skipped="${ax_skipped} AX-2"
       else
         /bin/chmod 000 "$ix"
         st=$(worktree_state "$wt1")
@@ -3669,7 +3671,7 @@ selftest_active_exclusions() {
   if [[ "$fail" -eq 0 ]]; then
     build_liveness_map >/dev/null 2>&1 || true
     if [[ "$ORACLE_STATE" != "ok" ]]; then
-      selftest_skip "active-exclusions AX-5" "liveness oracle unavailable on this host, so every apply row fails closed and the control cannot be removed"
+      selftest_skip "active-exclusions AX-5" "liveness oracle unavailable on this host, so every apply row fails closed and the control cannot be removed"; ax_skipped="${ax_skipped} AX-5"
     else
       LOCAL_BRANCH_CANDIDATES=(); REMOTE_BRANCH_CANDIDATES=()
       WORKTREE_CANDIDATES=("${wtd}		clean	0	REMOVE" "${wth}		clean	0	REMOVE" "${wtg}		clean	0	REMOVE")
@@ -3739,7 +3741,7 @@ selftest_active_exclusions() {
         fail=1
       fi
     else
-      selftest_skip "active-exclusions AX-8 control" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref to prove the quiet branch merged"
+      selftest_skip "active-exclusions AX-8 control" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref to prove the quiet branch merged"; ax_skipped="${ax_skipped} AX-8 control"
     fi
     OPEN_PR_BUILT="$saved_open_built"; OPEN_PR_STATE="$saved_open_state"; OPEN_PR_ENTRIES=("${saved_open[@]:-}")
   fi
@@ -3757,7 +3759,7 @@ selftest_active_exclusions() {
   WORKTREE_CANDIDATES=("${saved_wt[@]:-}")
   refresh_wt_snapshot
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: active-exclusions check PASS — AX-1 ignored-path writes / AX-2 unreadable status fails closed / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force keeps a newly dirty and a newly moved tree while removing the control / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate — each beside its control" >&2
+  echo "self-test: active-exclusions check PASS — AX-1 ignored-path writes / AX-2 unreadable status fails closed / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force keeps a newly dirty and a newly moved tree while removing the control / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate — each beside its control${ax_skipped:+ — SKIPPED on this host:${ax_skipped} (see the skip ledger)}" >&2
   return 0
 }
 
