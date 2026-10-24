@@ -16736,20 +16736,23 @@ sys.stdout.write("".join(out) + "|")
   # DECLARED COVERAGE BOUNDARY. It asserts the constants are readable, that the
   # phase is one of the three enum values, and that the review window has not
   # elapsed unaddressed. It does NOT assert that the arm behaves as the phase says
-  # — that is the test suite's job (T-EXEC-10 and T-NSI-10c/d/e pin the phase gates)
+  # — that is the test suite's job (T-EXEC-10, T-NSI-10c/d/e and AC-ENCL-P1 to -P4 pin
+  # the phase gates)
   # — and it does not read, classify or grade drain CONTENT.
   #
   # PARAMETERIZED OVER A FAMILY LIST, NOT COPIED PER ARM [#6167]. -022 now carries
-  # TWO phased widenings — the exec arm and the non-shell interpreter arm — each
-  # with its own five constants, because two rollouts with two populations must be
-  # able to retreat independently. The alternative was a third verbatim copy of this
-  # block (deploy.sh already records one reuse of its shape elsewhere), and a
+  # THREE phased widenings — the exec arm, the non-shell interpreter arm, and the
+  # shell and source arms at the enclosure positions the rule's second view opens —
+  # each with its own five constants, because rollouts with separate populations must
+  # be able to retreat independently. The alternative was a verbatim copy of this
+  # block per arm (deploy.sh already records one reuse of its shape elsewhere), and a
   # graduation READER duplicated three ways is exactly the drift surface the
-  # register-or-remove rule exists to prevent. Two families read by one body cannot
+  # register-or-remove rule exists to prevent. Three families read by one body cannot
   # drift; three literal copies can.
   #
-  # ADDING A THIRD ARM IS ONE WORD IN `c71_families`, plus the five constants in the
-  # hook. That is the property being bought here.
+  # ADDING AN ARM IS ONE WORD IN `c71_families` and one line naming its `arm` value,
+  # plus the five constants in the hook; the third family, ENCL, was added exactly
+  # that way. That is the property being bought here.
   #
   # THE DRAIN IS SPLIT BY THE `arm` FIELD, AND AN ABSENT FIELD READS AS `exec`.
   # Every row written before the field existed came from the exec arm, which was the
@@ -16759,7 +16762,7 @@ sys.stdout.write("".join(out) + "|")
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 71: BLOCK-DESTRUCTIVE-022 rollout graduation, per arm (deadline arm repo-derivable + enforcing; evidence arm operator-local + advisory)"
     local c71_hook="core/hooks/block-destructive.sh"
-    local c71_families="EXEC INTERP"
+    local c71_families="EXEC INTERP ENCL"
     if [[ ! -f "$c71_hook" ]]; then
       log "  FAIL:  destructive-022-graduation — hook source missing: $c71_hook (the gate cannot assert anything without it; this is a repo defect, not a benign absence)"
       ISSUES=$((ISSUES + 1))
@@ -16771,6 +16774,7 @@ sys.stdout.write("".join(out) + "|")
         case "$c71_fam" in
           EXEC)   c71_id="destructive-022-exec-graduation";   c71_armfield="exec" ;;
           INTERP) c71_id="destructive-022-interp-graduation"; c71_armfield="interp-nonshell" ;;
+          ENCL)   c71_id="destructive-022-encl-graduation";   c71_armfield="shell-enclosure" ;;
           *)      c71_id="destructive-022-$(printf '%s' "$c71_fam" | tr 'A-Z' 'a-z')-graduation"; c71_armfield="" ;;
         esac
 
@@ -16847,7 +16851,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
             if [[ "$c71_rows" == "SKIP" ]]; then
               c71_verdict="drain absent on this instance (operator-local, git-ignored) — the evidence arm SKIPs; read it where the sessions actually ran"
             elif [[ "$c71_rows" -eq 0 ]]; then
-              c71_verdict="0 rows for arm=${c71_armfield} → INSTRUMENTATION-SUSPECT, not 'no evidence'. Run that arm's must-flag control (block-destructive.test.sh T-EXEC-1 for exec, T-NSI-01a for interp-nonshell). If it writes a row the surface is genuinely quiet — graduate at near-zero risk or remove the arm as dead code. If it does not, the drain is BROKEN and that is a defect."
+              c71_verdict="0 rows for arm=${c71_armfield} → INSTRUMENTATION-SUSPECT, not 'no evidence'. Run that arm's must-flag control (block-destructive.test.sh T-EXEC-1 for exec, T-NSI-01a for interp-nonshell, AC-ENCL-P1 for shell-enclosure). If it writes a row the surface is genuinely quiet — graduate at near-zero risk or remove the arm as dead code. If it does not, the drain is BROKEN and that is a defect."
             elif [[ "$c71_rows" -lt "$c71_rows_thr" ]]; then
               c71_verdict="${c71_rows} rows (< ${c71_rows_thr}) → INSUFFICIENT-TRAFFIC. Choose one and record it: graduate on the small sample, retreat to shadow, or extend ONCE by re-dating DESTRUCTIVE_022_${c71_fam}_ARMED."
             else
