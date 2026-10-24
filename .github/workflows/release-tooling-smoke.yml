@@ -1310,9 +1310,12 @@ jobs:
         # step at all, and the single step that can fail is the last one in the job.
         # Do not re-sort it back up next to Arm A
         # because it reads as an "Arm A / Arm B" pair — that adjacency is what broke.
-        # Arm F rides this step and is DESIGNED to stay red until the `.py` population
-        # drains (see the Arm F paragraph below). Under Actions' default step semantics
-        # a failed step SKIPS every later step in the job, so while this step sat ahead
+        # Arm F rides this step. It was DESIGNED to stay red until the `.py` population
+        # drained; the prescribed `.py` tools now hold rows, so a `.py` finding is
+        # BLOCKING and only a finding in a suffix domain that carries no row is a
+        # by-construction residual (see the Arm F paragraph below). Under Actions'
+        # default step semantics a failed step SKIPS every later step in the job, so
+        # while this step sat ahead
         # of the two precision probes it did not merely fail — it silently skipped them,
         # and those probes are the only reason this gate is not "a claim about itself".
         # Measured on the live API at the commit that moved it: with this step 7th of 9,

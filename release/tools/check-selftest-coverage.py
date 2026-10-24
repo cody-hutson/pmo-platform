@@ -217,9 +217,10 @@ _DOC_ROW_KEY_RE = re.compile(r"^\|\s*`([^`]+)`")
 # --------------------------------------------------------------------------------
 # ARM F — mandate reachability: can an agent run what a pipeline spec tells it to run?
 # --------------------------------------------------------------------------------
-# ARM F REPORTS FINDINGS ON ARRIVAL AND ITS RESIDUAL CLASS IS NOT EXPECTED TO EMPTY UNTIL
-# THE NON-SHELL POPULATION IS DRAINED. DO NOT REGISTER THE selftest-discovery JOB AS A
-# REQUIRED CONTEXT UNTIL THEN.
+# ARM F REPORTED FINDINGS ON ARRIVAL. ITS RESIDUAL CLASS NOW HOLDS ONLY AN OPERAND IN A
+# SUFFIX DOMAIN THAT CARRIES NO ROW, SO IT IS EMPTY WHILE NO SPEC PRESCRIBES ONE — THE
+# `.py` DOMAIN HOLDS ROWS, AND A `.py` FINDING IS BLOCKING. DO NOT REGISTER THE
+# selftest-discovery JOB AS A REQUIRED CONTEXT UNTIL THE NON-SHELL POPULATION IS DRAINED.
 # Most of what this arm named on arrival was a `.py` tool, while every non-comment row in
 # the allowlist ended `.sh`: the non-shell section was DELIBERATELY EMPTY at introduction.
 # It is being filled from drain evidence during BLOCK-DESTRUCTIVE-022's warn phase, NOT
