@@ -28,6 +28,11 @@ core/standards/
 core/specs/
 core/rules/
 core/CLAUDE.md.template
+# core/process-catalog/ — the generated process catalog (design-artifact standard
+# § 13). It is outside the durable-corpus paths, so its pages carry Markdown links
+# this scan checks. Its README.md is the folder's first tracked file and keeps this
+# entry resolvable under --require-targets; it lands in the same commit as this line.
+core/process-catalog/
 
 # ── Release + operations governance/reference + skill SKILL.md sets ─────────
 release/governance/
