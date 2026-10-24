@@ -207,8 +207,8 @@ Read the table from the bottom: the first row whose **Surfaces** cell is true is
 
 | Class | Example, by its observable properties |
 |---|---|
-| XS | One instruction sentence in one pipeline stage spec replaced with the conformant form; a handful of changed lines. |
-| XS | One citation in the deploy script corrected to name the right decision record. |
+| XS | The hard-coded repository owner in one pipeline stage spec's command example replaced with a placeholder; one line changed, nothing added. |
+| XS | A placeholder in one project template replaced with the template variable for the same value, at each of its three sites; nothing added. |
 | S | Two documents in the release module amended so a scan stops missing relocated paths; no new file. |
 | S | A defect corrected in one tool and in the sibling tool that shared it; two files, one module, no new file. |
 | M | A release-title defect corrected across two tools, an executor skill, two pipeline stage specs and the gate register; six files in two modules, no new file. |
@@ -687,8 +687,8 @@ Any agent producing a **removal recommendation** over the platform's own backlog
 
 Size-class reference examples for the Step 5 Size-Class Assignment sub-block. Each is shut; each line says what the work was.
 
-- XS — #6409 — a stage spec's instruction corrected to the conformant provenance form.
-- XS — #6213 — a wrong decision-record citation in the deploy script corrected.
+- XS — #1098 — the hard-coded repository owner in a stage spec's command example replaced with a placeholder.
+- XS — #1827 — a project template's placeholder replaced with the template variable for its value.
 - S — #5582 — the deprecated-path scan made to see relocated files.
 - S — #5832 — a self-referential edge removed from the edge planner.
 - M — #6204 — the release title and the note's heading composed consistently across stages.
