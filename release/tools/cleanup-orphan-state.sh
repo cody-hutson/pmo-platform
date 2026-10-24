@@ -3526,7 +3526,8 @@ selftest_path_reaching_holder() {
 #
 # Arms:
 #   AX-1  git-ignored files present read active; the same tree before the file
-#         existed did not (control)
+#         existed did not, and neither did it while its only ignored entry was an
+#         empty directory (controls)
 #   AX-2  an unreadable index reads `unreadable` and classifies status-unreadable;
 #         restored, it reads clean (control)
 #   AX-3  an open PR's head branch, and a branch in an open release's family, read
@@ -3666,6 +3667,22 @@ selftest_active_exclusions() {
     if [[ -z "$f" ]]; then
       selftest_skip "active-exclusions AX-1" "no candidate path is ignored in this checkout"; ax_skipped="${ax_skipped} AX-1"
     else
+      # An ignored directory that holds no file is not content: it carries nothing to
+      # lose, and listing it would strand trees whose only ignored entry is an empty
+      # directory (measured on this repository's worktrees). The directory must NOT
+      # exist beforehand and must be ignored, or this control is satisfied trivially.
+      cand=""
+      for st in ".claude/worktrees/ax-empty-$$" ".claude/ax-empty-$$" "pmo-instance/ax-empty-$$"; do
+        if [[ ! -e "${wt1}/${st}" ]] && git -C "$wt1" check-ignore -q "${st}/x" 2>/dev/null; then cand="$st"; break; fi
+      done
+      if [[ -n "$cand" ]]; then
+        /bin/mkdir -p "${wt1}/${cand}"
+        got=$(selftest_ax_reason worktree_ignored_reason "$wt1")
+        selftest_ax_not AX-1 "a tree whose only ignored entry is an empty directory" "$got" "$L_IGN" || fail=1
+      else
+        selftest_skip "active-exclusions AX-1 empty-directory control" "no absent ignored directory to create"; ax_skipped="${ax_skipped} AX-1-empty-dir"
+      fi
+      st=""
       /bin/mkdir -p "$(/usr/bin/dirname -- "$f")" && printf 'ax\n' > "$f" && ign_ok=1
       /usr/bin/touch -t 200001010000 "$f"   # presence is the trace, not recency
       got=$(selftest_ax_reason worktree_ignored_reason "$wt1")
