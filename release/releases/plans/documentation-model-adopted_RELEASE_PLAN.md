@@ -8,7 +8,7 @@
 | **Bump Class** | minor — protocol text and references plus one decision record, with no new skill or governance file; the v4.77 plan landed a decision record as `minor`. Provisional v4.78 (anchor v4.77), re-verified at Engineering Commit 0 on 2026-10-24: `claim-version.sh --sha cebcf6c2 --bump minor --dry-run` → v4.78, and v4.78 is absent from the tag, published-release and ledger arms. The concrete number binds only at the Stage-12 atomic claim (ADR-092). |
 | **Date Created** | 2026-10-24 (Saturday) |
 | **Release Manager** | Agent-assisted |
-| **Status** | Executing — Stage 6 Engineering; Engineering Commit 0 and #8117 landed, #8494 next |
+| **Status** | Executing — Stage 6 Engineering; Engineering Commit 0, #8117 and #8494 landed, #8119 next |
 | **Branch** | release/documentation-model-adopted |
 | **PR** | #8534 — opened in **draft** after #8117's commit; ready for review at the Stage-9 gate |
 | **Milestone** | documentation-model-adopted |
@@ -63,7 +63,7 @@ Native GraphQL edges: **0 `blockedBy` / 0 `blocking` on all four cards** at Stag
 
 ### File Change Matrix
 
-Machine-readable form — one path per line, `<path>  <VERB>`, fence-delimited for deterministic extraction. The #8117 block carries the Stage 5 refinements recorded in DEV-3 and DEV-4; the other blocks are transcribed from the approved Stage 4 plan, and each card's Engineering spoke promotes its own refinements.
+Machine-readable form — one path per line, `<path>  <VERB>`, fence-delimited for deterministic extraction. The #8117 block carries the Stage 5 refinements recorded in DEV-3 and DEV-4, and the #8494 block those recorded in DEV-12; the other blocks are transcribed from the approved Stage 4 plan, and each card's Engineering spoke promotes its own refinements.
 
 ```
 # ── Commit 0 — the release plan ──
@@ -75,8 +75,11 @@ core/ADRs/README.md  EDIT  CONDITIONAL:ADR-RENUMBERED-AT-CLAIM
 core/standards/design-artifact-standard.md  EDIT
 core/specs/terminology-glossary.md  EDIT
 core/deploy/allowlists/doc-link-target-paths.txt  EDIT
-core/<catalog-folder>/README.md  ADD
-release/references/how-to/design-artifact-backfill-completion-condition.md  EDIT  CONDITIONAL:EIGHTH-ENUM-VALUE
+core/process-catalog/README.md  ADD
+release/references/how-to/design-artifact-backfill-completion-condition.md  EDIT
+core/standards/process-flow-diagram-standards.md  EDIT
+core/diagrams/architecture-platform-structure.md  EDIT
+core/deploy/allowlists/count-structure-baseline.txt  EDIT
 # ── #8119 — Documentation Impact on every shipping form (gate-criteria-spec, stage-13-close, release-process and deploy.sh are also edited by #8495) ──
 .github/ISSUE_TEMPLATE/epic.yml  EDIT
 .github/ISSUE_TEMPLATE/story.yml  EDIT
@@ -291,6 +294,9 @@ Per-card header (8 fields authored at A0; rows adopted verbatim below):
 ### Issue #8494: Extend the design-artifact standard to the generated process catalog the documentation-model ADR chose
 
 **Change Specification:** the Stage 5 spec on sub-task #8498 is the authority, with the Collective Review adjustments that fall on this card (seven link types; superseded-page retention (b); no § 7 Tier-A trigger for `state-lifecycle` this release; the § 5 retirement row and the re-pointing exclusions; one sentence on the L0 page's visual class; the structural map gains the catalog folder; the two count-free rewordings outside the matrix). Stage 4 carried: an eighth enum value vs a sub-class (R4 sites); the folder name and its first file (R3); the retire text per D-RetireSemantics. **Dependencies:** #8117 (build).
+- **Landed:** `abb690c1` (Stage 6), one commit over seven paths: the five Stage 5 changes applied from the spec's patches, which applied cleanly at this branch's head, and the README written from the spec's literal; then the Collective Review adjustments (DEV-12, DEV-15) and this card's half of DEV-10. The eighth flow-class value is `state-lifecycle`, the folder `core/process-catalog/`, and its README lands in the same commit as its scope-list row.
+- **Deliverable state:** `deliverable_state: deployed-copy-synced` — the standard's rules, the § 12.2 harness and the link-check scope row take effect on the corpus and in CI at merge, and the release declares no Layer-2 propagation target (§ Operational Deployment Manifest), so the commit on the release branch is the exit condition. No Artifact-Acceptance Record row is owed. The other reading is open: the stage doc names a codification standard as its example of a task-class deliverable, and under that reading the card is `artifact-accepted` and takes an ADDITIVE-mode AAR row like #8117's. Either is one line to change at the Stage 9 gate.
+- **Out-of-matrix consequence (DEV-16):** the spec's edit to the § 9 frontmatter preamble re-keyed a pre-existing row of Check 63's count-structure debt register, so the register's row is replaced in the plan-update commit.
 
 ### Issue #8119: Documentation Impact reaches every work-item form, covers docs/, and can declare a retirement
 
@@ -316,8 +322,11 @@ Per-card header (8 fields authored at A0; rows adopted verbatim below):
 | #8494 | `core/standards/design-artifact-standard.md` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8494 | `core/specs/terminology-glossary.md` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8494 | `core/deploy/allowlists/doc-link-target-paths.txt` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
-| #8494 | `core/<catalog-folder>/README.md` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8494 | `core/process-catalog/README.md` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8494 | `release/references/how-to/design-artifact-backfill-completion-condition.md` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8494 | `core/standards/process-flow-diagram-standards.md` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8494 | `core/diagrams/architecture-platform-structure.md` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8494 | `core/deploy/allowlists/count-structure-baseline.txt` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8119 | `.github/ISSUE_TEMPLATE/epic.yml` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8119 | `.github/ISSUE_TEMPLATE/story.yml` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8119 | `.github/ISSUE_TEMPLATE/observation.yml` | no | no (conj. 1) | unconstrained | unconstrained | ordinary Engineering spoke |
@@ -396,7 +405,7 @@ All rows read `unconstrained`: no control refuses these writes. That does not ma
 | #8494 | AC-2 | `grep -c -F "sub-flow-of" core/standards/design-artifact-standard.md` at least 1 [READER-GRADED — § 2 lists the state/lifecycle class; the § 12 lint run on a marker using it prints enum OK] | ≥1 (base 0) |
 | #8494 | AC-3 | `grep -c -i -F "retire" core/standards/design-artifact-standard.md` at least 1 [READER-GRADED — status transitions, no deletion, inbound links re-pointed in the same change] | ≥1 (base 0) |
 | #8494 | AC-4 | `grep -c -F "inbound index" core/standards/design-artifact-standard.md` at least 1 [READER-GRADED — the exception sits in § 9] | ≥1 (base 0) |
-| #8494 | AC-5 | [DEFERRED — the folder name binds at Stage 5; the PR-time link check runs `check-doc-links.py --require-targets` over the list and exits 3 on an empty entry] | link check green; folder row present |
+| #8494 | AC-5 | `grep -c -x -F "core/process-catalog/" core/deploy/allowlists/doc-link-target-paths.txt` at least 1 [READER-GRADED — the doc-link checker over the shared scope list, with the tracked base allowlist and require-targets, exits 0 or 1 and never 3 (exit 3 is an entry that resolves to no file)] | ≥1 (base 0) |
 | #8119 | AC-1 | `grep -c -F "label: Documentation Impact" .github/ISSUE_TEMPLATE/epic.yml` at least 1 [READER-GRADED — the same count is non-zero on story.yml and on each further form Solutioning names] | ≥1 (base 0) |
 | #8119 | AC-2 | `grep -c -i -F "retire" .github/ISSUE_TEMPLATE/improvement.yml` at least 1 [READER-GRADED — the G-CL8 row states how a retirement is verified] | ≥1 (base 0) |
 | #8119 | AC-3 | `grep -c -F "docs/" core/schemas/gate-criteria-spec.md` at least 1 [READER-GRADED — forms, PR template and stage restatements cite the G-CL8 row instead of restating a list] | ≥1 (base 0) |
@@ -501,8 +510,13 @@ N/A — enumerated over frontmatter schemas, issue-form field schemas and gate-r
 | **DEV-7** | Collective Review accepted the Stage 5 design recommendations as one set: superseded-page retention (b) — in place, marked in the generated index, no timed window; seven link types; no § 7 Tier-A trigger for `state-lifecycle` this release; the ADR's Context count dated to the spike's filing (ratified figure unchanged) plus its two recording additions (the D6 alternative; the reader-set note); the two count-free rewordings outside the matrix; the § 5 retirement row for embedded artifacts and the release-record / ADR re-pointing exclusions; the Documentation Impact scope list as the union of its three wordings plus `docs/`; four of six forms carry the field (observation and ADR forms exempt); the intake-desk type-map pointer deferred to a later release | Operator, Collective Review, #8496 | **APPLIED** — each card's Engineering spoke implements its share |
 | **DEV-8** | Stage 5 corrections to Stage 4 premises, both accepted with the #8117 spec: no index regeneration applies to a core ADR (DEV-4); and the Context count is anchored to the spike's filing (40 = 38 embedded + 2 dedicated on first-parent main at the end of 2026-10-02), not "at the pilot", when the count was 47 | Stage 5 spec, #8497 (F1, F2); adversarial review, #8518 (premises verified) | **APPLIED** |
 | **DEV-9** | Collective Review adjustment on #8117 (adopted adversarial Minor fix, FM-1): the ADR's `status:` line and its `## Status` sentence name the ratifying review as the operator's process-baseline planning-gate ratification (2026-10-23), replacing the undefined gate label. The adversarial review's other #8117 items were not adopted: FM-1's alternative mitigation (extend the References entry instead) and CD-1 (keep Context byte-identical) | Operator, Collective Review, #8496; adversarial review, #8518 | **APPLIED** in #8117's commit |
-| **DEV-10** | Collective Review adjustment across #8119 and #8494 (consistency-table disagreement): the forms' retire gloss aligns to the G-CL8 row and standard § 5 — no live mention of the path left | Operator, Collective Review, #8496 | **PENDING** — #8494 and #8119 Engineering |
+| **DEV-10** | Collective Review adjustment across #8119 and #8494 (consistency-table disagreement): the forms' retire gloss aligns to the G-CL8 row and standard § 5 — no live mention of the path left | Operator, Collective Review, #8496 | **#8494 half APPLIED** in `abb690c1`: standard § 5 already reads "every inbound reference … so no live document still names the retired item", and the § 13.6 retire bullet, which said "every inbound link", now says "every inbound reference" so the standard states the rule one way. **#8119 half PENDING** — the forms' gloss, #8119 Engineering |
 | **DEV-11** | Transcription edits at Commit 0, each a pointer rewrite with the finding unchanged: (a) in the adopted A0 rows, six citations of operator-local memory entries and five uses of the undefined planning-gate label are replaced by the content they stood for, because neither surface exists in the tracked corpus — the same class as DEV-9; (b) the DEV-4 correction is carried into the Cross-PR Overlap row for `core/ADRs/README.md`, the R2 mitigation and the matrix notes, which named the regeneration Stage 5 showed does not exist; (c) sections the Stage 4 comment carried as hand-offs (the Tier 1 [ADJUST] list, the Stage 5 inputs) are folded into DEV-2 and the per-issue Change Specifications rather than transcribed as open instructions, since both have been executed | Stage 6, Tier 1 | **APPLIED** at Commit 0 |
+| **DEV-12** | File Change Matrix, #8494 block, promoted from the Stage 5 spec and Collective Review: `core/<catalog-folder>/README.md` becomes `core/process-catalog/README.md` (D-Folder); the backfill how-to's `CONDITIONAL:EIGHTH-ENUM-VALUE` fired (D-ClassShape chose an eighth flat value) and the row is unconditional; and two paths join the block, `core/standards/process-flow-diagram-standards.md` and `core/diagrams/architecture-platform-structure.md`, for the two count-free rewordings D-CR3 accepted and the structural-map line D-CR5 adopted. The Agent-Editability Read gains the two rows; both are unconstrained | Stage 5 spec, #8498 (D-Folder, D-ClassShape, F4); Collective Review, #8496 | **APPLIED** with `abb690c1`, recorded in the plan update that follows it |
+| **DEV-13** | Verification Plan, #8494 AC-5: converted from `[DEFERRED — the folder name binds at Stage 5 …]` to a runnable probe on the bound path, as DEV-5 did for #8117 at Commit 0; it keeps a reader-graded limb for the doc-link checker's exit code, which the verifier's verb set does not run | Stage 4 plan direction; Stage 5 AC-binding table, #8498 | **APPLIED** in the plan update after `abb690c1` |
+| **DEV-14** | Phase A2 container for #8494: the threshold predicate, read literally, selects the **GitHub sub-issue container** — seven paths, multi-file, and structure-changing (a new `core/` folder and a new flow-class value carried across two files). As in the v4.69, v4.72, v4.74 and v4.75 releases, the hub-scaffolded Stage-6 sub-task for this card (#8502) is that container; the change units render as checklist rows in the release PR body, and no further sub-issue is created | Stage 6 Phase A2; the precedent releases' recorded determinations | **RECORDED** |
+| **DEV-15** | Collective Review adjustments applied on #8494 beyond the Stage 5 patches: (a) D-CR5, adversarial FM-1 — one sentence in § 13.8 that § 6 tool selection and § 12.1 conformance do not govern a page's flow, decision 2 of the documentation-model record does, so an L0 page declared `concept-model` still draws its flow in Mermaid; (b) D-CR5, adversarial FM-2 — the structural map lists `process-catalog/` under `core/`, and the map's pre-existing gap of four other `core/` folders is left as it was; (c) D-CR3 — the two count-free rewordings of "7" flow-type restatements in the process-flow standard and the structural map. Retention (b), the seven link types, no § 7 Tier-A trigger for `state-lifecycle`, and the § 5 embedded-artifact row with its re-pointing exclusions were already in the Stage 5 patch and landed as written | Operator, Collective Review, #8496; adversarial review, #8519 | **APPLIED** in `abb690c1` |
+| **DEV-16** | Out-of-matrix file, Tier 1 [ADJUST]: `core/deploy/allowlists/count-structure-baseline.txt` joins the #8494 block. The Stage 5 patch extends the § 9 preamble "Every dedicated artifact file (…) carries two machine-queryable frontmatter fields:" with the catalog-page home. Check 63 keys its debt register on the preamble's text, so the edit re-keyed a `pre-existing:list` row: `deploy.sh --check` read that row STALE and the pair as a new FAIL. Read at the site, the count is right — "two" counts `depicts:` and `flow_class:`, and the four bullets beneath are those fields plus their placement and validation rules — so the row is replaced by an `over-match:` row with the reason in a comment above it, as the hub-emits-state-gates-read release did for its two over-matches. Entries stay 72 (one row out, one in). Check 63 is deploy-time only and is not in the pre-merge required subset, so CI would not have caught it before the next deploy check | Stage 6 C4 self-verification (`deploy.sh --check` Check 63); the register's own header rule for `over-match:` rows | **APPLIED** in the plan-update commit after `abb690c1` |
 
 ## Verification Evidence
 
@@ -518,6 +532,21 @@ N/A — enumerated over frontmatter schemas, issue-form field schemas and gate-r
 - **Skill-package freshness:** `printf '%s\n' <changed paths> | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` → 0 skills for this slice and 0 over the whole matrix (control: `release/skills/release-hub/SKILL.md` → `release-hub`).
 - **Runtime suite:** no `runtime-suite-selection-map.md` row matches `core/ADRs/*.md` or `release/releases/plans/*.md`, so row 8 (no match) applies → `test-run/suite-skip`, the honest no-op for a decision record and a plan.
 - **Repository-integrity gates and link checks, over both commits:** issue-reference validity exit 0 (the plan passes by the `release/releases/*` path exemption; the same content outside that path → exit 1); dead-file-reference over `core release docs .github` plus top-level markdown, anchors and images → 0 broken, neither file carrying a markdown link (sensitivity: a planted link to a missing file → exit 1); depersonalization → 0 operator-identity hits over 522 non-blank added lines (control: the repository README → 1); the doc-link checker over the shared scope list with `--require-targets` → exit 0, 0 findings, self-test 11 of 11; commit messages → the close-keyword check CLEAN over 2 commits and the commit-message depersonalization replay 0 hits; both commits signed.
+
+**Stage 6 self-verification — #8494 (`abb690c1`, and the plan-update commit after it), 2026-10-24:**
+- **A1 entry.** `verify-release-plan.sh --ciac-lint` on the committed plan → `declared=3 parsed=3 clean=3 declared-deferral=0 flagged=0`; PROCEED. A3: none of the five matrix files had changed since `cebcf6c2`, and the spec's four patches passed `git apply --check` at this branch's head and applied cleanly, so no drift had to be corrected.
+- **§ 12.2 harness** (run with `/usr/bin/grep` in a scratch tree holding the patched standard and a fixture with one `flow-class=state-lifecycle` marker): the discovery query hits the fixture only; the loop reads `state-lifecycle dedicated=0 embedded=1 total=1`; the new lint prints `enum OK`. Controls: the base seven-value lint prints `WARN` on the same marker; a misspelled value (`state-lifecyle`) makes the new lint print `WARN`. The how-to's harness copy is byte-identical to the standard's over 16 lines (base vs new copies differ in 10 lines). On the real tree the new lint prints `enum OK` and the loop counts 46 artifacts, `state-lifecycle` 0.
+- **AC probes** (`verify-release-plan.sh`): the #8494 AC-1 to AC-5 grep limbs PASS (counts 2, 1, 13, 3 and 1); the reader-graded limbs are Stage 8's, so the executor reports each row UNRUNNABLE (partial execution), as it does for #8117's. CIAC-3 PASS (count 3). CIAC-2 still FAILs with count 1, which is its base control value: § 8 is untouched, as planned. FCM-3 (`core/process-catalog/README.md`) PASS; FCM coverage `declared=41 interpreted=41 uninterpreted=0`.
+- **Glossary** term count (the authoritative heading-scoped command) → 31 (base 25). **Frontmatter gate** (`check-doc-frontmatter.py`) on the standard, the glossary, the README, the process-flow standard and the structural map → `frontmatter-check 0`. The backfill how-to has no frontmatter block at base or here; that file is outside this check's targets and the gap is pre-existing.
+- **Doc-link checker** over the shared scope list with the tracked base allowlist and `--require-targets` → exit 0, 0 findings; self-test 11 of 11. Controls: the catalog entry over an empty folder → exit 3; a README carrying a planted dead link → exit 1.
+- **INT-7:** six `{{ADR:system-documentation-is-a-generated-process-catalog}}` tokens (standard 4, glossary 1, README 1), all in prose: 0 in link or reference-definition position by the stamp tool's own patterns (sensitivity: `](x{{ADR:y}})` → matched). `renumber-adr.py --stamp` dry run → would stamp 6 tokens across 3 files.
+- **Required gates, over `origin/main..HEAD`:** issue-reference validity → exit 0 (path mode on the four changed markdown files that carry no override → exit 0; sensitivity: a README copy with one bare issue reference in prose → exit 1; self-test PASS). Dead-file-reference (the CI invocation, every changed markdown file passed explicitly) → 0 broken; sensitivity: the README's link pointed at a missing file → exit 1, then restored byte-identical to `HEAD`. Depersonalization (the gate's literal set: the repository owner's handle plus the operator identity; case-sensitive, word-bounded) → 0 hits over 318 non-blank added lines in 8 in-scope files; control: the repository README → 1.
+- **Reference durability** (the detector constants read from `core/hooks/lib/fragile-ref-patterns.sh` as text, matched with `/usr/bin/grep -E` on the added, unfenced lines): the four durable files read Class L 0, V 0, U 0 and 0 issue-reference candidates, so the positional rule has nothing to flag; the plan is exempt by the durability allowlist. Sensitivity: one planted line per class → L 1, V 1, U 1, issue-ref 1.
+- **Check 63 (count-vs-structure)** — see DEV-16. After the register row is replaced: this file → `FAIL=0 KNOWN=1 STALE=0`; the whole tree → `FAIL=5 KNOWN=72 STALE=0`, the same five sites as `origin/main` (`SECURITY.md` ×2, an operator-instance reference document ×2, the release-notes standard), with the check's controls passing on both sides.
+- **`deploy.sh --check`** (read-only, at `abb690c1`, before the DEV-16 row): exit 1 with two `FAIL:` lines, `release-body-drift` (pre-existing, 13 published Release bodies) and `count-structure`, whose one new site this card introduced and DEV-16 resolves. Check 14 reads OK — no broken cross-references in scope.
+- **Skill-package freshness:** `--skills-for-paths` over every changed path → 0 skills (control: a SKILL.md → its skill). **ADR index: N/A — this release adds no record under `release/ADRs/`.**
+- **Runtime suite:** `core/deploy/allowlists/doc-link-target-paths.txt` matches row 2 of the selection map (`core/deploy/**`), so the deploy suite is selected by path. No member of that suite reads the file (its readers are deploy-time Check 14 and `link-check.yml`, both run above). The suite's authoritative run is the CI "Shell harness (macOS)" job on this head, and Stage 7 Phase A8 re-runs it. No `test-run` event was emitted by this spoke.
+- **Commit messages:** the close-keyword check is CLEAN; both commits are signed and carry only the sanctioned co-author trailer.
 
 **Artifact-Acceptance Record — ADDITIVE mode.** This release resolves **DEPLOYABLE** at close (rung 1: `domain_practice.domain` reads `governance`, not `task-artifact`), so `G-CL3` takes the deployable path. The ADR is a task-artifact deliverable riding that release, so its acceptance is recorded here and read by `G-CL4`. Seeded at Stage 6 with the fields known now; the verdict and the acceptor are completed when Stage 8 QA grades the reader limbs and the Stage 9 GO ratifies.
 
@@ -541,19 +570,20 @@ N/A — enumerated over frontmatter schemas, issue-form field schemas and gate-r
 
 ## Change Description
 
-*Interim — authored when the draft PR opened, after the first of three scope-locked cards landed. The Engineering commits for #8494 and #8119 each extend it, and it is complete before the Stage-9 ready-for-review transition.*
+*Interim — authored when the draft PR opened and extended as each scope-locked card lands; two of three have landed. #8119's Engineering commit extends it, and it is complete before the Stage-9 ready-for-review transition.*
 
 ### Outcome
 
-How a repository's system documentation is modelled is now a recorded, `Accepted` architecture decision on this branch: ADR-221 chooses one generated catalog of text process pages, with each page's visual written as text beside its prose, one page per node plus generated views, in a folder outside the durable-corpus paths. Every later card in the system-documentation initiative builds against it. The release goes on to extend the design-artifact standard to that catalog and to carry a Documentation Impact declaration, with a retire action, on every shipping work-item form.
+How a repository's system documentation is modelled is now a recorded, `Accepted` architecture decision on this branch: ADR-221 chooses one generated catalog of text process pages, with each page's visual written as text beside its prose, one page per node plus generated views, in a folder outside the durable-corpus paths. The design-artifact standard now governs that catalog: where it lives (`core/process-catalog/`), which page levels exist and what earns a node a page, the fields every page carries, seven link types, the generated index, graph and views, and how a page is retired. It also gains a state and lifecycle flow class. No page exists yet; the folder holds only its README. The release goes on to carry a Documentation Impact declaration, with a retire action, on every shipping work-item form.
 
 ### Issues resolved
 
 | # | Outcome (one line) | Status |
 |---|---|---|
 | #8117 | The documentation-model decision lands as ADR-221 (`Accepted`): D1 a generated catalog over text pages, D2 visuals as text in the same page, D6 one page per node plus generated views, with placement, identity, lifecycle and generation rules | DONE |
+| #8494 | The design-artifact standard governs the generated process catalog (new § 13), adds the `state-lifecycle` flow class at every enum site, states a retire step in § 5, and replaces reciprocal links for catalog pages with the generated inbound index; the glossary registers six catalog terms; `core/process-catalog/` exists with its README and is in the shared link-check scope | DONE |
 
-Rows for #8494 and #8119 are added by their Engineering commits. #8495 is back in Stage 5 Solutioning and joins only after its re-spec clears Collective Review.
+The row for #8119 is added by its Engineering commit. #8495 is back in Stage 5 Solutioning and joins only after its re-spec clears Collective Review.
 
 ### Key decisions (when applicable; omit this sub-section when no D-decisions were rendered)
 
@@ -563,6 +593,7 @@ Rows for #8494 and #8119 are added by their Engineering commits. #8495 is back i
 - **D-Concurrency Posture:** P0 fully serial; no force-push on the release branch.
 - **D-CR1, D-CR2:** scope locked for #8117, #8494 and #8119; #8495 returned to Stage 5.
 - **D-CR5 (applied to #8117):** the ADR names its ratifying review as the operator's planning-gate ratification, without an undefined gate label.
+- **D-CR3 and D-CR5 (applied to #8494):** superseded pages stay in place and are marked in the generated index, with no timed window; seven link types; no § 7 Tier-A trigger for `state-lifecycle` yet; the § 5 retirement row for an embedded artifact, with release records and ADRs never re-pointed; a page's flow is a Mermaid block whatever its flow class; the structural map lists the catalog folder; and two "7 flow types" restatements outside the standard became count-free.
 
 ### Reversibility
 
@@ -570,7 +601,10 @@ Rows for #8494 and #8119 are added by their Engineering commits. #8495 is back i
 
 ### Downstream impact
 
-- #8494 cites the ADR by its slug token and extends the design-artifact standard with the catalog layer, the link types, the state and lifecycle flow class and the reciprocal-link exception (ADR Consequence 1).
+- #8494 cites the ADR by its slug token in the standard, the glossary and the catalog README; the Stage-12 stamp resolves all six tokens to the bound number.
+- A design-artifact marker or `flow_class:` may now carry `state-lifecycle`; the § 12.2 harness and lint, and the backfill how-to's copy of them, accept it.
+- `core/process-catalog/` is in the shared link-check scope, so deploy-time Check 14 and the PR-time link check scan every page published there. Its README must stay while that entry stands, or the scan exits 3.
+- #8119 aligns the forms' retire gloss to standard § 5 (DEV-10), and #8495's re-spec reads § 13.3 (the page ID and `last_verified_commit`) and the § 5 retire step.
 - #8495's re-spec cites ADR decisions 2, 6 and 10.
 - At the Stage-12 claim, the ADR keeps 221 if this release merges first among the three in-flight releases that add an ADR-221; otherwise `renumber-adr.py` renumbers it and appends the core README's renumber-log line.
 
@@ -579,4 +613,5 @@ Rows for #8494 and #8119 are added by their Engineering commits. #8495 is back i
 - Release plan: this file, top section
 - Milestone: documentation-model-adopted
 - Decision record: `core/ADRs/ADR-221-system-documentation-is-a-generated-process-catalog.md`
+- Governing standard: `core/standards/design-artifact-standard.md` § 13 (the generated process catalog) and § 5 (retirement); catalog folder `core/process-catalog/`
 - User-facing release notes: authored at Stage 13 Close per the release-notes standard
