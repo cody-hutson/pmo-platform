@@ -114,6 +114,8 @@ A precondition that cites a file **plus a section anchor** cites a section that 
 
 **Prefer the section's number and its name together** (`§ 4.1 Operand resolution`) over the number alone. If the document is renumbered, the name still locates the content; if the section is renamed, the number still does. Either half surviving is the difference between a citation that degrades and one that dies.
 
+**This preference is scoped to a work-item body**, where the Section-Anchor Resolution below reads the number. A citation written into a durable-corpus file — a standard, a spec, a discipline, a release plan — follows the corpus form in [`reference-durability-standard.md` § Reference durability versus link resolution](../../../core/standards/reference-durability-standard.md) instead — the section's heading text and no number — because a corpus file outlives the numbering it would carry and no resolver re-reads it when its target is renumbered.
+
 **Where this is surfaced.** Numeric anchors in open issue bodies are resolved against their target's actual headings by the **Section-Anchor Resolution (A4.8)** determination at Stage 2 Triage, and by `deploy.sh` **Check 72**. Both are **advisory and report-only** — they surface a citation that does not resolve, they never block. Neither covers every citation form: the predicate models numeric anchors behind five prefixes and declares the classes it does not model, with counts, in its own header. Treat a clean run as *"nothing was found in the modelled classes"*, never as *"every anchor here is good."*
 
 ---
