@@ -3562,6 +3562,10 @@ selftest_path_reaching_holder() {
 #   AX-15 classify_remote is wired too: with a MERGED PR, a remote that moved since the
 #         last fetch, a fresh tip, and an open PR on a newer head classify active; a
 #         quiet fetched tip classifies REMOVE (control)
+#   AX-17 the open-PR list belongs to the repository being swept: a REPO_SLUG naming
+#         another repository makes it unavailable (fail-closed), because that
+#         repository's open PRs say nothing about this one's; a REPO_SLUG naming this
+#         repository's origin does not trip that guard (control)
 #   AX-16 THE APPLY-TIME BRANCH CLAIM, under a REAL in-process --apply: a REMOVE row for
 #         a moved local branch, and one for a fresh remote branch, are re-checked and
 #         left in place; a quiet local branch and a quiet remote branch in the same
@@ -4000,6 +4004,25 @@ selftest_active_exclusions() {
     selftest_ax_want AX-13 "a quiet clean tree with reflogs switched off" "$got" "SKIP — active — status unreadable (reflogs off)" || fail=1
   fi
 
+  # AX-17
+  if [[ "$fail" -eq 0 ]]; then
+    got=$( REPO_SLUG="cleanup-selftest-elsewhere/not-this-repo-$$"; OPEN_PR_BUILT=0; build_open_pr_list 2>&1 >/dev/null; printf '|%s' "$OPEN_PR_STATE" )
+    if [[ "$got" != *"does not name this repository's origin"*"|unavailable" ]]; then
+      echo "self-test: active-exclusions FAILED — a REPO_SLUG naming another repository did not make the open-PR list unavailable (got '${got}') (AX-17)" >&2
+      fail=1
+    fi
+    cand=$(repo_origin_slug 2>/dev/null || true)
+    if [[ -n "$cand" ]]; then
+      got=$( REPO_SLUG="$cand"; OPEN_PR_BUILT=0; build_open_pr_list 2>&1 >/dev/null )
+      if [[ "$got" == *"does not name this repository's origin"* ]]; then
+        echo "self-test: active-exclusions FAILED — a REPO_SLUG naming this repository's own origin tripped the guard, so AX-17 proves nothing (AX-17 control)" >&2
+        fail=1
+      fi
+    else
+      selftest_skip "active-exclusions AX-17 control" "this checkout's origin is not a GitHub remote"; ax_skipped="${ax_skipped} AX-17-control"
+    fi
+  fi
+
   # Teardown — the nested tree first, so the outer one can go
   [[ -n "$ix" && -f "$ix" ]] && /bin/chmod 644 "$ix" 2>/dev/null || true
   git worktree remove --force "$inner" >/dev/null 2>&1 || true
@@ -4021,7 +4044,7 @@ selftest_active_exclusions() {
   WORKTREE_CANDIDATES=("${saved_wt[@]:-}")
   refresh_wt_snapshot
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: active-exclusions check PASS — AX-1 git-ignored files present / AX-2 status unreadable / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate / AX-9 uncommitted changes / AX-10 WILL-DRAIN projection / AX-11 remote moved-since-fetch and fresh commit / AX-12 detached commits held by an open PR / AX-13 fail-closed tails / AX-14 classify_local wiring / AX-15 classify_remote wiring / AX-16 apply-time branch re-check, local and remote — each beside its control${ax_skipped:+ — SKIPPED on this host:${ax_skipped} (see the skip ledger)}" >&2
+  echo "self-test: active-exclusions check PASS — AX-1 git-ignored files present / AX-2 status unreadable / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate / AX-9 uncommitted changes / AX-10 WILL-DRAIN projection / AX-11 remote moved-since-fetch and fresh commit / AX-12 detached commits held by an open PR / AX-13 fail-closed tails / AX-14 classify_local wiring / AX-15 classify_remote wiring / AX-16 apply-time branch re-check, local and remote / AX-17 open-PR list bound to this repository — each beside its control${ax_skipped:+ — SKIPPED on this host:${ax_skipped} (see the skip ledger)}" >&2
   return 0
 }
 
