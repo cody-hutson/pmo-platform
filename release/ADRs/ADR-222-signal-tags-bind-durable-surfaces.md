@@ -1,6 +1,6 @@
 ---
 title: "ADR-222 — Signal tags bind durable records, not conversational turns"
-status: Proposed
+status: Accepted — operator-ratified at the authoring-conventions-enforced-or-retired Stage 13 Close ratification beat (Phase A13), 2026-10-24
 date: 2026-10-16
 release: authoring-conventions-enforced-or-retired
 deciders: "Workspace owner (operator) — option (C) rendered at the release's Stage-5 Collective Review scope-lock, with the independent adversarial review's corrections to the measurement, the runner statement and the register row taken; design by the Stage 5 Solutioning spoke (Principal Engineer persona); authored by the Stage 6 Engineering spoke"
@@ -22,7 +22,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering of the `authoring-conventions-enforced-or-retired` release. The operator rendered the decision, option (C), at that release's Stage-5 Collective Review scope-lock. The Stage 9 review reads this record before merge; ratification is the operator's at the Stage 13 close gate, which performs the flip to Accepted and records it in this file's frontmatter `status:` field.
+**Accepted** — operator-ratified at the `authoring-conventions-enforced-or-retired` Stage 13 Close ratification beat (Phase A13), 2026-10-24, as one record of a decision rendered per record. Authored at Stage 6 Engineering of that release as `Proposed`. The operator rendered the decision, option (C), at that release's Stage-5 Collective Review scope-lock. The ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.78**.
 
 **Numbering provenance.** Authored as **ADR-222**, the next number after this release branch's own claim of 221 against a mainline anchor of 220. Another open release branch also holds 222 as an unmerged claim, so the number is a duplicate at authoring and binds only at the Stage-12 claim: if another release merges 222 first, `release/tools/renumber-adr.py` moves this record at merge and appends a provenance note here. Branch-authored prose cites the record by its slug token, never by number. <!-- adr-record -->
 
