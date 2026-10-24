@@ -2910,10 +2910,11 @@ selftest_skip_ledger() {
 # subject. The real reader is restored on every path; group AX tests the reader
 # itself. The stub replaces the BUILDER, which the apply-time re-read calls, so the
 # code under test is the shipped apply path.
+SELFTEST_STUB_OPEN_PRS=()   # entries the stub reports; empty unless an arm sets them
 selftest_with_no_open_prs() {
   local real rc=0
   real=$(declare -f build_open_pr_list)
-  build_open_pr_list() { OPEN_PR_ENTRIES=(); OPEN_PR_STATE="ok"; OPEN_PR_BUILT=1; }
+  build_open_pr_list() { OPEN_PR_ENTRIES=("${SELFTEST_STUB_OPEN_PRS[@]:-}"); OPEN_PR_STATE="ok"; OPEN_PR_BUILT=1; }
   OPEN_PR_BUILT=0
   "$@" || rc=$?
   eval "$real"
@@ -3344,7 +3345,8 @@ selftest_self_guard() {
 # holder (background sleep cwd-anchored in a throwaway worktree) must classify
 # the tree "SKIP — active — live process"; after the holder dies, a fresh inner run must
 # drop the label (each inner run builds its own map — no memo staleness).
-# Holder self-expires (sleep 20) even on abnormal exit. Net-zero via porcelain.
+# Holder self-expires (sleep 60, comfortably past an inner run on a loaded host) even
+# on abnormal exit. Net-zero via porcelain.
 selftest_liveness_gate() {
   resolve_lsof_bin
   if [[ -z "$LSOF_BIN" ]]; then
@@ -3376,7 +3378,7 @@ selftest_liveness_gate() {
     return 0
   fi
 
-  ( cd "$wt" && exec /bin/sleep 20 ) & holder=$!
+  ( cd "$wt" && exec /bin/sleep 60 ) & holder=$!
   /bin/sleep 1   # settle: let the holder reach its cwd
 
   out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
@@ -3455,7 +3457,7 @@ selftest_path_reaching_holder() {
   fi
 
   # The holder: cwd outside the tree, one HEAD movement by path, then alive.
-  ( cd "${TMPDIR:-/tmp}" && /usr/bin/env -u GIT_COMMITTER_DATE git -C "$wt_h" reset -q HEAD && exec /bin/sleep 20 ) & holder=$!
+  ( cd "${TMPDIR:-/tmp}" && /usr/bin/env -u GIT_COMMITTER_DATE git -C "$wt_h" reset -q HEAD && exec /bin/sleep 60 ) & holder=$!
   /bin/sleep 1
 
   # PH-1
@@ -3531,10 +3533,11 @@ selftest_path_reaching_holder() {
 #         active; an unrelated branch does not (control); an unavailable open-PR list
 #         fails closed for that same branch
 #   AX-4  a freshly moved branch ref reads active; a backdated one does not (control)
-#   AX-5  THE APPLY-TIME CLAIM, under a REAL in-process `--apply --force`: a REMOVE row
-#         whose tree is dirty at apply time, and one whose HEAD moved after
-#         classification, survive and are relabelled; a clean quiet control row in the
-#         same apply IS removed, so the survivals are not an apply that removed nothing
+#   AX-5  THE APPLY-TIME CLAIM, under a REAL in-process `--apply --force`: REMOVE rows
+#         whose tree is dirty at apply time, whose HEAD moved after classification,
+#         that holds git-ignored files, or whose branch has an open PR all survive and
+#         are relabelled; a clean quiet control row in the same apply IS removed, so
+#         the survivals are not an apply that removed nothing
 #   AX-6  a tree containing another registered worktree reads nested; the inner tree
 #         does not (control)
 #   AX-7  --active-window-hours below the floor, or non-numeric, is refused; a widened
@@ -3586,7 +3589,7 @@ selftest_ax_not() {    # <arm> <what> <got> <label prefix it must NOT carry>
 selftest_active_exclusions() {
   local script_abs="" slug="" base="" has_main=0 fail=0 rc=0 ax_skipped="" got=""
   local wt1="" wtd="" wth="" wtg="" wto="" wtp="" inner="" b_fresh="" b_old="" b_dirty="" b_head=""
-  local cand="" f="" ix="" st="" fixdir="" rname="" rb="" rb_old="" old_sha="" new_sha="" pr_sha="" b_apply=""
+  local cand="" f="" ix="" st="" fixdir="" rname="" rb="" rb_old="" old_sha="" new_sha="" pr_sha="" b_apply="" wtq="" b_q="" ign_ok=0
   local saved_gh="$GH_BIN" saved_gh_resolved="$GH_BIN_RESOLVED"
   local L_HEAD="SKIP — active — recent HEAD activity (HEAD moved "
   local L_BRANCH="SKIP — active — recent HEAD activity (branch moved "
@@ -3609,9 +3612,10 @@ selftest_active_exclusions() {
   wtg="${REPO_ROOT}/.claude/worktrees/${slug}-ctrl"
   wto="${REPO_ROOT}/.claude/worktrees/${slug}-outer"
   wtp="${REPO_ROOT}/.claude/worktrees/${slug}-pr"
+  wtq="${REPO_ROOT}/.claude/worktrees/${slug}-openpr"
   inner="${wto}/ax-nested-$$"
   b_fresh="chore/${slug}-fresh"; b_old="chore/${slug}-old"; b_dirty="chore/${slug}-dirty"; b_head="chore/${slug}-head"
-  b_apply="chore/${slug}-apply"
+  b_apply="chore/${slug}-apply"; b_q="chore/${slug}-openpr"
   fixdir="${TMPDIR:-/tmp}/cleanup-selftest-ax-$$"; rname="cleanup-selftest-ax-$$"; rb="chore/${slug}-remote"; rb_old="chore/${slug}-remote-old"
   if git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
     has_main=1
@@ -3636,6 +3640,8 @@ selftest_active_exclusions() {
     echo "self-test: active-exclusions FAILED — could not create fixture worktree $wtd" >&2; fail=1; }
   [[ "$fail" -eq 0 ]] && ! git worktree add -b "$b_head" "$wth" "$base" >/dev/null 2>&1 && {
     echo "self-test: active-exclusions FAILED — could not create fixture worktree $wth" >&2; fail=1; }
+  [[ "$fail" -eq 0 ]] && ! git worktree add -b "$b_q" "$wtq" "$base" >/dev/null 2>&1 && {
+    echo "self-test: active-exclusions FAILED — could not create fixture worktree $wtq" >&2; fail=1; }
   [[ "$fail" -eq 0 ]] && ! git worktree add --detach "$inner" "$base" >/dev/null 2>&1 && {
     echo "self-test: active-exclusions FAILED — could not create the nested fixture worktree" >&2; fail=1; }
   [[ "$fail" -eq 0 ]] && ! git branch "$b_old" "$base" >/dev/null 2>&1 && fail=1
@@ -3660,10 +3666,12 @@ selftest_active_exclusions() {
     if [[ -z "$f" ]]; then
       selftest_skip "active-exclusions AX-1" "no candidate path is ignored in this checkout"; ax_skipped="${ax_skipped} AX-1"
     else
-      /bin/mkdir -p "$(/usr/bin/dirname -- "$f")" && printf 'ax\n' > "$f"
+      /bin/mkdir -p "$(/usr/bin/dirname -- "$f")" && printf 'ax\n' > "$f" && ign_ok=1
       /usr/bin/touch -t 200001010000 "$f"   # presence is the trace, not recency
       got=$(selftest_ax_reason worktree_ignored_reason "$wt1")
       selftest_ax_want AX-1 "a tree holding an old git-ignored file" "$got" "$L_IGN" || fail=1
+      got=$(selftest_ax_classify "$wt1")
+      selftest_ax_want AX-1 "classify_worktree on a tree holding a git-ignored file" "$got" "$L_IGN" || fail=1
     fi
   fi
 
@@ -3702,6 +3710,9 @@ selftest_active_exclusions() {
     selftest_ax_want AX-3 "a branch in an open release's family" "$got" "SKIP — active — open PR #990002 (its release)" || fail=1
     got=$(selftest_ax_reason branch_open_pr_reason "chore/${slug}-other")
     selftest_ax_not AX-3 "an unrelated branch" "$got" "$L_ANY" || fail=1
+    OPEN_PR_ENTRIES=("${b_q}	990008")
+    got=$(selftest_ax_classify "$wtq" "$b_q")
+    selftest_ax_want AX-3 "classify_worktree on a tree whose branch has an open PR" "$got" "SKIP — active — open PR #990008" || fail=1
     OPEN_PR_STATE="unavailable"
     got=$(selftest_ax_reason branch_open_pr_reason "chore/${slug}-other")
     selftest_ax_want AX-3 "an unavailable open-PR list" "$got" "$L_UNREAD" || fail=1
@@ -3784,14 +3795,31 @@ selftest_active_exclusions() {
       selftest_skip "active-exclusions AX-5" "liveness oracle unavailable on this host, so every apply row fails closed and the control cannot be removed"; ax_skipped="${ax_skipped} AX-5"
     else
       LOCAL_BRANCH_CANDIDATES=(); REMOTE_BRANCH_CANDIDATES=()
-      WORKTREE_CANDIDATES=("${wtd}		clean	0	REMOVE" "${wth}		clean	0	REMOVE" "${wtg}		clean	0	REMOVE")
+      WORKTREE_CANDIDATES=("${wtd}		clean	0	REMOVE" "${wth}		clean	0	REMOVE" "${wtg}		clean	0	REMOVE"
+                           "${wtq}	${b_q}	clean	0	REMOVE")
+      # The git-ignored row rides only when AX-1 could plant its file, and goes last
+      # so every other row keeps its index.
+      [[ "$ign_ok" -eq 1 ]] && WORKTREE_CANDIDATES+=("${wt1}		clean	0	REMOVE")
+      SELFTEST_STUB_OPEN_PRS=("${b_q}	990009")
       # The HEAD movement lands AFTER classification, as in the race this arm guards;
       # the dirty tree (AX-9) is dirty at apply time while its row reads clean.
       ( cd "${TMPDIR:-/tmp}" && /usr/bin/env -u GIT_COMMITTER_DATE git -C "$wth" checkout -q --detach )
       MODE="apply"; FORCE=1
       selftest_with_no_open_prs apply_removals >/dev/null 2>&1 || true
-      MODE="$saved_mode"; FORCE="$saved_force"
+      MODE="$saved_mode"; FORCE="$saved_force"; SELFTEST_STUB_OPEN_PRS=()
       OPEN_PR_BUILT=1; OPEN_PR_STATE="ok"; OPEN_PR_ENTRIES=()
+      if [[ "$ign_ok" -eq 1 ]]; then
+        if [[ ! -d "$wt1" ]]; then
+          echo "self-test: active-exclusions FAILED — --apply --force removed a tree holding git-ignored files (AX-5)" >&2
+          fail=1
+        fi
+        selftest_ax_want AX-5 "the git-ignored tree's row after --apply --force" "${WORKTREE_CANDIDATES[4]##*	}" "$L_IGN" || fail=1
+      fi
+      if [[ ! -d "$wtq" ]]; then
+        echo "self-test: active-exclusions FAILED — --apply --force removed a tree whose branch has an open PR (AX-5)" >&2
+        fail=1
+      fi
+      selftest_ax_want AX-5 "the open-PR tree's row after --apply --force" "${WORKTREE_CANDIDATES[3]##*	}" "SKIP — active — open PR #990009" || fail=1
       if [[ ! -d "$wtd" ]]; then
         echo "self-test: active-exclusions FAILED — --apply --force removed a tree with uncommitted work (AX-5)" >&2
         fail=1
@@ -3956,10 +3984,10 @@ selftest_active_exclusions() {
   # Teardown — the nested tree first, so the outer one can go
   [[ -n "$ix" && -f "$ix" ]] && /bin/chmod 644 "$ix" 2>/dev/null || true
   git worktree remove --force "$inner" >/dev/null 2>&1 || true
-  for f in "$wt1" "$wtd" "$wth" "$wtg" "$wto" "$wtp"; do
+  for f in "$wt1" "$wtd" "$wth" "$wtg" "$wto" "$wtp" "$wtq"; do
     git worktree remove --force "$f" >/dev/null 2>&1 || true
   done
-  for f in "$b_fresh" "$b_old" "$b_dirty" "$b_head" "$b_apply"; do
+  for f in "$b_fresh" "$b_old" "$b_dirty" "$b_head" "$b_apply" "$b_q"; do
     git branch -D "$f" >/dev/null 2>&1 || true
   done
   git update-ref -d "refs/remotes/${saved_remote}/chore/${slug}-prhead" >/dev/null 2>&1 || true
