@@ -7,7 +7,7 @@ date: 2026-06-26
 release: 16-knowledge-management-discipline
 deciders: "Workspace owner (architecture refined + ratified at the Stage 9 review); design authored at Stage 5 Solutioning"
 supersedes: ADR-029 whole
-superseded_by: {{ADR:memory-eviction-archive-disposition}} in-part (Decision item 4)
+superseded_by: ADR-221 in-part (Decision item 4)
 tags: [architecture, knowledge-management, memory, ssot, cross-surface, four-type-memory, no-shadow-ssot, contract, reversibility]
 ---
 
@@ -60,4 +60,4 @@ The per-type SSOT homes were assigned rather than relocated — § Decision item
 
 - [ADR-029 — Memory SSOT model — corpus-SSOT for codified Knowledge](ADR-029-memory-corpus-ssot-boundary.md): **superseded by this ADR.** The Knowledge cut this contract generalizes; its no-shadow invariant moves here verbatim and its encode-and-evict lifecycle becomes the Knowledge instance of the general graduation flow.
 - [ADR-040 — Leadership-owner fields are typed Person refs with an external free-text fallback](ADR-040-leadership-owner-person-ref.md): governs the People surface's write-authority (operator-write-only; refs resolve through a clarification path, never silently auto-created) that the contract's People row cites.
-- {{ADR:memory-eviction-archive-disposition}}: supersedes in part — the archive-first property named in Decision item 4. Every other clause of this record binds.
+- ADR-221: supersedes in part — the archive-first property named in Decision item 4. Every other clause of this record binds.
