@@ -1,6 +1,6 @@
 ---
 title: "ADR-221 — An evicted auto-memory entry is archived nowhere by default, and only operator-locally when elected"
-status: Proposed
+status: Accepted — operator-ratified at the authoring-conventions-enforced-or-retired Stage 13 Close ratification beat (Phase A13), 2026-10-24
 date: 2026-10-16
 release: authoring-conventions-enforced-or-retired
 deciders: "Workspace owner (operator) — the decision rendered at the release's Stage-5 Collective Review scope-lock, with the independent adversarial review's counter-designs on the unit of eviction, the absorption gate and the binding actor taken; design by the Stage 5 Solutioning spoke (Principal Engineer persona); authored by the Stage 6 Engineering spoke"
@@ -19,7 +19,7 @@ supersedes: ADR-045 in-part (Decision item 4) — the archive-first property onl
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering of the `authoring-conventions-enforced-or-retired` release. The operator rendered the decision at that release's Stage-5 Collective Review scope-lock. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter `status:` field.
+**Accepted** — operator-ratified at the `authoring-conventions-enforced-or-retired` Stage 13 Close ratification beat (Phase A13), 2026-10-24, as one record of a decision rendered per record. Authored at Stage 6 Engineering of that release as `Proposed`. The operator rendered the decision at that release's Stage-5 Collective Review scope-lock. The ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.78**.
 
 **Numbering provenance — `217 → 221`.** Held **ADR-217** branch-local; renumbered to **ADR-221** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 217. In-release citations that read "ADR-217" denote this record.
 
