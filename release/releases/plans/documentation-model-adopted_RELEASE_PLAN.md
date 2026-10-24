@@ -290,7 +290,7 @@ Per-card header (8 fields authored at A0; rows adopted verbatim below):
 - **Acceptance criteria:** four, per the card (AC2 and AC3 as re-worded by the operator on 2026-10-24).
 - **Estimated complexity:** Low — one new file, mechanical edits.
 - **Dependencies:** none.
-- **Landed:** `c79ac3fe` (Stage 6). The file is the Stage 5 literal (134 lines) with exactly two lines changed, the `status:` line and the first `## Status` sentence (DEV-9).
+- **Landed:** `c79ac3fe` (Stage 6). The file is the Stage 5 literal (134 lines) with exactly two lines changed, the `status:` line and the first `## Status` sentence (DEV-9). The Stage 6 sync then renumbered it (`943b1c97`, DEV-19): the tool rewrote the number in the title and heading lines and added the provenance note under `## Status`, so the file now also differs from the literal there.
 - **Deliverable state:** `deliverable_state: artifact-accepted` — a decision record is a task-class deliverable whose definition of done is the artifact; its Artifact-Acceptance Record row is in § Verification Evidence (ADDITIVE mode).
 
 ### Issue #8494: Extend the design-artifact standard to the generated process catalog the documentation-model ADR chose
