@@ -12033,8 +12033,8 @@ sys.stdout.write("".join(out) + "|")
 
   # ─── Check 28: Doc-impact resolution at Stage 13 close ──
   # Per the Stage 5 ADR D-EnforcementMechanism (A) — structural-only check that asserts
-  # the per-issue Documentation Impact declaration (made at Stage 1 Intake via improvement.yml /
-  # bug.yml) is resolved at Stage 13 Close. Companion to gate-criteria-spec.md Gate 13 G-CL8.
+  # the per-issue Documentation Impact declaration (made at Stage 1 Intake on a shipping work-item
+  # form) is resolved at Stage 13 Close. Companion to gate-criteria-spec.md Gate 13 G-CL8.
   #
   # Mechanism (full enforcement at Stage 13 close — release-context-specific):
   #   1. Read the release PR body's `### Documentation Impact` H3 section.
@@ -12046,7 +12046,9 @@ sys.stdout.write("".join(out) + "|")
   #
   # Mechanism (deploy-time warn-mode shakedown — what this check fires on every ./deploy.sh --check):
   #   - Verify .github/PULL_REQUEST_TEMPLATE.md carries the `### Documentation Impact` H3 subsection.
-  #   - Verify .github/ISSUE_TEMPLATE/{improvement.yml,bug.yml} carry the `Documentation Impact` field.
+  #   - Verify every shipping work-item form under .github/ISSUE_TEMPLATE/ carries the `Documentation Impact`
+  #     field — every form except the two the G-CL8 row exempts (observation.yml, adr.yml) and the
+  #     template chooser's config.yml. The set is derived, not listed, so a form added later is checked.
   #     This is the lightweight template-presence check (the leading indicator). Full per-PR
   #     per-issue verification (scanning recent release PRs + per-row declared-doc resolution)
   #     fires at Stage 13 release-context, invoked by the Stage 13 spoke at Phase A entry.
@@ -12086,20 +12088,33 @@ sys.stdout.write("".join(out) + "|")
       fi
     fi
 
-    # Verify the issue templates carry the Documentation Impact field
-    local _tmpl
-    for _tmpl in ".github/ISSUE_TEMPLATE/improvement.yml" ".github/ISSUE_TEMPLATE/bug.yml"; do
+    # Verify every shipping work-item form carries the Documentation Impact field. The form set is
+    # DERIVED, not listed: every form under .github/ISSUE_TEMPLATE/ except the exempt set the G-CL8
+    # row of core/schemas/gate-criteria-spec.md names (observation.yml, adr.yml) and the chooser's
+    # config file. A form added later, including a deployment's own kind form, is checked with no
+    # edit here, and an empty form set is a finding rather than a silent pass.
+    local _tmpl _tmpl_base _tmpl_seen=0
+    for _tmpl in .github/ISSUE_TEMPLATE/*.yml .github/ISSUE_TEMPLATE/*.yaml; do
       [[ -f "$_tmpl" ]] || continue
+      _tmpl_base="${_tmpl##*/}"
+      case "$_tmpl_base" in
+        observation.yml|adr.yml|config.yml|config.yaml) continue ;;
+      esac
+      _tmpl_seen=$((_tmpl_seen + 1))
       local _has_field
       _has_field=$(/usr/bin/grep -cE 'label: Documentation Impact' "$_tmpl" 2>/dev/null || true); _has_field=${_has_field:-0}
       if [[ "$_has_field" -eq 0 ]]; then
-        c28_output+="${_tmpl}: missing \`Documentation Impact\` field — required per the Stage 5 spec for Beat 1 declaration"$'\n'
+        c28_output+="${_tmpl}: missing \`Documentation Impact\` field — every shipping work-item form carries it (G-CL8 row, form-scope boundary)"$'\n'
         c28_findings=$((c28_findings + 1))
       fi
     done
+    if [[ "$_tmpl_seen" -eq 0 ]]; then
+      c28_output+=".github/ISSUE_TEMPLATE/: no shipping work-item form found — the form set cannot be empty"$'\n'
+      c28_findings=$((c28_findings + 1))
+    fi
 
     if [[ $c28_findings -eq 0 ]]; then
-      log "  OK:    PR template + issue templates carry Documentation Impact surfaces per the spec"
+      log "  OK:    PR template + ${_tmpl_seen} shipping work-item form(s) carry Documentation Impact surfaces per the spec"
     else
       flag_warn_or_issue "doc-impact-resolution" \
         "$c28_findings doc-impact surface drift finding(s) — see protocol at core/schemas/gate-criteria-spec.md Gate 13 G-CL8"
