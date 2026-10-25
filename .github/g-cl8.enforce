@@ -1,0 +1,16 @@
+# G-CL8 enforcement sentinel — read by deploy.sh cmd_check_doc_gates
+# (--check-doc-gates --gate g-cl8, Stage 13 Phase A11) and by Check 28's deadline arm.
+#
+# First non-comment token decides whether a FINDINGS verdict BLOCKS:
+#   warn     -> FINDINGS exits 2 and writes one warn-log row per failing issue
+#               under check "g-cl8" (advisory; Milestone close proceeds)
+#   enforce  -> FINDINGS exits 1 and writes no row (blocking)
+# Exit 0 belongs to CLEAN alone under either token, and N/A or NOT-EVALUATED exits 3
+# under either token: this is an escalation dial, never a suppression dial.
+#
+# Ships `warn`. The flip to `enforce` is an OPERATOR DECISION after the shakedown the
+# G-CL8 row of core/schemas/gate-criteria-spec.md declares, never auto-promoted by row
+# count; record it in core/standards/gate-efficacy-standard.md § Flip-decision status.
+# Until it is recorded, Check 28 reads GCL8_ROLLOUT_ARMED in core/deploy/deploy.sh and
+# raises an issue once the escalation window passes.
+warn

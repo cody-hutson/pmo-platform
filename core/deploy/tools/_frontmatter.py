@@ -4,19 +4,21 @@ single shared corpus-traversal predicate for the deploy-tool family.
 
 This is the ONE place the deploy-tool family parses a doc's frontmatter block,
 so two checks that both reason about "does this doc carry frontmatter, and what
-keys does it carry" can never drift apart. Its six live consumers, all under
+keys does it carry" can never drift apart. Its seven live consumers, all under
 core/deploy/tools/:
 
   * backfill-relationship-edges.py — via read_frontmatter();
   * build-doc-index.py — via read_frontmatter();
   * check-doc-frontmatter.py (Check 50) — via read_frontmatter(), the generalized
     all-keys reader;
+  * check-doc-gates.py (Check 28's release-context arm) — via read_frontmatter(),
+    on a git-object blob written to a temporary file;
   * check-version-anchors.py (Check 18b/18d) — via read_anchor(), which preserves
     that tool's exact 4-status contract;
   * compose-portfolio.py — via read_frontmatter(); and
   * stamp-node-frontmatter.py — via read_frontmatter().
 
-The last two of those checks load this module dynamically, through
+The three checks among them — Checks 50, 18b/18d and 28 — load this module dynamically, through
 importlib.util.spec_from_file_location rather than a static import, which is why
 a grep for `import _frontmatter` UNDER-reports the consumer set. Count the
 dynamic loads too before asserting a blast radius.
@@ -50,8 +52,8 @@ leave a universal silently asserting the opposite of.
 FROZEN SEMANTICS
 ----------------
 The clauses below state what this module DOES, not what a YAML parser would do.
-They are frozen deliberately: every one of them is a property six consumers
-already depend on, so changing one changes all six resolved-value sets at once
+They are frozen deliberately: every one of them is a property seven consumers
+already depend on, so changing one changes all seven resolved-value sets at once
 and silently. Each clause is anchored by a named assertion in _self_test — F-1
 in cases (1), (2) and (5), F-2 / F-3 / F-4 in case (5), F-5 in case (1) — so a
 future well-meaning tightening fails a test rather than shipping. The case
@@ -280,7 +282,7 @@ def _self_test() -> int:
         # F-4 — a "#" in a value is CONTENT. Each value must resolve WHOLE.
         assert keys5["project_id"] == "proj-alpha        # renamed from alpha-2024", (
             "F-4: a trailing '#' comment is part of the value; a strip here "
-            "would change resolved values across all six consumers at once"
+            "would change resolved values across all seven consumers at once"
         )
         assert keys5["anchor"] == "terminology-glossary.md#term-work-item", (
             "F-4: a heading anchor's '#' has no preceding whitespace and must "
@@ -325,8 +327,8 @@ def _self_test() -> int:
         # F-1 — the two FENCE-BOUNDARY clauses. They are pinned HERE because no
         # other case reaches them: every fixture above either opens with a fence
         # or carries no later fence at all, so a mutation to either boundary
-        # leaves all of them green. Both clauses are properties six consumers
-        # have resolved values under since this module shipped.
+        # leaves all of them green. Both clauses are properties seven consumers
+        # resolve values under.
         #
         # First arm — frontmatter exists IFF the FIRST line is a fence, HOWEVER
         # MANY fences appear later. A tightening that scans for the first "---"

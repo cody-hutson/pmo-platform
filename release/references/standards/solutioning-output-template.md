@@ -312,6 +312,8 @@ Stage 5 spokes use the scaffold below as starting draft. Replace bracketed place
 
 #### Blast Radius
 
+Current-state pages read: <the Phase A1.7 record — `<page-id> @ <sha>` per page read, or the `none — …` form that says why>
+
 <file change matrix + schema impact + consumer enumeration + cross-PR contention per § Blast Radius>
 
 #### Feasibility Assessment

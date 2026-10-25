@@ -61,6 +61,7 @@ core/deploy/tools/check-approved-queue-depth.py
 core/deploy/tools/check-commit-close-keywords.py
 core/deploy/tools/check-count-structure.py
 core/deploy/tools/check-doc-frontmatter.py
+core/deploy/tools/check-doc-gates.py
 core/deploy/tools/check-doc-links.py
 core/deploy/tools/check-extraction-contract.py
 core/deploy/tools/check-host-binding.py

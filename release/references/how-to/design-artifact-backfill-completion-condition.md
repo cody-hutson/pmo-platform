@@ -56,20 +56,20 @@ The verification is the enumeration harness canonical in [`design-artifact-stand
 grep -rl '^depicts:' core operations release docs
 
 # Embedded artifacts (section-level marker — § 9; enum-anchored + field-order-tolerant so the
-# § 9 grammar line and the bracketed <one-of-7> examples do not self-match — the `>` in [^>] excludes them)
-grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' core operations release docs
+# § 9 grammar line and the bracketed <flow-class> examples do not self-match — the `>` in [^>] excludes them)
+grep -rnE '<!-- design-artifact:[^>]*flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree|state-lifecycle)\b' core operations release docs
 
 # Per-flow-type count (dedicated + embedded, one row per type)
-for t in architecture data-flow agent-process human-process concept-model skill-flow decision-tree; do
+for t in architecture data-flow agent-process human-process concept-model skill-flow decision-tree state-lifecycle; do
   d=$(grep -rlE "^flow_class:[[:space:]]+$t\b" core operations release docs --include='*.md' | wc -l)
   e=$(grep -rn "design-artifact:[^>]*flow-class=$t\b" core operations release docs --include='*.md' | wc -l)
   printf "%-16s dedicated=%s embedded=%s total=%s\n" "$t" "$d" "$e" "$((d+e))"
 done
 
-# Enum-validation lint — surface any marker whose flow-class is NOT one of the 7 (the per-type
+# Enum-validation lint — surface any marker whose flow-class is NOT one of the § 2 values (the per-type
 # loop above drops an out-of-enum / typo'd flow-class silently; this catches it)
 grep -rnoE '<!-- design-artifact:[^>]*flow-class=[a-z-]+' core operations release docs --include='*.md' \
- | grep -vE 'flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree)\b' \
+ | grep -vE 'flow-class=(architecture|data-flow|agent-process|human-process|concept-model|skill-flow|decision-tree|state-lifecycle)\b' \
  && echo "WARN: out-of-enum flow-class marker(s) above" || echo "enum OK"
 ```
 
@@ -92,7 +92,7 @@ Backfill artifacts follow § 3 storage + § 4 naming, under the location clause 
 
 ## 5. Worked pass / fail example
 
-**PASS — a DECLARE candidate (data-flow, the decisive table-only case).** `core/schemas/stage-io-contracts.md` carries the boundary producer→consumer contract tables and **0 fenced blocks / 0 Mermaid / ~100 table rows**. Before the sweep the harness shows `data-flow … total=0` — a fence count is structurally blind to it. Add the § 9 marker on its own line under the contract-table heading (shown here with the flow-class value **bracketed** as `<data-flow>` — the § 9 grammar-placeholder idiom, `<one-of-7>` — so this illustrative how-to does **not** itself register in the § 12.2 count; a real declaration writes the bare enum `data-flow`):
+**PASS — a DECLARE candidate (data-flow, the decisive table-only case).** `core/schemas/stage-io-contracts.md` carries the boundary producer→consumer contract tables and **0 fenced blocks / 0 Mermaid / ~100 table rows**. Before the sweep the harness shows `data-flow … total=0` — a fence count is structurally blind to it. Add the § 9 marker on its own line under the contract-table heading (shown here with the flow-class value **bracketed** as `<data-flow>` — the § 9 grammar-placeholder idiom, `<flow-class>` — so this illustrative how-to does **not** itself register in the § 12.2 count; a real declaration writes the bare enum `data-flow`):
 
 ```
 <!-- design-artifact: flow-class=<data-flow>; name=stage-io-contracts; depicts=<the pipeline-stage docs whose I/O it maps> -->
