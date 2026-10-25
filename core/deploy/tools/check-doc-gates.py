@@ -613,9 +613,13 @@ def self_test() -> int:
         put("core/standards/old.md", fm + "old\n")
         put_bytes("packages/p.skill", b"PK\x03\x04\xa6\xff\x00bin")    # not UTF-8 text
         put_bytes("packages/same.skill", b"PK\x03\x04\xa6\xff\x00same")
+        put("core/order/a-fm.md", fm + "body\n")                       # listed before b.md
+        put("core/order/b.md", fm + "body\n")
         base = commit("base")
         put_bytes("packages/p.skill", b"PK\x03\x04\xa7\xfe\x00bin")    # only undecodable bytes change
         os.chmod(r / "packages/same.skill", 0o755)                     # listed, bytes unchanged
+        put("core/order/a-fm.md", fm.replace("title: T", "title: T2") + "body\n")
+        put("core/order/b.md", fm + "body\nmore body\n")
         put("core/diagrams/fm.md", fm.replace("title: T", "title: T2\nowner: x\nreviewed: y\nnote: z") + "body\n" * 5)
         put("core/standards/retire-me.md", fm.replace("ACTIVE", "DEPRECATED") + "to retire\n")
         (r / "docs/old-guide.md").unlink()
@@ -700,9 +704,10 @@ def self_test() -> int:
               got[0] == "PASS" and "1 commentary line(s) ignored" in got[1], got)
         # An HTML comment is stripped before the section's end is found, as a renderer
         # reads it. Each arm hides a row of the unchanged s.md beside a visible row of the
-        # changed a.md, so the section PASSes on the one row; the controls below show the
-        # hidden row FAILs when visible, and that a heading outside a comment still ends
-        # the section.
+        # changed a.md, so the section PASSes on the one row — except the two abrupt
+        # closes, `<!-->` and `<!--->`, which hide nothing: their arms show the visible row
+        # after the close is still graded. The controls below show the hidden row FAILs
+        # when visible, and that a heading outside a comment still ends the section.
         vis, hid = "core/diagrams/a.md | update | x", "core/standards/s.md | update | y"
         comments = {
             "multi-line": f"<!--\n{hid}\n-->\n{vis}",
@@ -712,6 +717,7 @@ def self_test() -> int:
             "crlf": f"<!--\r\n{hid}\r\n-->\r\n{vis}",
             "unterminated": f"{vis}\n<!-- {hid}",
             "abrupt-empty": f"<!-->\n{vis}",
+            "abrupt-empty-dash": f"<!--->\n{vis}",
         }
         for name, text in comments.items():
             eol = "\r\n" if name == "crlf" else "\n"
@@ -744,6 +750,9 @@ def self_test() -> int:
         check("G8-update a directory whose only change is frontmatter FAILs", got[0] == "FAIL", got)
         got = row("core/diagrams/", "update", head2)
         check("G8-update control: a directory with a file whose body changed PASSes", got[0] == "PASS", got)
+        got = row("core/order/", "update", head2)
+        check("G8-update a directory resolves on a later file: the first listed changed only "
+              "its frontmatter, the second its body", got[0] == "PASS", got)
         # A file that is not UTF-8 text is compared byte for byte, not read as text: a
         # changed binary resolves, directly or under a declared directory, and one whose
         # bytes did not change (only its mode did) does not.
