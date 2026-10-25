@@ -2950,6 +2950,27 @@ selftest_with_no_open_prs() {
   return "$rc"
 }
 
+# Arms that run this tool as a CHILD process cannot use the stub above: a function
+# override does not survive into a new bash, which loads the shipped reader again and,
+# on a host with no usable gh, fails closed — every fixture then reads active and the
+# arm measures the exclusion instead of its own subject. Those arms run the child from
+# a copy whose builder is the same no-open-PRs stub, made the way the fixed-point P2
+# copy is: beside the original (REPO_ROOT derives from SCRIPT_DIR), dot-prefixed and
+# PID-scoped so no glob discovers it, and removed by the caller on every exit path.
+# The copy counts only when the substitution reads back whole-line on both sides — the
+# stub line present, the shipped line gone — and the stub line is first shown NOT to
+# be a whole line of this source, so a sed that matched nothing cannot pass for a copy
+# that reads no open PRs.
+SELFTEST_NOPR_BUILDER_LINE='  OPEN_PR_ENTRIES=(); OPEN_PR_STATE="unavailable"; OPEN_PR_BUILT=1'
+SELFTEST_NOPR_STUB_LINE='  OPEN_PR_ENTRIES=(); OPEN_PR_STATE="ok"; OPEN_PR_BUILT=1; return 0 # self-test child: no open PRs'
+selftest_no_open_prs_copy() {
+  local dest="$1" src
+  src="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  if grep -qxF "$SELFTEST_NOPR_STUB_LINE" "$src"; then return 1; fi
+  LC_ALL=C sed "s/^${SELFTEST_NOPR_BUILDER_LINE}\$/${SELFTEST_NOPR_STUB_LINE}/" "$src" > "$dest" 2>/dev/null || return 1
+  grep -qxF "$SELFTEST_NOPR_STUB_LINE" "$dest" && ! grep -qxF "$SELFTEST_NOPR_BUILDER_LINE" "$dest"
+}
+
 # Apply-path regression guard. Reproduces the v1.02 defect class in miniature: an
 # isolated, fully-merged throwaway branch is run through the REAL apply path and must
 # come back actually DELETED, and the emitters must return 0 in --apply mode (the
@@ -3458,9 +3479,8 @@ selftest_liveness_gate() {
 #        directory in place and removes the control — the removal is what makes
 #        "the held tree survived" non-vacuous
 selftest_path_reaching_holder() {
-  local script_abs="" slug="" base="" br_h="" br_c="" wt_h="" wt_c="" out="" holder="" fail=0 old_date="" has_main=0
+  local child="" slug="" base="" br_h="" br_c="" wt_h="" wt_c="" out="" holder="" fail=0 old_date="" has_main=0
   local ph4="PH-4 a real --apply --force keeps the held tree and removes the control"
-  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
   slug="cleanup-selftest-reach-$$"
   br_h="chore/${slug}-held"; br_c="chore/${slug}-ctrl"
   wt_h="${REPO_ROOT}/.claude/worktrees/${slug}-held"
@@ -3498,8 +3518,15 @@ selftest_path_reaching_holder() {
     fail=1
   fi
 
+  # Both children run from the no-open-PRs copy (selftest_no_open_prs_copy): PH-4's
+  # control must be removable, which a fail-closed open-PR read never allows.
+  child="${SCRIPT_DIR}/.cleanup-selftest-nopr-$$.sh"
+  if [[ "$fail" -eq 0 ]] && ! selftest_no_open_prs_copy "$child"; then
+    echo "self-test: path-reaching holder FAILED — could not make the no-open-PRs copy of this script for the inner runs" >&2
+    fail=1
+  fi
   if [[ "$fail" -eq 0 ]]; then
-    out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
+    out=$(bash "$child" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
     if [[ "$fail" -eq 1 ]]; then
       echo "self-test: path-reaching holder FAILED — inner dry-run exited non-zero" >&2
     else
@@ -3519,7 +3546,7 @@ selftest_path_reaching_holder() {
   # PH-4 — needs a control that is removable on this host
   if [[ "$fail" -eq 0 ]]; then
     if [[ "$has_main" -eq 1 ]] && grep -q '"action":"REMOVE"' <<<"$(grep -F "${slug}-ctrl" <<<"$out" || true)"; then
-      out=$("$script_abs" --release-close "$slug" --apply --force --json 2>/dev/null) || true
+      out=$(bash "$child" --release-close "$slug" --apply --force --json 2>/dev/null) || true
       if [[ ! -d "$wt_h" ]]; then
         echo "self-test: path-reaching holder FAILED — --apply --force removed a tree a live holder was using by path (PH-4)" >&2
         fail=1
@@ -3528,13 +3555,14 @@ selftest_path_reaching_holder() {
         fail=1
       fi
     else
-      selftest_skip "path-reaching holder PH-4" "the control tree is not removable on this host (needs ${REMOTE_NAME}/${MAIN_BRANCH} and a readable open-PR list)"
+      selftest_skip "path-reaching holder PH-4" "the control tree is not removable on this host (no ${REMOTE_NAME}/${MAIN_BRANCH}, or the dry-run read it as something other than REMOVE)"
       ph4="PH-4 SKIPPED (see the skip ledger)"
     fi
   fi
 
   kill "$holder" >/dev/null 2>&1 || true
   wait "$holder" 2>/dev/null || true
+  rm -f "$child" 2>/dev/null || true
   git worktree remove "$wt_h" >/dev/null 2>&1 || git worktree remove --force "$wt_h" >/dev/null 2>&1 || true
   git worktree remove "$wt_c" >/dev/null 2>&1 || git worktree remove --force "$wt_c" >/dev/null 2>&1 || true
   git branch -D "$br_h" >/dev/null 2>&1 || true
@@ -4122,17 +4150,19 @@ selftest_active_exclusions() {
 # one equality claim can drift; one cannot. Three invocations, in order: P1 --dry-run
 # (must PROJECT the drain, and must mutate nothing), P2 --dry-run against a copy with
 # the projection dispatch stripped (must STOP projecting it — the arm that makes P1
-# falsifiable), then the original --apply (must PERFORM it). The fixture worktree is
+# falsifiable), then the --apply (must PERFORM it). The fixture worktree is
 # created UNLOCKED by the plain `git worktree add` above, which is load-bearing: the
 # locked class is excluded from REMOVE, so a locked fixture would make this check read
-# as its own failure.
+# as its own failure. All three run from the no-open-PRs copy
+# (selftest_no_open_prs_copy) for the same reason: the shipped reader fails closed on a
+# host with no usable gh, and a fixture read as active drains nothing.
 selftest_fixed_point() {
   if ! git rev-parse --verify --quiet "refs/remotes/${REMOTE_NAME}/${MAIN_BRANCH}" >/dev/null 2>&1; then
     selftest_skip "fixed-point check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
   local script_abs slug branch wt base out fail=0
-  local dry mut mut_out drc=0
+  local dry mut mut_out drc=0 child child_ok=0
   base=$(git merge-base HEAD "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   if [[ -z "$base" ]]; then
     selftest_skip "fixed-point check" "no merge-base between HEAD and ${REMOTE_NAME}/${MAIN_BRANCH}"
@@ -4160,6 +4190,13 @@ selftest_fixed_point() {
     echo "self-test: fixed-point check FAILED — fixture worktree or branch absent before the projection arm" >&2
     fail=1
   fi
+  child="${SCRIPT_DIR}/.cleanup-selftest-nopr-$$.sh"
+  if selftest_no_open_prs_copy "$child"; then
+    child_ok=1
+  else
+    echo "self-test: fixed-point check FAILED — could not make the no-open-PRs copy of this script for the inner runs" >&2
+    fail=1
+  fi
 
   # ── Arm P1 (#6207). ONE fixture, TWO invocations: --dry-run must PROJECT the drain
   # that the --apply arm below then performs, so the equality claim is made on a single
@@ -4173,7 +4210,7 @@ selftest_fixed_point() {
   # self-test. Do not "simplify" any arm here into an exit.
   if [[ "$fail" -eq 0 ]]; then
     drc=0
-    dry=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
+    dry=$(bash "$child" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
     if [[ "$drc" -ne 0 ]]; then
       echo "self-test: fixed-point check FAILED — inner --dry-run exited non-zero" >&2
       fail=1
@@ -4221,7 +4258,7 @@ selftest_fixed_point() {
       echo "self-test: fixed-point check FAILED — P2 strip-guard specificity: the anchored needle matches a WHOLE LINE of this script's own unsubstituted source, so limb 1 below cannot be false and the strip guard would pass on a sed that did nothing (#6207)" >&2
       fail=1
     fi
-    sed 's/^  projected_freed_branches$/  : # projection disabled (P2 sensitivity arm)/' "$script_abs" > "$mut"
+    sed 's/^  projected_freed_branches$/  : # projection disabled (P2 sensitivity arm)/' "$child" > "$mut"
     if grep -qxF '  : # projection disabled (P2 sensitivity arm)' "$mut" && ! grep -qE '^  projected_freed_branches$' "$mut"; then
       drc=0
       mut_out=$(bash "$mut" --release-close "$slug" --dry-run --json 2>/dev/null) || drc=1
@@ -4244,8 +4281,10 @@ selftest_fixed_point() {
   # exited non-zero" — a report asserting a failure that did not happen, in a change
   # whose whole subject is a report that misstates what a run did.
   drc=0
-  out=$("$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || drc=1
-  if [[ "$drc" -ne 0 ]]; then
+  [[ "$child_ok" -eq 1 ]] && { out=$(bash "$child" --release-close "$slug" --apply --json 2>/dev/null) || drc=1; }
+  if [[ "$child_ok" -ne 1 ]]; then
+    :   # reported FAILED where the copy was made; there is no child to run
+  elif [[ "$drc" -ne 0 ]]; then
     echo "self-test: fixed-point check FAILED — inner --apply exited non-zero" >&2
     fail=1
   else
@@ -4269,6 +4308,7 @@ selftest_fixed_point() {
   # no arm added later between the two can strand it. PID-scoped, so this can only ever
   # name this run's own file.
   rm -f "${SCRIPT_DIR}/.cleanup-selftest-mut-$$.sh" 2>/dev/null || true
+  rm -f "$child" 2>/dev/null || true
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
   echo "self-test: fixed-point check PASS — worktree + freed branch removed in one --apply; --dry-run projected that drain on the same fixture (P1) and stopped projecting it when the projection was stripped (P2)" >&2
   return 0
@@ -4396,8 +4436,7 @@ selftest_behind_head_apply() {
     selftest_skip "behind-HEAD apply check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
-  local script_abs tip base slug merged_branch attach_wt inv_wt out fail=0
-  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  local child tip base slug merged_branch attach_wt inv_wt out fail=0
   tip=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}~1" 2>/dev/null || true)
   if [[ -z "$tip" || -z "$base" ]]; then
@@ -4425,13 +4464,20 @@ selftest_behind_head_apply() {
     return 0
   fi
 
-  out=$(cd "$inv_wt" && "$script_abs" --release-close "$slug" --apply --json 2>/dev/null) || fail=1
-  if [[ "$fail" -eq 1 ]]; then
+  # The child runs from the no-open-PRs copy (selftest_no_open_prs_copy): this arm's
+  # subject is the behind-HEAD delete, which a fail-closed open-PR read would hide.
+  child="${SCRIPT_DIR}/.cleanup-selftest-nopr-$$.sh"
+  if ! selftest_no_open_prs_copy "$child"; then
+    echo "self-test: behind-HEAD apply check FAILED — could not make the no-open-PRs copy of this script for the inner run" >&2
+    fail=1
+  elif ! out=$(cd "$inv_wt" && bash "$child" --release-close "$slug" --apply --json 2>/dev/null); then
     echo "self-test: behind-HEAD apply check FAILED — inner --release-close --apply exited non-zero" >&2
+    fail=1
   elif git show-ref --verify --quiet "refs/heads/${merged_branch}"; then
     echo "self-test: behind-HEAD apply check FAILED — merged branch '$merged_branch' survived --apply from a behind-HEAD checkout without --force (#683 / FMF-2 regression)" >&2
     fail=1
   fi
+  rm -f "$child" 2>/dev/null || true
   git worktree remove --force "$attach_wt" >/dev/null 2>&1 || true
   git worktree remove --force "$inv_wt" >/dev/null 2>&1 || true
   git branch -D "$merged_branch" >/dev/null 2>&1 || true
@@ -4618,8 +4664,7 @@ selftest_locked_worktree() {
     selftest_skip "locked-worktree check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
-  local script_abs slug base wt_lk wt_ct br_lk br_ct out fail=0
-  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  local child slug base wt_lk wt_ct br_lk br_ct out fail=0
   slug="cleanup-selftest-lock-$$"
   br_lk="chore/${slug}-locked"
   br_ct="chore/${slug}-ctrl"
@@ -4649,9 +4694,16 @@ selftest_locked_worktree() {
     return 0
   fi
 
-  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
-  if [[ "$fail" -eq 1 ]]; then
+  # Both children run from the no-open-PRs copy (selftest_no_open_prs_copy): LK-2 and
+  # LK-4 need the unlocked control to be removable, and a fail-closed open-PR read
+  # would make it active and both controls unreadable.
+  child="${SCRIPT_DIR}/.cleanup-selftest-nopr-$$.sh"
+  if ! selftest_no_open_prs_copy "$child"; then
+    echo "self-test: locked-worktree FAILED — could not make the no-open-PRs copy of this script for the inner runs" >&2
+    fail=1
+  elif ! out=$(bash "$child" --release-close "$slug" --dry-run --json 2>/dev/null); then
     echo "self-test: locked-worktree FAILED — inner dry-run exited non-zero" >&2
+    fail=1
   else
     # LK-1
     if ! grep -q '"action":"SKIP — active — lock held' <<<"$(grep -F "${slug}-locked" <<<"$out" || true)"; then
@@ -4667,7 +4719,7 @@ selftest_locked_worktree() {
 
   # LK-3 + LK-4 — one REAL `--apply --force` run carries both
   if [[ "$fail" -eq 0 ]]; then
-    out=$("$script_abs" --release-close "$slug" --apply --force --json 2>/dev/null) || true
+    out=$(bash "$child" --release-close "$slug" --apply --force --json 2>/dev/null) || true
     if ! grep -q '"action":"SKIP — active — lock held' <<<"$(grep -F "${slug}-locked" <<<"$out" || true)"; then
       echo "self-test: locked-worktree FAILED — --apply --force did not skip the locked tree (LK-3)" >&2
       fail=1
@@ -4680,6 +4732,7 @@ selftest_locked_worktree() {
     fi
   fi
 
+  rm -f "$child" 2>/dev/null || true
   git worktree unlock "$wt_lk" >/dev/null 2>&1 || true
   git worktree remove "$wt_lk" >/dev/null 2>&1 || git worktree remove --force "$wt_lk" >/dev/null 2>&1 || true
   git worktree remove "$wt_ct" >/dev/null 2>&1 || git worktree remove --force "$wt_ct" >/dev/null 2>&1 || true
@@ -5258,6 +5311,10 @@ selftest_orphan_tag_reap() {
 #   (2) BLACK-BOX (AC-2/R2): the SAME unique-commit branch, with NO PR (real gh),
 #       run through `--release-close <slug> --dry-run` stays SKIP — proving the
 #       rescue never over-removes a genuinely-unmerged, un-PR'd branch.
+# Neither level's subject is the open-PR exclusion, so (1) classifies through
+# selftest_with_no_open_prs and (2) runs from the no-open-PRs copy; a fail-closed
+# open-PR read would otherwise answer (1) for it and make (2) pass without reaching
+# the rescue at all.
 # The "real shipped release reports non-zero removable" AC is a Stage-8 manual
 # integration check, not a fixture. Net-zero teardown via git porcelain.
 selftest_release_close_merged_pr() {
@@ -5265,8 +5322,7 @@ selftest_release_close_merged_pr() {
     selftest_skip "merged-PR rescue check" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref"
     return 0
   fi
-  local script_abs base slug branch wt out fail=0
-  script_abs="${SCRIPT_DIR}/$(/usr/bin/basename -- "${BASH_SOURCE[0]}")"
+  local child base slug branch wt out fail=0
   base=$(git rev-parse --verify --quiet "${REMOTE_NAME}/${MAIN_BRANCH}" 2>/dev/null || true)
   if [[ -z "$base" ]]; then
     selftest_skip "merged-PR rescue check" "could not resolve ${REMOTE_NAME}/${MAIN_BRANCH}"
@@ -5323,7 +5379,7 @@ selftest_release_close_merged_pr() {
       # real rebuild; the reset is subshell-local (#2790).
       PR_MAP_BUILT=1; PR_MAP_STATE=degraded; PR_MAP_ENTRIES=()
       LOCAL_BRANCH_CANDIDATES=()
-      classify_local "$seam_branch" 1
+      selftest_with_no_open_prs classify_local "$seam_branch" 1
       awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}"
     )
     seam_skip=$(
@@ -5332,7 +5388,7 @@ selftest_release_close_merged_pr() {
       # Force degraded per-branch path (see the require_pr=1 arm above) (#2790).
       PR_MAP_BUILT=1; PR_MAP_STATE=degraded; PR_MAP_ENTRIES=()
       LOCAL_BRANCH_CANDIDATES=()
-      classify_local "$seam_branch" 0
+      selftest_with_no_open_prs classify_local "$seam_branch" 0
       awk -F'\t' '{print $6}' <<<"${LOCAL_BRANCH_CANDIDATES[0]}"
     )
     if [[ "$seam_remove" != "REMOVE" ]]; then
@@ -5351,18 +5407,24 @@ selftest_release_close_merged_pr() {
   # ── (2) BLACK-BOX: real gh, no PR → unique-commit branch stays SKIP (no over-removal) ──
   # Detach the worktree's branch so classify_local sees a plain local branch (not
   # active-worktree-attached) yet the unique commit persists on the branch ref.
-  out=$("$script_abs" --release-close "$slug" --dry-run --json 2>/dev/null) || fail=1
-  if [[ "$fail" -eq 0 ]]; then
-    # The branch is worktree-attached, so its row reads "SKIP — worktree attached"
-    # (or an active-exclusion label); the load-bearing black-box assertion is that it is NOT REMOVE
-    # (no false rescue for a branch with no MERGED PR).
-    if grep -q '"action":"REMOVE"' <<<"$(grep -F "\"name\":\"${branch}\"" <<<"$out" || true)"; then
-      echo "self-test: merged-PR rescue check FAILED — unique-commit branch with NO PR classified REMOVE under --release-close (over-removal / R2 regression)" >&2
-      fail=1
-    fi
-  else
+  # Own rc, not the shared accumulator: with (1) above feeding the same `fail`, reading
+  # it here would report a dry-run that exited ZERO as "exited non-zero" (the
+  # selftest_fixed_point discipline).
+  child="${SCRIPT_DIR}/.cleanup-selftest-nopr-$$.sh"
+  if ! selftest_no_open_prs_copy "$child"; then
+    echo "self-test: merged-PR rescue check FAILED — could not make the no-open-PRs copy of this script for the inner run" >&2
+    fail=1
+  elif ! out=$(bash "$child" --release-close "$slug" --dry-run --json 2>/dev/null); then
     echo "self-test: merged-PR rescue check FAILED — inner --release-close dry-run exited non-zero" >&2
+    fail=1
+  # The branch is worktree-attached, so its row reads "SKIP — worktree attached"
+  # (or an active-exclusion label); the load-bearing black-box assertion is that it is NOT REMOVE
+  # (no false rescue for a branch with no MERGED PR).
+  elif grep -q '"action":"REMOVE"' <<<"$(grep -F "\"name\":\"${branch}\"" <<<"$out" || true)"; then
+    echo "self-test: merged-PR rescue check FAILED — unique-commit branch with NO PR classified REMOVE under --release-close (over-removal / R2 regression)" >&2
+    fail=1
   fi
+  rm -f "$child" 2>/dev/null || true
 
   git worktree remove --force "$wt" >/dev/null 2>&1 || true
   git branch -D "$branch" >/dev/null 2>&1 || true
