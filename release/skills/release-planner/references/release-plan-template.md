@@ -12,7 +12,7 @@ This template defines the standard structure for PMO platform release plans. The
 
 ## Template
 
-```markdown
+````markdown
 # Release Plan: <slug> — [Release Title]
 
 ## Header
@@ -258,6 +258,15 @@ Layer 2 file propagation targets for Stage 12/13:
 |---|-----------|--------|-------------|
 | 1 | [description] | [target file/system] | [how to verify] |
 
+### Memory Evictions (if applicable)
+
+**Layer-1 → Layer-2 boundary.** A memory eviction is the one manifest class in which a Layer-1 corpus change commits the platform to act on the operator's auto-memory store — a Layer-2 surface this release does not govern, that no commit in it touches, and that reverting the release PR does not restore. It is never an Engineering action: it executes at Stage 13 Phase B-OPS, under operator authorization, after the merge. One row per tie, per the release-plan template's § Memory-Eviction Entry Contract.
+
+| # | Tie (the codification card — never an entry's name, path or content) | Corpus homes (VERIFY-CORPUS targets) | VERIFY-CORPUS probes (file-anchored, against `origin/main`, with the merge-base reading) | Planned count (ledger rows citing the tie) | Executor | Trigger | Archive disposition |
+|---|---|---|---|---|---|---|---|
+| 1 | #N — the codification card whose rules now live at the corpus homes in the next cell | `core/standards/[file].md` § [Heading] | `git grep -c -F "[encoded phrase]" origin/main -- core/standards/[file].md` → at least 1 (0 at the merge base) | [k] | Stage 13 Phase B-OPS, operator-authorized, gated by `G-CL5`; never Stage 6 | Post-merge — the release PR is merged and its merge commit is an ancestor of `origin/main` | none |
+| 2 | #N — a second card, for whose entries the operator elects to keep a copy | `core/standards/[file].md` § [Heading] | `git grep -c -F "[encoded phrase]" origin/main -- core/standards/[file].md` → at least 1 (0 at the merge base) | [k] | Stage 13 Phase B-OPS, operator-authorized, gated by `G-CL5`; never Stage 6 | Post-merge — as row 1 | operator-local |
+
 ## Verification Evidence
 
 (Populated after Stage 12 execution — see verification-checklist.md for format)
@@ -311,7 +320,24 @@ Layer 2 file propagation targets for Stage 12/13:
 - Release plan: this file, top section
 - Milestone: <slug>
 - User-facing release notes: [`release/releases/notes/vX.Y_RELEASE_NOTES.md`](release/releases/notes/vX.Y_RELEASE_NOTES.md) (authored at Stage 13 Close per [`release/references/standards/release-notes-standard.md`](/release/references/standards/release-notes-standard.md))
-```
+````
+
+## Memory-Eviction Entry Contract
+<!-- design-artifact: flow-class=data-flow; name=memory-eviction-manifest-entry; depicts=release/skills/release-planner/references/release-plan-template.md,core/disciplines/knowledge-architecture.md,release/references/pipeline/stage-13-close.md -->
+
+A memory-eviction row covers one tie — the codification card the evicted entries are tied to — and never one entry. It is authored at Stage 4 and read at Stage 13; nothing in between changes it except its VERIFY-CORPUS probes, which Stage 6 re-derives against the change set that actually landed.
+
+| Cell | Authored by | Read by | Rule |
+|---|---|---|---|
+| Tie | Stage 4 planning, from a read of the store's ledger | Stage 13 manifest validation; the hub at the Tier 1 authorization; EVICT; the close-time absorption reconciliation | The codification card, written as its work-item reference. A row never names an entry — not its file name, its path in the store, its index line or its text: those are operator-local content. A tracked file's operator-memory-reference gate catches an entry name only in the shapes it knows, and reads no entry's text, so the row's own form is the control. The hub resolves the tie to its entries at the Tier 1 authorization and shows the operator that set; the executor receives the resolved entries in its operator-local brief. |
+| Corpus homes | Stage 4 planning; confirmed by the Stage 5 design | VERIFY-CORPUS; RE-POINT, as the link target | Every tracked file and heading that carries the tie's encoded rules on `origin/main` once the release merges. |
+| VERIFY-CORPUS probes | Stage 4 or Stage 5; re-derived at Stage 6 | the Stage 13 executor | One probe per corpus home, each naming the file the encoding was written to and read against `origin/main` after a fetch, with the reading the same probe gives at the release's merge base recorded beside it. A corpus-wide count is not evidence that the file was written, and a phrase the file already carried is not evidence that this release wrote it. A probe passes only when it reads 0 at the release's merge base and at least 1 on `origin/main`. |
+| Planned count | Stage 4 planning, from the ledger | the Stage 13 executor | The number of ledger rows citing the tie. The row executes all or nothing: every probe passes and the count at execution equals the planned count, or nothing in the row is evicted. An entry that holds more than its encoding kept is split before it is listed, its remainder left in the store with the tie removed; an entry whose ledger row cites more than one issue stops the row until it is split or re-tied. |
+| Executor | fixed | the hub; gate `G-CL5` | Stage 13 Phase B-OPS, operator-authorized. Never Stage 6. |
+| Trigger | fixed | the Stage 13 executor | Post-merge: the release PR is merged and its merge commit is an ancestor of `origin/main`. |
+| Archive disposition | fixed by the encode-and-evict lifecycle | Stage 13 manifest validation; the operator | `none` by default, or `operator-local` where the operator elects a copy for the row — made by the operator, never the executor, outside the store and outside every git working tree, before EVICT runs. No value names a tracked file, an issue, a pull request or a comment, and a row that names a destination for entry content is not executed. |
+
+The rule that fixes the archive disposition is the encode-and-evict lifecycle in `core/disciplines/knowledge-architecture.md`. It is restated here, not only cited, because this template ships inside a skill package where that file is not reachable; this section states nothing that lifecycle does not.
 
 ## Template Usage Rules
 
@@ -322,3 +348,4 @@ Layer 2 file propagation targets for Stage 12/13:
 5. **File committed on release branch** at Stage 4 (Planning) and updated through Stage 13 (Close).
 6. **Change Description section** is appended by the Stage 6 release-engineering spoke as part of PR creation per [`release/governance/RELEASE_PROTOCOL.md`](/release/governance/RELEASE_PROTOCOL.md) § Change Description Protocol — ~60 lines, operator-facing voice, 6 sub-sections (Outcome / Issues resolved / Key decisions [conditional] / Reversibility / Downstream impact / Cross-references). Distinct artifact from the user-facing release note at `release/releases/notes/vX.Y_RELEASE_NOTES.md` (authored at Stage 13 per [`release/references/standards/release-notes-standard.md`](/release/references/standards/release-notes-standard.md)).
 7. **The Version cell is a machine-read stamp manifest, not prose.** The `**Version**` value contains the literal `{{RELEASE_VERSION}}` token and no other text. Bump class, provisional-versus-claimed status, and any determination narrative belong in the `**Bump Class**` row. `claim-version.sh` resolves this token at the Stage-12 claim and renames the file into `plans/v<MAJOR>/`; a cell without it silently disables both.
+8. **A memory-eviction row follows § Memory-Eviction Entry Contract above, and is authored in the `### Memory Evictions` sub-table — never as a row of the file-propagation table.** One row per tie, never one per entry. A release that evicts nothing writes rule 1's null declaration, with memory eviction named among the classes it enumerated.

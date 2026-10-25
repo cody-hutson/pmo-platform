@@ -36,8 +36,8 @@ below bind it.
 
 **Instance detail stays out of this file.** Which systems this deployment connects to, which
 fields are never-write there, and what the working budget resolves to are all instance state.
-They live in the operator's own configuration and memory store per the memory↔corpus boundary
-in [knowledge-architecture.md](knowledge-architecture.md) § 6, never in this corpus artefact.
+They live in the operator's own configuration and memory store per
+[knowledge-architecture.md § Memory↔corpus boundary](knowledge-architecture.md), never in this corpus artefact.
 A corpus copy of an instance fact is a shadow source of truth that drifts the moment the
 deployment changes.
 
@@ -317,6 +317,6 @@ skill definitions that write to a seam.
 | [reconcile-dont-annotate.md](reconcile-dont-annotate.md) | **SIBLING.** Same reconcile-vs-annotate family, different surface contract. That discipline's default governs an artifact the platform owns; this one governs a human-facing external seam, where the discriminator is **authorship, not staleness** (§ 4). Neither restates the other. |
 | [decision-discipline.md](decision-discipline.md) § 2.1.1 | Verify-before-recommend. Upstream of § 6: a value derived from a stale input is not HIGH confidence, whatever the draft asserts. |
 | [review-discipline-principles.md](review-discipline-principles.md) | No-status-theater. § 1 and § 2 are its external-seam instance: a comment that recaps a state the system already records is theater on a surface where people are the audience. |
-| [knowledge-architecture.md](knowledge-architecture.md) § 6 | The memory↔corpus boundary. Owns the rule that the instance detail this document deliberately omits — which systems, which fields, which budget value — belongs in the operator's own store, never here. |
+| [knowledge-architecture.md § Memory↔corpus boundary](knowledge-architecture.md) | The memory↔corpus boundary. Owns the rule that the instance detail this document deliberately omits — which systems, which fields, which budget value — belongs in the operator's own store, never here. |
 | [`decision-time-adherence.md`](/core/rules/decision-time-adherence.md) | Carries the checkpoint that surfaces this discipline at the moment a write to a seam is about to happen. That index owns when the checkpoint fires and what is emitted; this document owns what the write must look like. |
 | [`CLAUDE.md.template`](/core/CLAUDE.md.template) § Universal Preferences | Carries a one-line signpost citing this discipline. The signpost is a pointer, not a mechanism — the mechanisms are the skill bindings, the checkpoint, and the hook. |

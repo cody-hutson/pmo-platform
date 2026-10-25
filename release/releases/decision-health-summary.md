@@ -22,32 +22,37 @@
 
 | Field | Value |
 |---|---|
-| Status | **RUN 2 COMPLETE (independent re-run of the same window)** — six seams `measured` and graded `partial`, one `uninstrumented`; 8 findings, 3 systemic patterns |
-| Audit date (UTC) | 2026-09-18 |
-| Resolved window — `from_release` | v4.60 (`deploy-checks-hardening-batch`) |
-| Resolved window — `from` merge anchor | `aea98ac15f84813a847ffcc666d3926fa7f23c00` |
-| Resolved window — `to_release` | v4.65 (`deploy-tools-and-tests-batch`) |
-| Resolved window — `to` merge anchor | `0c4f0a4d6210bff9413c2ff1ab2f8bd1d438a2da` |
-| Releases spanned | 5 (v4.61, v4.62, v4.63, v4.64, v4.65 — ordered by merge anchor, verified by ancestry with a reverse control arm) |
-| Decision-health posture | **Observable, incompletely recorded, and the gap concentrates at one gate.** Every seam the platform can see was measurable over this window and none reached full capture. The Stage-9 GO gate is the locus of the window's highest-severity finding and of its largest systemic pattern: v4.65 carries no gate-verdict row at all, and no release in the window carries a recommendation-choice delta at any GO firing. One seam is a standing blind spot. |
+| Status | **RUN 4 COMPLETE (operator-approved backfill of the T1 triggers that went unrun since 2026-09-18), window of 14 releases.** All seven seams `measured` and graded `partial`. 13 findings (7 MEDIUM, 6 LOW, none HIGH or CRITICAL); every one recurs in two or more releases, giving 11 systemic patterns. v4.78's 16 findings from run 3 carry forward |
+| Audit date (UTC) | 2026-10-24 |
+| Evidence cut | event log read 2026-10-24T22:23Z (3,381 rows across the window's 14 releases; per-release counts reproduced by the query tool's release join). Milestone issues: 626, plus 43 pull requests; each milestone's counter is reconciled. All 14 hub-state ledgers read |
+| Resolved window — `from_release` | v4.65 (`deploy-tools-and-tests-batch`) — the previous tiled `to_release` |
+| Resolved window — `from` merge anchor | `0c4f0a4d6210bff9413c2ff1ab2f8bd1d438a2da` |
+| Resolved window — `to_release` | v4.78 (`authoring-conventions-enforced-or-retired`), `VERIFIED` |
+| Resolved window — `to` merge anchor | `aa1e8ffe629e584e0d65ff73e5ff35387c10331d` |
+| Releases spanned | 14 (v4.66 through v4.78, including v4.67.1), ordered by merge anchor, with each consecutive pair verified by ancestry and a reverse control arm |
+| Untiled span | **None.** The 13 releases the previous run left untiled are covered, and the record tiles from the 2026-09-18 run's upper bound to v4.78 |
+| Decision-health posture | **The operator's gates were rendered and the GO was recorded in all 14 releases. The record around the gates is unreliable and uneven between releases.** The Stage-12 operator-authorization row (a `MUST` row) is absent in three `VERIFIED` releases, while the existence-only check passes. About 60 Stage 7/8 verdicts never reached the log in five releases. The action-item ledger disagrees with the log in six releases. Self-repair is recorded as an election in only five of the fourteen. Recording density varies by release more than by rule |
 | `coverage_index` | **0/7 = 0.000** (counts only `measured` + `captured` seams; a lower bound on decision-observability, not a health score) |
 | `instrumentation_ceiling` | **6/7 ≈ 0.857** (every seam with a declared producer; no window term) |
 | Coverage distribution — `captured` | 0 |
-| Coverage distribution — `partial` | 6 |
+| Coverage distribution — `partial` | 7 (DS1–DS7) |
 | Coverage distribution — `unexercised` | 0 — *quiet*; none occurred |
 | Coverage distribution — `undecidable` | 0 — *blind for this window only*; none occurred |
-| Coverage distribution — `uninstrumented` | 1 (DS7) — *standing blind*; carried by the residual-risk register |
-| Classification counts | `unrecorded-decision` 3 · `malformed-record` 2 · `non-terminal-disposition` 1 · `absent-evidence-surface` 1 · `oracle-coverage-gap` 1 |
-| Undeclared-producer detection | neither arm fired — per-seam arm not fired (the only `¬instrumented` seam returned zero rows); aggregate arm not fired (0.000 ≯ 0.857) |
-| Index re-based this run? | **NO** — the seam-identifier set `{DS1…DS7}` is unchanged against the prior pin, so § 3.3's guard does not fire. (The prior run rendered `re-based` under § 3.4's one-time first-run clause, which does not reach this run.) |
+| Coverage distribution — `uninstrumented` | 0. DS7 reads `measured` because rows arrived from an undeclared producer; its `instrumented` predicate is still false, which is why the ceiling stays 6/7 |
+| Classification counts | `unrecorded-decision` 6 · `malformed-record` 3 · `undeclared-producer` 1 · `oracle-coverage-gap` 1 · `detected-deviation` 1 · `non-terminal-disposition` 1 (run-carried labels; `undeclared-producer` is the rubric's own term) |
+| Undeclared-producer detection | **Per-seam arm FIRED on DS7**: one release (v4.75) wrote 45 `spoke-launch`/`quota-reservation` rows that no corpus rule declares a writer for. This is the arm's first firing. Aggregate arm not fired (0.000 ≯ 0.857) |
+| Index re-based this run? | **NO** — the seam-identifier set `{DS1…DS7}` is unchanged |
+| Movement against prior runs | 0/7 (v4.61–v4.65) → 1/7 (v4.78 alone) → 0/7 (v4.66–v4.78). **The last step is not a regression:** DS2 was captured for v4.78 alone, and the wider window includes five releases whose Stage 7/8 verdicts never reached the log. All three patterns from 2026-09-18 persist through this window |
+| Candidate patterns tested | all six recur — the GO with no choice delta (6 of the 12 releases that owed one), recovery recorded at the symptom locus (12 of 14), the Surface-1 deferral (12 of 14), the sweep zero-state absent (5 of 12), hub-brief premises overturned (3, a lower bound), incomplete self-repair sequences (5) |
+| `recommendation-choice` MUST-promotion condition | **NOT MET** — two releases after the cutover (v4.67.1, v4.77) carry no `recommendation-choice-delta` row |
 | Oracle pin — roster membership | `build-reviewer`, `implementation-planner`, `pipeline-triage`, `pmo-architect`, `pmo-data-engineer`, `pmo-devops-sre`, `pmo-principal-engineer`, `pmo-qa-lead`, `pmo-release-manager`, `pmo-skill-editor`, `pmo-skill-refiner`, `pmo-software-engineer`, `release-executor`, `release-hub`, `release-planner`, `roadmap-curator` |
-| Oracle pin — per-source path · content hash · entry count · entry-title set | entry-title sets recorded in full in the run folder's `SUMMARY.md` § Oracle derivation and pin; per-source hashes and counts in the table below |
-| Oracle pin — derivation date | 2026-09-18 |
-| Oracle pin — derivation control | bounding control **PASS** on all 16 sources (section-scoped count strictly < whole-file heading count everywhere; zero degenerate) |
-| Roster-delta notice | **no delta** — membership identical to the prior pin, none added, none removed; per-source content hashes also identical, so the oracle has not drifted in content |
-| Evidence-bar pass rate | **8 of 8 (100%)**; zero unpinnable observations |
-| Systemic patterns | 3 — the Stage-9 gate recording nothing; recovery recorded at the symptom locus not the election locus; the Stage-13 Surface-1 deferral taken on every release |
-| Latest analysis folder | `analysis/decision-audit-2026-09-18/` (operator-instance, git-ignored) |
+| Oracle pin — derivation anchor | `aa1e8ffe`, identical to run 3's pin, and re-verified unchanged at the run's `main` head |
+| Oracle pin — per-source path · content hash · entry count · entry-title set | entry-title sets recorded in full in the run folder's `SUMMARY.md`; per-source hashes and counts in the table below |
+| Oracle pin — derivation date | 2026-10-24 |
+| Oracle pin — derivation control | bounding control **PASS** on all 16 sources |
+| Roster-delta notice | **no delta** against run 3: membership, hashes and counts are identical |
+| Evidence-bar pass rate | **13 of 13 (100%)**; zero unpinnable observations |
+| Latest analysis folder | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/decision-audit-2026-10-24-backfill/` (operator-instance, git-ignored; the suffix separates it from the same date's v4.78 run) |
 
 ### Oracle pin — per source
 
@@ -65,26 +70,27 @@
 | `release/skills/pmo-skill-editor/SKILL.md` | `d7992351414dc01d` | 6 |
 | `release/skills/pmo-skill-refiner/SKILL.md` | `99e4966a83dfdc7b` | 6 |
 | `release/skills/pmo-software-engineer/SKILL.md` | `ff360c227b864ea8` | 4 |
-| `release/skills/release-executor/SKILL.md` | `3be07cbd8d85f281` | 13 |
-| `release/skills/release-hub/SKILL.md` | `379af3079936c3f0` | 9 |
-| `release/skills/release-planner/SKILL.md` | `1e403b00bbdfdf40` | 17 |
+| `release/skills/release-executor/SKILL.md` | `13ecc8addbc08873` | 13 |
+| `release/skills/release-hub/SKILL.md` | `99344ca2a747828b` | 10 |
+| `release/skills/release-planner/SKILL.md` | `5255d3699abb377c` | 17 |
 | `release/skills/roadmap-curator/SKILL.md` | `4b9383855ff24b8b` | 5 |
 
 ### Per-seam result
 
-| Seam | `rows(s,W)` | `occasions(s,W)` | coverage state | grade |
+| Seam | `rows(s,W)` | coverage state | grade | what keeps it from `captured` |
 |---|---|---|---|---|
-| **DS1** | 218 | ≥ 10 | `measured` | partial |
-| **DS2** | 22 | ≥ 5 | `measured` | partial |
-| **DS3** | 80 events + 15 ledger | ≥ 15 | `measured` | partial |
-| **DS4** | 0 | 4 | `measured` | partial |
-| **DS5** | 2 | 4 | `measured` | partial |
-| **DS6** | 3 | 3 | `measured` | partial |
-| **DS7** | 0 | — | `uninstrumented` | — (no grade — a non-graded state is never a passing grade) |
+| **DS1** | 793 | `measured` | partial | `MUST` Stage-12 authorization rows absent in three releases |
+| **DS2** | 187 | `measured` | partial | about 60 Stage 7/8 verdicts unrecorded in five releases (the GO row is present in all 14) |
+| **DS3** | 1,372 events + 14 ledgers | `measured` | partial | sweep zero-state absent in five releases; ledger and log diverge in six |
+| **DS4** | 382 | `measured` | partial | GO delta absent in six of the twelve releases that owed one |
+| **DS5** | 18 | `measured` | partial | recovery recorded at the symptom locus in 12 of 14 releases |
+| **DS6** | 34 | `measured` | partial | re-spawns with no delegation row; rows with no merit condition |
+| **DS7** | 45 (one release) | `measured` | partial | rows from an undeclared producer, in one release of fourteen |
 
-**DS4 is the instrumented-owed-and-silent case**, routed to `measured`/`partial` by § 2.1's first
-predicate rather than to `unexercised` or `uninstrumented`, so a live emission gap reads as a shortfall
-rather than as an absence.
+**DS7 is `measured` without being instrumented.** Rows arrived, so § 2.1's first predicate places
+the seam in `measured`. No corpus rule names their writer, so § 2.2 keeps `instrumented(DS7)` false,
+and the ceiling does not rise. That pairing is exactly what the per-seam undeclared-producer arm
+exists to surface.
 
 ## How to read this surface
 

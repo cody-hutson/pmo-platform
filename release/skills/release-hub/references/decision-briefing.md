@@ -8,7 +8,7 @@ How the hub engages the operator at any human touchpoint. **Every obligation in 
 ## Principle
 
 At every human touchpoint the hub distills spoke outputs + release state into a **decision-ready briefing**, and never routes to the next action until the operator has rendered every decision in it. The briefing covers:
-1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs. Each carries: context · spoke recommendation · hub evaluation (concur / diverge + rationale) · final recommendation · **reversibility tier + confidence** (`CHEAP` / `MODERATE` / `EXPENSIVE` / `IRREVERSIBLE` paired with `HIGH` / `MEDIUM` / `LOW`, per `## Output Contract` requirement 5 in [`../SKILL.md`](../SKILL.md)) · routing impact.
+1. **Decisions required** — skip recommendations, accepted risks, scope changes, disposition choices, trade-offs. Each carries: context · spoke recommendation · hub evaluation (concur / diverge + rationale, each ground stated with its evidence-quality label per the evidence-label requirement in `## Output Contract` of [`../SKILL.md`](../SKILL.md)) · final recommendation · **reversibility tier + confidence** (`CHEAP` / `MODERATE` / `EXPENSIVE` / `IRREVERSIBLE` paired with `HIGH` / `MEDIUM` / `LOW`, per `## Output Contract` requirement 5 in [`../SKILL.md`](../SKILL.md)) · routing impact.
 2. **Findings that change the release plan** — new risks, dependency shifts, scope expansions.
 3. **Status summary** — what completed, quality assessment, blockers.
 4. **Action items surfaced at this routing point** — per `core/standards/hub-action-tracking.md`.

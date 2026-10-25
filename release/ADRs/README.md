@@ -91,6 +91,8 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-212](ADR-212-lock-at-close-is-a-close-out-phase-over-every-milestone-thread.md) | Lock-at-close is a close-out phase over every milestone thread | Accepted | 2026-09-25 | closeout-verification-rows-consistent |
 | [ADR-213](ADR-213-post-merge-phases-declare-their-no-merge-behaviour.md) | Post-merge phases declare their --no-merge behaviour once; the deferral, the reports and the tests derive from the declaration | Accepted | 2026-09-25 | closeout-verification-rows-consistent |
 | [ADR-218](ADR-218-checkpoint-b-host-api-axis-reads-its-own-probe-in-band.md) | Checkpoint B's host-API axis reads its own probe, in-band | Accepted | 2026-09-27 | controls-fail-loud |
+| [ADR-222](ADR-222-signal-tags-bind-durable-surfaces.md) | Signal tags bind durable records, not conversational turns | Accepted | 2026-10-16 | authoring-conventions-enforced-or-retired |
+| [ADR-223](ADR-223-cleanup-excludes-active-items-not-only-live-ones.md) | The orphan cleanup excludes active items, not only live ones | Accepted | 2026-10-24 | fix-cleanup-active-exclusions |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
