@@ -200,22 +200,20 @@ Stage 5 spoke output declares activated artifacts in the release plan's **"Tier-
 
 **Gate criterion:** [`gate-criteria-spec.md`](../schemas/gate-criteria-spec.md) Gate 13 row `G-CL6`. See the schema doc for the canonical row text and self-repair action.
 
-**Detection mechanism (Stage 13 spoke implements):**
+**Detection mechanism (Stage 13 Phase A5 runs it):**
 
-1. Read the release plan's "Tier-A activated design artifacts" section.
-2. For each declared artifact, run:
-   - `git log --oneline <release-branch-base>..HEAD -- <artifact-path>` to verify at least one commit on the release branch touched the artifact.
-   - `git diff <release-branch-base>..HEAD -- <artifact-path>` to verify the diff is non-trivial (>3 line delta, excludes frontmatter-only changes).
-3. Per-artifact PASS / FAIL recorded in the release plan's Verification Evidence section.
+1. Run `core/deploy/deploy.sh --check-doc-gates --gate g-cl6 --pr <release-PR>`. It reads the release plan's "Tier-A activated design artifacts" section at the release head.
+2. For each declared artifact, it compares the artifact's body — frontmatter excluded — between the release base and head: a delta above 3 lines is a refresh, and a missing artifact or a frontmatter-only change is not. The range, the criterion and the out-of-scope class (a catalog page, § 13.8) are the G-CL6 row's.
+3. Per-artifact PASS / FAIL recorded in the release plan's Verification Evidence section, from the per-subject record the probe names.
 
 **Failure handling — warn-mode → enforce transition:**
 
 | Posture | Failure behavior | Mode flag |
 |---|---|---|
-| **Warn-mode (initial — first 2-3 releases post-cutover)** | Log per-artifact FAIL to `.claude/hooks/design-artifact-warn-log.jsonl` per workspace warn-log convention. Milestone close proceeds. Operator reviews log for false-positives, missed activations, or template gaps. | warn |
-| **Enforce-mode (post-shakedown)** | Per-artifact FAIL blocks Milestone close. Operator override per Reversibility tier: **CHEAP** (one-line `Override: <rationale>` entry in release plan deviation log). | enforce |
+| **Warn-mode (initial — first 2-3 releases post-cutover)** | One row per failing artifact in the shared deploy-check warn log (`$(pmo_instance_path)/deploy-check-warn-log.jsonl`) under `check: "g-cl6"`. Milestone close proceeds. Operator reviews the `g-cl6` rows for false-positives, missed activations, or template gaps. | `.github/g-cl6.enforce` reads `warn` |
+| **Enforce-mode (post-shakedown)** | Per-artifact FAIL blocks Milestone close. Operator override per Reversibility tier: **CHEAP** (one-line `Override: <rationale>` entry in release plan deviation log). | `.github/g-cl6.enforce` reads `enforce` |
 
-**Shakedown duration:** 2-3 releases per the [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist. The flip-to-enforce is operator-driven via `.claude/hooks/.mode` or equivalent surface, after warn-log review confirms low false-positive rate.
+**Shakedown duration:** 2-3 releases per the [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist. The flip-to-enforce is an operator decision, recorded by setting the committed sentinel `.github/g-cl6.enforce` to `enforce` after a review of the `g-cl6` rows confirms a low false-positive rate. `deploy.sh` Check 28 reads a repo-derivable deadline for that decision (`GCL6_ROLLOUT_ARMED`), so the shakedown cannot run on undated.
 
 **Override protocol (enforce state):**
 
@@ -507,6 +505,19 @@ The **enforcement surface** says where a control acts: `hook`, `deploy-run`, `ci
 - **Enumeration.** A catalog page is a dedicated artifact for enumeration: it carries `flow_class` and `depicts`, so the § 12.2 harness finds it, and § 9 validation rules 1 and 2 apply to it. Rule 3 does not (the process-page exception in § 9).
 - **Production.** § 7 activation and the § 10 creation rule do not govern pages. Pages are published and regenerated under this section, not produced by a Stage 5 Tier-A activation, and § 8's refresh gate does not read them: a page's freshness is its `last_verified_commit`, checked by the drift check.
 - **Rendering.** Mermaid syntax, shapes and colours on a page's flow follow `process-flow-diagram-standards.md`, as for every process-flow artifact. § 6 tool selection and § 12.1 conformance do not govern a page's flow; decision 2 of {{ADR:system-documentation-is-a-generated-process-catalog}} does — the flow is a Mermaid block, whatever the page's `flow_class`, so an L0 page declared `concept-model` still draws its flow in Mermaid.
+
+### § 13.9 Planning reads (Stage 2 and Stage 5)
+
+Before a change is sized, the planning stage reads the current-state pages for the areas the change touches, so blast radius is judged against how the system works today. Stage 2 Triage runs the read at its step A4.1 and Stage 5 Solutioning at its step A1.7; each stage spec states when the read runs, and this subsection states how.
+
+- **The area.** The change's affected files: the card's `### Affected Files` at Stage 2, and the File Change Matrix after canonical-surface enumeration at Stage 5.
+- **Finding the pages.** A page covers an affected file when the file is in the page's `depicts` list. Read the generated inbound index in `graph.json` (§ 13.5) where it exists; until the generator ships, read the pages' frontmatter directly. Open each covering page, and its parent page when the change crosses activities.
+- **Citing a page.** `<page-id> @ <last_verified_commit>` — the page's ID (its filename stem, § 13.3) and the commit it was last verified against. A page is stale when a file in its `depicts` list changed after that commit; cite it with `STALE` and read the changed source for the difference. For a `SUPERSEDED` page, read and cite the successor its `superseded_by` names.
+- **The record.** One line in the stage's output, in exactly one of three forms:
+  - `Current-state pages read: <page-id> @ <sha>[ STALE], …` — at least one page covers the area.
+  - `Current-state pages read: none — no page covers the area (<N> pages scanned, <M> affected files probed)` — the catalog holds pages, and none depicts an affected file.
+  - `Current-state pages read: none — the catalog holds no pages yet` — `core/process-catalog/` holds no page beside its README. This is the expected answer until pages are published. It is a different claim from the second form: an empty catalog could not have covered the area, so its "none" is not evidence that the area is undocumented.
+- **What the read changes.** It informs sizing and blast radius. It never authorizes an edit to a page: a stale or contradicted page is a finding for the stage's output, and its refresh belongs to the page's own change.
 
 ## Related References
 

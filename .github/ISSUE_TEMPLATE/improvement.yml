@@ -119,6 +119,7 @@ body:
         Two acceptable forms:
 
         (a) **Pointer list** — one bullet per affected doc: `file path | action (link / create / update / retire) | brief reason`.
+        The action is one of those four words exactly: a qualifier goes in the reason, and a row whose action depends on a condition is resolved at Stage 5, rewritten to the chosen action or removed.
         Pointers are directional at Intake (file-path level minimum; line-range optional); refined at Stage 5 in the File Change Matrix.
         `retire` withdraws a document by the method the G-CL8 row states: a document that carries the platform-doc `status`
         field moves to DEPRECATED (or SUPERSEDED, naming its successor) and stays in place; one without that field is
