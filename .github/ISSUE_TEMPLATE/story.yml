@@ -52,6 +52,36 @@ body:
       required: false
 
   - type: textarea
+    id: documentation-impact
+    attributes:
+      label: Documentation Impact
+      description: |
+        REQUIRED. Declare the documentation this story touches.
+        Two acceptable forms:
+
+        (a) **Pointer list** — one bullet per affected doc: `file path | action (link / create / update / retire) | brief reason`.
+        The action is one of those four words exactly: a qualifier goes in the reason, and a row whose action depends on a condition is resolved at Stage 5, rewritten to the chosen action or removed.
+        Pointers are directional at Intake (file-path level minimum); refined at Stage 5 in the File Change Matrix.
+        `retire` withdraws a document by the method the G-CL8 row states: a document that carries the platform-doc `status`
+        field moves to DEPRECATED (or SUPERSEDED, naming its successor) and stays in place; one without that field is
+        deleted. Either way, every inbound reference is re-pointed in the same change, to the successor where there is one
+        and otherwise removed, so no live document still names the retired item.
+
+        (b) **Explicit "None"** — write exactly: `None — no documentation impact (rationale: <one phrase>)`.
+        The rationale phrase is mandatory; bare `None` fails the Stage 13 Close gate (G-CL8).
+
+        **Scope:** defined once, in the G-CL8 row of `core/schemas/gate-criteria-spec.md` (Gate 13); this form does not restate it.
+      placeholder: |
+        docs/<guide>.md | update | the step this work changes
+        docs/<old-guide>.md | retire | replaced by docs/<new-guide>.md
+
+        — OR —
+
+        None — no documentation impact (rationale: <one phrase>)
+    validations:
+      required: true
+
+  - type: textarea
     id: notes
     attributes:
       label: Notes

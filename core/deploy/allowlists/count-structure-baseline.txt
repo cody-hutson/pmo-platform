@@ -79,7 +79,12 @@ core/specs/skill-consultation-map.md	61d9064c1211e0ae	pre-existing:table
 core/specs/staleness-confidence-standard.md	9664822c2cb48d2c	pre-existing:table
 core/standards/artifact-naming-standard.md	681f6b0b1dc07d34	pre-existing:list
 core/standards/c2-intake-sweep-path-a.md	74d0b9662b95ca41	pre-existing:list
-core/standards/design-artifact-standard.md	9f11f59cd0ded60e	pre-existing:list
+# over-match, read at the site: "carries two machine-queryable frontmatter fields:" counts the fields
+# `depicts:` and `flow_class:`. The list beneath it has four bullets: those two fields, then their
+# placement and their validation rules. Both numbers are true, of different sets. The documentation-model
+# release edited this preamble (dedicated-artifact homes now include a catalog page), which re-keyed the
+# pre-existing:list row it replaces.
+core/standards/design-artifact-standard.md	891e106a431f5fcb	over-match:2-counts-the-two-frontmatter-fields-not-the-four-bullets-fields-plus-placement-plus-validation
 core/standards/entity-lifecycle-protocol-shared-portfolio.md	cf90762262abd3e2	pre-existing:list
 core/standards/failure-mode-standard.md	8b7a8f73ec477705	pre-existing:list
 # over-match, read at the site: "the closed two-value set `no-commitments` / `emit-skipped`" is the

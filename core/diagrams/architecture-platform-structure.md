@@ -16,7 +16,7 @@ reversibility: CHEAP / Confidence HIGH
 <!-- reference-durability: allow-link -->
 # Architecture — Platform Structure
 
-**Flow class:** Architecture (per the design-artifact standard's 7-flow-type taxonomy — structural map of files, layers, and modules).
+**Flow class:** Architecture (per the design-artifact standard's flow-type taxonomy — structural map of files, layers, and modules).
 **Tool:** ASCII tree in a plain fenced code block (the architecture-class rendering tool — text-based, GitHub-native, agent-readable; proprietary and binary diagram formats are rejected for architecture artifacts).
 **Subject:** The current modular-monolith top-level layout of the pmo-platform repository.
 **Storage:** Centralized design artifact. This file is referenced from ≥3 parent docs (the architecture overview, the operating model, the README layout section, and the per-module READMEs), so it meets the centralization threshold and lives as a dedicated file under `core/diagrams/` rather than embedded in any single parent.
@@ -49,6 +49,7 @@ pmo-platform/                      ← modular-monolith repository root
 │   ├── diagrams/                  ← centralized cross-cutting design artifacts (this file lives here)
 │   ├── governance/                ← OPERATIONS.md + module README (core-owned governance)
 │   ├── hooks/                     ← security + integrity PreToolUse hooks and their allowlists
+│   ├── process-catalog/           ← the generated process catalog (design-artifact standard § 13)
 │   ├── rules/                     ← Claude Code operating manual (git-workflow, release-process, …)
 │   ├── schemas/                   ← stage-I/O contracts, gate-criteria, tracker schemas, …
 │   ├── skills/                    ← shared skills (prompt-builder, eval-writer, pmo-qa-auditor)

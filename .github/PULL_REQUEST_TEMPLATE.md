@@ -20,14 +20,14 @@
 
 ### Documentation Impact
 <!-- Per-issue resolution of Stage 1 Documentation Impact declaration.  -->
-<!-- One row per in-PR issue. Status: LINKED / CREATED / UPDATED / NONE. -->
+<!-- One row per in-PR issue. Status: LINKED / CREATED / UPDATED / RETIRED / NONE (one per declared action: link, create, update, retire). -->
 <!-- NONE applies when the issue declared `None — no documentation impact (rationale: ...)` at Intake. -->
 <!-- Resolution gate fires at Stage 13 Close (G-CL8 via deploy.sh Check 28). -->
-<!-- Scope: K1 codified corpus only (core/rules/, core/, core/governance/ + release/governance/, {operations,release,core}/skills/*/SKILL.md + references/, CLAUDE.md). -->
+<!-- Scope: defined once, in the G-CL8 row of core/schemas/gate-criteria-spec.md; not restated here. -->
 
 | Issue | Declared docs | Status | Commit(s) | Notes |
 |---|---|---|---|---|
-| #N | file_a / file_b | LINKED / CREATED / UPDATED / NONE | abc1234 | optional |
+| #N | file_a / file_b | LINKED / CREATED / UPDATED / RETIRED / NONE | abc1234 | optional |
 
 ### Deviation Log
 <!-- Departures from release plan with severity (minor / scope / plan-rejection). "None" if clean execution. -->

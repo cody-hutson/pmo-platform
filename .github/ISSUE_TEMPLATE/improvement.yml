@@ -115,18 +115,21 @@ body:
     attributes:
       label: Documentation Impact
       description: |
-        REQUIRED. Declare the K1 codified documentation this change touches.
+        REQUIRED. Declare the documentation this change touches.
         Two acceptable forms:
 
-        (a) **Pointer list** — one bullet per affected doc: `file path | action (link / create / update) | brief reason`.
+        (a) **Pointer list** — one bullet per affected doc: `file path | action (link / create / update / retire) | brief reason`.
+        The action is one of those four words exactly: a qualifier goes in the reason, and a row whose action depends on a condition is resolved at Stage 5, rewritten to the chosen action or removed.
         Pointers are directional at Intake (file-path level minimum; line-range optional); refined at Stage 5 in the File Change Matrix.
+        `retire` withdraws a document by the method the G-CL8 row states: a document that carries the platform-doc `status`
+        field moves to DEPRECATED (or SUPERSEDED, naming its successor) and stays in place; one without that field is
+        deleted. Either way, every inbound reference is re-pointed in the same change, to the successor where there is one
+        and otherwise removed, so no live document still names the retired item.
 
         (b) **Explicit "None"** — write exactly: `None — no documentation impact (rationale: <one phrase>)`.
         The rationale phrase is mandatory; bare `None` fails the Stage 13 Close gate (G-CL8).
 
-        **Scope:** K1 codified corpus only — `core/rules/`, `core/specs/` + `release/references/`, `core/governance/`,
-        `{operations,release,core}/skills/*/SKILL.md` + `references/`, `CLAUDE.md`. Layer 2 (`projects/`) and release plans
-        (`release/releases/plans/*`) are excluded — release plans are Stage 6 outputs, not declared targets.
+        **Scope:** defined once, in the G-CL8 row of `core/schemas/gate-criteria-spec.md` (Gate 13); this form does not restate it.
 
         **Why this exists:** the resolution of every declared item is verified at Stage 13 Close (G-CL8 via deploy.sh Check 28).
         The *absence* of any answer is the gate-failing state; the explicit "None" answer resolves trivially.
@@ -134,6 +137,7 @@ body:
         core/schemas/gate-criteria-spec.md | update | new G-CL8 criterion + v1.6 entry
         .github/PULL_REQUEST_TEMPLATE.md | update | new ### Documentation Impact subsection
         release/governance/release-process.md | update | Stage 1 / Stage 6 / Stage 13 narrative
+        docs/<old-guide>.md | retire | replaced by docs/<new-guide>.md
 
         — OR —
 

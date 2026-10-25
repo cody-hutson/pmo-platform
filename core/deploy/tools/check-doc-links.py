@@ -22,7 +22,9 @@ Two modes (mode discrimination via flag presence):
 
 Categories (broken-refs mode):
   broken-cross-ref  Target file does not exist
-  broken-anchor     Target file exists but anchor (#section) doesn't
+  broken-anchor     Target file exists but a line anchor (#L<n> or
+                    #L<n>-L<m>) names a line it does not have. Heading
+                    anchors (#section) are not checked by this primitive.
   deleted-target    Target path matches a known-deleted pattern
 
 Severity (broken-refs mode):
@@ -44,6 +46,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 # Repo-root resolution (#760). Precedence at the call site (main()):
 #   1. --workspace-root CLI flag   (explicit per-invocation override)
@@ -79,6 +82,44 @@ WORKSPACE_ROOT = resolve_workspace_root()
 # now-retired fallback, are removed. Both link checkers (this one and
 # release/tools/check-release-links.py) implement the one rule identically — see
 # core/standards/doc-link-maintenance-protocol.md § Path resolution.
+
+# Line anchors — one rule, shared with release/tools/check-release-links.py. A
+# fragment matching `^L[0-9]+(-L[0-9]+)?$` is GitHub's link to a line or a span
+# of lines, never a heading. It is valid when the target is a file with at least
+# that many lines, counted as git numbers them (for a span, both line numbers
+# must exist); line 0 or a line past the end is a `broken-anchor` finding. Only
+# the severity is each checker's own: here every finding exits 1 (the callers
+# carry the warn-mode posture); there it joins the warn-mode anchor findings.
+# The match is case-sensitive and anchored, so `#l5`, `#L5x` and `#L5-6` stay
+# heading fragments, which this primitive does not check.
+LINE_ANCHOR_RE = re.compile(r"^L([0-9]+)(?:-L([0-9]+))?$")
+
+
+def line_count(path: Path) -> int:
+    """Lines in a file as git and GitHub number them: split on line feeds, and
+    a last line with no trailing line feed still counts. 0 for an empty file,
+    a directory, or a file that cannot be read."""
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return 0
+    if not data:
+        return 0
+    return data.count(b"\n") + (0 if data.endswith(b"\n") else 1)
+
+
+def line_anchor_in_range(frag: str, path: Path) -> bool | None:
+    """None when `frag` is not a line anchor. Otherwise True when `path` is a
+    file holding every line the anchor names (both ends of a span), and False
+    for line 0, a line past the end, or a target that is not a file."""
+    m = LINE_ANCHOR_RE.match(frag)
+    if not m:
+        return None
+    start = int(m.group(1))
+    end = int(m.group(2)) if m.group(2) is not None else start
+    if not path.is_file():
+        return False
+    return min(start, end) >= 1 and max(start, end) <= line_count(path)
 
 INLINE_LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 REF_LINK_RE = re.compile(r"\[([^\]]+)\]\[([^\]]*)\]")
@@ -416,6 +457,23 @@ def scan_file(
                 "severity": classify_severity(source_file),
                 "remediation_recommendation": f"Verify path exists: {resolved}",
             })
+            continue
+        if anchor is not None and line_anchor_in_range(unquote(anchor), resolved) is False:
+            try:
+                rel_source = str(source_file.relative_to(workspace_root))
+            except ValueError:
+                rel_source = str(source_file)
+            findings.append({
+                "source_file": rel_source,
+                "line": line_no,
+                "target": target,
+                "category": "broken-anchor",
+                "severity": classify_severity(source_file),
+                "remediation_recommendation": (
+                    f"Line anchor #{anchor} is out of range for {resolved} "
+                    f"({line_count(resolved)} lines); point it at the cited line"
+                ),
+            })
     return findings
 
 
@@ -518,7 +576,7 @@ def emit_rewrite_map_markdown(entries: list[dict]) -> str:
 def run_self_test() -> int:
     """Sanity check: parser + resolver + rewrite-map mode + EMIT-ONLY enforcement.
 
-    10 fixtures:
+    12 fixtures:
       1. Existing: code-block exclusion + single broken ref.
       2. Anti-fallback regression guard (ADR-085): a bare module-prefixed link
          from a non-root file reads BROKEN even when the same path EXISTS at the
@@ -553,6 +611,13 @@ def run_self_test() -> int:
               and link-check.yml share one scan-scope source of truth; a
               missing/empty file returns [] (main() hard-errors on that — never a
               silent empty scan).
+     11. NEW: repeatable --allowlist UNIONs (tracked base + instance additions).
+     12. NEW: line anchors (`#L<n>` / `#L<n>-L<m>`) — valid when the target file
+              holds every line named, `broken-anchor` when out of range, never
+              read as a heading; near-misses stay heading fragments, which this
+              primitive does not check. The same case set is pinned in
+              release/tools/check-release-links.py's self-test, so the two
+              checkers keep one line-anchor rule.
     """
     import tempfile
 
@@ -875,7 +940,46 @@ def run_self_test() -> int:
         assert not scan_file(td_path / "CHANGELOG.md", unioned, td_path), \
             "fixture 11: union allowlist did not suppress the tracked-base entry"
 
-    print("self-test OK (11 fixtures passed)")
+    # ─── Fixture 12: line anchors — one rule with check-release-links.py ────
+    # `#L<n>` / `#L<n>-L<m>` names a line or a span of lines. It is valid when
+    # the target file holds every line it names (counted as git numbers lines),
+    # and a line past the end, line 0, or a non-file target is `broken-anchor`.
+    # It is never a heading, and a heading fragment stays unchecked here.
+    with tempfile.TemporaryDirectory() as td:
+        sandbox = Path(td).resolve()
+        three = sandbox / "three.md"
+        three.write_bytes(b"# A real heading\nb\nc\n")
+        no_final_newline = sandbox / "no-final-newline.txt"
+        no_final_newline.write_bytes(b"a\nb")
+        (sandbox / "empty.txt").write_bytes(b"")
+        (sandbox / "crlf.txt").write_bytes(b"a\r\nb\r\n")
+        (sandbox / "sub").mkdir()
+        counts = [line_count(sandbox / n) for n in
+                  ("three.md", "no-final-newline.txt", "empty.txt", "crlf.txt", "sub")]
+        assert counts == [3, 2, 0, 2, 0], (
+            f"fixture 12: line_count must number lines as git does; got {counts}")
+        for frag in ("l1", "L1x", "L", "L-L2", "L1-2", "L1-L", "5-process",
+                     "head", "L1 "):
+            assert line_anchor_in_range(frag, three) is None, (
+                f"fixture 12: #{frag} wrongly read as a line anchor")
+        doc = sandbox / "doc.md"
+        doc.write_text(
+            "[first](three.md#L1) [last](three.md#L3) [span](three.md#L2-L3)\n"
+            "[rooted](/three.md#L3) [span-whole](three.md#L1-L3)\n"
+            "[heading](three.md#a-real-heading) [no-heading](three.md#no-such-heading)\n"
+            "[near-miss](three.md#L9x) [lower](three.md#l9)\n"
+            "[no-final-newline](no-final-newline.txt#L2)\n"
+            "[past](three.md#L4) [span-past](three.md#L2-L4) [zero](three.md#L0)\n"
+            "[nl-past](no-final-newline.txt#L3) [dir](sub/#L1)\n"
+        )
+        findings = scan_file(doc, [], sandbox)
+        got = sorted((f["target"], f["category"]) for f in findings)
+        want = sorted((t, "broken-anchor") for t in (
+            "three.md#L4", "three.md#L2-L4", "three.md#L0",
+            "no-final-newline.txt#L3", "sub/#L1"))
+        assert got == want, f"fixture 12: line-anchor findings mismatch: {got}"
+
+    print("self-test OK (12 fixtures passed)")
     return 0
 
 
@@ -956,7 +1060,7 @@ def main() -> int:
         action="store_true",
         help="(broken-refs mode) treat a --target-paths glob entry that resolves to ZERO files as a path-resolution failure: emit a finding to stderr and exit 3. Opt-in — callers that do not pass it keep the prior exit-0-on-empty-scan behavior. Has no effect in rewrite-map mode (EMIT-ONLY).",
     )
-    p.add_argument("--self-test", action="store_true", help="Run internal smoke test (9 fixtures) and exit")
+    p.add_argument("--self-test", action="store_true", help="Run internal smoke test (12 fixtures) and exit")
     p.add_argument(
         "--workspace-root",
         help="Root to resolve workspace-rooted (/-prefixed and prefix-table) links and "

@@ -251,7 +251,7 @@ The `improvement.yml` GitHub Issue template reflects intake-stage field requirem
 | Category | O | No | Intake authors may not know the category taxonomy; triage applies after content analysis |
 | Affected Files | O | No | Requires codebase knowledge intake authors may not have; Planning defines precise affected files |
 | Dependencies | O | No | Authors may know some deps; triage/bundle discovers full dependency graph |
-| Documentation Impact | C | Yes | Author declares pointer-list of impacted K1 docs (link/create/update) OR explicit `None — no documentation impact (rationale: <phrase>)`. Per ; resolution gate at Stage 13 G-CL8. Applies to all issues entering Stage 1 going forward. |
+| Documentation Impact | C | Yes | Author declares a pointer list of the documents the change touches (link / create / update / retire) OR the explicit `None — no documentation impact (rationale: <phrase>)`. Scope, the forms that carry the field, and resolution are the Stage 13 G-CL8 row's (`gate-criteria-spec.md`). Applies to all issues entering Stage 1 going forward. |
 | Risks | O | No | Author-declared risks and cross-cutting concerns; "None identified" is the explicit-check signal |
 | Notes | O | No | Additional context, always optional |
 

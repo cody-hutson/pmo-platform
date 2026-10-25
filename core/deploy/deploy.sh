@@ -204,6 +204,15 @@ readonly GATE_ROLLOUT_PHASE="warn"       # shadow|warn|enforce
 readonly GATE_ROLLOUT_ARMED="2026-08-29"
 readonly GATE_ROLLOUT_REVIEW_DAYS=60
 readonly GATE_ROLLOUT_ESCALATE_DAYS=90
+# The G-CL6 / G-CL8 documentation close gates' warn-mode shakedown (Check 28's
+# deadline arm reads these). Same shape as the GATE_ROLLOUT_* block above, one ARMED
+# constant per gate because each gate graduates on its own decision: a gate's phase
+# is its committed probe sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce), and
+# the review and escalation windows are the GATE_ROLLOUT_* ones, which the warn-log
+# retention floor already binds. Turn a GRADUATION-OVERDUE finding green by recording
+# a decision: set the gate's sentinel to `enforce`, or re-date its ARMED constant.
+readonly GCL6_ROLLOUT_ARMED="2026-10-24"
+readonly GCL8_ROLLOUT_ARMED="2026-10-24"
 # Basename of the whole warn-log family — the hot file and every segment share
 # it. Stated once so a consumer pattern cannot drift from the writer's spelling.
 readonly WARN_LOG_BASENAME="deploy-check-warn-log"
@@ -336,16 +345,18 @@ warn_log_segment_set() {
 }
 
 # Echo the hot warn-log path, rotating it FIRST if it is over budget. Both
-# writer variables in cmd_check assign from here, so all 12 append sites are
-# bounded by one choke point.
+# writer variables in cmd_check assign from here, and the hoisted emitters
+# resolve their path from here when no writer variable is in scope, so all 13
+# append sites are bounded by one choke point.
 #
-# THE 12 SPLIT 9 + 3, and the split is worth stating because it was mis-derived
-# once. NINE sites interpolate a free-text `detail` through `"%s"` and therefore
+# THE 13 SPLIT 10 + 3, and the split is worth stating because it was mis-derived
+# once. TEN sites interpolate a free-text `detail` through `"%s"` and therefore
 # route through json_escape_detail() below; THREE build `detail` from integers
 # only and carry no escaping step at all (close-completeness, decision-emission,
-# register-runner-resolution). The total is unchanged at 12 and the choke point
-# is unchanged; only the serialization step behind nine of them was converted
-# from nine duplicated two-line idioms to one shared definition.
+# register-runner-resolution). The serialization step behind nine of the ten was
+# converted from nine duplicated two-line idioms to one shared definition when the
+# total stood at 12; the tenth, _dg_emit_row (the documentation close gates), was
+# written against that definition from the start.
 #
 # ROTATION IS A MOVE, NEVER A DELETION. The hot file is renamed whole into the
 # next numbered segment in the SAME directory. Nothing is discarded; retention
@@ -434,7 +445,7 @@ warn_log_path() {
 # variable, so no `detail` can carry one.
 #
 # WHY NOT `jq`. Not on dependency grounds — jq is already an undeclared hard
-# dependency of this file. Every one of the 12 append sites ends
+# dependency of this file. Every one of the 13 append sites ends
 # `>> … 2>/dev/null || true` under `set -euo pipefail`, i.e. it is built never to
 # fail. Piping into jq inserts a short-circuiting reader into that path, which is
 # the documented SIGPIPE/pipefail class in which a SUCCESSFUL escape can report
@@ -2958,6 +2969,169 @@ _de_verdict_exit_code() {
     NOSET)
       if [[ "$_de_enf" == "enforce" ]]; then printf '1\n'; else printf '4\n'; fi ;;
     *) printf '1\n' ;;       # fail-closed, sentinel-agnostic
+  esac
+}
+
+# ─── Documentation close gates (Check 28 / --check-doc-gates) — G-CL6 + G-CL8 ──
+# Check 28's release-context arms — the runner of Gate 13 G-CL6 and G-CL8 (advisory)
+# gate-efficacy: posture=advisory  enforcement=deploy-time-only  skip-semantics=no-release-context-is-not-evaluated
+#   invariant: for the release one PR merges, every artifact the release plan's Tier-A
+#              section declares was refreshed in <base>..<head> (G-CL6), and every issue of
+#              the release whose body carries a `### Documentation Impact` section has each
+#              declared row resolved by the G-CL8 row's action-keyed method (G-CL8). Each
+#              failing subject is one row in the shared deploy-check warn log under the
+#              gate's own check id, "g-cl6" or "g-cl8".
+#   falsification: deploy.sh --self-test group DG — a scratch repository holding one
+#                  unrefreshed Tier-A artifact and one unresolved declaration must write
+#                  exactly two rows, one per gate; the refreshed control writes none.
+#
+# ONE ENGINE, TWO SURFACES (the DD1 shape of _de_compute_verdict). The predicate lives in
+# core/deploy/tools/check-doc-gates.py, which reads commit ids and files and writes
+# nothing. --check-doc-gates (cmd_check_doc_gates) is the surface that has a release:
+# Stage 13 Phase A5 runs it for g-cl6 and Phase A11 for g-cl8, with the release PR. The
+# lifecycle Check 28 inside cmd_check has no release, so it reports these arms N/A and
+# keeps only its template-presence arm and the shakedown deadline arm.
+#
+# <base> AND <head> ARE BOUND TO THE RELEASE, NEVER TO THE CHECKOUT. <head> is the PR's
+# head commit. <base> is `git merge-base <head> <main>`, where <main> is the merge
+# commit's first parent once the PR has merged and origin/<base-ref> before. A range
+# written origin/main..HEAD is empty once the release has merged, and Stage 13 runs
+# after the merge.
+#
+# THE ROWS GO THROUGH THE SHARED SINK'S CHOKE POINT. _dg_emit_row resolves the hot file
+# with warn_log_path(), defensively as flag_not_evaluated does, so rotation still bounds
+# it and the row serializes through json_escape_detail(). Under `enforce` no row is
+# written: the probe exits 1 and the finding is the release plan's Verification
+# Evidence record, as flag_warn_or_issue writes no row on its enforce branch.
+
+# _dg_context <pr>
+#   Echoes `CONTEXT <base> <head> <milestone-number> <milestone-title>` (`-` for a PR with
+#   no milestone) or `NOT-EVALUATED <cause>`.
+_dg_context() {
+  local _pr="$1" _line _head _state _merge _bref _msn _ms _main _base
+  if ! command -v gh >/dev/null 2>&1; then
+    printf 'NOT-EVALUATED gh is not on PATH, so the release PR cannot be read\n'; return 0
+  fi
+  _line="$(gh pr view "$_pr" ${AUDIT_REPO:+--repo "$AUDIT_REPO"} --json headRefOid,state,mergeCommit,baseRefName,milestone \
+    --jq '[.headRefOid, .state, (.mergeCommit.oid // "-"), .baseRefName, (.milestone.number // "-"), (.milestone.title // "-")] | @tsv' 2>/dev/null || true)"
+  if [[ -z "$_line" ]]; then
+    printf 'NOT-EVALUATED gh pr view %s returned nothing (unauthenticated, offline, or no such PR)\n' "$_pr"; return 0
+  fi
+  # Tab is IFS whitespace, so an empty field would collapse into its neighbour; jq emits
+  # "-" for an absent merge commit or milestone, mapped back to empty here.
+  IFS=$'\t' read -r _head _state _merge _bref _msn _ms <<< "$_line"
+  if [[ "$_merge" == "-" ]]; then _merge=""; fi
+  if [[ "$_ms" == "-" ]]; then _ms=""; fi
+  if ! /usr/bin/git cat-file -e "${_head}^{commit}" 2>/dev/null; then
+    printf 'NOT-EVALUATED the PR head %s is not in the local object store; run git fetch origin, then re-run\n' "$_head"; return 0
+  fi
+  if [[ "$_state" == "MERGED" && -n "$_merge" ]]; then _main="${_merge}^1"; else _main="origin/${_bref}"; fi
+  _base="$(/usr/bin/git merge-base "$_head" "$_main" 2>/dev/null || true)"
+  if [[ -z "$_base" ]]; then
+    printf 'NOT-EVALUATED no merge base between %s and %s\n' "$_head" "$_main"; return 0
+  fi
+  printf 'CONTEXT %s %s %s %s\n' "$_base" "$_head" "$_msn" "$_ms"
+}
+
+# _dg_population <pr> <milestone-number> <milestone-title>
+#   Echoes `POPULATION <count> <issue-number>...` — G-CL8's population: the release
+#   milestone's issues less those labelled `status: deferred`, plus the issues the PR
+#   closes by keyword — or `NOT-EVALUATED g-cl8 population: <cause>`.
+#   A POPULATION READ FAILS LOUD, NEVER NARROW. Three causes withhold the gate: a PR with
+#   no milestone; any read that exits non-zero; and a milestone listing whose count does
+#   not equal the milestone's own issue count (GitHub's milestone record, read separately
+#   — open plus closed issues, pull requests excluded). Swallowing any of them would leave
+#   the keyword closes alone, the population that read a false N/A and a false CLEAN on
+#   real releases. A failed read leaves the population unmeasured, never counted.
+_dg_population() {
+  local _pr="$1" _msn="$2" _ms="$3" _kw _list _rc _expect _listed _nums
+  if [[ -z "$_msn" ]]; then
+    printf 'NOT-EVALUATED g-cl8 population: PR #%s carries no milestone, so the issues of the release cannot be listed\n' "$_pr"; return 0
+  fi
+  if [[ "${AUDIT_REPO:-}" != */* ]]; then
+    printf 'NOT-EVALUATED g-cl8 population: no owner/repo resolved (AUDIT_REPO), so the milestone count cannot be read\n'; return 0
+  fi
+  _rc=0; _kw="$(gh pr view "$_pr" --repo "$AUDIT_REPO" --json closingIssuesReferences --jq '.closingIssuesReferences[].number' 2>/dev/null)" || _rc=$?
+  if [[ "$_rc" -ne 0 ]]; then
+    printf 'NOT-EVALUATED g-cl8 population: the PR closing-reference read exited %s\n' "$_rc"; return 0
+  fi
+  _rc=0; _list="$(gh issue list --repo "$AUDIT_REPO" --milestone "$_msn" --state all --limit 5000 --json number,labels \
+    --jq '.[] | "\(.number) \([.labels[].name] | index("status: deferred") != null)"' 2>/dev/null)" || _rc=$?
+  if [[ "$_rc" -ne 0 ]]; then
+    printf 'NOT-EVALUATED g-cl8 population: the milestone %s issue listing exited %s\n' "$_msn" "$_rc"; return 0
+  fi
+  _rc=0; _expect="$(gh api graphql -f query='query($o:String!,$n:String!,$m:Int!){repository(owner:$o,name:$n){milestone(number:$m){issues{totalCount}}}}' \
+    -f o="${AUDIT_REPO%%/*}" -f n="${AUDIT_REPO##*/}" -F m="$_msn" --jq '.data.repository.milestone.issues.totalCount' 2>/dev/null)" || _rc=$?
+  if [[ "$_rc" -ne 0 || ! "$_expect" =~ ^[0-9]+$ ]]; then
+    printf 'NOT-EVALUATED g-cl8 population: the milestone %s issue count could not be read (exit %s)\n' "$_msn" "$_rc"; return 0
+  fi
+  _listed="$(printf '%s' "$_list" | /usr/bin/grep -c . || true)"
+  if [[ "$_listed" -ne "$_expect" ]]; then
+    printf 'NOT-EVALUATED g-cl8 population: the listing returned %s issue(s) and milestone %s holds %s\n' "$_listed" "$_msn" "$_expect"; return 0
+  fi
+  _nums="$( { printf '%s\n' "$_kw"; printf '%s\n' "$_list" | /usr/bin/awk '$2 == "false" { print $1 }'; } | /usr/bin/grep -E '^[0-9]+$' | /usr/bin/sort -un | /usr/bin/tr '\n' ' ' )"
+  printf 'POPULATION %s %s\n' "$(printf '%s' "$_nums" | /usr/bin/wc -w | /usr/bin/tr -d ' ')" "$_nums"
+}
+
+# _dg_emit_row <check-id> <detail> — one row in the shared warn log (warn mode only).
+_dg_emit_row() {
+  local check_id="$1" detail="$2" _ts _wl
+  _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  json_escape_detail "$detail"
+  local _detail_escaped="$JSON_ESCAPED"
+  _wl="${WARN_LOG:-$(warn_log_path)}"
+  printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
+}
+
+# _dg_report <gate> <engine-output-file> <engine-rc> <enforce|warn> [<population-count>]
+#   Logs each subject, writes one warn-log row per FAIL subject (warn only), and sets the
+#   global DG_VERDICT to ONE protocol token line: CLEAN <n> | FINDINGS <f> <n> |
+#   NA <cause> | NOT-EVALUATED <cause>. A global, not stdout: log() writes stdout, and a
+#   caller capturing the protocol line through $(...) would swallow every subject line.
+#   With a population count, the subjects reported must number exactly that many, or the
+#   verdict is NOT-EVALUATED whatever else was found: a subject that vanished between
+#   the population read and the engine was never graded.
+#   Touches ISSUES on no path — the probe's exit code is its only escalation.
+_dg_report() {
+  local _gate="$1" _out="$2" _rc="$3" _enf="$4" _pop="${5:-}" _res _g _subj _det _n=0 _f=0 _x=0 _o=0 _sum=""
+  DG_VERDICT=""
+  if [[ "$_rc" -ne 0 ]]; then
+    DG_VERDICT="NOT-EVALUATED engine exit ${_rc}: $(/usr/bin/sed -n 1p "$_out" 2>/dev/null | /usr/bin/tr '\t' ' ')"
+    return 0
+  fi
+  while IFS=$'\t' read -r _res _g _subj _det; do
+    case "$_res" in
+      PASS) log "  OK:    $_gate $_subj — $_det"; _n=$((_n + 1)) ;;
+      FAIL)
+        _n=$((_n + 1)); _f=$((_f + 1))
+        if [[ "$_enf" == "enforce" ]]; then
+          log "  FAIL:  $_gate $_subj — $_det"
+        else
+          log "  WARN:  $_gate $_subj — $_det (warn-mode; graduates when the committed sentinel .github/$_gate.enforce reads enforce)"
+          _dg_emit_row "$_gate" "$_subj: $_det"
+        fi ;;
+      NOT-EVALUATED) log "  NOT-EVAL: $_gate $_subj — $_det (not-evaluated; this is not a clean result)"; _x=$((_x + 1)) ;;
+      OUT-OF-SCOPE) _o=$((_o + 1)) ;;   # counted, not listed: a milestone's sub-tasks alone run to dozens
+      SUMMARY) _sum="$_subj $_det" ;;
+    esac
+  done < "$_out"
+  if [[ "$_o" -gt 0 ]]; then log "  N/A:   $_gate — $_o subject(s) out of scope (each named, with its reason, in the per-subject record)"; fi
+  if [[ -z "$_sum" ]]; then DG_VERDICT="NOT-EVALUATED the engine printed no SUMMARY line"
+  elif [[ -n "$_pop" && $((_n + _x + _o)) -ne "$_pop" ]]; then
+    DG_VERDICT="NOT-EVALUATED $((_n + _x + _o)) subject(s) reported for a population of $_pop"
+  elif [[ "$_f" -gt 0 ]]; then DG_VERDICT="FINDINGS $_f $_n"
+  elif [[ "$_x" -gt 0 ]]; then DG_VERDICT="NOT-EVALUATED $_x subject(s) could not be evaluated"
+  elif [[ "$_n" -eq 0 ]]; then DG_VERDICT="NA no in-scope subject for $_gate"
+  else DG_VERDICT="CLEAN $_n"; fi
+}
+
+# _dg_verdict_exit_code <token> <enforce|warn> — 0 is CLEAN's alone (PV-7).
+_dg_verdict_exit_code() {
+  case "${1:-}" in
+    CLEAN) printf '0\n' ;;
+    NA|NOT-EVALUATED) printf '3\n' ;;   # sentinel-agnostic: withheld, never a pass
+    FINDINGS) if [[ "${2:-warn}" == "enforce" ]]; then printf '1\n'; else printf '2\n'; fi ;;
+    *) printf '1\n' ;;                 # fail-closed
   esac
 }
 
@@ -12031,34 +12205,34 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
-  # ─── Check 28: Doc-impact resolution at Stage 13 close ──
-  # Per the Stage 5 ADR D-EnforcementMechanism (A) — structural-only check that asserts
-  # the per-issue Documentation Impact declaration (made at Stage 1 Intake via improvement.yml /
-  # bug.yml) is resolved at Stage 13 Close. Companion to gate-criteria-spec.md Gate 13 G-CL8.
+  # ─── Check 28: Documentation close gates (G-CL8 template surfaces + G-CL6/G-CL8 runner) ──
+  # Per the Stage 5 ADR D-EnforcementMechanism (A), extended: Check 28 is the check that
+  # backs gate-criteria-spec.md Gate 13 G-CL8, and it is now also the runner of G-CL6. Three
+  # arms, two surfaces.
   #
-  # Mechanism (full enforcement at Stage 13 close — release-context-specific):
-  #   1. Read the release PR body's `### Documentation Impact` H3 section.
-  #   2. For each in-PR issue row: parse declared docs + status.
-  #   3. For each non-None declared doc: verify file exists AND was modified in
-  #      `git log --follow <docs> origin/main..HEAD` (release branch commit range).
-  #   4. NONE status rows: verify the corresponding issue body Documentation Impact field
-  #      reads exactly `None — no documentation impact (rationale: <phrase>)`.
-  #
-  # Mechanism (deploy-time warn-mode shakedown — what this check fires on every ./deploy.sh --check):
+  # Arm 1 — template presence (this run, every ./deploy.sh --check; id doc-impact-resolution):
   #   - Verify .github/PULL_REQUEST_TEMPLATE.md carries the `### Documentation Impact` H3 subsection.
-  #   - Verify .github/ISSUE_TEMPLATE/{improvement.yml,bug.yml} carry the `Documentation Impact` field.
-  #     This is the lightweight template-presence check (the leading indicator). Full per-PR
-  #     per-issue verification (scanning recent release PRs + per-row declared-doc resolution)
-  #     fires at Stage 13 release-context, invoked by the Stage 13 spoke at Phase A entry.
+  #   - Verify every shipping work-item form under .github/ISSUE_TEMPLATE/ carries the `Documentation Impact`
+  #     field — every form except the two the G-CL8 row exempts (observation.yml, adr.yml) and the
+  #     template chooser's config.yml. The set is derived, not listed, so a form added later is checked.
+  #     This is the lightweight template-presence check (the leading indicator).
   #
-  # The check is non-blocking pre-Stage-13: deploy.sh --check is invoked at many lifecycle
-  # points (post-merge sync, session-start hygiene, mid-release drift detection). The
-  # release-context-specific full check is invoked by the Stage 13 spoke at Phase A entry.
-  # This deploy-time check enforces the PR-template adherence as the leading indicator.
+  # Arm 2 — release-context gates (Stage 13; ids g-cl6 and g-cl8): `deploy.sh --check-doc-gates
+  #   --gate <g-cl6|g-cl8> --pr <N>` runs core/deploy/tools/check-doc-gates.py over the release's
+  #   <base>..<head> and writes one warn-log row per failing subject. The method is the G-CL6 and
+  #   G-CL8 rows' own and is not restated here. This lifecycle run has no release PR, so it reports
+  #   arm 2 N/A rather than guessing one.
+  #
+  # Arm 3 — shakedown deadline (this run): GCL6_ROLLOUT_ARMED / GCL8_ROLLOUT_ARMED plus the
+  #   GATE_ROLLOUT_* windows, read against today's date (W2 of gate-efficacy-standard.md § Written
+  #   sink and terminable shakedown). It needs no drain, so it evaluates in CI and a fresh clone;
+  #   it warns at the review window and raises an issue at escalation until each gate's decision
+  #   is recorded in the repository.
   #
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks 8/9/10/14/15/18/19/
-  # 20/21/22/25/27/29 precedent); flip-to-enforce after ≥2-3-release warn-log review threshold
-  # OR warn-log drained to < 10 entries (whichever first), per the Stage 5 D-Decision.
+  # 20/21/22/25/27/29 precedent). Arm 1 graduates through the shared deploy-check mode; arm 2
+  # graduates per gate when its committed sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce)
+  # reads enforce — an operator decision, never auto-promoted by row count.
   #
   # Cutover: applies to ./deploy.sh --check invocations occurring on or after the
   # introducing release's merge SHA recorded in RELEASE_LOG.md. That
@@ -12066,10 +12240,9 @@ sys.stdout.write("".join(out) + "|")
   # were authored under pre-cutover improvement.yml without the Documentation Impact field;
   # retroactive Check 28 evaluation on its own PRs would fail by construction).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 28: Doc-impact resolution at Stage 13 close (scans recent release PRs for template adherence)"
+    log "Check 28: Documentation close gates (template presence; G-CL6/G-CL8 release-context arms run at Stage 13; shakedown deadline)"
     local c28_findings=0
     local c28_output=""
-    local c28_prs_scanned=0
     local c28_pr_template=".github/PULL_REQUEST_TEMPLATE.md"
 
     # Lightweight deploy-time check: verify the PR template carries the Documentation Impact subsection.
@@ -12086,25 +12259,68 @@ sys.stdout.write("".join(out) + "|")
       fi
     fi
 
-    # Verify the issue templates carry the Documentation Impact field
-    local _tmpl
-    for _tmpl in ".github/ISSUE_TEMPLATE/improvement.yml" ".github/ISSUE_TEMPLATE/bug.yml"; do
+    # Verify every shipping work-item form carries the Documentation Impact field. The form set is
+    # DERIVED, not listed: every form under .github/ISSUE_TEMPLATE/ except the exempt set the G-CL8
+    # row of core/schemas/gate-criteria-spec.md names (observation.yml, adr.yml) and the chooser's
+    # config file. A form added later, including a deployment's own kind form, is checked with no
+    # edit here, and an empty form set is a finding rather than a silent pass.
+    local _tmpl _tmpl_base _tmpl_seen=0
+    for _tmpl in .github/ISSUE_TEMPLATE/*.yml .github/ISSUE_TEMPLATE/*.yaml; do
       [[ -f "$_tmpl" ]] || continue
+      _tmpl_base="${_tmpl##*/}"
+      case "$_tmpl_base" in
+        observation.yml|adr.yml|config.yml|config.yaml) continue ;;
+      esac
+      _tmpl_seen=$((_tmpl_seen + 1))
       local _has_field
       _has_field=$(/usr/bin/grep -cE 'label: Documentation Impact' "$_tmpl" 2>/dev/null || true); _has_field=${_has_field:-0}
       if [[ "$_has_field" -eq 0 ]]; then
-        c28_output+="${_tmpl}: missing \`Documentation Impact\` field — required per the Stage 5 spec for Beat 1 declaration"$'\n'
+        c28_output+="${_tmpl}: missing \`Documentation Impact\` field — every shipping work-item form carries it (G-CL8 row, form-scope boundary)"$'\n'
         c28_findings=$((c28_findings + 1))
       fi
     done
+    if [[ "$_tmpl_seen" -eq 0 ]]; then
+      c28_output+=".github/ISSUE_TEMPLATE/: no shipping work-item form found — the form set cannot be empty"$'\n'
+      c28_findings=$((c28_findings + 1))
+    fi
 
     if [[ $c28_findings -eq 0 ]]; then
-      log "  OK:    PR template + issue templates carry Documentation Impact surfaces per the spec"
+      log "  OK:    PR template + ${_tmpl_seen} shipping work-item form(s) carry Documentation Impact surfaces per the spec"
     else
       flag_warn_or_issue "doc-impact-resolution" \
         "$c28_findings doc-impact surface drift finding(s) — see protocol at core/schemas/gate-criteria-spec.md Gate 13 G-CL8"
       printf '%s' "$c28_output" | sed 's/^/         /'
     fi
+
+    # Arm 2 — the release-context gates grade ONE release, so they run at Stage 13 with its PR.
+    log "  N/A:   G-CL6 (per artifact) and G-CL8 (per issue) run at Stage 13 via deploy.sh --check-doc-gates --gate <g-cl6|g-cl8> --pr <N>; this run has no release PR"
+
+    # Arm 3 — shakedown deadline. Committed constants and today's date only.
+    local _c28_g _c28_armed _c28_tok _c28_days
+    for _c28_g in g-cl6 g-cl8; do
+      if [[ "$_c28_g" == "g-cl6" ]]; then _c28_armed="$GCL6_ROLLOUT_ARMED"; else _c28_armed="$GCL8_ROLLOUT_ARMED"; fi
+      _c28_tok=""
+      if [[ -f ".github/${_c28_g}.enforce" ]]; then
+        _c28_tok="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' ".github/${_c28_g}.enforce" 2>/dev/null | /usr/bin/sed -n 1p | /usr/bin/tr -d '[:space:]' || true)"
+      fi
+      if [[ "$_c28_tok" == "enforce" ]]; then
+        log "  OK:    ${_c28_g} shakedown — graduated (.github/${_c28_g}.enforce reads enforce); the deadline is discharged"
+        continue
+      fi
+      _c28_days="$(python3 -c 'import datetime,sys
+print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromisoformat(sys.argv[1])).days)' "$_c28_armed" 2>/dev/null || printf '')"
+      if [[ -z "$_c28_days" ]]; then
+        log "  FAIL:  ${_c28_g} shakedown — its ARMED constant '${_c28_armed}' is not an ISO date, so the deadline cannot be evaluated"
+        ISSUES=$((ISSUES + 1))
+      elif [[ "$_c28_days" -ge "$GATE_ROLLOUT_ESCALATE_DAYS" ]]; then
+        log "  FAIL:  ${_c28_g} shakedown — GRADUATION-OVERDUE: ${_c28_days} days at warn, past the ${GATE_ROLLOUT_ESCALATE_DAYS}-day escalation. Record a decision in the repository: set .github/${_c28_g}.enforce to enforce, or re-date its ARMED constant in core/deploy/deploy.sh."
+        ISSUES=$((ISSUES + 1))
+      elif [[ "$_c28_days" -ge "$GATE_ROLLOUT_REVIEW_DAYS" ]]; then
+        log "  WARN:  ${_c28_g} shakedown — GRADUATION-DUE: ${_c28_days} days since arming (review at ${GATE_ROLLOUT_REVIEW_DAYS}d; a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). Read the ${_c28_g} rows across warn_log_segment_set(), then decide."
+      else
+        log "  OK:    ${_c28_g} shakedown — within the review window (${_c28_days}d of ${GATE_ROLLOUT_REVIEW_DAYS}d)"
+      fi
+    done
   fi
 
 
@@ -20843,11 +21059,147 @@ EOF
     /bin/rm -rf "$_bdt"
   fi
 
+  # ─── Assertion group DG — documentation close gates (Check 28 / --check-doc-gates) ──
+  #
+  # Offline and sandbox-only: a scratch git repository, a scratch WARN_LOG, no gh. Drives the
+  # REAL engine (core/deploy/tools/check-doc-gates.py) and the REAL hoisted _dg_report /
+  # _dg_emit_row / _dg_verdict_exit_code — the same bodies --check-doc-gates runs at Stage 13.
+  # The engine's own predicate arms (the retire arms, the None forms, frontmatter exclusion)
+  # are its --self-test's, run in CI by the selftest-discovery job; this group owns the EMIT
+  # path: rows, ids, mode and exit codes. The sandbox directory is left for the OS to clear.
+  echo "self-test: starting assertion group DG (documentation close gates G-CL6 + G-CL8)" >&2
+  if ! declare -F _dg_report >/dev/null || ! declare -F _dg_emit_row >/dev/null || ! declare -F _dg_verdict_exit_code >/dev/null; then
+    _dp_fail "DG-0 the hoisted _dg_report / _dg_emit_row / _dg_verdict_exit_code are not all defined — every DG arm drives them"
+  else
+    local _dgt; _dgt="$(/usr/bin/mktemp -d -t docgates-selftest.XXXXXX)"
+    local _dgr="$_dgt/repo" _dge _dgb _dgh _dgh2 _dgrc _dg_i0="$ISSUES"
+    _dge="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/check-doc-gates.py"
+    local WARN_LOG="$_dgt/warn.jsonl"
+    /bin/mkdir -p "$_dgr/core/diagrams" "$_dgr/core/standards" "$_dgr/release/releases/plans" "$_dgt/issues"
+    /usr/bin/git -C "$_dgr" init -q
+    printf -- '---\ntitle: A\nstatus: ACTIVE\n---\none\ntwo\nthree\nfour\nfive\n' > "$_dgr/core/diagrams/a.md"
+    printf -- '---\ntitle: S\nstatus: ACTIVE\n---\nstandard\n' > "$_dgr/core/standards/s.md"
+    /usr/bin/git -C "$_dgr" add -A
+    /usr/bin/git -C "$_dgr" -c user.name=dg -c user.email=dg@example.invalid commit -qm base
+    _dgb="$(/usr/bin/git -C "$_dgr" rev-parse HEAD)"
+    printf '# Plan\n\n## Tier-A activated design artifacts\n\n| Artifact path | Flow class | Trigger | Tier |\n|---|---|---|---|\n| `core/diagrams/a.md` | architecture | x | A |\n' > "$_dgr/release/releases/plans/dg_RELEASE_PLAN.md"
+    printf 'unrelated\n' > "$_dgr/README.md"
+    /usr/bin/git -C "$_dgr" add -A
+    /usr/bin/git -C "$_dgr" -c user.name=dg -c user.email=dg@example.invalid commit -qm head
+    _dgh="$(/usr/bin/git -C "$_dgr" rev-parse HEAD)"
+    printf '### Documentation Impact\ncore/standards/s.md | update | the change edits the standard\n' > "$_dgt/issues/9001.md"
+    printf '### Description\nno declaration on this form\n' > "$_dgt/issues/9002.md"
+
+    # DG-1 — the AC fixture: one unrefreshed Tier-A artifact + one unresolved declaration
+    # -> exactly two rows, one per gate, each valid JSON under the gate's own check id.
+    _dgrc=0; python3 "$_dge" --gate g-cl6 --base "$_dgb" --head "$_dgh" --plan release/releases/plans/dg_RELEASE_PLAN.md --repo-root "$_dgr" > "$_dgt/g6.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl6 "$_dgt/g6.tsv" "$_dgrc" warn > "$_dgt/g6.out"
+    if [[ "${DG_VERDICT%% *}" != "FINDINGS" ]]; then _dp_fail "DG-1 g-cl6 over an unrefreshed artifact must verdict FINDINGS, got '$DG_VERDICT'"; fi
+    _dgrc=0; python3 "$_dge" --gate g-cl8 --base "$_dgb" --head "$_dgh" --issues-dir "$_dgt/issues" --repo-root "$_dgr" > "$_dgt/g8.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl8 "$_dgt/g8.tsv" "$_dgrc" warn > "$_dgt/g8.out"
+    if [[ "${DG_VERDICT%% *}" != "FINDINGS" ]]; then _dp_fail "DG-1 g-cl8 over an unresolved declaration must verdict FINDINGS, got '$DG_VERDICT'"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"g-cl6"')" != "1" || "$(_dp_count "$WARN_LOG" '"check":"g-cl8"')" != "1" ]]; then _dp_fail "DG-1 the fixture must write exactly one g-cl6 row and one g-cl8 row"; fi
+    if [[ "$(/usr/bin/wc -l < "$WARN_LOG" | /usr/bin/tr -d ' ')" != "2" ]]; then _dp_fail "DG-1 the fixture must write exactly two rows in all (the out-of-scope issue writes none)"; fi
+    if ! python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1])]' "$WARN_LOG" 2>/dev/null; then _dp_fail "DG-1 every row must parse as JSON"; fi
+    if [[ "$(_dp_count "$WARN_LOG" 'core/diagrams/a.md')" != "1" || "$(_dp_count "$WARN_LOG" '#9001')" != "1" ]]; then _dp_fail "DG-1 each row must name its failing subject"; fi
+    echo "self-test: DG-1 fixture rows (one per gate):" >&2
+    /bin/cat "$WARN_LOG" >&2
+
+    # DG-2 — specificity: refresh the artifact (+4 body lines) and resolve the declaration;
+    # the same two runs write no further row and both verdict CLEAN.
+    printf 'six\nseven\neight\nnine\n' >> "$_dgr/core/diagrams/a.md"
+    printf 'standard, revised\n' >> "$_dgr/core/standards/s.md"
+    /usr/bin/git -C "$_dgr" add -A
+    /usr/bin/git -C "$_dgr" -c user.name=dg -c user.email=dg@example.invalid commit -qm refresh
+    _dgh2="$(/usr/bin/git -C "$_dgr" rev-parse HEAD)"
+    _dgrc=0; python3 "$_dge" --gate g-cl6 --base "$_dgb" --head "$_dgh2" --plan release/releases/plans/dg_RELEASE_PLAN.md --repo-root "$_dgr" > "$_dgt/g6b.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl6 "$_dgt/g6b.tsv" "$_dgrc" warn > "$_dgt/g6b.out"
+    if [[ "$DG_VERDICT" != "CLEAN 1" ]]; then _dp_fail "DG-2 g-cl6 over a refreshed artifact must verdict CLEAN 1, got '$DG_VERDICT'"; fi
+    _dgrc=0; python3 "$_dge" --gate g-cl8 --base "$_dgb" --head "$_dgh2" --issues-dir "$_dgt/issues" --repo-root "$_dgr" > "$_dgt/g8b.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl8 "$_dgt/g8b.tsv" "$_dgrc" warn > "$_dgt/g8b.out"
+    if [[ "$DG_VERDICT" != "CLEAN 1" ]]; then _dp_fail "DG-2 g-cl8 over a resolved declaration must verdict CLEAN 1 (the out-of-scope issue is not counted), got '$DG_VERDICT'"; fi
+    if [[ "$(/usr/bin/wc -l < "$WARN_LOG" | /usr/bin/tr -d ' ')" != "2" ]]; then _dp_fail "DG-2 a clean run must write no row"; fi
+
+    # DG-3 — enforce writes no row and maps FINDINGS to the blocking exit.
+    _dg_report g-cl8 "$_dgt/g8.tsv" 0 enforce > "$_dgt/g8e.out"
+    if [[ "$(/usr/bin/wc -l < "$WARN_LOG" | /usr/bin/tr -d ' ')" != "2" ]]; then _dp_fail "DG-3 enforce must write no warn-log row"; fi
+    if [[ "$(_dp_count "$_dgt/g8e.out" 'FAIL:  g-cl8')" != "1" ]]; then _dp_fail "DG-3 enforce must log one FAIL line for the failing issue"; fi
+
+    # DG-4 — an empty population is NA, an engine failure NOT-EVALUATED; neither is CLEAN.
+    printf 'SUMMARY\tg-cl6\tevaluated=0\tfail=0\tnot_evaluated=0\tout_of_scope=0\n' > "$_dgt/empty.tsv"
+    _dg_report g-cl6 "$_dgt/empty.tsv" 0 warn > /dev/null
+    if [[ "${DG_VERDICT%% *}" != "NA" ]]; then _dp_fail "DG-4 zero in-scope subjects must verdict NA, got '$DG_VERDICT'"; fi
+    _dg_report g-cl6 "$_dgt/empty.tsv" 3 warn > /dev/null
+    if [[ "${DG_VERDICT%% *}" != "NOT-EVALUATED" ]]; then _dp_fail "DG-4 an engine input error must verdict NOT-EVALUATED, got '$DG_VERDICT'"; fi
+    printf 'PASS\tg-cl8\t#1\tx\n' > "$_dgt/nosum.tsv"
+    _dg_report g-cl8 "$_dgt/nosum.tsv" 0 warn > /dev/null
+    if [[ "${DG_VERDICT%% *}" != "NOT-EVALUATED" ]]; then _dp_fail "DG-4 a run with no SUMMARY line must never read CLEAN, got '$DG_VERDICT'"; fi
+
+    # DG-5 — the exit space: 0 has exactly two producers of ten (verdict x sentinel), both CLEAN.
+    local _dgv _dgs _dgz=0 _dgzc=0
+    for _dgv in CLEAN FINDINGS NA NOT-EVALUATED bogus; do
+      for _dgs in warn enforce; do
+        if [[ "$(_dg_verdict_exit_code "$_dgv" "$_dgs")" == "0" ]]; then
+          _dgz=$((_dgz + 1)); [[ "$_dgv" == "CLEAN" ]] && _dgzc=$((_dgzc + 1))
+        fi
+      done
+    done
+    if [[ "$_dgz" -ne 2 || "$_dgzc" -ne 2 ]]; then _dp_fail "DG-5 exit 0 must have exactly two producers, both CLEAN (got $_dgz, $_dgzc CLEAN)"; fi
+    if [[ "$(_dg_verdict_exit_code FINDINGS warn)" != "2" || "$(_dg_verdict_exit_code FINDINGS enforce)" != "1" ]]; then _dp_fail "DG-5 the sentinel must move FINDINGS between 2 (warn) and 1 (enforce)"; fi
+
+    # DG-7 — the G-CL8 population read fails loud, never narrow (a gh stub, no network).
+    # Each failing read, a PR with no milestone, and a listing that does not reconcile with
+    # the milestone's own count withhold the gate; the control reconciles and returns the
+    # milestone's issues less `status: deferred`, plus the keyword closes.
+    if ! declare -F _dg_population >/dev/null; then
+      _dp_fail "DG-7 the hoisted _dg_population is not defined"
+    else
+      local _dgs_pr="ok" _dgs_list="ok" _dgs_count="3" _dgp _dgk
+      local AUDIT_REPO="acme/widget"
+      # A failing read prints its normal output and THEN exits non-zero, so each arm is
+      # caught by its own exit-code check and by nothing else.
+      gh() {
+        case "${1:-} ${2:-}" in
+          "pr view")     /usr/bin/printf '11\n99\n'; [[ "$_dgs_pr" != "fail" ]] ;;
+          "issue list")  /usr/bin/printf '10 false\n11 false\n12 true\n'; [[ "$_dgs_list" != "fail" ]] ;;
+          "api graphql") /usr/bin/printf '%s\n' "${_dgs_count%-fail}"; [[ "$_dgs_count" != *-fail ]] ;;
+          *) return 1 ;;
+        esac
+      }
+      _dgp="$(_dg_population 7 5 m)"
+      if [[ "$_dgp" != "POPULATION 3 10 11 99 " ]]; then _dp_fail "DG-7 control: a reconciled read must return the milestone's issues less status: deferred plus the keyword closes ('POPULATION 3 10 11 99 '), got '$_dgp'"; fi
+      for _dgk in no-milestone no-repo pr-fail list-fail count-fail count-mismatch; do
+        _dgs_pr="ok"; _dgs_list="ok"; _dgs_count="3"
+        case "$_dgk" in
+          no-milestone)   _dgp="$(_dg_population 7 "" "")" ;;
+          no-repo)        _dgp="$(AUDIT_REPO="" _dg_population 7 5 m)" ;;
+          pr-fail)        _dgs_pr="fail";    _dgp="$(_dg_population 7 5 m)" ;;
+          list-fail)      _dgs_list="fail";  _dgp="$(_dg_population 7 5 m)" ;;
+          count-fail)     _dgs_count="3-fail"; _dgp="$(_dg_population 7 5 m)" ;;
+          count-mismatch) _dgs_count="4";    _dgp="$(_dg_population 7 5 m)" ;;
+        esac
+        if [[ "$_dgp" != "NOT-EVALUATED g-cl8 population: "* ]]; then _dp_fail "DG-7 $_dgk must withhold the gate as NOT-EVALUATED, never narrow the population, got '$_dgp'"; fi
+      done
+      unset -f gh
+    fi
+    # DG-8 — the graded count reconciles with the population: a subject missing from the
+    # engine's record withholds the gate even beside a finding; an equal count does not.
+    printf 'FAIL\tg-cl8\t#1\tx\nPASS\tg-cl8\t#2\ty\nSUMMARY\tg-cl8\tevaluated=2\tfail=1\tnot_evaluated=0\tout_of_scope=0\n' > "$_dgt/pop.tsv"
+    _dg_report g-cl8 "$_dgt/pop.tsv" 0 enforce 3 > /dev/null
+    if [[ "$DG_VERDICT" != "NOT-EVALUATED 2 subject(s) reported for a population of 3" ]]; then _dp_fail "DG-8 two subjects reported for a population of three must verdict NOT-EVALUATED, got '$DG_VERDICT'"; fi
+    _dg_report g-cl8 "$_dgt/pop.tsv" 0 enforce 2 > /dev/null
+    if [[ "$DG_VERDICT" != "FINDINGS 1 2" ]]; then _dp_fail "DG-8 control: a reconciled count must verdict on the subjects (FINDINGS 1 2), got '$DG_VERDICT'"; fi
+
+    # DG-6 — structural non-escalation: no arm above moved ISSUES.
+    if [[ "$ISSUES" -ne "$_dg_i0" ]]; then _dp_fail "DG-6 the doc-gate emit path must never increment ISSUES, got +$((ISSUES - _dg_i0))"; fi
+  fi
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
   fi
   echo "self-test: PASS" >&2
+  echo "  documentation close gates validated (group DG): DG-1 one unrefreshed Tier-A artifact + one unresolved declaration write exactly two warn-log rows, one under each gate id / DG-2 the refreshed control writes none and verdicts CLEAN / DG-3 enforce writes no row / DG-4 an empty population is NA and an engine failure NOT-EVALUATED, never CLEAN / DG-5 exit 0 has exactly two producers, both CLEAN / DG-6 no arm moves ISSUES / DG-7 a failed population read, a PR with no milestone, an unresolved repository and an unreconciled count each withhold G-CL8 as NOT-EVALUATED, and the reconciled control returns the milestone less status: deferred plus the keyword closes / DG-8 a graded count short of the population withholds the gate even beside a finding" >&2
   echo "  version-freeness claimed-set column pinning validated (#3724 AC-N, group VF):" >&2
   echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
@@ -21190,6 +21542,95 @@ cmd_check_decision_emission() {
       exit "$(_de_verdict_exit_code __unexpected__ "$de_enforce")"
       ;;
   esac
+}
+
+# ─── Mode: --check-doc-gates (Stage 13 Phase A5 / A11) — G-CL6 + G-CL8 ──────
+#
+#   deploy.sh --check-doc-gates --gate g-cl6|g-cl8 --pr <N> [--plan <path>]
+#
+# Runs ONE documentation close gate over the release PR <N> and exits per the contract
+# below. --plan names the release plan G-CL6 reads at <head>; it defaults to
+# release/releases/plans/<milestone-title>_RELEASE_PLAN.md.
+#
+#   verdict          sentinel          exit  caller reads it as
+#   CLEAN            any               0     every in-scope subject resolved. SOLE OCCUPANT OF 0.
+#   FINDINGS         != enforce        2     ADVISORY: one warn-log row per failing subject
+#   FINDINGS         enforce           1     BLOCKING: Milestone close stops; no row is written
+#   NA               any               3     no in-scope subject (no Tier-A section; no issue of
+#                                            the release carries the section) — recorded N/A
+#   NOT-EVALUATED    any               3     withheld: no PR, gh unavailable, head unfetched,
+#                                            plan missing, a subject the engine could not read,
+#                                            or (g-cl8) a population read that failed, a PR with
+#                                            no milestone, or a count that did not reconcile
+#   <other>          any               1     unexpected — fail-closed
+cmd_check_doc_gates() {
+  validate_workspace
+  local _gate="" _pr="" _plan="" _ctx _base _head _msn _ms _enf="warn" _sent _tok _out _rc _in _npop=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --gate) _gate="${2:-}"; shift 2 ;;
+      --pr) _pr="${2:-}"; shift 2 ;;
+      --plan) _plan="${2:-}"; shift 2 ;;
+      *) log "check-doc-gates: unknown argument '$1'"; exit 1 ;;
+    esac
+  done
+  if [[ "$_gate" != "g-cl6" && "$_gate" != "g-cl8" ]]; then log "check-doc-gates: --gate must be g-cl6 or g-cl8"; exit 1; fi
+  _sent="${DOC_GATES_ENFORCE_DIR:-.github}/${_gate}.enforce"
+  if [[ -f "$_sent" ]]; then
+    _tok="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$_sent" 2>/dev/null | /usr/bin/sed -n 1p | /usr/bin/tr -d '[:space:]' || true)"
+    [[ "$_tok" == "enforce" ]] && _enf="enforce"
+  fi
+  if [[ -z "$_pr" ]]; then
+    log "check-doc-gates: $_gate NOT-EVALUATED — no --pr given; the gate grades one release and needs its PR"
+    exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+  fi
+  _ctx="$(_dg_context "$_pr")"
+  if [[ "${_ctx%% *}" != "CONTEXT" ]]; then
+    log "check-doc-gates: $_gate ${_ctx}"
+    exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+  fi
+  read -r _ _base _head _msn _ms <<< "$_ctx"
+  if [[ "$_msn" == "-" ]]; then _msn=""; fi
+  if [[ "$_ms" == "-" ]]; then _ms=""; fi
+  log "check-doc-gates: $_gate over PR #$_pr — range ${_base:0:8}..${_head:0:8} (sentinel: $_enf)"
+  # The run directory is RETAINED and named in the log: engine.tsv is the per-subject
+  # record Stage 13 copies into the release plan's Verification Evidence.
+  local _wd; _wd="$(/usr/bin/mktemp -d -t docgates.XXXXXX)"
+  _out="$_wd/engine.tsv"
+  if [[ "$_gate" == "g-cl6" ]]; then
+    _in="${_plan:-release/releases/plans/${_ms}_RELEASE_PLAN.md}"
+    _rc=0; python3 "$(dirname "${BASH_SOURCE[0]}")/tools/check-doc-gates.py" --gate g-cl6 --base "$_base" --head "$_head" --plan "$_in" > "$_out" 2>&1 || _rc=$?
+  else
+    /bin/mkdir -p "$_wd/issues"
+    # The population is the release's issues: those the PR closes by keyword AND those on
+    # its milestone, less any labelled `status: deferred` (Phase A2's label). A release
+    # PR that only references its issues (the safe phrasing the
+    # pipeline prescribes, with each issue closed at Stage 13) has an EMPTY
+    # closingIssuesReferences, and reading that alone would verdict N/A over a release
+    # that delivered every one of them. Sub-tasks and forms without the field drop out
+    # by the G-CL8 row's body-keyed issue scope, never by a list kept here. The read
+    # fails loud: _dg_population withholds the gate rather than narrow the population.
+    local _n _nums _popline
+    _popline="$(_dg_population "$_pr" "$_msn" "$_ms")"
+    if [[ "${_popline%% *}" != "POPULATION" ]]; then
+      log "check-doc-gates: $_gate ${_popline}"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    read -r _ _npop _nums <<< "$_popline"
+    log "check-doc-gates: $_gate population — ${_npop} issue(s) of the release (milestone ${_msn} reconciled; keyword closes added; status: deferred removed)"
+    for _n in $_nums; do
+      if ! gh issue view "$_n" ${AUDIT_REPO:+--repo "$AUDIT_REPO"} --json body --jq .body > "$_wd/issue-$_n.body" 2>/dev/null; then
+        printf 'NOT-EVALUATED\tg-cl8\t#%s\tissue body could not be read from GitHub\n' "$_n" >> "$_wd/unread.tsv"
+      else
+        /bin/mv "$_wd/issue-$_n.body" "$_wd/issues/$_n.md"
+      fi
+    done
+    _rc=0; python3 "$(dirname "${BASH_SOURCE[0]}")/tools/check-doc-gates.py" --gate g-cl8 --base "$_base" --head "$_head" --issues-dir "$_wd/issues" > "$_out" 2>&1 || _rc=$?
+    if [[ -f "$_wd/unread.tsv" ]]; then /bin/cat "$_wd/unread.tsv" >> "$_out"; fi
+  fi
+  _dg_report "$_gate" "$_out" "$_rc" "$_enf" ${_npop:+"$_npop"}
+  log "check-doc-gates: $_gate ${DG_VERDICT} (per-subject record: $_out)"
+  exit "$(_dg_verdict_exit_code "${DG_VERDICT%% *}" "$_enf")"
 }
 
 # ─── Mode: --check-required-subset (the CI load-bearing-check subset runner) — #1485 ─
@@ -22012,6 +22453,14 @@ main() {
       # exact defect this gate's CI mirror exists to avoid reproducing.
       cmd_check_decision_emission
       ;;
+    --check-doc-gates)
+      # Stage-13 documentation close gates (G-CL6 / G-CL8): runs ONE gate over one release
+      # PR and exits per the contract table on cmd_check_doc_gates, the authoring home this
+      # comment cites. The engine is core/deploy/tools/check-doc-gates.py; Check 28's
+      # lifecycle arm reports these gates N/A because a --check run has no release PR.
+      shift
+      cmd_check_doc_gates "$@"
+      ;;
     --check-required-subset)
       # CI runner (#1485): runs the enumerated load-bearing subset (network-free AND
       # install-independent AND posture:required AND no dedicated CI mirror) and exits
@@ -22059,7 +22508,7 @@ main() {
       cmd_report
       ;;
     *)
-      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --check-required-subset | --self-test | --report]"
+      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --check-doc-gates --gate <g-cl6|g-cl8> --pr <N> | --check-required-subset | --self-test | --report]"
       echo ""
       echo "Modes:"
       echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
@@ -22082,6 +22531,7 @@ main() {
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (RELEASE_LOG absent or unparseable — withheld, never a pass), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (withheld, never a pass), NOSET=4 advisory (gate asserted nothing — repo defect), INCOMPLETE/NOSET=1 when enforce, unexpected=1) (#4026)"
+      echo "  --check-doc-gates --gate <g-cl6|g-cl8> --pr <N> [--plan <path>]   Stage-13 documentation close gate (G-CL6 or G-CL8 over one release PR; CLEAN=0 and NOTHING ELSE EVER EXITS 0, FINDINGS=2 advisory with one warn-log row per failing subject, NA/NOT-EVALUATED=3 withheld, FINDINGS=1 when .github/<gate>.enforce reads enforce, unexpected=1)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
