@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.79] - 2026-10-25
+
+Every shippable work item now says what it does to documentation, retirement included, and release close-out checks it.
+
+[Full notes](release/releases/notes/v4.79_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.79)
+
 ## [v4.78] - 2026-10-24
 
 Seven authoring conventions each have a disposition you can check: one fails when broken, six are restated where they bind.
