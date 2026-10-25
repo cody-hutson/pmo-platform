@@ -84,7 +84,7 @@ MODERATE. A revert of the change's commits restores the walk, and an instance ru
 
 - ADR-150 — the rule governs execution capability; its membership criterion for a transparent wrapper and the allowlist's role are unchanged.
 - ADR-187 — command position is canonicalized, not parsed, and its prefix set is a bounded enumeration; this rule is deliberately not routed through it, and its copy of the vocabulary is asserted, not edited.
-- {{ADR:egress-prefix-walk-stops-on-the-gated-verb}} — the sibling guard's decision on the same grammar problem, by a domain-terminated scan; the second Alternatives entry above records why each guard keeps its own mechanism.
+- ADR-226 — the sibling guard's decision on the same grammar problem, by a domain-terminated scan; the second Alternatives entry above records why each guard keeps its own mechanism.
 
 ## References
 
