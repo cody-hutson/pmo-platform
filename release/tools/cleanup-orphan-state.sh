@@ -3557,7 +3557,11 @@ selftest_path_reaching_holder() {
 #         existed did not, and neither did it while its only ignored entry was an
 #         empty directory (controls)
 #   AX-2  an unreadable index reads `unreadable` and classifies status-unreadable;
-#         restored, it reads clean (control)
+#         restored, it reads clean (control). AX-2b isolates the status clause: with
+#         ONLY `git status` unreadable on a quiet clean tree, the classifier and the
+#         apply-time re-check each read exactly "status unreadable (git status)" — the
+#         unreadable index above also fails the git-ignored listing, which fails
+#         closed on its own and would mask a missing status clause
 #   AX-3  an open PR's head branch, and a branch in an open release's family, read
 #         active; an unrelated branch does not (control); an unavailable open-PR list
 #         fails closed for that same branch
@@ -3575,7 +3579,8 @@ selftest_path_reaching_holder() {
 #         one passes (control, needs the mainline ref)
 #   AX-9  a tree with uncommitted work classifies uncommitted-changes
 #   AX-10 the WILL-DRAIN projection never drains a branch whose worktree is active; with
-#         that worktree REMOVE instead, it does (control, needs the mainline ref)
+#         that worktree REMOVE instead, it does (control, needs the mainline ref). AX-10b:
+#         nor one that a SECOND worktree outside this run's removal set also holds
 #   AX-11 a remote branch whose server tip moved since the last fetch fails closed; once
 #         fetched, its fresh commit reads recent; a backdated tip reads quiet (control)
 #   AX-12 under --force, a detached tree whose commits an open PR's head holds reads
@@ -3622,7 +3627,7 @@ selftest_ax_not() {    # <arm> <what> <got> <label prefix it must NOT carry>
 selftest_active_exclusions() {
   local script_abs="" slug="" base="" has_main=0 fail=0 rc=0 ax_skipped="" got=""
   local wt1="" wtd="" wth="" wtg="" wto="" wtp="" inner="" b_fresh="" b_old="" b_dirty="" b_head=""
-  local cand="" f="" ix="" st="" fixdir="" rname="" rb="" rb_old="" old_sha="" new_sha="" pr_sha="" b_apply="" wtq="" b_q="" ign_ok=0
+  local cand="" f="" ix="" st="" fixdir="" rname="" rb="" rb_old="" old_sha="" new_sha="" pr_sha="" b_apply="" wtq="" b_q="" ign_ok=0 wtd2=""
   local saved_gh="$GH_BIN" saved_gh_resolved="$GH_BIN_RESOLVED"
   local L_HEAD="SKIP — active — recent HEAD activity (HEAD moved "
   local L_BRANCH="SKIP — active — recent HEAD activity (branch moved "
@@ -3646,6 +3651,7 @@ selftest_active_exclusions() {
   wto="${REPO_ROOT}/.claude/worktrees/${slug}-outer"
   wtp="${REPO_ROOT}/.claude/worktrees/${slug}-pr"
   wtq="${REPO_ROOT}/.claude/worktrees/${slug}-openpr"
+  wtd2="${REPO_ROOT}/.claude/worktrees/${slug}-dirty-second"
   inner="${wto}/ax-nested-$$"
   b_fresh="chore/${slug}-fresh"; b_old="chore/${slug}-old"; b_dirty="chore/${slug}-dirty"; b_head="chore/${slug}-head"
   b_apply="chore/${slug}-apply"; b_q="chore/${slug}-openpr"
@@ -3825,6 +3831,24 @@ selftest_active_exclusions() {
       fi
     else
       selftest_skip "active-exclusions AX-10 control" "no ${REMOTE_NAME}/${MAIN_BRANCH} ref to prove the branch merged"; ax_skipped="${ax_skipped} AX-10 control"
+    fi
+    # AX-10b — a second holder outside the removal set. git refuses a branch in two
+    # worktrees unless forced, so the fixture forces it; the gate exists for exactly
+    # that state, where removing one holder would leave the branch checked out in the
+    # other.
+    if git worktree add -f -q "$wtd2" "$b_dirty" >/dev/null 2>&1; then
+      refresh_wt_snapshot
+      WORKTREE_CANDIDATES=("${wtd}	${b_dirty}	clean	0	REMOVE")
+      LOCAL_BRANCH_CANDIDATES=("${b_dirty}	0	2026-01-01		(none)	SKIP — worktree attached")
+      selftest_with_no_open_prs projected_freed_branches >/dev/null 2>&1 || true
+      if [[ "${LOCAL_BRANCH_CANDIDATES[0]##*	}" == WILL-DRAIN* ]]; then
+        echo "self-test: active-exclusions FAILED — the projection drained a branch that a second worktree outside the removal set still holds (AX-10b)" >&2
+        fail=1
+      fi
+      git worktree remove --force "$wtd2" >/dev/null 2>&1 || true
+      refresh_wt_snapshot
+    else
+      selftest_skip "active-exclusions AX-10b" "could not check the branch out in a second worktree"; ax_skipped="${ax_skipped} AX-10b"
     fi
     WORKTREE_CANDIDATES=(); LOCAL_BRANCH_CANDIDATES=()
     OPEN_PR_BUILT=1; OPEN_PR_STATE="ok"; OPEN_PR_ENTRIES=()
@@ -4049,9 +4073,18 @@ selftest_active_exclusions() {
     fi
   fi
 
+  # AX-2b — on the quiet clean AX-12 tree, with only `git status` made unreadable
+  if [[ "$fail" -eq 0 ]]; then
+    got=$( worktree_state() { printf 'unreadable'; }; FORCE=1; ORACLE_STATE="ok"; ORACLE_BUILT=1; LIVE_CWD_ENTRIES=(); selftest_ax_classify "$wtp" )
+    selftest_ax_want AX-2b "classify_worktree when only git status is unreadable" "$got" "SKIP — active — status unreadable (git status)" || fail=1
+    got=$( worktree_state() { printf 'unreadable'; }; selftest_ax_reason worktree_active_now "$wtp" "" )
+    selftest_ax_want AX-2b "the apply-time re-check when only git status is unreadable" "$got" "SKIP — active — status unreadable (git status)" || fail=1
+  fi
+
   # Teardown — the nested tree first, so the outer one can go
   [[ -n "$ix" && -f "$ix" ]] && /bin/chmod 644 "$ix" 2>/dev/null || true
   git worktree remove --force "$inner" >/dev/null 2>&1 || true
+  git worktree remove --force "$wtd2" >/dev/null 2>&1 || true
   for f in "$wt1" "$wtd" "$wth" "$wtg" "$wto" "$wtp" "$wtq"; do
     git worktree remove --force "$f" >/dev/null 2>&1 || true
   done
@@ -4070,7 +4103,7 @@ selftest_active_exclusions() {
   WORKTREE_CANDIDATES=("${saved_wt[@]:-}")
   refresh_wt_snapshot
   if [[ "$fail" -ne 0 ]]; then exit 1; fi
-  echo "self-test: active-exclusions check PASS — AX-1 git-ignored files present / AX-2 status unreadable / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate / AX-9 uncommitted changes / AX-10 WILL-DRAIN projection / AX-11 remote moved-since-fetch and fresh commit / AX-12 detached commits held by an open PR / AX-13 fail-closed tails / AX-14 classify_local wiring / AX-15 classify_remote wiring / AX-16 apply-time branch re-check, local and remote / AX-17 open-PR list bound to this repository — each beside its control${ax_skipped:+ — SKIPPED on this host:${ax_skipped} (see the skip ledger)}" >&2
+  echo "self-test: active-exclusions check PASS — AX-1 git-ignored files present / AX-2 status unreadable / AX-3 open PR + release family + unavailable list / AX-4 branch movement / AX-5 apply-time re-check under --apply --force / AX-6 nested worktree / AX-7 window floor / AX-8 drain gate / AX-9 uncommitted changes / AX-10 WILL-DRAIN projection / AX-11 remote moved-since-fetch and fresh commit / AX-12 detached commits held by an open PR / AX-13 fail-closed tails / AX-14 classify_local wiring / AX-15 classify_remote wiring / AX-16 apply-time branch re-check, local and remote / AX-17 open-PR list bound to this repository / AX-2b status clause in isolation / AX-10b second holder — each beside its control${ax_skipped:+ — SKIPPED on this host:${ax_skipped} (see the skip ledger)}" >&2
   return 0
 }
 
