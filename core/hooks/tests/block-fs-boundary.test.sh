@@ -759,7 +759,7 @@ fi
 # demonstrates that the operator EXECUTES, reporting NOT-EVALUATED — never a pass — on an
 # interpreter that rejects it.
 #
-# A PIN SAYS WHICH VERDICT IT PINS. Fourteen pins assert the exit code AND either the
+# A PIN SAYS WHICH VERDICT IT PINS. Sixteen pins assert the exit code AND either the
 # number of -004 records the call wrote or the rule its refusal names, because one exit
 # code can come from different guards: G6 admits with a record, G4 admits silently, a word
 # the token walk never hands to the cascade writes nothing, G1 refuses under -003 and G5,
@@ -786,6 +786,10 @@ fi
 #   FR   F, and G6 refuses                                   exit dimension of XFORM-POS-01
 #   W    the walk hands every word of every segment over     record dimension of XFORM-POS-02
 #   WR   W, and G6 refuses                                   exit dimension of XFORM-POS-02
+#   A    the walk keeps a redirection's & in the segment    record dimension of XFORM-POS-03
+#   AR   A, and G6 refuses                                   exit dimension of XFORM-POS-03
+#   L    the walk joins a continuation line to its line     record dimension of XFORM-POS-04
+#   LR   L, and G6 refuses                                   exit dimension of XFORM-POS-04
 # The document arms XFORM-DOC-01 and -02 are paired on both halves: the document half by
 # the XFORM-DOC-03 mutants, the hook half by XFORM-MUT-01. XFORM-RESID-04 and XFORM-SEM-01
 # assert shell behaviour rather than hook behaviour; their own control (a direct
@@ -918,6 +922,16 @@ XFORM_X_G5S='s/; return 4;;$/; return 2;;/'
 XFORM_X_F='s/^          if (substr(t, 1, 1) == "-") continue;$/          t = t;/'
 XFORM_X_W1='s/^        if (first_token != v) continue;$/        first_token = v;/'
 XFORM_X_W2='s/^        for (i = first + 1; i <= m; i++) {$/        for (i = first; i <= m; i++) {/'
+# A and L both change the walk's split line, each in a copy of its own. The walk ends a
+# segment at every `&` and the canonicalizer starts a command after one, so A takes a
+# redirection's `&` and the separator after it out of the record before the split, and the
+# verb's segment runs on past the redirection. The walk reads one physical line per awk
+# record, so L joins a line that ends in a backslash to the line after it before the split,
+# as the shell does.
+# shellcheck disable=SC2016
+XFORM_X_A='s#^      n = split(\$0, segments, /\[;&|\]+/);$#      gsub(/[<>]\&; /, ">"); n = split($0, segments, /[;\&|]+/);#'
+# shellcheck disable=SC2016
+XFORM_X_L='s#^      n = split(\$0, segments, /\[;&|\]+/);$#      while ($0 ~ /\\\\$/ \&\& (getline nx) > 0) $0 = substr($0, 1, length($0) - 1) " " nx; n = split($0, segments, /[;\&|]+/);#'
 
 XFORM_R="$(xform_copy r "$XFORM_X_R")"
 XFORM_S="$(xform_copy s "$XFORM_X_S")"
@@ -931,6 +945,10 @@ XFORM_F="$(xform_copy f "$XFORM_X_F")"
 XFORM_FR="$(xform_copy fr "$XFORM_X_F" "$XFORM_X_R")"
 XFORM_W="$(xform_copy w "$XFORM_X_W1" "$XFORM_X_W2")"
 XFORM_WR="$(xform_copy wr "$XFORM_X_W1" "$XFORM_X_W2" "$XFORM_X_R")"
+XFORM_A="$(xform_copy a "$XFORM_X_A")"
+XFORM_AR="$(xform_copy ar "$XFORM_X_A" "$XFORM_X_R")"
+XFORM_L="$(xform_copy l "$XFORM_X_L")"
+XFORM_LR="$(xform_copy lr "$XFORM_X_L" "$XFORM_X_R")"
 
 # xform_shape <label> <copy> <lines out> <lines in> — the copy's shape against the shipped
 # hook: exactly <lines out> taken out and <lines in> put in, it parses, it refuses an
@@ -975,6 +993,10 @@ xform_shape "XFORM-MUT-SHAPE-F: the copy whose walk hands flag-position words ov
 xform_shape "XFORM-MUT-SHAPE-FR: F with G6 refusing differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_FR" 2 2
 xform_shape "XFORM-MUT-SHAPE-W: the copy whose walk hands every word of every segment over differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_W" 2 2
 xform_shape "XFORM-MUT-SHAPE-WR: W with G6 refusing differs in three lines, parses, and still refuses and admits untouched literals" "$XFORM_WR" 3 3
+xform_shape "XFORM-MUT-SHAPE-A: the copy whose walk keeps a redirection's ampersand in the verb's segment differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_A" 1 1
+xform_shape "XFORM-MUT-SHAPE-AR: A with G6 refusing differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_AR" 2 2
+xform_shape "XFORM-MUT-SHAPE-L: the copy whose walk joins a continuation line to the line it continues differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_L" 1 1
+xform_shape "XFORM-MUT-SHAPE-LR: L with G6 refusing differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_LR" 2 2
 
 # ----- XFORM-SUBJ / XFORM-PFX: the measured pair, and what the pair hides -----
 # shellcheck disable=SC2016  # payload text, not expansions
@@ -1067,6 +1089,26 @@ xform_pair "XFORM-POS-02-PAIR-rec: through the copy whose walk hands every word 
   "$XFORM_W" "$XFORM_C_ASSIGN" 0 rec 0   0 1 -
 xform_pair "XFORM-POS-02-PAIR-exit: through that copy with G6 refusing, the same command is refused" \
   "$XFORM_WR" "$XFORM_C_ASSIGN" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+# Two operand positions of a listed verb, by the same walk. An ampersand inside a
+# redirection operator ends the verb's segment: the walk splits on every `&`, and the
+# canonicalizer starts a command after it. And the walk reads one physical line at a time,
+# so an operand on a continuation line sits in a record of its own. Each is pinned at
+# today's verdict, with the walk mutation that hands the word over as its pairing.
+# shellcheck disable=SC2016
+XFORM_C_AMPREDIR='cat 2>&1 ${CFG@P}'
+xform_pin "XFORM-POS-03: the operator after a redirection operator that carries an ampersand is never examined — admitted, no record (declared exclusion)" \
+  "$XFORM_C_AMPREDIR" 0 rec 0
+xform_pair "XFORM-POS-03-PAIR-rec: through the copy whose walk keeps a redirection's ampersand in the verb's segment, the operand is admitted under G6 with a record — POS-03's zero is the walk's" \
+  "$XFORM_A" "$XFORM_C_AMPREDIR" 0 rec 0   0 1 -
+xform_pair "XFORM-POS-03-PAIR-exit: through that copy with G6 refusing, the same command is refused" \
+  "$XFORM_AR" "$XFORM_C_AMPREDIR" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+XFORM_C_CONT="cat \\${XFORM_NL}\${CFG@P}"
+xform_pin "XFORM-POS-04: the operator on a continuation line is never examined — admitted, no record (declared exclusion)" \
+  "$XFORM_C_CONT" 0 rec 0
+xform_pair "XFORM-POS-04-PAIR-rec: through the copy whose walk joins a continuation line to the line it continues, the operand is admitted under G6 with a record — POS-04's zero is the walk's" \
+  "$XFORM_L" "$XFORM_C_CONT" 0 rec 0   0 1 -
+xform_pair "XFORM-POS-04-PAIR-exit: through that copy with G6 refusing, the same command is refused" \
+  "$XFORM_LR" "$XFORM_C_CONT" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
 
 # ----- XFORM-NEAR: the named near misses stay allowed -----
 # xform_near <label> <command> — a must-not-flag arm (exit 0) with its pairing arm: the
@@ -1130,7 +1172,7 @@ else
     "$xform_r_ctl" "$xform_r_spec" "$xform_r_off" "$xform_r_idx" "$xform_r_ind"
   FAIL=$((FAIL + 1))
 fi
-/usr/bin/printf 'RESIDUAL: XFORM arms pin the parameter-transformation operator, two positions the token walk never examines, and three value-re-evaluating expansion forms as ADMITTED. A green run here does not mean any of them is refused.\n'
+/usr/bin/printf 'RESIDUAL: XFORM arms pin the parameter-transformation operator, four positions the token walk never examines, and three value-re-evaluating expansion forms as ADMITTED. A green run here does not mean any of them is refused.\n'
 
 # ----- XFORM-SEM-01: does the operator EXECUTE? (method b) -----
 # Capability, not a version string: each candidate interpreter is asked whether it
