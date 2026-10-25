@@ -20,6 +20,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.80] - 2026-10-25
+
+Command guards now check scripts hidden behind wrapper options, early-closing quotes and subshells, and log GitHub writes behind prefixes.
+
+[Full notes](release/releases/notes/v4.80_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.80)
+
 ## [v4.79] - 2026-10-25
 
 Every shippable work item now says what it does to documentation, retirement included, and release close-out checks it.
