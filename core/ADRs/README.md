@@ -130,6 +130,7 @@ ADR-217 (`release-identity-is-stamped-at-stage-12`) → **ADR-219** by `release/
 ADR-217 (`depersonalization-gate-scans-bot-runs`) → **ADR-220** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 217; the record's Status section carries the provenance note.
 ADR-217 (`memory-eviction-archive-disposition`) → **ADR-221** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 217; the record's Status section carries the provenance note.
 ADR-221 (`system-documentation-is-a-generated-process-catalog`) → **ADR-223** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 221; the record's Status section carries the provenance note.
+ADR-223 (`system-documentation-is-a-generated-process-catalog`) → **ADR-224** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 223; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 

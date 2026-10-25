@@ -1,5 +1,5 @@
 ---
-title: "ADR-223 — A repository's system documentation is one generated catalog of process pages, written as text, placed outside the durable-corpus paths"
+title: "ADR-224 — A repository's system documentation is one generated catalog of process pages, written as text, placed outside the durable-corpus paths"
 status: Accepted — operator-ratified at the process-baseline planning gate, 2026-10-23; numbered and landed through the release pipeline
 date: 2026-10-22
 release: documentation-model-adopted
@@ -10,7 +10,7 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-223 — A repository's system documentation is one generated catalog of process pages, written as text, placed outside the durable-corpus paths
+# ADR-224 — A repository's system documentation is one generated catalog of process pages, written as text, placed outside the durable-corpus paths
 
 ## Status
 
@@ -19,6 +19,8 @@ set — plus the placement, identity, lifecycle and generation questions the pro
 EXPENSIVE scope-lock: every page, check and view is shaped by it.
 
 **Numbering provenance — `221 → 223`.** Held **ADR-221** branch-local; renumbered to **ADR-223** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 221. In-release citations that read "ADR-221" denote this record.
+
+**Numbering provenance — `223 → 224`.** Held **ADR-223** branch-local; renumbered to **ADR-224** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 223. In-release citations that read "ADR-223" denote this record.
 
 ## Context
 

@@ -298,7 +298,7 @@ Per-card header (8 fields authored at A0; rows adopted verbatim below):
 ### Issue #8117: Decide how a repository's system documentation is modelled, and record the decision as an ADR
 
 **Change Specification** (Solutioning-level; the Stage 5 spec on sub-task #8497 is the authority, as amended by the Collective Review adjustments on #8496):
-- **Files:** `core/ADRs/ADR-223-system-documentation-is-a-generated-process-catalog.md` (add — `<N>` = `renumber-adr.py --next-free` at Commit 0, which printed 221; the tool renumbered it to 223 at the Stage 6 sync — DEV-19); `core/ADRs/README.md` (no hand edit — DEV-4; the renumber tool appended its renumber-log line at the Stage 6 sync — DEV-19).
+- **Files:** `core/ADRs/ADR-224-system-documentation-is-a-generated-process-catalog.md` (add — `<N>` = `renumber-adr.py --next-free` at Commit 0, which printed 221; the tool renumbered it to 223 at the Stage 6 sync — DEV-19); `core/ADRs/README.md` (no hand edit — DEV-4; the renumber tool appended its renumber-log line at the Stage 6 sync — DEV-19).
 - **Change description:** land the operator-ratified documentation-model decision as an `Accepted` ADR with the spec's gate-driven edits E1–E10 (identity frontmatter, references moved into a `## References` block, an H1, `## Related ADRs`, the Context count dated to the spike's filing, the D6 alternative and the reader-set note under Alternatives Considered), plus the Collective Review status-wording adjustment (the ratifying review named as the operator's planning-gate ratification, without the undefined gate label). `## Decision` stays byte-identical to the ratified text.
 - **Acceptance criteria:** four, per the card (AC2 and AC3 as re-worded by the operator on 2026-10-24).
 - **Estimated complexity:** Low — one new file, mechanical edits.
@@ -436,9 +436,9 @@ All rows read `unconstrained`: no control refuses these writes. That does not ma
 
 | Issue | AC | Verification Method | Expected Result |
 |---|---|---|---|
-| #8117 | AC-1 | `grep -c -F "One document per top-level process and component class" core/ADRs/ADR-223-system-documentation-is-a-generated-process-catalog.md` at least 1 [READER-GRADED — Decision items 1–3 name the chosen option for D1, D2 and D6; Alternatives Considered carries each one's rejected options] | ≥1 (base: file absent) |
-| #8117 | AC-2 | `grep -c -F "never hand-maintained" core/ADRs/ADR-223-system-documentation-is-a-generated-process-catalog.md` at least 1 [READER-GRADED — Decision 1 generates the index, graph and views from page frontmatter and the element inventory; Context bullet 2 cites ADR-089's lost-entry reasoning] | ≥1 (base: file absent) |
-| #8117 | AC-3 | `grep -c -F "is the page lifecycle; no new" core/ADRs/ADR-223-system-documentation-is-a-generated-process-catalog.md` at least 1 [READER-GRADED — Decision 6 reuses the platform-doc `status` field; Consequence 1 names the state and lifecycle flow class for the standard extension] | ≥1 (base: file absent) |
+| #8117 | AC-1 | `grep -c -F "One document per top-level process and component class" core/ADRs/ADR-224-system-documentation-is-a-generated-process-catalog.md` at least 1 [READER-GRADED — Decision items 1–3 name the chosen option for D1, D2 and D6; Alternatives Considered carries each one's rejected options] | ≥1 (base: file absent) |
+| #8117 | AC-2 | `grep -c -F "never hand-maintained" core/ADRs/ADR-224-system-documentation-is-a-generated-process-catalog.md` at least 1 [READER-GRADED — Decision 1 generates the index, graph and views from page frontmatter and the element inventory; Context bullet 2 cites ADR-089's lost-entry reasoning] | ≥1 (base: file absent) |
+| #8117 | AC-3 | `grep -c -F "is the page lifecycle; no new" core/ADRs/ADR-224-system-documentation-is-a-generated-process-catalog.md` at least 1 [READER-GRADED — Decision 6 reuses the platform-doc `status` field; Consequence 1 names the state and lifecycle flow class for the standard extension] | ≥1 (base: file absent) |
 | #8117 | AC-4 | [DEFERRED — `status:` is terminal on main only after merge; the Stage 13 G-CL9 authored limb reads the frontmatter of the landed path on main] | leading token `Accepted` |
 | #8494 | AC-1 | `grep -c -i -F "value stream" core/standards/design-artifact-standard.md` at least 1 [READER-GRADED — the section names the folder and the generated-never-hand-kept rule] | ≥1 (base 0) |
 | #8494 | AC-2 | `grep -c -F "sub-flow-of" core/standards/design-artifact-standard.md` at least 1 [READER-GRADED — § 2 lists the state/lifecycle class; the § 12 lint run on a marker using it prints enum OK] | ≥1 (base 0) |
@@ -670,7 +670,7 @@ N/A — enumerated over frontmatter schemas, issue-form field schemas and gate-r
 
 | `deliverable` | `canonical_path` | `landing_commit` | `acceptance_verdict` | `acceptor` |
 |---|---|---|---|---|
-| #8117 — {{ADR:system-documentation-is-a-generated-process-catalog}}, the documentation-model decision record | `core/ADRs/ADR-223-system-documentation-is-a-generated-process-catalog.md` | `c79ac3fe` | owed — Stage 8 QA, then the Stage 9 GO | owed — Stage 8 QA; ratified at the Stage 9 GO. The decision text itself was ratified by the operator at the process-baseline planning gate (2026-10-23), the card's ratifying review |
+| #8117 — {{ADR:system-documentation-is-a-generated-process-catalog}}, the documentation-model decision record | `core/ADRs/ADR-224-system-documentation-is-a-generated-process-catalog.md` | `c79ac3fe` | owed — Stage 8 QA, then the Stage 9 GO | owed — Stage 8 QA; ratified at the Stage 9 GO. The decision text itself was ratified by the operator at the process-baseline planning gate (2026-10-23), the card's ratifying review |
 
 ## Deployment Execution Log
 
@@ -744,7 +744,7 @@ How a repository's system documentation is modelled is now a recorded, `Accepted
 
 - Release plan: this file, top section
 - Milestone: documentation-model-adopted
-- Decision record: `core/ADRs/ADR-223-system-documentation-is-a-generated-process-catalog.md`
+- Decision record: `core/ADRs/ADR-224-system-documentation-is-a-generated-process-catalog.md`
 - Governing standard: `core/standards/design-artifact-standard.md` § 13 (the generated process catalog) and § 5 (retirement); catalog folder `core/process-catalog/`
 - Documentation Impact scope, form set and retire verification: the G-CL8 row of `core/schemas/gate-criteria-spec.md` (Gate 13)
 - Documentation close gates: `core/deploy/tools/check-doc-gates.py`, run by `core/deploy/deploy.sh --check-doc-gates`; sentinels `.github/g-cl6.enforce` and `.github/g-cl8.enforce`
