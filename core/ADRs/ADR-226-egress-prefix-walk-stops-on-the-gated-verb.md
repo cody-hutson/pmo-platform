@@ -1,6 +1,6 @@
 ---
 title: ADR-226 — The egress prefix walk stops on the gated verb
-status: Proposed — authored at Stage 6 Engineering under the release's Collective Review scope-lock; the transition to Accepted belongs to the Stage 13 ratification beat
+status: Accepted — operator-ratified at the hook-walk-adjudicates-every-operand Stage 13 Close ratification beat (Phase A13), 2026-10-25
 date: 2026-10-16
 release: hook-walk-adjudicates-every-operand
 deciders: "Workspace owner (operator) — the outcome rendered at the release's Stage-4 gate (a gh api write behind a prefix command's option or operand is evaluated and recorded at the rule's current rollout phase, and no phase constant changes) and the Collective Review scope-lock (the secondary-locator design, with the independent adversarial review's condition that a record written by the look-ahead be distinguishable from one written by the head walk; each guard keeps its own wrapper vocabulary; one tracked payload corpus read by each suite's own harness). Design by the Stage 5 Solutioning spoke (a six-candidate design exploration); authored by the Stage 6 Engineering spoke"
@@ -17,7 +17,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering, after the operator's Collective Review scope-lock rendered the scope this record documents. The Stage 13 ratification beat owns the transition to Accepted; this record is not written Accepted at authoring.
+**Accepted** — operator-ratified at the `hook-walk-adjudicates-every-operand` Stage 13 Close ratification beat (Phase A13), 2026-10-25, as one record of a decision rendered per record. Authored at Stage 6 Engineering of that release as `Proposed`, after the operator's Collective Review scope-lock rendered the scope this record documents. The ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.80**.
 
 **Numbering provenance.** Claimed as **219** against an anchor of **216** on `origin/main`, read from the repository's own ADR-numbering detector, which reported 217 and 218 as this branch's earlier claims; 217 and 218 are also held on sibling branches, and 219 on none at authorship (detection only, never binding). The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, which carries no number shape and resolves at the claim.
 

@@ -1,6 +1,6 @@
 ---
 title: ADR-225 — Enclosure positions are adjudicated by a second view
-status: Proposed — authored at Stage 6 Engineering under the release's Collective Review scope-lock; the transition to Accepted belongs to the Stage 13 ratification beat
+status: Accepted — operator-ratified at the hook-walk-adjudicates-every-operand Stage 13 Close ratification beat (Phase A13), 2026-10-25
 date: 2026-10-16
 release: hook-walk-adjudicates-every-operand
 deciders: "Workspace owner (operator) — scope rendered at the release's Stage-5 Collective Review scope-lock: close the enclosure fail-open; include the two adjacent fail-opens the design found, with the independent adversarial review's correction; a phased rollout in which new findings enter at the warn phase and a later graduation decision is owed; the unmilestoned sibling card for the grouping and xargs shapes kept separate. Design by the Stage 5 Solutioning spoke (an eight-candidate design exploration); authored by the Stage 6 Engineering spoke"
@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering, after the operator's Collective Review scope-lock rendered the scope this record documents. The Stage 13 ratification beat owns the transition to Accepted; this record is not written Accepted at authoring.
+**Accepted** — operator-ratified at the `hook-walk-adjudicates-every-operand` Stage 13 Close ratification beat (Phase A13), 2026-10-25, as one record of a decision rendered per record. Authored at Stage 6 Engineering of that release as `Proposed`, after the operator's Collective Review scope-lock rendered the scope this record documents. The ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.80**.
 
 **Numbering provenance.** Claimed as **218** against an anchor of **216** on `origin/main`, read from the repository's own ADR-numbering detector, which reported 217 as this branch's earlier claim and 217 and 218 also held on sibling branches (detection only, never binding). The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, which carries no number shape and resolves at the claim.
 
