@@ -330,7 +330,12 @@ def verify_retire(root: Path, base: str, head: str, doc: str) -> tuple[str, str]
 # it yields graded rows, or it is a named FAIL — never commentary. A line without `|`
 # is commentary and is not graded, whatever it names (measured over every issue body
 # carrying the section: a stricter rule that also failed pipe-less lines naming a path
-# failed scope notes, row continuations and struck-out lines, not undelivered rows).
+# failed scope notes, row continuations and struck-out lines, not undelivered rows) —
+# with ONE exception, keyed on the marker and not on the line's shape: a pipe-less line
+# carrying the `[ASSUMPTION – CONFIRM]` marker is a declaration not yet decided. It
+# FAILs as unresolved, as a qualified action cell does, because both are the same state
+# — a conditional declaration, which is resolved at Stage 5 — and one state must not
+# read FAIL in one spelling and PASS in the other.
 # A row's path is read through every shape the field licenses — a line range, an
 # anchor, or a `§` section after the path, and several comma-separated paths in one
 # cell — and every row on a line is graded. Every action-word cell must belong to a
@@ -338,6 +343,7 @@ def verify_retire(root: Path, base: str, head: str, doc: str) -> tuple[str, str]
 PATH_SUFFIX = re.compile(r"(?::\d+(?:-\d+)?|#[^\s|]*)$")   # a line range or an anchor
 LEAD_PUNCT, TRAIL_PUNCT = "([{\"'*", ")]}\"'*.,;:"
 RUN_CONNECTORS = {",", "and", "&", "+"}
+ASSUMPTION_MARKER = re.compile(r"\[ASSUMPTION\b")          # the evidence label of an open assumption
 
 
 def path_token(tok: str) -> str | None:
@@ -428,6 +434,10 @@ def eval_issue(root: Path, base: str, head: str, body: str) -> tuple[str, str]:
                 continue
             rows += got
             fails += [f'a `{o}` action cell with no path before it, on "{excerpt(line)}"' for o in orphans]
+        elif ASSUMPTION_MARKER.search(line):
+            fails.append(f'unresolved declaration "{excerpt(line)}": an `[ASSUMPTION – CONFIRM]` '
+                         "line in the field is a conditional declaration, resolved at Stage 5 — "
+                         "rewrite it as a `path | action | reason` row or remove it")
         else:
             prose += 1          # commentary: the line carries no "|"
     if not rows and not fails:
@@ -629,6 +639,18 @@ def self_test() -> int:
             check(f"G8-shape-{name} unchanged doc FAILs", got[0] == "FAIL" and "core/standards/s.md" in got[1], got)
             got = eval_issue(r, base, head2, "### Documentation Impact\n" + shape.format(d="core/diagrams/a.md") + "\n")
             check(f"G8-shape-{name} changed doc PASSes", got[0] == "PASS", got)
+        # A pipe-less line carrying the [ASSUMPTION – CONFIRM] marker is an unresolved
+        # declaration: it FAILs, worded like the qualified-action FAIL, beside a row that
+        # PASSes. Positive control: the same words without the marker are commentary and
+        # the section PASSes, so the FAIL is the marker's and not the line's.
+        note = "core/standards/s.md may also need an update; owner: Stage 5"
+        got = eval_issue(r, base, head2, "### Documentation Impact\ncore/diagrams/a.md | update | x\n"
+                                         "- [ASSUMPTION – CONFIRM] " + note + "\n")
+        check("G8-assumption-line FAILs as an unresolved declaration",
+              got[0] == "FAIL" and "unresolved declaration" in got[1] and "Stage 5" in got[1], got)
+        got = eval_issue(r, base, head2, "### Documentation Impact\ncore/diagrams/a.md | update | x\n- " + note + "\n")
+        check("G8-assumption-line control: the same words without the marker PASS as commentary",
+              got[0] == "PASS" and "1 commentary line(s) ignored" in got[1], got)
         # Retire arms need the scan tools; they run only when the tools are reachable.
         tools = Path(__file__).resolve().parents[3]
         if (tools / "release/tools/blast-radius.sh").is_file():
