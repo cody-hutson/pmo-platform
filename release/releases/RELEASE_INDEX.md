@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.79 | documentation-model-adopted | 2026-10-25 | — | #8534 | [notes/v4.79_RELEASE_NOTES.md](notes/v4.79_RELEASE_NOTES.md) |
 | v4.78 | authoring-conventions-enforced-or-retired | 2026-10-24 | — | #8396 | [notes/v4.78_RELEASE_NOTES.md](notes/v4.78_RELEASE_NOTES.md) |
 | v4.77 | dependabot-prs-merge-without-bypass | 2026-10-18 | — | #8453 | [notes/v4.77_RELEASE_NOTES.md](notes/v4.77_RELEASE_NOTES.md) |
 | v4.76 | ci-wiring-and-required-checks | 2026-10-17 | — | #8305 | [notes/v4.76_RELEASE_NOTES.md](notes/v4.76_RELEASE_NOTES.md) |
