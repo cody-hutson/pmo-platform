@@ -2863,9 +2863,9 @@ case "$TOOL_NAME" in
     #       makes for `"…"`, so both break together if a shell ever adds one.
     #   R-3 WHAT THE SECOND VIEW DOES NOT REACH, AND WHAT IT ADJUDICATES ALTHOUGH
     #       NOTHING RUNS, is stated once, as an open list of the limits known and
-    #       measured, in item 3 of the readiness fragment's residual list. Each limit
-    #       there is pinned by an AC-ENCL-RESIDUAL arm, and a green here-document arm
-    #       is still not evidence about any of them.
+    #       measured, in item 3 of the readiness fragment's residual list, with which
+    #       of them an AC-ENCL-RESIDUAL arm pins and which no arm pins. A green
+    #       here-document arm is still not evidence about any of them.
     #   R-4 A NON-CARRIER RECEIVER KEEPS THE FALSE POSITIVE. `cat <<'RPT'` still
     #       blocks. Deliberate: a missing carrier entry costs a false positive and
     #       can never admit an evasion, which is the fail direction this block
