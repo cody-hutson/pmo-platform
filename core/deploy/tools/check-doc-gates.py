@@ -250,9 +250,18 @@ def eval_gcl6(root: Path, base: str, head: str, plan_text: str) -> list[tuple[st
         if not exists_at(root, head, path):
             out.append(("FAIL", path, f"declared artifact is absent at the release head {short(head)}"))
             continue
-        old, new = body_lines(show(root, base, path)), body_lines(show(root, head, path))
-        delta = sum(1 for d in difflib.unified_diff(old, new, lineterm="", n=0)
-                    if d[:1] in "+-" and not d.startswith(("+++", "---")))
+        # Both blobs are read as bytes. An artifact that is not UTF-8 text at either end has
+        # no frontmatter block, so its whole content is its body, measured in lines split at
+        # its newline bytes; reading it as text would raise and withhold the gate.
+        blobs = [show_bytes(root, rev, path) or b"" for rev in (base, head)]
+        try:
+            old, new = (body_lines(b.decode("utf-8")) for b in blobs)
+            delta = sum(1 for d in difflib.unified_diff(old, new, lineterm="", n=0)
+                        if d[:1] in "+-" and not d.startswith(("+++", "---")))
+        except UnicodeDecodeError:
+            old, new = (b.splitlines() for b in blobs)
+            delta = sum(1 for d in difflib.diff_bytes(difflib.unified_diff, old, new, lineterm=b"", n=0)
+                        if d[:1] in b"+-" and not d.startswith((b"+++", b"---")))
         qual = " (file-level: an embedded artifact's region is not bounded)" if "§" in cell or "#" in cell.split(path)[-1][:3] else ""
         if delta <= 3:
             out.append(("FAIL", path, f"body delta {delta} line(s) <= 3, frontmatter excluded{qual}"))
@@ -628,11 +637,15 @@ def self_test() -> int:
         put_bytes("packages/p.skill", b"PK\x03\x04\xa6\xff\x00bin")    # not UTF-8 text
         put_bytes("packages/same.skill", b"PK\x03\x04\xa6\xff\x00same")
         put_bytes("core/assets/retired.skill", b"PK\x03\x04\xa6\xff\x00retired")   # deleted at head
+        put_bytes("core/figures/flow.png", b"\x89PNG\n\xa6a\n\xa6b\n\xa6c\n\xa6d\n")  # a binary Tier-A artifact
+        put_bytes("core/figures/one-line.bin", b"\xa6a\x85\xa6b\x85\xa6c\x85\xa6d")   # one line; 0x85 is no newline byte
         put("core/order/a-fm.md", fm + "body\n")                       # listed before b.md
         put("core/order/b.md", fm + "body\n")
         base = commit("base")
         put_bytes("packages/p.skill", b"PK\x03\x04\xa7\xfe\x00bin")    # only undecodable bytes change
         os.chmod(r / "packages/same.skill", 0o755)                     # listed, bytes unchanged
+        put_bytes("core/figures/flow.png", b"\x89PNG\n\xa7a\n\xa7b\n\xa7c\n\xa7d\n")  # four lines, undecodable bytes only
+        put_bytes("core/figures/one-line.bin", b"\xa7a\x85\xa7b\x85\xa7c\x85\xa7d")   # its one line changed
         put("core/order/a-fm.md", fm.replace("title: T", "title: T2") + "body\n")
         put("core/order/b.md", fm + "body\nmore body\n")
         put("core/diagrams/fm.md", fm.replace("title: T", "title: T2\nowner: x\nreviewed: y\nnote: z") + "body\n" * 5)
@@ -659,6 +672,21 @@ def self_test() -> int:
         head2 = commit("refresh a")
         res2 = {s: v for v, s, _ in eval_gcl6(r, base, head2, plan)}
         check("G6-4 refreshed artifact PASSes (specificity)", res2.get("core/diagrams/a.md") == "PASS", res2)
+        # A Tier-A artifact that is not UTF-8 text is read as bytes, never as text: its whole
+        # content is its body, in lines split at its newline bytes. Refreshed on four lines
+        # (only undecodable bytes change, so a lossy decode reads no delta) it PASSes. The
+        # control changed its one line, a delta of 2, and FAILs: that line carries 0x85,
+        # which a text split would read as three more line breaks and a delta of 8.
+        plan_bin = ("## Tier-A activated design artifacts\n\n"
+                    "| Card | Artifact path | Flow class | Tier |\n|---|---|---|---|\n"
+                    "| x | `core/figures/flow.png` | architecture | A |\n"
+                    "| x | `core/figures/one-line.bin` | architecture | A |\n")
+        res_bin = {s: (v, d) for v, s, d in eval_gcl6(r, base, head, plan_bin)}
+        check("G6-6 a binary artifact refreshed by more than 3 lines PASSes",
+              res_bin.get("core/figures/flow.png", ("",))[0] == "PASS", res_bin.get("core/figures/flow.png"))
+        got = res_bin.get("core/figures/one-line.bin", ("", ""))
+        check("G6-7 control: a binary artifact changed on its one line FAILs, a delta of 2",
+              got[0] == "FAIL" and "body delta 2 " in got[1], got)
 
         cases = {
             "unresolved": ("### Documentation Impact\ncore/standards/s.md | update | x\n", "FAIL"),
