@@ -94,7 +94,8 @@ def show(root: Path, rev: str, path: str) -> str | None:
 
 
 def changed_in_release(root: Path, base: str, head: str, path: str) -> bool:
-    """The release changed `path`: its content differs between <base> and <head>.
+    """The release changed `path`: its content differs between <base> and <head>. The
+    G-CL8 test of a `link` row; `create` and `update` read body_changed_in_release().
 
     A NET diff, deliberately not `git log <base>..<head> -- <path>`. Over a release range
     that synced main in mid-flight, the log lists the sync MERGES that carried main's own
@@ -129,6 +130,23 @@ def body_lines(text: str | None) -> list[str]:
             if lines[i].strip() == "---":
                 return lines[i + 1:]
     return lines
+
+
+def body_changed_in_release(root: Path, base: str, head: str, path: str) -> bool:
+    """The release changed `path`'s BODY: the G-CL8 test of a `create` or `update` row.
+
+    The files the net diff of changed_in_release() names, each compared through
+    body_lines() — the frontmatter-excluded reader G-CL6 measures with — so a change
+    confined to a document's frontmatter (a `last_verified_commit` restamp alone) does
+    not resolve a row, and neither does a created document whose body is empty or blank.
+    A directory path resolves when the body of any file under it changed; its own
+    `git show` is a tree listing, so it is never compared as one."""
+    r = git(root, "diff", "--name-only", "-z", "--no-renames", base, head, "--", path)
+    for f in (p for p in r.stdout.split("\0") if p):
+        before, after = ("\n".join(body_lines(show(root, rev, f))).strip() for rev in (base, head))
+        if before != after:
+            return True
+    return False
 
 
 def leading_token(value: str) -> str:
@@ -470,8 +488,11 @@ def eval_issue(root: Path, base: str, head: str, body: str) -> tuple[str, str]:
             continue
         if not exists_at(root, head, path):
             fails.append(f"{path} | {action}: absent at the release head {short(head)}")
-        elif not changed_in_release(root, base, head, path):
-            fails.append(f"{path} | {action}: unchanged between {short(base)} and {short(head)}")
+        elif action == "link" and not changed_in_release(root, base, head, path):
+            fails.append(f"{path} | link: unchanged between {short(base)} and {short(head)}")
+        elif action != "link" and not body_changed_in_release(root, base, head, path):
+            fails.append(f"{path} | {action}: unchanged between {short(base)} and {short(head)}, "
+                         "frontmatter excluded")
     if fails:
         return "FAIL", "; ".join(fails + unevaluated)
     if unevaluated:
@@ -577,6 +598,8 @@ def self_test() -> int:
         put("core/standards/retire-me.md", fm.replace("ACTIVE", "DEPRECATED") + "to retire\n")
         (r / "docs/old-guide.md").unlink()
         put("README.md", "unrelated\n")
+        put("core/standards/new-blank.md", fm + "\n\n")        # created with frontmatter and a blank body
+        put("core/standards/new-full.md", fm + "a body\n")     # created with a body
         head = commit("head")
 
         plan = ("# Plan\n\n## Tier-A activated design artifacts\n\n"
@@ -632,8 +655,8 @@ def self_test() -> int:
             "line-range": "{d}:3-4 | update | x",
             "anchor": "{d}#section | update | x",
             "section-sign": "{d} § Flow | update | x",
-            "comma-list": "core/diagrams/fm.md, {d} | update | x",
-            "same-line-second-row": "core/diagrams/fm.md | update | x. {d} | update | y",
+            "comma-list": "core/standards/new-full.md, {d} | update | x",
+            "same-line-second-row": "core/standards/new-full.md | update | x. {d} | update | y",
             "table": "| Path | Action | Reason |\n|---|---|---|\n| {d} | update | x |",
         }
         for name, shape in shapes.items():
@@ -678,6 +701,27 @@ def self_test() -> int:
         got = eval_issue(r, base, head2, f"### Documentation Impact\n### Example\n{vis}\n")
         check("G8-comment control: a heading outside a comment ends the section",
               got[0] == "FAIL" and "present but empty" in got[1], got)
+        # `update` and `create` compare the body with the frontmatter excluded, as G-CL6
+        # does; `link` stays a whole-file net diff. fm.md changed only its frontmatter
+        # between base and head; a.md changed its body by head2.
+        def row(path, action, rev):
+            return eval_issue(r, base, rev, f"### Documentation Impact\n{path} | {action} | x\n")
+        got = row("core/diagrams/fm.md", "update", head2)
+        check("G8-update a frontmatter-only change FAILs",
+              got[0] == "FAIL" and "core/diagrams/fm.md" in got[1] and "frontmatter excluded" in got[1], got)
+        got = row("core/diagrams/a.md", "update", head2)
+        check("G8-update control: a body change PASSes", got[0] == "PASS", got)
+        got = row("core/standards/new-blank.md", "create", head2)
+        check("G8-create a created document with a blank body FAILs",
+              got[0] == "FAIL" and "new-blank.md" in got[1], got)
+        got = row("core/standards/new-full.md", "create", head2)
+        check("G8-create control: a created document with a body PASSes", got[0] == "PASS", got)
+        got = row("core/diagrams/fm.md", "link", head2)
+        check("G8-link stays whole-file: a frontmatter-only change PASSes", got[0] == "PASS", got)
+        got = row("core/diagrams/", "update", head)
+        check("G8-update a directory whose only change is frontmatter FAILs", got[0] == "FAIL", got)
+        got = row("core/diagrams/", "update", head2)
+        check("G8-update control: a directory with a file whose body changed PASSes", got[0] == "PASS", got)
         # Retire arms need the scan tools; they run only when the tools are reachable.
         tools = Path(__file__).resolve().parents[3]
         if (tools / "release/tools/blast-radius.sh").is_file():
