@@ -75,7 +75,7 @@ MODERATE. A revert of the change's commits removes the locator, and an instance 
 - ADR-187 — command position is canonicalized, not parsed. This rule is still not routed through the canonicalizer, and the bounded prefix set that record fixes is the canonicalizer's own.
 - ADR-205 — a refusal record carries structure, never the command. The position key is structure; its consumers still select shadow rows by their `phase` key.
 - ADR-206 — egress allowlist rows declare their match domain. A locator hit's path is matched against the rows declared for gh api paths, like any other path.
-- ADR-224 — the sibling guard's decision on the same grammar problem, by per-wrapper option rows; each guard keeps its own mechanism, and that suite's parity arm reads this rule's word list.
+- ADR-227 — the sibling guard's decision on the same grammar problem, by per-wrapper option rows; each guard keeps its own mechanism, and that suite's parity arm reads this rule's word list.
 - ADR-225 — the sibling guard's position key, which this record's key follows.
 
 ## References

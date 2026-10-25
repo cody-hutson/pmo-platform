@@ -80,7 +80,7 @@ MODERATE. A revert of the change's commits restores the single view, and an inst
 - ADR-150 — the rule governs execution capability. Its alternative A10 kept the shipped arms' call sites byte-preserved; this record routes the shell and `source` call sites through a router that is a pass-through at a first-view position, which a suite arm asserts, so that the second view can carry its own rollout phase.
 - ADR-187 — command position is canonicalized, not parsed. Its first non-claim stands: this rule is still not routed through the canonicalizer, which still suppresses delimiters inside `$( )`.
 - ADR-205 — a refusal record carries structure, never the command; the position key is structure.
-- ADR-224 — the prefix walk the second view runs at each position, read unchanged.
+- ADR-227 — the prefix walk the second view runs at each position, read unchanged.
 
 ## References
 

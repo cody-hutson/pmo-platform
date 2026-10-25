@@ -1,5 +1,5 @@
 ---
-title: ADR-224 — The script-execution wrapper walk reads each wrapper's option grammar from rows
+title: ADR-227 — The script-execution wrapper walk reads each wrapper's option grammar from rows
 status: Proposed — authored at Stage 6 Engineering under the release's Collective Review scope-lock; the transition to Accepted belongs to the Stage 13 ratification beat
 date: 2026-10-16
 release: hook-walk-adjudicates-every-operand
@@ -19,7 +19,7 @@ source_observations:
   - "Stage 7's third pass found that reading an attached split value for a command word closes that class only for a value written without shell quotes and carrying no slash. Two classes stay open on an always-enforce arm, a split value written with shell quotes and a split value carrying a slash: in both, the program the guard models runs an unlisted script while the guard allows the line, and the guard as it stood before the release behaves the same."
 ---
 
-# ADR-224 — The script-execution wrapper walk reads each wrapper's option grammar from rows
+# ADR-227 — The script-execution wrapper walk reads each wrapper's option grammar from rows
 
 ## Status
 
@@ -30,6 +30,8 @@ source_observations:
 **Numbering provenance — `217 → 221`.** Held **ADR-217** branch-local; renumbered to **ADR-221** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 217. In-release citations that read "ADR-217" denote this record.
 
 **Numbering provenance — `221 → 224`.** Held **ADR-221** branch-local; renumbered to **ADR-224** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 221. In-release citations that read "ADR-221" denote this record.
+
+**Numbering provenance — `224 → 227`.** Held **ADR-224** branch-local; renumbered to **ADR-227** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 224. In-release citations that read "ADR-224" denote this record.
 
 ## Context
 
