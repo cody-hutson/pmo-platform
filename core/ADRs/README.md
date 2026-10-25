@@ -131,6 +131,13 @@ ADR-217 (`depersonalization-gate-scans-bot-runs`) → **ADR-220** by `release/to
 ADR-217 (`memory-eviction-archive-disposition`) → **ADR-221** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 217; the record's Status section carries the provenance note.
 ADR-221 (`system-documentation-is-a-generated-process-catalog`) → **ADR-223** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 221; the record's Status section carries the provenance note.
 ADR-223 (`system-documentation-is-a-generated-process-catalog`) → **ADR-224** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 223; the record's Status section carries the provenance note.
+ADR-217 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-221** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 217; the record's Status section carries the provenance note.
+ADR-218 (`enclosure-positions-are-adjudicated-by-a-second-view`) → **ADR-222** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 218; the record's Status section carries the provenance note.
+ADR-219 (`egress-prefix-walk-stops-on-the-gated-verb`) → **ADR-223** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 219; the record's Status section carries the provenance note.
+ADR-221 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-224** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 221; the record's Status section carries the provenance note.
+ADR-222 (`enclosure-positions-are-adjudicated-by-a-second-view`) → **ADR-225** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 222; the record's Status section carries the provenance note.
+ADR-223 (`egress-prefix-walk-stops-on-the-gated-verb`) → **ADR-226** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 223; the record's Status section carries the provenance note.
+ADR-224 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-227** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 224; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 

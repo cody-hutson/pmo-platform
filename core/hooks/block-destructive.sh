@@ -432,6 +432,226 @@ normalize_script_token() {
   script_norm_out="$t"
 }
 
+# Read ONE whitespace-delimited argv token the way the shell reads a word.
+#
+# WHY A SECOND READER SITS BESIDE normalize_script_token. That function answers
+# "what FILENAME does this token name?", and it rightly declines a token that
+# closes its own quote and then continues: the value in hand at that point is a
+# prefix, and a prefix is not a filename. The flag walk asks the same token a
+# different question — "is this the operand, or something in front of it?" — and
+# for that question a token the shell hands the interpreter as ONE word is fully
+# determined by argv however its quotes are placed. `""-x`, `'-'x` and `"-x"""`
+# are all the word `-x`. Declining them as a class is what let a quoted spelling
+# of a flag end the walk in front of a script nothing then adjudicated.
+#
+# THREE OUTCOMES, AND THEY ARE THE WHOLE CONTRACT.
+#   script_ws_complete=0            The token leaves a quote open, or ends on a
+#                                   dangling backslash. It is a FRAGMENT: one
+#                                   piece of a longer word that whitespace
+#                                   splitting cut. Nothing else set here may be
+#                                   relied on.
+#   complete=1, script_ws_exact=1   A whole word with no expansion in it.
+#                                   script_ws_out IS the word after quote removal.
+#   complete=1, script_ws_exact=0   A whole word whose VALUE argv does not
+#                                   determine: it carries `$` or a backtick where
+#                                   the shell expands them, an unquoted brace,
+#                                   glob or tilde character, or a `$'...'` run
+#                                   (not decoded here), or it is longer than the
+#                                   read limit. script_ws_out is not a value and
+#                                   must not be read as one.
+#
+# THE QUOTING RULES ARE THE TRACKER'S, STATE FOR STATE: 0 outside quotes, 1 inside
+# '...', 2 inside "...", 3 inside $'...', with the same four rules script_qadvance
+# applies. It is a separate function because that tracker carries ONE state across
+# the segments of a command and yields no value; calling it on a token would
+# overwrite the carried state and spend the command's shared step budget, and the
+# walk needs the value.
+#
+# ONE ARM IS THIS FUNCTION'S OWN, BECAUSE ITS QUESTION IS NOT THE TRACKER'S. The
+# tracker asks only where quoting opens and closes, and an unquoted `{`, `*`, `?`,
+# `[` or `~` moves neither. This function reports a VALUE, and those five
+# characters are where the shell's brace, pathname and tilde expansions act on an
+# unquoted word: `""--{norc,rcfile}` balances its quotes and is the two words
+# `--norc --rcfile` once brace expansion has run. So in state 0 each of them clears
+# script_ws_exact, and the word is reported as a word of unknown value. The test is
+# coarser than the shell's own rules — a lone `{`, a pattern that matches no file,
+# or a `~` that is not a tilde prefix is left as written — and the coarse reading
+# is the conservative one: it sends the word to adjudication, never past it.
+#
+# THE READ LIMIT DEGRADES TOWARD ADJUDICATION. The loop is quadratic in the token's
+# length on a hook that runs before every Bash call, so a longer token is not read.
+# It is reported as a word of unknown value — never as a fragment. Reporting
+# "fragment" would hand a padded spelling of the same flag the exit this function
+# exists to close. Both sides of the limit are adjudicated; the limit decides only
+# how precisely.
+#
+# NOT CLAIMED: that a word reported complete is one word when a command
+# substitution inside it contains whitespace. `""$(echo` balances its quotes and
+# is the first piece of `""$(echo -x)`. It is reported complete and inexact, which
+# is the conservative reading of it.
+script_word_scan() {
+  local t="$1" out="" c="" st=0
+  local sq="'" dq='"' bs='\' ds='$' bt='`'
+  script_ws_complete=0
+  script_ws_exact=1
+  script_ws_out=""
+  if [ "${#t}" -gt 1024 ]; then
+    script_ws_complete=1
+    script_ws_exact=0
+    return 0
+  fi
+  while [ -n "$t" ]; do
+    c="${t:0:1}"
+    case "$st" in
+      0)
+        case "$c" in
+          "$sq") st=1; t="${t:1}" ;;
+          "$dq") st=2; t="${t:1}" ;;
+          "$bs")
+            if [ "${#t}" -lt 2 ]; then return 0; fi
+            out="${out}${t:1:1}"; t="${t:2}"
+            ;;
+          "$ds")
+            script_ws_exact=0
+            case "${t:1:1}" in
+              "$sq") st=3; t="${t:2}" ;;
+              "$dq") st=2; t="${t:2}" ;;
+              *) t="${t:1}" ;;
+            esac
+            ;;
+          "$bt") script_ws_exact=0; t="${t:1}" ;;
+          '{'|'*'|'?'|'['|'~') script_ws_exact=0; out="${out}${c}"; t="${t:1}" ;;
+          *) out="${out}${c}"; t="${t:1}" ;;
+        esac
+        ;;
+      1)
+        case "$c" in
+          "$sq") st=0 ;;
+          *) out="${out}${c}" ;;
+        esac
+        t="${t:1}"
+        ;;
+      2)
+        case "$c" in
+          "$dq") st=0; t="${t:1}" ;;
+          "$bs")
+            if [ "${#t}" -lt 2 ]; then return 0; fi
+            case "${t:1:1}" in
+              "$ds"|"$bt"|"$dq"|"$bs") out="${out}${t:1:1}" ;;
+              *) out="${out}${bs}${t:1:1}" ;;
+            esac
+            t="${t:2}"
+            ;;
+          "$ds"|"$bt") script_ws_exact=0; t="${t:1}" ;;
+          *) out="${out}${c}"; t="${t:1}" ;;
+        esac
+        ;;
+      3)
+        case "$c" in
+          "$sq") st=0; t="${t:1}" ;;
+          "$bs")
+            if [ "${#t}" -lt 2 ]; then return 0; fi
+            t="${t:2}"
+            ;;
+          *) t="${t:1}" ;;
+        esac
+        ;;
+    esac
+  done
+  if [ "$st" -eq 0 ]; then script_ws_complete=1; fi
+  script_ws_out="$out"
+}
+
+# The flag walk's reading of one token.
+#
+# normalize_script_token IS ASKED FIRST AND UNCHANGED, so every token it resolves
+# is read exactly as before and this function acts only where it declined — and it
+# declines only a token that OPENS WITH A QUOTE. That is the whole reach of the
+# reading below, and it is narrower than "a quoted flag". The walk asks this
+# function only about a token that does not begin with `-`, and a token that begins
+# with `+` or a backslash resolves in the normalizer to its raw spelling. So a flag
+# that begins with `-`, `+` or a backslash and carries a quote, a backslash, or a
+# brace or glob character (`--rcfile""`, `+-emu""late`, `\-c`, `--{norc,rcfile}`)
+# never reaches this reading and is decided on its raw spelling exactly as before.
+# This function does not reach that class. The walk decides it at the top of its
+# loop, on its own reading of the token: a reading that is not a plain option word
+# ends the option run (script_option_word), so no `-n` behind it is a grant, and
+# under an interpreter a reading that is not plain takes the conservative route
+# (script_take_cmode_route).
+#
+# WHAT IT DOES WITH A DECLINED TOKEN, BY CLASS.
+#   A FRAGMENT keeps script_norm_ok=0. It still ends the walk and is still never
+#   advanced past, for the reason that was measured: the first piece of a quoted
+#   path that contains a space cannot be shown NOT to be the operand, and
+#   stepping off it adjudicates a later piece — the wrong subject. Arm
+#   F1-QTOK-RESIDUAL-space pins that.
+#   A TOKEN ANY VIEW PLACES IN THE ARM'S OPERAND DOMAIN keeps script_norm_ok=0 as
+#   well, so it reaches the operand branch exactly as it did. The probe and raw
+#   views are asked FIRST, and that order is what keeps this change monotone:
+#   `'x.sh'y` is the word `x.shy`, which no suffix set claims, yet the probe view
+#   claims the token and it is denied today. Reading it as a word would step
+#   over it and move that BLOCK to ALLOW. Arm FWALK-QWORD-ctl-claimed pins the
+#   deny, and its mutant FWALK-QWORD-M3b deletes this test to show it is the
+#   line that holds it. The same line keeps `""-x.sh` and `"-"x.sh` the operand:
+#   read as words they spell a dash flag, which the class below steps over
+#   (FWALK-QDASH-M2b deletes the line and shows it). The word's own value is
+#   asked second, and claims the token too, unless it begins with `-`.
+#   A WHOLE WORD WITH AN EXACT VALUE that no view claims is read as that value. A
+#   quote-led `""-x`, `''+n`, `""--` or `""-c` is read as its unquoted spelling
+#   and takes that spelling's verdict, parse-only grant and option arity included.
+#   A WHOLE WORD WHOSE EXACT VALUE BEGINS WITH `-` SPELLS A FLAG, WHATEVER ITS
+#   SUFFIX, because that is how the walk reads its unquoted twin: the raw view
+#   steps over every `-`-led token without asking the domain. `'-x.s'h` is the
+#   word `-x.sh`. Its probe `-x.s` and its raw token, ending `'h`, land in no
+#   domain, so its own value used to be the only claim on it: the walk ended on
+#   it, and the operand branch, which asks the probe and the raw token and never
+#   the word, adjudicated nothing, while `bash -x.sh <script>` adjudicates the
+#   script. Such a word is read as its value and marked in script_wv_dashword,
+#   and the walk's top-of-loop line steps over a marked word as the raw view
+#   steps over its twin (FWALK-QDASH-01 to -14). A caller may therefore rely on
+#   script_norm_ok=1 meaning "no view places this token in the domain, or it is
+#   a marked word that spells a dash flag". A token the normalizer resolves,
+#   `'-x.sh'`, is not read as a word: it returns unmarked, and the domain
+#   question at the top of the loop keeps it the operand (F1-QFLAG-ctl-domain).
+#   A WHOLE WORD OF UNKNOWN VALUE that no view claims is neither a flag this hook
+#   can read nor an operand it can name. It is read as its RAW spelling, which
+#   opens with a quote and so is never plain, and what happens to it is decided at
+#   the top of the walk's loop, where every other token the walk cannot read is
+#   decided: script_take_cmode_route is the one place a token is handed to the
+#   `-c` label. Under an INTERPRETER that route is taken: the walk ends, no
+#   parse-only exemption applies, and every remaining token that lands in the
+#   arm's operand domain is adjudicated. Stepping over it instead would be a
+#   guess that it takes no argument, and a `-n` that is in fact its argument
+#   would then be read as a grant. Under `source` that route does not exist — the
+#   `-c` label opens a program string only for an interpreter, and would there
+#   skip one token and stop looking — and there is no parse-only grant to
+#   protect. So the word is stepped over like any other token outside the
+#   domain, and the walk keeps looking.
+#
+# NET DIRECTION — MONOTONE ALLOW->BLOCK BY CONSTRUCTION. Every token whose reading
+# this function changes was, before it existed, a declined token no view claimed:
+# it ended the walk, became the operand, and was adjudicated by nothing. No block
+# was possible on that path, so none can be removed. A marked word is one such
+# token: the probe and the raw token never claimed it, and the claim its own value
+# made ended the walk on it with nothing adjudicated, so stepping over it can only
+# add an adjudication, or revoke a grant that stood there.
+script_walk_view() {
+  script_wv_dashword=0
+  normalize_script_token "$1"
+  if [ "$script_norm_ok" -eq 1 ]; then return 0; fi
+  script_word_scan "$1"
+  if [ "$script_ws_complete" -eq 0 ]; then return 0; fi
+  if script_operand_implicated "$script_interp_domain"; then return 0; fi
+  if [ "$script_ws_exact" -eq 1 ]; then
+    case "$script_ws_out" in -*) script_wv_dashword=1 ;; esac   # M-QDASH (mutation target; pinned by FWALK-QDASH-M0)
+    if [ "$script_wv_dashword" -eq 0 ] && script_operand_domain_hit "$script_interp_domain" "$script_ws_out"; then return 0; fi
+    script_norm_out="$script_ws_out"
+  else
+    script_norm_out="$script_norm_raw"
+  fi
+  script_norm_ok=1
+}
+
 # Decide whether the token just normalized falls inside ONE arm's declared operand
 # domain — the question each arm's `case` filter was already written to answer.
 #
@@ -649,10 +869,97 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
   return 1
 }
 
+# IS THIS AN OPTION WORD THE WALK CAN READ EXACTLY? — the question the parse-only
+# GRANT rests on, and one the walk never asked.
+#
+# WHY THE GRANT NEEDS IT. The table above grants parse-only on a bare `-n`, and the
+# arity table below keeps a `-n` that is really an option's ARGUMENT away from it.
+# Both read a token's TEXT. That is sound for a token whose text is its value and
+# which the shell reads as an option. It is unsound for the three other things a
+# walk passes on its way to the operand:
+#   - A WORD THAT IS NOT AN OPTION. The shells stop reading options at the first
+#     argument that begins with neither `-` nor `+`; every argument after it is a
+#     positional parameter. `zsh -s -O extglob -n <path>` runs its stdin with
+#     `extglob` as $1 and `-n` as $2, because zsh's `-O` takes no argument. The
+#     walk, which keeps looking past any token the operand domain does not claim,
+#     read that `-n` as a flag. A lone `-` ends option reading the same way.
+#   - AN OPTION WHOSE TEXT IS NOT ITS VALUE. `--rcfile""`, `--rc\file`,
+#     `\--rcfile`, `--rcfile$X` and `--{norc,rcfile}` are each `--rcfile` to bash,
+#     which takes the following `-n` as the rcfile NAME and EXECUTES the script
+#     behind it. The arity table is asked about the text, finds no row, and the
+#     `-n` was granted.
+#   - AN OPTION'S ARGUMENT THAT MAY BE NO WORD AT ALL. `bash --rcfile $X -n <path>`
+#     with X unset is `bash --rcfile -n <path>` to bash. The walk consumed `$X` as
+#     the argument and read the `-n` behind it as a flag. `"$@"` does the same
+#     inside quotes.
+# All three shapes were refused before the parse-only exemption existed, because
+# there was no exemption for the walk to mistake them for.
+#
+# THE TEST IS A CHARACTER ALLOWLIST, AND ITS DIRECTION IS THE WHOLE DESIGN. A text
+# is PLAIN when it carries nothing but the characters below: no quote, no
+# backslash, no `$`, no backtick, no glob, brace or tilde character, no
+# redirection. Those are characters no shell rewrites inside a word, so a plain
+# text IS the argv word and is exactly one word. Everything else is "not a text
+# this walk can read", and that answer grants nothing. There is no list of option
+# names, of words that end option parsing, or of quoting and expansion constructs
+# to keep complete. A spelling these functions have never seen costs an
+# over-block, never an exemption.
+#
+# ONE OF THOSE CHARACTERS IS REWRITTEN AT THE START OF A WORD. zsh expands a word
+# that begins with `=` to the path of the command it names, so the walk does not
+# hold that word's text. The latch is unaffected, because an option word begins
+# with a sign and a consumed argument zsh rewrites is still one word, or nothing
+# runs.
+#
+# THE EMPTY TEXT IS PLAIN, AND TWO CALLERS RELY ON IT. The walk gives the empty
+# reading to a token whose quote it could not resolve. Such a token is not an
+# option word, so the option run ends on it; and it carries no character outside
+# the set, so it is not handed to the conservative route — it ends the walk in
+# the arm that has always ended on it, and arm F1-QTOK-RESIDUAL-space keeps
+# pinning that. A quoted empty argument (`--rcfile ""`) is one word whose text
+# this hook holds, and reads as exact for the same reason.
+#
+# `~` IS OUTSIDE THE SET ALTHOUGH A LEADING TILDE IS ALWAYS ONE WORD. The set is
+# "characters that are never special inside a word", which a reader can check
+# without knowing any expansion rule. Admitting a character that is special in one
+# position inside a word and not another would trade that for a precision nobody
+# has asked for.
+#
+# NOT CLAIMED: that an option word which passes takes no argument. That is still
+# the arity table's measured answer for the literal spellings. These functions
+# only guarantee the table is asked about the spelling the shell will read.
+script_plain_word() {   # $1 = text -> 0 when every character is in the plain set
+  case "$1" in
+    *[!A-Za-z0-9_=+,.:/@%-]*) return 1 ;;
+  esac
+  return 0
+}
+
+script_option_word() {   # $1 = the walk's reading of one token
+  case "$1" in
+    [-+]?*) if script_plain_word "$1"; then return 0; fi ;;
+  esac
+  return 1
+}
+
+# The same question for a token the walk CONSUMED as an option's argument. Reads
+# the globals normalize_script_token last set, so it is asked directly after that
+# call and nowhere else. A token that opens its own quote is exact when the quote
+# closes on its last character and the text inside is plain; any other token is
+# exact when its raw spelling is plain. The raw spelling is asked, not
+# script_norm_out, because that probe has trailing punctuation stripped.
+script_arg_exact() {   # -> 0 when the token just normalized is one argv word whose text is held
+  case "$script_norm_raw" in
+    \"*|\'*) if [ "$script_norm_ok" -eq 1 ] && script_plain_word "$script_norm_out"; then return 0; fi ;;
+    *) if script_plain_word "$script_norm_raw"; then return 0; fi ;;
+  esac
+  return 1
+}
+
 # THE OPTION-ARITY TABLE, KEYED ON THE INTERPRETER — the third per-interpreter
-# table, beside the other two for the same reason they are beside each other:
+# table, beside the others for the same reason they are beside each other:
 # widening the interpreter set must mean adding a label in one place, not hunting
-# three. This one answers "does this option consume the NEXT token as its
+# four. This one answers "does this option consume the NEXT token as its
 # argument".
 #
 # WHY THE WALK NEEDS IT AT ALL. The flag walk steps over `-*` one token at a time
@@ -772,6 +1079,65 @@ script_interp_optarg_flag() {   # $1 = interpreter basename  $2 = normalized fla
   return 1
 }
 
+# HAND THE TOKEN THE WALK IS READING TO THE `-c` LABEL — the conservative route.
+#
+# The `-c` label ends the walk, applies no parse-only exemption, and has every
+# remaining token that lands in the arm's operand domain adjudicated. Taking it
+# for a token the walk would otherwise have stepped over can therefore add an
+# adjudication and remove none.
+#
+# A DOMAIN CLAIM STILL BEATS A FLAG SHAPE. A token that does not begin with `-`
+# on raw argv was read through the walk's view at the top of this iteration, and
+# if any view places it in the operand domain it is the operand: it is left alone
+# and reaches the arm that will adjudicate it. Routing it here instead would step
+# over it and move a BLOCK to an ALLOW. A token that begins with `-` on raw argv
+# was never asked that question — the raw view decides for it, unchanged — so it
+# is routed without asking.
+#
+# THIS IS THE ONE DEFINITION OF THE ROUTE. The quoted-word view no longer rewrites
+# a word of unknown value to `-c` itself: it reports the word's raw spelling, which
+# is not plain, and the walk's top-of-loop line hands it here like every other
+# token it cannot read. Two definitions of one rewrite are two places to get the
+# domain-claim guard wrong.
+script_take_cmode_route() {   # reads script_ftok and the last read's globals; sets script_ftok
+  case "$script_ftok" in
+    -*) script_ftok="-c" ;;
+    *) if ! script_operand_implicated "$script_interp_domain"; then script_ftok="-c"; fi ;;
+  esac
+}
+
+# THE COMMAND-STRING TABLE, KEYED ON THE INTERPRETER — the fourth per-interpreter
+# table. It answers "does this option token carry the command-string letter".
+#
+# WHY IT EXISTS. The walk's `-c)` label is an EXACT match, and the shells read
+# one-letter options as a CLUSTER: `bash -ec '<program>'`, `sh -xc`, `zsh -fc`
+# and `bash +ec` all take the next argument as a program string, exactly as a
+# bare `-c` does. The label never saw them. The cluster was stepped over as a
+# flag, the first piece of the program string became the operand, and nothing in
+# the string was adjudicated — while the same program behind a bare `-c` was.
+#
+# THE TEST HAS NOTHING TO OMIT: any single-sign cluster that contains `c`. It does
+# not ask which other letters are present or where the `c` sits. A long option
+# (`--rcfile`, `+-emulate`) is excluded by its second character, not by name.
+#
+# THE DIRECTION IS THE CONSERVATIVE ONE. A token this table claims takes the
+# route above, so reading a cluster as command mode when it is not can only add
+# an adjudication.
+#
+# THE NON-SHELL INTERPRETERS REACH THE EXPLICIT NULL and keep the exact `-c`
+# label only. Their single-dash options are not all one-letter clusters
+# (`perl -Mcharnames`, `python3 -Wignore`), so the cluster reading is not measured
+# for them and is not guessed.
+script_interp_cmode_flag() {   # $1 = interpreter basename  $2 = the walk's reading of one token
+  case "$1" in
+    bash|sh|zsh)
+      case "$2" in -c*|-[!-]*c*|+c*|+[!-]*c*) return 0 ;; esac
+      ;;
+    *) : ;;   # EXPLICIT NULL — see the table note above. Not an omission.
+  esac
+  return 1
+}
+
 # THE OPERAND-DOMAIN TABLE, KEYED ON THE INTERPRETER — the second per-interpreter
 # table, placed beside the first deliberately so the two cannot drift apart. The
 # table above answers "does this interpreter's flag mean it executes nothing"; this
@@ -810,6 +1176,263 @@ script_set_interp_domain() {   # $1 = interpreter basename -> sets script_interp
     node)           script_interp_domain="interp-js" ;;
     *)              script_interp_domain="interp" ;;   # shell trio + all else: UNCHANGED
   esac
+}
+
+# ---------------------------------------------------------------------------
+# WRAPPER OPTION GRAMMAR for the BLOCK-DESTRUCTIVE-022 command-position walk.
+#
+# A transparent wrapper execs the rest of its argv, but only AFTER its own
+# options, and an option that takes a separate argument puts a second token
+# between the wrapper and the command word. A walk that knows the wrapper and not
+# its options stops on the first option, reads that option as the command word,
+# matches no verb, and adjudicates nothing: `nice -n 10 bash <script>` is the same
+# execution as `nice bash <script>` and was not the same verdict.
+#
+# ONE ROW PER WRAPPER, IN getopt NOTATION, beside the four per-interpreter tables
+# above and for the same reason they are tables: the arity of an option is a fact
+# about a program, not about shell grammar, so it is data and not control flow.
+#   script_wopt    short options that take an argument: `x:` takes one, attached or
+#                  as the next token; `x::` takes one only when attached. A letter
+#                  that is not listed is a flag, and so is a digit (`nice -10`).
+#   script_wlarg   long options that may take their argument as the NEXT token, by
+#                  the name the program's own option table gives them. The
+#                  `--name=value` spelling needs no row: it is one token.
+#   script_wnox    short options under which the wrapper EXECUTES NOTHING and only
+#                  describes or edits its operand. The segment is not an execution
+#                  and is skipped, which is the verdict these spellings already had.
+#   script_wsplit  short options whose ATTACHED argument is env's own argv, prepended
+#   script_wlsplit to what follows (`env -S<string>`, `env --split-string=<string>`,
+#                  and every prefix of the long name the parser takes for it,
+#                  `env --split=<string>`). script_split_scan reads that value. When it
+#                  carries a command word of its own, the walk STOPS on the split token
+#                  and adjudicates it as it did before this table existed: the command
+#                  is inside the string, out of this walk's reach. When it carries only
+#                  options, an assignment or nothing, env's command is the token that
+#                  FOLLOWS, so the walk steps past the split token and goes on to it.
+#                  Stopping there would leave that command unadjudicated, and GNU env
+#                  runs it: a step may move the verb later; it may never remove one.
+#   script_wlong   EVERY long option the program's parser defines, from its own option
+#                  table rather than its manual, or nothing when the program reads no
+#                  long option. Only the resolution below reads it.
+#   script_wpos    what follows the option run and precedes the command word:
+#                  `one` a single positional operand (the duration `timeout` takes),
+#                  `assign` a run of `name=value` operands (`env`), `none` nothing.
+#
+# A LONG OPTION IS READ THE WAY ITS PROGRAM'S PARSER READS IT, PREFIXES INCLUDED.
+# Every row that lists a long option belongs to a program whose parser is
+# getopt_long — GNU coreutils' env, nice, stdbuf, timeout and nohup, GNU findutils'
+# xargs, GNU time, and sudo — and getopt_long takes an exact name, or any prefix
+# that names exactly one of its long options, for that option. `env --split=<path>`
+# is `env --split-string=<path>`, and GNU env executes the path. Matched as written,
+# the prefix was an option no row lists, the walk stepped over it, and a recorded
+# execution became an allow. So a long token is resolved first
+# (script_wrapper_longname), and the fields above are asked about the option it
+# resolves to, never about its spelling. A prefix of two or more options, and a
+# name that is none, stay as written: the parser rejects both and runs nothing,
+# and no row lists either, so the walk steps over it as a flag, the status quo
+# below. The table is the parser's, not the manual's: GNU time's own name for `-o`
+# is `--output-file`, and the `--output` its manual prints is a prefix of it.
+# exec, builtin and command are shell builtins that read no long option, so their
+# rows carry none and a long token is matched as written. The reference host's BSD
+# builds of env, nice, stdbuf, nohup and time read no long option either, so there
+# a long token is an error and runs nothing whichever way the walk reads it. Its
+# xargs reads eight of GNU's long options through getopt_long, each with the
+# argument GNU gives it, and for every prefix of them that it accepts, the walk,
+# reading GNU's larger table, decides as it does whether a value follows.
+#
+# FAILURE DIRECTION, STATED RATHER THAN ARGUED AWAY. A row closes what it lists, by
+# every spelling the program's parser takes for it. An option a row does not list
+# is stepped over as a flag, so if it takes a separate value that value is read as
+# the command word and nothing is adjudicated: the verdict every wrapper option had
+# before this table existed. That is the fail-open-on-omission direction the
+# operand walk's notes reject for an arity table. It is accepted here on a
+# measurement: the nothing-to-omit alternative, scanning for the verb, refuses
+# ordinary commands whose arguments merely name an interpreter. So every row has
+# an arm per spelling, and the one allow-granting field, script_wnox, is two rows
+# long with a near miss per letter.
+#
+# `env -S` is deliberately NOT listed as taking an argument, by any spelling: its
+# argument is env's own argv. The SEPARATE spelling leaves the token after it as the
+# command word. The ATTACHED spelling is script_split_scan's case: the walk stops on
+# it only when its value carries a command word, and otherwise goes on to the command
+# that the value's options or assignment precede.
+# ---------------------------------------------------------------------------
+script_wrapper_row() {   # $1 = wrapper basename
+  script_wrow=1
+  script_wopt=""
+  script_wlarg=" "
+  script_wnox=""
+  script_wsplit=""
+  script_wlsplit=" "
+  script_wlong=" "
+  script_wpos="none"
+  case "$1" in
+    nice)    script_wopt="n:"; script_wlarg=" --adjustment "
+             script_wlong=" --adjustment --help --version " ;;
+    stdbuf)  script_wopt="e:i:o:"; script_wlarg=" --error --input --output "
+             script_wlong=" --error --help --input --output --version " ;;
+    sudo)    script_wopt="a:C:c:D:g:h:p:R:r:T:t:U:u:"; script_wlarg=" --auth-type --close-from --login-class --chdir --group --host --prompt --chroot --role --command-timeout --type --other-user --user "; script_wnox="elvVK"
+             script_wlong=" --askpass --auth-type --background --bell --chdir --chroot --close-from --command-timeout --edit --group --help --host --list --login --login-class --no-update --non-interactive --other-user --preserve-env --preserve-groups --prompt --remove-timestamp --reset-timestamp --role --set-home --shell --stdin --type --user --validate --version " ;;
+    env)     script_wopt="a:C:P:u:"; script_wlarg=" --argv0 --chdir --unset "; script_wsplit="S"; script_wlsplit=" --split-string "; script_wpos="assign"
+             script_wlong=" --argv0 --block-signal --chdir --debug --default-signal --help --ignore-environment --ignore-signal --list-signal-handling --null --split-string --unset --version " ;;
+    xargs)   script_wopt="a:d:E:e::I:i::J:L:l::n:P:R:S:s:"; script_wlarg=" --arg-file --delimiter --max-args --max-procs --max-chars --process-slot-var "
+             script_wlong=" --arg-file --delimiter --eof --exit --help --interactive --max-args --max-chars --max-lines --max-procs --no-run-if-empty --null --open-tty --process-slot-var --replace --show-limits --verbose --version " ;;
+    time)    script_wopt="f:o:"; script_wlarg=" --format --output-file "   # M-WRAP-ABBREV-ROW
+             script_wlong=" --append --format --help --output-file --portability --quiet --verbose --version " ;;
+    timeout) script_wopt="k:s:"; script_wlarg=" --kill-after --signal "; script_wpos="one"
+             script_wlong=" --foreground --help --kill-after --preserve-status --signal --verbose --version " ;;
+    exec)    script_wopt="a:" ;;
+    builtin) : ;;
+    nohup)   script_wlong=" --help --version " ;;
+    command) script_wnox="vV" ;;
+    *)       script_wrow=0 ;;
+  esac
+}
+
+# Resolve one long-option token to the option the wrapper's parser takes it for, as
+# getopt_long does: an exact name wins, and otherwise a prefix names the one option
+# it begins. Leaves script_wlname on that option's full name, or on the token's own
+# name (the text before any `=`) when that names no option or more than one.
+script_wrapper_longname() {   # $1 = a token that begins with `--`
+  local _lname="${1#--}" _lw="" _lhit="" _lk=0
+  _lname="${_lname%%=*}"
+  script_wlname="--${_lname}"
+  case "$script_wlong" in
+    *" --${_lname} "*) return 0 ;;
+  esac
+  for _lw in $script_wlong; do
+    case "$_lw" in
+      "--${_lname}"*) _lk=$(( _lk + 1 )); _lhit="$_lw" ;;
+    esac
+  done
+  if [ "$_lk" -eq 1 ]; then script_wlname="$_lhit"; fi   # M-WRAP-ABBREV
+  return 0
+}
+
+# An attached split-string value is env's own argv, prepended to what follows, so when
+# it carries no command word of its own env's command is the token that FOLLOWS and the
+# walk must go on to it. Decide which: script_wsplit_cmd=1 when the value is itself a
+# command word (the command is inside the string and this walk cannot reach it, so the
+# caller stops on the split token exactly as it did before this helper), 0 when the
+# value is only options, an assignment, or empty (the caller consumes the split token
+# and walks on to adjudicate the command that follows). In the second case, when the
+# value is an option run, consume any following argv token an arg-taking option takes
+# as its separate argument, reading the row's own arity (script_wopt) the way the
+# cluster loop does, so `env --s=-u <ok> <na>` adjudicates <na> and not <ok>. The hook
+# tokenizes on whitespace, so the value is one word. A value holding a `/` is read as a
+# command word: a path is the command, and an option carrying a path keeps the verdict
+# it had before this helper (a declared residual, readiness item 2).
+script_split_scan() {   # $1 = the attached split value
+  local _v="$1" _c2="" _n="${#script_tokens[@]}"
+  script_wsplit_cmd=0   # M-WRAP-SPLITCMD
+  case "$_v" in
+    "")   return 0 ;;
+    */*)  script_wsplit_cmd=1; return 0 ;;
+    -*)   : ;;
+    *=*)  case "${_v%%=*}" in ''|*[!A-Za-z0-9_]*) script_wsplit_cmd=1 ;; esac
+          return 0 ;;
+    *)    script_wsplit_cmd=1; return 0 ;;
+  esac
+  _v="${_v#-}"
+  while [ -n "$_v" ]; do
+    _c2="${_v:0:1}"; _v="${_v:1}"
+    case "$script_wopt" in
+      *"${_c2}::"*) _v="" ;;
+      *"${_c2}:"*)
+        if [ -z "$_v" ] && [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
+        _v="" ;;
+    esac
+  done
+  return 0
+}
+
+# Step script_hidx over ONE wrapper's own option run and positional operands.
+# Entered with script_hidx on the token after the wrapper word and script_wrap
+# holding the wrapper's basename; leaves script_hidx on the first token that is
+# not part of the wrapper's own grammar. Sets script_winert=1 when a describe-only
+# option was seen. It steps and never adjudicates: see FAILURE DIRECTION above.
+script_wrapper_options() {
+  local _tok="" _rest="" _c="" _n="${#script_tokens[@]}"
+  script_wrapper_row "$script_wrap"
+  if [ "$script_wrow" -eq 0 ]; then return 0; fi
+  while [ "$script_hidx" -lt "$_n" ]; do
+    _tok="${script_tokens[$script_hidx]}"
+    case "$_tok" in
+      --)
+        script_hidx=$(( script_hidx + 1 ))
+        break
+        ;;
+      --*=*)
+        script_wrapper_longname "$_tok"
+        case "$script_wlsplit" in
+          *" $script_wlname "*)
+            script_split_scan "${_tok#*=}"
+            if [ "$script_wsplit_cmd" -eq 1 ]; then return 0; fi
+            ;;
+        esac
+        script_hidx=$(( script_hidx + 1 ))
+        ;;
+      --*)
+        script_wrapper_longname "$_tok"
+        script_hidx=$(( script_hidx + 1 ))
+        case "$script_wlarg" in
+          *" $script_wlname "*)
+            if [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
+            ;;
+        esac
+        ;;
+      -?*)
+        script_hidx=$(( script_hidx + 1 ))
+        _rest="${_tok#-}"
+        while [ -n "$_rest" ]; do
+          _c="${_rest:0:1}"
+          _rest="${_rest:1}"
+          if [ "$_c" = ":" ]; then continue; fi
+          case "$script_wnox" in
+            *"$_c"*) script_winert=1; return 0 ;;
+          esac
+          case "$script_wsplit" in
+            *"$_c"*)
+              if [ -n "$_rest" ]; then
+                script_split_scan "$_rest"
+                if [ "$script_wsplit_cmd" -eq 1 ]; then script_hidx=$(( script_hidx - 1 )); return 0; fi
+                _rest=""
+              fi
+              ;;
+          esac
+          case "$script_wopt" in
+            *"$_c::"*) _rest="" ;;
+            *"$_c:"*)
+              if [ -z "$_rest" ] && [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
+              _rest=""
+              ;;
+          esac
+        done
+        ;;
+      -)
+        script_hidx=$(( script_hidx + 1 ))
+        ;;
+      *) break ;;
+    esac
+  done
+  case "$script_wpos" in
+    one)
+      if [ "$script_hidx" -lt "$_n" ]; then script_hidx=$(( script_hidx + 1 )); fi
+      ;;
+    assign)
+      while [ "$script_hidx" -lt "$_n" ]; do
+        _tok="${script_tokens[$script_hidx]}"
+        case "$_tok" in
+          -*) break ;;
+          *=*)
+            script_hidx=$(( script_hidx + 1 ))
+            ;;
+          *) break ;;
+        esac
+      done
+      ;;
+  esac
+  return 0
 }
 
 # Adjudicate one candidate script path against the allowlist. Blocks (exit 2) on
@@ -911,9 +1534,17 @@ readonly DESTRUCTIVE_022_EXEC_PHASE="warn"   # shadow | warn | enforce
 # evidence. The DEADLINE arm reads a committed constant and today's date, so it
 # works in CI and in a fresh clone. deploy.sh Check 71 is its enforcement surface:
 # silent below threshold, warning at REVIEW_DAYS or REVIEW_ROWS, and at
-# ESCALATE_DAYS with this phase constant unchanged it increments ISSUES so
-# `--check --strict` exits 1. Doing nothing turns the pipeline red, and every way
-# of turning it green is a recorded decision.
+# ESCALATE_DAYS with this phase constant anything other than `enforce` it
+# increments ISSUES, so a strict full `deploy.sh --check` run exits 1. No
+# pull-request job runs that full check: a failure reaches whoever runs it, a
+# release-plan verification row that declares that run, and a strict run on any
+# published tag, whose committed arming date ages with it. Only two kinds of edit
+# turn it green, and each is a recorded decision: advancing this phase to
+# `enforce`, which discharges the gate for good; or keeping the elapsed days below
+# ESCALATE_DAYS — by re-dating the arming constant below forward (on its own, or
+# together with a retreat to `shadow`), or by raising ESCALATE_DAYS. A retreat to
+# `shadow` on its own does NOT: past the escalation day the check fails at
+# `shadow` exactly as it does at `warn`. Rows landing in the drain do not either.
 #
 # RE-DATED 2026-09-03, AND THE RE-DATE IS THE RECORDED DECISION RATHER THAN AN
 # INCIDENTAL EDIT. The exec arm's operand domain was widened in the same change
@@ -921,9 +1552,24 @@ readonly DESTRUCTIVE_022_EXEC_PHASE="warn"   # shadow | warn | enforce
 # forward include `.py`/`.rb`/`.js`/`.pl` direct executions — traffic the original
 # 2026-08-24 arming was not measuring. Check 71 names this exact remedy in its own
 # failure text ("extend ONCE by re-dating"), and reading a graduation against a
-# population whose composition changed underneath it is the alternative. This is
-# the one extension; a second would be a decision to retreat or graduate instead.
-readonly DESTRUCTIVE_022_EXEC_ARMED="2026-09-03"
+# population whose composition changed underneath it is the alternative.
+#
+# RE-DATED A SECOND TIME 2026-10-16, AND THIS COMMENT USED TO SAY THERE WOULD BE NO
+# SECOND. It read: "This is the one extension; a second would be a decision to
+# retreat or graduate instead." The operator reversed that deliberately at the
+# graduation gate on 2026-10-16: the arm neither graduates nor retreats, it stays at
+# `warn`, and the arming date moves forward. Graduating was declined on the reading
+# taken that day: most of the arm's recorded hits carried the shape of text or named
+# a path no allowlist row can resolve, an allowlisted script inside an assignment's
+# substitution is recorded unresolvable, direct executions from other work areas
+# have no row form, and this release widens the walk to positions no instance has
+# recorded yet. Retreating was declined because the `warn` notice is written to
+# standard error by a hook that exits 0, which the harness does not show a session,
+# so `shadow` would silence nothing anyone reads and add a rung on the way back to
+# `enforce`. The re-date restarts the clock: a review warning from 2026-12-15 (Tue)
+# and a finding from 2027-01-14 (Thu). The prior wording is kept rather than
+# deleted, because a reader who remembers it needs to know it was reversed on purpose.
+readonly DESTRUCTIVE_022_EXEC_ARMED="2026-10-16"
 readonly DESTRUCTIVE_022_EXEC_REVIEW_DAYS=60    # deadline arm — repo-derivable
 readonly DESTRUCTIVE_022_EXEC_REVIEW_ROWS=25    # evidence arm — operator-local
 readonly DESTRUCTIVE_022_EXEC_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
@@ -958,10 +1604,56 @@ readonly DESTRUCTIVE_022_INTERP_PHASE="warn"   # shadow | warn | enforce
 
 # Self-armed at the commit that introduced this family — never a placeholder for a
 # later editor to fill, for the reason recorded on the exec arming stamp above.
-readonly DESTRUCTIVE_022_INTERP_ARMED="2026-09-03"
+#
+# RE-DATED 2026-10-16, THE FAMILY'S FIRST RE-DATE, AND IT IS THE RECORDED DECISION:
+# at the graduation gate the operator kept this arm at `warn` rather than graduating
+# it. Graduating would refuse, from the first republish, every non-shell script the
+# allowlist does not list, and the class that blocks it has no sanctioned form yet: a
+# session's own multi-step logic run as a scratch script, which `enforce` would refuse
+# outright. An open card owns that form; the readiness fragment names it. The
+# extension is used rather than lapsed: the allowlist's non-shell section took its
+# first rows in the same change, read from the drain. The re-date restarts the clock:
+# a review warning from 2026-12-15 (Tue) and a finding from 2027-01-14 (Thu).
+readonly DESTRUCTIVE_022_INTERP_ARMED="2026-10-16"
 readonly DESTRUCTIVE_022_INTERP_REVIEW_DAYS=60    # deadline arm — repo-derivable
 readonly DESTRUCTIVE_022_INTERP_REVIEW_ROWS=25    # evidence arm — operator-local
 readonly DESTRUCTIVE_022_INTERP_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
+
+# The enclosure view (see ENCLOSURE-VIEW in the script-execution rule). Three
+# entry markers, and two work budgets a hook that runs before every Bash call
+# owes: a ceiling on the positions it opens and a ceiling on the remainder text
+# it copies. Both degrade to "this position is not seen" and both are pinned.
+readonly SCRIPT_BND_OLD=$'\002'    # a first-view segment start
+readonly SCRIPT_BND_PAREN=$'\003'  # a position opened by `(`
+readonly SCRIPT_BND_TICK=$'\004'   # a position opened by a backtick
+readonly SCRIPT_ENCL_POS_MAX=512
+readonly SCRIPT_ENCL_TAIL_BYTES=262144
+
+# ── THE ENCLOSURE VIEW'S SHELL FINDINGS: A THIRD FAMILY, AND A SIBLING FOR THE REASON
+# THE NON-SHELL FAMILY IS ONE.
+#
+# WHAT THIS FAMILY GATES. A shell interpreter or `source` finding at a command position
+# the enclosure view opens (ENCLOSURE-VIEW, in the script-execution rule), together with
+# the two decisions that view carries with it — the `xargs` standard-input deny and the
+# here-document receiver read from inside an enclosure. All of them are routed through
+# script_shell_verdict. At a first-view position the same arms never read this phase:
+# they stay always-enforce.
+#
+# WHY A PHASE AND NOT ENFORCE ON LANDING. The view adjudicates text a lexical matcher
+# cannot tell from a command — a quoted argument of a command outside the carrier set, a
+# kept here-document body, a comment — and its cost on inline pull-request bodies was
+# measured at several times what the commit-message corpus suggested. The operator chose
+# a phased rollout: findings enter at `warn`, and a later graduation decision is owed.
+# The warn phase measures how often the view WOULD refuse, never how often it would be
+# right; nothing in a row can say whether the text at its position runs.
+#
+# Self-armed at the commit that introduced this family, never a placeholder for a later
+# editor to fill, for the reason recorded on the exec arming stamp above.
+readonly DESTRUCTIVE_022_ENCL_PHASE="warn"   # shadow | warn | enforce
+readonly DESTRUCTIVE_022_ENCL_ARMED="2026-10-16"
+readonly DESTRUCTIVE_022_ENCL_REVIEW_DAYS=60    # deadline arm — repo-derivable
+readonly DESTRUCTIVE_022_ENCL_REVIEW_ROWS=25    # evidence arm — operator-local
+readonly DESTRUCTIVE_022_ENCL_ESCALATE_DAYS=90  # deadline arm turns ISSUES red
 
 # Rollout telemetry for the exec arm: evaluate, record, take no action. Carries
 # the CAUSE CLASS as well as the path, because an operator reading this drain must
@@ -978,9 +1670,13 @@ readonly DESTRUCTIVE_022_INTERP_ESCALATE_DAYS=90  # deadline arm turns ISSUES re
 # it, every row carried the bare reason `would-fire` and nothing naming WHICH
 # widening produced it — so a reading of 1,067 rows could size the rule and could
 # not apportion a single row to the arm whose graduation it was supposed to inform.
-# With two phase-gated arms writing to one drain that stops being an inconvenience
-# and becomes unusable: two independent graduation decisions, one undifferentiated
-# population. One `--arg` makes both readable from the same file.
+# With three phase-gated arms writing to one drain that stops being an inconvenience
+# and becomes unusable: three independent graduation decisions, one undifferentiated
+# population. One `--arg` makes each readable from the same file. A row written from a
+# command position the enclosure view opened also carries `pos: "enclosure"`, so a
+# reader can split any arm's population by where its rows came from. The key says
+# nothing about whether the text at that position runs, which a lexical matcher
+# cannot know.
 #
 # ROWS WRITTEN BEFORE THIS CHANGE CARRY NO `arm` FIELD, and a reader must treat an
 # absent field as `exec` — which is factually correct, because the exec arm was the
@@ -994,17 +1690,19 @@ log_would_fire_022() {
   ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo 'unknown')"
   "$JQ" -nc --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "BLOCK-DESTRUCTIVE-022" \
     --arg tool "$TOOL_NAME" --arg phase "$phase" --arg cause "$cause" \
-    --arg arm "$arm" --arg path "$path" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", arm:$arm, cause:$cause, path:$path, cwd:$cwd}' \
+    --arg arm "$arm" --arg path "$path" --arg cwd "$CWD" --arg pos "${script_rowpos:-}" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", arm:$arm, cause:$cause, path:$path, cwd:$cwd} + (if $pos != "" then {pos:$pos} else {} end)' \
     >> "$WARN_LOG" 2>/dev/null || true
 }
 
 # Adjudicate one direct-execution candidate under the rollout phase.
 #
-# THE TWO EXISTING ARMS DO NOT ROUTE THROUGH THIS. They keep calling
-# check_script_target directly, with their call sites unedited, so their verdicts
-# are byte-preserved rather than argued to be equivalent. This function is reached
-# only from the exec arm.
+# THE TWO EXISTING ARMS DO NOT ROUTE THROUGH THIS. The shell interpreter and
+# `source` arms route through script_shell_verdict below, which hands a first-view
+# finding straight to check_script_target, so their verdicts there are unchanged —
+# arm AC-ENCL-P5 asserts it, where an unedited call site used to carry it — and gives
+# a finding at a position the enclosure view opened that view's rollout phase. This
+# function is reached only from the exec arm.
 #
 # An allowlisted, resolvable path returns silently and writes NOTHING. A drain
 # that records permitted traffic measures the corpus rather than the widening, and
@@ -1052,15 +1750,16 @@ destructive_022_exec_verdict() {
 # Adjudicate one NON-SHELL INTERPRETER operand under its own rollout phase.
 #
 # THE SHELL TRIO DOES NOT ROUTE THROUGH THIS, and that is the same discipline the
-# exec router states one function above. `bash`, `sh`, `zsh`, `source` and `.` keep
-# calling check_script_target directly from their unedited call-site branch, so
-# their always-enforce verdicts are byte-preserved rather than argued to be
-# equivalent. That unconditional posture is the basis on which the mode-capable
-# hook cohort was permitted to degrade at all; softening it as a side effect of
-# admitting python would be the one change this widening must not make. The
-# `[ "$script_interp_domain" = "interp" ]` test at each call site is what enforces
-# it, and it is a positive test for the shipped domain rather than a negative test
-# against a list that could grow.
+# exec router states one function above. `bash`, `sh`, `zsh`, `source` and `.` route
+# through script_shell_verdict, which at a first-view position is a pass-through to
+# check_script_target, so their always-enforce verdicts there are unchanged — arms
+# AC-ENCL-P5 and T-NSI-04a to -04d assert it, where an unedited call-site branch
+# used to carry it by construction. That unconditional posture is the basis on which
+# the mode-capable hook cohort was permitted to degrade at all; softening it as a
+# side effect of admitting python would be the one change this widening must not
+# make. The `[ "$script_interp_domain" = "interp" ]` test at each call site is what
+# keeps the shell trio off this router, and it is a positive test for the shipped
+# domain rather than a negative test against a list that could grow.
 #
 # An allowlisted, resolvable path returns silently and writes NOTHING — a drain
 # that records permitted traffic measures the corpus rather than the widening.
@@ -1094,6 +1793,41 @@ destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
       ;;
   esac
   log_would_fire_022 "enforce" "$cause" "$path" "interp-nonshell"
+  check_script_target "$path" "$resolved"
+}
+
+# Verdict router for the always-enforce shell and source arms. First view: the shipped
+# call, unchanged — a pass-through to check_script_target, which arm AC-ENCL-P5
+# asserts. Second view (a command position behind a substitution or group opener):
+# the enclosure family's rollout phase. An unrecognised phase value falls through to
+# enforce, the direction the other two routers take.
+script_shell_verdict() {   # $1 = path  $2 = resolved
+  local path="$1" resolved="${2:-1}"
+  if [ "${script_pass:-1}" -ne 2 ]; then   # M-ENCL-ROUTE
+    check_script_target "$path" "$resolved"
+    return 0
+  fi
+  local cause="not-allowlisted"
+  case "$path" in
+    *'$'*) cause="unresolvable" ;;
+  esac
+  if [ "$resolved" -eq 0 ]; then cause="unresolvable"; fi
+  if [ "$cause" = "not-allowlisted" ] && is_script_allowlisted "$path"; then
+    return 0
+  fi
+  case "$DESTRUCTIVE_022_ENCL_PHASE" in
+    shadow)
+      log_would_fire_022 "shadow" "$cause" "$path" "shell-enclosure"
+      return 0
+      ;;
+    warn)
+      log_would_fire_022 "warn" "$cause" "$path" "shell-enclosure"
+      "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): script execution inside a substitution or group %s\n' \
+        "$HOOK_NAME" "$cause" "$path" >&2
+      return 0
+      ;;
+  esac
+  log_would_fire_022 "enforce" "$cause" "$path" "shell-enclosure"
   check_script_target "$path" "$resolved"
 }
 
@@ -1144,9 +1878,23 @@ destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
 # from being treated as a path.
 script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argument
   normalize_script_token "$1"
+  # THE CONSUMED ARGUMENT IS PART OF THE OPTION RUN. If its text is not held, the
+  # shell may have given the option a different word, or no word at all, and the
+  # `-n` the walk reads next may be the option's real argument. The run ends here,
+  # so that `-n` is not read as a grant. See script_option_word.
+  if ! script_arg_exact; then script_optrun=0; fi   # M-OPTARG (mutation target; pinned by NOEXEC-TERM-M4a)
+  # AND THE OPERAND BEHIND IT IS NO LONGER KNOWN. The same lost word can leave an
+  # allowlisted script in the argument slot while the shell runs the one after it:
+  # `bash --rcfile $X <allowlisted>.sh <script>.sh` with X unset. The token is
+  # already consumed, so there is nothing to hand to the `-c` label; the route's
+  # flag is set directly. The walk still stops where it always stops, and from
+  # there every remaining token that lands in the operand domain is adjudicated
+  # and no parse-only exemption applies. Both call sites of this function sit
+  # behind the walk's interpreter test, so it is never reached under `source`.
+  if ! script_arg_exact; then script_cmode=1; fi   # M-OPAQUE-ARG (mutation target; pinned by FWALK-OPAQUE-M3a)
   if script_operand_implicated "$script_interp_domain"; then
     if [ "$script_interp_domain" = "interp" ]; then
-      check_script_target "$script_norm_out" "$script_norm_ok"
+      script_shell_verdict "$script_norm_out" "$script_norm_ok"
     else
       destructive_022_interp_verdict "$script_norm_out" "$script_norm_ok"
     fi
@@ -1293,6 +2041,56 @@ script_qadvance() {
   return 0
 }
 
+# The text of a second-view position ends where its own enclosure closes: for a
+# parenthesis, the first `)` at depth 0 outside quotes; for a backtick, the next
+# unescaped backtick. Scanned LOCALLY from a fresh quote state, because the inside
+# of an enclosure is a fresh quoting context and the carried state can be wrong
+# about it. No close found, or the work budget spent: the text is left WHOLE —
+# the direction that adjudicates more, never less.
+script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> script_cut_out
+  script_cut_out="$1"
+  script_qt="$1"
+  local _used=0 _q=0 _d=0 _n=0 _lp='(' _rp=')'
+  while [ -n "$script_qt" ]; do
+    _n=$(( _n + 1 ))
+    if [ "$_n" -gt 200 ]; then return 0; fi
+    if [ "$2" -eq 2 ]; then
+      script_qnext "$script_bs" "$script_qbt"
+    elif [ "$_q" -eq 1 ]; then
+      script_qnext "$script_q1"
+    elif [ "$_q" -eq 2 ]; then
+      script_qnext "$script_bs" "$script_q2" "$_lp" "$_rp"
+    else
+      script_qnext "$script_bs" "$script_q1" "$script_q2" "$_lp" "$_rp"
+    fi
+    if [ "$script_qi" -lt 0 ]; then return 0; fi
+    _used=$(( _used + script_qi + 1 ))
+    script_qt="${script_qt:$(( script_qi + 1 ))}"
+    case "$script_qc" in
+      "$script_bs")
+        _used=$(( _used + 1 ))
+        script_qt="${script_qt:1}"
+        ;;
+      "$script_q1") if [ "$_q" -eq 1 ]; then _q=0; else _q=1; fi ;;
+      "$script_q2") if [ "$_q" -eq 2 ]; then _q=0; else _q=2; fi ;;
+      "$_lp") _d=$(( _d + 1 )) ;;
+      "$_rp")
+        if [ "$_d" -gt 0 ]; then
+          _d=$(( _d - 1 ))
+        elif [ "$_q" -eq 0 ]; then
+          script_cut_out="${1:0:$(( _used - 1 ))}"
+          return 0
+        fi
+        ;;
+      *)
+        script_cut_out="${1:0:$(( _used - 1 ))}"
+        return 0
+        ;;
+    esac
+  done
+  return 0
+}
+
 # --------------------------------------------------------------------------
 # HERE-DOCUMENT PRE-PASS (POSIX Shell Command Language 2.7.4)
 #
@@ -1339,7 +2137,14 @@ script_qadvance() {
 # The receiving command is resolved from the text between the last SEPARATOR at
 # quote-state 0 and the operator, not from the head of the line. `gh x ; bash
 # <<'E'` must resolve to `bash`, not to `gh`; reading the line head would hand a
-# real interpreter's stdin the carrier's exemption.
+# real interpreter's stdin the carrier's exemption. It is resolved a second time
+# from the innermost enclosure still open at the operator — `echo $(bash <<'E'`
+# hands the body to `bash`, not to `echo` — and a body is excised only when both
+# readings are carriers (ENCL-HDHEAD below). Below `enforce` on the enclosure
+# family's phase that finding is recorded and the body is still excised. Two limits
+# are measured and declared: a receiver behind a line continuation is not reached,
+# because this pass reads physical lines; and a carrier's unquoted substitution that
+# reads a here-document through `cat`, which runs nothing, is newly flagged.
 #
 # ALL-OR-NOTHING, BY DESIGN. If ANY here-document in the command fails either
 # condition, NOTHING is excised and the caller latches script_qbail — so every
@@ -1390,11 +2195,11 @@ script_heredoc_prescan() {
     *) return 0 ;;
   esac
 
-  local _lt='<' _sc=';' _amp='&' _bar='|'
-  local -a _lines _qdelim _qquoted _qstrip _qhead
+  local _lt='<' _sc=';' _amp='&' _bar='|' _lp='(' _rp=')'
+  local -a _lines _qdelim _qquoted _qstrip _qhead _qhead2 _ostk
   local _tmp="" _opline="" _cmp="" _pre="" _ch=""
   local _delim="" _delimline="" _body="" _bodyraw="" _headtxt=""
-  local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0
+  local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0 _od=0 _bt=-1 _h2=0 _c2=0 _j=0 _rh2=""
   local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out=""
 
   # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
@@ -1415,6 +2220,10 @@ script_heredoc_prescan() {
     _qn=0
     _pos=0
     _lastsep=0
+    # an enclosure still open from an earlier line opens this line at its start
+    _j=0
+    while [ "$_j" -lt "$_od" ]; do _ostk[$_j]=0; _j=$(( _j + 1 )); done
+    if [ "$_bt" -ge 0 ]; then _bt=0; fi
     script_qt="$_opline"
 
     # ---- scan this line for here-document operators at quote-state 0 ----
@@ -1448,7 +2257,7 @@ script_heredoc_prescan() {
           _qs=0
         fi
       else
-        script_qnext "$script_bs" "$script_q1" "$script_q2" "$_lt" "$_sc" "$_amp" "$_bar"
+        script_qnext "$script_bs" "$script_q1" "$script_q2" "$_lt" "$_sc" "$_amp" "$_bar" "$_lp" "$_rp" "$script_qbt"   # M-ENCL-SCAN
         if [ "$script_qi" -lt 0 ]; then break; fi
         _pre="$script_qpre"
         _ch="$script_qc"
@@ -1470,6 +2279,13 @@ script_heredoc_prescan() {
           # A separator OUTSIDE any quote starts a new simple command, so the
           # receiving command of any operator after it is resolved from here.
           _lastsep="$_pos"
+        elif [ "$_ch" = "$_lp" ]; then
+          _ostk[$_od]="$_pos"
+          _od=$(( _od + 1 ))
+        elif [ "$_ch" = "$_rp" ]; then
+          if [ "$_od" -gt 0 ]; then _od=$(( _od - 1 )); fi
+        elif [ "$_ch" = "$script_qbt" ]; then
+          if [ "$_bt" -ge 0 ]; then _bt=-1; else _bt="$_pos"; fi
         else
           # `<`. Three distinct constructs share the character.
           case "$script_qt" in
@@ -1544,6 +2360,12 @@ script_heredoc_prescan() {
               _qquoted[$_qn]="$_quoted"
               _qstrip[$_qn]="$_strip"
               _qhead[$_qn]="${_opline:$_lastsep:$(( _abs - _lastsep ))}"
+              # second view of the receiver: the text after the innermost enclosure
+              # still OPEN at the operator, when that lies after the last separator
+              _h2="$_lastsep"
+              if [ "$_od" -gt 0 ] && [ "${_ostk[$(( _od - 1 ))]}" -gt "$_h2" ]; then _h2="${_ostk[$(( _od - 1 ))]}"; fi
+              if [ "$_bt" -gt "$_h2" ]; then _h2="$_bt"; fi
+              _qhead2[$_qn]="${_opline:$_h2:$(( _abs - _h2 ))}"
               _qn=$(( _qn + 1 ))
               ;;
             *)
@@ -1591,6 +2413,12 @@ script_heredoc_prescan() {
       if [ "$_total" -gt 8 ]; then script_hdbail=1; return 0; fi
 
       _ex=0
+      _c2=0
+      script_resolve_head "${_qhead2[$_k]}"
+      _rh2="$script_head"
+      case "${script_head##*/}" in
+        gh|printf|echo|jq) _c2=1 ;;
+      esac
       script_resolve_head "$_headtxt"
       case "${script_head##*/}" in
         gh|printf|echo|jq)
@@ -1605,6 +2433,28 @@ script_heredoc_prescan() {
           ;;
       esac
 
+      # >>> ENCL-HDHEAD-BEGIN — core/hooks/tests/block-destructive.test.sh
+      # A body is excised only when the receiver read from the line head AND the one
+      # read from the innermost enclosure still open at the operator are both
+      # carriers. Where only the line head is a carrier, the finding follows the
+      # enclosure family's phase: below `enforce` the finding is recorded, naming the
+      # receiver read from the enclosure, and the body is still excised; at `enforce`,
+      # or on an unrecognised value, it is not excised and the first view reads it.
+      if [ "$_c2" -eq 0 ] && [ "$_ex" -eq 1 ]; then
+        case "$DESTRUCTIVE_022_ENCL_PHASE" in
+          shadow|warn)
+            script_rowpos="enclosure"
+            log_would_fire_022 "$DESTRUCTIVE_022_ENCL_PHASE" "heredoc-receiver" "${_rh2:-}" "shell-enclosure"
+            script_rowpos=""
+            if [ "$DESTRUCTIVE_022_ENCL_PHASE" = "warn" ]; then
+              "$PRINTF" '[CLAUDE-HOOK:%s:BLOCK-DESTRUCTIVE-022] WARN (would-block, rollout=warn, cause=%s): here-document received inside a substitution or group by %s\n' \
+                "$HOOK_NAME" "heredoc-receiver" "${_rh2:-}" >&2
+            fi
+            ;;
+          *) _ex=0 ;;
+        esac
+      fi
+      # >>> ENCL-HDHEAD-END
       if [ "$_ex" -eq 1 ]; then
         _excised=$(( _excised + 1 ))
         _out="${_out}${_delimline}"$'\n'
@@ -1976,19 +2826,24 @@ case "$TOOL_NAME" in
     # A segment whose start state is 0 still begins at COMMAND POSITION and is
     # ALWAYS adjudicated.
     #
-    # THAT IS NOT TRUE OF ENCLOSURE, and an earlier version of this comment said it
-    # was. It claimed unquoted `$( )`, backticks and `<( )` "all land there, so they
-    # need no separate rule". Measured, they do not: `$(bash <x>.sh)`,
-    # `` `bash <x>.sh` ``, `cat <( bash <x>.sh )` and `echo "$(bash <x>.sh)"` are all
-    # ALLOWED today. The inner command word sits at token index >= 1 of its segment,
-    # where the command-position walk never looks — a substitution is not a
-    # SEPARATOR, so it never starts a new segment and the inner word never reaches
-    # command position. (Adding a `;` inside the substitution blocks, but only
-    # incidentally: the separator shreds the substitution into a fresh segment.)
-    # This is a live fail-open in an always-enforce arm. It is a WIDENING to close
-    # and is tracked separately; the false claim is corrected here so a reader does
-    # not infer coverage the code does not have. Condition (2) below is unaffected —
-    # it governs what may be SUPPRESSED, and it is why `echo "$(…)"` is not.
+    # THAT WAS NOT TRUE OF ENCLOSURE in the first view, and an earlier version of
+    # this comment said it was. It claimed unquoted `$( )`, backticks and `<( )`
+    # "all land there, so they need no separate rule". They do not: a substitution
+    # is not a SEPARATOR, so it never starts a segment, and the inner command word
+    # sits at token index >= 1, where the command-position walk never looks. (A
+    # `;` inside the substitution blocked, but only incidentally: the separator
+    # shredded the substitution into a fresh segment.)
+    #
+    # ENCLOSURE POSITIONS ARE ADJUDICATED BY A SECOND VIEW of the same segments —
+    # see ENCLOSURE-VIEW below. Every `(` and every backtick opens a command
+    # position there, so `$(bash <x>.sh)`, `` `bash <x>.sh` ``, `cat <( bash <x>.sh )`,
+    # `( bash <x>.sh )` and `echo "$(bash <x>.sh)"` reach the same walk a verb
+    # behind `;` reaches. A shell or `source` finding there follows the enclosure
+    # family's rollout phase (DESTRUCTIVE_022_ENCL_PHASE), which entered at `warn`:
+    # recorded, not yet refused. The first view's segmentation and walk are not
+    # modified, so the second view can only ADD an adjudication. Condition (2) below
+    # is unaffected — it governs what may be SUPPRESSED, and it is why
+    # `echo "$(…)"` is not.
     #
     # HERE-DOCUMENTS ARE MODELLED, by a pre-pass that runs before the separator
     # substitution and excises only PROVABLY-INERT bodies — see the
@@ -2006,9 +2861,11 @@ case "$TOOL_NAME" in
     #   R-2 A BARE-DELIMITER EXPANSION INTRODUCED BY NEITHER `$` NOR A BACKTICK.
     #       None exists in POSIX; this is the same claim condition (2) already
     #       makes for `"…"`, so both break together if a shell ever adds one.
-    #   R-3 THE COMMAND-SUBSTITUTION FAIL-OPEN above is UNTOUCHED and remains live.
-    #       The pre-pass neither creates nor widens it, and a here-document arm
-    #       reading green is not evidence of its absence.
+    #   R-3 WHAT THE SECOND VIEW DOES NOT REACH, AND WHAT IT ADJUDICATES ALTHOUGH
+    #       NOTHING RUNS, is stated once, as an open list of the limits known and
+    #       measured, in item 3 of the readiness fragment's residual list, with which
+    #       of them an AC-ENCL-RESIDUAL arm pins and which no arm pins. A green
+    #       here-document arm is still not evidence about any of them.
     #   R-4 A NON-CARRIER RECEIVER KEEPS THE FALSE POSITIVE. `cat <<'RPT'` still
     #       blocks. Deliberate: a missing carrier entry costs a false positive and
     #       can never admit an evasion, which is the fail direction this block
@@ -2050,11 +2907,33 @@ case "$TOOL_NAME" in
     script_qtaint=0
     script_carrier=0
     script_head=""
+    script_pass=1
+    script_segno=0
+    script_oldno=0
+    script_newpos=0
+    script_p1n=0
+    script_p1supp=":"
+    script_supp=0
+    script_rowpos=""
+    script_encl=""
+    script_tail=""
+    script_lift=0
+    script_liftb=0
+    script_rest=""
+    script_piece=""
+    script_hold=""
+    script_esc=""
+    script_mark=""
+    script_cut_out=""
     # The flag walk's effective subject (raw token, or its normalized view when
     # that view is a flag outside every operand domain). Initialised for the same
     # reason as the three below: an unset read under `set -u` exits 1, and exit 1
     # is NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
     script_ftok=""
+    # The option-run latch and the reading it tests (see script_option_word).
+    # Initialised for the same reason as script_ftok above.
+    script_fsub=""
+    script_optrun=1
     # normalize_script_token sets all three before any reader runs. Initialised
     # anyway because an unset read under `set -u` exits 1, and exit 1 is
     # NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
@@ -2091,7 +2970,94 @@ case "$TOOL_NAME" in
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
 
+    # >>> ENCLOSURE-VIEW-BEGIN — core/hooks/tests/block-destructive.test.sh
+    # SECOND VIEW. The loop below runs twice over one text. Its first pass is the
+    # shipped segmentation, untouched. Its second pass sees the same segments again
+    # with one extra command position after every `(` and every backtick — the two
+    # characters every substitution, process substitution and subshell group opens
+    # with — so a verb behind an enclosure is adjudicated by the same walk as a verb
+    # behind a separator. The second pass can only ADD an adjudication: it runs after
+    # the first pass has finished, and nothing the first pass decided is revisited.
+    # Removing this block, the ENCL-HDHEAD block of the here-document pre-pass and the
+    # three openers on the pre-pass's M-ENCL-SCAN line restores the previous verdict;
+    # the suite's reverse mutant does exactly that. A shell or `source` finding at a
+    # position this block opens follows DESTRUCTIVE_022_ENCL_PHASE (through
+    # script_shell_verdict), and every other arm keeps its own phase.
+    #
+    # Each entry is two lines: a marker plus the text up to and including the next
+    # opener (scanned once, so the carried quote state stays exact), then the rest
+    # of the segment (appended for adjudication only, so an operand lying beyond a
+    # nested opener is still seen). An opener behind an odd run of backslashes is a
+    # literal character to this shell and opens no position.
+    case "$script_hdstripped" in
+      *'('*|*'`'*)
+        while IFS= read -r script_seg; do
+          script_p1n=$(( script_p1n + 1 ))
+          script_rest="$script_seg"
+          script_mark="$SCRIPT_BND_OLD"
+          script_hold=""
+          while :; do
+            case "$script_rest" in
+              *'('*|*'`'*) ;;
+              *) break ;;
+            esac
+            # TWO BUDGETS, both declared limits pinned by AC-ENCL-RESIDUAL-budget-*.
+            # Past the position ceiling no further position is opened; past the
+            # remainder budget a position is opened without its appended remainder.
+            if [ "$script_lift" -ge "$SCRIPT_ENCL_POS_MAX" ]; then break; fi
+            script_lift=$(( script_lift + 1 ))
+            script_piece="${script_rest%%[\(\`]*}"
+            script_esc="${script_piece##*[!\\]}"
+            script_piece="${script_rest:0:$(( ${#script_piece} + 1 ))}"
+            script_rest="${script_rest:${#script_piece}}"
+            if [ $(( ${#script_esc} % 2 )) -eq 1 ]; then   # M-ENCL-ESC
+              script_hold="${script_hold}${script_piece}"
+              continue
+            fi
+            if [ "$script_liftb" -lt "$SCRIPT_ENCL_TAIL_BYTES" ]; then
+              script_liftb=$(( script_liftb + ${#script_rest} ))
+              script_encl="${script_encl}${script_mark}${script_hold}${script_piece}"$'\n'"${script_rest}"$'\n'
+            else
+              script_encl="${script_encl}${script_mark}${script_hold}${script_piece}"$'\n'$'\n'
+            fi
+            script_hold=""
+            case "$script_piece" in
+              *'(') script_mark="$SCRIPT_BND_PAREN" ;;
+              *) script_mark="$SCRIPT_BND_TICK" ;;
+            esac
+          done
+          script_encl="${script_encl}${script_mark}${script_hold}${script_rest}"$'\n'$'\n'
+        done <<< "$script_segments"
+        script_segments="${script_segments}"$'\n'"${script_encl%$'\n'}"
+        ;;
+    esac
+    # >>> ENCLOSURE-VIEW-END
+
     while IFS= read -r script_seg; do
+      script_segno=$(( script_segno + 1 ))
+      if [ "$script_pass" -eq 1 ] && [ "$script_p1n" -gt 0 ] && [ "$script_segno" -gt "$script_p1n" ]; then
+        # the second view starts from the same clean state the first view started from
+        script_pass=2
+        script_qstate=0
+        script_qtaint=0
+        script_qwork=0
+        script_carrier=0
+        script_oldno=0
+      fi
+      script_newpos=0
+      script_tail=""
+      script_rowpos=""
+      if [ "$script_pass" -eq 2 ]; then
+        IFS= read -r script_tail || script_tail=""
+        case "${script_seg:0:1}" in
+          "$SCRIPT_BND_OLD") script_oldno=$(( script_oldno + 1 )) ;;
+          "$SCRIPT_BND_TICK") script_newpos=2 ;;
+          *) script_newpos=1 ;;
+        esac
+        script_seg="${script_seg:1}"
+      else
+        script_oldno=$(( script_oldno + 1 ))
+      fi
       # Quote state at the START of this segment, carried in from everything before
       # it. Captured BEFORE the segment is scanned, because a segment that opens a
       # quote is itself still at command position. The taint is captured with it:
@@ -2125,10 +3091,31 @@ case "$TOOL_NAME" in
         # condition (1). Condition (2) is the construct test: `'…'` (state 1) and
         # `$'…'` (state 3) expand nothing, so they are inert unconditionally; a
         # double-quoted run (state 2) is inert only while untainted.
+        script_supp=0
         case "$script_segstart" in
-          1|3) continue ;;
-          2) if [ "$script_segtaint" -eq 0 ]; then continue; fi ;;
+          1|3) script_supp=1 ;;
+          2) if [ "$script_segtaint" -eq 0 ]; then script_supp=1; fi ;;
         esac
+        if [ "$script_supp" -eq 1 ]; then   # M-ENCL-SUPP
+          if [ "$script_pass" -eq 1 ]; then script_p1supp="${script_p1supp}${script_oldno}:"; fi
+          continue
+        fi
+      fi
+
+      if [ "$script_pass" -eq 2 ]; then
+        # A segment START was adjudicated by the first view unless that view
+        # suppressed it. Re-open only those: the carrier that suppressed them was
+        # the line's, and inside an enclosure the command that owns the quote can
+        # be a different one (`echo $(bash -c '…; bash <x>.sh')`).
+        if [ "$script_newpos" -eq 0 ]; then
+          case "$script_p1supp" in
+            *":${script_oldno}:"*) : ;;   # M-ENCL-RESUPP
+            *) continue ;;
+          esac
+        fi
+        script_rowpos="enclosure"   # M-ENCL-GATE
+        script_seg="${script_seg}${script_tail}"   # M-ENCL-TAIL
+        if [ "$script_newpos" -ne 0 ]; then script_encl_cut "$script_seg" "$script_newpos"; script_seg="$script_cut_out"; fi   # M-ENCL-CUT
       fi
 
       [ -n "$script_seg" ] || continue
@@ -2175,21 +3162,35 @@ case "$TOOL_NAME" in
       #
       # A token is a prefix assignment IFF it contains `=` AND its NAME part
       # (everything before the FIRST `=`) is a valid shell name. A token that is
-      # neither an assignment nor a listed wrapper (below) TERMINATES the run and is
-      # the command word — so `a-b=1` and `--body=x` both stop the walk, and the skip
-      # cannot degrade into a general "advance past any token containing `=`". The
-      # two tests are ordered: `${tok%%=*}` returns the whole token when there is no
-      # `=`, so the pattern test must gate it.
+      # none of an assignment, a listed keyword or wrapper (below), or a token of a
+      # listed wrapper's own option grammar (the wrapper rows, script_wrapper_row)
+      # TERMINATES the run and is the command word — so `a-b=1` and `--body=x` both
+      # stop the walk here, and the skip cannot degrade into a general "advance past
+      # any token containing `=`". (Behind `env` the operand loop is env's own
+      # grammar, which takes any `name=value`: env sets `a-b=1` and runs what follows.)
+      # The two tests are ordered: `${tok%%=*}` returns the whole token when there is
+      # no `=`, so the pattern test must gate it.
       #
-      # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION
-      # that mirrors lib/command-position.awk's PREFIX set — one set, two walks, so
-      # the shared canonicalizer and this local walk cannot drift apart. `sudo bash
-      # <script>`, `env bash <script>` and `then bash <script>` are the SAME operation
-      # as `bash <script>`; without this the wrapper resolved as the command word, no
-      # verb matched, and the invocation fell through to ALLOW with the allowlist
-      # never consulted — the verdict tracking lexical position instead of the action.
-      # Matched on the BASENAME, as the verb below is, so `/usr/bin/env bash <script>`
-      # resolves too.
+      # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION,
+      # and each wrapper's own options and operands are walked from its row. `sudo
+      # bash <script>`, `nice -n 10 bash <script>` and `then bash <script>` are the
+      # SAME operation as `bash <script>`; without this the wrapper, or its first
+      # option, resolved as the command word, no verb matched, and the invocation fell
+      # through to ALLOW with the allowlist never consulted — the verdict tracking
+      # lexical position instead of the action. Matched on the BASENAME, as the verb
+      # below is, so `/usr/bin/env bash <script>` resolves too.
+      #
+      # THIS IS ONE OF FOUR LISTS OF THE VOCABULARY, AND THEY ARE NOT ONE SET. The
+      # egress rule's prefix-command walk and the shared canonicalizer
+      # lib/command-position.awk each hold a list and walk it with their own grammar,
+      # and the SIGPIPE-idiom lint of the repository-integrity workflow holds a fourth
+      # for a different question. This walk and the egress walk match the basename;
+      # the canonicalizer matches the exact token, and it alone steps over a leading
+      # redirection and an escaped verb; only the egress walk steps over every
+      # dash-led token. This rule is deliberately not routed through the
+      # canonicalizer. The suite's WRAPVOCAB-PARITY arms read every list and fail on a
+      # word-level difference their declared table does not carry, and on a
+      # declaration whose difference no longer exists.
       #
       # This is NOT the denylist-of-evaluating-verbs that the earlier note here ruled
       # out, and its failure direction is the opposite one. That note was reasoning
@@ -2200,13 +3201,15 @@ case "$TOOL_NAME" in
       # is recoverable. Membership criterion: the word must be a TRANSPARENT prefix —
       # a shell keyword, or a wrapper that execs the rest of the argv unchanged.
       #
-      # Still NOT skipped, deliberately: `eval` and `timeout`. `eval` re-parses a
-      # program string this lexical matcher cannot resolve (the same nested-shell
-      # residual lib/command-position.awk records for `bash -c '…'`), and `timeout`
-      # carries a duration operand the walk would additionally have to consume.
-      # Recorded residuals, not half-closed cases.
+      # Still NOT skipped, deliberately: `eval`. It re-parses a program string this
+      # lexical matcher cannot resolve (the same nested-shell residual
+      # lib/command-position.awk records for `bash -c '…'`). A recorded residual, not
+      # a half-closed case. `timeout` used to stand beside it, for the duration
+      # operand the walk would additionally have to consume; its row consumes it now.
       script_hidx=0
       script_xargs=0
+      script_wrap=""
+      script_winert=0
       while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
         script_ptok="${script_tokens[$script_hidx]}"
         case "$script_ptok" in
@@ -2219,13 +3222,22 @@ case "$TOOL_NAME" in
             ;;
         esac
         case "${script_ptok##*/}" in
-          sudo|env|command|builtin|exec|nohup|time|xargs|then|do|else|elif|'in'|'!')
-            if [ "${script_ptok##*/}" = "xargs" ]; then script_xargs=1; fi
+          then|do|else|elif|if|while|until|'in'|'!')   # M-WRAP-KEYWORDS
             script_hidx=$(( script_hidx + 1 ))
+            ;;
+          sudo|env|command|builtin|exec|nohup|time|xargs|nice|stdbuf|timeout)   # M-WRAP-WORDS
+            script_wrap="${script_ptok##*/}"
+            if [ "$script_wrap" = "xargs" ]; then script_xargs=1; fi
+            script_hidx=$(( script_hidx + 1 ))
+            script_wrapper_options   # M-WRAP-OPTIONS
+            if [ "$script_winert" -eq 1 ]; then break; fi
             ;;
           *) break ;;
         esac
       done
+      # A describe-only wrapper option was seen: the wrapper executes nothing, so
+      # this segment is not an execution of whatever follows it.
+      if [ "$script_winert" -eq 1 ]; then continue; fi
       # A command word must EXIST at command position -- an all-prefix segment
       # has none. The walk can consume every token (`FOO=1` as a whole segment,
       # or a segment that is nothing but wrapper prefixes), and this is the
@@ -2499,9 +3511,19 @@ case "$TOOL_NAME" in
       # ordinary adjudication below is correct and an allowlisted target still allows.
       if [ $(( script_hidx + 1 )) -ge "${#script_tokens[@]}" ]; then
         if [ "$script_xargs" -eq 1 ]; then
-          block "BLOCK-DESTRUCTIVE-022" \
-            "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' from stdin, so no argv path exists for this hook to adjudicate." \
-            "pass the script path on the command line (xargs <interpreter> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
+          # At a position the enclosure view opened, the deny follows that view's
+          # rollout phase (script_shell_verdict) below `enforce`; at `enforce`, and at
+          # every first-view position, it is the unconditional refusal it always was.
+          # An else, not an early `continue`: the branch's own `continue` below stays
+          # the first one after this test, which is the line the suite's no-operand
+          # deny mutant (STDIN-M2) rewrites.
+          if [ "$script_pass" -eq 2 ] && [ "$DESTRUCTIVE_022_ENCL_PHASE" != "enforce" ]; then
+            script_shell_verdict '$XARGS-STDIN' 1
+          else
+            block "BLOCK-DESTRUCTIVE-022" \
+              "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' from stdin, so no argv path exists for this hook to adjudicate." \
+              "pass the script path on the command line (xargs <interpreter> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
+          fi
         fi
         continue
       fi
@@ -2538,11 +3560,23 @@ case "$TOOL_NAME" in
       # that claims the token is the arm that will adjudicate it. Arm
       # F1-QFLAG-ctl-domain is that control and was green before this change.
       #
-      # AN UNRESOLVABLE TOKEN IS NEVER SKIPPED, for the reason every exemption in
-      # this file already gives: a filename that cannot be determined from argv
-      # cannot be shown to be a flag either. It breaks the walk and becomes the
-      # operand, where script_operand_implicated reads BOTH views and the
-      # unresolvable deny is reachable.
+      # THAT REASON HOLDS FOR A CLAIM THE OPERAND BRANCH READS — the normalizer's
+      # resolution, the probe, the raw token — AND DID NOT HOLD FOR A CLAIM MADE ONLY
+      # BY A QUOTE-LED WORD'S OWN VALUE, which that branch never reads: such a claim
+      # ended the walk on a token nothing then adjudicated. A word whose exact value
+      # begins with `-` is therefore not gated; it is stepped over as its unquoted
+      # twin is, whatever its suffix (the line marked M-QDASH-TOP below).
+      #
+      # A FRAGMENT IS NEVER SKIPPED, for the reason every exemption in this file
+      # already gives: a filename that cannot be determined from argv cannot be
+      # shown to be a flag either. It breaks the walk and becomes the operand,
+      # where script_operand_implicated reads BOTH views and the unresolvable deny
+      # is reachable. A token that opens with a quote and closes every quote it
+      # opens is not a fragment — it is a whole word, and script_walk_view reads it
+      # as its unquoted spelling. A flag token that begins with `-`, `+` or a
+      # backslash never reaches that reading: the raw view decides a `-`-led token,
+      # and the normalizer resolves the other two to their raw spelling, exactly as
+      # before.
       #
       # NET DIRECTION. For the FLAG-SHAPE rule immediately above, the direction is
       # one-way: a token can move from "operand that no arm claimed" to "skipped",
@@ -2573,12 +3607,16 @@ case "$TOOL_NAME" in
       # script_cmode; read once, after the walk, together with it. 0 is both the
       # initial value and the fail-safe one: it exempts nothing.
       script_noexec=0
+      # Is the walk still inside a run of option words it can read exactly? Reset
+      # per segment beside script_noexec, whose grant it qualifies. 1 is the initial
+      # value; 0 is the fail-safe one: it grants nothing.
+      script_optrun=1
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
         script_ftok="${script_tokens[$script_idx]}"
         case "$script_ftok" in
           -*) ;;   # raw view already decides — unchanged, and asked first
           *)
-            normalize_script_token "$script_ftok"
+            script_walk_view "$script_ftok"
             if [ "$script_norm_ok" -eq 1 ]; then
               case "$script_norm_out" in
                 -*)
@@ -2590,7 +3628,19 @@ case "$TOOL_NAME" in
                   # the SHELL suffix set and find no claim, skipping a token the
                   # Python domain claims — the exemption widening this walk's own
                   # comment forbids.
-                  if ! script_operand_implicated "$script_interp_domain"; then
+                  #
+                  # A WORD THAT SPELLS A DASH FLAG IS NOT ASKED. The view marks a
+                  # quote-led whole word whose exact value begins with `-`
+                  # (script_wv_dashword), and the unquoted twin of such a word is a
+                  # `-`-led raw token, which the raw view above steps over without
+                  # asking the domain. So a marked word is stepped over the same way,
+                  # even when its value lands in the domain: `bash '-x.s'h <script>`
+                  # adjudicates the script, as `bash -x.sh <script>` does. The
+                  # question still decides a token the normalizer resolved, which is
+                  # never marked: `bash '-x.sh'` stays the operand. The mark is read
+                  # with a default because a mutant that calls the normalizer at this
+                  # site instead of the view never sets it.
+                  if [ "${script_wv_dashword:-0}" = 1 ] || ! script_operand_implicated "$script_interp_domain"; then   # M-QDASH-TOP (mutation target; pinned by FWALK-QDASH-M3a)
                     script_ftok="$script_norm_out"
                   fi
                   ;;
@@ -2598,6 +3648,67 @@ case "$TOOL_NAME" in
             fi
             ;;
         esac
+        # WHERE THE OPTION RUN ENDS. script_optrun stays 1 only while EVERY token the
+        # walk has read in this segment is an option word it can read exactly — see
+        # script_option_word for what that means and why the test has nothing to omit.
+        # The parse-only grant below is conditional on it, so a `-n` that follows a
+        # word that is not an option, or an option whose text is not its value, is no
+        # longer read as a grant. script_adjudicate_optarg applies the same test to an
+        # argument the walk consumes, which never passes through here.
+        #
+        # IT IS A LATCH, AND THAT IS RIGHT HERE WHERE IT WAS WRONG FOR PARSE-ONLY
+        # ITSELF. noexec is a mode the shells resolve last-one-wins, so its state is
+        # reassigned by every token the walk steps over. Where option parsing ENDS is
+        # not a mode: once the interpreter has stopped reading options, or this walk
+        # has lost track of what it is reading, nothing later on argv restores it.
+        #
+        # THE SUBJECT IS THE WALK'S OWN READING OF THE TOKEN, WHATEVER PRODUCED IT.
+        # script_ftok is the raw spelling for a token that begins with `-`, which the
+        # read above never touches, and for every other token it did not rewrite. For
+        # a token that opens its own quote the subject is the value that read
+        # resolved (`'+x'` is `+x`), or the empty text when it resolved none — which
+        # is not an option word and ends the walk in the arm below anyway. Nothing
+        # here assumes a quoted option has already been given its unquoted spelling:
+        # a reading that still carries a quote, a backslash or an expansion simply
+        # fails the test.
+        #
+        # THIS SETS A STATE AND MOVES NO TOKEN. The walk still terminates on the
+        # arm's operand domain and still adjudicates the first token that lands in
+        # it, so `bash <wrapper> <script>.sh` blocks exactly as before. Only the
+        # grant is narrowed, which makes the change MONOTONE ALLOW -> BLOCK by
+        # construction: a segment this latch touches was exempted before and is
+        # adjudicated now, and nothing that was adjudicated stops being.
+        script_fsub="$script_ftok"
+        case "$script_fsub" in
+          \"*|\'*) if [ "$script_norm_ok" -eq 1 ]; then script_fsub="$script_norm_out"; else script_fsub=""; fi ;;
+        esac
+        if ! script_option_word "$script_fsub"; then script_optrun=0; fi   # M-OPTRUN (mutation target; pinned by NOEXEC-TERM-M2a)
+        # AN OPTION THE WALK CANNOT READ IS NOT STEPPED OVER AS IF IT TOOK NO ARGUMENT.
+        # A token whose reading carries a character outside the plain set — a quote,
+        # a backslash, an expansion, a glob, a brace, a redirection — has a value this
+        # hook does not hold. Stepping over it is a guess that it consumes nothing,
+        # and when the guess is wrong an allowlisted script in its argument slot is
+        # adjudicated as the operand while the script the shell runs is never read:
+        # `bash --rcfile"" <allowlisted>.sh <script>.sh`,
+        # `bash \--rcfile <allowlisted>.sh <script>.sh` and
+        # `bash $X--rcfile <allowlisted>.sh <script>.sh` execute <script>.sh. Under an
+        # interpreter the token takes the route `-c` takes instead.
+        #
+        # ASKED OF THE READING, NOT OF HOW THE TOKEN IS SPELLED. It makes no
+        # difference whether the token begins with `-`, `+`, a backslash or a quote,
+        # or whether an earlier read gave it a value: if that value is not plain, the
+        # walk does not hold the word. The empty reading is plain, so a token whose
+        # quote did not resolve is left to the arm that ends the walk on it. Under
+        # `source` no such route exists and there is no arity to get wrong, so the
+        # token is stepped over as before.
+        if [ "$script_verb" = "interp" ] && ! script_plain_word "$script_fsub"; then script_take_cmode_route; fi   # M-OPAQUE (mutation target; pinned by FWALK-OPAQUE-M1a)
+        # A CLUSTER THAT CARRIES THE COMMAND-STRING LETTER IS `-c`. The label below is
+        # an exact match; script_interp_cmode_flag is what lets `-ec`, `-xc` and `+ec`
+        # reach it. Asked of the same reading the latch above used, so a quoted
+        # cluster is still that cluster. No verb test is needed: script_interp_base
+        # is cleared for every segment beside the verb, so under `source` the table
+        # is asked about an empty basename and reaches its null.
+        if script_interp_cmode_flag "$script_interp_base" "$script_fsub"; then script_take_cmode_route; fi   # M-CLUSTER (mutation target; pinned by FWALK-CLUSTER-M1a)
         # THE TERMINATION PREDICATE IS THE ARM'S OWN DECLARED OPERAND DOMAIN, not
         # "the first token that is not flag-shaped". Answering "where is the operand?"
         # with "the first non-flag token" is wrong in two independent ways, and both
@@ -2629,7 +3740,7 @@ case "$TOOL_NAME" in
         # `extglob`, an rcfile path are all simply NOT THE OPERAND, and the walk keeps
         # looking. It needs no arity knowledge and no plus-form enumeration.
         #
-        # AN UNRESOLVABLE TOKEN IS NEVER SKIPPED, AND THAT CLAUSE IS NOT OPTIONAL. It is
+        # A FRAGMENT IS NEVER ADVANCED PAST, AND THAT CLAUSE IS NOT OPTIONAL. It is
         # this file's own doctrine (stated above and on script_exempt_system_bin) applied
         # to a new arm: ADVANCING PAST a token is an exemption in exactly the sense
         # SKIPPING one is, so it inherits the same rule -- a filename that cannot be
@@ -2637,7 +3748,9 @@ case "$TOOL_NAME" in
         # clause the walk advances off `'/tmp/pmo` (whitespace splitting hands it the
         # first fragment of a space-bearing quoted path) onto a LATER fragment and
         # adjudicates the wrong subject; arm F1-QTOK-RESIDUAL-space is that control and
-        # it turns red, which is how the clause was found.
+        # it turns red, which is how the clause was found. The clause is about
+        # fragments. A whole word that opens with a quote is decided by
+        # script_walk_view before this arm sees it.
         #
         # NET DIRECTION -- MONOTONE ALLOW->BLOCK BY CONSTRUCTION, which is the property
         # to check any edit to this arm against. If the old first-non-flag token WAS
@@ -2698,6 +3811,9 @@ case "$TOOL_NAME" in
             # as the TERMINATION predicate. Parse-only status is granted ONLY by positive
             # recognition in script_interp_noexec_flag and is REVOKED BY EVERY TOKEN THE
             # WALK STEPS OVER, whatever it is spelled.
+            # The grant has a second condition, and it is a narrowing: the walk must still
+            # be inside a run of option words it can read exactly (script_optrun, set at
+            # the top of this loop). Recognition is necessary; it is no longer sufficient.
             #
             # THE GUARANTEE IS SCOPED TO STEPPED-OVER TOKENS, AND AN EARLIER FORM OF THIS
             # NOTE OVERSTATED IT. It said "there is nothing to omit" and "a spelling this
@@ -2709,23 +3825,28 @@ case "$TOOL_NAME" in
             # OPERAND ADJUDICATION, not this predicate. State the property that way and it
             # is decidable per token; state it unqualified and it is simply false.
             #
-            # THE BOUNDARY HAS ONE LIVE FAMILY, AND IT IS INHERITED, NOT INTRODUCED HERE.
-            # A token whose leading quote closes early — `""+n`, `''+n`, `'+'n`, `"-"n` —
-            # is marked unresolvable by normalize_script_token, so it breaks at the
-            # script_norm_ok test ABOVE the revoke and an earlier `-n` grant stands:
-            #   bash -n ""+n <unlisted>.sh  -> ALLOW  (the shell runs it; `""+n` IS `+n`)
-            #   bash -n   +n <unlisted>.sh  -> BLOCK  (same invocation, unquoted)
-            # The same family ALLOWs on `origin/main`, so this release introduces none of
-            # it, and the shape that proves WHERE the allow comes from carries no `-n` at
-            # all: `bash ""-x <unlisted>.sh` ALLOWs on `origin/main` and here alike. The
-            # cause is the unresolvable-operand path, not noexec. A symmetric clear on that
-            # break is therefore MEASURABLY INERT — it was built and measured and the shape
-            # still ALLOWs — so it is deliberately NOT shipped: it would add a fourth
-            # enumeration and close nothing. Arms NOEXEC-QSPLIT-* pin the family and
-            # NOEXEC-QSPLIT-M* pins the inertness; closing it is the operand path's job.
+            # THE BOUNDARY'S ONE FAMILY IS CLOSED FOR A WHOLE WORD. A token whose leading
+            # quote closes early — `""+n`, `''+n`, `'+'n`, `"-"n` — is declined by
+            # normalize_script_token, and while the walk read tokens only through that
+            # function it broke at the script_norm_ok test ABOVE the revoke, so an earlier
+            # grant stood and the script behind it was adjudicated by nothing:
+            #   bash -n ""+n <unlisted>.sh  -> was ALLOW (the shell runs it; `""+n` IS `+n`)
+            #   bash -n   +n <unlisted>.sh  -> BLOCK     (same invocation, unquoted)
+            # script_walk_view now reads such a token as the word the shell makes of it, so
+            # a quoted clear revokes and a quoted flag is stepped over like its unquoted
+            # spelling, whatever its suffix. What still reaches that break with a grant the
+            # unquoted spelling would revoke is a FRAGMENT, and for a fragment a
+            # symmetric clear there is still inert — the allow originates in the
+            # unadjudicated operand — so it is still not shipped. Arms NOEXEC-QSPLIT-01 to
+            # -05 pin the closed family, NOEXEC-QSPLIT-M* pins the inertness on a fragment,
+            # and the fragment case is the readiness doc's limit 3. A flag that begins with
+            # a sign or a backslash and carries a quote is not this family: it never reaches
+            # the view, and it is the option-run latch at the top of this loop that keeps a
+            # `-n` behind it from granting, and the conservative route that adjudicates what
+            # follows it.
             #
-            # FAIL-SAFE DIRECTION, PER BRANCH. Recognised set-spelling -> 1 (exempt) is
-            # the ONLY path to parse-only, and it is exactly today's measured row. Every
+            # FAIL-SAFE DIRECTION, PER BRANCH. Recognised set-spelling INSIDE AN INTACT
+            # OPTION RUN -> 1 (exempt) is the ONLY path to parse-only. Every
             # other token THE WALK STEPS OVER -> 0, which does not allow anything: it
             # routes the segment into the ordinary allowlist adjudication below. Within
             # that class, unknown means REFUSED, never EXEMPT. A token the walk ENDS ON is
@@ -2741,8 +3862,10 @@ case "$TOOL_NAME" in
             # noexec <script>` is revoked by `-o`, not by `noexec`. Adding an
             # argument-taking option to the noexec table would break that and is why the
             # two tables are neighbours.
+            # It does end the option RUN when its text is not held: script_adjudicate_optarg
+            # carries that test, because the argument never passes the top of this loop.
             if [ "$script_verb" = "interp" ]; then
-              if script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
+              if [ "$script_optrun" -eq 1 ] && script_interp_noexec_flag "$script_interp_base" "$script_ftok"; then
                 script_noexec=1
               else
                 script_noexec=0   # M-NOEXEC-REVOKE (mutation target; pinned by NOEXEC-M1)
@@ -2882,8 +4005,8 @@ case "$TOOL_NAME" in
             # and reading this sentence as a property of the whole predicate is the
             # overstatement corrected at the `-*)` arm above.
             #
-            # IT SITS BELOW BOTH BREAKS ON PURPOSE. A token that ENDS the walk — an
-            # unresolvable token, or the domain-claimed operand — is not stepped over and
+            # IT SITS BELOW BOTH BREAKS ON PURPOSE. A token that ENDS the walk — a
+            # fragment, or the domain-claimed operand — is not stepped over and
             # must not revoke, or `bash -n <script>.sh` would revoke on the script itself
             # and the card's entire value would be lost. Arms PARSE-07 and NOEXEC-CTL-01
             # pin that boundary behaviourally and NOEXEC-ORD-01 pins the LINE ORDER
@@ -2892,12 +4015,12 @@ case "$TOOL_NAME" in
             #
             # AND THAT ORDERING IS EXACTLY WHERE THE PREDICATE'S GUARANTEE STOPS. The two
             # breaks above are the tokens the revoke never sees, so a grant made earlier
-            # survives them; the `-*)` arm's note carries the measured residual (the
-            # leading-quote-closes-early family) and the evidence that clearing here would
+            # survives them; the `-*)` arm's note carries the measured residual (a
+            # fragment in front of the operand) and the evidence that clearing here would
             # be inert. The right reading of this ordering is a declared trade — the
             # card's value in exchange for a residual the OPERAND path owns — and not a
             # claim that the predicate cannot fail open.
-            normalize_script_token "${script_tokens[$script_idx]}"   # M-FWALK-BODY
+            script_walk_view "${script_tokens[$script_idx]}"   # M-FWALK-BODY
             if [ "$script_norm_ok" -eq 0 ]; then break; fi
             if script_operand_implicated "$script_interp_domain"; then break; fi
             if [ "$script_verb" = "interp" ]; then
@@ -2961,7 +4084,7 @@ case "$TOOL_NAME" in
           # ends `.sh` is still adjudicated.
           if script_operand_implicated "$script_interp_domain"; then
             if [ "$script_interp_domain" = "interp" ]; then
-              check_script_target "$script_cand" "$script_norm_ok"
+              script_shell_verdict "$script_cand" "$script_norm_ok"
             else
               destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
             fi
@@ -2989,18 +4112,20 @@ case "$TOOL_NAME" in
           # `/*`, `~/*` and `*.bash` coverage, and widening the interpreter arm to
           # `/*` opens a false-positive surface with no defect behind it.
           if script_operand_implicated source; then
-            check_script_target "$script_cand" "$script_norm_ok"
+            script_shell_verdict "$script_cand" "$script_norm_ok"
           fi
         else
-          # THE SHELL TRIO'S PATH IS THE UNEDITED ONE, AND THE BRANCH IS HOW THAT IS
-          # ENFORCED RATHER THAN ASSERTED. Domain `interp` — `bash`, `sh`, `zsh` and
-          # every basename script_set_interp_domain does not name — still calls
-          # check_script_target directly and still blocks unconditionally. Only a
-          # newly-admitted interpreter reaches the phase-gated router, so admitting
+          # THE SHELL TRIO'S PATH STAYS OFF THE NON-SHELL ROUTER, AND THE BRANCH IS
+          # HOW. Domain `interp` — `bash`, `sh`, `zsh` and every basename
+          # script_set_interp_domain does not name — calls script_shell_verdict,
+          # which at a first-view position is check_script_target and still blocks
+          # unconditionally (arm AC-ENCL-P5); only at a position the enclosure view
+          # opened does that view's rollout phase apply. Only a newly-admitted
+          # interpreter reaches the phase-gated non-shell router, so admitting
           # python cannot soften the arm that was always-enforce before it.
           if script_operand_implicated "$script_interp_domain"; then
             if [ "$script_interp_domain" = "interp" ]; then
-              check_script_target "$script_cand" "$script_norm_ok"
+              script_shell_verdict "$script_cand" "$script_norm_ok"
             else
               destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
             fi

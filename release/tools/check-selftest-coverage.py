@@ -55,10 +55,12 @@ THE ARMS
                               adjudicated by the hook's own match rule
 
     SEVERITY IS PER-FINDING, NOT PER-ARM — that is what Arm F's row above records. Arm F
-    REPORTS FINDINGS ON ARRIVAL and is not expected green: most of what it names is a
-    `.py` tool, and the allowlist's non-shell section is deliberately empty pending
-    BLOCK-DESTRUCTIVE-022's drain, so those are unmatchable by construction rather than
-    unregistered by oversight. The exit code below now ADMITS that distinction: a
+    REPORTED FINDINGS ON ARRIVAL: most of what it named was a `.py` tool, while the
+    allowlist's non-shell section was deliberately empty pending BLOCK-DESTRUCTIVE-022's
+    drain, so those were unmatchable by construction rather than unregistered by
+    oversight. That section is now being filled from the drain, and the `.py` tools a
+    spec prescribes hold rows; a suffix domain that still carries no row keeps its
+    findings in the residual class. The exit code below now ADMITS that distinction: a
     by-construction residual verdicts EXPECTED-RESIDUAL and takes its own member, while a
     remediable Arm F finding — one whose suffix domain already carries rows, or whose
     operand is not on disk at all — verdicts BLOCKING alongside Arms B and E. A residual
@@ -215,15 +217,18 @@ _DOC_ROW_KEY_RE = re.compile(r"^\|\s*`([^`]+)`")
 # --------------------------------------------------------------------------------
 # ARM F — mandate reachability: can an agent run what a pipeline spec tells it to run?
 # --------------------------------------------------------------------------------
-# ARM F REPORTS FINDINGS ON ARRIVAL AND ITS RESIDUAL CLASS IS NOT EXPECTED TO EMPTY UNTIL
-# THE NON-SHELL POPULATION IS DRAINED. DO NOT REGISTER THE selftest-discovery JOB AS A
-# REQUIRED CONTEXT UNTIL THEN.
-# Most of what this arm names today is a `.py` tool. Every non-comment row in the
-# allowlist ends `.sh`; the non-shell section is DELIBERATELY EMPTY at introduction and
-# is to be filled from drain evidence during BLOCK-DESTRUCTIVE-022's warn phase, NOT
-# pre-populated from a corpus survey (core/rules/bypass-mode-readiness/block-destructive.md).
-# So a `.py` finding here is unmatchable BY CONSTRUCTION and is not remediable by adding
-# a row. Naming the population on every in-scope PR is this arm's job; draining it is the
+# ARM F REPORTED FINDINGS ON ARRIVAL. ITS RESIDUAL CLASS NOW HOLDS ONLY AN OPERAND IN A
+# SUFFIX DOMAIN THAT CARRIES NO ROW, SO IT IS EMPTY WHILE NO SPEC PRESCRIBES ONE — THE
+# `.py` DOMAIN HOLDS ROWS, AND A `.py` FINDING IS BLOCKING. DO NOT REGISTER THE
+# selftest-discovery JOB AS A REQUIRED CONTEXT UNTIL THE NON-SHELL POPULATION IS DRAINED.
+# Most of what this arm named on arrival was a `.py` tool, while every non-comment row in
+# the allowlist ended `.sh`: the non-shell section was DELIBERATELY EMPTY at introduction.
+# It is being filled from drain evidence during BLOCK-DESTRUCTIVE-022's warn phase, NOT
+# pre-populated from a corpus survey (core/rules/bypass-mode-readiness/block-destructive.md),
+# and its first rows are `.py` tools the drain recorded, the prescribed ones among them.
+# So a finding in a suffix domain that still carries no row is unmatchable BY CONSTRUCTION
+# and not remediable by adding a row elsewhere, while a `.py` finding is now remediable.
+# Naming the population on every in-scope PR is this arm's job; draining it is the
 # graduation reviewer's.
 #
 # WHICH FINDINGS ARE RESIDUAL IS DERIVED, NEVER HARDCODED — see allowlist_suffix_domains().

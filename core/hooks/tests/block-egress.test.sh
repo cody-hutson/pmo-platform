@@ -2114,6 +2114,941 @@ fi
 
 /bin/rm -rf "$E007_V_BASE"
 
+# =====================================================================
+# AC-E007-W* — the gated verb behind a prefix command's own grammar
+# =====================================================================
+# The rule's head walk steps over a prefix command (env, sudo, xargs, timeout, nice, stdbuf,
+# nohup, time, exec, command, builtin) and that command's dash-led tokens, then reads the
+# first other token as the command word. An option that takes a SEPARATE argument
+# (`env -u NAME`), a positional operand (`timeout 5`) or an assignment only the prefix
+# command accepts (`env a-b=1`) put a word there; the walk read it as the command, found no
+# gated verb, and the write behind it was never examined. The hook now runs a secondary
+# locator behind the walk: when a segment's head resolved through a prefix command and the
+# walk did not land on the gated verb, the first `gh` + `api` pair later in the segment is
+# adjudicated. It is a domain test, not an option table, so these arms assert that nothing a
+# prefix command carries strands the verb, that the locator moves no verdict the head walk
+# already gave, and that its row says which locator found the verb.
+#
+# EVERY POSITION THE LOCATOR REACHES IS A WIDENING. At the shipped rollout phase a hit is
+# recorded (a would-fire row) and takes no action, so the arms grade the shipped hook (S) on
+# its ROW and a copy with only the phase forced to `enforce` (E) on its REFUSAL, beside the
+# reverse mutant (R: the hook with the marked locator span deleted, which is the hook before
+# this change in every branch these arms reach) and its phase-forced twin (RE). A
+# must-locate arm's R limb is its red-before evidence in every run.
+#
+# HERMETIC, ON THE V FAMILY'S PATTERN: every copy lives in its own sandbox through
+# e007_v_sandbox, whose one-row allowlist makes repos/v-test-owner/v-test-repo/issues the
+# allowlisted path, and every call goes through the D family's runner at .mode=enforce with
+# the scope root and the master-enable config root pinned, logs counted in records.
+#
+# A GREEN-BEFORE CONTROL, PIN OR MUST-NOT-FLAG ARM IS PAIRED: its `-pair` arm runs the same
+# payload through a mutant under which the arm's own verdict cannot hold, so no such arm is
+# green because its observation is dead. Each mutant carries a shape guard (the lines it takes
+# out and puts in against the source hook, that it parses, and that it still denies the
+# untouched rule -001):
+#   P   the prefix arm without env          PE  P, phase forced
+#   D   the day-one refusal never taken     A   every segment recorded as a write
+#   AE  A, phase forced                     LE  the allowlist matches nothing, phase forced
+#   WE  every gh api a write, phase forced  UE  the locator ungated, phase forced
+#   QE  quoted spaces kept, phase forced    K   every row labelled look-ahead
+#   N   a locator hit advances the first-invocation counter (what AC-E007-W5a guards)
+echo ""
+echo "gh api write behind a prefix command's option, argument or operand (AC-E007-W*)"
+echo "---"
+
+E007_W_BASE="$(/usr/bin/mktemp -d)"
+E007_W_OK="repos/v-test-owner/v-test-repo/issues"
+E007_W_NO="repos/evil-org/secret/issues"
+E007_W_SRC="${E007_D_HOOK_SRC}/block-egress.sh"
+
+# The edits, each naming the one line it changes; a copy applies any number of them in turn.
+E007_W_X_PHASE='s|^readonly EGRESS_007_WIDENING_PHASE="shadow"$|readonly EGRESS_007_WIDENING_PHASE="enforce"|'
+E007_W_X_REVERSE='/^        # >>> PREFIX-LOCATOR-BEGIN/,/^        # >>> PREFIX-LOCATOR-END/d'
+E007_W_X_COUNTER='s|^        if \[ "\$egress_scanhit" -eq 0 \]; then egress_ghseen=\$(( egress_ghseen + 1 )); fi$|        egress_ghseen=$(( egress_ghseen + 1 ))|'
+E007_W_X_NOENV='s/^\( *\)time|command|builtin|exec|nohup|env|sudo|xargs|timeout|nice|stdbuf)$/\1time|command|builtin|exec|nohup|sudo|xargs|timeout|nice|stdbuf)/'
+E007_W_X_NODAY1='s|^          egress_widening=0$|          egress_widening=1|'
+E007_W_X_ALLGH='s|^      \*gh\*)$|      *)|'
+E007_W_X_ALLSEG='s,^        \[ "\${#egress_toks\[@\]}" -ge 2 \] || continue$,        egress_007_verdict "not-allowlisted" "all-segments" 1; continue,'
+E007_W_X_NOALLOW='s|^      \$pattern) return 0;;$|      $pattern) return 1;;|'
+E007_W_X_ALLWRITE='s|^        egress_write=0$|        egress_write=1|'
+E007_W_X_UNGATED='s|^        if \[ "\$egress_pfxseen" -eq 1 \]; then$|        if true; then|'
+E007_W_X_QSPACE='s|^    body="\${body// /\${EGRESS_SENT}}"$|    body="${body}"|'
+E007_W_X_LABEL='s|^        egress_pos=""$|        egress_pos="look-ahead"|'
+
+# e007_w_copy <dir> [<edit> ...] — <dir>/mut.sh, the source hook with each edit applied in
+# turn, installed as the hook of a sandbox rooted at <dir>. With no edit: the shipped hook.
+e007_w_copy() {
+  local dir="$1" x
+  shift
+  /bin/mkdir -p "$dir"
+  /bin/cp "$E007_W_SRC" "${dir}/mut.sh"
+  for x in "$@"; do
+    /usr/bin/sed -e "$x" "${dir}/mut.sh" > "${dir}/mut.next" && /bin/mv "${dir}/mut.next" "${dir}/mut.sh"
+  done
+  e007_v_sandbox "$dir" "${dir}/mut.sh"
+}
+E007_W_S="${E007_W_BASE}/s";   e007_w_copy "$E007_W_S"
+E007_W_E="${E007_W_BASE}/e";   e007_w_copy "$E007_W_E" "$E007_W_X_PHASE"
+E007_W_R="${E007_W_BASE}/r";   e007_w_copy "$E007_W_R" "$E007_W_X_REVERSE"
+E007_W_RE="${E007_W_BASE}/re"; e007_w_copy "$E007_W_RE" "$E007_W_X_REVERSE" "$E007_W_X_PHASE"
+E007_W_N="${E007_W_BASE}/n";   e007_w_copy "$E007_W_N" "$E007_W_X_COUNTER"
+E007_W_P="${E007_W_BASE}/p";   e007_w_copy "$E007_W_P" "$E007_W_X_NOENV"
+E007_W_PE="${E007_W_BASE}/pe"; e007_w_copy "$E007_W_PE" "$E007_W_X_NOENV" "$E007_W_X_PHASE"
+E007_W_D="${E007_W_BASE}/d";   e007_w_copy "$E007_W_D" "$E007_W_X_NODAY1"
+E007_W_A="${E007_W_BASE}/a";   e007_w_copy "$E007_W_A" "$E007_W_X_ALLGH" "$E007_W_X_ALLSEG"
+E007_W_AE="${E007_W_BASE}/ae"; e007_w_copy "$E007_W_AE" "$E007_W_X_ALLGH" "$E007_W_X_ALLSEG" "$E007_W_X_PHASE"
+E007_W_LE="${E007_W_BASE}/le"; e007_w_copy "$E007_W_LE" "$E007_W_X_NOALLOW" "$E007_W_X_PHASE"
+E007_W_WE="${E007_W_BASE}/we"; e007_w_copy "$E007_W_WE" "$E007_W_X_ALLWRITE" "$E007_W_X_PHASE"
+E007_W_UE="${E007_W_BASE}/ue"; e007_w_copy "$E007_W_UE" "$E007_W_X_UNGATED" "$E007_W_X_PHASE"
+E007_W_QE="${E007_W_BASE}/qe"; e007_w_copy "$E007_W_QE" "$E007_W_X_QSPACE" "$E007_W_X_PHASE"
+E007_W_K="${E007_W_BASE}/k";   e007_w_copy "$E007_W_K" "$E007_W_X_LABEL"
+
+# e007_w_shape <name> <dir> <out> <in> — a copy's shape against the source hook: exactly <out>
+# lines taken out and <in> put in, it parses, and as its sandbox's hook it still denies the
+# untouched rule -001, so a verdict read from it is the mutation's and not a dead copy's.
+e007_w_shape() {
+  local name="$1" dir="$2" want_o="$3" want_n="$4" d n_o n_n why=""
+  d="$(/usr/bin/diff "$E007_W_SRC" "${dir}/mut.sh" 2>/dev/null)"
+  n_o="$(/usr/bin/grep -c '^<' <<<"$d")"
+  n_n="$(/usr/bin/grep -c '^>' <<<"$d")"
+  { [ "$n_o" = "$want_o" ] && [ "$n_n" = "$want_n" ]; } \
+    || why="${why} lines -${n_o}/+${n_n}, want -${want_o}/+${want_n} (the edit no longer targets its line: re-point it, do not delete the arm);"
+  /bin/bash -n "${dir}/mut.sh" 2>/dev/null || why="${why} the copy does not parse;"
+  e007_d_run "$dir" enforce "$(e007_d_bash 'cat ~/.ssh/id_rsa' "$dir")"
+  { [ "$E007_D_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-EGRESS-001' <<<"$E007_D_ERR"; } \
+    || why="${why} liveness: -001 not denied (exit ${E007_D_EXIT});"
+  if [ -z "$why" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "$why"; fi
+}
+
+# The marked span, read from the source hook's own markers.
+E007_W_MB="$(/usr/bin/grep -c -e '^        # >>> PREFIX-LOCATOR-BEGIN' "$E007_W_SRC")"
+E007_W_ME="$(/usr/bin/grep -c -e '^        # >>> PREFIX-LOCATOR-END' "$E007_W_SRC")"
+E007_W_SPAN="$(/usr/bin/awk '/^        # >>> PREFIX-LOCATOR-BEGIN/ { b = NR } /^        # >>> PREFIX-LOCATOR-END/ { e = NR } END { if (b && e) print e - b + 1; else print 0 }' "$E007_W_SRC")"
+
+e007_w_shape "AC-E007-W0a: the phase-forced copy E differs from the source in one line, parses, and still denies -001" "$E007_W_E" 1 1
+
+# W0b — the reverse mutant: each marker once in the source hook, neither in the copy, the copy
+# shorter by exactly the marked span, still carrying the prefix arm's mark (which sits outside
+# the span, so R is the pre-change walk and not a broken one), parsing, and still denying -001.
+_w_why=""
+{ [ "$E007_W_MB" = 1 ] && [ "$E007_W_ME" = 1 ] && [ "$E007_W_SPAN" -gt 2 ]; } \
+  || _w_why="${_w_why} the source carries the markers ${E007_W_MB} and ${E007_W_ME} times (want 1 and 1) around a span of ${E007_W_SPAN} lines;"
+[ "$(/usr/bin/grep -c -e 'PREFIX-LOCATOR-' "${E007_W_R}/mut.sh")" = 0 ] || _w_why="${_w_why} the copy still carries a marker;"
+_w_d="$(/usr/bin/diff "$E007_W_SRC" "${E007_W_R}/mut.sh" 2>/dev/null)"
+{ [ "$(/usr/bin/grep -c '^<' <<<"$_w_d")" = "$E007_W_SPAN" ] && [ "$(/usr/bin/grep -c '^>' <<<"$_w_d")" = 0 ]; } \
+  || _w_why="${_w_why} the copy is not the source less exactly the marked span;"
+[ "$(/usr/bin/grep -c -F -e 'egress_pfxseen=1' "${E007_W_R}/mut.sh")" -ge 1 ] || _w_why="${_w_why} the copy lost the prefix arm's mark;"
+/bin/bash -n "${E007_W_R}/mut.sh" 2>/dev/null || _w_why="${_w_why} the copy does not parse;"
+e007_d_run "$E007_W_R" enforce "$(e007_d_bash 'cat ~/.ssh/id_rsa' "$E007_W_R")"
+{ [ "$E007_D_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-EGRESS-001' <<<"$E007_D_ERR"; } || _w_why="${_w_why} liveness: -001 not denied (exit ${E007_D_EXIT});"
+if [ -z "$_w_why" ]; then
+  e007_d_pass "AC-E007-W0b: the reverse mutant R is the source less exactly its ${E007_W_SPAN}-line marked span, keeps the prefix arm's mark, parses, and still denies -001"
+else
+  e007_d_fail "AC-E007-W0b: the reverse mutant R is the source less exactly its marked span" "$_w_why"
+fi
+
+e007_w_shape "AC-E007-W0c: the counter copy N differs from the source in one line, parses, and still denies -001" "$E007_W_N" 1 1
+
+_w_why=""
+[ "$E007_W_SPAN" -gt 2 ] || _w_why=" the source carries no marked span, so RE would be E;"
+_w_d="$(/usr/bin/diff "${E007_W_R}/mut.sh" "${E007_W_RE}/mut.sh" 2>/dev/null)"
+{ [ "$(/usr/bin/grep -c '^<' <<<"$_w_d")" = 1 ] && [ "$(/usr/bin/grep -c '^>' <<<"$_w_d")" = 1 ]; } || _w_why="${_w_why} RE is not R with one line changed;"
+/bin/bash -n "${E007_W_RE}/mut.sh" 2>/dev/null || _w_why="${_w_why} RE does not parse;"
+if [ -z "$_w_why" ]; then
+  e007_d_pass "AC-E007-W0d: RE is the reverse mutant with only its phase line changed, and parses"
+else
+  e007_d_fail "AC-E007-W0d: RE is the reverse mutant with only its phase line changed" "$_w_why"
+fi
+
+e007_w_shape "AC-E007-W0-P: the no-env copy P differs in one line, parses, and still denies -001" "$E007_W_P" 1 1
+e007_w_shape "AC-E007-W0-PE: PE differs in two lines (no env, phase forced), parses, and still denies -001" "$E007_W_PE" 2 2
+e007_w_shape "AC-E007-W0-D: the never-day-one copy D differs in one line, parses, and still denies -001" "$E007_W_D" 1 1
+e007_w_shape "AC-E007-W0-A: the every-segment copy A differs in two lines, parses, and still denies -001" "$E007_W_A" 2 2
+e007_w_shape "AC-E007-W0-AE: AE differs in three lines (A, phase forced), parses, and still denies -001" "$E007_W_AE" 3 3
+e007_w_shape "AC-E007-W0-LE: LE differs in two lines (allowlist matches nothing, phase forced), parses, and still denies -001" "$E007_W_LE" 2 2
+e007_w_shape "AC-E007-W0-WE: WE differs in two lines (every gh api a write, phase forced), parses, and still denies -001" "$E007_W_WE" 2 2
+e007_w_shape "AC-E007-W0-UE: UE differs in two lines (locator ungated, phase forced), parses, and still denies -001" "$E007_W_UE" 2 2
+e007_w_shape "AC-E007-W0-QE: QE differs in two lines (quoted spaces kept, phase forced), parses, and still denies -001" "$E007_W_QE" 2 2
+e007_w_shape "AC-E007-W0-K: the label-everything copy K differs in one line, parses, and still denies -001" "$E007_W_K" 1 1
+
+# e007_w_run <dir> <command> — the D family's runner at .mode=enforce.
+e007_w_run() { e007_d_run "$1" enforce "$(e007_d_bash "$2" "$1")"; }
+# e007_w_rec <dir> — phase|cause|path|pos of the last would-fire row in <dir>'s warn log, pos
+# `-` when the row carries none. Read only when the call just added one row.
+e007_w_rec() {
+  local log="$1/.claude/hooks/egress-warn-log.jsonl"
+  if [ -s "$log" ]; then
+    /usr/bin/jq -s -r '[.[] | select(.reason == "would-fire")] | last // empty | "\(.phase // "")|\(.cause // "")|\(.path // "")|\(.pos // "-")"' "$log" 2>/dev/null || true
+  fi
+}
+# e007_w_locates <command> [<cause> [<path>]] — the must-locate test: 0 when the shipped hook
+# allows the call with exactly one new would-fire row reading shadow|<cause>|<path>|look-ahead
+# and the reverse mutant allows it with no new row. Sets E007_W_ROW (the shipped row) and
+# E007_W_WHY (what failed).
+E007_W_ROW=""
+E007_W_WHY=""
+e007_w_locates() {
+  local cmd="$1" cause="${2:-not-allowlisted}" path="${3:-$E007_W_NO}"
+  E007_W_ROW=""; E007_W_WHY=""
+  e007_w_run "$E007_W_S" "$cmd"
+  if [ "$E007_D_WRN" = 1 ]; then E007_W_ROW="$(e007_w_rec "$E007_W_S")"; fi
+  { [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_WRN" = 1 ] && [ "$E007_D_BLK" = 0 ]; } \
+    || E007_W_WHY="${E007_W_WHY} shipped: exit=${E007_D_EXIT} rows+${E007_D_WRN} refusals+${E007_D_BLK}, want 0 +1 +0;"
+  [ "$E007_W_ROW" = "shadow|${cause}|${path}|look-ahead" ] \
+    || E007_W_WHY="${E007_W_WHY} shipped row ${E007_W_ROW:-none}, want shadow|${cause}|${path}|look-ahead;"
+  e007_w_run "$E007_W_R" "$cmd"
+  { [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_WRN" = 0 ] && [ "$E007_D_BLK" = 0 ]; } \
+    || E007_W_WHY="${E007_W_WHY} reverse: exit=${E007_D_EXIT} rows+${E007_D_WRN} refusals+${E007_D_BLK}, want 0 +0 +0;"
+  [ -z "$E007_W_WHY" ]
+}
+e007_w_pair() { # <label> <command> [<cause> [<path>]] — one must-locate arm
+  local label="$1"
+  shift
+  if e007_w_locates "$@"; then e007_d_pass "$label"; else e007_d_fail "$label" "$E007_W_WHY"; fi
+}
+
+# ---- AC-1: the card's subject, its same-position control, the plain form, the near miss ----
+E007_W_C1="env -u NAME gh api -X POST ${E007_W_NO}"
+E007_W_C1C="env gh api -X POST ${E007_W_NO}"
+E007_W_NEAR="env -u NAME ls"
+
+e007_w_pair "AC-E007-W1: env -u NAME gh api -X POST <unlisted> is located behind the option's argument and recorded at the shipped phase, with no action taken" "$E007_W_C1"
+_w1_row="$E007_W_ROW"
+
+_w_why=""
+e007_w_run "$E007_W_S" "$E007_W_C1C"
+_w1c_row=""; if [ "$E007_D_WRN" = 1 ]; then _w1c_row="$(e007_w_rec "$E007_W_S")"; fi
+{ [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_WRN" = 1 ] && [ "$E007_D_BLK" = 0 ]; } || _w_why="${_w_why} shipped: exit=${E007_D_EXIT} rows+${E007_D_WRN} refusals+${E007_D_BLK}, want 0 +1 +0;"
+[ "$_w1c_row" = "shadow|not-allowlisted|${E007_W_NO}|-" ] || _w_why="${_w_why} shipped row ${_w1c_row:-none}, want shadow|not-allowlisted|${E007_W_NO}|- (a head-walk row carries no pos key);"
+e007_w_run "$E007_W_R" "$E007_W_C1C"
+{ [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_WRN" = 1 ]; } || _w_why="${_w_why} reverse: exit=${E007_D_EXIT} rows+${E007_D_WRN}, want 0 +1 (a reverse copy that cannot record proves nothing);"
+if [ -z "$_w_why" ]; then
+  e007_d_pass "AC-E007-W1c: the same-position control env gh api -X POST <unlisted> is recorded by the head walk on the shipped hook and on the reverse mutant, its row carrying no pos key"
+else
+  e007_d_fail "AC-E007-W1c: the same-position control is recorded by the head walk on both copies" "$_w_why"
+fi
+e007_d_expect "AC-E007-W1c-pair: through the copy whose prefix arm lacks env, the same control is neither recorded nor refused — so W1c reads a live head walk" \
+  "$E007_W_P" enforce "$E007_W_C1C" 0 0 0
+
+if [ -n "$_w1_row" ] && [ -n "$_w1c_row" ] && [ "${_w1_row%|*}" = "${_w1c_row%|*}" ]; then
+  e007_d_pass "AC-E007-W1q: the located write's row carries the same phase, cause and path as the same-position control's (${_w1_row%|*})"
+else
+  e007_d_fail "AC-E007-W1q: the located write's row carries the same phase, cause and path as the same-position control's" "W1 row=${_w1_row:-none} W1c row=${_w1c_row:-none}"
+fi
+if [ "${_w1_row##*|}" = "look-ahead" ] && [ -n "$_w1c_row" ] && [ "${_w1c_row##*|}" = "-" ]; then
+  e007_d_pass "AC-E007-W1k: a row the look-ahead writes is distinguishable from one the head walk writes — pos look-ahead on the first, no pos key on the second"
+else
+  e007_d_fail "AC-E007-W1k: a look-ahead row is distinguishable from a head-walk row" "W1 row=${_w1_row:-none} W1c row=${_w1c_row:-none}"
+fi
+e007_w_run "$E007_W_K" "$E007_W_C1C"
+_w_krow=""; if [ "$E007_D_WRN" = 1 ]; then _w_krow="$(e007_w_rec "$E007_W_K")"; fi
+if [ "${_w_krow##*|}" = "look-ahead" ]; then
+  e007_d_pass "AC-E007-W1k-pair: through the copy that labels every row, the head walk's row carries pos look-ahead — so W1k's absent key is read on a live writer"
+else
+  e007_d_fail "AC-E007-W1k-pair: through the copy that labels every row, the head walk's row carries pos look-ahead" "row=${_w_krow:-none} exit=${E007_D_EXIT} rows+${E007_D_WRN}"
+fi
+
+_w_why=""
+e007_w_run "$E007_W_E" "$E007_W_C1"
+{ [ "$E007_D_EXIT" = 2 ] && [ "$E007_D_BLK" = 1 ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_D_ERR"; } \
+  || _w_why="${_w_why} phase-forced copy: exit=${E007_D_EXIT} refusals+${E007_D_BLK}, want 2 +1 naming BLOCK-EGRESS-007;"
+e007_w_run "$E007_W_RE" "$E007_W_C1"
+{ [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_BLK" = 0 ] && [ "$E007_D_WRN" = 0 ]; } \
+  || _w_why="${_w_why} its reverse twin: exit=${E007_D_EXIT} refusals+${E007_D_BLK} rows+${E007_D_WRN}, want 0 +0 +0;"
+if [ -z "$_w_why" ]; then
+  e007_d_pass "AC-E007-W1e: with only the phase forced to enforce, the subject is refused by BLOCK-EGRESS-007, and the reverse mutant forced the same way allows it with no record"
+else
+  e007_d_fail "AC-E007-W1e: with the phase forced, the subject is refused, and the forced reverse mutant allows it" "$_w_why"
+fi
+
+_w_why=""
+e007_w_run "$E007_W_E" "$E007_W_C1C"
+{ [ "$E007_D_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_D_ERR"; } || _w_why="${_w_why} phase-forced copy: exit=${E007_D_EXIT}, want 2 naming BLOCK-EGRESS-007;"
+e007_w_run "$E007_W_RE" "$E007_W_C1C"
+{ [ "$E007_D_EXIT" = 2 ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_D_ERR"; } || _w_why="${_w_why} its reverse twin: exit=${E007_D_EXIT}, want 2 naming BLOCK-EGRESS-007;"
+if [ -z "$_w_why" ]; then
+  e007_d_pass "AC-E007-W1f: the same-position control is refused by both phase-forced copies — the forced sandbox can deny at a prefix position"
+else
+  e007_d_fail "AC-E007-W1f: the same-position control is refused by both phase-forced copies" "$_w_why"
+fi
+e007_d_expect "AC-E007-W1f-pair: through the phase-forced copy whose prefix arm lacks env, the same control is allowed — so W1f reads a live refusal" \
+  "$E007_W_PE" enforce "$E007_W_C1C" 0 0 0
+
+e007_d_expect "AC-E007-W1p: the plain form gh api -X POST <unlisted> is still refused on day one by the shipped hook" \
+  "$E007_W_S" enforce "gh api -X POST ${E007_W_NO}" 2 1 0 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W1p-pair: through the copy that never takes the day-one refusal, the plain form is recorded and allowed — so W1p reads a live day-one refusal" \
+  "$E007_W_D" enforce "gh api -X POST ${E007_W_NO}" 0 0 1
+e007_d_expect "AC-E007-W1n: the near miss env -u NAME ls is neither recorded nor refused by the shipped hook" \
+  "$E007_W_S" enforce "$E007_W_NEAR" 0 0 0
+e007_d_expect "AC-E007-W1n-pair: through the copy that records every segment as a write, the same near miss is recorded — so W1n's zero is read on a live writer" \
+  "$E007_W_A" enforce "$E007_W_NEAR" 0 0 1
+e007_d_expect "AC-E007-W1m: the near miss env -u NAME ls is allowed with the phase forced to enforce (0 refusals)" \
+  "$E007_W_E" enforce "$E007_W_NEAR" 0 0 -
+e007_d_expect "AC-E007-W1m-pair: through the phase-forced copy that records every segment as a write, the same near miss is refused — so W1m's zero is read on a live refusal" \
+  "$E007_W_AE" enforce "$E007_W_NEAR" 2 1 -
+
+# ---- AC-2: every separate-argument option, operand and unlisted word the arm admits ----
+# The design's static rows: each (command, option) pair the Stage-5 design took from the
+# reference host's binaries and manual pages, with W1's env -u. `env -S` is listed as the
+# design measured it; its argument is env's own argv, so with `x` the program env runs is `x`
+# and the pair is text to it — located all the same, the declared over-evaluation W4a pins.
+E007_W_ROWS='env|-C|/tmp|
+env|-P|/usr/bin|
+env|-S|x|
+xargs|-E|EOF|
+xargs|-I|R|
+xargs|-J|R|
+xargs|-L|1|
+xargs|-n|1|
+xargs|-P|2|
+xargs|-R|2|
+xargs|-S|255|
+xargs|-s|4096|
+nice|-n|5|
+stdbuf|-e|0|
+stdbuf|-i|0|
+stdbuf|-o|L|
+time|-o|/tmp/t|
+exec|-a|name|
+sudo|-C|3|
+sudo|-D|/tmp|
+sudo|-g|staff|
+sudo|-h|localhost|
+sudo|-p|prompt|
+sudo|-R|/tmp|
+sudo|-T|5|
+sudo|-u|bot|
+sudo|-U|bot|
+timeout|-k|1|5
+timeout|-s|KILL|5'
+while IFS='|' read -r _w_c _w_o _w_a _w_x; do
+  [ -n "$_w_c" ] || continue
+  e007_w_pair "AC-E007-W2-${_w_c}${_w_o}: ${_w_c} ${_w_o} ${_w_a}${_w_x:+ ${_w_x}} gh api -X POST <unlisted> is located behind the option's argument" \
+    "${_w_c} ${_w_o} ${_w_a}${_w_x:+ ${_w_x}} gh api -X POST ${E007_W_NO}"
+done <<<"$E007_W_ROWS"
+
+e007_w_pair "AC-E007-W2-timeout-duration: timeout 5 gh api -X POST <unlisted> is located behind the positional operand" \
+  "timeout 5 gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-W2-env-assignment: env a-b=1 gh api -X POST <unlisted> is located behind an assignment only env accepts" \
+  "env a-b=1 gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-W2-unlisted-option: env --zz-unlisted VALUE gh api -X POST <unlisted> is located behind an option no table lists" \
+  "env --zz-unlisted VALUE gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-W2-unlisted-operand: nohup zz-launcher gh api -X POST <unlisted> is located behind a word outside the prefix set" \
+  "nohup zz-launcher gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-W2-nested: sudo -u bot env -u X nice -n 5 gh api -X POST <unlisted> is located behind three prefix commands' options" \
+  "sudo -u bot env -u X nice -n 5 gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-W2-keyword: if env -u X gh api -X POST <unlisted>; then :; fi is located behind a keyword and a prefix option" \
+  "if env -u X gh api -X POST ${E007_W_NO}; then :; fi"
+e007_w_pair "AC-E007-W2-implicit: env -u NAME gh api <unlisted> -f a=b — an implicit POST — is located" \
+  "env -u NAME gh api ${E007_W_NO} -f a=b"
+e007_w_pair "AC-E007-W2-unresolvable: env -u X gh api -X POST repos/{owner}/{repo}/issues is located and recorded with cause unresolvable, its path as written" \
+  "env -u X gh api -X POST repos/{owner}/{repo}/issues" unresolvable "repos/{owner}/{repo}/issues"
+e007_w_pair "AC-E007-W2-decoy-echo: env -u echo gh api -X POST <unlisted> — an option argument that names a printing command — is located as the write it is" \
+  "env -u echo gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-W2-decoy-gh: env -u gh api=1 gh api -X POST <unlisted> — a gh option argument not followed by api — is passed over and the real pair located" \
+  "env -u gh api=1 gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-W2-quoted: env -u NAME gh api -X POST '<unlisted>' — a quoted path — is located with its unquoted path" \
+  "env -u NAME gh api -X POST '${E007_W_NO}'"
+
+# ---- The sibling guard's option tables, read as test data (AC-E007-W2R-*) ----
+# block-destructive.sh carries, per wrapper, the short options that take an argument
+# (script_wopt, getopt notation) and the long options that may take the next token
+# (script_wlarg), beside each program's whole long-option table (script_wlong), read from the
+# programs' own option tables. This rule's walk reads no option table and needs none: the
+# locator interprets nothing it passes over, so these arms READ those rows and send each short
+# option the static rows above do not already carry, and each long option at its full name
+# and at the shortest prefix its program's parser takes for it — resolved as getopt_long
+# resolves one: an exact name wins, otherwise a prefix that begins exactly one option —
+# through the locator. Rows that cannot be read FAIL; they never shrink this family silently.
+E007_W_SIB="${E007_D_HOOK_SRC}/block-destructive.sh"
+E007_W_SIBROWS=""
+if [ -r "$E007_W_SIB" ]; then
+  E007_W_SIBROWS="$(/usr/bin/awk '
+    /^script_wrapper_row\(\) \{/ { inrow = 1; next }
+    inrow && /^\}/ { inrow = 0 }
+    inrow {
+      if (match($0, /^    [a-z]+\)/)) w = substr($0, 5, RLENGTH - 5)
+      if (w == "") next
+      if (match($0, /script_wopt="[^"]*"/))  print w "|wopt|"  substr($0, RSTART + 13, RLENGTH - 14)
+      if (match($0, /script_wlarg="[^"]*"/)) print w "|wlarg|" substr($0, RSTART + 14, RLENGTH - 15)
+      if (match($0, /script_wlong="[^"]*"/)) print w "|wlong|" substr($0, RSTART + 14, RLENGTH - 15)
+    }' "$E007_W_SIB")"
+fi
+E007_W_STATIC=" env-u env-C env-P env-S xargs-E xargs-I xargs-J xargs-L xargs-n xargs-P xargs-R xargs-S xargs-s nice-n stdbuf-e stdbuf-i stdbuf-o time-o exec-a sudo-C sudo-D sudo-g sudo-h sudo-p sudo-R sudo-T sudo-u sudo-U timeout-k timeout-s "
+_w_miss=""
+for _w_need in nice stdbuf sudo env xargs time timeout; do
+  case "$E007_W_SIBROWS" in
+    *"${_w_need}|wopt|"*) ;;
+    *) _w_miss="${_w_miss} ${_w_need}:wopt" ;;
+  esac
+  case "$E007_W_SIBROWS" in
+    *"${_w_need}|wlarg|"*) ;;
+    *) _w_miss="${_w_miss} ${_w_need}:wlarg" ;;
+  esac
+done
+if [ -z "$_w_miss" ]; then
+  e007_d_pass "AC-E007-W2R-ROWS: the sibling guard's option rows read for all seven wrappers that carry an argument-taking option"
+else
+  e007_d_fail "AC-E007-W2R-ROWS: the sibling guard's option rows read" "missing:${_w_miss} (from ${E007_W_SIB})"
+fi
+
+# e007_w_prefix <--name> <the program's long-option table> -> E007_W_PFX, the shortest prefix
+# the program's parser resolves to <--name>; <--name> itself when no shorter one does.
+e007_w_prefix() {
+  local name="$1" table="$2" k p w n exact
+  E007_W_PFX="$name"
+  k=3
+  while [ "$k" -lt "${#name}" ]; do
+    p="${name:0:$k}"
+    exact=0
+    n=0
+    for w in $table; do
+      if [ "$w" = "$p" ]; then exact=1; fi
+      case "$w" in "$p"*) n=$((n + 1)) ;; esac
+    done
+    if [ "$exact" -eq 0 ] && [ "$n" -eq 1 ]; then E007_W_PFX="$p"; return 0; fi
+    k=$((k + 1))
+  done
+  return 0
+}
+
+while IFS='|' read -r _w_cmd _w_kind _w_val; do
+  [ "$_w_kind" = wopt ] || continue
+  _w_opd=""
+  if [ "$_w_cmd" = timeout ]; then _w_opd=" 5"; fi
+  _w_s="$_w_val"
+  while [ -n "$_w_s" ]; do
+    _w_l="${_w_s:0:1}"
+    _w_s="${_w_s:1}"
+    case "$_w_s" in
+      '::'*) _w_s="${_w_s:2}"; continue ;;   # an argument only when attached
+      ':'*)  _w_s="${_w_s:1}" ;;             # a separate argument
+      *)     continue ;;                     # a flag
+    esac
+    case "$E007_W_STATIC" in *" ${_w_cmd}-${_w_l} "*) continue ;; esac
+    e007_w_pair "AC-E007-W2R-${_w_cmd}-${_w_l}: ${_w_cmd} -${_w_l} V1${_w_opd} gh api -X POST <unlisted> is located (a short option of the sibling's row the static rows do not carry)" \
+      "${_w_cmd} -${_w_l} V1${_w_opd} gh api -X POST ${E007_W_NO}"
+  done
+done <<<"$E007_W_SIBROWS"
+
+while IFS='|' read -r _w_cmd _w_kind _w_val; do
+  [ "$_w_kind" = wlarg ] || continue
+  _w_table=""
+  while IFS='|' read -r _w_c2 _w_k2 _w_v2; do
+    if [ "$_w_c2" = "$_w_cmd" ] && [ "$_w_k2" = wlong ]; then _w_table="$_w_v2"; fi
+  done <<<"$E007_W_SIBROWS"
+  _w_opd=""
+  if [ "$_w_cmd" = timeout ]; then _w_opd=" 5"; fi
+  for _w_name in $_w_val; do
+    e007_w_prefix "$_w_name" "$_w_table"
+    _w_why=""
+    for _w_sp in "$_w_name" "$E007_W_PFX"; do
+      e007_w_locates "${_w_cmd} ${_w_sp} V1${_w_opd} gh api -X POST ${E007_W_NO}" || _w_why="${_w_why} [${_w_sp}]${E007_W_WHY}"
+    done
+    if [ -z "$_w_why" ]; then
+      e007_d_pass "AC-E007-W2R-${_w_cmd}${_w_name}: ${_w_cmd} ${_w_name} V1 and its shortest unique prefix ${E007_W_PFX} are both located (a long option of the sibling's row)"
+    else
+      e007_d_fail "AC-E007-W2R-${_w_cmd}${_w_name}: ${_w_cmd} ${_w_name} and its shortest unique prefix ${E007_W_PFX} are both located" "$_w_why"
+    fi
+  done
+done <<<"$E007_W_SIBROWS"
+
+# ---- AC-2's real-binary sweep (AC-E007-W2d*) ----
+# The card asks for the separate-argument set derived by exercising the real binaries. For
+# each of env, xargs, nice, stdbuf, timeout and nohup that resolves on this runner — never
+# sudo and never a shell builtin — and each letter a-z, A-Z and 0-9 except xargs -p and -o,
+# which open the terminal, the binary runs a harmless command behind `-<letter> <value>`, with
+# stdin a one-line pipe, for the values 1, ., L and 4096 in turn. The option takes a separate
+# argument when the sentinel the command prints appears on stdout as the start of a whole
+# line: stdout only, so a command a binary echoes to stderr (`xargs -t`) never reads as run,
+# and 4096 is the workable value of a size option (`xargs -s`). Each derived option is then
+# sent through the locator. One watchdog bounds the whole sweep; a sweep it stops is a FAIL
+# naming the probe in flight, never a silent drop. Declared limit: an option whose argument is
+# a command string (`env -S`) is not derived — the command it would run is its argument — and
+# the static rows carry it.
+#
+# Nothing in the hook reads the sweep's result. What lets the sweep fail is AC-E007-W2d-static:
+# every pair the Stage-5 design exercised on its reference host must be derived wherever its
+# binary is present, so a sweep that misreads a binary turns red.
+E007_W_DIR="${E007_W_BASE}/derive"
+/bin/mkdir -p "$E007_W_DIR"
+E007_W_DBINS="env xargs nice stdbuf timeout nohup"
+E007_W_DLIMIT="${E007_W_SWEEP_LIMIT_HS:-480}"   # half-seconds for the whole sweep
+# e007_w_try <binary> <letter> <value> <shape> — one probe; 0 when the sentinel ran. Shape
+# `novalue` drops the value token: the instrument mutant the sweep's own controls are paired
+# with (a probe that never sends the value cannot tell an argument from a flag).
+e007_w_try() {
+  local bin="$1" c="$2" v="$3" shape="$4" out="${E007_W_DIR}/probe.out"
+  : > "$out"
+  case "${bin##*/}:${shape}" in
+    timeout:novalue) /usr/bin/printf 'x\n' | "$bin" "-$c" 1 /bin/echo E007WRAN > "$out" 2>/dev/null ;;
+    timeout:*)       /usr/bin/printf 'x\n' | "$bin" "-$c" "$v" 1 /bin/echo E007WRAN > "$out" 2>/dev/null ;;
+    *:novalue)       /usr/bin/printf 'x\n' | "$bin" "-$c" /bin/echo E007WRAN > "$out" 2>/dev/null ;;
+    *)               /usr/bin/printf 'x\n' | "$bin" "-$c" "$v" /bin/echo E007WRAN > "$out" 2>/dev/null ;;
+  esac
+  /usr/bin/grep -q -E '^E007WRAN( |$)' "$out"
+}
+e007_w_sweep() { # stdout: binary|letter|value per derived option, ABSENT|binary, then DONE
+  local b bin c v
+  for b in $E007_W_DBINS; do
+    bin="$(command -v "$b" 2>/dev/null || true)"
+    case "$bin" in
+      /*) ;;
+      *) /usr/bin/printf 'ABSENT|%s\n' "$b"; continue ;;
+    esac
+    for c in a b c d e f g h i j k l m n o p q r s t u v w x y z A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 0 1 2 3 4 5 6 7 8 9; do
+      case "${b}:${c}" in xargs:p|xargs:o) continue ;; esac
+      for v in 1 . L 4096; do
+        /usr/bin/printf '%s -%s %s\n' "$b" "$c" "$v" > "${E007_W_DIR}/progress"
+        if e007_w_try "$bin" "$c" "$v" real; then
+          /usr/bin/printf '%s|%s|%s\n' "$b" "$c" "$v"
+          break
+        fi
+      done
+    done
+  done
+  /usr/bin/printf 'DONE\n'
+}
+e007_w_sweep > "${E007_W_DIR}/derived.txt" 2>/dev/null &
+_w_pid=$!
+_w_ticks=0
+while kill -0 "$_w_pid" 2>/dev/null; do
+  if [ "$_w_ticks" -ge "$E007_W_DLIMIT" ]; then
+    /usr/bin/pkill -P "$_w_pid" 2>/dev/null
+    kill "$_w_pid" 2>/dev/null
+    break
+  fi
+  /bin/sleep 0.5
+  _w_ticks=$((_w_ticks + 1))
+done
+wait "$_w_pid" 2>/dev/null
+_w_done="$(/usr/bin/grep -c -x -e 'DONE' "${E007_W_DIR}/derived.txt")"
+_w_absent="$(/usr/bin/sed -n 's/^ABSENT|//p' "${E007_W_DIR}/derived.txt" | /usr/bin/tr '\n' ' ')"
+_w_inflight="$(/bin/cat "${E007_W_DIR}/progress" 2>/dev/null)"
+
+# W2d-sens / -spec — the sweep's own controls, read from its result: env -u consumes its
+# argument on every env this suite runs on, and env -i takes none.
+if /usr/bin/grep -q -E '^env\|u\|' "${E007_W_DIR}/derived.txt"; then
+  e007_d_pass "AC-E007-W2d-sens: the sweep derives env -u as taking a separate argument"
+else
+  e007_d_fail "AC-E007-W2d-sens: the sweep derives env -u as taking a separate argument" "not derived (sweep finished: ${_w_done}; in flight: ${_w_inflight:-none})"
+fi
+if [ "$_w_done" = 1 ] && ! /usr/bin/grep -q -E '^env\|i\|' "${E007_W_DIR}/derived.txt"; then
+  e007_d_pass "AC-E007-W2d-spec: the finished sweep does not derive env -i, which takes no argument"
+else
+  e007_d_fail "AC-E007-W2d-spec: the finished sweep does not derive env -i" "sweep finished: ${_w_done}; env -i derived: $(/usr/bin/grep -c -E '^env\|i\|' "${E007_W_DIR}/derived.txt")"
+fi
+_w_envbin="$(command -v env 2>/dev/null || true)"
+if [ -n "$_w_envbin" ] && ! e007_w_try "$_w_envbin" u 1 novalue; then
+  e007_d_pass "AC-E007-W2d-sens-pair: a probe that drops the value does not derive env -u — so W2d-sens reads the value token"
+else
+  e007_d_fail "AC-E007-W2d-sens-pair: a probe that drops the value does not derive env -u" "env=${_w_envbin:-absent}"
+fi
+if [ -n "$_w_envbin" ] && e007_w_try "$_w_envbin" i 1 novalue; then
+  e007_d_pass "AC-E007-W2d-spec-pair: a probe that drops the value derives env -i — so W2d-spec's absence is read on a probe able to report one"
+else
+  e007_d_fail "AC-E007-W2d-spec-pair: a probe that drops the value derives env -i" "env=${_w_envbin:-absent}"
+fi
+
+# W2d — every derived option through the locator: the shipped hook records it, the reverse
+# mutant leaves no row.
+_w_why=""
+_w_n=0
+_w_set=""
+while IFS='|' read -r _w_b _w_c _w_v; do
+  case "$_w_b" in ''|ABSENT|DONE) continue ;; esac
+  _w_opd=""
+  if [ "$_w_b" = timeout ]; then _w_opd=" 1"; fi
+  _w_n=$((_w_n + 1))
+  _w_set="${_w_set} ${_w_b}-${_w_c}"
+  e007_w_locates "${_w_b} -${_w_c} ${_w_v}${_w_opd} gh api -X POST ${E007_W_NO}" || _w_why="${_w_why} [${_w_b} -${_w_c} ${_w_v}]${E007_W_WHY}"
+done < "${E007_W_DIR}/derived.txt"
+if [ "$_w_done" != 1 ]; then
+  e007_d_fail "AC-E007-W2d: every option the real-binary sweep derives is located" "the sweep did not finish inside ${E007_W_DLIMIT} half-seconds; in flight: ${_w_inflight:-unknown}"
+elif [ "$_w_n" -eq 0 ]; then
+  e007_d_fail "AC-E007-W2d: every option the real-binary sweep derives is located" "the sweep derived no option — never a vacuous pass"
+elif [ -n "$_w_why" ]; then
+  e007_d_fail "AC-E007-W2d: every option the real-binary sweep derives is located" "$_w_why"
+else
+  e007_d_pass "AC-E007-W2d: every one of the ${_w_n} separate-argument options the real-binary sweep derived on this runner is located behind its value"
+fi
+/usr/bin/printf 'RESIDUAL: AC-E007-W2d derived on this runner:%s.%s\n' "${_w_set:- none}" \
+  "${_w_absent:+ NOT-EVALUATED — not installed on this runner: ${_w_absent}— this is not a clean result for those binaries.}"
+
+# W2d-static — the pairs the Stage-5 design exercised on its reference host, each of which
+# exists in both the BSD and the GNU build, must be derived wherever their binary is present.
+E007_W_MEASURED="env|u xargs|E xargs|I xargs|L xargs|n xargs|P xargs|s nice|n stdbuf|e stdbuf|i stdbuf|o"
+e007_w_static() { # <derived-set file> -> E007_W_MISS, E007_W_CHECKED
+  local p b
+  E007_W_MISS=""
+  E007_W_CHECKED=0
+  for p in $E007_W_MEASURED; do
+    b="${p%%|*}"
+    case " ${_w_absent} " in *" ${b} "*) continue ;; esac
+    E007_W_CHECKED=$((E007_W_CHECKED + 1))
+    /usr/bin/grep -q -E "^${b}\|${p#*|}\|" "$1" || E007_W_MISS="${E007_W_MISS} ${b}-${p#*|}"
+  done
+}
+e007_w_static "${E007_W_DIR}/derived.txt"
+if [ "$_w_done" = 1 ] && [ "$E007_W_CHECKED" -gt 0 ] && [ -z "$E007_W_MISS" ]; then
+  e007_d_pass "AC-E007-W2d-static: all ${E007_W_CHECKED} measured pairs whose binary is present are derived by the sweep"
+else
+  e007_d_fail "AC-E007-W2d-static: every measured pair whose binary is present is derived by the sweep" "checked ${E007_W_CHECKED}; missing:${E007_W_MISS:- none}; sweep finished: ${_w_done}"
+fi
+/usr/bin/grep -v -E '^env\|u\|' "${E007_W_DIR}/derived.txt" > "${E007_W_DIR}/derived-planted.txt"
+e007_w_static "${E007_W_DIR}/derived-planted.txt"
+case " ${E007_W_MISS} " in
+  *" env-u "*) e007_d_pass "AC-E007-W2d-static-pair: with env -u planted out of the derived set, the cross-check reports it — so W2d-static can fail" ;;
+  *) e007_d_fail "AC-E007-W2d-static-pair: with env -u planted out of the derived set, the cross-check reports it" "reported:${E007_W_MISS:- nothing}" ;;
+esac
+
+# ---- What the locator must not reach, and what it reaches that is not a write ----
+e007_d_expect "AC-E007-W3a: an allowlisted write behind env -u NAME stays allowed with the phase forced" \
+  "$E007_W_E" enforce "env -u NAME gh api -X POST ${E007_W_OK}" 0 0 -
+e007_d_expect "AC-E007-W3a-pair: through the phase-forced copy whose allowlist matches nothing, the same write is refused — so W3a's allow is the allowlist's decision on a located write" \
+  "$E007_W_LE" enforce "env -u NAME gh api -X POST ${E007_W_OK}" 2 1 - 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W3b: a read behind env -u NAME stays allowed with the phase forced" \
+  "$E007_W_E" enforce "env -u NAME gh api ${E007_W_NO}" 0 0 -
+e007_d_expect "AC-E007-W3b-pair: through the phase-forced copy that reads every gh api as a write, the same read is refused — so W3b's allow is the write test's decision on a located invocation" \
+  "$E007_W_WE" enforce "env -u NAME gh api ${E007_W_NO}" 2 1 - 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W3c: env -u NAME gh pr list stays allowed with the phase forced" \
+  "$E007_W_E" enforce "env -u NAME gh pr list" 0 0 -
+e007_d_expect "AC-E007-W3c-pair: through the phase-forced copy that records every segment as a write, the same command is refused — so W3c's zero is read on a live refusal" \
+  "$E007_W_AE" enforce "env -u NAME gh pr list" 2 1 -
+e007_d_expect "AC-E007-W3d: a-b=1 gh api -X POST <unlisted> — no prefix command consumed, so the locator does not run — stays allowed with the phase forced" \
+  "$E007_W_E" enforce "a-b=1 gh api -X POST ${E007_W_NO}" 0 0 -
+e007_d_expect "AC-E007-W3d-pair: through the phase-forced copy whose locator runs on every segment, the same command is refused — so W3d's allow is the locator's prefix gate" \
+  "$E007_W_UE" enforce "a-b=1 gh api -X POST ${E007_W_NO}" 2 1 - 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W3e: echo env -u X gh api -X POST <unlisted> — the prefix word not at command position — stays allowed with the phase forced" \
+  "$E007_W_E" enforce "echo env -u X gh api -X POST ${E007_W_NO}" 0 0 -
+e007_d_expect "AC-E007-W3e-pair: through the phase-forced copy whose locator runs on every segment, the same command is refused — so W3e's allow is the locator's prefix gate" \
+  "$E007_W_UE" enforce "echo env -u X gh api -X POST ${E007_W_NO}" 2 1 - 'BLOCK-EGRESS-007'
+e007_w_pair "AC-E007-W4a: env -u NAME echo gh api -X POST <unlisted> — text behind a prefix command — is evaluated as a write and recorded with pos look-ahead (the declared over-evaluation, pinned)" \
+  "env -u NAME echo gh api -X POST ${E007_W_NO}"
+e007_d_expect "AC-E007-W4b: env -S \"gh api -X POST <unlisted>\" — a command carried as a string — is not reached, with the phase forced (a declared limit, pinned)" \
+  "$E007_W_E" enforce "env -S \"gh api -X POST ${E007_W_NO}\"" 0 0 0
+e007_d_expect "AC-E007-W4b-pair: through the phase-forced copy that keeps quoted spaces, the same command is refused — so W4b's pin rests on quote neutralization, read on a live refusal" \
+  "$E007_W_QE" enforce "env -S \"gh api -X POST ${E007_W_NO}\"" 2 1 - 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W4c: env -u X \$GH api -X POST <unlisted> — a command word that is a variable — is not reached, with the phase forced (a declared limit, pinned)" \
+  "$E007_W_E" enforce "env -u X \$GH api -X POST ${E007_W_NO}" 0 0 0
+e007_d_expect "AC-E007-W4c-pair: through the phase-forced copy that records every segment as a write, the same command is refused — so W4c's zero is read on a live refusal" \
+  "$E007_W_AE" enforce "env -u X \$GH api -X POST ${E007_W_NO}" 2 1 -
+E007_W_HD="cat > notes.md <<'EOF'"$'\n'"time to retry: gh api -X POST ${E007_W_NO} -f title=x"$'\n'"EOF"
+e007_w_pair "AC-E007-W4d: a heredoc body line that opens with a prefix word (time to retry: gh api -X POST <unlisted> ...) is evaluated as a write and recorded with pos look-ahead (the declared over-evaluation, pinned)" \
+  "$E007_W_HD"
+e007_d_expect "AC-E007-W4e: 2>/dev/null env -u X gh api -X POST <unlisted> — a leading redirection the walk does not resolve — is not reached, with the phase forced (a declared limit, pinned)" \
+  "$E007_W_E" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 0 0 0
+e007_d_expect "AC-E007-W4e-pair: through the phase-forced copy whose locator runs on every segment, the same command is refused — so W4e's pin is the walk's, read on a live refusal" \
+  "$E007_W_UE" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 2 1 - 'BLOCK-EGRESS-007'
+
+# ---- AC-4: the one mechanism by which the locator could withdraw a refusal ----
+# The first-invocation counter is the only state carried between segments that the verdict
+# reads. A located invocation earlier in the command must not advance it, or the later write
+# at the head of a segment moves out of the day-one refusal into the rollout phase.
+e007_d_expect "AC-E007-W5a: a read located behind env -u NAME does not count as the first invocation — the later head-position write is still refused on day one" \
+  "$E007_W_S" enforce "env -u NAME gh api ${E007_W_OK} ; gh api -X POST ${E007_W_NO}" 2 1 0 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W5m: through the copy whose look-ahead advances the counter, the same command is recorded and allowed — the regression W5a exists to catch, shown catchable" \
+  "$E007_W_N" enforce "env -u NAME gh api ${E007_W_OK} ; gh api -X POST ${E007_W_NO}" 0 0 1
+e007_d_expect "AC-E007-W5b: a read located behind timeout 5 does not count as the first invocation — the later head-position write is still refused on day one" \
+  "$E007_W_S" enforce "timeout 5 gh api ${E007_W_OK} ; gh api -X POST ${E007_W_NO}" 2 1 0 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W5b-pair: through the copy whose look-ahead advances the counter, the same command is recorded and allowed" \
+  "$E007_W_N" enforce "timeout 5 gh api ${E007_W_OK} ; gh api -X POST ${E007_W_NO}" 0 0 1
+
+# =====================================================================
+# EGRESSCORPUS-* — the tracked payload differential for this rule's walk
+# =====================================================================
+# core/hooks/tests/fixtures/walk-payload-corpus.txt is the one committed corpus the walk
+# cards share as their exit bar: no payload's verdict may move from refused toward allowed
+# except as a declared precision improvement, with the detector shown able to fire first. This
+# block runs every `block-egress` row through the shipped hook — the S copy above, at .mode
+# enforce and the shipped rollout phase — and fails a group whose rows return anything else,
+# so the corpus diff of a change IS that change's differential. The row format and the
+# procedure for adding rows: core/hooks/tests/fixtures/README.md.
+#
+# THE CORPUS IS RESOLVED, NEVER ASSUMED, on the block-destructive reader's three rungs (beside
+# this suite, the .source-repo-root pointer, the repository root above a default-site layout),
+# and an unresolved corpus is a FAIL rather than an empty pass.
+#
+# A VERDICT IS READ FROM THE EXIT CODE AND THE WARN LOG: exit 2 is B; exit 0 with a new
+# would-fire row is W; exit 0 with none is a; anything else is E<rc> and never matches. At
+# .mode=enforce the warn log receives would-fire rows only, one per line, so a line count is
+# a row count.
+echo ""
+echo "BLOCK-EGRESS-007 walk-payload corpus (EGRESSCORPUS-*)"
+echo "---"
+
+EC_REL="core/hooks/tests/fixtures/walk-payload-corpus.txt"
+EC_FILE=""
+EC_RUNG=""
+ec_try() { if [ -z "$EC_FILE" ] && [ -n "$1" ] && [ -f "$1" ]; then EC_FILE="$1"; EC_RUNG="$2"; fi; }
+ec_try "$(dirname "$0")/fixtures/walk-payload-corpus.txt" "beside the suite"
+ec_src_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  IFS= read -r ec_src_root < "$(dirname "$0")/.source-repo-root" || true
+fi
+if [ -n "$ec_src_root" ]; then ec_try "${ec_src_root}/${EC_REL}" ".source-repo-root pointer"; fi
+ec_up="$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd -P)"
+if [ -n "$ec_up" ]; then ec_try "${ec_up}/${EC_REL}" "repository root above the layout"; fi
+
+EC_ID=(); EC_GROUP=(); EC_TWIN=(); EC_GT=(); EC_REC=(); EC_CMD=(); EC_OBS=()
+ec_total=0
+ec_other=0
+ec_ids="|"
+ec_dupes=" "
+if [ -n "$EC_FILE" ]; then
+  while IFS='|' read -r f_id f_hook f_group f_twin f_gt f_rec f_cmd || [ -n "$f_id" ]; do
+    case "$f_id" in ''|'#'*) continue ;; esac
+    ec_total=$((ec_total + 1))
+    case "$ec_ids" in *"|${f_id}|"*) ec_dupes="${ec_dupes}${f_id} " ;; esac
+    ec_ids="${ec_ids}${f_id}|"
+    if [ "$f_hook" != "block-egress" ]; then ec_other=$((ec_other + 1)); continue; fi
+    EC_ID+=("$f_id"); EC_GROUP+=("$f_group"); EC_TWIN+=("$f_twin")
+    EC_GT+=("$f_gt"); EC_REC+=("$f_rec"); EC_CMD+=("$f_cmd")
+  done < "$EC_FILE"
+fi
+ec_n=${#EC_ID[@]}
+
+if [ -z "$EC_FILE" ]; then
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-00 corpus UNRESOLVED — every rung missed (beside=%s pointer=%s root=%s); no row was graded\n' \
+    "$(dirname "$0")/fixtures" "${ec_src_root:-<none>}" "${ec_up:-<none>}"
+  FAIL=$((FAIL + 1))
+elif [ "$ec_n" -eq 0 ]; then
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-00 corpus resolved via %s but carries no block-egress row (%s rows in all)\n' "$EC_RUNG" "$ec_total"
+  FAIL=$((FAIL + 1))
+else
+  ec_digest="$(/usr/bin/shasum -a 256 "$EC_FILE")"
+  ec_digest="${ec_digest%% *}"
+  /usr/bin/printf 'PASS: EGRESSCORPUS-00 corpus resolved via %s: %s block-egress rows of %s (%s for other guards), sha256 %s\n' \
+    "$EC_RUNG" "$ec_n" "$ec_total" "$ec_other" "$ec_digest"
+  PASS=$((PASS + 1))
+fi
+
+# EGRESSCORPUS-ROWS — every row is well formed: an id unique across the WHOLE file, a verdict
+# and a ground-truth class from their closed sets, a group, a command, and a twin that names a
+# row of this guard.
+ec_egress_ids="|"
+ec_i=0
+while [ "$ec_i" -lt "$ec_n" ]; do
+  ec_egress_ids="${ec_egress_ids}${EC_ID[$ec_i]}|"
+  ec_i=$((ec_i + 1))
+done
+ec_badrows=""
+ec_i=0
+while [ "$ec_i" -lt "$ec_n" ]; do
+  ec_why=""
+  case "${EC_REC[$ec_i]}" in a|B|W) ;; *) ec_why="${ec_why} verdict" ;; esac
+  case "${EC_GT[$ec_i]}" in X|o|w|e|s|-|'?') ;; *) ec_why="${ec_why} gt" ;; esac
+  [ -n "${EC_GROUP[$ec_i]}" ] || ec_why="${ec_why} group"
+  [ -n "${EC_CMD[$ec_i]}" ] || ec_why="${ec_why} command"
+  case "${EC_ID[$ec_i]}" in *'|'*|'') ec_why="${ec_why} id" ;; esac
+  case "$ec_dupes" in *" ${EC_ID[$ec_i]} "*) ec_why="${ec_why} duplicate-id" ;; esac
+  if [ "${EC_TWIN[$ec_i]}" != "-" ]; then
+    case "$ec_egress_ids" in *"|${EC_TWIN[$ec_i]}|"*) ;; *) ec_why="${ec_why} twin" ;; esac
+  fi
+  if [ -n "$ec_why" ]; then ec_badrows="${ec_badrows} ${EC_ID[$ec_i]}(${ec_why# })"; fi
+  ec_i=$((ec_i + 1))
+done
+if [ "$ec_n" -gt 0 ] && [ -z "$ec_badrows" ]; then
+  /usr/bin/printf 'PASS: EGRESSCORPUS-ROWS all %s rows are well formed (ids unique across the file, closed verdict and ground-truth sets, twins resolve)\n' "$ec_n"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-ROWS malformed rows:%s\n' "${ec_badrows:- <no rows read>}"
+  FAIL=$((FAIL + 1))
+fi
+
+for ec_dir in "$E007_W_S" "$E007_W_R" "$E007_W_N"; do
+  /usr/bin/printf 'enforce' > "${ec_dir}/.claude/hooks/.mode"
+done
+ec_rows() { if [ -f "$1" ]; then /usr/bin/wc -l < "$1" | /usr/bin/tr -d '[:space:]'; else /usr/bin/printf '0'; fi; }
+EC_V=""
+ec_run() { # <dir> <command> -> EC_V
+  local log="$1/.claude/hooks/egress-warn-log.jsonl" before after rc=0
+  before="$(ec_rows "$log")"
+  /usr/bin/printf '%s' "$(e007_d_bash "$2" "$1")" \
+    | PMO_SCOPE_GUARD_ROOT="$1" PMO_PLATFORM_CONFIG_ROOT="${1}/.cfg" /bin/bash "$1/.claude/hooks/block-egress.sh" >/dev/null 2>&1 \
+    || rc="$?"
+  after="$(ec_rows "$log")"
+  case "$rc" in
+    2) EC_V="B" ;;
+    0) if [ "$after" -gt "$before" ]; then EC_V="W"; else EC_V="a"; fi ;;
+    *) EC_V="E${rc}" ;;
+  esac
+}
+EC_CMDX=""
+ec_expand() { local c="$1"; c="${c//@OK@/$E007_W_OK}"; c="${c//@NO@/$E007_W_NO}"; EC_CMDX="$c"; }
+
+# EGRESSCORPUS-SCOPE — the hermetic copy is in scope and enforcing, shown by a rule this
+# change never touches.
+ec_run "$E007_W_S" 'cat ~/.ssh/id_rsa'
+if [ "$EC_V" = B ]; then
+  /usr/bin/printf 'PASS: EGRESSCORPUS-SCOPE the hermetic copy is in scope and enforcing (unrelated rule -001 refuses), so the verdicts below are live\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-SCOPE the hermetic copy is not live (verdict %s, want B); the verdicts below are unusable\n' "$EC_V"
+  FAIL=$((FAIL + 1))
+fi
+
+ec_i=0
+while [ "$ec_i" -lt "$ec_n" ]; do
+  ec_expand "${EC_CMD[$ec_i]}"
+  ec_run "$E007_W_S" "$EC_CMDX"
+  EC_OBS[$ec_i]="$EC_V"
+  ec_i=$((ec_i + 1))
+done
+
+# EGRESSCORPUS-REC-<group> — one arm per group: each row returns its recorded verdict. A failure
+# names every row that moved, as id(recorded->observed), on the FAIL line itself.
+EC_GROUPS=()
+ec_i=0
+while [ "$ec_i" -lt "$ec_n" ]; do
+  ec_seen=0
+  for ec_g in ${EC_GROUPS[@]+"${EC_GROUPS[@]}"}; do
+    if [ "$ec_g" = "${EC_GROUP[$ec_i]}" ]; then ec_seen=1; fi
+  done
+  if [ "$ec_seen" -eq 0 ]; then EC_GROUPS+=("${EC_GROUP[$ec_i]}"); fi
+  ec_i=$((ec_i + 1))
+done
+for ec_g in ${EC_GROUPS[@]+"${EC_GROUPS[@]}"}; do
+  ec_cnt=0
+  ec_moved=""
+  ec_i=0
+  while [ "$ec_i" -lt "$ec_n" ]; do
+    if [ "${EC_GROUP[$ec_i]}" = "$ec_g" ]; then
+      ec_cnt=$((ec_cnt + 1))
+      if [ "${EC_OBS[$ec_i]}" != "${EC_REC[$ec_i]}" ]; then
+        ec_moved="${ec_moved} ${EC_ID[$ec_i]}(${EC_REC[$ec_i]}->${EC_OBS[$ec_i]})"
+      fi
+    fi
+    ec_i=$((ec_i + 1))
+  done
+  if [ -z "$ec_moved" ]; then
+    /usr/bin/printf 'PASS: EGRESSCORPUS-REC-%s %s rows return their recorded verdicts\n' "$ec_g" "$ec_cnt"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: EGRESSCORPUS-REC-%s rows moved from their recorded verdicts:%s\n' "$ec_g" "$ec_moved"
+    FAIL=$((FAIL + 1))
+  fi
+done
+
+# EGRESSCORPUS-OPEN — a row in an `open-` group records a write the rule allows today,
+# declared open; it must stay a recorded allow, so a refused row still marked open is a
+# half-applied closure. The rule's ground truth is not run, so only the verdict is read.
+ec_open=0
+ec_open_bad=""
+ec_i=0
+while [ "$ec_i" -lt "$ec_n" ]; do
+  case "${EC_GROUP[$ec_i]}" in
+    open-*)
+      ec_open=$((ec_open + 1))
+      if [ "${EC_REC[$ec_i]}" != "a" ]; then ec_open_bad="${ec_open_bad} ${EC_ID[$ec_i]}(${EC_REC[$ec_i]})"; fi
+      ;;
+  esac
+  ec_i=$((ec_i + 1))
+done
+if [ -z "$ec_open_bad" ]; then
+  /usr/bin/printf 'PASS: EGRESSCORPUS-OPEN %s rows declared open, each a recorded allow\n' "$ec_open"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-OPEN rows marked open that are not a recorded allow:%s\n' "$ec_open_bad"
+  FAIL=$((FAIL + 1))
+fi
+
+# EGRESSCORPUS-TWIN — a quoted row is never WEAKER than its unquoted twin (a < W < B), on the
+# verdicts observed in this run. Rows in an `open-` group are left to EGRESSCORPUS-OPEN.
+ec_twin_n=0
+ec_twin_bad=""
+ec_i=0
+while [ "$ec_i" -lt "$ec_n" ]; do
+  case "${EC_GROUP[$ec_i]}" in
+    open-*) ;;
+    *)
+      if [ "${EC_TWIN[$ec_i]}" != "-" ]; then
+        ec_twin_n=$((ec_twin_n + 1))
+        ec_tv=""
+        ec_j=0
+        while [ "$ec_j" -lt "$ec_n" ]; do
+          if [ "${EC_ID[$ec_j]}" = "${EC_TWIN[$ec_i]}" ]; then ec_tv="${EC_OBS[$ec_j]}"; break; fi
+          ec_j=$((ec_j + 1))
+        done
+        case "${EC_OBS[$ec_i]}" in a) ec_r1=0 ;; W) ec_r1=1 ;; B) ec_r1=2 ;; *) ec_r1=-1 ;; esac
+        case "$ec_tv" in a) ec_r2=0 ;; W) ec_r2=1 ;; B) ec_r2=2 ;; *) ec_r2=-1 ;; esac
+        if [ "$ec_r1" -lt 0 ] || [ "$ec_r2" -lt 0 ] || [ "$ec_r1" -lt "$ec_r2" ]; then
+          ec_twin_bad="${ec_twin_bad} ${EC_ID[$ec_i]}(${EC_OBS[$ec_i]}<${EC_TWIN[$ec_i]}:${ec_tv:-?})"
+        fi
+      fi
+      ;;
+  esac
+  ec_i=$((ec_i + 1))
+done
+if [ "$ec_twin_n" -gt 0 ] && [ -z "$ec_twin_bad" ]; then
+  /usr/bin/printf 'PASS: EGRESSCORPUS-TWIN all %s rows with an unquoted twin are at least as strict as it\n' "$ec_twin_n"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-TWIN rows weaker than their unquoted twin (row(observed<twin:observed)):%s\n' "${ec_twin_bad:- <no twin rows read>}"
+  FAIL=$((FAIL + 1))
+fi
+
+# EGRESSCORPUS-DET-* — two detectors, each shown able to fire and shown alive. The reverse
+# mutant R (the look-ahead removed) runs every row recorded W: it must allow at least one
+# (the look-ahead's absence is visible to the corpus) and still record or refuse at least one.
+# The counter mutant N (a look-ahead hit advances the first-invocation counter) runs every row
+# recorded B: it must move at least one toward allow (a withdrawn refusal is visible to the
+# corpus) and still refuse at least one. A zero in the comparison above is read only after
+# both pairs are green.
+ec_la_fires=0
+ec_la_alive=0
+ec_ct_fires=0
+ec_ct_alive=0
+ec_i=0
+while [ "$ec_i" -lt "$ec_n" ]; do
+  case "${EC_REC[$ec_i]}" in
+    W)
+      ec_expand "${EC_CMD[$ec_i]}"
+      ec_run "$E007_W_R" "$EC_CMDX"
+      case "$EC_V" in a) ec_la_fires=$((ec_la_fires + 1)) ;; B|W) ec_la_alive=$((ec_la_alive + 1)) ;; esac
+      ;;
+    B)
+      ec_expand "${EC_CMD[$ec_i]}"
+      ec_run "$E007_W_N" "$EC_CMDX"
+      case "$EC_V" in a|W) ec_ct_fires=$((ec_ct_fires + 1)) ;; B) ec_ct_alive=$((ec_ct_alive + 1)) ;; esac
+      ;;
+  esac
+  ec_i=$((ec_i + 1))
+done
+if [ "$ec_la_fires" -gt 0 ]; then
+  /usr/bin/printf 'PASS: EGRESSCORPUS-DET-lookahead-fires the reverse mutant moves %s recorded W rows to an allow (the detector fires)\n' "$ec_la_fires"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-DET-lookahead-fires the reverse mutant moved no recorded W row to an allow; the comparison above cannot be read as clean\n'
+  FAIL=$((FAIL + 1))
+fi
+if [ "$ec_la_alive" -gt 0 ]; then
+  /usr/bin/printf 'PASS: EGRESSCORPUS-DET-lookahead-alive the same mutant still records or refuses %s recorded W rows (a live hook, not a dead copy)\n' "$ec_la_alive"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-DET-lookahead-alive the reverse mutant recorded nothing; its allows above prove nothing\n'
+  FAIL=$((FAIL + 1))
+fi
+if [ "$ec_ct_fires" -gt 0 ]; then
+  /usr/bin/printf 'PASS: EGRESSCORPUS-DET-counter-fires the counter mutant moves %s recorded refusals toward allow (the detector fires)\n' "$ec_ct_fires"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-DET-counter-fires the counter mutant moved no recorded refusal toward allow; the comparison above cannot be read as clean\n'
+  FAIL=$((FAIL + 1))
+fi
+if [ "$ec_ct_alive" -gt 0 ]; then
+  /usr/bin/printf 'PASS: EGRESSCORPUS-DET-counter-alive the same mutant still refuses %s recorded rows (a live hook, not a dead copy)\n' "$ec_ct_alive"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EGRESSCORPUS-DET-counter-alive the counter mutant refused nothing; its moves above prove nothing\n'
+  FAIL=$((FAIL + 1))
+fi
+
+/usr/bin/printf 'RESIDUAL: EGRESSCORPUS graded %s block-egress rows of the corpus at sha256 %s (resolved via %s); %s of them are declared open — writes this rule does not reach, owned by later changes — and a green corpus speaks only for the rows it carries. The reverse mutant moved %s recorded W rows to an allow; the counter mutant moved %s recorded refusals toward allow.\n' \
+  "$ec_n" "${ec_digest:-unresolved}" "${EC_RUNG:-unresolved}" "$ec_open" "$ec_la_fires" "$ec_ct_fires"
+
+/bin/rm -rf "$E007_W_BASE"
+
 # ----- Raw network tools (BLOCK-EGRESS-008/009/010/011) -----
 
 echo ""
