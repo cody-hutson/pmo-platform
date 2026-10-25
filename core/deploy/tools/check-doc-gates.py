@@ -220,26 +220,28 @@ def eval_gcl6(root: Path, base: str, head: str, plan_text: str) -> list[tuple[st
 
 
 # ─── G-CL8 ────────────────────────────────────────────────────────────────────
+# An HTML comment as a renderer reads it: `<!-->` and `<!--->` close at once; any other
+# `<!--` runs to the first `-->`, to the first `--!>` (HTML reads that as a close too), or
+# to the end of the text when it is never closed. The dot matches newlines, so a comment
+# spanning lines is one match.
+HTML_COMMENT = re.compile(r"<!--(?:-?>|.*?(?:--!?>|\Z))", re.S)
+
+
 def doc_impact_section(body: str) -> list[str] | None:
-    """-> content lines of `### Documentation Impact`, or None when the body has none."""
+    """-> content lines of `### Documentation Impact`, or None when the body has none.
+
+    Comments are stripped from the text after the heading in ONE pass, before the
+    section's end is found: a heading inside a comment does not end the section, and a
+    row inside a comment, on one line or across several, is not graded."""
     lines = body.replace("\r\n", "\n").split("\n")
     start = next((i for i, l in enumerate(lines) if l.strip() == "### Documentation Impact"), None)
     if start is None:
         return None
-    content, in_comment = [], False
-    for line in lines[start + 1:]:
+    content = []
+    for line in HTML_COMMENT.sub("", "\n".join(lines[start + 1:])).split("\n"):
         if re.match(r"^#{1,3}\s", line):
             break
-        text = line
-        if in_comment:
-            if "-->" in text:
-                text, in_comment = text.split("-->", 1)[1], False
-            else:
-                continue
-        text = re.sub(r"<!--.*?-->", "", text)
-        if "<!--" in text:
-            text, in_comment = text.split("<!--", 1)[0], True
-        text = text.strip()
+        text = line.strip()
         if not text or text == "_No response_" or text == "— OR —":
             continue
         content.append(text)
@@ -651,6 +653,31 @@ def self_test() -> int:
         got = eval_issue(r, base, head2, "### Documentation Impact\ncore/diagrams/a.md | update | x\n- " + note + "\n")
         check("G8-assumption-line control: the same words without the marker PASS as commentary",
               got[0] == "PASS" and "1 commentary line(s) ignored" in got[1], got)
+        # An HTML comment is stripped before the section's end is found, as a renderer
+        # reads it. Each arm hides a row of the unchanged s.md beside a visible row of the
+        # changed a.md, so the section PASSes on the one row; the controls below show the
+        # hidden row FAILs when visible, and that a heading outside a comment still ends
+        # the section.
+        vis, hid = "core/diagrams/a.md | update | x", "core/standards/s.md | update | y"
+        comments = {
+            "multi-line": f"<!--\n{hid}\n-->\n{vis}",
+            "single-line": f"{vis} <!-- {hid} -->",
+            "heading-inside": f"<!--\n### Example\n{hid}\n-->\n{vis}",
+            "bang-close": f"<!-- {hid} --!>\n{vis}",
+            "crlf": f"<!--\r\n{hid}\r\n-->\r\n{vis}",
+            "unterminated": f"{vis}\n<!-- {hid}",
+            "abrupt-empty": f"<!-->\n{vis}",
+        }
+        for name, text in comments.items():
+            eol = "\r\n" if name == "crlf" else "\n"
+            got = eval_issue(r, base, head2, "### Documentation Impact" + eol + text + eol)
+            check(f"G8-comment-{name} hides its row", got[0] == "PASS" and "1 declared row(s)" in got[1], got)
+        got = eval_issue(r, base, head2, f"### Documentation Impact\n{hid}\n{vis}\n")
+        check("G8-comment control: the hidden row, visible, FAILs",
+              got[0] == "FAIL" and "core/standards/s.md" in got[1], got)
+        got = eval_issue(r, base, head2, f"### Documentation Impact\n### Example\n{vis}\n")
+        check("G8-comment control: a heading outside a comment ends the section",
+              got[0] == "FAIL" and "present but empty" in got[1], got)
         # Retire arms need the scan tools; they run only when the tools are reachable.
         tools = Path(__file__).resolve().parents[3]
         if (tools / "release/tools/blast-radius.sh").is_file():
