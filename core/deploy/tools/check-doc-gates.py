@@ -93,6 +93,12 @@ def show(root: Path, rev: str, path: str) -> str | None:
     return r.stdout if r.returncode == 0 else None
 
 
+def show_bytes(root: Path, rev: str, path: str) -> bytes | None:
+    """show() without decoding: the blob's bytes, for a file that may not be text."""
+    r = subprocess.run(["git", "-C", str(root), "show", f"{rev}:{path}"], capture_output=True)
+    return r.stdout if r.returncode == 0 else None
+
+
 def changed_in_release(root: Path, base: str, head: str, path: str) -> bool:
     """The release changed `path`: its content differs between <base> and <head>. The
     G-CL8 test of a `link` row; `create` and `update` read body_changed_in_release().
@@ -140,10 +146,17 @@ def body_changed_in_release(root: Path, base: str, head: str, path: str) -> bool
     confined to a document's frontmatter (a `last_verified_commit` restamp alone) does
     not resolve a row, and neither does a created document whose body is empty or blank.
     A directory path resolves when the body of any file under it changed; its own
-    `git show` is a tree listing, so it is never compared as one."""
+    `git show` is a tree listing, so it is never compared as one. A file that is not
+    UTF-8 text at either end — a binary such as a `.skill` package — has no frontmatter
+    block, so its whole content is its body and the two blobs are compared byte for byte;
+    reading it as text would raise, and one row would withhold the gate for the release."""
     r = git(root, "diff", "--name-only", "-z", "--no-renames", base, head, "--", path)
     for f in (p for p in r.stdout.split("\0") if p):
-        before, after = ("\n".join(body_lines(show(root, rev, f))).strip() for rev in (base, head))
+        blobs = [show_bytes(root, rev, f) or b"" for rev in (base, head)]
+        try:
+            before, after = ("\n".join(body_lines(b.decode("utf-8"))).strip() for b in blobs)
+        except UnicodeDecodeError:
+            before, after = blobs
         if before != after:
             return True
     return False
@@ -576,6 +589,11 @@ def self_test() -> int:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(text, encoding="utf-8")
 
+        def put_bytes(path, data):
+            p = r / path
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+
         def commit(msg):
             run("add", "-A")
             run("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", msg)
@@ -593,7 +611,11 @@ def self_test() -> int:
         put(".github/PULL_REQUEST_TEMPLATE.md", "### Documentation Impact\n")
         put("core/process-catalog/p.md", fm + "page\n")
         put("core/standards/old.md", fm + "old\n")
+        put_bytes("packages/p.skill", b"PK\x03\x04\xa6\xff\x00bin")    # not UTF-8 text
+        put_bytes("packages/same.skill", b"PK\x03\x04\xa6\xff\x00same")
         base = commit("base")
+        put_bytes("packages/p.skill", b"PK\x03\x04\xa7\xfe\x00bin")    # only undecodable bytes change
+        os.chmod(r / "packages/same.skill", 0o755)                     # listed, bytes unchanged
         put("core/diagrams/fm.md", fm.replace("title: T", "title: T2\nowner: x\nreviewed: y\nnote: z") + "body\n" * 5)
         put("core/standards/retire-me.md", fm.replace("ACTIVE", "DEPRECATED") + "to retire\n")
         (r / "docs/old-guide.md").unlink()
@@ -722,6 +744,16 @@ def self_test() -> int:
         check("G8-update a directory whose only change is frontmatter FAILs", got[0] == "FAIL", got)
         got = row("core/diagrams/", "update", head2)
         check("G8-update control: a directory with a file whose body changed PASSes", got[0] == "PASS", got)
+        # A file that is not UTF-8 text is compared byte for byte, not read as text: a
+        # changed binary resolves, directly or under a declared directory, and one whose
+        # bytes did not change (only its mode did) does not.
+        got = row("packages/p.skill", "update", head2)
+        check("G8-update a changed binary file PASSes", got[0] == "PASS", got)
+        got = row("packages/", "update", head2)
+        check("G8-update a directory holding a changed binary file PASSes", got[0] == "PASS", got)
+        got = row("packages/same.skill", "update", head2)
+        check("G8-update control: a binary file whose bytes did not change FAILs",
+              got[0] == "FAIL" and "packages/same.skill" in got[1], got)
         # Retire arms need the scan tools; they run only when the tools are reachable.
         tools = Path(__file__).resolve().parents[3]
         if (tools / "release/tools/blast-radius.sh").is_file():
