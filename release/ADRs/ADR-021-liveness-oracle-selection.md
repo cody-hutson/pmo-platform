@@ -4,6 +4,7 @@ status: Accepted
 date: 2026-06-11
 release: v1.11-cleanup-orphan-state-reliability
 deciders: "Stage 5 Solutioning (Principal Engineer — Architecture Assessment) + operator at Collective Review scope-lock"
+superseded_by: ADR-223 in-part (recency prohibition and absolute-path holder residual and skip-label vocabulary)
 tags: [architecture, release-tooling, safety, liveness, worktree-lifecycle]
 source_observations:
   - "Session worktrees of live Claude sessions were removed mid-execution by cleanup sweeps (self-reap and sibling-reap classes); the failure is the cwd-deleted error in the running session."
