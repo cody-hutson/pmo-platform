@@ -126,6 +126,17 @@ def frontmatter_of(text: str | None) -> tuple[dict, str]:
         os.unlink(tmp)
 
 
+def frontmatter_of_blob(blob: bytes) -> tuple[dict, str]:
+    """frontmatter_of() for a blob read as bytes. A blob that is not UTF-8 text, such as
+    a binary package, has no frontmatter block and so no `status` field; it is not read
+    as text, which would raise, and one row would withhold the gate for the release."""
+    try:
+        text = blob.decode("utf-8")
+    except UnicodeDecodeError:
+        return {}, "no-frontmatter"
+    return frontmatter_of(text)
+
+
 def body_lines(text: str | None) -> list[str]:
     """The document minus its frontmatter block (the delta G-CL6 measures)."""
     if text is None:
@@ -327,17 +338,20 @@ def inbound_refs(root: Path, doc: str, arm: str) -> tuple[list[str] | None, str]
 
 
 def verify_retire(root: Path, base: str, head: str, doc: str) -> tuple[str, str]:
-    base_text = show(root, base, doc)
-    if base_text is None:
+    """The G-CL8 retire verification. Both blobs are read as bytes: a document that is
+    not UTF-8 text at the base carries no `status` field, so it takes arm (b), deletion;
+    one that is not text at the head of an arm (a) retire reads its status as absent."""
+    base_blob = show_bytes(root, base, doc)
+    if base_blob is None:
         return "FAIL", "retire declared for a document absent at the release base"
-    keys, status = frontmatter_of(base_text)
+    keys, status = frontmatter_of_blob(base_blob)
     successor = None
     if status == "ok" and keys.get("status", "").strip():
         arm = "a"
-        head_text = show(root, head, doc)
-        if head_text is None:
+        head_blob = show_bytes(root, head, doc)
+        if head_blob is None:
             return "FAIL", "carries the status field and was deleted — retire it by a status move instead"
-        hkeys, _ = frontmatter_of(head_text)
+        hkeys, _ = frontmatter_of_blob(head_blob)
         tok = leading_token(hkeys.get("status", ""))
         if tok not in ("DEPRECATED", "SUPERSEDED"):
             return "FAIL", f"status at head is {tok or 'absent'}, not DEPRECATED or SUPERSEDED"
@@ -613,6 +627,7 @@ def self_test() -> int:
         put("core/standards/old.md", fm + "old\n")
         put_bytes("packages/p.skill", b"PK\x03\x04\xa6\xff\x00bin")    # not UTF-8 text
         put_bytes("packages/same.skill", b"PK\x03\x04\xa6\xff\x00same")
+        put_bytes("core/assets/retired.skill", b"PK\x03\x04\xa6\xff\x00retired")   # deleted at head
         put("core/order/a-fm.md", fm + "body\n")                       # listed before b.md
         put("core/order/b.md", fm + "body\n")
         base = commit("base")
@@ -623,6 +638,7 @@ def self_test() -> int:
         put("core/diagrams/fm.md", fm.replace("title: T", "title: T2\nowner: x\nreviewed: y\nnote: z") + "body\n" * 5)
         put("core/standards/retire-me.md", fm.replace("ACTIVE", "DEPRECATED") + "to retire\n")
         (r / "docs/old-guide.md").unlink()
+        (r / "core/assets/retired.skill").unlink()
         put("README.md", "unrelated\n")
         put("core/standards/new-blank.md", fm + "\n\n")        # created with frontmatter and a blank body
         put("core/standards/new-full.md", fm + "a body\n")     # created with a body
@@ -780,6 +796,14 @@ def self_test() -> int:
             check("G8-retire-a re-pointed PASSes", got[0] == "PASS", got)
             got = eval_issue(r, base, head4, "### Documentation Impact\ndocs/old-guide.md | retire | x\n")
             check("G8-retire-b deleted, unreferenced PASSes", got[0] == "PASS", got)
+            # A document that is not UTF-8 text is read as bytes, never as text: it carries
+            # no status field, so a deleted binary takes arm (b) and resolves, and one still
+            # present at head FAILs as any arm (b) document does.
+            got = eval_issue(r, base, head4, "### Documentation Impact\ncore/assets/retired.skill | retire | x\n")
+            check("G8-retire-b a deleted binary file PASSes", got[0] == "PASS", got)
+            got = eval_issue(r, base, head4, "### Documentation Impact\npackages/p.skill | retire | x\n")
+            check("G8-retire-b control: a binary file still present at head FAILs",
+                  got[0] == "FAIL" and "still exists at head" in got[1], got)
             put("core/standards/successor.md", fm.replace("title: T", "title: T\nsupersedes: core/standards/retire-me.md") + "new\n")
             head4b = commit("successor names its predecessor on its supersession line")
             got = eval_issue(r, base, head4b, "### Documentation Impact\ncore/standards/retire-me.md | retire | x\n")
@@ -809,6 +833,13 @@ def self_test() -> int:
             head8 = commit("the catalog page names its successor")
             got = eval_issue(r, base, head8, "### Documentation Impact\ncore/process-catalog/p.md | retire | x\n")
             check("G8-retire-a SUPERSEDED catalog page naming its successor PASSes", got[0] == "PASS", got)
+            # The head blob is read as bytes too: a status-carrying document that is not
+            # text at head has no status to read there, so its retire FAILs as unmoved.
+            put_bytes("core/standards/old.md", b"PK\x03\x04\xa6\xff\x00old")
+            head9 = commit("a status-carrying document replaced by a binary at the same path")
+            got = eval_issue(r, base, head9, "### Documentation Impact\ncore/standards/old.md | retire | x\n")
+            check("G8-retire-a a document that is binary at head FAILs: its status reads absent",
+                  got[0] == "FAIL" and "status at head is absent" in got[1], got)
         else:
             failures.append("retire arms not run: blast-radius.sh is not reachable from this file")
 
