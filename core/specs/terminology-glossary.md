@@ -289,7 +289,7 @@ Reference terms by stable `{#term-<slug>}` anchor. On first use of a canonical t
 
 - **Definition:** The platform's system documentation: one page per process node (universe, value stream, sub-process, activity), each activity's steps as rows in its page, and an index, a graph and cross-cutting views generated from the pages' frontmatter, never hand-maintained. It is a derived, descriptive index: skills, specs and code govern execution, and where a page disagrees with them the page is corrected.
 - **Real-world PMO equivalent:** A process architecture, the linked process map a business-process-management practice keeps (for example, a process classification framework held as one connected set rather than as separate diagrams).
-- **Platform equivalent:** `core/process-catalog/`: written pages under `<universe-id>/`, and the generated `INDEX.md`, `graph.json` and `views/`. Decision record: {{ADR:system-documentation-is-a-generated-process-catalog}}.
+- **Platform equivalent:** `core/process-catalog/`: written pages under `<universe-id>/`, and the generated `INDEX.md`, `graph.json` and `views/`. Decision record: ADR-224.
 - **Authoritative file:** `core/standards/design-artifact-standard.md` § 13.
 - **Consumers:** Catalog pages and their generator; the Stage 2 and Stage 5 planning reads; the Stage 13 documentation gates.
 

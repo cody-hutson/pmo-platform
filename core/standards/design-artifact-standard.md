@@ -382,7 +382,7 @@ The fourth row is the decisive one for **rule-7 conformance**, and it is the rea
 
 ## § 13. The Generated Process Catalog
 
-The process catalog is the platform's system documentation: one page per process node, written as text, with every index, graph and cross-cutting view generated from the pages, per {{ADR:system-documentation-is-a-generated-process-catalog}}. It sits beside the artifact model of §§ 2–12 and does not replace it: an embedded or dedicated artifact still explains the document it belongs to, while a catalog page orients a reader in a process and links to the sources that govern it.
+The process catalog is the platform's system documentation: one page per process node, written as text, with every index, graph and cross-cutting view generated from the pages, per ADR-224. It sits beside the artifact model of §§ 2–12 and does not replace it: an embedded or dedicated artifact still explains the document it belongs to, while a catalog page orients a reader in a process and links to the sources that govern it.
 
 **Authority.** The catalog is a derived, descriptive index of the platform, not a source of its rules. Skills, specs and code govern execution. When a page and the sources it summarizes disagree, the page is wrong and is corrected against them. A disagreement never changes a source to match a page; if it exposes a defect in a source, that source changes through its own governed path. Agents execute from skills and specs; catalog pages serve orientation, impact analysis, design and review. That is why a page orients and links and never restates a SKILL.md, spec or standard (§ 13.2).
 
@@ -435,7 +435,7 @@ A node that passes two tests takes the higher, less detailed level, and a sub-pr
 
 Each page also carries the link fields of § 13.4 that apply to it. Page templates may add fields; they never redefine the fields above.
 
-**Authoring rules.** The rules the catalog's validator enforces on page content are recorded in decision 12 of {{ADR:system-documentation-is-a-generated-process-catalog}} and are not restated here: an executed number cites a saved query, a Controls row takes its class from the register, a summary count is computed from the page's own Steps table, a source link starts at the repository root, and a platform term is linked or explained on first use. How a page cites a line of a source, and which identifiers it may carry, is stated under Evergreen references in § 13.4.
+**Authoring rules.** The rules the catalog's validator enforces on page content are recorded in decision 12 of ADR-224 and are not restated here: an executed number cites a saved query, a Controls row takes its class from the register, a summary count is computed from the page's own Steps table, a source link starts at the repository root, and a platform term is linked or explained on first use. How a page cites a line of a source, and which identifiers it may carry, is stated under Evergreen references in § 13.4.
 
 ### § 13.4 Link types
 
@@ -504,7 +504,7 @@ The **enforcement surface** says where a control acts: `hook`, `deploy-run`, `ci
 
 - **Enumeration.** A catalog page is a dedicated artifact for enumeration: it carries `flow_class` and `depicts`, so the § 12.2 harness finds it, and § 9 validation rules 1 and 2 apply to it. Rule 3 does not (the process-page exception in § 9).
 - **Production.** § 7 activation and the § 10 creation rule do not govern pages. Pages are published and regenerated under this section, not produced by a Stage 5 Tier-A activation, and § 8's refresh gate does not read them: a page's freshness is its `last_verified_commit`, checked by the drift check.
-- **Rendering.** Mermaid syntax, shapes and colours on a page's flow follow `process-flow-diagram-standards.md`, as for every process-flow artifact. § 6 tool selection and § 12.1 conformance do not govern a page's flow; decision 2 of {{ADR:system-documentation-is-a-generated-process-catalog}} does — the flow is a Mermaid block, whatever the page's `flow_class`, so an L0 page declared `concept-model` still draws its flow in Mermaid.
+- **Rendering.** Mermaid syntax, shapes and colours on a page's flow follow `process-flow-diagram-standards.md`, as for every process-flow artifact. § 6 tool selection and § 12.1 conformance do not govern a page's flow; decision 2 of ADR-224 does — the flow is a Mermaid block, whatever the page's `flow_class`, so an L0 page declared `concept-model` still draws its flow in Mermaid.
 
 ### § 13.9 Planning reads (Stage 2 and Stage 5)
 
@@ -529,7 +529,7 @@ Before a change is sized, the planning stage reads the current-state pages for t
 - [`evidence-grounding-standard.md`](evidence-grounding-standard.md) — sibling location-convention precedent.
 - [`bypass-mode-readiness.md`](../rules/bypass-mode-readiness.md) — workspace-canonical warn-mode → enforce shakedown precedent (Checks 8/9/10/14/15).
 - [`doc-link-maintenance.md`](../rules/doc-link-maintenance.md) — link-resolution enforcement (Check 14 and the PR-time link check).
-- The documentation-model decision record, {{ADR:system-documentation-is-a-generated-process-catalog}} — the decision § 13 implements.
+- The documentation-model decision record, ADR-224 — the decision § 13 implements.
 - [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) — K1 tier classification (this standard is K1).
 - Scope: Framework Part 1 + deferred Backfill Part 2.
 - Composed-with origin: `process-flow-diagram-standards.md` introduction.

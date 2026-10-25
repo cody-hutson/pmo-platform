@@ -11,7 +11,7 @@ The process catalog is the platform's system documentation: one page per process
 
 The catalog is a derived, descriptive index: skills, specs and code govern execution, and where a page disagrees with them the page is corrected. Agents execute from skills and specs; pages serve orientation, impact analysis, design and review.
 
-The rules live in one place, [the design-artifact standard](../standards/design-artifact-standard.md), in its section on the generated process catalog: where pages live, the levels and what earns a node a page, page identity and frontmatter, link types, the generated surfaces, the lifecycle and retire step, and how a page cites its sources so that its references stay current. The decision behind the model is {{ADR:system-documentation-is-a-generated-process-catalog}}.
+The rules live in one place, [the design-artifact standard](../standards/design-artifact-standard.md), in its section on the generated process catalog: where pages live, the levels and what earns a node a page, page identity and frontmatter, link types, the generated surfaces, the lifecycle and retire step, and how a page cites its sources so that its references stay current. The decision behind the model is ADR-224.
 
 | Path | Written or generated |
 |---|---|
