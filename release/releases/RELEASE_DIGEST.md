@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v4.80.1 (2026-10-28) — Stage 12 no longer pushes to main; rebuilt packages land only by pull request
+
 ### v4.80 (2026-10-25) — Safety guards now see scripts hidden behind wrappers, quotes and subshells
 
 ### v4.79 (2026-10-25) — Every change now says what it does to documentation, and close-out checks it
