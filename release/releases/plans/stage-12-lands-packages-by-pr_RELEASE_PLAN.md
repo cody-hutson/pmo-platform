@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH — documentation-only edits to seven tra
 | **Bump Class** | patch — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a corrective spec fix to a shipped stage shard, versioned hotfix, so the patch form on patch-base `v4.80`. Provisional display `v4.80.1`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-10-27 (Tuesday) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file, `715a4444`), the change set (`8a1c6f13`) and this evidence update landed; the draft release PR is open for Stage 7 |
+| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file, `715a4444`), the change set (`8a1c6f13`) and the evidence update (`f6cbf25b`) landed; Stage 7 Dev Testing passed at `f6cbf25b`, and a Stage 6 fix cycle landed its findings F-01, F-02 and F-03 (DEV-11); the draft release PR is open for Stage 8 |
 | **Branch** | `release/stage-12-lands-packages-by-pr` |
 | **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `stage-12-lands-packages-by-pr` |
@@ -120,6 +120,7 @@ Every element determined at Stage 4 that a named downstream consumer reads **fro
 | `core/rules/git-workflow.md` names the workspace root as the primary checkout; the close-out tool's worktree preflight compares against that root | A mirror-pair rules file and a tool outside this hotfix's write set; it predates this card | the existing owner #8102 (one comment, hub) |
 | The operator-memory-reference gate misses a memory filename that contains digits | A required gate's detector; a separate card owns it | the existing owner #7254 (one comment, hub) |
 | A class-level hook deny for a plain push to the default branch | Advisory altitude finding from the Stage-5 review; it would need an authorization path for rollback's legitimate push | the existing owner #8427 (one comment, hub) |
+| The Phase B3/B5 sequencing gap: `claim-version.sh` needs the Stage 12 chore branch checked out before the claim (it refuses a detached HEAD and the default branch), while the shard cuts that branch in Phase B5, after the Phase B3 tag push and after Phase B4.1 detaches the session worktree, so a literal read leaves the stamp commit outside the Stage 12 chore PR | It predates this card, and this release changes no Phase B3, B4 or B5 step; the Stage-5 adversarial review asked for it to be recorded as out-of-scope drift (Stage 7 finding F-03) | the existing owner #7011 (milestone `plan-corpus-identity-and-pointers`); recorded here only — no new issue and no comment |
 
 ---
 
@@ -317,6 +318,8 @@ No file is renamed, moved or deleted, so the mover set is empty. The phase being
 
 **AC baseline:** #8089 has **5** acceptance criteria, read at `d1af7e9b` (body revision `2026-10-28T03:11:12Z`, after the hub re-bound criteria 1, 2 and 4 under the Stage-5 approval). The rows below bind to that body: criteria 1, 2 and 4 carry several probes each, so each probe is its own sub-row (`AC-<n><suffix>`), one command per row.
 
+`ac_baseline: { #8089: 5, read_at: d1af7e9b }`
+
 ### Per-Issue Verification
 
 | Issue | AC | Verification Method | Expected Result |
@@ -418,6 +421,7 @@ One branch `release/stage-12-lands-packages-by-pr` off `origin/main` at `d1af7e9
 | **DEV-8** | **PR-1 is applied at two places the brief did not name.** (1) The governance paragraph's examples add a fourth instance, a partial-deployment fix-forward's own chore PR, because the same change set's package-staleness fix-forward rebuilds a package at Stage 12 recovery — the adversarial review's first counter-example to a closed seam list. (2) The partial-deployment-recovery "Gap closed" line reads "Stage 12 has no package-rebuild step of its own" and says that the fix-forward rebuild lands only through a pull request, so it no longer contradicts the fix-forward two paragraphs above it | PR-1's own mitigation text in the Stage-5 adversarial review (which proposed the fix-forward example), approved at the Stage-5 review | **APPLIED** — `8a1c6f13`; recorded because the brief named three seams |
 | **DEV-9** | **FM-1 touches two lines of `core/rules/skill-deployment.md`:** step 3 itself, and the section's opening clause that listed step 3 among post-merge work, which now says step 3 is owed before the merge. The section heading "Deployment Steps (Post-Merge)" is unchanged: renaming it is a reference cascade beyond the mitigation, and the opening clause now carries the exception | FM-1 (Stage-5 Decision Recorded: "smallest change that removes the contradiction") | **APPLIED** — `8a1c6f13` |
 | **DEV-10** | **Stage-6 A2 container: the PR-body checklist.** Decomposed by logical unit, the release has two planned sub-tasks — this plan (Commit 0) and the Phase J.5 removal cascade, which cannot be split across commits without leaving a half-removed procedure on an intermediate head — plus the special sync, plan-update and verification rows, and the work is doc-only, so the predicate selects the checklist. Counted one per file instead, the count is 8, which would select the sub-issue container | Stage-6 Phase A2 predicate (`stage-06-engineering.md` § 5) | **RECORDED** — the checklist renders in the release PR body; the per-file reading is surfaced to the hub rather than taken silently |
+| **DEV-11** | **A Stage 6 fix cycle after the Stage 7 PASS lands three Stage-7 findings and transcribes the Stage 7 evidence (Tier 1 [ADJUST]).** **F-01:** the machine-readable `ac_baseline: { #8089: 5, read_at: d1af7e9b }` line is added to § Verification Plan, beside the prose baseline it restates. **F-02:** the governance paragraph's Phase B3 example now reads "which rebuilds any package a `--stamp-file` artifact stales": one phrase on the one changed line, so `release-process.md` still differs from `main` by exactly one line. The example is qualified rather than dropped because the warning sentence names the claim-version stamp commit among "the rebuild seams above"; the heading, the invariant, the freshness-gate posture text and the warning are unchanged. **F-03:** § Exclusions records the B3/B5 sequencing gap, routed to its existing owner, with no new issue and no comment. The Stage 7 evidence is transcribed under § Verification Evidence, and the Header Status cell is brought up to date. No criterion, design decision or File Change Matrix row changes | Stage 7 Dev Testing report (F-01 and F-02 Tier 1; F-03 the record the report asked the hub to make); hub brief for the fix cycle | **APPLIED** — `b291563f` (governance) and the plan commit that carries this row; re-verified on the new head, with the results on the Stage-7 sub-task |
 
 ---
 
@@ -489,6 +493,43 @@ Every AC sensitivity arm was read on the baseline tree before the edits, with th
 | **Runtime suite** | **No-match row** of the runtime-suite selection map: the change is documentation and governance text only. The honest no-op is a `test-run` / `suite-skip` event (stage 6), named for the hub to append; this spoke writes no event row |
 | **`deliverable_state`** | `deployed-copy-synced` — reached at Stage 12, when the Phase B4 deploy re-lays the rules mirror; every other row declares no propagation target |
 
+### Stage 7 Dev Testing (extension)
+
+*Transcribed from the Stage 7 Dev Testing report on the Stage-7 sub-task (#8567), against head `f6cbf25b` on base `d1af7e9b` (equal to `origin/main`, so the branch was fresh). The Stage 7 spoke is read-only, so its report carried this extension for the hub to transcribe; the Stage 6 fix cycle transcribes it here (DEV-11).*
+
+**Verdict: PASS** — no Blocker, iteration count 0. Phase C scores: Clarity 4, Accuracy 4, Internal consistency 4, Convention depth 4, Domain-practice conformance (`governance`) 4; each at or above its threshold.
+
+| Check | Stage 7 result |
+|---|---|
+| **Plan verifier re-run** (with `--stage4-comment`) | 15 PASS / 0 FAIL / 6 SKIP / 2 UNRUNNABLE / 0 ERROR over 23 records, exit 0, row for row identical to Stage 6. The two UNRUNNABLE rows are the declared reader-graded limbs (AC-2b, AC-3) and the six SKIPs are the declared-deferred rows. Verdict-laundering guard CLEAN: no row moved from FAIL or ERROR to SKIP or UNRUNNABLE |
+| **AC probes**, head vs baseline `d1af7e9b` | All 11 runnable probes return the expected value, and each sensitivity arm on the baseline reproduces the count the card states: AC-1a 0 / 2, AC-1b 0 / 1, AC-1c 2 / 9, AC-1d 8 / 8, AC-2a 0 / 1, AC-2b 1 / 0, AC-3 0 / 1 (control 1 / 1), AC-4a 0 / 1, AC-4c 0 / 1 (control `diff -q` 4 / 4), AC-4d 1 / 2 |
+| **AC binder** | `check-ac-binding.py` → `UNPARSEABLE`, exit 3, because this plan then carried no machine-readable `ac_baseline:` line (F-01). The rows were mapped by reading: AC-1a–1d → criterion 1, AC-2a/2b → 2, AC-3 → 3, AC-4a–4d → 4, AC-5 → 5, so 5 of 5 criteria are covered |
+| **Name sweep** | `J.5` outside `release/releases/`: head 3 lines / 2 files (`stage-12-execute.md` :173 and :475, `pipeline-event-log-schema.md` :617), baseline 20 lines / 7 files; it agrees with the Stage-6 REFCASCADE trailer line for line |
+| **Command-shape sweep** | head 7 lines, 0 of them in the 7 edited files; baseline 14, 7 in scope; the 7 out-of-scope survivors are unchanged. A concept sweep with no phase name (Phase H near a rebuild or package word) reads head 0 / baseline 7 |
+| **Package resolver** | the 8 changed paths on STDIN → empty, exit 0. Sensitivity: `rollback-protocol.md` + `tracker-schemas.md` → `release-executor`, `tracker-manager`; specificity: a near-miss path → empty |
+| **Doc-link checker** | `--require-targets` over the 8 changed files → 0 findings; `--self-test` passes 12 fixtures. Inbound fragment links to the one changed heading: 0 (sensitivity: 11 files carry the `release-process.md#` link shape) |
+| **Deprecated-path scan** | `NOT-APPLICABLE — no paths retired (denominator 0)`: the range has 8 paths, none deleted, and 0 rename rows |
+| **Branch freshness (S7-I04)** | `assert_branch_fresh.py --base origin/main --head f6cbf25b` → exit 0, 0 unreachable commits; control `--head d1af7e9b~3` → FAIL, listing 12 commits |
+| **`deploy.sh --check`, head vs `origin/main`** | Both trees end "2 issue(s) found", and the 2 FAIL lines are byte-identical on both, so they predate this release and name no file in its diff. The only net-new line is the expected Check-9 `mirror-sync` WARN on `core/rules/skill-deployment.md`, which the Phase B4 deploy re-lays (F-10) |
+| **Mergeability and required checks** | `MERGEABLE`, `mergeStateStatus` not `DIRTY`, draft. 22 of 22 required contexts dispatched, stable across two polls. At the last read 21 passed and 1 was pending (`Install/onboarding/update regression suite (macOS)`, F-09), and none failed. The roster record was not written while the roster was still dispatching (exit 3, NOT-EVALUATED, not a clean result) |
+| **Runtime suite (A8)** | `suite-skip`: all 8 paths take the selection map's no-match row |
+| **Commits** | 3 commits, each signature `G` and each with the co-author trailer; the close-keyword check examined 3 and found 0 |
+
+**Findings** — 4 Minor and 6 Informational or Cosmetic; the three escapes are F-01 (Stage 4), F-02 (Stage 6) and F-03 (Stage 5).
+
+| F-ID | Severity | Finding | Disposition |
+|---|---|---|---|
+| F-01 | Minor | No machine-readable `ac_baseline:` line, so the binder read `UNPARSEABLE` | **Landed in the fix cycle** — the line is in § Verification Plan (DEV-11) |
+| F-02 | Minor | The governance paragraph said the Phase B3 stamp commit "rebuilds any package its stamp stales"; the canonical B3 call passes `--stamp-slug` only, and the claim tool rebuilds only for a `--stamp-file` artifact | **Landed in the fix cycle** — `b291563f` qualifies the example with `--stamp-file` (DEV-11) |
+| F-03 | Minor | The Stage-5 review's request to record the B3/B5 sequencing gap as out-of-scope drift had no landing | **Landed in the fix cycle** — the § Exclusions row, routed to its existing owner (DEV-11) |
+| F-04 | Informational | The literal heading "Stage 12 rebuilds none" sits beside three Stage-12-time rebuild paths (the A.5.7c renumber's package-staleness disclosure, the partial-deployment fix-forward, the conditional B3 `--stamp-file` arm), each of which lands by pull request | Accepted; Stage 8 reads A.5.7c when it grades criterion 2 |
+| F-05 | Informational | Criterion 3's "read the row" assumes a rewritten row; under the delete branch the table and the phase agree by absence | Accepted; Stage 8 notes it |
+| F-06 | Informational | Three tool limits: the binder's label grammar does not read suffixed sub-rows such as `AC-1a`; the verifier's JSON output is invalid when an Expected cell holds a double quote; three `awk` warnings under `--stage4-comment` | Out of scope; for the tool owners |
+| F-07 | Cosmetic | The "(Post-Merge)" heading sits over a step 3 that is now owed before the merge | Accepted as recorded (DEV-9) |
+| F-08 | Informational | "The Stage-6 package-rebuild beat" names no element of `stage-06-engineering.md`, whose C4 freshness paragraph carries the obligation | Accepted; align the name on a future touch |
+| F-09 | Minor | One required macOS suite was pending at the last read | The hub re-reads the required roster before Stage 9 |
+| F-10 | Informational | The one net-new deploy-check line is the expected rules-mirror drift | Accepted; Phase B4 re-lays the mirror and Check 9 verifies it |
+
 ---
 
 ## Change Description
@@ -537,6 +578,8 @@ The governance statement is the paragraph headed *Package rebuilds land by pull 
 
 - **#8089** — the sole card: Stage 12's Phase J.5 commits in the primary checkout and pushes to the default branch.
 - **#8564 · #8565 · #8566** — the Stage-4, Stage-5 and Stage-6 sub-tasks carrying the plan, the design with its adversarial review and both Decision Recorded comments, and this engineering work.
+- **#8567** — the Stage-7 sub-task: the Dev Testing report transcribed under § Verification Evidence, and the Stage 6 fix cycle that landed its findings (DEV-11).
+- **#7011** — Stage-12 Phase B3 cannot run where the stage shard sequences it; owns the B3/B5 sequencing gap recorded in § Exclusions.
 - **#7932** — the parent epic (defect and hardening evergreen intake).
 - **#8427** — release-executor checklist defect of the same class; owns the "Phase H" naming and the rollback protocol's direct push.
 - **#6212** — Stage-12 install propagation for references-only skill changes; a latent file-contention edge.
