@@ -70,7 +70,7 @@ The schema above states the field; this sub-section states its **key grammar**, 
 | Value | Definition | Set by |
 |---|---|---|
 | **SUCCESS** | All in-scope deliverables shipped; QC4-01 through QC4-05 PASS; no post-deploy regression surfaced within the 30-day post-deploy review window. Default value when Stage 13 Checkpoint 4 closes clean. | Stage 13 spoke (autonomous when QC4 all-PASS) |
-| **PARTIAL** | Stage 12 deployed but ≥1 file/skill/target failed S-2 copy, Phase H deploy, Phase J.5 rebuild, OR ≥1 QC4 invariant FAIL'd post-deploy. Detail + recovery routing defers to [`partial-deployment-recovery.md`](partial-deployment-recovery.md). | Operator (when partial-deploy condition fires) |
+| **PARTIAL** | Stage 12 deployed but ≥1 file/skill/target failed S-2 copy or the Phase B4 deploy, OR ≥1 QC4 invariant FAIL'd post-deploy. Detail + recovery routing defers to [`partial-deployment-recovery.md`](partial-deployment-recovery.md). | Operator (when partial-deploy condition fires) |
 | **ROLLBACK** | Release was reversed via `git revert -m 1 <merge-SHA>` post-deploy OR equivalent reversal mechanism (tag deletion, manual file restoration). Reversal SHA cited in rationale line. | Operator (post-rollback ceremony) |
 | **DEFERRED** | Stage 12 was attempted, HALTed before merge per Tier 2 [SCOPE CHANGE] (e.g., Phase A.5 main-divergence too wide, mergeStateStatus persistent UNKNOWN, dependent-PR blocker), and never re-attempted within the release's open window. Distinct from a release that has not yet started Stage 12 — DEFERRED is terminal. | Operator (after explicit defer decision) |
 

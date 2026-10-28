@@ -143,7 +143,9 @@ redeploys the skills a merge brought in, so a merge to `main` no longer depends 
 the operator remembering to deploy. The hook is described under *Automatic
 post-merge deploy* below; the numbered steps here remain the authoritative
 description of what a deploy does, the path to use on any machine where the hook
-is not installed, and — for steps 2 and 3 — work the hook does not do at all.
+is not installed, and — for steps 2 and 3 — work the hook does not do at all (step 3
+is owed before the merge, in the pull request of the change that edited the skill,
+not after it).
 
 1. Deploy changed skills and packages: `./deploy.sh --deploy`
    - Auto-detects changed skills via tag-based git diff
@@ -153,7 +155,7 @@ is not installed, and — for steps 2 and 3 — work the hook does not do at all
    - Verifies each copy via diff
    - To deploy specific skills: `./deploy.sh --deploy daily-status comms-writer`
 2. Verify deployment: open Cowork, invoke the changed skill, confirm expected behavior. In Claude Code, type `/` and confirm the skill appears as a plain entry (e.g., `/daily-status`).
-3. **Rebuild .skill package — MANDATORY for every modified skill** via `python3 -m scripts.package_skill <skill-dir> packages/` from `release/skills/pmo-skill-refiner/`. Every skill in `{core,operations,release}/skills/` has a corresponding `.skill` package in `packages/` — no exceptions. Source-vs-package staleness is a release-blocking compliance gap, structurally enforced by `deploy.sh --check` Check 7 (package-freshness). Check 7 asserts freshness **by content, not by mtime** (per the gate-efficacy standard): each build emits a committed content-baseline sidecar `packages/<skill>.skill.sha256` (the rebuild-stable content-manifest hash), and Check 7 stages a rebuild of source and compares its content hash against that baseline — so a stale package fails even on a fresh checkout where every file mtime is equal, while a mere `touch` of a current package does not. Use `bash core/deploy/tools/build-skill-packages.sh <skill>` (which injects `TEMPLATE_SYNC_MAP` canonicals and writes the sidecar) rather than calling the packager directly when a skill consumes injected templates, so the committed package and its sidecar both reflect current canonical content.
+3. **Rebuild .skill package — MANDATORY for every modified skill**, before merge: the rebuild lands in the pull request of the change that edited the skill (in a release, the Stage-6 package-rebuild beat in the release PR), never as a step after the merge. Rebuild via `python3 -m scripts.package_skill <skill-dir> packages/` from `release/skills/pmo-skill-refiner/`. Every skill in `{core,operations,release}/skills/` has a corresponding `.skill` package in `packages/` — no exceptions. Source-vs-package staleness is a release-blocking compliance gap, structurally enforced by `deploy.sh --check` Check 7 (package-freshness). Check 7 asserts freshness **by content, not by mtime** (per the gate-efficacy standard): each build emits a committed content-baseline sidecar `packages/<skill>.skill.sha256` (the rebuild-stable content-manifest hash), and Check 7 stages a rebuild of source and compares its content hash against that baseline — so a stale package fails even on a fresh checkout where every file mtime is equal, while a mere `touch` of a current package does not. Use `bash core/deploy/tools/build-skill-packages.sh <skill>` (which injects `TEMPLATE_SYNC_MAP` canonicals and writes the sidecar) rather than calling the packager directly when a skill consumes injected templates, so the committed package and its sidecar both reflect current canonical content.
 
 **Package freshness is asserted at two surfaces, and they do not fail alike.** A
 criterion that leans on "the freshness gate" has to say which one it means:
@@ -247,10 +249,14 @@ therefore NOT a no-op — it MUST resolve to one of two dispositions, and the
 default is to propagate:
 
 - **(a) Propagate (DEFAULT, primary).** At Stage 12 the release-stamped deploy of
-  Phase B4 names `<skill>` (which re-mirrors `references/` per Deployment Step 1) AND
-  the skill's `.skill` package is rebuilt per Deployment Step 3 (`bash
-  core/deploy/tools/build-skill-packages.sh <skill>`), so the mirror and the package
-  stay current with source.
+  Phase B4 names `<skill>` (which re-mirrors `references/` per Deployment Step 1).
+  The skill's `.skill` package is not rebuilt at Stage 12: Deployment Step 3 is an
+  obligation of the change that edited the skill, so the release PR already carries
+  the rebuilt package and its sidecar, and the mirror and the package stay current
+  with source. Stage 12 has no package-rebuild step of its own: a `.skill` package
+  rebuild lands only through a pull request from a branch, and the Stage-6
+  package-rebuild beat, the claim-version stamp commit and Stage 13 Phase B5.9 are
+  examples of that invariant, not a closed list.
   This is the default because the platform value is no-silent-drift: a
   references-only edit that does not propagate leaves the installed mirror and the
   distributed package stale against source.

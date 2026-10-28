@@ -67,8 +67,7 @@ Stage 12 spoke runs all 5 checks; records per-check outcome in sub-task output.
 
 ### Check 1 — Per-skill copy integrity (file-level)
 
-- **Command:** `git -C ${HOME}/Claude diff --name-only` (primary; expects post-deploy clean state)
-- **Per-skill repeat:** `diff -q <git-source-SKILL.md> <Cowork-install-SKILL.md>` AND `diff -q <git-source-SKILL.md> <~/<OPERATOR_INSTANCE_SKILLS_PATH>/<name>/SKILL.md>`
+- **Command (per skill):** `diff -q <git-source-SKILL.md> <Cowork-install-SKILL.md>` AND `diff -q <git-source-SKILL.md> <~/<OPERATOR_INSTANCE_SKILLS_PATH>/<name>/SKILL.md>`
 - **Outcome enum:** PASS (zero diff per skill) / FAIL-PARTIAL (≥1 skill diff non-clean, others clean) / FAIL-SYSTEMIC (every skill diff non-clean)
 
 ### Check 2 — `core/deploy/deploy.sh --check` regression (release-attribution)
@@ -108,16 +107,16 @@ Triggered by Check 5 = partial-failure AND operator-authorized "fix-forward" dec
 1. **Identify failed copies** from Check 1 / Check 3 / Check 4 outcome enums (the per-skill / per-mirror divergence list).
 2. **Retry per failure class:**
    - **S-2 SKILL.md copy failure** → re-run the Stage 12 Phase B4 stamped form for the failed names — `core/deploy/deploy.sh --deploy --release <milestone-slug> <name1> <name2> ...` — so each recovered target gains a `resolved` row beside its failed one; an unstamped retry repairs the copy and leaves the release's record reading failed.
-   - **Package staleness** → re-run `python3 -m scripts.package_skill <skill-dir> packages/` per affected skill; commit per Phase J.5 rebuild-then-commit pattern (chore PR with message `chore(<version>): rebuilt skill packages from Phase H deploy` — the canonical precedent message form).
+   - **Package staleness** → in the executor's session worktree, on a chore branch cut from `origin/main`, rebuild each affected package with `bash core/deploy/tools/build-skill-packages.sh <skill>` and commit the package together with its `.sha256` sidecar; land the commit through a pull request per the Stage 12 chore-PR pattern (§ Precedent below) — never by a commit in the primary checkout or a push to the default branch.
    - **Mirror divergence (`core/rules/` ↔ `engineering/rules/`)** → manual `cp` of the canonical source over the divergent mirror; commit per Stage 12 chore-PR pattern.
 3. **Re-verify via Check 1 + Check 3 + Check 4 + Check 5** until aggregator returns full-success.
 4. **Update RELEASE_LOG.md visible-H4 Deployment Log** — append `Result: PARTIAL → SUCCESS (fix-forward: <N> retries; details: <file list>)` to the existing block. Per FM3 (§ 9), this update MUST land via the Stage 13 chore-PR pattern per [`release-process.md`](../../governance/release-process.md) Stage 13 § Chore PR convention — NEVER via direct-to-main commit.
 
-### Precedent (Phase J.5 rebuild-then-commit pattern)
+### Precedent (Stage 12 chore-PR pattern)
 
-The Stage 12 Phase J.5 rebuilt-package commit pattern is structurally a fix-forward primitive for the cascade-modified-package class. Commit message: `chore(<version>): rebuilt skill packages from Phase H deploy`. Extension to S-2 partial-deploy: the same commit-and-verify discipline applies to S-2 retries; the difference is the failure class (orphan packages → rebuild script; partial S-2 copies → re-run `core/deploy/deploy.sh --deploy`).
+Every fix-forward commit in this section lands the way the Stage 12 Phase B5 chore PR does: a branch cut in the executor's session worktree, one commit, a pull request, and the Phase B merge verification. A rebuilt package is no exception. It is a pull-request-borne rebuild of the same kind as Stage 13 Phase B5.9, so the pull request's checks, the package-freshness gate among them, run on it before it reaches `main`. The repair differs by failure class (stale package → the package builder; partial S-2 copy → the stamped Phase B4 deploy); the landing path does not.
 
-**Gap closed:** Phase J.5 addresses the orphan-package class (Phase H ran successfully but the rebuild commit was missing); this standard addresses the partial-copy class (Phase H itself partially failed). Distinct mechanisms; complementary protocols.
+**Gap closed:** Stage 12 has no package-rebuild step of its own, so a stale package found at assessment is a pre-merge rebuild that did not happen, never a deploy-time orphan waiting to be committed; its fix-forward rebuild above lands, like every package rebuild, only through a pull request from a branch. This standard covers that class and the partial-copy class (Phase B4 itself partially failed). Distinct failure classes; one landing path.
 
 ### Self-repair posture
 
@@ -203,7 +202,7 @@ decision-outcome-tracking.md (sibling) declares a PARTIAL outcome value for the 
 
 ## 11. Cutover
 
-**Applies to:** all Stage 12 deployments going forward. If any partial-failure surfaces, recovery follows the decision tree in § 3 (standard fix-forward via the Phase J.5 rebuild-then-commit pattern, or rollback per § 7).
+**Applies to:** all Stage 12 deployments going forward. If any partial-failure surfaces, recovery follows the decision tree in § 3 (standard fix-forward per § 6, landing through the Stage 12 chore-PR pattern, or rollback per § 7).
 
 ## 12. Cross-references
 
@@ -213,7 +212,7 @@ decision-outcome-tracking.md (sibling) declares a PARTIAL outcome value for the 
 | Upstream trigger (Stage 12 Self-repair line) | [`release/governance/release-process.md`](../../governance/release-process.md) § Stage 12 | Stage 12 Self-repair line cross-references this standard when Phase C surfaces partial-failure |
 | Rollback procedure authority | [`RELEASE_PROTOCOL.md`](../../governance/RELEASE_PROTOCOL.md) § Rollback protocol | Canonical rollback procedure including snapshot-restore semantics for Cowork's non-git surface |
 | Rollback skill entrypoint | [`release-executor` SKILL.md](../../skills/release-executor/SKILL.md) Mode C | Existing rollback entrypoint; this standard does NOT modify Mode C semantics |
-| Fix-forward precedent | [`pipeline/stage-12-execute.md`](../pipeline/stage-12-execute.md) § Phase J.5 rebuild-then-commit pattern | Rebuilt-package commit pattern; structurally a fix-forward primitive for cascade-modified-package class |
+| Fix-forward precedent | [`pipeline/stage-12-execute.md`](../pipeline/stage-12-execute.md) § Phase B5 commit mechanism — chore PR | The pull-request landing path every fix-forward commit uses, a rebuilt package included |
 | Failure-mode schema | [`failure-mode-standard.md`](../../../core/standards/failure-mode-standard.md) | 5-field schema + 5 category tags (TRIG / INPUT / PROC / OUT / HAND) |
 | Chore PR convention | [`release-process.md`](../../governance/release-process.md) Stage 13 § Chore PR convention | Deployment Log Result field updates land via chore PR, never direct-to-main |
 | K1 placement | [`knowledge-architecture.md § 3`](../../../core/disciplines/knowledge-architecture.md) | K1 standards live at `core/standards/` |
