@@ -1,0 +1,588 @@
+---
+title: Release Plan — stage-12-lands-packages-by-pr (Stage 12 lands rebuilt packages by pull request; Phase J.5 is removed)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: versioned (bump-class patch; patch-base v4.80; provisional display v4.80.1; the concrete number binds at the Stage-12 atomic claim)
+milestone: stage-12-lands-packages-by-pr
+release_class: hotfix
+reversibility: CHEAP / Confidence HIGH — documentation-only edits to seven tracked pipeline, governance, standards and rules files plus this plan, on one branch with one merge, so reverting the merge restores main byte-for-byte. No package is rebuilt and no schema changes; the deployed rules mirror is re-laid by the next deploy. A claimed version tag is retained and recorded, never deleted.
+---
+# Release Plan — `stage-12-lands-packages-by-pr`
+
+**Milestone:** `stage-12-lands-packages-by-pr` (milestone 436). The Stage-4 planning sub-task **#8564** carries the approved plan and the Stage-4 gate's Decision Recorded; this file transcribes that plan as the Stage-5 design and its Decision Recorded amend it. The Stage-5 design, its independent adversarial review and the Stage-5 Decision Recorded are on **#8565**. This file is Engineering Commit 0, authored by the Stage-6 spoke on **#8566**.
+
+**Version identity:** **versioned** — bump-class **`patch`** on patch-base **`v4.80`**, provisional display **`v4.80.1`**. The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-primary while in flight, and the Header `**Version**` cell carries the double-brace release-version placeholder, which this file reproduces in that cell only.
+
+**Topology:** D-C **SINGLE** — one release branch, `release/stage-12-lands-packages-by-pr`, one pull request opened in **draft** after the change set lands, one merge into `main`.
+
+**Concurrency posture:** **P0 fully serial** — one card, one wave. Force-push, `--force-with-lease` included, is not used on the shared branch.
+
+**Release class:** `hotfix` — confirmed at the Stage-4 gate; Stage 9 review depth **Standard** (§ Release Class declaration).
+
+> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #8564 and is amended by three records: the Stage-4 Decision Recorded (plan approved; the Outcome AFTER sentence narrowed to Stage 12; no new issues), the Stage-5 design on #8565 (delete Phase J.5; three conditional matrix rows promoted; a gate hazard found on a line the release must edit), and the Stage-5 Decision Recorded on #8565 (the design approved with five review mitigations folded into Stage 6; acceptance criteria 1, 2 and 4 re-bound on #8089). Where the plan and a later record differ, the later record wins, and each such change is recorded in § Deviation Log. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | patch — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a corrective spec fix to a shipped stage shard, versioned hotfix, so the patch form on patch-base `v4.80`. Provisional display `v4.80.1`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
+| **Date Created** | 2026-10-27 (Tuesday) |
+| **Release Manager** | Agent-assisted (release-hub) |
+| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file, `715a4444`), the change set (`8a1c6f13`) and the evidence update (`f6cbf25b`) landed; Stage 7 Dev Testing passed at `f6cbf25b`, and a Stage 6 fix cycle landed its findings F-01, F-02 and F-03 (DEV-11); the draft release PR is open for Stage 8 |
+| **Branch** | `release/stage-12-lands-packages-by-pr` |
+| **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
+| **Milestone** | `stage-12-lands-packages-by-pr` |
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-10-27, domain: governance }`
+
+#### Domain Practice Provenance
+
+**Form X** (sourcing-exempt): every File Change Matrix row is an internal pipeline, governance, standards or rules artifact, and none is application source, so no external body of practice is consumed. Dominant domain **`governance`**. Transcribed unchanged from the Stage-4 plan (Phase A1.5) and carried unchanged by the Stage-5 design.
+
+---
+
+## Commit-0 Version Re-Verify Record
+
+Run at Engineering Commit 0, both halves, per `release/references/how-to/hub-spoke-bridge.md` Procedure 0 § Canonical location (single-branch topology, steps 1 to 3b).
+
+### Version half (steps 1–3, pre-write)
+
+| Step | Action | Observed |
+|---|---|---|
+| **1** | `git fetch origin main`, then `git fetch --tags origin` | both exit 0; `origin/main` = `d1af7e9b` (`d1af7e9b75ed7a3ee95ec0a8e570524b30162df0`), equal to the Stage-4 baseline pin. The release branch was cut from it before this file was written |
+| **2** | Recompute next-free for bump-class **`patch`** on patch-base **`v4.80`** through the adapter itself: `release/tools/claim-version.sh --sha d1af7e9b75ed7a3ee95ec0a8e570524b30162df0 --bump patch --patch-base v4.80 --dry-run` (the adapter's own allocation; no tag pushed) | **`v4.80.1`** (exit 0; "would claim v4.80.1 (no tag pushed)") — equal to the planned display |
+| **3** | HALT unless the planned version is absent from the claimed set AND equals the recomputed next-free. The tag arm binds; the published-Release and ledger arms corroborate | **absent on every arm, equal to next-free → PROCEED** |
+
+**Probe record for the step-3 zero** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0 to PV-7):
+
+```
+Probe:       git ls-remote --tags origin                                   (tag arm — binds)
+             gh release list --limit 5000, tag names                       (Release arm)
+             git show origin/main:release/releases/RELEASE_LOG.md          (ledger arm)
+             each filtered for the exact v4.80.1 tuple
+Denominator: 448 ls-remote lines (225 distinct tags); 223 published Releases (under the
+             5000 limit, so not truncated); the ledger at origin/main, 2,850 lines
+Control - sensitivity: the same three readers on the v4.80 slot — tag v4.80, Release v4.80,
+             and 8 ledger lines naming v4.80. Every arm returns non-zero, so a zero on the
+             v4.80.1 slot is a real negative
+Control - specificity: NOT TRIGGERED — a slot-occupancy question over one exact version tuple
+             has no near-miss class the probe must reject (v4.80 is a different tuple, and the
+             comparator is tuple equality, not string prefix)
+Extraction:  the full ls-remote output, the full Release list and the full ledger read from
+             origin/main (never the worktree copy)
+Result:      0 occupants of the (4,80,1) slot on every arm; the highest claimed tag is v4.80
+Verdict:     CLEAN — v4.80.1 is free and equals the recomputed next-free; no HALT
+```
+
+**In-flight state at Commit 0:** none. 0 open pull requests and 0 remote `release/*` heads other than this release's own (§ Cross-PR Overlap Audit → In-Flight Release Roster).
+
+### Manifest half (step 3b, post-write and pre-commit)
+
+`release/tools/claim-version.sh --verify-stamp stage-12-lands-packages-by-pr`, run after this file was written and before it was committed; exit 0 is required. The result is recorded in § Verification Evidence.
+
+This file carries **exactly one** literal double-brace release-version placeholder — the Header `**Version**` cell. Every other mention names the placeholder rather than reproducing it, because the claim resolves the token by substitution across the whole file.
+
+### Commit-0 Survival Set
+
+Every element determined at Stage 4 that a named downstream consumer reads **from this file** (`release/references/pipeline/stage-04-planning.md` § 6). Dropping one is a spec violation, not an oversight.
+
+| # | Survival element | Carried at |
+|---|---|---|
+| 1 | `domain_practice` label (`source` · `date` · in-label `domain`; Form X, so no Mode-B rationale) | § Header |
+| 2 | File Change Matrix (machine-readable, fence-delimited; the three conditional rows promoted at this commit) | § File Change Matrix |
+| 3 | Cross-Issue Acceptance Criteria — **structurally empty at n=1**, declared rather than omitted | § Cross-Issue Acceptance Criteria |
+| 4 | Verification Plan (with the AC baseline, bound to #8089's current body) | § Verification Plan |
+| 5 | Release-version stamp manifest (the double-brace placeholder in the Header `**Version**` cell; bump class in the `**Bump Class**` row) | § Header |
+| 6 | Stage Applicability Matrix | § Stage Applicability Matrix |
+| 7 | Release Class declaration | § Release Class declaration |
+| 8 | Implementation Sequence (the approved build order, as Stage 5 resolved it) | § Implementation Sequence |
+| 9 | Baseline pin (the Stage-4 `origin/main` SHA, and the Commit-0 base beside it) | § Cross-PR Overlap Audit → Baseline SHA |
+
+---
+
+## Scope
+
+### Issues Included
+
+| Issue | Priority | Title | Disposition |
+|---|---|---|---|
+| #8089 | P1 | Stage 12's Phase J.5 tells a spoke to commit in the primary checkout and push straight to main | carried; Stage-5 design D-1 (delete Phase J.5) |
+
+### Exclusions
+
+| Item | Why it is out of scope | Routed to |
+|---|---|---|
+| The rollback protocol's own direct push to `main` (`release/skills/release-executor/references/rollback-protocol.md`, two lines) | The Outcome AFTER sentence was narrowed to Stage 12 at the Stage-4 gate | the existing owner #8427 (one comment, hub) |
+| `core/rules/git-workflow.md` names the workspace root as the primary checkout; the close-out tool's worktree preflight compares against that root | A mirror-pair rules file and a tool outside this hotfix's write set; it predates this card | the existing owner #8102 (one comment, hub) |
+| The operator-memory-reference gate misses a memory filename that contains digits | A required gate's detector; a separate card owns it | the existing owner #7254 (one comment, hub) |
+| A class-level hook deny for a plain push to the default branch | Advisory altitude finding from the Stage-5 review; it would need an authorization path for rollback's legitimate push | the existing owner #8427 (one comment, hub) |
+| The Phase B3/B5 sequencing gap: `claim-version.sh` needs the Stage 12 chore branch checked out before the claim (it refuses a detached HEAD and the default branch), while the shard cuts that branch in Phase B5, after the Phase B3 tag push and after Phase B4.1 detaches the session worktree, so a literal read leaves the stamp commit outside the Stage 12 chore PR | It predates this card, and this release changes no Phase B3, B4 or B5 step; the Stage-5 adversarial review asked for it to be recorded as out-of-scope drift (Stage 7 finding F-03) | the existing owner #7011 (milestone `plan-corpus-identity-and-pointers`); recorded here only — no new issue and no comment |
+
+---
+
+## Decision Record
+
+### Stage-4 plan gate (operator, 2026-10-27)
+
+| Decision | Rendered |
+|---|---|
+| Plan + Release Outcome Statement | **Approved**, with the Outcome **AFTER** sentence narrowed to Stage 12 (the rollback protocol's own direct push is out of this hotfix's scope) |
+| Out-of-scope follow-ups | One comment on each existing owner (#8427, #7954). **No new issues** |
+| D-Version | A recorded determination, not a gate: `v4.80.1` provisional, bump class patch on patch-base `v4.80`, re-verified at Engineering Commit 0 and at the Stage-12 atomic claim |
+
+### Stage-5 design review (operator, 2026-10-27)
+
+| Decision | Rendered |
+|---|---|
+| Design D-1 to D-7 — delete Phase J.5; retarget the references-only (a) instruction together with `core/rules/skill-deployment.md` § References-only; reconcile the A.7.4 cutover clause; the partial-deployment-recovery retargets; delete the bridge chip-prompt requirement; preserve the retrospective Evidence line and the event-log schema history list; re-bind acceptance criteria 1, 2 and 4 | **Approved, with the reviewer's mitigations folded into Stage 6** |
+| Mitigations Stage 6 carries | **PR-1** — state the invariant and cite the rebuild seams as examples, not as a closed list · **FM-1** — `core/rules/skill-deployment.md` § Deployment Steps (Post-Merge) step 3 no longer places the rebuild after merge · **CD-1** — a one-line, command-free "Phase J.5 (removed)" marker in place of the phase · **CD-2** — drop the partial-deployment-recovery Check-1 probe line the design called ceremony · **O2** — correct the B5 REST annotation's "within the same stage" wording |
+| Side findings | One comment on each existing owner (#8427, #7254, #8102) — hub actions, no repository change |
+
+**Applied by the hub under the Stage-5 approval (Tier 1 [ADJUST]):** #8089's acceptance criteria 1, 2 and 4 were replaced with the Stage-5 text, and criterion 1's `Phase J.5` count was re-pinned from 1 to 2 for the CD-1 marker; the milestone's Parallelization Map re-classes the #6212 edge to file-contention, latent.
+
+---
+
+## Dependency Graph
+
+```
+#8089 (sole card)        in-bundle edges: none
+  typed deps (REST + GraphQL): blocked_by 0 · blocking 0
+  parent: epic #7932 (open) · sub-issues: the stage sub-tasks only
+  body: no Dependencies section
+soft / latent (informational, not in the graph):
+  #6212 (stage-assertions-reconcile) — file-contention, latent: names stage-12-execute.md and
+                                       skill-deployment.md § References-only, both edited here
+  #8427 (unmilestoned)               — soft: shares "Phase H" lines that co-occur with J.5
+```
+
+---
+
+## Implementation Sequence
+
+Single branch `release/stage-12-lands-packages-by-pr`, one release PR. Stage 5 selected the **delete** branch (D-1), which resolves every "delete or rewrite" fork the Stage-4 sequence carried.
+
+| Step | Work | Files | Carries |
+|---|---|---|---|
+| **0** | **Engineering Commit 0** — this plan file, with the Commit-0 Survival Set, after the version re-verify (tag arm binds) and `claim-version.sh --verify-stamp` | this file | Survival Set 1–9 |
+| **1** | **Delete Phase J.5** (heading, steps J.5.1–J.5.5, its cutover line and its REST annotation), leaving a one-line, command-free "Phase J.5 (removed)" marker in its place | `release/references/pipeline/stage-12-execute.md` | AC-1, AC-4; CD-1 |
+| **2** | **In-file reconciliation, same commit:** delete the composition-table row and the § 11 emit row; drop J.5 from the A.7.4 chore-PR list and replace that line's spent cutover clause with the unconditional form (the gate hazard, R11); drop J.5 from the B5 REST annotation and correct its "within the same stage" wording; the naming note; retarget the references-only (a) rebuild instruction to the change that edited the skill. The retrospective Evidence line is preserved | `release/references/pipeline/stage-12-execute.md` | AC-1 to AC-4; O2; PR-1 |
+| **3** | **Governance file** — retarget the rebuild obligation from J.5 to the pull-request rebuild invariant and drop the J.5 command restatement; keep the freshness-gate posture text and the "the gate does not discharge the rebuild obligation" warning in substance | `release/governance/release-process.md` | AC-2; PR-1 |
+| **4** | **Bridge** — delete the Stage-12 chip-prompt requirement that restates the J.5 commands, with its cutover line | `release/references/how-to/hub-spoke-bridge.md` | AC-5 |
+| **5** | **Standards and the third stage shard** — partial-deployment-recovery Check 1 (drop the probe line), the package-staleness fix-forward, § Precedent, the cutover pointer and the cross-reference row; the PARTIAL definition; the Stage-13 REST annotation | `release/references/standards/partial-deployment-recovery.md`, `release/references/standards/decision-outcome-tracking.md`, `release/references/pipeline/stage-13-close.md` | AC-4, AC-5; CD-2 |
+| **6** | **Rules file** — the references-only (a) retarget at its policy home, and Deployment Step 3 placed before merge | `core/rules/skill-deployment.md` | AC-2; PR-1; FM-1 |
+| **7** | **Sweeps and self-verification** — the name sweep and the command-shape sweep, each pre and post, emitted as the REFCASCADE trailer; Stage-6 C4 (`verify-release-plan.sh`, the package resolver, the link checker) | — | AC-5 |
+
+**Steps 1 to 6 land in one commit.** They are one reference cascade: the deletion of a phase and every restatement of it. Split across commits, an intermediate head would carry a half-removed procedure, which `core/rules/rename-reference-cascade.md` § 2 forbids (the corpus is never left half-cascaded), and the sweep's post-counts would be true only at the last of them.
+
+---
+
+## Stage Applicability Matrix
+
+Activation-criteria matrix (`planning-solutioning-handoff.md` § 3), transcribed from Stage 4:
+
+| Issue | T1 | T2 | T3 | T4 | T5 | T6 | Verdict | Rationale |
+|---|---|---|---|---|---|---|---|---|
+| #8089 | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ACTIVATE | T4: two candidate mechanisms, delete versus rewrite. T6: Affected Files says the restatements are "to be found by a reference sweep", pinned at 20 lines / 7 files |
+
+| Stage | #8089 | Basis |
+|---|---|---|
+| 5 Solutioning | **RUN** (ran; full-form Phase 0.5) | ACTIVATE above |
+| 6 Engineering | RUN | — |
+| 7 Dev Testing | RUN | hub standing direction; the change has functional impact on the Stage-12 protocol |
+| 8 QA | RUN | hub standing direction; the 5 acceptance criteria are graded per criterion |
+| 9 Plan Review | RUN (Standard) | hotfix posture |
+| 10 / 11 | compress (PLATFORM-SATISFIED) | git-native, doc-only |
+| 12 Execute | RUN | the Phase B4 deploy runs `--no-targets` (the write set changes no `skills/` or `packages/` path) |
+| 13 Close | RUN (7-day outcome window) | — |
+
+---
+
+## File Change Matrix
+
+One path per line, `<path>  <VERB>`, fence-delimited for deterministic extraction.
+
+```
+# ── release PR ──
+release/releases/plans/stage-12-lands-packages-by-pr_RELEASE_PLAN.md  ADD
+release/references/pipeline/stage-12-execute.md  EDIT
+release/governance/release-process.md  EDIT
+release/references/how-to/hub-spoke-bridge.md  EDIT
+release/references/standards/partial-deployment-recovery.md  EDIT
+# ── promoted at Commit 0 by the Stage-5 design (delete branch selected; references-only (a) taken in scope) ──
+release/references/pipeline/stage-13-close.md  EDIT
+release/references/standards/decision-outcome-tracking.md  EDIT
+core/rules/skill-deployment.md  EDIT
+```
+
+#### Read-only inputs
+
+```
+release/tools/automated-closeout.sh  READ
+core/deploy/deploy.sh  READ
+core/hooks/git-post-merge-deploy.sh  READ
+core/rules/git-workflow.md  READ
+```
+
+#### Release-wide explicit non-scope
+
+```
+release/references/standards/pipeline-event-log-schema.md  NOT EDITED
+release/skills/release-executor/references/rollback-protocol.md  NOT EDITED
+core/disciplines/autonomous-execution-model.md  NOT EDITED
+release/releases/RELEASE_LOG.md  NOT TOUCHED
+```
+
+**The three conditional rows are promoted in this commit.** The Stage-4 matrix carried `release/references/pipeline/stage-13-close.md` and `release/references/standards/decision-outcome-tracking.md` under the delete-branch condition and `core/rules/skill-deployment.md` under the references-only-in-scope condition. Stage 5 selected the delete branch (D-1) and took the references-only (a) instruction in scope (D-2), so both conditions fired and the three rows move into the unconditional set here, per the authoring contract (`stage-04-planning.md` § 6, rule 5).
+
+**Non-scope reasons.** `pipeline-event-log-schema.md` lists past protocol introductions, which is history and carries no command, so its Phase J.5 mention is preserved with reason (Stage-5 D-6). `rollback-protocol.md` is routed to #8427. `autonomous-execution-model.md` names a direct push as a retry-capped call site, which stays accurate while rollback still pushes. `release/releases/` holds provenance files, preserved. The `RELEASE_LOG.md` row is the Stage-12 chore PR's write, not this matrix's.
+
+**Zero `ADD` rows for executables** → the new-executable companion obligation does not fire. **No path is renamed or moved** → the mover set is empty. **One heading changes**, the partial-deployment-recovery `### Precedent (…)` heading; it has 0 inbound fragment links (Stage-5 probe).
+
+### Agent-Editability Read
+
+Transcribed from the Stage-4 derivation, controls read at `d1af7e9b`. Every row decided on conjunct 1 — no path carries a `*/skills/<name>/` segment, so the skill-gate's first conjunct is false everywhere.
+
+| Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class |
+|---|---|---|---|
+| `release/releases/plans/stage-12-lands-packages-by-pr_RELEASE_PLAN.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
+| `release/references/pipeline/stage-12-execute.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
+| `release/governance/release-process.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` (the governance-file protocol applies: unconstrained is not ungoverned) |
+| `release/references/how-to/hub-spoke-bridge.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
+| `release/references/standards/partial-deployment-recovery.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
+| `release/references/pipeline/stage-13-close.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
+| `release/references/standards/decision-outcome-tracking.md` | ∅ | ∅ — conjunct 1 false | `unconstrained` |
+| `core/rules/skill-deployment.md` | ∅ — the Tier-0 `.claude/rules/*` arm names the **deployed** mirror, not this repository path | ∅ — conjunct 1 false | `unconstrained` (a mirror-pair file: the deploy re-lays the mirror; Check 9 verifies) |
+
+**Card class `unconstrained`; execution path: ordinary Engineering spoke.**
+
+---
+
+## Contention Map
+
+**Within release:** one card, so no within-release contention.
+
+**Cross-cutting counts after the Stage-5 decisions:** `pipeline/stage-*.md` files edited = **2** (`stage-12-execute.md`, `stage-13-close.md`); rule-defining surfaces edited = **2 of 6** (`release-process.md`, `hub-spoke-bridge.md`). `core/rules/skill-deployment.md` is in neither set. The class stays `hotfix`; no [SCOPE CHANGE].
+
+**Latent overlaps (other milestones naming files this release edits):** #6212 names `stage-12-execute.md` and `skill-deployment.md` § References-only, both edited here — a latent file-contention edge, not in flight. #8427 shares "Phase H" lines; this release drops "Phase H" only as a byproduct of a line touched for J.5 (R6).
+
+## Cross-PR Overlap Audit
+
+### Baseline SHA
+
+`d1af7e9b75ed7a3ee95ec0a8e570524b30162df0` — the Stage-4 Phase A0 pin, re-read unchanged by the Stage-5 design, and the Commit-0 base: the release branch is cut from exactly this commit.
+
+### In-Flight Release Roster
+
+**Measured at:** `d1af7e9b` · `2026-10-28T03:28:10Z` (Engineering Commit 0) · **Population:** n=0 sibling(s)
+
+**None in flight at `d1af7e9b` / Engineering Commit 0.** Probe: open pull requests → 0 (control: the same reader on merged pull requests, limit 5 → 5); remote `release/*` heads → 0 (control: all remote heads → 1, `main`). This is a pinned measurement with no verdict; Stage 9 Phase A6.6 re-measures it.
+
+### Structural sub-audit
+
+No file is renamed, moved or deleted, so the mover set is empty. The phase being removed is bold text, not a markdown heading, so no GitHub anchor exists that its removal could break.
+
+---
+
+## Risk Register
+
+| # | Risk | Class | Severity · Likelihood | Mitigation | Reversibility / Confidence |
+|---|---|---|---|---|---|
+| R1 | A premise error carried into the fix: deleting J.5 on the strength of "the freshness gate exists" alone, the substitution `release-process.md` warns against | scope / design | High · Medium | The deletion rests on two facts: the trigger is unreachable (Phase B4 deploys from the session worktree; the deploy copies packages and never writes `packages/`; the post-merge hook deploys and never rebuilds), and every prescribed rebuild lands by pull request. The gate and Check 7 are cited only as detectors | CHEAP / HIGH |
+| R2 | The `release-process.md` paragraph is governance text that also carries the freshness-gate posture rule and the "do not retire a rebuild control on a gate's existence" warning; a broad edit could delete them | governance | High · Low | Surgical edit under `core/rules/governance-files.md`: two phrase-level replacements on one line; the posture text and the warning stay in substance. Post-edit, the file's diff shows exactly one changed line | CHEAP / HIGH |
+| R3 | **Premise corrected at Stage 5.** The Stage-4 plan stated that the required operator-memory-reference gate would turn red on a rewritten line carrying the memory filename cited in the J.5 REST annotation and the § 11 emit row. **It would not:** the gate's pattern does not match that filename, because the digits in the name defeat its letters-then-underscore form (probe record on #8565). The citations are deleted anyway — durable corpus does not cite operator memory, and the cited memory no longer exists in the store. The detector's false negative is routed to its existing owner, #7254 | gate | Low · Low | Delete both citations with the phase; add no memory filename on any line | CHEAP / HIGH |
+| R4 | **Class margin.** 2 `pipeline/stage-*.md` files and 2 of the 6 rule-defining surfaces, each one short of the cross-cutting trigger | scope | Medium · Low | Any third surface of either kind goes to the hub as a [SCOPE CHANGE]; Stage 5 confirmed the counts after its decisions | EXPENSIVE (re-class) / MEDIUM |
+| R5 | **Dangling rebuild instruction.** After J.5 is removed, the references-only (a) instruction in `stage-12-execute.md` and its policy home in `core/rules/skill-deployment.md` would still tell a Stage-12 executor to rebuild a package with no landing path | design | Medium · Medium | Both are retargeted together in this release (Stage-5 D-2): the rebuild is an obligation of the change that edited the skill, met in the release PR. The #6212 edge becomes file-contention, latent | CHEAP / MEDIUM-HIGH |
+| R6 | **#8427 overlap.** "Phase H" lines co-occur with J.5 lines | contention | Low · High | Drop "Phase H" only as a byproduct of a line touched for J.5, using the live name (Phase B4); touch no line solely for "Phase H" | CHEAP / HIGH |
+| R7 | The issue-reference validity gate flags an added `#N` outside a reference block in an edited file | gate | Low · Low | Rewritten prose summarizes inline; no bare issue numbers on added lines | CHEAP / HIGH |
+| R8 | The milestone's Outcome AFTER statement over-claims | scope | — | **Closed at the Stage-4 gate:** AFTER narrowed to Stage 12; the rollback protocol's push routed to #8427 | CHEAP / HIGH |
+| R9 | **Baseline pin.** `stage-12-execute.md` is a high-traffic file; a sibling merge before Stage 9 would move it | contention | Low · Low | Stage 9 Phase A6.5 re-check; Stage 12 Phase A.5 | CHEAP / HIGH |
+| R10 | **Rollback complexity** | rollback | Low | A single revert of the release PR. Doc-only, no package rebuilt, Phase B4 runs `--no-targets` | CHEAP / HIGH |
+| R11 | **Required-gate hazard on a line this release must edit (Stage-5 D-3).** The A.7.4 chore-PR scope note in `stage-12-execute.md` (the Phase A.7 paragraph) must lose its J.5 mention, and the same line carries a spent introducing-release cutover clause — the version-cutover apparatus the reference-durability standard is removing. The file carries no `allow-version-ref` marker, so any edit to that line turns the required "Durable-corpus fragile-reference delta" check red | gate | High · High | In the same edit, replace that line's cutover clause with the unconditional form ("Applies to all releases going forward"). Add no file-wide marker, which would blind the gate for a high-traffic file. The file's other cutover lines stay byte-identical | CHEAP / HIGH |
+| R12 | **The deleted procedure survives outside the repository.** Other releases' operator-instance hub-state files carry Stage-12 brief blocks that quote J.5's commands; an in-repo sweep cannot see them | handoff | Medium · Low | Not edited by this release (Layer 2, hub-owned). The REFCASCADE trailer names the surface so it does not over-claim a zero; this release's own Stage-12 brief is rendered fresh from the post-merge bridge, never from a carried block | CHEAP / HIGH |
+
+---
+
+## Cross-Issue Acceptance Criteria
+
+**Structurally empty — declared, not omitted.** A `CIAC-N` spans two or more issues; this release has one content member (#8089), so the candidate population is empty by construction rather than by an unfinished search. Enumerated over the milestone's non-sub-task members: {#8089}; none spans two. Stage-9 QC3.5 reads this declaration and finds nothing to verify.
+
+`CIAC-LINT-SUMMARY` (Stage 4, on the drafted body): `declared=0 parsed=0 clean=0 declared-deferral=0 flagged=0` (exit 0). Re-read at Stage 6 entry on this committed file; the result is in § Verification Evidence.
+
+---
+
+## Verification Plan
+
+**AC baseline:** #8089 has **5** acceptance criteria, read at `d1af7e9b` (body revision `2026-10-28T03:11:12Z`, after the hub re-bound criteria 1, 2 and 4 under the Stage-5 approval). The rows below bind to that body: criteria 1, 2 and 4 carry several probes each, so each probe is its own sub-row (`AC-<n><suffix>`), one command per row.
+
+`ac_baseline: { #8089: 5, read_at: d1af7e9b }`
+
+### Per-Issue Verification
+
+| Issue | AC | Verification Method | Expected Result |
+|---|---|---|---|
+| #8089 | AC-1a | `grep -c -F 'push origin main' release/references/pipeline/stage-12-execute.md` expect 0 | 0 (2 at baseline `d1af7e9b`) · control: `grep -c -F 'B4_DIR' release/references/pipeline/stage-12-execute.md` → 8 |
+| #8089 | AC-1b | `grep -c -F 'git -C ${HOME}/Claude' release/references/pipeline/stage-12-execute.md` expect 0 | 0 (1 at baseline) · control: `grep -c -F 'B4_DIR' release/references/pipeline/stage-12-execute.md` → 8 |
+| #8089 | AC-1c | `grep -c -F 'Phase J.5' release/references/pipeline/stage-12-execute.md` expect 2 | 2 — the command-free "Phase J.5 (removed)" marker and the preserved retrospective Evidence line under the Phase B5 REST-preference annotation (9 at baseline) |
+| #8089 | AC-1d | `grep -c -F 'B4_DIR' release/references/pipeline/stage-12-execute.md` expect 8 | 8, unchanged — the criterion's own control arm |
+| #8089 | AC-2a | `grep -c -F 'build-skill-packages.sh' release/references/pipeline/stage-12-execute.md` expect 0 | 0 (1 at baseline) · control: `grep -c -F 'B4_DIR' release/references/pipeline/stage-12-execute.md` → 8 |
+| #8089 | AC-2b | `grep -c -F 'Package rebuilds land by pull request; Stage 12 rebuilds none.' release/governance/release-process.md` expect 1 [READER-GRADED — read, against the PR Process section of core/rules/git-workflow.md, the references-only propagation paragraph of release/references/pipeline/stage-12-execute.md, the paragraph this probe locates, and the References-only change propagation section of core/rules/skill-deployment.md; each states that Stage 12 rebuilds no package and that a rebuild lands only by pull request] | 1 (0 at baseline); the reader limb is graded at Stage 8 |
+| #8089 | AC-3 | `grep -c -F 'direct push to main' release/references/pipeline/stage-12-execute.md` expect 0 [READER-GRADED — the merge-verification composition table carries no Phase J.5 row and the file carries no Phase J.5 procedure, so the two agree by absence; the A.7.4 note, the Phase B5 REST annotation and the Audit-Trail emit table name no J.5 chore PR] | 0 (1 at baseline) · control: `grep -c -F 'Phase B5 chore-PR mechanism' release/references/pipeline/stage-12-execute.md` → 1 |
+| #8089 | AC-4a | `grep -c -F 'rebuilt_packages.txt' release/references/pipeline/stage-12-execute.md` expect 0 | 0 (1 at baseline) · control: `grep -c -F 'B4_DIR' release/references/pipeline/stage-12-execute.md` → 8 |
+| #8089 | AC-4b | `grep -c -F 'git -C ${HOME}/Claude' release/references/pipeline/stage-12-execute.md` expect 0 | 0 (1 at baseline) · control: `grep -c -F 'B4_DIR' release/references/pipeline/stage-12-execute.md` → 8 |
+| #8089 | AC-4c | `grep -c -F 'git -C ${HOME}/Claude' release/references/standards/partial-deployment-recovery.md` expect 0 | 0 (1 at baseline) · control: `grep -c -F 'diff -q' release/references/standards/partial-deployment-recovery.md` → non-zero (the per-skill copy checks that carry Check 1) |
+| #8089 | AC-4d | `grep -c -F '/tmp/body.md' release/references/pipeline/stage-12-execute.md` expect 1 | 1 — the Phase B5 REST-preference annotation's request-body file, outside this criterion (2 at baseline) |
+| #8089 | AC-5 | [DEFERRED — the two-arm git grep reference sweep is outside the plan verifier's runnable shapes; its evidence surface is the Stage-6 REFCASCADE trailer in § Verification Evidence; graded at Stage 8] | name sweep: pre 20 lines / 7 files, post 3 (the retrospective Evidence line, the event-log schema history list, the removed-phase marker); command-shape sweep over the 7 files: pre 7, post 0 |
+
+**Null rows carry a same-target control** (AC-Binding Limb 2): every `expect 0` row names a control run with the same instrument on the same file, and that control returns non-zero.
+
+### Release-Level Verification
+
+These checks use tools outside the plan verifier's runnable shapes (`git grep`, a pipe into the package resolver, `git diff`, the link checker), so each is declared deferred to the Stage-6 C4 run that executes it; the commands themselves are in § Verification Evidence with their observed results.
+
+| Check | Verification Method | Expected |
+|---|---|---|
+| Name sweep (DTA-7) | [DEFERRED — a git grep over the tracked tree minus release/releases/, run at Stage 6 C4; command and result in § Verification Evidence] | pre 20 lines / 7 files; post 3, each preserved with reason |
+| Command-shape sweep (DTA-7) | [DEFERRED — a git grep over the tracked tree minus release/releases/, run at Stage 6 C4; command and result in § Verification Evidence] | pre 14 total / 7 in scope; post 0 in scope, 7 out of scope unchanged |
+| Package consequence | [DEFERRED — the package resolver reading each changed path on STDIN, run at Stage 6 C4; result in § Verification Evidence] | empty — no package rebuild owed |
+| Governance-file diff | [DEFERRED — a git diff of the governance file against origin/main, run at Stage 6 C4; result in § Verification Evidence] | exactly one changed line |
+| Doc-link integrity | [DEFERRED — the doc-link checker over the 7 edited files, run at Stage 6 C4; result in § Verification Evidence] | no findings |
+
+---
+
+## Delivery Strategy
+
+One branch `release/stage-12-lands-packages-by-pr` off `origin/main` at `d1af7e9b`; one PR, opened in draft at Stage 6 Phase C2; one merge at Stage 12. Slices are commits on that branch, never separate PRs: Commit 0 (this plan), then the change set as one commit, then the plan's evidence update. Commit messages carry the `stage-12-lands-packages-by-pr:` prefix and a reference-only `(#8089)`. The PR body is parser-clean: the card is referenced in the dedicated Issue References block with a reference-only keyword and is transitioned to closed at Stage 13, not by an auto-close keyword on merge.
+
+---
+
+## Rollback Strategy
+
+`git revert -m 1` of the merge commit restores `main` byte-for-byte. Every row is a documentation edit to a tracked file plus this new plan; there is no schema change, no file-format change, no package rebuild and no data migration. The deployed rules mirror of `core/rules/skill-deployment.md` is re-laid from source by the next deploy, so a revert is followed by a deploy and needs no hand repair. The version tag is retained and recorded, never deleted.
+
+---
+
+## Quota Budget
+
+**Verdict:** PASS [ASSUMPTION – CONFIRM]
+**Parallel-eligible spokes per parallel stage:** Stage 5: 1 · Stage 7: 1 · Stage 8: 1 — every batch is a singleton.
+**Per-spoke cost estimate:** `size:S` → the lowest ordinal band (heuristic).
+**Assumed/stated remaining usage-window envelope:** UNSTATED, so the conservative default applies.
+**Estimated cumulative draw % (worst parallel batch):** not synthesized; the worst batch is one lowest-band spoke.
+**Routing:** PASS: proceed.
+**Note:** Checkpoint B re-validates at every launch (singleton form PROCEED/DEFER) and gates on the host-API axis at runtime.
+
+---
+
+## Release Class declaration
+
+**`hotfix`** — confirmed at the Stage-4 gate. Triggers: a P1 corrective defect in the shipped Stage-12 spec; one issue; a documentation-only surface; versioned, so the patch form. Differentiation posture: engagement density **Light** · Stage 9 review depth **Standard** · Stage 5 activation bias **MINIMAL** · Stage 13 outcome window **7-day**. Novel does not fire (no new reference doc, schema or skill; the delete is a corrective design choice inside the card). Cross-cutting does not fire (2 of 3 and 2 of 3, § Contention Map).
+
+---
+
+## Release Outcome Statement
+
+**AFTER** — No Stage 12 step commits in the primary checkout or pushes to the default branch. Rebuilt packages reach `main` only through a pull request, so every required check runs on them. The Stage 12 spec and its merge-verification applicability table agree with the standing rules: all changes go through PRs, the primary checkout is read-only for sessions, and a spawned spoke has no primary access.
+
+**BEFORE** — Stage 12 Phase J.5 tells the spoke to stage and commit rebuilt packages in the primary checkout and push to the default branch from it, and the applicability table states that direct push as intended. Admins are not held to branch protection on `main`, so if the phase fired, a push made with the operator's credentials would land unreviewed, skipping the pull request and all required checks.
+
+**Actor(s):** the Stage 12 spoke; the release hub that briefs it; the operator, whose credentials the push would use.
+
+**Success Indicator:** a search of `stage-12-execute.md` for a commit or push from the primary checkout returns nothing in Phase J.5 or its applicability row; a reference sweep finds no brief or bridge text restating J.5's commands; the next release that rebuilds packages lands them through a pull request.
+
+---
+
+## Operational Deployment Manifest
+
+| Surface | Propagation | Mechanism |
+|---|---|---|
+| `release/references/pipeline/stage-12-execute.md` · `stage-13-close.md` · `release/references/how-to/hub-spoke-bridge.md` · `release/references/standards/partial-deployment-recovery.md` · `decision-outcome-tracking.md` · `release/governance/release-process.md` | **Repository-only** — none is under a skills tree, so no installed copy exists | none required |
+| `core/rules/skill-deployment.md` | **Mirror-pair member** — the deployed rules mirror is re-laid from source by the rules-mirror carrier on every deploy invocation, `--no-targets` included; Check 9 verifies | `deploy: --no-targets` at Phase B4 (no skill or package path in the merge) |
+| this plan | **Repository-only** | none required |
+
+**`deliverable_state: deployed-copy-synced`** — the one Layer-2 propagation target is the rules mirror, which the Phase B4 deploy re-lays; every other row declares no propagation target.
+
+---
+
+## Deviation Log
+
+| # | Deviation | Authority | Disposition |
+|---|---|---|---|
+| **DEV-1** | **Composition gap at Bundle.** The milestone reached Stage 4 with no Stage-3 pipeline-event rows and no A6 line, and with no Parallelization Map (the hub inserted the map under a Tier 1 [ADJUST] at the Stage-4 gate) | Stage-4 plan finding 4; hub brief for Stage 6 | **RECORDED, not backfilled.** No gate rows are fabricated after the fact |
+| **DEV-2** | **The Stage-4 "delete or rewrite" fork is resolved to delete** (Stage-5 D-1), and the three conditional matrix rows are promoted | Stage-5 Decision Recorded | **APPLIED** — § Implementation Sequence and § File Change Matrix |
+| **DEV-3** | **Risk R3's premise is corrected:** the operator-memory-reference gate does not match the cited memory filename (its digits defeat the pattern). The citations are deleted on durability grounds | Stage-5 design (probe record) and Stage-5 Decision Recorded | **APPLIED** — § Risk Register R3; the detector gap routed to #7254 |
+| **DEV-4** | **A required-gate hazard the Stage-4 plan did not see is added** as R11: the A.7.4 line carries a spent cutover clause, so editing it turns the fragile-reference delta check red unless the clause is replaced in the same edit | Stage-5 design D-3 | **APPLIED** — § Risk Register R11; the replacement lands with the change set |
+| **DEV-5** | **The Verification Plan binds to #8089's current body.** Criteria 1, 2 and 4 were re-bound at the Stage-5 review, and criterion 1's `Phase J.5` count re-pinned from 1 to 2 for the CD-1 marker; the Stage-4 `[DEFERRED]` row for criterion 2 and the placeholder-token row for criterion 4 are replaced by runnable probes | Stage-5 design (AC re-bind text) and the hub's Tier 1 [ADJUST] under the Stage-5 approval | **APPLIED** — § Verification Plan |
+| **DEV-6** | **The five review mitigations are folded into the change set.** **PR-1:** the governance paragraph, the references-only (a) disposition in `stage-12-execute.md` and its policy home in `core/rules/skill-deployment.md` each state the invariant (Stage 12 has no package-rebuild step of its own; a `.skill` package rebuild lands only through a pull request from a branch) and cite the rebuild seams as examples, not a closed list; the governance paragraph's obligation sentence drops the count ("the rebuild seams above … among them"). **FM-1:** `core/rules/skill-deployment.md` Deployment Step 3 is owed before the merge, in the pull request of the change that edited the skill. **CD-1:** a one-line, command-free "Phase J.5 (removed)" marker stands where the phase stood. **CD-2:** the partial-deployment-recovery Check-1 probe line is dropped. **O2:** the B5 REST annotation reads "within the same per-hour window" | Stage-5 Decision Recorded (mitigations approved with the design) | **APPLIED** — `8a1c6f13` |
+| **DEV-7** | **One design change is superseded rather than applied as written: PDR-a.** The design retargeted Check 1's `git diff --name-only` line to the executor's worktree; CD-2 drops that line instead, because the probe can only pass on a tree nothing writes. Check 1's per-skill `diff -q` line, which carries the check, is relabelled `Command (per skill)` — Check 3's own label — so each check still leads with its command. The other 20 design changes are applied as written | CD-2 (Stage-5 Decision Recorded), which names dropping the line as its first option | **APPLIED** — `8a1c6f13`; AC-4c reads 0 either way |
+| **DEV-8** | **PR-1 is applied at two places the brief did not name.** (1) The governance paragraph's examples add a fourth instance, a partial-deployment fix-forward's own chore PR, because the same change set's package-staleness fix-forward rebuilds a package at Stage 12 recovery — the adversarial review's first counter-example to a closed seam list. (2) The partial-deployment-recovery "Gap closed" line reads "Stage 12 has no package-rebuild step of its own" and says that the fix-forward rebuild lands only through a pull request, so it no longer contradicts the fix-forward two paragraphs above it | PR-1's own mitigation text in the Stage-5 adversarial review (which proposed the fix-forward example), approved at the Stage-5 review | **APPLIED** — `8a1c6f13`; recorded because the brief named three seams |
+| **DEV-9** | **FM-1 touches two lines of `core/rules/skill-deployment.md`:** step 3 itself, and the section's opening clause that listed step 3 among post-merge work, which now says step 3 is owed before the merge. The section heading "Deployment Steps (Post-Merge)" is unchanged: renaming it is a reference cascade beyond the mitigation, and the opening clause now carries the exception | FM-1 (Stage-5 Decision Recorded: "smallest change that removes the contradiction") | **APPLIED** — `8a1c6f13` |
+| **DEV-10** | **Stage-6 A2 container: the PR-body checklist.** Decomposed by logical unit, the release has two planned sub-tasks — this plan (Commit 0) and the Phase J.5 removal cascade, which cannot be split across commits without leaving a half-removed procedure on an intermediate head — plus the special sync, plan-update and verification rows, and the work is doc-only, so the predicate selects the checklist. Counted one per file instead, the count is 8, which would select the sub-issue container | Stage-6 Phase A2 predicate (`stage-06-engineering.md` § 5) | **RECORDED** — the checklist renders in the release PR body; the per-file reading is surfaced to the hub rather than taken silently |
+| **DEV-11** | **A Stage 6 fix cycle after the Stage 7 PASS lands three Stage-7 findings and transcribes the Stage 7 evidence (Tier 1 [ADJUST]).** **F-01:** the machine-readable `ac_baseline: { #8089: 5, read_at: d1af7e9b }` line is added to § Verification Plan, beside the prose baseline it restates. **F-02:** the governance paragraph's Phase B3 example now reads "which rebuilds any package a `--stamp-file` artifact stales": one phrase on the one changed line, so `release-process.md` still differs from `main` by exactly one line. The example is qualified rather than dropped because the warning sentence names the claim-version stamp commit among "the rebuild seams above"; the heading, the invariant, the freshness-gate posture text and the warning are unchanged. **F-03:** § Exclusions records the B3/B5 sequencing gap, routed to its existing owner, with no new issue and no comment. The Stage 7 evidence is transcribed under § Verification Evidence, and the Header Status cell is brought up to date. No criterion, design decision or File Change Matrix row changes | Stage 7 Dev Testing report (F-01 and F-02 Tier 1; F-03 the record the report asked the hub to make); hub brief for the fix cycle | **APPLIED** — `b291563f` (governance) and the plan commit that carries this row; re-verified on the new head, with the results on the Stage-7 sub-task |
+
+---
+
+## Documentation Impact
+
+| Issue | Declared docs | Status | Commit | Notes |
+|---|---|---|---|---|
+| #8089 | `release/references/pipeline/stage-12-execute.md` — Phase J.5 and its applicability-table row | **UPDATED** | `8a1c6f13` | The phase is removed and a command-free marker stands in its place; its composition-table row is deleted. The reference sweep the card's Affected Files asked for carried the same change to six further files in the same commit |
+
+---
+
+## Verification Evidence
+
+*Populated at Stage 6 C4 self-verification against head `8a1c6f13`; extended at Stage 7 and Stage 8.*
+
+### Plan verifier
+
+`bash release/tools/verify-release-plan.sh --format=md --stage4-comment <the Stage-4 comment saved in the run directory> release/releases/plans/stage-12-lands-packages-by-pr_RELEASE_PLAN.md` → exit 0. Roll-up: **15 PASS / 0 FAIL / 6 SKIP / 2 UNRUNNABLE / 0 ERROR over 23 records.** The 6 SKIPs are the declared-deferred rows (AC-5 and the five release-level checks, each run below). The 2 UNRUNNABLE rows are AC-2b and AC-3: each designated `grep` PASSed (1 and 0), and each row's reader-graded limb is declared for the Stage-8 grader, so the verifier correctly does not read either row as a pass.
+
+| AC | Designated probe | Observed | Verdict |
+|---|---|---|---|
+| AC-1a | `push origin main` in `stage-12-execute.md` | 0 (2 at baseline) | PASS |
+| AC-1b | the primary-checkout `git -C` form in `stage-12-execute.md` | 0 (1 at baseline) | PASS |
+| AC-1c | `Phase J.5` in `stage-12-execute.md` | 2 — the removed-phase marker and the retrospective Evidence line (9 at baseline) | PASS |
+| AC-1d | `B4_DIR` in `stage-12-execute.md` (control) | 8, unchanged | PASS |
+| AC-2a | `build-skill-packages.sh` in `stage-12-execute.md` | 0 (1 at baseline) | PASS |
+| AC-2b | the governance paragraph's heading in `release-process.md` | 1 (0 at baseline); reader limb for Stage 8 | UNRUNNABLE (by declaration) |
+| AC-3 | `direct push to main` in `stage-12-execute.md` | 0 (1 at baseline); control `Phase B5 chore-PR mechanism` → 1; reader limb for Stage 8 | UNRUNNABLE (by declaration) |
+| AC-4a | `rebuilt_packages.txt` in `stage-12-execute.md` | 0 (1 at baseline) | PASS |
+| AC-4b | the primary-checkout `git -C` form in `stage-12-execute.md` | 0 (1 at baseline) | PASS |
+| AC-4c | the primary-checkout `git -C` form in `partial-deployment-recovery.md` | 0 (1 at baseline); control `diff -q` → 4 | PASS |
+| AC-4d | `/tmp/body.md` in `stage-12-execute.md` | 1 — the Phase B5 annotation's request body (2 at baseline) | PASS |
+| AC-5 | declared-deferred to the trailer below | — | SKIP |
+| FCM | declared ADDs vs the release diff `d1af7e9b..8a1c6f13` | declared=16 interpreted=16 obligations=1 excluded=8 conditional=0 uninterpreted=0; the plan ADD delivered | PASS |
+| PROV | `domain_practice` presence, grammar (Form X, 2026-10-27) and the Commit-0 delta against the Stage-4 comment | 1 label; conformant; no survival element lost (3 of 3 present) | PASS |
+
+Every AC sensitivity arm was read on the baseline tree before the edits, with the same probes: 2 / 1 / 9 / 8 / 1 / 1 / 1 / 2, and 1 for the partial-deployment-recovery probe — each equal to the baseline value the card states.
+
+### Reference sweeps (AC-5; DTA-7)
+
+```
+[REFCASCADE: git grep -n -F "J.5" -- . ':!release/releases/' over the 1,637 tracked files outside
+ release/releases/ → pre 20 (7 files) / post 3, all PRESERVE: stage-12-execute.md:173 (retrospective
+ Evidence line, history), pipeline-event-log-schema.md:617 (history list, file not edited),
+ stage-12-execute.md:475 (the CD-1 removed-phase marker, command-free)]
+[REFCASCADE: git grep -n -E 'git -C \$\{HOME\}/Claude (diff|add|commit|push)|rebuilt skill packages
+ from Phase H deploy|push origin main' -- . ':!release/releases/' over the same population →
+ pre 14 (7 in scope) / post 7 (0 in scope); the 7 out-of-scope survivors are unchanged and are the
+ live control: autonomous-execution-model.md:82, block-destructive.test.sh:243,244,341,342,
+ rollback-protocol.md:74,93]
+```
+
+**Not searched by this sweep, named so the trailer does not over-claim a zero:** other releases' operator-instance hub-state files, which still quote J.5's commands in carried Stage-12 brief blocks. They are Layer-2 hub working state, outside the repository and outside this spoke's run directory, so this spoke neither edits nor reads them. The Stage-5 adversarial review measured 47 matching files there (control `Phase B5`: 106). This release's own Stage-12 brief is rendered fresh from the post-merge bridge, never from a carried block. `release/releases/` (provenance) is excluded by design.
+
+### Release-level checks
+
+| Check | Result |
+|---|---|
+| **Commit-0 version half** | `git fetch --tags origin`; next-free for bump-class `patch` on patch-base `v4.80` = **`v4.80.1`** (adapter dry run), free on the tag, Release and ledger arms; sensitivity on the `v4.80` slot is non-zero on all three. **No HALT** |
+| **Commit-0 manifest half** | `release/tools/claim-version.sh --verify-stamp stage-12-lands-packages-by-pr` → **exit 0**, "verify-stamp OK … plan-only manifest (0 --stamp-file target(s))". Exactly one literal double-brace release-version placeholder in this file, in the Header `**Version**` cell |
+| **CIAC lint (Stage-6 A1)** | `verify-release-plan.sh --ciac-lint` on this file → `declared=0 parsed=0 clean=0 declared-deferral=0 flagged=0`, exit 0 |
+| **Package consequence** | the 8 changed paths through `build-skill-packages.sh --skills-for-paths` on STDIN → **empty**, exit 0. Sensitivity: `rollback-protocol.md` + `tracker-schemas.md` → `release-executor`, `tracker-manager`. No package rebuild is owed, so the Stage-6 rebuild beat has nothing to land |
+| **Governance-file diff** | `release/governance/release-process.md`: exactly **1** line changed (1 insertion, 1 deletion). On that line the freshness-gate posture text ("Read this gate's posture; never assume it."), the "The gate does not discharge the rebuild obligation." warning and its substitution sentence, the five input classes, the resolver instruction and the cutover line are all present; `J.5` is absent |
+| **Doc-link integrity** | `check-doc-links.py --target-paths <the 7 edited files> --require-targets` → **0 findings**, exit 0; its `--self-test` passes 12 fixtures (the sensitivity arm). `check-release-links.py --diff-base origin/main --plan-depth-lint` → 0 broken links, 0 depth-sensitive plan links (this plan carries no markdown link) |
+| **Gate pre-flight on added lines** | Over the 27 added lines of the 7 edited files: 0 version-cutover, 0 bare issue references, 0 raw URLs, 0 memory filenames, 0 identity strings, 0 primary-checkout commands. 6 touched lines carry pre-existing markdown links, and all 7 files carry the `allow-link` marker. Each detector's sensitivity arm fires; the version-cutover arm reads the house unconditional form clean |
+| **Mirror-pair parity** | **N/A** — no mirror-pair member is added, removed or renamed. `core/rules/skill-deployment.md` is edited in place; its links keep the mirror-pair form (no link was added) |
+| **C3 deployed-copy sync** | **N/A at Stage 6, with reason.** The one deployed copy is the rules mirror of `core/rules/skill-deployment.md`, which is deploy-produced and never hand-copied; laying unmerged branch content into the live mirror would install unmerged rules. The Phase B4 deploy re-lays it after the merge (`--no-targets` still runs the rules-mirror carrier), and Check 9 verifies it |
+| **ADR index** | **N/A — this release adds no record under `release/ADRs/`** |
+| **Runtime suite** | **No-match row** of the runtime-suite selection map: the change is documentation and governance text only. The honest no-op is a `test-run` / `suite-skip` event (stage 6), named for the hub to append; this spoke writes no event row |
+| **`deliverable_state`** | `deployed-copy-synced` — reached at Stage 12, when the Phase B4 deploy re-lays the rules mirror; every other row declares no propagation target |
+
+### Stage 7 Dev Testing (extension)
+
+*Transcribed from the Stage 7 Dev Testing report on the Stage-7 sub-task (#8567), against head `f6cbf25b` on base `d1af7e9b` (equal to `origin/main`, so the branch was fresh). The Stage 7 spoke is read-only, so its report carried this extension for the hub to transcribe; the Stage 6 fix cycle transcribes it here (DEV-11).*
+
+**Verdict: PASS** — no Blocker, iteration count 0. Phase C scores: Clarity 4, Accuracy 4, Internal consistency 4, Convention depth 4, Domain-practice conformance (`governance`) 4; each at or above its threshold.
+
+| Check | Stage 7 result |
+|---|---|
+| **Plan verifier re-run** (with `--stage4-comment`) | 15 PASS / 0 FAIL / 6 SKIP / 2 UNRUNNABLE / 0 ERROR over 23 records, exit 0, row for row identical to Stage 6. The two UNRUNNABLE rows are the declared reader-graded limbs (AC-2b, AC-3) and the six SKIPs are the declared-deferred rows. Verdict-laundering guard CLEAN: no row moved from FAIL or ERROR to SKIP or UNRUNNABLE |
+| **AC probes**, head vs baseline `d1af7e9b` | All 11 runnable probes return the expected value, and each sensitivity arm on the baseline reproduces the count the card states: AC-1a 0 / 2, AC-1b 0 / 1, AC-1c 2 / 9, AC-1d 8 / 8, AC-2a 0 / 1, AC-2b 1 / 0, AC-3 0 / 1 (control 1 / 1), AC-4a 0 / 1, AC-4c 0 / 1 (control `diff -q` 4 / 4), AC-4d 1 / 2 |
+| **AC binder** | `check-ac-binding.py` → `UNPARSEABLE`, exit 3, because this plan then carried no machine-readable `ac_baseline:` line (F-01). The rows were mapped by reading: AC-1a–1d → criterion 1, AC-2a/2b → 2, AC-3 → 3, AC-4a–4d → 4, AC-5 → 5, so 5 of 5 criteria are covered |
+| **Name sweep** | `J.5` outside `release/releases/`: head 3 lines / 2 files (`stage-12-execute.md` :173 and :475, `pipeline-event-log-schema.md` :617), baseline 20 lines / 7 files; it agrees with the Stage-6 REFCASCADE trailer line for line |
+| **Command-shape sweep** | head 7 lines, 0 of them in the 7 edited files; baseline 14, 7 in scope; the 7 out-of-scope survivors are unchanged. A concept sweep with no phase name (Phase H near a rebuild or package word) reads head 0 / baseline 7 |
+| **Package resolver** | the 8 changed paths on STDIN → empty, exit 0. Sensitivity: `rollback-protocol.md` + `tracker-schemas.md` → `release-executor`, `tracker-manager`; specificity: a near-miss path → empty |
+| **Doc-link checker** | `--require-targets` over the 8 changed files → 0 findings; `--self-test` passes 12 fixtures. Inbound fragment links to the one changed heading: 0 (sensitivity: 11 files carry the `release-process.md#` link shape) |
+| **Deprecated-path scan** | `NOT-APPLICABLE — no paths retired (denominator 0)`: the range has 8 paths, none deleted, and 0 rename rows |
+| **Branch freshness (S7-I04)** | `assert_branch_fresh.py --base origin/main --head f6cbf25b` → exit 0, 0 unreachable commits; control `--head d1af7e9b~3` → FAIL, listing 12 commits |
+| **`deploy.sh --check`, head vs `origin/main`** | Both trees end "2 issue(s) found", and the 2 FAIL lines are byte-identical on both, so they predate this release and name no file in its diff. The only net-new line is the expected Check-9 `mirror-sync` WARN on `core/rules/skill-deployment.md`, which the Phase B4 deploy re-lays (F-10) |
+| **Mergeability and required checks** | `MERGEABLE`, `mergeStateStatus` not `DIRTY`, draft. 22 of 22 required contexts dispatched, stable across two polls. At the last read 21 passed and 1 was pending (`Install/onboarding/update regression suite (macOS)`, F-09), and none failed. The roster record was not written while the roster was still dispatching (exit 3, NOT-EVALUATED, not a clean result) |
+| **Runtime suite (A8)** | `suite-skip`: all 8 paths take the selection map's no-match row |
+| **Commits** | 3 commits, each signature `G` and each with the co-author trailer; the close-keyword check examined 3 and found 0 |
+
+**Findings** — 4 Minor and 6 Informational or Cosmetic; the three escapes are F-01 (Stage 4), F-02 (Stage 6) and F-03 (Stage 5).
+
+| F-ID | Severity | Finding | Disposition |
+|---|---|---|---|
+| F-01 | Minor | No machine-readable `ac_baseline:` line, so the binder read `UNPARSEABLE` | **Landed in the fix cycle** — the line is in § Verification Plan (DEV-11) |
+| F-02 | Minor | The governance paragraph said the Phase B3 stamp commit "rebuilds any package its stamp stales"; the canonical B3 call passes `--stamp-slug` only, and the claim tool rebuilds only for a `--stamp-file` artifact | **Landed in the fix cycle** — `b291563f` qualifies the example with `--stamp-file` (DEV-11) |
+| F-03 | Minor | The Stage-5 review's request to record the B3/B5 sequencing gap as out-of-scope drift had no landing | **Landed in the fix cycle** — the § Exclusions row, routed to its existing owner (DEV-11) |
+| F-04 | Informational | The literal heading "Stage 12 rebuilds none" sits beside three Stage-12-time rebuild paths (the A.5.7c renumber's package-staleness disclosure, the partial-deployment fix-forward, the conditional B3 `--stamp-file` arm), each of which lands by pull request | Accepted; Stage 8 reads A.5.7c when it grades criterion 2 |
+| F-05 | Informational | Criterion 3's "read the row" assumes a rewritten row; under the delete branch the table and the phase agree by absence | Accepted; Stage 8 notes it |
+| F-06 | Informational | Three tool limits: the binder's label grammar does not read suffixed sub-rows such as `AC-1a`; the verifier's JSON output is invalid when an Expected cell holds a double quote; three `awk` warnings under `--stage4-comment` | Out of scope; for the tool owners |
+| F-07 | Cosmetic | The "(Post-Merge)" heading sits over a step 3 that is now owed before the merge | Accepted as recorded (DEV-9) |
+| F-08 | Informational | "The Stage-6 package-rebuild beat" names no element of `stage-06-engineering.md`, whose C4 freshness paragraph carries the obligation | Accepted; align the name on a future touch |
+| F-09 | Minor | One required macOS suite was pending at the last read | The hub re-reads the required roster before Stage 9 |
+| F-10 | Informational | The one net-new deploy-check line is the expected rules-mirror drift | Accepted; Phase B4 re-lays the mirror and Check 9 verifies it |
+
+---
+
+## Change Description
+
+*Authored at Stage 6 Phase C1 per RELEASE_PROTOCOL § Change Description Protocol. Operator-facing.*
+
+### Outcome
+
+**Stage 12 no longer tells a spoke to commit in the primary checkout or to push to the default branch.**
+
+Before this release, Stage 12 carried a step, Phase J.5, for packages a deploy had rebuilt. It staged them in the primary checkout, committed them there and ran a direct push to `main`. Its commands could not run as written: they aimed at the workspace root, which is not a repository. Had they run, a push made with the operator's credentials would have landed unreviewed, because admins are not held to branch protection. The step contradicted three standing rules: all changes go through pull requests, the primary checkout is read-only for sessions, and a spawned spoke has no primary access.
+
+The step is gone, and so is its trigger. The Stage-12 deploy now runs from the session worktree and copies packages without rebuilding them, and the post-merge hook deploys without rebuilding. A package rebuild lands only through a pull request from a branch. In a release, that is the Stage-6 rebuild beat in the release PR, so the merged tree already carries the current package.
+
+### Issues resolved
+
+One card: Stage 12's Phase J.5 commits in the primary checkout and pushes straight to `main`. All five acceptance criteria carry a verification row; the mechanical probes pass on this branch, and two reader-graded limbs go to Stage 8.
+
+### Key decisions
+
+**Delete the step; do not rewrite it.** A pull-request version of J.5 would wrap a ceremony around a state nothing produces. The package envelope embeds file times, so a Stage-12 rebuild of an already-current package would only land churn. The deletion rests on two facts that were checked: the trigger cannot occur, and every prescribed rebuild already lands by pull request. It does not rest on the freshness gate's existence, which the governance text warns against, and that warning is kept.
+
+**State the invariant, not a list.** The governance text says a rebuild lands only by pull request and names the seams where one happens as examples. A closed list would go stale the first time a new rebuild site appeared, and the adversarial review found two already.
+
+**Leave a marker where the phase stood.** One line names Phase J.5 as removed and says where rebuilds land. A brief or reader that still names the phase finds an answer rather than a dangling name. The marker carries no command.
+
+**Fix the gate hazard in the same edit.** One line this release had to edit also carried an old introducing-release cutover clause, which the required fragile-reference check turns red on any edit. The clause takes the unconditional form now; no file-wide exemption marker was added.
+
+### Reversibility
+
+**CHEAP · confidence HIGH.** Documentation-only edits to seven tracked files plus this plan, on one branch with one merge: `git revert -m 1` restores `main` byte-for-byte. No package is rebuilt, no schema changes, and the deployed rules mirror is re-laid from source by the next deploy. The version tag is retained and recorded if the release is ever withdrawn.
+
+### Downstream impact
+
+A Stage-12 spoke no longer has a rebuild step to run or to record. Hub briefs that list "Phase J.5" as a row now point at a removed phase, and the marker says so. The skill-deployment rules file now places the package rebuild before the merge, in the pull request of the change that edited the skill, matching what the freshness gate already enforces. The partial-deployment recovery standard's fix-forward rebuilds a stale package with the canonical builder and lands it by chore PR. The old raw-packager call skipped the content sidecar, so it would have failed the deploy check.
+
+Other releases' carried hub-state brief blocks still quote the old commands outside the repository. This release does not touch them; the hub renders this release's Stage-12 brief fresh.
+
+### Cross-references
+
+The governance statement is the paragraph headed *Package rebuilds land by pull request; Stage 12 rebuilds none.* in `release/governance/release-process.md` § Stage 12. The stage shard's removed-phase marker and its references-only disposition are in `release/references/pipeline/stage-12-execute.md`. The rule's durable policy home is `core/rules/skill-deployment.md` § References-only change propagation. The design, its adversarial review and both decision records are on the Stage-5 sub-task.
+
+---
+
+## Issue References
+
+- **#8089** — the sole card: Stage 12's Phase J.5 commits in the primary checkout and pushes to the default branch.
+- **#8564 · #8565 · #8566** — the Stage-4, Stage-5 and Stage-6 sub-tasks carrying the plan, the design with its adversarial review and both Decision Recorded comments, and this engineering work.
+- **#8567** — the Stage-7 sub-task: the Dev Testing report transcribed under § Verification Evidence, and the Stage 6 fix cycle that landed its findings (DEV-11).
+- **#7011** — Stage-12 Phase B3 cannot run where the stage shard sequences it; owns the B3/B5 sequencing gap recorded in § Exclusions.
+- **#7932** — the parent epic (defect and hardening evergreen intake).
+- **#8427** — release-executor checklist defect of the same class; owns the "Phase H" naming and the rollback protocol's direct push.
+- **#6212** — Stage-12 install propagation for references-only skill changes; a latent file-contention edge.
+- **#7254** — the operator-memory-reference gate's detector; owns the digits false negative.
+- **#8102** — the git-workflow rule's primary-checkout location; owns the workspace-root drift.
+- **#7954** — the G-PL5 title-guard false positive (Stage-4 side finding).
