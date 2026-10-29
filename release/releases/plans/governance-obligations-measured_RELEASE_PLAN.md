@@ -519,7 +519,7 @@ The PR body is parser-clean: the four cards carry a close keyword only in the PR
 
 Transcribed from the milestone description at Engineering Commit 0.
 
-**AFTER** — When a release declares a governance obligation, close-out measures it against its stated population, and a gap closes only with a named owner. A control offered at Stage 9 as discharging a risk must have been observed acting where it runs. Two obligations that nothing checked are now checked before they drift: a work item's Documentation Impact declaration, and the close-out date that the changelog, the digest and the release note share.
+**AFTER** — When a release declares a governance obligation, close-out measures it against its stated population, and a gap closes only with a named owner. A control offered at Stage 9 as discharging a risk must have been observed acting where it runs. Two obligations that nothing checked are now checked: a work item's Documentation Impact declaration before it can be bundled, and the close-out date that the changelog, the digest and the release note share, at every deploy-time check.
 
 **BEFORE** — The platform accepts a control's artifact as evidence the control ran. A declared obligation can ship at zero conformance with no owner and still close verified. A Stage-9 residual can rest on a guard that never fires on its path. Nothing upstream of the close checks the Documentation Impact field or the three close-out dates.
 
