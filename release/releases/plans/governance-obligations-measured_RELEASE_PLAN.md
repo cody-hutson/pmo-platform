@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH — additive edits to tracked governance,
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): protocol text added and modified, per the Bump-Class Selection Guide. Provisional display `v4.81`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092). It rises to major only if a card selects a skill behavioural change, and none does |
 | **Date Created** | 2026-10-29 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 and #4919 landed; #5286, #5062, #4417 follow in serial order |
+| **Status** | Executing — Stage 6 Engineering: Commit 0, #4919 and #5286 landed; #5062, #4417 follow in serial order |
 | **Branch** | `release/governance-obligations-measured` |
 | **PR** | #8599 — opened in **draft** at Stage 6 Phase C2 after #4919's slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `governance-obligations-measured` |
@@ -225,9 +225,24 @@ Single branch `release/governance-obligations-measured`, posture **P0 (fully ser
 
 **Downstream contract (what the siblings grade against):** the class literal `accepts-artifact-as-action` (gate-efficacy, the paragraph after class-3 limit 7); the rule `observed acting` with its evidence form at § 8 **PV-2f**; G-PR4 names `G-CL10` and carries no population, threshold or owner test; the v2.22 entry is opened by #4919 and the siblings append to it; the register row's population name is `stage9-control-backed-dispositions`; `PV-2f` is taken (relayed to #5903).
 
-### #5286, #5062, #4417 — change specifications
+### #5286 — change specification (the second card; Stage-5 design on #8582, CD-1 and the A6.5 refinements adopted)
 
-Each is carried by its own Stage-5 design (#8582, #8586, #8590) and its own Stage-6 sub-task, and its slice records its own change specification and evidence in this file when it lands. The File Change Matrix below already carries every path each card's design and its scope-lock render name.
+**Files:** the ADR (ADR-228, cited in-release as `{{ADR:declared-obligations-measured-at-close}}`), `core/deploy/tools/check-doc-gates.py`, `core/deploy/deploy.sh`, `.github/g-cl10.enforce`, `core/schemas/gate-criteria-spec.md`, `release/references/pipeline/stage-13-close.md`, `release/references/specs/release-outcome-statement-template.md`, `core/standards/gate-efficacy-standard.md`, and the D-5286-MatrixCascade (A) surfaces: `core/schemas/gate-evaluation-spec.md`, `release/governance/release-process.md` (two paragraphs), `release/references/pipeline/stage-03-bundle.md`, `release/references/standards/bundle-composition-doctrine.md`, `core/deploy/tools/README.md`. Slices in the design's order: the ADR; the engine with its fixtures; the wrapper, sentinel and DG arms; the criterion, Phase A14 and the template; the register; the cascade.
+
+**What lands.** Gate 13 criterion **G-CL10**, warn-mode, run at Stage 13 **Phase A14** by `deploy.sh --check-doc-gates --gate g-cl10` (`--list` first). Arm (i): every gate-coverage register row whose Surface leads with `prose` that the release added or modified carries a `**Population:**` segment, and the release plan's Verification Evidence carries its population record — bound to the declaration by probe and a pin containing the release head — which meets the threshold or names an open owning work item outside the release whose body or comments name the population. Arm (ii): every limb of the milestone's Release Outcome Statement names an owning work item on the new required `**Limb owners:**` line (Outcome template 2.0). The engine stays offline and runs no declared probe; the wrapper reads the milestone, release membership and each owner's issue and comments.
+
+**The adopted remedies, as this card applies them:**
+- **CD-1:** `probe: none` is not in the grammar — the engine reads it as malformed (fixture CL10-X); a population no instrument reaches carries a census definition (#4919's row is the live case, CL10-CN its fixture). An owner is valid only when its body or comment stream names the population (CL10-NN, CL10-CM), and Phase A14 step (2) posts the record on the owner.
+- **PR-1:** with no `--plan`, the engine finds the one plan whose `milestone:` frontmatter names the release, wherever the version stamp moved it, and withholds an obligation as `record-unresolved` naming the candidates otherwise (CL10-PF, DG-12); Phase A14 step (3) carries A5's `--plan` clause.
+- **FM-2:** the owner read carries `state_reason`; a limb whose every owner closed as not planned or a duplicate FAILs `limb-owner-abandoned` (L-6), and an open non-member owner reads `carried-by-nonmember #N` (L-1b).
+- **FM-3:** arm (ii)'s cutover reads the milestone's Composition Lock date before its creation date (L-8); template § 10 states the key.
+- **FM-4:** every arm-ii subject, and so every arm-ii warn-log detail, opens `limbs:` (L-10, DG-13); the flip row's blocker asks for each arm's FAIL path exercised.
+- **FM-5:** the ADR gives host-side reach as the eliminating reason for an engine-executed probe; Phase A14 step (2) reads the probe first, runs it under the hook layer with no bypass, and records a refused probe `state: not-run` (CL10-NR).
+- **FM-6:** the record is found at any heading depth anywhere in the plan (CL10-H, under the plan's H2 section); a Surface cell's leading markup is set aside (CL10-K); a `\|` probe binds to a `|` record (CL10-E); A14.1 and the AAR text name the H2 `## Verification Evidence` section.
+
+### #5062, #4417 — change specifications
+
+Each is carried by its own Stage-5 design (#8586, #8590) and its own Stage-6 sub-task, and its slice records its own change specification and evidence in this file when it lands. The File Change Matrix below already carries every path each card's design and its scope-lock render name.
 
 ---
 
@@ -268,7 +283,7 @@ release/references/pipeline/stage-13-close.md  EDIT
 release/references/specs/release-outcome-statement-template.md  EDIT
 release/references/standards/bundle-composition-doctrine.md  EDIT
 .github/g-cl10.enforce  ADD
-core/ADRs/ADR-<next-free>-declared-obligations-measured-at-close.md  ADD
+core/ADRs/ADR-228-declared-obligations-measured-at-close.md  ADD
 # ── #5062 (home Bundle G3-20 SELECTED; Triage A4.9 SELECTED; D-5062-MatrixCascade (A)) ──
 release/references/pipeline/stage-02-triage.md  EDIT
 release/tools/bundle-issues-parser.py  EDIT
@@ -548,6 +563,37 @@ Run by the Stage-6 spoke on #8579 at head `55a48478` (the card's last content co
 
 **`deliverable_state` for #4919:** `deployed-copy-synced` — every path is repository-only, so the release declares no propagation target for it.
 
+### Stage 6 — #5286 (C4 self-verification)
+
+Run by the Stage-6 spoke on #8583 over its six content commits (49168dd3, 3bce42ba, 3be12c00, 4dcf8d2b, dc9312e8, 355782dc), against baselines read from `origin/main` `b1aaa77e`. Engine: `python3` line scans and the repository's own runners. Every arm states its subject-discriminating control.
+
+| ID | Binds | Method | Observed | Control |
+|---|---|---|---|---|
+| Plan rows | AC-1, AC-2, AC-5 | `bash release/tools/verify-release-plan.sh` on this file | AC-1 PASS (count 3), AC-2 PASS (count 5), AC-5 PASS (count 5); AC-3 and AC-4 declared-deferred to the fixtures below. Roll-up 13 PASS / 1 FAIL / 20 SKIP / 1 UNRUNNABLE / 0 ERROR over 35 records; FCM-2 (the sentinel) and FCM-3 (the ADR) now PASS | the FAIL is #5062's AC-3 and the UNRUNNABLE #4919's reader-graded AC-2, both by design; each #5286 row read FAIL at Commit 0 |
+| E-1 | AC-3, CIAC-4 | `python3 core/deploy/tools/check-doc-gates.py --self-test` | PASS, 0 failures. CL10-S (a `prose` row declaring 100%, record `conforming: 0` of 3, `owner: none`) → FAIL `unowned: none`; CL10-P (the same record, `owner: #7`, an open non-member whose body names the population) → PASS `owned-residual #7`; the two fixtures differ in exactly one line, asserted by a difflib comparison | mutation: CL10-S's owner set to `#7` → CL10-S red (3 arms); the owner rule turned to PASS → CL10-S, CL10-T2, CL10-Z red; an unmutated copy → 0 G-CL10 arms red |
+| E-2 | AC-4, CD-1 | the same suite | CL10-M (member owner), CL10-C (closed), CL10-PR (pull request), CL10-NF (not found), CL10-OR (other repository), CL10-NN (open non-member whose body names a different population) each FAIL; CL10-U (unreadable owner) NOT-EVALUATED; CL10-CM (owner naming the population only in a comment) PASS; CL10-X (`probe: none`) FAILs as malformed; CL10-CN (a census probe) PASS | mutation: the naming test dropped → CL10-NN red; `probe: none` re-admitted → CL10-X red |
+| E-3 | design arms | the same suite | CL10-T (3/3) PASS; CL10-D (no declaration), CL10-R (no record), CL10-B (record bound to another probe), CL10-PO (pin outside the release), CL10-RM (labels out of order), CL10-0 (0% threshold) FAIL; CL10-PU (unfetched pin) and CL10-RU (unresolved plan) NOT-EVALUATED; CL10-N (segment-only change) and CL10-V (a `ci` row) not enrolled; CL10-DW graded from the worktree and, without the worktree repair, `declaration-missing`; CL10-NR (`state: not-run`) unmeasured and carried by an owner | CL10-L: the `--list` enumeration and the grade agree in count; CLI-1..3 drive the command line |
+| E-4 | PR-1, FM-2..FM-6 | the same suite | CL10-PF: the plan resolves through `milestone:` frontmatter, 0 or 2 declaring plans → `record-unresolved` naming them. L-1, L-1b (`carried-by-nonmember #7`), L-2, L-3, L-4, L-5, L-6 (`limb-owner-abandoned`) and its control, L-7, L-8 (Composition Lock read before creation), L-9, L-10 (every arm-ii subject opens `limbs:`); CL10-K (`**prose**` Surface enrols), CL10-H (record under the H2 section), CL10-E (`\|` binds to `|`) | mutation: lock date ignored → L-8 red; abandoned owner accepted → L-6 red; markup strip dropped → CL10-K red |
+| E-5 | AC-3, AC-4, CIAC-4 (emit path) | `bash core/deploy/deploy.sh --self-test`, group DG | PASS. DG-9: the CL10-S fixture through the real engine and `_dg_report` verdicts `FINDINGS 1 2` and writes exactly one `g-cl10` row naming `obligation:dg-pop` and `unowned: none`; DG-10: the CL10-P fixture verdicts `CLEAN 2` and writes none; DG-11: one subject for a population of two → NOT-EVALUATED; DG-12: a plan renamed after `<head>` is found by `milestone:` and graded, and a slug no plan declares withholds the obligation; DG-13: an unowned limb writes one row whose detail opens `limbs:` | mutation: DG-10 pointed at the CL10-S record → `DG-10 … got 'FINDINGS 1 2'` and `DG-10 an owned obligation must write no g-cl10 row`, both red |
+| E-6 | AC-1 | python line scans, gate-criteria-spec | lines carrying `owning work item` 3; lines opening `\| G-CL10 \|` exactly 2 (criterion, Self-Repair) | baseline 0 and 0; `\| G-CL9 \|` reads 2; the plain token `G-CL10` reads 14 here and 2 at the baseline, so it is not used as the AC probe |
+| E-7 | AC-2 | stage-13-close | `obligation` (case-insensitive) on 5 lines; `--check-doc-gates --gate g-cl10` on 1 line (two occurrences, the `--list` and the grade, in one paragraph) | baseline 2 and 0; `--gate g-cl8` reads 1 |
+| E-8 | AC-5 | the Outcome template | `owning work item` on 5 lines; `**Limb owners:**` once inside the § 2.1 fence; `**Template version:** 2.0` once | baseline 0; `AFTER` reads 35 (baseline 32) |
+| E-9 | CIAC-1, INT-3 | gate-criteria-spec | `specified, not yet emitting` on 14 lines, 0 inside the v2.22 entry; one `**v2.22 changes` entry, one `**Schema version:** 2.22`; the entry's ID list reads `G-CL1..G-CL10` | baseline 14 |
+| E-10 | CIAC-2, INT-1 | the G-CL10 and G-PR4 rows | G-CL10 names G-PR4; G-PR4 names G-CL10 and carries none of `threshold`, `owning work item`, `population:` | — |
+| E-11 | INT-2 | the engine's own register functions over the register at `b1aaa77e`, HEAD and the worktree | `prose` rows in the release range: 1 (#4919's `stage9-control-backed-dispositions`), lacking a segment: 0 — the back-fill is zero edits. Register rows 77 → 78 → 80; Surface `prose` 23 → 24; the two new rows read `deploy-time`; the G-CL10 limits sentence names the accepts-artifact-as-action class in #4919's spelling | base `prose` rows 23 (non-zero), all outside the range |
+| E-12 | live | `bash core/deploy/deploy.sh --check-doc-gates --gate g-cl10 --pr 8599 --list` at `355782dc` | exit 0: one SUBJECT, `obligation:stage9-control-backed-dispositions` at 100% with its census probe; four LIMBs, each owned by its card; four OWNER lines; no `declaration-missing`. `--list` writes nothing | the grade was not run against the PR: its record does not exist before Stage 13, so it would only write false `g-cl10` rows to the shared warn log |
+| E-13 | CIAC-3 | `bash core/deploy/deploy.sh --check`, the Check 62 line | `OK: all 51 gate-coverage register resolution pointer(s) resolve` — CLEAN at 51 | #4919's head read 47; the two new rows add two `runner-def:` and two `runner-src:` pointers. Mutation arm (an anchor deleted → `UNRESOLVED`) is routed to Stage 7 in a warn-log-redirected sandbox, as #4919's was: a full `--check` over a mutated tree would append a false `register-runner-resolution` row to the shared warn log |
+| E-14 | W2 | the same run, Check 28 arm 3 | `OK: g-cl10 shakedown — within the review window (0d of 60d)`; the N/A line names G-CL10 | `g-cl6` and `g-cl8` lines unchanged |
+| E-15 | deploy check | the same run | 2 issues, both present at #4919's run: `release-body-drift` and `count-structure` (`SECURITY.md`, `operator-instance-home-and-isolation-key.md`, `release-notes-standard.md`) — no subject is a file this release touches. Check 14: no broken cross-ref in scope; Check 63 controls PASS | — |
+| E-16 | durability | the fragile-reference detectors translated to `python3`, over the lines #5286 added (59e8ad6b..head) to durable-corpus files | LINK hits only in files carrying `allow-link`; one CUTOVER hit, the v2.22 cutover bullet `#4919` opened, under `allow-version-ref`; no URL hit; ISSUEREF hits only in this plan, whose root the reference-durability allowlist exempts | planted link, cutover, URL and `#4919` → 1 each; near-miss `template 2.0 is exempt` → 0 |
+| E-17 | links, counts | `check-doc-links.py --require-targets` over the eleven edited markdown files; `check-count-structure.py --path` on each | no broken link; `FAIL=0` on the ten files in the lint's scope (the `KNOWN` entries are baseline rows); this plan sits outside it, so its run reads NOT-EVALUATED over zero files, not clean | `check-adr-durability.py --diff-base origin/main` on ADR-228: COUNT 0; its self-test 156/156 |
+| Package consequence | C4 | the 13 changed paths on STDIN to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | empty — no rostered skill's package is staled | `release/skills/release-planner/SKILL.md` → `release-planner` |
+| ADR index | C4 | did this card add a record under `release/ADRs/`? | ADR index: N/A — this card adds no record under `release/ADRs/`; ADR-228 is under `core/ADRs/`, whose README is curated and has no projected region | — |
+| Runtime suite | C4 | `runtime-suite-selection-map.md` over the changed paths | row 4 (`core/deploy/tools/*.py`): `python3 release/tools/check-selftest-coverage.py --run` → ARM A PASSED 78 of 78, `test-run/suite-pass` emitted (`spoke:#8583`; typed read-back 0 → 1). Row 2 (`core/deploy/**`): `deploy.sh --self-test` (E-5) and `test_deploy_path_literals.sh` (10 passed, 0 failed, bash 3.2) run locally; the remaining deploy `run:` steps are the PR's `Shell harness (macOS)` and install-suite jobs | the PR's Ubuntu self-test job fails on `release/tools/cleanup-orphan-state.sh` alone (two active-exclusions cases); `check-doc-gates.py --self-test` reads PASS there |
+| Mirror pairs | C4 | do the changed paths include a mirror-pair member? | no — no `core/rules/` path is edited | — |
+
+**`deliverable_state` for #5286:** `deployed-copy-synced` — every path is repository-only, so the release declares no propagation target for it.
+
 ---
 
 ## Deployment Execution Log
@@ -569,7 +615,7 @@ This release stops the platform from accepting a control's artifact as evidence 
 | # | Outcome (one line) | Status |
 |---|---|---|
 | #4919 | The accepts-artifact-as-action class is named; PV-2f states what observing a control acting takes; Stage 9 Phase A4 and G-PR4 apply it with a census line and an independent second observation | DONE (landed at Stage 6) |
-| #5286 | Gate 13 G-CL10 measures every declared obligation at close and requires an owner that names the population for a shortfall; the Outcome template binds each limb to an owner | PENDING (its Stage-6 card) |
+| #5286 | Gate 13 G-CL10 measures every declared obligation at close and requires an owner that names the population for a shortfall; the Outcome template binds each limb to an owner | DONE (landed at Stage 6) |
 | #5062 | Gate 3 G3-20 asserts at Bundle that a card's Documentation Impact is gradable under G-CL8's grammar; Triage reads it early and advisory | PENDING (its Stage-6 card) |
 | #4417 | A new warn-mode deploy check compares the close-out anchor date across the release digest, the changelog and the release note | PENDING (its Stage-6 card) |
 
@@ -578,7 +624,7 @@ This release stops the platform from accepting a control's artifact as evidence 
 - **D-ReleaseClass:** cross-cutting; #4444 left the milestone. Four stage specs are edited, and 18 × 1.3 = 23 points sits inside the band.
 - **D-4919-Routing:** the plan-row control question went to #5903, which owns control-arm authoring discipline.
 - **Scope-lock remedies:** each card's adversarial-review remedies were folded into Stage 6. For #4919 that means a census line, an independent `via`, the path/input split in PV-2f, and a Posture cell that states what the evaluator actually does with an unsatisfied G-PR4.
-- **#5286 CD-1:** no obligation may be declared unmeasurable; one no instrument reaches is enumerated by hand census.
+- **#5286 CD-1:** no obligation may be declared unmeasurable; one no instrument reaches is enumerated by hand census, and a shortfall's owner counts only when its body or comments name the population. The gate finds the release plan by its `milestone:` frontmatter, because the version stamp moves it before Stage 13 runs, and the Outcome's limb owners are required from the date the milestone's composition was locked.
 - **D-5062-Posture (A′):** G3-20 blocks cards not yet bundled and is advisory on a re-bundle, with the posture divergence recorded as an override.
 
 ### Reversibility
@@ -611,6 +657,7 @@ This release stops the platform from accepting a control's artifact as evidence 
 | **DEV-6** | **The A6.5 remedies adopted at the scope-lock, applied as Stage-6 instructions, per card.** #4919: CD1 (independent second observation), CD2 (census line and presence probe; the owner-act boundary defined with it), CD3 (PV-2f limb (1) path, limb (2) input), PR-1 (completed Aggregation-Trace; Posture restated); PR-4 is not adopted as a re-type — G-PR4's cells are retained and the v2.22 bullet states that `structural` covers presence over the census. #5286: PR-1, FM-2..FM-6 refinements, and CD-1 (no `probe: none`; hand census; owner names the population). #5062: CD-5, PR-2, FM-2, FM-3, FM-5. #4417: CD-1, CD-2, CD-3, FM-4, FM-5 | Collective Review scope-lock Decision Recorded | **APPLIED** per card as its slice lands; #4919's in § Implementation Sequence |
 | **DEV-7** | **#4919 AC-1 re-anchored** (G-PL1): "the Stage-9 GO-residual criteria" names no surface; residual acceptance lives at Phase A4, G-PR4 and the Phase C1 risk acceptance | Stage-4 plan Phase A0.5; Stage-4 gate | **RECORDED** — the card body stays as historical record |
 | **DEV-8** | **#4919's open plan-row question routed out** (D-4919-Routing (A)) to #5903 as evidence, with #7899 named as the mechanical consumer; #4919's acceptance criteria are unchanged | Stage-4 Decision Recorded | **RECORDED** |
+| **DEV-9** | **#5286 — implementation choices inside the design, each Tier 1 [ADJUST].** (a) G-CL9 was missing from three Gate-13 enumerations (`stage-13-close.md` Phase A tree and judgment-dimension note, `gate-evaluation-spec.md` non-omission note); it is restored beside G-CL10 in the same lines. (b) Counts and enumerations the new row makes stale, reconciled in the same edits: the close-class disposition block (ten close gates, eight no-ops, "the warn-mode gates (`G-CL8`, `G-CL9`, `G-CL10`)", ten dispositions), the stage-13 close-class diagram, the Outcome template's `purpose:` line and its anti-pattern count. (c) The owner read is a directory of each owner's issue JSON and comment bodies (`--owners-dir`) rather than the design's four-column TSV, because CD-1's naming test needs the owner's text and the engine stays offline. (d) The register runner pointers name the arms' entry points `eval_gcl10_obligations` and `eval_gcl10_outcome_limbs` as the design does; each maps over its arm's subjects. (e) FM-1's secondary remedy — an empty population passing as such — is not adopted: it was not among the scope-lock's adopted remedies, so `examined: 0` stays unmeasured and needs an owner, as the design states. (f) The INT-2 back-fill reads "every `prose` row in the release range", per the adversarial review's precision note: that set is #4919's one row, which already carries a parsing segment, so the back-fill is zero edits and the 23 `prose` rows already on `main` are untouched | Stage-5 design on #8582, its A6.5 review and the scope-lock; the Stage-6 brief | **APPLIED** — § Verification Evidence (#5286) |
 
 ---
 
