@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH — additive edits to tracked governance,
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): protocol text added and modified, per the Bump-Class Selection Guide. Provisional display `v4.81`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092). It rises to major only if a card selects a skill behavioural change, and none does |
 | **Date Created** | 2026-10-29 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file), then #4919 |
+| **Status** | Executing — Stage 6 Engineering: Commit 0 and #4919 landed; #5286, #5062, #4417 follow in serial order |
 | **Branch** | `release/governance-obligations-measured` |
 | **PR** | opened in **draft** at Stage 6 Phase C2 after #4919's slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `governance-obligations-measured` |
@@ -441,7 +441,7 @@ These checks use tools or shapes outside the plan verifier's runnable set, so ea
 | Deployment mechanism | Git merge, then `./deploy.sh --deploy` mirror refresh. No skill package fires |
 | Stacked-base cleanup | N/A (single branch) |
 
-The PR body is parser-clean: each card is named in the dedicated Issue References block and is marked as closed at Stage 13; no close-family verb precedes an issue number anywhere else.
+The PR body is parser-clean: the four cards carry a close keyword only in the PR body's dedicated Issue References block, as the Stage-6 brief lists them; no close-family verb precedes an issue number anywhere else in the body, the title or any commit message.
 
 ---
 
@@ -521,6 +521,82 @@ Run by the Stage-6 spoke on #8579 after this file was written and before it was 
 | Full verifier (RED arm) | `bash release/tools/verify-release-plan.sh release/releases/plans/governance-obligations-measured_RELEASE_PLAN.md` | exit 3 — **5 PASS / 10 FAIL / 20 SKIP / 0 UNRUNNABLE / 0 ERROR over 35 records** (23 per-issue, 4 cross-issue, 8 always-on). Every runnable per-issue row (7) reads FAIL against the baseline tree — each row's sensitivity arm for its later GREEN. CIAC-1 PASS (14, at most 14). `FCM-COVERAGE` PASS: `declared=35 interpreted=35 obligations=3 excluded=12 conditional=0 uninterpreted=0 pathless=0 prose_led=0`; FCM-1..3 FAIL pre-commit (this file, the sentinel and the ADR — this file delivers at this commit, the other two with #5286). `PROV-PRESENCE` / `PROV-GRAMMAR` PASS (Form X) |
 | Doc links | `python3 core/deploy/tools/check-doc-links.py --target-paths release/releases/plans/governance-obligations-measured_RELEASE_PLAN.md --require-targets` | exit 0, no findings, over a file carrying 0 markdown links (python count: 0 inline, 0 reference definitions) — the file names paths in backticks and links nothing |
 
+### Stage 6 — #4919 (C4 self-verification)
+
+Run by the Stage-6 spoke on #8579 at head `55a48478` (the card's last content commit), against baseline copies read from `origin/main` `b1aaa77e`. Engine: `python3` line scans (the workstation `grep` is a shim), plus the repository's own runners. Every arm states its subject-discriminating control.
+
+| ID | Binds | Method | Observed | Control |
+|---|---|---|---|---|
+| Plan rows | AC-1, AC-2, AC-3 | `bash release/tools/verify-release-plan.sh` on this file | AC-1 PASS (count 5); AC-2 limb 1 PASS (count 1), row UNRUNNABLE by design — its reader limb is graded at Stage 8; AC-3 PASS (count 1). Roll-up 8 PASS / 6 FAIL / 20 SKIP / 1 UNRUNNABLE / 0 ERROR over 35 records | each row read FAIL at Commit 0 on the baseline tree (its sensitivity arm); the 6 FAIL are the later cards' rows and their two ADDs, still RED by design |
+| V-1 | AC-1 + PV-2b | stage-09 region from the `**Phase A4 —` line to the line opening `**Phase A6.5` | region 20 lines: "observed acting" 2, census label 1, observed-acting label 1; whole file "observed acting" 5 (region < whole — bounded); the hyphenated `observed-acting` token sits on 1 line, the fenced template | baseline: region ABSENT (reported absent, not 0); the A3.7 region (19 lines) carries 0 |
+| V-2 | AC-1 + CIAC-2 | the first row opening `\| G-PR4 \|` in gate-criteria-spec | names "observed acting" and `G-CL10`; carries none of "threshold", "owning work item", "population:"; cells `field` / `structural` / `auto` retained | the G-PR3 row: neither token; the baseline G-PR4 row: neither token |
+| V-3 | AC-2 | review-discipline span from the line opening `      PV-2f` to the line opening `PV-3` | 52 lines: "observed acting" 1, "accepts-artifact-as-action" 1 | the PV-2e span (105 lines): 0 and 0; baseline: no PV-2f line, "observed acting" 0 in the whole file |
+| V-4 | AC-2 | gate-efficacy, the paragraph between class-3 limit 7 and `### Requirement (b′)` | 1 paragraph: the class 1, "observed acting" 1; the limits list (7 lines) carries neither | baseline: 0 non-blank lines between limit 7 and (b′) — the paragraph absent |
+| V-5 | AC-3 | the Phase A4 region | the learning phrase exactly 1; 0 version tokens, 0 issue references, 0 markdown links | the same phrase in `release/releases/RELEASE_LOG.md` at `origin/main`: 1 line (the probe finds its source); mutation — the phrase dropped from the region → 0 |
+| V-6 | durability | the fragile-reference detectors of `core/hooks/lib/fragile-ref-patterns.sh` (LINK, CUTOVER, URL, ISSUEREF), translated to `python3`, over the card's added non-fenced lines (87) | review-discipline 0 hits; gate-evaluation-spec 0; gate-efficacy 0; stage-09: 3 link hits, all on pre-existing links of the two modified lines, under the file's `allow-link`; gate-criteria-spec: 2 link hits (`allow-link`) and 1 cutover hit, the v2.22 entry's cutover bullet (`allow-version-ref`) | planted `v4.03 is exempt` line → CUTOVER 1; planted link and `#4919` → 1 each; near-miss `**v2.22 changes (non-breaking — minor` → 0 |
+| V-7 | CIAC-3 | `bash core/deploy/deploy.sh --check`, the Check 62 line | `OK: all 47 gate-coverage register resolution pointer(s) resolve` — CLEAN at 47 | baseline register: 46 pointers, 0 naming the new anchor (head: 47, 1). Mutation arm (delete the Phase A4 template → `UNRESOLVED`): see the spoke output on #8579 |
+| V-8 | INT-2 (#5286) | #5286's `**Population:**` regex over the register | 1 row names `stage9-control-backed-dispositions`; it parses: threshold 100, probe a presence census (not `none`), no `;` in the member definition; the row has 5 cells; Surface leads `prose`; 1 segment in the register, unique | near-misses do not parse: an ASCII hyphen for the em-dash, and the threshold without `%` |
+| V-9 | CIAC-1 | lines carrying "specified, not yet emitting" in gate-criteria-spec | 14; the v2.22 entry quotes it 0 times | baseline 14 |
+| V-10 | INT-3 | `**Schema version:**` and version-entry headers | one `**Schema version:** 2.22`; one `**v2.22 changes` entry; one `**v2.21 changes` (history kept) | mainline read 2.21 with 0 v2.22 entries |
+| V-11 | Check 63 | `python3 core/deploy/tools/check-count-structure.py --path <file>`, each of the five files | `FAIL=0 KNOWN=0 STALE=0` on each (gate-efficacy: 4 pairs examined) | `--self-test`: sensitivity examined 1 flagged 1, specificity examined 1 flagged 0 |
+| V-12 | links | `python3 core/deploy/tools/check-doc-links.py --target-paths <the five files> --require-targets`; `python3 release/tools/check-release-links.py --check-anchors --diff-base origin/main --files <the five files and this plan>` | no broken link, no broken anchor, over 171 inline links in the five files | `check-doc-links.py --self-test`: 12 fixtures pass |
+| Deploy check | no new FAIL line | the same `deploy.sh --check` run | 2 issues: `release-body-drift` (logged-release bodies) and `count-structure` (`SECURITY.md`, `core/references/reference/operator-instance-home-and-isolation-key.md`, `release/references/standards/release-notes-standard.md`) — neither subject is a file this release touches `[INFERRED: attribution by subject file; no baseline run was taken]` | — |
+| Package consequence | C4 | the six changed paths on STDIN to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | empty — no rostered skill's package is staled | `release/skills/release-planner/SKILL.md` → `release-planner` |
+| ADR index | C4 | did this card add a record under `release/ADRs/`? | ADR index: N/A — this card adds no record under `release/ADRs/` | — |
+| Runtime suite | C4 | `runtime-suite-selection-map.md` over the six paths | the no-match row: `test-run/suite-skip` emitted (`spoke:#8579`, payload `suite:NONE; selected-by:no-match; reason:doc-only-change`) | typed read-back: 0 before, 1 after |
+| Mirror pairs | C4 | do the six paths include a mirror-pair member? | no — no `core/rules/` path is edited, so neither mirror-pair link form nor path-set parity applies | — |
+
+**`deliverable_state` for #4919:** `deployed-copy-synced` — every path is repository-only, so the release declares no propagation target for it.
+
+---
+
+## Deployment Execution Log
+
+Populated during Stage 12, per the execution checklist.
+
+---
+
+## Change Description
+
+Authored at Stage 6 Phase C1 by the first Engineering spoke, before the draft pull request opened; each later card refreshes **Issues resolved** and, where its slice changes them, **Key decisions** and **Downstream impact**. Operator-facing; the user-facing release note is a separate Stage-13 artifact.
+
+### Outcome
+
+This release stops the platform from accepting a control's artifact as evidence that the control acted, and makes a declared governance obligation something close-out measures rather than something a release asserts. At Stage 9 a risk that rests on a hook, gate, check or deploy step is accepted only once that control was observed acting where it runs, recorded on a census line and an independently observed line per risk. At Stage 13 every obligation the release declares is measured over its stated population, and a shortfall closes only with a named owner that carries it. Two obligations nothing checked before — a work item's Documentation Impact declaration, and the close-out date the changelog, digest and release note share — gain checks upstream of the close.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #4919 | The accepts-artifact-as-action class is named; PV-2f states what observing a control acting takes; Stage 9 Phase A4 and G-PR4 apply it with a census line and an independent second observation | DONE (landed at Stage 6) |
+| #5286 | Gate 13 G-CL10 measures every declared obligation at close and requires an owner that names the population for a shortfall; the Outcome template binds each limb to an owner | PENDING (its Stage-6 card) |
+| #5062 | Gate 3 G3-20 asserts at Bundle that a card's Documentation Impact is gradable under G-CL8's grammar; Triage reads it early and advisory | PENDING (its Stage-6 card) |
+| #4417 | A new warn-mode deploy check compares the close-out anchor date across the release digest, the changelog and the release note | PENDING (its Stage-6 card) |
+
+### Key decisions
+
+- **D-ReleaseClass:** cross-cutting; #4444 left the milestone. Four stage specs are edited, and 18 × 1.3 = 23 points sits inside the band.
+- **D-4919-Routing:** the plan-row control question went to #5903, which owns control-arm authoring discipline.
+- **Scope-lock remedies:** each card's adversarial-review remedies were folded into Stage 6. For #4919 that means a census line, an independent `via`, the path/input split in PV-2f, and a Posture cell that states what the evaluator actually does with an unsatisfied G-PR4.
+- **#5286 CD-1:** no obligation may be declared unmeasurable; one no instrument reaches is enumerated by hand census.
+- **D-5062-Posture (A′):** G3-20 blocks cards not yet bundled and is advisory on a re-bundle, with the posture divergence recorded as an override.
+
+### Reversibility
+
+**CHEAP — HIGH confidence.** `git revert -m 1` of the merge commit restores `main` byte-for-byte; every new gate ships warn-mode, so nothing blocks on revert, and the version tag is retained, never deleted.
+
+### Downstream impact
+
+- Every later Stage 9 records a Phase A4 control census and one independently observed line per control-backed risk; this release's own Stage 9 is the first worked example.
+- Every later Stage 13 runs G-CL10 over the register rows its release adds or modifies; `#5903` takes the next free § 8 identifier, because `PV-2f` is now taken.
+- Bundle sessions read G3-20's verdict per card; release close reads the new anchor-agreement check's warn rows.
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `governance-obligations-measured`.
+- User-facing release note: authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`, under `release/releases/notes/`.
+
 ---
 
 ## Deviation Log
@@ -540,10 +616,10 @@ Run by the Stage-6 spoke on #8579 after this file was written and before it was 
 
 ## Issue References
 
-- **#4919** — verification-by-declaration: a control's artifact accepted as evidence that it acted (the class card). Mark as closed at Stage 13.
-- **#5286** — declared obligations measured at close. Mark as closed at Stage 13.
-- **#5062** — Documentation Impact checked upstream (narrowed). Mark as closed at Stage 13.
-- **#4417** — close-out anchors agree. Mark as closed at Stage 13.
+- **#4919** — verification-by-declaration: a control's artifact accepted as evidence that it acted (the class card). Closes through the release PR's Issue References block.
+- **#5286** — declared obligations measured at close. Closes through the release PR's Issue References block.
+- **#5062** — Documentation Impact checked upstream (narrowed). Closes through the release PR's Issue References block.
+- **#4417** — close-out anchors agree. Closes through the release PR's Issue References block.
 - **#4444** — removed at the plan gate; returned to the approved backlog under epic #5867.
 - **#8577 · #8578 · #8579 · #8582 · #8586 · #8590** — the Stage-4 sub-task (plan and gate record), the four Stage-5 sub-tasks (designs, adversarial reviews, scope-lock), and the first Stage-6 sub-task.
 - **#5867 · #8114 · #6428** — the parent epics.
