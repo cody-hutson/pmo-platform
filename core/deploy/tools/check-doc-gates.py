@@ -3,8 +3,8 @@
 
 WHAT IT IS
     The engine `core/deploy/deploy.sh --check-doc-gates` runs at Stage 13 Close to
-    evaluate the two documentation close gates of `core/schemas/gate-criteria-spec.md`
-    Gate 13 over ONE release's commit range:
+    evaluate the close gates of `core/schemas/gate-criteria-spec.md` Gate 13 that grade
+    ONE release's commit range: g-cl6, g-cl8, g-cl10.
 
       g-cl6  Design artifacts refreshed: every artifact the release plan's
              "Tier-A activated design artifacts" section declares was touched in
@@ -13,17 +13,26 @@ WHAT IT IS
              `### Documentation Impact` section has each declared row resolved by the
              action-keyed method of the G-CL8 row (link / create / update / retire),
              or reads exactly `None — no documentation impact (rationale: <phrase>)`.
+      g-cl10 Declared obligations measured: every gate-coverage register row whose Surface
+             leads with `prose` that <base>..<head> added or modified declares its
+             population, and the release plan's record of it meets the threshold or names
+             an open owning work item outside the release whose body or comments name the
+             population (arm i); every limb of the milestone's Release Outcome Statement
+             names an owning work item (arm ii). `--list` prints both before measurement.
 
-    The criteria are NOT restated here; the G-CL6 and G-CL8 rows are their authority
-    and this file implements them. Where this file and those rows disagree, the rows win
-    and this file is the defect.
+    The criteria are NOT restated here; the G-CL6, G-CL8 and G-CL10 rows are their
+    authority and this file implements them. Where this file and those rows disagree, the
+    rows win and this file is the defect.
 
 WHAT IT IS NOT
     It writes nothing. It never touches the warn log, the network or GitHub: deploy.sh
-    resolves the release context (the PR, <base>, <head>, the issue bodies) and hands
-    this engine files and commit ids, then turns FAIL lines into warn-log rows through
-    the shared sink's one append path. Keeping the engine offline is what lets
-    `--self-test` exercise every arm in CI with no credentials.
+    resolves the release context (the PR, <base>, <head>, the issue bodies, the milestone
+    description, each owning work item's JSON and comments) and hands this engine files
+    and commit ids, then turns FAIL lines into warn-log rows through the shared sink's one
+    append path. Keeping the engine offline is what lets `--self-test` exercise every arm
+    in CI with no credentials. It never runs a probe a register row declares: it grades
+    the record a Stage 13 spoke wrote, bound to the declaration by the probe string and a
+    pin that contains <head>.
 
 OUTPUT CONTRACT (stdout, one line per subject, tab-separated)
     <RESULT>\t<gate>\t<subject>\t<detail>
@@ -550,6 +559,403 @@ def eval_gcl8(root: Path, base: str, head: str, issues_dir: Path) -> list[tuple[
     return out
 
 
+# ─── G-CL10 ───────────────────────────────────────────────────────────────────
+# The declared obligations of one release, measured at close. Arm (i) reads the
+# gate-coverage register: every row whose Surface cell leads with `prose` — a predicate
+# nothing executes — that the release added or modified carries a `**Population:**`
+# segment, and the release plan carries that population's record. Arm (ii) reads the
+# milestone's Release Outcome Statement: every limb names an owning work item. The
+# criterion is the G-CL10 row; this section implements it and never runs a probe.
+REGISTER_PATH = "core/standards/gate-efficacy-standard.md"
+REGISTER_HEADING = re.compile(r"^##\s+Gate-coverage register\b")
+CELL_SPLIT = re.compile(r"(?<!\\)\|")
+POPULATION_SEGMENT = re.compile(
+    r"\*\*Population:\*\*\s*`(?P<name>[^`|]+)`\s*—\s*population:\s*(?P<members>.+?);\s*"
+    r"probe:\s*`(?P<probe>[^`]+)`;\s*threshold:\s*(?P<threshold>\d{1,3})%")
+POPULATION_NAME = re.compile(r"\*\*Population:\*\*\s*`([^`|]+)`")
+# The segment closes its cell: normalization drops it through to the cell's end, so a
+# row whose only change is the segment is not a row the release modified.
+SEGMENT_SPAN = re.compile(r"\*\*Population:\*\*.*?(?=(?<!\\)\||$)")
+# The population-record labels of gate-efficacy-standard.md Requirement (c), in order.
+RECORD_LABELS = ("population", "probe", "examined", "sensitivity", "specificity", "state", "exempted")
+ROS_HEADING = re.compile(r"^###\s+Release Outcome Statement\s*$")
+LIMB_LINE = re.compile(r"^\s*\*{0,2}Limb owners:\*{0,2}\s*(.+?)\s*$")
+LOCK_DATE = re.compile(r"\*\*Locked at:\*\*\s*Stage 4 Planning entry\s*·\s*(\d{4}-\d{2}-\d{2})")
+ABANDONED_REASONS = ("not_planned", "duplicate")
+
+
+def register_rows(text: str | None) -> list[str] | None:
+    """The data rows of the gate-coverage register, raw: the table rows between the
+    heading opening `## Gate-coverage register` and the next `## `, header and separator
+    excluded. None when the text is absent or carries no such heading."""
+    if text is None:
+        return None
+    lines = text.splitlines()
+    start = next((i for i, l in enumerate(lines) if REGISTER_HEADING.match(l)), None)
+    if start is None:
+        return None
+    rows, header = [], False
+    for line in lines[start + 1:]:
+        if line.startswith("## "):
+            break
+        if not line.lstrip().startswith("|") or is_separator(line):
+            continue
+        if not header:
+            header = True
+            continue
+        rows.append(line.strip())
+    return rows
+
+
+def row_cells(row: str) -> list[str]:
+    parts = [c.strip() for c in CELL_SPLIT.split(row.strip())]
+    if parts and parts[0] == "":
+        parts = parts[1:]
+    if parts and parts[-1] == "":
+        parts = parts[:-1]
+    return parts
+
+
+def surface_word(row: str) -> str:
+    """The Surface cell's first word, lowercased, after any leading `*`, `_` or backtick:
+    markup is not spelling, so a `**prose**` cell leads with `prose`."""
+    cells = row_cells(row)
+    if len(cells) < 3:
+        return ""
+    m = re.match(r"([A-Za-z][A-Za-z-]*)", re.sub(r"^[\s*_`]+", "", cells[2]))
+    return m.group(1).lower() if m else ""
+
+
+def norm_row(row: str) -> str:
+    return " ".join(SEGMENT_SPAN.sub("", row).split())
+
+
+def parse_population(row: str) -> tuple[dict | None, str | None]:
+    """-> (declaration, None) or (None, `declaration-missing` / `declaration-malformed` …)."""
+    if "**Population:**" not in row:
+        return None, "declaration-missing: the row carries no **Population:** segment"
+    m = POPULATION_SEGMENT.search(row)
+    if not m:
+        return None, ("declaration-malformed: the segment does not read "
+                      "**Population:** `<name>` — population: <member definition>; "
+                      "probe: `<invocation, or a census definition>`; threshold: <1-100>%")
+    threshold = int(m.group("threshold"))
+    probe = " ".join(m.group("probe").replace("\\|", "|").split())
+    if not 1 <= threshold <= 100:
+        return None, (f"declaration-malformed: threshold {threshold}% is outside 1-100% "
+                      "(0% would admit the case the gate exists to fail)")
+    if probe.lower() == "none":
+        return None, ("declaration-malformed: probe `none` is not admitted — a population no "
+                      "instrument reaches is enumerated by hand census")
+    return {"name": m.group("name").strip(),
+            "members": " ".join(m.group("members").replace("\\|", "|").split()),
+            "probe": probe, "threshold": threshold}, None
+
+
+def _plain(line: str) -> str:
+    """A record line with its list bullet, backticks and bold markers set aside."""
+    return re.sub(r"^\s*(?:[-*+]\s+)?", "", line).replace("`", "").replace("**", "").strip()
+
+
+def parse_record(plan_text: str, name: str) -> tuple[dict | None, str | None]:
+    """The `Population record — <name>` block, found at any heading depth anywhere in the
+    plan: one fenced block holding exactly the seven record labels in order, then
+    `conforming: <k>` and `owner: #<N>` or `owner: none` before the next heading."""
+    lines = plan_text.splitlines()
+    heading = re.compile(r"^#{1,6}\s+Population record\s+—\s+" + re.escape(name) + r"\s*$")
+    hits = [i for i, l in enumerate(lines) if heading.match(l)]
+    if not hits:
+        return None, f"record-missing: the release plan carries no `#### Population record — {name}` block"
+    if len(hits) > 1:
+        return None, f"record-malformed: {len(hits)} records carry the name {name}"
+    start = hits[0] + 1
+    end = next((k for k in range(start, len(lines)) if re.match(r"^#{1,6}\s", lines[k])), len(lines))
+    block = lines[start:end]
+    fo = next((k for k, l in enumerate(block) if l.strip().startswith("```")), None)
+    fc = next((k for k in range((fo or 0) + 1, len(block)) if block[k].strip().startswith("```")), None) \
+        if fo is not None else None
+    if fo is None or fc is None:
+        return None, "record-malformed: no closed fenced block under the heading"
+    body = [l for l in block[fo + 1:fc] if l.strip()]
+    got = tuple((re.match(r"^\s*([a-z]+):", l) or re.match(r"()", "")).group(1) for l in body)
+    if got != RECORD_LABELS:
+        return None, ("record-malformed: the fenced block must carry exactly "
+                      f"{', '.join(RECORD_LABELS)}, one line each in that order; it carries "
+                      f"{', '.join(g or '?' for g in got) or 'nothing'}")
+    rec = {lab: line.split(":", 1)[1].strip() for lab, line in zip(RECORD_LABELS, body)}
+    tail = [_plain(l) for l in block[fc + 1:]]
+    conf = next((l.split(":", 1)[1].strip() for l in tail if l.startswith("conforming:")), None)
+    own = next((l.split(":", 1)[1].strip() for l in tail if l.startswith("owner:")), None)
+    if conf is None or not re.fullmatch(r"\d+", conf):
+        return None, "record-malformed: no `conforming: <integer>` line after the fenced block"
+    if own is None or not re.fullmatch(r"#\d+|none", own, re.I):
+        return None, "record-malformed: no `owner: #<N>` or `owner: none` line after the fenced block"
+    rec["conforming"] = int(conf)
+    rec["owner"] = int(own[1:]) if own.startswith("#") else None
+    return rec, None
+
+
+def resolve_record(root: Path, record: str | None, slug: str | None) -> tuple[str | None, str | None]:
+    """The release plan the records live in, read from the working tree: the record is
+    written after <head>, and the version stamp renames the plan before Stage 13 runs, so
+    an explicit --record wins and otherwise the plan is the ONE plan whose `milestone:`
+    frontmatter names the release. -> (text, None) or (None, `record-unresolved: …`)."""
+    if record:
+        p = Path(record) if Path(record).is_absolute() else root / record
+        if not p.is_file():
+            return None, f"record-unresolved: {record} is not a file in the working tree"
+        return p.read_text(encoding="utf-8"), None
+    if not slug:
+        return None, "record-unresolved: neither --record nor --milestone-slug names the release plan"
+    hits = []
+    for p in sorted((root / "release/releases/plans").glob("**/*_RELEASE_PLAN.md")):
+        keys, status = _fm.read_frontmatter(p)
+        if status == "ok" and keys.get("milestone", "").strip() == slug:
+            hits.append(p)
+    if len(hits) != 1:
+        names = ", ".join(str(h.relative_to(root)) for h in hits) or "none"
+        return None, (f"record-unresolved: {len(hits)} release plan(s) declare `milestone: {slug}` "
+                      f"({names}); pass --plan <path>")
+    return hits[0].read_text(encoding="utf-8"), None
+
+
+def limb_subjects(outcome: str, created: str | None, required_from: str | None) -> list[dict]:
+    lines = outcome.replace("\r\n", "\n").split("\n")
+    start = next((i for i, l in enumerate(lines) if ROS_HEADING.match(l)), None)
+    if start is None:
+        return [{"arm": "ii", "subject": "limbs:outcome", "preset": (
+            "FAIL", "no-outcome-statement: the milestone description carries no `### Release Outcome Statement` heading")}]
+    end = next((k for k in range(start + 1, len(lines)) if re.match(r"^#{1,3}\s", lines[k])), len(lines))
+    line = next((m.group(1) for l in lines[start + 1:end] for m in [LIMB_LINE.match(l)] if m), None)
+    if line is None:
+        lock = LOCK_DATE.search(outcome)
+        key, src = (lock.group(1), "composition-lock") if lock else ((created or "")[:10], "milestone-creation")
+        if not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", key) and required_from):
+            return [{"arm": "ii", "subject": "limbs:outcome", "preset": (
+                "NOT-EVALUATED", "cutover-unknown: no **Limb owners:** line, and the date it would be required from cannot be read")}]
+        if key >= required_from:
+            return [{"arm": "ii", "subject": "limbs:outcome", "preset": (
+                "FAIL", f"limb-owners-missing: no **Limb owners:** line; the {src} date {key} is on or after {required_from}")}]
+        return [{"arm": "ii", "subject": "limbs:outcome", "preset": (
+            "OUT-OF-SCOPE", f"grandfathered: no **Limb owners:** line; the {src} date {key} precedes {required_from}")}]
+    out = []
+    for i, entry in enumerate((e.strip().rstrip(".").strip() for e in re.split(r"\s+·\s+", line)), 1):
+        if not entry:
+            continue
+        label, arrow, rhs = entry.partition("→")
+        if not arrow:
+            label, arrow, rhs = entry.partition("->")
+        owners = [int(n) for n in re.findall(r"#(\d+)", rhs)] if arrow else []
+        out.append({"arm": "ii", "subject": f"limbs:outcome-limb:{i}", "label": (label if arrow else entry).strip(),
+                    "owners": owners})
+    return out
+
+
+def gcl10_subjects(head_reg: list[str], base_reg: list[str], wt_reg: list[str] | None,
+                   plan: tuple[str | None, str | None], outcome: str,
+                   created: str | None, required_from: str | None) -> list[dict]:
+    """The ONE enumeration both --list and the grade read, so the population the wrapper
+    counts and the subjects the grade reports come from the same code."""
+    base_norms = {norm_row(r) for r in base_reg}
+    wt_by_norm = {norm_row(r): r for r in (wt_reg or [])}
+    keyed = wt_reg if wt_reg is not None else head_reg
+    names: dict[str, int] = {}
+    for r in keyed:
+        m = POPULATION_NAME.search(r)
+        if m:
+            names[m.group(1).strip()] = names.get(m.group(1).strip(), 0) + 1
+    plan_text, plan_err = plan
+    subjects = []
+    for row in head_reg:
+        if surface_word(row) != "prose" or norm_row(row) in base_norms:
+            continue
+        drow = wt_by_norm.get(norm_row(row), row)          # the close worktree may repair a declaration
+        decl, err = parse_population(drow)
+        nm = POPULATION_NAME.search(drow)
+        cells = row_cells(row)
+        subject = f"obligation:{nm.group(1).strip()}" if nm else f"row:{excerpt(cells[0] if cells else row, 60)}"
+        s = {"arm": "i", "subject": subject, "decl": decl, "err": err}
+        if decl and names.get(decl["name"], 0) > 1:
+            s["err"] = f"declaration-duplicate: the name {decl['name']} keys {names[decl['name']]} register rows"
+        if decl and not s["err"]:
+            if plan_err:
+                s["plan_err"] = plan_err
+            else:
+                s["rec"], s["rec_err"] = parse_record(plan_text or "", decl["name"])
+        subjects.append(s)
+    return subjects + limb_subjects(outcome, created, required_from)
+
+
+def owner_numbers(subjects: list[dict]) -> list[int]:
+    nums = set()
+    for s in subjects:
+        if s["arm"] == "i" and s.get("rec") and s["rec"]["owner"] is not None:
+            nums.add(s["rec"]["owner"])
+        nums.update(s.get("owners", []))
+    return sorted(nums)
+
+
+def load_owners(owners_dir: Path, numbers: list[int]) -> dict[int, dict]:
+    """Each owner as the wrapper read it: `<N>.error` (NOT-FOUND or UNREADABLE), else the
+    issue JSON `<N>.json` and its comment bodies `<N>.comments`. A file missing for an
+    owner reads UNREADABLE: an owner nobody read is not an owner that passed."""
+    out = {}
+    for n in numbers:
+        err = owners_dir / f"{n}.error"
+        if err.is_file():
+            tok = err.read_text(encoding="utf-8").strip().upper()
+            out[n] = {"err": "NOT-FOUND" if tok == "NOT-FOUND" else "UNREADABLE"}
+            continue
+        try:
+            js = json.loads((owners_dir / f"{n}.json").read_text(encoding="utf-8"))
+            comments = (owners_dir / f"{n}.comments").read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            out[n] = {"err": "UNREADABLE"}
+            continue
+        out[n] = {"state": str(js.get("state") or "").lower(), "reason": str(js.get("state_reason") or ""),
+                  "pr": "pull_request" in js, "repo_url": str(js.get("repository_url") or ""),
+                  "text": (js.get("body") or "") + "\n" + comments}
+    return out
+
+
+def _same_repo(o: dict, repo: str) -> bool:
+    return o["repo_url"].lower().rstrip("/").endswith("/repos/" + repo.lower())
+
+
+def names_population(text: str, name: str) -> bool:
+    return re.search(r"(?<![A-Za-z0-9_-])" + re.escape(name) + r"(?![A-Za-z0-9_-])", text) is not None
+
+
+def grade_record(root: Path, head: str, decl: dict, rec: dict) -> tuple[str, str]:
+    """-> (PASS | FAIL | NOT-EVALUATED, detail), or ("OWNER", why) when the obligation is
+    short of its threshold or unmeasured and so needs an owning work item."""
+    if " ".join(rec["population"].replace("\\|", "|").split()) != decl["members"]:
+        return "FAIL", "record-unbound: the record's population: line differs from the declared member definition"
+    probe, sep, pin = rec["probe"].rpartition(" @ ")
+    if not sep or not pin.strip():
+        return "FAIL", "record-malformed: the record's probe: carries no ` @ <commit>` pin"
+    if " ".join(probe.replace("\\|", "|").split()) != decl["probe"]:
+        return "FAIL", "record-unbound: the record's probe differs from the declared probe"
+    pin = pin.strip()
+    if not is_commit(root, pin):
+        return "NOT-EVALUATED", f"pin-unfetched: {pin} is not a commit in the local object store; fetch it, then re-run"
+    if git(root, "merge-base", "--is-ancestor", head, pin).returncode != 0:
+        return "FAIL", f"pin-outside-release: {short(pin)} does not contain the release head {short(head)}"
+    m = re.match(r"(\d+)\b", rec["examined"])
+    if not m:
+        return "FAIL", "record-malformed: examined: does not open on an integer"
+    n, k, t = int(m.group(1)), rec["conforming"], decl["threshold"]
+    if k > n:
+        return "FAIL", f"record-malformed: conforming {k} exceeds examined {n}"
+    sens = re.search(r"observed\s+(\d+)", rec["sensitivity"])
+    state = leading_token(rec["state"])
+    if state != "FETCHED" or n == 0 or not sens or int(sens.group(1)) < 1:
+        why = (f"state {rec['state'].split()[0] if rec['state'] else 'absent'}" if state != "FETCHED"
+               else "examined 0" if n == 0 else "the sensitivity arm records no observed count of at least 1")
+        return "OWNER", f"unmeasured ({why})"
+    pct = (100 * k) // n
+    if k >= 1 and k * 100 >= t * n:
+        return "PASS", f"threshold-met {k}/{n} ({pct}%) >= {t}%"
+    return "OWNER", f"short {k}/{n} ({pct}%) < {t}%"
+
+
+def grade_obligation(root: Path, head: str, s: dict, members: set[int], owners: dict[int, dict],
+                     repo: str) -> tuple[str, str, str]:
+    subj = s["subject"]
+    if s.get("err"):
+        return "FAIL", subj, s["err"]
+    if s.get("plan_err"):
+        return "NOT-EVALUATED", subj, s["plan_err"]
+    if s.get("rec_err"):
+        return "FAIL", subj, s["rec_err"]
+    verdict, detail = grade_record(root, head, s["decl"], s["rec"])
+    if verdict != "OWNER":
+        return verdict, subj, detail
+    n, name = s["rec"]["owner"], s["decl"]["name"]
+    if n is None:
+        return "FAIL", subj, f"unowned: none — {detail}, and the record names no owning work item"
+    o = owners.get(n, {"err": "UNREADABLE"})
+    if o.get("err") == "UNREADABLE":
+        return "NOT-EVALUATED", subj, f"owner-unreadable: #{n} could not be read — {detail}"
+    why = ("not-found" if o.get("err") == "NOT-FOUND" else "pull-request" if o["pr"]
+           else "other-repository" if not _same_repo(o, repo) else "closed" if o["state"] != "open"
+           else "member-of-release" if n in members
+           else "population-not-named" if not names_population(o["text"], name) else None)
+    if why:
+        return "FAIL", subj, f"unowned: #{n} {why} — {detail}"
+    return "PASS", subj, f"owned-residual #{n} — {detail}"
+
+
+def grade_limb(s: dict, members: set[int], owners: dict[int, dict], repo: str) -> tuple[str, str, str]:
+    subj = s["subject"]
+    if "preset" in s:
+        return s["preset"][0], subj, s["preset"][1]
+    if not s["owners"]:
+        return "FAIL", subj, f"limb-unowned: {s['label']} names no owning work item"
+    bad, unread, abandoned, tags = [], [], [], []
+    for n in s["owners"]:
+        o = owners.get(n, {"err": "UNREADABLE"})
+        if o.get("err") == "UNREADABLE":
+            unread.append(f"#{n}")
+        elif o.get("err") == "NOT-FOUND" or o["pr"] or not _same_repo(o, repo):
+            bad.append(f"#{n} " + ("not-found" if o.get("err") else "pull-request" if o["pr"] else "other-repository"))
+        elif o["state"] != "open" and o["reason"] in ABANDONED_REASONS:
+            abandoned.append(f"#{n} closed {o['reason']}")
+        else:
+            tags.append(f"carried-by-nonmember #{n}" if o["state"] == "open" and n not in members else f"#{n}")
+    if bad:
+        return "FAIL", subj, f"limb-owner-invalid: {s['label']} — {', '.join(bad)}"
+    if unread:
+        return "NOT-EVALUATED", subj, f"owner-unreadable: {s['label']} — {', '.join(unread)}"
+    if not tags:
+        return "FAIL", subj, f"limb-owner-abandoned: {s['label']} — every owner closed unworked ({', '.join(abandoned)})"
+    return "PASS", subj, f"{s['label']} — owned by {', '.join(tags + abandoned)}"
+
+
+def print_gcl10_list(subjects: list[dict]) -> None:
+    for s in subjects:
+        if s["arm"] == "i":
+            d = s.get("decl")
+            if d and not s.get("err"):
+                print(f"SUBJECT\t{s['subject']}\t{d['threshold']}%\t{d['probe']}")
+            else:
+                print(f"SUBJECT\t{s['subject']}\t{s['err'].split(':')[0]}")
+        elif "preset" in s:
+            print(f"LIMB\t{s['subject']}\t{s['preset'][1].split(':')[0]}")
+        else:
+            print(f"LIMB\t{s['subject']}\t{s['label']}\t{' '.join(f'#{n}' for n in s['owners']) or 'none'}")
+    for n in owner_numbers(subjects):
+        print(f"OWNER\t{n}")
+
+
+def run_gcl10(root: Path, a) -> int:
+    head_reg = register_rows(show(root, a.head, REGISTER_PATH))
+    if head_reg is None:
+        print(f"INPUT-ERROR\tg-cl10\t{REGISTER_PATH}\tno gate-coverage register at {short(a.head)}")
+        return 3
+    if not (a.outcome and Path(a.outcome).is_file()):
+        print(f"INPUT-ERROR\tg-cl10\t{a.outcome}\tthe milestone description file (--outcome) was not found")
+        return 3
+    base_reg = register_rows(show(root, a.base, REGISTER_PATH)) or []
+    wt = Path(a.register_worktree) if Path(a.register_worktree).is_absolute() else root / a.register_worktree
+    wt_reg = register_rows(wt.read_text(encoding="utf-8")) if wt.is_file() else None
+    subjects = gcl10_subjects(head_reg, base_reg, wt_reg, resolve_record(root, a.record, a.milestone_slug),
+                              Path(a.outcome).read_text(encoding="utf-8"), a.milestone_created,
+                              a.limbs_required_from)
+    if a.list:
+        print_gcl10_list(subjects)
+        return 0
+    if not (a.members and Path(a.members).is_file() and a.owners_dir and Path(a.owners_dir).is_dir()
+            and a.repo and "/" in a.repo):
+        print("INPUT-ERROR\tg-cl10\t-\tgrading needs --members <file>, --owners-dir <dir> and --repo <owner/repo>")
+        return 3
+    members = {int(t) for t in Path(a.members).read_text(encoding="utf-8").split() if t.isdigit()}
+    owners = load_owners(Path(a.owners_dir), owner_numbers(subjects))
+    emit("g-cl10", [grade_obligation(root, a.head, s, members, owners, a.repo) if s["arm"] == "i"
+                    else grade_limb(s, members, owners, a.repo) for s in subjects])
+    return 0
+
+
 def emit(gate: str, results: list[tuple[str, str, str]]) -> None:
     counts = {"PASS": 0, "FAIL": 0, "NOT-EVALUATED": 0, "OUT-OF-SCOPE": 0}
     for res, subject, detail in results:
@@ -562,11 +968,22 @@ def emit(gate: str, results: list[tuple[str, str, str]]) -> None:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--gate", choices=("g-cl6", "g-cl8"))
+    ap.add_argument("--gate", choices=("g-cl6", "g-cl8", "g-cl10"))
     ap.add_argument("--base")
     ap.add_argument("--head")
     ap.add_argument("--plan", help="g-cl6: release plan path, read at <head>")
     ap.add_argument("--issues-dir", help="g-cl8: directory of <N>.md issue bodies")
+    ap.add_argument("--record", help="g-cl10: the release plan carrying the population records, read from the working tree")
+    ap.add_argument("--milestone-slug", help="g-cl10: find the release plan by its `milestone:` frontmatter when --record is not given")
+    ap.add_argument("--register-worktree", default=REGISTER_PATH,
+                    help="g-cl10: the register as the close worktree holds it (a declaration repaired after <head>)")
+    ap.add_argument("--outcome", help="g-cl10: a file holding the milestone description")
+    ap.add_argument("--milestone-created", help="g-cl10: the milestone's created_at")
+    ap.add_argument("--limbs-required-from", help="g-cl10: the date the **Limb owners:** line is required from")
+    ap.add_argument("--members", help="g-cl10: the issue numbers of the release, whitespace-separated")
+    ap.add_argument("--owners-dir", help="g-cl10: <N>.json + <N>.comments, or <N>.error, per owner")
+    ap.add_argument("--repo", help="g-cl10: owner/repo an owning work item must belong to")
+    ap.add_argument("--list", action="store_true", help="g-cl10: print the declared population, the limbs and the owners; grade nothing")
     ap.add_argument("--repo-root", default=".")
     ap.add_argument("--self-test", action="store_true")
     a = ap.parse_args(argv)
@@ -579,6 +996,8 @@ def main(argv: list[str]) -> int:
         if not is_commit(root, rev):
             print(f"INPUT-ERROR\t{a.gate}\t{rev}\tnot a commit in {root}")
             return 3
+    if a.gate == "g-cl10":
+        return run_gcl10(root, a)
     if a.gate == "g-cl6":
         plan = show(root, a.head, a.plan) if a.plan else None
         if plan is None:
@@ -871,10 +1290,259 @@ def self_test() -> int:
         else:
             failures.append("retire arms not run: blast-radius.sh is not reachable from this file")
 
+    _self_test_gcl10(check)
+
     for f in failures:
         print(f"self-test FAIL: {f}", file=sys.stderr)
     print(f"check-doc-gates self-test: {'FAIL' if failures else 'PASS'} ({len(failures)} failure(s))", file=sys.stderr)
     return 1 if failures else 0
+
+
+# The G-CL10 arms: one scratch repository whose register gains a row of each shape at
+# <head>, graded through the same enumeration --list prints. CL10-S and CL10-P are the
+# CIAC-4 pair — the identical fixture, differing in the record's owner line alone.
+REG_TOP = ("# Fixture standard\n\n## Gate-coverage register (seed)\n\n"
+           "| Invariant | Enforcing gate | Surface | Posture | Falsification test |\n|---|---|---|---|---|\n")
+REG_BASE_ROWS = ("| R-old a prose obligation already on base | review step | prose (no job) | advisory | x |\n"
+                 "| R-seg a prose row that gains only a segment | review step | prose | advisory | x |\n"
+                 "| R-ci an old ci row | job | ci | required | x |\n")
+REG_TAIL = "\n## After the register\n\n| H | H | H | H | H |\n|---|---|---|---|---|\n| a | b | prose | d | e |\n"
+
+
+def _seg(name: str, probe: str, threshold: str = "100") -> str:
+    return f"**Population:** `{name}` — population: members of {name}; probe: `{probe}`; threshold: {threshold}%"
+
+
+def _rec(name: str, probe: str, head: str, examined: str = "3 — counted at the pin",
+         sens: str = "a known member -> observed 1", state: str = "fetched",
+         conforming: str = "0", owner: str = "none") -> str:
+    return (f"#### Population record — {name}\n\n```\npopulation: members of {name}\n"
+            f"probe: {probe} @ {head}\nexamined: {examined}\nsensitivity: {sens}\n"
+            f"specificity: NOT TRIGGERED — a fixture\nstate: {state}\nexempted: 0\n```\n\n"
+            f"conforming: {conforming}\nowner: {owner}\n")
+
+
+def _self_test_gcl10(check) -> None:
+    with tempfile.TemporaryDirectory() as td:
+        r = Path(td)
+
+        def run(*a):
+            subprocess.run(["git", "-C", str(r), *a], check=True, capture_output=True)
+
+        def put(path, text):
+            p = r / path
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text, encoding="utf-8")
+
+        def commit(msg):
+            run("add", "-A")
+            run("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", msg)
+            return git(r, "rev-parse", "HEAD").stdout.strip()
+
+        run("init", "-q")
+        put(REGISTER_PATH, REG_TOP + REG_BASE_ROWS + REG_TAIL)
+        base = commit("base")
+        seg_e = _seg("pop-e", "ls e \\| wc -l")                  # a `|` in a probe is written `\|`
+        head_rows = (
+            "| R-old a prose obligation already on base | review step | prose (no job) | advisory | x |\n"
+            f"| R-seg a prose row that gains only a segment | review step | prose | advisory | x {_seg('pop-n', 'n')} |\n"
+            "| R-ci an old ci row | job | ci | required | x |\n"
+            f"| R-S widgets carry a tag | review step | prose (nothing executes it) | advisory | flip it {_seg('pop-s', 'count-widgets --tagged')} |\n"
+            f"| R-V a new ci row | job | ci | required | x {_seg('pop-v', 'v')} |\n"
+            f"| R-K a bold surface | review step | **prose** (bold) | advisory | x {_seg('pop-k', 'k-probe', '50')} |\n"
+            "| R-D a new prose row with no declaration | review step | prose | advisory | x |\n"
+            f"| R-E an escaped pipe | review step | prose | advisory | x {seg_e} |\n"
+            f"| R-0 a zero threshold | review step | prose | advisory | x {_seg('pop-0', 'z', '0')} |\n"
+            f"| R-X a probe of none | review step | prose | advisory | x {_seg('pop-x', 'none')} |\n"
+            "| R-W declared only in the worktree | review step | prose | advisory | x |\n"
+            f"| R-C a census probe | review step | prose | advisory | x {_seg('pop-c', 'presence census — count the lines by hand')} |\n")
+        put(REGISTER_PATH, REG_TOP + head_rows + REG_TAIL)
+        head = commit("head")
+        # CL10-DW: after <head> the close worktree repairs one row's declaration.
+        wt_rows = head_rows.replace("| R-W declared only in the worktree | review step | prose | advisory | x |",
+                                    f"| R-W declared only in the worktree | review step | prose | advisory | x {_seg('pop-w', 'w')} |")
+        put(REGISTER_PATH, REG_TOP + wt_rows + REG_TAIL)
+
+        common = ("# Plan\n\n## Verification Evidence\n\n"                     # CL10-H: an H2 section
+                  + _rec("pop-k", "k-probe", head, examined="2", conforming="1")
+                  + _rec("pop-e", "ls e | wc -l", head, examined="1", conforming="1")   # CL10-E: \| binds to |
+                  + _rec("pop-w", "w", head, examined="1", conforming="1")
+                  + _rec("pop-c", "presence census — count the lines by hand", head, examined="2", conforming="2"))
+        plan_s = common + _rec("pop-s", "count-widgets --tagged", head)
+        plan_p = common + _rec("pop-s", "count-widgets --tagged", head, owner="#7")
+        outcome_ok = ("### Release Outcome Statement\n\n**AFTER** — x.\n\n**BEFORE** — y.\n\n"
+                      "**Limb owners:** first limb → #20 · second limb → #21, #7.\n\n## Release Class\n")
+        owners_dir = r / "_owners"
+        owners_dir.mkdir()
+        issue = "https://api.github.com/repos/acme/widget"
+        fixtures = {
+            7: {"state": "open", "body": "carries the residual of pop-s", "repository_url": issue},
+            8: {"state": "open", "body": "names pop-s", "repository_url": issue},                 # a member
+            9: {"state": "closed", "state_reason": "completed", "body": "pop-s", "repository_url": issue},
+            10: {"state": "open", "body": "pop-s", "repository_url": issue, "pull_request": {}},
+            12: {"state": "open", "body": "names nothing it owns; pop-sx is another population", "repository_url": issue},
+            14: {"state": "open", "body": "pop-s", "repository_url": "https://api.github.com/repos/acme/other"},
+            20: {"state": "open", "body": "", "repository_url": issue},
+            21: {"state": "closed", "state_reason": "completed", "body": "", "repository_url": issue},
+            22: {"state": "closed", "state_reason": "not_planned", "body": "", "repository_url": issue},
+        }
+        for n, js in fixtures.items():
+            (owners_dir / f"{n}.json").write_text(json.dumps(js), encoding="utf-8")
+            (owners_dir / f"{n}.comments").write_text("", encoding="utf-8")
+        (owners_dir / "11.error").write_text("UNREADABLE\n", encoding="utf-8")
+        (owners_dir / "13.error").write_text("NOT-FOUND\n", encoding="utf-8")
+        (owners_dir / "15.comments").write_text("a comment naming pop-s\n", encoding="utf-8")
+        (owners_dir / "15.json").write_text(json.dumps({"state": "open", "body": "", "repository_url": issue}), encoding="utf-8")
+        members = {8, 20, 21}
+
+        def grade(plan_text, outcome=outcome_ok, created="2026-01-01T00:00:00Z", required="2026-06-01",
+                  plan_err=None, wt=True):
+            wt_reg = register_rows((r / REGISTER_PATH).read_text(encoding="utf-8")) if wt else None
+            subjects = gcl10_subjects(register_rows(show(r, head, REGISTER_PATH)),
+                                      register_rows(show(r, base, REGISTER_PATH)), wt_reg,
+                                      (None, plan_err) if plan_err else (plan_text, None), outcome, created, required)
+            owners = load_owners(owners_dir, owner_numbers(subjects))
+            res = [grade_obligation(r, head, s, members, owners, "acme/widget") if s["arm"] == "i"
+                   else grade_limb(s, members, owners, "acme/widget") for s in subjects]
+            return {subj: (v, d) for v, subj, d in res}, subjects
+
+        res_s, subjects = grade(plan_s)
+        res_p, _ = grade(plan_p)
+        got = res_s.get("obligation:pop-s", ("", ""))
+        check("CL10-S 0% conformance with no owner FAILs (AC-3)", got[0] == "FAIL" and "unowned: none" in got[1], got)
+        got = res_p.get("obligation:pop-s", ("", ""))
+        check("CL10-P 0% conformance owned by an open non-member that names the population PASSes (AC-4)",
+              got[0] == "PASS" and "owned-residual #7" in got[1], got)
+        changed = [d for d in difflib.unified_diff(plan_s.splitlines(), plan_p.splitlines(), lineterm="", n=0)
+                   if d[:1] in "+-" and not d.startswith(("+++", "---"))]
+        check("CL10-S/P the two fixtures differ in the owner line alone (CIAC-4)",
+              changed == ["-owner: none", "+owner: #7"], changed)
+        for tag, n, want in (("M", 8, "member-of-release"), ("C", 9, "closed"), ("PR", 10, "pull-request"),
+                             ("NN", 12, "population-not-named"), ("NF", 13, "not-found"),
+                             ("OR", 14, "other-repository")):
+            got = grade(common + _rec("pop-s", "count-widgets --tagged", head, owner=f"#{n}"))[0]["obligation:pop-s"]
+            check(f"CL10-{tag} an owner that is {want} FAILs", got[0] == "FAIL" and want in got[1], got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", head, owner="#11"))[0]["obligation:pop-s"]
+        check("CL10-U an unreadable owner is NOT-EVALUATED, never a pass", got[0] == "NOT-EVALUATED", got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", head, owner="#15"))[0]["obligation:pop-s"]
+        check("CL10-CM an owner whose comment stream names the population PASSes", got[0] == "PASS", got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", head, conforming="3"))[0]["obligation:pop-s"]
+        check("CL10-T 3/3 at 100% PASSes with no owner", got[0] == "PASS" and "threshold-met 3/3" in got[1], got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", head, conforming="2"))[0]["obligation:pop-s"]
+        check("CL10-T2 2/3 short of 100% with no owner FAILs", got[0] == "FAIL" and "short 2/3" in got[1], got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", head, sens="a known member -> observed 0",
+                                  conforming="3"))[0]["obligation:pop-s"]
+        check("CL10-Z a sensitivity arm observed at 0 reads unmeasured and needs an owner",
+              got[0] == "FAIL" and "unmeasured" in got[1], got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", head, state="not-run — the hook layer refused the probe",
+                                  conforming="0", owner="#7"))[0]["obligation:pop-s"]
+        check("CL10-NR a probe refused (state not-run) is unmeasured, and an owner naming it carries it",
+              got[0] == "PASS" and "unmeasured" in got[1], got)
+        got = grade(common)[0]["obligation:pop-s"]
+        check("CL10-R no record FAILs", got[0] == "FAIL" and "record-missing" in got[1], got)
+        got = grade(common + _rec("pop-s", "count-widgets --all", head, conforming="3"))[0]["obligation:pop-s"]
+        check("CL10-B a record bound to another probe FAILs", got[0] == "FAIL" and "record-unbound" in got[1], got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", base, conforming="3"))[0]["obligation:pop-s"]
+        check("CL10-PO a pin that does not contain <head> FAILs", got[0] == "FAIL" and "pin-outside-release" in got[1], got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", "f" * 40, conforming="3"))[0]["obligation:pop-s"]
+        check("CL10-PU an unfetched pin is NOT-EVALUATED", got[0] == "NOT-EVALUATED" and "pin-unfetched" in got[1], got)
+        got = grade(plan_s.replace("examined: 3", "conforming: 1\nexamined: 3"))[0]["obligation:pop-s"]
+        check("CL10-RM a record whose labels are out of order FAILs", got[0] == "FAIL" and "record-malformed" in got[1], got)
+        got = res_s.get("row:R-D a new prose row with no declaration", ("", ""))
+        check("CL10-D a new prose row with no declaration FAILs", got[0] == "FAIL" and "declaration-missing" in got[1], got)
+        got = res_s.get("obligation:pop-w", ("", ""))
+        check("CL10-DW a declaration repaired only in the worktree is graded", got[0] == "PASS", got)
+        got = grade(plan_s, wt=False)[0].get("row:R-W declared only in the worktree", ("", ""))
+        check("CL10-DW control: without the worktree repair the row reads declaration-missing",
+              got[0] == "FAIL" and "declaration-missing" in got[1], got)
+        got = res_s.get("obligation:pop-0", ("", ""))
+        check("CL10-0 a 0% threshold FAILs as malformed", got[0] == "FAIL" and "declaration-malformed" in got[1], got)
+        got = res_s.get("obligation:pop-x", ("", ""))
+        check("CL10-X probe `none` is not admitted (CD-1)", got[0] == "FAIL" and "declaration-malformed" in got[1], got)
+        got = res_s.get("obligation:pop-c", ("", ""))
+        check("CL10-CN a census-definition probe binds and grades", got[0] == "PASS", got)
+        check("CL10-N a row whose only change is its segment is not in the population",
+              "obligation:pop-n" not in res_s and "row:R-old a prose obligation already on base" not in res_s, sorted(res_s))
+        check("CL10-V a non-prose row is not in the population", "obligation:pop-v" not in res_s, sorted(res_s))
+        check("CL10-K a bold **prose** Surface enrols", res_s.get("obligation:pop-k", ("",))[0] == "PASS", res_s.get("obligation:pop-k"))
+        check("CL10-E a \\| declaration binds to a | record", res_s.get("obligation:pop-e", ("",))[0] == "PASS", res_s.get("obligation:pop-e"))
+        check("CL10-H a record under an H2 Verification Evidence section is found",
+              "## Verification Evidence" in common and "### Verification Evidence" not in common
+              and res_s.get("obligation:pop-c", ("",))[0] == "PASS", res_s.get("obligation:pop-c"))
+        check("CL10-AFTER the table after the register is not read", not any(k.startswith("row:a") for k in res_s), sorted(res_s))
+        got = grade(plan_s, plan_err="record-unresolved: 0 release plan(s) declare `milestone: m`")[0]["obligation:pop-s"]
+        check("CL10-RU an unresolved plan is NOT-EVALUATED", got[0] == "NOT-EVALUATED" and "record-unresolved" in got[1], got)
+        # The enumeration is shared: --list counts exactly the subjects the grade reports.
+        check("CL10-L the list enumeration and the grade agree in count", len(subjects) == len(res_s), (len(subjects), len(res_s)))
+
+        # Limbs (arm ii).
+        got = res_s.get("limbs:outcome-limb:1", ("", ""))
+        check("L-1 a limb owned by a member PASSes", got[0] == "PASS", got)
+        got = res_s.get("limbs:outcome-limb:2", ("", ""))
+        check("L-1b an open non-member owner is named carried-by-nonmember",
+              got[0] == "PASS" and "carried-by-nonmember #7" in got[1], got)
+        one = lambda o, **k: [v for s, v in grade(plan_s, outcome=o, **k)[0].items() if s.startswith("limbs:")]
+        got = one(outcome_ok.replace("→ #20 ·", "→ nothing yet ·"))[0]
+        check("L-2 a limb naming no #N FAILs", got[0] == "FAIL" and "limb-unowned" in got[1], got)
+        bare = "### Release Outcome Statement\n\n**AFTER** — x.\n\n**BEFORE** — y.\n"
+        got = one(bare, created="2026-07-01T00:00:00Z")
+        check("L-3 no owner line on a milestone created after the cutover FAILs",
+              got == [("FAIL", got[0][1])] and "limb-owners-missing" in got[0][1], got)
+        got = one(bare, created="2026-01-01T00:00:00Z")
+        check("L-4 no owner line before the cutover is OUT-OF-SCOPE", got and got[0][0] == "OUT-OF-SCOPE", got)
+        got = one(outcome_ok, created="2026-01-01T00:00:00Z")
+        check("L-5 a present line is graded before the cutover too", got and all(v == "PASS" for v, _ in got), got)
+        got = one(outcome_ok.replace("#21, #7", "#22"))[1]
+        check("L-6 a limb whose only owner closed not_planned FAILs (FM-2)",
+              got[0] == "FAIL" and "limb-owner-abandoned" in got[1], got)
+        got = one(outcome_ok.replace("#21, #7", "#22, #20"))[1]
+        check("L-6 control: an abandoned owner beside a live one PASSes", got[0] == "PASS", got)
+        got = one(outcome_ok.replace("#21, #7", "#10"))[1]
+        check("L-7 a pull request as a limb owner FAILs", got[0] == "FAIL" and "limb-owner-invalid" in got[1], got)
+        locked = bare + "\n## Composition\n\n### Composition Lock\n**Locked at:** Stage 4 Planning entry · 2026-07-01 · planning sub-task #1\n"
+        got = one(locked, created="2026-01-01T00:00:00Z")
+        check("L-8 the cutover reads the Composition Lock date before the creation date (FM-3)",
+              got and got[0][0] == "FAIL" and "composition-lock date 2026-07-01" in got[0][1], got)
+        got = one("## Goal\n\nno outcome\n")
+        check("L-9 a description with no Outcome heading FAILs", got and got[0][0] == "FAIL" and "no-outcome-statement" in got[0][1], got)
+        check("L-10 every arm-ii subject opens `limbs:` (the drain counts each arm)",
+              all(s["subject"].startswith("limbs:") for s in subjects if s["arm"] == "ii")
+              and all(not s["subject"].startswith("limbs:") for s in subjects if s["arm"] == "i"), [s["subject"] for s in subjects])
+
+        # PR-1: the plan is found by its frontmatter, wherever the version stamp moved it.
+        put("release/releases/plans/v9/v9.99_RELEASE_PLAN.md", "---\ntitle: P\nmilestone: dg-slug\n---\n" + plan_p)
+        put("release/releases/plans/other_RELEASE_PLAN.md", "---\ntitle: Q\nmilestone: another\n---\n# Q\n")
+        text, err = resolve_record(r, None, "dg-slug")
+        check("CL10-PF the plan resolves through its milestone: frontmatter", err is None and "owner: #7" in (text or ""), err)
+        text, err = resolve_record(r, None, "absent-slug")
+        check("CL10-PF control: no plan declaring the slug is record-unresolved", text is None and "0 release plan" in (err or ""), err)
+        put("release/releases/plans/dup_RELEASE_PLAN.md", "---\ntitle: R\nmilestone: dg-slug\n---\n# R\n")
+        text, err = resolve_record(r, None, "dg-slug")
+        check("CL10-PF two plans declaring the slug is record-unresolved, naming both",
+              text is None and "2 release plan" in (err or "") and "dup_RELEASE_PLAN.md" in (err or ""), err)
+
+        # The CLI: --list and the grade over the same inputs.
+        (r / "_outcome.md").write_text(outcome_ok, encoding="utf-8")
+        (r / "_members.txt").write_text("8 20 21\n", encoding="utf-8")
+        (r / "_plan.md").write_text(plan_s, encoding="utf-8")
+        cli = [sys.executable, str(Path(__file__).resolve()), "--gate", "g-cl10", "--base", base, "--head", head,
+               "--repo-root", str(r), "--record", "_plan.md", "--outcome", str(r / "_outcome.md"),
+               "--milestone-created", "2026-01-01T00:00:00Z", "--limbs-required-from", "2026-06-01"]
+        out = subprocess.run(cli + ["--list"], capture_output=True, text=True)
+        lines = out.stdout.splitlines()
+        npop = sum(1 for l in lines if l.split("\t")[0] in ("SUBJECT", "LIMB"))
+        check("CLI-1 --list prints the declared population, the limbs and the owners",
+              out.returncode == 0 and "SUBJECT\tobligation:pop-s\t100%\tcount-widgets --tagged" in lines
+              and "OWNER\t20" in lines and npop == len(subjects), out.stdout + out.stderr)
+        out = subprocess.run(cli + ["--members", str(r / "_members.txt"), "--owners-dir", str(owners_dir),
+                                    "--repo", "acme/widget"], capture_output=True, text=True)
+        graded = [l for l in out.stdout.splitlines() if not l.startswith("SUMMARY")]
+        check("CLI-2 the grade reports one line per listed subject and FAILs CL10-S",
+              out.returncode == 0 and len(graded) == npop and "FAIL\tg-cl10\tobligation:pop-s\t" in out.stdout,
+              out.stdout + out.stderr)
+        out = subprocess.run(cli, capture_output=True, text=True)
+        check("CLI-3 grading without --members/--owners-dir/--repo is an input error (exit 3)",
+              out.returncode == 3 and out.stdout.startswith("INPUT-ERROR"), out.stdout)
 
 
 if __name__ == "__main__":
