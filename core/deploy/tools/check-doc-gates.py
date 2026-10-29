@@ -859,8 +859,8 @@ def grade_record(root: Path, head: str, decl: dict, rec: dict) -> tuple[str, str
     return "OWNER", f"short {k}/{n} ({pct}%) < {t}%"
 
 
-def grade_obligation(root: Path, head: str, s: dict, members: set[int], owners: dict[int, dict],
-                     repo: str) -> tuple[str, str, str]:
+def _grade_obligation(root: Path, head: str, s: dict, members: set[int], owners: dict[int, dict],
+                      repo: str) -> tuple[str, str, str]:
     subj = s["subject"]
     if s.get("err"):
         return "FAIL", subj, s["err"]
@@ -886,7 +886,7 @@ def grade_obligation(root: Path, head: str, s: dict, members: set[int], owners: 
     return "PASS", subj, f"owned-residual #{n} — {detail}"
 
 
-def grade_limb(s: dict, members: set[int], owners: dict[int, dict], repo: str) -> tuple[str, str, str]:
+def _grade_limb(s: dict, members: set[int], owners: dict[int, dict], repo: str) -> tuple[str, str, str]:
     subj = s["subject"]
     if "preset" in s:
         return s["preset"][0], subj, s["preset"][1]
@@ -910,6 +910,18 @@ def grade_limb(s: dict, members: set[int], owners: dict[int, dict], repo: str) -
     if not tags:
         return "FAIL", subj, f"limb-owner-abandoned: {s['label']} — every owner closed unworked ({', '.join(abandoned)})"
     return "PASS", subj, f"{s['label']} — owned by {', '.join(tags + abandoned)}"
+
+
+def eval_gcl10_obligations(root: Path, head: str, subjects: list[dict], members: set[int],
+                           owners: dict[int, dict], repo: str) -> list[tuple[str, str, str]]:
+    """G-CL10 arm (i): one verdict per declared obligation the release added or modified."""
+    return [_grade_obligation(root, head, s, members, owners, repo) for s in subjects if s["arm"] == "i"]
+
+
+def eval_gcl10_outcome_limbs(subjects: list[dict], members: set[int], owners: dict[int, dict],
+                             repo: str) -> list[tuple[str, str, str]]:
+    """G-CL10 arm (ii): one verdict per Outcome limb, or one for the Outcome as a whole."""
+    return [_grade_limb(s, members, owners, repo) for s in subjects if s["arm"] == "ii"]
 
 
 def print_gcl10_list(subjects: list[dict]) -> None:
@@ -951,8 +963,8 @@ def run_gcl10(root: Path, a) -> int:
         return 3
     members = {int(t) for t in Path(a.members).read_text(encoding="utf-8").split() if t.isdigit()}
     owners = load_owners(Path(a.owners_dir), owner_numbers(subjects))
-    emit("g-cl10", [grade_obligation(root, a.head, s, members, owners, a.repo) if s["arm"] == "i"
-                    else grade_limb(s, members, owners, a.repo) for s in subjects])
+    emit("g-cl10", eval_gcl10_obligations(root, a.head, subjects, members, owners, a.repo)
+         + eval_gcl10_outcome_limbs(subjects, members, owners, a.repo))
     return 0
 
 
@@ -1402,8 +1414,8 @@ def _self_test_gcl10(check) -> None:
                                       register_rows(show(r, base, REGISTER_PATH)), wt_reg,
                                       (None, plan_err) if plan_err else (plan_text, None), outcome, created, required)
             owners = load_owners(owners_dir, owner_numbers(subjects))
-            res = [grade_obligation(r, head, s, members, owners, "acme/widget") if s["arm"] == "i"
-                   else grade_limb(s, members, owners, "acme/widget") for s in subjects]
+            res = (eval_gcl10_obligations(r, head, subjects, members, owners, "acme/widget")
+                   + eval_gcl10_outcome_limbs(subjects, members, owners, "acme/widget"))
             return {subj: (v, d) for v, subj, d in res}, subjects
 
         res_s, subjects = grade(plan_s)
