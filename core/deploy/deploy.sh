@@ -21460,6 +21460,9 @@ EOF
 |---|---|---|---|---|
 | an old prose row | review step | prose | advisory | x |
 DG10BASE
+    # The declared probe opens on a file the scratch repository tracks, as the probe
+    # grammar's invocation arm requires (CD-1, the shape rule).
+    printf '#!/bin/sh\n' > "$_d10/count-widgets"
     /usr/bin/git -C "$_d10" add -A
     /usr/bin/git -C "$_d10" -c user.name=dg -c user.email=dg@example.invalid commit -qm base
     _d10b="$(/usr/bin/git -C "$_d10" rev-parse HEAD)"

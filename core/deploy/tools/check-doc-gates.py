@@ -59,6 +59,7 @@ import difflib
 import importlib.util
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -686,13 +687,36 @@ def norm_row(row: str) -> str:
     return " ".join(SEGMENT_SPAN.sub("", row).split())
 
 
-# CD-1: no declaration states its population unmeasurable, in any spelling. A probe is
-# an exact invocation or a census definition (`<kind> census — …`); one that OPENS on a
-# placeholder word, or on a bare dash or ellipsis, is neither, and would otherwise reach
-# the close as `not-run` and pass on an owner alone. The test is the first word, whole
-# and case-folded, so a command or census kind that merely begins like one of these
-# (`native-dep-mirror.py`, `notes census —`, `tbd-report`) still parses. Whether any
-# other string really is an invocation stays the close reviewer's read.
+# CD-1, the shape rule: no declaration states its population unmeasurable, in any
+# spelling, because a probe is accepted only when it positively matches one of its two
+# arms. A placeholder never has to be recognised to be refused.
+#   census      `<kind> census — <definition>`: one kind word — any word, a placeholder-
+#               looking one included (`todo census — …`) — then `census`, an em or en dash,
+#               and a definition carrying a letter or digit outside any `<…>` slot.
+#   invocation  its first word is a file tracked at the release head (a leading `./` set
+#               aside; never absolute, never through a `..` segment, never a directory),
+#               or a tool on PROBE_TOOLS.
+# A first word on neither is rejected by design, whatever it spells: a tool the host has
+# installed but the repository does not track and the allowlist does not name included.
+# Between the arms the placeholder list stays as a backstop: a probe that is not a census
+# and opens on a placeholder word or a bare dash is reported as that placeholder, even
+# where a file of that name is tracked. What a shape cannot decide stays the close
+# reviewer's read (stage-13-close.md Phase A14 step 2): whether a well-shaped probe
+# enumerates anything — an allowlisted tool given arguments that count nothing, or a
+# census whose definition is itself a placeholder.
+#
+# PROBE_TOOLS is derived from the corpus, not chosen: the leading word of every probe the
+# corpus already runs — each multi-word backticked span in the Verification Method cells
+# of the tracked release plans, and each Enforcing-gate invocation and Population probe of
+# the gate-coverage register — kept where the plan verifier's closed tool catalog
+# (`RUNNABLE_VERBS` and `span_invokes_tool` in release/tools/verify-release-plan.sh) names
+# it, less the shell keywords and builtins that catalog lists apart, because a probe that
+# opens on shell syntax hides the command that enumerates. A tool no corpus probe has led
+# with is not on it (`node`, `nl`, `nohup`), and neither is the register's bare `deploy.sh`
+# shorthand: from the repository root its exact invocation is `bash core/deploy/deploy.sh …`.
+PROBE_TOOLS = ("awk", "bash", "cat", "gh", "git", "grep", "ls", "python3", "sh", "shasum", "test", "zsh")
+CENSUS_KIND = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+CENSUS_DASHES = "—–"
 PLACEHOLDER_WORD = re.compile(
     r"none|nil|null|n/?a|n\.a\.?|tb[acd]|todo|unknown|unmeasur(?:able|ed)|immeasurable|"
     r"not|no|nothing", re.I)
@@ -700,8 +724,8 @@ BARE_WORD = re.compile(r"[-‐‑‒–—―.…?*_/\\]+")
 
 
 def placeholder_probe(probe: str) -> str | None:
-    """The placeholder `probe` opens on, or None when it opens on a word that can begin an
-    invocation or a census definition."""
+    """The backstop: the placeholder `probe` opens on, or None when its first word, whole
+    and case-folded with outer punctuation set aside, is not a placeholder."""
     words = probe.split()
     if not words:
         return probe
@@ -714,8 +738,59 @@ def placeholder_probe(probe: str) -> str | None:
     return None
 
 
-def parse_population(row: str) -> tuple[dict | None, str | None]:
-    """-> (declaration, None) or (None, `declaration-missing` / `declaration-malformed` …)."""
+def census_shape(probe: str) -> str | None:
+    """None when `probe` is a census definition, else why the census arm does not hold."""
+    words = probe.split(None, 2)
+    if len(words) < 2 or words[1].lower() != "census":
+        return "it does not read `<kind> census — <definition>`"
+    if not CENSUS_KIND.fullmatch(words[0]):
+        return f"its kind `{words[0]}` is not one word"
+    rest = words[2] if len(words) > 2 else ""
+    if not rest or rest[0] not in CENSUS_DASHES:
+        return "no em or en dash follows `census`"
+    if not re.search(r"[^\W_]", re.sub(r"<[^>]*>", "", rest[1:])):
+        return "its definition after the dash is empty or an unfilled `<…>` slot"
+    return None
+
+
+def tracked_path(word: str, tracked) -> bool:
+    """True when `word` names a file `tracked(path)` reports tracked at the release head."""
+    path = word[2:] if word.startswith("./") else word
+    if tracked is None or not path or path.startswith(("/", "~")) or ".." in path.split("/"):
+        return False
+    return bool(tracked(posixpath.normpath(path)))
+
+
+def tracked_files(root: Path, rev: str) -> set[str]:
+    """Every file path tracked at `rev` — the set the invocation arm reads. A tree that
+    cannot be listed tracks nothing, so the arm fails closed."""
+    out = git(root, "ls-tree", "-r", "-z", "--name-only", rev)
+    return {p for p in out.stdout.split("\0") if p} if out.returncode == 0 else set()
+
+
+def probe_shape(probe: str, tracked) -> str | None:
+    """None when `probe` matches an arm of the probe grammar, else why not — naming the
+    arm that refused it: the placeholder backstop, or both arms with each one's reason."""
+    census = census_shape(probe)
+    if census is None:
+        return None
+    lead = placeholder_probe(probe)
+    if lead is not None:
+        return (f"probe `{probe}` opens on the placeholder `{lead}` (the placeholder backstop) — "
+                "no declaration states its population unmeasurable; a population no instrument "
+                "reaches is enumerated by hand census (`<kind> census — <definition>`)")
+    first = probe.split()[0]
+    if first in PROBE_TOOLS or tracked_path(first, tracked):
+        return None
+    return (f"probe `{probe}` matches neither arm of the probe grammar — census arm: {census}; "
+            f"invocation arm: its first word `{first}` is neither a file tracked at the release "
+            f"head nor a tool on PROBE_TOOLS ({', '.join(PROBE_TOOLS)})")
+
+
+def parse_population(row: str, tracked=None) -> tuple[dict | None, str | None]:
+    """-> (declaration, None) or (None, `declaration-missing` / `declaration-malformed` …).
+    `tracked(path)` answers whether a path is a file tracked at the release head; given no
+    answer, no path is tracked, and an invocation must open on a tool on PROBE_TOOLS."""
     if "**Population:**" not in row:
         return None, "declaration-missing: the row carries no **Population:** segment"
     m = POPULATION_SEGMENT.search(row)
@@ -728,11 +803,9 @@ def parse_population(row: str) -> tuple[dict | None, str | None]:
     if not 1 <= threshold <= 100:
         return None, (f"declaration-malformed: threshold {threshold}% is outside 1-100% "
                       "(0% would admit the case the gate exists to fail)")
-    lead = placeholder_probe(probe)
-    if lead is not None:
-        return None, (f"declaration-malformed: probe `{probe}` opens on the placeholder `{lead}` — "
-                      "no declaration states its population unmeasurable; a population no "
-                      "instrument reaches is enumerated by hand census (`<kind> census — …`)")
+    why = probe_shape(probe, tracked)
+    if why is not None:
+        return None, f"declaration-malformed: {why}"
     return {"name": m.group("name").strip(),
             "members": " ".join(m.group("members").replace("\\|", "|").split()),
             "probe": probe, "threshold": threshold}, None
@@ -839,9 +912,10 @@ def limb_subjects(outcome: str, created: str | None, required_from: str | None) 
 
 def gcl10_subjects(head_reg: list[str], base_reg: list[str], wt_reg: list[str] | None,
                    plan: tuple[str | None, str | None], outcome: str,
-                   created: str | None, required_from: str | None) -> list[dict]:
+                   created: str | None, required_from: str | None, tracked=None) -> list[dict]:
     """The ONE enumeration both --list and the grade read, so the population the wrapper
-    counts and the subjects the grade reports come from the same code."""
+    counts and the subjects the grade reports come from the same code. `tracked` is the
+    probe grammar's tracked-file answer at <head> (parse_population)."""
     base_norms = {norm_row(r) for r in base_reg}
     wt_by_norm = {norm_row(r): r for r in (wt_reg or [])}
     keyed = wt_reg if wt_reg is not None else head_reg
@@ -856,7 +930,7 @@ def gcl10_subjects(head_reg: list[str], base_reg: list[str], wt_reg: list[str] |
         if surface_word(row) != "prose" or norm_row(row) in base_norms:
             continue
         drow = wt_by_norm.get(norm_row(row), row)          # the close worktree may repair a declaration
-        decl, err = parse_population(drow)
+        decl, err = parse_population(drow, tracked)
         nm = POPULATION_NAME.search(drow)
         cells = row_cells(row)
         subject = f"obligation:{nm.group(1).strip()}" if nm else f"row:{excerpt(cells[0] if cells else row, 60)}"
@@ -1039,7 +1113,7 @@ def run_gcl10(root: Path, a) -> int:
     wt_reg = register_rows(wt.read_text(encoding="utf-8")) if wt.is_file() else None
     subjects = gcl10_subjects(head_reg, base_reg, wt_reg, resolve_record(root, a.record, a.milestone_slug),
                               Path(a.outcome).read_text(encoding="utf-8"), a.milestone_created,
-                              a.limbs_required_from)
+                              a.limbs_required_from, tracked_files(root, a.head).__contains__)
     if a.list:
         print_gcl10_list(subjects)
         return 0
@@ -1466,6 +1540,31 @@ REG_BASE_ROWS = ("| R-old a prose obligation already on base | review step | pro
                  "| R-seg a prose row that gains only a segment | review step | prose | advisory | x |\n"
                  "| R-ci an old ci row | job | ci | required | x |\n")
 REG_TAIL = "\n## After the register\n\n| H | H | H | H | H |\n|---|---|---|---|---|\n| a | b | prose | d | e |\n"
+# Files the scratch repository tracks, so a fixture probe that opens on one parses through
+# the invocation arm's tracked-path test, never through its spelling. Several begin like a
+# placeholder on purpose: the backstop must not refuse a tracked file for its prefix.
+FIXTURE_TOOLS = ("count-widgets", "k-probe", "w", "count-d", "nothing-to-see.sh", "tbd-report",
+                 "nonexistent-check.sh", "todo-scan", "unknownfiles.py", "nullcheck", "na-report.py",
+                 "none-such.sh", "TODO.sh", "count.sh", "tools/x.sh")
+# QA pass 2's 40 spellings the first-word list admitted as probes, by its class. Each is
+# malformed under the shape rule; the last ten no first-word list can decide. The two
+# invisible prefixes are carried on `none`.
+QA2_ADMITTED = (
+    ("a wrapper outside the strip set", ("<none>", "<TBD>", "<n/a>", "*none*", "**TBD**", "_none_", "~none~",
+                                         "«none»", "“none”", "‘n/a’", "⟨none⟩",
+                                         "<invocation, or a census definition>")),
+    ("a dotted or spaced spelling, or a misspelling", ("T.B.D.", "t.b.d", "N / A", "unmeasureable")),
+    ("a dash outside the dash set", ("−", "﹘", "﹣", "－", "⁃", "⸺", "⸻",
+                                     "− counted by hand")),
+    ("a trailing ellipsis", ("none…", "N/A…")),
+    ("an invisible leading format character", ("​none", "﻿none")),
+    ("a bare run outside the bare set", ("~", "¿?")),
+    ("a placeholder phrase outside the word list", ("to be determined", "to be decided", "pending", "missing",
+                                                     "cannot be measured", "can't be measured")),
+    ("a hyphen compound of a listed word", ("not-measured", "none-measured", "un-measurable", "non-measurable")),
+)
+# The five QA graded PASS `owned-residual — unmeasured` end to end through the CLI.
+QA2_END_TO_END = ("<TBD>", "T.B.D.", "none…", "to be determined", "<invocation, or a census definition>")
 
 
 def _seg(name: str, probe: str, threshold: str = "100") -> str:
@@ -1500,6 +1599,8 @@ def _self_test_gcl10(check) -> None:
 
         run("init", "-q")
         put(REGISTER_PATH, REG_TOP + REG_BASE_ROWS + REG_TAIL)
+        for tool in FIXTURE_TOOLS:
+            put(tool, "#!/bin/sh\n")
         base = commit("base")
         seg_e = _seg("pop-e", "ls e \\| wc -l")                  # a `|` in a probe is written `\|`
         head_rows = (
@@ -1517,6 +1618,7 @@ def _self_test_gcl10(check) -> None:
             f"| R-C a census probe | review step | prose | advisory | x {_seg('pop-c', 'presence census — count the lines by hand')} |\n")
         put(REGISTER_PATH, REG_TOP + head_rows + REG_TAIL)
         head = commit("head")
+        tracked = tracked_files(r, head).__contains__          # the CLI's tracked-file answer
         # CL10-DW: after <head> the close worktree repairs one row's declaration.
         wt_rows = head_rows.replace("| R-W declared only in the worktree | review step | prose | advisory | x |",
                                     f"| R-W declared only in the worktree | review step | prose | advisory | x {_seg('pop-w', 'w')} |")
@@ -1559,7 +1661,8 @@ def _self_test_gcl10(check) -> None:
             wt_reg = register_rows((r / REGISTER_PATH).read_text(encoding="utf-8")) if wt else None
             subjects = gcl10_subjects(register_rows(show(r, head, REGISTER_PATH)),
                                       register_rows(show(r, base, REGISTER_PATH)), wt_reg,
-                                      (None, plan_err) if plan_err else (plan_text, None), outcome, created, required)
+                                      (None, plan_err) if plan_err else (plan_text, None), outcome, created, required,
+                                      tracked)
             owners = load_owners(owners_dir, owner_numbers(subjects))
             res = (eval_gcl10_obligations(r, head, subjects, members, owners, "acme/widget")
                    + eval_gcl10_outcome_limbs(subjects, members, owners, "acme/widget"))
@@ -1614,12 +1717,12 @@ def _self_test_gcl10(check) -> None:
         dup = [f"| R-D1 first | review step | prose | advisory | x {_seg('pop-d', 'count-d --one')} |",
                f"| R-D2 second | review step | prose | advisory | x {_seg('pop-d', 'count-d --two')} |"]
         dres = eval_gcl10_obligations(r, head, gcl10_subjects(dup, [], None, (common, None), outcome_ok,
-                                                              "2026-01-01T00:00:00Z", "2026-06-01"),
+                                                              "2026-01-01T00:00:00Z", "2026-06-01", tracked),
                                       members, {}, "acme/widget")
         check("CL10-DUP a population name keying two register rows FAILs on both rows",
               len(dres) == 2 and all(v == "FAIL" and "declaration-duplicate" in d for v, _, d in dres), dres)
         one = [s for s in gcl10_subjects(dup[:1], [], None, (common, None), outcome_ok,
-                                         "2026-01-01T00:00:00Z", "2026-06-01") if s["arm"] == "i"]
+                                         "2026-01-01T00:00:00Z", "2026-06-01", tracked) if s["arm"] == "i"]
         check("CL10-DUP control: the same name on one row is not a duplicate",
               len(one) == 1 and one[0]["err"] is None, one)
         for owner, want in (("none", ("FAIL", "unowned: none — unmeasured (examined 0)")),
@@ -1651,30 +1754,67 @@ def _self_test_gcl10(check) -> None:
         # CL10-X variants: CD-1 holds for every spelling of "unmeasurable", not only the
         # literal `none` — a placeholder or bare probe is malformed, so it never reaches
         # the close as `not-run` and passes on an owner alone.
+        prow = lambda name, probe: f"| R x | review step | prose | advisory | x {_seg(name, probe)} |"
         for spelling in ("n/a", "N/A", "tbd", "TBD", "unmeasurable", "unmeasured", "—", "–", "-", "...",
                          "none — measured by hand", "none.", "no instrument", "not measurable",
                          "not applicable", "n.a.", "unknown", "— counted by hand"):
-            decl, err = parse_population(f"| R x | review step | prose | advisory | x {_seg('pop-ph', spelling)} |")
+            decl, err = parse_population(prow("pop-ph", spelling), tracked)
             check(f"CL10-X a placeholder or bare probe `{spelling}` is malformed (CD-1)",
                   decl is None and (err or "").startswith("declaration-malformed"), (decl, err))
-        # Specificity: an exact invocation or a census definition parses, including one whose
-        # first word merely begins like a placeholder.
+        # CL10-SH, the shape rule: every spelling QA pass 2 found admitted — one arm per
+        # spelling, grouped by its class — is malformed, with the fixture's tracked files in
+        # view, so it is refused for its shape and not for an empty tracked set.
+        for cls, spellings in QA2_ADMITTED:
+            for spelling in spellings:
+                decl, err = parse_population(prow("pop-sh", spelling), tracked)
+                check(f"CL10-SH {cls}: the probe {spelling!a} is malformed (shape rule)",
+                      decl is None and (err or "").startswith("declaration-malformed"), (decl, err))
+        # Specificity: an exact invocation or a census definition parses — a census whatever
+        # its kind, a tool on PROBE_TOOLS, and a tracked file, including the ones whose name
+        # begins like a placeholder (the fix pass's eight near-miss controls among them).
         for probe in ("presence census — count the lines by hand", "count-widgets --tagged", "ls e \\| wc -l",
                       "python3 release/tools/native-dep-mirror.py --self-test", "notes census — count the notes by hand",
-                      "nothing-to-see.sh --count", "tbd-report --list", "nodes census — count the nodes by hand"):
-            decl, err = parse_population(f"| R x | review step | prose | advisory | x {_seg('pop-ok', probe)} |")
+                      "nothing-to-see.sh --count", "tbd-report --list", "nodes census — count the nodes by hand",
+                      "Notes census – count the notes by hand",
+                      'python3 release/tools/bundle-issues-parser.py --label "status: bundled" --doc-impact-population',
+                      "nonexistent-check.sh --count", "todo-scan --count", "unknownfiles.py --list", "nullcheck --all",
+                      "na-report.py", "none-such.sh", "TODO.sh --count", "./count.sh"):
+            decl, err = parse_population(prow("pop-ok", probe), tracked)
             check(f"CL10-X control: the probe `{probe}` parses", err is None and decl is not None, (decl, err))
-        # End to end, the shape the finding reproduced: an `n/a` probe whose record is
-        # unmeasured and whose owner names the population FAILs, never PASSes on the owner.
-        na_row = ("| R-NA a placeholder probe | review step | prose | advisory | x "
-                  f"{_seg('pop-na', 'n/a')} |")
-        na_subj = gcl10_subjects([na_row], [], None,
-                                 (_rec("pop-na", "n/a", head, state="not-run", owner="#7"), None),
-                                 outcome_ok, "2026-01-01T00:00:00Z", "2026-06-01")
+        # The message names the arm that refused the probe.
+        _, err = parse_population(prow("pop-u", "count-widgets --tagged"), lambda p: False)
+        check("CL10-SH an untracked, unlisted first word fails the invocation arm, and the message says so",
+              "census arm: it does not read" in (err or "") and "invocation arm: its first word `count-widgets`" in (err or "")
+              and "PROBE_TOOLS (awk," in (err or ""), err)
+        _, err = parse_population(prow("pop-u", "presence census — …"), tracked)
+        check("CL10-SH a census with no definition fails the census arm, and the message says so",
+              "census arm: its definition after the dash is empty" in (err or ""), err)
+        _, err = parse_population(prow("pop-u", "presence census - count by hand"), tracked)
+        check("CL10-SH a census whose dash is a hyphen fails the census arm",
+              "census arm: no em or en dash follows" in (err or ""), err)
+        _, err = parse_population(prow("pop-u", "<kind> census — <definition>"), tracked)
+        check("CL10-SH the census template's own unfilled slots fail the census arm",
+              "census arm: its kind `<kind>` is not one word" in (err or ""), err)
+        _, err = parse_population(prow("pop-u", "none — measured by hand"), tracked)
+        check("CL10-SH the placeholder backstop names itself", "(the placeholder backstop)" in (err or ""), err)
+        for probe, why in (("tools --list", "a directory"), ("../tools/count.py", "a path through `..`"),
+                           ("/bin/ls -l", "an absolute path"), ("deploy.sh --check", "the register's bare shorthand")):
+            decl, err = parse_population(prow("pop-u", probe), tracked)
+            check(f"CL10-SH {why} is not a tracked file: `{probe}` is malformed",
+                  decl is None and "invocation arm" in (err or ""), (decl, err))
+        # End to end, the shape the finding reproduced: a placeholder probe whose record is
+        # unmeasured and whose owner names the population FAILs, never PASSes on the owner —
+        # `n/a`, and the five QA pass 2 graded PASS through the CLI.
         na_own = {7: {"state": "open", "reason": "", "pr": False, "repo_url": issue, "text": "carries pop-na"}}
-        got = (eval_gcl10_obligations(r, head, na_subj, members, na_own, "acme/widget") or [("", "", "")])[0]
-        check("CL10-X end to end: an owned `n/a` declaration FAILs as malformed",
-              got[0] == "FAIL" and "declaration-malformed" in got[2], got)
+        for probe in ("n/a",) + QA2_END_TO_END:
+            na_row = ("| R-NA a placeholder probe | review step | prose | advisory | x "
+                      f"{_seg('pop-na', probe)} |")
+            na_subj = gcl10_subjects([na_row], [], None,
+                                     (_rec("pop-na", probe, head, state="not-run", owner="#7"), None),
+                                     outcome_ok, "2026-01-01T00:00:00Z", "2026-06-01", tracked)
+            got = (eval_gcl10_obligations(r, head, na_subj, members, na_own, "acme/widget") or [("", "", "")])[0]
+            check(f"CL10-X end to end: an owned {probe!a} declaration FAILs as malformed",
+                  got[0] == "FAIL" and "declaration-malformed" in got[2], got)
         got = res_s.get("obligation:pop-c", ("", ""))
         check("CL10-CN a census-definition probe binds and grades", got[0] == "PASS", got)
         check("CL10-N a row whose only change is its segment is not in the population",
