@@ -3655,7 +3655,7 @@ selftest_ax_not() {    # <arm> <what> <got> <label prefix it must NOT carry>
 selftest_active_exclusions() {
   local script_abs="" slug="" base="" has_main=0 fail=0 rc=0 ax_skipped="" got=""
   local wt1="" wtd="" wth="" wtg="" wto="" wtp="" inner="" b_fresh="" b_old="" b_dirty="" b_head=""
-  local cand="" f="" ix="" st="" fixdir="" rname="" rb="" rb_old="" old_sha="" new_sha="" pr_sha="" b_apply="" wtq="" b_q="" ign_ok=0 wtd2=""
+  local cand="" f="" ix="" st="" fixdir="" rname="" rb="" rb_old="" old_sha="" new_sha="" srv_tip="" trk_tip="" pr_sha="" b_apply="" wtq="" b_q="" ign_ok=0 wtd2=""
   local saved_gh="$GH_BIN" saved_gh_resolved="$GH_BIN_RESOLVED"
   local L_HEAD="SKIP — active — recent HEAD activity (HEAD moved "
   local L_BRANCH="SKIP — active — recent HEAD activity (branch moved "
@@ -4009,13 +4009,28 @@ selftest_active_exclusions() {
       got=$( PR_MAP_BUILT=1; PR_MAP_STATE="ok"; PR_MAP_ENTRIES=("${rb_old}	990006	MERGED"); OPEN_PR_ENTRIES=("${rb_old}	990007"); REMOTE_BRANCH_CANDIDATES=(); classify_remote "$rb_old" >/dev/null 2>&1; printf '%s' "${REMOTE_BRANCH_CANDIDATES[0]##*	}" )
       selftest_ax_want AX-15 "classify_remote on a merged branch that has a newer open PR" "$got" "SKIP — active — open PR #990007" || fail=1
       new_sha=$(/usr/bin/env -u GIT_COMMITTER_DATE git "${ident[@]}" commit-tree "${base}^{tree}" -p "$old_sha" -m "cleanup-selftest ax-11 new" 2>/dev/null || true)
-      # Pushed by URL, not by remote name, so the tracking ref is NOT updated — the
-      # state of a branch someone else pushed after this host's last fetch.
+      # The state under test is a branch someone else pushed after this host's last
+      # fetch: the server tip is new and the tracking ref still holds the fetched tip.
+      # A push from this repository stands in for that other host only while it leaves
+      # the tracking ref alone, and from git 2.56 a push to a URL that uniquely matches
+      # a configured remote updates that remote's tracking ref too (git RelNotes
+      # 2.56.0). So the tracking ref is set back to the fetched tip explicitly, whatever
+      # the push did, and the precondition is read back through the classifier's own
+      # two reads before anything is classified: a fixture that did not build the state
+      # fails here, rather than failing or passing AX-11 and AX-15 for the wrong reason.
       if [[ -n "$new_sha" ]] && git push -q "${fixdir}/r.git" "${new_sha}:refs/heads/${rb}" >/dev/null 2>&1; then
-        got=$(selftest_ax_reason remote_recent_reason "$rb")
-        selftest_ax_want AX-11 "a remote branch that moved since the last fetch" "$got" "$L_MOVED" || fail=1
-        got=$( PR_MAP_BUILT=1; PR_MAP_STATE="ok"; PR_MAP_ENTRIES=("${rb}	990005	MERGED"); REMOTE_BRANCH_CANDIDATES=(); classify_remote "$rb" >/dev/null 2>&1; printf '%s' "${REMOTE_BRANCH_CANDIDATES[0]##*	}" )
-        selftest_ax_want AX-15 "classify_remote on a merged branch that moved since the last fetch" "$got" "$L_MOVED" || fail=1
+        git update-ref "refs/remotes/${rname}/${rb}" "$old_sha" >/dev/null 2>&1 || true
+        srv_tip=$(git ls-remote --heads "$rname" "refs/heads/${rb}" 2>/dev/null || true); srv_tip="${srv_tip%%	*}"
+        trk_tip=$(git rev-parse --verify --quiet "refs/remotes/${rname}/${rb}" 2>/dev/null || true)
+        if [[ "$srv_tip" != "$new_sha" || "$trk_tip" != "$old_sha" ]]; then
+          echo "self-test: active-exclusions FAILED — the moved-since-the-last-fetch fixture did not build: server tip '${srv_tip}', tracking ref '${trk_tip}', want '${new_sha}' and '${old_sha}' (AX-11 precondition)" >&2
+          fail=1
+        else
+          got=$(selftest_ax_reason remote_recent_reason "$rb")
+          selftest_ax_want AX-11 "a remote branch that moved since the last fetch" "$got" "$L_MOVED" || fail=1
+          got=$( PR_MAP_BUILT=1; PR_MAP_STATE="ok"; PR_MAP_ENTRIES=("${rb}	990005	MERGED"); REMOTE_BRANCH_CANDIDATES=(); classify_remote "$rb" >/dev/null 2>&1; printf '%s' "${REMOTE_BRANCH_CANDIDATES[0]##*	}" )
+          selftest_ax_want AX-15 "classify_remote on a merged branch that moved since the last fetch" "$got" "$L_MOVED" || fail=1
+        fi
         git fetch -q "$rname" >/dev/null 2>&1 || true
         got=$(selftest_ax_reason remote_recent_reason "$rb")
         selftest_ax_want AX-11 "a fetched remote branch with a fresh commit" "$got" "$L_REMOTE" || fail=1
