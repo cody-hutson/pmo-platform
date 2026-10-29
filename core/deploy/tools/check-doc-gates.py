@@ -693,9 +693,9 @@ def norm_row(row: str) -> str:
 #   census      `<kind> census — <definition>`: one kind word — any word, a placeholder-
 #               looking one included (`todo census — …`) — then `census`, an em or en dash,
 #               and a definition carrying a letter or digit outside any `<…>` slot.
-#   invocation  its first word is a file tracked at the release head (a leading `./` set
-#               aside; never absolute, never through a `..` segment, never a directory),
-#               or a tool on PROBE_TOOLS.
+#   invocation  its first word is a file tracked at the release head (normalised, so a
+#               leading `./` is set aside; git tracks no absolute path, none outside the
+#               repository and no directory), or a tool on PROBE_TOOLS.
 # A first word on neither is rejected by design, whatever it spells: a tool the host has
 # installed but the repository does not track and the allowlist does not name included.
 # Between the arms the placeholder list stays as a backstop: a probe that is not a census
@@ -754,11 +754,10 @@ def census_shape(probe: str) -> str | None:
 
 
 def tracked_path(word: str, tracked) -> bool:
-    """True when `word` names a file `tracked(path)` reports tracked at the release head."""
-    path = word[2:] if word.startswith("./") else word
-    if tracked is None or not path or path.startswith(("/", "~")) or ".." in path.split("/"):
-        return False
-    return bool(tracked(posixpath.normpath(path)))
+    """True when `word`, normalised so a leading `./` is set aside, is a file `tracked(path)`
+    reports tracked at the release head. git tracks no absolute path, none outside the
+    repository and no directory, so none of those reads as tracked."""
+    return tracked is not None and bool(word) and bool(tracked(posixpath.normpath(word)))
 
 
 def tracked_files(root: Path, rev: str) -> set[str]:
@@ -1797,11 +1796,25 @@ def _self_test_gcl10(check) -> None:
               "census arm: its kind `<kind>` is not one word" in (err or ""), err)
         _, err = parse_population(prow("pop-u", "none — measured by hand"), tracked)
         check("CL10-SH the placeholder backstop names itself", "(the placeholder backstop)" in (err or ""), err)
+        # CL10-WS: the backstop sets outer punctuation aside before it reads the first word,
+        # so a wrapped placeholder is reported as the placeholder it is. The shape rule
+        # refuses these spellings either way; this arm turns red if that strip is removed or
+        # narrowed, because then only the message changes.
+        for spelling in ("(none)", "[TBD]", "{n/a}", "'none'", '"none"', "none!", "none;", "N/A,"):
+            _, err = parse_population(prow("pop-ws", spelling), tracked)
+            check(f"CL10-WS the wrapped placeholder `{spelling}` is read by the backstop",
+                  f"opens on the placeholder `{spelling}` (the placeholder backstop)" in (err or ""), err)
         for probe, why in (("tools --list", "a directory"), ("../tools/count.py", "a path through `..`"),
                            ("/bin/ls -l", "an absolute path"), ("deploy.sh --check", "the register's bare shorthand")):
             decl, err = parse_population(prow("pop-u", probe), tracked)
             check(f"CL10-SH {why} is not a tracked file: `{probe}` is malformed",
                   decl is None and "invocation arm" in (err or ""), (decl, err))
+        # Given no tracked-file answer, no path is tracked: only a tool on PROBE_TOOLS opens
+        # an invocation, and a census parses as ever.
+        got = [parse_population(prow("pop-nt", p))[1] for p in
+               ("count-widgets --tagged", "python3 tools/x.py --count", "presence census — count by hand")]
+        check("CL10-SH with no tracked-file answer only an allowlisted tool or a census parses",
+              "invocation arm" in (got[0] or "") and got[1] is None and got[2] is None, got)
         # CL10-KW: a census definition parses whatever its kind word is, a placeholder-looking
         # one included, because the census arm is read before the backstop.
         for probe in ("todo census — count the TODO markers by hand",
