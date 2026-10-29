@@ -204,15 +204,23 @@ readonly GATE_ROLLOUT_PHASE="warn"       # shadow|warn|enforce
 readonly GATE_ROLLOUT_ARMED="2026-08-29"
 readonly GATE_ROLLOUT_REVIEW_DAYS=60
 readonly GATE_ROLLOUT_ESCALATE_DAYS=90
-# The G-CL6 / G-CL8 documentation close gates' warn-mode shakedown (Check 28's
-# deadline arm reads these). Same shape as the GATE_ROLLOUT_* block above, one ARMED
+# The G-CL6 / G-CL8 / G-CL10 release-context close gates' warn-mode shakedown (Check
+# 28's deadline arm reads these). Same shape as the GATE_ROLLOUT_* block above, one ARMED
 # constant per gate because each gate graduates on its own decision: a gate's phase
-# is its committed probe sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce), and
-# the review and escalation windows are the GATE_ROLLOUT_* ones, which the warn-log
-# retention floor already binds. Turn a GRADUATION-OVERDUE finding green by recording
-# a decision: set the gate's sentinel to `enforce`, or re-date its ARMED constant.
+# is its committed probe sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce,
+# .github/g-cl10.enforce), and the review and escalation windows are the GATE_ROLLOUT_*
+# ones, which the warn-log retention floor already binds. Turn a GRADUATION-OVERDUE
+# finding green by recording a decision: set the gate's sentinel to `enforce`, or
+# re-date its ARMED constant.
 readonly GCL6_ROLLOUT_ARMED="2026-10-24"
 readonly GCL8_ROLLOUT_ARMED="2026-10-24"
+readonly GCL10_ROLLOUT_ARMED="2026-10-29"
+# From this date a Release Outcome Statement carries a **Limb owners:** line
+# (release-outcome-statement-template.md § 2). G-CL10 arm (ii) keys the date on the
+# milestone's composition lock, or its creation when no lock is recorded: an Outcome
+# without the line is out of scope before this date and a FAIL on or after it, and a
+# line that is present is always graded.
+readonly LIMB_OWNERS_REQUIRED_FROM="2026-10-29"
 # Basename of the whole warn-log family — the hot file and every segment share
 # it. Stated once so a consumer pattern cannot drift from the writer's spelling.
 readonly WARN_LOG_BASENAME="deploy-check-warn-log"
@@ -2972,25 +2980,30 @@ _de_verdict_exit_code() {
   esac
 }
 
-# ─── Documentation close gates (Check 28 / --check-doc-gates) — G-CL6 + G-CL8 ──
-# Check 28's release-context arms — the runner of Gate 13 G-CL6 and G-CL8 (advisory)
+# ─── Release-context close gates (Check 28 / --check-doc-gates) — G-CL6 + G-CL8 + G-CL10 ──
+# Check 28's release-context arms — the runner of Gate 13 G-CL6, G-CL8 and G-CL10 (advisory)
 # gate-efficacy: posture=advisory  enforcement=deploy-time-only  skip-semantics=no-release-context-is-not-evaluated
 #   invariant: for the release one PR merges, every artifact the release plan's Tier-A
-#              section declares was refreshed in <base>..<head> (G-CL6), and every issue of
+#              section declares was refreshed in <base>..<head> (G-CL6); every issue of
 #              the release whose body carries a `### Documentation Impact` section has each
-#              declared row resolved by the G-CL8 row's action-keyed method (G-CL8). Each
-#              failing subject is one row in the shared deploy-check warn log under the
-#              gate's own check id, "g-cl6" or "g-cl8".
+#              declared row resolved by the G-CL8 row's action-keyed method (G-CL8); and
+#              every declared obligation of the release is measured or owned, and every
+#              Outcome limb names its owning work item (G-CL10). Each failing subject is
+#              one row in the shared deploy-check warn log under the gate's own check id,
+#              "g-cl6", "g-cl8" or "g-cl10".
 #   falsification: deploy.sh --self-test group DG — a scratch repository holding one
 #                  unrefreshed Tier-A artifact and one unresolved declaration must write
-#                  exactly two rows, one per gate; the refreshed control writes none.
+#                  exactly two rows, one per gate; the refreshed control writes none. A
+#                  declared obligation at 0% conformance with no owner writes exactly one
+#                  g-cl10 row; the identical record naming an owner that names the
+#                  population writes none.
 #
 # ONE ENGINE, TWO SURFACES (the DD1 shape of _de_compute_verdict). The predicate lives in
 # core/deploy/tools/check-doc-gates.py, which reads commit ids and files and writes
 # nothing. --check-doc-gates (cmd_check_doc_gates) is the surface that has a release:
-# Stage 13 Phase A5 runs it for g-cl6 and Phase A11 for g-cl8, with the release PR. The
-# lifecycle Check 28 inside cmd_check has no release, so it reports these arms N/A and
-# keeps only its template-presence arm and the shakedown deadline arm.
+# Stage 13 Phase A5 runs it for g-cl6, Phase A11 for g-cl8 and Phase A14 for g-cl10, with
+# the release PR. The lifecycle Check 28 inside cmd_check has no release, so it reports
+# these arms N/A and keeps only its template-presence arm and the shakedown deadline arm.
 #
 # <base> AND <head> ARE BOUND TO THE RELEASE, NEVER TO THE CHECKOUT. <head> is the PR's
 # head commit. <base> is `git merge-base <head> <main>`, where <main> is the merge
@@ -3071,6 +3084,32 @@ _dg_population() {
   fi
   _nums="$( { printf '%s\n' "$_kw"; printf '%s\n' "$_list" | /usr/bin/awk '$2 == "false" { print $1 }'; } | /usr/bin/grep -E '^[0-9]+$' | /usr/bin/sort -un | /usr/bin/tr '\n' ' ' )"
   printf 'POPULATION %s %s\n' "$(printf '%s' "$_nums" | /usr/bin/wc -w | /usr/bin/tr -d ' ')" "$_nums"
+}
+
+# _dg_owner_states <dir> <issue-number>...
+#   G-CL10's owner read. For each owning work item it writes, under <dir>, the issue as
+#   the repository host returns it (<N>.json — its state, state_reason, repository and
+#   whether it is a pull request) and its comment bodies (<N>.comments), because an owner
+#   is valid only when its body or comment stream names the population it carries. A read
+#   that fails writes <N>.error instead: NOT-FOUND when the host answered 404, UNREADABLE
+#   for any other failure. The engine reads an UNREADABLE owner as NOT-EVALUATED, never as
+#   a pass, and an owner with no file at all the same way.
+_dg_owner_states() {
+  local _dir="$1" _n _rc
+  shift
+  for _n in "$@"; do
+    _rc=0; gh api "repos/${AUDIT_REPO}/issues/${_n}" > "$_dir/$_n.json" 2> "$_dir/$_n.err" || _rc=$?
+    if [[ "$_rc" -ne 0 ]]; then
+      if /usr/bin/grep -q 'HTTP 404' "$_dir/$_n.err" 2>/dev/null; then
+        printf 'NOT-FOUND\n' > "$_dir/$_n.error"
+      else
+        printf 'UNREADABLE\n' > "$_dir/$_n.error"
+      fi
+      continue
+    fi
+    _rc=0; gh api --paginate "repos/${AUDIT_REPO}/issues/${_n}/comments" --jq '.[].body' > "$_dir/$_n.comments" 2>/dev/null || _rc=$?
+    if [[ "$_rc" -ne 0 ]]; then printf 'UNREADABLE\n' > "$_dir/$_n.error"; fi
+  done
 }
 
 # _dg_emit_row <check-id> <detail> — one row in the shared warn log (warn mode only).
@@ -12205,10 +12244,10 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
-  # ─── Check 28: Documentation close gates (G-CL8 template surfaces + G-CL6/G-CL8 runner) ──
+  # ─── Check 28: Documentation close gates (G-CL8 template surfaces + G-CL6/G-CL8/G-CL10 runner) ──
   # Per the Stage 5 ADR D-EnforcementMechanism (A), extended: Check 28 is the check that
-  # backs gate-criteria-spec.md Gate 13 G-CL8, and it is now also the runner of G-CL6. Three
-  # arms, two surfaces.
+  # backs gate-criteria-spec.md Gate 13 G-CL8, and it is now also the runner of G-CL6 and
+  # G-CL10. Three arms, two surfaces.
   #
   # Arm 1 — template presence (this run, every ./deploy.sh --check; id doc-impact-resolution):
   #   - Verify .github/PULL_REQUEST_TEMPLATE.md carries the `### Documentation Impact` H3 subsection.
@@ -12217,13 +12256,14 @@ sys.stdout.write("".join(out) + "|")
   #     template chooser's config.yml. The set is derived, not listed, so a form added later is checked.
   #     This is the lightweight template-presence check (the leading indicator).
   #
-  # Arm 2 — release-context gates (Stage 13; ids g-cl6 and g-cl8): `deploy.sh --check-doc-gates
-  #   --gate <g-cl6|g-cl8> --pr <N>` runs core/deploy/tools/check-doc-gates.py over the release's
-  #   <base>..<head> and writes one warn-log row per failing subject. The method is the G-CL6 and
-  #   G-CL8 rows' own and is not restated here. This lifecycle run has no release PR, so it reports
+  # Arm 2 — release-context gates (Stage 13; ids g-cl6, g-cl8 and g-cl10): `deploy.sh --check-doc-gates
+  #   --gate <g-cl6|g-cl8|g-cl10> --pr <N>` runs core/deploy/tools/check-doc-gates.py over the release's
+  #   <base>..<head> and writes one warn-log row per failing subject. The method is the G-CL6,
+  #   G-CL8 and G-CL10 rows' own and is not restated here. This lifecycle run has no release PR, so it reports
   #   arm 2 N/A rather than guessing one.
   #
-  # Arm 3 — shakedown deadline (this run): GCL6_ROLLOUT_ARMED / GCL8_ROLLOUT_ARMED plus the
+  # Arm 3 — shakedown deadline (this run): GCL6_ROLLOUT_ARMED / GCL8_ROLLOUT_ARMED /
+  #   GCL10_ROLLOUT_ARMED plus the
   #   GATE_ROLLOUT_* windows, read against today's date (W2 of gate-efficacy-standard.md § Written
   #   sink and terminable shakedown). It needs no drain, so it evaluates in CI and a fresh clone;
   #   it warns at the review window and raises an issue at escalation until each gate's decision
@@ -12231,8 +12271,8 @@ sys.stdout.write("".join(out) + "|")
   #
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks 8/9/10/14/15/18/19/
   # 20/21/22/25/27/29 precedent). Arm 1 graduates through the shared deploy-check mode; arm 2
-  # graduates per gate when its committed sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce)
-  # reads enforce — an operator decision, never auto-promoted by row count.
+  # graduates per gate when its committed sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce,
+  # .github/g-cl10.enforce) reads enforce — an operator decision, never auto-promoted by row count.
   #
   # Cutover: applies to ./deploy.sh --check invocations occurring on or after the
   # introducing release's merge SHA recorded in RELEASE_LOG.md. That
@@ -12240,7 +12280,7 @@ sys.stdout.write("".join(out) + "|")
   # were authored under pre-cutover improvement.yml without the Documentation Impact field;
   # retroactive Check 28 evaluation on its own PRs would fail by construction).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 28: Documentation close gates (template presence; G-CL6/G-CL8 release-context arms run at Stage 13; shakedown deadline)"
+    log "Check 28: Documentation close gates (template presence; G-CL6/G-CL8/G-CL10 release-context arms run at Stage 13; shakedown deadline)"
     local c28_findings=0
     local c28_output=""
     local c28_pr_template=".github/PULL_REQUEST_TEMPLATE.md"
@@ -12293,12 +12333,16 @@ sys.stdout.write("".join(out) + "|")
     fi
 
     # Arm 2 — the release-context gates grade ONE release, so they run at Stage 13 with its PR.
-    log "  N/A:   G-CL6 (per artifact) and G-CL8 (per issue) run at Stage 13 via deploy.sh --check-doc-gates --gate <g-cl6|g-cl8> --pr <N>; this run has no release PR"
+    log "  N/A:   G-CL6 (per artifact), G-CL8 (per issue) and G-CL10 (per declared obligation and Outcome limb) run at Stage 13 via deploy.sh --check-doc-gates --gate <g-cl6|g-cl8|g-cl10> --pr <N>; this run has no release PR"
 
     # Arm 3 — shakedown deadline. Committed constants and today's date only.
     local _c28_g _c28_armed _c28_tok _c28_days
-    for _c28_g in g-cl6 g-cl8; do
-      if [[ "$_c28_g" == "g-cl6" ]]; then _c28_armed="$GCL6_ROLLOUT_ARMED"; else _c28_armed="$GCL8_ROLLOUT_ARMED"; fi
+    for _c28_g in g-cl6 g-cl8 g-cl10; do
+      case "$_c28_g" in
+        g-cl6)  _c28_armed="$GCL6_ROLLOUT_ARMED" ;;
+        g-cl8)  _c28_armed="$GCL8_ROLLOUT_ARMED" ;;
+        g-cl10) _c28_armed="$GCL10_ROLLOUT_ARMED" ;;
+      esac
       _c28_tok=""
       if [[ -f ".github/${_c28_g}.enforce" ]]; then
         _c28_tok="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' ".github/${_c28_g}.enforce" 2>/dev/null | /usr/bin/sed -n 1p | /usr/bin/tr -d '[:space:]' || true)"
@@ -21067,7 +21111,7 @@ EOF
   # The engine's own predicate arms (the retire arms, the None forms, frontmatter exclusion)
   # are its --self-test's, run in CI by the selftest-discovery job; this group owns the EMIT
   # path: rows, ids, mode and exit codes. The sandbox directory is left for the OS to clear.
-  echo "self-test: starting assertion group DG (documentation close gates G-CL6 + G-CL8)" >&2
+  echo "self-test: starting assertion group DG (release-context close gates G-CL6 + G-CL8 + G-CL10)" >&2
   if ! declare -F _dg_report >/dev/null || ! declare -F _dg_emit_row >/dev/null || ! declare -F _dg_verdict_exit_code >/dev/null; then
     _dp_fail "DG-0 the hoisted _dg_report / _dg_emit_row / _dg_verdict_exit_code are not all defined — every DG arm drives them"
   else
@@ -21190,6 +21234,89 @@ EOF
     _dg_report g-cl8 "$_dgt/pop.tsv" 0 enforce 2 > /dev/null
     if [[ "$DG_VERDICT" != "FINDINGS 1 2" ]]; then _dp_fail "DG-8 control: a reconciled count must verdict on the subjects (FINDINGS 1 2), got '$DG_VERDICT'"; fi
 
+    # DG-9..DG-13 — G-CL10 through the REAL engine and the REAL _dg_report: a scratch
+    # repository whose gate-coverage register gains one `prose` row at <head> declaring a
+    # 100% threshold, a milestone description whose one limb names a member, and owners
+    # read from files the way _dg_owner_states writes them. CL10-S and CL10-P below are the
+    # CIAC-4 pair: the same record, differing in its owner line alone.
+    local _d10="$_dgt/repo10" _d10o="$_dgt/owners10" _d10b _d10h _d10r _d10line
+    /bin/mkdir -p "$_d10/core/standards" "$_d10/release/releases/plans" "$_d10o"
+    /usr/bin/git -C "$_d10" init -q
+    /bin/cat > "$_d10/core/standards/gate-efficacy-standard.md" <<'DG10BASE'
+# Fixture standard
+
+## Gate-coverage register (seed)
+
+| Invariant | Enforcing gate | Surface | Posture | Falsification test |
+|---|---|---|---|---|
+| an old prose row | review step | prose | advisory | x |
+DG10BASE
+    /usr/bin/git -C "$_d10" add -A
+    /usr/bin/git -C "$_d10" -c user.name=dg -c user.email=dg@example.invalid commit -qm base
+    _d10b="$(/usr/bin/git -C "$_d10" rev-parse HEAD)"
+    /bin/cat >> "$_d10/core/standards/gate-efficacy-standard.md" <<'DG10HEAD'
+| widgets carry a tag | review step | prose (nothing executes it) | advisory | x **Population:** `dg-pop` — population: every widget; probe: `count-widgets --tagged`; threshold: 100% |
+DG10HEAD
+    printf -- '---\ntitle: P\nmilestone: dg10\n---\n# Plan\n' > "$_d10/release/releases/plans/dg10_RELEASE_PLAN.md"
+    /usr/bin/git -C "$_d10" add -A
+    /usr/bin/git -C "$_d10" -c user.name=dg -c user.email=dg@example.invalid commit -qm head
+    _d10h="$(/usr/bin/git -C "$_d10" rev-parse HEAD)"
+    printf -v _d10r '## Verification Evidence\n\n#### Population record — dg-pop\n\n```\npopulation: every widget\nprobe: count-widgets --tagged @ %s\nexamined: 3 — widgets at the pin\nsensitivity: a known widget -> observed 1\nspecificity: NOT TRIGGERED — a fixture\nstate: fetched\nexempted: 0\n```\n\nconforming: 0\n' "$_d10h"
+    printf '%sowner: none\n' "$_d10r" > "$_dgt/plan10-s.md"
+    printf '%sowner: #7\n' "$_d10r" > "$_dgt/plan10-p.md"
+    printf '### Release Outcome Statement\n\n**AFTER** — x.\n\n**BEFORE** — y.\n\n**Limb owners:** the one limb → #20.\n' > "$_dgt/outcome10.md"
+    printf '### Release Outcome Statement\n\n**AFTER** — x.\n\n**BEFORE** — y.\n\n**Limb owners:** the one limb → not yet named.\n' > "$_dgt/outcome10-bad.md"
+    printf '20\n' > "$_dgt/members10.txt"
+    printf '{"state":"open","body":"carries the residual of dg-pop","repository_url":"https://api.github.com/repos/acme/widget"}\n' > "$_d10o/7.json"
+    printf '{"state":"open","body":"","repository_url":"https://api.github.com/repos/acme/widget"}\n' > "$_d10o/20.json"
+    : > "$_d10o/7.comments"; : > "$_d10o/20.comments"
+    local -a _d10a=(--gate g-cl10 --base "$_d10b" --head "$_d10h" --repo-root "$_d10" --milestone-created 2026-01-01T00:00:00Z
+                    --limbs-required-from 2026-06-01 --members "$_dgt/members10.txt" --owners-dir "$_d10o" --repo acme/widget)
+    local _d10pop _d10g0
+
+    # DG-9 — CL10-S: a declared obligation at 0% conformance with no owner writes exactly
+    # one g-cl10 row, through the shared sink, naming the obligation.
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --record "$_dgt/plan10-s.md" --list > "$_dgt/g10l.tsv" 2>&1 || _dgrc=$?
+    _d10pop="$(/usr/bin/awk -F'\t' '$1 == "SUBJECT" || $1 == "LIMB"' "$_dgt/g10l.tsv" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+    if [[ "$_dgrc" -ne 0 || "$_d10pop" != "2" ]]; then _dp_fail "DG-9 --list must exit 0 and print one obligation and one limb (population 2), got exit $_dgrc, population '$_d10pop'"; fi
+    _d10g0="$(_dp_count "$WARN_LOG" '"check":"g-cl10"')"
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --record "$_dgt/plan10-s.md" > "$_dgt/g10s.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl10 "$_dgt/g10s.tsv" "$_dgrc" warn "$_d10pop" > "$_dgt/g10s.out"
+    if [[ "$DG_VERDICT" != "FINDINGS 1 2" ]]; then _dp_fail "DG-9 g-cl10 over a 0% obligation with no owner must verdict FINDINGS 1 2, got '$DG_VERDICT'"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"g-cl10"')" != "$((_d10g0 + 1))" ]]; then _dp_fail "DG-9 the fixture must write exactly one g-cl10 row"; fi
+    _d10line="$(_dp_line "$WARN_LOG" '"check":"g-cl10"')"
+    if [[ "$_d10line" != *"obligation:dg-pop"* || "$_d10line" != *"unowned: none"* ]]; then _dp_fail "DG-9 the g-cl10 row must name the obligation and the missing owner: $_d10line"; fi
+
+    # DG-10 — CL10-P: the identical record naming an open non-member owner that names the
+    # population writes no row and verdicts CLEAN over both subjects.
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --record "$_dgt/plan10-p.md" > "$_dgt/g10p.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl10 "$_dgt/g10p.tsv" "$_dgrc" warn "$_d10pop" > "$_dgt/g10p.out"
+    if [[ "$DG_VERDICT" != "CLEAN 2" ]]; then _dp_fail "DG-10 g-cl10 over the same 0% obligation owned by an open non-member naming it must verdict CLEAN 2, got '$DG_VERDICT'"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"g-cl10"')" != "$((_d10g0 + 1))" ]]; then _dp_fail "DG-10 an owned obligation must write no g-cl10 row"; fi
+
+    # DG-11 — a subject that vanishes between --list and the grade withholds the gate.
+    printf 'PASS\tg-cl10\tobligation:dg-pop\tx\nSUMMARY\tg-cl10\tevaluated=1\tfail=0\tnot_evaluated=0\tout_of_scope=0\n' > "$_dgt/g10v.tsv"
+    _dg_report g-cl10 "$_dgt/g10v.tsv" 0 warn 2 > /dev/null
+    if [[ "$DG_VERDICT" != "NOT-EVALUATED 1 subject(s) reported for a population of 2" ]]; then _dp_fail "DG-11 one subject reported for a population of two must verdict NOT-EVALUATED, got '$DG_VERDICT'"; fi
+
+    # DG-12 — the plan moves after <head>, as the version stamp moves it: found through its
+    # milestone: frontmatter, never read at the slug path. Control: a slug no plan declares
+    # withholds the obligation as record-unresolved.
+    /bin/mkdir -p "$_d10/release/releases/plans/v9"
+    /usr/bin/git -C "$_d10" mv release/releases/plans/dg10_RELEASE_PLAN.md release/releases/plans/v9/v9.99_RELEASE_PLAN.md
+    /bin/cat "$_dgt/plan10-p.md" >> "$_d10/release/releases/plans/v9/v9.99_RELEASE_PLAN.md"
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --milestone-slug dg10 > "$_dgt/g10m.tsv" 2>&1 || _dgrc=$?
+    if [[ "$_dgrc" -ne 0 || "$(_dp_count "$_dgt/g10m.tsv" $'PASS\tg-cl10\tobligation:dg-pop')" != "1" ]]; then _dp_fail "DG-12 a plan renamed after <head> must be found by its milestone: frontmatter and graded"; fi
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --milestone-slug no-such-slug > "$_dgt/g10n.tsv" 2>&1 || _dgrc=$?
+    if [[ "$(_dp_count "$_dgt/g10n.tsv" 'record-unresolved')" != "1" || "$(_dp_count "$_dgt/g10n.tsv" $'NOT-EVALUATED\tg-cl10\tobligation:dg-pop')" != "1" ]]; then _dp_fail "DG-12 control: a slug no plan declares must withhold the obligation as record-unresolved"; fi
+
+    # DG-13 — an arm-ii FAIL writes one row whose detail opens `limbs:`, so the drain can
+    # count each arm apart.
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10-bad.md" --record "$_dgt/plan10-p.md" > "$_dgt/g10b.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl10 "$_dgt/g10b.tsv" "$_dgrc" warn "$_d10pop" > /dev/null
+    if [[ "$DG_VERDICT" != "FINDINGS 1 2" ]]; then _dp_fail "DG-13 an unowned limb must verdict FINDINGS 1 2, got '$DG_VERDICT'"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"detail":"limbs:outcome-limb:1: limb-unowned')" != "1" ]]; then _dp_fail "DG-13 the arm-ii row's detail must open limbs:"; fi
+
     # DG-6 — structural non-escalation: no arm above moved ISSUES.
     if [[ "$ISSUES" -ne "$_dg_i0" ]]; then _dp_fail "DG-6 the doc-gate emit path must never increment ISSUES, got +$((ISSUES - _dg_i0))"; fi
   fi
@@ -21199,7 +21326,7 @@ EOF
     return 1
   fi
   echo "self-test: PASS" >&2
-  echo "  documentation close gates validated (group DG): DG-1 one unrefreshed Tier-A artifact + one unresolved declaration write exactly two warn-log rows, one under each gate id / DG-2 the refreshed control writes none and verdicts CLEAN / DG-3 enforce writes no row / DG-4 an empty population is NA and an engine failure NOT-EVALUATED, never CLEAN / DG-5 exit 0 has exactly two producers, both CLEAN / DG-6 no arm moves ISSUES / DG-7 a failed population read, a PR with no milestone, an unresolved repository and an unreconciled count each withhold G-CL8 as NOT-EVALUATED, and the reconciled control returns the milestone less status: deferred plus the keyword closes / DG-8 a graded count short of the population withholds the gate even beside a finding" >&2
+  echo "  release-context close gates validated (group DG): DG-1 one unrefreshed Tier-A artifact + one unresolved declaration write exactly two warn-log rows, one under each gate id / DG-2 the refreshed control writes none and verdicts CLEAN / DG-3 enforce writes no row / DG-4 an empty population is NA and an engine failure NOT-EVALUATED, never CLEAN / DG-5 exit 0 has exactly two producers, both CLEAN / DG-6 no arm moves ISSUES / DG-7 a failed population read, a PR with no milestone, an unresolved repository and an unreconciled count each withhold G-CL8 as NOT-EVALUATED, and the reconciled control returns the milestone less status: deferred plus the keyword closes / DG-8 a graded count short of the population withholds the gate even beside a finding / DG-9 a declared obligation at 0% conformance with no owner writes exactly one g-cl10 row naming it / DG-10 the identical record naming an open non-member owner that names the population writes none and verdicts CLEAN / DG-11 a g-cl10 subject missing from the grade withholds the gate / DG-12 a plan renamed after <head> is found by its milestone: frontmatter, and a slug no plan declares withholds the obligation / DG-13 an unowned Outcome limb writes one row whose detail opens limbs:" >&2
   echo "  version-freeness claimed-set column pinning validated (#3724 AC-N, group VF):" >&2
   echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
@@ -21544,37 +21671,49 @@ cmd_check_decision_emission() {
   esac
 }
 
-# ─── Mode: --check-doc-gates (Stage 13 Phase A5 / A11) — G-CL6 + G-CL8 ──────
+# ─── Mode: --check-doc-gates (Stage 13 Phase A5 / A11 / A14) — G-CL6 + G-CL8 + G-CL10 ──
 #
-#   deploy.sh --check-doc-gates --gate g-cl6|g-cl8 --pr <N> [--plan <path>]
+#   deploy.sh --check-doc-gates --gate g-cl6|g-cl8|g-cl10 --pr <N> [--plan <path>] [--list]
 #
-# Runs ONE documentation close gate over the release PR <N> and exits per the contract
-# below. --plan names the release plan G-CL6 reads at <head>; it defaults to
-# release/releases/plans/<milestone-title>_RELEASE_PLAN.md.
+# Runs ONE release-context close gate over the release PR <N> and exits per the contract
+# below. For g-cl6, --plan names the release plan G-CL6 reads at <head>; it defaults to
+# release/releases/plans/<milestone-title>_RELEASE_PLAN.md. For g-cl10 the plan is read
+# from the WORKING TREE, not at <head>: the population records are written after <head>,
+# and the version stamp renames the plan before Stage 13 runs, so --plan names it
+# explicitly or, by default, the engine finds the ONE plan whose `milestone:` frontmatter
+# names the release. g-cl10 --list prints the declared population, the Outcome limbs and
+# the owners, writes nothing, and exits 0 (3 when the engine could not read its inputs).
 #
 #   verdict          sentinel          exit  caller reads it as
 #   CLEAN            any               0     every in-scope subject resolved. SOLE OCCUPANT OF 0.
 #   FINDINGS         != enforce        2     ADVISORY: one warn-log row per failing subject
 #   FINDINGS         enforce           1     BLOCKING: Milestone close stops; no row is written
 #   NA               any               3     no in-scope subject (no Tier-A section; no issue of
-#                                            the release carries the section) — recorded N/A
+#                                            the release carries the section; for g-cl10, no
+#                                            declared obligation and an Outcome out of scope)
+#                                            — recorded N/A
 #   NOT-EVALUATED    any               3     withheld: no PR, gh unavailable, head unfetched,
 #                                            plan missing, a subject the engine could not read,
-#                                            or (g-cl8) a population read that failed, a PR with
-#                                            no milestone, or a count that did not reconcile
+#                                            or (g-cl8, g-cl10) a population read that failed, a
+#                                            PR with no milestone, or a count that did not
+#                                            reconcile; for g-cl10 also an unreadable milestone
+#                                            description, an unresolved plan, an unfetched pin
+#                                            or an unreadable owner
 #   <other>          any               1     unexpected — fail-closed
 cmd_check_doc_gates() {
   validate_workspace
-  local _gate="" _pr="" _plan="" _ctx _base _head _msn _ms _enf="warn" _sent _tok _out _rc _in _npop=""
+  local _gate="" _pr="" _plan="" _ctx _base _head _msn _ms _enf="warn" _sent _tok _out _rc _in _npop="" _list=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --gate) _gate="${2:-}"; shift 2 ;;
       --pr) _pr="${2:-}"; shift 2 ;;
       --plan) _plan="${2:-}"; shift 2 ;;
+      --list) _list=1; shift ;;
       *) log "check-doc-gates: unknown argument '$1'"; exit 1 ;;
     esac
   done
-  if [[ "$_gate" != "g-cl6" && "$_gate" != "g-cl8" ]]; then log "check-doc-gates: --gate must be g-cl6 or g-cl8"; exit 1; fi
+  if [[ "$_gate" != "g-cl6" && "$_gate" != "g-cl8" && "$_gate" != "g-cl10" ]]; then log "check-doc-gates: --gate must be g-cl6, g-cl8 or g-cl10"; exit 1; fi
+  if [[ "$_list" -eq 1 && "$_gate" != "g-cl10" ]]; then log "check-doc-gates: --list is a g-cl10 option"; exit 1; fi
   _sent="${DOC_GATES_ENFORCE_DIR:-.github}/${_gate}.enforce"
   if [[ -f "$_sent" ]]; then
     _tok="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$_sent" 2>/dev/null | /usr/bin/sed -n 1p | /usr/bin/tr -d '[:space:]' || true)"
@@ -21600,6 +21739,51 @@ cmd_check_doc_gates() {
   if [[ "$_gate" == "g-cl6" ]]; then
     _in="${_plan:-release/releases/plans/${_ms}_RELEASE_PLAN.md}"
     _rc=0; python3 "$(dirname "${BASH_SOURCE[0]}")/tools/check-doc-gates.py" --gate g-cl6 --base "$_base" --head "$_head" --plan "$_in" > "$_out" 2>&1 || _rc=$?
+  elif [[ "$_gate" == "g-cl10" ]]; then
+    # G-CL10: the milestone description (arm ii's Outcome and its composition lock) and
+    # its creation date, then the engine's own enumeration — the population _dg_report
+    # reconciles against — then each owner it names, then the grade. Every failed read
+    # withholds the gate; none narrows it.
+    local _eng _created _owners _popline _nums
+    _eng="$(dirname "${BASH_SOURCE[0]}")/tools/check-doc-gates.py"
+    if [[ -z "$_msn" || "${AUDIT_REPO:-}" != */* ]]; then
+      log "check-doc-gates: $_gate NOT-EVALUATED — the PR carries no milestone, or no owner/repo resolved (AUDIT_REPO), so the Outcome cannot be read"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    if ! gh api "repos/${AUDIT_REPO}/milestones/${_msn}" --jq '.description // ""' > "$_wd/outcome.md" 2>/dev/null \
+       || ! _created="$(gh api "repos/${AUDIT_REPO}/milestones/${_msn}" --jq '.created_at' 2>/dev/null)"; then
+      log "check-doc-gates: $_gate NOT-EVALUATED — the milestone ${_msn} description could not be read"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    local -a _g10=(--gate g-cl10 --base "$_base" --head "$_head" --outcome "$_wd/outcome.md"
+                   --milestone-created "$_created" --limbs-required-from "$LIMB_OWNERS_REQUIRED_FROM")
+    if [[ -n "$_plan" ]]; then _g10+=(--record "$_plan"); else _g10+=(--milestone-slug "$_ms"); fi
+    _rc=0; python3 "$_eng" "${_g10[@]}" --list > "$_wd/list.tsv" 2>&1 || _rc=$?
+    if [[ "$_list" -eq 1 ]]; then
+      /bin/cat "$_wd/list.tsv"
+      if [[ "$_rc" -eq 0 ]]; then exit 0; fi
+      exit 3
+    fi
+    if [[ "$_rc" -ne 0 ]]; then
+      log "check-doc-gates: $_gate NOT-EVALUATED — the engine could not list the declared population: $(/usr/bin/sed -n 1p "$_wd/list.tsv" | /usr/bin/tr '\t' ' ')"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    _npop="$(/usr/bin/awk -F'\t' '$1 == "SUBJECT" || $1 == "LIMB"' "$_wd/list.tsv" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+    _owners="$(/usr/bin/awk -F'\t' '$1 == "OWNER" { print $2 }' "$_wd/list.tsv" | /usr/bin/tr '\n' ' ')"
+    log "check-doc-gates: $_gate population — ${_npop} subject(s): declared obligations the release added or modified, and the Outcome's limbs; owners named: ${_owners:-none}"
+    # Release membership decides whether an owner sits inside the closing release, which
+    # carries nothing forward. It is G-CL8's population read, so it fails loud the same way.
+    _popline="$(_dg_population "$_pr" "$_msn" "$_ms")"
+    if [[ "${_popline%% *}" != "POPULATION" ]]; then
+      log "check-doc-gates: $_gate NOT-EVALUATED — release membership (the G-CL8 population read): ${_popline#NOT-EVALUATED g-cl8 population: }"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    read -r _ _ _nums <<< "$_popline"
+    printf '%s\n' "$_nums" > "$_wd/members.txt"
+    /bin/mkdir -p "$_wd/owners"
+    # shellcheck disable=SC2086  # the owner numbers are digits only, split on purpose
+    _dg_owner_states "$_wd/owners" $_owners
+    _rc=0; python3 "$_eng" "${_g10[@]}" --members "$_wd/members.txt" --owners-dir "$_wd/owners" --repo "$AUDIT_REPO" > "$_out" 2>&1 || _rc=$?
   else
     /bin/mkdir -p "$_wd/issues"
     # The population is the release's issues: those the PR closes by keyword AND those on
@@ -22454,7 +22638,7 @@ main() {
       cmd_check_decision_emission
       ;;
     --check-doc-gates)
-      # Stage-13 documentation close gates (G-CL6 / G-CL8): runs ONE gate over one release
+      # Stage-13 release-context close gates (G-CL6 / G-CL8 / G-CL10): runs ONE gate over one release
       # PR and exits per the contract table on cmd_check_doc_gates, the authoring home this
       # comment cites. The engine is core/deploy/tools/check-doc-gates.py; Check 28's
       # lifecycle arm reports these gates N/A because a --check run has no release PR.
@@ -22508,7 +22692,7 @@ main() {
       cmd_report
       ;;
     *)
-      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --check-doc-gates --gate <g-cl6|g-cl8> --pr <N> | --check-required-subset | --self-test | --report]"
+      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --check-doc-gates --gate <g-cl6|g-cl8|g-cl10> --pr <N> [--list] | --check-required-subset | --self-test | --report]"
       echo ""
       echo "Modes:"
       echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
@@ -22531,7 +22715,7 @@ main() {
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (RELEASE_LOG absent or unparseable — withheld, never a pass), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (withheld, never a pass), NOSET=4 advisory (gate asserted nothing — repo defect), INCOMPLETE/NOSET=1 when enforce, unexpected=1) (#4026)"
-      echo "  --check-doc-gates --gate <g-cl6|g-cl8> --pr <N> [--plan <path>]   Stage-13 documentation close gate (G-CL6 or G-CL8 over one release PR; CLEAN=0 and NOTHING ELSE EVER EXITS 0, FINDINGS=2 advisory with one warn-log row per failing subject, NA/NOT-EVALUATED=3 withheld, FINDINGS=1 when .github/<gate>.enforce reads enforce, unexpected=1)"
+      echo "  --check-doc-gates --gate <g-cl6|g-cl8|g-cl10> --pr <N> [--plan <path>] [--list]   Stage-13 release-context close gate (G-CL6, G-CL8 or G-CL10 over one release PR; g-cl10 --list prints the declared population and writes nothing; CLEAN=0 and NOTHING ELSE EVER EXITS 0, FINDINGS=2 advisory with one warn-log row per failing subject, NA/NOT-EVALUATED=3 withheld, FINDINGS=1 when .github/<gate>.enforce reads enforce, unexpected=1)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"
