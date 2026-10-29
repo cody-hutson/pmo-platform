@@ -995,9 +995,11 @@ grep_count() {
 }
 
 # Run-scoped CLOSE-OUT anchor (#3718). Sampled ONCE at script load and reused by
-# every close-out-anchored write: RELEASE_DIGEST, the release-note frontmatter
-# `date:` (and thence CHANGELOG, which derives its date from that frontmatter),
-# and RELEASE_REVERSIONS. Before this, each phase called date_today() freshly, so
+# every close-out-anchored write: RELEASE_DIGEST and CHANGELOG (both through the
+# projector's --closeout-anchor), the release-note frontmatter `date:` when this run
+# scaffolds the note, and RELEASE_REVERSIONS. A note that already exists is not
+# scaffolded and keeps its own date; deploy.sh Check 82 (closeout-anchor-consistency)
+# asserts the three surfaces agree. Before this, each phase called date_today() freshly, so
 # a close-out run spanning a UTC midnight could write TWO different dates into
 # ONE atomic Stage-13 chore PR — the same "sampled more than once" defect the
 # Stage-5 date variable exists to prevent, at a smaller unit of work. Per
@@ -4662,8 +4664,11 @@ phase_scaffold_release_notes() {
     return 0
   fi
 
-  # CLOSE-OUT anchor, run-scoped (#3718). This frontmatter `date:` is ALSO the
-  # source CHANGELOG derives its date from, so the two surfaces cannot disagree.
+  # CLOSE-OUT anchor, run-scoped (#3718): the same CLOSEOUT_ANCHOR_UTC sample the DIGEST
+  # and CHANGELOG entries are emitted with, so a note scaffolded HERE agrees with both by
+  # construction. Nothing here makes them agree: a note that already exists takes the
+  # SKIPPED branch above and keeps the date its author wrote. deploy.sh Check 82
+  # (closeout-anchor-consistency) is what asserts the three agree.
   local date_str
   date_str="$CLOSEOUT_ANCHOR_UTC"
 
