@@ -435,6 +435,58 @@ PV-2  CONTROL — SENSITIVITY ARM.
              criterion carrying a closed copy of the list goes stale the moment the list
              is amended, and then grades a conforming arm as non-conforming.
 
+      PV-2f  OBSERVED ACTING (a control offered as discharging a risk).
+             Where a result is offered as evidence that a CONTROL ACTS — a hook,
+             gate, check, test, CI job, script or deploy step accepted as
+             discharging a risk, as bounding a residual, or as having run on its
+             subject — the sensitivity arm establishes it only when the control is
+             observed acting, which takes both limbs:
+               (1) ON THE PATH WHERE THE CONTROL WILL RUN — the loading context,
+                   runner, entry point and scope it runs under when it is relied
+                   on. A direct invocation of a hook is not an observation of that
+                   hook on a session path where the hook layer does not load. A
+                   fixture exercised through the control's own entry point, on the
+                   path the control runs on, does observe that path — the shape
+                   PV-2d already requires of a probe reachable only by a remote
+                   trigger.
+               (2) AS THE CONTROL'S OWN ACTION ON AN INPUT IT MUST ACT ON — it
+                   blocked, detected, refreshed or measured, and the result is
+                   shown to follow from that input (PV-2a: introduce, confirm,
+                   revert). Where the control's action reaches live state that
+                   only it can reach — a refresh, a deploy, a close-out write —
+                   the input it must act on is that live state, or a sandboxed
+                   copy of it reached through the same entry point; a fixture
+                   alone does not stand in for it. An ARTIFACT of the control is
+                   not this observation: its presence or configuration (an
+                   allowlist entry, a register row, an anchor, a fixture file), an
+                   exit status or a pass token alone, a row it wrote, a verdict
+                   token with no examined population behind it, or a digest match
+                   standing in for the arm it would have run.
+             Limb (1) is WHERE the control ran and limb (2) is WHAT it acted on.
+             They fail independently — a hook never loaded on the session path
+             fails limb (1), a deploy step that exits zero on a surface it cannot
+             refresh fails limb (2) — and the rider holds only when both do. Where
+             the observation is recorded, the record names the path it was taken
+             on: the `path=` field of a Stage 9 Phase A4 line, or the input line of
+             the sensitivity arm in the § 8.2 form. Naming the path does not make a
+             wrong path self-detecting: comparing the recorded path with the path
+             the control runs on is the reviewer read that the wrong-subject
+             boundary in § 8.4 already names. A control that cannot be observed on
+             its run path is not accepted as discharging the risk — the risk is
+             dispositioned without it, never accepted on its artifact — and a zero
+             resting on such an arm is INDETERMINATE naming PV-2f.
+
+             This rider is the acceptor's half of a pair. PV-7 obliges a control to
+             report a state it did not measure; this rider obliges whoever accepts
+             the control not to read its artifact as its action, and a control can
+             meet PV-7 in full and still be accepted on an artifact. The failure it
+             closes is named in `core/standards/gate-efficacy-standard.md` as the
+             accepts-artifact-as-action class. RUNNER: at a release's Stage 9 the
+             hub applies it at Phase A4, graded as gate criterion G-PR4; elsewhere
+             it binds the act of accepting a control, as Rule 15 binds the act of
+             claiming a zero, and no CI job executes it. Like PV-2e, it introduces
+             no new verdict.
+
 PV-3  EXTRACTION.   Show that the bytes the probe actually read were non-empty and
                     untruncated — a byte or line count of the input, not of the
                     output. A probe over an empty or truncated input returns zero for
