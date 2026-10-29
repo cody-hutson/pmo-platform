@@ -686,6 +686,34 @@ def norm_row(row: str) -> str:
     return " ".join(SEGMENT_SPAN.sub("", row).split())
 
 
+# CD-1: no declaration states its population unmeasurable, in any spelling. A probe is
+# an exact invocation or a census definition (`<kind> census — …`); one that OPENS on a
+# placeholder word, or on a bare dash or ellipsis, is neither, and would otherwise reach
+# the close as `not-run` and pass on an owner alone. The test is the first word, whole
+# and case-folded, so a command or census kind that merely begins like one of these
+# (`native-dep-mirror.py`, `notes census —`, `tbd-report`) still parses. Whether any
+# other string really is an invocation stays the close reviewer's read.
+PLACEHOLDER_WORD = re.compile(
+    r"none|nil|null|n/?a|n\.a\.?|tb[acd]|todo|unknown|unmeasur(?:able|ed)|immeasurable|"
+    r"not|no|nothing", re.I)
+BARE_WORD = re.compile(r"[-‐‑‒–—―.…?*_/\\]+")
+
+
+def placeholder_probe(probe: str) -> str | None:
+    """The placeholder `probe` opens on, or None when it opens on a word that can begin an
+    invocation or a census definition."""
+    words = probe.split()
+    if not words:
+        return probe
+    first = words[0]
+    if first[0] in "-‐‑‒–—―" or BARE_WORD.fullmatch(first):
+        return first
+    word = re.split(r"[–—―]", first, maxsplit=1)[0].strip(".,;:!?()[]{}'\"")
+    if not word or PLACEHOLDER_WORD.fullmatch(word):
+        return first
+    return None
+
+
 def parse_population(row: str) -> tuple[dict | None, str | None]:
     """-> (declaration, None) or (None, `declaration-missing` / `declaration-malformed` …)."""
     if "**Population:**" not in row:
@@ -700,9 +728,11 @@ def parse_population(row: str) -> tuple[dict | None, str | None]:
     if not 1 <= threshold <= 100:
         return None, (f"declaration-malformed: threshold {threshold}% is outside 1-100% "
                       "(0% would admit the case the gate exists to fail)")
-    if probe.lower() == "none":
-        return None, ("declaration-malformed: probe `none` is not admitted — a population no "
-                      "instrument reaches is enumerated by hand census")
+    lead = placeholder_probe(probe)
+    if lead is not None:
+        return None, (f"declaration-malformed: probe `{probe}` opens on the placeholder `{lead}` — "
+                      "no declaration states its population unmeasurable; a population no "
+                      "instrument reaches is enumerated by hand census (`<kind> census — …`)")
     return {"name": m.group("name").strip(),
             "members": " ".join(m.group("members").replace("\\|", "|").split()),
             "probe": probe, "threshold": threshold}, None
@@ -1588,6 +1618,33 @@ def _self_test_gcl10(check) -> None:
         check("CL10-0 a 0% threshold FAILs as malformed", got[0] == "FAIL" and "declaration-malformed" in got[1], got)
         got = res_s.get("obligation:pop-x", ("", ""))
         check("CL10-X probe `none` is not admitted (CD-1)", got[0] == "FAIL" and "declaration-malformed" in got[1], got)
+        # CL10-X variants: CD-1 holds for every spelling of "unmeasurable", not only the
+        # literal `none` — a placeholder or bare probe is malformed, so it never reaches
+        # the close as `not-run` and passes on an owner alone.
+        for spelling in ("n/a", "N/A", "tbd", "TBD", "unmeasurable", "unmeasured", "—", "–", "-", "...",
+                         "none — measured by hand", "none.", "no instrument", "not measurable",
+                         "not applicable", "n.a.", "unknown", "— counted by hand"):
+            decl, err = parse_population(f"| R x | review step | prose | advisory | x {_seg('pop-ph', spelling)} |")
+            check(f"CL10-X a placeholder or bare probe `{spelling}` is malformed (CD-1)",
+                  decl is None and (err or "").startswith("declaration-malformed"), (decl, err))
+        # Specificity: an exact invocation or a census definition parses, including one whose
+        # first word merely begins like a placeholder.
+        for probe in ("presence census — count the lines by hand", "count-widgets --tagged", "ls e \\| wc -l",
+                      "python3 release/tools/native-dep-mirror.py --self-test", "notes census — count the notes by hand",
+                      "nothing-to-see.sh --count", "tbd-report --list", "nodes census — count the nodes by hand"):
+            decl, err = parse_population(f"| R x | review step | prose | advisory | x {_seg('pop-ok', probe)} |")
+            check(f"CL10-X control: the probe `{probe}` parses", err is None and decl is not None, (decl, err))
+        # End to end, the shape the finding reproduced: an `n/a` probe whose record is
+        # unmeasured and whose owner names the population FAILs, never PASSes on the owner.
+        na_row = ("| R-NA a placeholder probe | review step | prose | advisory | x "
+                  f"{_seg('pop-na', 'n/a')} |")
+        na_subj = gcl10_subjects([na_row], [], None,
+                                 (_rec("pop-na", "n/a", head, state="not-run", owner="#7"), None),
+                                 outcome_ok, "2026-01-01T00:00:00Z", "2026-06-01")
+        na_own = {7: {"state": "open", "reason": "", "pr": False, "repo_url": issue, "text": "carries pop-na"}}
+        got = (eval_gcl10_obligations(r, head, na_subj, members, na_own, "acme/widget") or [("", "", "")])[0]
+        check("CL10-X end to end: an owned `n/a` declaration FAILs as malformed",
+              got[0] == "FAIL" and "declaration-malformed" in got[2], got)
         got = res_s.get("obligation:pop-c", ("", ""))
         check("CL10-CN a census-definition probe binds and grades", got[0] == "PASS", got)
         check("CL10-N a row whose only change is its segment is not in the population",
