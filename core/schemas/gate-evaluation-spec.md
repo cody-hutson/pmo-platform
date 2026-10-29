@@ -219,7 +219,7 @@ Dimensions cited from [`pipeline/stage-09-plan-review.md`](../../release/referen
 | Judgment dimension (shard §7) | Anchored structural criterion (G-PR*) | Anchoring rationale |
 |---|---|---|
 | evidence completeness | G-PR1 (evidence package complete, Phase A1-A6) + G-PR2 (all upstream reports present) | Dimension is the qualitative read of the same evidence-assembly surface G-PR1/G-PR2 check structurally-present. |
-| risk assessment quality | G-PR4 (risk register reviewed — all mitigated/accepted) | Structural check = "flag set"; judgment = "is the mitigation *sound*". |
+| risk assessment quality | G-PR4 (risk register reviewed — all mitigated/accepted; a census classing every risk; each control-backed disposition observed acting) | Structural check = "flag set", a Phase A4 control census covering every risk, and an independently observed Phase A4 line for each control-backed risk; judgment = "is the mitigation *sound*" — including whether the census classed each risk soundly and whether each line records an observation made on the path where the control runs. |
 | decision clarity | G-PR6 (decision record posted) + G-PR7 (goal-conformance ALIGNED/DIVERGED/MISALIGNED — itself `Check=judgment`) | G-PR7 is the sole existing late-stage `Check=judgment` criterion; "decision clarity" is its Layer-2 dimensional expression. |
 | handoff readiness | G-PR3 (PR scope matches plan) + G-PR5 (deployment-readiness checklist all PASS) | Judgment read of whether the Stage 9->12 handoff (mergeable PR, conformant scope) is *execution-ready*, not merely present. |
 
