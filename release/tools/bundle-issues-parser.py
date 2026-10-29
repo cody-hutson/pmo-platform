@@ -58,7 +58,8 @@ one `MEMBER` line per issue to which G3-20 applies, with its `doc_impact` — an
 `SUMMARY` line carrying the examined and conforming counts; an issue outside the
 population is counted on the SUMMARY line and not listed. A parse failure on another
 field is not its concern, so it exits 0 on any completed run; 2 as above; 3 when the
-engine could not be loaded, because then nothing was graded.
+engine could not be loaded, because then nothing was graded: the SUMMARY line then
+carries no conforming count, and a NOT-EVALUATED line follows it.
 """
 
 import argparse
@@ -502,11 +503,15 @@ def emit_doc_impact_population(pairs: List[Tuple["IssueRecord", str]]) -> Tuple[
         conforming += r.doc_impact == "gradable"
         withheld += r.doc_impact == "not-evaluated"
         lines.append(f"MEMBER\t#{r.number}\t{cell}\t{r.doc_impact}\t{' '.join(r.doc_impact_detail.split())}")
-    lines.append(f"SUMMARY\t{DOC_IMPACT_POPULATION}\texamined={examined}\tconforming={conforming}"
-                 f"\tnot_evaluated={withheld}\tout_of_population={outside}")
     unloaded = _load_doc_gates()[0] is None
+    # Membership is read from labels and needs no engine, so `examined` stays; with the
+    # engine unloaded nothing was graded, so the conforming counter is ABSENT, never 0.
+    counted = "" if unloaded else f"\tconforming={conforming}"
+    lines.append(f"SUMMARY\t{DOC_IMPACT_POPULATION}\texamined={examined}{counted}"
+                 f"\tnot_evaluated={withheld}\tout_of_population={outside}")
     if unloaded:
-        lines.append(f"NOT-EVALUATED\t{DOC_IMPACT_POPULATION}\tengine not loaded: {_load_doc_gates()[1]}")
+        lines.append(f"NOT-EVALUATED\t{DOC_IMPACT_POPULATION}\tengine not loaded: {_load_doc_gates()[1]}"
+                     f"; this is not a clean result")
     return "\n".join(lines), (3 if unloaded else 0)
 
 
@@ -1151,7 +1156,7 @@ Stuff.
     if set(DOC_IMPACT_STATES) != {"gradable", "ungradable", "misheaded", "absent", "not-evaluated"}:
         failures.append(f"DI states drifted: {DOC_IMPACT_STATES}")
 
-    # ---- DP-1..DP-3 — the G3-20 live population (--doc-impact-population) ------
+    # ---- DP-1..DP-4 — the G3-20 live population (--doc-impact-population) ------
     _apply = {
         "improvement": (["improvement", "status: bundled"], "", "req"),
         "bug": (["bug"], "", "req"),
@@ -1191,6 +1196,27 @@ Stuff.
     _verdicts = {l.split("\t")[1]: l.split("\t")[3] for l in _text.splitlines() if l.startswith("MEMBER\t")}
     if _verdicts != {"#11": "gradable", "#12": "ungradable"}:
         failures.append(f"DP-3 member verdicts: {_verdicts}")
+    # DP-4 — engine outage: exit 3; the one SUMMARY line keeps `examined=` and carries NO
+    # `conforming=` (a counter on a non-measuring status is absent, never 0); every member
+    # is withheld; the NOT-EVALUATED line says it is not a clean result. DP-2 is the pair:
+    # the same raws with the engine loaded carry the counter and exit 0.
+    _engine = globals()["DOC_GATES_ENGINE"]
+    globals()["DOC_GATES_ENGINE"] = Path("/nonexistent/check-doc-gates.py")
+    try:
+        _text4, _code4 = emit_doc_impact_population([(build_issue_record(r), r["body"]) for r in _raws])
+    finally:
+        globals()["DOC_GATES_ENGINE"] = _engine
+    _lines4 = _text4.splitlines()
+    _summary4 = [l for l in _lines4 if l.startswith("SUMMARY\t")]
+    _ne4 = [l for l in _lines4 if l.startswith("NOT-EVALUATED\t")]
+    _withheld4 = {l.split("\t")[3] for l in _lines4 if l.startswith("MEMBER\t")}
+    if (_code4 != 3 or len(_summary4) != 1 or "\texamined=2\t" not in _summary4[0]
+            or "conforming=" in _summary4[0] or _withheld4 != {"not-evaluated"}
+            or len(_ne4) != 1 or "this is not a clean result" not in _ne4[0]):
+        failures.append(f"DP-4 engine outage: code={_code4} summary={_summary4} members={_withheld4} "
+                        f"not_evaluated={_ne4}")
+    if _load_doc_gates()[0] is None:
+        failures.append("DP-4 restore: the real engine must still load after the outage arm")
 
     if failures:
         print("SELF-TEST FAIL:", file=sys.stderr)
