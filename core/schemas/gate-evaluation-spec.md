@@ -246,7 +246,7 @@ Dimensions cited from [`pipeline/stage-13-close.md`](../../release/references/pi
 | carry-forward accuracy | G-CL1 (documented-deferred branch) + inherited carry-forward-items-tracked (field-lifecycle Gate 13 Exit) | Whether deferrals are *correctly* carried, not merely listed. |
 | operational deployment thoroughness | G-CL5 (operational deployment manifest fully executed, Phase B-OPS) | Structural = "manifest entries PASS"; judgment = "was the operational rollout *complete*". |
 
-**Non-omission note.** Stage 13's warn-mode criteria **G-CL6/G-CL7/G-CL8** (design-artifact refresh, goal-attainment, doc-impact) are conditional/warn-mode and carry their own verdict semantics + warn-log escape hatches; they are deliberately NOT folded under a 1-5 base dimension (doing so would double-govern them). The four base dims anchor to the unconditional G-CL1..G-CL5 + inherited criteria.
+**Non-omission note.** Stage 13's warn-mode criteria **G-CL6/G-CL7/G-CL8/G-CL9/G-CL10** (design-artifact refresh, goal-attainment, doc-impact, ADR ratification flips, declared-obligation measurement) are conditional/warn-mode and carry their own verdict semantics + warn-log escape hatches; they are deliberately NOT folded under a 1-5 base dimension (doing so would double-govern them). The four base dims anchor to the unconditional G-CL1..G-CL5 + inherited criteria.
 
 ---
 

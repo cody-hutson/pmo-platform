@@ -349,7 +349,7 @@ Stage 3 Phase B3 milestone-description authoring populates these fields, consoli
 
 | Field | Source spec | Required? | Format |
 |---|---|---|---|
-| **Outcome (AFTER + BEFORE)** | [`release-outcome-statement-template.md`](../specs/release-outcome-statement-template.md) | REQUIRED | `### Release Outcome Statement` H3 with `**AFTER**` + `**BEFORE**` (1-3 sentences each); OPTIONAL `**Actor(s):**` + `**Success Indicator:**` |
+| **Outcome (AFTER + BEFORE)** | [`release-outcome-statement-template.md`](../specs/release-outcome-statement-template.md) | REQUIRED | `### Release Outcome Statement` H3 with `**AFTER**` + `**BEFORE**` (1-3 sentences each) + `**Limb owners:**` (each AFTER limb → its owning work item); OPTIONAL `**Actor(s):**` + `**Success Indicator:**` |
 | **Release Class** | [`release-class-taxonomy.md`](../specs/release-class-taxonomy.md) | REQUIRED | `## Release Class` H2 with `Class:` field (enum: routine / novel / cross-cutting / hotfix) + non-empty `Rationale` sub-field |
 | **Scope (tickets + sub-slices)** | This doctrine § 3 Step 2 + § 4 | REQUIRED | Ticket list (`#N`) + pts + sub-slice list (when tight-merge applied) |
 | **Internal sequence** | This doctrine § 3 Step 6 | REQUIRED | Ordered ticket list with layer annotations (foundation → infra → skill-core → eval) |
