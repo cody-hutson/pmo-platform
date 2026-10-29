@@ -24,6 +24,13 @@ WHAT IT IS
     authority and this file implements them. Where this file and those rows disagree, the
     rows win and this file is the defect.
 
+    `grade_declaration()` is the G-CL8 declaration grammar alone — no git, no network, no
+    release range — and the one implementation of it: `eval_issue` adds the resolution
+    pass at close, and Gate 3 criterion G3-20 reads it at the `status: bundled`
+    transition through `release/tools/bundle-issues-parser.py`, which loads this file by
+    path. The self-test's GD-PARITY arm holds the two to the same verdict whenever
+    resolution is held constant.
+
 WHAT IT IS NOT
     It writes nothing. It never touches the warn log, the network or GitHub: deploy.sh
     resolves the release context (the PR, <base>, <head>, the issue bodies, the milestone
@@ -474,19 +481,39 @@ def excerpt(line: str, n: int = 80) -> str:
     return line if len(line) <= n else line[: n - 1] + "…"
 
 
-def eval_issue(root: Path, base: str, head: str, body: str) -> tuple[str, str]:
+def grade_declaration(body: str) -> tuple[str, str, list[tuple[str, str, str, str]] | None, list[str], int]:
+    """The G-CL8 declaration grammar alone: no git, no network, no release range.
+
+    -> (verdict, detail, rows, findings, prose)
+        verdict   OUT-OF-SCOPE (no `### Documentation Impact` section) | FAIL (a grammar
+                  finding) | PASS (a declaration the close gate can grade)
+        detail    the grammar's own message
+        rows      None when the verdict is already final without a row pass (no section, an
+                  empty field, the None forms, no row at all); otherwise every declared row
+                  in declaration order as (path, action, kind, finding), kind one of
+                  `graded` (left for the resolution pass), `out-of-scope`, `unknown-action`
+                  or `placeholder` (the last three carry their message in `finding`)
+        findings  the line-level grammar findings: unparseable, orphan action cell,
+                  unresolved-assumption line
+        prose     commentary lines ignored
+
+    This is the one implementation of the grammar: `eval_issue` adds the resolution pass
+    on top of it at close, and the bundle gate G3-20 reads it at the `status: bundled`
+    transition through `release/tools/bundle-issues-parser.py`, so the two gates cannot
+    disagree about a declaration's grammar."""
     content = doc_impact_section(body)
     if content is None:
-        return "OUT-OF-SCOPE", "body carries no ### Documentation Impact section"
+        return "OUT-OF-SCOPE", "body carries no ### Documentation Impact section", None, [], 0
     if not content:
-        return "FAIL", "Documentation Impact section is present but empty"
+        return "FAIL", "Documentation Impact section is present but empty", None, [], 0
     if len(content) == 1 and content[0].lstrip("-*+ ").startswith("None"):
         line = content[0].lstrip("-*+ ").strip("`")
         if EXPLICIT_NONE.match(line) and EXPLICIT_NONE.match(line).group(1).strip():
-            return "PASS", "explicit None with a rationale"
-        return "FAIL", "None without the exact `None — no documentation impact (rationale: …)` form"
+            return "PASS", "explicit None with a rationale", None, [], 0
+        return ("FAIL", "None without the exact `None — no documentation impact (rationale: …)` form",
+                None, [], 0)
     lines = [re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", raw).replace("`", "") for raw in content]
-    fails, notes, unevaluated, rows, prose = [], [], [], [], 0
+    findings, parsed, prose = [], [], 0
     for k, line in enumerate(lines):
         if "|" in line:
             if is_separator(line) or (line.strip().startswith("|") and k + 1 < len(lines)
@@ -494,35 +521,64 @@ def eval_issue(root: Path, base: str, head: str, body: str) -> tuple[str, str]:
                 continue                                 # a table's header or separator row
             got, orphans = parse_row_line(line)
             if not got:
-                fails.append(f'unparseable declaration line "{excerpt(line)}": it carries "|" '
-                             "but names no `path | action | reason` row")
+                findings.append(f'unparseable declaration line "{excerpt(line)}": it carries "|" '
+                                "but names no `path | action | reason` row")
                 continue
-            rows += got
-            fails += [f'a `{o}` action cell with no path before it, on "{excerpt(line)}"' for o in orphans]
+            parsed += got
+            findings += [f'a `{o}` action cell with no path before it, on "{excerpt(line)}"' for o in orphans]
         elif ASSUMPTION_MARKER.search(line):
-            fails.append(f'unresolved declaration "{excerpt(line)}": an `[ASSUMPTION – CONFIRM]` '
-                         "line in the field is a conditional declaration, resolved at Stage 5 — "
-                         "rewrite it as a `path | action | reason` row or remove it")
+            findings.append(f'unresolved declaration "{excerpt(line)}": an `[ASSUMPTION – CONFIRM]` '
+                            "line in the field is a conditional declaration, resolved at Stage 5 — "
+                            "rewrite it as a `path | action | reason` row or remove it")
         else:
             prose += 1          # commentary: the line carries no "|"
-    if not rows and not fails:
-        return "FAIL", ("no `path | action | reason` row, and the field is not exactly "
-                        "`None — no documentation impact (rationale: …)`")
-    graded = 0
-    for path, action_cell in rows:
+    if not parsed and not findings:
+        return ("FAIL", "no `path | action | reason` row, and the field is not exactly "
+                        "`None — no documentation impact (rationale: …)`", None, [], prose)
+    rows: list[tuple[str, str, str, str]] = []
+    for path, action_cell in parsed:
         path = "core/CLAUDE.md.template" if path == "CLAUDE.md" else path
         action = norm_action(action_cell)
         if action not in ACTIONS:
-            fails.append(f"{path}: unknown action `{action_cell}` — the action is exactly one of "
+            rows.append((path, action, "unknown-action",
+                         f"{path}: unknown action `{action_cell}` — the action is exactly one of "
                          "link, create, update or retire; a qualifier belongs in the reason, and a "
-                         "conditional declaration is resolved at Stage 5")
+                         "conditional declaration is resolved at Stage 5"))
+        elif path.startswith(OUT_OF_SCOPE_PREFIXES):
+            rows.append((path, action, "out-of-scope", f"{path}: out of the G-CL8 corpus scope"))
+        elif re.search(r"[<>*{}]", path):
+            rows.append((path, action, "placeholder", f"{path} | {action}: placeholder path"))
+        else:
+            rows.append((path, action, "graded", ""))
+    fails = findings + [f for _, _, kind, f in rows if kind in ("unknown-action", "placeholder")]
+    if fails:
+        return "FAIL", "; ".join(fails), rows, findings, prose
+    notes = [f for _, _, kind, f in rows if kind == "out-of-scope"]
+    extra = notes + ([f"{prose} commentary line(s) ignored"] if prose else [])
+    gradable = sum(1 for _, _, kind, _ in rows if kind == "graded")
+    return ("PASS", f"{gradable} declared row(s) gradable" + (f" ({'; '.join(extra)})" if extra else ""),
+            rows, findings, prose)
+
+
+def eval_issue(root: Path, base: str, head: str, body: str) -> tuple[str, str]:
+    """G-CL8 for one issue body: the declaration grammar (`grade_declaration`), then the
+    resolution pass over the release range. Findings read in declaration order — the
+    line-level grammar findings first, then each row's finding, grammar or resolution."""
+    verdict, detail, rows, findings, prose = grade_declaration(body)
+    if rows is None:
+        return verdict, detail
+    fails, notes, unevaluated = list(findings), [], []
+    graded = 0
+    for path, action, kind, finding in rows:
+        if kind == "unknown-action":
+            fails.append(finding)
             continue
-        if path.startswith(OUT_OF_SCOPE_PREFIXES):
-            notes.append(f"{path}: out of the G-CL8 corpus scope")
+        if kind == "out-of-scope":
+            notes.append(finding)
             continue
         graded += 1
-        if re.search(r"[<>*{}]", path):
-            fails.append(f"{path} | {action}: placeholder path")
+        if kind == "placeholder":
+            fails.append(finding)
             continue
         if action == "retire":
             res, why = verify_retire(root, base, head, path)
@@ -1301,6 +1357,67 @@ def self_test() -> int:
                   got[0] == "FAIL" and "status at head is absent" in got[1], got)
         else:
             failures.append("retire arms not run: blast-radius.sh is not reachable from this file")
+
+        # GD-PARITY — grade_declaration() is eval_issue's grammar, split out so the bundle
+        # gate G3-20 can read it with no release range. The oracle is the code's structure,
+        # not a list of message phrases: with the resolution functions held at "resolved",
+        # the two must render the same verdict for every fixture body above, OUT-OF-SCOPE
+        # included. The retire bodies are in the corpus, so a grammar the split dropped
+        # from a retire row is caught too.
+        corpus = [b for b, _ in cases.values()]
+        corpus += ["### Documentation Impact\n" + s.format(d=d) + "\n"
+                   for s in shapes.values() for d in ("core/standards/s.md", "core/diagrams/a.md")]
+        corpus += [("### Documentation Impact" + ("\r\n" if n == "crlf" else "\n") + t
+                    + ("\r\n" if n == "crlf" else "\n")) for n, t in comments.items()]
+        corpus += [f"### Documentation Impact\n{hid}\n{vis}\n", f"### Documentation Impact\n### Example\n{vis}\n",
+                   "### Documentation Impact\ncore/diagrams/a.md | update | x\nprojects/demo/notes.md | update | x\n",
+                   "### Documentation Impact\ncore/diagrams/a.md | update | x\n- [ASSUMPTION – CONFIRM] " + note + "\n",
+                   "### Documentation Impact\ncore/diagrams/a.md | update | x\n- " + note + "\n"]
+        corpus += [f"### Documentation Impact\n{p} | {a} | x\n" for p, a in (
+            ("core/diagrams/fm.md", "update"), ("core/standards/new-blank.md", "create"),
+            ("core/diagrams/fm.md", "link"), ("core/diagrams/", "update"), ("packages/same.skill", "update"),
+            ("core/standards/retire-me.md", "retire"), ("docs/old-guide.md", "retire"),
+            ("core/assets/retired.skill", "retire"), ("packages/p.skill", "retire"),
+            ("docs/new-guide.md", "retire"), ("core/standards/s.md", "retire"),
+            ("core/process-catalog/p.md", "retire"), ("core/standards/old.md", "retire"))]
+        mixed = ("### Documentation Impact\ncore/standards/s.md | update | x\n"
+                 "core/diagrams/a.md | rewrite | y\n")
+        corpus.append(mixed)
+        g = globals()
+        held = {k: g[k] for k in ("exists_at", "changed_in_release", "body_changed_in_release", "verify_retire")}
+        g["exists_at"] = lambda *_: True
+        g["changed_in_release"] = lambda *_: True
+        g["body_changed_in_release"] = lambda *_: True
+        g["verify_retire"] = lambda *_: ("PASS", "held resolved")
+        try:
+            split = [(b, grade_declaration(b)[0], eval_issue(r, base, head2, b)[0]) for b in corpus]
+        finally:
+            g.update(held)
+        apart = [(excerpt(b.replace("\n", " ⏎ ")), gv, ev) for b, gv, ev in split if gv != ev]
+        check(f"GD-PARITY grade_declaration and eval_issue agree on all {len(corpus)} fixture bodies "
+              "with resolution held constant", not apart, apart)
+        check("GD-PARITY control: the corpus carries every verdict the grammar can render",
+              {gv for _, gv, _ in split} == {"PASS", "FAIL", "OUT-OF-SCOPE"}, {gv for _, gv, _ in split})
+        # The discriminating pair, un-stubbed: the same body, gradable but unresolved — the
+        # grammar passes it and the close gate fails it, so resolution was not folded in.
+        body = cases["unresolved"][0]
+        got = (grade_declaration(body)[0], eval_issue(r, base, head2, body)[0])
+        check("GD-PARITY unresolved: gradable at Bundle, unresolved at close", got == ("PASS", "FAIL"), got)
+        # Declaration order is the detail order: a row's resolution finding stays ahead of
+        # a later row's grammar finding, and the grammar alone reports only its own.
+        got = eval_issue(r, base, head2, mixed)
+        check("GD-PARITY mixed: findings read in declaration order",
+              got[0] == "FAIL" and 0 <= got[1].find("core/standards/s.md | update: unchanged")
+              < got[1].find("core/diagrams/a.md: unknown action"), got)
+        got = grade_declaration(mixed)[:2]
+        check("GD-PARITY mixed: the grammar reports the unknown action and no resolution finding",
+              got[0] == "FAIL" and "unknown action" in got[1] and "unchanged" not in got[1], got)
+        # The placeholder path is grammar, so the grammar alone fails it; the same row with
+        # a real path is gradable (control).
+        got = grade_declaration("### Documentation Impact\ncore/standards/<name>.md | update | x\n")[:2]
+        check("GD-PARITY a placeholder path is a grammar FAIL", got[0] == "FAIL" and "placeholder path" in got[1], got)
+        got = grade_declaration("### Documentation Impact\ncore/standards/name.md | update | x\n")[:2]
+        check("GD-PARITY placeholder control: a real path is gradable", got == ("PASS", "1 declared row(s) gradable"), got)
 
     _self_test_gcl10(check)
 
