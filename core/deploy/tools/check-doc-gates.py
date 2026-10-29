@@ -1601,6 +1601,36 @@ def _self_test_gcl10(check) -> None:
         check("CL10-R no record FAILs", got[0] == "FAIL" and "record-missing" in got[1], got)
         got = grade(common + _rec("pop-s", "count-widgets --all", head, conforming="3"))[0]["obligation:pop-s"]
         check("CL10-B a record bound to another probe FAILs", got[0] == "FAIL" and "record-unbound" in got[1], got)
+        # The four arm-(i) branches no other fixture reaches: the record's population: line,
+        # a conforming count above examined, a name keying two rows, and an empty record.
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", head, conforming="3").replace(
+            "population: members of pop-s", "population: members of pop-other"))[0]["obligation:pop-s"]
+        check("CL10-BP a record bound to another population: line FAILs",
+              got[0] == "FAIL" and "record-unbound" in got[1] and "population: line" in got[1], got)
+        got = grade(common + _rec("pop-s", "count-widgets --tagged", head, examined="2",
+                                  conforming="3"))[0]["obligation:pop-s"]
+        check("CL10-CX a conforming count above examined FAILs as malformed",
+              got[0] == "FAIL" and "record-malformed" in got[1] and "exceeds examined" in got[1], got)
+        dup = [f"| R-D1 first | review step | prose | advisory | x {_seg('pop-d', 'count-d --one')} |",
+               f"| R-D2 second | review step | prose | advisory | x {_seg('pop-d', 'count-d --two')} |"]
+        dres = eval_gcl10_obligations(r, head, gcl10_subjects(dup, [], None, (common, None), outcome_ok,
+                                                              "2026-01-01T00:00:00Z", "2026-06-01"),
+                                      members, {}, "acme/widget")
+        check("CL10-DUP a population name keying two register rows FAILs on both rows",
+              len(dres) == 2 and all(v == "FAIL" and "declaration-duplicate" in d for v, _, d in dres), dres)
+        one = [s for s in gcl10_subjects(dup[:1], [], None, (common, None), outcome_ok,
+                                         "2026-01-01T00:00:00Z", "2026-06-01") if s["arm"] == "i"]
+        check("CL10-DUP control: the same name on one row is not a duplicate",
+              len(one) == 1 and one[0]["err"] is None, one)
+        for owner, want in (("none", ("FAIL", "unowned: none — unmeasured (examined 0)")),
+                            ("#7", ("PASS", "owned-residual #7 — unmeasured (examined 0)"))):
+            try:
+                got = grade(common + _rec("pop-s", "count-widgets --tagged", head, examined="0 — counted at the pin",
+                                          conforming="0", owner=owner))[0]["obligation:pop-s"]
+            except ZeroDivisionError as exc:                  # the branch gone: 0 members reach the percentage
+                got = ("RAISED", repr(exc))
+            check(f"CL10-EZ a record that examined 0 members is unmeasured and needs an owner (owner {owner})",
+                  got[0] == want[0] and want[1] in got[1], got)
         got = grade(common + _rec("pop-s", "count-widgets --tagged", base, conforming="3"))[0]["obligation:pop-s"]
         check("CL10-PO a pin that does not contain <head> FAILs", got[0] == "FAIL" and "pin-outside-release" in got[1], got)
         got = grade(common + _rec("pop-s", "count-widgets --tagged", "f" * 40, conforming="3"))[0]["obligation:pop-s"]
