@@ -450,7 +450,7 @@ The CIAC lint on the Stage-4 body read `declared=4 parsed=4 clean=1 declared-def
 | #4919 | AC-3 | `grep -c -F "verify a guard fires where it will execute" release/references/pipeline/stage-09-plan-review.md` at least 1 | at least 1 (baseline 0; the same phrase reads 1 in release/releases/RELEASE_LOG.md) |
 | #4417 | AC-1 | declared, verification deferred to the self-test arm Stage 5 names for a seeded post-declaration divergence, re-run at Stage 7 | finding names the version and the disagreeing surfaces |
 | #4417 | AC-2 | declared, verification deferred to the same self-test run with no network access | completes offline |
-| #4417 | AC-3 | declared, verification deferred to the self-test arm where two surfaces agree and the third diverges | flagged |
+| #4417 | AC-3 | declared, verification deferred to the 3-way self-test arm where two surfaces agree and the third diverges, the both-drifted-together case a 2-way compare reads as agreement | flagged |
 | #4417 | AC-4 | declared, verification deferred to the self-test arm over a grandfathered divergent version | silent |
 | #4417 | AC-5 | declared, verification deferred to the flip-decision row for the new check in core/standards/gate-efficacy-standard.md | warn posture, written sink and deadline stated |
 
