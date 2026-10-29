@@ -1,6 +1,6 @@
 ---
 title: Release Outcome Statement Template
-purpose: Per-release pre-execution goal anchor declared at Stage 3 Phase B3 and embedded in GitHub Milestone description as `### Release Outcome Statement` H3. Carries REQUIRED AFTER/BEFORE paragraphs + OPTIONAL Actor(s) / Success Indicator. Consumed at Stage 9 Plan Review (G-PR7 goal-conformance) and Stage 13 Close (QC4-06 + G-CL7 goal-attainment).
+purpose: Per-release pre-execution goal anchor declared at Stage 3 Phase B3 and embedded in GitHub Milestone description as `### Release Outcome Statement` H3. Carries REQUIRED AFTER/BEFORE paragraphs and a REQUIRED Limb owners line + OPTIONAL Actor(s) / Success Indicator. Consumed at Stage 9 Plan Review (G-PR7 goal-conformance) and Stage 13 Close (QC4-06 + G-CL7 goal-attainment; G-CL10 limb owners).
 applies_to: All Milestones created going forward.
 parallel_to: release-class-taxonomy.md (Outcome shape selects from Release Class per § 4); release-readiness-scan-spec.md (dim 3 reads Outcome Statement); release-notes-standard.md (Outcome is the pre-execution anchor that Release Notes deliver against post-merge).
 distinguished_from: Roadmap Capability Outcome Statement (§ 9 disambiguation) — roadmap Outcomes span 5+ releases; this template is per-single-release.
@@ -53,6 +53,8 @@ The Outcome serves as the binding intent reference at Stage 9 Plan Review (goal-
 **Actor(s):** <optional — who/what executes the AFTER capability; defaults to "hub + release-class-appropriate spokes" when omitted>
 
 **Success Indicator:** <optional — one observable signal at Stage 13 that confirms goal attainment; verifiable evidence the AFTER state holds. When omitted, Stage 13 QC4-06 falls back to judgment-only assessment.>
+
+**Limb owners:** <each limb of AFTER → the work item that owns it: `<limb> → #N · <limb> → #N`; every limb names at least one owning work item>
 ```
 
 ### 2.2 Field constraints
@@ -64,6 +66,7 @@ The Outcome serves as the binding intent reference at Stage 9 Plan Review (goal-
 | **BEFORE** paragraph | 1–3 sentences; current-state baseline | Stage 9 G-PR7 LLM-graded recommend check |
 | `Actor(s):` | Optional; free-form | Informational only |
 | `Success Indicator:` | Optional; one-line observable signal | Stage 13 QC4-06 evidence anchor when present |
+| `Limb owners:` | REQUIRED; one entry per AFTER limb, entries separated by ` · `, each `<limb> → #N[, #M]` naming at least one owning work item | Stage 13 G-CL10 (auto; warn-mode initial) — each owner resolves to an issue of this repository, and an owner closed as not planned or as a duplicate does not carry a limb |
 | Total length | ≤6 sentences across AFTER + BEFORE | Stage 3 advisory only — length is a quality signal, not a structural gate |
 
 ### 2.3 Audit-finding rationale
@@ -107,6 +110,12 @@ One observable signal at Stage 13 that confirms goal attainment. Examples:
 - `Subsequent release's Stage 3 spoke auto-populates the Outcome heading from template` for forward-compose validation
 
 REQUIRED for hotfix-class releases (the post-fix observable). RECOMMENDED for novel-class and cross-cutting-class releases. OPTIONAL for routine-class releases.
+
+### 3.5 Limb owners sub-field (required)
+
+A limb is one thing the AFTER paragraph promises. Name each limb in a few words and point it at the work item that delivers it: `<limb> → #N`, with ` · ` between limbs. A limb with no owning work item is a promise nothing delivers. Name the delivering card; where the release will not deliver the limb, name the open work item that carries it. When a card leaves the release, re-point its limb in the same edit that removes the card — an owner moved out of the release still carries the limb only if it is open and outside the release, and an owner closed as not planned or as a duplicate carries nothing.
+
+REQUIRED for every release class. Stage 13 G-CL10 reads the line from the Milestone description; whether each limb was attained remains QC4-06 and G-CL7's question.
 
 ## 4. Class-varying Outcome shapes
 
@@ -175,7 +184,7 @@ Operator override permitted with documented rationale, e.g., "this is technicall
 
 ## 6. Anti-patterns
 
-Six anti-patterns surface the goal-anchor-as-status-theater risk explicitly flagged in the Outcome Statement spec. Stage 9 G-PR7 LLM-graded check surfaces these on read; operator may accept divergence with documented rationale.
+Seven anti-patterns surface the goal-anchor-as-status-theater risk explicitly flagged in the Outcome Statement spec. Stage 9 G-PR7 LLM-graded check surfaces these on read; operator may accept divergence with documented rationale.
 
 ### 6.1 Outcome restated as scope
 
@@ -252,6 +261,14 @@ Six anti-patterns surface the goal-anchor-as-status-theater risk explicitly flag
 
 **Fix:** State the outcome plainly. "Stage 9 Plan Review applies a Release Readiness Scan against the assembled implementation; the operator sees per-dimension PASS/FAIL evidence in the Decision Briefing" is self-contained. The release plan's §3.2 then details the mechanism for engineers.
 
+### 6.7 A limb no work item owns
+
+**Anti-pattern:** a three-limb Outcome whose third limb's only card was re-homed to another milestone before close. Nothing in the description changed, so the limb still read as promised; the release closed with that limb undelivered and no work item carrying it.
+
+**Why bad:** the Outcome is the release's promise, and a limb with no owner is a promise with no one delivering it. The gap surfaces only when someone reads the Outcome against the shipped work, which is too late to route it.
+
+**Fix:** carry a `**Limb owners:**` line (§ 3.5) and re-point a limb in the same edit that moves its card. Stage 13 G-CL10 reads the line and fails a limb that names no owning work item.
+
 ## 7. Verification mechanism (HYBRID)
 
 Stage 9 G-PR7 + Stage 13 QC4-06 + G-CL7 form the verification cascade per D-VerificationMechanism HYBRID. Mechanism:
@@ -283,6 +300,10 @@ Non-blocking for milestone close — routing options per Stage 13 Phase A goal-a
 ### 7.4 Stage 13 G-CL7 (verdict-presence gate, warn-mode initial)
 
 Goal-attainment verification recorded (QC4-06 verdict present in release plan Verification Evidence section). Initial warn-mode posture per [`bypass-mode-readiness.md`](../../../core/rules/bypass-mode-readiness.md) Shakedown → Enforce Transition Checklist precedent — per-release FAIL logs to the shared deploy-check warn log (`$(pmo_instance_path)/deploy-check-warn-log.jsonl`) and Milestone close proceeds — **specified, not yet emitting**: no check emits this gate's FAIL row. Flip to enforce after 2-3 release shakedown. See [`gate-criteria-spec.md` Gate 13](../../../core/schemas/gate-criteria-spec.md#gate-13-close-readiness) row G-CL7.
+
+### 7.5 Stage 13 G-CL10 (limb owners, warn-mode initial)
+
+Every limb on the `**Limb owners:**` line names at least one owning work item, and each owner resolves to an issue of this repository; a limb whose every owner closed as not planned or as a duplicate is unowned. An Outcome without the line is a FAIL when its Milestone falls inside § 10's cutover, and out of scope before it. Warn-mode: each failing limb writes one row, its detail opening `limbs:`, to the shared deploy-check warn log under `check: "g-cl10"`, and Milestone close proceeds. Whether a limb was attained stays with QC4-06 and G-CL7. See [`gate-criteria-spec.md` Gate 13](../../../core/schemas/gate-criteria-spec.md#gate-13-close-readiness) row G-CL10, whose arm (i) — declared obligations measured at close — is not this template's concern.
 
 ## 8. Composition with paired artifacts
 
@@ -319,6 +340,8 @@ The naming collision is a residual drift surfaced during R1 survey on 2026-05-24
 
 This protocol applies to all Milestones created going forward. Pre-existing milestones are grandfathered — the protocol applies prospectively and does not retroactively amend milestone descriptions authored before it. Stage 13 G-CL7 (QC4-06 verdict presence) is warn-mode initial, flipping to enforce after a 2-3 release shakedown.
 
+**The `**Limb owners:**` line (template 2.0)** is keyed on when the Outcome was composed, not on when its Milestone was created: it is required of every Milestone whose `### Composition Lock` marker records a date on or after the date G-CL10 grades the line from (`LIMB_OWNERS_REQUIRED_FROM` in `core/deploy/deploy.sh`), and — where no lock is recorded — of every Milestone created on or after that date. An earlier Milestone without the line is out of scope at G-CL10; a line that is present is graded whatever the Milestone's date.
+
 **Future-state migration:** The establishing release's existing `**Goal (AFTER/BEFORE):**` block form may later be renamed via an operator-discretion Tier 1 [ADJUST] commit to `### Release Outcome Statement` to align with the canonical schema, OR the existing form is grandfathered indefinitely. Decision deferred — non-blocking.
 
 ## 11. Consumers
@@ -328,14 +351,14 @@ This protocol applies to all Milestones created going forward. Pre-existing mile
 | Stage 3 Bundle authoring | Phase B3 Milestone-description authoring | [`pipeline/stage-03-bundle.md`](../pipeline/stage-03-bundle.md) § 5 Phase B |
 | Stage 9 Plan Review | Phase A goal-conformance check | [`pipeline/stage-09-plan-review.md`](../pipeline/stage-09-plan-review.md) § 5 Phase A |
 | Stage 13 Close | Phase A goal-attainment verification | [`pipeline/stage-13-close.md`](../pipeline/stage-13-close.md) § 5 Phase A |
-| Gate criteria schema | G3-11 / G-PR7 / QC4-06 / G-CL7 rows | [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) Gates 3/9/13 |
+| Gate criteria schema | G3-11 / G-PR7 / QC4-06 / G-CL7 / G-CL10 rows | [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md) Gates 3/9/13 |
 | Release-process rules | Stage 3 / Stage 9 / Stage 13 entries; Checkpoint 4 table | [`release/governance/release-process.md`](../../governance/release-process.md) (+ mirror [`release/governance/release-process.md`](../../governance/release-process.md)) |
 | Hub Decision Briefing | Procedure 0 Phase B1 + Procedure 5 Stage 9 evidence package | [`how-to/hub-spoke-bridge.md`](../how-to/hub-spoke-bridge.md) Procedures 0 + 5 |
 | Release planning skill | Mode A Phase A Stage 3 deliverables | [`skills/release-planner/SKILL.md`](../../skills/release-planner/SKILL.md) Mode A |
 
 ## 12. Versioning
 
-**Template version:** 1.0
+**Template version:** 2.0 — the required `**Limb owners:**` field (§ 2, § 3.5), a required-field addition and so a major bump with the cutover clause in § 10. Introduced in `governance-obligations-measured`.
 **Source issue:** Stage 5 Outcome Statement spec
 **Stage 5 spec:** Outcome Statement Stage 5 sub-task
 **Introduced in:** pipeline-fitness-foundation
