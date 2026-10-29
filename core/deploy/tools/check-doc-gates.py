@@ -1545,7 +1545,7 @@ REG_TAIL = "\n## After the register\n\n| H | H | H | H | H |\n|---|---|---|---|-
 # placeholder on purpose: the backstop must not refuse a tracked file for its prefix.
 FIXTURE_TOOLS = ("count-widgets", "k-probe", "w", "count-d", "nothing-to-see.sh", "tbd-report",
                  "nonexistent-check.sh", "todo-scan", "unknownfiles.py", "nullcheck", "na-report.py",
-                 "none-such.sh", "TODO.sh", "count.sh", "tools/x.sh")
+                 "none-such.sh", "TODO.sh", "count.sh", "tools/x.sh", "todo")
 # QA pass 2's 40 spellings the first-word list admitted as probes, by its class. Each is
 # malformed under the shape rule; the last ten no first-word list can decide. The two
 # invisible prefixes are carried on `none`.
@@ -1801,6 +1801,28 @@ def _self_test_gcl10(check) -> None:
                            ("/bin/ls -l", "an absolute path"), ("deploy.sh --check", "the register's bare shorthand")):
             decl, err = parse_population(prow("pop-u", probe), tracked)
             check(f"CL10-SH {why} is not a tracked file: `{probe}` is malformed",
+                  decl is None and "invocation arm" in (err or ""), (decl, err))
+        # CL10-KW: a census definition parses whatever its kind word is, a placeholder-looking
+        # one included, because the census arm is read before the backstop.
+        for probe in ("todo census — count the TODO markers by hand",
+                      "none census — count the rows no instrument reaches, by hand"):
+            decl, err = parse_population(prow("pop-ok", probe), tracked)
+            check(f"CL10-KW a census parses whatever its kind word: `{probe}`", err is None and decl is not None,
+                  (decl, err))
+        # CL10-RD: a first word that is neither a tracked file nor a tool on PROBE_TOOLS is
+        # rejected by design, a tool the host has installed included. QA's tool named `todo`
+        # is refused even where a file of that name is tracked: the backstop reads it first.
+        _, err = parse_population(prow("pop-u", "todo ls --count"), tracked)
+        check("CL10-RD QA's tool named `todo` is rejected by design, a tracked file named `todo` included",
+              "opens on the placeholder `todo`" in (err or ""), err)
+        for probe in ("node scripts/count.js", "nohup ./count.sh", "nl -ba x.md"):
+            decl, err = parse_population(prow("pop-u", probe), tracked)
+            check(f"CL10-RD a tool off PROBE_TOOLS and untracked is rejected by design: `{probe}`",
+                  decl is None and "invocation arm" in (err or ""), (decl, err))
+        for probe in ("count-widgets --tagged", "nonexistent-check.sh --count", "todo-scan --count",
+                      "TODO.sh --count", "./count.sh"):
+            decl, err = parse_population(prow("pop-u", probe), lambda p: False)
+            check(f"CL10-RD the control `{probe}` parses only for its tracked file",
                   decl is None and "invocation arm" in (err or ""), (decl, err))
         # End to end, the shape the finding reproduced: a placeholder probe whose record is
         # unmeasured and whose owner names the population FAILs, never PASSes on the owner —
