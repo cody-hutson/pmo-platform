@@ -144,6 +144,8 @@ Operator override permitted with documented rationale, e.g., "this is technicall
 **Actor(s):** release-planner / hub at Stage 3 Phase B3; hub at Stage 9 Phase A; Stage 13 close spoke.
 
 **Success Indicator:** The next release entering Stage 3 (post-cutover) carries a `### Release Outcome Statement` H3 in its milestone description AND Stage 9 G-PR7 + Stage 13 QC4-06 fire against it.
+
+**Limb owners:** Outcome block authored at Stage 3 → #N · goal-conformance check at Stage 9 → #M · goal-attainment verification at Stage 13 → #P
 ```
 
 ### 5.2 Routine-class example (gate-criterion addition)
@@ -154,6 +156,8 @@ Operator override permitted with documented rationale, e.g., "this is technicall
 **AFTER** — Stage 2 Triage emits a Decision Date on every Approved issue, populated to the Projects Date field via `gh project item-edit`, enforced by gate G2-06.
 
 **BEFORE** — Approved issues had no triage Decision Date field; the date was inferred from the `status: approved` label transition timestamp, which drifted across re-triage iterations.
+
+**Limb owners:** Decision Date emitted and enforced by G2-06 → #N
 ```
 
 ### 5.3 Cross-cutting-class example (mirror discipline)
@@ -168,6 +172,8 @@ Operator override permitted with documented rationale, e.g., "this is technicall
 **Actor(s):** Stage 6 Engineering spokes (engineering/rules/ writes); hub (mirror recovery commits).
 
 **Success Indicator:** Check 9 returns exit 0 across all post-cutover releases entering Stage 12 deploy verification.
+
+**Limb owners:** mirror pairs held byte-identical by Check 9 → #N · mirror recovery codified at the hub seam → #M
 ```
 
 ### 5.4 Hotfix-class example (broken behavior)
@@ -180,6 +186,8 @@ Operator override permitted with documented rationale, e.g., "this is technicall
 **BEFORE** — Check 23 reported a false-positive drift on the INDEX entry (cited in #N), blocking `deploy.sh --check` exit 0 on every commit since 2026-05-DD.
 
 **Success Indicator:** `core/deploy/deploy.sh --check` exits 0 with `Check 23: PASS` immediately after this release's merge SHA lands on main.
+
+**Limb owners:** Check 23's false-positive drift removed → #N
 ```
 
 ## 6. Anti-patterns
