@@ -57,7 +57,9 @@ derivable from the LOG). This tool serves three roles:
     heading `(<date>[, version-less])`, the CHANGELOG heading `- <date>`, and the
     note frontmatter `date:`. Report each row whose surfaces carry more than one
     date. A versioned row compares 3 surfaces. A version-less row compares 2,
-    because the CHANGELOG has no key for it by construction. An absent or
+    because the scripted close-out writes it no CHANGELOG entry — and 3 when a
+    CHANGELOG entry for its slug exists anyway (a close-out written by hand or
+    hub-direct); its missing entry is never NOT-EVALUATED. An absent or
     unparseable surface is NOT-EVALUATED for that row, never agreement; presence
     is Checks 32 and 48's predicate. Rows before the declaration are not read.
     The note's `date:` is read here to VERIFY only. No emitter reads it, and
@@ -897,9 +899,11 @@ def verify_closeout_anchors(log_rows: list[dict], digest: dict[str, list[str]],
     Scope is every LOG row at or after the row whose version is `cutoff`, in LOG order.
     Returns None when no row's version equals `cutoff`: the scope cannot be resolved,
     which is never a clean result. A row not yet VERIFIED is counted in flight and not
-    read. A version-less row has no CHANGELOG key by construction, so it compares two
-    surfaces. An absent or unparseable value is NOT-EVALUATED for that surface — never
-    agreement — and the remaining surfaces are still compared.
+    read. A version-less row compares two surfaces, because the scripted close-out writes it
+    no CHANGELOG entry; when an entry for its slug exists anyway (a close-out written by
+    hand or hub-direct) that entry is compared too, and its absence is never NOT-EVALUATED.
+    An absent or unparseable value is NOT-EVALUATED for that surface — never agreement —
+    and the remaining surfaces are still compared.
 
     A finding names the version, every value read and the PARTITION of surfaces by
     date. It deliberately carries no "wrong" or "fault" field: when two surfaces have
@@ -911,8 +915,8 @@ def verify_closeout_anchors(log_rows: list[dict], digest: dict[str, list[str]],
     if idx is None:
         return None
     result: dict = {"cutoff": cutoff, "enumerated": 0, "examined": 0, "in_flight": 0,
-                    "pre_cutoff": idx, "version_less": 0, "total": len(log_rows),
-                    "findings": [], "not_evaluated": []}
+                    "pre_cutoff": idx, "version_less": 0, "version_less_changelog": 0,
+                    "total": len(log_rows), "findings": [], "not_evaluated": []}
     for row in log_rows[idx:]:
         if row.get("state", "").strip() != "VERIFIED":
             result["in_flight"] += 1
@@ -938,15 +942,16 @@ def verify_closeout_anchors(log_rows: list[dict], digest: dict[str, list[str]],
             else:
                 _not_evaluated("DIGEST", f"unparseable {cell!r}")
 
-        if not version_less:
-            dates = changelog.get(key)
-            if not dates:
-                _not_evaluated("CHANGELOG", "absent")
-            for value in dates or []:
-                if _DATE_RE.match(value):
-                    values.setdefault("CHANGELOG", []).append(value)
-                else:
-                    _not_evaluated("CHANGELOG", f"unparseable {value!r}")
+        dates = changelog.get(key)
+        if version_less and dates:
+            result["version_less_changelog"] += 1
+        if not dates and not version_less:
+            _not_evaluated("CHANGELOG", "absent")
+        for value in dates or []:
+            if _DATE_RE.match(value):
+                values.setdefault("CHANGELOG", []).append(value)
+            else:
+                _not_evaluated("CHANGELOG", f"unparseable {value!r}")
 
         note_value, cause = note_date(row)
         if note_value is None:
@@ -978,8 +983,11 @@ def render_closeout_report(result: dict) -> list[str]:
     status = "degraded" if result["not_evaluated"] else "fetched"
     lines = [
         f"DENOM: status={status} enumerated={result['enumerated']} examined={result['examined']} "
-        f"(VERIFIED RELEASE_LOG rows at/after {result['cutoff']}; {result['version_less']} version-less "
-        f"compared two-way — no CHANGELOG key by construction; {result['in_flight']} in-flight row(s) "
+        f"(VERIFIED RELEASE_LOG rows at/after {result['cutoff']}; "
+        f"{result['version_less'] - result['version_less_changelog']} version-less compared two-way — no "
+        f"CHANGELOG entry, which the scripted close-out never writes; {result['version_less_changelog']} "
+        f"version-less compared three-way — a CHANGELOG entry written by hand or hub-direct; "
+        f"{result['in_flight']} in-flight row(s) "
         f"excluded; {result['pre_cutoff']} earlier row(s) predate the anchor declaration and are not "
         f"read; {result['total']} LOG rows total)"
     ]
@@ -1602,6 +1610,52 @@ def _self_test_closeout_anchors() -> int:
     clean = {**res, "findings": [], "not_evaluated": []}
     if not render_closeout_report(clean)[0].startswith("DENOM: status=fetched "):
         return _fail("a run with every surface compared must report status=fetched")
+
+    # CA-12 — a version-less row's CHANGELOG entry is compared when one exists. The scripted
+    # emitter refuses to write one, but a close-out written by hand or hub-direct can, and a
+    # skipped read would hide its divergence with no finding and no NOT-EVALUATED line.
+    # Sensitivity: vl-hand's entry is a day after its DIGEST and note -> one finding naming
+    # CHANGELOG alone. Specificity: vl-twin's entry agrees and vl-none has none -> silent,
+    # and the absent entry is never NOT-EVALUATED. The DENOM line counts the two apart.
+    vl_rows = parse_log_rows(
+        "| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| v9.40 | m40 | #1 | #40 | `a` | `v9.40` | VERIFIED | 2026-06-01 |\n"
+        "| vl-hand (version-less) | vl-hand | #1 | #41 | `a` | (none) | VERIFIED | 2026-06-02 |\n"
+        "| vl-twin (version-less) | vl-twin | #1 | #42 | `a` | (none) | VERIFIED | 2026-06-03 |\n"
+        "| vl-none (version-less) | vl-none | #1 | #43 | `a` | (none) | VERIFIED | 2026-06-04 |\n"
+    )
+    vl_digest = parse_digest_dates(
+        "### v9.40 (2026-06-01) — the cutoff row agrees\n"
+        "### vl-hand (2026-06-02, version-less) — a hand-written CHANGELOG entry a day later (CA-12)\n"
+        "### vl-twin (2026-06-03, version-less) — a hand-written CHANGELOG entry that agrees (CA-12)\n"
+        "### vl-none (2026-06-04, version-less) — no CHANGELOG entry (CA-12)\n"
+    )
+    vl_changelog = parse_changelog_dates(
+        "## [v9.40] - 2026-06-01\n"
+        "## [vl-hand] - 2026-06-03\n"
+        "## [vl-twin] - 2026-06-03\n"
+    )
+    vl_notes = {"v9.40": "2026-06-01", "vl-hand": "2026-06-02", "vl-twin": "2026-06-03",
+                "vl-none": "2026-06-04"}
+
+    def vl_note(row: dict) -> tuple[str | None, str]:
+        value = vl_notes.get(_slug_from_version_cell(row["version"]))
+        return (value, "") if value else (None, "absent")
+
+    vl = verify_closeout_anchors(vl_rows, vl_digest, vl_changelog, vl_note, cutoff="v9.40")
+    if vl is None:
+        return _fail("CA-12 the fixture cutoff v9.40 names a LOG row, but the scope did not resolve")
+    if [f["version"] for f in vl["findings"]] != ["vl-hand (version-less)"] or \
+            vl["findings"][0]["partition"] != [("2026-06-02", ["DIGEST", "note"]), ("2026-06-03", ["CHANGELOG"])]:
+        return _fail(f"CA-12 a version-less row's CHANGELOG entry must be compared when one exists: "
+                     f"findings {[(f['version'], f['partition']) for f in vl['findings']]}")
+    if vl["not_evaluated"] or vl["version_less"] != 3 or vl.get("version_less_changelog") != 2:
+        return _fail(f"CA-12 counters wrong: not_evaluated={vl['not_evaluated']} version_less={vl['version_less']} "
+                     f"version_less_changelog={vl.get('version_less_changelog')} (expected none/3/2)")
+    vl_denom = render_closeout_report(vl)[0]
+    if "1 version-less compared two-way" not in vl_denom or "2 version-less compared three-way" not in vl_denom:
+        return _fail(f"CA-12 the DENOM line must count the two-way and three-way version-less rows apart: {vl_denom!r}")
     return 0
 
 

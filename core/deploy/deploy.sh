@@ -18151,7 +18151,8 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
   # gate-efficacy: posture=advisory  enforcement-surface=deploy-time-only
   #   invariant: every VERIFIED release at/after the close-out-anchor declaration carries ONE
   #              close-out date on its DIGEST heading, its CHANGELOG heading and its release
-  #              note's frontmatter `date:` (two surfaces for a version-less release)
+  #              note's frontmatter `date:` (two surfaces for a version-less release with no
+  #              CHANGELOG entry)
   #   falsification: change ONE surface's date on such a release -> a WARN row naming the
   #                  version and the split of surfaces by date (deploy.sh --self-test group CO-1)
   #
@@ -18159,7 +18160,8 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
   # `### <key> (<date>)`, CHANGELOG.md's `## [<key>] - <date>` and the release note's
   # frontmatter `date:`. For every VERIFIED RELEASE_LOG row at or after the release that
   # declared that anchor (the projector's CLOSEOUT_ANCHOR_DECLARED_AT), they must carry one
-  # date. A version-less release has no CHANGELOG key by construction, so it compares two.
+  # date. A version-less release compares two, because the scripted close-out writes it no
+  # CHANGELOG entry; a CHANGELOG entry for its slug written by hand or hub-direct is compared too.
   # A finding names the version, every value and the split of surfaces by date; it never
   # says which side is wrong, because when two surfaces drift together the majority is.
   #
