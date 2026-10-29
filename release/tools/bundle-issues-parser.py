@@ -30,25 +30,45 @@ Parse semantics (#291 v3.20 robustification — DS-1..DS-4 of the ratified Stage
     G1-06-Bug — the P-level DIGIT is the canonical satisfier; the qualifier word is
     discarded. Absent / word-only / out-of-range => None, which sorts LAST in the
     tie-breaker and NEVER contributes to parse_status.
+  - Documentation Impact gradability (Gate 3 criterion G3-20) is DELEGATED to the
+    G-CL8 engine `core/deploy/tools/check-doc-gates.py`: its `grade_declaration()` is
+    the one declaration grammar, loaded LAZILY by path (never at import, so a module
+    that imports this one for another function never reads the engine). The per-issue
+    `doc_impact` is one of `gradable` / `ungradable` / `misheaded` / `absent` /
+    `not-evaluated`; `not-evaluated` (the engine could not be loaded, or raised) is
+    never a pass. Like `ac_present`, it is data and NEVER feeds parse_status.
 
 Usage:
   python3 bundle-issues-parser.py --milestone "v2.10-..." [--output-format json|tsv|github]
   python3 bundle-issues-parser.py --issues 46,49,57 [--output-format json]
+  python3 bundle-issues-parser.py --label "status: bundled" [--output-format json]
   echo "46\\n49\\n57" | python3 bundle-issues-parser.py [--output-format json]
+  python3 bundle-issues-parser.py --label "status: bundled" --doc-impact-population
   python3 bundle-issues-parser.py --self-test
 
 Exit codes:
   0 — clean parse all issues
   1 — parse failure on >=1 issue (operator action required)
-  2 — API/network failure (retry recommended)
+  2 — API/network failure (retry recommended), or a label listing that reached the
+      result cap (the population may be truncated, so nothing is reported)
+
+--doc-impact-population is a separate mode with its own output and exit codes. It
+prints the members of the G3-20 live population `doc-impact-gradable-in-bundled` —
+one `MEMBER` line per issue to which G3-20 applies, with its `doc_impact` — and one
+`SUMMARY` line carrying the examined and conforming counts; an issue outside the
+population is counted on the SUMMARY line and not listed. A parse failure on another
+field is not its concern, so it exits 0 on any completed run; 2 as above; 3 when the
+engine could not be loaded, because then nothing was graded.
 """
 
 import argparse
+import importlib.util
 import json
 import re
 import subprocess
 import sys
 from dataclasses import dataclass, asdict
+from pathlib import Path
 from typing import List, Set, Dict, Optional, Tuple
 
 
@@ -76,6 +96,11 @@ class IssueRecord:
     # never a parse failure: neither field feeds parse_status.
     ac_present: bool = False
     ac_count: int = 0
+    # G3-20 — Documentation Impact gradability, read through the G-CL8 engine's
+    # grammar. Additive and DEFAULTED, like the AC axis; absence is data, never a
+    # parse failure, and `not-evaluated` is never a pass.
+    doc_impact: str = "not-evaluated"
+    doc_impact_detail: str = ""
 
 
 # ---- Parsing functions --------------------------------------------------------
@@ -367,6 +392,124 @@ def parse_acceptance_criteria(body: str) -> Tuple[bool, int]:
     return (True, len(AC_CRITERION_RE.findall(section)))
 
 
+# ---- Documentation Impact gradability (G3-20) ---------------------------------
+# The grammar is NOT restated here. The G-CL8 row of core/schemas/gate-criteria-spec.md
+# is its authority and core/deploy/tools/check-doc-gates.py its one implementation
+# (`grade_declaration`), so the bundle gate and the close gate read one grammar. The
+# engine is loaded by path on first use and cached; a module that imports this one for
+# another function (Check 22's delegates, compute-milestone-positions.py) never reads it.
+DOC_GATES_ENGINE = Path(__file__).resolve().parents[2] / "core" / "deploy" / "tools" / "check-doc-gates.py"
+DOC_IMPACT_STATES = ("gradable", "ungradable", "misheaded", "absent", "not-evaluated")
+DOC_IMPACT_POPULATION = "doc-impact-gradable-in-bundled"
+INTAKE_TIER_LABELS = ("improvement", "bug", "observation")
+_doc_gates_cache: Dict[str, Tuple[Optional[object], Optional[str]]] = {}
+
+
+def _load_doc_gates(engine: Optional[Path] = None) -> Tuple[Optional[object], Optional[str]]:
+    """-> (engine module, None) or (None, cause). Never raises; cached per path."""
+    path = Path(engine) if engine is not None else DOC_GATES_ENGINE
+    key = str(path)
+    if key not in _doc_gates_cache:
+        try:
+            if not path.is_file():
+                raise FileNotFoundError(f"{path.name} not found at {path.parent}")
+            spec = importlib.util.spec_from_file_location("check_doc_gates_engine", path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            if not (callable(getattr(mod, "grade_declaration", None))
+                    and callable(getattr(mod, "doc_impact_section", None))):
+                raise AttributeError("the engine carries no grade_declaration / doc_impact_section")
+            _doc_gates_cache[key] = (mod, None)
+        except Exception as e:  # noqa: BLE001 — any load failure withholds the verdict
+            _doc_gates_cache[key] = (None, f"{type(e).__name__}: {e}")
+    return _doc_gates_cache[key]
+
+
+def parse_documentation_impact(body: str, engine: Optional[Path] = None) -> Tuple[str, str]:
+    """Return (doc_impact, detail) for one body, first match wins:
+
+      engine not loadable                                  -> not-evaluated (the cause)
+      no `### Documentation Impact` as the engine reads it,
+        but a section the shared detector finds             -> misheaded
+      no section by either detector                         -> absent
+      the engine's grammar passes the declaration           -> gradable   (its detail)
+      the engine's grammar fails it                         -> ungradable (its finding)
+      the engine raised on this body                        -> not-evaluated
+
+    `misheaded` is not a second grammar: it is the engine's exact heading detector
+    finding nothing while extract_section() — the shared, suffix- and depth-tolerant
+    detector (ADR-111) — finds a section. To G-CL8 such a body reads out of scope.
+    """
+    mod, cause = _load_doc_gates(engine)
+    if mod is None:
+        return ("not-evaluated", f"engine not loaded: {cause}")
+    try:
+        if mod.doc_impact_section(body or "") is None:
+            if extract_section(body or "", "Documentation Impact") is not None:
+                return ("misheaded", "a Documentation Impact heading is present but not as "
+                        "`### Documentation Impact`, the heading the G-CL8 grammar reads")
+            return ("absent", "")
+        verdict, detail = mod.grade_declaration(body)[:2]
+    except Exception as e:  # noqa: BLE001 — a raise on one body withholds that verdict only
+        return ("not-evaluated", f"engine raised {type(e).__name__} grading this body")
+    if verdict == "PASS":
+        return ("gradable", detail)
+    if verdict == "FAIL":
+        return ("ungradable", detail)
+    return ("not-evaluated", f"engine returned an unexpected verdict {verdict!r}")
+
+
+def g3_20_applicability(labels: List[str], body: str) -> Tuple[str, str]:
+    """Return (cell, reason): whether G3-20 applies to an issue, per its applies-to cells
+    and its kind-form disposition in core/schemas/gate-criteria-spec.md.
+
+      `req`       an `improvement`- or `bug`-labelled issue, not a `sub-task`
+      `kind-form` no intake-tier label, a `type:` label, and a body that declares the
+                  section in any heading form (read by extract_section)
+      `n/a`       everything else, with the reason
+
+    Bounded, and stated: the licensed kind vocabulary is not resolved here, so any
+    `type:` label reads as kind-form; an issue whose kind is unlicensed would be F3 under
+    the Template Detection Logic and never reach a criterion."""
+    if "sub-task" in labels:
+        return ("n/a", "a sub-task is never a bundling candidate")
+    tiers = [lab for lab in labels if lab in INTAKE_TIER_LABELS]
+    if len(tiers) > 1:
+        return ("n/a", "more than one intake-tier label: the form family stops it before any criterion")
+    if tiers == ["observation"]:
+        return ("n/a", "observation: G3-20 reads it once the Template-Conversion Rule converts it")
+    if tiers:
+        return ("req", tiers[0])
+    if any(lab.startswith("type:") for lab in labels):
+        if extract_section(body or "", "Documentation Impact") is not None:
+            return ("kind-form", "the body declares the section")
+        return ("n/a", "a kind-form body that declares no Documentation Impact section")
+    return ("n/a", "no intake-tier label and no type: label")
+
+
+def emit_doc_impact_population(pairs: List[Tuple["IssueRecord", str]]) -> Tuple[str, int]:
+    """The live population of G3-20's register row, from (record, body) pairs: one MEMBER
+    line per issue to which G3-20 applies (number, applies-to cell, doc_impact, detail),
+    then one SUMMARY line. Returns (text, exit code): 3 when the engine was not loaded,
+    else 0."""
+    lines, examined, conforming, withheld, outside = [], 0, 0, 0, 0
+    for r, body in sorted(pairs, key=lambda p: p[0].number):
+        cell, _ = g3_20_applicability(r.labels, body)
+        if cell == "n/a":
+            outside += 1
+            continue
+        examined += 1
+        conforming += r.doc_impact == "gradable"
+        withheld += r.doc_impact == "not-evaluated"
+        lines.append(f"MEMBER\t#{r.number}\t{cell}\t{r.doc_impact}\t{' '.join(r.doc_impact_detail.split())}")
+    lines.append(f"SUMMARY\t{DOC_IMPACT_POPULATION}\texamined={examined}\tconforming={conforming}"
+                 f"\tnot_evaluated={withheld}\tout_of_population={outside}")
+    unloaded = _load_doc_gates()[0] is None
+    if unloaded:
+        lines.append(f"NOT-EVALUATED\t{DOC_IMPACT_POPULATION}\tengine not loaded: {_load_doc_gates()[1]}")
+    return "\n".join(lines), (3 if unloaded else 0)
+
+
 # ---- API surface --------------------------------------------------------------
 
 def gh_issue_view(number: int) -> Dict:
@@ -400,6 +543,32 @@ def gh_milestone_issues(milestone: str) -> List[Dict]:
     return json.loads(result.stdout)
 
 
+LABEL_LIST_LIMIT = 5000
+
+
+def gh_label_issues(label: str) -> List[Dict]:
+    """List all OPEN issues carrying a label. A listing that reaches the result cap may be
+    truncated (git-workflow.md § Batch CLI Query Limits), so it raises rather than return
+    a population it cannot vouch for."""
+    result = subprocess.run(
+        [
+            "gh", "issue", "list",
+            "--label", label,
+            "--state", "open",
+            "--json", "number,title,state,labels,body,milestone",
+            "--limit", str(LABEL_LIST_LIMIT),
+        ],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"gh issue list --label failed: {result.stderr}")
+    issues = json.loads(result.stdout)
+    if len(issues) >= LABEL_LIST_LIMIT:
+        raise RuntimeError(f"gh issue list --label {label!r} returned {len(issues)} issues, the "
+                           "result cap: the population may be truncated")
+    return issues
+
+
 def build_issue_record(raw: Dict) -> IssueRecord:
     body = raw.get("body") or ""
     labels = [lab["name"] for lab in raw.get("labels", [])]
@@ -411,6 +580,10 @@ def build_issue_record(raw: Dict) -> IssueRecord:
         else "clean"
     )
     ac_present, ac_count = parse_acceptance_criteria(body)
+    try:
+        doc_impact, doc_impact_detail = parse_documentation_impact(body)
+    except Exception as e:  # noqa: BLE001 — never let the G3-20 read break a parse
+        doc_impact, doc_impact_detail = "not-evaluated", f"{type(e).__name__} reading the declaration"
     milestone = raw.get("milestone") or {}
     return IssueRecord(
         number=raw["number"],
@@ -424,6 +597,8 @@ def build_issue_record(raw: Dict) -> IssueRecord:
         dependencies=sorted(deps),
         ac_present=ac_present,
         ac_count=ac_count,
+        doc_impact=doc_impact,
+        doc_impact_detail=doc_impact_detail,
     )
 
 
@@ -933,6 +1108,90 @@ Stuff.
             f"ac_present={_rec.ac_present} ac_count={_rec.ac_count}"
         )
 
+    # ---- DI-1..DI-10 — Documentation Impact gradability (G3-20) ----------------
+    # The grammar is the G-CL8 engine's; these arms hold the delegation and the five
+    # states. Subject-discriminating pairs: DI-1/DI-3 differ only in the declaration
+    # line, DI-1/DI-5 only in the heading depth.
+    _row = "core/standards/example.md | update | the rule it states changes"
+    _di = {
+        "DI-1": (f"### Documentation Impact\n\n{_row}\n", "gradable"),
+        "DI-2": ("### Documentation Impact\n\nNone — no documentation impact (rationale: tooling only)\n", "gradable"),
+        "DI-3": ("### Documentation Impact\n\nThe example standard's rule changes.\n", "ungradable"),
+        "DI-4": ("### Documentation Impact\n\nNone — no documentation impact (rationale: tooling only).\n", "ungradable"),
+        "DI-5": (f"## Documentation Impact\n\n{_row}\n", "misheaded"),
+        "DI-6": (f"### Documentation Impact [DRAFT]\n\n{_row}\n", "misheaded"),
+        "DI-7": ("### Description\n\nNothing about documentation.\n", "absent"),
+        "DI-8": ("### Documentation Impact\n\ncore/standards/example.md | update (conditional) | x\n", "ungradable"),
+    }
+    for _name, (_body, _want) in _di.items():
+        _got = parse_documentation_impact(_body)
+        if _got[0] != _want:
+            failures.append(f"{_name} expected {_want}, got {_got}")
+    for _a, _b in (("DI-1", "DI-3"), ("DI-1", "DI-5")):
+        _la, _lb = _di[_a][0].splitlines(), _di[_b][0].splitlines()
+        if len(_la) != len(_lb) or sum(x != y for x, y in zip(_la, _lb)) != 1:
+            failures.append(f"{_a}/{_b} are not a one-line subject-discriminating pair")
+    # DI-3 and DI-8 carry the engine's own finding, never a parser paraphrase.
+    for _name in ("DI-3", "DI-8"):
+        _detail = parse_documentation_impact(_di[_name][0])[1]
+        if not _detail or _detail == _di[_name][0]:
+            failures.append(f"{_name} carries no engine finding: {_detail!r}")
+    # DI-9 — an engine that cannot be loaded withholds the verdict: never `gradable`.
+    _got = parse_documentation_impact(_di["DI-1"][0], engine=Path("/nonexistent/check-doc-gates.py"))
+    if _got[0] != "not-evaluated" or "engine not loaded" not in _got[1]:
+        failures.append(f"DI-9 unloadable engine: got {_got}")
+    # DI-10 — absence is data: a body clean on Affected Files with no Documentation
+    # Impact stays parse_status clean, and its doc_impact reads absent.
+    _rec = build_issue_record({
+        "number": 5062, "title": "t", "state": "open", "labels": [],
+        "body": "### Affected Files\n- `core/foo.md` (edit — fix)\n",
+    })
+    if _rec.parse_status != "clean" or _rec.doc_impact != "absent":
+        failures.append(f"DI-10 absence-is-data: parse_status={_rec.parse_status} doc_impact={_rec.doc_impact}")
+    if set(DOC_IMPACT_STATES) != {"gradable", "ungradable", "misheaded", "absent", "not-evaluated"}:
+        failures.append(f"DI states drifted: {DOC_IMPACT_STATES}")
+
+    # ---- DP-1..DP-3 — the G3-20 live population (--doc-impact-population) ------
+    _apply = {
+        "improvement": (["improvement", "status: bundled"], "", "req"),
+        "bug": (["bug"], "", "req"),
+        "sub-task": (["improvement", "sub-task"], "", "n/a"),
+        "observation": (["observation"], "", "n/a"),
+        "two tiers": (["improvement", "bug"], "", "n/a"),
+        "kind-form declaring": (["type:story"], "## Documentation Impact\n\nx | update | y\n", "kind-form"),
+        "kind-form silent": (["type:story"], "### Description\n\nx\n", "n/a"),
+        "no form label": (["status: bundled"], "", "n/a"),
+    }
+    for _name, (_labels, _body, _want) in _apply.items():
+        _got = g3_20_applicability(_labels, _body)[0]
+        if _got != _want:
+            failures.append(f"DP-1 applicability {_name}: expected {_want}, got {_got}")
+    # DP-2 — members only, counts on the SUMMARY line, exit 0 even though one member's
+    # Affected Files fail to parse (parse_status is not this mode's concern).
+    _raws = [
+        {"number": 11, "title": "a", "state": "open", "labels": [{"name": "improvement"}],
+         "body": f"### Affected Files\n- `core/foo.md` (edit — x)\n\n### Documentation Impact\n\n{_row}\n"},
+        {"number": 12, "title": "b", "state": "open", "labels": [{"name": "bug"}],
+         "body": "### Documentation Impact\n\nThe example standard changes.\n"},
+        {"number": 13, "title": "c", "state": "open", "labels": [{"name": "improvement"}, {"name": "sub-task"}],
+         "body": f"### Documentation Impact\n\n{_row}\n"},
+        {"number": 14, "title": "d", "state": "open", "labels": [{"name": "type:story"}],
+         "body": "### Description\n\nx\n"},
+    ]
+    _pairs = [(build_issue_record(r), r["body"]) for r in _raws]
+    _text, _code = emit_doc_impact_population(_pairs)
+    _members = [l.split("\t")[1] for l in _text.splitlines() if l.startswith("MEMBER\t")]
+    _summary = [l for l in _text.splitlines() if l.startswith("SUMMARY\t")]
+    if _code != 0 or _members != ["#11", "#12"] or _summary != [
+            f"SUMMARY\t{DOC_IMPACT_POPULATION}\texamined=2\tconforming=1\tnot_evaluated=0\tout_of_population=2"]:
+        failures.append(f"DP-2 population: code={_code} members={_members} summary={_summary}")
+    if any(r.parse_status != "failed" for r, _ in _pairs[1:2]):
+        failures.append("DP-2 control: #12 should parse failed, so the exit-0 arm proves something")
+    # DP-3 — the members' verdicts are the parse's own doc_impact values.
+    _verdicts = {l.split("\t")[1]: l.split("\t")[3] for l in _text.splitlines() if l.startswith("MEMBER\t")}
+    if _verdicts != {"#11": "gradable", "#12": "ungradable"}:
+        failures.append(f"DP-3 member verdicts: {_verdicts}")
+
     if failures:
         print("SELF-TEST FAIL:", file=sys.stderr)
         for f in failures:
@@ -948,7 +1207,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--milestone", help="Milestone title to fetch all issues from")
     parser.add_argument("--issues", help="Comma-separated issue numbers")
+    parser.add_argument("--label", help="Every open issue carrying this label")
     parser.add_argument("--output-format", choices=["json", "tsv"], default="json")
+    parser.add_argument("--doc-impact-population", action="store_true",
+                        help="Print G3-20's live population (MEMBER + SUMMARY lines) instead of the parse; exit 0 on a completed run")
     parser.add_argument("--self-test", action="store_true", help="Run synthetic fixtures")
     args = parser.parse_args()
 
@@ -960,6 +1222,12 @@ def main() -> int:
     if args.milestone:
         try:
             raw_issues = gh_milestone_issues(args.milestone)
+        except RuntimeError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 2
+    elif args.label:
+        try:
+            raw_issues = gh_label_issues(args.label)
         except RuntimeError as e:
             print(f"ERROR: {e}", file=sys.stderr)
             return 2
@@ -984,6 +1252,11 @@ def main() -> int:
         return 2
 
     records = [build_issue_record(raw) for raw in raw_issues]
+    if args.doc_impact_population:
+        text, code = emit_doc_impact_population(
+            [(rec, raw.get("body") or "") for rec, raw in zip(records, raw_issues)])
+        print(text)
+        return code
     contention = build_contention_map(records)
 
     if args.output_format == "tsv":
