@@ -63,7 +63,7 @@ Six values define the lifecycle state of each field at each pipeline stage.
 | Category (body) | 1 (opt) / 2 (req) | Author (opt) -> Triage Agent (req) | O | **C\**/U | R | L | L | L | L | L | L | L | L |
 | Affected Files | 1 (opt) / 4 (req) | Author (opt) -> Planning Agent (req) | O | U | — | **C\**/U | U | L | L | L | L | L | L |
 | Dependencies | 1 (opt) / 3 (req) | Author (opt) -> Triage/Bundle Agent | O | U | **C\**/R | U | L | L | L | L | L | L | L |
-| Documentation Impact | 1-Intake | Author | **C** | R | L | L | U | L | L | L | L | L | R |
+| Documentation Impact | 1-Intake | Author | **C** | U | R/U | L | U | L | L | L | L | L | R |
 | Risks | 1 (opt) | Author | O | O | O | O | O | L | L | L | L | L | L |
 | Notes | Any | Any | O | O | O | O | O | O | O | O | O | O | O |
 
@@ -138,6 +138,7 @@ For named gate definitions (Triage Readiness, Workflow Readiness, Release Readin
 | All Gate 2 fields present | Field (R) | Inherited |
 | Milestone assigned | Anchor (C at 3) | Matrix |
 | Dependencies populated and validated within milestone | Field (C/R at 3) | Matrix |
+| Documentation Impact declaration gradable, where G3-20 applies | Field (R/U at 3) | Matrix · gate-criteria-spec.md G3-20 |
 | Bundle rationale posted | Artifact | I/O contracts |
 | Status = Bundled | Anchor |  T3 |
 
