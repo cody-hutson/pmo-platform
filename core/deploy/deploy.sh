@@ -221,6 +221,13 @@ readonly GCL10_ROLLOUT_ARMED="2026-10-29"
 # without the line is out of scope before this date and a FAIL on or after it, and a
 # line that is present is always graded.
 readonly LIMB_OWNERS_REQUIRED_FROM="2026-10-29"
+# Check 82 (closeout-anchor-consistency)'s warn-mode shakedown (W2). Its deadline arm
+# (_c82_deadline) reads this against the GATE_ROLLOUT_* windows and today's date. Turn a
+# GRADUATION-OVERDUE finding green by recording a decision in the repository: flip the
+# check's committed default to resolve_check_mode "closeout-anchor-consistency" "enforce"
+# and delete the deadline arm in the same commit; record the flip declined in its
+# flip-decision row; or re-date this constant with the reason.
+readonly CLOSEOUT_ANCHOR_ROLLOUT_ARMED="2026-10-29"
 # Basename of the whole warn-log family — the hot file and every segment share
 # it. Stated once so a consumer pattern cannot drift from the writer's spelling.
 readonly WARN_LOG_BASENAME="deploy-check-warn-log"
@@ -7827,6 +7834,120 @@ flag_release_body_drift() {
       printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$_ts" "$check_id" "$_detail_escaped" >> "$_wl" 2>/dev/null || true
       ;;
   esac
+}
+
+# ─── _c82_report / _c82_deadline — Check 82's verdict tail and deadline arm (TOP-LEVEL) ──
+#
+# HOISTED TO TOP LEVEL for flag_not_evaluated's reason: a definition inside cmd_check() is
+# registered only when execution reaches it, and --self-test group CO drives THESE bodies,
+# never a copy. Check 82 is `closeout-anchor-consistency`. Its primitive is
+# core/deploy/tools/generate_release_index.py --verify-closeout-anchors, whose stdout
+# grammar is that module's render_closeout_report(): one DENOM line, then verdict-first
+# TSV rows of class FAIL or NOT-EVALUATED, and nothing else.
+#
+# _c82_report <mode> <rc> <out>
+#   <mode>  enforce | warn, as a LITERAL. Check 82 dispatches it from its own dial with a
+#           `case`, so the dial variable is never passed as an argument — that keeps every
+#           reference to the dial inside the closed vocabulary WE-K grades
+#           (core/deploy/tests/test_advisory_emitter_contract.sh).
+#   <rc>    the primitive's exit: 0 no divergence · 1 at least one · 3 not run. Any other
+#           exit is outside its contract.
+#   <out>   the primitive's stdout and stderr, captured together.
+# A FAIL row is a finding: under enforce a FAIL line and one issue per row; under warn a
+# WARN line and one row per finding appended to the shared warn log under the check id
+# (W1), never an issue. NOT-EVALUATED rows fan into ONE flag_not_evaluated emit, which moves
+# no exit code. Every reading this tail cannot vouch for — no DENOM record, a row of an
+# unrecognised class, exit 1 naming nothing, exit 0 beside a FAIL row, an exit outside
+# 0/1/3, a mode it does not know — is an INSTRUMENT FAILURE and fails closed on every mode,
+# and the OK line is withheld: a verdict that cannot be read is not a pass.
+#
+# The residual-class predicate is the one tsv_residual_rows implements, written once here
+# rather than called: that helper is nested inside cmd_check and does not exist when the
+# --self-test runner executes (the mirror-pair-parity body records the same constraint).
+_c82_report() {
+  local _m="$1" _rc="$2" _out="$3"
+  local _denom _resid _ne _hits=0 _detail _readable=1
+  local _cls _ver _fld _vals _split _rec
+  if [[ "$_m" != "enforce" && "$_m" != "warn" ]]; then
+    log "  FAIL:  closeout-anchor-consistency — the verdict tail was handed mode '${_m}', which it does not know; findings cannot be routed, so the check fails closed"
+    ISSUES=$((ISSUES + 1))
+    return 0
+  fi
+  case "$_rc" in
+    0|1)
+      _denom="$(/usr/bin/sed -n 's/^DENOM: //p' <<<"$_out")"
+      _resid="$(/usr/bin/awk -F'\t' '
+        /^[[:space:]]*$/ { next }
+        /^DENOM: / { next }
+        $1 !~ /^(FAIL|NOT-EVALUATED)$/ { printf "%s%s", (n++ ? "; " : ""), $0 }
+      ' <<<"$_out")"
+      log "  DENOM: closeout-anchor-consistency — ${_denom:-<no population record>}"
+      if [[ -z "$_denom" || -n "$_resid" ]]; then
+        log "  FAIL:  closeout-anchor-consistency — the primitive's output is unreadable (no DENOM record, or rows outside FAIL/NOT-EVALUATED: ${_resid:-none}); an unread row is never an absence"
+        ISSUES=$((ISSUES + 1))
+        _readable=0
+      fi
+      _ne="$(/usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf "%s%s %s (%s)", (n++ ? "; " : ""), $2, $3, $4}' <<<"$_out")"
+      if [[ -n "$_ne" ]]; then
+        flag_not_evaluated "closeout-anchor-consistency" "status=degraded — these release surfaces could not be compared: ${_ne}; this is not a clean result"
+      fi
+      while IFS=$'\t' read -r _cls _ver _fld _vals _split _rec; do
+        [[ "$_cls" == "FAIL" ]] || continue
+        _hits=$((_hits + 1))
+        _detail="${_ver}: close-out surfaces disagree — ${_split} (${_vals}); ${_rec}"
+        if [[ "$_m" == "enforce" ]]; then
+          log "  FAIL:  closeout-anchor-consistency — ${_detail}"
+          ISSUES=$((ISSUES + 1))
+        else
+          log "  WARN:  closeout-anchor-consistency — ${_detail} (warn-mode; the flip is an operator decision recorded in core/standards/gate-efficacy-standard.md § Flip-decision status)"
+          json_escape_detail "$_detail"
+          printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "closeout-anchor-consistency" "$JSON_ESCAPED" >> "${WARN_LOG:-$(warn_log_path)}" 2>/dev/null || true
+        fi
+      done <<<"$_out"
+      if [[ "$_rc" -eq 1 && $_hits -eq 0 ]]; then
+        log "  FAIL:  closeout-anchor-consistency — the primitive exited 1 and named no divergence; a findings verdict that names nothing is unreadable, not a finding"
+        ISSUES=$((ISSUES + 1))
+      elif [[ "$_rc" -eq 0 && $_hits -gt 0 ]]; then
+        log "  FAIL:  closeout-anchor-consistency — the primitive exited 0 beside ${_hits} FAIL row(s); its exit contract is broken, so the verdict is unreadable"
+        ISSUES=$((ISSUES + 1))
+      elif [[ "$_rc" -eq 0 && $_readable -eq 1 && -z "$_ne" ]]; then
+        log "  OK:    closeout-anchor-consistency — every VERIFIED release at/after the anchor declaration carries one close-out date on each surface that declares it"
+      elif [[ "$_rc" -eq 0 && $_readable -eq 1 ]]; then
+        log "  OK:    closeout-anchor-consistency — no divergence among the surfaces compared [DEGRADED — some surfaces were not evaluated (see NOT-EVAL); this is not a clean result]"
+      fi
+      ;;
+    3)
+      flag_not_evaluated "closeout-anchor-consistency" "status=not-run — $(/usr/bin/sed -n 1p <<<"$_out"); the clean token is withheld; this is not a clean result"
+      ;;
+    *)
+      log "  FAIL:  closeout-anchor-consistency — the primitive exited ${_rc}, outside its 0/1/3 contract, so the verdict is unreadable: $(/usr/bin/tail -1 <<<"$_out")"
+      ISSUES=$((ISSUES + 1))
+      ;;
+  esac
+  return 0
+}
+
+# _c82_deadline <armed-date>
+#   W2, the repo-derivable ending condition of Check 82's warn-mode shakedown: the armed
+#   date (CLOSEOUT_ANCHOR_ROLLOUT_ARMED on the live path) against the GATE_ROLLOUT_* windows
+#   and today's UTC date — the Check 28 arm-3 shape. A date it cannot evaluate is a FAIL,
+#   never a silent pass; GRADUATION-OVERDUE is an issue; GRADUATION-DUE only warns.
+_c82_deadline() {
+  local _armed="$1" _days
+  _days="$(/usr/bin/python3 -c 'import datetime,sys
+print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromisoformat(sys.argv[1])).days)' "$_armed" 2>/dev/null || printf '')"
+  if [[ -z "$_days" ]]; then
+    log "  FAIL:  closeout-anchor-consistency shakedown — the deadline cannot be evaluated (the armed date '${_armed}' is not an ISO date, or /usr/bin/python3 could not compute it)"
+    ISSUES=$((ISSUES + 1))
+  elif [[ "$_days" -ge "$GATE_ROLLOUT_ESCALATE_DAYS" ]]; then
+    log "  FAIL:  closeout-anchor-consistency shakedown — GRADUATION-OVERDUE: ${_days} days at warn (escalation ${GATE_ROLLOUT_ESCALATE_DAYS}d). Record a decision in the repository: flip the committed default to enforce, decline in the flip-decision row, or re-date CLOSEOUT_ANCHOR_ROLLOUT_ARMED."
+    ISSUES=$((ISSUES + 1))
+  elif [[ "$_days" -ge "$GATE_ROLLOUT_REVIEW_DAYS" ]]; then
+    log "  WARN:  closeout-anchor-consistency shakedown — GRADUATION-DUE: ${_days} days since arming (review at ${GATE_ROLLOUT_REVIEW_DAYS}d; a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). Read the closeout-anchor-consistency rows across warn_log_segment_set(), then decide."
+  else
+    log "  OK:    closeout-anchor-consistency shakedown — within the review window (${_days}d of ${GATE_ROLLOUT_REVIEW_DAYS}d)"
+  fi
+  return 0
 }
 
 # ─── Check 16 population body — _c16_* (TOP-LEVEL) ───────────────────────────
@@ -18025,6 +18146,92 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
     fi
   fi
 
+  # ─── Check 82: Close-out anchor consistency (RELEASE_DIGEST ↔ CHANGELOG ↔ release-note date) ──
+  # Check 82 — Close-out anchor consistency (advisory; warn-mode initial; enforcement-surface: deploy-time-only — no CI mirror, Requirement (b′))
+  # gate-efficacy: posture=advisory  enforcement-surface=deploy-time-only
+  #   invariant: every VERIFIED release at/after the close-out-anchor declaration carries ONE
+  #              close-out date on its DIGEST heading, its CHANGELOG heading and its release
+  #              note's frontmatter `date:` (two surfaces for a version-less release)
+  #   falsification: change ONE surface's date on such a release -> a WARN row naming the
+  #                  version and the split of surfaces by date (deploy.sh --self-test group CO-1)
+  #
+  # WHAT IT ASSERTS. Three surfaces declare the close-out anchor: RELEASE_DIGEST.md's
+  # `### <key> (<date>)`, CHANGELOG.md's `## [<key>] - <date>` and the release note's
+  # frontmatter `date:`. For every VERIFIED RELEASE_LOG row at or after the release that
+  # declared that anchor (the projector's CLOSEOUT_ANCHOR_DECLARED_AT), they must carry one
+  # date. A version-less release has no CHANGELOG key by construction, so it compares two.
+  # A finding names the version, every value and the split of surfaces by date; it never
+  # says which side is wrong, because when two surfaces drift together the majority is.
+  #
+  # WHY THREE-WAY. The DIGEST and the CHANGELOG are written from one run-scoped sample, so
+  # a two-way compare of them reads agreement on exactly the defect that motivated this
+  # check: a pre-authored note keeps its author's date while both ledgers get the run's.
+  #
+  # WHY NOT INSIDE CHECK 23. Check 23 owns the merge-anchored LOG<->INDEX pair on its own
+  # dial; one dial per predicate (core/ADRs/ADR-166-split-predicate-gate-graduation.md), so
+  # each graduates on its own decision, and Check 23's --verify output contract is unchanged.
+  #
+  # PRESENCE IS NOT ITS PREDICATE. An absent or unparseable surface is NOT-EVALUATED for
+  # that row, never agreement; whether the surface should exist is Checks 32 and 48's.
+  # Rows before the declaration are grandfathered and not read.
+  #
+  # POSTURE. Its own committed dial, resolve_check_mode "closeout-anchor-consistency"
+  # "warn", tested with `case`, so a shared-cohort flip does not arm it. W1: each finding
+  # appends one row to the shared warn log under the check id; NOT-EVALUATED surfaces go
+  # through flag_not_evaluated. W2: CLOSEOUT_ANCHOR_ROLLOUT_ARMED, read by _c82_deadline.
+  # The flip is the committed default resolve_check_mode "closeout-anchor-consistency"
+  # "enforce", never a mode file, with the deadline arm deleted in the same commit
+  # (core/standards/gate-efficacy-standard.md § Flip-decision status).
+  #
+  # THE CONTROL ARM RUNS FIRST AND BLOCKS ON EVERY MODE. It is the projector's whole
+  # --self-test, so it ALSO carries Check 23's fixtures (the INDEX verifier, sort, orphan,
+  # header and Theme limbs): a regression in one of those reads here, under this check's id,
+  # as a fixture failure. Declared rather than discovered — the module is one grammar owner,
+  # and the failing limb is named in the printed output.
+  #
+  # COVERAGE BOUNDARY. Deploy-time only: the fixtures also run in CI through the
+  # selftest-discovery job, but nothing in CI runs the live compare, so Requirement (b′)
+  # bars `required`. A CI caller on the pull request that writes the subject — the Stage-13
+  # chore PR — is the named precondition for `required`, not a step this check takes.
+  #
+  # Primitive: core/deploy/tools/generate_release_index.py --verify-closeout-anchors (carries
+  # --self-test). Verdict tail and deadline arm: _c82_report and _c82_deadline at top level,
+  # driven by --self-test group CO.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    local c82_mode
+    c82_mode="$(resolve_check_mode "closeout-anchor-consistency" "warn")"
+    if [[ "$c82_mode" != "off" ]]; then
+      log "Check 82: Close-out anchor consistency (RELEASE_DIGEST, CHANGELOG and release-note date agree for every VERIFIED release at/after the anchor declaration; ${c82_mode})"
+      local c82_script="core/deploy/tools/generate_release_index.py"
+      if [[ ! -f "$c82_script" ]]; then
+        log "  FAIL:  closeout-anchor-consistency — primitive missing: $c82_script (a repo defect, not a benign absence)"
+        ISSUES=$((ISSUES + 1))
+      elif [[ ! -x "/usr/bin/python3" ]]; then
+        log "  FAIL:  closeout-anchor-consistency — /usr/bin/python3 not executable, so the close-out anchors are NOT-EVALUATED — this is not a clean result"
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── control arm FIRST: a probe that cannot be shown to detect proves nothing ──
+        local c82_fx_out c82_fx_rc=0
+        c82_fx_out=$(/usr/bin/python3 "$c82_script" --self-test 2>&1) || c82_fx_rc=$?
+        log "  CTRL:  closeout-anchor-consistency — $(/usr/bin/tail -1 <<<"$c82_fx_out")"
+        if [[ $c82_fx_rc -ne 0 ]]; then
+          log "  FAIL:  closeout-anchor-consistency-fixtures — projector self-test regression (exit $c82_fx_rc; hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+          /usr/bin/sed 's/^/         /' <<<"$c82_fx_out"
+          ISSUES=$((ISSUES + 1))
+        else
+          local c82_out c82_rc=0
+          c82_out=$(/usr/bin/python3 "$c82_script" --verify-closeout-anchors 2>&1) || c82_rc=$?
+          case "$c82_mode" in
+            enforce) _c82_report enforce "$c82_rc" "$c82_out" ;;
+            *) _c82_report warn "$c82_rc" "$c82_out" ;;
+          esac
+        fi
+      fi
+      # ── deadline arm (W2): the committed constant and today's date only ──
+      _c82_deadline "$CLOSEOUT_ANCHOR_ROLLOUT_ARMED"
+    fi
+  fi
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
@@ -21321,12 +21528,152 @@ DG10HEAD
     if [[ "$ISSUES" -ne "$_dg_i0" ]]; then _dp_fail "DG-6 the doc-gate emit path must never increment ISSUES, got +$((ISSUES - _dg_i0))"; fi
   fi
 
+  # ─── Assertion group CO — close-out anchor consistency (Check 82) ──────────────
+  #
+  # Offline and sandbox-only: a scratch corpus, a scratch WARN_LOG, no gh, no network. Drives
+  # the REAL primitive (core/deploy/tools/generate_release_index.py --verify-closeout-anchors,
+  # with its fixture path overrides) and the REAL hoisted _c82_report / _c82_deadline — the
+  # bodies Check 82 runs. The primitive's own grammar arms (CA-1..CA-11) are its --self-test's,
+  # run in CI by the selftest-discovery job and first inside Check 82; this group owns the
+  # EMIT path: the finding row, the warn-log row, the mode, the fail-closed readings and W2.
+  #
+  # The primitive takes no cutoff argument — the boundary is a committed constant, never an
+  # input — so the sandbox LOG carries a literal v4.02 row. CO-1 is the sensitivity arm (a
+  # seeded divergence after it); CO-2 the specificity arm (the same corpus, the seed removed,
+  # a divergence BEFORE it still present in the input); CO-3 the enforce dial; CO-4 a surface
+  # that cannot be compared; CO-5 a scope that cannot be resolved; CO-6 every reading the
+  # tail cannot vouch for; CO-7 the deadline; CO-8 the mode exclusivity.
+  #
+  # WHAT THIS GROUP CANNOT SEE: Check 82's inline lines in cmd_check — its dial read, its
+  # primitive-missing and python-missing branches and its control-arm call — reached only by
+  # a --check run, which records them.
+  echo "self-test: starting assertion group CO (close-out anchor consistency, Check 82)" >&2
+  if ! declare -F _c82_report >/dev/null || ! declare -F _c82_deadline >/dev/null; then
+    _dp_fail "CO-0 the hoisted _c82_report / _c82_deadline are not both defined — every CO arm drives them"
+  else
+    local _cot; _cot="$(/usr/bin/mktemp -d -t closeoutanchor-selftest.XXXXXX)"
+    local _cop; _cop="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/generate_release_index.py"
+    local WARN_LOG="$_cot/warn.jsonl"
+    local ISSUES=0
+    local _co_out _co_rc _co_i0 _co_w0 _co_e0 _co_l
+    /bin/mkdir -p "$_cot/notes/_unversioned"
+    printf '| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n|---|---|---|---|---|---|---|---|\n| v4.01 | co-m1 | #1 | #2 | `a` | `v4.01` | VERIFIED | 2026-06-01 |\n| v4.02 | co-m2 | #1 | #2 | `b` | `v4.02` | VERIFIED | 2026-06-02 |\n| v4.03 | co-m3 | #1 | #2 | `c` | `v4.03` | VERIFIED | 2026-06-04 |\n| co-vl (version-less) | co-vl | #1 | #2 | `d` | (none) | VERIFIED | 2026-06-06 |\n' > "$_cot/LOG.md"
+    printf '| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n|---|---|---|---|---|---|---|---|\n| v4.01 | co-m1 | #1 | #2 | `a` | `v4.01` | VERIFIED | 2026-06-01 |\n| v4.03 | co-m3 | #1 | #2 | `c` | `v4.03` | VERIFIED | 2026-06-04 |\n' > "$_cot/LOG-nocut.md"
+    printf '# RELEASE_DIGEST\n\n### v4.01 (2026-06-02) — before the declaration, divergent\n### v4.02 (2026-06-03) — agrees\n### v4.03 (2026-06-05) — the seeded release\n### co-vl (2026-06-06, version-less) — agrees\n' > "$_cot/DIGEST.md"
+    printf '# Changelog\n\n## [Unreleased]\n\n## [v4.03] - 2026-06-05\n\n## [v4.02] - 2026-06-03\n\n## [v4.01] - 2026-06-02\n' > "$_cot/CHANGELOG.md"
+    printf '# Changelog\n\n## [Unreleased]\n\n## [v4.02] - 2026-06-03\n\n## [v4.01] - 2026-06-02\n' > "$_cot/CHANGELOG-no403.md"
+    printf -- '---\ntitle: a\ndate: 2026-06-01\n---\n# v4.01\n' > "$_cot/notes/v4.01_RELEASE_NOTES.md"
+    printf -- '---\ntitle: b\ndate: 2026-06-03\n---\n# v4.02\n' > "$_cot/notes/v4.02_RELEASE_NOTES.md"
+    printf -- '---\ntitle: c\ndate: 2026-06-04\n---\n# v4.03\n' > "$_cot/notes/v4.03_RELEASE_NOTES.md"
+    printf -- '---\ntitle: d\ndate: 2026-06-06\n---\n# co-vl\n' > "$_cot/notes/_unversioned/co-vl_RELEASE_NOTES.md"
+
+    # _co_run <log> <changelog>: the real primitive over the sandbox; sets _co_out / _co_rc.
+    _co_run() {
+      _co_rc=0
+      _co_out="$(/usr/bin/python3 "$_cop" --verify-closeout-anchors --log-path "$1" --digest-path "$_cot/DIGEST.md" --changelog-path "$2" --notes-dir "$_cot/notes" 2>&1)" || _co_rc=$?
+    }
+    # _co_ago <days>: today's UTC date minus <days>, ISO.
+    _co_ago() {
+      /usr/bin/python3 -c 'import datetime,sys
+print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(days=int(sys.argv[1]))).isoformat())' "$1"
+    }
+
+    # CO-1 — SENSITIVITY: v4.03's note is a day earlier than its DIGEST and CHANGELOG, which
+    # agree with each other. Exit 1; ONE WARN line naming v4.03 and the split; ONE warn-log
+    # row under the check id; no issue; no OK line; the pre-declaration v4.01 stays silent.
+    _co_run "$_cot/LOG.md" "$_cot/CHANGELOG.md"
+    if [[ "$_co_rc" -ne 1 ]]; then _dp_fail "CO-1 a seeded post-declaration divergence must exit 1, got $_co_rc: $_co_out"; fi
+    _co_i0="$ISSUES"; _co_w0="$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')"
+    _c82_report warn "$_co_rc" "$_co_out" > "$_cot/co1.out" 2>&1
+    _co_l="$(_dp_line "$_cot/co1.out" 'WARN:  closeout-anchor-consistency')"
+    if [[ "$(_dp_count "$_cot/co1.out" 'WARN:  closeout-anchor-consistency')" != "1" || "$_co_l" != *"v4.03: close-out surfaces disagree"* || "$_co_l" != *"2026-06-04: {note} | 2026-06-05: {CHANGELOG,DIGEST}"* ]]; then _dp_fail "CO-1 exactly one WARN line must name v4.03 and the split of surfaces by date: $_co_l"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')" != "$((_co_w0 + 1))" || "$(_dp_line "$WARN_LOG" '"check":"closeout-anchor-consistency"')" != *'"detail":"v4.03: close-out surfaces disagree'* ]]; then _dp_fail "CO-1 the finding must write exactly one warn-log row naming v4.03 (W1)"; fi
+    if [[ "$ISSUES" -ne "$_co_i0" || "$(_dp_count "$_cot/co1.out" 'FAIL:')" != "0" || "$(_dp_count "$_cot/co1.out" 'OK:')" != "0" ]]; then _dp_fail "CO-1 a warn-mode finding must raise no issue, print no FAIL line and withhold the OK line"; fi
+    if [[ "$(_dp_count "$_cot/co1.out" 'v4.01')" != "0" ]]; then _dp_fail "CO-1 the pre-declaration v4.01 divergence must not be read"; fi
+
+    # CO-2 — SPECIFICITY: the seed removed (v4.03's note now agrees); v4.01's divergence is
+    # still in the input — shown present, so the silence is the boundary working, not an
+    # empty input. Exit 0; the clean OK line; no WARN line; no warn-log row; no issue.
+    if [[ "$(_dp_count "$_cot/DIGEST.md" '### v4.01 (2026-06-02)')" != "1" || "$(_dp_count "$_cot/notes/v4.01_RELEASE_NOTES.md" 'date: 2026-06-01')" != "1" ]]; then _dp_fail "CO-2 the specificity input must carry the pre-declaration near-miss (v4.01 DIGEST 06-02, note 06-01)"; fi
+    printf -- '---\ntitle: c\ndate: 2026-06-05\n---\n# v4.03\n' > "$_cot/notes/v4.03_RELEASE_NOTES.md"
+    _co_run "$_cot/LOG.md" "$_cot/CHANGELOG.md"
+    _co_i0="$ISSUES"; _co_w0="$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')"
+    _c82_report warn "$_co_rc" "$_co_out" > "$_cot/co2.out" 2>&1
+    if [[ "$_co_rc" -ne 0 || "$(_dp_count "$_cot/co2.out" 'WARN:')" != "0" || "$(_dp_count "$_cot/co2.out" 'OK:    closeout-anchor-consistency — every VERIFIED release')" != "1" ]]; then _dp_fail "CO-2 an agreeing corpus must exit 0 and print the clean OK line and no WARN line (rc $_co_rc)"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')" != "$_co_w0" || "$ISSUES" -ne "$_co_i0" ]]; then _dp_fail "CO-2 an agreeing corpus must write no warn-log row and raise no issue"; fi
+    if [[ "$(_dp_count "$_cot/co2.out" 'status=fetched enumerated=3 examined=3')" != "1" || "$(_dp_count "$_cot/co2.out" '1 version-less compared two-way')" != "1" || "$(_dp_count "$_cot/co2.out" '1 earlier row(s) predate')" != "1" ]]; then _dp_fail "CO-2 the DENOM record must count 3 compared rows, 1 version-less and 1 pre-declaration row"; fi
+
+    # CO-3 — the ENFORCE dial: the seed restored; ONE FAIL line naming v4.03, ISSUES +1, and
+    # no warn-log row.
+    printf -- '---\ntitle: c\ndate: 2026-06-04\n---\n# v4.03\n' > "$_cot/notes/v4.03_RELEASE_NOTES.md"
+    _co_run "$_cot/LOG.md" "$_cot/CHANGELOG.md"
+    _co_i0="$ISSUES"; _co_w0="$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')"
+    _c82_report enforce "$_co_rc" "$_co_out" > "$_cot/co3.out" 2>&1
+    if [[ "$(_dp_count "$_cot/co3.out" 'FAIL:  closeout-anchor-consistency — v4.03: close-out surfaces disagree')" != "1" || "$((ISSUES - _co_i0))" -ne 1 ]]; then _dp_fail "CO-3 under enforce the finding must print one FAIL line naming v4.03 and raise exactly one issue (got +$((ISSUES - _co_i0)))"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')" != "$_co_w0" ]]; then _dp_fail "CO-3 under enforce no warn-log row is written"; fi
+
+    # CO-4 — a surface that cannot be compared: v4.03's note agrees again and its CHANGELOG
+    # entry is gone. Exit 0; ONE NOT-EVAL line naming it; the OK line carries DEGRADED; one
+    # evaluated:false row; no issue.
+    printf -- '---\ntitle: c\ndate: 2026-06-05\n---\n# v4.03\n' > "$_cot/notes/v4.03_RELEASE_NOTES.md"
+    _co_run "$_cot/LOG.md" "$_cot/CHANGELOG-no403.md"
+    _co_i0="$ISSUES"; _co_e0="$(_dp_count "$WARN_LOG" '"evaluated":false')"
+    _c82_report warn "$_co_rc" "$_co_out" > "$_cot/co4.out" 2>&1
+    _co_l="$(_dp_line "$_cot/co4.out" 'NOT-EVAL: closeout-anchor-consistency')"
+    if [[ "$_co_rc" -ne 0 || "$(_dp_count "$_cot/co4.out" 'NOT-EVAL: closeout-anchor-consistency')" != "1" || "$_co_l" != *"v4.03 CHANGELOG (absent)"* || "$_co_l" != *"status=degraded"* ]]; then _dp_fail "CO-4 one NOT-EVAL line must name v4.03's CHANGELOG as absent under status=degraded (rc $_co_rc): $_co_l"; fi
+    if [[ "$(_dp_count "$_cot/co4.out" '[DEGRADED')" != "1" || "$(_dp_count "$WARN_LOG" '"evaluated":false')" != "$((_co_e0 + 1))" || "$ISSUES" -ne "$_co_i0" ]]; then _dp_fail "CO-4 a degraded read must print the DEGRADED OK line, write one evaluated:false row and raise no issue"; fi
+
+    # CO-5 — a scope that cannot be resolved: a LOG without the declaration row. Exit 3; a
+    # NOT-EVAL line under status=not-run; no OK line; no issue.
+    _co_run "$_cot/LOG-nocut.md" "$_cot/CHANGELOG.md"
+    _co_i0="$ISSUES"
+    _c82_report warn "$_co_rc" "$_co_out" > "$_cot/co5.out" 2>&1
+    if [[ "$_co_rc" -ne 3 || "$(_dp_count "$_cot/co5.out" 'status=not-run')" != "1" || "$(_dp_count "$_cot/co5.out" 'names no RELEASE_LOG row')" != "1" || "$(_dp_count "$_cot/co5.out" 'OK:')" != "0" || "$ISSUES" -ne "$_co_i0" ]]; then _dp_fail "CO-5 an unresolved scope must exit 3 and read status=not-run with no OK line and no issue (rc $_co_rc)"; fi
+
+    # CO-6 — every reading the tail cannot vouch for fails closed, here under warn: exit 1
+    # naming nothing; exit 0 beside a FAIL row; a row of an unknown class; no DENOM record; an
+    # exit outside 0/1/3; a mode the tail does not know. Each raises one issue and no OK line.
+    local _co_case _co_n=0
+    for _co_case in "1|DENOM: status=fetched enumerated=1 examined=1 (x)" \
+                    "0|DENOM: status=fetched enumerated=1 examined=1 (x)"$'\n'$'FAIL\tv9.01\tcloseout_anchor\tDIGEST=2026-01-01\ta | b\trec' \
+                    "0|DENOM: status=fetched enumerated=1 examined=1 (x)"$'\n'$'BOGUS\tx' \
+                    "0|" \
+                    "7|boom"; do
+      _co_n=$((_co_n + 1))
+      _co_i0="$ISSUES"
+      _c82_report warn "${_co_case%%|*}" "${_co_case#*|}" > "$_cot/co6-$_co_n.out" 2>&1
+      if [[ "$((ISSUES - _co_i0))" -ne 1 || "$(_dp_count "$_cot/co6-$_co_n.out" 'OK:')" != "0" ]]; then _dp_fail "CO-6 case $_co_n (exit ${_co_case%%|*}) must fail closed with exactly one issue and no OK line (got +$((ISSUES - _co_i0)))"; fi
+    done
+    _co_i0="$ISSUES"
+    _c82_report off 0 "DENOM: status=fetched enumerated=0 examined=0 (x)" > "$_cot/co6-mode.out" 2>&1
+    if [[ "$((ISSUES - _co_i0))" -ne 1 || "$(_dp_count "$_cot/co6-mode.out" 'does not know')" != "1" ]]; then _dp_fail "CO-6 a mode the tail does not know must fail closed with one issue"; fi
+
+    # CO-7 — W2: armed today is within the window; 61 days back is GRADUATION-DUE (a warning,
+    # no issue); 91 days back is GRADUATION-OVERDUE (one issue); a non-date cannot be
+    # evaluated (one issue).
+    _co_i0="$ISSUES"
+    _c82_deadline "$(_co_ago 0)" > "$_cot/co7a.out" 2>&1
+    _c82_deadline "$(_co_ago 61)" > "$_cot/co7b.out" 2>&1
+    if [[ "$(_dp_count "$_cot/co7a.out" 'within the review window')" != "1" || "$(_dp_count "$_cot/co7b.out" 'GRADUATION-DUE')" != "1" || "$ISSUES" -ne "$_co_i0" ]]; then _dp_fail "CO-7 armed today must read within the window and 61 days back GRADUATION-DUE, neither raising an issue"; fi
+    _c82_deadline "$(_co_ago 91)" > "$_cot/co7c.out" 2>&1
+    _c82_deadline "not-a-date" > "$_cot/co7d.out" 2>&1
+    if [[ "$(_dp_count "$_cot/co7c.out" 'GRADUATION-OVERDUE')" != "1" || "$(_dp_count "$_cot/co7d.out" 'cannot be evaluated')" != "1" || "$((ISSUES - _co_i0))" -ne 2 ]]; then _dp_fail "CO-7 91 days back must read GRADUATION-OVERDUE and a non-date cannot be evaluated, one issue each (got +$((ISSUES - _co_i0)))"; fi
+
+    # CO-8 — the mode is exclusive: combined with --self-test it is a usage error (exit 2),
+    # never a self-test exit reported as the verification's.
+    _co_rc=0; /usr/bin/python3 "$_cop" --verify-closeout-anchors --self-test > "$_cot/co8.out" 2>&1 || _co_rc=$?
+    if [[ "$_co_rc" -ne 2 ]]; then _dp_fail "CO-8 --verify-closeout-anchors with --self-test must exit 2, got $_co_rc"; fi
+
+    /bin/rm -rf "$_cot"
+  fi
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
   fi
   echo "self-test: PASS" >&2
   echo "  release-context close gates validated (group DG): DG-1 one unrefreshed Tier-A artifact + one unresolved declaration write exactly two warn-log rows, one under each gate id / DG-2 the refreshed control writes none and verdicts CLEAN / DG-3 enforce writes no row / DG-4 an empty population is NA and an engine failure NOT-EVALUATED, never CLEAN / DG-5 exit 0 has exactly two producers, both CLEAN / DG-6 no arm moves ISSUES / DG-7 a failed population read, a PR with no milestone, an unresolved repository and an unreconciled count each withhold G-CL8 as NOT-EVALUATED, and the reconciled control returns the milestone less status: deferred plus the keyword closes / DG-8 a graded count short of the population withholds the gate even beside a finding / DG-9 a declared obligation at 0% conformance with no owner writes exactly one g-cl10 row naming it / DG-10 the identical record naming an open non-member owner that names the population writes none and verdicts CLEAN / DG-11 a g-cl10 subject missing from the grade withholds the gate / DG-12 a plan renamed after <head> is found by its milestone: frontmatter, and a slug no plan declares withholds the obligation / DG-13 an unowned Outcome limb writes one row whose detail opens limbs:" >&2
+  echo "  close-out anchor consistency validated (group CO, Check 82): CO-1 a seeded post-declaration divergence writes one WARN line naming the version and the split, and one warn-log row / CO-2 the seed removed, with a pre-declaration divergence still in the input, prints the clean OK line and writes none / CO-3 enforce prints one FAIL line and raises one issue / CO-4 a surface not compared is one NOT-EVAL line and a DEGRADED OK / CO-5 an unresolved scope reads status=not-run / CO-6 every unreadable verdict fails closed with one issue and no OK line / CO-7 the deadline warns at review and fails at escalation / CO-8 the mode is exclusive" >&2
   echo "  version-freeness claimed-set column pinning validated (#3724 AC-N, group VF):" >&2
   echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
