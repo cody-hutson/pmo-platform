@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v4.81] - 2026-10-30
+
+A release's governance promises are now measured when it closes, and any shortfall must name the work item that will close it.
+
+[Full notes](release/releases/notes/v4.81_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v4.81)
+
 ## [v4.80.1] - 2026-10-28
 
 Stage 12 no longer commits in the primary checkout or pushes to main; rebuilt skill packages reach main only by pull request.
