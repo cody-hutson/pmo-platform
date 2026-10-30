@@ -211,13 +211,13 @@ value cannot be resolved to an instant after the fact by any later reader.
 | `release/releases/RELEASE_LOG.md` — `Date` column | **merge event** | Stage 12 chore PR |
 | `release/releases/RELEASE_INDEX.md` — `Date` column | **merge event**, sourced from the LOG row | close-out `append_release_index` |
 | `release/releases/RELEASE_DIGEST.md` — `### vX.Y (<date>)` | **close-out event** | close-out `append_release_digest` |
-| `CHANGELOG.md` — `## [vX.Y] - <date>` | **close-out event**, derived from the release-note frontmatter `date:` | close-out `append_changelog` |
+| `CHANGELOG.md` — `## [vX.Y] - <date>` | **close-out event**, the same run-scoped sample as the DIGEST | close-out `append_changelog` |
 | `release/releases/notes/vX.Y_RELEASE_NOTES.md` — frontmatter `date:` | **close-out event** | close-out `scaffold_release_notes` |
 | `release/releases/RELEASE_REVERSIONS.md` — date cell | **close-out event** | close-out `append_reversions` |
 | pipeline event log — `ts` field | **emission instant** | `release/tools/append-pipeline-event.sh` |
 
 **Why LOG and INDEX share the merge anchor, and DIGEST/CHANGELOG do not.** LOG
-and INDEX are the corpus's two primary ledgers and the only pair carrying an
+and INDEX are the corpus's two primary ledgers and the merge-anchored pair carrying an
 automated cross-assertion: `core/deploy/tools/generate_release_index.py --verify`
 (invoked by `deploy.sh` Check 23) asserts the INDEX row equals the LOG row
 field-for-field. **A checker asserting equality across a pair that holds two
@@ -227,6 +227,10 @@ ability to report a difference that is not. Binding both ledgers to the merge
 anchor is what makes that check capable of detecting real drift. The close-out
 instant is not destroyed by this: DIGEST, the release note, and CHANGELOG all
 carry it, each declaring so. Both facts keep a home; the check keeps its teeth.
+The close-out-anchored surfaces carry their own: `generate_release_index.py
+--verify-closeout-anchors` (`deploy.sh` Check 82) asserts that the DIGEST, the release
+note and the CHANGELOG carry one close-out date for every release at or after the anchor
+declaration.
 
 ### Sample once per unit of work
 
@@ -290,6 +294,7 @@ per § *Grandfathering* — declared forward, never backfilled.
 | Stage 13 close-out protocol | [`pipeline/stage-13-close.md` § Phase B commit mechanism](../../release/references/pipeline/stage-13-close.md) | Names the anchor each Stage-13 corpus write carries |
 | Close-out emitter | [`automated-closeout.sh`](../../release/tools/automated-closeout.sh) | Holds the run-scoped close-out anchor; writes INDEX / DIGEST / CHANGELOG / notes / REVERSIONS |
 | LOG↔INDEX checker | [`generate_release_index.py`](../deploy/tools/generate_release_index.py) | `--verify` asserts the merge-anchor equality this standard declares (`deploy.sh` Check 23) |
+| Close-out-anchor checker | [`generate_release_index.py`](../deploy/tools/generate_release_index.py) | `--verify-closeout-anchors` asserts DIGEST / note / CHANGELOG date agreement (`deploy.sh` Check 82) |
 
 ## Version History
 
@@ -297,3 +302,4 @@ per § *Grandfathering* — declared forward, never backfilled.
 |---|---|---|
 | Initial | 2026-05-21 | Initial authoring —  |
 | Emission-time extension | 2026-07-31 | Extended to the emission-time surface: § *Emission-Time Anchors* (three-anchor taxonomy, release-corpus surface→anchor map, sample-once-per-unit-of-work rule, emitted-vs-compared distinction, format rules, forward-only grandfathering) + § *Scope router*. Title, `purpose:`, and `consumers:` widened. The Stage-5 trigger predicate and the `${AUDIT_DATE_UTC}` variable schema are unchanged — no existing consumer acquires an obligation. |
+| Close-out-anchor checker | 2026-10-29 | The close-out-anchored surfaces gain an automated cross-assertion: `generate_release_index.py --verify-closeout-anchors` (`deploy.sh` Check 82) compares the DIGEST, release-note and CHANGELOG dates for every release at or after the anchor declaration. The CHANGELOG row of the surface→anchor map states its true source, the same run-scoped sample as the DIGEST, and LOG↔INDEX is named the merge-anchored pair rather than the only checked one. |

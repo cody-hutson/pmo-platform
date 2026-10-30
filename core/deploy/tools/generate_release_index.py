@@ -37,7 +37,7 @@ reconciles them against release/releases/RELEASE_INDEX.md (live 6-column schema:
 Version | Milestone | Date | Theme | Release PR | Release Notes).
 
 The INDEX is hand-authored at Stage 13 close (the Theme cell is free-prose not
-derivable from the LOG). This tool serves two roles:
+derivable from the LOG). This tool serves three roles:
 
   default (write/--output-stdout): regenerate the 6-column INDEX from the LOG +
     filesystem (plan/note presence). Hand-authored Theme cells are PRESERVED
@@ -51,12 +51,29 @@ derivable from the LOG). This tool serves two roles:
     Milestone, Date, Release PR, Release-Notes-link presence) — the Theme cell
     has no LOG source of truth and is intentionally NOT drift-checked.
 
+  --verify-closeout-anchors (deploy.sh Check 82): read-only. For every VERIFIED
+    LOG row at or after CLOSEOUT_ANCHOR_DECLARED_AT, in LOG order, read the
+    close-out date on each surface that declares the close-out anchor: the DIGEST
+    heading `(<date>[, version-less])`, the CHANGELOG heading `- <date>`, and the
+    note frontmatter `date:`. Report each row whose surfaces carry more than one
+    date. A versioned row compares 3 surfaces. A version-less row compares 2,
+    because the scripted close-out writes it no CHANGELOG entry — and 3 when a
+    CHANGELOG entry for its slug exists anyway (a close-out written by hand or
+    hub-direct); its missing entry is never NOT-EVALUATED. An absent or
+    unparseable surface is NOT-EVALUATED for that row, never agreement; presence
+    is Checks 32 and 48's predicate. Rows before the declaration are not read.
+    The note's `date:` is read here to VERIFY only. No emitter reads it, and
+    read_note()'s derivation-direction rule stands. Output: one `DENOM:` line,
+    then one verdict-first TSV row per finding (`FAIL`) and per surface that
+    could not be compared (`NOT-EVALUATED`).
+
 The earlier 8-column schema (Version|Date|Class|Scope|Plan|Note|LOG|Status) and
 its #N-token "Scope" count are RETIRED — the live INDEX has no Scope column, so
 the #N-token miscount the generator was filed to fix is moot by construction.
 
 Usage:
     python3 core/deploy/tools/generate_release_index.py --verify        # read-only
+    python3 core/deploy/tools/generate_release_index.py --verify-closeout-anchors   # read-only
     python3 core/deploy/tools/generate_release_index.py --self-test     # read-only
     python3 core/deploy/tools/generate_release_index.py --output-stdout # no write
     python3 core/deploy/tools/generate_release_index.py                 # DESTRUCTIVE
@@ -100,6 +117,11 @@ clean) OR an on-disk INDEX orphan row not derivable from the LOG (write +
 Exit 3 matches the cross-module-audit.sh family convention (per #459) so
 deploy.sh can distinguish "found drift" (1) from "could not run / corpus
 integrity violation" (3).
+--verify-closeout-anchors: 0 = no divergence (NOT-EVALUATED rows may be present,
+and the DENOM status says so); 1 = at least one divergence; 3 = the LOG, DIGEST,
+CHANGELOG or notes dir is unresolved, zero LOG rows parse, or
+CLOSEOUT_ANCHOR_DECLARED_AT names no LOG row. Combining it with --verify, --emit,
+--self-test or --output-stdout is a usage error (exit 2).
 
 Render order: rows are emitted chronological-recent-first (newest Date first;
 within a Date tie the most-recently-appended LOG row — i.e. the more recent
@@ -168,6 +190,17 @@ EMIT_SURFACES = ("index", "digest", "changelog")
 # corpus do not parse under it.
 NOTE_FRONTMATTER_RE = re.compile(r"---\n(.*?)\n---\n", re.DOTALL)
 NOTE_SUMMARY_RE = re.compile(r'^summary:\s*"?([^"\n]+)"?', re.MULTILINE)
+
+# Close-out-anchor READ grammar (--verify-closeout-anchors). Each parser sits beside
+# the emitter whose output it reads — emit_digest_entry() writes `### <key> (<cell>)`
+# and emit_changelog_entry() writes `## [<key>] - <date>` — and --self-test's
+# round-trip limb binds each pair, so the reader and the writer cannot drift apart.
+# Date validity reuses _DATE_RE; a DIGEST cell admits the version-less marker.
+DIGEST_ENTRY_RE = re.compile(r"^### (?P<key>\S+) \((?P<cell>[^)]*)\)", re.MULTILINE)
+DIGEST_DATE_CELL_RE = re.compile(r"^(?P<date>\d{4}-\d{2}-\d{2})(?:, version-less)?$")
+CHANGELOG_ENTRY_RE = re.compile(r"^## \[(?P<key>[^\]]+)\] - (?P<date>\S+)[ \t]*$", re.MULTILINE)
+NOTE_DATE_RE = re.compile(r'^date:\s*"?(?P<date>[^"\n]*?)"?\s*$', re.MULTILINE)
+CLOSEOUT_SURFACES = ("DIGEST", "CHANGELOG", "note")
 
 # Live LOG schema: | Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |
 # Version cell may be a bare version key (v1.06) OR a version-less slug with a
@@ -370,6 +403,19 @@ DATE_ANCHOR_GRANDFATHERED = frozenset({
 # A comment is not a guard.
 DATE_ANCHOR_RECONCILIATION = "2026-07-30"
 
+# The LOG row of the release whose pull request declared the close-out anchor on
+# RELEASE_DIGEST.md and CHANGELOG.md ("Entries predating this declaration are
+# grandfathered — anchors are declared forward, never backfilled"). Rows at or after it,
+# in LOG order, are in scope for --verify-closeout-anchors; rows before it are not read.
+# A LOG-ROW boundary, not a date: the date is the SUBJECT under test, so a date boundary
+# would let a divergent row decide its own scope. Not an enumeration: the exempt
+# population is every row written before the declaration — a boundary, not a closed set
+# of defects (contrast DATE_ANCHOR_GRANDFATHERED).
+#
+# DO NOT move this forward to silence a finding. A divergence at or after it is a writer
+# defect or a hand-edit; correct the surface. --self-test pins it to a live LOG row.
+CLOSEOUT_ANCHOR_DECLARED_AT = "v4.02"
+
 
 def _date_sort_key(date_cell: str) -> tuple[int, str]:
     """Sort key for one Date cell. Well-formed ISO dates sort by value;
@@ -548,8 +594,11 @@ def read_note(version_key: str, milestone: str) -> dict:
              "headline": <str|None>, "summary": <str|None>}.
     `text is None` means the note does not resolve — the caller decides whether
     that is loud (CHANGELOG) or expected (DIGEST). The note's `date:` is
-    deliberately NOT read: it is written FROM the close-out anchor one phase
-    later, so treating it as a source would invert the direction of derivation.
+    deliberately NOT read here: it is written from the close-out anchor when the
+    close-out scaffolds the note (a note that already exists keeps the date its
+    author wrote), so treating it as a source would invert the direction of
+    derivation. It is VERIFIED, never derived from, by --verify-closeout-anchors,
+    through read_note_closeout_date().
     """
     rel = find_artifact(version_key, milestone, "note")
     out: dict = {"path": rel, "text": None, "headline": None, "summary": None}
@@ -776,6 +825,181 @@ def verify(log_rows: list[dict], index_rows: list[dict],
     return findings
 
 
+# ── Close-out anchor consistency (--verify-closeout-anchors) ──────────────────
+
+CLOSEOUT_RECOMMENDATION = (
+    "the release's close-out surfaces carry more than one close-out date. Each must carry the one "
+    "close-out run date (UTC). Read it from the Stage-13 chore commit that wrote the entries, and "
+    "correct the differing surface IN PLACE. The majority is not evidence of correctness. A note's "
+    "date also appears in its Section-2 date line, so changing it changes the published Release body "
+    "(release-notes-standard § 5.1). Never regenerate a derived surface whole, and never move "
+    "CLOSEOUT_ANCHOR_DECLARED_AT to silence this"
+)
+
+
+def parse_digest_dates(text: str) -> dict[str, list[str]]:
+    """Map each DIGEST entry key to the raw `(<cell>)` of EVERY entry carrying it.
+
+    Duplicates are kept: two entries for one key that carry two dates are a
+    divergence on that surface, never a last-one-wins read. The cell is returned raw
+    (`2026-05-20` or `2026-05-20, version-less`); verify_closeout_anchors() reads the
+    date out of it with DIGEST_DATE_CELL_RE, so an unparseable cell surfaces as
+    NOT-EVALUATED rather than vanishing here.
+    """
+    out: dict[str, list[str]] = {}
+    for m in DIGEST_ENTRY_RE.finditer(text):
+        out.setdefault(m.group("key"), []).append(m.group("cell").strip())
+    return out
+
+
+def parse_changelog_dates(text: str) -> dict[str, list[str]]:
+    """Map each CHANGELOG `## [<key>] - <date>` heading key to every date token it
+    carries, duplicates kept. `## [Unreleased]` carries no date and does not match."""
+    out: dict[str, list[str]] = {}
+    for m in CHANGELOG_ENTRY_RE.finditer(text):
+        out.setdefault(m.group("key"), []).append(m.group("date"))
+    return out
+
+
+def read_note_closeout_date(version_cell: str, milestone: str) -> tuple[str | None, str]:
+    """Read ONE release note's frontmatter `date:` for VERIFICATION, never derivation.
+
+    Returns (date, "") or (None, cause), where cause is one of `absent`,
+    `unreadable`, `frontmatter unparseable`, `no date: field` or `unparseable <value>`.
+    Resolution reuses find_artifact() and NOTES_DIR exactly as read_note() does, so the
+    note this reads is the note every other limb of this module means.
+    """
+    rel = find_artifact(version_cell, milestone, "note")
+    if not rel:
+        return None, "absent"
+    try:
+        text = (NOTES_DIR.parent / rel).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None, "unreadable"
+    fm = NOTE_FRONTMATTER_RE.match(text)
+    if not fm:
+        return None, "frontmatter unparseable"
+    d = NOTE_DATE_RE.search(fm.group(1))
+    if not d:
+        return None, "no date: field"
+    value = d.group("date").strip()
+    if not _DATE_RE.match(value):
+        return None, f"unparseable {value!r}"
+    return value, ""
+
+
+def verify_closeout_anchors(log_rows: list[dict], digest: dict[str, list[str]],
+                            changelog: dict[str, list[str]], note_date,
+                            cutoff: str = CLOSEOUT_ANCHOR_DECLARED_AT) -> dict | None:
+    """Compare the close-out date across every surface that declares the close-out anchor.
+
+    `note_date` is a callable(row) -> (date | None, cause), so the note surface is
+    injectable for fixtures and read from the corpus in the live run.
+
+    Scope is every LOG row at or after the row whose version is `cutoff`, in LOG order.
+    Returns None when no row's version equals `cutoff`: the scope cannot be resolved,
+    which is never a clean result. A row not yet VERIFIED is counted in flight and not
+    read. A version-less row compares two surfaces, because the scripted close-out writes it
+    no CHANGELOG entry; when an entry for its slug exists anyway (a close-out written by
+    hand or hub-direct) that entry is compared too, and its absence is never NOT-EVALUATED.
+    An absent or unparseable value is NOT-EVALUATED for that surface — never agreement —
+    and the remaining surfaces are still compared.
+
+    A finding names the version, every value read and the PARTITION of surfaces by
+    date. It deliberately carries no "wrong" or "fault" field: when two surfaces have
+    drifted together the majority is the wrong side, so the check reports the split and
+    never assigns blame.
+    """
+    idx = next((i for i, r in enumerate(log_rows)
+                if _slug_from_version_cell(r["version"]) == cutoff), None)
+    if idx is None:
+        return None
+    result: dict = {"cutoff": cutoff, "enumerated": 0, "examined": 0, "in_flight": 0,
+                    "pre_cutoff": idx, "version_less": 0, "version_less_changelog": 0,
+                    "total": len(log_rows), "findings": [], "not_evaluated": []}
+    for row in log_rows[idx:]:
+        if row.get("state", "").strip() != "VERIFIED":
+            result["in_flight"] += 1
+            continue
+        result["enumerated"] += 1
+        version = row["version"]
+        key = _slug_from_version_cell(version)
+        version_less = VERSION_LESS_MARKER in version
+        if version_less:
+            result["version_less"] += 1
+        values: dict[str, list[str]] = {}
+
+        def _not_evaluated(surface: str, cause: str) -> None:
+            result["not_evaluated"].append({"version": version, "surface": surface, "cause": cause})
+
+        cells = digest.get(key)
+        if not cells:
+            _not_evaluated("DIGEST", "absent")
+        for cell in cells or []:
+            m = DIGEST_DATE_CELL_RE.match(cell)
+            if m:
+                values.setdefault("DIGEST", []).append(m.group("date"))
+            else:
+                _not_evaluated("DIGEST", f"unparseable {cell!r}")
+
+        dates = changelog.get(key)
+        if version_less and dates:
+            result["version_less_changelog"] += 1
+        if not dates and not version_less:
+            _not_evaluated("CHANGELOG", "absent")
+        for value in dates or []:
+            if _DATE_RE.match(value):
+                values.setdefault("CHANGELOG", []).append(value)
+            else:
+                _not_evaluated("CHANGELOG", f"unparseable {value!r}")
+
+        note_value, cause = note_date(row)
+        if note_value is None:
+            _not_evaluated("note", cause or "absent")
+        elif _DATE_RE.match(note_value):
+            values["note"] = [note_value]
+        else:
+            _not_evaluated("note", f"unparseable {note_value!r}")
+
+        read = [d for ds in values.values() for d in ds]
+        if len(read) >= 2:
+            result["examined"] += 1
+        distinct = sorted(set(read))
+        if len(distinct) > 1:
+            partition = [(d, sorted(s for s, ds in values.items() if d in ds)) for d in distinct]
+            result["findings"].append({"version": version, "values": values, "partition": partition})
+    return result
+
+
+def render_closeout_report(result: dict) -> list[str]:
+    """The --verify-closeout-anchors stdout contract, one line per element.
+
+    A `DENOM:` line first; then one verdict-first TSV row per finding
+    (`FAIL <version> closeout_anchor <values> <partition> <recommendation>`) and one per
+    surface not compared (`NOT-EVALUATED <version> <surface> <cause>`). deploy.sh Check
+    82 classifies every row by its first field and treats any other class as unreadable,
+    so this function is the only place the grammar is spelled.
+    """
+    status = "degraded" if result["not_evaluated"] else "fetched"
+    lines = [
+        f"DENOM: status={status} enumerated={result['enumerated']} examined={result['examined']} "
+        f"(VERIFIED RELEASE_LOG rows at/after {result['cutoff']}; "
+        f"{result['version_less'] - result['version_less_changelog']} version-less compared two-way — no "
+        f"CHANGELOG entry, which the scripted close-out never writes; {result['version_less_changelog']} "
+        f"version-less compared three-way — a CHANGELOG entry written by hand or hub-direct; "
+        f"{result['in_flight']} in-flight row(s) "
+        f"excluded; {result['pre_cutoff']} earlier row(s) predate the anchor declaration and are not "
+        f"read; {result['total']} LOG rows total)"
+    ]
+    for f in result["findings"]:
+        vals = ";".join(f"{s}={','.join(f['values'][s])}" for s in CLOSEOUT_SURFACES if s in f["values"])
+        split = " | ".join(f"{d}: {{{','.join(ss)}}}" for d, ss in f["partition"])
+        lines.append(f"FAIL\t{f['version']}\tcloseout_anchor\t{vals}\t{split}\t{CLOSEOUT_RECOMMENDATION}")
+    for n in result["not_evaluated"]:
+        lines.append(f"NOT-EVALUATED\t{n['version']}\t{n['surface']}\t{n['cause']}")
+    return lines
+
+
 def _self_test() -> int:
     """In-process synthetic LOG (8-col) + INDEX (6-col) pair with known drift.
 
@@ -948,7 +1172,8 @@ def _self_test() -> int:
 
     for limb in (_self_test_clock_free, _self_test_grandfathering_closed,
                  _self_test_header_preserved, _self_test_theme_and_order,
-                 _self_test_emitters):
+                 _self_test_emitters, _self_test_closeout_anchors,
+                 _self_test_closeout_cutoff_resolves):
         rc = limb()
         if rc != 0:
             return rc
@@ -959,7 +1184,11 @@ def _self_test() -> int:
           "projector clock-free (import allow-list + callsite denial, AST-parsed); "
           "date-anchor grandfathering closed (every member pre-reconciliation); "
           "INDEX header preserved verbatim; Theme round-trip + row-order limbs fire; "
-          "all three emitters produce exactly ONE entry and cannot emit a whole file")
+          "all three emitters produce exactly ONE entry and cannot emit a whole file; "
+          "close-out anchors: a 3-way divergence a 2-way compare reads as agreement fires, "
+          "both-drifted fires with no side blamed, grandfathered rows silent, unreadable surfaces "
+          "NOT-EVALUATED, emitter<->parser round-trip holds; the live cutoff row resolves and the "
+          "live note reader returns a date at both ends of the scope")
     return 0
 
 
@@ -1032,10 +1261,11 @@ def _self_test_grandfathering_closed() -> int:
     legitimate addition, which trains reviewers to edit the assertion instead of
     investigating the cause.
 
-    THIS LIMB READS THE LIVE LOG, and is the only self-test limb that does.
-    Recorded deliberately: the assertion is about the real enumeration against
-    the real corpus and cannot be made from synthetic data. An unresolvable LOG
-    is a FAIL, never a skip — a guard that passes vacuously is not a guard.
+    THIS LIMB READS THE LIVE LOG — one of two self-test limbs that do; the other is
+    _self_test_closeout_cutoff_resolves, for the same reason. Recorded deliberately:
+    the assertion is about the real enumeration against the real corpus and cannot
+    be made from synthetic data. An unresolvable LOG is a FAIL, never a skip — a
+    guard that passes vacuously is not a guard.
     """
     if not LOG_PATH.exists():
         print(f"self-test FAIL: grandfathering-closure limb cannot run — {_rel(LOG_PATH)} does not "
@@ -1239,6 +1469,244 @@ def _self_test_emitters() -> int:
     return 0
 
 
+def _self_test_closeout_anchors() -> int:
+    """--verify-closeout-anchors, in-process (arms CA-1 to CA-11).
+
+    One synthetic 8-column LOG, a DIGEST text, a CHANGELOG text and a note map, with the
+    cutoff injected as `v9.20`. Every assertion is an EXACT SET, never a count, so an arm
+    that fires on the wrong row cannot pass by firing on the right number of rows. The
+    sensitivity arms (CA-1, CA-2, CA-3, CA-9) must fire; the specificity arms (CA-4, CA-5)
+    are the near-misses that must not — CA-4's pre-cutoff rows carry CA-1's exact
+    divergence, so their silence is the cutoff working and not an empty input.
+    """
+    def _fail(msg: str) -> int:
+        print(f"self-test FAIL: close-out anchors — {msg}", file=sys.stderr)
+        return 1
+
+    log_rows = parse_log_rows(
+        "| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| v9.10 | m10 | #1 | #10 | `a` | `v9.10` | VERIFIED | 2026-05-01 |\n"
+        "| v9.11 | m11 | #1 | #11 | `a` | `v9.11` | VERIFIED | 2026-05-01 |\n"
+        "| v9.20 | m20 | #1 | #20 | `a` | `v9.20` | VERIFIED | 2026-05-02 |\n"
+        "| v9.21 | m21 | #1 | #21 | `a` | `v9.21` | VERIFIED | 2026-05-03 |\n"
+        "| vl-slug (version-less) | vl-slug | #1 | #30 | `a` | (none) | VERIFIED | 2026-05-13 |\n"
+        "| v9.22 | m22 | #1 | #22 | `a` | `v9.22` | VERIFIED | 2026-05-11 |\n"
+        "| v9.23 | m23 | #1 | #23 | `a` | `v9.23` | VERIFIED | 2026-05-12 |\n"
+        "| v9.24 | m24 | #1 | #24 | `a` | `v9.24` | VERIFIED | 2026-05-14 |\n"
+        "| v9.25 | m25 | #1 | #25 | `a` | `v9.25` | VERIFIED | 2026-05-15 |\n"
+        "| v9.26 | m26 | #1 | #26 | `a` | `v9.26` | VERIFIED | 2026-05-16 |\n"
+        "| v9.27 | m27 | #1 | #27 | `a` | `v9.27` | DEPLOYED | 2026-05-17 |\n"
+    )
+    digest = parse_digest_dates(
+        "### v9.10 (2026-05-12) — pre-cutoff, CA-1's divergence (CA-4)\n"
+        "### v9.11 (version-less) — pre-cutoff, unparseable cell (CA-4)\n"
+        "### v9.20 (2026-05-03) — the cutoff row diverges (CA-9)\n"
+        "### v9.21 (2026-05-04) — all agree (CA-5)\n"
+        "### vl-slug (2026-05-13, version-less) — version-less, agrees (CA-5)\n"
+        "### v9.22 (2026-05-12) — DIGEST = CHANGELOG, note a day earlier (CA-1)\n"
+        "### v9.23 (2026-05-20) — DIGEST alone differs (CA-2)\n"
+        "### v9.24 (2026-05-15) — DIGEST = CHANGELOG drifted together (CA-3)\n"
+        "### v9.25 (2026-05-16) — CHANGELOG absent (CA-6)\n"
+        "### v9.26 (version-less) — a versioned row's unparseable cell (CA-6)\n"
+    )
+    changelog = parse_changelog_dates(
+        "## [Unreleased]\n\n"
+        "## [v9.10] - 2026-05-12\n"
+        "## [v9.20] - 2026-05-03\n"
+        "## [v9.21] - 2026-05-04\n"
+        "## [v9.22] - 2026-05-12\n"
+        "## [v9.23] - 2026-05-13\n"
+        "## [v9.24] - 2026-05-15\n"
+        "## [v9.26] - 2026-05-17\n"
+    )
+    notes = {"v9.10": "2026-05-11", "v9.20": "2026-05-02", "v9.21": "2026-05-04",
+             "vl-slug": "2026-05-13", "v9.22": "2026-05-11", "v9.23": "2026-05-13",
+             "v9.24": "2026-05-14", "v9.25": "2026-05-16", "v9.26": "2026-05-17"}
+
+    def note_date(row: dict) -> tuple[str | None, str]:
+        value = notes.get(_slug_from_version_cell(row["version"]))
+        return (value, "") if value else (None, "absent")
+
+    res = verify_closeout_anchors(log_rows, digest, changelog, note_date, cutoff="v9.20")
+    if res is None:
+        return _fail("the fixture cutoff v9.20 names a LOG row, but the scope did not resolve")
+    by_version = {f["version"]: f for f in res["findings"]}
+
+    # The exact finding set: CA-9 (boundary), CA-1, CA-2, CA-3.
+    if set(by_version) != {"v9.20", "v9.22", "v9.23", "v9.24"}:
+        return _fail(f"findings must be exactly {{v9.20, v9.22, v9.23, v9.24}}, got {sorted(by_version)}")
+    # CA-1 — the 3-way sensitivity arm, and the reason it is 3-way: the 2-way compare
+    # of the same row reads agreement.
+    ca1 = by_version["v9.22"]
+    if ca1["partition"] != [("2026-05-11", ["note"]), ("2026-05-12", ["CHANGELOG", "DIGEST"])]:
+        return _fail(f"CA-1 partition wrong: {ca1['partition']}")
+    if ca1["values"]["DIGEST"] != ca1["values"]["CHANGELOG"]:
+        return _fail("CA-1 fixture must agree two-way (DIGEST = CHANGELOG), or it does not show why "
+                     "the compare is three-way")
+    # CA-2 — DIGEST alone in its own cell of the partition.
+    if not any(ss == ["DIGEST"] for _, ss in by_version["v9.23"]["partition"]):
+        return _fail(f"CA-2 must isolate DIGEST in its own partition cell: {by_version['v9.23']['partition']}")
+    # CA-3 — both drifted together: a partition, and no field that names a side wrong.
+    ca3 = by_version["v9.24"]
+    if ca3["partition"] != [("2026-05-14", ["note"]), ("2026-05-15", ["CHANGELOG", "DIGEST"])]:
+        return _fail(f"CA-3 partition wrong: {ca3['partition']}")
+    if any(set(f) != {"version", "values", "partition"} for f in res["findings"]):
+        return _fail("a finding carries a field beyond version / values / partition — the check names "
+                     "the split and never assigns fault")
+    # CA-4 — the pre-cutoff rows are not read: no finding, no NOT-EVALUATED.
+    pre = {"v9.10", "v9.11"}
+    if pre & set(by_version) or pre & {n["version"] for n in res["not_evaluated"]}:
+        return _fail("CA-4 a pre-cutoff row was read")
+    if res["pre_cutoff"] != 2:
+        return _fail(f"CA-4 pre_cutoff must be 2, got {res['pre_cutoff']}")
+    # CA-5 — agreeing rows are silent; the version-less row compares two surfaces and its
+    # missing CHANGELOG is not NOT-EVALUATED.
+    if res["version_less"] != 1:
+        return _fail(f"CA-5 version_less must be 1, got {res['version_less']}")
+    # CA-6 — exactly the two surfaces that could not be compared.
+    ne = {(n["version"], n["surface"]) for n in res["not_evaluated"]}
+    if ne != {("v9.25", "CHANGELOG"), ("v9.26", "DIGEST")}:
+        return _fail(f"CA-5/CA-6 NOT-EVALUATED must be exactly v9.25 CHANGELOG and v9.26 DIGEST, got {sorted(ne)}")
+    # CA-7 — a row not yet VERIFIED is counted in flight and not read.
+    if res["in_flight"] != 1 or res["enumerated"] != 8 or res["examined"] != 8 or res["total"] != 11:
+        return _fail(f"CA-7 counters wrong: in_flight={res['in_flight']} enumerated={res['enumerated']} "
+                     f"examined={res['examined']} total={res['total']} (expected 1/8/8/11)")
+    # CA-8 — a cutoff naming no row is unresolved, never a clean zero.
+    if verify_closeout_anchors(log_rows, digest, changelog, note_date, cutoff="v0.00") is not None:
+        return _fail("CA-8 a cutoff naming no LOG row must return None")
+
+    # CA-10 — emitter -> parser round-trip, both DIGEST forms and the CHANGELOG.
+    for emitted in (emit_digest_entry("v9.30", "2026-05-20", "H"),
+                    emit_digest_entry(f"vl-rt {VERSION_LESS_MARKER}", "2026-05-20", "H")):
+        cells = [c for cs in parse_digest_dates(emitted).values() for c in cs]
+        m = DIGEST_DATE_CELL_RE.match(cells[0]) if len(cells) == 1 else None
+        if not m or m.group("date") != "2026-05-20":
+            return _fail(f"CA-10 the DIGEST parser does not read back what emit_digest_entry wrote: {emitted!r}")
+    cl = parse_changelog_dates(emit_changelog_entry("v9.30", "2026-05-20", "S", "o/r", "notes/x.md"))
+    if cl != {"v9.30": ["2026-05-20"]} or not _DATE_RE.match(cl["v9.30"][0]):
+        return _fail(f"CA-10 the CHANGELOG parser does not read back what emit_changelog_entry wrote: {cl}")
+    # CA-11 — keys are exact: v9.8 never reads v9.80's entry.
+    exact = parse_digest_dates("### v9.80 (2026-01-01) — a\n### v9.8 (2026-05-30) — b\n")
+    if exact.get("v9.8") != ["2026-05-30"] or exact.get("v9.80") != ["2026-01-01"]:
+        return _fail(f"CA-11 DIGEST keys must match exactly: {exact}")
+
+    # The stdout contract deploy.sh parses: a DENOM line first, then six-field FAIL rows
+    # and four-field NOT-EVALUATED rows, and nothing else.
+    lines = render_closeout_report(res)
+    if not lines[0].startswith("DENOM: status=degraded enumerated=8 examined=8 "):
+        return _fail(f"the DENOM line must lead and read status=degraded enumerated=8 examined=8: {lines[0]!r}")
+    rows = [ln.split("\t") for ln in lines[1:]]
+    if sorted(r[0] for r in rows) != ["FAIL"] * 4 + ["NOT-EVALUATED"] * 2:
+        return _fail(f"the report must carry exactly 4 FAIL and 2 NOT-EVALUATED rows: {[r[0] for r in rows]}")
+    for r in rows:
+        if (r[0] == "FAIL" and (len(r) != 6 or r[2] != "closeout_anchor")) or \
+                (r[0] == "NOT-EVALUATED" and len(r) != 4):
+            return _fail(f"a report row has the wrong shape: {r}")
+    ca1_row = next(r for r in rows if r[0] == "FAIL" and r[1] == "v9.22")
+    if ca1_row[3] != "DIGEST=2026-05-12;CHANGELOG=2026-05-12;note=2026-05-11" or \
+            ca1_row[4] != "2026-05-11: {note} | 2026-05-12: {CHANGELOG,DIGEST}":
+        return _fail(f"CA-1's FAIL row must name every value and the split: {ca1_row[3]!r} / {ca1_row[4]!r}")
+    clean = {**res, "findings": [], "not_evaluated": []}
+    if not render_closeout_report(clean)[0].startswith("DENOM: status=fetched "):
+        return _fail("a run with every surface compared must report status=fetched")
+
+    # CA-12 — a version-less row's CHANGELOG entry is compared when one exists. The scripted
+    # emitter refuses to write one, but a close-out written by hand or hub-direct can, and a
+    # skipped read would hide its divergence with no finding and no NOT-EVALUATED line.
+    # Sensitivity: vl-hand's entry is a day after its DIGEST and note -> one finding naming
+    # CHANGELOG alone. Specificity: vl-twin's entry agrees and vl-none has none -> silent,
+    # and the absent entry is never NOT-EVALUATED. The DENOM line counts the two apart.
+    vl_rows = parse_log_rows(
+        "| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        "| v9.40 | m40 | #1 | #40 | `a` | `v9.40` | VERIFIED | 2026-06-01 |\n"
+        "| vl-hand (version-less) | vl-hand | #1 | #41 | `a` | (none) | VERIFIED | 2026-06-02 |\n"
+        "| vl-twin (version-less) | vl-twin | #1 | #42 | `a` | (none) | VERIFIED | 2026-06-03 |\n"
+        "| vl-none (version-less) | vl-none | #1 | #43 | `a` | (none) | VERIFIED | 2026-06-04 |\n"
+    )
+    vl_digest = parse_digest_dates(
+        "### v9.40 (2026-06-01) — the cutoff row agrees\n"
+        "### vl-hand (2026-06-02, version-less) — a hand-written CHANGELOG entry a day later (CA-12)\n"
+        "### vl-twin (2026-06-03, version-less) — a hand-written CHANGELOG entry that agrees (CA-12)\n"
+        "### vl-none (2026-06-04, version-less) — no CHANGELOG entry (CA-12)\n"
+    )
+    vl_changelog = parse_changelog_dates(
+        "## [v9.40] - 2026-06-01\n"
+        "## [vl-hand] - 2026-06-03\n"
+        "## [vl-twin] - 2026-06-03\n"
+    )
+    vl_notes = {"v9.40": "2026-06-01", "vl-hand": "2026-06-02", "vl-twin": "2026-06-03",
+                "vl-none": "2026-06-04"}
+
+    def vl_note(row: dict) -> tuple[str | None, str]:
+        value = vl_notes.get(_slug_from_version_cell(row["version"]))
+        return (value, "") if value else (None, "absent")
+
+    vl = verify_closeout_anchors(vl_rows, vl_digest, vl_changelog, vl_note, cutoff="v9.40")
+    if vl is None:
+        return _fail("CA-12 the fixture cutoff v9.40 names a LOG row, but the scope did not resolve")
+    if [f["version"] for f in vl["findings"]] != ["vl-hand (version-less)"] or \
+            vl["findings"][0]["partition"] != [("2026-06-02", ["DIGEST", "note"]), ("2026-06-03", ["CHANGELOG"])]:
+        return _fail(f"CA-12 a version-less row's CHANGELOG entry must be compared when one exists: "
+                     f"findings {[(f['version'], f['partition']) for f in vl['findings']]}")
+    if vl["not_evaluated"] or vl["version_less"] != 3 or vl.get("version_less_changelog") != 2:
+        return _fail(f"CA-12 counters wrong: not_evaluated={vl['not_evaluated']} version_less={vl['version_less']} "
+                     f"version_less_changelog={vl.get('version_less_changelog')} (expected none/3/2)")
+    vl_denom = render_closeout_report(vl)[0]
+    if "1 version-less compared two-way" not in vl_denom or "2 version-less compared three-way" not in vl_denom:
+        return _fail(f"CA-12 the DENOM line must count the two-way and three-way version-less rows apart: {vl_denom!r}")
+    return 0
+
+
+def _self_test_closeout_cutoff_resolves() -> int:
+    """CLOSEOUT_ANCHOR_DECLARED_AT names a live LOG row, the scope is non-empty, and the
+    live note reader returns a date at both ends of that scope.
+
+    The second half closes the one silent degradation the in-process arms cannot see:
+    they inject the note surface, so a reader that stopped reading would turn every
+    note-versus-the-rest finding into a NOT-EVALUATED line, which moves no exit code on
+    any mode. Reading the note of the cutoff row and of the last VERIFIED row in scope
+    turns that into a hard self-test failure, in CI and at deploy time alike, with no
+    new import.
+
+    THIS LIMB READS THE LIVE LOG AND TWO LIVE NOTES, for the reason
+    _self_test_grandfathering_closed does: the assertion is about the real corpus. An
+    unresolvable LOG is a FAIL, never a skip.
+    """
+    if not LOG_PATH.exists():
+        print(f"self-test FAIL: close-out cutoff limb cannot run — {_rel(LOG_PATH)} does not resolve. "
+              "This limb is corpus-bound by necessity; refusing to pass vacuously", file=sys.stderr)
+        return 1
+    rows = parse_log_rows(LOG_PATH.read_text(encoding="utf-8"))
+    if not rows:
+        print("self-test FAIL: close-out cutoff limb parsed zero LOG rows", file=sys.stderr)
+        return 1
+    idx = next((i for i, r in enumerate(rows)
+                if _slug_from_version_cell(r["version"]) == CLOSEOUT_ANCHOR_DECLARED_AT), None)
+    if idx is None:
+        print(f"self-test FAIL: CLOSEOUT_ANCHOR_DECLARED_AT '{CLOSEOUT_ANCHOR_DECLARED_AT}' names no "
+              "RELEASE_LOG row — --verify-closeout-anchors would exit 3 on every run", file=sys.stderr)
+        return 1
+    if idx + 1 >= len(rows):
+        print(f"self-test FAIL: no RELEASE_LOG row follows {CLOSEOUT_ANCHOR_DECLARED_AT} — the scope "
+              "holds only its boundary row, so the check would pass vacuously", file=sys.stderr)
+        return 1
+    last = next((r for r in reversed(rows[idx:]) if r.get("state", "").strip() == "VERIFIED"), None)
+    for label, row in (("the cutoff row", rows[idx]), ("the last VERIFIED row in scope", last)):
+        if row is None:
+            print("self-test FAIL: no VERIFIED row at or after the cutoff — nothing for the note "
+                  "reader to read", file=sys.stderr)
+            return 1
+        value, cause = read_note_closeout_date(row["version"], row.get("milestone", ""))
+        if value is None:
+            print(f"self-test FAIL: the live note reader returned no date for {label} "
+                  f"({row['version']}): {cause}. A reader that cannot read the note silently "
+                  "collapses the three-way compare to two-way", file=sys.stderr)
+            return 1
+    return 0
+
+
 def _existing_theme_map() -> dict[str, str]:
     """Read the on-disk INDEX (if present) and map Version -> Theme so a
     regenerate preserves hand-authored Theme prose. Returns {} if absent."""
@@ -1343,18 +1811,35 @@ def main() -> int:
     p.add_argument("--log-path", help="Override the RELEASE_LOG.md path (fixture injection)")
     p.add_argument("--index-path", help="Override the RELEASE_INDEX.md path (fixture injection)")
     p.add_argument("--notes-dir", help="Override the release-notes directory (fixture injection)")
+    p.add_argument("--verify-closeout-anchors", action="store_true", help="Read-only: for every VERIFIED RELEASE_LOG row at/after CLOSEOUT_ANCHOR_DECLARED_AT, compare the close-out date on the DIGEST heading, the CHANGELOG heading and the release-note frontmatter; exit 1 on a divergence, exit 3 on an unresolved surface or scope (deploy.sh Check 82)")
+    p.add_argument("--digest-path", help="Override the RELEASE_DIGEST.md path (fixture injection)")
+    p.add_argument("--changelog-path", help="Override the CHANGELOG.md path (fixture injection)")
     args = p.parse_args()
+
+    # Exclusive BEFORE any mode dispatch: --self-test returns early below, so a combined
+    # invocation checked any later would silently run the self-test and report its exit as
+    # the verification's.
+    if args.verify_closeout_anchors:
+        clash = [flag for flag, on in (("--verify", args.verify), ("--emit", args.emit),
+                                       ("--self-test", args.self_test),
+                                       ("--output-stdout", args.output_stdout)) if on]
+        if clash:
+            p.error("--verify-closeout-anchors cannot be combined with " + ", ".join(clash))
 
     if args.self_test:
         return _self_test()
 
-    global LOG_PATH, INDEX_PATH, NOTES_DIR
+    global LOG_PATH, INDEX_PATH, NOTES_DIR, DIGEST_PATH, CHANGELOG_PATH
     if args.log_path:
         LOG_PATH = Path(args.log_path).resolve()
     if args.index_path:
         INDEX_PATH = Path(args.index_path).resolve()
     if args.notes_dir:
         NOTES_DIR = Path(args.notes_dir).resolve()
+    if args.digest_path:
+        DIGEST_PATH = Path(args.digest_path).resolve()
+    if args.changelog_path:
+        CHANGELOG_PATH = Path(args.changelog_path).resolve()
 
     # Path-resolution failure (clause 1): LOG missing → exit 3, NOT a silent
     # pass and NOT a drift-exit-1. The check is unverifiable; deploy.sh maps
@@ -1370,6 +1855,35 @@ def main() -> int:
         # a config error → exit 3 (NOT a masked exit 0/1).
         print("error: path-resolution failure — no LOG rows parsed (LOG_ROW_RE vs current schema mismatch)", file=sys.stderr)
         return 3
+
+    if args.verify_closeout_anchors:
+        for label, path in (("RELEASE_DIGEST.md", DIGEST_PATH), ("CHANGELOG.md", CHANGELOG_PATH),
+                            ("the release-notes directory", NOTES_DIR)):
+            if not path.exists():
+                print(f"error: path-resolution failure — {label} not found at {_rel(path)}; the "
+                      "close-out anchors are unverifiable, which is not a clean result", file=sys.stderr)
+                return 3
+        try:
+            digest_text = DIGEST_PATH.read_text(encoding="utf-8")
+            changelog_text = CHANGELOG_PATH.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"error: path-resolution failure — a close-out surface is unreadable ({exc}); "
+                  "this is not a clean result", file=sys.stderr)
+            return 3
+        result = verify_closeout_anchors(
+            rows,
+            parse_digest_dates(digest_text),
+            parse_changelog_dates(changelog_text),
+            lambda r: read_note_closeout_date(r["version"], r.get("milestone", "")),
+        )
+        if result is None:
+            print(f"error: CLOSEOUT_ANCHOR_DECLARED_AT '{CLOSEOUT_ANCHOR_DECLARED_AT}' names no "
+                  "RELEASE_LOG row — the scope cannot be resolved; this is not a clean result",
+                  file=sys.stderr)
+            return 3
+        for line in render_closeout_report(result):
+            print(line)
+        return 1 if result["findings"] else 0
 
     if args.emit:
         # EVERY non-file input is required, for EVERY surface — including the ones

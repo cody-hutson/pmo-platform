@@ -204,15 +204,30 @@ readonly GATE_ROLLOUT_PHASE="warn"       # shadow|warn|enforce
 readonly GATE_ROLLOUT_ARMED="2026-08-29"
 readonly GATE_ROLLOUT_REVIEW_DAYS=60
 readonly GATE_ROLLOUT_ESCALATE_DAYS=90
-# The G-CL6 / G-CL8 documentation close gates' warn-mode shakedown (Check 28's
-# deadline arm reads these). Same shape as the GATE_ROLLOUT_* block above, one ARMED
+# The G-CL6 / G-CL8 / G-CL10 release-context close gates' warn-mode shakedown (Check
+# 28's deadline arm reads these). Same shape as the GATE_ROLLOUT_* block above, one ARMED
 # constant per gate because each gate graduates on its own decision: a gate's phase
-# is its committed probe sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce), and
-# the review and escalation windows are the GATE_ROLLOUT_* ones, which the warn-log
-# retention floor already binds. Turn a GRADUATION-OVERDUE finding green by recording
-# a decision: set the gate's sentinel to `enforce`, or re-date its ARMED constant.
+# is its committed probe sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce,
+# .github/g-cl10.enforce), and the review and escalation windows are the GATE_ROLLOUT_*
+# ones, which the warn-log retention floor already binds. Turn a GRADUATION-OVERDUE
+# finding green by recording a decision: set the gate's sentinel to `enforce`, or
+# re-date its ARMED constant.
 readonly GCL6_ROLLOUT_ARMED="2026-10-24"
 readonly GCL8_ROLLOUT_ARMED="2026-10-24"
+readonly GCL10_ROLLOUT_ARMED="2026-10-29"
+# From this date a Release Outcome Statement carries a **Limb owners:** line
+# (release-outcome-statement-template.md § 2). G-CL10 arm (ii) keys the date on the
+# milestone's composition lock, or its creation when no lock is recorded: an Outcome
+# without the line is out of scope before this date and a FAIL on or after it, and a
+# line that is present is always graded.
+readonly LIMB_OWNERS_REQUIRED_FROM="2026-10-29"
+# Check 82 (closeout-anchor-consistency)'s warn-mode shakedown (W2). Its deadline arm
+# (_c82_deadline) reads this against the GATE_ROLLOUT_* windows and today's date. Turn a
+# GRADUATION-OVERDUE finding green by recording a decision in the repository: flip the
+# check's committed default to resolve_check_mode "closeout-anchor-consistency" "enforce"
+# and delete the deadline arm in the same commit; record the flip declined in its
+# flip-decision row; or re-date this constant with the reason.
+readonly CLOSEOUT_ANCHOR_ROLLOUT_ARMED="2026-10-29"
 # Basename of the whole warn-log family — the hot file and every segment share
 # it. Stated once so a consumer pattern cannot drift from the writer's spelling.
 readonly WARN_LOG_BASENAME="deploy-check-warn-log"
@@ -2972,25 +2987,30 @@ _de_verdict_exit_code() {
   esac
 }
 
-# ─── Documentation close gates (Check 28 / --check-doc-gates) — G-CL6 + G-CL8 ──
-# Check 28's release-context arms — the runner of Gate 13 G-CL6 and G-CL8 (advisory)
+# ─── Release-context close gates (Check 28 / --check-doc-gates) — G-CL6 + G-CL8 + G-CL10 ──
+# Check 28's release-context arms — the runner of Gate 13 G-CL6, G-CL8 and G-CL10 (advisory)
 # gate-efficacy: posture=advisory  enforcement=deploy-time-only  skip-semantics=no-release-context-is-not-evaluated
 #   invariant: for the release one PR merges, every artifact the release plan's Tier-A
-#              section declares was refreshed in <base>..<head> (G-CL6), and every issue of
+#              section declares was refreshed in <base>..<head> (G-CL6); every issue of
 #              the release whose body carries a `### Documentation Impact` section has each
-#              declared row resolved by the G-CL8 row's action-keyed method (G-CL8). Each
-#              failing subject is one row in the shared deploy-check warn log under the
-#              gate's own check id, "g-cl6" or "g-cl8".
+#              declared row resolved by the G-CL8 row's action-keyed method (G-CL8); and
+#              every declared obligation of the release is measured or owned, and every
+#              Outcome limb names its owning work item (G-CL10). Each failing subject is
+#              one row in the shared deploy-check warn log under the gate's own check id,
+#              "g-cl6", "g-cl8" or "g-cl10".
 #   falsification: deploy.sh --self-test group DG — a scratch repository holding one
 #                  unrefreshed Tier-A artifact and one unresolved declaration must write
-#                  exactly two rows, one per gate; the refreshed control writes none.
+#                  exactly two rows, one per gate; the refreshed control writes none. A
+#                  declared obligation at 0% conformance with no owner writes exactly one
+#                  g-cl10 row; the identical record naming an owner that names the
+#                  population writes none.
 #
 # ONE ENGINE, TWO SURFACES (the DD1 shape of _de_compute_verdict). The predicate lives in
 # core/deploy/tools/check-doc-gates.py, which reads commit ids and files and writes
 # nothing. --check-doc-gates (cmd_check_doc_gates) is the surface that has a release:
-# Stage 13 Phase A5 runs it for g-cl6 and Phase A11 for g-cl8, with the release PR. The
-# lifecycle Check 28 inside cmd_check has no release, so it reports these arms N/A and
-# keeps only its template-presence arm and the shakedown deadline arm.
+# Stage 13 Phase A5 runs it for g-cl6, Phase A11 for g-cl8 and Phase A14 for g-cl10, with
+# the release PR. The lifecycle Check 28 inside cmd_check has no release, so it reports
+# these arms N/A and keeps only its template-presence arm and the shakedown deadline arm.
 #
 # <base> AND <head> ARE BOUND TO THE RELEASE, NEVER TO THE CHECKOUT. <head> is the PR's
 # head commit. <base> is `git merge-base <head> <main>`, where <main> is the merge
@@ -3071,6 +3091,32 @@ _dg_population() {
   fi
   _nums="$( { printf '%s\n' "$_kw"; printf '%s\n' "$_list" | /usr/bin/awk '$2 == "false" { print $1 }'; } | /usr/bin/grep -E '^[0-9]+$' | /usr/bin/sort -un | /usr/bin/tr '\n' ' ' )"
   printf 'POPULATION %s %s\n' "$(printf '%s' "$_nums" | /usr/bin/wc -w | /usr/bin/tr -d ' ')" "$_nums"
+}
+
+# _dg_owner_states <dir> <issue-number>...
+#   G-CL10's owner read. For each owning work item it writes, under <dir>, the issue as
+#   the repository host returns it (<N>.json — its state, state_reason, repository and
+#   whether it is a pull request) and its comment bodies (<N>.comments), because an owner
+#   is valid only when its body or comment stream names the population it carries. A read
+#   that fails writes <N>.error instead: NOT-FOUND when the host answered 404, UNREADABLE
+#   for any other failure. The engine reads an UNREADABLE owner as NOT-EVALUATED, never as
+#   a pass, and an owner with no file at all the same way.
+_dg_owner_states() {
+  local _dir="$1" _n _rc
+  shift
+  for _n in "$@"; do
+    _rc=0; gh api "repos/${AUDIT_REPO}/issues/${_n}" > "$_dir/$_n.json" 2> "$_dir/$_n.err" || _rc=$?
+    if [[ "$_rc" -ne 0 ]]; then
+      if /usr/bin/grep -q 'HTTP 404' "$_dir/$_n.err" 2>/dev/null; then
+        printf 'NOT-FOUND\n' > "$_dir/$_n.error"
+      else
+        printf 'UNREADABLE\n' > "$_dir/$_n.error"
+      fi
+      continue
+    fi
+    _rc=0; gh api --paginate "repos/${AUDIT_REPO}/issues/${_n}/comments" --jq '.[].body' > "$_dir/$_n.comments" 2>/dev/null || _rc=$?
+    if [[ "$_rc" -ne 0 ]]; then printf 'UNREADABLE\n' > "$_dir/$_n.error"; fi
+  done
 }
 
 # _dg_emit_row <check-id> <detail> — one row in the shared warn log (warn mode only).
@@ -7790,6 +7836,120 @@ flag_release_body_drift() {
   esac
 }
 
+# ─── _c82_report / _c82_deadline — Check 82's verdict tail and deadline arm (TOP-LEVEL) ──
+#
+# HOISTED TO TOP LEVEL for flag_not_evaluated's reason: a definition inside cmd_check() is
+# registered only when execution reaches it, and --self-test group CO drives THESE bodies,
+# never a copy. Check 82 is `closeout-anchor-consistency`. Its primitive is
+# core/deploy/tools/generate_release_index.py --verify-closeout-anchors, whose stdout
+# grammar is that module's render_closeout_report(): one DENOM line, then verdict-first
+# TSV rows of class FAIL or NOT-EVALUATED, and nothing else.
+#
+# _c82_report <mode> <rc> <out>
+#   <mode>  enforce | warn, as a LITERAL. Check 82 dispatches it from its own dial with a
+#           `case`, so the dial variable is never passed as an argument — that keeps every
+#           reference to the dial inside the closed vocabulary WE-K grades
+#           (core/deploy/tests/test_advisory_emitter_contract.sh).
+#   <rc>    the primitive's exit: 0 no divergence · 1 at least one · 3 not run. Any other
+#           exit is outside its contract.
+#   <out>   the primitive's stdout and stderr, captured together.
+# A FAIL row is a finding: under enforce a FAIL line and one issue per row; under warn a
+# WARN line and one row per finding appended to the shared warn log under the check id
+# (W1), never an issue. NOT-EVALUATED rows fan into ONE flag_not_evaluated emit, which moves
+# no exit code. Every reading this tail cannot vouch for — no DENOM record, a row of an
+# unrecognised class, exit 1 naming nothing, exit 0 beside a FAIL row, an exit outside
+# 0/1/3, a mode it does not know — is an INSTRUMENT FAILURE and fails closed on every mode,
+# and the OK line is withheld: a verdict that cannot be read is not a pass.
+#
+# The residual-class predicate is the one tsv_residual_rows implements, written once here
+# rather than called: that helper is nested inside cmd_check and does not exist when the
+# --self-test runner executes (the mirror-pair-parity body records the same constraint).
+_c82_report() {
+  local _m="$1" _rc="$2" _out="$3"
+  local _denom _resid _ne _hits=0 _detail _readable=1
+  local _cls _ver _fld _vals _split _rec
+  if [[ "$_m" != "enforce" && "$_m" != "warn" ]]; then
+    log "  FAIL:  closeout-anchor-consistency — the verdict tail was handed mode '${_m}', which it does not know; findings cannot be routed, so the check fails closed"
+    ISSUES=$((ISSUES + 1))
+    return 0
+  fi
+  case "$_rc" in
+    0|1)
+      _denom="$(/usr/bin/sed -n 's/^DENOM: //p' <<<"$_out")"
+      _resid="$(/usr/bin/awk -F'\t' '
+        /^[[:space:]]*$/ { next }
+        /^DENOM: / { next }
+        $1 !~ /^(FAIL|NOT-EVALUATED)$/ { printf "%s%s", (n++ ? "; " : ""), $0 }
+      ' <<<"$_out")"
+      log "  DENOM: closeout-anchor-consistency — ${_denom:-<no population record>}"
+      if [[ -z "$_denom" || -n "$_resid" ]]; then
+        log "  FAIL:  closeout-anchor-consistency — the primitive's output is unreadable (no DENOM record, or rows outside FAIL/NOT-EVALUATED: ${_resid:-none}); an unread row is never an absence"
+        ISSUES=$((ISSUES + 1))
+        _readable=0
+      fi
+      _ne="$(/usr/bin/awk -F'\t' '$1=="NOT-EVALUATED"{printf "%s%s %s (%s)", (n++ ? "; " : ""), $2, $3, $4}' <<<"$_out")"
+      if [[ -n "$_ne" ]]; then
+        flag_not_evaluated "closeout-anchor-consistency" "status=degraded — these release surfaces could not be compared: ${_ne}; this is not a clean result"
+      fi
+      while IFS=$'\t' read -r _cls _ver _fld _vals _split _rec; do
+        [[ "$_cls" == "FAIL" ]] || continue
+        _hits=$((_hits + 1))
+        _detail="${_ver}: close-out surfaces disagree — ${_split} (${_vals}); ${_rec}"
+        if [[ "$_m" == "enforce" ]]; then
+          log "  FAIL:  closeout-anchor-consistency — ${_detail}"
+          ISSUES=$((ISSUES + 1))
+        else
+          log "  WARN:  closeout-anchor-consistency — ${_detail} (warn-mode; the flip is an operator decision recorded in core/standards/gate-efficacy-standard.md § Flip-decision status)"
+          json_escape_detail "$_detail"
+          printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "closeout-anchor-consistency" "$JSON_ESCAPED" >> "${WARN_LOG:-$(warn_log_path)}" 2>/dev/null || true
+        fi
+      done <<<"$_out"
+      if [[ "$_rc" -eq 1 && $_hits -eq 0 ]]; then
+        log "  FAIL:  closeout-anchor-consistency — the primitive exited 1 and named no divergence; a findings verdict that names nothing is unreadable, not a finding"
+        ISSUES=$((ISSUES + 1))
+      elif [[ "$_rc" -eq 0 && $_hits -gt 0 ]]; then
+        log "  FAIL:  closeout-anchor-consistency — the primitive exited 0 beside ${_hits} FAIL row(s); its exit contract is broken, so the verdict is unreadable"
+        ISSUES=$((ISSUES + 1))
+      elif [[ "$_rc" -eq 0 && $_readable -eq 1 && -z "$_ne" ]]; then
+        log "  OK:    closeout-anchor-consistency — every VERIFIED release at/after the anchor declaration carries one close-out date on each surface that declares it"
+      elif [[ "$_rc" -eq 0 && $_readable -eq 1 ]]; then
+        log "  OK:    closeout-anchor-consistency — no divergence among the surfaces compared [DEGRADED — some surfaces were not evaluated (see NOT-EVAL); this is not a clean result]"
+      fi
+      ;;
+    3)
+      flag_not_evaluated "closeout-anchor-consistency" "status=not-run — $(/usr/bin/sed -n 1p <<<"$_out"); the clean token is withheld; this is not a clean result"
+      ;;
+    *)
+      log "  FAIL:  closeout-anchor-consistency — the primitive exited ${_rc}, outside its 0/1/3 contract, so the verdict is unreadable: $(/usr/bin/tail -1 <<<"$_out")"
+      ISSUES=$((ISSUES + 1))
+      ;;
+  esac
+  return 0
+}
+
+# _c82_deadline <armed-date>
+#   W2, the repo-derivable ending condition of Check 82's warn-mode shakedown: the armed
+#   date (CLOSEOUT_ANCHOR_ROLLOUT_ARMED on the live path) against the GATE_ROLLOUT_* windows
+#   and today's UTC date — the Check 28 arm-3 shape. A date it cannot evaluate is a FAIL,
+#   never a silent pass; GRADUATION-OVERDUE is an issue; GRADUATION-DUE only warns.
+_c82_deadline() {
+  local _armed="$1" _days
+  _days="$(/usr/bin/python3 -c 'import datetime,sys
+print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromisoformat(sys.argv[1])).days)' "$_armed" 2>/dev/null || printf '')"
+  if [[ -z "$_days" ]]; then
+    log "  FAIL:  closeout-anchor-consistency shakedown — the deadline cannot be evaluated (the armed date '${_armed}' is not an ISO date, or /usr/bin/python3 could not compute it)"
+    ISSUES=$((ISSUES + 1))
+  elif [[ "$_days" -ge "$GATE_ROLLOUT_ESCALATE_DAYS" ]]; then
+    log "  FAIL:  closeout-anchor-consistency shakedown — GRADUATION-OVERDUE: ${_days} days at warn (escalation ${GATE_ROLLOUT_ESCALATE_DAYS}d). Record a decision in the repository: flip the committed default to enforce, decline in the flip-decision row, or re-date CLOSEOUT_ANCHOR_ROLLOUT_ARMED."
+    ISSUES=$((ISSUES + 1))
+  elif [[ "$_days" -ge "$GATE_ROLLOUT_REVIEW_DAYS" ]]; then
+    log "  WARN:  closeout-anchor-consistency shakedown — GRADUATION-DUE: ${_days} days since arming (review at ${GATE_ROLLOUT_REVIEW_DAYS}d; a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). Read the closeout-anchor-consistency rows across warn_log_segment_set(), then decide."
+  else
+    log "  OK:    closeout-anchor-consistency shakedown — within the review window (${_days}d of ${GATE_ROLLOUT_REVIEW_DAYS}d)"
+  fi
+  return 0
+}
+
 # ─── Check 16 population body — _c16_* (TOP-LEVEL) ───────────────────────────
 #
 # HOISTED TO TOP LEVEL DELIBERATELY; the placement is load-bearing, not stylistic,
@@ -12205,10 +12365,10 @@ sys.stdout.write("".join(out) + "|")
   fi
 
 
-  # ─── Check 28: Documentation close gates (G-CL8 template surfaces + G-CL6/G-CL8 runner) ──
+  # ─── Check 28: Documentation close gates (G-CL8 template surfaces + G-CL6/G-CL8/G-CL10 runner) ──
   # Per the Stage 5 ADR D-EnforcementMechanism (A), extended: Check 28 is the check that
-  # backs gate-criteria-spec.md Gate 13 G-CL8, and it is now also the runner of G-CL6. Three
-  # arms, two surfaces.
+  # backs gate-criteria-spec.md Gate 13 G-CL8, and it is now also the runner of G-CL6 and
+  # G-CL10. Three arms, two surfaces.
   #
   # Arm 1 — template presence (this run, every ./deploy.sh --check; id doc-impact-resolution):
   #   - Verify .github/PULL_REQUEST_TEMPLATE.md carries the `### Documentation Impact` H3 subsection.
@@ -12217,13 +12377,14 @@ sys.stdout.write("".join(out) + "|")
   #     template chooser's config.yml. The set is derived, not listed, so a form added later is checked.
   #     This is the lightweight template-presence check (the leading indicator).
   #
-  # Arm 2 — release-context gates (Stage 13; ids g-cl6 and g-cl8): `deploy.sh --check-doc-gates
-  #   --gate <g-cl6|g-cl8> --pr <N>` runs core/deploy/tools/check-doc-gates.py over the release's
-  #   <base>..<head> and writes one warn-log row per failing subject. The method is the G-CL6 and
-  #   G-CL8 rows' own and is not restated here. This lifecycle run has no release PR, so it reports
+  # Arm 2 — release-context gates (Stage 13; ids g-cl6, g-cl8 and g-cl10): `deploy.sh --check-doc-gates
+  #   --gate <g-cl6|g-cl8|g-cl10> --pr <N>` runs core/deploy/tools/check-doc-gates.py over the release's
+  #   <base>..<head> and writes one warn-log row per failing subject. The method is the G-CL6,
+  #   G-CL8 and G-CL10 rows' own and is not restated here. This lifecycle run has no release PR, so it reports
   #   arm 2 N/A rather than guessing one.
   #
-  # Arm 3 — shakedown deadline (this run): GCL6_ROLLOUT_ARMED / GCL8_ROLLOUT_ARMED plus the
+  # Arm 3 — shakedown deadline (this run): GCL6_ROLLOUT_ARMED / GCL8_ROLLOUT_ARMED /
+  #   GCL10_ROLLOUT_ARMED plus the
   #   GATE_ROLLOUT_* windows, read against today's date (W2 of gate-efficacy-standard.md § Written
   #   sink and terminable shakedown). It needs no drain, so it evaluates in CI and a fresh clone;
   #   it warns at the review window and raises an issue at escalation until each gate's decision
@@ -12231,8 +12392,8 @@ sys.stdout.write("".join(out) + "|")
   #
   # Warn-mode initial per bypass-mode-readiness.md §Shakedown (Checks 8/9/10/14/15/18/19/
   # 20/21/22/25/27/29 precedent). Arm 1 graduates through the shared deploy-check mode; arm 2
-  # graduates per gate when its committed sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce)
-  # reads enforce — an operator decision, never auto-promoted by row count.
+  # graduates per gate when its committed sentinel (.github/g-cl6.enforce, .github/g-cl8.enforce,
+  # .github/g-cl10.enforce) reads enforce — an operator decision, never auto-promoted by row count.
   #
   # Cutover: applies to ./deploy.sh --check invocations occurring on or after the
   # introducing release's merge SHA recorded in RELEASE_LOG.md. That
@@ -12240,7 +12401,7 @@ sys.stdout.write("".join(out) + "|")
   # were authored under pre-cutover improvement.yml without the Documentation Impact field;
   # retroactive Check 28 evaluation on its own PRs would fail by construction).
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
-    log "Check 28: Documentation close gates (template presence; G-CL6/G-CL8 release-context arms run at Stage 13; shakedown deadline)"
+    log "Check 28: Documentation close gates (template presence; G-CL6/G-CL8/G-CL10 release-context arms run at Stage 13; shakedown deadline)"
     local c28_findings=0
     local c28_output=""
     local c28_pr_template=".github/PULL_REQUEST_TEMPLATE.md"
@@ -12293,12 +12454,16 @@ sys.stdout.write("".join(out) + "|")
     fi
 
     # Arm 2 — the release-context gates grade ONE release, so they run at Stage 13 with its PR.
-    log "  N/A:   G-CL6 (per artifact) and G-CL8 (per issue) run at Stage 13 via deploy.sh --check-doc-gates --gate <g-cl6|g-cl8> --pr <N>; this run has no release PR"
+    log "  N/A:   G-CL6 (per artifact), G-CL8 (per issue) and G-CL10 (per declared obligation and Outcome limb) run at Stage 13 via deploy.sh --check-doc-gates --gate <g-cl6|g-cl8|g-cl10> --pr <N>; this run has no release PR"
 
     # Arm 3 — shakedown deadline. Committed constants and today's date only.
     local _c28_g _c28_armed _c28_tok _c28_days
-    for _c28_g in g-cl6 g-cl8; do
-      if [[ "$_c28_g" == "g-cl6" ]]; then _c28_armed="$GCL6_ROLLOUT_ARMED"; else _c28_armed="$GCL8_ROLLOUT_ARMED"; fi
+    for _c28_g in g-cl6 g-cl8 g-cl10; do
+      case "$_c28_g" in
+        g-cl6)  _c28_armed="$GCL6_ROLLOUT_ARMED" ;;
+        g-cl8)  _c28_armed="$GCL8_ROLLOUT_ARMED" ;;
+        g-cl10) _c28_armed="$GCL10_ROLLOUT_ARMED" ;;
+      esac
       _c28_tok=""
       if [[ -f ".github/${_c28_g}.enforce" ]]; then
         _c28_tok="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' ".github/${_c28_g}.enforce" 2>/dev/null | /usr/bin/sed -n 1p | /usr/bin/tr -d '[:space:]' || true)"
@@ -17981,6 +18146,94 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
     fi
   fi
 
+  # ─── Check 82: Close-out anchor consistency (RELEASE_DIGEST ↔ CHANGELOG ↔ release-note date) ──
+  # Check 82 — Close-out anchor consistency (advisory; warn-mode initial; enforcement-surface: deploy-time-only — no CI mirror, Requirement (b′))
+  # gate-efficacy: posture=advisory  enforcement-surface=deploy-time-only
+  #   invariant: every VERIFIED release at/after the close-out-anchor declaration carries ONE
+  #              close-out date on its DIGEST heading, its CHANGELOG heading and its release
+  #              note's frontmatter `date:` (two surfaces for a version-less release with no
+  #              CHANGELOG entry)
+  #   falsification: change ONE surface's date on such a release -> a WARN row naming the
+  #                  version and the split of surfaces by date (deploy.sh --self-test group CO-1)
+  #
+  # WHAT IT ASSERTS. Three surfaces declare the close-out anchor: RELEASE_DIGEST.md's
+  # `### <key> (<date>)`, CHANGELOG.md's `## [<key>] - <date>` and the release note's
+  # frontmatter `date:`. For every VERIFIED RELEASE_LOG row at or after the release that
+  # declared that anchor (the projector's CLOSEOUT_ANCHOR_DECLARED_AT), they must carry one
+  # date. A version-less release compares two, because the scripted close-out writes it no
+  # CHANGELOG entry; a CHANGELOG entry for its slug written by hand or hub-direct is compared too.
+  # A finding names the version, every value and the split of surfaces by date; it never
+  # says which side is wrong, because when two surfaces drift together the majority is.
+  #
+  # WHY THREE-WAY. The DIGEST and the CHANGELOG are written from one run-scoped sample, so
+  # a two-way compare of them reads agreement on exactly the defect that motivated this
+  # check: a pre-authored note keeps its author's date while both ledgers get the run's.
+  #
+  # WHY NOT INSIDE CHECK 23. Check 23 owns the merge-anchored LOG<->INDEX pair on its own
+  # dial; one dial per predicate (core/ADRs/ADR-166-split-predicate-gate-graduation.md), so
+  # each graduates on its own decision, and Check 23's --verify output contract is unchanged.
+  #
+  # PRESENCE IS NOT ITS PREDICATE. An absent or unparseable surface is NOT-EVALUATED for
+  # that row, never agreement; whether the surface should exist is Checks 32 and 48's.
+  # Rows before the declaration are grandfathered and not read.
+  #
+  # POSTURE. Its own committed dial, resolve_check_mode "closeout-anchor-consistency"
+  # "warn", tested with `case`, so a shared-cohort flip does not arm it. W1: each finding
+  # appends one row to the shared warn log under the check id; NOT-EVALUATED surfaces go
+  # through flag_not_evaluated. W2: CLOSEOUT_ANCHOR_ROLLOUT_ARMED, read by _c82_deadline.
+  # The flip is the committed default resolve_check_mode "closeout-anchor-consistency"
+  # "enforce", never a mode file, with the deadline arm deleted in the same commit
+  # (core/standards/gate-efficacy-standard.md § Flip-decision status).
+  #
+  # THE CONTROL ARM RUNS FIRST AND BLOCKS ON EVERY MODE. It is the projector's whole
+  # --self-test, so it ALSO carries Check 23's fixtures (the INDEX verifier, sort, orphan,
+  # header and Theme limbs): a regression in one of those reads here, under this check's id,
+  # as a fixture failure. Declared rather than discovered — the module is one grammar owner,
+  # and the failing limb is named in the printed output.
+  #
+  # COVERAGE BOUNDARY. Deploy-time only: the fixtures also run in CI through the
+  # selftest-discovery job, but nothing in CI runs the live compare, so Requirement (b′)
+  # bars `required`. A CI caller on the pull request that writes the subject — the Stage-13
+  # chore PR — is the named precondition for `required`, not a step this check takes.
+  #
+  # Primitive: core/deploy/tools/generate_release_index.py --verify-closeout-anchors (carries
+  # --self-test). Verdict tail and deadline arm: _c82_report and _c82_deadline at top level,
+  # driven by --self-test group CO.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    local c82_mode
+    c82_mode="$(resolve_check_mode "closeout-anchor-consistency" "warn")"
+    if [[ "$c82_mode" != "off" ]]; then
+      log "Check 82: Close-out anchor consistency (RELEASE_DIGEST, CHANGELOG and release-note date agree for every VERIFIED release at/after the anchor declaration; ${c82_mode})"
+      local c82_script="core/deploy/tools/generate_release_index.py"
+      if [[ ! -f "$c82_script" ]]; then
+        log "  FAIL:  closeout-anchor-consistency — primitive missing: $c82_script (a repo defect, not a benign absence)"
+        ISSUES=$((ISSUES + 1))
+      elif [[ ! -x "/usr/bin/python3" ]]; then
+        log "  FAIL:  closeout-anchor-consistency — /usr/bin/python3 not executable, so the close-out anchors are NOT-EVALUATED — this is not a clean result"
+        ISSUES=$((ISSUES + 1))
+      else
+        # ── control arm FIRST: a probe that cannot be shown to detect proves nothing ──
+        local c82_fx_out c82_fx_rc=0
+        c82_fx_out=$(/usr/bin/python3 "$c82_script" --self-test 2>&1) || c82_fx_rc=$?
+        log "  CTRL:  closeout-anchor-consistency — $(/usr/bin/tail -1 <<<"$c82_fx_out")"
+        if [[ $c82_fx_rc -ne 0 ]]; then
+          log "  FAIL:  closeout-anchor-consistency-fixtures — projector self-test regression (exit $c82_fx_rc; hard-fail on every mode). A probe that can no longer be shown to detect AND to discriminate proves nothing by returning zero."
+          /usr/bin/sed 's/^/         /' <<<"$c82_fx_out"
+          ISSUES=$((ISSUES + 1))
+        else
+          local c82_out c82_rc=0
+          c82_out=$(/usr/bin/python3 "$c82_script" --verify-closeout-anchors 2>&1) || c82_rc=$?
+          case "$c82_mode" in
+            enforce) _c82_report enforce "$c82_rc" "$c82_out" ;;
+            *) _c82_report warn "$c82_rc" "$c82_out" ;;
+          esac
+        fi
+      fi
+      # ── deadline arm (W2): the committed constant and today's date only ──
+      _c82_deadline "$CLOSEOUT_ANCHOR_ROLLOUT_ARMED"
+    fi
+  fi
+
   # Summary
   if [[ $ISSUES -eq 0 ]]; then
     log "All checks passed."
@@ -21067,7 +21320,7 @@ EOF
   # The engine's own predicate arms (the retire arms, the None forms, frontmatter exclusion)
   # are its --self-test's, run in CI by the selftest-discovery job; this group owns the EMIT
   # path: rows, ids, mode and exit codes. The sandbox directory is left for the OS to clear.
-  echo "self-test: starting assertion group DG (documentation close gates G-CL6 + G-CL8)" >&2
+  echo "self-test: starting assertion group DG (release-context close gates G-CL6 + G-CL8 + G-CL10)" >&2
   if ! declare -F _dg_report >/dev/null || ! declare -F _dg_emit_row >/dev/null || ! declare -F _dg_verdict_exit_code >/dev/null; then
     _dp_fail "DG-0 the hoisted _dg_report / _dg_emit_row / _dg_verdict_exit_code are not all defined — every DG arm drives them"
   else
@@ -21190,8 +21443,233 @@ EOF
     _dg_report g-cl8 "$_dgt/pop.tsv" 0 enforce 2 > /dev/null
     if [[ "$DG_VERDICT" != "FINDINGS 1 2" ]]; then _dp_fail "DG-8 control: a reconciled count must verdict on the subjects (FINDINGS 1 2), got '$DG_VERDICT'"; fi
 
+    # DG-9..DG-13 — G-CL10 through the REAL engine and the REAL _dg_report: a scratch
+    # repository whose gate-coverage register gains one `prose` row at <head> declaring a
+    # 100% threshold, a milestone description whose one limb names a member, and owners
+    # read from files the way _dg_owner_states writes them. CL10-S and CL10-P below are the
+    # CIAC-4 pair: the same record, differing in its owner line alone.
+    local _d10="$_dgt/repo10" _d10o="$_dgt/owners10" _d10b _d10h _d10r _d10line
+    /bin/mkdir -p "$_d10/core/standards" "$_d10/release/releases/plans" "$_d10o"
+    /usr/bin/git -C "$_d10" init -q
+    /bin/cat > "$_d10/core/standards/gate-efficacy-standard.md" <<'DG10BASE'
+# Fixture standard
+
+## Gate-coverage register (seed)
+
+| Invariant | Enforcing gate | Surface | Posture | Falsification test |
+|---|---|---|---|---|
+| an old prose row | review step | prose | advisory | x |
+DG10BASE
+    # The declared probe opens on a file the scratch repository tracks, as the probe
+    # grammar's invocation arm requires (CD-1, the shape rule).
+    printf '#!/bin/sh\n' > "$_d10/count-widgets"
+    /usr/bin/git -C "$_d10" add -A
+    /usr/bin/git -C "$_d10" -c user.name=dg -c user.email=dg@example.invalid commit -qm base
+    _d10b="$(/usr/bin/git -C "$_d10" rev-parse HEAD)"
+    /bin/cat >> "$_d10/core/standards/gate-efficacy-standard.md" <<'DG10HEAD'
+| widgets carry a tag | review step | prose (nothing executes it) | advisory | x **Population:** `dg-pop` — population: every widget; probe: `count-widgets --tagged`; threshold: 100% |
+DG10HEAD
+    printf -- '---\ntitle: P\nmilestone: dg10\n---\n# Plan\n' > "$_d10/release/releases/plans/dg10_RELEASE_PLAN.md"
+    /usr/bin/git -C "$_d10" add -A
+    /usr/bin/git -C "$_d10" -c user.name=dg -c user.email=dg@example.invalid commit -qm head
+    _d10h="$(/usr/bin/git -C "$_d10" rev-parse HEAD)"
+    printf -v _d10r '## Verification Evidence\n\n#### Population record — dg-pop\n\n```\npopulation: every widget\nprobe: count-widgets --tagged @ %s\nexamined: 3 — widgets at the pin\nsensitivity: a known widget -> observed 1\nspecificity: NOT TRIGGERED — a fixture\nstate: fetched\nexempted: 0\n```\n\nconforming: 0\n' "$_d10h"
+    printf '%sowner: none\n' "$_d10r" > "$_dgt/plan10-s.md"
+    printf '%sowner: #7\n' "$_d10r" > "$_dgt/plan10-p.md"
+    printf '### Release Outcome Statement\n\n**AFTER** — x.\n\n**BEFORE** — y.\n\n**Limb owners:** the one limb → #20.\n' > "$_dgt/outcome10.md"
+    printf '### Release Outcome Statement\n\n**AFTER** — x.\n\n**BEFORE** — y.\n\n**Limb owners:** the one limb → not yet named.\n' > "$_dgt/outcome10-bad.md"
+    printf '20\n' > "$_dgt/members10.txt"
+    printf '{"state":"open","body":"carries the residual of dg-pop","repository_url":"https://api.github.com/repos/acme/widget"}\n' > "$_d10o/7.json"
+    printf '{"state":"open","body":"","repository_url":"https://api.github.com/repos/acme/widget"}\n' > "$_d10o/20.json"
+    : > "$_d10o/7.comments"; : > "$_d10o/20.comments"
+    local -a _d10a=(--gate g-cl10 --base "$_d10b" --head "$_d10h" --repo-root "$_d10" --milestone-created 2026-01-01T00:00:00Z
+                    --limbs-required-from 2026-06-01 --members "$_dgt/members10.txt" --owners-dir "$_d10o" --repo acme/widget)
+    local _d10pop _d10g0
+
+    # DG-9 — CL10-S: a declared obligation at 0% conformance with no owner writes exactly
+    # one g-cl10 row, through the shared sink, naming the obligation.
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --record "$_dgt/plan10-s.md" --list > "$_dgt/g10l.tsv" 2>&1 || _dgrc=$?
+    _d10pop="$(/usr/bin/awk -F'\t' '$1 == "SUBJECT" || $1 == "LIMB"' "$_dgt/g10l.tsv" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+    if [[ "$_dgrc" -ne 0 || "$_d10pop" != "2" ]]; then _dp_fail "DG-9 --list must exit 0 and print one obligation and one limb (population 2), got exit $_dgrc, population '$_d10pop'"; fi
+    _d10g0="$(_dp_count "$WARN_LOG" '"check":"g-cl10"')"
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --record "$_dgt/plan10-s.md" > "$_dgt/g10s.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl10 "$_dgt/g10s.tsv" "$_dgrc" warn "$_d10pop" > "$_dgt/g10s.out"
+    if [[ "$DG_VERDICT" != "FINDINGS 1 2" ]]; then _dp_fail "DG-9 g-cl10 over a 0% obligation with no owner must verdict FINDINGS 1 2, got '$DG_VERDICT'"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"g-cl10"')" != "$((_d10g0 + 1))" ]]; then _dp_fail "DG-9 the fixture must write exactly one g-cl10 row"; fi
+    _d10line="$(_dp_line "$WARN_LOG" '"check":"g-cl10"')"
+    if [[ "$_d10line" != *"obligation:dg-pop"* || "$_d10line" != *"unowned: none"* ]]; then _dp_fail "DG-9 the g-cl10 row must name the obligation and the missing owner: $_d10line"; fi
+
+    # DG-10 — CL10-P: the identical record naming an open non-member owner that names the
+    # population writes no row and verdicts CLEAN over both subjects.
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --record "$_dgt/plan10-p.md" > "$_dgt/g10p.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl10 "$_dgt/g10p.tsv" "$_dgrc" warn "$_d10pop" > "$_dgt/g10p.out"
+    if [[ "$DG_VERDICT" != "CLEAN 2" ]]; then _dp_fail "DG-10 g-cl10 over the same 0% obligation owned by an open non-member naming it must verdict CLEAN 2, got '$DG_VERDICT'"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"g-cl10"')" != "$((_d10g0 + 1))" ]]; then _dp_fail "DG-10 an owned obligation must write no g-cl10 row"; fi
+
+    # DG-11 — a subject that vanishes between --list and the grade withholds the gate.
+    printf 'PASS\tg-cl10\tobligation:dg-pop\tx\nSUMMARY\tg-cl10\tevaluated=1\tfail=0\tnot_evaluated=0\tout_of_scope=0\n' > "$_dgt/g10v.tsv"
+    _dg_report g-cl10 "$_dgt/g10v.tsv" 0 warn 2 > /dev/null
+    if [[ "$DG_VERDICT" != "NOT-EVALUATED 1 subject(s) reported for a population of 2" ]]; then _dp_fail "DG-11 one subject reported for a population of two must verdict NOT-EVALUATED, got '$DG_VERDICT'"; fi
+
+    # DG-12 — the plan moves after <head>, as the version stamp moves it: found through its
+    # milestone: frontmatter, never read at the slug path. Control: a slug no plan declares
+    # withholds the obligation as record-unresolved.
+    /bin/mkdir -p "$_d10/release/releases/plans/v9"
+    /usr/bin/git -C "$_d10" mv release/releases/plans/dg10_RELEASE_PLAN.md release/releases/plans/v9/v9.99_RELEASE_PLAN.md
+    /bin/cat "$_dgt/plan10-p.md" >> "$_d10/release/releases/plans/v9/v9.99_RELEASE_PLAN.md"
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --milestone-slug dg10 > "$_dgt/g10m.tsv" 2>&1 || _dgrc=$?
+    if [[ "$_dgrc" -ne 0 || "$(_dp_count "$_dgt/g10m.tsv" $'PASS\tg-cl10\tobligation:dg-pop')" != "1" ]]; then _dp_fail "DG-12 a plan renamed after <head> must be found by its milestone: frontmatter and graded"; fi
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10.md" --milestone-slug no-such-slug > "$_dgt/g10n.tsv" 2>&1 || _dgrc=$?
+    if [[ "$(_dp_count "$_dgt/g10n.tsv" 'record-unresolved')" != "1" || "$(_dp_count "$_dgt/g10n.tsv" $'NOT-EVALUATED\tg-cl10\tobligation:dg-pop')" != "1" ]]; then _dp_fail "DG-12 control: a slug no plan declares must withhold the obligation as record-unresolved"; fi
+
+    # DG-13 — an arm-ii FAIL writes one row whose detail opens `limbs:`, so the drain can
+    # count each arm apart.
+    _dgrc=0; python3 "$_dge" "${_d10a[@]}" --outcome "$_dgt/outcome10-bad.md" --record "$_dgt/plan10-p.md" > "$_dgt/g10b.tsv" 2>&1 || _dgrc=$?
+    _dg_report g-cl10 "$_dgt/g10b.tsv" "$_dgrc" warn "$_d10pop" > /dev/null
+    if [[ "$DG_VERDICT" != "FINDINGS 1 2" ]]; then _dp_fail "DG-13 an unowned limb must verdict FINDINGS 1 2, got '$DG_VERDICT'"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"detail":"limbs:outcome-limb:1: limb-unowned')" != "1" ]]; then _dp_fail "DG-13 the arm-ii row's detail must open limbs:"; fi
+
     # DG-6 — structural non-escalation: no arm above moved ISSUES.
     if [[ "$ISSUES" -ne "$_dg_i0" ]]; then _dp_fail "DG-6 the doc-gate emit path must never increment ISSUES, got +$((ISSUES - _dg_i0))"; fi
+  fi
+
+  # ─── Assertion group CO — close-out anchor consistency (Check 82) ──────────────
+  #
+  # Offline and sandbox-only: a scratch corpus, a scratch WARN_LOG, no gh, no network. Drives
+  # the REAL primitive (core/deploy/tools/generate_release_index.py --verify-closeout-anchors,
+  # with its fixture path overrides) and the REAL hoisted _c82_report / _c82_deadline — the
+  # bodies Check 82 runs. The primitive's own grammar arms (CA-1..CA-11) are its --self-test's,
+  # run in CI by the selftest-discovery job and first inside Check 82; this group owns the
+  # EMIT path: the finding row, the warn-log row, the mode, the fail-closed readings and W2.
+  #
+  # The primitive takes no cutoff argument — the boundary is a committed constant, never an
+  # input — so the sandbox LOG carries a literal v4.02 row. CO-1 is the sensitivity arm (a
+  # seeded divergence after it); CO-2 the specificity arm (the same corpus, the seed removed,
+  # a divergence BEFORE it still present in the input); CO-3 the enforce dial; CO-4 a surface
+  # that cannot be compared; CO-5 a scope that cannot be resolved; CO-6 every reading the
+  # tail cannot vouch for; CO-7 the deadline; CO-8 the mode exclusivity.
+  #
+  # WHAT THIS GROUP CANNOT SEE: Check 82's inline lines in cmd_check — its dial read, its
+  # primitive-missing and python-missing branches and its control-arm call — reached only by
+  # a --check run, which records them.
+  echo "self-test: starting assertion group CO (close-out anchor consistency, Check 82)" >&2
+  if ! declare -F _c82_report >/dev/null || ! declare -F _c82_deadline >/dev/null; then
+    _dp_fail "CO-0 the hoisted _c82_report / _c82_deadline are not both defined — every CO arm drives them"
+  else
+    local _cot; _cot="$(/usr/bin/mktemp -d -t closeoutanchor-selftest.XXXXXX)"
+    local _cop; _cop="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/generate_release_index.py"
+    local WARN_LOG="$_cot/warn.jsonl"
+    local ISSUES=0
+    local _co_out _co_rc _co_i0 _co_w0 _co_e0 _co_l
+    /bin/mkdir -p "$_cot/notes/_unversioned"
+    printf '| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n|---|---|---|---|---|---|---|---|\n| v4.01 | co-m1 | #1 | #2 | `a` | `v4.01` | VERIFIED | 2026-06-01 |\n| v4.02 | co-m2 | #1 | #2 | `b` | `v4.02` | VERIFIED | 2026-06-02 |\n| v4.03 | co-m3 | #1 | #2 | `c` | `v4.03` | VERIFIED | 2026-06-04 |\n| co-vl (version-less) | co-vl | #1 | #2 | `d` | (none) | VERIFIED | 2026-06-06 |\n' > "$_cot/LOG.md"
+    printf '| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |\n|---|---|---|---|---|---|---|---|\n| v4.01 | co-m1 | #1 | #2 | `a` | `v4.01` | VERIFIED | 2026-06-01 |\n| v4.03 | co-m3 | #1 | #2 | `c` | `v4.03` | VERIFIED | 2026-06-04 |\n' > "$_cot/LOG-nocut.md"
+    printf '# RELEASE_DIGEST\n\n### v4.01 (2026-06-02) — before the declaration, divergent\n### v4.02 (2026-06-03) — agrees\n### v4.03 (2026-06-05) — the seeded release\n### co-vl (2026-06-06, version-less) — agrees\n' > "$_cot/DIGEST.md"
+    printf '# Changelog\n\n## [Unreleased]\n\n## [v4.03] - 2026-06-05\n\n## [v4.02] - 2026-06-03\n\n## [v4.01] - 2026-06-02\n' > "$_cot/CHANGELOG.md"
+    printf '# Changelog\n\n## [Unreleased]\n\n## [v4.02] - 2026-06-03\n\n## [v4.01] - 2026-06-02\n' > "$_cot/CHANGELOG-no403.md"
+    printf -- '---\ntitle: a\ndate: 2026-06-01\n---\n# v4.01\n' > "$_cot/notes/v4.01_RELEASE_NOTES.md"
+    printf -- '---\ntitle: b\ndate: 2026-06-03\n---\n# v4.02\n' > "$_cot/notes/v4.02_RELEASE_NOTES.md"
+    printf -- '---\ntitle: c\ndate: 2026-06-04\n---\n# v4.03\n' > "$_cot/notes/v4.03_RELEASE_NOTES.md"
+    printf -- '---\ntitle: d\ndate: 2026-06-06\n---\n# co-vl\n' > "$_cot/notes/_unversioned/co-vl_RELEASE_NOTES.md"
+
+    # _co_run <log> <changelog>: the real primitive over the sandbox; sets _co_out / _co_rc.
+    _co_run() {
+      _co_rc=0
+      _co_out="$(/usr/bin/python3 "$_cop" --verify-closeout-anchors --log-path "$1" --digest-path "$_cot/DIGEST.md" --changelog-path "$2" --notes-dir "$_cot/notes" 2>&1)" || _co_rc=$?
+    }
+    # _co_ago <days>: today's UTC date minus <days>, ISO.
+    _co_ago() {
+      /usr/bin/python3 -c 'import datetime,sys
+print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(days=int(sys.argv[1]))).isoformat())' "$1"
+    }
+
+    # CO-1 — SENSITIVITY: v4.03's note is a day earlier than its DIGEST and CHANGELOG, which
+    # agree with each other. Exit 1; ONE WARN line naming v4.03 and the split; ONE warn-log
+    # row under the check id; no issue; no OK line; the pre-declaration v4.01 stays silent.
+    _co_run "$_cot/LOG.md" "$_cot/CHANGELOG.md"
+    if [[ "$_co_rc" -ne 1 ]]; then _dp_fail "CO-1 a seeded post-declaration divergence must exit 1, got $_co_rc: $_co_out"; fi
+    _co_i0="$ISSUES"; _co_w0="$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')"
+    _c82_report warn "$_co_rc" "$_co_out" > "$_cot/co1.out" 2>&1
+    _co_l="$(_dp_line "$_cot/co1.out" 'WARN:  closeout-anchor-consistency')"
+    if [[ "$(_dp_count "$_cot/co1.out" 'WARN:  closeout-anchor-consistency')" != "1" || "$_co_l" != *"v4.03: close-out surfaces disagree"* || "$_co_l" != *"2026-06-04: {note} | 2026-06-05: {CHANGELOG,DIGEST}"* ]]; then _dp_fail "CO-1 exactly one WARN line must name v4.03 and the split of surfaces by date: $_co_l"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')" != "$((_co_w0 + 1))" || "$(_dp_line "$WARN_LOG" '"check":"closeout-anchor-consistency"')" != *'"detail":"v4.03: close-out surfaces disagree'* ]]; then _dp_fail "CO-1 the finding must write exactly one warn-log row naming v4.03 (W1)"; fi
+    if [[ "$ISSUES" -ne "$_co_i0" || "$(_dp_count "$_cot/co1.out" 'FAIL:')" != "0" || "$(_dp_count "$_cot/co1.out" 'OK:')" != "0" ]]; then _dp_fail "CO-1 a warn-mode finding must raise no issue, print no FAIL line and withhold the OK line"; fi
+    if [[ "$(_dp_count "$_cot/co1.out" 'v4.01')" != "0" ]]; then _dp_fail "CO-1 the pre-declaration v4.01 divergence must not be read"; fi
+
+    # CO-2 — SPECIFICITY: the seed removed (v4.03's note now agrees); v4.01's divergence is
+    # still in the input — shown present, so the silence is the boundary working, not an
+    # empty input. Exit 0; the clean OK line; no WARN line; no warn-log row; no issue.
+    if [[ "$(_dp_count "$_cot/DIGEST.md" '### v4.01 (2026-06-02)')" != "1" || "$(_dp_count "$_cot/notes/v4.01_RELEASE_NOTES.md" 'date: 2026-06-01')" != "1" ]]; then _dp_fail "CO-2 the specificity input must carry the pre-declaration near-miss (v4.01 DIGEST 06-02, note 06-01)"; fi
+    printf -- '---\ntitle: c\ndate: 2026-06-05\n---\n# v4.03\n' > "$_cot/notes/v4.03_RELEASE_NOTES.md"
+    _co_run "$_cot/LOG.md" "$_cot/CHANGELOG.md"
+    _co_i0="$ISSUES"; _co_w0="$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')"
+    _c82_report warn "$_co_rc" "$_co_out" > "$_cot/co2.out" 2>&1
+    if [[ "$_co_rc" -ne 0 || "$(_dp_count "$_cot/co2.out" 'WARN:')" != "0" || "$(_dp_count "$_cot/co2.out" 'OK:    closeout-anchor-consistency — every VERIFIED release')" != "1" ]]; then _dp_fail "CO-2 an agreeing corpus must exit 0 and print the clean OK line and no WARN line (rc $_co_rc)"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')" != "$_co_w0" || "$ISSUES" -ne "$_co_i0" ]]; then _dp_fail "CO-2 an agreeing corpus must write no warn-log row and raise no issue"; fi
+    if [[ "$(_dp_count "$_cot/co2.out" 'status=fetched enumerated=3 examined=3')" != "1" || "$(_dp_count "$_cot/co2.out" '1 version-less compared two-way')" != "1" || "$(_dp_count "$_cot/co2.out" '1 earlier row(s) predate')" != "1" ]]; then _dp_fail "CO-2 the DENOM record must count 3 compared rows, 1 version-less and 1 pre-declaration row"; fi
+
+    # CO-3 — the ENFORCE dial: the seed restored; ONE FAIL line naming v4.03, ISSUES +1, and
+    # no warn-log row.
+    printf -- '---\ntitle: c\ndate: 2026-06-04\n---\n# v4.03\n' > "$_cot/notes/v4.03_RELEASE_NOTES.md"
+    _co_run "$_cot/LOG.md" "$_cot/CHANGELOG.md"
+    _co_i0="$ISSUES"; _co_w0="$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')"
+    _c82_report enforce "$_co_rc" "$_co_out" > "$_cot/co3.out" 2>&1
+    if [[ "$(_dp_count "$_cot/co3.out" 'FAIL:  closeout-anchor-consistency — v4.03: close-out surfaces disagree')" != "1" || "$((ISSUES - _co_i0))" -ne 1 ]]; then _dp_fail "CO-3 under enforce the finding must print one FAIL line naming v4.03 and raise exactly one issue (got +$((ISSUES - _co_i0)))"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"closeout-anchor-consistency"')" != "$_co_w0" ]]; then _dp_fail "CO-3 under enforce no warn-log row is written"; fi
+
+    # CO-4 — a surface that cannot be compared: v4.03's note agrees again and its CHANGELOG
+    # entry is gone. Exit 0; ONE NOT-EVAL line naming it; the OK line carries DEGRADED; one
+    # evaluated:false row; no issue.
+    printf -- '---\ntitle: c\ndate: 2026-06-05\n---\n# v4.03\n' > "$_cot/notes/v4.03_RELEASE_NOTES.md"
+    _co_run "$_cot/LOG.md" "$_cot/CHANGELOG-no403.md"
+    _co_i0="$ISSUES"; _co_e0="$(_dp_count "$WARN_LOG" '"evaluated":false')"
+    _c82_report warn "$_co_rc" "$_co_out" > "$_cot/co4.out" 2>&1
+    _co_l="$(_dp_line "$_cot/co4.out" 'NOT-EVAL: closeout-anchor-consistency')"
+    if [[ "$_co_rc" -ne 0 || "$(_dp_count "$_cot/co4.out" 'NOT-EVAL: closeout-anchor-consistency')" != "1" || "$_co_l" != *"v4.03 CHANGELOG (absent)"* || "$_co_l" != *"status=degraded"* ]]; then _dp_fail "CO-4 one NOT-EVAL line must name v4.03's CHANGELOG as absent under status=degraded (rc $_co_rc): $_co_l"; fi
+    if [[ "$(_dp_count "$_cot/co4.out" '[DEGRADED')" != "1" || "$(_dp_count "$WARN_LOG" '"evaluated":false')" != "$((_co_e0 + 1))" || "$ISSUES" -ne "$_co_i0" ]]; then _dp_fail "CO-4 a degraded read must print the DEGRADED OK line, write one evaluated:false row and raise no issue"; fi
+
+    # CO-5 — a scope that cannot be resolved: a LOG without the declaration row. Exit 3; a
+    # NOT-EVAL line under status=not-run; no OK line; no issue.
+    _co_run "$_cot/LOG-nocut.md" "$_cot/CHANGELOG.md"
+    _co_i0="$ISSUES"
+    _c82_report warn "$_co_rc" "$_co_out" > "$_cot/co5.out" 2>&1
+    if [[ "$_co_rc" -ne 3 || "$(_dp_count "$_cot/co5.out" 'status=not-run')" != "1" || "$(_dp_count "$_cot/co5.out" 'names no RELEASE_LOG row')" != "1" || "$(_dp_count "$_cot/co5.out" 'OK:')" != "0" || "$ISSUES" -ne "$_co_i0" ]]; then _dp_fail "CO-5 an unresolved scope must exit 3 and read status=not-run with no OK line and no issue (rc $_co_rc)"; fi
+
+    # CO-6 — every reading the tail cannot vouch for fails closed, here under warn: exit 1
+    # naming nothing; exit 0 beside a FAIL row; a row of an unknown class; no DENOM record; an
+    # exit outside 0/1/3; a mode the tail does not know. Each raises one issue and no OK line.
+    local _co_case _co_n=0
+    for _co_case in "1|DENOM: status=fetched enumerated=1 examined=1 (x)" \
+                    "0|DENOM: status=fetched enumerated=1 examined=1 (x)"$'\n'$'FAIL\tv9.01\tcloseout_anchor\tDIGEST=2026-01-01\ta | b\trec' \
+                    "0|DENOM: status=fetched enumerated=1 examined=1 (x)"$'\n'$'BOGUS\tx' \
+                    "0|" \
+                    "7|boom"; do
+      _co_n=$((_co_n + 1))
+      _co_i0="$ISSUES"
+      _c82_report warn "${_co_case%%|*}" "${_co_case#*|}" > "$_cot/co6-$_co_n.out" 2>&1
+      if [[ "$((ISSUES - _co_i0))" -ne 1 || "$(_dp_count "$_cot/co6-$_co_n.out" 'OK:')" != "0" ]]; then _dp_fail "CO-6 case $_co_n (exit ${_co_case%%|*}) must fail closed with exactly one issue and no OK line (got +$((ISSUES - _co_i0)))"; fi
+    done
+    _co_i0="$ISSUES"
+    _c82_report off 0 "DENOM: status=fetched enumerated=0 examined=0 (x)" > "$_cot/co6-mode.out" 2>&1
+    if [[ "$((ISSUES - _co_i0))" -ne 1 || "$(_dp_count "$_cot/co6-mode.out" 'does not know')" != "1" ]]; then _dp_fail "CO-6 a mode the tail does not know must fail closed with one issue"; fi
+
+    # CO-7 — W2: armed today is within the window; 61 days back is GRADUATION-DUE (a warning,
+    # no issue); 91 days back is GRADUATION-OVERDUE (one issue); a non-date cannot be
+    # evaluated (one issue).
+    _co_i0="$ISSUES"
+    _c82_deadline "$(_co_ago 0)" > "$_cot/co7a.out" 2>&1
+    _c82_deadline "$(_co_ago 61)" > "$_cot/co7b.out" 2>&1
+    if [[ "$(_dp_count "$_cot/co7a.out" 'within the review window')" != "1" || "$(_dp_count "$_cot/co7b.out" 'GRADUATION-DUE')" != "1" || "$ISSUES" -ne "$_co_i0" ]]; then _dp_fail "CO-7 armed today must read within the window and 61 days back GRADUATION-DUE, neither raising an issue"; fi
+    _c82_deadline "$(_co_ago 91)" > "$_cot/co7c.out" 2>&1
+    _c82_deadline "not-a-date" > "$_cot/co7d.out" 2>&1
+    if [[ "$(_dp_count "$_cot/co7c.out" 'GRADUATION-OVERDUE')" != "1" || "$(_dp_count "$_cot/co7d.out" 'cannot be evaluated')" != "1" || "$((ISSUES - _co_i0))" -ne 2 ]]; then _dp_fail "CO-7 91 days back must read GRADUATION-OVERDUE and a non-date cannot be evaluated, one issue each (got +$((ISSUES - _co_i0)))"; fi
+
+    # CO-8 — the mode is exclusive: combined with --self-test it is a usage error (exit 2),
+    # never a self-test exit reported as the verification's.
+    _co_rc=0; /usr/bin/python3 "$_cop" --verify-closeout-anchors --self-test > "$_cot/co8.out" 2>&1 || _co_rc=$?
+    if [[ "$_co_rc" -ne 2 ]]; then _dp_fail "CO-8 --verify-closeout-anchors with --self-test must exit 2, got $_co_rc"; fi
+
+    /bin/rm -rf "$_cot"
   fi
 
   if [[ "$failures" -gt 0 ]]; then
@@ -21199,7 +21677,8 @@ EOF
     return 1
   fi
   echo "self-test: PASS" >&2
-  echo "  documentation close gates validated (group DG): DG-1 one unrefreshed Tier-A artifact + one unresolved declaration write exactly two warn-log rows, one under each gate id / DG-2 the refreshed control writes none and verdicts CLEAN / DG-3 enforce writes no row / DG-4 an empty population is NA and an engine failure NOT-EVALUATED, never CLEAN / DG-5 exit 0 has exactly two producers, both CLEAN / DG-6 no arm moves ISSUES / DG-7 a failed population read, a PR with no milestone, an unresolved repository and an unreconciled count each withhold G-CL8 as NOT-EVALUATED, and the reconciled control returns the milestone less status: deferred plus the keyword closes / DG-8 a graded count short of the population withholds the gate even beside a finding" >&2
+  echo "  release-context close gates validated (group DG): DG-1 one unrefreshed Tier-A artifact + one unresolved declaration write exactly two warn-log rows, one under each gate id / DG-2 the refreshed control writes none and verdicts CLEAN / DG-3 enforce writes no row / DG-4 an empty population is NA and an engine failure NOT-EVALUATED, never CLEAN / DG-5 exit 0 has exactly two producers, both CLEAN / DG-6 no arm moves ISSUES / DG-7 a failed population read, a PR with no milestone, an unresolved repository and an unreconciled count each withhold G-CL8 as NOT-EVALUATED, and the reconciled control returns the milestone less status: deferred plus the keyword closes / DG-8 a graded count short of the population withholds the gate even beside a finding / DG-9 a declared obligation at 0% conformance with no owner writes exactly one g-cl10 row naming it / DG-10 the identical record naming an open non-member owner that names the population writes none and verdicts CLEAN / DG-11 a g-cl10 subject missing from the grade withholds the gate / DG-12 a plan renamed after <head> is found by its milestone: frontmatter, and a slug no plan declares withholds the obligation / DG-13 an unowned Outcome limb writes one row whose detail opens limbs:" >&2
+  echo "  close-out anchor consistency validated (group CO, Check 82): CO-1 a seeded post-declaration divergence writes one WARN line naming the version and the split, and one warn-log row / CO-2 the seed removed, with a pre-declaration divergence still in the input, prints the clean OK line and writes none / CO-3 enforce prints one FAIL line and raises one issue / CO-4 a surface not compared is one NOT-EVAL line and a DEGRADED OK / CO-5 an unresolved scope reads status=not-run / CO-6 every unreadable verdict fails closed with one issue and no OK line / CO-7 the deadline warns at review and fails at escalation / CO-8 the mode is exclusive" >&2
   echo "  version-freeness claimed-set column pinning validated (#3724 AC-N, group VF):" >&2
   echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
@@ -21544,37 +22023,49 @@ cmd_check_decision_emission() {
   esac
 }
 
-# ─── Mode: --check-doc-gates (Stage 13 Phase A5 / A11) — G-CL6 + G-CL8 ──────
+# ─── Mode: --check-doc-gates (Stage 13 Phase A5 / A11 / A14) — G-CL6 + G-CL8 + G-CL10 ──
 #
-#   deploy.sh --check-doc-gates --gate g-cl6|g-cl8 --pr <N> [--plan <path>]
+#   deploy.sh --check-doc-gates --gate g-cl6|g-cl8|g-cl10 --pr <N> [--plan <path>] [--list]
 #
-# Runs ONE documentation close gate over the release PR <N> and exits per the contract
-# below. --plan names the release plan G-CL6 reads at <head>; it defaults to
-# release/releases/plans/<milestone-title>_RELEASE_PLAN.md.
+# Runs ONE release-context close gate over the release PR <N> and exits per the contract
+# below. For g-cl6, --plan names the release plan G-CL6 reads at <head>; it defaults to
+# release/releases/plans/<milestone-title>_RELEASE_PLAN.md. For g-cl10 the plan is read
+# from the WORKING TREE, not at <head>: the population records are written after <head>,
+# and the version stamp renames the plan before Stage 13 runs, so --plan names it
+# explicitly or, by default, the engine finds the ONE plan whose `milestone:` frontmatter
+# names the release. g-cl10 --list prints the declared population, the Outcome limbs and
+# the owners, writes nothing, and exits 0 (3 when the engine could not read its inputs).
 #
 #   verdict          sentinel          exit  caller reads it as
 #   CLEAN            any               0     every in-scope subject resolved. SOLE OCCUPANT OF 0.
 #   FINDINGS         != enforce        2     ADVISORY: one warn-log row per failing subject
 #   FINDINGS         enforce           1     BLOCKING: Milestone close stops; no row is written
 #   NA               any               3     no in-scope subject (no Tier-A section; no issue of
-#                                            the release carries the section) — recorded N/A
+#                                            the release carries the section; for g-cl10, no
+#                                            declared obligation and an Outcome out of scope)
+#                                            — recorded N/A
 #   NOT-EVALUATED    any               3     withheld: no PR, gh unavailable, head unfetched,
 #                                            plan missing, a subject the engine could not read,
-#                                            or (g-cl8) a population read that failed, a PR with
-#                                            no milestone, or a count that did not reconcile
+#                                            or (g-cl8, g-cl10) a population read that failed, a
+#                                            PR with no milestone, or a count that did not
+#                                            reconcile; for g-cl10 also an unreadable milestone
+#                                            description, an unresolved plan, an unfetched pin
+#                                            or an unreadable owner
 #   <other>          any               1     unexpected — fail-closed
 cmd_check_doc_gates() {
   validate_workspace
-  local _gate="" _pr="" _plan="" _ctx _base _head _msn _ms _enf="warn" _sent _tok _out _rc _in _npop=""
+  local _gate="" _pr="" _plan="" _ctx _base _head _msn _ms _enf="warn" _sent _tok _out _rc _in _npop="" _list=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --gate) _gate="${2:-}"; shift 2 ;;
       --pr) _pr="${2:-}"; shift 2 ;;
       --plan) _plan="${2:-}"; shift 2 ;;
+      --list) _list=1; shift ;;
       *) log "check-doc-gates: unknown argument '$1'"; exit 1 ;;
     esac
   done
-  if [[ "$_gate" != "g-cl6" && "$_gate" != "g-cl8" ]]; then log "check-doc-gates: --gate must be g-cl6 or g-cl8"; exit 1; fi
+  if [[ "$_gate" != "g-cl6" && "$_gate" != "g-cl8" && "$_gate" != "g-cl10" ]]; then log "check-doc-gates: --gate must be g-cl6, g-cl8 or g-cl10"; exit 1; fi
+  if [[ "$_list" -eq 1 && "$_gate" != "g-cl10" ]]; then log "check-doc-gates: --list is a g-cl10 option"; exit 1; fi
   _sent="${DOC_GATES_ENFORCE_DIR:-.github}/${_gate}.enforce"
   if [[ -f "$_sent" ]]; then
     _tok="$(/usr/bin/grep -vE '^[[:space:]]*(#|$)' "$_sent" 2>/dev/null | /usr/bin/sed -n 1p | /usr/bin/tr -d '[:space:]' || true)"
@@ -21600,6 +22091,51 @@ cmd_check_doc_gates() {
   if [[ "$_gate" == "g-cl6" ]]; then
     _in="${_plan:-release/releases/plans/${_ms}_RELEASE_PLAN.md}"
     _rc=0; python3 "$(dirname "${BASH_SOURCE[0]}")/tools/check-doc-gates.py" --gate g-cl6 --base "$_base" --head "$_head" --plan "$_in" > "$_out" 2>&1 || _rc=$?
+  elif [[ "$_gate" == "g-cl10" ]]; then
+    # G-CL10: the milestone description (arm ii's Outcome and its composition lock) and
+    # its creation date, then the engine's own enumeration — the population _dg_report
+    # reconciles against — then each owner it names, then the grade. Every failed read
+    # withholds the gate; none narrows it.
+    local _eng _created _owners _popline _nums
+    _eng="$(dirname "${BASH_SOURCE[0]}")/tools/check-doc-gates.py"
+    if [[ -z "$_msn" || "${AUDIT_REPO:-}" != */* ]]; then
+      log "check-doc-gates: $_gate NOT-EVALUATED — the PR carries no milestone, or no owner/repo resolved (AUDIT_REPO), so the Outcome cannot be read"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    if ! gh api "repos/${AUDIT_REPO}/milestones/${_msn}" --jq '.description // ""' > "$_wd/outcome.md" 2>/dev/null \
+       || ! _created="$(gh api "repos/${AUDIT_REPO}/milestones/${_msn}" --jq '.created_at' 2>/dev/null)"; then
+      log "check-doc-gates: $_gate NOT-EVALUATED — the milestone ${_msn} description could not be read"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    local -a _g10=(--gate g-cl10 --base "$_base" --head "$_head" --outcome "$_wd/outcome.md"
+                   --milestone-created "$_created" --limbs-required-from "$LIMB_OWNERS_REQUIRED_FROM")
+    if [[ -n "$_plan" ]]; then _g10+=(--record "$_plan"); else _g10+=(--milestone-slug "$_ms"); fi
+    _rc=0; python3 "$_eng" "${_g10[@]}" --list > "$_wd/list.tsv" 2>&1 || _rc=$?
+    if [[ "$_list" -eq 1 ]]; then
+      /bin/cat "$_wd/list.tsv"
+      if [[ "$_rc" -eq 0 ]]; then exit 0; fi
+      exit 3
+    fi
+    if [[ "$_rc" -ne 0 ]]; then
+      log "check-doc-gates: $_gate NOT-EVALUATED — the engine could not list the declared population: $(/usr/bin/sed -n 1p "$_wd/list.tsv" | /usr/bin/tr '\t' ' ')"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    _npop="$(/usr/bin/awk -F'\t' '$1 == "SUBJECT" || $1 == "LIMB"' "$_wd/list.tsv" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+    _owners="$(/usr/bin/awk -F'\t' '$1 == "OWNER" { print $2 }' "$_wd/list.tsv" | /usr/bin/tr '\n' ' ')"
+    log "check-doc-gates: $_gate population — ${_npop} subject(s): declared obligations the release added or modified, and the Outcome's limbs; owners named: ${_owners:-none}"
+    # Release membership decides whether an owner sits inside the closing release, which
+    # carries nothing forward. It is G-CL8's population read, so it fails loud the same way.
+    _popline="$(_dg_population "$_pr" "$_msn" "$_ms")"
+    if [[ "${_popline%% *}" != "POPULATION" ]]; then
+      log "check-doc-gates: $_gate NOT-EVALUATED — release membership (the G-CL8 population read): ${_popline#NOT-EVALUATED g-cl8 population: }"
+      exit "$(_dg_verdict_exit_code NOT-EVALUATED "$_enf")"
+    fi
+    read -r _ _ _nums <<< "$_popline"
+    printf '%s\n' "$_nums" > "$_wd/members.txt"
+    /bin/mkdir -p "$_wd/owners"
+    # shellcheck disable=SC2086  # the owner numbers are digits only, split on purpose
+    _dg_owner_states "$_wd/owners" $_owners
+    _rc=0; python3 "$_eng" "${_g10[@]}" --members "$_wd/members.txt" --owners-dir "$_wd/owners" --repo "$AUDIT_REPO" > "$_out" 2>&1 || _rc=$?
   else
     /bin/mkdir -p "$_wd/issues"
     # The population is the release's issues: those the PR closes by keyword AND those on
@@ -22454,7 +22990,7 @@ main() {
       cmd_check_decision_emission
       ;;
     --check-doc-gates)
-      # Stage-13 documentation close gates (G-CL6 / G-CL8): runs ONE gate over one release
+      # Stage-13 release-context close gates (G-CL6 / G-CL8 / G-CL10): runs ONE gate over one release
       # PR and exits per the contract table on cmd_check_doc_gates, the authoring home this
       # comment cites. The engine is core/deploy/tools/check-doc-gates.py; Check 28's
       # lifecycle arm reports these gates N/A because a --check run has no release PR.
@@ -22508,7 +23044,7 @@ main() {
       cmd_report
       ;;
     *)
-      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --check-doc-gates --gate <g-cl6|g-cl8> --pr <N> | --check-required-subset | --self-test | --report]"
+      echo "Usage: ./deploy.sh [--deploy [skill...] | --all | --check [--warn] | --check-lifecycle | --check-version-freeness | --check-close-completeness | --check-doc-gates --gate <g-cl6|g-cl8|g-cl10> --pr <N> [--list] | --check-required-subset | --self-test | --report]"
       echo ""
       echo "Modes:"
       echo "  --deploy [skill...]          Deploy changed skills to Cowork install path (auto-detect or manual)"
@@ -22531,7 +23067,7 @@ main() {
       echo "  --check-required-subset      CI subset runner — enumerated load-bearing checks (Checks 38, 73, 77, 78); honors .github/deploy-check-ci.enforce (#1485)"
       echo "  --check-release-corpus       Release-corpus completeness probe (Check 32 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (RELEASE_LOG absent or unparseable — withheld, never a pass), INCOMPLETE/SKIP=1 when enforce, unexpected=1) (#1484)"
       echo "  --check-decision-emission    Decision-emission minimum-set probe (Check 61 only; CLEAN=0 and NOTHING ELSE EVER EXITS 0, INCOMPLETE=2 advisory, SKIP=3 NOT-EVALUATED (withheld, never a pass), NOSET=4 advisory (gate asserted nothing — repo defect), INCOMPLETE/NOSET=1 when enforce, unexpected=1) (#4026)"
-      echo "  --check-doc-gates --gate <g-cl6|g-cl8> --pr <N> [--plan <path>]   Stage-13 documentation close gate (G-CL6 or G-CL8 over one release PR; CLEAN=0 and NOTHING ELSE EVER EXITS 0, FINDINGS=2 advisory with one warn-log row per failing subject, NA/NOT-EVALUATED=3 withheld, FINDINGS=1 when .github/<gate>.enforce reads enforce, unexpected=1)"
+      echo "  --check-doc-gates --gate <g-cl6|g-cl8|g-cl10> --pr <N> [--plan <path>] [--list]   Stage-13 release-context close gate (G-CL6, G-CL8 or G-CL10 over one release PR; g-cl10 --list prints the declared population and writes nothing; CLEAN=0 and NOTHING ELSE EVER EXITS 0, FINDINGS=2 advisory with one warn-log row per failing subject, NA/NOT-EVALUATED=3 withheld, FINDINGS=1 when .github/<gate>.enforce reads enforce, unexpected=1)"
       echo "  --check-package-freshness    .skill package content-freshness probe (Check 7 only; FRESH=0, STALE=2 advisory / 1 when enforce, NOT-EVALUATED=3 advisory / 1 when enforce, unexpected=1) (#2656)"
       echo "  --self-test                  Offline regression for the close-completeness invariant (abbreviated scaffold still caught) (#1290)"
       echo "  --report                     Structured report for Stage 13 verification evidence"

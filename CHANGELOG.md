@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 adapted for pmo-platform's release-milestone numbering (`vMAJOR.MINOR`).
 
 **Date anchor — close-out event (UTC).** The date in each `## [vX.Y] - <date>`
-heading dates the **Stage-13 close-out run**, derived from the release note's
-frontmatter `date:` and therefore sampled once per close-out run in UTC. It is
+heading dates the **Stage-13 close-out run**: it is written from the close-out run
+anchor, the same run-scoped sample as the release digest's, taken once per close-out
+run in UTC. It is
 **not** the merge date: `release/releases/RELEASE_LOG.md` and
 `release/releases/RELEASE_INDEX.md` carry the merge anchor, so a release whose
 close-out crossed a UTC midnight reads a day later here — the two anchors

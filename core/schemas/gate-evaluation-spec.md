@@ -149,7 +149,7 @@ The evaluator routes gate-criteria-spec.md criteria by the `Check` column:
 | Scope coherence | `shared_affected_files / total_unique_files` | Parse Affected Files from issue bodies, compute cross-issue overlap. | Report only (informational density metric, no threshold) |
 | Capacity utilization | `bundle_size / capacity_heuristic` | bundle_size = Milestone issue count. capacity_heuristic = rolling max of last 5 releases. | ≤ 1.2 |
 | Contention density | `files_with_2+_issues / total_unique_files` | Cross-issue affected-files analysis. | ≤ 0.5 |
-| Structural pass rate | `gate_criteria_structural_passes / total_structural_criteria` | Every gate-criteria-spec.md § Gate 3 row whose `Check` column is `structural` — the selector, not a snapshot: no range and no count, so the denominator tracks the criterion set automatically (per the general rule stated above under Layer 1). The RETIRED G3-13 tombstone carries `Check = -` and is excluded by the predicate. | = 1.0 |
+| Structural pass rate | `gate_criteria_structural_passes / total_structural_criteria` | Every gate-criteria-spec.md § Gate 3 row whose `Check` column is `structural` — the selector, not a snapshot: no range and no count, so the denominator tracks the criterion set automatically (per the general rule stated above under Layer 1). The RETIRED G3-13 tombstone carries `Check = -` and is excluded by the predicate. An advisory G3-20 verdict — on a kind-form card, or on a member already labelled `status: bundled` that a re-bundle evaluates again — is recorded in the bundle rationale and never excludes the card, so it is not a structural non-pass and does not lower this rate. | = 1.0 |
 
 **capacity_heuristic computation:** Rolling max of last 5 releases (Milestone issue counts). When fewer than 5 releases exist, use max of all available releases.
 
@@ -219,7 +219,7 @@ Dimensions cited from [`pipeline/stage-09-plan-review.md`](../../release/referen
 | Judgment dimension (shard §7) | Anchored structural criterion (G-PR*) | Anchoring rationale |
 |---|---|---|
 | evidence completeness | G-PR1 (evidence package complete, Phase A1-A6) + G-PR2 (all upstream reports present) | Dimension is the qualitative read of the same evidence-assembly surface G-PR1/G-PR2 check structurally-present. |
-| risk assessment quality | G-PR4 (risk register reviewed — all mitigated/accepted) | Structural check = "flag set"; judgment = "is the mitigation *sound*". |
+| risk assessment quality | G-PR4 (risk register reviewed — all mitigated/accepted; a census classing every risk; each control-backed disposition observed acting) | Structural check = "flag set", a Phase A4 control census covering every risk, and an independently observed Phase A4 line for each control-backed risk; judgment = "is the mitigation *sound*" — including whether the census classed each risk soundly and whether each line records an observation made on the path where the control runs. |
 | decision clarity | G-PR6 (decision record posted) + G-PR7 (goal-conformance ALIGNED/DIVERGED/MISALIGNED — itself `Check=judgment`) | G-PR7 is the sole existing late-stage `Check=judgment` criterion; "decision clarity" is its Layer-2 dimensional expression. |
 | handoff readiness | G-PR3 (PR scope matches plan) + G-PR5 (deployment-readiness checklist all PASS) | Judgment read of whether the Stage 9->12 handoff (mergeable PR, conformant scope) is *execution-ready*, not merely present. |
 
@@ -246,7 +246,7 @@ Dimensions cited from [`pipeline/stage-13-close.md`](../../release/references/pi
 | carry-forward accuracy | G-CL1 (documented-deferred branch) + inherited carry-forward-items-tracked (field-lifecycle Gate 13 Exit) | Whether deferrals are *correctly* carried, not merely listed. |
 | operational deployment thoroughness | G-CL5 (operational deployment manifest fully executed, Phase B-OPS) | Structural = "manifest entries PASS"; judgment = "was the operational rollout *complete*". |
 
-**Non-omission note.** Stage 13's warn-mode criteria **G-CL6/G-CL7/G-CL8** (design-artifact refresh, goal-attainment, doc-impact) are conditional/warn-mode and carry their own verdict semantics + warn-log escape hatches; they are deliberately NOT folded under a 1-5 base dimension (doing so would double-govern them). The four base dims anchor to the unconditional G-CL1..G-CL5 + inherited criteria.
+**Non-omission note.** Stage 13's warn-mode criteria **G-CL6/G-CL7/G-CL8/G-CL9/G-CL10** (design-artifact refresh, goal-attainment, doc-impact, ADR ratification flips, declared-obligation measurement) are conditional/warn-mode and carry their own verdict semantics + warn-log escape hatches; they are deliberately NOT folded under a 1-5 base dimension (doing so would double-govern them). The four base dims anchor to the unconditional G-CL1..G-CL5 + inherited criteria.
 
 ---
 
