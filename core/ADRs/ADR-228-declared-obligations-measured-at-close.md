@@ -19,7 +19,7 @@ source_observations:
 
 **Proposed** — authored at Stage 6 Engineering of `governance-obligations-measured`, after the operator's Collective Review scope-lock rendered the scope this record documents. It is ratified at this release's Stage 13 Phase A13 under Gate 13 criterion G-CL9's authored-by-this-release limb, and the ratification is recorded in the frontmatter `status:` field, never inferred from a review comment or from milestone closure.
 
-**Numbering provenance.** Claimed as **228** against an anchor of **227** on `origin/main`, read from `release/tools/renumber-adr.py --next-free`. The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, `{{ADR:declared-obligations-measured-at-close}}`, which resolves at the claim.
+**Numbering provenance.** Claimed as **228** against an anchor of **227** on `origin/main`, read from `release/tools/renumber-adr.py --next-free`. The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, `ADR-228`, which resolves at the claim.
 
 ## Context
 
