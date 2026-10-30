@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v4.81 | governance-obligations-measured | 2026-10-30 | — | #8599 | [notes/v4.81_RELEASE_NOTES.md](notes/v4.81_RELEASE_NOTES.md) |
 | v4.80.1 | stage-12-lands-packages-by-pr | 2026-10-28 | — | #8574 | [notes/v4.80.1_RELEASE_NOTES.md](notes/v4.80.1_RELEASE_NOTES.md) |
 | v4.80 | hook-walk-adjudicates-every-operand | 2026-10-25 | — | #8306 | [notes/v4.80_RELEASE_NOTES.md](notes/v4.80_RELEASE_NOTES.md) |
 | v4.79 | documentation-model-adopted | 2026-10-25 | — | #8534 | [notes/v4.79_RELEASE_NOTES.md](notes/v4.79_RELEASE_NOTES.md) |
