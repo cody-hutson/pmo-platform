@@ -1,6 +1,6 @@
 ---
 title: ADR-228 — A declared obligation is measured over its population at close, and a shortfall closes only with an owner that names it
-status: Proposed — ratified at this release's Stage 13 Phase A13
+status: Accepted — operator-ratified at the governance-obligations-measured Stage 13 Close ratification beat (Phase A13), 2026-10-29
 date: 2026-10-29
 release: governance-obligations-measured
 deciders: "Workspace owner (operator) — scope rendered at the release's Stage-5 Collective Review scope-lock, which adopted the independent adversarial review's counter-design (no unmeasurable declaration; an owner valid only where it names the population) and its plan-resolution and failure-mode refinements. Design by the Stage 5 Solutioning spoke; authored by the Stage 6 Engineering spoke"
@@ -17,9 +17,9 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering of `governance-obligations-measured`, after the operator's Collective Review scope-lock rendered the scope this record documents. It is ratified at this release's Stage 13 Phase A13 under Gate 13 criterion G-CL9's authored-by-this-release limb, and the ratification is recorded in the frontmatter `status:` field, never inferred from a review comment or from milestone closure.
+**Accepted** — operator-ratified at the `governance-obligations-measured` Stage 13 Close ratification beat (Phase A13), 2026-10-29, as one record of a decision rendered per record, under Gate 13 criterion G-CL9's authored-by-this-release limb. Authored at Stage 6 Engineering of that release as `Proposed`, after the operator's Collective Review scope-lock rendered the scope this record documents. The ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v4.81**.
 
-**Numbering provenance.** Claimed as **228** against an anchor of **227** on `origin/main`, read from `release/tools/renumber-adr.py --next-free`. The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cites this record by its slug token, `ADR-228`, which resolves at the claim.
+**Numbering provenance.** Claimed as **228** against an anchor of **227** on `origin/main`, read from `release/tools/renumber-adr.py --next-free`. The number binds at the Stage-12 claim; should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. In-release prose cited this record by its slug token, which carried no number and resolved to ADR-228 at the Stage-12 claim.
 
 ## Context
 
