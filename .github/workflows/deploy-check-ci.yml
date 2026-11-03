@@ -1,6 +1,6 @@
 name: Deploy-check required subset (pre-merge load-bearing gate)
 
-# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Pre-merge load-bearing check subset"  always-reports=yes
+# gate-efficacy: posture=required  enforcement=branch-protection:"Pre-merge load-bearing check subset"  always-reports=yes
 #   invariant: every load-bearing deploy.sh --check member in the enumerated
 #              required-subset (network-free AND install-independent AND
 #              posture:required AND lacking a dedicated CI mirror) holds pre-merge —
@@ -34,8 +34,8 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 #              in the sentinel; neither is derived, so neither updates itself.
 #   falsification: edit a per-hook source (e.g. add a rule row) under
 #                  core/rules/bypass-mode-readiness/ without regenerating the index
-#                  -> this gate reports STALE (warn-mode: summary + exit 0; enforce:
-#                  red + exit 1). A fresh index -> green. Independently, mutate
+#                  -> this gate reports STALE and the job exits 1 (red). A fresh index
+#                  -> green. Independently, mutate
 #                  _g3_14_compute_verdict's floor comparison from `>=` to `>` (or
 #                  _g3_15_compute_verdict's band comparison from `<=` to `<`) ->
 #                  Check 73 reports FAIL on the at-threshold fixture; restore ->
@@ -82,12 +82,15 @@ name: Deploy-check required subset (pre-merge load-bearing gate)
 # taken explicitly, on the ground that a workflow declaring itself required owes
 # always-reports before it owes runner minutes.
 #
-# Ships warn-mode-initial (reports, does not block) until the operator flips the
-# committed .github/deploy-check-ci.enforce sentinel token to `enforce` AND adds this
-# job to required_status_checks (branch protection — the out-of-tree enforcement
-# surface, R3). Those two steps are now the WHOLE flip; the third is already done.
-# (Per core/standards/gate-efficacy-standard.md (b)/(b') and § Verdict-Input Closure;
-# warn-mode-initial per core/rules/git-workflow.md § Repository-Integrity Gates.)
+# GRADUATED. This gate shipped warn-mode-initial and was flipped on the operator's
+# gate-rollout graduation decision. A red verdict blocks a merge only while BOTH hold:
+# the committed .github/deploy-check-ci.enforce token reads `enforce` (it moves with
+# core/deploy/deploy.sh GATE_ROLLOUT_PHASE), and this job's context is registered in
+# required_status_checks (branch protection — the out-of-tree enforcement surface, R3),
+# registered after the flip and never before it. The flip record, with its specificity
+# reading and owner, is the `Pre-merge load-bearing check subset` row of
+# core/standards/gate-efficacy-standard.md § Declared-required contexts.
+# (Per core/standards/gate-efficacy-standard.md (b)/(b') and § Verdict-Input Closure.)
 #
 # THIN caller of the single engine. --check-required-subset runs each subset
 # member's shared _cNN_compute_verdict "gate" body and aggregates the verdict;
@@ -150,7 +153,7 @@ jobs:
           printf '%s\n' "$OUT" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "rc=$RC" >> "$GITHUB_OUTPUT"
 
-      - name: Gate decision (warn-mode-initial)
+      - name: Gate decision (exit code -> job conclusion)
         env:
           RC: ${{ steps.check.outputs.rc }}
         run: |

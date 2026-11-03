@@ -183,8 +183,12 @@ FORCE_ALL=false
 # close: a permanent advisory wearing the shape of a temporary one.
 #
 # Turn a GRADUATION-OVERDUE finding green by RECORDING A DECISION: advance
-# GATE_ROLLOUT_PHASE, retreat it, or re-date GATE_ROLLOUT_ARMED — the
-# edited line IS the audit record. Advance is an operator decision, never
+# GATE_ROLLOUT_PHASE to enforce, or re-date GATE_ROLLOUT_ARMED — the edited line
+# IS the audit record. A retreat is not a third exit: below enforce the day count
+# keeps running from GATE_ROLLOUT_ARMED, so a retreat past the escalation window
+# carries a re-date. GATE_ROLLOUT_PHASE moves with the .github/deploy-check-ci.enforce
+# token, in one commit; nothing compares the two.
+# Advance is an operator decision, never
 # auto-promoted by row count (core/standards/progressive-rollout-convention.md
 # owns the ladder and this phase enum).
 #
@@ -200,7 +204,7 @@ FORCE_ALL=false
 # call pmo_instance_path() and that resolver does not exist until that line.
 # Only the CONSTANTS are declared here, which is what keeps this the single
 # declaration site.
-readonly GATE_ROLLOUT_PHASE="warn"       # shadow|warn|enforce
+readonly GATE_ROLLOUT_PHASE="enforce"    # shadow|warn|enforce
 readonly GATE_ROLLOUT_ARMED="2026-08-29"
 readonly GATE_ROLLOUT_REVIEW_DAYS=60
 readonly GATE_ROLLOUT_ESCALATE_DAYS=90
@@ -3243,7 +3247,7 @@ _c38_compute_verdict() {
 #
 #   TREE-RESIDENT half (this check)  — the gate MACHINERY, as committed on this
 #       branch, computes its declared predicate and FIRES on a breach. Every input
-#       is a committed file. `posture: required (warn-mode-initial)`.
+#       is a committed file. `posture: required`.
 #   BACKLOG-RESIDENT half (NOT here) — the live parse rate / the live
 #       effective_pts. Stays advisory PERMANENTLY on architectural grounds, at its
 #       declared Stage-3 -> 4 boundary runner. That is a recorded residual, not an
@@ -17353,7 +17357,8 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   # Warn-mode initial via flag_warn_or_issue: the per-check knob is
   # resolve_check_mode "bundle-metrics-gate-integrity", the proven one-token
   # decouple. The CI surface's warn-vs-enforce is a SEPARATE sentinel
-  # (.github/deploy-check-ci.enforce), and neither is flipped by this release.
+  # (.github/deploy-check-ci.enforce); the two flip independently, and a flip of
+  # either leaves the other where it was.
   if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
     log "Check 73: Bundle-metrics gate integrity (G3-14 / G3-15 machinery discriminates, sinks cohere, config resolves; tree-resident half only)"
     local c73_verdict c73_tok
@@ -17382,15 +17387,19 @@ print((datetime.datetime.utcnow().date()-a).days)' "$c71_armed" 2>/dev/null || p
   #              repo-derivable exit criterion, and that criterion has not elapsed
   #              unaddressed (W2 of gate-efficacy-standard.md § Written sink and
   #              terminable shakedown).
-  #   falsification: re-date GATE_ROLLOUT_ARMED more than
-  #                  GATE_ROLLOUT_ESCALATE_DAYS into the past -> GRADUATION-OVERDUE
-  #                  and `--check --strict` exits 1; restore -> OK.
+  #   falsification: set GATE_ROLLOUT_PHASE below enforce (warn) AND re-date
+  #                  GATE_ROLLOUT_ARMED more than GATE_ROLLOUT_ESCALATE_DAYS into the
+  #                  past -> GRADUATION-OVERDUE and a strict `--check` (the default;
+  #                  `--check --warn` is the non-strict form) exits 1; restore both
+  #                  -> OK (GRADUATED). At phase enforce the deadline arm is
+  #                  discharged, so a re-date alone changes nothing.
   #
   # WHAT IT ASSERTS. That limb (i)'s residual `warn -> enforce` flip — one committed
   # .github/deploy-check-ci.enforce token plus one branch-protection registration — is
   # DECIDED rather than left running. It reads four committed constants and today's
-  # date and, past the review window, forces a verdict: advance the phase, retreat it,
-  # or re-date the arming constant. Each is a one-line edit, and the edited line IS the
+  # date and, past the review window, forces a verdict: advance the phase to enforce,
+  # or re-date the arming constant (a retreat alone discharges nothing: below enforce
+  # the day count keeps running). Each is a one-line edit, and the edited line IS the
   # audit record of the decision.
   #
   # WHAT IT DELIBERATELY DOES NOT ASSERT — the scope boundary is the whole defence
@@ -17500,7 +17509,7 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
 
         if [[ "$c74_elapsed" -ge "$GATE_ROLLOUT_ESCALATE_DAYS" ]]; then
           log "  FAIL:  gate-rollout-graduation — GRADUATION-OVERDUE: ${c74_elapsed} days at phase='${GATE_ROLLOUT_PHASE}', past the ${GATE_ROLLOUT_ESCALATE_DAYS}-day escalation. ${c74_verdict}"
-          log "         Turn this green by RECORDING A DECISION in core/deploy/deploy.sh: advance GATE_ROLLOUT_PHASE, retreat it, or re-date GATE_ROLLOUT_ARMED. Doing nothing is the one option this gate removes."
+          log "         Turn this green by RECORDING A DECISION in core/deploy/deploy.sh: advance GATE_ROLLOUT_PHASE to enforce (with the .github/deploy-check-ci.enforce token), or re-date GATE_ROLLOUT_ARMED with its reason — a retreat alone leaves this red. Doing nothing is the one option this gate removes."
           ISSUES=$((ISSUES + 1))
         elif [[ "$c74_elapsed" -ge "$GATE_ROLLOUT_REVIEW_DAYS" ]]; then
           log "  WARN:  gate-rollout-graduation — GRADUATION-DUE (deadline): ${c74_elapsed} days since arming (threshold ${GATE_ROLLOUT_REVIEW_DAYS}d; escalates to a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). ${c74_verdict}"
@@ -17721,14 +17730,15 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
   # Check 77 — Mirror-pair path-set parity across holders (advisory; warn-mode initial) [#4738]
   #
   # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
-  #   posture: required(warn-mode-initial)
-  #   enforcement-surface: --check-required-subset (pre-merge) + deploy-check.mode warn-window
-  #            (blocks when the operator flips .github/deploy-check-ci.enforce to enforce)
+  #   posture: required
+  #   enforcement-surface: --check-required-subset (pre-merge, blocking —
+  #            branch-protection:"Pre-merge load-bearing check subset") + deploy-check.mode
+  #            warn-window (deploy-time lifecycle surface, independent of the CI sentinel)
   #   invariant: every holder of the source-side mirror-pair path set declares an
   #              IDENTICAL set — asserted by extracting the declared field of each
   #              marked region and diffing every holder against the union.
-  #   falsification: add one entry to ONE holder's array only -> WARN (advisory) /
-  #                  FAIL (post-flip), naming the path and the holder.
+  #   falsification: add one entry to ONE holder's array only -> WARN (deploy-time
+  #                  lifecycle) / FAIL (pre-merge gate), naming the path and the holder.
   #
   # The predicate body _c77_compute_verdict is TOP-LEVEL and shared verbatim with
   # the --check-required-subset runner, so no predicate is re-encoded on either
@@ -17770,16 +17780,16 @@ print((datetime.datetime.utcnow().date()-a).days)' "$GATE_ROLLOUT_ARMED" 2>/dev/
   # Check 78 — Rules-corpus admission + byte budget (advisory; warn-mode initial)
   #
   # Gate-efficacy posture (per core/standards/gate-efficacy-standard.md Req (b)):
-  #   posture: required(warn-mode-initial)
-  #   enforcement-surface: --check-required-subset (pre-merge) + deploy-check.mode
-  #            warn-window (blocks when the operator flips
-  #            .github/deploy-check-ci.enforce to enforce)
+  #   posture: required
+  #   enforcement-surface: --check-required-subset (pre-merge, blocking —
+  #            branch-protection:"Pre-merge load-bearing check subset") + deploy-check.mode
+  #            warn-window (deploy-time lifecycle surface, independent of the CI sentinel)
   #   invariant: the admitted rules set stays inside the byte ceiling published in
   #              rules-corpus-admission-standard.md §3, every member over the
   #              per-file trigger carries a §2 conditional scoping field, and every
   #              member carries the §2 required frontmatter including `type: rule`.
   #   falsification: add a member that carries the set past the ceiling -> WARN
-  #                  (advisory) / FAIL (post-flip), naming the overshoot in bytes and
+  #                  (deploy-time lifecycle) / FAIL (pre-merge gate), naming the overshoot in bytes and
   #                  the top-3 contributors by size; drop the scoping field from a
   #                  member over the trigger -> UNSCOPED-VIOLATION. Both arms are
   #                  exercised by `check-rules-budget.py --self-test`, so the
@@ -22199,10 +22209,11 @@ cmd_check_doc_gates() {
 # the per-session cost only after that cost had already been paid.
 #
 # Surface = "gate": fail-closed. Warn-vs-enforce at the CI surface is decided by the
-# committed .github/deploy-check-ci.enforce sentinel — during the warn-mode window an
-# in-scope FAIL is reported but swallowed (exit 0); flip the token to 'enforce' after
-# shakedown to block. Reads its sentinel the way the single-check probes do; unlike them it
-# still maps a warn-mode FAIL onto exit 0 — declared here, not hidden.
+# committed .github/deploy-check-ci.enforce sentinel — at `enforce` an in-scope FAIL
+# blocks (exit 1); at `warn`, or with the file absent or its first token anything but
+# `enforce`, the same FAIL is reported but swallowed (exit 0). Reads its sentinel the
+# way the single-check probes do; unlike them it maps a warn-mode FAIL onto exit 0 —
+# declared here, not hidden.
 #
 #   exit 0  — every subset member passed, OR a member FAILed but the sentinel is warn
 #             (true verdict reported, not blocking).
@@ -23003,7 +23014,7 @@ main() {
       # per the AGGREGATE verdict, honoring the committed .github/deploy-check-ci.enforce
       # sentinel (warn swallows a FAIL, enforce blocks). Each member runs its shared
       # _cNN_compute_verdict "gate" body — no re-encoded predicate. Today carrying
-      # Checks 38, 73 and 77. Used by .github/workflows/deploy-check-ci.yml.
+      # Checks 38, 73, 77 and 78. Used by .github/workflows/deploy-check-ci.yml.
       cmd_check_required_subset
       ;;
     --check-release-corpus)
