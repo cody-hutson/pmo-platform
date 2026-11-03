@@ -32,9 +32,9 @@ reversibility: MODERATE / Confidence HIGH — additive and in-place text edits t
 | **Bump Class** | major — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a skill behavioural change — `intake-desk` Mode C gains a filing-threshold step that changes its processing at every dial, and `release-hub` gains a Stage 9 and Stage 13 filing step — per the Bump-Class Selection Guide row "Skill behavioral change (new mode, altered processing logic)". Provisional display `v5.0`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-03 (Tuesday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file), then Changes 1–32; Change 33 is operator-executed before Stage 7 |
+| **Status** | Executing — Stage 6 Engineering: Commit 0 and Changes 1–32 landed; Change 33 (four `core/governance/OPERATIONS.md` lines) is operator-executed on this branch before Stage 7; Stage 7 Dev Testing next |
 | **Branch** | `release/releases-file-only-the-follow-ups-that-matter` |
-| **PR** | opened in **draft** at Stage 6 Phase C2 after the first content slice; transitions to ready-for-review at the Stage-9 gate |
+| **PR** | #8646 — opened in **draft** at Stage 6 Phase C2 after the first content slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `releases-file-only-the-follow-ups-that-matter` |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-11-03, domain: governance }`
@@ -214,7 +214,7 @@ Single branch `release/releases-file-only-the-follow-ups-that-matter`, posture *
 
 | Change | Path | What it does |
 |---|---|---|
-| 1 | `core/ADRs/ADR-229-filing-threshold-and-release-follow-up-sweep.md` (ADD) | The decision record: one filing threshold whose home is `core/`; tag at source; Stage 9 ledger and accept-or-cut; Stage 13 sweep per repository; Mode C threshold always; Stage 2 counting. Consequences state the line is a disposition prompt not a bound, the GO on an EXCESS is held by conduct, the charter residual is widened, and an outside-run hold lives in the caller's output with monitoring criteria. Number 229 allocated by `renumber-adr.py --next-free`, bound at merge; other branch-authored prose cites `{{ADR:filing-threshold-and-release-follow-up-sweep}}` |
+| 1 | `core/ADRs/ADR-229-filing-threshold-and-release-follow-up-sweep.md` (ADD) | The decision record: one filing threshold whose home is `core/`; tag at source; Stage 9 ledger and accept-or-cut; Stage 13 sweep per repository; Mode C threshold always; Stage 2 counting. Consequences state the line is a disposition prompt not a bound, the GO on an EXCESS is held by conduct, the charter residual is widened, and an outside-run hold lives in the caller's output with monitoring criteria. Its number is allocated by `renumber-adr.py --next-free` over the mainline anchor and bound at merge; this file and other branch-authored prose cite it as `{{ADR:filing-threshold-and-release-follow-up-sweep}}` |
 | 2 | `core/ADRs/README.md` | A curated entry under § Automation-governance ADRs, after the ADR-184 entry |
 | 3 | `core/standards/work-item-filing-threshold.md` (ADD) | The threshold's single home: two limbs (class: user-visible, security- or privacy-relevant; severity: at least Minor); the 2026-10-24 user-visible ruling for platform-internal items; reading the severity limb; below-threshold lands where it surfaced, filed nowhere; not filed when already declared (a record declares only when it accepts) or owned; security items withheld and reported privately; consumers |
 | 4 | `release/references/standards/finding-disposition-framework.md` | Frontmatter and § 1/§ 7 notes; `:119` Defer row; new § 8 — release follow-ups (definition, tag at source, release severity sources, where below-threshold lands, Accept-only declaration, one sweep per repository, what a cut may do, which step applies it, the family cutover) |
@@ -444,7 +444,7 @@ No file is renamed, moved or deleted, so the mover set is empty. `SURFACE(R)` is
 | R9 | The realized surface (38 source paths) under-counts `size:L` | Operator | **Closed at the Stage-5 decision:** `size:L` kept; L gives 10 effective and XL 17, both in band (DEV-3) | CHEAP / HIGH |
 | R10 | New class 3-O obligations ship unregistered | Stage 6 / 13 | Change 24's three register rows, each with a Population segment and a runner disposition (two `runner-def:` pointers, one named gap); G-CL10 measures them at close | CHEAP / HIGH |
 | R11 | A Stage 9 run of this release's own new step (reflexivity) | Operator | The introducing release is exempt by its cutover; voluntary Phase A7.6 at its own Stage 9 is recommended as corroboration (revision 1 R5) | CHEAP / HIGH |
-| R12 | The ADR's number (229) is claimed by a sibling that merges first | Stage 12 | ADR-115 / ADR-181: the renumbering tool moves the record at merge; other prose cites the slug token | CHEAP / HIGH |
+| R12 | The ADR's allocated number is claimed by a sibling that merges first | Stage 12 | ADR-115 / ADR-181: the renumbering tool moves the record at merge; other prose cites the slug token | CHEAP / HIGH |
 
 ---
 
@@ -592,8 +592,10 @@ Two rows for the Stage 13 B-OPS5 absorption reconciliation. The operator acts on
 
 | Memory | Eviction trigger | Pre-eviction check |
 |---|---|---|
-| `feedback_filing_threshold_net_work.md` | #8146 ships | the core standard and Mode C each state the threshold on `main` |
-| `feedback_observations_are_counters.md` | #8146 ships | the Stage 2 observation path states the counting rule on `main` |
+| the operator's temporary note on the filing threshold and the net-work rule (an eviction pointer to this release) | #8146 ships | the core standard and Mode C each state the threshold on `main` |
+| the operator's temporary note that observations are counters for related work (an eviction pointer to this release) | #8146 ships | the Stage 2 observation path states the counting rule on `main` |
+
+Each row names the note by its subject, not its store filename: the store is operator-local and does not ship, so the operator resolves the note from its subject at Stage 13.
 
 ---
 
@@ -601,7 +603,80 @@ Two rows for the Stage 13 B-OPS5 absorption reconciliation. The operator acts on
 
 ### Engineering Commit 0 — Stage 6 A1
 
-Run by the Stage-6 spoke on #8607 after this file was written and before it was committed, on base `f8d88626`. Results are recorded in the Stage-6 output on #8607 and in the next commit's update of this section.
+Run by the Stage-6 spoke on #8607 after this file was written and before it was committed, on base `f8d88626`.
+
+| Check | Command | Observed |
+|---|---|---|
+| Stamp manifest (step 3b) | `bash release/tools/claim-version.sh --verify-stamp releases-file-only-the-follow-ups-that-matter` | exit 0 — "verify-stamp OK … carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s))". The file carries exactly 1 literal placeholder (grep count) |
+| CIAC authoring lint (A1) | `bash release/tools/verify-release-plan.sh --ciac-lint <this file>` | exit 0 — `CIAC-LINT-SUMMARY declared=0 parsed=0 clean=0 declared-deferral=0 flagged=0`; G4-06 moot on n = 1 |
+| Full verifier (RED arm) | `bash release/tools/verify-release-plan.sh <this file>` | exit 3 — 4 PASS / 27 FAIL / 10 SKIP / 0 UNRUNNABLE / 4 ERROR over 45 records. Every runnable per-issue row read FAIL or ERROR against the baseline tree (ERROR where the file is new: the matcher cannot read an absent file, reported as not-a-zero) — each row's sensitivity arm for its later GREEN. `FCM-COVERAGE` PASS: `declared=68 interpreted=68 obligations=3 excluded=18 conditional=0 uninterpreted=0 pathless=0 prose_led=0`. `PROV-PRESENCE` / `PROV-GRAMMAR` PASS (Form X) |
+| Doc links | `python3 core/deploy/tools/check-doc-links.py --target-paths <this file> --require-targets` | exit 0, no findings; the file carries no markdown link |
+
+### Stage 6 — C4 self-verification (at head `b8a703c0`, Changes 1–32 landed)
+
+| Check | Command | Observed |
+|---|---|---|
+| Full verifier (GREEN arm) | `bash release/tools/verify-release-plan.sh <this file>` | exit 3 — **22 PASS / 1 FAIL / 10 SKIP / 12 UNRUNNABLE / 0 ERROR** over 45 records. The 1 FAIL is AC-7's `not planned` row on `core/governance/OPERATIONS.md` (count 1, wanted 0) — the operator's Change 33, not yet committed. The 12 UNRUNNABLE are rows whose grep limb PASSES and whose reader-graded limb is declared for Stage 8 (partial execution by design). FCM-1..3 PASS: all three declared ADDs delivered. `FCM-COVERAGE` `uninterpreted=0` |
+| REFCASCADE — routing vocabulary | `git grep -c -i -E "next-release issue\|landing issue" -- . ':!release/releases/'` | **pre 17 / 12 files → post 3 / 3 files**: `core/ADRs/ADR-050-deliverable-domain-axis.md`, `core/deploy/tests/test_upgrade_config_durability.sh`, `core/standards/progressive-rollout-convention.md` — the three preserved history sites |
+| REFCASCADE — post-Stage-9 filing paths | the Stage-5 filing-path instrument over the corpus minus `release/releases/` | **pre 19 / 10 files → post 3 / 3 files**: `gate-efficacy-standard.md`'s G-CL8 flip row and `automated-closeout.sh`'s carry-forward prompt (the two forecast N/A rows), plus `hub-spoke-bridge.md`'s preserved audit-class history sentence, an over-match (DEV-12) |
+| REFCASCADE — renamed row label | `git grep -n -F "Audit retro Milestone tags" -- .` | **pre 3 / 1 file → post 0** |
+| Package consequence | changed paths on STDIN to `build-skill-packages.sh --skills-for-paths` | before the skill slice: empty for every non-skill path (control: `release/skills/release-hub/SKILL.md` → `release-hub`); the six edited skills rebuilt |
+| Package freshness (Check 7 engine) | `bash core/deploy/deploy.sh --check-package-freshness` | exit 0 — "55 rostered skill package(s) content-fresh — OK" |
+| ADR numbering | `python3 release/tools/check-adr-numbers.py`; `python3 release/tools/renumber-adr.py --detect` | PASS, 229 ADRs contiguous, no duplicates; the claim BINDS at anchor 228 |
+| ADR index | — | N/A — this release adds no record under `release/ADRs/` |
+| ADR durability | `python3 release/tools/check-adr-durability.py --root . --handle <owner> --diff-base origin/main --files <the new ADR>` | `SCANNED 1 · COUNT 0` |
+| Issue-reference validity | `check-issue-ref-validity.sh --base origin/main --head HEAD --resolver gh` (repository set) | exit 0 — every issue reference in the changed markdown resolves in-repo and sits in a reference block |
+| Dead-file references | `check-release-links.py --roots core release docs .github --top-level-md --check-anchors --images --diff-base origin/main --files <37 changed .md>` | exit 0, 0 broken |
+| Doc links (Check 14 primitive) | `check-doc-links.py --target-paths <37 changed .md> --require-targets` | exit 0, no findings (control: its `--self-test`, 12 fixtures passed) |
+| Register runner pointers (Check 62 resolution rule) | the `runner-def:` extraction Check 62 uses, then a fixed-string read of each new anchor | 48 → 50 pointers; `net-work-ledger` reads 1 in `stage-09-plan-review.md`, `Observation-counting` reads 1 in `triage-execution.md`; the named-gap row carries none |
+| Operator-memory references | the gate's own pattern over every added line | 0 after this commit (the first push carried two memory-store filenames in § Memory Evictions; the gate failed them, and the rows now name the notes by subject — control line fires 1) |
+| Runtime suite | `runtime-suite-selection-map.md` | row 8, no match — `test-run/suite-skip` emitted (stage 6, actor `spoke:#8607`; read back 0 → 1) |
+| Skill-edit discipline | `pmo-skill-editor` Mode A | release-hub, pmo-release-manager, pmo-qa-lead and release-executor edited in sessions minted and ended by `core/deploy/tools/start-skill-editor-session.sh`; intake-desk and pipeline-triage by conduct; every commit carries the `Skill-Editor-Audit-Trail:` trailer; no version field changed |
+
+**`deliverable_state`:** `deployed-copy-synced` at Stage 12, once the six skills and the rules mirror are deployed (C3 sync is N/A at Stage 6: deployment is Stage 12's).
+
+---
+
+## Change Description
+
+Authored at Stage 6 Phase C1 by the Engineering spoke on #8607, after Changes 1–32 landed and before the pull request leaves draft. Operator-facing; the user-facing release note is authored at Stage 13.
+
+### Outcome
+
+A release now files only the follow-ups that matter, and files them once. One filing threshold — user-visible, security- or privacy-relevant, and at least Minor — decides whether anything a release defers, recommends or detects becomes a work item; anything below it stays in the record where it surfaced. Every follow-up is tagged with its class where it surfaces and waits there. Stage 9 assembles them into a ledger, counts them against the issues the release resolves, and shows the operator the net work before GO; an excess is accepted or cut before anything is filed. Stage 13 files one sweep issue per repository, plus separate issues only for genuine bugs and features, after the operator confirms what surfaced after Stage 9. Automatic intake logging applies the same threshold at every dial, and Stage 2 counts related observations into one piece of work instead of converting each into its own card.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8146 | The filing threshold has one home in `core/`; the release pipeline tags, counts and files its follow-ups through Stage 9 Phase A7.6 and Stage 13 Phase A10.5; `intake-desk` Mode C applies the threshold always; Stage 2 counts observations into one story | DONE at Stage 6 for Changes 1–32; Change 33 (four `OPERATIONS.md` lines) is the operator's, before Stage 7 |
+
+### Key decisions
+
+- **D-ThresholdHome, superseded at Stage 5:** the threshold lives in a new core standard, `core/standards/work-item-filing-threshold.md`, because the operations module (Mode C, always) and the release module both consume it; the disposition framework's new § 8 carries only the release-side routing.
+- **D-FilingStepHome (A):** the Stage 9 spec owns the counting step; the hub procedure, `release-hub` and `pmo-release-manager` point to it. The filing itself moved to Stage 13 Phase A10.5, after the last producer.
+- **D-CharterTouch (A):** the charter is not edited; its Mode C clause now overstates Mode C always, recorded as a residual for the next charter revision, owned by the operator.
+- **D-ObservationCountingHome (A):** Stage 2 owns the counting rule; four `OPERATIONS.md` lines are the operator's edit.
+- **Counter-designs taken at Stage 5:** a cut never returns a protected row; the class is tagged at the source and the sources reconcile on the line; the hub produces `release_context`; one sweep per repository; filing after the last producer, with one cutover anchored at the start of Stage 9 Phase A.
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** Reverting the single merge commit restores `main` byte-for-byte; the six packages are rebuilt and the skills and rules mirror redeployed. Issues filed and observations counted under the new rules after merge stay valid records and reopen individually. The version tag is retained, never deleted.
+
+### Downstream impact
+
+- Every release whose Stage 9 Phase A starts after this merges renders the Phase A7.6 net work line, and its Stage 13 files the sweeps at Phase A10.5; a release already past Stage 4 but not yet at Stage 9 becomes bound, and anything it filed earlier enters its ledger as `pre-filed`. The merge-order sibling that follows this one is the first such release.
+- Stage 7 and Stage 8 spokes tag a Defer in their own records instead of opening an issue; every spoke's `### Decisions & Recommendations` may carry the follow-up tag.
+- `intake-desk` Mode C holds below-threshold signals at every dial once the skill version that introduced it is deployed (Stage 12); a held record lives in the caller's output.
+- Stage 2 triage batches run after the merge count observations and close counted ones `completed` with `status: done`.
+- The gate-coverage register gains three class 3-O rows, measured at this release's Stage 13 (G-CL10); two carry runner pointers that Check 62 resolves, and one is a named gap with a declared observable.
+
+### Cross-references
+
+- Release plan: this file, top section; the authoritative change specification is Stage 5 revision 1 on #8606.
+- Decision record: `{{ADR:filing-threshold-and-release-follow-up-sweep}}` in `core/ADRs/`, `Proposed` until Stage 13 Phase A13.
+- Milestone: `releases-file-only-the-follow-ups-that-matter`.
+- User-facing release note: authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`, under `release/releases/notes/`.
 
 ---
 
@@ -620,6 +695,10 @@ Run by the Stage-6 spoke on #8607 after this file was written and before it was 
 | **DEV-9** | **ADR placement:** `core/ADRs/`, not `release/ADRs/`; the release index is unchanged | revision 1 row 7 (D-13) | **APPLIED** |
 | **DEV-10** | **Conditional rows:** MODEC-CONTRACT, TRIAGE-EXEC, STAGE3-TCR, OPS-PATTERN-REVIEW and PLAYBOOK-POINTER fire (PLAYBOOK-POINTER because the Stage 13 addendum confirmation needs a Hub Gate Register row); CHARTER-TOUCH does not fire. Promoted at this commit | revision 1 row 9; Stage-4 Decision Recorded, amendment 2 | **APPLIED** — § File Change Matrix |
 | **DEV-11** | **Version display spelling:** the adapter renders the (5, 0) slot as `v5.00`; the Stage-4 determination displays it as `v5.0`. Same slot, so the version half PROCEEDs; the tag's spelling is the adapter's at the Stage-12 claim | Commit-0 re-verify (this file) | **RECORDED** |
+| **DEV-12** | **The filing-path instrument reads 3 hits post-change, not the 2 the revision forecast.** The third is `hub-spoke-bridge.md`'s audit-class history sentence ("…closed with 0 stabilization Issues filed…"), which Change 14 keeps as written: the instrument's case-insensitive `N Issues filed` alternative matches the tail of "stabilization Issues filed". It is an over-match on preserved history, not a filing path; the pre-count of 19 included the same sentence | Stage 6 C4 REFCASCADE (this file, § Verification Evidence) | **RECORDED** — preserved, named |
+| **DEV-13** | **Cutover citations added where revision 1's Rule 5 binds a surface whose Change text named no sentence:** Procedure 7 Step 4's audit rows (one sentence after the sequencing note), `release-hub` Mode O step 7, `pmo-release-manager` Modes 1 and 3, and `pmo-qa-lead`'s defer branch each cite the filing-step cutover in `finding-disposition-framework.md` § 8. Additive, and required by the binding rule | revision 1 § Rules that bind every Change, Rule 5 | **APPLIED** |
+| **DEV-14** | **The new ADR carries no `allow-issue-ref` marker.** Every bare issue reference in it sits in its `## References` block, a recognized reference block, so the file declares no override the declaration obligation could not justify (`core/ADRs/README.md` § Repo-integrity authoring discipline; `git-workflow.md` § Declaring an issue-ref override). The issue-reference gate reads it clean (§ Verification Evidence) | Stage 6 authoring | **RECORDED** |
+| **DEV-15** | **One ADR Context sentence worded to keep the retired routing phrase out of the release** (Rule 2): the deferral mechanism is described as "an issue of its own, opened only to hold the deferral" | revision 1 § Rules, Rule 2 | **APPLIED** |
 
 ---
 
