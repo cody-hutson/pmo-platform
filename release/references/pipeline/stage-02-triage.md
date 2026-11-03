@@ -174,11 +174,49 @@ Contextual: full backlog (duplicate detection), current file state (feasibility)
 
 **Template-aware gate evaluation (per gate-criteria-spec.md):** Phase A1 evaluates G1 criteria using the applies-to column triple in [`gate-criteria-spec.md`](../../../core/schemas/gate-criteria-spec.md). For `bug`-labeled issues, Adapter Blocks G1-02-Bug / G1-05-Bug / G1-06-Bug provide the lexical/semantic translation (Severity ↔ Priority, bug-narrative AC pattern, conjunction of Reproduction Steps + Expected Behavior + Actual Behavior). G1-01 is template-agnostic — the former `[Bug]:` title-prefix adapter (G1-01-Bug) is retired; all templates share one prefix-less title-informativeness floor. For `observation`-labeled issues, G1-04 / G1-05 / G1-06 are `n/a` (fields don't exist); G1-02 evaluates against the observation-branch promotability test (3-field signal sufficient to draft an improvement.yml Description). Promotability PASS at observation surface routes to Stage 3 Phase A1 Template-Conversion Rule (per the Template-Conversion Rule in `gate-criteria-spec.md`) when the operator subsequently surfaces the issue for bundling. **Cutover discipline:** Applies to all releases going forward.
 
-**Untriaged-view filter.** Stage 2 Triage's "untriaged" query excludes observation-tier intake artifacts from the no-status-label review surface. Observations carry `observation` category + `status: proposed` at intake (per `label-taxonomy.md`) but their triage is NOT the Approve/Defer/Reject decision — observations route via the G1-02 observation-branch promotability test and surface to the Pattern Review Cadence Protocol (per `core/governance/OPERATIONS.md` § Pattern Review Cadence Protocol) for cross-release emergence detection, not per-issue triage. Operator's "untriaged" filter:
+**Untriaged-view filter.** Stage 2 Triage's "untriaged" query excludes observation-tier intake artifacts from the no-status-label review surface. Observations carry `observation` category + `status: proposed` at intake (per `label-taxonomy.md`) but their triage is NOT the Approve/Defer/Reject decision — observations route via the G1-02 observation-branch promotability test and surface to the Pattern Review Cadence Protocol (per `core/governance/OPERATIONS.md` § Pattern Review Cadence Protocol) for cross-release emergence detection, not per-issue triage — and they are counted into the work they point to by § Observation counting below. Operator's "untriaged" filter:
 
     gh issue list --search 'is:open is:issue label:"status: proposed" -label:observation'
 
 excludes observations. Pattern-detection skills query the complement set (`--label observation --state open`) when running Pattern Review per OPERATIONS.md Rule 1 triggers.
+
+**Observation counting (per batch, operator-confirmed).** Observations are counters for related work, not cards awaiting one-to-one conversion. Once per triage batch, after the consolidated summary, `pipeline-triage` reads the open observations — `gh issue list --label observation --state open --limit 5000 --json number,title,body,createdAt`, the result count verified per the batch-query limits rule — and counts them:
+
+1. **Group by the work they point to** — the surface each names (*File or section affected*) and the outcome it asks for (*What does good look like?*). Observations asking for the same outcome on the same surface are one group; a shared file alone is not.
+2. **Reuse an owner first.** Run this phase's A2 subsumption and A2.5 similarity checks against open non-observation work items. Where one owns the group's work, add one count line to its evidence section — `### Evidence` on `improvement.yml` and `bug.yml`, `### Value` on `story.yml`: `Counted observations: <n> (<numbers>) — Stage 2 triage <YYYY-MM-DD>`. A new acceptance criterion the group implies is surfaced to the operator, not written, because the owner may sit in a milestone whose composition is locked, and an added criterion changes locked scope.
+3. **Otherwise write one story per group of two or more** — one body against the active work-item template, listing its members in its evidence section as the count (`N = <n>: <numbers>`), taking the members' common parent epic where they share one, and entering this stage as a new proposal.
+4. **Hold a singleton at N = 1** unless it stands on its own evidence — it blocks approved work, carries a measured cost, or shows a structural gap one read proves — in which case it is converted in place under the Stage 3 Template-Conversion Rule, keeping its number so native links survive.
+5. **Close each counted observation** — first read its comment thread for a prior operator decision about it (a Pattern Review DEFER, an earlier verdict) and honour any found; then post `Counted into #<N> — Stage 2 triage <YYYY-MM-DD>`, replace its status label with `status: done`, and close it with reason `completed`. A counted observation is not rejected, so `not planned` is never its reason.
+
+Story bodies, count lines and closures are drafted automatically; each create, body edit and close is applied only after the operator confirms it, as with any close at this stage. The Pattern Review Cadence Protocol in `core/governance/OPERATIONS.md` stays the cadence trigger for cross-release emergence; a proposal it files lists its members and enters this stage like any other, where A2 checks it against existing owners.
+
+<!-- design-artifact: flow-class=agent-process; name=stage-2-observation-counting; depicts=release/references/pipeline/stage-02-triage.md,release/skills/pipeline-triage/references/triage-execution.md -->
+```mermaid
+flowchart TD
+    r[["Open observations, read once per triage batch (count verified)"]] --> g["Group by the work they point to: surface named + outcome asked"]
+    g --> o{"Does an open work item already own the group's work?"}
+    o -->|yes| cl["Add one count line to the owner's evidence section"]
+    o -->|no| n{"Group of two or more?"}
+    n -->|yes| st["Draft one story listing its members as the count"]
+    n -->|no| h{"Singleton stands on its own evidence?"}
+    h -->|no| hold(["Hold at N = 1"])
+    h -->|yes| cv["Convert in place under the Template-Conversion Rule"]
+    cl --> p["Read each member's thread for a prior operator decision"]
+    st --> p
+    p --> op[["Operator confirms each create, body edit and close"]]
+    op --> close(["Post 'Counted into #N'; status: done; close as completed"])
+    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+    classDef human fill:#D1ECF1,stroke:#17A2B8,color:#0C5460;
+    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+    classDef external fill:#E2E3E5,stroke:#6C757D,color:#383D41;
+    class g,cl,st,cv,p automated;
+    class r,op human;
+    class o,n,h gate;
+    class hold,close external;
+```
+
+*Cutover:* binds triage batches run after the merge SHA of the release that introduced this block, as recorded in the release log. This anchor is deliberately separate from the release-follow-up family's: a triage batch belongs to no release run.
+
 **Phase B (Human, Tier 3):** B1 review summary, B2 render Approve/Reject/Defer, B2a set Decision Date in the GitHub Projects Date field (see B2a Forcing-Function and Failure-Handling block below — REQUIRED, gate-blocking at G2-06), B3 cadence: **on-arrival for P1** (claim and render verdict within 1 business day [CALIBRATE-AFTER-3 — single-operator PMO posture; tune to N business days when team_size ≥ 2] per `release-process.md § Stage 2: Triage § Triage cadence`); **batch for P2-P4** (triaged immediately before the next bundling session per the ceremony sequence Triage → Bundle → Plan); **weekly minimum floor** (operator reviews all `status: proposed` issues at least once per calendar week regardless of bundling-session timing).
 
 **B2a Forcing-Function and Failure-Handling (REQUIRED — gate-blocking at G2-06):**
