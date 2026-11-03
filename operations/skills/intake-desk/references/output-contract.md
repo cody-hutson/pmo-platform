@@ -92,7 +92,7 @@ tracker" / "work item" / "item reference", not a specific tool's nouns.
 ## Mode C — non-interactive emit
 
 Mode C (Ambient Auto-Log, `SKILL.md` § Mode C) drives the **same emit process above**
-with **one substitution**: the human `AskUserQuestion` confirm is replaced by a
+with **one added test and one substitution**: the filing threshold runs first (`SKILL.md` § Mode C — The filing threshold), then the human `AskUserQuestion` confirm is replaced by a
 standing `operator.toml [automation].automation_level` ceiling plus the Tier-0
 never-auto floor. Everything else — Render, Gate (5-test + title-informativeness),
 Log, Read back, Report, and the § Structured-field carriage rules — is **reused
@@ -102,6 +102,7 @@ paths remain the logged item or the chat-returned copy/paste body; no scratch `.
 
 **Confirm-gate substitution (per `automation_level`):**
 
+- **Threshold hold (every dial)** — a below-threshold signal returns the held record; a passing signal with `release_context` returns the follow-up candidate record; neither runs Log.
 - `off` — author nothing, create nothing; return a structured **"signal detected,
   held — dial is off"** record to the caller so the signal is surfaced, not dropped.
 - `recommend` — run Render + Gate, then **surface** the rendered body **plus the exact
