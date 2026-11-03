@@ -34,7 +34,7 @@ reversibility: MODERATE / Confidence HIGH — two warn-to-enforce flips plus too
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): protocol text added and modified, per the Bump-Class Selection Guide. Provisional display `v4.82`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092). It rises to major only if a card selects a skill behavioural change, and none does |
 | **Date Created** | 2026-11-03 (Tuesday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file), then step 1 (#8325) |
+| **Status** | Executing — Stage 6 Engineering: Commit 0 and step 1 (#8325) landed; steps 2–6 (#8424) next |
 | **Branch** | `release/required-checks-enforce-as-declared` |
 | **PR** | opened in **draft** at Stage 6 Phase C2 after #8325's slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `required-checks-enforce-as-declared` |
@@ -553,6 +553,31 @@ Run by the Stage-6 spoke on #8617 after this file was written and before it was 
 | Skill-roster totals (R5) | `python3 core/deploy/tools/check-skill-count-imp.py --files <this file> --mode both` | exit 0, no finding. Control: a one-line content file carrying a seeded roster total, scanned as this path with `--scan-pair`, exits 1 with one count finding |
 | Identity strings, host URLs, link sequences | a python line scan of this file for the operator handle, name and home path, an email address, a hyphen-suffixed repository slug, a raw host URL and a markdown link sequence | 0 in every class. Control: one constructed line carrying one of each fires every class but the bare-username class, whose input it does not carry; the home-path class covers that spelling |
 | Close-family keywords | a python scan for a close-family verb followed by an issue number | 0 in this file |
+
+### Plan step 1 (#8325) — Stage 6 C4
+
+Run by the Stage-6 spoke on #8617 on the step-1 tree, before its push. The step-1 commit is `6590b1d9`; it touches exactly the four step-1 files (84 insertions, 65 deletions).
+
+| Check | Command | Observed |
+|---|---|---|
+| Required subset under enforce | `bash core/deploy/deploy.sh --check-required-subset` | exit 0 — `all 4 load-bearing check(s) passed` (Checks 38 FRESH, 73 PASS, 77 PASS, 78 PASS). The sentinel's first non-comment token, parsed the way the runner parses it, reads `enforce`; the same parse at Commit 0 reads `warn` |
+| Hook-registry index | `/usr/bin/python3 core/deploy/tools/build-hook-registry.py --check` | exit 0 — in sync, so the flip does not turn a stale index into a red subset job |
+| Conformance ratchet | `/usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py` | exit 0 — 44/44 declarations across 27 workflow files; the census's 3 population records match their re-derived populations, so the renamed step and its census row agree; every anti-vacuity arm fired |
+| Reconciler self-test | `python3 core/deploy/tools/reconcile-gate-posture.py --self-test` | exit 0 — 26 arms PASS (tier 1 and tier 2) |
+| Reconciler on the live branch object (informational) | `python3 core/deploy/tools/reconcile-gate-posture.py --live-branch-json <GET branches/main>` | exit 1, **DIVERGED as expected**: 22 reconciled, 3 held (behavioral-regression, link-check, skill-count), 1 unregistered — `Pre-merge load-bearing check subset` (`posture=required`). The Stage-4 baseline on the pre-flip tree read RECONCILED with 4 held, which is this read's opposite arm. It clears at the Stage-12 registration (R6) |
+| Skill-roster totals (R5) | `python3 core/deploy/tools/check-skill-count-imp.py --scan-pair core/standards/gate-efficacy-standard.md::=::<its 17 added lines> --mode both` | exit 0. Control: a seeded roster total scanned as the same path exits 1 |
+| Fragile references (R3; the design's Probe Z3) | a python scan of the standard's 229 table rows for an issue-number token, and of its 17 added lines for a link sequence, a raw URL, a bare issue reference, cutover phrasing and an IMP-series literal | 0 issue references in table rows (the one token the pattern reaches is the pre-existing `#[0-9]+` regex class, not an issue reference); `- #N — ` Source(s) lines: 4; added lines: the only issue reference is the new Source(s) entry, inside the reference block; 0 in every other class. Control: one constructed line per class fires each class |
+| Doc links | `python3 core/deploy/tools/check-doc-links.py --target-paths core/standards/gate-efficacy-standard.md,<this file> --require-targets`, and its `--self-test` | exit 0, no findings; self-test 12 fixtures OK |
+| Package consequence | the four changed paths and this file on STDIN to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | empty. Control: a skill's `SKILL.md` on the same reader returns its skill name |
+| Identity strings and close-family keywords | the python scans above, over the 84 added lines | 0 in every class |
+| Commit-message close keywords | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | exit 0 — 2 commits examined, 0 findings |
+| Shell syntax | `bash -n core/deploy/deploy.sh` | exit 0 |
+| Plan verifier (step-1 state) | `bash release/tools/verify-release-plan.sh release/releases/plans/required-checks-enforce-as-declared_RELEASE_PLAN.md` | exit 3 — **6 PASS / 4 FAIL / 16 SKIP / 1 UNRUNNABLE / 0 ERROR over 27 records**, the expected intermediate state: #8325 AC-1 PASS (count 1); #8424 AC-2's command limb PASS, so the row reads UNRUNNABLE only for its reader-graded limb; FCM-1 PASS (this file delivered, range `f8d88626..6590b1d9`); FCM-COVERAGE and PROV PASS. The four FAILs are owned by #8424's steps: #8424 AC-1 reads 1 of 2 Source(s) entries and AC-6 1 of 4 (steps 2 and 5), CIAC-1 reads 1 (the skill-count row is still CORRECT-THEN-HOLD until step 2) and CIAC-2 reads 1 of 2 (step 2) |
+| Runtime suite | `runtime-suite-selection-map.md` row 2 (`core/deploy/**`) selects the deploy steps of `install-tests.yml` | not run locally: the change to `deploy.sh` is comment text plus one constant read by Check 74 alone; the selected suite runs on the release PR, and Stage 7 A8 re-runs it as the authoritative gate input |
+
+**Cascade sweeps** (the Stage-5 sweeps S-a to S-h, plus S-i from the A6.5 review, as one python line scan over the four files): **pre 81 hits** (S-a..S-h 79, equal to the design's count, plus S-i 2) → **post 54**. Every surviving hit is a PRESERVE or N/A site of the design's table, or is the step's own new wording: the retreat sentences now say a retreat is not an exit (S-e), the new notes name the sentinel file and its past `warn` state as history (S-b, S-f, S-g). By sweep, pre → post: S-a 30 → 13 (the 13 are the standard's definitions, other gates' sentinels, the two held rows and frozen history); S-b 7 → 3; S-c 3 → 1 (the `version-freeness.yml` census row, a different member); S-d 1 → 0; S-e 10 → 13 (Check 71 and another check's notes, plus the corrected retreat wording); S-f 17 → 17 (conditional mechanism and the rewritten lines); S-g 5 → 1 (the new past-tense paragraph); S-h 6 → 4 (other checks' lifecycle labels); S-i 2 → 2 — the lede token `DEFERRED OR DECLINED` reads 1 → 0, and the two survivors are the paragraph's pass-anchored closing sentence about the deploy-time cohort, which stays, and frozen Version History.
+
+`[REFCASCADE: git grep -F 'Gate decision (warn-mode-initial)' over .github/workflows/deploy-check-ci.yml and the standard's deploy-check-ci census row → pre 2 / post 0]` — tree-wide the old name reads 7 → 5 (four workflows and the `version-freeness.yml` census row keep it, as different census members).
 
 ---
 
