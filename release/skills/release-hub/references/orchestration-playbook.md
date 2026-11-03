@@ -409,6 +409,7 @@ and did — disagree:
 | 10 | Early merge | 6 | operator | **STOP** | 1 — Recommend | yes | `early-merge` |
 | 11 | Action-item resolution (7a) | 7 | operator | **STOP-IF** the action-item ledger's status predicate is unsatisfied; else EXECUTE-AND-REPORT. **The predicate itself is not restated here** — it is defined once in `core/standards/hub-action-tracking.md`, so a change to how ledger status is read requires no edit to this register | 1 — Recommend (the attestation limb is irreducibly human — the hub cannot attest to its own ledger) | yes | `action-item-close` · `7a-attestation` |
 | 12 | Post-deploy `--apply` (orphan cleanup) | 7 | operator | **STOP** | 1 — Recommend | yes | `orphan-cleanup-apply` |
+| 13 | Stage 13 follow-up addendum and failed filings (Phase A10.5) | 7 | operator | **STOP-IF** the Phase A10.5 addendum holds a passing row, or a filing still fails after its retry; else EXECUTE-AND-REPORT | 1 — Recommend (the spoke drafts each row; the operator confirms, cuts or waives) | yes | — |
 <!-- GATE-REGISTER:END -->
 
 **Reading the columns.** `Disposition` ∈ `STOP` · `EXECUTE-AND-REPORT` ·
