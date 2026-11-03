@@ -79,7 +79,7 @@ exactly these so the report and the framework agree (source:
 | `Evidence` | what the grader found in PR content (cite / quote) | grader output |
 | `Severity` | `Blocker \| Warning` — **present only when `NOT MET`** | verdict-projection table |
 | `Drift-rationale` | required-when-present — populated **only** for the three drift verdicts | verdict-projection table |
-| `Disposition` | `fix-now \| defer \| accept` — the Stage-8 Finding-Disposition axis (operator-rendered; advisory in the matrix) | Stage-8 §5 Finding Disposition Framework |
+| `Disposition` | `fix-now \| defer \| accept` — the Stage-8 Finding-Disposition axis (operator-rendered; advisory in the matrix); a `defer` names where the gap lands — `defer → card` while the card stays open, else the follow-up tag (`defer → follow-up: <class>`, `release/references/standards/finding-disposition-framework.md` § 8.2) | Stage-8 §5 Finding Disposition Framework |
 
 **Verdict enum (the `Verdict` column domain), verbatim from `stage-08-qa-testing.md` §5:**
 
@@ -168,8 +168,9 @@ here is the **per-criterion detail** the report renders. The relationship:
 ## Rendered-Report Scaffold
 
 Copy the structure below into each report instance. Angle-bracket `<…>` tokens
-are fill-in slots; `#T3-N` evidence anchors and `#NNN` deferral targets are
-placeholders the renderer replaces. Fenced blocks render as real fenced blocks in
+are fill-in slots; `#T3-N` evidence anchors are placeholders the renderer
+replaces, and a `defer` row's landing (`card`, or the follow-up tag) is a
+fill-in slot. Fenced blocks render as real fenced blocks in
 the instance.
 
 ---
@@ -197,14 +198,15 @@ REJECT names the blocking-criterion count.>_
 |---|---|---|---|---|---|---|
 | AC-1 | <AC text verbatim> | MET | <what the grader found> | — | — | — |
 | AC-2 | <AC text verbatim> | NOT MET | <what the grader found> | Blocker | — | fix-now |
-| AC-3 | <AC text verbatim> | PARTIAL | <what the grader found; unmet remainder> | Warning | — | defer → #NNN |
+| AC-3 | <AC text verbatim> | PARTIAL | <what the grader found; unmet remainder> | Warning | — | defer → follow-up: user-visible |
 | AC-4 | <AC text verbatim> | N/A-WITH-RATIONALE | <what the grader found> | — | <why not applicable> | accept |
 | INT-1 | <integration AC text> | REINTERPRET-WITH-RATIONALE | <what the grader found> | — | <how re-read> | accept |
 
 _(`Severity` populated only on `NOT MET`; `Drift-rationale` populated only for the
 three drift verdicts; a `defer`/`accept` on a `NOT MET` or AC-blocking `PARTIAL`
 row must carry the Operator Override Record pointer per `stage-08-qa-testing.md`
-§5.)_
+§5; a `defer` names its landing — `card`, or the follow-up tag — and never an
+issue number.)_
 
 ### Fitness assessment
 
@@ -241,7 +243,7 @@ its Operator Override Record.>
 # acceptance-matrix v1 · issue:#<N> · release:v<X.Y> · ns:AC=issue,INT=design · verdict:<ACCEPT|CONDITIONAL_ACCEPT|REJECT|HOLD> · score:<0.000> · met:<n>/<total>
 id:AC-1  | verdict:MET                       | severity:-       | disposition:-           | evidence:T3-1
 id:AC-2  | verdict:NOT_MET                    | severity:Blocker | disposition:fix-now     | evidence:T3-2
-id:AC-3  | verdict:PARTIAL                    | severity:Warning | disposition:defer:#NNN  | evidence:T3-3
+id:AC-3  | verdict:PARTIAL                    | severity:Warning | disposition:defer:follow-up | evidence:T3-3
 id:AC-4  | verdict:N_A_WITH_RATIONALE         | severity:-       | disposition:accept      | evidence:T3-4
 id:INT-1 | verdict:REINTERPRET_WITH_RATIONALE | severity:-       | disposition:accept      | evidence:T3-5
 ```

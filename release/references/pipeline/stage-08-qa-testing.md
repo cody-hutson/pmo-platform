@@ -302,7 +302,7 @@ Record fields:
 | **Verdict + evidence** | `NOT MET` / `PARTIAL` + the Phase B evidence line (what was found) |
 | **Disposition** | `Defer` or `Accept` (the non-fix disposition being authorized) |
 | **Operator rationale** | why the conscious scope change is acceptable (1–3 sentences; "routine prioritization" is **not** a valid rationale) |
-| **Reversibility + landing** | reversibility tier + where the gap lands: **Defer** → a next-release issue number (the gap gets a tracked home); **Accept** → recorded in the Acceptance Report fitness assessment |
+| **Reversibility + landing** | reversibility tier + where the gap lands: **Defer** → the card itself while it stays open (the release-boundary deferral, `deferred-item-tracking.md` §§ 1–12) — it stays open when the release PR's Issue References block does not close it, read at this stage; when the card closes, a release follow-up tagged in the Acceptance Report's Disposition cell (`defer → follow-up: <class>`, `finding-disposition-framework.md` § 8.2), which Stage 9 Phase A7.6 reads against the filing threshold. A record whose Disposition is Defer declares nothing (§ 8.5). No issue is opened only to hold the deferral. **Accept** → recorded in the Acceptance Report fitness assessment; the record declares the item, which is never filed |
 
 The agent **surfaces** the gap and the *requirement* for an Override Record wherever the trigger above fires; it does **not** self-author the override (Tier 3 — acceptance is human judgment per § 8). **CONDITIONAL ACCEPT** is the **named vehicle** for an accepted criterion the trigger reaches: at Phase E such a verdict **must** carry one Override Record per **triggering** criterion — this is the existing "documented rationale" of that verdict made specific. Whether a given criterion triggers is decided by the trigger above and is not restated here; no parallel verdict is invented.
 
@@ -310,7 +310,7 @@ The agent **surfaces** the gap and the *requirement* for an Override Record wher
 
 A `PARTIAL` keys the gate by its **unmet remainder**:
 
-- **Unmet remainder is non-AC-blocking** (cosmetic, outside the AC's contractual scope, or aspirational with no documented commitment) → routes the **Step 1 weighted layer**: a deferral opens a next-release issue; an acceptance carries the one-line weighted-layer rationale. The § Step 0 trigger does **not** fire, so no Override Record attaches. This is the "substantially met, minor remainder" case CONDITIONAL ACCEPT contemplates.
+- **Unmet remainder is non-AC-blocking** (cosmetic, outside the AC's contractual scope, or aspirational with no documented commitment) → routes the **Step 1 weighted layer**: a deferral is recorded as a tagged release follow-up for the Stage 9 filing step; an acceptance carries the one-line weighted-layer rationale. The § Step 0 trigger does **not** fire, so no Override Record attaches. This is the "substantially met, minor remainder" case CONDITIONAL ACCEPT contemplates.
 - **Unmet remainder is itself an acceptance commitment** (a contractual sub-criterion is undelivered) → **escalates to the Step-0 NOT-MET gate**: fix-now (Lane 2 → DT return) is the only no-override disposition; defer/accept fires the § Step 0 trigger and requires the Operator Override Record.
 - **Test:** *"Is the unmet portion something we agreed to deliver?"* — **yes → NOT-MET gate**; **no → weighted layer.**
 
@@ -341,7 +341,9 @@ This is the inverse view of the differentiation note in [`stage-07-dev-testing.m
 | Step 1 weighted disposition + Step 2 tie-break (§ 4) | references the shared framework | **inherited unchanged** (references the same shared framework) |
 | Step 0 hard precedence | open **Blocker** → fix-now-or-escalate; never silent defer/accept; **Note** → Accept | **STRENGTHENED:** **NOT-MET AC** → fix-now is the only no-override disposition; defer/accept needs a **recorded operator override**. Strictly stronger — Stage 7 permits in-scope Blocker auto-fix-now and records no override; Stage 8 forbids any non-fix disposition of a NOT-MET AC absent recorded sign-off. |
 | Finding vocabulary | DT severity (Blocker / Warning / Note) | QA per-criterion verdict (`MET / NOT MET / PARTIAL`); NOT-MET keys the gate, PARTIAL keys by unmet remainder; drift verdicts are out-of-gate |
-| Routing on Defer | new next-release issue | **same**, plus a deferred criterion that the § Step 0 trigger reaches additionally requires the Operator Override Record |
+| Routing on Defer | release follow-up, tagged in the Stage 7 Findings row; filed only through the Stage 9 and Stage 13 filing steps | **same**, plus a deferred criterion that the § Step 0 trigger reaches additionally requires the Operator Override Record |
+
+*Cutover:* the Defer routing above follows the filing-step cutover in `release/references/standards/finding-disposition-framework.md` § 8 — it applies to releases whose Stage 9 Phase A starts after the merge SHA of the release that introduced it; an earlier release keeps its prior routing to the end of its run.
 
 **Phase D — Iteration Loop:**
 QA Pass 1 → Route findings per lanes → Lane actions executed (Lane 2 triggers QA→DT Return per [DT↔QA Handoff Protocol](stage-07-dev-testing.md#dtqa-handoff-protocol); DT runs full re-review per the DT-Eng iteration loop, iterates with Engineering, emits Verified Signal on PASS) → QA Pass 2 (full re-review per Stage 8 §5 Phase D) triggered by Verified Signal → If new findings, route again → Escalation at iteration count > 2 (flag to operator). Iteration cap rationale: more than 2 passes indicates a systemic issue, not incremental fixes.

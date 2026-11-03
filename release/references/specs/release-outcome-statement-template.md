@@ -303,7 +303,7 @@ Stage 13 spoke reads the Outcome Statement from the Milestone description AND re
 - **PARTIALLY-ATTAINED** → surface diagnostic for operator routing. Composes with: PARTIALLY-ATTAINED → PARTIAL.
 - **NOT-ATTAINED** → surface diagnostic. Composes with: NOT-ATTAINED → SUCCESS-document-divergence OR ROLLBACK per operator.
 
-Non-blocking for milestone close — routing options per Stage 13 Phase A goal-attainment verification protocol (A) immediate-hotfix Issue / (B) carry-forward Issue / (C) accept-as-residual.
+Non-blocking for milestone close — routing options per Stage 13 Phase A goal-attainment verification protocol (A) immediate-hotfix follow-up / (B) carry-forward follow-up / (C) accept-as-residual — (A) and (B) are filed only through Stage 13 Phase A10.5, if they pass the filing threshold.
 
 ### 7.4 Stage 13 G-CL7 (verdict-presence gate, warn-mode initial)
 

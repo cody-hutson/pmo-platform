@@ -139,6 +139,74 @@ A risk whose control was not observed acting on its run path is re-dispositioned
 
 LLM-graded judgment-recommend tier per gate-criterion G-PR7 in [gate-criteria-spec.md](../../../core/schemas/gate-criteria-spec.md#gate-9-plan-review). Recommend-tier matches the G3-04/G3-05 judgment precedent — a grep cannot reliably assert "release delivers the AFTER state"; the LLM scan provides the recommendation; the operator renders the binding decision. See [release-outcome-statement-template.md](../specs/release-outcome-statement-template.md) for the canonical Outcome schema and anti-pattern catalog the conformance check applies on read. **Cutover:** Applies to all Stage 9 reviews going forward.
 
+**Phase A7.6 — Follow-up assembly and net work (Tier 1).** Every release follow-up recorded so far is gathered here, read against the filing threshold once, and counted against the work the release resolves — before anything is filed. The threshold is `core/standards/work-item-filing-threshold.md`; the release-side routing is `release/references/standards/finding-disposition-framework.md` § 8. This phase applies both and restates neither. No earlier routing point files a follow-up.
+
+1. **Assemble the ledger** — one row per release follow-up (§ 8.1 of the framework), from: the Stage 4 plan's Recommendations; each Stage 5–8 sub-task output's `### Decisions & Recommendations` finding carrying the follow-up tag; every Stage 7 Findings row and Stage 8 Acceptance Report row dispositioned Defer, with its Operator Override Record where one exists; each candidate `intake-desk` Mode C held for this release; each hub-surfaced follow-up recorded on a sub-task; and each downstream item of an audit SUMMARY the release produced. An item recorded at two sources is one row, under the earlier source. A row carries its source (stage and comment URL), the item, its repository (`target` or `platform`, § 8.6), the tag its source recorded, its severity, and its threshold verdict. A security row whose description would disclose a weakness reads `security — description withheld` (the threshold's § 6).
+2. **Apply the threshold** to every row. A below-threshold row stays in its stage record.
+3. **Remove what is not filed even when it passes** — already declared (cite the record), owned (name the owner), or carried by its own card. The decision records searched are the Stage 4 decision record, any Collective Review scope-lock record, and each Operator Override Record — which declares only on Accept (§ 8.5). The Stage 9 decision record is not yet posted and is not searched.
+4. **Classify each remaining row** — a sweep item, or a separate issue when its source tagged it ` · bug` or ` · feature`.
+5. **Render the line** in the Stage 9 sub-task output, in this form:
+
+   ```
+   **Phase A7.6 net-work-ledger:** resolved=<R> · proposed=<P> (sweep=<S> · bug=<B> · feature=<F> · target=<T> · platform=<L>) · net=<R−P> → <NON-NEGATIVE | EXCESS <P−R>> · below-threshold=<K> · declared=<D> · folded=<O> · cut=<C> · reclassified=<Q> · sources: s7=<n> s8=<n> dr=<n> hub=<n> modec=<n> audit=<n> · read <ISO-8601 UTC>
+   ```
+
+   `R` counts this release's milestone members, sub-tasks excluded, that the release PR's Issue References block closes. `P` counts **items, not issues**: S + B + F = P = T + L, and gathering items into a sweep does not shrink it. Each source count is reproducible from its own record — the Defer rows of the Stage 7 Findings table, the `defer` rows of the Stage 8 Acceptance Report, the tagged findings of the `### Decisions & Recommendations` blocks and the Stage 4 Recommendations, the hub-recorded follow-ups, the Mode C held candidates, the audit items — and the sources sum to P + K + D + O + C, so a row missing from the ledger shows as a gap between a source's own count and its term here. `Q` counts rows whose source carried no tag, or whose reading differs from the tag, each with its reason. `C` is `0` until Phase C.
+6. **Record the ledger** under the line — one row per item, its source pointer and its verdict. Phase C reads it, and Stage 13 Phase A10.5 files from it.
+
+The line is a prompt for the operator's disposition, not a bound: it counts what the release's records hold, and an item no record holds is outside it. The hyphenated token in the line's bolded label is the gate-coverage register's anchor for this phase; write it nowhere else in this file, so deleting the template deletes the anchor.
+
+**Fixture — excess arm** (inputs; render the line before reading the expected result). The release ships a target repository; `target` rows are the target's work, `platform` rows are about the pipeline. Milestone members closed by the release PR: 1. Ledger rows:
+
+| # | Source, as recorded | Tag at the source | Item | Repository | Severity |
+|---|---|---|---|---|---|
+| a | Stage 7 Findings row, Defer; its Evidence cites a reproduction | `follow-up: user-visible · bug` | a command reports success when its write failed | target | Minor |
+| b | Stage 8 `### Decisions & Recommendations` | `follow-up: none` | two specs word the same rule differently; no user acts on it | platform | Minor |
+| c | Stage 5 `### Decisions & Recommendations` | `follow-up: user-visible` | a residual the release's ADR declares in its Consequences | platform | Minor |
+| d | Stage 8 Acceptance Report: PARTIAL with an AC-blocking remainder on a card that closes; Operator Override Record, Disposition **Defer** | `defer → follow-up: user-visible` | a shipped command omits one documented output | target | Major |
+| e | Stage 6 `### Decisions & Recommendations` | `follow-up: user-visible` | the remainder of a criterion the operator accepted at Stage 8 under an Operator Override Record, Disposition **Accept** | target | Major |
+| f | hub-surfaced, recorded on the Stage 7 sub-task | `follow-up: privacy` | a log line writes the operator's username | platform | Minor |
+| g | `intake-desk` Mode C candidate held for this release | `filing-threshold: pass; user-visible; Minor` | an error hint names a flag the command no longer accepts | platform | Minor |
+| h | Stage 7 Findings row, Defer | `follow-up: user-visible` | a help-text example shows a deprecated flag | target | Minor |
+| i | Stage 6 `### Decisions & Recommendations` | `follow-up: user-visible · feature` | users ask for a second export format | target | Minor |
+| j | hub-surfaced, recorded on the Stage 8 sub-task | `follow-up: security` | security — description withheld | platform | Major |
+
+*Expected:* `resolved=1 · proposed=7 (sweep=5 · bug=1 · feature=1 · target=4 · platform=3) · net=-6 → EXCESS 6 · below-threshold=1 · declared=2 · folded=0 · cut=0 · reclassified=0 · sources: s7=2 s8=1 dr=4 hub=2 modec=1 audit=0`. Row b is below the threshold; rows c and e are declared (c by the ADR, e by the Accept record); row d is **not** declared — its record defers it — and joins the sweep. GO is not recordable until the decision record carries a disposition.
+
+*Cut, then expected:* the operator proposes returning h (re-read as Cosmetic, the reading recorded on the row), folding g into an open work item that already owns that hint, and returning a. Returning a is refused — a is protected, tagged ` · bug` — and the other two apply: `resolved=1 · proposed=5 (sweep=3 · bug=1 · feature=1 · target=3 · platform=2) · net=-4 → EXCESS 4 · below-threshold=1 · declared=2 · folded=0 · cut=2 · reclassified=0 · sources: s7=2 s8=1 dr=4 hub=2 modec=1 audit=0`. An excess remains, so GO needs the accepted form. Rows f and j are protected too.
+
+**Fixture — balanced arm.** Milestone members closed: 3; ledger rows a, b and c only. *Expected:* `resolved=3 · proposed=1 (sweep=0 · bug=1 · feature=0 · target=1 · platform=0) · net=2 → NON-NEGATIVE · below-threshold=1 · declared=1 · folded=0 · cut=0 · reclassified=0 · sources: s7=1 s8=0 dr=2 hub=0 modec=0 audit=0`, and no disposition line is owed.
+
+**Fixture — close arm** (rendered by Stage 13 Phase A10.5 from the excess arm after the cut and an accepted GO). Two follow-ups surface after Stage 9 Phase A: k — a QC4-05 FAIL routed (B), an internal reference pointing at a renamed section, `follow-up: none`; l — a Stage 12 record-deferred propagation, the installed copy of a skill reference stale until the next deploy, `follow-up: user-visible`, platform, Minor. The operator confirms l. *Expected:* `resolved=1 · proposed=6 (sweep=4 · bug=1 · feature=1 · target=3 · platform=3) · net=-5 → EXCESS 5 · below-threshold=2 · declared=2 · folded=0 · cut=2 · reclassified=0 · sources: s7=2 s8=1 dr=4 hub=2 modec=1 audit=0 late=2`. Filed on the target: one sweep (d), one bug issue (a), one feature issue (i). Filed on this platform: one sweep (f, l, and one security item counted without description). Row j goes to the operator for a private report. Nothing is filed for b, c, e, g, h or k; g is recorded against its owner.
+
+<!-- design-artifact: flow-class=agent-process; name=stage-9-follow-up-net-work; depicts=release/references/pipeline/stage-09-plan-review.md,release/references/standards/finding-disposition-framework.md,release/references/pipeline/stage-13-close.md,core/standards/work-item-filing-threshold.md -->
+```mermaid
+flowchart TD
+    s[["Stage records, each follow-up tagged at its source: D&R blocks, Stage 7/8 Defer rows, Override Records, hub records, Mode C candidates, audit items"]] --> a["A7.6: assemble the ledger, one row per item, with its repository"]
+    a --> t{"Passes the threshold? (class AND at least Minor)"}
+    t -->|no| k(["Stays in its stage record — counted below-threshold"])
+    t -->|yes| x{"Declared (Accept only), owned, or carried by its own card?"}
+    x -->|yes| d(["Not filed — citation or owner recorded"])
+    x -->|no| c["Classify: sweep item, or bug / feature tagged at source"]
+    c --> l["Render the net work line: resolved vs proposed, sources reconciled"]
+    l --> g{"EXCESS?"}
+    g -->|no| go[["Phase C: operator renders GO / NO-GO"]]
+    g -->|yes| op[["Phase C: operator accepts the excess, or cuts — a protected row is never returned"]]
+    op --> go
+    go --> late["Stage 13 A10.5: operator confirms each later follow-up (addendum)"]
+    late --> f(["File one sweep per repository + separate bug / feature issues; security items to the operator privately"])
+    classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
+    classDef human fill:#D1ECF1,stroke:#17A2B8,color:#0C5460;
+    classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
+    classDef external fill:#E2E3E5,stroke:#6C757D,color:#383D41;
+    class a,c,l automated;
+    class s,go,op,late human;
+    class t,x,g gate;
+    class k,d,f external;
+```
+
+*Cutover:* applies to releases whose Stage 9 Phase A starts after the merge SHA of the release that introduced this phase, as recorded in the release log. A release whose Stage 9 Phase A started earlier keeps its prior routing to the end of its run (`finding-disposition-framework.md` § 8).
+
 **Phase A8 — Draft→ready-for-review transition (Tier 1):** The release PR was created in **draft** state at Stage 6 Phase C2 (per [`stage-06-engineering.md`](stage-06-engineering.md) § Phase C) so it stayed visibly work-in-progress through Engineering + Dev Testing + QA. Before Phase B tiered presentation, once evidence assembly (A1–A7) is complete, the hub transitions the release PR from draft to **ready-for-review** — `gh pr ready <PR>` — so the operator reviews the PR diff in its review-ready form, with the `## Change Description` section (committed at Stage 6 Phase C1) visible in the diff. This is the single point in the pipeline where the draft→ready transition occurs; a still-draft PR reaching Stage 12 Phase B fails the pre-B1 draft-state guard (per [`stage-12-execute.md`](stage-12-execute.md) § Phase A.7 Release-PR draft-state guard) because a draft PR cannot merge. **Single-operator no-op:** in single-operator steady state (OPERATOR resolves to `@me`, `--reviewer` dropped) the PR is self-reviewed by its author — the draft→ready transition runs identically (a draft PR still transitions to ready with no external reviewer required), and the Phase C GO decision remains the review-discipline artifact per the § PR metadata single-operator reviewer convention. The transition is a lifecycle step, not a review-request; it does not require a second reviewer to fire.
 
 **A8 exit assertion — read the state back; never infer it from having issued the command.** After issuing `gh pr ready <release-PR>`, read the state back from the host — `gh pr view <release-PR> --json isDraft --jq .isDraft` — and record **the observed value, not the expected one**. Record it in the Stage 9 sub-task output on a fixed-shape anchor line, verbatim in this form:
@@ -173,7 +241,7 @@ The recorded `updatedAt` is the freshness anchor. `isDraft` is mutable live stat
 **Single-operator steady state:** with OPERATOR == `@me` and `--reviewer` dropped, `reviewRequests` is empty and no *requested-reviewer* review-decision state is emitted — in steady state the advisory input is simply **absent** (an honest no-op, not a missing gate). On a public repository an *unrequested* third-party review can still set `reviewDecision`; the advisory lane surfaces any such state together with the reviewing author's association per the author-association trust boundary ([`release-process.md` § Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol)) — an untrusted-association review state is surfaced-untrusted context, never a veto. No facet of Phase A9 requires a second reviewer to function; the advisory lane records "no review-decision state (single-operator)" and advances. **Cutover discipline:** Applies to all Stage 9 reviews going forward.
 
 **Phase B — Tiered Presentation (Tier 1):**
-Present evidence package to operator in three tiers: Tier 1 (30-second summary — verdict recommendation, key metrics, blockers), Tier 2 (5-minute detail — per-issue status, risk assessment, escape analysis), Tier 3 (full evidence — complete reports, PR diff, release plan).
+Present evidence package to operator in three tiers: Tier 1 (30-second summary — verdict recommendation, key metrics, blockers), Tier 2 (5-minute detail — per-issue status, risk assessment, escape analysis), Tier 3 (full evidence — complete reports, PR diff, release plan). The Phase A7.6 line rides the Tier-1 summary; an **EXCESS** sits on the decisions-owed line, never the blockers line.
 
 **Phase C — Human Decision (Tier 3):**
 
@@ -185,9 +253,13 @@ Present evidence package to operator in three tiers: Tier 1 (30-second summary �
 
 GO WITH CONDITIONS boundary rule: if a condition requires code changes, it is a NO-GO. Conditions are documentation, tracking, or process items only.
 
+**A condition or a re-deferral is a follow-up too.** A GO WITH CONDITIONS condition the release will not discharge before Stage 13, and an incoming deferral re-deferred past this release, is recorded as a release follow-up in the decision record, tagged per `finding-disposition-framework.md` § 8.2. It joins the Phase A7.6 ledger under the `hub` source, and the line is re-rendered before GO is recorded. A condition discharged before Stage 13 is not a follow-up.
+
+**An excess is accepted or cut before anything is filed.** When the Phase A7.6 line reads **EXCESS**, GO and GO WITH CONDITIONS are recordable only once the decision record carries exactly one of `**Net work disposition:** accepted — excess <n> — <operator rationale>` or `**Net work disposition:** cut — <rows and what each cut did>`, followed by the re-rendered line. A cut does only what `finding-disposition-framework.md` § 8.7 allows, and a protected row is never returned to its stage record. An excess that remains after a cut needs the accepted form. The excess is not a NO-GO input: it asks for the operator's accept-or-cut call, and the verdict stays the operator's alone. On NO-GO the ledger stays on this sub-task and nothing is filed.
+
 **Phase C1 — Record the verdict (one action with rendering it).** A Stage 9 verdict is recorded on two surfaces at the routing point where the operator renders it, and read back, before the gate sub-task closes:
 
-1. **The decision record** — the comment on the Stage 9 sub-task, in the format the sub-task body names (decision, rationale, conditions, risk acceptance). The risk acceptance names, for each risk accepted on a control, the Phase A4 record line showing that control observed acting, with its independent `via` — never the control's presence, exit status or a row it wrote.
+1. **The decision record** — the comment on the Stage 9 sub-task, in the format the sub-task body names (decision, rationale, conditions, risk acceptance), each condition or re-deferral recorded as a release follow-up, and — when the Phase A7.6 line reads EXCESS — the net work disposition line. The risk acceptance names, for each risk accepted on a control, the Phase A4 record line showing that control observed acting, with its independent `via` — never the control's presence, exit status or a row it wrote.
 2. **The verdict's `gate-outcome` row** — one row per rendered verdict, emitted by the hub on the operator's behalf: `release/tools/append-pipeline-event.sh --version <milestone slug> --stage 9 --event-type gate-outcome --event-subtype <plan-review-go or plan-review-no-go> --actor operator --subject milestone:#<N> --reversibility <the tier the Decision Briefing states for the release> --outcome resolved --payload 'ms:#<N>; verdict:<GO, GO-WITH-CONDITIONS or NO-GO>; record:<the decision-record comment URL>'`. GO and GO WITH CONDITIONS emit `plan-review-go` at stage `9` with actor `operator`; NO-GO emits `plan-review-no-go` at stage `9` with actor `operator`. The operator renders the verdict whichever agent runs the writer, so the actor is always `operator`, and `plan-review-go` is never written for a verdict rendered at any other stage. The verdict's row is `gate-outcome`/`plan-review-go` or `gate-outcome`/`plan-review-no-go`, never `decision`/`d-class`, although the verdict is rendered through a Decision Briefing.
 3. **Read the row back before closing the sub-task** — a PRE/POST count typed to the verdict's own class, `release/tools/query-pipeline-event.sh --release <milestone slug> --event-type gate-outcome --event-subtype <plan-review-go or plan-review-no-go> --stage 9 --count`, taken before and after the append, plus a content match on the `record:` pointer with `--payload-contains`, per the release-hub orchestration playbook's Procedure 4a step 4 (assert the delta, never a non-zero absolute). The count is typed to the class this step writes, so a verdict recorded as `decision`/`d-class` leaves `POST == PRE` and reads as a write that did not land; the stage-`9` `operator` identity is fixed by the invocation in item 2, and the writer refuses either subtype under any other stage or actor. A write that did not land is re-emitted at this same routing point.
 

@@ -65,7 +65,7 @@ Each canonicalization produces a 2-part artifact:
 - Documented rationale: `<reference to ADR issue # OR governance doc section>`
 
 **Out-of-scope drift detected during survey** (REQUIRED if non-zero — surfaces R1's spec-vs-reality work to downstream stages):
-- `<file:line>` — `<observation>` — `<routing: Tier 1 [ADJUST] | next-release issue | accepted-residual>`
+- `<file:line>` — `<observation>` — `<routing: Tier 1 [ADJUST] | release follow-up (filing threshold) | accepted-residual>`
 ```
 
 The three justification categories — audit / upstream / ADR — are exhaustive by construction. Sample prompt language at [`hub-spoke-bridge.md` Procedure 3 Spoke Template](../../release/references/how-to/hub-spoke-bridge.md) routes the spoke to one of the three. When justification cites the **upstream** category, the entry references [`upstream-reference-catalog.md`](upstream-reference-catalog.md).
@@ -111,7 +111,7 @@ inspectable Evidence-Grounding artifact in your output:
    `core/standards/upstream-reference-catalog.md`), or
    (c) a documented governance rationale (ADR issue # or doc section).
 3. List any out-of-scope drift observed during the survey, with routing
-   recommendation (Tier 1 [ADJUST] / next-release issue / accepted-residual).
+   recommendation (Tier 1 [ADJUST] / release follow-up (filing threshold) / accepted-residual).
 
 Place the artifact as a `### Evidence-Grounding (per R1 )` subsection
 in your output, AFTER `### Detail` and BEFORE `### Decisions & Recommendations`.

@@ -22,7 +22,7 @@ supersedes: none
 
 ## Context
 
-A release could create more work than it resolved, and the few follow-ups that mattered were buried among many that did not. Three mechanisms produced the volume. Every review finding was routed to its own issue, with no test of whether it was worth one. Each deferral at the GO/NO-GO needed its own landing issue, opened only to hold the deferral. And residuals an ADR already declared were filed again as issues. Automatic intake logging filed at its highest dial with no value test either.
+A release could create more work than it resolved, and the few follow-ups that mattered were buried among many that did not. Three mechanisms produced the volume. Every review finding was routed to its own issue, with no test of whether it was worth one. Each deferral at the GO/NO-GO needed an issue of its own, opened only to hold the deferral. And residuals an ADR already declared were filed again as issues. Automatic intake logging filed at its highest dial with no value test either.
 
 The same shape showed at Stage 2 Triage, where the observation path converted each observation into its own card, one to one, when related observations were counters for one piece of work.
 
