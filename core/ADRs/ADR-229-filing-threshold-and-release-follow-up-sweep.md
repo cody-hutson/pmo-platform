@@ -1,9 +1,9 @@
 ---
 title: ADR-229 — A work item passes a filing threshold; a release files its follow-ups in one sweep per repository
-status: Proposed
+status: Accepted — operator-ratified at the releases-file-only-the-follow-ups-that-matter Stage 13 Close ratification beat (Phase A13), 2026-11-04
 date: 2026-11-03
 release: releases-file-only-the-follow-ups-that-matter
-deciders: "Workspace owner (ratified at the Stage 9 review); design authored at Stage 5 Solutioning and revised after the adversarial design review"
+deciders: "Workspace owner (ratified at the Stage 13 Close ratification beat); design authored at Stage 5 Solutioning and revised after the adversarial design review"
 tags: [governance, intake, release-pipeline, filing-threshold, shared-kernel, reversibility-moderate]
 source_observations:
   - "A target release delivered three cards and filed eighteen follow-up issues; a post-release review kept about three and closed fifteen. Three mechanisms produced them: every review finding routed to an issue, an issue opened per deferral at the GO/NO-GO only to hold it, and residuals an ADR already declared filed again."
@@ -16,7 +16,7 @@ supersedes: none
 
 ## Status
 
-**Proposed.** Flips to Accepted at the introducing release's Stage 13 ratification beat (Phase A13). The number binds at merge.
+**Accepted** — operator-ratified at the `releases-file-only-the-follow-ups-that-matter` Stage 13 Close ratification beat (Phase A13), 2026-11-04, as one record of a decision rendered per record, under Gate 13 criterion G-CL9's authored-by-this-release limb. Authored at Stage 6 Engineering of that release as `Proposed`, after the operator's Stage 5 decision record rendered the scope this record documents. The ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure. The decision this record documents shipped in **v5.00**.
 
 **Numbering provenance.** Claimed as **229** against an anchor of **228** on `origin/main`, read from `release/tools/renumber-adr.py --next-free` at Engineering Commit 0. A branch claim is detection-only and never binds; should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations from other branch-authored artifacts use the slug token `{{ADR:<slug>}}`, which carries no number shape and resolves at the claim.
 
