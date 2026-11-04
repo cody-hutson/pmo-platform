@@ -484,6 +484,270 @@ test_case "unset PATH blocks" \
   "$(bash_payload 'unset PATH')" \
   2 "BLOCK-DESTRUCTIVE-020"
 
+# --- AC-D020 (#8444): the PATH-manipulation rule judges every spelling alike ---
+#
+# BLOCK-DESTRUCTIVE-020 anchors a PATH assignment at a command start, and the shared
+# canonicalizer marked only the command word, so an assignment its prefix walk stepped over
+# never sat where the anchor reads. The prefix form above was refused while the same
+# assignment handed to a wrapper, placed behind another assignment or a redirection, after a
+# keyword or `!`, at a condition position or inside a group was admitted, and so were the
+# declaration builtins and the append operator. The canonicalizer's transformation (e) now
+# marks every assignment the walk skips, and the rule's own line reads a declaration
+# builtin's argument list and `PATH+=`. Each arm is the refused plain form (CTL) reached
+# through one spelling. The NEAR arms hold the same shapes with another name, or the name as
+# content, and must stay allowed, so each refusal is attributable to the PATH assignment
+# itself. CAP pins the prefix cap's boundary: an assignment behind ten prefix-run tokens is
+# judged, one behind eleven is the declared residual. OVER pins the declared over-block of
+# an assignment written as a heredoc body line, which the canonicalizer reads as a command
+# start because heredoc bodies are outside its model.
+test_case "AC-D020-CTL-PFX: a prefix PATH assignment blocks (plain-form control)" \
+  "$(bash_payload 'PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-CTL-EXPORT: export PATH before the command blocks (plain-form control)" \
+  "$(bash_payload 'export PATH=x; true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAP: a PATH assignment handed to env blocks" \
+  "$(bash_payload 'env PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAP-SUDO: a PATH assignment handed to sudo blocks" \
+  "$(bash_payload 'sudo PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAP-TIME: a PATH assignment behind time blocks" \
+  "$(bash_payload 'time PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAPOPT-1: a PATH assignment behind env's own flag blocks" \
+  "$(bash_payload 'env -i PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAPOPT-2: a PATH assignment behind env's own option and its argument blocks" \
+  "$(bash_payload 'env -u FOO PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAPABS: a PATH assignment handed to env by absolute path blocks" \
+  "$(bash_payload '/usr/bin/env PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-COND-IF: a PATH assignment at an if condition blocks" \
+  "$(bash_payload 'if PATH=x true; then true; fi')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-COND-WHILE: a PATH assignment at a while condition blocks" \
+  "$(bash_payload 'while PATH=x false; do true; done')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-COND-UNTIL: a PATH assignment at an until condition blocks" \
+  "$(bash_payload 'until PATH=x true; do true; done')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-COND-EXPORT: export PATH at an if condition blocks" \
+  "$(bash_payload 'if export PATH=x; then true; fi')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-ASSIGN-1: a PATH assignment behind another assignment blocks" \
+  "$(bash_payload 'FOO=1 PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-ASSIGN-2: a PATH assignment behind a redirection blocks" \
+  "$(bash_payload '>/dev/null PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-GROUP-1: a PATH assignment opening a subshell blocks" \
+  "$(bash_payload '(PATH=x; true)')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-GROUP-2: a PATH assignment opening a brace group blocks" \
+  "$(bash_payload '{ PATH=x; true; }')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-GROUP-3: a PATH assignment opening a function body blocks" \
+  "$(bash_payload 'f() { PATH=x true; }')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-KW-1: a PATH assignment after then blocks" \
+  "$(bash_payload 'if true; then PATH=x true; fi')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-KW-2: a PATH assignment after do blocks" \
+  "$(bash_payload 'for i in 1; do PATH=x true; done')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-KW-3: a PATH assignment after ! blocks" \
+  "$(bash_payload '! PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-EXPORT-ARGS-1: export with a PATH assignment later in its argument list blocks" \
+  "$(bash_payload 'export FOO=1 PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-EXPORT-ARGS-2: export with an end-of-options marker before PATH blocks" \
+  "$(bash_payload 'export -- PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-DECL-1: declare carrying a PATH assignment blocks" \
+  "$(bash_payload 'declare -x PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-DECL-2: typeset carrying a PATH assignment blocks" \
+  "$(bash_payload 'typeset -x PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-DECL-3: readonly carrying a PATH assignment blocks" \
+  "$(bash_payload 'readonly PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-DECL-4: local carrying a PATH assignment blocks" \
+  "$(bash_payload 'local PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-APPEND: an appending PATH assignment blocks" \
+  "$(bash_payload 'PATH+=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-CAP-TEN: a PATH assignment behind ten prefix-run tokens blocks (the cap's boundary)" \
+  "$(bash_payload 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-CAP-RESID: a PATH assignment behind eleven prefix-run tokens allows (the declared cap residual)" \
+  "$(bash_payload 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 PATH=x true')" \
+  0
+
+test_case "AC-D020-OVER-HEREDOC: a PATH assignment written as a heredoc body line blocks (declared over-block)" \
+  "$(bash_payload "$(/usr/bin/printf '%s\n%s\n%s' "cat > notes.txt <<'EOF'" 'local PATH=x' 'EOF')")" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-NEAR-1: another variable handed to env allows" \
+  "$(bash_payload 'env FOO=x true')" \
+  0
+
+test_case "AC-D020-NEAR-2: another variable opening a subshell allows" \
+  "$(bash_payload '(FOO=x; true)')" \
+  0
+
+test_case "AC-D020-NEAR-3: another variable at an if condition allows" \
+  "$(bash_payload 'if FOO=x true; then true; fi')" \
+  0
+
+test_case "AC-D020-NEAR-4: a variable whose name ends in PATH allows" \
+  "$(bash_payload 'MYPATH=x true')" \
+  0
+
+test_case "AC-D020-NEAR-5: a variable whose name begins with PATH allows" \
+  "$(bash_payload 'PATHX=x true')" \
+  0
+
+test_case "AC-D020-NEAR-6: a PATH assignment as an argument of echo allows" \
+  "$(bash_payload 'echo PATH=x')" \
+  0
+
+test_case "AC-D020-NEAR-7: a PATH assignment as a search pattern allows" \
+  "$(bash_payload 'grep -c PATH= f')" \
+  0
+
+test_case "AC-D020-NEAR-8: a wrapped PATH assignment inside a quoted string allows" \
+  "$(bash_payload 'echo "env PATH=x true"')" \
+  0
+
+test_case "AC-D020-NEAR-9: export of a variable whose name ends in PATH allows" \
+  "$(bash_payload 'export MYPATH=x')" \
+  0
+
+test_case "AC-D020-NEAR-10: declare of another variable allows" \
+  "$(bash_payload 'declare -x FOO=x')" \
+  0
+
+# AC-D020-CANON — transformation (e)'s text contract, exact. The default output marks every
+# assignment the walk skips and never the one at offset 1; the exit view, which the deletion
+# hook's allow-on-match exits read, marks no assignment.
+d020_canon() { # $1 = arm label  $2 = input  $3 = expected output  $4 = view (default | exit)
+  local got
+  if [ "$4" = exit ]; then
+    got="$(/usr/bin/awk -v CMDPOS_VIEW=exit -f "${HOOK%/*}/lib/command-position.awk" <<<"$2" 2>/dev/null)"
+  else
+    got="$(/usr/bin/awk -f "${HOOK%/*}/lib/command-position.awk" <<<"$2" 2>/dev/null)"
+  fi
+  if [ "$got" = "$3" ]; then
+    /usr/bin/printf 'PASS: %s the %s view of [%s] is [%s]\n' "$1" "$4" "$2" "$3"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s the %s view of [%s]: wanted [%s] got [%s]\n' "$1" "$4" "$2" "$3" "$got"
+    FAIL=$((FAIL + 1))
+  fi
+}
+d020_canon "AC-D020-CANON-1" 'env PATH=x true' 'env ; PATH=x ; true' default
+d020_canon "AC-D020-CANON-2" 'FOO=1 PATH=x true' 'FOO=1 ; PATH=x ; true' default
+d020_canon "AC-D020-CANON-3" '(PATH=x; true)' '(; PATH=x; ; true)' default
+d020_canon "AC-D020-CANON-4" 'PATH=x true' 'PATH=x ; true' default
+d020_canon "AC-D020-CANON-EXIT" 'env PATH=x true' 'env PATH=x ; true' exit
+
+# --- AC-D023 (#8444): the anti-injection rule reads the positions -020 reads ---
+#
+# BLOCK-DESTRUCTIVE-023 shares -020's anchored-assignment shape, so transformation (e) moves
+# its wrapped, behind-assignment, grouped and condition-position spellings from admitted to
+# refused, a declared tightening; its two export-capable lines also read a declaration
+# builtin's argument list and the append operator, as -020's line does. No arm pinned this
+# rule's patterns before, so CTL is the plain-form control, and NEAR holds a name that only
+# resembles the variable, or the variable as content.
+test_case "AC-D023-CTL: a prefix hook-bypass assignment blocks (plain-form control)" \
+  "$(bash_payload 'CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-CTL-SCOPE: a prefix scope-root assignment blocks (plain-form control)" \
+  "$(bash_payload 'PMO_SCOPE_GUARD_ROOT=x true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-WRAP: a hook-bypass assignment handed to env blocks (declared tightening)" \
+  "$(bash_payload 'env CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-WRAP-OPT: a hook-bypass assignment behind env's own flag blocks (declared tightening)" \
+  "$(bash_payload 'env -i CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-WRAP-SCOPE: a scope-root assignment handed to env blocks (declared tightening)" \
+  "$(bash_payload 'env PMO_SCOPE_GUARD_ROOT=x true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-ASSIGN: a hook-bypass assignment behind another assignment blocks (declared tightening)" \
+  "$(bash_payload 'FOO=1 CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-GROUP: a hook-bypass assignment opening a subshell blocks (declared tightening)" \
+  "$(bash_payload '(CLAUDE_HOOK_BYPASS=1 true)')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-COND: a hook-bypass assignment at an if condition blocks (declared tightening)" \
+  "$(bash_payload 'if CLAUDE_HOOK_BYPASS=1 true; then true; fi')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-DECL: declare carrying a hook-bypass assignment blocks" \
+  "$(bash_payload 'declare -x CLAUDE_HOOK_BYPASS=1')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-DECL-SCOPE: export with a scope-root assignment later in its argument list blocks" \
+  "$(bash_payload 'export FOO=1 PMO_SCOPE_GUARD_ROOT=x')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-APPEND: an appending hook-bypass assignment blocks" \
+  "$(bash_payload 'CLAUDE_HOOK_BYPASS+=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-APPEND-SCOPE: an appending scope-root assignment blocks" \
+  "$(bash_payload 'PMO_SCOPE_GUARD_ROOT+=x true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-NEAR-1: a variable whose name only resembles the bypass variable allows" \
+  "$(bash_payload 'env FOO_HOOK_BYPASS=1 true')" \
+  0
+
+test_case "AC-D023-NEAR-2: the bypass assignment as an argument of echo allows" \
+  "$(bash_payload 'echo CLAUDE_HOOK_BYPASS=1')" \
+  0
+
 test_case "alias grep='echo ok' blocks" \
   "$(bash_payload 'alias grep='\''echo ok'\''')" \
   2 "BLOCK-DESTRUCTIVE-021"

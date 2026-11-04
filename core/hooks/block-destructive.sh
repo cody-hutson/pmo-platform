@@ -2674,14 +2674,20 @@ case "$TOOL_NAME" in
 
     # ----- NEW-B: tamper resistance (PATH / alias / function / unset) -----
 
-    # BLOCK-DESTRUCTIVE-020 — PATH assignment (export PATH=, PATH=<value>, unset PATH)
-    # Blocks both plain assignment and command-prefix assignment (PATH=/tmp:$PATH cmd)
+    # BLOCK-DESTRUCTIVE-020 — PATH assignment, judged alike however it is spelled (#8444):
+    # PATH=<value> and PATH+=<value> at any command position the shared canonicalizer
+    # resolves — its transformation (e) marks every assignment its prefix walk skips, so one
+    # handed to a wrapper, behind another assignment or a redirection, after a keyword or
+    # `!`, at a condition position or inside a group sits at a command start; export,
+    # declare, typeset, readonly or local carrying a PATH assignment anywhere in its
+    # argument list; and unset PATH (the arm below). The declared over-blocks and the
+    # spellings this rule does not judge are listed in its registry row.
     # Note: shell-assignment rules (PATH=, export, unset) are NOT verb-invocations and
     # the absolute-path prefix is structurally inapplicable — these forms cannot be
     # invoked via /usr/bin/PATH=... However, ANCHOR_PREFIX_BASH is applied uniformly
     # per Stage 5 Spec A4.2 (mechanical uniform anchor transformation). The
     # optional prefix group degenerates to the existing pattern for these rules.
-    if matches "${ANCHOR_PREFIX_BASH}"'(export[[:space:]]+)?PATH='; then
+    if matches "${ANCHOR_PREFIX_BASH}"'((export|declare|typeset|readonly|local)[[:space:]]+([^;&|]*[[:space:]])?)?PATH[+]?='; then
       block "BLOCK-DESTRUCTIVE-020" \
         "PATH manipulation denied (enables hook-tool substitution attacks per Red Team H2)." \
         "if you need a modified PATH, set it in your shell before launching claude, or set CLAUDE_HOOK_BYPASS=1"
@@ -2710,7 +2716,11 @@ case "$TOOL_NAME" in
     # vector, so they carry one posture and one rule ID rather than drifting apart.
     # The escape hatch must be operator-only (set BEFORE claude launch), not accessible to
     # Claude via prompt injection. This rule enforces the asymmetry.
-    if matches "${ANCHOR_PREFIX_BASH}"'(export[[:space:]]+)?CLAUDE_HOOK_BYPASS='; then
+    # Positions are the canonicalizer's (#8444): its transformation (e) puts a wrapped,
+    # behind-assignment, grouped or condition-position assignment at a command start, a
+    # declared tightening of this rule's spellings; the two export-capable lines also read
+    # a declaration builtin's argument list and the append operator, as -020's line does.
+    if matches "${ANCHOR_PREFIX_BASH}"'((export|declare|typeset|readonly|local)[[:space:]]+([^;&|]*[[:space:]])?)?CLAUDE_HOOK_BYPASS[+]?='; then
       block "BLOCK-DESTRUCTIVE-023" \
         "CLAUDE_HOOK_BYPASS cannot be set mid-session (defeats the operator-only escape-hatch design)." \
         "to bypass hooks, exit claude and relaunch with: CLAUDE_HOOK_BYPASS=1 claude"
@@ -2720,7 +2730,7 @@ case "$TOOL_NAME" in
         "CLAUDE_HOOK_BYPASS command-prefix assignment denied (injection-attack vector)." \
         "to bypass hooks, exit claude and relaunch with: CLAUDE_HOOK_BYPASS=1 claude"
     fi
-    if matches "${ANCHOR_PREFIX_BASH}"'(export[[:space:]]+)?PMO_SCOPE_GUARD_ROOT='; then
+    if matches "${ANCHOR_PREFIX_BASH}"'((export|declare|typeset|readonly|local)[[:space:]]+([^;&|]*[[:space:]])?)?PMO_SCOPE_GUARD_ROOT[+]?='; then
       block "BLOCK-DESTRUCTIVE-023" \
         "PMO_SCOPE_GUARD_ROOT cannot be set mid-session (it re-points the layer-3 workspace-scope guard)." \
         "to change the governed scope root, exit claude and relaunch with: PMO_SCOPE_GUARD_ROOT=<path> claude"

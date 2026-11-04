@@ -79,12 +79,12 @@
 # THE EXIT VIEW
 # -------------
 # Run with `-v CMDPOS_VIEW=exit`, this file emits the EXIT VIEW: the same quote mask and
-# the same insertions as the default output, made by the prefix walk as it stood before
-# the wrapper grammar joined it — the fourteen original words, matched as exact tokens,
-# each stepped as one token. It is read only by exits that ALLOW on a match (the deletion
-# hook's git exemption and its no-target exit), so those exits keep the verdicts they had
-# while the default output widens. The exit view is frozen: a transformation added to the
-# default walk does not reach it.
+# the same command-start insertions ((a) to (c)) as the default output — never (e)'s —
+# made by the prefix walk as it stood before the wrapper grammar joined it: the fourteen
+# original words, matched as exact tokens, each stepped as one token. It is read only by
+# exits that ALLOW on a match (the deletion hook's git exemption and its no-target exit),
+# so those exits keep the verdicts they had while the default output widens. The exit
+# view is frozen: a transformation added to the default walk does not reach it.
 #
 # TRANSFORMATIONS (the complete list)
 #   (a) `; ` inserted before each resolved command-start token (never at offset 1).
@@ -99,6 +99,16 @@
 #       themselves are PRESERVED, and no other content is altered, so every downstream
 #       consumer (resolve_and_classify, the -022 segment loop, the osascript extractor)
 #       sees the token text it saw before.
+#   (e) `; ` inserted before each assignment the default walk skips (never at offset 1): a
+#       `NAME=value` word of the prefix run, and a `NAME=value` operand a wrapper's own
+#       grammar consumes (env's). A rule anchored on an assignment rather than a verb
+#       (BLOCK-DESTRUCTIVE-020, -023) then reads one handed to a wrapper, behind another
+#       assignment or a redirection, after a keyword or `!`, at a condition position or as
+#       the first word of a group, as it reads one at a command start. Insertion-only, and
+#       only on tokens the walk already resolved as assignments: the verb keeps its own
+#       insertion from (a), and no verb pattern can match an assignment token, so a rule
+#       anchored on a verb neither gains nor loses a match. An assignment behind more than
+#       ten prefix-run tokens is not marked. The exit view does not carry (e).
 #
 # WHAT IT DELIBERATELY DOES NOT CLOSE (residual, by construction)
 #   - Nested / deferred program strings: `bash -c '…'`, `sh -c '…'`, `eval '…'`,
@@ -439,6 +449,7 @@ function cp_wrapper_walk(w, hi,   tok, ts, rest, c, lname) {
       tok = substr(out, TK_S, TK_E - TK_S + 1)
       if (substr(tok, 1, 1) == "-") break
       if (index(tok, "=") == 0) break
+      if (TK_S > 1) ins[TK_S] = "; "   # (e) CMDPOS-E
       CP_I = TK_E + 1
     }
   }
@@ -469,7 +480,10 @@ function resolve_segment(lo, hi,   i, t_start, t_end, tok, w, skips, xflag) {
       }
       continue
     }
-    if (tok ~ /^[A-Za-z_][A-Za-z0-9_]*=/) { i = t_end + 1; skips++; continue }   # VAR=value
+    if (tok ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {                                       # VAR=value
+      if (t_start > 1) ins[t_start] = "; "   # (e) CMDPOS-E
+      i = t_end + 1; skips++; continue
+    }
     if (tok ~ /^[0-9]*(>>|>|<)/) {                                               # redirect
       i = t_end + 1; skips++
       if (tok ~ /(>>|>|<)$/) {                        # operand is a separate token

@@ -368,7 +368,9 @@ check_case DECLARED "heredoc-body prose behind a wrapper"      "$(/usr/bin/print
 # --- CANON-FORM (#8314): the canonical form, exact. Each input's default output and exit
 #     view are pinned to the strings the walk is specified to emit: the default output
 #     reaches the command word behind each face; the exit view keeps the form the walk
-#     produced before the wrapper grammar, byte for byte. ---
+#     produced before the wrapper grammar, byte for byte. The default output also marks
+#     every assignment the walk skips (transformation (e), #8444), and the exit view marks
+#     none, which the two assignment-bearing rows pin. ---
 form_case() { # $1 = label  $2 = input  $3 = expected default output  $4 = expected exit view
   _got="$(canonicalize "$2")"
   if [ "$_got" = "$3" ]; then
@@ -393,11 +395,11 @@ form_case "nice with its adjustment"           'nice -n 10 rm -rf /etc'     'nic
 form_case "timeout with its duration"          'timeout 5 rm -rf /etc'      'timeout 5 ; rm -rf /etc'      'timeout 5 rm -rf /etc'
 form_case "stdbuf with an attached value"      'stdbuf -o0 rm -rf /etc'     'stdbuf -o0 ; rm -rf /etc'     'stdbuf -o0 rm -rf /etc'
 form_case "if condition"                       'if rm -rf /etc ; then :; fi' 'if ; rm -rf /etc ; then ; :; ; fi' 'if rm -rf /etc ; then ; :; ; fi'
-form_case "assignment after a wrapper"         'env PATH=/x cmd'            'env PATH=/x ; cmd'            'env PATH=/x ; cmd'
+form_case "assignment after a wrapper"         'env PATH=/x cmd'            'env ; PATH=/x ; cmd'          'env PATH=/x ; cmd'
 form_case "escaped wrapper word"               '\sudo rm -rf /etc'          '\sudo ; rm -rf /etc'          'sudo rm -rf /etc'
 form_case "quoted wrapper word"                '"sudo" rm -rf /etc'         '"sudo" ; rm -rf /etc'         '"sudo" rm -rf /etc'
 form_case "git consumed as a wrapper's user"   'sudo -u git push --force'   'sudo -u git ; push --force'   'sudo ; -u git push --force'
-form_case "eleven prefix tokens (the cap)"     'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 rm -rf /etc' 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 ; K=1 rm -rf /etc' 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 ; K=1 rm -rf /etc'
+form_case "eleven prefix tokens (the cap)"     'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 rm -rf /etc' 'A=1 ; B=1 ; C=1 ; D=1 ; E=1 ; F=1 ; G=1 ; H=1 ; I=1 ; J=1 ; K=1 rm -rf /etc' 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 ; K=1 rm -rf /etc'
 form_case "a line the exit view resolved before" 'sudo git status ; rm -rf /tmp/x' 'sudo ; git status ; ; rm -rf /tmp/x' 'sudo ; git status ; ; rm -rf /tmp/x'
 
 # --- CMDPOS-SINGLE-SOURCE (#8314): one implementation for the four consumers ---

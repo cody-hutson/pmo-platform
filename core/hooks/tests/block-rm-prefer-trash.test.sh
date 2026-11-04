@@ -503,6 +503,85 @@ else
 fi
 /bin/rm -rf "$cps_root"
 
+# ----- AC-D020-NEUTRAL (#8444): transformation (e) leaves the exit view and both exits unchanged -----
+#
+# (e) inserts `; ` before every assignment the canonicalizer's default walk skips, so a rule
+# anchored on an assignment (BLOCK-DESTRUCTIVE-020, -023) reads it at a command start. This
+# hook's two allow-on-match exits read the EXIT VIEW, which (e) does not reach, and no exit
+# pattern can match an assignment token, so both exits must keep their verdicts. Shown, not
+# argued: a copy of the canonicalizer with (e)'s two marked lines removed is built and shown
+# live (it differs from the shipped copy by exactly those lines, and it parses). Then, on each
+# witness, the exit view is byte-identical across the two copies, the default view is not (the
+# witness really carries an (e) mark), and this hook returns the same exit code and the same
+# message through either copy. The witnesses put a marked assignment ahead of a git command at
+# Step 1's exemption, of a target-less deletion verb at Step 2's no-target exit, and of a
+# refused deletion, in plain form and behind a wrapper or a condition keyword; the control
+# shows the sandbox live.
+neu_root="$(/usr/bin/mktemp -d)"
+neu_hooks="${neu_root}/.claude/hooks"
+/bin/mkdir -p "${neu_hooks}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${neu_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${neu_hooks}/block-rm-prefer-trash.sh"
+neu_ship="${HOOK_DIR}/lib/command-position.awk"
+neu_noe="${neu_root}/command-position-no-e.awk"
+/usr/bin/sed -e '/# (e) CMDPOS-E$/d' "$neu_ship" > "$neu_noe"
+neu_n="$(/usr/bin/diff "$neu_ship" "$neu_noe" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+neu_live=0
+if [ "$neu_n" = 2 ] && /usr/bin/awk -f "$neu_noe" </dev/null >/dev/null 2>&1; then neu_live=1; fi
+if [ "$neu_live" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-D020-NEUTRAL-LIVE the copy without (e) differs from the shipped canonicalizer by exactly its two marked lines, and parses\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D020-NEUTRAL-LIVE the copy without (e) is not live (differing lines: %s, expected 2)\n' "${neu_n:-none}"
+  FAIL=$((FAIL + 1))
+fi
+neu_view() { # $1 = canonicalizer copy  $2 = view (default | exit)  $3 = command -> stdout
+  if [ "$2" = exit ]; then
+    /usr/bin/awk -v CMDPOS_VIEW=exit -f "$1" <<<"$3" 2>/dev/null
+  else
+    /usr/bin/awk -f "$1" <<<"$3" 2>/dev/null
+  fi
+}
+neu_run() { # $1 = canonicalizer copy  $2 = command -> NEU_RC and NEU_ERR
+  /bin/cp "$1" "${neu_hooks}/lib/command-position.awk"
+  NEU_RC=0
+  NEU_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$2" "$neu_root")" | /bin/bash "${neu_hooks}/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || NEU_RC="$?"
+}
+neu_case() { # $1 = arm label  $2 = command
+  local ev_same=no dv_diff=no rc_ship err_ship
+  if [ "$(neu_view "$neu_ship" exit "$2")" = "$(neu_view "$neu_noe" exit "$2")" ]; then ev_same=yes; fi
+  if [ "$(neu_view "$neu_ship" default "$2")" != "$(neu_view "$neu_noe" default "$2")" ]; then dv_diff=yes; fi
+  neu_run "$neu_ship" "$2"; rc_ship="$NEU_RC"; err_ship="$NEU_ERR"
+  neu_run "$neu_noe" "$2"
+  if [ "$neu_live" = 1 ] && [ "$ev_same" = yes ] && [ "$dv_diff" = yes ] \
+     && [ "$rc_ship" = "$NEU_RC" ] && [ "$err_ship" = "$NEU_ERR" ]; then
+    /usr/bin/printf 'PASS: %s exit view unchanged, default view marked, verdict unchanged through either copy (exit %s)\n' "$1" "$rc_ship"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s copy live=%s, exit view unchanged=%s, default view marked=%s, exit %s with (e) and %s without\n' \
+      "$1" "$neu_live" "$ev_same" "$dv_diff" "$rc_ship" "$NEU_RC"
+    FAIL=$((FAIL + 1))
+  fi
+}
+neu_run "$neu_ship" 'echo hello'
+neu_ctl_benign="$NEU_RC"
+neu_run "$neu_ship" 'rm -rf /tmp/foo'
+if [ "$neu_ctl_benign" = 0 ] && [ "$NEU_RC" = 2 ] && /usr/bin/grep -q 'BLOCK-TRASH-001' <<<"$NEU_ERR"; then
+  /usr/bin/printf 'PASS: AC-D020-NEUTRAL-CTL the sandbox allows a benign command and refuses the plain-form deletion\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D020-NEUTRAL-CTL the sandbox is not live (benign exit=%s, plain-form exit=%s)\n' "$neu_ctl_benign" "$NEU_RC"
+  FAIL=$((FAIL + 1))
+fi
+neu_case "AC-D020-NEUTRAL-1: a git command behind a marked assignment, beside a deletion (Step 1)" 'FOO=1 BAR=2 git status ; rm -rf /tmp/foo'
+neu_case "AC-D020-NEUTRAL-2: a git command behind env and its assignment, beside a deletion (Step 1)" 'env FOO=1 git log ; rm -rf /tmp/foo'
+neu_case "AC-D020-NEUTRAL-3: a target-less rm behind a marked assignment, before a trash call (Step 2)" 'FOO=1 BAR=2 rm ; trash /etc/hosts'
+neu_case "AC-D020-NEUTRAL-4: a target-less rm behind env and its assignment, before an unlink (Step 2)" 'env FOO=1 rm ; sudo unlink /tmp/foo'
+neu_case "AC-D020-NEUTRAL-5: a refused deletion behind a marked assignment" 'FOO=1 BAR=2 rm -rf /tmp/foo'
+neu_case "AC-D020-NEUTRAL-6: a git condition behind a marked assignment, with a deletion in its branch" 'if FOO=1 git diff --quiet ; then rm -rf /tmp/foo ; fi'
+/bin/rm -rf "$neu_root"
+
 # ----- CWD-*: a relative target is judged from the directory the command can be in -----
 #
 # The payload cwd is where the call STARTS; a directory change earlier on the same line

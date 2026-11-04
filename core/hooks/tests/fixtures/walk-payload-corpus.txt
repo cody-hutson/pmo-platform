@@ -1479,3 +1479,86 @@ EG388|block-egress|eg-counter|-|?|W|nohup -x gh api -X POST @NO@ ; gh api -X POS
 EG389|block-egress|eg-counter|-|?|B|nohup -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
 EG390|block-egress|eg-counter|-|?|W|nohup -x gh api -X POST @OK@ ; gh api -X POST @NO@
 EG391|block-egress|eg-counter|-|?|W|nohup -x gh api @NO@ -f a=b ; gh api -X POST @NO@
+# --- seed 9: card #8444 — BLOCK-DESTRUCTIVE-020 and -023 by spelling (73 rows) ---
+# Ids DP (-020) and DQ (-023). Every command is benign and every assigned value is
+# slash-free, so BLOCK-DESTRUCTIVE-022 cannot contribute a verdict; the d020-near and
+# d023-near groups hold the same shapes with another name, or the name as content, and
+# d020-cap pins the prefix cap's boundary (behind ten prefix-run tokens judged, behind
+# eleven not). gt is `?`: no row was executed outside the suite's hermetic copies. No group
+# is `open-`: that contract asserts an executing payload, which an assignment row cannot
+# carry. The verdicts are the fix commit's, because this block lands with the fix; the
+# red-before reading of each group that moves is the suite run against the pre-fix hook,
+# kept as executed evidence.
+DP01|block-destructive|d020-ctl|-|?|B|PATH=x true
+DP02|block-destructive|d020-ctl|-|?|B|true; PATH=x true
+DP03|block-destructive|d020-ctl|-|?|B|true && PATH=x true
+DP04|block-destructive|d020-ctl|-|?|B|export PATH=x
+DP05|block-destructive|d020-ctl|-|?|B|export PATH=x; true
+DP06|block-destructive|d020-ctl|-|?|B|unset PATH
+DP07|block-destructive|d020-ctl|-|?|B|unset -v PATH
+DP10|block-destructive|d020-wrap|-|?|B|env PATH=x true
+DP11|block-destructive|d020-wrap|-|?|B|sudo PATH=x true
+DP12|block-destructive|d020-wrap|-|?|B|time PATH=x true
+DP13|block-destructive|d020-wrap|-|?|B|env -i PATH=x true
+DP14|block-destructive|d020-wrap|-|?|B|env -u FOO PATH=x true
+DP15|block-destructive|d020-wrap|-|?|B|/usr/bin/env PATH=x true
+DP20|block-destructive|d020-cond|-|?|B|if PATH=x true; then true; fi
+DP21|block-destructive|d020-cond|-|?|B|while PATH=x false; do true; done
+DP22|block-destructive|d020-cond|-|?|B|until PATH=x true; do true; done
+DP23|block-destructive|d020-cond|-|?|B|if export PATH=x; then true; fi
+DP30|block-destructive|d020-pos|-|?|B|FOO=1 PATH=x true
+DP31|block-destructive|d020-pos|-|?|B|>/dev/null PATH=x true
+DP32|block-destructive|d020-pos|-|?|B|(PATH=x; true)
+DP33|block-destructive|d020-pos|-|?|B|( PATH=x true )
+DP34|block-destructive|d020-pos|-|?|B|{ PATH=x; true; }
+DP35|block-destructive|d020-pos|-|?|B|f() { PATH=x true; }
+DP36|block-destructive|d020-pos|-|?|B|if true; then PATH=x true; fi
+DP37|block-destructive|d020-pos|-|?|B|for i in 1; do PATH=x true; done
+DP38|block-destructive|d020-pos|-|?|B|! PATH=x true
+DP40|block-destructive|d020-decl|-|?|B|export FOO=1 PATH=x
+DP41|block-destructive|d020-decl|-|?|B|export -- PATH=x
+DP42|block-destructive|d020-decl|-|?|B|declare -x PATH=x
+DP43|block-destructive|d020-decl|-|?|B|typeset -x PATH=x
+DP44|block-destructive|d020-decl|-|?|B|readonly PATH=x
+DP45|block-destructive|d020-decl|-|?|B|local PATH=x
+DP46|block-destructive|d020-decl|-|?|B|PATH+=x true
+DP47|block-destructive|d020-decl|-|?|B|env PATH+=x true
+DP48|block-destructive|d020-cap|-|?|B|A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 PATH=x true
+DP49|block-destructive|d020-cap|-|?|a|A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 PATH=x true
+DP50|block-destructive|d020-over|-|?|B|nohup PATH=x true
+DP51|block-destructive|d020-over|-|?|B|exec PATH=x true
+DP52|block-destructive|d020-over|-|?|B|env PATH=x
+DP53|block-destructive|d020-over|-|?|B|nice PATH=x true
+DP60|block-destructive|d020-near|-|?|a|FOO=x true
+DP61|block-destructive|d020-near|-|?|a|env FOO=x true
+DP62|block-destructive|d020-near|-|?|a|export FOO=x
+DP63|block-destructive|d020-near|-|?|a|(FOO=x; true)
+DP64|block-destructive|d020-near|-|?|a|if FOO=x true; then true; fi
+DP65|block-destructive|d020-near|-|?|a|MYPATH=x true
+DP66|block-destructive|d020-near|-|?|a|PATHX=x true
+DP67|block-destructive|d020-near|-|?|a|echo PATH=x
+DP68|block-destructive|d020-near|-|?|a|grep -c PATH= f
+DP69|block-destructive|d020-near|-|?|a|for v in PATH=x; do true; done
+DP70|block-destructive|d020-near|-|?|a|echo "env PATH=x true"
+DP71|block-destructive|d020-near|-|?|a|printf "%s\n" "(PATH=x; true)"
+DP72|block-destructive|d020-near|-|?|a|export MYPATH=x
+DP80|block-destructive|d020-resid|-|?|a|bash -c 'PATH=x true'
+DP81|block-destructive|d020-resid|-|?|a|eval PATH=x true
+DP82|block-destructive|d020-resid|-|?|a|env -u PATH true
+DP83|block-destructive|d020-resid|-|?|a|env -S "PATH=x true"
+DQ01|block-destructive|d023-ctl|-|?|B|CLAUDE_HOOK_BYPASS=1 true
+DQ02|block-destructive|d023-ctl|-|?|B|export CLAUDE_HOOK_BYPASS=1
+DQ03|block-destructive|d023-ctl|-|?|B|PMO_SCOPE_GUARD_ROOT=x true
+DQ04|block-destructive|d023-ctl|-|?|B|export PMO_SCOPE_GUARD_ROOT=x
+DQ05|block-destructive|d023-wrap|-|?|B|env -i CLAUDE_HOOK_BYPASS=1 true
+DQ06|block-destructive|d023-wrap|-|?|B|env CLAUDE_HOOK_BYPASS=1 true
+DQ07|block-destructive|d023-wrap|-|?|B|FOO=1 CLAUDE_HOOK_BYPASS=1 true
+DQ08|block-destructive|d023-wrap|-|?|B|(CLAUDE_HOOK_BYPASS=1 true)
+DQ09|block-destructive|d023-wrap|-|?|B|env PMO_SCOPE_GUARD_ROOT=x true
+DQ10|block-destructive|d023-wrap|-|?|B|if CLAUDE_HOOK_BYPASS=1 true; then true; fi
+DQ11|block-destructive|d023-decl|-|?|B|declare -x CLAUDE_HOOK_BYPASS=1
+DQ12|block-destructive|d023-decl|-|?|B|export FOO=1 PMO_SCOPE_GUARD_ROOT=x
+DQ13|block-destructive|d023-decl|-|?|B|CLAUDE_HOOK_BYPASS+=1 true
+DQ14|block-destructive|d023-decl|-|?|B|PMO_SCOPE_GUARD_ROOT+=x true
+DQ20|block-destructive|d023-near|-|?|a|env FOO_HOOK_BYPASS=1 true
+DQ21|block-destructive|d023-near|-|?|a|echo CLAUDE_HOOK_BYPASS=1
