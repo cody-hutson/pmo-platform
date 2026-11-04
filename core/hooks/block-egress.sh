@@ -1691,8 +1691,17 @@ case "$TOOL_NAME" in
     # of those can produce `gh` only from text that, once its quote characters and `$` are
     # removed, holds a `gh` in either letter case or a backslash. A command without either
     # is skipped without scanning, so non-`gh` commands stay as fast as before.
+    #
+    # The removal is one pass of tr in the C locale, which deletes the same three bytes, and
+    # never a pattern substitution over the command: this line runs on every command that
+    # reaches the rule, and on bash 3.2 a global substitution of the whole command grows
+    # superlinearly once the command carries a character it replaces — the bracket class took
+    # a file-sized command past the runtime's hook timeout, after which a PreToolUse hook does
+    # not block, and three single-character substitutions grow the same way. tr reads the
+    # command from a here-string, so no argument-length limit applies, and a failed pass sends
+    # the command to the full scan.
     egress_fast="$COMMAND"
-    egress_fq="${COMMAND//[\"\'\$]/}"  # respell: fast-strip
+    egress_fq="$(LC_ALL=C "$TR" -d "\"'\$" <<< "$COMMAND")" || egress_fq=gh  # respell: fast-strip
     case "$egress_fq" in *[Gg][Hh]*|*'\'*) egress_fast=gh ;; esac  # respell: fast-path
     case "$egress_fast" in
       *gh*)

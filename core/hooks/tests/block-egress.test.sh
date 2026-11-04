@@ -3084,6 +3084,98 @@ e007_sp_arm "AC-E007-SP-F4: g''h api -X POST <unlisted> — the verb split by an
 e007_sp_arm "AC-E007-SP-F5: \$'g'\$'h' api -X POST <unlisted> — the verb as two adjacent ANSI-C strings — is refused on day one; the fast path skips it without its widening, and when tested raw" \
   "\$'g'\$'h' api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0 "$E007_SP_FR" 0 0 0
 
+# ---- AC-E007-T* (#8315, DT pass 2): the fast path's cost is linear in the command ----
+#
+# The fast-path strip runs on every Bash command that reaches -007, before the gh decision, so
+# its cost bounds the whole hook on any command. On bash 3.2 a global pattern substitution over
+# the whole command grows superlinearly once the command carries a character it replaces: the
+# bracket class grew about 7x per doubling, and three single-character substitutions about 8x
+# (a smaller constant, the same growth). Past a file-sized command the hook outlasted the
+# runtime's command-hook timeout, and a timed-out PreToolUse hook does not block. The strip is
+# now one pass of tr in the C locale, which deletes the same three bytes. EQ holds its output
+# byte for byte against the bracket class on a dense input, beside a near miss that keeps `$`
+# and must differ. T1 to T6 run the whole sandbox hook on a large benign command (no gh, one `$`
+# a line) at 10, 20 and 40 KB, in en_US.UTF-8 and in C, under a watchdog: each must finish
+# inside the budget and allow. T-CTL is the instrument's sensitivity: the same hook with its
+# fast-strip line set back to the bracket class, on the 10 KB command in UTF-8, must be stopped
+# at the budget. The budget is a ceiling with headroom for a loaded host, not the expected time.
+E007_T_LIMIT="${E007_T_LIMIT_DS:-200}"   # tenths of a second
+E007_T_R="${E007_W_BASE}/t"
+/bin/mkdir -p "$E007_T_R"
+E007_T_X_BRACKET='s|^\( *\)egress_fq=.*  # respell: fast-strip$|\1egress_fq="${COMMAND//[\\"\\'"'"'\\$]/}"  # respell: fast-strip|'
+E007_T_BK="${E007_W_BASE}/tbk"; e007_w_copy "$E007_T_BK" "$E007_T_X_BRACKET"
+# e007_t_cmd <bytes> <file> — a benign command of exactly <bytes> bytes: one `$` a line, no gh.
+e007_t_cmd() {
+  /usr/bin/awk -v n="$1" 'BEGIN { l = "echo the quick brown fox jumps over $one lazy dog\n"; s = ""
+    while (length(s) < n) s = s l; printf "%s", substr(s, 1, n) }' > "$2"
+}
+# e007_t_timed <sandbox> <locale> <command-file> <limit> — the sandbox hook on the Bash payload of
+# the command, under <locale>; a watchdog stops it at <limit> tenths. Sets E007_T_DS (tenths
+# elapsed, -1 when stopped) and E007_T_EXIT.
+e007_t_timed() {
+  local hooks="$1/.claude/hooks" pay="${E007_T_R}/payload.json" pid n=0
+  e007_d_bash "$(/bin/cat "$3")" "$1" > "$pay"
+  /usr/bin/printf '%s' enforce > "${hooks}/.mode"
+  LC_ALL="$2" PMO_SCOPE_GUARD_ROOT="$1" PMO_PLATFORM_CONFIG_ROOT="$1/.cfg" \
+    /bin/bash "${hooks}/block-egress.sh" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+      E007_T_DS=-1; E007_T_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  E007_T_EXIT=0; wait "$pid" || E007_T_EXIT=$?
+  E007_T_DS="$n"
+}
+# EQ — the shipped strip line, evaluated as the hook evaluates it, against the bracket class.
+_t_line="$(/usr/bin/sed -n 's/^ *\(egress_fq=.*\)  # respell: fast-strip$/\1/p' "$E007_W_SRC")"
+_t_bracket='egress_fq="${COMMAND//[\"\'"'"'\$]/}"'
+_t_keep='egress_fq="${COMMAND//\"/}"; egress_fq="${egress_fq//\'"'"'/}"'
+/usr/bin/awk 'BEGIN { for (i = 0; i < 10; i++) printf "gh api -X POST \"repos/o/r\" '"'"'q'"'"' $x ${y} $'"'"'\\x41'"'"' \\\" \\'"'"' \\$ \\\\ naïve 日本 ü !#%%&()*+,-./:;<=>?@[]^_`{|}~ \"a'"'"'b\" '"'"'c\"d'"'"' $\"e\"\n"; printf "end" }' > "${E007_T_R}/dense.cmd"
+e007_t_eval() { # <locale> <assignment line> <out>
+  LC_ALL="$1" /bin/bash -c 'readonly TR=/usr/bin/tr; set -euo pipefail
+    COMMAND="$(/bin/cat "$1"; /usr/bin/printf x)"; COMMAND="${COMMAND%x}"; eval "$2"; /usr/bin/printf "%s" "$egress_fq"' \
+    _ "${E007_T_R}/dense.cmd" "$2" > "$3" 2>/dev/null
+}
+_t_why=""
+for _t_loc in en_US.UTF-8 C; do
+  e007_t_eval "$_t_loc" "$_t_line" "${E007_T_R}/eq-shipped.out" || _t_why="${_t_why} [${_t_loc}] the shipped line did not run;"
+  e007_t_eval "$_t_loc" "$_t_bracket" "${E007_T_R}/eq-bracket.out" || _t_why="${_t_why} [${_t_loc}] the bracket line did not run;"
+  e007_t_eval "$_t_loc" "$_t_keep" "${E007_T_R}/eq-keep.out" || _t_why="${_t_why} [${_t_loc}] the near-miss line did not run;"
+  /usr/bin/cmp -s "${E007_T_R}/eq-shipped.out" "${E007_T_R}/eq-bracket.out" || _t_why="${_t_why} [${_t_loc}] shipped != bracket;"
+  /usr/bin/cmp -s "${E007_T_R}/eq-keep.out" "${E007_T_R}/eq-bracket.out" && _t_why="${_t_why} [${_t_loc}] the near miss equals the bracket class (the comparison cannot see a difference);"
+  [ -s "${E007_T_R}/eq-bracket.out" ] || _t_why="${_t_why} [${_t_loc}] empty bracket output;"
+done
+case "$_t_line" in *'"$TR"'*) ;; *) _t_why="${_t_why} the shipped fast-strip line does not run tr: [${_t_line}];" ;; esac
+if [ -z "$_t_why" ]; then
+  e007_d_pass "AC-E007-T-EQ: the shipped strip equals the bracket class byte for byte on a dense input in UTF-8 and C, and a near miss that keeps \$ differs"
+else
+  e007_d_fail "AC-E007-T-EQ: the shipped strip equals the bracket class byte for byte" "$_t_why"
+fi
+for _t_kb in 10 20 40; do e007_t_cmd $(( _t_kb * 1024 )) "${E007_T_R}/c${_t_kb}.cmd"; done
+_t_n=0
+for _t_loc in en_US.UTF-8 C; do
+  for _t_kb in 10 20 40; do
+    _t_n=$(( _t_n + 1 ))
+    e007_t_timed "$E007_W_S" "$_t_loc" "${E007_T_R}/c${_t_kb}.cmd" "$E007_T_LIMIT"
+    if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+      e007_d_pass "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+    else
+      e007_d_fail "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the hook inside the budget and is allowed" \
+        "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+    fi
+  done
+done
+e007_t_timed "$E007_T_BK" en_US.UTF-8 "${E007_T_R}/c10.cmd" "$E007_T_LIMIT"
+if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F 'egress_fq="${COMMAND//[' "${E007_T_BK}/mut.sh"; then
+  e007_d_pass "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at ${E007_T_LIMIT} tenths on the 10 KB command in UTF-8 — the instrument sees the cost"
+else
+  e007_d_fail "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget" \
+    "elapsed=${E007_T_DS} tenths exit=${E007_T_EXIT}; a copy that finishes, or that carries no bracket-class line, cannot show T1-T6 measure anything (BROKEN PROBE)"
+fi
+
 # ---- Behind a prefix: each respelling reaches the record its plain twin gets ----
 e007_w_pair "AC-E007-SP-W4: \\env -u X gh api -X POST <unlisted> — an escaped prefix word — is located behind the option's argument and recorded" \
   "\\env -u X gh api -X POST ${E007_W_NO}"
