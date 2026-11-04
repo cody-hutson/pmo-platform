@@ -628,6 +628,50 @@ The four single-edit variants of the card's criterion — SEP, ARV, PFX and CTX 
 
 ---
 
+## Change Description
+
+Authored at Stage 6 Phase C1 by the last Engineering spoke (#8618, plan steps 4–6), after every Engineering step landed and before the draft pull request is marked ready-for-review. Operator-facing; the user-facing release note is a separate Stage-13 artifact. A Tier 1 [ADJUST] at Stage 7 or 8 that changes which issues land or which decision stands refreshes **Issues resolved**, **Key decisions** and **Downstream impact** in a later commit.
+
+### Outcome
+
+The two required checks that were held in warn mode now fail on a finding: the pre-merge load-bearing subset (Checks 38, 73, 77 and 78) and the skill-count delta. Each workflow header declares bare `posture=required`, and the gate-efficacy standard records each flip as REGISTER with its specificity reading and owner; Check 74 reads green because the rollout phase is `enforce`. Both contexts become merge-blocking when the operator registers them at Stage 12. The posture reconciler no longer lets a `warn-mode-initial` qualifier buy an exemption — a held declaration with no disposition row is the new *unrecorded hold* divergence — and it reads the rules that apply to `main` as well as classic branch protection, giving a verdict only when both reads return. Stage 7's roster predicates P1–P3 each have a register row with a runner, and a malformed `gate-efficacy:` header now fails naming its own workflow.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8325 | The subset's sentinel token and `GATE_ROLLOUT_PHASE` read `enforce` together, its header reads bare `required`, and every row that stated its warn posture is reconciled, with Check 74's exits stated as the code computes them | DONE (landed at Stage 6; registration at Stage 12) |
+| #8424 | The skill-count delta flips with `${WARN_MODE:-false}`; the reconciler gains the unrecorded-hold class, a fail-closed read of the disposition table and an allow-list read of the rules for `main`; P1–P3 gain runner rows with Populations; the ratchet closes the posture vocabulary and attributes every harness result to its own mutation | DONE (landed at Stage 6; registration at Stage 12) |
+
+### Key decisions
+
+Each is recorded in this file's § Decision Record.
+
+- **PA-008 D-Divergence-Definition — shape (a):** *held* needs the qualifier and a HOLD-family row; a qualified declaration with no row, absent from live, is *unrecorded hold*; *held and registered* keys on the qualifier alone. Behavioral-regression and link-check stay held, because both have rows.
+- **PA-009 D-HeaderForm — bare `posture=required`** on both flipped workflows, with AC7 moved into the valve-safe set, which landed ahead of the 2026-11-17 checkpoint.
+- **PA-010 D-AC7-Mechanism — a closed posture vocabulary:** the `posture` key is mandatory and reads `required` or `advisory` with an optional parenthesized qualifier; the embedded-key check stays a diagnostic.
+- **Scope-lock item 3 — the rules reader dispatches by allow-list.** Of GitHub's 25 rule types, 15 that restrict refs, commit content or file shape are ignored, `required_status_checks` is read, and the other 9 — and any type added later — read `degraded`, so the run is `NOT-EVALUATED` rather than a verdict over an unread gate (DEV-21).
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** Reverting the merge restores `main` byte-for-byte, but the whole-release rollback is ordered: un-register both contexts first, then `git revert -m 1` the merge, then re-date `GATE_ROLLOUT_ARMED` past Check 74's escalation window. Each context, and the reconciler, ratchet and register changes, revert on their own at CHEAP; the version tag is retained, never deleted.
+
+### Downstream impact
+
+- **Stage 12:** the operator registers `Pre-merge load-bearing check subset` and `Skill-count / IMP-XXX delta` immediately before the merge, re-runs both checks, and reads back `main`'s live required contexts; the reconciler on the merge push reads `RECONCILED` with held = behavioral-regression and link-check (CIAC-3).
+- **Until then:** `Gate posture reconciliation (declared vs live)` reads DIVERGED on this pull request with exactly the two flipped contexts unregistered — the expected red (R6).
+- **Every pull request after the merge** meets both enforcing gates; ms#443's added markdown lines meet the skill-count gate and ms#438's hook-source edits need a regenerated index (R9).
+- **A ruleset on `main`:** a `required_status_checks` rule is reconciled; a review, merge-queue, deployment, scan or workflow rule turns every reconciliation `NOT-EVALUATED` until the reader is extended — the fail-closed cost scope-lock item 3 accepted.
+- **Stage 13:** G-CL10 measures the three new Populations (`stage7-required-gate-p1-reads`, `-p2-reads`, `-p3-reads`) over this release's Stage 7 outputs; AI-002 adds a note on #4714; the token↔phase residual enriches #7021 and Check 71's retreat wording enriches #8549.
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `required-checks-enforce-as-declared`.
+- User-facing release note: authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`, under `release/releases/notes/`.
+
+---
+
 ## Deviation Log
 
 | # | Deviation | Authority | Disposition |
