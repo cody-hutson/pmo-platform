@@ -269,8 +269,8 @@ POSTURE_RESIDUALS: dict[tuple[str, str, str], str] = {
 # gate-efficacy-standard.md Requirement (b) (`population:`) and Requirement (c)
 # § Population shortfall. Every name from here to POPULATION_RESIDUALS is new, and the
 # functions that use them are too: the contract `reconcile-gate-posture.py` imports from
-# this module (`parse_headers`, `QUOTED_RE`, `declared_contexts`) is untouched, and
-# nothing new runs at import time.
+# this module (the names its `PARSER_NAMES` lists) is untouched, and nothing new runs at
+# import time.
 POPULATION_RE = re.compile(r"^\s*#\s{2,}population:\s*(?P<fields>.*)$")
 
 # The closed exemption-unit set, narrowest first. `file/class` is a per-file marker that

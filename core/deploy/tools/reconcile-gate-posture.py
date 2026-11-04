@@ -40,20 +40,24 @@ THE THREE-VALUED LIVE STATUS IS THE WHOLE POINT
 -----------------------------------------------
 A reconciliation that printed agreement when it could not read branch protection would
 launder a NON-MEASUREMENT into a clean bill of health — the precise defect class this
-tool exists to close. The live read is therefore reported as one of the closed status
-set in `core/disciplines/review-discipline-principles.md` § 8.1 PV-7a:
+tool exists to close. `main`'s live required contexts come from TWO reads, and each is
+reported as one of the closed status set in
+`core/disciplines/review-discipline-principles.md` § 8.1 PV-7a:
 
-    fetched   — the read returned a list of contexts; the comparison is a MEASUREMENT
+    fetched   — the read returned a list of contexts; it is a MEASUREMENT
     degraded  — a read was supplied and did not return a usable list: a refused or
-                failed request, an API error body, a body that is not a branch object
-                carrying the context list, or a --live file that is empty or holds a
-                line that cannot be a context name; nothing is measured
-    not-run   — no live input was supplied at all
+                failed request, an API error body, a body that is not the expected
+                shape, a --live file that is empty or holds a line that cannot be a
+                context name, or a rule this read cannot name the checks of; nothing
+                is measured
+    not-run   — no input was supplied for that read at all
 
-Under `degraded` and `not-run` the verdict is NOT-EVALUATED — this is not a clean
-result — and the class table and class sections are ABSENT rather than empty: a
-consumer must branch on the status before reading any count, and a count is never
-zeroed to stand in for a measurement that did not happen.
+The live status is `fetched` only when BOTH reads are `fetched`; otherwise it is the
+first non-fetched status, in branch-protection-then-rules order. Under `degraded` and
+`not-run` the verdict is NOT-EVALUATED — this is not a clean result — and the class
+table and class sections are ABSENT rather than empty: a consumer must branch on the
+status before reading any count, and a count is never zeroed to stand in for a
+measurement that did not happen.
 
 The CI job reads the PUBLIC branch object, `GET /repos/{owner}/{repo}/branches/main`,
 which returns `protection.required_status_checks.contexts` to any caller that can read
@@ -68,39 +72,58 @@ the failing verdict manufactured from a failed read. The same holds for `--live`
 empty file cannot tell an empty set from a failed read, so it is `degraded`; pass the
 branch object when the measured set may legitimately be empty.
 
+The second read is of the rules that apply to `main`, `GET
+/repos/{owner}/{repo}/rules/branches/main?per_page=100`, handed over whole
+(`--live-rules-json`) — never the repository's ruleset list, which also carries
+rulesets that target tags. The tool dispatches on each rule's `type` by ALLOW-LIST: a
+type known to add no merge gate is ignored, `required_status_checks` is read for its
+contexts, and every other type — including any type the host adds later — is
+`degraded`, because it holds a merge on something no status context this read can name
+carries. A list at the page limit cannot exclude truncation, so it is `degraded` too.
+
 WHAT DIVERGE MEANS
 ------------------
-A context is DECLARED REQUIRED when a declaration on the registration track names it.
-The track is defined once, in core/standards/gate-efficacy-standard.md § Declared-required
-contexts — registration disposition; `declared_required()` below computes it, with the
-conformance ratchet's own grammar for a required posture. This file does not restate it.
+The definition is stated once, in core/standards/gate-efficacy-standard.md § Requirement
+(b); this tool computes it. A context is DECLARED REQUIRED when a declaration on the
+registration track names it. The track is defined once, in § Declared-required contexts —
+registration disposition of the same standard; `declared_required()` below computes it,
+with the conformance ratchet's own grammar for a required posture.
 
-A declared-required context is HELD when every declaration naming it carries the
+A declared-required context DISCLOSES A HOLD when every declaration naming it carries the
 qualifier `warn-mode-initial` exactly. Otherwise it CLAIMS DELIVERY — and that includes
 `required(enforce; ratified …)` and any qualifier the standard has not named, so a newly
-coined qualifier buys no exemption.
+coined qualifier buys no exemption. A context that discloses a hold is HELD only when
+that section's table carries a HOLD or CORRECT-THEN-HOLD row for it, so the qualifier
+alone buys no exemption either.
 
-On a run whose live read returned, the declared and live sets DIVERGE when any of three
-classes has a member:
+On a run whose two live reads both returned, the declared and live sets DIVERGE when any
+of four classes has a member:
 
     unregistered         — a context that claims delivery and is absent from the live set
-    held and registered  — a held context present in the live set: the registered job
-                           that still swallows its findings, a required check that
-                           cannot turn red
+    held and registered  — a context that discloses a hold and is present in the live
+                           set, with or without a row: the registered job that still
+                           swallows its findings, a required check that cannot turn red
+    unrecorded hold      — a context that discloses a hold, is absent from the live set,
+                           and has no HOLD or CORRECT-THEN-HOLD row
     undeclared           — a live context that no declaration on the track names
 
-A held context that is ABSENT from the live set is HELD: listed on every measured run,
-never a divergence, because the compound form already discloses its own non-delivery.
-So `required(warn-mode-initial)` falls on the agreeing side while its context is
-unregistered and on the diverging side once it is registered. The prose statement of
-the same definition is core/standards/gate-efficacy-standard.md § Requirement (b).
+A context that discloses a hold, is ABSENT from the live set and has its row is HELD:
+listed on every measured run, never a divergence, because the qualifier states what is
+not being delivered and the row states what ends it. So `required(warn-mode-initial)`
+with its row falls on the agreeing side while its context is unregistered and on the
+diverging side once it is registered.
+
+The table is a VERDICT INPUT. It is read from the standard (`--standard`) through the
+shared table splitter, and any format drift — the heading or the header row changed, a
+row that is not four cells, a disposition outside the closed set, a context on two rows,
+or no rows at all — is exit 2, never an empty set of rows.
 
 SINGLE PARSER
 -------------
 The declared set is extracted by importing the conformance ratchet's header parser from
 `core/deploy/tests/test_gate_efficacy_declarations.py` — `parse_headers`, its quoted-
-context pattern, its required-posture grammar, its enforcement keys and its surface
-reader — rather than re-implementing the header grammar. Two parsers over one header
+context pattern, its required-posture grammar, its enforcement keys, its surface reader
+and its table-row splitter — rather than re-implementing the header grammar. Two parsers over one header
 format is a second thing to keep in agreement, and the agreement is exactly what rots:
 an earlier version of this file took any posture that merely BEGAN with the letters,
 where the ratchet takes `required` or `required(`.
@@ -114,15 +137,16 @@ The reconciliation job passes it, so tier 2 has a mandatory runner.
 
 EXIT CONTRACT
 -------------
-    0  MEASURED and RECONCILED. The live read returned and no divergence class has a
+    0  MEASURED and RECONCILED. Both live reads returned and no divergence class has a
        member. Held contexts may exist; they are listed.
-    1  MEASURED and DIVERGED. The live read returned and at least one divergence class
+    1  MEASURED and DIVERGED. Both live reads returned and at least one divergence class
        has a member. This is the failing verdict.
     2  THE INSTRUMENT CANNOT ASSERT. A --self-test arm did not behave as declared, or the
        declared set could not be read at all (no workflows resolved, the shared parser
-       unreachable, or zero declared contexts discovered), or the verdict could not be
-       written to --github-output. A broken probe, never a gate verdict.
-    3  NOT-EVALUATED. The live read did not return (`degraded`) or none was supplied
+       unreachable, or zero declared contexts discovered), or the disposition table could
+       not be read, or the verdict could not be written to --github-output. A broken
+       probe, never a gate verdict.
+    3  NOT-EVALUATED. Either live read did not return (`degraded`) or was not supplied
        (`not-run`). This is not a clean result: it is never agreement and never the
        failing verdict, and it carries its own exit code so the state survives the
        process boundary.
@@ -138,6 +162,7 @@ import tempfile
 from pathlib import Path
 
 PARSER_MODULE_REL = "core/deploy/tests/test_gate_efficacy_declarations.py"
+STANDARD_REL = "core/standards/gate-efficacy-standard.md"
 
 # The names this tool reads from the shared parser. A module missing any of them is
 # reported unreachable rather than half-used.
@@ -148,6 +173,40 @@ PARSER_NAMES = (
     "BLOCKING_SURFACE",
     "ENFORCEMENT_KEYS",
     "enforcement_surface",
+    "_table_cells",
+)
+
+# The disposition table — a verdict input. Its heading, its four column names and its
+# closed disposition set are read exactly; anything else fails the instrument (exit 2).
+TABLE_HEADING = "## Declared-required contexts — registration disposition"
+TABLE_COLUMNS = ("Context", "Declared at", "Disposition", "Basis / ending condition")
+HOLD_FAMILY = ("HOLD", "CORRECT-THEN-HOLD")
+DISPOSITIONS = ("REGISTER",) + HOLD_FAMILY
+
+# The rules read. A full page cannot exclude truncation, so a list this long is degraded.
+RULES_PAGE_LIMIT = 100
+RULE_TYPE_STATUS_CHECKS = "required_status_checks"
+# ALLOW-LIST of rule types known to add no merge gate: each restricts which refs may be
+# created, updated or deleted, or what a pushed commit, ref name or file may look like —
+# none holds a merge on a result. `required_status_checks` is read; EVERY other type,
+# including one the host adds later, is degraded, because it holds a merge on something
+# (a review, a deployment, a scan, a workflow, a queue) no status context here names.
+RULE_TYPES_NO_MERGE_GATE = (
+    "creation",
+    "update",
+    "deletion",
+    "non_fast_forward",
+    "required_linear_history",
+    "required_signatures",
+    "commit_message_pattern",
+    "commit_author_email_pattern",
+    "committer_email_pattern",
+    "branch_name_pattern",
+    "tag_name_pattern",
+    "file_path_restriction",
+    "max_file_path_length",
+    "file_extension_restriction",
+    "max_file_size",
 )
 
 STATUS_FETCHED = "fetched"
@@ -167,10 +226,12 @@ CLASS_RECONCILED = "reconciled"
 CLASS_HELD = "held"
 CLASS_UNREGISTERED = "unregistered"
 CLASS_HELD_REGISTERED = "held and registered"
+CLASS_UNRECORDED = "unrecorded hold"
 CLASS_UNDECLARED = "undeclared"
 CLASS_ORDER = (CLASS_RECONCILED, CLASS_HELD, CLASS_UNREGISTERED,
-               CLASS_HELD_REGISTERED, CLASS_UNDECLARED)
-DIVERGENCE_CLASSES = (CLASS_UNREGISTERED, CLASS_HELD_REGISTERED, CLASS_UNDECLARED)
+               CLASS_HELD_REGISTERED, CLASS_UNRECORDED, CLASS_UNDECLARED)
+DIVERGENCE_CLASSES = (CLASS_UNREGISTERED, CLASS_HELD_REGISTERED, CLASS_UNRECORDED,
+                      CLASS_UNDECLARED)
 
 # Detail-section headings, as CONSTANTS the self-test asserts on rather than as prose it
 # substring-matches. An earlier implementation let the harness match the summary table's
@@ -181,9 +242,12 @@ DIVERGENCE_CLASSES = (CLASS_UNREGISTERED, CLASS_HELD_REGISTERED, CLASS_UNDECLARE
 SEC_UNREGISTERED = "#### Unregistered — declared `required`, absent from live"
 SEC_HELD_REGISTERED = ("#### Held and registered — declared required(warn-mode-initial), "
                        "present in live")
+SEC_UNRECORDED = ("#### Unrecorded hold — declared required(warn-mode-initial), not "
+                  "registered, no HOLD or CORRECT-THEN-HOLD row")
 SEC_UNDECLARED = ("#### Undeclared — live and blocking, named by no declaration on the "
                   "registration track")
-SEC_HELD = "#### Held — declared required(warn-mode-initial), not registered"
+SEC_HELD = ("#### Held — declared required(warn-mode-initial), not registered, its "
+            "HOLD-family row recorded")
 SEC_RECONCILED = "#### Reconciled — declared set and live set agree"
 SEC_NOT_MEASURED = "#### NOT-EVALUATED — the live read did not return"
 TABLE_HEADER = "| Class | Count |"
@@ -321,24 +385,122 @@ def read_live_branch_json(path: str | None) -> tuple[str, list[str]]:
     return STATUS_FETCHED, contexts
 
 
-def is_held(postures) -> bool:
+def read_live_rules_json(path: str | None) -> tuple[str, list[str]]:
+    """(status, contexts) from the body of GET .../rules/branches/main.
+
+    `fetched` ONLY for a list, shorter than the page limit, whose every rule names a
+    type: a type on the no-merge-gate allow-list is ignored, a `required_status_checks`
+    rule contributes its contexts, and any other type is `degraded` — it holds a merge on
+    something this read cannot name, so the live set would be under-read."""
+    if not path:
+        return STATUS_NOT_RUN, []
+    try:
+        body = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return STATUS_DEGRADED, []
+    if not isinstance(body, list) or len(body) >= RULES_PAGE_LIMIT:
+        return STATUS_DEGRADED, []
+    contexts: list[str] = []
+    for rule in body:
+        kind = rule.get("type") if isinstance(rule, dict) else None
+        if not isinstance(kind, str) or not kind:
+            return STATUS_DEGRADED, []
+        if kind in RULE_TYPES_NO_MERGE_GATE:
+            continue
+        if kind != RULE_TYPE_STATUS_CHECKS:
+            return STATUS_DEGRADED, []
+        params = rule.get("parameters")
+        checks = params.get(RULE_TYPE_STATUS_CHECKS) if isinstance(params, dict) else None
+        if not isinstance(checks, list) or not all(
+                isinstance(c, dict) and isinstance(c.get("context"), str) and c["context"]
+                for c in checks):
+            return STATUS_DEGRADED, []
+        contexts.extend(c["context"] for c in checks)
+    return STATUS_FETCHED, list(dict.fromkeys(contexts))
+
+
+def combined_status(classic: str, rules: str) -> str:
+    """`fetched` only when both reads are; otherwise the first that is not, in
+    branch-protection-then-rules order."""
+    for status in (classic, rules):
+        if status != STATUS_FETCHED:
+            return status
+    return STATUS_FETCHED
+
+
+class TableError(Exception):
+    """The disposition table cannot be read. Never an empty set of rows."""
+
+
+def read_disposition_rows(text: str, parser) -> dict[str, str]:
+    """{context: disposition} from § Declared-required contexts, read through the shared
+    table splitter. Raises TableError on any format drift."""
+    lines = text.splitlines()
+    if TABLE_HEADING not in lines:
+        raise TableError(f"the heading `{TABLE_HEADING}` is absent")
+    start = lines.index(TABLE_HEADING) + 1
+    end = next((i for i in range(start, len(lines)) if lines[i].startswith("## ")),
+               len(lines))
+    table: list[str] = []
+    for line in lines[start:end]:
+        if line.lstrip().startswith("|"):
+            table.append(line)
+        elif table:
+            break
+    if len(table) < 2 or tuple(parser._table_cells(table[0])) != TABLE_COLUMNS:
+        raise TableError(f"no header row reading {' | '.join(TABLE_COLUMNS)}")
+    if not all(c and set(c) <= set(":-") for c in parser._table_cells(table[1])):
+        raise TableError("the header row is not followed by a separator row")
+    rows: dict[str, str] = {}
+    for line in table[2:]:
+        cells = parser._table_cells(line)
+        if len(cells) != len(TABLE_COLUMNS):
+            raise TableError(f"a row carries {len(cells)} cells, not "
+                             f"{len(TABLE_COLUMNS)}: {line[:80]}")
+        context, disposition = cells[0], cells[2].replace("**", "").strip()
+        if disposition not in DISPOSITIONS:
+            raise TableError(f"`{context}` carries the disposition `{disposition}`, "
+                             f"outside {', '.join(DISPOSITIONS)}")
+        if context in rows:
+            raise TableError(f"`{context}` appears on two rows")
+        rows[context] = disposition
+    if not rows:
+        raise TableError("the table carries zero rows")
+    return rows
+
+
+def load_disposition_rows(standard: Path | None, parser) -> dict[str, str]:
+    """read_disposition_rows over a file; an unreadable file is a TableError too."""
+    if standard is None:
+        raise TableError("no standard resolved")
+    try:
+        text = standard.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise TableError(f"the file cannot be read ({exc.__class__.__name__})") from None
+    return read_disposition_rows(text, parser)
+
+
+def discloses_hold(postures) -> bool:
     return bool(postures) and all(p == f"required({HELD_QUALIFIER})" for p in postures)
 
 
-def classify(declared: dict, status: str, live: list[str]) -> tuple[str, dict[str, list[str]]]:
-    """(verdict, classes). Classes are computed ONLY from a read that returned."""
+def classify(declared: dict, rows: dict[str, str], status: str,
+             live: list[str]) -> tuple[str, dict[str, list[str]]]:
+    """(verdict, classes). Classes are computed ONLY from reads that returned."""
     if status != STATUS_FETCHED:
         return VERDICT_NOT_EVALUATED, {}
     live_set = set(live)
+    disclosed = {c for c in declared if discloses_hold(declared[c])}
+    recorded = {c for c in disclosed if rows.get(c) in HOLD_FAMILY}
     classes = {
         CLASS_RECONCILED: sorted(c for c in declared
-                                 if c in live_set and not is_held(declared[c])),
-        CLASS_HELD: sorted(c for c in declared
-                           if c not in live_set and is_held(declared[c])),
+                                 if c in live_set and c not in disclosed),
+        CLASS_HELD: sorted(c for c in recorded if c not in live_set),
         CLASS_UNREGISTERED: sorted(c for c in declared
-                                   if c not in live_set and not is_held(declared[c])),
-        CLASS_HELD_REGISTERED: sorted(c for c in declared
-                                      if c in live_set and is_held(declared[c])),
+                                   if c not in live_set and c not in disclosed),
+        CLASS_HELD_REGISTERED: sorted(c for c in disclosed if c in live_set),
+        CLASS_UNRECORDED: sorted(c for c in disclosed
+                                 if c not in live_set and c not in recorded),
         CLASS_UNDECLARED: sorted(c for c in live_set if c not in declared),
     }
     diverged = any(classes[k] for k in DIVERGENCE_CLASSES)
@@ -351,8 +513,19 @@ def _sites(declared: dict, ctx: str) -> str:
                      for site in sites)
 
 
-def render(declared: dict, status: str, live: list[str], verdict: str,
+READ_LABELS = ("branch protection (`branches/main`)",
+               "the rules for `main` (`rules/branches/main`)")
+
+
+def _row_note(rows: dict[str, str], ctx: str) -> str:
+    return f"its row reads {rows[ctx]}" if ctx in rows else "no row"
+
+
+def render(declared: dict, rows: dict[str, str], reads, live: list[str], verdict: str,
            classes: dict[str, list[str]], named: dict[str, list[str]]) -> list[str]:
+    """`reads` is ((classic status, classic contexts), (rules status, rules contexts));
+    `live` is their union, and is read only when both are fetched."""
+    status = combined_status(reads[0][0], reads[1][0])
     out: list[str] = []
     out.append("### Gate posture reconciliation — declared vs live branch protection")
     out.append("")
@@ -365,16 +538,22 @@ def render(declared: dict, status: str, live: list[str], verdict: str,
                f"**{len(declared)}**")
     out.append(f"- live-read status: **{status}**"
                + (f" ({len(live)} context(s))" if status == STATUS_FETCHED else ""))
+    for label, (read_status, contexts) in zip(READ_LABELS, reads):
+        out.append(f"  - {label}: **{read_status}**"
+                   + (f" ({len(contexts)} context(s))"
+                      if read_status == STATUS_FETCHED else ""))
     out.append("")
 
     if status != STATUS_FETCHED:
+        missing = [label for label, (read_status, _) in zip(READ_LABELS, reads)
+                   if read_status != STATUS_FETCHED]
         out.append(SEC_NOT_MEASURED)
         out.append("")
-        out.append("**No comparison is published, because none was measured.** The live "
-                   "`required_status_checks.contexts` read did not return a usable list, "
+        out.append("**No comparison is published, because none was measured.** A live "
+                   "read did not return a usable list — " + "; ".join(missing) + " — "
                    "so this run reports its own non-measurement — never agreement and "
                    "never the failing verdict. The declared set is still listed, and the "
-                   "comparison resumes on the next run whose read returns.")
+                   "comparison resumes on the next run whose two reads both return.")
         out.append("")
         out.append("Declared contexts (unreconciled this run):")
         out.append("")
@@ -416,6 +595,20 @@ def render(declared: dict, status: str, live: list[str], verdict: str,
             out.append(f"- `{ctx}` — {_sites(declared, ctx)}")
         out.append("")
 
+    if classes[CLASS_UNRECORDED]:
+        out.append(SEC_UNRECORDED)
+        out.append("")
+        out.append("Each discloses a hold through its qualifier, but "
+                   "`core/standards/gate-efficacy-standard.md` § Declared-required "
+                   "contexts carries no HOLD or CORRECT-THEN-HOLD row naming what ends the "
+                   "hold and who owns it, so the qualifier is buying an exemption nothing "
+                   "records. The repair is one of two: add the row naming what ends the "
+                   "hold and its owner, or flip the gate and drop the qualifier.")
+        out.append("")
+        for ctx in classes[CLASS_UNRECORDED]:
+            out.append(f"- `{ctx}` — {_sites(declared, ctx)}; {_row_note(rows, ctx)}")
+        out.append("")
+
     if classes[CLASS_UNDECLARED]:
         out.append(SEC_UNDECLARED)
         out.append("")
@@ -439,18 +632,18 @@ def render(declared: dict, status: str, live: list[str], verdict: str,
         out.append("")
         out.append("Listed on every measured run and never a divergence: each declares "
                    "`required(warn-mode-initial)`, which discloses its own non-delivery, "
-                   "and is not registered. Its registration-disposition row names what "
-                   "ends the hold.")
+                   "is not registered, and has the HOLD or CORRECT-THEN-HOLD row that "
+                   "names what ends the hold.")
         out.append("")
         for ctx in classes[CLASS_HELD]:
-            out.append(f"- `{ctx}` — {_sites(declared, ctx)}")
+            out.append(f"- `{ctx}` — {_sites(declared, ctx)}; {_row_note(rows, ctx)}")
         out.append("")
 
     if verdict == VERDICT_RECONCILED:
         out.append(SEC_RECONCILED)
         out.append("")
         out.append("Every context that claims delivery is live, no held context is live, "
-                   "and every live context is declared.")
+                   "every disclosed hold has its row, and every live context is declared.")
         out.append("")
 
     out.append("_Never a required context: part of this verdict's input is out-of-tree "
@@ -461,18 +654,20 @@ def render(declared: dict, status: str, live: list[str], verdict: str,
     return out
 
 
-def emit(verdict: str, status: str, github_output: str | None) -> int:
+def emit(verdict: str, status: str, rules_status: str, github_output: str | None) -> int:
     """Write the verdict for the workflow (if asked) and return the exit code for it.
 
     The verdict token and the exit code are derived from ONE verdict value here, so the
-    two transports cannot disagree; arm T1 asserts it. A write failure is exit 2: a
-    verdict the caller cannot read is not a verdict.
+    two transports cannot disagree; arm T1 asserts it. `live_status` is the combined
+    status of the two reads and `rules_status` the rules read's own. A write failure is
+    exit 2: a verdict the caller cannot read is not a verdict.
     """
     if github_output:
         try:
             with open(github_output, "a", encoding="utf-8") as fh:
                 fh.write(f"verdict={verdict}\n")
                 fh.write(f"live_status={status}\n")
+                fh.write(f"rules_status={rules_status}\n")
         except OSError as exc:
             print(f"FAIL ({EXIT_CANNOT_ASSERT}): the verdict could not be written to "
                   f"--github-output ({exc}).", file=sys.stderr)
@@ -493,9 +688,11 @@ def declared_set_problem(declared: dict) -> str | None:
 
 # ── Self-test ──────────────────────────────────────────────────────────────────────
 
-TIER1_ARMS = ("U1", "U2", "H1", "H2", "N1", "N2", "Q1", "M1", "M2", "M3",
-              "J1", "J2", "J3", "J4", "J5", "L1", "L2", "T1", "D1")
-TIER2_ARMS = ("P1", "P2", "P3", "P4", "P5", "P6", "P7")
+TIER1_ARMS = ("U1", "U2", "H1", "H2", "H3", "H4", "H5", "H6", "N1", "N2", "Q1",
+              "M1", "M2", "M3", "J1", "J2", "J3", "J4", "J5", "L1", "L2",
+              "RS1", "RS2", "RS3", "RS4", "T1", "D1")
+TIER2_ARMS = ("P1", "P2", "P3", "P4", "P5", "P6", "P7",
+              "TB1", "TB2", "TB3", "TB4", "TB5", "TB6")
 
 FIXTURE_HEADERS = {
     # P1 — a bare `required` header naming two contexts.
@@ -516,10 +713,41 @@ FIXTURE_HEADERS = {
     "p7.yml": '# gate-efficacy: posture=required-on-release  enforcement=branch-protection:"P lookalike"  always-reports=yes\n',
 }
 
+# TB1's well-formed disposition table; TB2 to TB6 are one-edit variants of it. The row
+# after the next `## ` heading carries a disposition outside the closed set and must not
+# be read, and `Ctx two`'s basis cell carries an escaped pipe that must not split it.
+TB_TABLE = (
+    "Lead text.\n"
+    "\n"
+    f"{TABLE_HEADING}\n"
+    "\n"
+    "A paragraph about the table.\n"
+    "\n"
+    "| Context | Declared at | Disposition | Basis / ending condition |\n"
+    "|---|---|---|---|\n"
+    "| `Ctx one` | `a.yml` | **REGISTER** | basis |\n"
+    "| `Ctx two` | `b.yml` | **HOLD** | ends when a \\| b is decided |\n"
+    "| `Ctx three` | `c.yml` | **CORRECT-THEN-HOLD** | basis |\n"
+    "\n"
+    "A paragraph after the table.\n"
+    "\n"
+    "## Next section\n"
+    "\n"
+    "| Context | Declared at | Disposition | Basis / ending condition |\n"
+    "|---|---|---|---|\n"
+    "| `Not read` | `d.yml` | **PARK** | outside the section |\n"
+)
 
-def _run(declared: dict, status: str, live: list[str]):
-    verdict, classes = classify(declared, status, live)
-    body = "\n".join(render(declared, status, live, verdict, classes, {}))
+
+def _run(declared: dict, status: str, live: list[str], rows: dict | None = None,
+         rules_status: str = STATUS_FETCHED, rules_live: tuple = ()):
+    """`status`/`live` are the branch-protection read; the rules read defaults to a
+    fetched empty list, and the rows to one HOLD row for the fixture context `H`."""
+    rows = {"H": "HOLD"} if rows is None else rows
+    union = list(dict.fromkeys(list(live) + list(rules_live)))
+    verdict, classes = classify(declared, rows, combined_status(status, rules_status), union)
+    reads = ((status, list(live)), (rules_status, list(rules_live)))
+    body = "\n".join(render(declared, rows, reads, union, verdict, classes, {}))
     return verdict, classes, body
 
 
@@ -561,6 +789,43 @@ def _tier1(failures: list[str], scratch: Path) -> None:
           "a held context absent from live was reported as a divergence, or was not "
           "listed as held")
 
+    # H3 / H4 — SENSITIVITY then SPECIFICITY for the fourth class on one input: a context
+    # that discloses a hold, is absent from live and has NO row is an UNRECORDED HOLD and
+    # the run DIVERGES; the same input with its HOLD row is held and RECONCILES.
+    decl_u = {"A": claim, "U": held}
+    verdict, classes, body = _run(decl_u, STATUS_FETCHED, ["A"], rows={})
+    check("H3", verdict == VERDICT_DIVERGED and classes[CLASS_UNRECORDED] == ["U"]
+          and not classes[CLASS_HELD] and SEC_UNRECORDED in body and "`U`" in body
+          and EXIT_CODE[verdict] == 1,
+          "a qualified context with no disposition row, absent from live, was not "
+          "reported as an unrecorded hold with a DIVERGED verdict and exit 1")
+    verdict, classes, body = _run(decl_u, STATUS_FETCHED, ["A"], rows={"U": "HOLD"})
+    check("H4", verdict == VERDICT_RECONCILED and classes[CLASS_HELD] == ["U"]
+          and not classes[CLASS_UNRECORDED] and SEC_UNRECORDED not in body
+          and SEC_HELD in body,
+          "the same qualified context WITH its HOLD row was still reported as an "
+          "unrecorded hold, or was not listed as held")
+
+    # H5 — the row must be a HOLD-family row: CORRECT-THEN-HOLD holds; a REGISTER row on
+    # a qualified context is a stale record and diverges as an unrecorded hold.
+    verdict, classes, _ = _run(decl_u, STATUS_FETCHED, ["A"], rows={"U": "CORRECT-THEN-HOLD"})
+    ok_cth = verdict == VERDICT_RECONCILED and classes[CLASS_HELD] == ["U"]
+    verdict, classes, body = _run(decl_u, STATUS_FETCHED, ["A"], rows={"U": "REGISTER"})
+    check("H5", ok_cth and verdict == VERDICT_DIVERGED
+          and classes[CLASS_UNRECORDED] == ["U"] and "its row reads REGISTER" in body,
+          "a CORRECT-THEN-HOLD row did not hold, or a REGISTER row on a qualified "
+          "context was read as a hold")
+
+    # H6 — held and registered keys on the qualifier ALONE, and is never double-counted
+    # as an unrecorded hold: a live qualified context reads held-and-registered only,
+    # with its row and without one.
+    for arm_rows in ({}, {"U": "HOLD"}):
+        verdict, classes, _ = _run(decl_u, STATUS_FETCHED, ["A", "U"], rows=arm_rows)
+        check("H6", verdict == VERDICT_DIVERGED and classes[CLASS_HELD_REGISTERED] == ["U"]
+              and not classes[CLASS_UNRECORDED] and not classes[CLASS_HELD],
+              f"a live qualified context with rows={arm_rows} was not held and "
+              f"registered alone")
+
     # N1 / N2 — a live context no track declaration names is UNDECLARED; the same live
     # set with that context declared is clean.
     verdict, classes, body = _run({"A": claim}, STATUS_FETCHED, ["A", "Z"])
@@ -590,8 +855,8 @@ def _tier1(failures: list[str], scratch: Path) -> None:
     # token, clause or heading would pass.
     for arm, status in (("M1", STATUS_DEGRADED), ("M2", STATUS_NOT_RUN)):
         verdict, classes, body = _run(decl_h, status, [])
-        sections = (TABLE_HEADER, SEC_UNREGISTERED, SEC_HELD_REGISTERED, SEC_UNDECLARED,
-                    SEC_HELD, SEC_RECONCILED)
+        sections = (TABLE_HEADER, SEC_UNREGISTERED, SEC_HELD_REGISTERED, SEC_UNRECORDED,
+                    SEC_UNDECLARED, SEC_HELD, SEC_RECONCILED)
         check(arm, verdict == "NOT-EVALUATED" and classes == {}
               and not any(s in body for s in sections)
               and "**Verdict:** NOT-EVALUATED — this is not a clean result" in body
@@ -660,20 +925,107 @@ def _tier1(failures: list[str], scratch: Path) -> None:
           "a --live file holding a response body was read as a measurement, or real "
           "context names were not")
 
+    # RS1 to RS4 — the rules read of `rules/branches/main`. Its sensitivity rests on these
+    # fixtures: no rule applies to `main` today, so the live read returns `[]`.
+    def rsc_rule(*contexts):
+        return {"type": RULE_TYPE_STATUS_CHECKS, "ruleset_id": 1,
+                "parameters": {"strict_required_status_checks_policy": False,
+                               "required_status_checks": [{"context": c} for c in contexts]}}
+
+    # RS1 — SENSITIVITY: a required context delivered ONLY by a rule is live — reconciled
+    # when the rule names it, unregistered when the same rule does not.
+    decl_r = {"A": claim, "R": claim}
+    r_status, r_live = read_live_rules_json(jfile("rs1.json", [{"type": "deletion"}, rsc_rule("R")]))
+    verdict, classes, _ = _run(decl_r, STATUS_FETCHED, ["A"], rules_status=r_status,
+                               rules_live=tuple(r_live))
+    ok_with = (r_status, r_live) == (STATUS_FETCHED, ["R"]) and verdict == VERDICT_RECONCILED
+    r_status, r_live = read_live_rules_json(jfile("rs1b.json", [rsc_rule()]))
+    verdict, classes, _ = _run(decl_r, STATUS_FETCHED, ["A"], rules_status=r_status,
+                               rules_live=tuple(r_live))
+    check("RS1", ok_with and r_status == STATUS_FETCHED and verdict == VERDICT_DIVERGED
+          and classes[CLASS_UNREGISTERED] == ["R"],
+          "a context delivered by a required_status_checks rule was not read as live, or "
+          "a rule naming no context made it live")
+
+    # RS2 — the verdict is CONJUNCTIVE: with branch protection fetched and the rules read
+    # degraded or not supplied, a fixture that would reconcile and one that would diverge
+    # both read NOT-EVALUATED, exit 3, naming the rules read as the one that did not return.
+    for rules in (STATUS_DEGRADED, STATUS_NOT_RUN):
+        for live in (["A", "B"], ["A"]):
+            verdict, classes, body = _run(decl, STATUS_FETCHED, live, rules_status=rules)
+            check("RS2", verdict == VERDICT_NOT_EVALUATED and classes == {}
+                  and EXIT_CODE[verdict] == 3 and TABLE_HEADER not in body
+                  and "#### NOT-EVALUATED — the live read did not return" in body
+                  and f"{READ_LABELS[1]}: **{rules}**" in body
+                  and f"{READ_LABELS[0]}: **fetched**" in body,
+                  f"branch protection fetched with the rules read `{rules}` and live={live} "
+                  f"produced {verdict}, or did not name the rules read")
+
+    # RS3 — the ALLOW-LIST dispatch. Every shape below is degraded: an error body, a
+    # non-list, a list at the page limit, a rule with no type, a malformed status-check
+    # rule, and every merge-holding type that is not `required_status_checks` — named or
+    # unknown. Its specificity legs: a no-merge-gate rule alone, and a list one short of
+    # the page limit, are fetched with no context. The page limit is asserted as the
+    # LITERALS 100 and 99, never through the constant: an oracle read from the tool's own
+    # constant moves with it, so a raised or deleted limit would pass.
+    degraded_inputs = {
+        "error body": error_body,
+        "a non-list": {"type": "deletion"},
+        "a list at the page limit": [{"type": "deletion"}] * 100,
+        "a rule with no type": [{"parameters": {}}],
+        "a status-check rule with no list": [{"type": RULE_TYPE_STATUS_CHECKS, "parameters": {}}],
+        "a status-check rule with an empty context": [rsc_rule("")],
+        "a workflows rule": [{"type": "workflows", "parameters": {"workflows": []}}],
+        "a code_scanning rule": [{"type": "code_scanning", "parameters": {}}],
+        "a pull_request rule": [{"type": "pull_request", "parameters": {}}],
+        "an unknown type": [{"type": "zzz-type"}],
+        "a gating rule beside a status-check rule": [rsc_rule("R"), {"type": "merge_queue"}],
+    }
+    for label, payload in degraded_inputs.items():
+        check("RS3", read_live_rules_json(jfile("rs3.json", payload)) == (STATUS_DEGRADED, []),
+              f"{label} was not read as degraded")
+    check("RS3", read_live_rules_json(str(scratch / "absent-rules.json")) == (STATUS_DEGRADED, [])
+          and read_live_rules_json(jfile("rs3e.json", "")) == (STATUS_DEGRADED, [])
+          and read_live_rules_json(None) == (STATUS_NOT_RUN, []),
+          "a missing or empty rules file was not degraded, or no file was not not-run")
+    check("RS3", read_live_rules_json(jfile("rs3s.json", [{"type": "deletion"}]))
+          == (STATUS_FETCHED, [])
+          and read_live_rules_json(jfile("rs3t.json", [{"type": "non_fast_forward"}] * 99))
+          == (STATUS_FETCHED, [])
+          and all(read_live_rules_json(jfile("rs3u.json", [{"type": t}]))
+                  == (STATUS_FETCHED, []) for t in RULE_TYPES_NO_MERGE_GATE),
+          "a rule type known to add no merge gate, or a list one short of the page limit, "
+          "was not read as fetched with no context")
+
+    # RS4 — an empty rules list with branch protection fetched leaves the verdict to the
+    # branch-protection set alone, in both directions.
+    r_status, r_live = read_live_rules_json(jfile("rs4.json", []))
+    reconciled, _, _ = _run(decl, STATUS_FETCHED, ["A", "B"], rules_status=r_status)
+    verdict, classes, _ = _run(decl, STATUS_FETCHED, ["A"], rules_status=r_status)
+    check("RS4", (r_status, r_live) == (STATUS_FETCHED, []) and reconciled == VERDICT_RECONCILED
+          and verdict == VERDICT_DIVERGED and classes[CLASS_UNREGISTERED] == ["B"],
+          "an empty rules list did not leave the verdict to the branch-protection set")
+
     # T1 — the token written for the workflow and the return code agree, for all three
-    # verdicts, and the three codes are distinct.
+    # verdicts, and the three codes are distinct. The rules read's own status is written
+    # beside the combined one, so a run can be read for `rules_status` on its own.
     codes = set()
-    for live, status, want in ((["A", "B"], STATUS_FETCHED, VERDICT_RECONCILED),
-                               (["A"], STATUS_FETCHED, VERDICT_DIVERGED),
-                               ([], STATUS_DEGRADED, VERDICT_NOT_EVALUATED)):
-        verdict, _, _ = _run(decl, status, live)
-        out_path = scratch / f"t1-{want}.out"
-        rc = emit(verdict, status, str(out_path))
+    for live, status, rules, want in (
+            (["A", "B"], STATUS_FETCHED, STATUS_FETCHED, VERDICT_RECONCILED),
+            (["A"], STATUS_FETCHED, STATUS_FETCHED, VERDICT_DIVERGED),
+            ([], STATUS_DEGRADED, STATUS_FETCHED, VERDICT_NOT_EVALUATED),
+            (["A", "B"], STATUS_FETCHED, STATUS_NOT_RUN, VERDICT_NOT_EVALUATED)):
+        verdict, _, _ = _run(decl, status, live, rules_status=rules)
+        combined = combined_status(status, rules)
+        out_path = scratch / f"t1-{want}-{rules}.out"
+        rc = emit(verdict, combined, rules, str(out_path))
         written = out_path.read_text(encoding="utf-8").splitlines()
         codes.add(rc)
         check("T1", verdict == want and rc == EXIT_CODE[want]
-              and f"verdict={want}" in written and f"live_status={status}" in written,
-              f"for {want}, the written token or the return code ({rc}) disagreed")
+              and f"verdict={want}" in written and f"live_status={combined}" in written
+              and f"rules_status={rules}" in written,
+              f"for {want} (rules {rules}), the written tokens or the return code ({rc}) "
+              f"disagreed")
     check("T1", codes == {0, 1, 3}, f"the three verdicts did not map to three distinct "
           f"codes 0, 1 and 3 (got {sorted(codes)})")
 
@@ -701,10 +1053,10 @@ def _tier2(failures: list[str], parser, scratch: Path) -> None:
     check("P2", declared.get("P legacy key") == {"required": ["p2.yml:1"]},
           "the legacy `enforcement-surface=` key was not read")
     check("P3", set(declared.get("P held", {})) == {"required(warn-mode-initial)"}
-          and is_held(declared["P held"]),
+          and discloses_hold(declared["P held"]),
           "the held qualifier did not survive the parse intact")
     check("P4", set(declared.get("P ratified", {})) == {"required(enforce; ratified 2026-09-04)"}
-          and not is_held(declared["P ratified"]),
+          and not discloses_hold(declared["P ratified"]),
           "a qualifier containing spaces did not survive the parse, or was read as held")
     check("P5", "P advisory" not in declared and "P advisory on bp" not in declared,
           "an `advisory` header's context was declared required")
@@ -714,6 +1066,55 @@ def _tier2(failures: list[str], parser, scratch: Path) -> None:
           "a required posture on a non-blocking surface named a context on the track")
     check("P7", "P lookalike" not in declared,
           "a posture that merely begins with the letters was swept in")
+
+    # TB1 to TB6 — the disposition-table reader, through the shared splitter (which is
+    # why they are tier 2). TB1 is the specificity leg every malformed arm is a one-edit
+    # variant of: it parses, with backticks and `**` stripped, an escaped pipe kept inside
+    # its cell, and the next section's table not read.
+    def tb(name: str, text: str):
+        path = scratch / name
+        path.write_text(text, encoding="utf-8")
+        try:
+            return load_disposition_rows(path, parser), None
+        except TableError as exc:
+            return None, str(exc)
+
+    rows, err = tb("tb1.md", TB_TABLE)
+    check("TB1", err is None and rows == {"Ctx one": "REGISTER", "Ctx two": "HOLD",
+                                          "Ctx three": "CORRECT-THEN-HOLD"},
+          f"a well-formed disposition table did not parse to its three rows ({err or rows})")
+    variants = {
+        "TB2": (TB_TABLE.replace(TABLE_HEADING, "## Declared-required contexts"),
+                "the heading absent"),
+        "TB3": (TB_TABLE.replace("| Disposition |", "| Decision |"),
+                "a column renamed"),
+        "TB4": (TB_TABLE.replace("| `Ctx three` | `c.yml` |", "| `Ctx three` |"),
+                "a three-cell row"),
+        "TB5": (TB_TABLE.replace("**HOLD**", "**PARK**"),
+                "a disposition outside the closed set"),
+        "TB6": (TB_TABLE.replace("`Ctx three`", "`Ctx one`"),
+                "a context on two rows"),
+    }
+    for arm, (text, what) in variants.items():
+        rows, err = tb(f"{arm.lower()}.md", text)
+        check(arm, rows is None and err is not None,
+              f"{what} was read as a table ({rows}) rather than failing the instrument")
+    for arm, text, what in (
+            ("TB3", TB_TABLE.replace("| Context | Declared at | Disposition | Basis / ending "
+                                     "condition |\n|---|---|---|---|\n", ""),
+             "the header row deleted"),
+            ("TB6", TB_TABLE.split("| `Ctx one`")[0].rstrip("\n") + "\n\n## Next section\n",
+             "zero rows")):
+        rows, err = tb(f"{arm.lower()}b.md", text)
+        check(arm, rows is None and err is not None,
+              f"{what} was read as a table ({rows}) rather than failing the instrument")
+    try:
+        load_disposition_rows(scratch / "no-such-standard.md", parser)
+        unreadable_failed = False
+    except TableError:
+        unreadable_failed = True
+    check("TB2", tb("empty.md", "")[1] is not None and unreadable_failed,
+          "an empty or unreadable standard was read as a table")
 
 
 def self_test(require_parser: bool) -> int:
@@ -764,14 +1165,23 @@ def main() -> int:
                     help="workflow directory (default: <repo root>/.github/workflows)")
     live = ap.add_mutually_exclusive_group()
     live.add_argument("--live", default=None,
-                      help="file of live required_status_checks contexts, one per line; "
+                      help="the branch-protection input: a file of live "
+                           "required_status_checks contexts, one per line; "
                            "an empty file, or one holding a JSON response body, is degraded; a non-JSON body (an HTML page, a stderr line) is not detected — use --live-branch-json")
     live.add_argument("--live-branch-json", default=None,
-                      help="the response body of GET /repos/{owner}/{repo}/branches/main; "
-                           "anything but a branch object carrying the context list is "
-                           "degraded")
+                      help="the branch-protection input: the response body of GET "
+                           "/repos/{owner}/{repo}/branches/main; anything but a branch "
+                           "object carrying the context list is degraded")
+    ap.add_argument("--live-rules-json", default=None,
+                    help="the response body of GET /repos/{owner}/{repo}/rules/branches/main"
+                         "?per_page=100; required for a verdict — without it the rules read "
+                         "is not-run and the run is NOT-EVALUATED")
+    ap.add_argument("--standard", default=None,
+                    help=f"the gate-efficacy standard whose disposition table is read "
+                         f"(default: <repo root>/{STANDARD_REL})")
     ap.add_argument("--github-output", default=None,
-                    help="append verdict=<TOKEN> and live_status=<status> to this file")
+                    help="append verdict=<TOKEN>, live_status=<status> and "
+                         "rules_status=<status> to this file")
     ap.add_argument("--self-test", action="store_true",
                     help="run the falsification harness and exit")
     ap.add_argument("--require-parser", action="store_true",
@@ -792,7 +1202,8 @@ def main() -> int:
               f"set could not be read, so no report is published.", file=sys.stderr)
         return EXIT_CANNOT_ASSERT
 
-    parser = load_shared_parser(root or repo_root_from(workflows.resolve()))
+    root = root or repo_root_from(workflows.resolve())
+    parser = load_shared_parser(root)
     if parser is None:
         print(f"FAIL ({EXIT_CANNOT_ASSERT}): the shared header parser at "
               f"{PARSER_MODULE_REL} is unreachable, so the declared set could not be "
@@ -807,14 +1218,29 @@ def main() -> int:
         print(f"FAIL ({EXIT_CANNOT_ASSERT}): {problem}", file=sys.stderr)
         return EXIT_CANNOT_ASSERT
 
+    standard = Path(args.standard) if args.standard else (
+        (root / STANDARD_REL) if root else None
+    )
+    try:
+        rows = load_disposition_rows(standard, parser)
+    except TableError as exc:
+        print(f"FAIL ({EXIT_CANNOT_ASSERT}): the disposition table in {standard} cannot be "
+              f"read ({exc}) — a verdict input that cannot be read is not an empty one, so "
+              f"no report is published.", file=sys.stderr)
+        return EXIT_CANNOT_ASSERT
+
     if args.live_branch_json is not None:
-        status, live_contexts = read_live_branch_json(args.live_branch_json)
+        classic = read_live_branch_json(args.live_branch_json)
     else:
-        status, live_contexts = read_live(args.live)
-    verdict, classes = classify(declared, status, live_contexts)
+        classic = read_live(args.live)
+    rules = read_live_rules_json(args.live_rules_json)
+    status = combined_status(classic[0], rules[0])
+    live_contexts = list(dict.fromkeys(classic[1] + rules[1]))
+    verdict, classes = classify(declared, rows, status, live_contexts)
     named = named_anywhere(workflows, parser)
-    print("\n".join(render(declared, status, live_contexts, verdict, classes, named)))
-    return emit(verdict, status, args.github_output)
+    print("\n".join(render(declared, rows, (classic, rules), live_contexts, verdict,
+                           classes, named)))
+    return emit(verdict, status, rules[0], args.github_output)
 
 
 if __name__ == "__main__":
