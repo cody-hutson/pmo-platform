@@ -233,7 +233,7 @@ Same as CLAUDE.md, plus PMO-specific:
 
 ### Continuous Improvement Protocol
 
-All skills auto-log improvements by creating a GitHub Issue via the `improvement.yml` (or `observation.yml`) template — with the matching category label per `label-taxonomy.md` — whenever they encounter:
+All skills auto-log improvements through `intake-desk` Mode C — which first applies the filing threshold in `core/standards/work-item-filing-threshold.md`, then authors the GitHub Issue via the `improvement.yml` (or `observation.yml`) template with the matching category label per `label-taxonomy.md` — whenever they encounter:
 - A gap (missing artifact, undefined handoff, unimplemented step)
 - An inconsistency (context files disagree, skill behavior doesn't match spec)
 - A broken or degraded handoff (tag emitted but receiver can't parse it)
@@ -242,7 +242,7 @@ All skills auto-log improvements by creating a GitHub Issue via the `improvement
 
 **Format:** Use the GitHub Issue improvement template. Include: an informative summary title (no type/category prefix — the label carries type; see `release/references/how-to/intake-style-guide.md` §7), severity (P1-P4 in body Priority field), category (selected from required Category dropdown in `improvement.yml`), and body sections (Description, Evidence, Affected Files, Proposed Change, Acceptance Criteria) with enough detail to generate an implementation plan without re-reading the original conversation. The category label corresponding to the dropdown selection is applied at Stage 2 Triage CER Resolve.
 
-**Do not:** Ask the user before creating the Issue. Do not mention it conversationally without also creating the Issue. Do not filter by perceived importance — log everything, let the user triage on GitHub.
+**Do not:** Ask the user before routing the signal through Mode C. Do not mention it conversationally without also routing it. Do not file a signal the filing threshold holds — Mode C returns it as a held record, and the calling skill notes it in its own output; what passes, the user triages on GitHub.
 
 **Where a half-formed idea lives before it is tracker-ready:** refine it on a sanctioned surface — the issue tracker (`observation.yml` → `improvement.yml`) or the git-ignored runtime tier — never as a draft / scratch file committed to the public repo. See [intake-style-guide.md § Sanctioned idea-refinement surface](../../release/references/how-to/intake-style-guide.md) and [`core/rules/git-workflow.md` § Draft / scratch content](../rules/git-workflow.md).
 
@@ -255,7 +255,7 @@ All skills auto-log improvements by creating a GitHub Issue via the `improvement
 
    Free-form bodies that skip template scaffolding are not permitted.
 2. **Do NOT attempt to resolve the gap in the current session.** Continue current work.
-3. User triages on GitHub: close = reject, add `approved` label = approved, assign Milestone = bundle. For Observations, the triage agent may also draft a full Proposal for operator approval and close the Observation with `promoted to #N`.
+3. User triages on GitHub: close = reject, add `approved` label = approved, assign Milestone = bundle. For Observations, triage counts them into the work they point to per `release/references/pipeline/stage-02-triage.md` § Observation counting, closing each counted observation as `completed` with a `Counted into #N` pointer.
 4. Only work on the improvement if the user explicitly requests it.
 5. When requested → generate implementation plan → user approves → execute.
 
@@ -634,7 +634,7 @@ When the emergence rule fires (≥2 same-(domain, theme) within 180 days), the `
 After drafting and operator-PROMOTE verdict, the `release-executor` Mode G execute phase (operator-explicit handoff from `release-planner` Mode D, NOT chained=true cascade per the 4-skill allowlist exclusion):
 
 1. Files the new Proposal via `gh issue create -F <approved_body_file>` using `improvement.yml`. The `<approved_body_file>` is the LITERAL body the operator approved in the Decision Briefing — Mode G performs NO synthesis, NO re-rendering, NO field-substitution post-approval.
-2. Each source observation is updated: post a closing comment `Promoted to #<new-proposal> via Pattern Review YYYY-MM-DD`; close the observation with reason `not planned` (operator can re-open if needed).
+2. Each source observation is updated: post a closing comment `Promoted to #<new-proposal> via Pattern Review YYYY-MM-DD`; replace its status label with `status: done` and close the observation with reason `completed` — a counted observation is not rejected (operator can re-open if needed).
 3. `RELEASE_LOG.md` Pattern Review row is appended (per Rule 5 below).
 
 **Operator approval gate (LITERAL body).** Operator PROMOTE verdict in release-planner Mode D Step 6 is rendered against the verbatim Proposal body inline in the Decision Briefing — NOT against a cluster summary abstraction. The release-executor Mode G consumes that LITERAL approved body file via `gh issue create -F <approved_body_file>` with NO synthesis, NO re-rendering, NO field-substitution post-approval. This is the C5 cascade approval-rule discipline expressed as a load-bearing artifact: the body the operator literally read is the body that gets filed.

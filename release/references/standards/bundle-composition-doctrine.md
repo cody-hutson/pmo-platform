@@ -396,7 +396,7 @@ Each shape demonstrates how Step 1-7 apply to a real-world bundle scenario. Shap
 **Example: hypothetical v1.XX-audit-cleanup-batch** (5-8 issues, 10-15 pts).
 
 - **Step 1 — Capability:** AFTER: audit findings from `<audit-name>-YYYY-MM-DD/` SUMMARY.md remediated; corpus drift cleared. BEFORE: known drift items unresolved.
-- **Step 2 — Tickets:** all issues filed from the audit's `issue-drafts/` folder per CLAUDE.md analysis folder convention.
+- **Step 2 — Tickets:** the issues the audit's follow-up filing produced at Stage 13 Phase A10.5 — its sweep and any separate bug or feature issues — once triaged.
 - **Step 3 — Dep walk:** typically zero (audit findings are independent cleanups).
 - **Step 4 — Older milestones:** N/A (audit findings are net-new).
 - **Step 5 — Size:** 10-15 pts (acceptable band — audit-cleanup is typically small per-issue).

@@ -480,7 +480,7 @@ Each pipeline stage's agent has explicitly defined write permissions. This follo
 | Stage | Body Updates | Comments | Sub-Issues | Labels | Projects Fields | Native Deps | Operator Approval Required |
 |---|---|---|---|---|---|---|---|
 | 1 (Intake) | Create issue | — | — | `improvement` (auto) | status: Proposed | — | No |
-| 2 (Triage) | Proposed Change (R/U), AC (R/U), Priority (C\*/U), Category (C\*/U), Affected Files (U), Dependencies (U) | Decision comment | — | Category label applied (from body Category dropdown per `improvement.yml`, or fallback to `improvement` if no specific category fits) | status: Approved/Rejected/Deferred | Mirror body `FS+0d #N` deps to native `blocked-by` via A3.5 substep (per § Native Dependencies) | Decision (Tier 3) |
+| 2 (Triage) | Proposed Change (R/U), AC (R/U), Priority (C\*/U), Category (C\*/U), Affected Files (U), Dependencies (U), Evidence / Value (U — one counted-observation line on an owning item) | Decision comment, `Counted into #N` closure comment | — | Category label applied (from body Category dropdown per `improvement.yml`, or fallback to `improvement` if no specific category fits) | status: Approved/Rejected/Deferred | Mirror body `FS+0d #N` deps to native `blocked-by` via A3.5 substep (per § Native Dependencies) | Decision (Tier 3) |
 | 3 (Bundle) | Dependencies (C\*/R) | Bundle rationale comment | — | — | status: Bundled; Milestone assignment | — | Scope approval (Tier 3) |
 | 4 (Planning) | Proposed Change (U), Affected Files (C\*/U), Dependencies (U) | Plan reference comment | — | — | stage: 4-Planning | — | No |
 | 5 (Solutioning) | Proposed Change (U), AC (U), Affected Files (U), Documentation Impact (U) | Design review comment | — | — | stage: 5-Solutioning | Re-trigger mirror logic if AC refinement touches Dependencies field (conditional) | Design decisions (Tier 3) |
@@ -489,7 +489,7 @@ Each pipeline stage's agent has explicitly defined write permissions. This follo
 | 8 (QA Testing) | — | — | Create review pass sub-issues | — | stage: 8-QA | — | Acceptance (Tier 3) |
 | 9 (Plan Review) | — | Decision record comment | — | — | stage: 9-PlanReview | — | Go/No-Go (Tier 3) |
 | 12 (Execute) | — | Deployment log comment | — | — | stage: 12-Execute | — | Authorization (Tier 3) |
-| 13 (Close) | — | Verification evidence comment | — | — | status: Done, stage: 13-Close | Re-run drift-check as QC4 verification parity-check (per § Native Dependencies) | No |
+| 13 (Close) | Create one follow-up sweep issue per repository and the separate bug / feature issues, from the Stage 9 ledger and the Stage 13 addendum (Phase A10.5); add one evidence line to each owner a row folded into | Verification evidence comment | — | — | status: Done, stage: 13-Close | Re-run drift-check as QC4 verification parity-check (per § Native Dependencies) | No |
 
 > **Note:** Stages 10 and 11 are compressed into the git workflow (per release-process.md) and have no independent agent write permissions.
 
