@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.00] - 2026-11-04
+
+A release now files a follow-up issue only when it matters, and gathers the ones that do into one sweep issue per repository.
+
+[Full notes](release/releases/notes/v5.00_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.00)
+
 ## [v4.81] - 2026-10-30
 
 A release's governance promises are now measured when it closes, and any shortfall must name the work item that will close it.
