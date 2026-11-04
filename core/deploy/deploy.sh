@@ -16262,7 +16262,7 @@ print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromiso
   # coverage claim can never be read as larger than its delivery.
   #
   # NOT ON THE REQUIRED-SUBSET ROSTER. Check 63 is deliberately absent from
-  # --check-required-subset. That roster carries Checks 38, 73 and 77; joining it is a
+  # --check-required-subset. That roster carries Checks 38, 73, 77 and 78; joining it is a
   # separate, later, evidence-gated decision, and staying off it is what makes shipping
   # enforcing safe today (no CI workflow runs the full --check suite).
   #
