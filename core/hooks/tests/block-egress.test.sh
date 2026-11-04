@@ -2278,6 +2278,45 @@ E007_W_UE="${E007_W_BASE}/ue"; e007_w_copy "$E007_W_UE" "$E007_W_X_UNGATED" "$E0
 E007_W_QE="${E007_W_BASE}/qe"; e007_w_copy "$E007_W_QE" "$E007_W_X_QSPACE" "$E007_W_X_PHASE"
 E007_W_K="${E007_W_BASE}/k";   e007_w_copy "$E007_W_K" "$E007_W_X_LABEL"
 
+# The respelling repairs (AC-E007-SP*, below): each enters the hook through ONE line carrying a
+# trailing `# respell: <name>` mark, so each reverse edit here takes exactly that line out (or
+# turns it into the pre-change behaviour) and a copy that applies it is the hook without that
+# one repair. A shape arm per copy pins the edit to its line.
+E007_W_X_FASTPRE='/  # respell: fast-path$/d'
+E007_W_X_FASTRAW='s|^\( *\)egress_fq=.*  # respell: fast-strip$|\1egress_fq="$COMMAND"|'
+E007_W_X_NOANSIC='s|^\( *\)if egress_ansic_span; then :  # respell: ansi-c$|\1if false; then :|'
+E007_W_X_ANSIESC='s@^  if egress_trailing_backslash_odd "\$body"; then return 1; fi  # respell: ansi-guard$@  while egress_trailing_backslash_odd "$body"; do case "${rest#?}" in *"$q"*) rest="${rest#?}"; body="${body}${q}${rest%%"$q"*}"; rest="${rest#"${rest%%"$q"*}"}" ;; *) break ;; esac; done@'
+E007_W_X_NOJOIN='/  # respell: join$/d'
+E007_W_X_JOINALL='s|^\( *\)if .*egress_keep_line .*  # respell: keep$|\1:|'
+E007_W_X_NORDR='/  # respell: redirect$/d'
+E007_W_X_AMPGT='/  # respell: redirect-ampgt$/d'
+E007_W_X_NOESC='/  # respell: escape$/d'
+E007_W_X_NOBRACE='/  # respell: brace$/d'
+E007_W_X_NOFOLD='/  # respell: fold$/d'
+E007_W_X_RPCOUNT='/  # respell: no-count$/d'
+E007_W_X_NOR9='s/^\( *\)if egress_old_reachable_gh_api "\$COMMAND" || egress_old_reachable_respelled "\$COMMAND"; then  # respell: unparseable$/\1if egress_old_reachable_gh_api "$COMMAND"; then/'
+E007_W_X_LOWCAP='s|^readonly EGRESS_007_PARSE_CAP=1048576$|readonly EGRESS_007_PARSE_CAP=16|'
+E007_W_X_NOSHORT='/  # respell: short-flags$/d'
+E007_W_X_NOQOPS='/  # respell: quoted-ops$/d'
+E007_SP_FP="${E007_W_BASE}/fp";   e007_w_copy "$E007_SP_FP" "$E007_W_X_FASTPRE"
+E007_SP_FR="${E007_W_BASE}/fr";   e007_w_copy "$E007_SP_FR" "$E007_W_X_FASTRAW"
+E007_SP_NC="${E007_W_BASE}/nc";   e007_w_copy "$E007_SP_NC" "$E007_W_X_NOANSIC"
+E007_SP_AX="${E007_W_BASE}/ax";   e007_w_copy "$E007_SP_AX" "$E007_W_X_ANSIESC"
+E007_SP_NJ="${E007_W_BASE}/nj";   e007_w_copy "$E007_SP_NJ" "$E007_W_X_NOJOIN"
+E007_SP_NJE="${E007_W_BASE}/nje"; e007_w_copy "$E007_SP_NJE" "$E007_W_X_NOJOIN" "$E007_W_X_PHASE"
+E007_SP_JA="${E007_W_BASE}/ja";   e007_w_copy "$E007_SP_JA" "$E007_W_X_JOINALL"
+E007_SP_NR="${E007_W_BASE}/nr";   e007_w_copy "$E007_SP_NR" "$E007_W_X_NORDR"
+E007_SP_NRE="${E007_W_BASE}/nre"; e007_w_copy "$E007_SP_NRE" "$E007_W_X_NORDR" "$E007_W_X_PHASE"
+E007_SP_AG="${E007_W_BASE}/ag";   e007_w_copy "$E007_SP_AG" "$E007_W_X_AMPGT"
+E007_SP_NE="${E007_W_BASE}/ne";   e007_w_copy "$E007_SP_NE" "$E007_W_X_NOESC"
+E007_SP_NB="${E007_W_BASE}/nb";   e007_w_copy "$E007_SP_NB" "$E007_W_X_NOBRACE"
+E007_SP_NF="${E007_W_BASE}/nf";   e007_w_copy "$E007_SP_NF" "$E007_W_X_NOFOLD"
+E007_SP_RC="${E007_W_BASE}/rc";   e007_w_copy "$E007_SP_RC" "$E007_W_X_RPCOUNT"
+E007_SP_NU="${E007_W_BASE}/nu";   e007_w_copy "$E007_SP_NU" "$E007_W_X_NOR9"
+E007_SP_LC="${E007_W_BASE}/lc";   e007_w_copy "$E007_SP_LC" "$E007_W_X_LOWCAP"
+E007_SP_NS="${E007_W_BASE}/ns";   e007_w_copy "$E007_SP_NS" "$E007_W_X_NOSHORT"
+E007_SP_NQ="${E007_W_BASE}/nq";   e007_w_copy "$E007_SP_NQ" "$E007_W_X_NOQOPS"
+
 # e007_w_shape <name> <dir> <out> <in> — a copy's shape against the source hook: exactly <out>
 # lines taken out and <in> put in, it parses, and as its sandbox's hook it still denies the
 # untouched rule -001, so a verdict read from it is the mutation's and not a dead copy's.
@@ -2811,10 +2850,10 @@ e007_d_expect "AC-E007-W4c-pair: through the phase-forced copy that records ever
 E007_W_HD="cat > notes.md <<'EOF'"$'\n'"time to retry: gh api -X POST ${E007_W_NO} -f title=x"$'\n'"EOF"
 e007_w_pair "AC-E007-W4d: a heredoc body line that opens with a prefix word (time to retry: gh api -X POST <unlisted> ...) is evaluated as a write and recorded with pos look-ahead (the declared over-evaluation, pinned)" \
   "$E007_W_HD"
-e007_d_expect "AC-E007-W4e: 2>/dev/null env -u X gh api -X POST <unlisted> — a leading redirection the walk does not resolve — is not reached, with the phase forced (a declared limit, pinned)" \
-  "$E007_W_E" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 0 0 0
-e007_d_expect "AC-E007-W4e-pair: through the phase-forced copy whose locator runs on every segment, the same command is refused — so W4e's pin is the walk's, read on a live refusal" \
-  "$E007_W_UE" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 2 1 - 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W4e: 2>/dev/null env -u X gh api -X POST <unlisted> — a leading redirection, which the walk now steps over — is located behind the redirection and the prefix's option and refused with the phase forced" \
+  "$E007_W_E" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 2 1 - 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W4e-pair: through the phase-forced copy without the redirection repair, the same command is not reached — so W4e's refusal is that repair's" \
+  "$E007_SP_NRE" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 0 0 0
 
 # ---- AC-4: the one mechanism by which the locator could withdraw a refusal ----
 # The first-invocation counter is the only state carried between segments that the verdict
@@ -2828,6 +2867,304 @@ e007_d_expect "AC-E007-W5b: a read located behind timeout 5 does not count as th
   "$E007_W_S" enforce "timeout 5 gh api ${E007_W_OK} ; gh api -X POST ${E007_W_NO}" 2 1 0 'BLOCK-EGRESS-007'
 e007_d_expect "AC-E007-W5b-pair: through the copy whose look-ahead advances the counter, the same command is recorded and allowed" \
   "$E007_W_N" enforce "timeout 5 gh api ${E007_W_OK} ; gh api -X POST ${E007_W_NO}" 0 0 1
+
+# =====================================================================
+# AC-E007-SP* — a respelled gh api write is read as the shell resolves it
+# =====================================================================
+# A shell resolves several spellings to the one command word, subcommand or flag it would read
+# plainly: a redirection word is no argv word, wherever it stands; a backslash-escaped, a
+# brace-expanded, an ANSI-C- or locale-quoted and a letter-case-variant command word name the same
+# program; a backslash-newline joins two lines before any word is read; a verb split by quote
+# characters is one word; and gh's own parser reads a method or field flag written attached
+# (-XPOST, -X=POST) or clustered after its one boolean flag (-iX POST). The rule now reads each the
+# way the shell does, in both of its adjudication gates — the tokenized walk and, for a command the
+# scanner cannot tokenize, the unparseable branch's second reader — and classifies the write by the
+# position the shell resolves it to: a write at the head of a segment the replaced anchor admitted
+# is refused from day one in every spelling; every other position is a widening, recorded at the
+# shipped phase. An invocation resolved only through a respelling advances its own counter, never
+# the first-invocation counter, so no shipped day-one refusal moves.
+#
+# Every arm is red against the pre-fix hook on its shipped-copy limb, or names why it is green on
+# both sides (a near miss, a pin). Each mutant copy is the hook less exactly one repair, made by
+# the reverse edits above and pinned by an SP0 shape arm: fp the fast-path widening · fr the
+# fast path tested raw · nc ANSI-C decoding · ax the ANSI-C terminator guard · nj/nje the
+# continuation join (and phase forced) · ja every continuation joined · nr/nre the redirection
+# strip (and phase forced) · ag the `&>` protection · ne/nb/nf the escape, brace and case steps ·
+# rc the respelled-invocation counter · nu the unparseable branch's second reader · lc a lowered
+# parse cap · ns the short-flag cluster reader · nq the quoted-operator stand-ins. A limb reads
+# `exit/refusals/rows`, the D family's deltas at .mode=enforce.
+echo ""
+echo "gh api write in a respelling the shell resolves (AC-E007-SP*)"
+echo "---"
+
+e007_w_shape "AC-E007-SP0-FP: the copy without the fast-path widening differs in one line taken out, parses, and still denies -001" "$E007_SP_FP" 1 0
+e007_w_shape "AC-E007-SP0-FR: the copy whose fast path tests the raw command differs in one line, parses, and still denies -001" "$E007_SP_FR" 1 1
+e007_w_shape "AC-E007-SP0-NC: the copy without ANSI-C decoding differs in one line, parses, and still denies -001" "$E007_SP_NC" 1 1
+e007_w_shape "AC-E007-SP0-AX: the copy whose ANSI-C span ends at the first unescaped quote differs in one line, parses, and still denies -001" "$E007_SP_AX" 1 1
+e007_w_shape "AC-E007-SP0-NJ: the copy without the continuation join differs in one line taken out, parses, and still denies -001" "$E007_SP_NJ" 1 0
+e007_w_shape "AC-E007-SP0-NJE: NJE differs in two lines out and one in (no join, phase forced), parses, and still denies -001" "$E007_SP_NJE" 2 1
+e007_w_shape "AC-E007-SP0-JA: the copy that joins every continuation differs in one line, parses, and still denies -001" "$E007_SP_JA" 1 1
+e007_w_shape "AC-E007-SP0-NR: the copy without the redirection repair differs in two lines taken out, parses, and still denies -001" "$E007_SP_NR" 2 0
+e007_w_shape "AC-E007-SP0-NRE: NRE differs in three lines out and one in (no redirection repair, phase forced), parses, and still denies -001" "$E007_SP_NRE" 3 1
+e007_w_shape "AC-E007-SP0-AG: the copy without the &> protection differs in one line taken out, parses, and still denies -001" "$E007_SP_AG" 1 0
+e007_w_shape "AC-E007-SP0-NE: the copy without the escape step differs in one line taken out, parses, and still denies -001" "$E007_SP_NE" 1 0
+e007_w_shape "AC-E007-SP0-NB: the copy without the brace step differs in one line taken out, parses, and still denies -001" "$E007_SP_NB" 1 0
+e007_w_shape "AC-E007-SP0-NF: the copy without the case step differs in one line taken out, parses, and still denies -001" "$E007_SP_NF" 1 0
+e007_w_shape "AC-E007-SP0-RC: the copy whose respelled invocations advance the first-invocation counter differs in one line taken out, parses, and still denies -001" "$E007_SP_RC" 1 0
+e007_w_shape "AC-E007-SP0-NU: the copy whose unparseable branch reads only the plain spelling differs in one line, parses, and still denies -001" "$E007_SP_NU" 1 1
+e007_w_shape "AC-E007-SP0-LC: the lowered-cap copy differs in one line, parses, and still denies -001" "$E007_SP_LC" 1 1
+e007_w_shape "AC-E007-SP0-NS: the copy without the short-flag cluster reader differs in one line taken out, parses, and still denies -001" "$E007_SP_NS" 1 0
+e007_w_shape "AC-E007-SP0-NQ: the copy without the quoted-operator stand-ins differs in two lines taken out, parses, and still denies -001" "$E007_SP_NQ" 2 0
+
+# e007_sp_limbs <command> <copy> <exit> <refusals> <rows> [...] — runs each limb and appends what
+# failed to E007_SP_WHY. A delta of `-` is not asserted; a limb that expects a refusal must name
+# BLOCK-EGRESS-007.
+E007_SP_WHY=""
+e007_sp_limbs() {
+  local cmd="$1" d x b w
+  shift
+  while [ "$#" -ge 4 ]; do
+    d="$1"; x="$2"; b="$3"; w="$4"
+    shift 4
+    e007_w_run "$d" "$cmd"
+    [ "$E007_D_EXIT" = "$x" ] || E007_SP_WHY="${E007_SP_WHY} [${d##*/}] exit=${E007_D_EXIT}, want ${x};"
+    [ "$b" = "-" ] || [ "$E007_D_BLK" = "$b" ] || E007_SP_WHY="${E007_SP_WHY} [${d##*/}] refusals +${E007_D_BLK}, want +${b};"
+    [ "$w" = "-" ] || [ "$E007_D_WRN" = "$w" ] || E007_SP_WHY="${E007_SP_WHY} [${d##*/}] rows +${E007_D_WRN}, want +${w};"
+    if [ "$x" = 2 ] && ! /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_D_ERR"; then
+      E007_SP_WHY="${E007_SP_WHY} [${d##*/}] the refusal is not BLOCK-EGRESS-007;"
+    fi
+  done
+}
+# e007_sp_arm <name> <command> <copy> <exit> <refusals> <rows> [...] — one arm: PASS only when every
+# limb holds.
+e007_sp_arm() {
+  local name="$1" cmd="$2"
+  shift 2
+  E007_SP_WHY=""
+  e007_sp_limbs "$cmd" "$@"
+  if [ -z "$E007_SP_WHY" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "$E007_SP_WHY"; fi
+}
+# e007_sp_rowarm <name> <command> <want-row> [<copy> <exit> <refusals> <rows> ...] — the shipped copy
+# allows the call with exactly one new would-fire row reading <want-row> (phase|cause|path|pos),
+# and each further limb holds as in e007_sp_arm.
+e007_sp_rowarm() {
+  local name="$1" cmd="$2" want="$3" row=""
+  shift 3
+  E007_SP_WHY=""
+  e007_w_run "$E007_W_S" "$cmd"
+  if [ "$E007_D_WRN" = 1 ]; then row="$(e007_w_rec "$E007_W_S")"; fi
+  { [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_BLK" = 0 ] && [ "$E007_D_WRN" = 1 ]; } \
+    || E007_SP_WHY="${E007_SP_WHY} [s] exit=${E007_D_EXIT} refusals+${E007_D_BLK} rows+${E007_D_WRN}, want 0 +0 +1;"
+  [ "$row" = "$want" ] || E007_SP_WHY="${E007_SP_WHY} [s] row ${row:-none}, want ${want};"
+  e007_sp_limbs "$cmd" "$@"
+  if [ -z "$E007_SP_WHY" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "$E007_SP_WHY"; fi
+}
+
+E007_SP_NL=$'\n'
+E007_SP_ESQ=" ; echo it\\'s"   # an unquoted escaped apostrophe: well-formed, and not tokenizable by the scanner
+E007_SP_PLAIN="gh api -X POST ${E007_W_NO}"
+
+# ---- The redirection repair: a redirection word is no argv word, wherever it stands ----
+e007_sp_arm "AC-E007-SP-R1: >/dev/null gh api -X POST <unlisted> — a leading redirection — is refused on day one, and is not reached without the redirection repair" \
+  ">/dev/null ${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_NR" 0 0 0
+e007_sp_arm "AC-E007-SP-R2: gh api -X >/dev/null POST <unlisted> — a method value behind a redirection — is refused on day one (a declared tightening), and read as a read without the repair" \
+  "gh api -X >/dev/null POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NR" 0 0 0
+e007_sp_arm "AC-E007-SP-R3: gh api -X POST >/dev/null <allowlisted> — a redirection among the operands — is allowed (a declared precision improvement), and refused with the redirection read as the path without the repair" \
+  "gh api -X POST >/dev/null ${E007_W_OK}" "$E007_W_S" 0 0 0 "$E007_SP_NR" 2 1 0
+e007_sp_arm "AC-E007-SP-R4: echo x &>/dev/null gh api -X POST <unlisted> — a mid-command &> — stays inside echo's argv, and splits a segment without the &> protection" \
+  "echo x &>/dev/null ${E007_SP_PLAIN}" "$E007_W_S" 0 0 0 "$E007_SP_AG" 2 1 0
+e007_sp_rowarm "AC-E007-SP-R5: env &>/dev/null gh api -X POST <unlisted> — &> between a prefix word and the verb — is recorded by the head walk as its twin env gh api is, and refused at a split segment without the &> protection" \
+  "env &>/dev/null ${E007_SP_PLAIN}" "shadow|not-allowlisted|${E007_W_NO}|-" "$E007_SP_AG" 2 1 0
+e007_sp_arm "AC-E007-SP-R6: a heredoc body's quotation line (> word, then a head write) reads as the shell reads a command line — refused on day one (the declared over-refusal, pinned), and not reached without the redirection repair" \
+  "cat <<EOF${E007_SP_NL}> note ${E007_SP_PLAIN}${E007_SP_NL}EOF" "$E007_W_S" 2 1 0 "$E007_SP_NR" 0 0 0
+
+# ---- The continuation join, and the keep rule that keeps a line's own verdict ----
+e007_sp_arm "AC-E007-SP-C1: gh \\⏎api -X POST <unlisted> — a continuation between the verb and its subcommand — is refused on day one, and is not reached without the join" \
+  "gh \\${E007_SP_NL}api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NJ" 0 0 0
+e007_sp_arm "AC-E007-SP-C2: gh api <unlisted> \\⏎-X POST — a method flag on a continued line — is refused on day one (a declared tightening), and read as a read without the join" \
+  "gh api ${E007_W_NO} \\${E007_SP_NL}-X POST" "$E007_W_S" 2 1 0 "$E007_SP_NJ" 0 0 0
+e007_sp_arm "AC-E007-SP-C3: gh api -X POST \\⏎<allowlisted> — the path on a continued line — is allowed (a declared precision improvement), and refused with the backslash read as the path without the join" \
+  "gh api -X POST \\${E007_SP_NL}${E007_W_OK}" "$E007_W_S" 0 0 0 "$E007_SP_NJ" 2 1 0
+e007_sp_rowarm "AC-E007-SP-W2: env -u X gh \\⏎api -X POST <unlisted> — a continuation behind a prefix option — is located and recorded, refused with the phase forced, and not reached without the join" \
+  "env -u X gh \\${E007_SP_NL}api -X POST ${E007_W_NO}" "shadow|not-allowlisted|${E007_W_NO}|look-ahead" "$E007_W_E" 2 1 - "$E007_SP_NJE" 0 0 0
+e007_sp_rowarm "AC-E007-SP-W3: env \\⏎-u X gh api -X POST <unlisted> — a continuation inside the prefix's option run — is located and recorded, refused with the phase forced, and not reached without the join" \
+  "env \\${E007_SP_NL}-u X ${E007_SP_PLAIN}" "shadow|not-allowlisted|${E007_W_NO}|look-ahead" "$E007_W_E" 2 1 - "$E007_SP_NJE" 0 0 0
+e007_sp_arm "AC-E007-SP-G1: env -u X \\⏎gh api -X POST <unlisted> — a next line that earns its own verdict — is kept apart and refused on day one; joined regardless, it would move to the record" \
+  "env -u X \\${E007_SP_NL}${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_JA" 0 0 1
+e007_sp_arm "AC-E007-SP-G2: watch \\⏎gh api -X POST <unlisted> — a launcher outside the prefix set before a kept line — is refused on day one; joined regardless, it would be allowed with no record" \
+  "watch \\${E007_SP_NL}${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_JA" 0 0 0
+e007_sp_arm "AC-E007-SP-G3: gh api <unlisted> # c \\⏎-X POST — a backslash inside a comment — joins nothing, so the read stays a read (SP-C2 is its contrast)" \
+  "gh api ${E007_W_NO} # c \\${E007_SP_NL}-X POST" "$E007_W_S" 0 0 0
+e007_sp_arm "AC-E007-SP-G4: gh api <unlisted> \\\\⏎-X POST — an even backslash run — is no continuation, so the read stays a read (SP-C2 is its contrast)" \
+  "gh api ${E007_W_NO} \\\\${E007_SP_NL}-X POST" "$E007_W_S" 0 0 0
+e007_sp_arm "AC-E007-SP-G5: nice -n \\⏎5 gh api -X POST <unlisted> — the option's argument opening the next line — is kept apart and not reached even with the phase forced (a declared residual, pinned); joined regardless, it is recorded" \
+  "nice -n \\${E007_SP_NL}5 ${E007_SP_PLAIN}" "$E007_W_E" 0 0 0 "$E007_SP_JA" 0 0 1
+
+# ---- The command-word normalization: escape, brace, case, and the two quote forms ----
+e007_sp_arm "AC-E007-SP-E1: \\gh api -X POST <unlisted> — an escaped verb — is refused on day one, and not reached without the escape step" \
+  "\\gh api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NE" 0 0 0
+e007_sp_arm "AC-E007-SP-E2: gh \\api -X POST <unlisted> — an escaped subcommand — is refused on day one (a declared tightening), and not reached without the escape step" \
+  "gh \\api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NE" 0 0 0
+e007_sp_arm "AC-E007-SP-B1: {gh,api} -X POST <unlisted> — a brace group that expands to the verb and subcommand — is refused on day one, and not reached without the brace step" \
+  "{gh,api} -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NB" 0 0 0
+e007_sp_arm "AC-E007-SP-L1: GH api -X POST <unlisted> — a letter-case variant of the verb — is refused on day one, and not reached without the case step" \
+  "GH api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NF" 0 0 0
+e007_sp_arm "AC-E007-SP-A1: \$'\\x67h' api -X POST <unlisted> — an ANSI-C-quoted verb with a hex escape — is refused on day one, and not reached without ANSI-C decoding" \
+  "\$'\\x67h' api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NC" 0 0 0
+e007_sp_arm "AC-E007-SP-A6: gh api -X \$'POST' <unlisted> — an ANSI-C-quoted method value — is refused on day one (a declared tightening), and read as a read without ANSI-C decoding" \
+  "gh api -X \$'POST' ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NC" 0 0 0
+_sp_why=""
+e007_w_run "$E007_W_S" "gh api -X POST \$'${E007_W_OK}'"
+{ [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_BLK" = 0 ] && [ "$E007_D_WRN" = 0 ]; } || _sp_why="${_sp_why} [s] exit=${E007_D_EXIT} refusals+${E007_D_BLK} rows+${E007_D_WRN}, want 0 +0 +0;"
+e007_w_run "$E007_SP_NC" "gh api -X POST \$'${E007_W_OK}'"
+{ [ "$E007_D_EXIT" = 2 ] && [ "$E007_D_BLK" = 1 ] && /usr/bin/grep -q 'unresolvable' <<<"$E007_D_ERR"; } || _sp_why="${_sp_why} [nc] exit=${E007_D_EXIT} refusals+${E007_D_BLK}, want 2 +1 with cause unresolvable;"
+if [ -z "$_sp_why" ]; then
+  e007_d_pass "AC-E007-SP-A7: gh api -X POST \$'<allowlisted>' — an ANSI-C-quoted allowlisted path — is allowed (a declared precision improvement), and refused as unresolvable without ANSI-C decoding"
+else
+  e007_d_fail "AC-E007-SP-A7: an ANSI-C-quoted allowlisted path is allowed, and refused as unresolvable without decoding" "$_sp_why"
+fi
+
+# ---- The fast path admits what the transformations behind it resolve ----
+e007_sp_arm "AC-E007-SP-F1: g\\h api -X POST <unlisted> — an escape inside the verb — is refused on day one; the fast path skips it without its widening, and admits it on the backslash when tested raw" \
+  "g\\h api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0 "$E007_SP_FR" 2 1 0
+e007_sp_arm "AC-E007-SP-F2: GH api -X POST <unlisted> — a case variant — is refused on day one; the fast path skips it without its widening" \
+  "GH api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0
+e007_sp_arm "AC-E007-SP-F3: \$'\\147\\150' api -X POST <unlisted> — an ANSI-C verb of octal escapes — is refused on day one; the fast path skips it without its widening" \
+  "\$'\\147\\150' api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0
+e007_sp_arm "AC-E007-SP-F4: g''h api -X POST <unlisted> — the verb split by an empty quote pair — is refused on day one; the fast path skips it without its widening, and when tested raw" \
+  "g''h api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0 "$E007_SP_FR" 0 0 0
+e007_sp_arm "AC-E007-SP-F5: \$'g'\$'h' api -X POST <unlisted> — the verb as two adjacent ANSI-C strings — is refused on day one; the fast path skips it without its widening, and when tested raw" \
+  "\$'g'\$'h' api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0 "$E007_SP_FR" 0 0 0
+
+# ---- Behind a prefix: each respelling reaches the record its plain twin gets ----
+e007_w_pair "AC-E007-SP-W4: \\env -u X gh api -X POST <unlisted> — an escaped prefix word — is located behind the option's argument and recorded" \
+  "\\env -u X gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-SP-W5: env -u X {gh,api} -X POST <unlisted> — a brace-expanded verb behind a prefix option — is located and recorded" \
+  "env -u X {gh,api} -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-SP-W6: env -u X GH api -X POST <unlisted> — a case-variant verb behind a prefix option — is located and recorded" \
+  "env -u X GH api -X POST ${E007_W_NO}"
+
+# ---- The counter: a respelled invocation never advances the first-invocation counter ----
+e007_sp_arm "AC-E007-SP-K1: \\gh api <allowlisted> ; gh api -X POST <unlisted> — a respelled read before a plain write — leaves the write refused on day one; if respelled invocations advanced the counter, it would move to the record" \
+  "\\gh api ${E007_W_OK} ; ${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_RC" 0 0 1
+e007_sp_arm "AC-E007-SP-K2: gh api <allowlisted> ; \\gh api -X POST <unlisted> — a respelled write after a plain read — is recorded as its plain twin is, and refused with the phase forced" \
+  "gh api ${E007_W_OK} ; \\gh api -X POST ${E007_W_NO}" "$E007_W_S" 0 0 1 "$E007_W_E" 2 1 -
+e007_sp_arm "AC-E007-SP-K3: \\gh api <allowlisted> ; \\gh api -X POST <unlisted> — a respelled write after a respelled read — is recorded as its plain twin is" \
+  "\\gh api ${E007_W_OK} ; \\gh api -X POST ${E007_W_NO}" "$E007_W_S" 0 0 1
+e007_sp_arm "AC-E007-SP-K4: gh \\⏎api <allowlisted> ; gh api -X POST <unlisted> — a joined read before a plain write — leaves the write refused on day one; if respelled invocations advanced the counter, it would move to the record" \
+  "gh \\${E007_SP_NL}api ${E007_W_OK} ; ${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_RC" 0 0 1
+
+# ---- The unparseable branch reads the same spellings, at the shipped test's positions only ----
+e007_sp_arm "AC-E007-SP-U0: the plain head write followed by an untokenizable construct is refused by the shipped test, with and without the second reader (the control)" \
+  "${E007_SP_PLAIN}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 2 1 0
+e007_sp_arm "AC-E007-SP-U1: a leading redirection, then the write, in an untokenizable command, is refused; the shipped test alone admits it" \
+  ">/dev/null ${E007_SP_PLAIN}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U2: a continuation between the verb and its subcommand, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "gh \\${E007_SP_NL}api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U3: an escaped verb, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "\\gh api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U4: a brace-expanded verb, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "{gh,api} -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U5: an ANSI-C verb with a hex escape, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "\$'\\x67h' api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U6: a case-variant verb, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "GH api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U7: an escaped verb's read, in an untokenizable command, is refused as its plain twin is; the shipped test alone admits it" \
+  "\\gh api ${E007_W_OK}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U8: an escaped verb behind env, in an untokenizable command, is allowed as its plain twin is — a prefix word is never passed over there (a near miss)" \
+  "env \\gh api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 0 0 0
+e007_sp_arm "AC-E007-SP-U9: an escaped verb inside a subshell, in an untokenizable command, is allowed as its plain twin is (a near miss)" \
+  "( \\gh api -X POST ${E007_W_NO} )${E007_SP_ESQ}" "$E007_W_S" 0 0 0
+e007_sp_arm "AC-E007-SP-U10: env -u X \\⏎ then an escaped verb on the next physical line, in an untokenizable command, is refused at that line's head; the shipped test alone admits it" \
+  "env -u X \\${E007_SP_NL}\\gh api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+_sp_why=""
+e007_w_run "$E007_SP_LC" "\\gh api -X POST ${E007_W_NO}${E007_SP_ESQ}"
+{ [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_BLK" = 0 ] && [ "$E007_D_WRN" = 0 ]; } || _sp_why="${_sp_why} [lc respelled] exit=${E007_D_EXIT} refusals+${E007_D_BLK} rows+${E007_D_WRN}, want 0 +0 +0;"
+e007_w_run "$E007_SP_LC" "${E007_SP_PLAIN}${E007_SP_ESQ}"
+{ [ "$E007_D_EXIT" = 2 ] && [ "$E007_D_BLK" = 1 ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_D_ERR"; } || _sp_why="${_sp_why} [lc plain] exit=${E007_D_EXIT} refusals+${E007_D_BLK}, want 2 +1;"
+if [ -z "$_sp_why" ]; then
+  e007_d_pass "AC-E007-SP-U11: above a lowered parse cap the second reader locates nothing — an escaped verb in an untokenizable command is allowed — while the plain spelling is still refused (the declared cap residual, pinned)"
+else
+  e007_d_fail "AC-E007-SP-U11: above a lowered cap the respelled form is not located and the plain form is still refused" "$_sp_why"
+fi
+
+# ---- The ANSI-C terminator guard: no command crosses the scanner's parse boundary ----
+e007_sp_arm "AC-E007-SP-A2: echo \$'it\\'s' ; gh api <allowlisted> — an ANSI-C string carrying an escaped quote — keeps today's unparseable refusal; a span ended at the first unescaped quote would make it a tokenizable read" \
+  "echo \$'it\\'s' ; gh api ${E007_W_OK}" "$E007_W_S" 2 1 0 "$E007_SP_AX" 0 0 0
+e007_sp_arm "AC-E007-SP-A3: an implicit-POST write to <unlisted> whose field value is that string keeps today's refusal; unguarded, it would move to the record" \
+  "gh api ${E007_W_NO} -f body=\$'it\\'s'" "$E007_W_S" 2 1 0 "$E007_SP_AX" 0 0 1
+e007_sp_arm "AC-E007-SP-A4: a read of <allowlisted>, then an explicit write to <unlisted> carrying that string, keeps today's refusal; unguarded, it would move to the record" \
+  "gh api ${E007_W_OK} ; ${E007_SP_PLAIN} -f body=\$'it\\'s'" "$E007_W_S" 2 1 0 "$E007_SP_AX" 0 0 1
+e007_sp_arm "AC-E007-SP-A5: a read of <allowlisted>, then that write behind env, keeps today's refusal; unguarded, it would move to the record" \
+  "gh api ${E007_W_OK} ; env ${E007_SP_PLAIN} -f body=\$'it\\'s'" "$E007_W_S" 2 1 0 "$E007_SP_AX" 0 0 1
+
+# ---- Class 10: a method or field flag in its attached or clustered short form ----
+e007_sp_arm "AC-E007-SP-M1: gh api -XPOST <unlisted> — the method attached to its flag — is refused on day one, and read as a read without the cluster reader" \
+  "gh api -XPOST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M2: gh api -X=POST <unlisted> — the method attached with = — is refused on day one, and read as a read without the cluster reader" \
+  "gh api -X=POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M3: gh api -iX POST <unlisted> — the method flag clustered after -i, its value the next word — is refused on day one, and read as a read of the path POST without the cluster reader" \
+  "gh api -iX POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M4: gh api -iXPOST <unlisted> — clustered and attached — is refused on day one, and read as a read without the cluster reader" \
+  "gh api -iXPOST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M5: gh api <unlisted> -fbody=x — a field flag with its value attached — is an implicit POST, recorded as its plain twin is, and read as a read without the cluster reader" \
+  "gh api ${E007_W_NO} -fbody=x" "$E007_W_S" 0 0 1 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M6: gh api -XGET <unlisted> — an attached read method — stays a read (a near miss); with every invocation read as a write and the phase forced, it is refused" \
+  "gh api -XGET ${E007_W_NO}" "$E007_W_S" 0 0 0 "$E007_W_WE" 2 1 -
+e007_sp_arm "AC-E007-SP-M7: gh api -iH accept:x <allowlisted> -X POST — a clustered header flag's separate value — is no longer taken for the path, so the allowlisted write is allowed (a declared precision improvement); without the cluster reader the header value is the path, refused" \
+  "gh api -iH accept:x ${E007_W_OK} -X POST" "$E007_W_S" 0 0 0 "$E007_SP_NS" 2 1 0
+e007_sp_arm "AC-E007-SP-M8: gh api -XGET <unlisted> -f q=1 — an attached GET with a field flag — is a GET, as gh sends it, so no write is recorded (a declared precision improvement); without the cluster reader it is an implicit POST, recorded" \
+  "gh api -XGET ${E007_W_NO} -f q=1" "$E007_W_S" 0 0 0 "$E007_SP_NS" 0 0 1
+
+# ---- The quoted-operator stand-ins: a quoted < or > is content, never a redirection ----
+e007_sp_arm "AC-E007-SP-Q1: gh api -X POST '>x' <allowlisted> — a quoted word that begins with > — keeps today's refusal, the word read as the path; read as a redirection it would be dropped and the write allowed" \
+  "gh api -X POST '>x' ${E007_W_OK}" "$E007_W_S" 2 1 0 "$E007_SP_NQ" 0 0 0
+e007_sp_arm "AC-E007-SP-Q2: gh api -X POST -f '<x>=1' <allowlisted> — a quoted field that begins with < — keeps today's allow; read as a redirection the field flag would take the path and the write would be refused" \
+  "gh api -X POST -f '<x>=1' ${E007_W_OK}" "$E007_W_S" 0 0 0 "$E007_SP_NQ" 2 1 0
+
+# ---- Redirection-grammar parity: what each walk steps over, asserted rather than silent ----
+# One row per redirection form, `egress|canon|d022|form`: whether the egress walk steps over the
+# form before the verb (asserted through the shipped copy), whether the shared canonicalizer does
+# (asserted through its awk, the form before a neutral word), and the script-execution walk, which
+# steps over none — declared, owned by its own card, and not read here. An arm fails on an
+# undeclared difference and on a declared difference that no longer exists.
+E007_RDR_DECL='steps|steps|none|>/tmp/es.f
+steps|steps|none|> /tmp/es.f
+steps|steps|none|>>/tmp/es.f
+steps|steps|none|>> /tmp/es.f
+steps|steps|none|2>/tmp/es.f
+steps|steps|none|2> /tmp/es.f
+steps|none|none|2>&1
+steps|none|none|>&2
+steps|steps|none|</tmp/es.f
+steps|steps|none|< /tmp/es.f
+steps|steps|none|<<<x
+steps|steps|none|<>/tmp/es.f
+steps|none|none|>|/tmp/es.f
+steps|steps|none|&>/tmp/es.f
+steps|steps|none|&>>/tmp/es.f
+steps|none|none|{fd}>/tmp/es.f'
+_sp_eg_bad=""; _sp_ca_bad=""; _sp_n=0
+while IFS='|' read -r _sp_eg _sp_ca _sp_dd _sp_form; do
+  [ -n "$_sp_form" ] || continue
+  _sp_n=$((_sp_n + 1))
+  e007_w_run "$E007_W_S" "${_sp_form} ${E007_SP_PLAIN}"
+  if [ "$E007_D_EXIT" = 2 ]; then _sp_obs=steps; else _sp_obs=none; fi
+  [ "$_sp_obs" = "$_sp_eg" ] || _sp_eg_bad="${_sp_eg_bad} [${_sp_form}] observed ${_sp_obs}, declared ${_sp_eg};"
+  _sp_ca_out="$(/usr/bin/printf '%s' "${_sp_form} true" | /usr/bin/awk -f "${E007_D_HOOK_SRC}/lib/command-position.awk" 2>/dev/null)"
+  case "$_sp_ca_out" in *"; true"*) _sp_obs=steps ;; *) _sp_obs=none ;; esac
+  [ "$_sp_obs" = "$_sp_ca" ] || _sp_ca_bad="${_sp_ca_bad} [${_sp_form}] observed ${_sp_obs}, declared ${_sp_ca};"
+done <<<"$E007_RDR_DECL"
+if [ "$_sp_n" -eq 16 ] && [ -z "$_sp_eg_bad" ]; then
+  e007_d_pass "AC-E007-RDRPARITY-egress: the egress walk steps over all ${_sp_n} declared redirection forms before the verb"
+else
+  e007_d_fail "AC-E007-RDRPARITY-egress: the egress walk's redirection handling matches its declaration" "rows ${_sp_n} (want 16);${_sp_eg_bad}"
+fi
+if [ "$_sp_n" -eq 16 ] && [ -z "$_sp_ca_bad" ]; then
+  e007_d_pass "AC-E007-RDRPARITY-canon: the shared canonicalizer's redirection handling matches its declared column on all ${_sp_n} forms"
+else
+  e007_d_fail "AC-E007-RDRPARITY-canon: the shared canonicalizer's redirection handling matches its declared column" "rows ${_sp_n} (want 16);${_sp_ca_bad}"
+fi
 
 # =====================================================================
 # EGRESSCORPUS-* — the tracked payload differential for this rule's walk

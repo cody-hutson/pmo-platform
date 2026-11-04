@@ -460,9 +460,13 @@ digest() {
 #   enforce — apply the deny
 # Deliberately ONE line to advance, so the Stage-9 GO gate can ratify straight to
 # `enforce` without a code redesign. Advance one rung at a time; retreat is the
-# same single edit. REPAIRS — quote handling, the flag walk, `--` — are NOT gated
-# by this and enforce from day one, because they can only STOP a wrong denial and
-# so carry no new-deny risk by construction.
+# same single edit. The phase governs WIDENINGS only. A write is classified by the
+# command position the shell resolves it to, not by how that position is spelled:
+# the first counted invocation at the head of a segment the replaced anchor admitted,
+# with an explicit write method, enforces from day one in every spelling the rule
+# resolves. The REPAIRS — quote handling, the flag walk, `--`, the respelling repairs —
+# are not gated by this either, and none of them can allow a case the shipped hook
+# refuses. Every other position is a widening and follows this phase.
 #
 # This is deliberately NOT the shared `.claude/hooks/.mode` dial. That file is read
 # by every mode-capable hook in the bundle, so flipping it to soften a -007
@@ -474,6 +478,18 @@ readonly EGRESS_007_WIDENING_PHASE="shadow"
 # span. Substituting rather than deleting preserves token boundaries, so a quoted
 # argument stays ONE token instead of silently fusing with its neighbour.
 readonly EGRESS_SENT=$'\001'
+
+# The respelling mark. It stands in front of text the rule reached only through a spelling the
+# shell resolves for it — an ANSI-C or locale span, a joined continuation — and rides inside its
+# token (it is neither a blank nor a separator) until the mark pass strips it and flags that token
+# as respelled. `\001` already means "structure inside quotes", so this is its own character.
+readonly EGRESS_RSP=$'\004'
+
+# A `<` or `>` inside a quoted span is content, never a redirection operator, as the shell reads
+# it. The scanner carries each as its own stand-in so the redirection strip cannot take a quoted
+# word for a redirection, and the stand-ins are put back right after that strip.
+readonly EGRESS_QLT=$'\005'
+readonly EGRESS_QGT=$'\006'
 
 # Segment-boundary class markers. Segmentation emits one segment per line, each
 # prefixed with the class of the separator that OPENED it, so the rollout classifier
@@ -535,7 +551,14 @@ egress_comment_open_at_end() {
 # adjudicated — `# x; gh api <path> --method DELETE` denies today and must keep
 # denying — so removal would soften a live deny while fixing the desynchronization.
 # Neutralizing just the quotes fixes the desynchronization and moves nothing else.
-egress_neutralize_quoted() {
+#
+# The scanner is a CORE that sets EGRESS_NQ and a wrapper that prints it. The core sets
+# EGRESS_NQ on every return — on a quote it cannot close, to the text it neutralized
+# before that quote — so the unparseable branch's second reader can call it once per
+# piece in the current shell, with no fork. An ANSI-C ($'…') or locale ($"…") span is
+# read as the shell reads it (egress_ansic_span): its content changes, never where it
+# ends, so no command crosses the parse boundary in either direction.
+egress_neutralize_into() {
   local rest="$1"
   local out="" head body q
   while [ -n "$rest" ]; do
@@ -564,19 +587,21 @@ egress_neutralize_quoted() {
     rest="${rest#?}"
     case "$rest" in
       *"$q"*) ;;
-      *) return 1 ;;
+      *) EGRESS_NQ="$out"; return 1 ;;
     esac
     body="${rest%%"$q"*}"
     rest="${rest#"$body"}"
     # A backslash-escaped quote inside a DOUBLE-quoted span is content, not a
     # terminator; absorb it and keep scanning. Single quotes have no escape
-    # mechanism in shell, so this correction applies to double quotes only.
-    if [ "$q" = '"' ]; then
+    # mechanism in shell, so this correction applies to double quotes only — an
+    # ANSI-C span is decoded in place and keeps the shipped terminator.
+    if egress_ansic_span; then :  # respell: ansi-c
+    elif [ "$q" = '"' ]; then
       while egress_trailing_backslash_odd "$body"; do
         rest="${rest#?}"
         case "$rest" in
           *"$q"*) ;;
-          *) return 1 ;;
+          *) EGRESS_NQ="$out"; return 1 ;;
         esac
         body="${body}${q}${rest%%"$q"*}"
         rest="${rest#"${rest%%"$q"*}"}"
@@ -593,9 +618,116 @@ egress_neutralize_quoted() {
     body="${body//)/${EGRESS_SENT}}"
     body="${body//\#/${EGRESS_SENT}}"
     body="${body//\`/${EGRESS_SENT}}"
+    body="${body//</${EGRESS_QLT}}"  # respell: quoted-ops
+    body="${body//>/${EGRESS_QGT}}"  # respell: quoted-ops
     out="${out}${body}"
   done
-  "$PRINTF" '%s' "$out"
+  EGRESS_NQ="$out"
+  return 0
+}
+
+# The scanner as a command: prints the neutralized text, or returns 1 on a quote it cannot close.
+egress_neutralize_quoted() {
+  egress_neutralize_into "$1" || return 1
+  "$PRINTF" '%s' "$EGRESS_NQ"
+  return 0
+}
+
+# R2 — an ANSI-C ($'…') or a locale ($"…") span, read as the shell reads it. Called by the scanner
+# core when it reaches a quote, and reads and edits the core's locals (q, head, body, out, rest).
+# It applies only when the unquoted run just consumed — `head`, never `out`, so a quoted `$` before
+# a quote stays text — ends in a `$` that is not itself escaped. A locale span drops that `$`,
+# leaves the respelling mark, and is then scanned as the double-quoted span it is (returns 1). An
+# ANSI-C span keeps the shipped terminator, the next `'`: a body that ends in an odd backslash run
+# there is read exactly as before, its `$` kept as text, so the parse boundary does not move;
+# otherwise the `$` is dropped, the mark left, and the body decoded (returns 0).
+egress_ansic_span() {
+  case "$head" in
+    *'$') ;;
+    *) return 1 ;;
+  esac
+  if egress_trailing_backslash_odd "${head%\$}"; then return 1; fi
+  if [ "$q" = '"' ]; then
+    out="${out%\$}${EGRESS_RSP}"
+    return 1
+  fi
+  if egress_trailing_backslash_odd "$body"; then return 1; fi  # respell: ansi-guard
+  out="${out%\$}${EGRESS_RSP}"
+  egress_ansic_decode "$body"
+  body="$EGRESS_AC"
+  return 0
+}
+
+# Decode the body of an ANSI-C span into EGRESS_AC. The decoded set: \NNN (one to three octal
+# digits), \xHH (one or two hex digits), \uHHHH and \UHHHHHHHH when the code point is at most
+# U+007F, and \\ \' \" \? \a \b \e \E \f \n \r \t \v. Any other escape stays as written,
+# backslash and character. A decoded NUL ends the string, as the shell ends it. Builtins only, and
+# no command-derived text ever reaches a format string: a character is produced from a number the
+# decoder computed.
+egress_ansic_decode() {
+  local s="$1" out="" c d n lim v
+  while : ; do
+    case "$s" in
+      *\\*) ;;
+      *) out="${out}${s}"; break ;;
+    esac
+    out="${out}${s%%\\*}"
+    s="${s#*\\}"
+    c="${s:0:1}"
+    v=-1
+    case "$c" in
+      [01234567])
+        d=""; n=0
+        while [ "$n" -lt 3 ]; do
+          case "${s:$n:1}" in
+            [01234567]) d="${d}${s:$n:1}"; n=$(( n + 1 )) ;;
+            *) break ;;
+          esac
+        done
+        v=$(( 8#$d & 255 ))
+        s="${s:$n}"
+        ;;
+      x|u|U)
+        case "$c" in x) lim=2 ;; u) lim=4 ;; *) lim=8 ;; esac
+        d=""; n=1
+        while [ "$n" -le "$lim" ]; do
+          case "${s:$n:1}" in
+            [0123456789abcdefABCDEF]) d="${d}${s:$n:1}"; n=$(( n + 1 )) ;;
+            *) break ;;
+          esac
+        done
+        if [ -z "$d" ]; then
+          out="${out}\\"
+          continue
+        fi
+        v=$(( 16#$d ))
+        if [ "$c" != x ] && [ "$v" -gt 127 ]; then
+          out="${out}\\${s:0:$n}"
+          s="${s:$n}"
+          continue
+        fi
+        s="${s:$n}"
+        ;;
+      '\') out="${out}\\"; s="${s:1}"; continue ;;
+      "'") out="${out}'"; s="${s:1}"; continue ;;
+      '"') out="${out}\""; s="${s:1}"; continue ;;
+      '?') out="${out}?"; s="${s:1}"; continue ;;
+      a) out="${out}"$'\a'; s="${s:1}"; continue ;;
+      b) out="${out}"$'\b'; s="${s:1}"; continue ;;
+      e|E) out="${out}"$'\033'; s="${s:1}"; continue ;;
+      f) out="${out}"$'\f'; s="${s:1}"; continue ;;
+      n) out="${out}"$'\n'; s="${s:1}"; continue ;;
+      r) out="${out}"$'\r'; s="${s:1}"; continue ;;
+      t) out="${out}"$'\t'; s="${s:1}"; continue ;;
+      v) out="${out}"$'\v'; s="${s:1}"; continue ;;
+      *) out="${out}\\"; continue ;;
+    esac
+    if [ "$v" -eq 0 ]; then break; fi
+    builtin printf -v d '%o' "$v"
+    builtin printf -v c "\\${d}"
+    out="${out}${c}"
+  done
+  EGRESS_AC="$out"
   return 0
 }
 
@@ -651,6 +783,501 @@ egress_old_reachable_gh_api() {
     first=0
     rest="${rest#gh}"
   done
+}
+
+# ==========================================================================
+# BLOCK-EGRESS-007 — respelled spellings, read as the shell resolves them
+# ==========================================================================
+#
+# A shell resolves several spellings to the command word, subcommand or flag it would read
+# plainly, and a write reached through one is the same write: a redirection word is no argv word,
+# wherever it stands (R5); a backslash-escaped, brace-expanded or letter-case-variant command word
+# names the same program (R4); an ANSI-C or locale span is a quoted word (R2, in the scanner); a
+# backslash-newline is removed before any word is read (R3); and gh's flag parser reads a method or
+# field flag written attached or clustered (the short-flag reader in the operand walk). Each helper
+# below is one of those transformations, and each enters the rule through ONE line carrying a
+# trailing `# respell: <name>` mark, so the suite's reverse mutants take one repair out at a time.
+#
+# The rung a respelled write takes is decided by the position the shell resolves it to, never by
+# its spelling: a write at the head of a segment the replaced anchor admitted is refused from day
+# one in every spelling the rule resolves, and every other position is a widening. An invocation
+# the rule resolves only through a respelling never advances the first-invocation counter; it
+# counts on its own, so a respelled read early in a command cannot move a later plain write out of
+# the day-one refusal, and every verdict the shipped hook gave an invocation it could already
+# resolve is kept.
+#
+# Not resolved, and declared rather than implied: a command word produced by an expansion these
+# helpers do not perform (zsh's `=cmd`, a pathname pattern, a nested, sequence, escape-bearing or
+# all-empty brace group, an ANSI-C escape outside the decoded set), a redirection written against
+# the word before it, a method value that is itself escaped or brace-expanded, a continuation that
+# leaves a prefix command's option argument or operand at the head of a line that also holds the
+# verb, and arguments that arrive on standard input.
+
+readonly EGRESS_UC='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+readonly EGRESS_LC='abcdefghijklmnopqrstuvwxyz'
+
+# R4 (a) — a word holding exactly one brace group pre{w1,…,wn}post, with n of at least two, no
+# nested group, no `..` sequence, and no backslash, `$`, slash or quoted structure anywhere in it,
+# expands to its non-empty words. Sets EGRESS_RV, EGRESS_RVN and EGRESS_RVCH; returns 1 for any
+# other word, and for a group whose every word is empty.
+egress_brace_words() {
+  local w="$1" pre rest mid post alt k=0 last=0
+  case "$w" in *'{'*','*'}'*) ;; *) return 1 ;; esac
+  case "$w" in *\\*|*'$'*|*/*|*..*|*"${EGRESS_SENT}"*) return 1 ;; esac
+  pre="${w%%\{*}"
+  rest="${w#*\{}"
+  mid="${rest%%\}*}"
+  post="${rest#*\}}"
+  case "${pre}${mid}${post}" in *'{'*|*'}'*) return 1 ;; esac
+  case "$mid" in *,*) ;; *) return 1 ;; esac
+  EGRESS_BW=()
+  while [ "$last" -eq 0 ]; do
+    case "$mid" in
+      *,*) alt="${mid%%,*}"; mid="${mid#*,}" ;;
+      *) alt="$mid"; last=1 ;;
+    esac
+    if [ -n "${pre}${alt}${post}" ]; then
+      EGRESS_BW[$k]="${pre}${alt}${post}"
+      k=$(( k + 1 ))
+    fi
+  done
+  [ "$k" -gt 0 ] || return 1
+  EGRESS_RV=( "${EGRESS_BW[@]}" )
+  EGRESS_RVN="$k"
+  EGRESS_RVCH=1
+  return 0
+}
+
+# R4 (b) — each `\c` in a word becomes `c`, in one left-to-right pass, as quote removal does. The
+# scanner has already dropped quote marks, so a backslash that sat inside a quoted span is read
+# here too: such a word reads as its escaped twin, stricter and never looser.
+egress_unescape_rv() {
+  local j=0 s out
+  while [ "$j" -lt "$EGRESS_RVN" ]; do
+    s="${EGRESS_RV[$j]}"
+    case "$s" in
+      *\\*)
+        out=""
+        while : ; do
+          case "$s" in
+            *\\*) ;;
+            *) out="${out}${s}"; break ;;
+          esac
+          out="${out}${s%%\\*}"
+          s="${s#*\\}"
+          out="${out}${s:0:1}"
+          s="${s:1}"
+        done
+        EGRESS_RV[$j]="$out"
+        EGRESS_RVCH=1
+        ;;
+    esac
+    j=$(( j + 1 ))
+  done
+  return 0
+}
+
+# R4 (c) — a command word's basename of at most seven characters that holds an upper-case ASCII
+# letter is folded to lower case: on a case-insensitive volume `GH`, `ENV` and `Sudo` name gh, env
+# and sudo. Letters are listed, never a range, because a bracket range follows the locale's
+# collation. The subcommand is never folded: gh rejects `API`.
+egress_fold_rv() {
+  local w dir="" base out="" c p i=0
+  [ "$EGRESS_RVN" -ge 1 ] || return 0
+  w="${EGRESS_RV[0]}"
+  case "$w" in
+    */*) dir="${w%/*}/"; base="${w##*/}" ;;
+    *) base="$w" ;;
+  esac
+  [ "${#base}" -le 7 ] || return 0
+  case "$base" in
+    *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*) ;;
+    *) return 0 ;;
+  esac
+  while [ "$i" -lt "${#base}" ]; do
+    c="${base:$i:1}"
+    case "$c" in
+      [ABCDEFGHIJKLMNOPQRSTUVWXYZ]) p="${EGRESS_UC%%"$c"*}"; c="${EGRESS_LC:${#p}:1}" ;;
+    esac
+    out="${out}${c}"
+    i=$(( i + 1 ))
+  done
+  EGRESS_RV[0]="${dir}${out}"
+  EGRESS_RVCH=1
+  EGRESS_RVFOLD=1
+  return 0
+}
+
+# R4 — the command-word normalization: what the shell makes of one word before it looks the word
+# up. EGRESS_RV holds the resulting words (EGRESS_RVN of them); EGRESS_RVCH is 1 when a step changed
+# the word, EGRESS_RVFOLD when the case step did. $2 names the steps: `abc` for a command word, `ab`
+# for the subcommand.
+egress_respell_word() {
+  EGRESS_RV=( "$1" ); EGRESS_RVN=1; EGRESS_RVCH=0; EGRESS_RVFOLD=0
+  egress_brace_words "$1" || true  # respell: brace
+  egress_unescape_rv  # respell: escape
+  case "$2" in *c*) egress_fold_rv ;; esac  # respell: fold
+  return 0
+}
+
+# The normalization applied in place to the token at index $1 (steps $2): a changed token is written
+# back and flagged in egress_tflag, and a brace group's words are spliced in, each flagged. Sets
+# egress_cfold.
+egress_norm_at() {
+  local i="$1" n k j
+  egress_respell_word "${egress_toks[$i]}" "$2"
+  egress_cfold="$EGRESS_RVFOLD"
+  [ "$EGRESS_RVCH" -eq 1 ] || return 0
+  if [ "$EGRESS_RVN" -eq 1 ]; then
+    egress_toks[$i]="${EGRESS_RV[0]}"
+    egress_tflag[$i]=1
+    return 0
+  fi
+  n="${#egress_toks[@]}"
+  EGRESS_NT=(); EGRESS_NF=(); k=0; j=0
+  while [ "$j" -lt "$i" ]; do
+    EGRESS_NT[$k]="${egress_toks[$j]}"; EGRESS_NF[$k]="${egress_tflag[$j]:-0}"
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  j=0
+  while [ "$j" -lt "$EGRESS_RVN" ]; do
+    EGRESS_NT[$k]="${EGRESS_RV[$j]}"; EGRESS_NF[$k]=1
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  j=$(( i + 1 ))
+  while [ "$j" -lt "$n" ]; do
+    EGRESS_NT[$k]="${egress_toks[$j]}"; EGRESS_NF[$k]="${egress_tflag[$j]:-0}"
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  egress_toks=( "${EGRESS_NT[@]}" )
+  egress_tflag=( "${EGRESS_NF[@]}" )
+  return 0
+}
+
+# The look-ahead's test in a respelling: the token at $1 normalizes to words whose first has the
+# basename `gh` and is followed by `api` — the next word of its own brace group, or the next token
+# normalized without the case step. A plain pair is the shipped test's, not this one's. On a hit
+# both words are written back, normalized and flagged.
+egress_la_respelled() {
+  local i="$1" g
+  egress_respell_word "${egress_toks[$i]}" abc
+  [ "$EGRESS_RVN" -ge 1 ] || return 1
+  [ "${EGRESS_RV[0]##*/}" = gh ] || return 1
+  if [ "$EGRESS_RVN" -ge 2 ]; then
+    [ "${EGRESS_RV[1]}" = api ] || return 1
+    egress_norm_at "$i" abc
+    return 0
+  fi
+  g="$EGRESS_RVCH"
+  egress_respell_word "${egress_toks[$(( i + 1 ))]}" ab
+  [ "$EGRESS_RVN" -ge 1 ] || return 1
+  [ "${EGRESS_RV[0]}" = api ] || return 1
+  [ "$g" -eq 1 ] || [ "$EGRESS_RVCH" -eq 1 ] || return 1
+  egress_norm_at "$i" abc
+  egress_norm_at "$(( i + 1 ))" ab
+  return 0
+}
+
+# R6 — the mark pass, right after a segment is tokenized: strip every respelling mark from
+# egress_toks and flag each token that carried one in egress_tflag; a token that was only the mark
+# is dropped and its flag moves to the next token. Returns 1 when no token is left.
+egress_strip_marks() {
+  local i=0 n="${#egress_toks[@]}" k=0 t carry=0
+  egress_tflag=()
+  case "${egress_toks[*]}" in
+    *"${EGRESS_RSP}"*) ;;
+    *) return 0 ;;
+  esac
+  EGRESS_NT=(); EGRESS_NF=()
+  while [ "$i" -lt "$n" ]; do
+    t="${egress_toks[$i]}"
+    i=$(( i + 1 ))
+    case "$t" in
+      *"${EGRESS_RSP}"*)
+        t="${t//${EGRESS_RSP}/}"
+        if [ -z "$t" ]; then carry=1; continue; fi
+        EGRESS_NT[$k]="$t"; EGRESS_NF[$k]=1
+        ;;
+      *)
+        EGRESS_NT[$k]="$t"; EGRESS_NF[$k]="$carry"
+        ;;
+    esac
+    carry=0
+    k=$(( k + 1 ))
+  done
+  [ "$k" -gt 0 ] || return 1
+  egress_toks=( "${EGRESS_NT[@]}" )
+  egress_tflag=( "${EGRESS_NF[@]}" )
+  return 0
+}
+
+# Is the word $1 a redirection? An optional descriptor — a number, or {name} — then an unquoted `<`
+# or `>`. The protected forms carry the sentinel in place of the `&` of `>&` and `<&` and the `|` of
+# `>|`, and lead with it for `&>` and `&>>`; a quoted `<` or `>` is a stand-in here and never
+# matches. EGRESS_RDR_OP is 1 when the word is the operator alone, so its operand is the next word.
+egress_is_redirection() {
+  local r="$1" nm
+  EGRESS_RDR_OP=0
+  r="${r#"${r%%[!0123456789]*}"}"
+  case "$r" in
+    '{'*)
+      nm="${r%%\}*}"
+      nm="${nm#\{}"
+      case "$nm" in ''|[!A-Za-z_]*|*[!A-Za-z0-9_]*) return 1 ;; esac
+      case "$r" in *'}'*) r="${r#*\}}" ;; *) return 1 ;; esac
+      ;;
+  esac
+  case "$r" in
+    '<'*|'>'*|"${EGRESS_SENT}>"*) ;;
+    *) return 1 ;;
+  esac
+  case "$r" in
+    '<'|'>'|'>>'|'<>'|'<<'|'<<-'|'<<<'|">${EGRESS_SENT}"|"<${EGRESS_SENT}"|"${EGRESS_SENT}>"|"${EGRESS_SENT}>>")
+      EGRESS_RDR_OP=1
+      ;;
+  esac
+  return 0
+}
+
+# R5 — the redirection strip: every redirection word leaves egress_toks, and so does the operand of
+# an operator written alone, wherever it stands in the segment, because none of them is an argv
+# word. The token after a removal is flagged. Returns 1 when no token is left.
+egress_strip_redirections() {
+  local i=0 n="${#egress_toks[@]}" k=0 fl=0
+  case "${egress_toks[*]}" in
+    *'<'*|*'>'*) ;;
+    *) return 0 ;;
+  esac
+  EGRESS_NT=(); EGRESS_NF=()
+  while [ "$i" -lt "$n" ]; do
+    if egress_is_redirection "${egress_toks[$i]}"; then
+      i=$(( i + 1 + EGRESS_RDR_OP ))
+      fl=1
+      continue
+    fi
+    EGRESS_NT[$k]="${egress_toks[$i]}"
+    if [ "$fl" -eq 1 ]; then EGRESS_NF[$k]=1; else EGRESS_NF[$k]="${egress_tflag[$i]:-0}"; fi
+    fl=0
+    k=$(( k + 1 ))
+    i=$(( i + 1 ))
+  done
+  [ "$k" -gt 0 ] || return 1
+  egress_toks=( "${EGRESS_NT[@]}" )
+  egress_tflag=( "${EGRESS_NF[@]}" )
+  return 0
+}
+
+# Put the quoted-operator stand-ins back once the redirection strip has run, so a path, a field or a
+# logged value carries the characters the command wrote.
+egress_restore_quoted_ops() {
+  local i=0 n="${#egress_toks[@]}"
+  case "${egress_toks[*]}" in
+    *"${EGRESS_QLT}"*|*"${EGRESS_QGT}"*) ;;
+    *) return 0 ;;
+  esac
+  while [ "$i" -lt "$n" ]; do
+    egress_toks[$i]="${egress_toks[$i]//${EGRESS_QLT}/<}"
+    egress_toks[$i]="${egress_toks[$i]//${EGRESS_QGT}/>}"
+    i=$(( i + 1 ))
+  done
+  return 0
+}
+
+# R5's operator protection, shared by both adjudication gates: the `&` of `>&`, `<&` and `&>` (so
+# `&>>` too) and the `|` of `>|` become the sentinel before segmentation, so a redirection operator
+# is never read as a separator. Sets EGRESS_PRO.
+egress_protect_redirect_ops() {
+  local s="$1"
+  s="${s//>&/>${EGRESS_SENT}}"
+  s="${s//<&/<${EGRESS_SENT}}"
+  s="${s//&>/${EGRESS_SENT}>}"  # respell: redirect-ampgt
+  s="${s//>|/>${EGRESS_SENT}}"
+  EGRESS_PRO="$s"
+  return 0
+}
+
+# R3's keep rule: the physical line $1 holds an adjacent pair whose first word's basename is gh once
+# normalized and whose second word is api, and its first word is neither api nor a dash-led word
+# without a slash. Such a line earns a verdict on its own — the shipped hook reads it as a fresh
+# command start — and a join would turn it into a prefix position. A line that opens with api, or
+# with a dash-led word, cannot resolve alone, so joining it takes nothing from it.
+egress_keep_line() {
+  local l="${1//${EGRESS_RSP}/}" i=0 n w2 first
+  case "$l" in *[![:space:]]*) ;; *) return 1 ;; esac
+  set -f
+  # shellcheck disable=SC2206
+  EGRESS_KW=( $l )
+  set +f
+  n="${#EGRESS_KW[@]}"
+  first="${EGRESS_KW[0]}"
+  case "$first" in
+    api) return 1 ;;
+    -*) case "$first" in */*) ;; *) return 1 ;; esac ;;
+  esac
+  while [ "$i" -lt "$n" ]; do
+    egress_respell_word "${EGRESS_KW[$i]}" abc
+    if [ "$EGRESS_RVN" -ge 1 ] && [ "${EGRESS_RV[0]##*/}" = gh ]; then
+      w2=""
+      if [ "$EGRESS_RVN" -ge 2 ]; then
+        w2="${EGRESS_RV[1]}"
+      elif [ $(( i + 1 )) -lt "$n" ]; then
+        egress_respell_word "${EGRESS_KW[$(( i + 1 ))]}" ab
+        w2="${EGRESS_RV[0]:-}"
+      fi
+      if [ "$w2" = api ]; then return 0; fi
+    fi
+    i=$(( i + 1 ))
+  done
+  return 1
+}
+
+# R3 — the continuation join on the neutralized command in egress_norm: an unquoted backslash-newline
+# is removed, as the shell removes it before it reads words, and the respelling mark is left in front
+# of the joined line's first non-blank character. Never inside a `#` comment, where a backslash ends
+# nothing; never on an even backslash run; and not where the keep rule holds for the line it would
+# join. The second reader passes `nokeep`, for a view with every continuation joined.
+#
+# The physical lines are read once into an array and the result is joined once, so the cost is
+# linear in the command, like the segmentation loop's; nothing runs unless the command carries an
+# unquoted backslash-newline.
+egress_join_continuations() {
+  local i=1 n=0 k=0 l cur nxt lead keep
+  case "$egress_norm" in
+    *\\$'\n'*) ;;
+    *) return 0 ;;
+  esac
+  EGRESS_JL=(); EGRESS_JO=()
+  while IFS= read -r l; do
+    EGRESS_JL[$n]="$l"
+    n=$(( n + 1 ))
+  done <<< "$egress_norm"
+  cur="${EGRESS_JL[0]}"
+  while [ "$i" -lt "$n" ]; do
+    nxt="${EGRESS_JL[$i]}"
+    keep=1
+    if egress_trailing_backslash_odd "$cur" && ! egress_comment_open_at_end "${cur//${EGRESS_RSP}/}"; then
+      keep=0
+      if [ "${1:-}" != nokeep ] && egress_keep_line "$nxt"; then keep=1; fi  # respell: keep
+    fi
+    if [ "$keep" -eq 1 ]; then
+      EGRESS_JO[$k]="$cur"
+      k=$(( k + 1 ))
+      cur="$nxt"
+    else
+      lead="${nxt%%[![:blank:]]*}"
+      cur="${cur%\\}${lead}${EGRESS_RSP}${nxt#"$lead"}"
+    fi
+    i=$(( i + 1 ))
+  done
+  EGRESS_JO[$k]="$cur"
+  egress_join_lines
+  return 0
+}
+
+# The joined lines back into egress_norm, one newline between each.
+egress_join_lines() {
+  local IFS=$'\n'
+  egress_norm="${EGRESS_JO[*]}"
+  return 0
+}
+
+# Class 10 — a short-flag word that gh's flag parser reads as a cluster: any run of the boolean -i,
+# then one value-taking flag (-X -f -F -H -q -t -p) whose value is the rest of the word with one
+# leading `=` dropped, or the next word when nothing is attached. A word that parser would reject is
+# stepped over as one token, as before. Reads and advances the operand walk's state.
+egress_short_flags() {
+  local s="${egress_tok#-}" f v sep=0 hasv=1
+  while : ; do
+    case "$s" in
+      i*) s="${s#i}" ;;
+      *) break ;;
+    esac
+  done
+  f="${s:0:1}"
+  v="${s:1}"
+  case "$f" in
+    X|f|F|H|q|t|p) ;;
+    *) egress_idx=$(( egress_idx + 1 )); return 0 ;;
+  esac
+  case "$v" in
+    '') sep=1 ;;
+    '='?*) v="${v#=}" ;;
+  esac
+  if [ "$sep" -eq 1 ]; then
+    if [ $(( egress_idx + 1 )) -lt "${#egress_toks[@]}" ]; then
+      v="${egress_toks[$(( egress_idx + 1 ))]}"
+    else
+      hasv=0
+    fi
+  fi
+  case "$f" in
+    X) if [ "$hasv" -eq 1 ]; then egress_method="$v"; egress_explicit=1; fi ;;
+    f|F) egress_implicit=1 ;;
+  esac
+  egress_idx=$(( egress_idx + 1 + sep ))
+  return 0
+}
+
+# R9 — the unparseable branch's second reader, joined to the shipped test on one `||` line. A command
+# the scanner cannot tokenize is refused when it carries a gh api invocation at a position the
+# shipped test reads — the start of the command, or right after `;` `&` `|` or a newline — and the
+# shipped test runs first, unchanged, so every refusal it makes stands. This reader finds the same
+# invocation in a respelling: in the physical lines, and again with every continuation joined, it
+# reads each piece with the walk's own helpers — the quote scanner up to any quote it cannot close,
+# the mark pass, the redirection strip, the command-word normalization on the first two words — and
+# passes over no keyword, assignment or prefix word, each of which is a widening in the walk where
+# this branch has no widening rung. Above the parse cap it locates nothing; the plain spelling there
+# is still located by the shipped test.
+egress_old_reachable_respelled() {
+  local cmd="$1" view v=0 piece
+  [ "${#cmd}" -le "$EGRESS_007_PARSE_CAP" ] || return 1
+  while [ "$v" -lt 2 ]; do
+    view="$cmd"
+    if [ "$v" -eq 1 ]; then
+      case "$view" in
+        *\\$'\n'*) ;;
+        *) return 1 ;;
+      esac
+      egress_norm="$view"
+      egress_join_continuations nokeep
+      view="$egress_norm"
+    fi
+    egress_protect_redirect_ops "$view"
+    view="${EGRESS_PRO//;/$'\n'}"
+    view="${view//&/$'\n'}"
+    view="${view//|/$'\n'}"
+    while IFS= read -r piece; do
+      if egress_piece_is_gh_api "$piece"; then return 0; fi
+    done <<< "$view"
+    v=$(( v + 1 ))
+  done
+  return 1
+}
+
+# One piece of an untokenizable command: does it open with gh api, in a spelling the walk resolves?
+egress_piece_is_gh_api() {
+  local p="$1"
+  egress_neutralize_into "$p" || true
+  p="$EGRESS_NQ"
+  case "$p" in *[![:space:]]*) ;; *) return 1 ;; esac
+  set -f
+  # shellcheck disable=SC2206
+  egress_toks=( $p )
+  set +f
+  egress_strip_marks || return 1
+  egress_strip_redirections || return 1
+  egress_respell_word "${egress_toks[0]}" abc
+  [ "$EGRESS_RVN" -ge 1 ] || return 1
+  [ "${EGRESS_RV[0]##*/}" = gh ] || return 1
+  if [ "$EGRESS_RVN" -ge 2 ]; then
+    [ "${EGRESS_RV[1]}" = api ] || return 1
+    return 0
+  fi
+  [ "${#egress_toks[@]}" -ge 2 ] || return 1
+  egress_respell_word "${egress_toks[1]}" ab
+  [ "$EGRESS_RVN" -ge 1 ] || return 1
+  [ "${EGRESS_RV[0]}" = api ] || return 1
+  return 0
 }
 
 # Classify a gh-api path operand per the AUTHORITY-PREFIX rule.
@@ -1056,11 +1683,16 @@ case "$TOOL_NAME" in
     # why the single-ERE structure was replaced rather than patched, and why
     # ANCHOR_PREFIX_BASH is deliberately not read here.
     #
-    # Fast-path guard. The head token's basename must be `gh`, so the substring is
-    # necessarily present — a command without it can be skipped without scanning.
-    # Non-`gh` commands are therefore measurably FASTER than before this change,
-    # because the gate `grep` fork the old structure always ran is now skipped.
-    case "$COMMAND" in
+    # Fast-path guard, derived from the transformations it guards rather than from example
+    # spellings: the rule resolves a command word through quote removal, ANSI-C decoding,
+    # unescaping, the case fold, the brace splice and the continuation join, and every one
+    # of those can produce `gh` only from text that, once its quote characters and `$` are
+    # removed, holds a `gh` in either letter case or a backslash. A command without either
+    # is skipped without scanning, so non-`gh` commands stay as fast as before.
+    egress_fast="$COMMAND"
+    egress_fq="${COMMAND//[\"\'\$]/}"  # respell: fast-strip
+    case "$egress_fq" in *[Gg][Hh]*|*'\'*) egress_fast=gh ;; esac  # respell: fast-path
+    case "$egress_fast" in
       *gh*)
     # The branch body below is deliberately left at the rule's own indentation
     # rather than shifted under the `case`. The guard is a performance wrapper, not
@@ -1080,7 +1712,12 @@ case "$TOOL_NAME" in
       # what the shell cannot parse — a heredoc body, an escaped or nested quote, a
       # comment the scanner does not recognize — so a well-formed command can be refused
       # here too, and each record's `features.shell_parse` says which kind it was.
-      if egress_old_reachable_gh_api "$COMMAND"; then
+      #
+      # The class is read in every spelling the walk resolves at those positions: the
+      # shipped test runs first and unchanged, and the second reader looks for the same
+      # invocation through the walk's own helpers, past no keyword, assignment or prefix
+      # word, and only up to the parse cap for a respelled verb.
+      if egress_old_reachable_gh_api "$COMMAND" || egress_old_reachable_respelled "$COMMAND"; then  # respell: unparseable
         # The one cause whose evidence is a constant carries the feature set instead.
         egress_007_verdict "unparseable" "unknown" 0 "$(egress_007_unparseable_features "$COMMAND")"
       fi
@@ -1103,6 +1740,12 @@ case "$TOOL_NAME" in
       # segment after the first announces how it was opened and the loop below stays a
       # single flat pass. The first segment carries no marker: it is the start of the
       # command, which the old anchor always admitted.
+      #
+      # Before segmenting, a backslash-newline is joined as the shell joins it (the keep rule
+      # keeps a line that earns its own verdict), and a redirection operator's `&` or `|`
+      # is protected, so it is read as the operator it is and never as a separator.
+      egress_join_continuations  # respell: join
+      egress_protect_redirect_ops "$egress_norm"; egress_norm="$EGRESS_PRO"  # respell: redirect
       egress_segs="${egress_norm//;/$'\n'${EGRESS_BND_OLD}}"
       egress_segs="${egress_segs//&/$'\n'${EGRESS_BND_OLD}}"
       egress_segs="${egress_segs//|/$'\n'${EGRESS_BND_OLD}}"
@@ -1112,6 +1755,7 @@ case "$TOOL_NAME" in
 
       egress_segno=0
       egress_ghseen=0
+      egress_rpseen=0
 
       while IFS= read -r egress_seg; do
         egress_segno=$(( egress_segno + 1 ))
@@ -1133,6 +1777,12 @@ case "$TOOL_NAME" in
         # shellcheck disable=SC2206
         egress_toks=( $egress_seg )
         set +f
+        # The respelling marks come off, flagging their tokens, and every redirection word
+        # (with an operator's operand) leaves the segment, flagging the token after it; a quoted
+        # `<` or `>` is a stand-in until then, and is put back once the strip has run.
+        egress_strip_marks || continue
+        egress_strip_redirections || continue  # respell: redirect
+        egress_restore_quoted_ops
         [ "${#egress_toks[@]}" -ge 2 ] || continue
 
         # ---- Resolve COMMAND POSITION before reading the verb ----
@@ -1154,10 +1804,19 @@ case "$TOOL_NAME" in
         # `=` AND its NAME part is a valid shell name — so `a-b=1` and `--body=x` both
         # terminate the walk and the skip cannot degrade into "advance past any token
         # containing `=`". One vocabulary across both matcher surfaces, deliberately.
+        #
+        # A token the walk reaches DIRECTLY — the segment head, or the token right after a
+        # keyword, an assignment, or a prefix word with no option between — is read as the
+        # shell resolves it (the command-word normalization) before it is tested; the first
+        # token after a prefix command's option run is not, because it may be that option's
+        # argument. A reserved word is recognized only in its own letter case.
         egress_hidx=0
         egress_pfxseen=0
         egress_scanhit=0
         egress_pos=""
+        egress_direct=1
+        egress_hnorm=0
+        egress_cfold=0
         while [ "$egress_hidx" -lt "${#egress_toks[@]}" ]; do
           egress_raw="${egress_toks[$egress_hidx]}"
           case "$egress_raw" in
@@ -1166,22 +1825,34 @@ case "$TOOL_NAME" in
                 *[!A-Za-z0-9_]*) break ;;
               esac
               egress_hidx=$(( egress_hidx + 1 ))
+              egress_direct=1
               continue
               ;;
           esac
+          egress_hnorm=0
+          egress_cfold=0
+          if [ "$egress_direct" -eq 1 ]; then
+            egress_norm_at "$egress_hidx" abc
+            egress_hnorm=1
+            egress_raw="${egress_toks[$egress_hidx]}"
+          fi
           case "${egress_raw##*/}" in
             do|then|else|elif|if|while|until|'!'|'{'|'}'|'{}')
+              [ "$egress_cfold" -eq 0 ] || break
               egress_hidx=$(( egress_hidx + 1 ))
+              egress_direct=1
               ;;
             time|command|builtin|exec|nohup|env|sudo|xargs|timeout|nice|stdbuf)
               egress_pfxseen=1
               egress_hidx=$(( egress_hidx + 1 ))
+              egress_optat="$egress_hidx"
               while [ "$egress_hidx" -lt "${#egress_toks[@]}" ]; do
                 case "${egress_toks[$egress_hidx]}" in
                   -*) egress_hidx=$(( egress_hidx + 1 )) ;;
                   *) break ;;
                 esac
               done
+              if [ "$egress_hidx" -eq "$egress_optat" ]; then egress_direct=1; else egress_direct=0; fi
               ;;
             *) break ;;
           esac
@@ -1210,22 +1881,32 @@ case "$TOOL_NAME" in
         # POST <path>`, or a heredoc body line that opens with a prefix word) is evaluated as
         # a write. Every position this block reaches is a widening (the verb is never at the
         # head of the segment), so it follows the rollout phase and is refused only once that
-        # phase is `enforce`. What the rule reaches is literal adjacent `gh` and `api` words
-        # at a position its walk resolves; anything else is undetermined, not covered — among
-        # others a command carried as a string (`bash -c '...'`, `env -S '...'`), a command
-        # word that is a variable, a leading word outside the prefix set, and a spelling the
-        # walk above does not resolve at all.
+        # phase is `enforce`. What the rule reaches is adjacent `gh` and `api` words at a
+        # position its walk resolves, in their plain spelling or in one the command-word
+        # normalization resolves; anything else is undetermined, not covered — among others a
+        # command carried as a string (`bash -c '...'`, `env -S '...'`), a command word that is
+        # a variable, a leading word outside the prefix set, and a spelling no helper of this
+        # rule resolves (the list beside the respelling helpers).
         #
-        # The walk above is deliberately untouched, so every segment it already resolved is
-        # resolved identically. `egress_scanhit` records that the verb was found here and
+        # Every segment the walk resolved before the respelling repairs is resolved
+        # identically. `egress_scanhit` records that the verb was found here and
         # not by the walk; the first-invocation counter below reads it. `egress_pos` labels
         # the would-fire row this hit writes (`pos: "look-ahead"`), so the drain can tell
         # the two populations apart: it says which locator found the verb, never that the
-        # words it found are executed.
+        # words it found are executed. A candidate is read in a respelling only once: the
+        # token the walk already normalized is tested in its normalized form alone.
         if [ "$egress_pfxseen" -eq 1 ]; then
           egress_sidx="$egress_hidx"
           while [ $(( egress_sidx + 1 )) -lt "${#egress_toks[@]}" ]; do
             if [ "${egress_toks[$egress_sidx]##*/}" = "gh" ] && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then
+              if [ "$egress_sidx" -ne "$egress_hidx" ]; then
+                egress_hidx="$egress_sidx"
+                egress_scanhit=1
+                egress_pos="look-ahead"
+              fi
+              break
+            fi
+            if { [ "$egress_sidx" -ne "$egress_hidx" ] || [ "$egress_hnorm" -eq 0 ]; } && egress_la_respelled "$egress_sidx"; then
               if [ "$egress_sidx" -ne "$egress_hidx" ]; then
                 egress_hidx="$egress_sidx"
                 egress_scanhit=1
@@ -1248,10 +1929,21 @@ case "$TOOL_NAME" in
           gh) ;;
           *) continue ;;
         esac
+        # The subcommand is read without the case step: gh rejects `API`.
+        egress_norm_at "$(( egress_hidx + 1 ))" ab
         case "${egress_toks[$(( egress_hidx + 1 ))]}" in
           api) ;;
           *) continue ;;
         esac
+        # Was this invocation reached through a respelling? It was when any token from the
+        # segment start through the subcommand carried a mark, followed a removed
+        # redirection, or was changed by the command-word normalization.
+        egress_repaired=0
+        egress_j=0
+        while [ "$egress_j" -le $(( egress_hidx + 1 )) ]; do
+          if [ "${egress_tflag[$egress_j]:-0}" -eq 1 ]; then egress_repaired=1; break; fi
+          egress_j=$(( egress_j + 1 ))
+        done
         # A verb found by the secondary locator does not advance the first-invocation
         # counter. The rollout classifier below can refuse from day one only the FIRST
         # invocation the walk resolves; counting one that only the locator can see would
@@ -1259,6 +1951,11 @@ case "$TOOL_NAME" in
         # a deny withdrawn by a change that was meant only to add evaluation. Holding the
         # counter still keeps the shipped hook's verdict for every invocation the walk
         # resolves; it is not a reconstruction of the replaced matcher's verdict.
+        #
+        # An invocation reached only through a respelling does not advance it either, for the
+        # same reason: the shipped hook could not see it, so counting it would move a later
+        # plain write out of the day-one refusal. It counts on its own counter instead.
+        if [ "$egress_repaired" -eq 1 ] && [ "$egress_scanhit" -eq 0 ]; then egress_scanhit=1; egress_rpseen=$(( egress_rpseen + 1 )); fi  # respell: no-count
         if [ "$egress_scanhit" -eq 0 ]; then egress_ghseen=$(( egress_ghseen + 1 )); fi
 
         # ---- Walk the operands: method, write-ness, and the path ----
@@ -1272,6 +1969,11 @@ case "$TOOL_NAME" in
         # Implicit POST is exact, not a heuristic: gh documents that the request
         # method defaults to POST when a field flag is present, so `-f`/`-F`/`--field`
         # /`--raw-field`/`--input` IS a write even with no `-X`.
+        #
+        # A short flag is read in every form gh's parser takes: separate (`-X POST`),
+        # attached (`-XPOST`, `-X=POST`) and clustered after the boolean `-i` (`-iX POST`),
+        # so a method or field flag sets what its plain spelling sets and its value is never
+        # taken for the path.
         egress_idx=$(( egress_hidx + 2 ))
         egress_method=""
         egress_explicit=0
@@ -1313,6 +2015,7 @@ case "$TOOL_NAME" in
             -H|--header|-q|--jq|-t|--template|--hostname|--cache|-p|--preview)
               egress_idx=$(( egress_idx + 2 ))
               ;;
+            -[!-]?*) egress_short_flags; continue ;;  # respell: short-flags
             -*)
               egress_idx=$(( egress_idx + 1 ))
               ;;
@@ -1336,13 +2039,19 @@ case "$TOOL_NAME" in
 
         # ---- Rollout classification ----
         #
-        # A deny is a WIDENING exactly when the replaced matcher could not have
-        # produced it. That matcher adjudicated ONE path — the FIRST `gh api` in the
-        # command — reached only from start-of-string or a `[;&|]` separator, with the
-        # verb at the head of the segment, and only when an explicit write method was
-        # present. A deny meeting all four conditions is the SAME verdict the old code
-        # reached: it enforces from day one, because gating it would LOOSEN a control
-        # that already denies. Anything else is new and enters the rollout ladder.
+        # A write is classified by the command position the shell resolves it to, not by
+        # how that position is spelled. The replaced matcher adjudicated ONE path — the
+        # FIRST `gh api` in the command — reached only from start-of-string or a `[;&|]`
+        # separator, with the verb at the head of the segment, and only when an explicit
+        # write method was present. A write meeting all four conditions enforces from day
+        # one in every spelling the rule resolves, because gating it would LOOSEN a control
+        # that already denies its plain spelling. Anything else enters the rollout ladder.
+        #
+        # "First" is read on two counters. An invocation the shipped hook could resolve is
+        # the first when it is the first such one, exactly as before. An invocation resolved
+        # only through a respelling is the first when no counted invocation precedes it and
+        # it is the first respelled one — so a respelled read before a plain write leaves that
+        # write refused, stricter than its plain twin and never looser.
         #
         # The `oldpos` term is why segmentation tracks two separator classes. Without
         # it a write inside `$( )` or a subshell would be classified as old-reachable
@@ -1350,7 +2059,7 @@ case "$TOOL_NAME" in
         # so that deny is new and owes the ladder. Measured: it is the difference
         # between three cases reading enforce and reading shadow.
         egress_widening=1
-        if [ "$egress_ghseen" -eq 1 ] && [ "$egress_hidx" -eq 0 ] && [ "$egress_explicit" -eq 1 ] && [ "$egress_oldpos" -eq 1 ]; then
+        if [ "$egress_hidx" -eq 0 ] && [ "$egress_explicit" -eq 1 ] && [ "$egress_oldpos" -eq 1 ] && { { [ "$egress_repaired" -eq 0 ] && [ "$egress_ghseen" -eq 1 ]; } || { [ "$egress_repaired" -eq 1 ] && [ "$egress_ghseen" -eq 0 ] && [ "$egress_rpseen" -eq 1 ]; }; }; then
           egress_widening=0
         fi
 

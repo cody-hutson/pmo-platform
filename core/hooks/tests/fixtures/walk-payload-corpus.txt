@@ -1161,7 +1161,11 @@ PN04|block-destructive|wrap-prec-name|-|?|a|exec --zz=@D@/x.sh ls
 # text the look-ahead evaluates as a write (a printed command, env -S's own argv), declared,
 # recorded now; eg-head is located by the head walk before and after; eg-day1 is refused before
 # and after; eg-near must stay allowed; open-eg-unreached is a write this rule's own walk does
-# not reach, declared open; open-eg-canon is a credential read behind a prefix command's
+# not reach, declared open; of its rows, the rule's walk now reads the respelled ones (card
+# #8315), so EG140 and EG142-EG144 — a leading redirection and an escaped, brace-expanded or
+# ANSI-C-quoted verb — moved to a day-one refusal (group eg-respelled, twin EG100) and EG141, a
+# redirection before a prefix command, to a record (group eg-respelled-look) in #8315's fix
+# commit; open-eg-canon is a credential read behind a prefix command's
 # option, which the shared canonicalizer now reaches (card #8314), so EG160-EG162 moved from
 # an open allow to a refusal (group eg-canon, verdict B) in #8314's fix commit; eg-counter is the
 # design's generated then-write corpus — the prefix words none, env, sudo, xargs, timeout,
@@ -1274,11 +1278,11 @@ EG131|block-egress|eg-near|-|?|a|nice -n 5 echo hello
 EG132|block-egress|eg-near|-|?|a|env X=1 echo "gh api -X POST @NO@"
 EG133|block-egress|eg-near|-|?|a|env -u NAME gh api -X POST @OK@/5541/comments -f body=x
 EG135|block-egress|eg-near|-|?|a|xargs -I R echo done
-EG140|block-egress|open-eg-unreached|-|?|a|>/dev/null gh api -X POST @NO@
-EG141|block-egress|open-eg-unreached|-|?|a|2>/dev/null env -u X gh api -X POST @NO@
-EG142|block-egress|open-eg-unreached|-|?|a|\gh api -X POST @NO@
-EG143|block-egress|open-eg-unreached|-|?|a|{gh,api} -X POST @NO@
-EG144|block-egress|open-eg-unreached|-|?|a|$'gh' api -X POST @NO@
+EG140|block-egress|eg-respelled|EG100|?|B|>/dev/null gh api -X POST @NO@
+EG141|block-egress|eg-respelled-look|-|?|W|2>/dev/null env -u X gh api -X POST @NO@
+EG142|block-egress|eg-respelled|EG100|?|B|\gh api -X POST @NO@
+EG143|block-egress|eg-respelled|EG100|?|B|{gh,api} -X POST @NO@
+EG144|block-egress|eg-respelled|EG100|?|B|$'gh' api -X POST @NO@
 EG145|block-egress|open-eg-unreached|-|?|a|echo -X POST @NO@ | xargs gh api
 EG146|block-egress|open-eg-unreached|-|?|a|watch gh api -X POST @NO@
 EG147|block-egress|open-eg-unreached|-|?|a|bash -c 'gh api -X POST @NO@'
@@ -1562,3 +1566,137 @@ DQ13|block-destructive|d023-decl|-|?|B|CLAUDE_HOOK_BYPASS+=1 true
 DQ14|block-destructive|d023-decl|-|?|B|PMO_SCOPE_GUARD_ROOT+=x true
 DQ20|block-destructive|d023-near|-|?|a|env FOO_HOOK_BYPASS=1 true
 DQ21|block-destructive|d023-near|-|?|a|echo CLAUDE_HOOK_BYPASS=1
+# --- seed 10: card #8315 — BLOCK-EGRESS-007 by spelling: the verb, its position and its flags (113 rows) ---
+# Ids ES. Read by block-egress.test.sh (arms EGRESSCORPUS-*) exactly as seed 8 is: at the rule's
+# shipped rollout phase, in a hermetic root at enforce mode, @OK@ the one gh api path that root
+# allowlists and @NO@ a path no row of it grants. Each row writes one gh api invocation in a
+# spelling the shell resolves to the plain one — a redirection word, an escaped, brace-expanded,
+# ANSI-C- or locale-quoted or letter-case-variant command word, a verb split by quote characters,
+# or a method or field flag in its attached or clustered short form — and its twin, where one
+# exists, is the plain spelling. A row ending in `; echo it\'s` carries an unquoted escaped
+# apostrophe: well-formed shell that the rule's scanner reads as an unterminated quote, so the row
+# reaches the rule's unparseable branch. A command needing a newline (a line continuation, a
+# heredoc quotation line) is a suite arm only. Groups: es-head, es-fast, es-unparse and es-flag
+# move to the verdict their plain twin gets; es-tighten and es-r2tight are declared tightenings;
+# es-prefix and es-later move from no record to the rollout phase's record; es-precision,
+# es-r2prec and es-flag-prec are declared precision improvements; es-boundary with its twins in
+# es-boundary-twin pins that no command crosses the scanner's parse boundary; es-counter pins the
+# first-invocation counter; es-ampgt pins a mid-command `&>`; es-quote pins the declared
+# quotation-line reading; es-unparse-ctl is the unparseable refusal of the plain spelling;
+# es-near, es-unparse-near, es-flag-near and es-ok must stay allowed; open-es-resid is declared
+# open. gt is `?`: a row's outcome is a gh api write, which no suite performs. The verdicts are the
+# fix commit's, because this block lands with the fix; the red-before reading of each group that
+# moves is the suite run against the pre-fix hook, kept as executed evidence.
+ES001|block-egress|es-head|EG100|?|B|2>/dev/null gh api -X POST @NO@
+ES002|block-egress|es-head|EG100|?|B|</dev/null gh api -X POST @NO@
+ES003|block-egress|es-head|EG100|?|B|>> /tmp/es.log gh api -X POST @NO@
+ES004|block-egress|es-head|EG100|?|B|2>&1 gh api -X POST @NO@
+ES005|block-egress|es-head|EG100|?|B|&>/dev/null gh api -X POST @NO@
+ES006|block-egress|es-head|EG100|?|B|>|/tmp/es.out gh api -X POST @NO@
+ES007|block-egress|es-head|EG100|?|B|<<<x gh api -X POST @NO@
+ES008|block-egress|es-head|EG100|?|B|g\h api -X POST @NO@
+ES009|block-egress|es-head|EG100|?|B|$'\x67h' api -X POST @NO@
+ES010|block-egress|es-head|EG100|?|B|$'\147\150' api -X POST @NO@
+ES011|block-egress|es-head|EG100|?|B|$"gh" api -X POST @NO@
+ES012|block-egress|es-head|EG100|?|B|$'g\x68' api -X POST @NO@
+ES013|block-egress|es-head|EG100|?|B|GH api -X POST @NO@
+ES014|block-egress|es-head|EG100|?|B|Gh api -X POST @NO@
+ES015|block-egress|es-head|EG100|?|B|/opt/homebrew/bin/GH api -X POST @NO@
+ES020|block-egress|es-tighten|EG100|?|B|gh \api -X POST @NO@
+ES021|block-egress|es-tighten|EG100|?|B|gh api -X >/dev/null POST @NO@
+ES022|block-egress|es-tighten|EG100|?|B|gh api -X 2>/dev/null POST @NO@
+ES030|block-egress|es-prefix|EG080|?|W|\env gh api -X POST @NO@
+ES031|block-egress|es-prefix|EG080|?|W|ENV gh api -X POST @NO@
+ES032|block-egress|es-prefix|EG080|?|W|env GH api -X POST @NO@
+ES033|block-egress|es-prefix|EG001|?|W|\env -u NAME gh api -X POST @NO@
+ES034|block-egress|es-prefix|EG001|?|W|env -u NAME GH api -X POST @NO@
+ES035|block-egress|es-prefix|EG001|?|W|env -u NAME \gh api -X POST @NO@
+ES036|block-egress|es-prefix|EG001|?|W|env -u NAME $'gh' api -X POST @NO@
+ES037|block-egress|es-prefix|EG001|?|W|env -u NAME {gh,api} -X POST @NO@
+ES038|block-egress|es-prefix|EG001|?|W|2>/dev/null env -u NAME gh api -X POST @NO@
+ES039|block-egress|es-prefix|EG081|?|W|Sudo gh api -X POST @NO@
+ES050|block-egress|es-near|-|?|a|>/dev/null gh api @NO@
+ES051|block-egress|es-near|-|?|a|> gh api -X POST @NO@
+ES052|block-egress|es-near|-|?|a|\\gh api -X POST @NO@
+ES053|block-egress|es-near|-|?|a|{gx,api} -X POST @NO@
+ES054|block-egress|es-near|-|?|a|$'gx' api -X POST @NO@
+ES055|block-egress|es-near|-|?|a|$'\x67x' api -X POST @NO@
+ES056|block-egress|es-near|-|?|a|GX api -X POST @NO@
+ES057|block-egress|es-near|-|?|a|gh API -X POST @NO@
+ES058|block-egress|es-near|-|?|a|THEN gh api -X POST @NO@
+ES059|block-egress|es-near|-|?|a|echo \gh api -X POST @NO@
+ES060|block-egress|es-near|-|?|a|\env -u NAME ls
+ES061|block-egress|es-ok|-|?|a|gh api -X POST @OK@
+ES062|block-egress|es-ok|ES061|?|a|>/dev/null gh api -X POST @OK@
+ES063|block-egress|es-ok|ES061|?|a|\gh api -X POST @OK@
+ES064|block-egress|es-ok|ES061|?|a|$'gh' api -X POST @OK@
+ES065|block-egress|es-ok|ES061|?|a|GH api -X POST @OK@
+ES066|block-egress|es-ok|ES061|?|a|{gh,api} -X POST @OK@
+ES070|block-egress|es-precision|-|?|a|gh api -X POST >/dev/null @OK@
+ES071|block-egress|es-precision|-|?|a|gh api -X POST 2>&1 @OK@
+ES072|block-egress|es-precision|-|?|a|gh api -X POST > /tmp/out.json @OK@
+ES080|block-egress|es-counter|-|?|B|\gh api @OK@ ; gh api -X POST @NO@
+ES081|block-egress|es-counter|-|?|B|>/dev/null gh api @OK@ ; gh api -X POST @NO@
+ES082|block-egress|es-counter|-|?|B|GH api @OK@ ; gh api -X POST @NO@
+ES083|block-egress|es-counter|-|?|B|$'gh' api @OK@ ; gh api -X POST @NO@
+ES084|block-egress|es-counter|-|?|B|{gh,api} @OK@ ; gh api -X POST @NO@
+ES085|block-egress|es-later|-|?|W|gh api @OK@ ; \gh api -X POST @NO@
+ES086|block-egress|es-later|-|?|W|\gh api @OK@ ; \gh api -X POST @NO@
+ES090|block-egress|open-es-resid|-|?|a|=gh api -X POST @NO@
+ES091|block-egress|open-es-resid|-|?|a|/opt/homebrew/bin/g[h] api -X POST @NO@
+ES100|block-egress|es-unparse-ctl|-|?|B|gh api -X POST @NO@ ; echo it\'s
+ES111|block-egress|es-unparse-ctl|-|?|B|gh api @OK@ ; echo it\'s
+ES101|block-egress|es-unparse|ES100|?|B|>/dev/null gh api -X POST @NO@ ; echo it\'s
+ES102|block-egress|es-unparse|ES100|?|B|2>/dev/null gh api -X POST @NO@ ; echo it\'s
+ES103|block-egress|es-unparse|ES100|?|B|\gh api -X POST @NO@ ; echo it\'s
+ES104|block-egress|es-unparse|ES100|?|B|g\h api -X POST @NO@ ; echo it\'s
+ES105|block-egress|es-unparse|ES100|?|B|{gh,api} -X POST @NO@ ; echo it\'s
+ES106|block-egress|es-unparse|ES100|?|B|$'gh' api -X POST @NO@ ; echo it\'s
+ES107|block-egress|es-unparse|ES100|?|B|$'\x67h' api -X POST @NO@ ; echo it\'s
+ES108|block-egress|es-unparse|ES100|?|B|GH api -X POST @NO@ ; echo it\'s
+ES109|block-egress|es-unparse|ES100|?|B|g""h api -X POST @NO@ ; echo it\'s
+ES110|block-egress|es-unparse|ES111|?|B|\gh api @OK@ ; echo it\'s
+ES115|block-egress|es-unparse-near|-|?|a|env \gh api -X POST @NO@ ; echo it\'s
+ES116|block-egress|es-unparse-near|-|?|a|( \gh api -X POST @NO@ ) ; echo it\'s
+ES117|block-egress|es-unparse-near|-|?|a|if true; then \gh api -X POST @NO@; fi ; echo it\'s
+ES118|block-egress|es-unparse-near|-|?|a|X=1 \gh api -X POST @NO@ ; echo it\'s
+ES119|block-egress|es-unparse-near|-|?|a|\gx api -X POST @NO@ ; echo it\'s
+ES120|block-egress|es-unparse-near|-|?|a|echo x &>/dev/null \gh api -X POST @NO@ ; echo it\'s
+ES125|block-egress|es-fast|EG100|?|B|g''h api -X POST @NO@
+ES126|block-egress|es-fast|EG100|?|B|"g"h api -X POST @NO@
+ES127|block-egress|es-fast|EG100|?|B|$'g'$'h' api -X POST @NO@
+ES128|block-egress|es-fast|EG100|?|B|$'g'h api -X POST @NO@
+ES073|block-egress|es-boundary|ES134|?|B|echo $'it\'s' ; gh api @OK@
+ES131|block-egress|es-boundary|ES135|?|B|gh api @NO@ -f body=$'it\'s'
+ES132|block-egress|es-boundary|ES136|?|B|gh api @OK@ ; gh api -X POST @NO@ -f body=$'it\'s'
+ES133|block-egress|es-boundary|ES137|?|B|gh api @OK@ ; env gh api -X POST @NO@ -f body=$'it\'s'
+ES134|block-egress|es-boundary-twin|-|?|a|echo "it's" ; gh api @OK@
+ES135|block-egress|es-boundary-twin|-|?|W|gh api @NO@ -f body="it's"
+ES136|block-egress|es-boundary-twin|-|?|W|gh api @OK@ ; gh api -X POST @NO@ -f body="it's"
+ES137|block-egress|es-boundary-twin|-|?|W|gh api @OK@ ; env gh api -X POST @NO@ -f body="it's"
+ES140|block-egress|es-r2tight|EG100|?|B|gh api -X $'POST' @NO@
+ES141|block-egress|es-r2tight|EG100|?|B|gh api --method=$'POST' @NO@
+ES142|block-egress|es-r2tight|EG001|?|W|env -u NAME gh api -X $'POST' @NO@
+ES145|block-egress|es-r2prec|ES147|?|a|gh api -X POST $'@OK@'
+ES146|block-egress|es-r2prec|ES147|?|a|gh api -X POST $"@OK@"
+ES147|block-egress|es-r2prec|-|?|a|gh api -X POST '@OK@'
+ES148|block-egress|es-r2prec|-|?|B|gh api -X POST $'@NO@'
+ES150|block-egress|es-ampgt|-|?|a|echo x &>/dev/null gh api -X POST @NO@
+ES151|block-egress|es-ampgt|EG080|?|W|env &>/dev/null gh api -X POST @NO@
+ES152|block-egress|es-ampgt|-|?|a|echo x &>>/tmp/es.log gh api -X POST @NO@
+ES155|block-egress|es-quote|EG100|?|B|> note gh api -X POST @NO@
+ES156|block-egress|es-quote|ES111|?|B|> note gh api @OK@ ; echo it\'s
+ES160|block-egress|es-flag|EG100|?|B|gh api -XPOST @NO@
+ES161|block-egress|es-flag|EG100|?|B|gh api -X=POST @NO@
+ES162|block-egress|es-flag|EG100|?|B|gh api -iX POST @NO@
+ES163|block-egress|es-flag|EG100|?|B|gh api -iXPOST @NO@
+ES164|block-egress|es-flag|-|?|B|gh api @NO@ -XDELETE
+ES165|block-egress|es-flag|-|?|W|gh api @NO@ -fbody=x
+ES166|block-egress|es-flag|-|?|W|gh api @NO@ -Fbody=x
+ES167|block-egress|es-flag|-|?|W|gh api -ifbody=x @NO@
+ES168|block-egress|es-flag|EG001|?|W|env -u NAME gh api -XPOST @NO@
+ES170|block-egress|es-flag-near|-|?|a|gh api -XGET @NO@
+ES171|block-egress|es-flag-near|-|?|a|gh api -iXPOST @OK@
+ES172|block-egress|es-flag-near|-|?|a|gh api -Hx:y @NO@
+ES175|block-egress|es-flag-prec|-|?|a|gh api -iH accept:x @OK@ -X POST
+ES176|block-egress|es-flag-prec|-|?|a|gh api -XGET @NO@ -f q=1
