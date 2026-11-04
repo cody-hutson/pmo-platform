@@ -6,12 +6,12 @@ canonical_path: operations/templates/qa-acceptance-report-template.md
 owner: [OPERATOR_NAME]
 review_status: DRAFT
 created: 2026-07-03
-updated: 2026-09-26
+updated: 2026-11-04
 generated_by: release-pipeline v4.06
 reviewer: N/A
 canon: PMBOK 7 §Quality + ISO/IEC/IEEE 29119-3 §Test Completion Report
 canon_compat: none
-version: "v4.70"
+version: "v5.00"
 supersedes: N/A
 superseded_by: N/A
 ---
