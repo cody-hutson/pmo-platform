@@ -5,7 +5,7 @@
 |---|---|
 | Hook | `.claude/hooks/block-mcp-writes.sh` |
 | Matcher | `mcp__*` |
-| Scope | MCP tools matching write-verb pattern, gated by allowlist |
+| Scope | MCP tools matching the write-verb pattern, gated by the allowlist |
 | Mode | Warn-mode initial (shared `.claude/hooks/.mode`); flip-to-enforce per the [`§ Shakedown → Enforce Transition Checklist`](../bypass-mode-readiness.md) |
 
 ### Rule registry
