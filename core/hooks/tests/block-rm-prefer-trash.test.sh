@@ -327,6 +327,17 @@ test_case "EXT-POS17: time -p rm blocks (wrapper flag that takes no argument)" \
 test_case "EXT-POS18: xargs with its own option feeding rm blocks via the stdin sentinel" \
   "$(bash_payload 'printf x | xargs -n 1 rm')" 2 "BLOCK-TRASH-001"
 
+# ----- EXT-APPEND (#8314, follow-up pass): the append form of a prefix assignment -----
+#
+# The canonicalizer read a NAME+=value word as the command word, so the deletion behind it was
+# never at a command start. T1 is that deletion behind the append form; T1-CTL the same
+# deletion behind a NAME=value word (EXT-POS7's class), refused before and after.
+test_case "EXT-APPEND-T1-CTL: a NAME=value assignment then rm blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-APPEND-T1: an append-form assignment then rm blocks" \
+  "$(bash_payload 'FOO+=1 rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
 # ----- EXT-FP: false-positive guards for the widened positions (#5644) -----
 #
 # Shell text carried AS CONTENT is not a command. These are ordinary engineering commands
@@ -456,6 +467,98 @@ else
   case "${ra_dir##*/}" in rmt-ra.*) /bin/rm -rf "$ra_dir" ;; esac
 fi
 
+# ----- EXT-APPEND-X (#8314, follow-up pass): the two allow exits keep the exit view's walk -----
+#
+# The default walk now steps over the append form of a prefix assignment (NAME+=value). The
+# exit view does not: it is frozen at the walk the two allow exits read before, so they keep
+# today's verdicts. Were its assignment test widened the same way, a git command or a
+# target-less deletion verb behind an append-form word would reach Step 1's git exemption or
+# Step 2's no-target exit, and each sentinel below — refused before this pass and after it —
+# would be allowed. Shown, not argued. X1-X4 read the shipped hook; their refusal is the same
+# on the hook before this pass, which the pass's red-before run records. Then two copies of
+# the canonicalizer are each shown live (one line from the shipped copy, and it parses): one
+# with this pass's marked line reverted, and one whose exit view also takes the append form.
+# On every sentinel the exit view is byte-identical through the shipped and the reverted copy
+# while the default view is not (XV: the exit view is unchanged by this edit, and the sentinel
+# carries the form the edit reads). The hook is not run through the reverted copy: its
+# version-skew canary refuses that copy by design (CMDPOS-SKEW-APPEND). Through the copy whose
+# exit view takes the append form, in a sandbox, the hook allows the sentinel (PAIR, the
+# sentinel shown able to fire).
+test_case "EXT-APPEND-X1: a git status behind an append-form assignment does not exempt the deletion beside it (Step 1)" \
+  "$(bash_payload 'FOO+=1 git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-APPEND-X2: a target-less rm behind an append-form assignment does not end the evaluation before the trash call (Step 2)" \
+  "$(bash_payload 'FOO+=1 rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
+
+test_case "EXT-APPEND-X3: a target-less rm behind an append-form assignment does not displace today's start-verb unlink (Step 2)" \
+  "$(bash_payload 'FOO+=1 rm ; sudo unlink /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-APPEND-X4: a git log behind two append-form assignments does not exempt the deletion beside it (Step 1)" \
+  "$(bash_payload 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+apx_root="$(/usr/bin/mktemp -d)"
+apx_hooks="${apx_root}/.claude/hooks"
+/bin/mkdir -p "${apx_hooks}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${apx_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${apx_hooks}/block-rm-prefer-trash.sh"
+apx_ship="${HOOK_DIR}/lib/command-position.awk"
+apx_rev="${apx_root}/command-position-no-append.awk"
+apx_exit="${apx_root}/command-position-exit-append.awk"
+/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "$apx_ship" > "$apx_rev"
+/usr/bin/sed -e '/skips++; continue }   # VAR=value$/s/\*=\//*[+]?=\//' "$apx_ship" > "$apx_exit"
+apx_lines() { # $1 = copy -> the number of lines it differs from the shipped copy by, counted on both sides
+  /usr/bin/diff "$apx_ship" "$1" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true
+}
+apx_rev_live=0; apx_exit_live=0
+if [ "$(apx_lines "$apx_rev")" = 2 ] && /usr/bin/awk -f "$apx_rev" </dev/null >/dev/null 2>&1; then apx_rev_live=1; fi
+if [ "$(apx_lines "$apx_exit")" = 2 ] && /usr/bin/awk -f "$apx_exit" </dev/null >/dev/null 2>&1; then apx_exit_live=1; fi
+if [ "$apx_rev_live" = 1 ] && [ "$apx_exit_live" = 1 ]; then
+  /usr/bin/printf 'PASS: EXT-APPEND-XV-LIVE the reverted copy and the exit-append copy each differ from the shipped canonicalizer by exactly one line, and parse\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EXT-APPEND-XV-LIVE a sandbox copy is not live (reverted live=%s, exit-append live=%s)\n' "$apx_rev_live" "$apx_exit_live"
+  FAIL=$((FAIL + 1))
+fi
+apx_view() { # $1 = canonicalizer copy  $2 = view (default | exit)  $3 = command -> stdout
+  if [ "$2" = exit ]; then
+    /usr/bin/awk -v CMDPOS_VIEW=exit -f "$1" <<<"$3" 2>/dev/null
+  else
+    /usr/bin/awk -f "$1" <<<"$3" 2>/dev/null
+  fi
+}
+apx_run() { # $1 = canonicalizer copy  $2 = command -> APX_RC and APX_ERR
+  /bin/cp "$1" "${apx_hooks}/lib/command-position.awk"
+  APX_RC=0
+  APX_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$2" "$apx_root")" | /bin/bash "${apx_hooks}/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || APX_RC="$?"
+}
+apx_case() { # $1 = sentinel label  $2 = command
+  local ev_same=no dv_diff=no
+  if [ "$(apx_view "$apx_ship" exit "$2")" = "$(apx_view "$apx_rev" exit "$2")" ]; then ev_same=yes; fi
+  if [ "$(apx_view "$apx_ship" default "$2")" != "$(apx_view "$apx_rev" default "$2")" ]; then dv_diff=yes; fi
+  if [ "$apx_rev_live" = 1 ] && [ "$ev_same" = yes ] && [ "$dv_diff" = yes ]; then
+    /usr/bin/printf 'PASS: %s-XV the exit view is byte-identical with and without the append form, and the default view walks it\n' "$1"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s-XV reverted copy live=%s, exit view unchanged=%s, default view differs=%s\n' \
+      "$1" "$apx_rev_live" "$ev_same" "$dv_diff"
+    FAIL=$((FAIL + 1))
+  fi
+  apx_run "$apx_exit" "$2"
+  if [ "$apx_exit_live" = 1 ] && [ "$APX_RC" = 0 ]; then
+    /usr/bin/printf 'PASS: %s-PAIR a copy whose exit view also takes the append form allows the sentinel, so it can fire\n' "$1"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s-PAIR the exit-append copy did not allow the sentinel (copy live=%s, exit=%s): %s\n' "$1" "$apx_exit_live" "$APX_RC" "$APX_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+apx_case "EXT-APPEND-X1" 'FOO+=1 git status ; rm -rf /tmp/foo'
+apx_case "EXT-APPEND-X2" 'FOO+=1 rm ; trash /etc/hosts'
+apx_case "EXT-APPEND-X3" 'FOO+=1 rm ; sudo unlink /tmp/foo'
+apx_case "EXT-APPEND-X4" 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo'
+/bin/rm -rf "$apx_root"
+
 # ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
 #
 # This hook trusts the shared canonicalizer only after three probes: a one-line function
@@ -490,6 +593,9 @@ cps_skew() { # $1 = arm label  $2 = sed program for the canonicalizer copy  $3 =
 }
 cps_skew "CMDPOS-SKEW-01" 's/WROW\["nice"\]=1//' "the wrapper grammar"
 cps_skew "CMDPOS-SKEW-02" 's/CMDPOS_VIEW == "exit"/CMDPOS_VIEW == "zzexit"/' "the exit view"
+# (#8314, follow-up pass) The second probe puts an append-form prefix assignment ahead of its
+# wrapper, so a copy whose walk reads that word as the command word fails it too.
+cps_skew "CMDPOS-SKEW-APPEND" '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "the append form of a prefix assignment"
 /bin/cp "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
 cps_run 'echo hello'
 cps_ctl_benign="$CPS_RC"

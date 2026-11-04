@@ -244,6 +244,8 @@ face_sentinel "stdbuf with its option"    'stdbuf -o0 rm -rf /var/tmp/pmo-ac4-se
 face_sentinel "sudo with its user"        'sudo -u root rm -rf /var/tmp/pmo-ac4-sentinel-target'
 face_sentinel "sudo with a flag"          'sudo -n rm -rf /var/tmp/pmo-ac4-sentinel-target'
 face_sentinel "an if condition"           'if rm -rf /var/tmp/pmo-ac4-sentinel-target ; then :; fi'
+# (#8314, follow-up pass) The append form of a prefix assignment is a face of the same walk.
+face_sentinel "an append-form assignment" 'FOO+=1 rm -rf /var/tmp/pmo-ac4-sentinel-target'
 
 # --- (4) CORPUS + LIMBS B / C / D ------------------------------------------------------
 # check_case <class> <label> <command>
@@ -362,6 +364,14 @@ check_case NEAR    "describe-only sudo -l"                     'sudo -l rm'
 check_case NEAR    "a program whose name begins with env"      '/usr/local/bin/envsubst cat'
 check_case NEAR    "echo of a keyword and a verb"              'echo if rm'
 check_case NEAR    "timeout running echo"                      'timeout 5 echo rm'
+# --- #8314, follow-up pass: words that only look like the append form of a prefix
+#     assignment stay what they were — a quoted word, an argument of the real command, an
+#     invalid name, and the subscript form left to its own card — and the form as content. ---
+check_case NEAR    "a quoted append-form word is the command"  '"FOO+=1" rm -rf /tmp/x'
+check_case NEAR    "an append-form word as an echo argument"   'echo FOO+=1 rm -rf /tmp/x'
+check_case NEAR    "an invalid name before the append operator" '1FOO+=1 rm -rf /tmp/x'
+check_case NEAR    "a subscript append (an indirect form)"     'FOO[1]+=x rm -rf /tmp/x'
+check_case CONTENT "an echoed append-form deletion line"       'echo "FOO+=1 rm -rf /tmp/x"'
 check_case DECLARED "xargs behind its own option feeding cat"  "printf 'a' | xargs -0 cat"
 check_case DECLARED "heredoc-body prose behind a wrapper"      "$(/usr/bin/printf '%s\n%s\n%s' "git commit -F - <<'EOF'" 'nice rm stale-cache' 'EOF')"
 
@@ -401,6 +411,22 @@ form_case "quoted wrapper word"                '"sudo" rm -rf /etc'         '"su
 form_case "git consumed as a wrapper's user"   'sudo -u git push --force'   'sudo -u git ; push --force'   'sudo ; -u git push --force'
 form_case "eleven prefix tokens (the cap)"     'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 rm -rf /etc' 'A=1 ; B=1 ; C=1 ; D=1 ; E=1 ; F=1 ; G=1 ; H=1 ; I=1 ; J=1 ; K=1 rm -rf /etc' 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 ; K=1 rm -rf /etc'
 form_case "a line the exit view resolved before" 'sudo git status ; rm -rf /tmp/x' 'sudo ; git status ; ; rm -rf /tmp/x' 'sudo ; git status ; ; rm -rf /tmp/x'
+# --- CANON-FORM (#8314, follow-up pass): the append form of a prefix assignment. The default
+#     walk steps over a NAME+=value word with the skip, the cap count and the (e) mark a
+#     NAME=value word gets; the exit view keeps the walk it had, so it reads that word as the
+#     command word. The words that only look like the form, and the subscript and array
+#     spellings left to their own card, read the same with and without it. ---
+form_case "append-form assignment before the command"     'FOO+=1 rm -rf /etc'          'FOO+=1 ; rm -rf /etc'          'FOO+=1 rm -rf /etc'
+form_case "append-form assignment before an assignment"   'FOO+=1 PATH=/x cmd'          'FOO+=1 ; PATH=/x ; cmd'        'FOO+=1 PATH=/x cmd'
+form_case "append-form assignment behind an assignment"   'A=1 B+=1 rm -rf /etc'        'A=1 ; B+=1 ; rm -rf /etc'      'A=1 ; B+=1 rm -rf /etc'
+form_case "append-form assignment opening a later segment" 'true; FOO+=1 rm -rf /etc'   'true; ; FOO+=1 ; rm -rf /etc'  'true; ; FOO+=1 rm -rf /etc'
+form_case "append form inside the cap (ten tokens)"       'A+=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 rm -rf /etc' 'A+=1 ; B=1 ; C=1 ; D=1 ; E=1 ; F=1 ; G=1 ; H=1 ; I=1 ; J=1 ; rm -rf /etc' 'A+=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 rm -rf /etc'
+form_case "append form at the cap (eleven tokens)"        'A+=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 rm -rf /etc' 'A+=1 ; B=1 ; C=1 ; D=1 ; E=1 ; F=1 ; G=1 ; H=1 ; I=1 ; J=1 ; K=1 rm -rf /etc' 'A+=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 rm -rf /etc'
+form_case "a quoted append-form word"                     '"FOO+=1" rm -rf /etc'        '"FOO+=1" rm -rf /etc'          '"FOO+=1" rm -rf /etc'
+form_case "an append-form word after the command word"    'echo FOO+=1 rm -rf /etc'     'echo FOO+=1 rm -rf /etc'       'echo FOO+=1 rm -rf /etc'
+form_case "an invalid name before the append operator"    '1FOO+=1 rm -rf /etc'         '1FOO+=1 rm -rf /etc'           '1FOO+=1 rm -rf /etc'
+form_case "a subscript append (an indirect form)"         'FOO[1]+=x rm -rf /etc'       'FOO[1]+=x rm -rf /etc'         'FOO[1]+=x rm -rf /etc'
+form_case "an array append (an indirect form)"            'FOO+=(x y) rm -rf /etc'      'FOO+=(; x y) ; rm -rf /etc'    'FOO+=(; x y) ; rm -rf /etc'
 
 # --- CMDPOS-SINGLE-SOURCE (#8314): one implementation for the four consumers ---
 # AC3: every hook that carries the shared anchor resolves command position through this

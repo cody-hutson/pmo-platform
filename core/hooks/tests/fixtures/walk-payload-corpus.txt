@@ -1700,3 +1700,28 @@ ES171|block-egress|es-flag-near|-|?|a|gh api -iXPOST @OK@
 ES172|block-egress|es-flag-near|-|?|a|gh api -Hx:y @NO@
 ES175|block-egress|es-flag-prec|-|?|a|gh api -iH accept:x @OK@ -X POST
 ES176|block-egress|es-flag-prec|-|?|a|gh api -XGET @NO@ -f q=1
+# --- seed 11: the follow-up pass on card #8314 — the append form of a prefix assignment (12 rows) ---
+# Ids AP. bash and zsh read NAME+=value, the append form of a prefix assignment, as an
+# assignment word, as they read NAME=value. The canonicalizer's prefix walk recognized only
+# the second, so it took an append-form word for the command word, and a guarded assignment
+# behind it never sat at a command start. As in seed 9, every command is benign and every
+# assigned value is slash-free. apnd-ctl holds guarded assignments behind a NAME=value word,
+# refused before and after; with seed 9's DP30 and DQ07 they are the plain-form spellings of
+# the apnd rows. apnd holds the shapes this pass moves from allowed to refused; apnd-near words
+# that only look like the append form — quoted, an argument of the real command, an invalid
+# name — and the form ahead of another name, which keep today's allow. gt is `?`. The verdicts
+# are the fix commit's; the red-before reading of apnd is the suite run against the
+# pre-change canonicalizer, kept as executed evidence. This header does not take the
+# card-block form the cross-issue criterion counts: #8314's own seed block is still deferred.
+AP01|block-destructive|apnd-ctl|-|?|B|FOO=1 PATH+=x true
+AP02|block-destructive|apnd-ctl|-|?|B|FOO=1 PMO_SCOPE_GUARD_ROOT=x true
+AP10|block-destructive|apnd|-|?|B|FOO+=1 PATH=x true
+AP11|block-destructive|apnd|-|?|B|FOO+=1 PATH+=x true
+AP12|block-destructive|apnd|-|?|B|FOO+=1 env PATH=x true
+AP13|block-destructive|apnd|-|?|B|true; FOO+=1 PATH=x true
+AP14|block-destructive|apnd|-|?|B|FOO+=1 CLAUDE_HOOK_BYPASS=1 true
+AP15|block-destructive|apnd|-|?|B|FOO+=1 PMO_SCOPE_GUARD_ROOT=x true
+AP20|block-destructive|apnd-near|-|?|a|"FOO+=1" PATH=x true
+AP21|block-destructive|apnd-near|-|?|a|echo FOO+=1 PATH=x
+AP22|block-destructive|apnd-near|-|?|a|1FOO+=1 PATH=x true
+AP23|block-destructive|apnd-near|-|?|a|FOO+=1 MYPATH=x true

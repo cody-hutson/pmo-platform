@@ -1593,12 +1593,14 @@ case "$TOOL_NAME" in
     # Two probes (#8314): the first catches a present-but-empty or truncated copy; the
     # second — a wrapper carrying a separate-argument option before a benign verb, exposed
     # at an anchor only by the walk that reads wrapper grammar — catches a VERSION SKEW, a
-    # copy that predates that grammar.
+    # copy that predates that grammar. The second probe opens with the append form of a
+    # prefix assignment (#8314, follow-up pass), so a copy whose walk reads that word as the
+    # command word — one that predates the append form — fails it too.
     CMDPOS_OK=0
     if [ -r "$CMDPOS_AWK" ]; then
       if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
          && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
-         && _cp_canary2="$("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+         && _cp_canary2="$("$PRINTF" '%s' 'Z+=0 nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
          && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q'; then
         CMDPOS_OK=1
       fi

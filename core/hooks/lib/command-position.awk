@@ -53,7 +53,8 @@
 # ---------------
 # A segment's command word is found by stepping over its prefix run: a compound-command
 # keyword (then do else elif in ! if while until), a transparent wrapper (sudo env command
-# builtin exec nohup time xargs nice stdbuf timeout), a `NAME=value` assignment, and a
+# builtin exec nohup time xargs nice stdbuf timeout), an assignment — `NAME=value` or its
+# append form `NAME+=value`, which bash and zsh both read as an assignment word — and a
 # redirection. A prefix word is matched on its BASENAME (`/usr/bin/env` is env), after one
 # leading backslash and full-token quotes are dropped (`\sudo` and `"sudo"` are sudo). A
 # wrapper is stepped together with its OWN grammar: its option run, then its positional
@@ -81,7 +82,8 @@
 # Run with `-v CMDPOS_VIEW=exit`, this file emits the EXIT VIEW: the same quote mask and
 # the same command-start insertions ((a) to (c)) as the default output — never (e)'s —
 # made by the prefix walk as it stood before the wrapper grammar joined it: the fourteen
-# original words, matched as exact tokens, each stepped as one token. It is read only by
+# original words, matched as exact tokens, each stepped as one token, and the `NAME=value`
+# assignment alone — never its append form. It is read only by
 # exits that ALLOW on a match (the deletion hook's git exemption and its no-target exit),
 # so those exits keep the verdicts they had while the default output widens. The exit
 # view is frozen: a transformation added to the default walk does not reach it.
@@ -100,9 +102,9 @@
 #       consumer (resolve_and_classify, the -022 segment loop, the osascript extractor)
 #       sees the token text it saw before.
 #   (e) `; ` inserted before each assignment the default walk skips (never at offset 1): a
-#       `NAME=value` word of the prefix run, and a `NAME=value` operand a wrapper's own
-#       grammar consumes (env's). A rule anchored on an assignment rather than a verb
-#       (BLOCK-DESTRUCTIVE-020, -023) then reads one handed to a wrapper, behind another
+#       `NAME=value` or `NAME+=value` word of the prefix run, and a `NAME=value` operand a
+#       wrapper's own grammar consumes (env's). A rule anchored on an assignment rather than
+#       a verb (BLOCK-DESTRUCTIVE-020, -023) then reads one handed to a wrapper, behind another
 #       assignment or a redirection, after a keyword or `!`, at a condition position or as
 #       the first word of a group, as it reads one at a command start. Insertion-only, and
 #       only on tokens the walk already resolved as assignments: the verb keeps its own
@@ -129,9 +131,10 @@
 #   the consuming hook then behaves exactly as it does today rather than on a mask that
 #   might be inverted. Never worse than the status quo. Consumers additionally canary this
 #   file before trusting its output, because a truncated or corrupt copy would emit an
-#   empty string and take the hook's whole matcher with it; a second canary probe
-#   distinguishes this walk from the one before the wrapper grammar, so a stale copy
-#   beside a current hook also fails closed.
+#   empty string and take the hook's whole matcher with it; a second canary probe — an
+#   append-form assignment ahead of a wrapper carrying a separate-argument option —
+#   distinguishes this walk from the one before the wrapper grammar and from the one before
+#   the append form, so a stale copy beside a current hook also fails closed.
 
 BEGIN {
   SENT = sprintf("%c", 1)
@@ -480,7 +483,7 @@ function resolve_segment(lo, hi,   i, t_start, t_end, tok, w, skips, xflag) {
       }
       continue
     }
-    if (tok ~ /^[A-Za-z_][A-Za-z0-9_]*=/) {                                       # VAR=value
+    if (tok ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) {                    # VAR=value or VAR+=value  CMDPOS-APPEND
       if (t_start > 1) ins[t_start] = "; "   # (e) CMDPOS-E
       i = t_end + 1; skips++; continue
     }
@@ -500,7 +503,9 @@ function resolve_segment(lo, hi,   i, t_start, t_end, tok, w, skips, xflag) {
 
 # The exit view's walk: the prefix walk as it stood before the wrapper grammar joined it
 # — the fourteen words of view 1, matched as exact tokens, each stepped as one token.
-# Frozen on purpose: see THE EXIT VIEW above.
+# Frozen on purpose: see THE EXIT VIEW above. Its assignment test reads `NAME=value` only.
+# The append form is the default walk's alone: an exit that allows on a match must not
+# widen, and this test taking that form would turn a refusal at either exit into an allow.
 function resolve_segment_exit(lo, hi,   i, t_start, t_end, tok, skips, xflag) {
   if (lo > hi) return
   i = lo; skips = 0; xflag = 0

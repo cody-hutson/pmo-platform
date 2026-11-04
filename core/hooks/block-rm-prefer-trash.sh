@@ -242,13 +242,17 @@ if [ -r "$CMDPOS_AWK" ]; then
   # leaves it unreached here, where the walk that reads wrapper grammar exposes it at an
   # anchor. A stale or damaged row table therefore fails this probe, so the hook denies
   # rather than reading every wrapped command the old way while believing the primitive OK.
+  # The second probe opens with the append form of a prefix assignment (#8314, follow-up
+  # pass), so a copy whose walk reads that word as the command word — one that predates the
+  # append form — fails it too.
   # A third probe guards the EXIT VIEW this hook uniquely reads: the exit view of the same
-  # wrapped input must NOT expose the verb (its walk predates the wrapper grammar), so a
-  # copy that ignores or lacks the view — emitting the widened form for both — fails here
-  # and the hook denies rather than letting the two allow-exits read a widened view.
+  # wrapped input, without that prefix, must NOT expose the verb (its walk predates the
+  # wrapper grammar), so a copy that ignores or lacks the view — emitting the widened form
+  # for both — fails here and the hook denies rather than letting the two allow-exits read a
+  # widened view.
   if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
      && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
-     && _cp_canary2="$("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+     && _cp_canary2="$("$PRINTF" '%s' 'Z+=0 nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
      && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q' \
      && _cp_canary3="$("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null)" \
      && ! "$PRINTF" '%s' "$_cp_canary3" | "$GREP" -q '; q'; then

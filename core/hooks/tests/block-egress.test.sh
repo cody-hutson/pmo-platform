@@ -158,6 +158,17 @@ test_case "EXT-POS-E11: timeout 30 curl POST blocks (wrapper missing from the se
 test_case "EXT-FP-E2: a describe-only command naming a read verb allows" \
   "$(bash_payload 'command -v cat')" 0
 
+# ----- EXT-APPEND (#8314, follow-up pass): the append form of a prefix assignment -----
+#
+# The canonicalizer read a NAME+=value word as the command word, so the credential read
+# behind it was never at a command start. E1 is that read behind the append form; E1-CTL the
+# same read behind a NAME=value word, refused before and after.
+test_case "EXT-APPEND-E1-CTL: a NAME=value assignment then cat ~/.ssh/id_rsa blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-APPEND-E1: an append-form assignment then cat ~/.ssh/id_rsa blocks" \
+  "$(bash_payload 'FOO+=1 cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
 # ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
 #
 # The hook trusts the shared canonicalizer only after two probes: a one-line function body,
@@ -187,6 +198,23 @@ if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSI
   PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$cps_live" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+# CMDPOS-SKEW-APPEND (#8314, follow-up pass): the second probe puts an append-form prefix
+# assignment ahead of its wrapper, so a copy whose walk reads that word as the command word —
+# the walk before this pass — never exposes the benign word, and in enforce the hook fails
+# CLOSED. Modelled by a copy whose marked assignment test is reverted to the NAME=value form
+# alone, shown live first: it differs from the shipped copy by exactly that line, and parses.
+/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "${HOOK%/*}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_n="$(/usr/bin/diff "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+cps_live=0
+if [ "$cps_n" = 2 ] && /usr/bin/awk -f "${cps_hooks}/lib/command-position.awk" </dev/null >/dev/null 2>&1; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form of a prefix assignment fails the hook closed in enforce (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form did not fail the hook closed (mutant live=%s, differing lines=%s, exit=%s): %s\n' "$cps_live" "${cps_n:-none}" "$CPS_RC" "$CPS_ERR"
   FAIL=$((FAIL + 1))
 fi
 /bin/cp "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"

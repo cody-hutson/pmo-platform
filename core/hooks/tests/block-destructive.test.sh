@@ -285,6 +285,50 @@ test_case "EXT-RES-D-GIT-CTL: sudo -u root git push --force blocks (the same wra
   "$(bash_payload 'sudo -u root git push --force')" \
   2 "BLOCK-DESTRUCTIVE-001"
 
+# --- EXT-APPEND (#8314, follow-up pass): the append form of a prefix assignment ---
+#
+# A prefix assignment has two spellings, NAME=value and its append form NAME+=value, and
+# bash and zsh read both as an assignment word and run the command behind it. The
+# canonicalizer's prefix walk recognized only the first, so it read an append-form word as
+# the command word, and nothing behind that word sat at a command start: the deletion
+# behind it reached no anchored rule. Each arm below is the plain-form refusal of
+# EXT-POS-D4 (a NAME=value prefix, the CTL arm) reached through the append form: alone, not
+# at the start of the line, with an empty value, ahead of a wrapper, and twice. PREC is the
+# declared precision class of EXT-RES-D-GIT reached behind the append form: the command runs
+# `push` as the user git and never runs git, so it is allowed exactly as its NAME=value
+# spelling already is; PREC-CTL is the same wrapper running git, refused.
+test_case "EXT-APPEND-D-CTL: a NAME=value assignment then rm -rf / blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D1: an append-form assignment then rm -rf / blocks" \
+  "$(bash_payload 'FOO+=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D2: an append-form assignment opening a later segment, then rm -rf / blocks" \
+  "$(bash_payload 'true; FOO+=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D3: an append-form assignment with an empty value, then rm -rf / blocks" \
+  "$(bash_payload 'FOO+= rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D4: an append-form assignment, then a wrapper, then rm -rf / blocks" \
+  "$(bash_payload 'FOO+=1 sudo rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D5: two append-form assignments then rm -rf / blocks" \
+  "$(bash_payload 'FOO+=1 BAR+=2 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-PREC: an append-form assignment ahead of sudo -u git push --force allows (the declared precision class)" \
+  "$(bash_payload 'FOO+=1 sudo -u git push --force')" \
+  0
+
+test_case "EXT-APPEND-PREC-CTL: an append-form assignment ahead of sudo -u root git push --force blocks" \
+  "$(bash_payload 'FOO+=1 sudo -u root git push --force')" \
+  2 "BLOCK-DESTRUCTIVE-001"
+
 # --- /Users subdirs — block at /Users bare, allow deeper ---
 test_case "rm -rf /Users blocks (catastrophic)" \
   "$(bash_payload 'rm -rf /Users')" \
@@ -746,6 +790,71 @@ test_case "AC-D023-NEAR-1: a variable whose name only resembles the bypass varia
 
 test_case "AC-D023-NEAR-2: the bypass assignment as an argument of echo allows" \
   "$(bash_payload 'echo CLAUDE_HOOK_BYPASS=1')" \
+  0
+
+# --- EXT-APPEND-D020 / -D023 (#8314, follow-up pass): an assignment behind the append form ---
+#
+# -020 and -023 read the append operator on their own variable at a command start, but an
+# append-form word was the canonicalizer's command word, so a guarded assignment BEHIND one
+# was never reached and never marked by transformation (e). Each arm is a guarded assignment
+# placed behind an append-form assignment; each CTL is the same assignment behind a
+# NAME=value word, refused before and after. The NEAR arms hold words that only look like
+# the append form — quoted, an argument of the real command, an invalid name, a doubled
+# operator — or the append form ahead of another name, and must keep today's allow.
+test_case "EXT-APPEND-D020-CTL: a PATH assignment behind a NAME=value assignment blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D020-1: a PATH assignment behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D020-2: an appending PATH assignment behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 PATH+=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D020-3: a PATH assignment handed to env behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 env PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D020-4: export PATH behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 export PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D023-CTL: a hook-bypass assignment behind a NAME=value assignment blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "EXT-APPEND-D023-1: a hook-bypass assignment behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "EXT-APPEND-D023-2: a scope-root assignment behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 PMO_SCOPE_GUARD_ROOT=x true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "EXT-APPEND-NEAR-1: a quoted append-form word is the command word, so the PATH word behind it allows" \
+  "$(bash_payload '"FOO+=1" PATH=x true')" \
+  0
+
+test_case "EXT-APPEND-NEAR-2: an append-form word as an argument of echo allows" \
+  "$(bash_payload 'echo FOO+=1 PATH=x')" \
+  0
+
+test_case "EXT-APPEND-NEAR-3: an invalid name before the append operator is the command word and allows" \
+  "$(bash_payload '1FOO+=1 PATH=x true')" \
+  0
+
+test_case "EXT-APPEND-NEAR-4: a doubled plus is not the append operator and allows" \
+  "$(bash_payload 'FOO++=1 PATH=x true')" \
+  0
+
+test_case "EXT-APPEND-NEAR-5: an append-form assignment ahead of a variable whose name ends in PATH allows" \
+  "$(bash_payload 'FOO+=1 MYPATH=x true')" \
+  0
+
+test_case "EXT-APPEND-NEAR-6: an append-form line written as quoted content allows" \
+  "$(bash_payload 'echo "FOO+=1 PATH=x true"')" \
   0
 
 test_case "alias grep='echo ok' blocks" \
@@ -7809,6 +7918,24 @@ if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSI
   PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$cps_live" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+# CMDPOS-SKEW-APPEND (#8314, follow-up pass): the second probe puts an append-form prefix
+# assignment ahead of its wrapper, so a copy whose walk reads that word as the command word —
+# the walk before this pass — never exposes the benign word, and the hook fails CLOSED rather
+# than read every append-prefixed command the old way. Modelled by a copy whose marked
+# assignment test is reverted to the NAME=value form alone, shown live first: it differs from
+# the shipped copy by exactly that one line, and it parses.
+/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "${HOOK%/*}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_n="$(/usr/bin/diff "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+cps_live=0
+if [ "$cps_n" = 2 ] && /usr/bin/awk -f "${cps_hooks}/lib/command-position.awk" </dev/null >/dev/null 2>&1; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form of a prefix assignment fails the hook closed (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form did not fail the hook closed (mutant live=%s, differing lines=%s, exit=%s): %s\n' "$cps_live" "${cps_n:-none}" "$CPS_RC" "$CPS_ERR"
   FAIL=$((FAIL + 1))
 fi
 /bin/cp "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
