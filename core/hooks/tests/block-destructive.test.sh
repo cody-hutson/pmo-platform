@@ -2052,6 +2052,115 @@ case "${b022_probe_rc}:${b022_probe_err}" in
 esac
 
 # ==========================================================================
+# BLOCK-022 — the append form of a prefix assignment (#8314, the walk-fix pass)
+# ==========================================================================
+#
+# A prefix assignment has two spellings, NAME=value and its append form NAME+=value, and
+# bash and zsh read both as an assignment word and run the command behind it. This rule's
+# command-position walk recognized only the first, so it took an append-form word for the
+# command word: an interpreter or `source` invocation behind it matched no verb and was never
+# adjudicated, while an append-form word whose own value named an interpreter or a script was
+# adjudicated as though it were the command. The walk now steps over the append form exactly
+# as it steps over NAME=value. Each must-flag arm below is a must-flag arm of the
+# assignment-prefix block above (its NAME=value control) reached through the append form, and
+# each was allowed, with nothing adjudicated, before this pass.
+#
+# THE DECLARED PRECISION CLASS. An append-form word is an assignment, so its value is not the
+# command and the word after it is: `VAR+=/bin/bash <script>` runs <script> directly, which the
+# direct-execution arm records at its rollout phase where the old reading refused it as an
+# interpreter invocation, and `VAR+=<script> <command>` executes nothing, which the old reading
+# recorded as a direct execution. Each takes the verdict its NAME=value spelling already has,
+# and the twin arm beside it pins that.
+#
+# THE DECLARED LIMIT. The head resolver the quoted-fragment suppression reads keeps its
+# NAME=value-only test on purpose: it fails closed, so a carrier behind the append form keeps a
+# false positive its NAME=value spelling does not have, and widening it would turn refusals
+# into allows. Pinned, not closed.
+
+echo ""
+echo "BLOCK-022 the append form of a prefix assignment (walk-fix pass)"
+echo "---"
+
+test_case "BLOCK-022 append: VAR+=v before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV+=1 bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: two append-form assignments before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'FOO+=bar BAZ+=qux bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: VAR+= with an empty value before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV+= bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: VAR+=v before source, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV+=1 source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: VAR+=v, then a wrapper and its option, then bash, blocks" \
+  "$(bash_payload 'ENVV+=1 sudo -u bot bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: VAR+=v opening a later segment, then bash, blocks" \
+  "$(bash_payload 'true; ENVV+=1 bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+exec_warn_case "BLOCK-022 append: VAR+=v before a direct execution records it at the exec arm's phase" \
+  'ENVV+=1 /tmp/evil.sh' 'not-allowlisted'
+
+# must-not-flag control -- the same prefix over an allowlisted target.
+test_case "BLOCK-022 append control: VAR+=v before bash, allowlisted, allows" \
+  "$(bash_payload 'ENVV+=1 bash core/deploy/deploy.sh')" \
+  0
+
+# skip-precision controls. Each word below only looks like the append form, or stands where the
+# walk does not step, so it stays the command word -- not an interpreter -- and the verdict is
+# UNCHANGED from before this pass. If the skip ever loosens into a general advance past any
+# token carrying `+=`, or into the array or indirect forms another card owns, these flip to
+# blocking and fail.
+test_case "BLOCK-022 append precision: a quoted append-form word is the command word" \
+  "$(bash_payload '"ENVV+=1" bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 append precision: an append-form word after the command word is an argument" \
+  "$(bash_payload 'echo ENVV+=1 bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 append precision: invalid NAME before the append operator does not advance" \
+  "$(bash_payload 'a-b+=1 bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 append precision: a doubled plus is not the append operator" \
+  "$(bash_payload 'ENVV++=1 bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 append precision: an array append ends the run (an indirect form another card owns)" \
+  "$(bash_payload 'ENVV+=(x) bash /tmp/evil.sh')" \
+  0
+
+# The declared precision class, each beside its NAME=value twin.
+exec_warn_case "BLOCK-022 append precision class: VAR+=/bin/bash <script> is the direct execution of <script>, recorded" \
+  'ENVV+=/bin/bash /tmp/evil.sh' 'not-allowlisted'
+
+exec_warn_case "BLOCK-022 append precision class twin: VAR=/bin/bash <script> is recorded the same way" \
+  'ENVV=/bin/bash /tmp/evil.sh' 'not-allowlisted'
+
+exec_notflag_case "BLOCK-022 append precision class: VAR+=<script> before another command executes nothing" \
+  'ENVV+=/tmp/evil.sh true'
+
+exec_notflag_case "BLOCK-022 append precision class twin: VAR=<script> before another command executes nothing" \
+  'ENVV=/tmp/evil.sh true'
+
+# The declared limit of the head resolver, beside its NAME=value spelling.
+test_case "BLOCK-022 append limit: a carrier behind the append form keeps the quoted-fragment false positive (pinned)" \
+  "$(bash_payload "ENVV+=1 gh issue comment 1 --body 'x; bash /tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append limit control: the NAME=value spelling of that carrier suppresses the fragment" \
+  "$(bash_payload "ENVV=1 gh issue comment 1 --body 'x; bash /tmp/evil.sh'")" \
+  0
+
+# ==========================================================================
 # BLOCK-022 F1 — normalization must not MANUFACTURE an allow (deny-don't-sanitize)
 # ==========================================================================
 #

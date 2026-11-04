@@ -1725,3 +1725,33 @@ AP20|block-destructive|apnd-near|-|?|a|"FOO+=1" PATH=x true
 AP21|block-destructive|apnd-near|-|?|a|echo FOO+=1 PATH=x
 AP22|block-destructive|apnd-near|-|?|a|1FOO+=1 PATH=x true
 AP23|block-destructive|apnd-near|-|?|a|FOO+=1 MYPATH=x true
+# --- seed 12: the walk-fix pass on cards #8314 and #8315 — the append form of a prefix assignment in the two walks that keep their own prefix logic (15 rows) ---
+# Ids SW (BLOCK-DESTRUCTIVE-022's interpreter prefix walk, card #8314); the EW rows for
+# BLOCK-EGRESS-007's head walk (card #8315) land with that card's fix. bash and zsh read
+# NAME+=value, the append form of a prefix assignment, as an assignment word, as they read
+# NAME=value. The -022 walk is not routed through the shared canonicalizer and recognized only
+# the second spelling, so it took an append-form word for the command word, and the script
+# behind it was not adjudicated. swa-ctl holds the NAME=value spellings, at the verdicts they
+# had. swa is what this pass moves from allowed: refused, or recorded at the direct-execution
+# or non-shell interpreter arm's phase. swa-near only looks like the form, or stands where the
+# walk does not step, and keeps today's allow. swa-prec is the declared precision class: an
+# append-form word whose value the old reading took for the command (an interpreter, a script
+# path) is the assignment it is, so the word after it is the command, as for its NAME=value
+# spelling. gt is `?`. The verdicts are the fix commit's; the red-before reading of each group
+# that moves is the suite run against the pre-change hook, kept as executed evidence. This
+# header does not take the card-block form the cross-issue criterion counts.
+SW01|block-destructive|swa-ctl|-|?|B|FOO=1 bash @D@/na.sh
+SW02|block-destructive|swa-ctl|-|?|W|FOO=/bin/bash @D@/na.sh
+SW03|block-destructive|swa-ctl|-|?|a|FOO=@D@/na.sh true
+SW10|block-destructive|swa|-|?|B|FOO+=1 bash @D@/na.sh
+SW11|block-destructive|swa|-|?|B|FOO+=1 source @D@/na.sh
+SW12|block-destructive|swa|-|?|B|FOO+=1 sudo -u bot bash @D@/na.sh
+SW13|block-destructive|swa|-|?|W|FOO+=1 @D@/na.sh
+SW14|block-destructive|swa|-|?|W|FOO+=1 python3 @D@/na.py
+SW20|block-destructive|swa-near|-|?|a|"FOO+=1" bash @D@/na.sh
+SW21|block-destructive|swa-near|-|?|a|echo FOO+=1 bash @D@/na.sh
+SW22|block-destructive|swa-near|-|?|a|a-b+=1 bash @D@/na.sh
+SW23|block-destructive|swa-near|-|?|a|FOO+=(x) bash @D@/na.sh
+SW24|block-destructive|swa-near|-|?|a|FOO+=1 bash @D@/ok.sh
+SW30|block-destructive|swa-prec|-|?|W|FOO+=/bin/bash @D@/na.sh
+SW31|block-destructive|swa-prec|-|?|a|FOO+=@D@/na.sh true

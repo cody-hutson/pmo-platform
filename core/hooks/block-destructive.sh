@@ -3180,7 +3180,14 @@ case "$TOOL_NAME" in
       # not even fail safe.
       #
       # A token is a prefix assignment IFF it contains `=` AND its NAME part
-      # (everything before the FIRST `=`) is a valid shell name. A token that is
+      # (everything before the FIRST `=`) is a valid shell name, or a valid name and
+      # one `+`: the append form `NAME+=value`, which bash and zsh read as an
+      # assignment word too, is stepped over with the same skip (#8314, the walk-fix
+      # pass; before it, an append-form word ended the run as the command word, so the
+      # script behind it was never adjudicated and a value naming an interpreter or a
+      # script was adjudicated in its place). An append whose value opens an array
+      # (`NAME+=(...)`) ends the run, as a subscript and every other indirect form do;
+      # those belong to another card. A token that is
       # none of an assignment, a listed keyword or wrapper (below), or a token of a
       # listed wrapper's own option grammar (the wrapper rows, script_wrapper_row)
       # TERMINATES the run and is the command word — so `a-b=1` and `--body=x` both
@@ -3188,7 +3195,12 @@ case "$TOOL_NAME" in
       # any token containing `=`". (Behind `env` the operand loop is env's own
       # grammar, which takes any `name=value`: env sets `a-b=1` and runs what follows.)
       # The two tests are ordered: `${tok%%=*}` returns the whole token when there is
-      # no `=`, so the pattern test must gate it.
+      # no `=`, so the pattern test must gate it. The egress rule's head walk spells
+      # this predicate identically (its suite's AC-E007-AP-PARITY arm reads both). The
+      # head resolver the quoted-fragment suppression reads (script_resolve_head) keeps
+      # its NAME=value-only test on purpose: it fails closed, so an append-form word
+      # there costs a false positive and never an admission, and widening it would
+      # turn refusals into allows.
       #
       # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION,
       # and each wrapper's own options and operands are walked from its row. `sudo
@@ -3234,7 +3246,8 @@ case "$TOOL_NAME" in
         case "$script_ptok" in
           [A-Za-z_]*=*)
             case "${script_ptok%%=*}" in
-              *[!A-Za-z0-9_]*) break ;;
+              *[!A-Za-z0-9_+]*|*+?*) break ;;   # M-WRAP-APPEND
+              *+) case "${script_ptok#*=}" in '('*) break ;; esac ;;   # M-WRAP-APPEND-ARRAY
             esac
             script_hidx=$(( script_hidx + 1 ))
             continue
