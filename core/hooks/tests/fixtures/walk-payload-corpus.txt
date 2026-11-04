@@ -1725,21 +1725,27 @@ AP20|block-destructive|apnd-near|-|?|a|"FOO+=1" PATH=x true
 AP21|block-destructive|apnd-near|-|?|a|echo FOO+=1 PATH=x
 AP22|block-destructive|apnd-near|-|?|a|1FOO+=1 PATH=x true
 AP23|block-destructive|apnd-near|-|?|a|FOO+=1 MYPATH=x true
-# --- seed 12: the walk-fix pass on cards #8314 and #8315 — the append form of a prefix assignment in the two walks that keep their own prefix logic (15 rows) ---
-# Ids SW (BLOCK-DESTRUCTIVE-022's interpreter prefix walk, card #8314); the EW rows for
-# BLOCK-EGRESS-007's head walk (card #8315) land with that card's fix. bash and zsh read
-# NAME+=value, the append form of a prefix assignment, as an assignment word, as they read
-# NAME=value. The -022 walk is not routed through the shared canonicalizer and recognized only
-# the second spelling, so it took an append-form word for the command word, and the script
-# behind it was not adjudicated. swa-ctl holds the NAME=value spellings, at the verdicts they
-# had. swa is what this pass moves from allowed: refused, or recorded at the direct-execution
-# or non-shell interpreter arm's phase. swa-near only looks like the form, or stands where the
-# walk does not step, and keeps today's allow. swa-prec is the declared precision class: an
-# append-form word whose value the old reading took for the command (an interpreter, a script
-# path) is the assignment it is, so the word after it is the command, as for its NAME=value
-# spelling. gt is `?`. The verdicts are the fix commit's; the red-before reading of each group
-# that moves is the suite run against the pre-change hook, kept as executed evidence. This
-# header does not take the card-block form the cross-issue criterion counts.
+# --- seed 12: the walk-fix pass on cards #8314 and #8315 — the append form of a prefix assignment in the two walks that keep their own prefix logic (33 rows) ---
+# Ids SW (BLOCK-DESTRUCTIVE-022's interpreter prefix walk, card #8314) and EW (BLOCK-EGRESS-007's
+# head walk, card #8315). bash and zsh read NAME+=value, the append form of a prefix assignment,
+# as an assignment word, as they read NAME=value. Neither walk is routed through the shared
+# canonicalizer, and each recognized only the second spelling: the -022 walk took an append-form
+# word for the command word, so the script behind it was not adjudicated, and the -007 walk took it
+# for an unlisted leading word, which the rule treats as the command, so a write behind it was
+# admitted with no record. swa-ctl and ewa-ctl hold the NAME=value spellings, at the verdicts they
+# had. swa and ewa are what this pass moves from allowed: refused, or recorded at the direct-
+# execution or non-shell interpreter arm's phase (-022), or recorded at the shipped phase as the
+# widening a write behind an assignment is (-007). swa-near and ewa-near only look like the form,
+# or stand where neither walk steps, and keep today's allow. swa-prec and ewa-prec are the declared
+# precision class: an append-form word whose value the old reading took for the command (an
+# interpreter, a script path, a path ending in gh) is the assignment it is, so the word after it is
+# the command, as for its NAME=value spelling. ewa-quote is a quoted append-form word, which the
+# egress scanner reads with its quote marks dropped, recorded as its quoted NAME=value twin is.
+# ewa-counter is a read behind the form before a later write, whose day-one refusal stays: an
+# invocation reached behind the form advances neither first-invocation counter, so this spelling is
+# stricter than its NAME=value twin. gt is `?`. The verdicts are the fix commits'; the red-before
+# reading of each group that moves is the suite run against the pre-change hooks, kept as executed
+# evidence. This header does not take the card-block form the cross-issue criterion counts.
 SW01|block-destructive|swa-ctl|-|?|B|FOO=1 bash @D@/na.sh
 SW02|block-destructive|swa-ctl|-|?|W|FOO=/bin/bash @D@/na.sh
 SW03|block-destructive|swa-ctl|-|?|a|FOO=@D@/na.sh true
@@ -1755,3 +1761,21 @@ SW23|block-destructive|swa-near|-|?|a|FOO+=(x) bash @D@/na.sh
 SW24|block-destructive|swa-near|-|?|a|FOO+=1 bash @D@/ok.sh
 SW30|block-destructive|swa-prec|-|?|W|FOO+=/bin/bash @D@/na.sh
 SW31|block-destructive|swa-prec|-|?|a|FOO+=@D@/na.sh true
+EW01|block-egress|ewa-ctl|-|?|W|FOO=1 gh api -X POST @NO@
+EW02|block-egress|ewa-ctl|-|?|W|FOO=1 gh api @OK@ ; gh api -X POST @NO@
+EW03|block-egress|ewa-ctl|-|?|W|"FOO=1" gh api -X POST @NO@
+EW04|block-egress|ewa-ctl|-|?|a|FOO=/opt/homebrew/bin/gh api -X POST @NO@
+EW10|block-egress|ewa|-|?|W|FOO+=1 gh api -X POST @NO@
+EW11|block-egress|ewa|-|?|W|true; FOO+=1 gh api -X POST @NO@
+EW12|block-egress|ewa|-|?|W|FOO+=1 env -u NAME gh api -X POST @NO@
+EW13|block-egress|ewa|-|?|W|FOO+=1 gh api @NO@ -f body=x
+EW14|block-egress|ewa|-|?|W|FOO+=1 \gh api -X POST @NO@
+EW20|block-egress|ewa-quote|-|?|W|"FOO+=1" gh api -X POST @NO@
+EW30|block-egress|ewa-counter|-|?|B|FOO+=1 gh api @OK@ ; gh api -X POST @NO@
+EW31|block-egress|ewa-counter|-|?|B|FOO+=1 gh api @OK@ ; \gh api -X POST @NO@
+EW40|block-egress|ewa-near|-|?|a|echo FOO+=1 gh api -X POST @NO@
+EW41|block-egress|ewa-near|-|?|a|a-b+=1 gh api -X POST @NO@
+EW42|block-egress|ewa-near|-|?|a|FOO++=1 gh api -X POST @NO@
+EW43|block-egress|ewa-near|-|?|a|FOO+=1 gh api -X POST @OK@
+EW44|block-egress|ewa-near|-|?|a|FOO+=1 gh api -X POST @NO@ ; echo it\'s
+EW50|block-egress|ewa-prec|-|?|a|FOO+=/opt/homebrew/bin/gh api -X POST @NO@

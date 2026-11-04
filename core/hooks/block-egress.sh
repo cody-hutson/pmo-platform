@@ -1803,9 +1803,23 @@ case "$TOOL_NAME" in
         #
         # The assignment-prefix predicate is spelled identically to the one
         # BLOCK-DESTRUCTIVE-022 uses — a token is a prefix assignment IFF it contains
-        # `=` AND its NAME part is a valid shell name — so `a-b=1` and `--body=x` both
-        # terminate the walk and the skip cannot degrade into "advance past any token
-        # containing `=`". One vocabulary across both matcher surfaces, deliberately.
+        # `=` AND its NAME part is a valid shell name, or a valid name and the one `+`
+        # of the append form `NAME+=value`, which bash and zsh read as an assignment
+        # word too — so `a-b=1` and `--body=x` both terminate the walk and the skip
+        # cannot degrade into "advance past any token containing `=`". One vocabulary
+        # across both matcher surfaces, deliberately; the suite's AC-E007-AP-PARITY arm
+        # reads both. An append whose value opens an array ends the walk, as it ends
+        # that rule's; here `(` already opens a segment, so this walk never meets such a
+        # token, and the line is kept for the shared spelling. Before the walk-fix pass
+        # (#8315) an append-form word ended the walk as an unlisted leading word, which
+        # this rule treats as the command, so a write behind it was admitted with no
+        # record; it now takes the rung of its NAME=value twin.
+        #
+        # One line this rule adds after the predicate (`append: hold`): an invocation the
+        # walk reaches only behind the append form advances neither first-invocation
+        # counter, exactly as a look-ahead hit does not (egress_scanhit), because the
+        # shipped hook never reached it. Counting it would move a later write at the head
+        # of a segment out of the day-one refusal it has today.
         #
         # A token the walk reaches DIRECTLY — the segment head, or the token right after a
         # keyword, an assignment, or a prefix word with no option between — is read as the
@@ -1824,8 +1838,10 @@ case "$TOOL_NAME" in
           case "$egress_raw" in
             [A-Za-z_]*=*)
               case "${egress_raw%%=*}" in
-                *[!A-Za-z0-9_]*) break ;;
+                *[!A-Za-z0-9_+]*|*+?*) break ;;  # append: walk
+                *+) case "${egress_raw#*=}" in '('*) break ;; esac ;;  # append: array
               esac
+              case "${egress_raw%%=*}" in *+) egress_scanhit=1 ;; esac  # append: hold
               egress_hidx=$(( egress_hidx + 1 ))
               egress_direct=1
               continue

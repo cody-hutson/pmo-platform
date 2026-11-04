@@ -3194,6 +3194,115 @@ else
   e007_d_fail "AC-E007-RDRPARITY-canon: the shared canonicalizer's redirection handling matches its declared column" "rows ${_sp_n} (want 16);${_sp_ca_bad}"
 fi
 
+# ---- The append form of a prefix assignment (#8315, the walk-fix pass) ----
+# bash and zsh read NAME+=value, the append form of a prefix assignment, as an assignment word, as
+# they read NAME=value. This walk's predicate recognized only the second, so it took an append-form
+# word for an unlisted leading word, which the rule treats as the command, and a write behind it was
+# admitted with no record. The walk now steps over the form with the skip and the position flag a
+# NAME=value word gets (the `append: walk` line), so a write behind it takes its NAME=value twin's
+# rung: a widening, recorded at the shipped phase. An append whose value opens an array still ends
+# the walk (the `append: array` line); `(` already opens a segment here, so this walk never meets
+# such a token, and the line is kept so the predicate stays spelled as BLOCK-DESTRUCTIVE-022's
+# (AP-PARITY). One addition the twin does not carry: an invocation the walk reaches only behind the
+# form advances neither first-invocation counter (the `append: hold` line), as a look-ahead hit does
+# not, because the shipped hook never reached it -- so no later write at the head of a segment
+# leaves the day-one refusal it has today, and a read-then-write command spelled with the form is
+# the stricter of the two spellings. A quoted append-form word is read with its quote marks dropped,
+# as every word here is, so it is recorded as its quoted NAME=value twin is. And a form whose value
+# ends in `gh`, ahead of the word `api`, is the assignment it is: the shell runs `api`, so the write
+# the reverted walk refused is not there (the declared precision class).
+# Copies: ap the hook with the three marked lines reverted (the walk before this pass) · ah the hook
+# without the hold. A limb reads exit/refusals/rows, as the SP arms read them.
+E007_W_X_APWALK='/  # append: walk$/s/_+]\*|\*+?\*)/_]*)/'
+E007_W_X_APARRAY='/  # append: array$/d'
+E007_W_X_APHOLD='/  # append: hold$/d'
+E007_AP_R="${E007_W_BASE}/ap"; e007_w_copy "$E007_AP_R" "$E007_W_X_APWALK" "$E007_W_X_APARRAY" "$E007_W_X_APHOLD"
+E007_AP_H="${E007_W_BASE}/ah"; e007_w_copy "$E007_AP_H" "$E007_W_X_APHOLD"
+e007_w_shape "AC-E007-AP0-R: the copy with the append form reverted differs in three lines out and one in, parses, and still denies -001" "$E007_AP_R" 3 1
+e007_w_shape "AC-E007-AP0-H: the copy without the hold differs in one line taken out, parses, and still denies -001" "$E007_AP_H" 1 0
+E007_AP_HEAD="shadow|not-allowlisted|${E007_W_NO}|-"
+
+e007_sp_rowarm "AC-E007-AP-CTL: FOO=1 gh api -X POST <unlisted> — the NAME=value control — is recorded by the head walk, and so on the reverted copy" \
+  "FOO=1 ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 1
+e007_sp_rowarm "AC-E007-AP-1: FOO+=1 gh api -X POST <unlisted> — the append form — is recorded by the head walk as its NAME=value twin is, refused with the phase forced, and allowed with no record on the reverted copy" \
+  "FOO+=1 ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_W_E" 2 1 - "$E007_AP_R" 0 0 0
+e007_sp_rowarm "AC-E007-AP-2: true; FOO+=1 gh api -X POST <unlisted> — the form opening a later segment — is recorded, and allowed with no record on the reverted copy" \
+  "true; FOO+=1 ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 0
+e007_sp_rowarm "AC-E007-AP-3: FOO+=1 env -u X gh api -X POST <unlisted> — the form ahead of a prefix command — is located and recorded, and allowed with no record on the reverted copy" \
+  "FOO+=1 env -u X ${E007_SP_PLAIN}" "shadow|not-allowlisted|${E007_W_NO}|look-ahead" "$E007_AP_R" 0 0 0
+e007_sp_rowarm "AC-E007-AP-4: env FOO+=1 gh api -X POST <unlisted> — the form behind a prefix word — is recorded by the head walk where the reverted copy records it through the look-ahead: the verdict does not move, the row moves to the head-walk population" \
+  "env FOO+=1 ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 1
+
+# The counter: an invocation reached behind the form advances neither first-invocation counter.
+e007_sp_arm "AC-E007-AP-K1: FOO+=1 gh api <allowlisted> ; gh api -X POST <unlisted> — a read behind the form before a plain write — leaves the write refused on day one, as before this pass; without the hold the read would count and the write would move to the record" \
+  "FOO+=1 gh api ${E007_W_OK} ; ${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_AP_R" 2 1 0 "$E007_AP_H" 0 0 1
+e007_sp_arm "AC-E007-AP-K2: FOO+=1 gh api <allowlisted> ; \\gh api -X POST <unlisted> — the same before a respelled write — leaves it refused on day one; without the hold it would move to the record" \
+  "FOO+=1 gh api ${E007_W_OK} ; \\gh api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_AP_R" 2 1 0 "$E007_AP_H" 0 0 1
+e007_sp_arm "AC-E007-AP-K3: FOO=1 gh api <allowlisted> ; gh api -X POST <unlisted> — the NAME=value twin — records the write, its read counted, on both copies: the append form is the stricter spelling (the declared asymmetry)" \
+  "FOO=1 gh api ${E007_W_OK} ; ${E007_SP_PLAIN}" "$E007_W_S" 0 0 1 "$E007_AP_R" 0 0 1
+
+# A quoted append-form word, beside its quoted NAME=value twin.
+e007_sp_rowarm "AC-E007-AP-Q: \"FOO+=1\" gh api -X POST <unlisted> — a quoted append-form word — is recorded as its quoted NAME=value twin is, because this rule's scanner drops quote marks before a word is read; allowed with no record on the reverted copy" \
+  "\"FOO+=1\" ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 0
+e007_sp_rowarm "AC-E007-AP-Q-CTL: \"FOO=1\" gh api -X POST <unlisted> — the quoted NAME=value twin — is recorded, and so on the reverted copy" \
+  "\"FOO=1\" ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 1
+
+# The declared precision class, beside its NAME=value spelling.
+e007_sp_arm "AC-E007-AP-PREC: FOO+=/opt/homebrew/bin/gh api -X POST <unlisted> — an append whose value ends in gh, ahead of the word api — is allowed with no record as its NAME=value spelling is, since the shell runs api and never gh; the reverted copy read the value as the verb and refused it" \
+  "FOO+=/opt/homebrew/bin/gh api -X POST ${E007_W_NO}" "$E007_W_S" 0 0 0 "$E007_AP_R" 2 1 0
+e007_sp_arm "AC-E007-AP-PREC-CTL: FOO=/opt/homebrew/bin/gh api -X POST <unlisted> — the NAME=value spelling — is allowed with no record on both copies" \
+  "FOO=/opt/homebrew/bin/gh api -X POST ${E007_W_NO}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0
+
+# Near misses: each stays allowed with no record on both copies, and the ungated, phase-forced
+# locator refuses it, so the arm can fail.
+e007_sp_arm "AC-E007-AP-NEAR-1: echo FOO+=1 gh api -X POST <unlisted> — the form after the command word — stays allowed with no record; with the locator ungated and the phase forced it is refused" \
+  "echo FOO+=1 ${E007_SP_PLAIN}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0 "$E007_W_UE" 2 1 -
+e007_sp_arm "AC-E007-AP-NEAR-2: a-b+=1 gh api -X POST <unlisted> — an invalid name before the append operator — stays allowed with no record; with the locator ungated and the phase forced it is refused" \
+  "a-b+=1 ${E007_SP_PLAIN}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0 "$E007_W_UE" 2 1 -
+e007_sp_arm "AC-E007-AP-NEAR-3: FOO++=1 gh api -X POST <unlisted> — a doubled plus, not the append operator — stays allowed with no record; with the locator ungated and the phase forced it is refused" \
+  "FOO++=1 ${E007_SP_PLAIN}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0 "$E007_W_UE" 2 1 -
+
+# The unparseable branch: its readers pass over no assignment in either spelling, by design.
+e007_sp_arm "AC-E007-AP-U: FOO+=1 gh api -X POST <unlisted>, in a command the scanner cannot tokenize, stays allowed with no record as its NAME=value twin is (corpus row ES118 and arm SP-U0 are the twin and the plain head's refusal)" \
+  "FOO+=1 ${E007_SP_PLAIN}${E007_SP_ESQ}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0
+
+# AC-E007-AP-PARITY — the assignment-prefix predicate is spelled as BLOCK-DESTRUCTIVE-022's, as the
+# hook's own comment says: the lines from `case "${<token>%%=*}" in` to its `esac`, in this walk
+# and in that rule's command-position walk, read with leading blanks and a trailing marker taken off
+# and each walk's own token variable written TOK, are the same lines. Both readings must find the
+# predicate (three lines at least), and the sensitivity limb is this walk's reading with one word
+# changed, which must compare as different.
+e007_ap_pred() { # $1 file  $2 token variable -> the predicate's lines, normalized
+  /usr/bin/awk -v v="$2" '
+    function rep(s, a, b,   i, out) {
+      out = ""
+      while ((i = index(s, a)) > 0) { out = out substr(s, 1, i - 1) b; s = substr(s, i + length(a)) }
+      return out s
+    }
+    index($0, "case \"${" v "%%=*}\" in") { on = 1 }
+    on {
+      line = $0
+      sub(/^[ \t]+/, "", line)
+      sub(/[ \t][ \t]+# [A-Za-z].*$/, "", line)
+      print rep(line, v, "TOK")
+      if (line == "esac") exit
+    }
+  ' "$1"
+}
+_ap_eg="$(e007_ap_pred "${E007_D_HOOK_SRC}/block-egress.sh" egress_raw)"
+_ap_dd="$(e007_ap_pred "${E007_D_HOOK_SRC}/block-destructive.sh" script_ptok)"
+_ap_mu="${_ap_eg/ break ;;/ brake ;;}"
+_ap_why=""
+[ "$(/usr/bin/awk 'END { print NR }' <<<"$_ap_eg")" -ge 3 ] || _ap_why="${_ap_why} the egress predicate was not found;"
+[ "$(/usr/bin/awk 'END { print NR }' <<<"$_ap_dd")" -ge 3 ] || _ap_why="${_ap_why} the BLOCK-DESTRUCTIVE-022 predicate was not found;"
+[ "$_ap_eg" = "$_ap_dd" ] || _ap_why="${_ap_why} the two predicates differ;"
+[ "$_ap_mu" != "$_ap_dd" ] || _ap_why="${_ap_why} sensitivity: a changed word reads as the same predicate;"
+if [ -z "$_ap_why" ]; then
+  e007_d_pass "AC-E007-AP-PARITY: this walk's assignment-prefix predicate is spelled as BLOCK-DESTRUCTIVE-022's, line for line, and a one-word change reads as different"
+else
+  e007_d_fail "AC-E007-AP-PARITY: this walk's assignment-prefix predicate is spelled as BLOCK-DESTRUCTIVE-022's" "${_ap_why} egress=[${_ap_eg}] d022=[${_ap_dd}]"
+fi
+
 # =====================================================================
 # EGRESSCORPUS-* — the tracked payload differential for this rule's walk
 # =====================================================================
