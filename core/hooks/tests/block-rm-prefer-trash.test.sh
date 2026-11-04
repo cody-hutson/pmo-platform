@@ -400,6 +400,9 @@ test_case "EXT-RA-T4: a target-less rm behind nice does not end the evaluation b
 test_case "EXT-RA-T5: a target-less rm behind a long sudo flag does not end the evaluation" \
   "$(bash_payload 'sudo --list rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
 
+test_case "EXT-RA-T6: a target-less rm the widening promotes does not displace today's start-verb unlink" \
+  "$(bash_payload 'nice rm ; sudo unlink /tmp/foo')" 2 "BLOCK-TRASH-001"
+
 # The neutrality pins: a line the walk resolved BEFORE the wrapper grammar keeps the
 # verdict it had, which the exit view exists to preserve. Both are allowed today and stay
 # allowed here; the per-segment closure of these lines is #8122's, which must flip them.
@@ -449,6 +452,7 @@ else
   ra_pair "EXT-RA-T3-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" '/usr/bin/env git log ; rm -rf /tmp/foo'
   ra_pair "EXT-RA-T4-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; trash /etc/hosts'
   ra_pair "EXT-RA-T5-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'sudo --list rm ; trash /etc/hosts'
+  ra_pair "EXT-RA-T6-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; sudo unlink /tmp/foo'
   case "${ra_dir##*/}" in rmt-ra.*) /bin/rm -rf "$ra_dir" ;; esac
 fi
 

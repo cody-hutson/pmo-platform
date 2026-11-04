@@ -825,6 +825,55 @@ basis_note() {
   fi
 }
 
+# judge_targets(verb) — extract and classify every target token of a deletion verb on the
+# canonicalized command, blocking on the first one (every classification of rm/rmdir/unlink
+# blocks). Sets the caller-scoped `found_target=1` when the verb carries at least one
+# operand. Called for the detected (widened) verb; and, when the exit-view verb differs
+# (#8314), for that verb too, so a target-less verb the widening promoted ahead of today's
+# command-start verb cannot short-circuit past the real deletion that verb carries.
+judge_targets() {
+  local verb="$1" tseg token classification verdict resolved suggestion
+  while IFS="$TAB" read -r tseg token; do
+    [ -z "$token" ] && continue
+    found_target=1
+    classification=0
+    verdict="$(resolve_and_classify "$token" "$tseg")" || classification="$?"
+    split_verdict "$verdict"; resolved="$RESOLVED"
+    case "$classification" in
+      0)
+        # Inside workspace — block with Trash suggestion
+        suggestion="$(suggest_trash_command "$resolved")"
+        block "BLOCK-TRASH-002" \
+          "permanent deletion inside workspace blocked: $resolved$(basis_note)" \
+          "use Trash instead: $suggestion (or set CLAUDE_HOOK_BYPASS=1 only if intentional)"
+        ;;
+      1)
+        # Outside workspace — blocked. An auto-memory entry (MEMORY-STORE ARM) is still
+        # refused for a permanent-deletion verb, but the refusal names the Trash move.
+        if [ "$(memory_arm_verdict "$token")" = "ELIGIBLE" ]; then
+          case "$token" in \"*\"|\'*\') suggestion="trash '${token:1:${#token}-2}'" ;; *) suggestion="trash '$token'" ;; esac
+          block "BLOCK-TRASH-001" \
+            "permanent deletion of an auto-memory entry is refused — evict it with a Trash move instead: $suggestion" \
+            "eviction is a Trash move (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary, EVICT); no bypass is needed"
+        fi
+        block "BLOCK-TRASH-001" \
+          "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved$(basis_note)" \
+          "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+        ;;
+      2)
+        # Unresolvable under strict policy
+        block "BLOCK-TRASH-001" \
+          "path is unresolvable under strict policy (variable/subshell/backtick token): $token" \
+          "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+        ;;
+      3)
+        # Relative operand after a directory change the hook cannot follow
+        block_cwd_unknown "BLOCK-TRASH-001" "$token"
+        ;;
+    esac
+  done < <(extract_target_tokens "$verb")
+}
+
 # ==========================================================================
 # RULE EVALUATION
 # ==========================================================================
@@ -852,54 +901,22 @@ if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
 
   if [ -n "$verb" ]; then
     ensure_cwd_table
-    # Iterate target tokens
     found_target=0
-    while IFS="$TAB" read -r tseg token; do
-      [ -z "$token" ] && continue
-      found_target=1
-      classification=0
-      verdict="$(resolve_and_classify "$token" "$tseg")" || classification="$?"
-      split_verdict "$verdict"; resolved="$RESOLVED"
-      case "$classification" in
-        0)
-          # Inside workspace — block with Trash suggestion
-          suggestion="$(suggest_trash_command "$resolved")"
-          block "BLOCK-TRASH-002" \
-            "permanent deletion inside workspace blocked: $resolved$(basis_note)" \
-            "use Trash instead: $suggestion (or set CLAUDE_HOOK_BYPASS=1 only if intentional)"
-          ;;
-        1)
-          # Outside workspace — blocked. An auto-memory entry (MEMORY-STORE ARM) is still
-          # refused for a permanent-deletion verb, but the refusal names the Trash move.
-          if [ "$(memory_arm_verdict "$token")" = "ELIGIBLE" ]; then
-            case "$token" in \"*\"|\'*\') suggestion="trash '${token:1:${#token}-2}'" ;; *) suggestion="trash '$token'" ;; esac
-            block "BLOCK-TRASH-001" \
-              "permanent deletion of an auto-memory entry is refused — evict it with a Trash move instead: $suggestion" \
-              "eviction is a Trash move (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary, EVICT); no bypass is needed"
-          fi
-          block "BLOCK-TRASH-001" \
-            "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved$(basis_note)" \
-            "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
-          ;;
-        2)
-          # Unresolvable under strict policy
-          block "BLOCK-TRASH-001" \
-            "path is unresolvable under strict policy (variable/subshell/backtick token): $token" \
-            "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
-          ;;
-        3)
-          # Relative operand after a directory change the hook cannot follow
-          block_cwd_unknown "BLOCK-TRASH-001" "$token"
-          ;;
-      esac
-    done < <(extract_target_tokens "$verb")
+    judge_targets "$verb"
 
     # If the verb matched but no target tokens were extracted (e.g., bare `rm` with no
-    # args), there is nothing to delete — allow. (#8314) Only a verb that is a command
-    # start in the EXIT VIEW grants this allow: a verb visible only under the widened walk
-    # (`nice rm ; trash …`, where rm has no target but a later segment is refusable) must
-    # NOT short-circuit past Steps 3-4, so the no-target exit reads the un-widened view.
+    # args), there is nothing to delete — allow. (#8314) The no-target allow is granted
+    # only on the verb the EXIT VIEW (un-widened) places at a command start: a verb the
+    # widened walk promoted ahead of today's command-start verb must not short-circuit.
+    # When the exit-view verb DIFFERS from the widened-first verb (e.g. `nice rm ; sudo
+    # unlink <path>`: widened picks a target-less `rm`, but today's start is `unlink`),
+    # its own targets are judged first, so the real deletion is not skipped. When they are
+    # the SAME verb (`sudo rm ; trash …`, `rm` at a start in both views), today's verdict
+    # is kept and the line-laundering those exits leave stays its own rule's card.
     exit_verb="$(first_deletion_verb exit_matches)"  # M-TRASH-NOTARGET
+    if [ "$found_target" = 0 ] && [ -n "$exit_verb" ] && [ "$exit_verb" != "$verb" ]; then
+      judge_targets "$exit_verb"
+    fi
     if [ "$found_target" = 0 ] && [ -n "$exit_verb" ]; then
       exit 0
     fi
