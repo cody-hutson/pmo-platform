@@ -586,7 +586,7 @@ apx_case "EXT-APPEND-X4" 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo'
 # form exposes the word only on the walk that reads wrapper grammar; and the same input in
 # the exit view, which must keep the form the walk produced before that grammar. A stale or
 # damaged copy beside this hook passes the first probe and fails a later one, so the hook
-# fails CLOSED. Modelled by a copy whose sudo row is removed (SKEW-01) and a copy whose exit
+# fails CLOSED. Modelled by a copy whose nice row is removed (SKEW-01) and a copy whose exit
 # view is unreachable (SKEW-02); the control is the same sandbox with the shipped copy.
 cps_root="$(/usr/bin/mktemp -d)"
 cps_hooks="${cps_root}/.claude/hooks"

@@ -8096,7 +8096,7 @@ fi
 # form exposes the word only on the walk that reads wrapper grammar. A copy of the
 # canonicalizer that predates that grammar, or whose row table is damaged, passes the first
 # probe and fails the second, so the hook must fail CLOSED rather than read every wrapped
-# command the old way while believing the primitive healthy. Modelled by a copy whose sudo
+# command the old way while believing the primitive healthy. Modelled by a copy whose nice
 # row is removed; the control is the same sandbox with the shipped copy.
 cps_root="$(/usr/bin/mktemp -d)"
 cps_hooks="${cps_root}/.claude/hooks"

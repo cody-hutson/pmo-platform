@@ -144,8 +144,13 @@ readonly ANCHOR_PREFIX_GIT='(^|[^[:alnum:]_-])(/(usr/(local/)?|opt/(homebrew|loc
 #
 # ANCHOR_PREFIX_GIT is a word-boundary anchor, not a command-position one, so it was never
 # blind in this way. Canonicalization only ever INSERTS `;` and replaces in-quote structure
-# with a non-alphanumeric sentinel — both of which are already `[^[:alnum:]_-]` — so it can
-# add boundaries for the git rules but never remove one.
+# with a non-alphanumeric sentinel — both of which are already `[^[:alnum:]_-]` — so it never
+# removes a boundary character the git rules read. It can still cost them a match: when a
+# wrapper's own grammar consumes `git` as an option value or a positional (`sudo -u git push
+# --force`), the separator lands between `git` and its subcommand, and the rule no longer
+# reads a git subcommand there. That command runs another program and never runs git, so
+# the move is a declared precision improvement (the readiness text and the command-position
+# decision record's Consequences), pinned beside a refused control that does run git.
 #
 # BLOCK-DESTRUCTIVE-022 is deliberately NOT routed through this: its segment loop and
 # cumulative quote-parity tracking read "$COMMAND" directly and own their own lexical
@@ -3215,10 +3220,11 @@ case "$TOOL_NAME" in
       # egress rule's prefix-command walk and the shared canonicalizer
       # lib/command-position.awk each hold a list and walk it with their own grammar,
       # and the SIGPIPE-idiom lint of the repository-integrity workflow holds a fourth
-      # for a different question. This walk and the egress walk match the basename;
-      # the canonicalizer matches the exact token, and it alone steps over a leading
-      # redirection and an escaped verb; only the egress walk steps over every
-      # dash-led token. This rule is deliberately not routed through the
+      # for a different question. All three walks match the basename; the canonicalizer
+      # and the egress walk each step over a leading redirection and an escaped verb,
+      # and this walk does not; only the egress walk steps over every dash-led token,
+      # and the canonicalizer alone serves a frozen un-widened view to the deletion
+      # hook's two allow-on-match exits. This rule is deliberately not routed through the
       # canonicalizer. The suite's WRAPVOCAB-PARITY arms read every list and fail on a
       # word-level difference their declared table does not carry, and on a
       # declaration whose difference no longer exists.

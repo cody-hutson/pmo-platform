@@ -233,7 +233,7 @@ test_case "EXT-ORDER-F2: an output redirection to a file named timeout, then cat
 # and a wrapper carrying a separate-argument option before a benign word, whose canonical
 # form exposes the word only on the walk that reads wrapper grammar. A copy that predates
 # that grammar, or whose row table is damaged, passes the first probe and fails the second,
-# so in enforce the hook fails CLOSED. Modelled by a copy whose sudo row is removed; the
+# so in enforce the hook fails CLOSED. Modelled by a copy whose nice row is removed; the
 # control is the same sandbox with the shipped copy.
 cps_root="$(/usr/bin/mktemp -d)"
 cps_hooks="${cps_root}/.claude/hooks"
