@@ -441,6 +441,8 @@ The CIAC lint on the Stage-4 body read `declared=3 parsed=3 clean=2 declared-def
 2. **`Skill-count / IMP-XXX delta`** (after step 2 is pushed): push a commit that adds a stale literal skill-roster total to a changed `.md` line → the job exits 1 (red); push the revert → green. Prefer this variant to a deprecated IMP-series reference: that variant also reddens the required `Issue-reference validity gate`, which muddies the reading.
 3. Both contexts are still unregistered at Stage 7, so the observation is "the job turns red in PR context". That a registered red context blocks the merge is host behaviour, observed at Stage 12 only as the read-back; state it as the residual.
 
+G-PR4 run 2 falsification input, reverted by the next commit: the platform ships all 54 PMO skills.
+
 **Also at Stage 7:** a strict `deploy.sh --check` on the release head, reading Check 74's own block (#8325 AC-2): subject `ok=1 denom_enforce=1 fail_or_warn=0` (the `OK: … GRADUATED to enforce` line and a `DENOM` line carrying `phase=enforce`); sensitivity arm the same read at Commit 0, where the phase is `warn` and the day count is past the review threshold → `WARN: … GRADUATION-DUE`; a block of 0 lines means Check 74 did not run (NOT-EVALUATED, never a pass). And the reconciler against both live inputs — the branch-protection object and `rules/branches/main` — reading DIVERGED with exactly the two flipped contexts unregistered and held = behavioral-regression and link-check, once the flips are in the PR tree and step 4 has landed (`RECONCILED` with the same 2 held only after the Stage-12 registration, R6); Stage 7 confirms `rules_status=fetched` on the first PR run after step 4.
 
 ### G-CL10 arm (i) — prose rows this release adds
