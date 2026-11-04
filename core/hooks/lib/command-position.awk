@@ -105,8 +105,11 @@
 #       consumer (resolve_and_classify, the -022 segment loop, the osascript extractor)
 #       sees the token text it saw before.
 #   (e) `; ` inserted before each assignment the default walk skips (never at offset 1): a
-#       `NAME=value` or `NAME+=value` word of the prefix run, and a `NAME=value` operand a
-#       wrapper's own grammar consumes (env's). A rule anchored on an assignment rather than
+#       `NAME=value` or `NAME+=value` word of the prefix run, and each word of env's
+#       assignment run — the words after its options, up to the first that carries no `=` or
+#       begins with a dash, which is how env reads them. env assigns such a word literally, so
+#       an append-shaped operand sets a variable whose name ends in `+`: marking it is a
+#       declared over-block in the safe direction. A rule anchored on an assignment rather than
 #       a verb (BLOCK-DESTRUCTIVE-020, -023) then reads one handed to a wrapper, behind another
 #       assignment or a redirection, after a keyword or `!`, at a condition position or as
 #       the first word of a group, as it reads one at a command start. Insertion-only, and

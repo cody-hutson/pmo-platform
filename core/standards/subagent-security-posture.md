@@ -104,7 +104,7 @@ See § 4 for the resolved contract.
 
 **Evidence rule for anyone grading this.** A `block-log.jsonl` row alone is **not** evidence that a hook fired in a real session: the row schema carries no `session_id` and its `cwd` is read from the payload, so an identical row is producible from a direct stdin pipe that never touched the harness. The grading contract is **W ∧ L ∧ R** — witness file ∧ log row ∧ tool result — against a pre-fix baseline. See the probe document's § Negative control.
 
-**Anti-injection guarantee inheritance:** [`BLOCK-DESTRUCTIVE-023`](../rules/bypass-mode-readiness.md) fires on all Bash invocations including those from subagents. The asymmetry (operator pre-launch shell can enable the bypass env var; prompt-injection cannot) holds for in-session Agent-tool subagent invocations by construction. Same evidence basis: LOGICAL-INFERRED; Stage 7 DT regression case prescribed per Stage 5 spec D-AntiInjectionReverification option C.
+**Anti-injection guarantee inheritance:** [`BLOCK-DESTRUCTIVE-023`](../rules/bypass-mode-readiness.md) fires on all Bash invocations including those from subagents. The asymmetry (the operator's pre-launch shell can enable the bypass env var; an in-session assignment of it written as an assignment word is refused, within the bound the readiness corpus's anti-injection paragraph states, which names the spellings the rule does not judge) holds for in-session Agent-tool subagent invocations by construction. Same evidence basis: LOGICAL-INFERRED; Stage 7 DT regression case prescribed per Stage 5 spec D-AntiInjectionReverification option C.
 
 ## § 3.1 Coverage boundary of a PreToolUse-enforced control — FOUR conditions
 
