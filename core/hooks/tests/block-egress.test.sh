@@ -3109,6 +3109,15 @@ e007_t_cmd() {
   /usr/bin/awk -v n="$1" 'BEGIN { l = "echo the quick brown fox jumps over $one lazy dog\n"; s = ""
     while (length(s) < n) s = s l; printf "%s", substr(s, 1, n) }' > "$2"
 }
+# e007_t_reap <pid> — stop a process and every process under it, children first, with KILL. A TERM
+# is not enough to stop a hook: bash defers it until a running parameter expansion returns, which
+# is the very cost being timed, and a command-substitution subshell outlives a parent that dies, so
+# it would go on burning a core after its arm has been read (DT pass 3).
+e007_t_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do e007_t_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
 # e007_t_timed <sandbox> <locale> <command-file> <limit> — the sandbox hook on the Bash payload of
 # the command, under <locale>; a watchdog stops it at <limit> tenths. Sets E007_T_DS (tenths
 # elapsed, -1 when stopped) and E007_T_EXIT.
@@ -3121,7 +3130,7 @@ e007_t_timed() {
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$n" -ge "$4" ]; then
-      kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+      e007_t_reap "$pid"; wait "$pid" 2>/dev/null
       E007_T_DS=-1; E007_T_EXIT=-1; return 0
     fi
     /bin/sleep 0.1; n=$(( n + 1 ))
@@ -3174,6 +3183,193 @@ if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F 'egress_fq="${COMMAND//[' "${E00
 else
   e007_d_fail "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget" \
     "elapsed=${E007_T_DS} tenths exit=${E007_T_EXIT}; a copy that finishes, or that carries no bracket-class line, cannot show T1-T6 measure anything (BROKEN PROBE)"
+fi
+
+# ---- AC-E007-X* (#8315, DT pass 3): every substitution of the scanner is a linear pass ----
+#
+# The scanner ran global pattern substitutions over its quoted spans, its comments, its tokens, its
+# physical lines and the whole command, and on bash 3.2 each costs more than linear time in the
+# text it scans once that text carries a match for its pattern — so a large command could hold
+# the hook past the runtime's command-hook timeout, after which a PreToolUse hook does not block. A piece of at least EGRESS_LINEAR_MIN characters now takes one pass of tr, sed or awk
+# in the C locale first, on a line marked `# linear: <site>`. X-EQ-<site> lifts each marked block
+# out of the hook and runs it with the bound at 0 (the pass runs) and at 10^9 (the substitutions
+# alone, which is the code before this change): the two must be equal byte for byte on a dense
+# input — every byte from 1 to 255, multibyte letters, invalid UTF-8, the sentinels and each
+# operator — and on its edge endings, in en_US.UTF-8 and in C; the pass alone must equal them as
+# well; and a near miss, the pass with one rewrite wrong, must differ. X1 to X30 run the whole
+# sandbox hook under the watchdog on five benign shapes at 10, 20 and 40 KB in both locales — the
+# dollar filler, separator-dense, one big quoted span after a long quoted comment, redirection-
+# dense, and separator-dense ending in a quote it never closes (the unparseable branch's reader) —
+# each inside the budget and allowed. X-CTL is the instrument's sensitivity: a copy whose bound
+# never lets a pass run is stopped at the budget on the 20 KB quoted span in UTF-8. X-FB holds the
+# fallback: a copy whose pass tools do not exist reads the verdicts of the shipped hook on commands
+# that reach every pass, and raises no hook error. The token mark strip and the continuation join's
+# mark-free twin are reached long by no timed shape — a shape that reaches them long is built from
+# many short quoted spans or many continuation lines, and is held instead by the quote walk's or the
+# join's own removals, which the readiness fragment declares — so their blocks are pinned by X-EQ
+# alone.
+E007_L_R="${E007_W_BASE}/l"
+/bin/mkdir -p "$E007_L_R"
+/usr/bin/printf '%s\n' 'set -euo pipefail' 'readonly TR=/usr/bin/tr' \
+  "readonly EGRESS_SENT=\$'\\001' EGRESS_RSP=\$'\\004' EGRESS_QLT=\$'\\005' EGRESS_QGT=\$'\\006' EGRESS_BND_OLD=\$'\\002' EGRESS_BND_NEW=\$'\\003'" \
+  > "${E007_L_R}/prelude.sh"
+# The dense input, three times over, and its edge endings: a newline, three newlines, a separator,
+# the pass's own terminator byte, and the empty text.
+LC_ALL=C /usr/bin/awk 'BEGIN { for (r = 0; r < 3; r++) { for (i = 1; i < 256; i++) printf "%c", i
+  printf "%s", "naïve 日本 ü \377\303 x\342\202 y\200 ;&|()#`<>\"'"'"'\001\002\003\004\005\006\177>&<&&>>|.$\\ \t\n" } }' \
+  > "${E007_L_R}/in-0"
+{ /bin/cat "${E007_L_R}/in-0"; /usr/bin/printf '\n'; } > "${E007_L_R}/in-1"
+{ /bin/cat "${E007_L_R}/in-0"; /usr/bin/printf '\n\n\n'; } > "${E007_L_R}/in-2"
+{ /bin/cat "${E007_L_R}/in-0"; /usr/bin/printf ';'; } > "${E007_L_R}/in-3"
+{ /bin/cat "${E007_L_R}/in-0"; /usr/bin/printf '.'; } > "${E007_L_R}/in-4"
+: > "${E007_L_R}/in-5"
+# e007_l_block <src> <site> <lines> <out> — the line marked `# linear: <site>` and the lines after
+# it, <lines> in all; returns 1 unless exactly one line carries the mark.
+e007_l_block() {
+  M="# linear: $2" /usr/bin/awk -v k="$3" 'BEGIN { m = ENVIRON["M"] }
+    length($0) >= length(m) && substr($0, length($0) - length(m) + 1) == m { c++; n = k }
+    n > 0 { print; n-- }
+    END { exit c == 1 ? 0 : 1 }' "$1" > "$4"
+}
+# e007_l_swap <in> <from> <to> <out> — the first occurrence of <from> replaced by <to>, literally.
+e007_l_swap() {
+  F="$2" T="$3" /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+    !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
+    { print }
+    END { exit d ? 0 : 1 }' "$1" > "$4"
+}
+# e007_l_eval <locale> <bound> <variable> <block> <input> <out> — the block in a fresh /bin/bash,
+# its variable holding the input, the bound at <bound>; writes the variable after the block.
+e007_l_eval() {
+  LC_ALL="$1" /bin/bash -c '. "$1"; EGRESS_LINEAR_MIN="$2"; lp=""; egress_lp=""; egress_toks=(x); i=0
+    __in="$(/bin/cat "$5"; printf x)"; __in="${__in%x}"
+    eval "$3=\"\$__in\""
+    . "$4"
+    eval "printf %s \"\${$3}\"" > "$6"' _ "${E007_L_R}/prelude.sh" "$2" "$3" "$4" "$5" "$6"
+}
+# e007_l_eq <site> <lines> <variable> <near-miss from> <near-miss to>
+e007_l_eq() {
+  local why="" loc k blk="${E007_L_R}/b-$1" near="${E007_L_R}/n-$1" one="${E007_L_R}/o-$1"
+  e007_l_block "$E007_W_SRC" "$1" "$2" "$blk" || why="${why} no single line marked \`# linear: $1\`;"
+  e007_l_swap "$blk" "$4" "$5" "$near" || why="${why} the near-miss edit did not apply;"
+  /usr/bin/head -1 "$blk" > "$one"
+  if [ -z "$why" ]; then
+    for loc in en_US.UTF-8 C; do
+      for k in 0 1 2 3 4 5; do
+        e007_l_eval "$loc" 1000000000 "$3" "$blk" "${E007_L_R}/in-$k" "${E007_L_R}/ship.out" \
+          || why="${why} [${loc} in-${k}] the substitutions did not run;"
+        e007_l_eval "$loc" 0 "$3" "$blk" "${E007_L_R}/in-$k" "${E007_L_R}/pass.out" \
+          || why="${why} [${loc} in-${k}] the pass did not run;"
+        /usr/bin/cmp -s "${E007_L_R}/ship.out" "${E007_L_R}/pass.out" || why="${why} [${loc} in-${k}] pass != substitutions;"
+        if [ "$1" != redirect-ops ]; then
+          e007_l_eval "$loc" 0 "$3" "$one" "${E007_L_R}/in-$k" "${E007_L_R}/one.out" \
+            || why="${why} [${loc} in-${k}] the pass line alone did not run;"
+          /usr/bin/cmp -s "${E007_L_R}/ship.out" "${E007_L_R}/one.out" || why="${why} [${loc} in-${k}] the pass alone != substitutions;"
+        fi
+      done
+      e007_l_eval "$loc" 1000000000 "$3" "$blk" "${E007_L_R}/in-0" "${E007_L_R}/ship.out" || why="${why} [${loc}] the reference did not run;"
+      e007_l_eval "$loc" 0 "$3" "$near" "${E007_L_R}/in-0" "${E007_L_R}/near.out" || why="${why} [${loc}] the near miss did not run;"
+      [ -s "${E007_L_R}/ship.out" ] || why="${why} [${loc}] empty reference output;"
+      /usr/bin/cmp -s "${E007_L_R}/ship.out" "${E007_L_R}/near.out" \
+        && why="${why} [${loc}] the near miss equals the substitutions (the comparison cannot see a difference);"
+    done
+  fi
+  if [ -z "$why" ]; then
+    e007_d_pass "AC-E007-X-EQ-$1: the \`# linear: $1\` pass equals its substitutions byte for byte on a dense input and its edge endings in UTF-8 and C, alone and with them, and a near miss differs"
+  else
+    e007_d_fail "AC-E007-X-EQ-$1: the \`# linear: $1\` pass equals its substitutions byte for byte" "$why"
+  fi
+}
+e007_l_eq comment 3 body "'\\042\\047' '\\001\\001'" "'\\042\\047' '\\001\\002'"
+e007_l_eq span 13 body "\\005\\006'" "\\006\\005'"
+e007_l_eq mark 2 t "-d '\\004'" "-d '\\005'"
+e007_l_eq stand-in 3 'egress_toks[0]' "'\\074\\076'" "'\\076\\074'"
+e007_l_eq redirect-ops 8 s " -e \"s/&>/\${EGRESS_SENT}>/g\"" ""
+e007_l_eq mark-free 2 s "-d '\\004'" "-d '\\005'"
+e007_l_eq view 4 view "'\\012\\012\\012'" "'\\012\\012\\001'"
+e007_l_eq segments 7 egress_segs 'gsub(/[()`]/, "\n" w)' 'gsub(/[()`]/, "\n" o)'
+# e007_l_fill <bytes> <head> <unit> <tail> — the head, as many units as fit, then the tail.
+e007_l_fill() {
+  H="$2" U="$3" T="$4" /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]; s = h
+    while (length(s) + length(u) + length(t) <= n) s = s u
+    printf "%s", s t }'
+}
+# e007_l_cmd <shape> <bytes> <file> — one of the five benign shapes; each carries `gh`, so the fast
+# path hands it to the scanner, and each ends in a gh api read or in an unclosed quote.
+e007_l_cmd() {
+  case "$1" in
+    dollar)      e007_l_fill "$2" '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "$3" ;;
+    separator)   e007_l_fill "$2" 'echo gh;' 'echo a;echo b|cat&echo c;' 'gh api repos/o/r' > "$3" ;;
+    quoted)
+      e007_l_fill $(( $2 / 4 )) "echo gh # it's \"x\" " "don't \"stop\" " $'\n' > "$3.c"
+      e007_l_fill $(( $2 - $(/usr/bin/wc -c < "$3.c") )) "echo '" 'a b'$'\t''c;d&e|f(g)h#i`j<k>l"m'$'\n' "'"$'\n''gh api repos/o/r' > "$3.q"
+      /bin/cat "$3.c" "$3.q" > "$3" ;;
+    redirection) e007_l_fill "$2" 'echo gh' ' >&2 2>&1 <&0 &>/dev/null >|/dev/null' ' ; gh api repos/o/r' > "$3" ;;
+    unparseable) e007_l_fill "$2" 'echo gh;' 'echo a;echo b|cat&echo c;' "echo 'x" > "$3" ;;
+  esac
+}
+for _l_shape in dollar separator quoted redirection unparseable; do
+  for _l_kb in 10 20 40; do e007_l_cmd "$_l_shape" $(( _l_kb * 1024 )) "${E007_L_R}/${_l_shape}-${_l_kb}.cmd"; done
+done
+_l_n=0
+for _l_shape in dollar separator quoted redirection unparseable; do
+  for _l_loc in en_US.UTF-8 C; do
+    for _l_kb in 10 20 40; do
+      _l_n=$(( _l_n + 1 ))
+      e007_t_timed "$E007_W_S" "$_l_loc" "${E007_L_R}/${_l_shape}-${_l_kb}.cmd" "$E007_T_LIMIT"
+      if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+        e007_d_pass "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+      else
+        e007_d_fail "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the hook inside the budget and is allowed" \
+          "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+      fi
+    done
+  done
+done
+E007_L_X_NOPASS='s|^readonly EGRESS_LINEAR_MIN=256$|readonly EGRESS_LINEAR_MIN=1000000000|'
+E007_L_NP="${E007_W_BASE}/lnp"; e007_w_copy "$E007_L_NP" "$E007_L_X_NOPASS"
+e007_t_timed "$E007_L_NP" en_US.UTF-8 "${E007_L_R}/quoted-20.cmd" "$E007_T_LIMIT"
+if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly EGRESS_LINEAR_MIN=1000000000' "${E007_L_NP}/mut.sh"; then
+  e007_d_pass "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at ${E007_T_LIMIT} tenths on the 20 KB quoted span in UTF-8 — the instrument sees the cost"
+else
+  e007_d_fail "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget" \
+    "elapsed=${E007_T_DS} tenths exit=${E007_T_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X30 measure anything (BROKEN PROBE)"
+fi
+# X-FB: every pass's tool repointed to a path that does not exist, so each pass fails and leaves its
+# piece to the substitutions. Three commands that reach every pass long: a write to an unlisted
+# path behind a long quoted comment, a long quoted span, a long redirection run, an ANSI-C span on
+# a long word and a continuation (refused on day one); the same with a read (allowed); and a
+# respelled write in a long separator-dense command ending in an unclosed quote (refused by the
+# unparseable branch's reader).
+E007_L_X_NOTOOL='/# linear: [a-z-]*$/s#"\$TR"#/nonexistent/tr#; /# linear: [a-z-]*$/s#/usr/bin/sed#/nonexistent/sed#; /# linear: [a-z-]*$/s#/usr/bin/awk#/nonexistent/awk#'
+E007_L_NT="${E007_W_BASE}/lnt"; e007_w_copy "$E007_L_NT" "$E007_L_X_NOTOOL"
+e007_l_fill 400 "echo gh # it's \"x\" " "don't \"stop\" " $'\n' > "${E007_L_R}/fb.c"
+e007_l_fill 400 "echo '" 'a b'$'\t''c;d&e|f(g)h#i`j<k>l"m'$'\n' "'" > "${E007_L_R}/fb.q"
+{ e007_l_fill 400 '' ' >&2 2>&1 <&0 &>/dev/null >|/dev/null' ''
+  /usr/bin/printf '%s' " x\\"$'\n'"y \$'a'$(e007_l_fill 300 '' 'b' '');"; } > "${E007_L_R}/fb.r"
+_l_fbw="$(/bin/cat "${E007_L_R}/fb.c" "${E007_L_R}/fb.q" "${E007_L_R}/fb.r")gh api -X POST ${E007_W_NO}"
+_l_fbr="$(/bin/cat "${E007_L_R}/fb.c" "${E007_L_R}/fb.q" "${E007_L_R}/fb.r")gh api repos/o/r"
+_l_fbu="$(e007_l_fill 300 '' 'echo a;echo b|cat&echo c;' '')\\gh api -X POST ${E007_W_NO} 'x"
+_l_why=""
+_l_tools="$(/usr/bin/grep -c -F '/nonexistent/' "${E007_L_NT}/mut.sh")" || true
+[ "$_l_tools" = 8 ] || _l_why="${_l_why} the copy repoints ${_l_tools} pass lines, want 8;"
+for _l_c in "w:2:1:${_l_fbw}" "r:0:0:${_l_fbr}" "u:2:1:${_l_fbu}"; do
+  _l_tag="${_l_c%%:*}"; _l_rest="${_l_c#*:}"
+  _l_wx="${_l_rest%%:*}"; _l_rest="${_l_rest#*:}"
+  _l_wb="${_l_rest%%:*}"; _l_cmd="${_l_rest#*:}"
+  [ "${#_l_cmd}" -ge 256 ] || _l_why="${_l_why} [${_l_tag}] the command is shorter than the bound;"
+  e007_w_run "$E007_W_S" "$_l_cmd"
+  _l_s="${E007_D_EXIT}/${E007_D_BLK}"
+  e007_w_run "$E007_L_NT" "$_l_cmd"
+  _l_t="${E007_D_EXIT}/${E007_D_BLK}"
+  [ "$_l_s" = "${_l_wx}/${_l_wb}" ] || _l_why="${_l_why} [${_l_tag}] shipped reads ${_l_s}, want ${_l_wx}/${_l_wb};"
+  [ "$_l_t" = "$_l_s" ] || _l_why="${_l_why} [${_l_tag}] the copy without its tools reads ${_l_t}, the shipped hook ${_l_s};"
+  case "$E007_D_ERR" in *HOOK-ERROR*) _l_why="${_l_why} [${_l_tag}] the copy without its tools raised a hook error;" ;; esac
+done
+if [ -z "$_l_why" ]; then
+  e007_d_pass "AC-E007-X-FB: with every pass's tool missing, each pass falls back to its substitutions — a refused write, an allowed read and an unparseable respelled write read as the shipped hook reads them, with no hook error"
+else
+  e007_d_fail "AC-E007-X-FB: with every pass's tool missing, the verdicts equal the shipped hook's" "$_l_why"
 fi
 
 # ---- Behind a prefix: each respelling reaches the record its plain twin gets ----

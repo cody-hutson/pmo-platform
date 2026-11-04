@@ -498,6 +498,21 @@ readonly EGRESS_QGT=$'\006'
 readonly EGRESS_BND_OLD=$'\002'   # `;` `&` `|` — the replaced anchor admitted these
 readonly EGRESS_BND_NEW=$'\003'   # `(` `)` backtick — it did not
 
+# The linear pass, a bound in characters. On bash 3.2 a global pattern substitution costs more
+# than linear time in the text it scans once that text carries a match for the pattern, so the
+# scanner's substitutions over a piece of the command — a quoted span, a comment, a token, a line
+# or the whole text — could hold this hook past the runtime's command-hook timeout on a large
+# command, and a hook that times out does not block. A piece of at least this many
+# characters is therefore rewritten first by one pass of tr, sed or awk in the C locale, whose
+# output equals the substitutions' byte for byte (a `# linear:` line, pinned by AC-E007-X-EQ).
+# Where every pattern is one character, the substitutions still run after the pass and find
+# nothing left to replace, which costs one scan of the piece; the redirection operators, two
+# characters each, skip them instead. A shorter piece costs less than the fork the pass takes,
+# so it keeps the substitutions alone, and a pass that fails leaves the piece to them, so the
+# text that comes out is the same on every path. The continuation join keeps a mark-free twin
+# of each line instead of removing marks from a line it grows.
+readonly EGRESS_LINEAR_MIN=256
+
 # True when the string ends in an ODD number of backslashes — i.e. a following
 # quote character is escaped and is not a terminator.
 egress_trailing_backslash_odd() {
@@ -560,7 +575,7 @@ egress_comment_open_at_end() {
 # ends, so no command crosses the parse boundary in either direction.
 egress_neutralize_into() {
   local rest="$1"
-  local out="" head body q
+  local out="" head body q lp
   while [ -n "$rest" ]; do
     head="${rest%%[\"\']*}"
     if [ "$head" = "$rest" ]; then
@@ -578,6 +593,7 @@ egress_neutralize_into() {
         *$'\n'*) body="${rest%%$'\n'*}"; rest="${rest#"$body"}" ;;
         *)       body="$rest"; rest="" ;;
       esac
+      if [ "${#body}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\042\047' '\001\001' <<< "${body}.")"; then body="${lp%.}"; fi  # linear: comment
       body="${body//\"/${EGRESS_SENT}}"
       body="${body//\'/${EGRESS_SENT}}"
       out="${out}${body}"
@@ -608,6 +624,8 @@ egress_neutralize_into() {
       done
     fi
     rest="${rest#?}"
+    # The here-string's newline is translated too and comes back as the last byte; `%?` drops it.
+    if [ "${#body}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\040\011\012\073\046\174\050\051\043\140\074\076' '\001\001\001\001\001\001\001\001\001\001\005\006' <<< "$body")"; then body="${lp%?}"; fi  # linear: span
     body="${body// /${EGRESS_SENT}}"
     body="${body//	/${EGRESS_SENT}}"
     body="${body//$'\n'/${EGRESS_SENT}}"
@@ -982,7 +1000,7 @@ egress_la_respelled() {
 # egress_toks and flag each token that carried one in egress_tflag; a token that was only the mark
 # is dropped and its flag moves to the next token. Returns 1 when no token is left.
 egress_strip_marks() {
-  local i=0 n="${#egress_toks[@]}" k=0 t carry=0
+  local i=0 n="${#egress_toks[@]}" k=0 t carry=0 lp
   egress_tflag=()
   case "${egress_toks[*]}" in
     *"${EGRESS_RSP}"*) ;;
@@ -994,6 +1012,7 @@ egress_strip_marks() {
     i=$(( i + 1 ))
     case "$t" in
       *"${EGRESS_RSP}"*)
+        if [ "${#t}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" -d '\004' <<< "${t}.")"; then t="${lp%.}"; fi  # linear: mark
         t="${t//${EGRESS_RSP}/}"
         if [ -z "$t" ]; then carry=1; continue; fi
         EGRESS_NT[$k]="$t"; EGRESS_NF[$k]=1
@@ -1070,12 +1089,13 @@ egress_strip_redirections() {
 # Put the quoted-operator stand-ins back once the redirection strip has run, so a path, a field or a
 # logged value carries the characters the command wrote.
 egress_restore_quoted_ops() {
-  local i=0 n="${#egress_toks[@]}"
+  local i=0 n="${#egress_toks[@]}" lp
   case "${egress_toks[*]}" in
     *"${EGRESS_QLT}"*|*"${EGRESS_QGT}"*) ;;
     *) return 0 ;;
   esac
   while [ "$i" -lt "$n" ]; do
+    if [ "${#egress_toks[$i]}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\005\006' '\074\076' <<< "${egress_toks[$i]}.")"; then egress_toks[$i]="${lp%.}"; fi  # linear: stand-in
     egress_toks[$i]="${egress_toks[$i]//${EGRESS_QLT}/<}"
     egress_toks[$i]="${egress_toks[$i]//${EGRESS_QGT}/>}"
     i=$(( i + 1 ))
@@ -1087,11 +1107,16 @@ egress_restore_quoted_ops() {
 # `&>>` too) and the `|` of `>|` become the sentinel before segmentation, so a redirection operator
 # is never read as a separator. Sets EGRESS_PRO.
 egress_protect_redirect_ops() {
-  local s="$1"
-  s="${s//>&/>${EGRESS_SENT}}"
-  s="${s//<&/<${EGRESS_SENT}}"
-  s="${s//&>/${EGRESS_SENT}>}"  # respell: redirect-ampgt
-  s="${s//>|/>${EGRESS_SENT}}"
+  local s="$1" lp
+  # On a long text the sed pass makes all four substitutions, in their order, so they are skipped.
+  if [ "${#s}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C /usr/bin/sed -e "s/>&/>${EGRESS_SENT}/g" -e "s/<&/<${EGRESS_SENT}/g" -e "s/&>/${EGRESS_SENT}>/g" -e "s/>|/>${EGRESS_SENT}/g" <<< "${s}.")"; then  # linear: redirect-ops
+    s="${lp%.}"
+  else
+    s="${s//>&/>${EGRESS_SENT}}"
+    s="${s//<&/<${EGRESS_SENT}}"
+    s="${s//&>/${EGRESS_SENT}>}"  # respell: redirect-ampgt
+    s="${s//>|/>${EGRESS_SENT}}"
+  fi
   EGRESS_PRO="$s"
   return 0
 }
@@ -1100,7 +1125,8 @@ egress_protect_redirect_ops() {
 # normalized and whose second word is api, and its first word is neither api nor a dash-led word
 # without a slash. Such a line earns a verdict on its own — the shipped hook reads it as a fresh
 # command start — and a join would turn it into a prefix position. A line that opens with api, or
-# with a dash-led word, cannot resolve alone, so joining it takes nothing from it.
+# with a dash-led word, cannot resolve alone, so joining it takes nothing from it. The join passes
+# the line's mark-free twin, so the mark removal below finds nothing to remove.
 egress_keep_line() {
   local l="${1//${EGRESS_RSP}/}" i=0 n w2 first
   case "$l" in *[![:space:]]*) ;; *) return 1 ;; esac
@@ -1131,17 +1157,41 @@ egress_keep_line() {
   return 1
 }
 
+# The physical lines of egress_norm with every respelling mark removed, into EGRESS_JS, one entry for
+# each entry of EGRESS_JL: the whole text is rewritten once — by one tr pass when it is long — and
+# read into lines as the join reads them. A text with no mark is its own twin.
+egress_mark_free_lines() {
+  local l j=0 s lp
+  case "$egress_norm" in
+    *"${EGRESS_RSP}"*) ;;
+    *) EGRESS_JS=( "${EGRESS_JL[@]}" ); return 0 ;;
+  esac
+  s="$egress_norm"
+  if [ "${#s}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" -d '\004' <<< "${s}.")"; then s="${lp%.}"; fi  # linear: mark-free
+  s="${s//${EGRESS_RSP}/}"
+  EGRESS_JS=()
+  while IFS= read -r l; do
+    EGRESS_JS[$j]="$l"
+    j=$(( j + 1 ))
+  done <<< "$s"
+  return 0
+}
+
 # R3 — the continuation join on the neutralized command in egress_norm: an unquoted backslash-newline
 # is removed, as the shell removes it before it reads words, and the respelling mark is left in front
 # of the joined line's first non-blank character. Never inside a `#` comment, where a backslash ends
 # nothing; never on an even backslash run; and not where the keep rule holds for the line it would
 # join. The second reader passes `nokeep`, for a view with every continuation joined.
 #
-# The physical lines are read once into an array and the result is joined once, so the cost is
-# linear in the command, like the segmentation loop's; nothing runs unless the command carries an
-# unquoted backslash-newline.
+# The physical lines are read once into an array, with their mark-free twins, and the result is
+# joined once; nothing runs unless the command carries an unquoted backslash-newline. The cost is
+# NOT linear in the command: each join still tests the line it has grown — for an odd run of
+# trailing backslashes, and for a comment open at its end — and on bash 3.2 each test removes a
+# prefix or a suffix from that line at a cost that grows faster than the line, so a command of many
+# continuation lines costs more than linear time in its length. A declared residual (the readiness
+# fragment's cost row), held for its own decision rather than changed here.
 egress_join_continuations() {
-  local i=1 n=0 k=0 l cur nxt lead keep
+  local i=1 n=0 k=0 l cur nxt lead keep curs nxts
   case "$egress_norm" in
     *\\$'\n'*) ;;
     *) return 0 ;;
@@ -1151,21 +1201,26 @@ egress_join_continuations() {
     EGRESS_JL[$n]="$l"
     n=$(( n + 1 ))
   done <<< "$egress_norm"
-  cur="${EGRESS_JL[0]}"
+  # The comment test and the keep rule read a line with its respelling marks removed. Each line's
+  # mark-free twin is read once (EGRESS_JS), and `curs` grows with `cur`, so no join removes marks
+  # from the line it has grown.
+  egress_mark_free_lines
+  cur="${EGRESS_JL[0]}"; curs="${EGRESS_JS[0]}"
   while [ "$i" -lt "$n" ]; do
-    nxt="${EGRESS_JL[$i]}"
+    nxt="${EGRESS_JL[$i]}"; nxts="${EGRESS_JS[$i]}"
     keep=1
-    if egress_trailing_backslash_odd "$cur" && ! egress_comment_open_at_end "${cur//${EGRESS_RSP}/}"; then
+    if egress_trailing_backslash_odd "$cur" && ! egress_comment_open_at_end "$curs"; then
       keep=0
-      if [ "${1:-}" != nokeep ] && egress_keep_line "$nxt"; then keep=1; fi  # respell: keep
+      if [ "${1:-}" != nokeep ] && egress_keep_line "$nxts"; then keep=1; fi  # respell: keep
     fi
     if [ "$keep" -eq 1 ]; then
       EGRESS_JO[$k]="$cur"
       k=$(( k + 1 ))
-      cur="$nxt"
+      cur="$nxt"; curs="$nxts"
     else
       lead="${nxt%%[![:blank:]]*}"
       cur="${cur%\\}${lead}${EGRESS_RSP}${nxt#"$lead"}"
+      curs="${curs%\\}${lead}${nxts#"$lead"}"
     fi
     i=$(( i + 1 ))
   done
@@ -1229,7 +1284,7 @@ egress_short_flags() {
 # this branch has no widening rung. Above the parse cap it locates nothing; the plain spelling there
 # is still located by the shipped test.
 egress_old_reachable_respelled() {
-  local cmd="$1" view v=0 piece
+  local cmd="$1" view v=0 piece lp
   [ "${#cmd}" -le "$EGRESS_007_PARSE_CAP" ] || return 1
   while [ "$v" -lt 2 ]; do
     view="$cmd"
@@ -1243,7 +1298,9 @@ egress_old_reachable_respelled() {
       view="$egress_norm"
     fi
     egress_protect_redirect_ops "$view"
-    view="${EGRESS_PRO//;/$'\n'}"
+    view="$EGRESS_PRO"
+    if [ "${#view}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\073\046\174' '\012\012\012' <<< "${view}.")"; then view="${lp%.}"; fi  # linear: view
+    view="${view//;/$'\n'}"
     view="${view//&/$'\n'}"
     view="${view//|/$'\n'}"
     while IFS= read -r piece; do
@@ -1757,7 +1814,9 @@ case "$TOOL_NAME" in
       # is protected, so it is read as the operator it is and never as a separator.
       egress_join_continuations  # respell: join
       egress_protect_redirect_ops "$egress_norm"; egress_norm="$EGRESS_PRO"  # respell: redirect
-      egress_segs="${egress_norm//;/$'\n'${EGRESS_BND_OLD}}"
+      egress_segs="$egress_norm"
+      if [ "${#egress_segs}" -ge "$EGRESS_LINEAR_MIN" ] && egress_lp="$(LC_ALL=C /usr/bin/awk -v o="$EGRESS_BND_OLD" -v w="$EGRESS_BND_NEW" '{ gsub(/[;&|]/, "\n" o); gsub(/[()`]/, "\n" w); print }' <<< "${egress_segs}.")"; then egress_segs="${egress_lp%.}"; fi  # linear: segments
+      egress_segs="${egress_segs//;/$'\n'${EGRESS_BND_OLD}}"
       egress_segs="${egress_segs//&/$'\n'${EGRESS_BND_OLD}}"
       egress_segs="${egress_segs//|/$'\n'${EGRESS_BND_OLD}}"
       egress_segs="${egress_segs//(/$'\n'${EGRESS_BND_NEW}}"
