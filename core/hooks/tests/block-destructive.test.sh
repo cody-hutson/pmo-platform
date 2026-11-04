@@ -9478,6 +9478,177 @@ encl_mut_arm "AC-ENCL-TEXEC6-pair: with the first view's carrier suppression off
 
 /bin/rm -rf "$ENCL_ROOT"
 
+# ---- AC-022-X* (#8314, DT pass 3): the -022 separator split is a linear pass ----
+#
+# The script-execution rule split every command that reaches it into segments with three global
+# pattern substitutions over the whole command, and on bash 3.2 each costs more than linear time
+# in the text it scans once that text carries the separator it replaces — so a large command could
+# hold this hook past the runtime's command-hook timeout, after which a PreToolUse hook does not
+# block. A command of at least SCRIPT_LINEAR_MIN characters is now split first by one tr pass in
+# the C locale, on the line marked `# linear: segments`. X-EQ lifts that block out of the hook and
+# runs it with the bound at 0 (the pass runs) and at 10^9 (the substitutions alone, the code before
+# this change): equal byte for byte on a dense input — every byte from 1 to 255, multibyte letters,
+# invalid UTF-8 and each operator — and on its edge endings, in en_US.UTF-8 and in C, alone and with
+# them, beside a near miss that must differ. X1 to X24 run the hook under a watchdog on four benign
+# shapes at 10, 20 and 40 KB in both locales — the dollar filler, separator-dense, one big quoted
+# span and redirection-dense — each inside the budget and allowed. X-CTL is the instrument's
+# sensitivity: a copy whose bound never lets the pass run is stopped at the budget on the 40 KB
+# separator-dense command in UTF-8. X-FB holds the fallback: a copy whose tr does not exist reads
+# the shipped hook's verdicts on a long command and raises no hook error.
+LIN_LIMIT="${LIN_LIMIT_DS:-200}"   # tenths of a second
+LIN_ROOT="$(/usr/bin/mktemp -d)"
+LIN_HOOKS="${LIN_ROOT}/.claude/hooks"
+/bin/mkdir -p "${LIN_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${LIN_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${LIN_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '%s\n' '/tmp/pmo-lin-ok.sh' > "${LIN_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${LIN_HOOKS}/.mode"
+/bin/cp "$HOOK" "${LIN_HOOKS}/block-destructive.sh"
+/usr/bin/sed 's/^readonly SCRIPT_LINEAR_MIN=256$/readonly SCRIPT_LINEAR_MIN=1000000000/' "$HOOK" > "${LIN_HOOKS}/block-destructive-nopass.sh"
+/usr/bin/sed '/# linear: segments$/s#/usr/bin/tr#/nonexistent/tr#' "$HOOK" > "${LIN_HOOKS}/block-destructive-notool.sh"
+
+# The dense input, three times over, and its edge endings.
+LC_ALL=C /usr/bin/awk 'BEGIN { for (r = 0; r < 3; r++) { for (i = 1; i < 256; i++) printf "%c", i
+  printf "%s", "naïve 日本 ü \377\303 x\342\202 y\200 ;&|()#`<>\"'"'"'\001\002\003\004\005\006\177>&<&&>>|.$\\ \t\n" } }' \
+  > "${LIN_ROOT}/in-0"
+{ /bin/cat "${LIN_ROOT}/in-0"; /usr/bin/printf '\n'; } > "${LIN_ROOT}/in-1"
+{ /bin/cat "${LIN_ROOT}/in-0"; /usr/bin/printf '\n\n\n'; } > "${LIN_ROOT}/in-2"
+{ /bin/cat "${LIN_ROOT}/in-0"; /usr/bin/printf ';'; } > "${LIN_ROOT}/in-3"
+{ /bin/cat "${LIN_ROOT}/in-0"; /usr/bin/printf '.'; } > "${LIN_ROOT}/in-4"
+: > "${LIN_ROOT}/in-5"
+# lin_eval <locale> <bound> <block> <input> <out> — the block in a fresh /bin/bash on the input.
+lin_eval() {
+  LC_ALL="$1" /bin/bash -c 'set -euo pipefail; SCRIPT_LINEAR_MIN="$1"; script_lp=""
+    script_segments="$(/bin/cat "$3"; printf x)"; script_segments="${script_segments%x}"
+    . "$2"
+    printf %s "$script_segments" > "$4"' _ "$2" "$3" "$4" "$5"
+}
+lin_why=""
+M='# linear: segments' /usr/bin/awk 'BEGIN { m = ENVIRON["M"] }
+  length($0) >= length(m) && substr($0, length($0) - length(m) + 1) == m { c++; n = 4 }
+  n > 0 { print; n-- }
+  END { exit c == 1 ? 0 : 1 }' "$HOOK" > "${LIN_ROOT}/block" || lin_why="${lin_why} no single line marked \`# linear: segments\`;"
+/usr/bin/head -1 "${LIN_ROOT}/block" > "${LIN_ROOT}/one"
+F="'\\012\\012\\012'" T="'\\012\\012\\001'" /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+  !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
+  { print }
+  END { exit d ? 0 : 1 }' "${LIN_ROOT}/block" > "${LIN_ROOT}/near" || lin_why="${lin_why} the near-miss edit did not apply;"
+if [ -z "$lin_why" ]; then
+  for lin_loc in en_US.UTF-8 C; do
+    for lin_k in 0 1 2 3 4 5; do
+      lin_eval "$lin_loc" 1000000000 "${LIN_ROOT}/block" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/ship.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the substitutions did not run;"
+      lin_eval "$lin_loc" 0 "${LIN_ROOT}/block" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/pass.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass did not run;"
+      lin_eval "$lin_loc" 0 "${LIN_ROOT}/one" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/one.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass line alone did not run;"
+      /usr/bin/cmp -s "${LIN_ROOT}/ship.out" "${LIN_ROOT}/pass.out" || lin_why="${lin_why} [${lin_loc} in-${lin_k}] pass != substitutions;"
+      /usr/bin/cmp -s "${LIN_ROOT}/ship.out" "${LIN_ROOT}/one.out" || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass alone != substitutions;"
+    done
+    lin_eval "$lin_loc" 1000000000 "${LIN_ROOT}/block" "${LIN_ROOT}/in-0" "${LIN_ROOT}/ship.out" || lin_why="${lin_why} [${lin_loc}] the reference did not run;"
+    lin_eval "$lin_loc" 0 "${LIN_ROOT}/near" "${LIN_ROOT}/in-0" "${LIN_ROOT}/near.out" || lin_why="${lin_why} [${lin_loc}] the near miss did not run;"
+    [ -s "${LIN_ROOT}/ship.out" ] || lin_why="${lin_why} [${lin_loc}] empty reference output;"
+    /usr/bin/cmp -s "${LIN_ROOT}/ship.out" "${LIN_ROOT}/near.out" \
+      && lin_why="${lin_why} [${lin_loc}] the near miss equals the substitutions (the comparison cannot see a difference);"
+  done
+fi
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-X-EQ: the \`# linear: segments\` pass equals the three substitutions byte for byte on a dense input and its edge endings in UTF-8 and C, alone and with them, and a near miss differs"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-EQ: the \`# linear: segments\` pass equals the three substitutions byte for byte" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+
+# lin_fill <bytes> <head> <unit> <tail> — the head, as many units as fit, then the tail.
+lin_fill() {
+  H="$2" U="$3" T="$4" /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]; s = h
+    while (length(s) + length(u) + length(t) <= n) s = s u
+    printf "%s", s t }'
+}
+# lin_cmd <shape> <bytes> <file> — one of the four benign shapes.
+lin_cmd() {
+  case "$1" in
+    dollar)      lin_fill "$2" '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "$3" ;;
+    separator)   lin_fill "$2" 'echo gh;' 'echo a;echo b|cat&echo c;' 'gh api repos/o/r' > "$3" ;;
+    quoted)      lin_fill "$2" "echo '" 'a b'$'\t''c;d&e|f(g)h#i`j<k>l"m'$'\n' "'"$'\n''gh api repos/o/r' > "$3" ;;
+    redirection) lin_fill "$2" 'echo gh' ' >&2 2>&1 <&0 &>/dev/null >|/dev/null' ' ; gh api repos/o/r' > "$3" ;;
+  esac
+}
+# lin_reap <pid> — stop a process and every process under it, children first, with KILL: bash
+# defers a TERM until a running parameter expansion returns, which is the cost being timed, and a
+# command-substitution subshell outlives a parent that dies.
+lin_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do lin_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
+# lin_timed <hook-file> <locale> <command-file> <limit> — the hook on the Bash payload of the
+# command under a watchdog; sets LIN_DS (tenths elapsed, -1 when stopped) and LIN_EXIT.
+LIN_DS=0
+LIN_EXIT=0
+lin_timed() {
+  local pay="${LIN_ROOT}/payload.json" pid n=0
+  bash_payload "$(/bin/cat "$3")" "$LIN_ROOT" > "$pay"
+  LC_ALL="$2" /bin/bash "$1" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      lin_reap "$pid"; wait "$pid" 2>/dev/null
+      LIN_DS=-1; LIN_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  LIN_EXIT=0; wait "$pid" || LIN_EXIT=$?
+  LIN_DS="$n"
+}
+for lin_shape in dollar separator quoted redirection; do
+  for lin_kb in 10 20 40; do lin_cmd "$lin_shape" $(( lin_kb * 1024 )) "${LIN_ROOT}/${lin_shape}-${lin_kb}.cmd"; done
+done
+lin_n=0
+for lin_shape in dollar separator quoted redirection; do
+  for lin_loc in en_US.UTF-8 C; do
+    for lin_kb in 10 20 40; do
+      lin_n=$(( lin_n + 1 ))
+      lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/${lin_shape}-${lin_kb}.cmd" "$LIN_LIMIT"
+      if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
+        /usr/bin/printf 'PASS: %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook in ${LIN_DS} tenths of a second (budget ${LIN_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+      else
+        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed" \
+          "elapsed=${LIN_DS} tenths (-1 = stopped at ${LIN_LIMIT}) exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+      fi
+    done
+  done
+done
+lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/separator-40.cmd" "$LIN_LIMIT"
+if [ "$LIN_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly SCRIPT_LINEAR_MIN=1000000000' "${LIN_HOOKS}/block-destructive-nopass.sh"; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at ${LIN_LIMIT} tenths on the 40 KB separator-dense command in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget" \
+    "elapsed=${LIN_DS} tenths exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X24 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+fi
+# X-FB: the pass's tr repointed to a path that does not exist, so the pass fails and leaves the
+# split to the substitutions. A long separator-dense command ending in an unlisted script run by an
+# interpreter (refused), and the same ending in an echo (allowed).
+lin_why=""
+lin_tools="$(/usr/bin/grep -c -F '/nonexistent/tr' "${LIN_HOOKS}/block-destructive-notool.sh")" || true
+[ "$lin_tools" = 1 ] || lin_why="${lin_why} the copy repoints ${lin_tools} pass lines, want 1;"
+lin_pad="$(lin_fill 400 '' 'echo a;echo b|cat&echo c;' '')"
+for lin_c in "b:2:${lin_pad}bash /tmp/pmo-lin-na.sh" "a:0:${lin_pad}echo done"; do
+  lin_tag="${lin_c%%:*}"; lin_rest="${lin_c#*:}"
+  lin_want="${lin_rest%%:*}"; lin_cmd_s="${lin_rest#*:}"
+  lin_s=0; lin_t=0
+  ( /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive.sh" > /dev/null 2>&1 ) || lin_s="$?"
+  lin_err="$( { /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive-notool.sh" > /dev/null; } 2>&1 )" || lin_t="$?"
+  [ "$lin_s" = "$lin_want" ] || lin_why="${lin_why} [${lin_tag}] shipped exits ${lin_s}, want ${lin_want};"
+  [ "$lin_t" = "$lin_s" ] || lin_why="${lin_why} [${lin_tag}] the copy without its tr exits ${lin_t}, the shipped hook ${lin_s};"
+  case "$lin_err" in *HOOK-ERROR*) lin_why="${lin_why} [${lin_tag}] the copy without its tr raised a hook error;" ;; esac
+done
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-X-FB: with the pass's tr missing, the split falls back to its substitutions — a refused interpreter run and an allowed echo read as the shipped hook reads them, with no hook error"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-FB: with the pass's tr missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$LIN_ROOT"
+
 # --- Summary ---
 echo ""
 echo "================================"

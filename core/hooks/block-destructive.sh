@@ -1633,6 +1633,9 @@ readonly SCRIPT_BND_PAREN=$'\003'  # a position opened by `(`
 readonly SCRIPT_BND_TICK=$'\004'   # a position opened by a backtick
 readonly SCRIPT_ENCL_POS_MAX=512
 readonly SCRIPT_ENCL_TAIL_BYTES=262144
+# The separator split's linear pass, a bound in characters (see THE LINEAR PASS in the
+# script-execution rule): a command this long or longer is split by one tr pass first.
+readonly SCRIPT_LINEAR_MIN=256
 
 # ── THE ENCLOSURE VIEW'S SHELL FINDINGS: A THIRD FAMILY, AND A SIBLING FOR THE REASON
 # THE NON-SHELL FAMILY IS ONE.
@@ -2783,9 +2786,11 @@ case "$TOOL_NAME" in
     # operand FILTER differs per verb, because an interpreter takes a script and
     # `source` takes any file.
     #
-    # Bash 3.2-safe throughout (macOS system bash): parameter expansion only, no
-    # `tr`, no associative arrays, and the loop runs in the CURRENT shell (here-string,
-    # never a pipeline) so `block`'s exit 2 propagates rather than dying in a subshell.
+    # Bash 3.2-safe throughout (macOS system bash): parameter expansion only — save
+    # the separator split's one `tr` pass on a long command, inside a command
+    # substitution whose output the current shell reads (THE LINEAR PASS, below) — no
+    # associative arrays, and the loop runs in the CURRENT shell (here-string, never a
+    # pipeline) so `block`'s exit 2 propagates rather than dying in a subshell.
 
     # THE SEPARATOR SUBSTITUTION MOVED DOWN, and the move is load-bearing. It now
     # runs AFTER the here-document pre-pass, on script_hdstripped rather than on
@@ -2949,6 +2954,7 @@ case "$TOOL_NAME" in
     script_esc=""
     script_mark=""
     script_cut_out=""
+    script_lp=""
     # The flag walk's effective subject (raw token, or its normalized view when
     # that view is a flag outside every operand domain). Initialised for the same
     # reason as the three below: an unset read under `set -u` exits 1, and exit 1
@@ -2990,7 +2996,20 @@ case "$TOOL_NAME" in
 
     # Separator substitution, on the pre-pass output. Excised bodies are already
     # gone; a declined command reaches this line as $COMMAND verbatim.
-    script_segments="${script_hdstripped//;/$'\n'}"
+    #
+    # THE LINEAR PASS. On bash 3.2 a global pattern substitution costs more than
+    # linear time in the text it scans once that text carries the character it
+    # replaces, so on a large command these three lines could hold the hook past the
+    # runtime's command-hook timeout, and a hook that times out does not block. A
+    # command of at least SCRIPT_LINEAR_MIN characters is therefore split first by
+    # one pass of tr in the C locale, whose output equals the three substitutions'
+    # byte for byte (AC-022-X-EQ); they still run after it and find nothing left to
+    # replace, which costs one scan. A shorter command costs less than the fork the
+    # pass takes, so it keeps the substitutions alone, and a pass that fails leaves
+    # the text to them, so the segments are the same on every path.
+    script_segments="$script_hdstripped"
+    if [ "${#script_segments}" -ge "$SCRIPT_LINEAR_MIN" ] && script_lp="$(LC_ALL=C /usr/bin/tr '\073\046\174' '\012\012\012' <<< "${script_segments}.")"; then script_segments="${script_lp%.}"; fi  # linear: segments
+    script_segments="${script_segments//;/$'\n'}"
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
 
