@@ -220,7 +220,7 @@ cps_live=0
 if ! /usr/bin/cmp -s "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" \
    && ! /usr/bin/grep -q -F 'WROW["nice"]' "${cps_hooks}/lib/command-position.awk"; then cps_live=1; fi
 cps_run 'echo hello'
-if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'PRIMITIVE-MISSING'; then
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
   /usr/bin/printf 'PASS: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar fails the hook closed in enforce (exit 2, PRIMITIVE-MISSING)\n'
   PASS=$((PASS + 1))
 else

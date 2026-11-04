@@ -480,7 +480,7 @@ cps_skew() { # $1 = arm label  $2 = sed program for the canonicalizer copy  $3 =
   local live=0
   if ! /usr/bin/cmp -s "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"; then live=1; fi
   cps_run 'echo hello'
-  if [ "$live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'PRIMITIVE-MISSING'; then
+  if [ "$live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
     /usr/bin/printf 'PASS: %s a canonicalizer copy without %s fails the hook closed (exit 2, PRIMITIVE-MISSING)\n' "$1" "$3"
     PASS=$((PASS + 1))
   else
@@ -494,7 +494,7 @@ cps_skew "CMDPOS-SKEW-02" 's/CMDPOS_VIEW == "exit"/CMDPOS_VIEW == "zzexit"/' "th
 cps_run 'echo hello'
 cps_ctl_benign="$CPS_RC"
 cps_run 'rm -rf /tmp/foo'
-if [ "$cps_ctl_benign" = 0 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'BLOCK-TRASH-001'; then
+if [ "$cps_ctl_benign" = 0 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'BLOCK-TRASH-001' <<<"$CPS_ERR"; then
   /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command and refuses the plain form\n'
   PASS=$((PASS + 1))
 else
