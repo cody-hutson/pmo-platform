@@ -1,22 +1,28 @@
 name: Gate posture reconciliation
 
 # gate-efficacy: posture=advisory  enforcement=ci-enforce:"Gate posture reconciliation (declared vs live)" (never a required context — a MEASURED divergence turns this check RED)  always-reports=yes
-#   invariant: on a run whose live read returned, the declared and live required-context
-#              sets do not diverge. "Diverge" is defined in
+#   invariant: on a run whose two live reads both returned, the declared and live
+#              required-context sets do not diverge. "Diverge" is defined in
 #              core/standards/gate-efficacy-standard.md § Requirement (b), over the
 #              registration track that § Declared-required contexts of the same standard
-#              defines, and computed by core/deploy/tools/reconcile-gate-posture.py. Three
-#              classes: UNREGISTERED — a declared-required context that claims delivery is
-#              absent from main's live required_status_checks.contexts; HELD AND
-#              REGISTERED — a context declared `required(warn-mode-initial)` is present in
-#              it; UNDECLARED — a live context is named by no declaration on the
-#              registration track. A context declared `required(warn-mode-initial)` and
-#              absent from the live set is HELD: listed on every measured run, never a
+#              defines, and computed by core/deploy/tools/reconcile-gate-posture.py. The
+#              live set is two reads: main's branch protection, and the
+#              required_status_checks rules that apply to main. Four classes:
+#              UNREGISTERED — a declared-required context that claims delivery is absent
+#              from the live set; HELD AND REGISTERED — a context declared
+#              `required(warn-mode-initial)` is present in it; UNRECORDED HOLD — a context
+#              declared `required(warn-mode-initial)` is absent from it and has no HOLD or
+#              CORRECT-THEN-HOLD row in § Declared-required contexts; UNDECLARED — a live
+#              context is named by no declaration on the registration track. A context
+#              declared `required(warn-mode-initial)`, absent from the live set and with
+#              its HOLD-family row is HELD: listed on every measured run, never a
 #              divergence.
 #   falsification: add a `posture=required  enforcement=branch-protection:"<a context that
 #                  is not registered>"` header -> this check goes RED on that pull request
 #                  and names the context; correct the header to `advisory`, or have the
-#                  operator register the context, and re-run -> green. A failed live read
+#                  operator register the context, and re-run -> green. Add a
+#                  `posture=required(warn-mode-initial)` header with no disposition row ->
+#                  RED as UNRECORDED HOLD; add its HOLD row -> green. A failed live read
 #                  cannot turn this check red and cannot turn it green: see the three
 #                  states below.
 #   posture note: `advisory` is STRUCTURAL and PERMANENT. This context must never be
@@ -33,18 +39,20 @@ name: Gate posture reconciliation
 #                 required rows govern the merge, and a red verdict here is read and
 #                 recorded at the merge — never waived unread, and never a block.
 #   three states: at the level a reviewer reads, this check concludes SUCCESS (measured,
-#                 reconciled), FAILURE (measured, diverged) or SKIPPED (NOT-EVALUATED — the
-#                 live read did not return). A skipped verdict is not a clean result; the
-#                 measurement job below carries a warning annotation when it happens.
+#                 reconciled), FAILURE (measured, diverged) or SKIPPED (NOT-EVALUATED —
+#                 either live read did not return). A skipped verdict is not a clean
+#                 result; the measurement job below carries a warning annotation when it
+#                 happens.
 #
 # gate-efficacy: posture=advisory  enforcement=ci-enforce:"Gate posture reconciliation (measurement)" (red only when the instrument itself is broken)  always-reports=yes
 #   invariant: the reconciler discriminates — its committed --self-test passes with the
-#              shared header parser loaded — and the declared set is readable. This job
-#              performs the live read and the comparison and publishes the report. It does
-#              NOT carry the verdict.
-#   falsification: break one --self-test arm, or make the declared set unreadable -> this
-#                  job goes RED (exit 2) and the verdict job is skipped. Make the live read
-#                  fail -> this job stays GREEN with a warning annotation and the verdict
+#              shared header parser loaded — and the declared set and the disposition table
+#              are readable. This job performs the two live reads and the comparison and
+#              publishes the report. It does NOT carry the verdict.
+#   falsification: break one --self-test arm, make the declared set unreadable, or change
+#                  the disposition table's heading or columns -> this job goes RED (exit 2)
+#                  and the verdict job is skipped. Make either live read fail -> this job
+#                  stays GREEN with a warning annotation and the verdict
 #                  job is SKIPPED: an outage turns nothing red and nothing green. The
 #                  self-test step's --require-parser is what makes the parser-backed arms
 #                  mandatory; this job is their one mandatory runner, so dropping the flag
@@ -63,8 +71,16 @@ name: Gate posture reconciliation
 # refuses the workflow token, which is why this job once reported a non-measurement on
 # every run. The response body is handed to the reconciler whole: the decision "is this
 # body a measurement" is verdict-bearing, so it lives in the tool, under its self-test,
-# and not in this file's shell. STATED LIMIT: this is a read of classic branch
-# protection. A required check delivered by a ruleset is outside it.
+# and not in this file's shell. The second read is of the rules that apply to main,
+# `GET /repos/{owner}/{repo}/rules/branches/main?per_page=100` — never the repository's
+# ruleset list, which also carries rulesets that target tags — handed over the same way.
+# A verdict needs BOTH reads to return. STATED LIMIT: the live set is classic branch
+# protection through the public branch object plus the required_status_checks rules that
+# rules/branches/main returns. A rule of a type known to add no merge gate is ignored;
+# any other rule type — a review, deployment, scan, workflow or merge-queue rule, or a
+# type the host adds later — holds a merge on something this read cannot name, so it
+# reads degraded and the run is NOT-EVALUATED. The rules reader's sensitivity rests on
+# self-test fixtures, because no rule applies to main today.
 #
 # WHY A SEPARATE SURFACE FROM THE CONFORMANCE RATCHET. The predicate splits on
 # VERDICT-INPUT CLOSURE, and the two halves must not share a host. Half A — "every job
@@ -138,6 +154,25 @@ jobs:
             sed -n '1,5p' live-error.txt || true
           fi
 
+      - name: Read the rules that apply to main (no admin scope needed)
+        # The rules for main, never the repository ruleset list: that list also carries
+        # rulesets targeting tags. Un-gated, like the branch read: the reconciler decides
+        # what the body is, and a read that does not return is a non-measurement.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          rm -f rules.json
+          if gh api "repos/${REPO}/rules/branches/main?per_page=100" > rules.json 2> rules-error.txt
+          then
+            echo "rules read: the request returned"
+          else
+            rm -f rules.json
+            echo "rules read: the request did not return"
+            sed -n '1,5p' rules-error.txt || true
+          fi
+
       - name: Reconcile declared-required contexts against live branch protection
         id: reconcile
         # The tool's exit code is the transport, and this handler is the consuming rule:
@@ -151,6 +186,7 @@ jobs:
           set +e
           python3 core/deploy/tools/reconcile-gate-posture.py \
             --live-branch-json branch.json \
+            --live-rules-json rules.json \
             --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
           rc=${PIPESTATUS[0]}
           set -e
@@ -159,7 +195,7 @@ jobs:
               exit 0
               ;;
             3)
-              echo "::warning title=Gate posture reconciliation::NOT-EVALUATED — the live read did not return, so no verdict is published. This is not a clean result."
+              echo "::warning title=Gate posture reconciliation::NOT-EVALUATED — a live read (branch protection or the rules for main) did not return, so no verdict is published. This is not a clean result."
               exit 0
               ;;
             *)

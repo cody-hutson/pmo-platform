@@ -25,17 +25,21 @@
 #   warn      → report only (exit-0); an in-scope FAIL is surfaced but does not block.
 #   enforce   → block on an in-scope FAIL (exit-1 propagates to the CI caller).
 #
-# Ships DORMANT (warn) during the calibration window, per the warn-mode-initial
-# posture and the reflexive-pipeline-loop discipline (the introducing release
-# `governance-ci-gates` dogfoods this gate green on its own PR before any flip).
-# Flip the token below to `enforce` after a >=3-day warn-log review with zero false
-# positives. The operator then registers the `Pre-merge load-bearing check subset`
-# context in `required_status_checks.contexts` via branch protection (the out-of-tree
-# enforcement surface) — after the flip, never before it: a context registered while
-# this token reads `warn` is a required check that cannot turn red. The single-token
-# edit, followed by the branch-protection change, arms the gate. No code change is
-# needed to graduate.
+# GRADUATED. The token below shipped DORMANT (warn) for the calibration window and was
+# flipped to `enforce` on the operator's gate-rollout graduation decision; its
+# specificity reading and owner are recorded in the `Pre-merge load-bearing check
+# subset` row of core/standards/gate-efficacy-standard.md § Declared-required contexts.
+# It moves together with GATE_ROLLOUT_PHASE in core/deploy/deploy.sh, in one commit:
+# nothing compares the two, so an edit to one alone leaves them out of step.
+# The `Pre-merge load-bearing check subset` context is registered in branch protection
+# after the flip, never before it: a context registered while this token reads `warn`
+# is a required check that cannot turn red. A RETREAT reverses this flip: un-register
+# the context first, then revert the flip commit's edits to this token,
+# GATE_ROLLOUT_PHASE, the workflow header and the standard's flip record together, and
+# past Check 74's escalation window re-date GATE_ROLLOUT_ARMED, because below `enforce`
+# that deadline re-arms.
+# An absent file, or a first token other than `enforce`, reads as `warn`.
 #
-# (Token-flagged rather than presence-flagged so the file can ship now — the docs
-#  reference it — while the gate stays non-blocking; mirrors close-completeness.enforce.)
-warn
+# (Token-flagged rather than presence-flagged so the file could ship while the gate
+#  stayed non-blocking — the docs reference it; mirrors close-completeness.enforce.)
+enforce

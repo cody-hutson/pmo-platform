@@ -1,25 +1,25 @@
 name: Skill-count / IMP-XXX drift
 
-# gate-efficacy: posture=required(warn-mode-initial)  enforcement=branch-protection:"Skill-count / IMP-XXX delta"  always-reports=yes
+# gate-efficacy: posture=required  enforcement=branch-protection:"Skill-count / IMP-XXX delta"  always-reports=yes
 #   invariant: no changed file adds a deprecated IMP-XXX reference or a hardcoded
 #              skill-count that drifts from the runtime-computed roster authority.
 #   falsification: add a line citing "IMP-042" or a stale literal skill total to a
 #                  changed markdown file -> the detector reports it on that added line.
-#                  Under WARN_MODE='true' the job still exits 0; setting WARN_MODE to
-#                  'false' turns that same finding RED. The --self-test step hard-fails
-#                  independent of WARN_MODE.
-#   posture note: the qualifier is load-bearing and was ADDED because the bare
-#                 `posture=required` this header carried was FALSE ON BOTH AXES. The
-#                 workflow sets WARN_MODE: 'true' and swallows every finding to `exit 0`,
-#                 so a red verdict is not reachable at all; and the context is absent
-#                 from main's live required_status_checks.contexts. Registering it in
-#                 that state would manufacture a required check STRUCTURALLY INCAPABLE
-#                 of turning red — a merge-predicate conjunct that can never be false,
-#                 which is a strictly weaker guarantee than a reader of "required"
-#                 assumes. The graduation order is therefore fixed: flip WARN_MODE to
-#                 'false' FIRST once the warn-window is clean, and only then register the
-#                 context. Recorded as CORRECT-THEN-HOLD in
+#                  WARN_MODE is 'false', so that finding turns the job RED (exit 1).
+#                  The --self-test step hard-fails independent of WARN_MODE.
+#   posture note: GRADUATED. This header carried the hold qualifier while WARN_MODE
+#                 read 'true' and every finding was swallowed to `exit 0`, and it was
+#                 flipped on the operator's held-flip decision: `required` now states
+#                 what this gate delivers. WARN_MODE is 'false', so a finding
+#                 turns the job RED. The context is registered in main's branch
+#                 protection after the flip, never before it: a context registered while
+#                 WARN_MODE reads 'true' is a required check that cannot turn red. The
+#                 flip record — its specificity reading, its owner and its named
+#                 residual — is this context's row in
 #                 core/standards/gate-efficacy-standard.md § Declared-required contexts.
+#                 A RETREAT reverses this flip: un-register the context first, then
+#                 revert the flip commit's edits to WARN_MODE, this header and the
+#                 standard's flip record together.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
 # Runs on EVERY pull request (no paths filter), so this required status check
@@ -42,15 +42,12 @@ permissions:
   contents: read
 
 env:
-  # Warn-mode-initial per core/rules/bypass-mode-readiness.md +
-  # core/rules/doc-link-maintenance.md. The corpus is clean of live IMP-XXX in
-  # skill specs today (0 hits) and carries no stale roster total on a current
-  # line, so the gate fires on nothing at the shakedown baseline and only
-  # annotates net-new regressions. Flip-to-enforce (set to 'false') once the
-  # warn-window confirms zero false-positive annotations on real PRs — tracked as
-  # a Stage-13 flip-to-enforce assessment line item. When 'true', findings are
-  # reported to the job summary but the job still exits 0 (no hard block).
-  WARN_MODE: 'true'
+  # Enforcing. A finding on an added line turns this job RED (exit 1), and a
+  # scan-surface error (detector exit 3) is RED in either setting. 'true' is the
+  # retreat setting (findings reported to the job summary, exit 0), taken only
+  # after the context is un-registered, in the order the posture note above
+  # states (core/standards/gate-efficacy-standard.md § Declared-required contexts).
+  WARN_MODE: 'false'
 
 jobs:
   skill-count-imp:
@@ -188,8 +185,8 @@ jobs:
             echo "This gate is the PR-time mirror of \`deploy.sh\` Check 5(c). See \`core/deploy/tools/check-skill-count-imp.py\`."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
-          if [ "${WARN_MODE:-true}" = "true" ]; then
-            echo "::warning::skill-count-imp findings present; WARN_MODE is on, not failing the PR (flip to enforce once the warn-window is clean)."
+          if [ "${WARN_MODE:-false}" = "true" ]; then
+            echo "::warning::skill-count-imp findings present; WARN_MODE is 'true' (the retreat setting), so this PR is not failed."
             exit 0
           fi
           exit 1

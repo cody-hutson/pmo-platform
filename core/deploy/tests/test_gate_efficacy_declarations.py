@@ -120,10 +120,27 @@ listed suite that has gained an executor fails, while a NEW zero-executor suite,
 one whose row was deleted, is reported and not failed — executor coverage as a merge gate
 is the self-test coverage checker's decision.
 
+A MALFORMED HEADER IS A FINDING ON ITS OWN WORKFLOW — NEVER A DROP-OUT, NEVER ANOTHER'S
+----------------------------------------------------------------------------------
+Every arm that reads a posture skips a value it cannot read, so a declaration whose
+posture is misspelled, missing, or swallowed by a collapsed separator used to fall out of
+grading at exit 0. `evaluate` therefore grades the posture field on every declaration: the
+key is mandatory and its value is `required` or `advisory`, optionally with one
+parenthesized qualifier. Where a field's value carries another governed `key=`, a
+diagnostic line names the collapsed separator that explains the finding.
+
+And every harness arm reads only the DELTA its own mutation added. An arm that read "were
+there findings at all" blamed its own innocent victim whenever the tree already carried a
+finding elsewhere, so a malformed header was reported against the wrong workflow. Victims
+are drawn from workflows with no baseline finding; a delta that lands on any other file is
+the arm's own INSTRUMENT FAILURE; and `attribution_harness` proves both on a live
+workflow, one malformed edit at a time.
+
 EXIT CONTRACT
 -------------
     0  every workflow conforms AND the anti-vacuity harness passed
-    1  at least one declared-vs-actual mismatch (a workflow with no header, a job
+    1  at least one declared-vs-actual mismatch (a workflow with no header, a declaration
+       with no `posture` field or one outside the closed vocabulary, a job
        publishing a check-run its workflow's headers do not name, a `required` posture
        naming a surface that cannot block, a stale residual-ledger entry, a malformed
        or zero-yield population declaration, a declared population the check never
@@ -132,12 +149,15 @@ EXIT CONTRACT
        population-ledger entry, a census row missing, stale or unclassified, or a census
        `examined:` that disagrees with its rows)
     2  the harness itself could not assert — an unreadable population, a partition too
-       small to build a mutation arm, a mutation the detector failed to flag, an empty
-       population-declaration set, a `git ls-files` failure, an unreadable standard or
-       census input, a census population that re-derives empty, or a census arm that
-       fails to discriminate. Fail-closed: a probe that cannot demonstrate it
+       small to build a mutation arm, a mutation the detector failed to flag, an arm
+       whose result it cannot attribute to its own mutation (an INSTRUMENT FAILURE), an
+       empty population-declaration set, a `git ls-files` failure, an unreadable
+       standard or census input, a census population that re-derives empty, or a census
+       arm that fails to discriminate. Fail-closed: a probe that cannot demonstrate it
        discriminates reports 2 rather than the clean it can no longer distinguish from a
-       real one.
+       real one. Before a harness-failure exit 2, every finding on the real tree is
+       printed, prefixed `finding on the real tree`, so a harness that cannot assert
+       never hides one.
 
 THE HARNESS RUNS BY DEFAULT, ON EVERY INVOCATION — deliberately, and it is the whole
 reason to trust the zero. A falsification harness behind a flag nothing passes runs
@@ -163,6 +183,7 @@ import re
 import shlex
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 try:
@@ -191,6 +212,26 @@ ANY_EXPR_RE = re.compile(r"\$\{\{.*?\}\}")
 # literal `(`, so a hypothetical future posture word that merely BEGINS with the letters
 # — `required-on-release`, say — is NOT silently swept into the required class.
 POSTURE_REQUIRED_RE = re.compile(r"^required(?:\(|$)")
+
+# THE CLOSED POSTURE VOCABULARY. The standard's Declaration schema gives `posture` two
+# values, `required | advisory`; a value may carry ONE parenthesized qualifier — the
+# `required(warn-mode-initial)` and `advisory(ratified …)` forms this tree uses. The key is
+# MANDATORY. A posture outside this grammar, or no posture at all, is a finding: before it
+# was, every posture-graded arm SKIPPED such a declaration, so a misspelled or deleted
+# posture dropped the declaration out of grading at exit 0 — and the reconciliation report
+# dropped its context from the declared set the same way.
+POSTURE_VOCAB_RE = re.compile(r"^(?:required|advisory)(?:\([^()]+\))?$")
+
+# The keys a declaration's grammar governs. One of them appearing INSIDE another field's
+# value is the signature of a collapsed separator: fields are split on two or more spaces,
+# so a single space merges two fields into one, and the second key is never read. This is
+# a DIAGNOSTIC — it names the cause on a declaration that already carries a finding — not a
+# verdict of its own: the closed vocabulary above, and the field branches of `evaluate`,
+# are what turn a collapse into a finding.
+GOVERNED_KEYS = ("posture", "enforcement", "enforcement-surface", "always-reports",
+                 "skip-semantics")
+EMBEDDED_KEY_RE = re.compile(
+    r"(?:^|\s)(" + "|".join(map(re.escape, GOVERNED_KEYS)) + r")=")
 
 # The only enforcement surface that makes a red verdict block a merge on this host.
 BLOCKING_SURFACE = "branch-protection"
@@ -228,8 +269,8 @@ POSTURE_RESIDUALS: dict[tuple[str, str, str], str] = {
 # gate-efficacy-standard.md Requirement (b) (`population:`) and Requirement (c)
 # § Population shortfall. Every name from here to POPULATION_RESIDUALS is new, and the
 # functions that use them are too: the contract `reconcile-gate-posture.py` imports from
-# this module (`parse_headers`, `QUOTED_RE`, `declared_contexts`) is untouched, and
-# nothing new runs at import time.
+# this module (the names its `PARSER_NAMES` lists) is untouched, and nothing new runs at
+# import time.
 POPULATION_RE = re.compile(r"^\s*#\s{2,}population:\s*(?P<fields>.*)$")
 
 # The closed exemption-unit set, narrowest first. `file/class` is a per-file marker that
@@ -365,6 +406,27 @@ def evaluate(
         for lineno, fields in declarations:
             n_declarations += 1
             site = f"{name}:{lineno}"
+            first = len(findings)
+            # THE POSTURE BRANCH — mandatory key, closed vocabulary. Graded on EVERY
+            # declaration, ahead of the trigger branches, because every other arm that
+            # reads the posture skips a value it cannot read: a declaration this branch
+            # does not catch falls out of grading silently.
+            posture = fields.get("posture")
+            if posture is None:
+                findings.append(
+                    f"{site}: declares no `posture` field — the key is mandatory, and a "
+                    f"declaration without one is dropped from every posture-graded arm, so "
+                    f"it is a finding, never a skip (gate-efficacy-standard.md Requirement "
+                    f"(b))"
+                )
+            elif not POSTURE_VOCAB_RE.match(posture):
+                findings.append(
+                    f"{site}: posture {posture!r} is outside the closed vocabulary — "
+                    f"`required` or `advisory`, optionally with one parenthesized qualifier "
+                    f"(gate-efficacy-standard.md Requirement (b)); a posture this suite "
+                    f"cannot read is dropped from every posture-graded arm, so it is a "
+                    f"finding, never a skip"
+                )
             if filtered_now:
                 if fields.get("skip-semantics") != "absent-is-pass":
                     findings.append(
@@ -407,8 +469,28 @@ def evaluate(
                         f"skip-semantics — absence cannot occur, so the declaration is "
                         f"false"
                     )
+            # The embedded-key DIAGNOSTIC: on a declaration that already carries a
+            # finding, name the collapsed separator that explains it. It never decides a
+            # verdict on its own — every collapse position is caught by a branch above.
+            if len(findings) > first:
+                findings.extend(collapsed_separator_notes(site, fields))
 
     return findings, filtered, filter_free, n_declarations
+
+
+def collapsed_separator_notes(site: str, fields: dict[str, str]) -> list[str]:
+    """One diagnostic line per field whose VALUE carries a governed `key=` — the trace a
+    single-space separator leaves when it merges two fields into one."""
+    notes: list[str] = []
+    for key, value in fields.items():
+        match = EMBEDDED_KEY_RE.search(value)
+        if match:
+            notes.append(
+                f"{site}: diagnostic — field `{key}` carries the `{match.group(1)}=` key "
+                f"inside its value; fields are separated by two or more spaces, so a "
+                f"collapsed separator has merged two fields into one"
+            )
+    return notes
 
 
 def declared_contexts(text: str) -> set[str]:
@@ -632,14 +714,56 @@ def evaluate_jobs(sources: dict[str, str]) -> tuple[list[str], list[str], int]:
     return findings, scoped, graded
 
 
+# ─── ATTRIBUTION — every harness result belongs to the arm's own mutation ──────────────
+#
+# A harness arm mutates ONE workflow and reads whether the detector reacted. Read as
+# "were there findings at all", any finding the tree already carries — on any workflow —
+# answers yes, so a specificity arm blamed its own innocent victim and the suite exited 2
+# before printing the real finding, naming the wrong workflow. Read instead as the DELTA
+# its mutation added, a pre-existing finding cancels out, and a delta that lands on any
+# file but the victim is not the victim's finding at all: the arm cannot attribute its
+# own result, so it reports ITSELF as the failure, never another workflow.
+
+def finding_file(finding: str) -> str:
+    """The workflow a finding names — every finding opens with `<file>:` or `<file>:<line>:`."""
+    return finding.split(":", 1)[0]
+
+
+def attribute_delta(victim: str, base: list[str],
+                    mutated: list[str]) -> tuple[str, list[str]]:
+    """Classify the findings a mutation ADDED, as a multiset difference.
+
+    `clean` — it added none; `victim` — every one it added names `victim`; `foreign` —
+    at least one names another file, which is returned. A multiset, so a finding the tree
+    already carried — however many times — never reads as this arm's result.
+    """
+    added = Counter(mutated) - Counter(base)
+    if not added:
+        return "clean", []
+    foreign = sorted({finding_file(f) for f in added} - {victim})
+    if foreign:
+        return "foreign", foreign
+    return "victim", []
+
+
+def instrument_failure(arm: str, victim: str, foreign: list[str]) -> str:
+    """The message an arm emits when it cannot attribute its own result."""
+    return (f"{arm} (INSTRUMENT FAILURE): the arm's mutation of {victim} produced "
+            f"findings on {', '.join(foreign)} — the harness cannot attribute its own "
+            f"result, so it reports itself, not any workflow, as failed")
+
+
 def job_harness(sources: dict[str, str]) -> list[str]:
     """Anti-vacuity for the per-job arm. Same doctrine as `harness` above: every arm
     mutates an in-memory copy of the LIVE population and requires the detector to
     react, an arm that cannot be BUILT is a reported NOSET rather than a skip, and the
-    specificity arm runs on the same non-empty input as the sensitivity arms."""
+    specificity arm runs on the same non-empty input as the sensitivity arms. Each arm's
+    result is the delta its own mutation added (`attribute_delta`), and victims are drawn
+    only from workflows with no baseline finding."""
     failures: list[str] = []
 
     base_findings, scoped, graded = evaluate_jobs(sources)
+    dirty = {finding_file(f) for f in base_findings}
 
     if not scoped:
         failures.append("NOSET: no workflow declares a named check-run, so arms "
@@ -648,21 +772,27 @@ def job_harness(sources: dict[str, str]) -> list[str]:
         failures.append("NOSET: zero jobs graded — a clean over an empty population "
                         "is not a clean")
 
-    def flags(name: str, mutate) -> bool:
+    def flags(arm: str, name: str, mutate) -> bool | None:
+        """True — the mutation's delta names only `name`; False — it added nothing;
+        None — the arm could not assert, and its failure is already recorded."""
         mutated = dict(sources)
         mutated[name] = mutate(sources[name])
         if mutated[name] == sources[name]:
-            failures.append(f"B-CTRL: mutation of {name} changed nothing — the arm "
-                            f"asserts against an unmutated input")
-            return False
+            failures.append(f"B-CTRL ({arm}): mutation of {name} changed nothing — the "
+                            f"arm asserts against an unmutated input")
+            return None
         found, _, _ = evaluate_jobs(mutated)
-        return len(found) > len(base_findings)
+        verdict, foreign = attribute_delta(name, base_findings, found)
+        if verdict == "foreign":
+            failures.append(instrument_failure(arm, name, foreign))
+            return None
+        return verdict == "victim"
 
     # B1 — SENSITIVITY. Rename a declared context that a job actually matches; that job
     # must go from covered to uncovered. Renaming rather than deleting keeps the header
     # well-formed, so the arm proves the JOB check fired and not a parse failure.
     victim = None
-    for name in scoped:
+    for name in (n for n in scoped if n not in dirty):
         contexts = declared_contexts(sources[name])
         for job_key, _, job_name in named_jobs(sources[name]):
             expanded = expand_job_name(sources[name], job_key, job_name) or []
@@ -678,8 +808,8 @@ def job_harness(sources: dict[str, str]) -> list[str]:
                         "skipped")
     else:
         vname, vctx = victim
-        if not flags(vname, lambda t: edit_header(
-                t, f'"{vctx}"', '"zzz-renamed-context"')):
+        if flags("B1", vname, lambda t: edit_header(
+                t, f'"{vctx}"', '"zzz-renamed-context"')) is False:
             failures.append(f"B1: renaming the declared context {vctx!r} in {vname} — "
                             f"orphaning the job that publishes it — was NOT flagged")
 
@@ -688,7 +818,8 @@ def job_harness(sources: dict[str, str]) -> list[str]:
     # are named. Without this arm a detector that flagged every named job would pass B1
     # and B3 and be worthless — and it would red-CI eleven conforming workflows.
     c1 = [n for n in sorted(sources)
-          if parse_headers(sources[n]) and not declared_contexts(sources[n])
+          if n not in dirty
+          and parse_headers(sources[n]) and not declared_contexts(sources[n])
           and named_jobs(sources[n])]
     if not c1:
         failures.append("NOSET: no C1-class workflow (header present, no check-run "
@@ -696,9 +827,9 @@ def job_harness(sources: dict[str, str]) -> list[str]:
                         "than skipped")
     else:
         c1_victim = c1[0]
-        if flags(c1_victim, lambda t: re.sub(
+        if flags("B2", c1_victim, lambda t: re.sub(
                 r"^(    name:).*$", r"\1 Zzz fabricated job name", t, count=1,
-                flags=re.M)):
+                flags=re.M)) is True:
             failures.append(f"B2: renaming a job in C1-class {c1_victim} WAS flagged — "
                             f"the arm over-matches into workflows whose posture is "
                             f"declared by containment")
@@ -709,7 +840,7 @@ def job_harness(sources: dict[str, str]) -> list[str]:
     # leg alone. An implementation that skipped matrix jobs entirely would pass B1/B2
     # and silently exempt every matrix gate in the tree.
     matrix_victim = None
-    for name in scoped:
+    for name in (n for n in scoped if n not in dirty):
         contexts = declared_contexts(sources[name])
         for job_key, _, job_name in named_jobs(sources[name]):
             if "${{" not in job_name:
@@ -726,8 +857,8 @@ def job_harness(sources: dict[str, str]) -> list[str]:
                         "skipped")
     else:
         mname, mleg = matrix_victim
-        if not flags(mname, lambda t: edit_header(
-                t, f'"{mleg}"', '"zzz-broken-matrix-leg"')):
+        if flags("B3", mname, lambda t: edit_header(
+                t, f'"{mleg}"', '"zzz-broken-matrix-leg"')) is False:
             failures.append(f"B3: breaking the declared matrix leg {mleg!r} in {mname} "
                             f"was NOT flagged — the resolver is not expanding "
                             f"${{{{ matrix.* }}}}, so every matrix job is exempt")
@@ -747,28 +878,38 @@ def posture_harness(sources: dict[str, str]) -> list[str]:
     that ignored posture entirely and flagged every non-`branch-protection` surface
     would pass C1 and fail C2; one that ignored the surface would pass C2 and fail C1.
     C3 and C4 are the specificity pair, and C5 audits the exemption mechanism itself.
+    Each arm's result is the delta its own mutation added (`attribute_delta`), and
+    victims are drawn only from workflows with no baseline finding.
     """
     failures: list[str] = []
 
     base_findings, _, graded = evaluate_posture(sources)
+    dirty = {finding_file(f) for f in base_findings}
 
     if graded == 0:
         failures.append("NOSET: no declaration carries a `required` posture, so arms "
                         "C1/C3 cannot be built — reported rather than skipped")
 
-    def flags(name: str, mutate) -> bool:
+    def flags(arm: str, name: str, mutate) -> bool | None:
+        """True — the mutation's delta names only `name`; False — it added nothing;
+        None — the arm could not assert, and its failure is already recorded."""
         mutated = dict(sources)
         mutated[name] = mutate(sources[name])
         if mutated[name] == sources[name]:
-            failures.append(f"C-CTRL: mutation of {name} changed nothing — the arm "
-                            f"asserts against an unmutated input")
-            return False
+            failures.append(f"C-CTRL ({arm}): mutation of {name} changed nothing — the "
+                            f"arm asserts against an unmutated input")
+            return None
         found, _, _ = evaluate_posture(mutated)
-        return len(found) > len(base_findings)
+        verdict, foreign = attribute_delta(name, base_findings, found)
+        if verdict == "foreign":
+            failures.append(instrument_failure(arm, name, foreign))
+            return None
+        return verdict == "victim"
 
     def find_declaration(predicate):
-        """First (file, posture, surface) in the live population satisfying predicate."""
-        for name in sorted(sources):
+        """First (file, posture, surface) in the live population satisfying predicate,
+        among workflows with no baseline finding."""
+        for name in sorted(n for n in sources if n not in dirty):
             for _, fields in parse_headers(sources[name]):
                 posture = fields.get("posture", "")
                 surface = enforcement_surface(fields)
@@ -798,8 +939,8 @@ def posture_harness(sources: dict[str, str]) -> list[str]:
                         "rather than skipped")
     else:
         cname, _, _ = conforming
-        if not flags(cname, lambda t: edit_header(
-                t, f"={BLOCKING_SURFACE}", "=zzz-unregistered-surface")):
+        if flags("C1", cname, lambda t: edit_header(
+                t, f"={BLOCKING_SURFACE}", "=zzz-unregistered-surface")) is False:
             failures.append(f"C1: repointing a `required` declaration in {cname} at a "
                             f"non-blocking enforcement surface was NOT flagged")
 
@@ -811,8 +952,8 @@ def posture_harness(sources: dict[str, str]) -> list[str]:
                         "so arms C2/C4 cannot be built — reported rather than skipped")
     else:
         aname, aposture, _ = advisory
-        if not flags(aname, lambda t, p=aposture: edit_header(
-                t, f"posture={p}", "posture=required")):
+        if flags("C2", aname, lambda t, p=aposture: edit_header(
+                t, f"posture={p}", "posture=required")) is False:
             failures.append(f"C2: promoting an advisory declaration in {aname} to "
                             f"`required` while it names a non-blocking surface was NOT "
                             f"flagged — the arm is not reading the posture field")
@@ -820,12 +961,13 @@ def posture_harness(sources: dict[str, str]) -> list[str]:
     # C3 — SPECIFICITY, on the same non-empty input. A QUALIFIED `required` posture that
     # still names `branch-protection` is conforming and must stay clean. Without this
     # arm, an implementation that matched only the bare literal `required` would pass
-    # C1 and C2 while silently exempting the six qualified declarations in this tree —
+    # C1 and C2 while silently exempting every qualified declaration in this tree —
     # the same space-intolerant-match failure `reconcile-gate-posture.py` records.
     if conforming:
         cname, _, _ = conforming
-        if flags(cname, lambda t: edit_header(
-                t, "posture=required", "posture=required(zzz-shakedown-qualifier)")):
+        if flags("C3", cname, lambda t: edit_header(
+                t, "posture=required",
+                "posture=required(zzz-shakedown-qualifier)")) is True:
             failures.append(f"C3: a QUALIFIED `required` posture still naming "
                             f"`branch-protection` in {cname} WAS flagged — the arm "
                             f"treats a conforming qualified declaration as a defect")
@@ -836,8 +978,8 @@ def posture_harness(sources: dict[str, str]) -> list[str]:
     # and would red-CI twenty-one conforming advisory declarations.
     if advisory:
         aname, _, asurface = advisory
-        if flags(aname, lambda t, s=asurface: edit_header(
-                t, f"={s}", "=zzz-some-other-advisory-surface")):
+        if flags("C4", aname, lambda t, s=asurface: edit_header(
+                t, f"={s}", "=zzz-some-other-advisory-surface")) is True:
             failures.append(f"C4: changing an ADVISORY declaration's enforcement "
                             f"surface in {aname} WAS flagged — the arm over-matches "
                             f"into postures this invariant does not govern")
@@ -2617,85 +2759,108 @@ def harness(sources: dict[str, str], filtered: list[str],
     """Anti-vacuity. Every arm mutates an in-memory copy of a LIVE workflow and
     requires the detector to react. An arm that cannot be BUILT is NOSET, not a skip.
 
-    ARM COVERAGE IS THE DESIGN CONSTRAINT, not arm count. `evaluate` has FIVE finding
-    branches — filtered-without-`skip-semantics`, filtered-declaring-`always-reports`,
+    ARM COVERAGE IS THE DESIGN CONSTRAINT, not arm count. `evaluate` has SIX finding
+    branches — the posture branch (a missing posture, or one outside the closed
+    vocabulary), filtered-without-`skip-semantics`, filtered-declaring-`always-reports`,
     filter-free-without-`always-reports`, filter-free-declaring-`skip-semantics`, and a
     `required` branch-protection declaration on a filtered file (A9 and A10) — plus the
-    no-header branch. An earlier arm set, written when the first four finding branches
-    and the no-header branch were all there was, covered only three of those five: A1
+    no-header branch. The posture branch's arms are MH1, MH5 and MH6 in
+    `attribution_harness`, because they also assert attribution. An earlier arm set,
+    written when four finding branches and the no-header branch were all there was,
+    covered only three of those five: A1
     exercised the second, A2 the fourth, A4 the no-header branch, and A3's filter
     deletion was ALSO caught by the fourth, so deleting either VALUE branch outright left
     the suite green. That hole was found by mutation-grading this file against itself, not by
     reading it, which is why A6 and A7 exist and why the grading is recorded in the
     register row rather than the arm count.
+
+    ATTRIBUTION. Each arm's result is the delta its own mutation added
+    (`attribute_delta`), never "were there findings at all": read that way, a finding the
+    tree already carried made a specificity arm blame its own innocent victim, so a
+    malformed header was reported against the wrong workflow. Victims are drawn only
+    from workflows with no baseline finding, and an arm whose delta lands on another
+    file reports itself as an INSTRUMENT FAILURE.
     """
     failures: list[str] = []
 
-    def flags(name: str, mutate) -> bool:
+    base_findings, _, _, _ = evaluate(sources)
+    dirty = {finding_file(f) for f in base_findings}
+    clean_filtered = [n for n in filtered if n not in dirty]
+    clean_free = [n for n in filter_free if n not in dirty]
+
+    def flags(arm: str, name: str, mutate) -> bool | None:
+        """True — the mutation's delta names only `name`; False — it added nothing;
+        None — the arm could not assert, and its failure is already recorded."""
         mutated = dict(sources)
         mutated[name] = mutate(sources[name])
         if mutated[name] == sources[name]:
-            failures.append(f"A-CTRL: mutation of {name} changed nothing — the arm "
-                            f"asserts against an unmutated input")
-            return False
+            failures.append(f"A-CTRL ({arm}): mutation of {name} changed nothing — the "
+                            f"arm asserts against an unmutated input")
+            return None
         found, _, _, _ = evaluate(mutated)
-        return bool(found)
+        verdict, foreign = attribute_delta(name, base_findings, found)
+        if verdict == "foreign":
+            failures.append(instrument_failure(arm, name, foreign))
+            return None
+        return verdict == "victim"
 
-    if not filtered:
-        failures.append("NOSET: no path-filtered workflow exists, so arms A1/A3/A6 "
-                        "cannot be built — reported rather than skipped")
-    if not filter_free:
-        failures.append("NOSET: no filter-free workflow exists, so arms A2/A4/A5/A7 "
-                        "cannot be built — reported rather than skipped")
+    if not clean_filtered:
+        failures.append("NOSET: no path-filtered workflow free of a baseline finding "
+                        "exists, so arms A1/A3/A6 cannot be built — reported rather than "
+                        "skipped")
+    if not clean_free:
+        failures.append("NOSET: no filter-free workflow free of a baseline finding "
+                        "exists, so arms A2/A4/A5/A7 cannot be built — reported rather "
+                        "than skipped")
 
-    if filtered:
-        victim = filtered[0]
+    if clean_filtered:
+        victim = clean_filtered[0]
         # A1 — branch 2: always-reports injected into a FILTERED header.
-        if not flags(victim, lambda t: edit_header(
+        if flags("A1", victim, lambda t: edit_header(
                 t, "skip-semantics=absent-is-pass",
-                "skip-semantics=absent-is-pass  always-reports=yes")):
+                "skip-semantics=absent-is-pass  always-reports=yes")) is False:
             failures.append(f"A1: injecting always-reports into filtered {victim} was "
                             f"NOT flagged")
         # A6 — branch 1: the filter kept, the declared value taken out of the enum.
         # This is the arm that covers the filtered-side VALUE test; without it,
         # deleting that whole branch leaves the suite green.
-        if not flags(victim, lambda t: edit_header(
+        if flags("A6", victim, lambda t: edit_header(
                 t, "skip-semantics=absent-is-pass",
-                "skip-semantics=zzz-not-the-enum")):
+                "skip-semantics=zzz-not-the-enum")) is False:
             failures.append(f"A6: a non-enum skip-semantics value on filtered {victim} "
                             f"was NOT flagged")
         # A3 — the filter deleted, the header left claiming absent-is-pass. This is
         # the real-world regression shape (a cost edit that forgets the declaration).
-        if not flags(victim, strip_filter):
+        if flags("A3", victim, strip_filter) is False:
             failures.append(f"A3: deleting {victim}'s paths filter while leaving "
                             f"skip-semantics=absent-is-pass was NOT flagged")
 
-    if filter_free:
-        victim = filter_free[0]
+    if clean_free:
+        victim = clean_free[0]
         # A2 — branch 4: skip-semantics injected into a FILTER-FREE header.
-        if not flags(victim, lambda t: edit_header(
+        if flags("A2", victim, lambda t: edit_header(
                 t, "always-reports=yes",
-                "always-reports=yes  skip-semantics=absent-is-pass")):
+                "always-reports=yes  skip-semantics=absent-is-pass")) is False:
             failures.append(f"A2: injecting skip-semantics into filter-free {victim} "
                             f"was NOT flagged")
         # A7 — branch 3: no filter, and the header denies always-reports. The
         # filter-free counterpart of A6, and the arm whose absence let a whole branch
         # be deleted silently.
-        if not flags(victim, lambda t: edit_header(
-                t, "always-reports=yes", "always-reports=no")):
+        if flags("A7", victim, lambda t: edit_header(
+                t, "always-reports=yes", "always-reports=no")) is False:
             failures.append(f"A7: always-reports=no on filter-free {victim} was NOT "
                             f"flagged")
         # A4 — branch 5: the header removed entirely.
-        if not flags(victim, lambda t: "\n".join(
-                l for l in t.splitlines() if not HEADER_RE.match(l.strip()))):
+        if flags("A4", victim, lambda t: "\n".join(
+                l for l in t.splitlines() if not HEADER_RE.match(l.strip()))) is False:
             failures.append(f"A4: stripping {victim}'s gate-efficacy header was NOT "
                             f"flagged")
         # A5 — SPECIFICITY, on the same non-empty input: a fabricated field touching
         # neither governed field must NOT be flagged. Without it a detector that
         # flagged everything would pass A1-A4/A6/A7 and be worthless.
-        if flags(victim, lambda t: edit_header(
+        if flags("A5", victim, lambda t: edit_header(
                 t, "always-reports=yes",
-                "always-reports=yes  zzz-fabricated-field=yes")):
+                "always-reports=yes  zzz-fabricated-field=yes")) is True:
             failures.append(f"A5: a fabricated non-governed header field on {victim} "
                             f"WAS flagged — the detector over-matches")
 
@@ -2705,7 +2870,8 @@ def harness(sources: dict[str, str], filtered: list[str],
     # LATER declaration in a file that carries more than one, and it is the only arm
     # that goes red if the grader regresses to first-match-only. It was written after
     # exactly that mutation was found to survive the six arms above.
-    multi = [n for n in sorted(sources) if len(parse_headers(sources[n])) > 1]
+    multi = [n for n in sorted(sources)
+             if n not in dirty and len(parse_headers(sources[n])) > 1]
     if not multi:
         failures.append("NOSET: no workflow carries more than one gate-efficacy "
                         "declaration, so arm A8 cannot be built — reported rather "
@@ -2725,8 +2891,8 @@ def harness(sources: dict[str, str], filtered: list[str],
             if len(carrying) < 2:
                 continue  # cannot reach a NON-FIRST declaration in this file
             built = True
-            if not flags(victim, lambda t, o=old, n=f"{old}  {add}": edit_header(
-                    t, o, n, occurrence=2)):
+            if flags("A8", victim, lambda t, o=old, n=f"{old}  {add}": edit_header(
+                    t, o, n, occurrence=2)) is False:
                 failures.append(
                     f"A8: injecting {add} into the SECOND gate-efficacy declaration "
                     f"of {victim} (line {carrying[1]}) was NOT flagged — the grader "
@@ -2746,7 +2912,7 @@ def harness(sources: dict[str, str], filtered: list[str],
     # without it a branch that ignored the posture and flagged every branch-protection
     # surface on a filtered file would pass A9.
     track_victim = None
-    for name in filtered:
+    for name in clean_filtered:
         declarations = parse_headers(sources[name])
         if not declarations:
             continue
@@ -2769,11 +2935,11 @@ def harness(sources: dict[str, str], filtered: list[str],
                 f"{tkey}={tvalue}", onto)
 
         for posture in ("required", "required(warn-mode-initial)"):
-            if not flags(tname, onto_track(posture)):
+            if flags("A9", tname, onto_track(posture)) is False:
                 failures.append(f"A9: a `{posture}` declaration naming branch-protection "
                                 f"on filtered {tname} was NOT flagged — a registered "
                                 f"context on a path-filtered workflow passes every branch")
-        if flags(tname, onto_track("advisory")):
+        if flags("A10", tname, onto_track("advisory")) is True:
             failures.append(f"A10: an ADVISORY declaration naming branch-protection on "
                             f"filtered {tname} WAS flagged — the fifth branch over-matches "
                             f"into postures it does not govern")
@@ -2804,6 +2970,208 @@ def strip_filter(text: str) -> str:
             continue
         out.append(line)
     return "\n".join(out) + "\n"
+
+
+def edit_first_header_fields(text: str, edit) -> str:
+    """Apply `edit(parts)` to the FIRST gate-efficacy header line's field list.
+
+    `parts` alternates field tokens and the separators between them — tokens at even
+    indices, separators at odd — so an arm can collapse a separator or delete a field
+    without guessing how wide the separator is or whether a value carries a space.
+    In-memory only, used solely to build the MH arms.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(r"^(\s*#\s*gate-efficacy:\s*)(.*?)(\s*)$", line)
+        if match:
+            parts = re.split(r"(\s{2,})", match.group(2))
+            lines[index] = match.group(1) + "".join(edit(parts)) + match.group(3)
+            break
+    return "\n".join(lines) + "\n"
+
+
+def _posture_index(parts: list[str]) -> int | None:
+    return next((i for i in range(0, len(parts), 2)
+                 if parts[i].startswith("posture=")), None)
+
+
+def _collapse_after_posture(parts: list[str]) -> list[str]:
+    i = _posture_index(parts)
+    if i is not None and i + 1 < len(parts):
+        parts = parts[:i + 1] + [" "] + parts[i + 2:]
+    return parts
+
+
+def _delete_posture(parts: list[str]) -> list[str]:
+    i = _posture_index(parts)
+    if i is None:
+        return parts
+    if i + 1 < len(parts):
+        return parts[:i] + parts[i + 2:]
+    return parts[:max(i - 1, 0)]
+
+
+MISSPELLED_POSTURE = {"required": "requird", "advisory": "advisroy"}
+
+
+def _misspell_posture(parts: list[str]) -> list[str]:
+    i = _posture_index(parts)
+    if i is None:
+        return parts
+    match = re.match(r"^posture=(required|advisory)(.*)$", parts[i])
+    if match:
+        parts = list(parts)
+        parts[i] = f"posture={MISSPELLED_POSTURE[match.group(1)]}{match.group(2)}"
+    return parts
+
+
+def attribution_harness(sources: dict[str, str]) -> tuple[list[str], str]:
+    """Anti-vacuity for ATTRIBUTION and for the posture branch. Returns (failures, the
+    victim the MH arms mutated).
+
+    THE INVARIANT: a malformed `gate-efficacy:` header fails naming the malformed
+    workflow, and only it — and no harness arm, reading a tree that carries that
+    finding, blames another workflow for it.
+
+    MH1–MH6 each make ONE edit to the first declaration of a live workflow: MH1 collapses
+    the separator after `posture=`, MH2 sets `always-reports=no`, MH3 turns
+    `# gate-efficacy:` into `# gate-efficacy;`, MH4 renames the declared context, MH5
+    misspells the posture and MH6 deletes the posture field. MH1–MH4 are the four
+    single-edit variants that once read 1, 2, 2, 1 at exit — two of them misattributed —
+    and, on a bare `required` header, MH1 read 0. Each passes only when the findings its
+    edit added name the victim alone AND every sibling harness whose evaluator gained one
+    of them, run over the mutated tree, still asserts: that second limb is the
+    attribution repair, observed acting on a tree that carries a real finding. A harness
+    whose evaluator gained nothing reads the mutated tree exactly as it reads the real
+    one, which `main` has already run it over. MH1, MH5 and MH6 are also the posture branch's
+    sensitivity arms; its specificity input is every live declaration, which the real
+    tree grades clean. AT1–AT4 grade `attribute_delta` itself on synthetic finding lists.
+
+    The victim is the first filter-free workflow, sorted, with no baseline finding,
+    whose first declaration carries a posture, `always-reports=yes` and an enforcement
+    field naming a context that a job publishes and that no other header line names.
+    None is a NOSET, never a skip.
+    """
+    failures: list[str] = []
+
+    def per_evaluator(src: dict[str, str]):
+        """(trigger, jobs, posture) findings, plus the filtered / filter-free split."""
+        f_trigger, filt, free, _ = evaluate(src)
+        f_jobs, _, _ = evaluate_jobs(src)
+        f_posture, _, _ = evaluate_posture(src)
+        return (f_trigger, f_jobs, f_posture), filt, free
+
+    base_parts, _, _ = per_evaluator(sources)
+    base = [f for part in base_parts for f in part]
+    dirty = {finding_file(f) for f in base}
+
+    victim = None
+    for name in sorted(n for n in sources if n not in dirty):
+        text = sources[name]
+        try:
+            if has_path_filter(text):
+                continue
+            jobs = named_jobs(text)
+        except Exception:
+            continue
+        declarations = parse_headers(text)
+        if not declarations:
+            continue
+        fields = declarations[0][1]
+        key = next((k for k in ENFORCEMENT_KEYS if k in fields), None)
+        if "posture" not in fields or key is None or fields.get("always-reports") != "yes":
+            continue
+        header_lines = [ln for ln in text.splitlines() if HEADER_RE.match(ln.strip())]
+        published = {n for job_key, _, job_name in jobs
+                     for n in (expand_job_name(text, job_key, job_name) or [])}
+        context = next(
+            (c for c in QUOTED_RE.findall(fields[key])
+             if c in published and sum(f'"{c}"' in ln for ln in header_lines) == 1),
+            None)
+        if context is not None:
+            victim = (name, context)
+            break
+
+    vname = victim[0] if victim else "(none)"
+    if not victim:
+        failures.append("NOSET: no filter-free workflow free of a baseline finding carries "
+                        "a first declaration with a posture, always-reports=yes and a "
+                        "published context named once, so arms MH1–MH6 cannot be built — "
+                        "reported rather than skipped")
+    else:
+        vname, vctx = victim
+        arms = (
+            ("MH1", "the separator after `posture=` collapsed to one space",
+             lambda t: edit_first_header_fields(t, _collapse_after_posture)),
+            ("MH2", "`always-reports=yes` set to `always-reports=no`",
+             lambda t: edit_header(t, "always-reports=yes", "always-reports=no")),
+            ("MH3", "`# gate-efficacy:` written as `# gate-efficacy;`",
+             lambda t: edit_header(t, "gate-efficacy:", "gate-efficacy;")),
+            ("MH4", f"the declared context {vctx!r} renamed",
+             lambda t: edit_header(t, f'"{vctx}"', f'"{vctx}-zzz"')),
+            ("MH5", "the posture misspelled",
+             lambda t: edit_first_header_fields(t, _misspell_posture)),
+            ("MH6", "the posture field deleted",
+             lambda t: edit_first_header_fields(t, _delete_posture)),
+        )
+        for arm, what, mutate in arms:
+            mutated = dict(sources)
+            mutated[vname] = mutate(sources[vname])
+            if mutated[vname] == sources[vname]:
+                failures.append(f"MH-CTRL ({arm}): {what} changed nothing in {vname} — "
+                                f"the arm asserts against an unmutated input")
+                continue
+            parts, filt, free = per_evaluator(mutated)
+            found = [f for part in parts for f in part]
+            verdict, foreign = attribute_delta(vname, base, found)
+            if verdict == "foreign":
+                failures.append(instrument_failure(arm, vname, foreign))
+                continue
+            if verdict == "clean":
+                failures.append(f"{arm}: {what} in {vname} was NOT flagged — the malformed "
+                                f"declaration drops out of grading at exit 0")
+                continue
+            # Each sibling harness attributes against its OWN evaluator's baseline, so
+            # only a harness whose evaluator gained a finding here can be misled by it;
+            # the others read this tree exactly as they read the real one, which `main`
+            # has already run them over.
+            sibling: list[str] = []
+            for gained, run in (
+                    (parts[0] != base_parts[0], lambda: harness(mutated, filt, free)),
+                    (parts[1] != base_parts[1], lambda: job_harness(mutated)),
+                    (parts[2] != base_parts[2], lambda: posture_harness(mutated))):
+                if gained:
+                    sibling += run()
+            if sibling:
+                failures.append(f"{arm}: with {what} in {vname}, a sibling harness could "
+                                f"not assert over the mutated tree — the finding would be "
+                                f"reported against the wrong workflow, or not at all: "
+                                f"{sibling[0]}")
+
+    # AT1–AT4 — the attribution rule itself, on synthetic finding lists.
+    victim_file, other_file = "zzz-victim.yml", "zzz-other.yml"
+    if attribute_delta(victim_file, [], [])[0] != "clean":
+        failures.append("AT1: an empty delta was not classified clean")
+    if attribute_delta(victim_file, [], [f"{victim_file}:3: x"])[0] != "victim":
+        failures.append("AT2: a delta naming only the victim was not classified as the "
+                        "victim's")
+    verdict, foreign = attribute_delta(victim_file, [], [f"{other_file}:5: x"])
+    mixed, mixed_foreign = attribute_delta(
+        victim_file, [], [f"{victim_file}:3: x", f"{other_file}:5: y"])
+    message = instrument_failure("AT3", victim_file, foreign)
+    if (verdict != "foreign" or foreign != [other_file] or mixed != "foreign"
+            or mixed_foreign != [other_file] or "INSTRUMENT FAILURE" not in message
+            or "AT3" not in message or "over-match" in message
+            or f"findings on {other_file}" not in message):
+        failures.append("AT3: a delta naming another file was not reported as the arm's "
+                        "own INSTRUMENT FAILURE naming that file")
+    if attribute_delta(victim_file, [f"{other_file}:5: x"],
+                       [f"{other_file}:5: x"])[0] != "clean":
+        failures.append("AT4: a baseline finding on another file, with nothing added, was "
+                        "not classified clean — the misattribution this harness exists to "
+                        "prevent")
+
+    return failures, vname
 
 
 def main() -> int:
@@ -2923,6 +3291,8 @@ def main() -> int:
     harness_failures = harness(sources, filtered, filter_free)
     harness_failures += job_harness(sources)
     harness_failures += posture_harness(sources)
+    attribution_failures, attribution_victim = attribution_harness(sources)
+    harness_failures += attribution_failures
     harness_failures += population_harness(sources, deploy_text, tracked)
     try:
         census_failures, census_notes = census_harness(census_text, sources, root, tracked,
@@ -2932,6 +3302,12 @@ def main() -> int:
                                          f"({exc})"], []
     harness_failures += census_failures
     if harness_failures:
+        # The real tree's findings first: a harness that cannot assert must never hide
+        # them, and they name the workflow that is actually malformed. The exit stays 2.
+        real = findings + job_findings + posture_findings + pop_findings + census_findings
+        for finding in real:
+            print(f"finding on the real tree (reported though the harness could not "
+                  f"assert): {finding}", file=sys.stderr)
         print("FAIL (harness): the detector did not demonstrate it discriminates.",
               file=sys.stderr)
         for failure in harness_failures:
@@ -2959,6 +3335,16 @@ def main() -> int:
           "so BOTH graded fields are really read; specificity arms C3 (a QUALIFIED "
           "`required` still naming branch-protection) and C4 (an advisory declaration's "
           f"surface) stayed clean on the same non-empty input; {c5_clause}")
+    print(f"anti-vacuity (attribution): MH1–MH6, each one edit to {attribution_victim} "
+          "(a separator collapsed after `posture=`, `always-reports=no`, `gate-efficacy;`, "
+          "a renamed context, a misspelled posture, a deleted posture field), each drew "
+          f"findings on {attribution_victim} alone, and every sibling harness whose "
+          "evaluator gained one still asserted over that mutated tree — so a malformed "
+          "header is reported against its own workflow; MH1, MH5 and MH6 are the posture branch's sensitivity arms, "
+          "and every live declaration is its specificity input; AT1–AT4 classified an "
+          "empty delta clean, a victim-only delta the victim's, a delta on another file "
+          "the arm's own INSTRUMENT FAILURE, and an unchanged baseline finding elsewhere "
+          "clean")
     print("anti-vacuity (population): P1 flagged a missing root appended to the worked "
           "reference's live array and P2 kept that declaration clean unmutated; P7 drew "
           "exactly one finding from a synthetic declaration over an empty glob while its "
