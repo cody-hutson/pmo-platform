@@ -163,6 +163,14 @@ in-scope issue, then assemble the consolidated summary.
   pattern with evidence + recommended operator action; empty patterns reported explicitly as
   "none detected", never omitted).
 
+### Observation-counting pass (per batch; after A6.5)
+
+- **Definition:** `stage-02-triage.md` § Observation counting; fires **once per batch**, after the consolidated summary. It is the one Stage-2 step that reads the complement of the untriaged view.
+- **Read:** `gh issue list --label observation --state open --limit 5000 --json number,title,body,createdAt`, with the result count checked against the dataset size first (`gh issue list --label observation --state open --limit 5000 --json number --jq length`), per the batch-query limits rule — a truncated read misclassifies observations as absent.
+- **Run:** steps 1–5 of § Observation counting as proposals — group by the surface named and the outcome asked; reuse an owner first with one count line; otherwise draft one story per group of two or more; hold a singleton at N = 1 unless it stands on its own evidence; for each counted observation, read its thread for a prior operator decision and draft the `Counted into #<N>` comment, the `status: done` label swap and the `completed` closure.
+- **Emit:** a `### Observation Counting` block — one row per group: its members, the owner or drafted story, the count line or story body, and the closures proposed. A batch with no group of two or more and no owner match reports "none counted", never omits the block.
+- **Confirm:** each create, body edit and close is held behind the operator gate, exactly as Close/Reject is (§ Verdict boundary); nothing is applied without the operator's confirmation.
+
 ## Failure-handling
 
 Honor the per-phase failure-handling posture defined in `stage-02-triage.md` §5 (do not restate the

@@ -264,8 +264,9 @@ default is to propagate:
   close time (e.g. a doc-only references patch the operator chooses to batch into
   a later deploy), record the deferral with a REQUIRED tracked follow-up — a
   manifest deferral entry (the release plan's Operational Deployment Manifest) OR
-  a follow-up issue reference. A deferral without a tracked follow-up pointer is
-  not a valid disposition.
+  a release follow-up recorded for the Stage 13 filing step
+  (`release/references/standards/finding-disposition-framework.md` § 8). A deferral
+  without a tracked pointer is not a valid disposition.
 
 `deploy.sh --check` **Check 1** (Skill sync — source-vs-installed `references/`
 drift) is the DETECTION backstop, not a substitute for the disposition: it

@@ -297,8 +297,10 @@ The disposition the human renders maps onto the existing severity (Blocker/Warni
 |---|---|---|
 | Fix-now (in scope) | Engineering `fix(dt):` commit on the release branch (the existing DT↔Engineering loop) | Tier 1 |
 | Fix-now (needs scope change) | Operator decides per inter-stage feedback protocol | Tier 2 |
-| Defer | Open a **next-release issue** (new disposition — the finding leaves this release with a tracked home) | — |
+| Defer | Record a **release follow-up** in this stage's Findings table, its Recommendation cell opening with the follow-up tag (`finding-disposition-framework.md` § 8.2); no issue is opened here. Stage 9 Phase A7.6 reads it against the filing threshold — a passing item joins the release's post-release sweep, a below-threshold item stays in this record | — |
 | Accept | Note / logged + one-line rationale; no routing | — |
+
+*Cutover:* the Defer routing follows the filing-step cutover in `release/references/standards/finding-disposition-framework.md` § 8 — it applies to releases whose Stage 9 Phase A starts after the merge SHA of the release that introduced it; an earlier release keeps its prior routing to the end of its run.
 
 #### Worked example (representative DT finding)
 
@@ -314,7 +316,7 @@ The disposition the human renders maps onto the existing severity (Blocker/Warni
 | Reversibility / Risk | Fix-Now | additive one-line swap, CHEAP, no regression risk |
 | Scope-Window | Fix-Now | branch still open |
 
-**Disposition:** Step 0 — Warning, gate does not force. Step 1 — `Effort=Fix-Now AND (Best-Practice=Fix-Now) AND Reversibility≠Accept AND Scope-Window=open` → **Fix-Now**. Routed Tier 1 (`fix(dt):` commit). **This is the correct call** — the prior ad-hoc "accept-as-is" is foreclosed: a trivial, documented-best-practice, low-risk fix on an open branch is fix-now, exactly per operator feedback. Had the branch been **merged** (Scope-Window=Defer), Step 1's Defer clause fires → open a next-release issue (not silent accept).
+**Disposition:** Step 0 — Warning, gate does not force. Step 1 — `Effort=Fix-Now AND (Best-Practice=Fix-Now) AND Reversibility≠Accept AND Scope-Window=open` → **Fix-Now**. Routed Tier 1 (`fix(dt):` commit). **This is the correct call** — the prior ad-hoc "accept-as-is" is foreclosed: a trivial, documented-best-practice, low-risk fix on an open branch is fix-now, exactly per operator feedback. Had the branch been **merged** (Scope-Window=Defer), Step 1's Defer clause fires → record a tagged release follow-up for the Stage 9 filing step (not silent accept).
 
 #### Stage 7 ↔ Stage 8 differentiation (for the QA adaptation)
 
@@ -419,6 +421,7 @@ Stage 7's terminal report section is the **Handoff Payload** — a structured bl
 | Evidence citations | Inline code for paths/commands, markdown link for URLs | Separates reference from narrative |
 | Enum values | Exact casing from schema — no synonyms | Deterministic enum parse |
 | Severity vocabulary | `Blocker` / `Major` / `Minor` / `Cosmetic` / `Informational` | Matches persona and the routing protocol |
+| Follow-up tag | A Findings row dispositioned Defer opens its Recommendation cell with the follow-up tag of `finding-disposition-framework.md` § 8.2 — `follow-up: <class>`, plus ` · bug` when the row's Evidence cites a reproduction | The class is read where the finding surfaced, before the release's resolved count is known |
 | Routing tier values | `Tier 1` / `Tier 2` / `Tier 3` / `—` (Notes) | Per the inter-stage feedback protocol and the iteration-loop classification |
 | Origin stage | `S4` / `S5` / `S6` / `S7 (pass N)` / `S8 (return)` | Enables escape provenance |
 | Test-results table | Columns exactly `Suite · Selected-by · Result · Pass/Fail · Env · Evidence · Event ts`; `Result` ∈ `PASS` / `FAIL` / `SKIP`; one row per selected suite, or a single `NONE — …` line | Deterministic extraction of the runtime-gate outcome |

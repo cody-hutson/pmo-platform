@@ -1,16 +1,21 @@
 ---
 title: Finding Disposition Framework
 type: standard
-purpose: K1 codified-knowledge canonical cross-stage finding-disposition decision-weighting framework — the stage-agnostic WHEN-axis (fix-now / defer / accept) that layers on top of each review stage's WHERE-axis (classification/routing). Defines the corrected 5-factor disposition matrix, the Step 1 weighted-disposition logic, the Step 2 tie-break order, and the stage-agnostic scoring skeleton. Consumed by Stage 7 Dev Testing and Stage 8 QA Testing, each of which injects its own stage-specific Step 0 precedence gate.
+purpose: K1 codified-knowledge canonical cross-stage finding-disposition decision-weighting framework — the stage-agnostic WHEN-axis (fix-now / defer / accept) that layers on top of each review stage's WHERE-axis (classification/routing). Defines the corrected 5-factor disposition matrix, the Step 1 weighted-disposition logic, the Step 2 tie-break order, and the stage-agnostic scoring skeleton. Consumed by Stage 7 Dev Testing and Stage 8 QA Testing, each of which injects its own stage-specific Step 0 precedence gate; and § 8, how a release routes its follow-ups through the filing threshold (core/standards/work-item-filing-threshold.md), which it cites and does not restate.
 parallel_to:
   - release/references/pipeline/stage-07-dev-testing.md (Stage 7 consumer — injects the open-Blocker Step 0 gate; owns the DT worked example + Phase D/E pointers + Automation Trajectory row)
   - release/references/pipeline/stage-08-qa-testing.md (Stage 8 consumer — injects the NOT-MET-AC Step 0 gate with operator-override record)
   - release/references/standards/solutioning-output-template.md (sister K1 standard — house style for Stage-5/6 reference scaffolds)
+  - core/standards/work-item-filing-threshold.md (the filing threshold § 8 applies)
 consumers:
   - release/references/pipeline/stage-07-dev-testing.md (§ Finding Disposition Decision Framework — references this doc for matrix + Steps 1-2 + scoring; defines Stage-7 Step 0)
   - release/references/pipeline/stage-08-qa-testing.md (§ Finding Disposition Decision Framework — references this doc for matrix + Steps 1-2 + scoring; defines Stage-8 Step 0)
+  - release/references/pipeline/stage-09-plan-review.md (§ 8 — Phase A7.6, Phase C)
+  - release/references/pipeline/stage-13-close.md (§ 8 — Phase A10.5)
+  - release/references/pipeline/stage-12-execute.md (§ 8 — record-deferred propagation)
+  - release/governance/release-process.md (§ 8 — QC4-05 and QC4-06 routing)
 reversibility: CHEAP (forward-only reference doc; existing stage outputs not retroactively conformed; revisable in subsequent releases without breaking consumers)
-last-updated: 2026-06-06
+last-updated: 2026-11-03
 ---
 <!-- reference-durability: allow-link -->
 
@@ -24,7 +29,7 @@ This standard defines the **WHEN-axis**: for each finding, **fix-now** (this rel
 
 The two axes **compose**: a consuming stage classifies WHERE first, then disposes WHEN. Disposition is **advisory input to the human** at the stage's human-review step — it is a weighting aid, not auto-correction.
 
-**In scope (this standard):** the stage-agnostic mechanics — the 5-factor disposition matrix (§ 3), the Step 1 weighted-disposition logic and Step 2 tie-break (§ 4), and the stage-agnostic scoring skeleton (§ 5).
+**In scope (this standard):** the stage-agnostic mechanics — the 5-factor disposition matrix (§ 3), the Step 1 weighted-disposition logic and Step 2 tie-break (§ 4), and the stage-agnostic scoring skeleton (§ 5). § 8 states how a release routes its follow-ups through the filing threshold, whose home is `core/standards/work-item-filing-threshold.md`.
 
 **Out of scope (this standard — stage-injected by each consumer):** the **Step 0 precedence gate**. Step 0 is a severity/verdict gate applied *before* the weighted layer, and it differs per stage (an open Blocker means something different at Dev Testing than a NOT-MET acceptance criterion does at QA). Each consuming stage defines its own Step 0 in its own shard. See § 6.
 
@@ -112,11 +117,76 @@ The Stage 8 gate is the Stage 7 gate **strengthened** — the only difference be
 
 ## § 7. Consumers
 
-This framework is referenced (not duplicated) by each consuming stage shard. Each consumer references §§ 3–5 for the shared mechanics and defines only its own Step 0 gate plus its stage-specific integration:
+This framework is referenced (not duplicated) by each consuming stage shard. Each consumer references §§ 3–5 for the shared mechanics and defines only its own Step 0 gate plus its stage-specific integration. This table lists the consumers of §§ 3–6; § 8's are listed in § 8.8.
 
 | Consumer | Reading surface | What the consumer owns locally (not in this doc) |
 |---|---|---|
-| [`release/references/pipeline/stage-07-dev-testing.md`](../pipeline/stage-07-dev-testing.md) | § Finding Disposition Decision Framework | Stage-7 Step 0 (open-Blocker gate); DT worked example; the Disposition → routing-consequence table (Tier 1 `fix(dt):` / Tier 2 / Defer → next-release issue / Accept → logged); Phase D/E forward-pointers; the Automation Trajectory row |
+| [`release/references/pipeline/stage-07-dev-testing.md`](../pipeline/stage-07-dev-testing.md) | § Finding Disposition Decision Framework | Stage-7 Step 0 (open-Blocker gate); DT worked example; the Disposition → routing-consequence table (Tier 1 `fix(dt):` / Tier 2 / Defer → release follow-up (§ 8) / Accept → logged); Phase D/E forward-pointers; the Automation Trajectory row |
 | [`release/references/pipeline/stage-08-qa-testing.md`](../pipeline/stage-08-qa-testing.md) | § Finding Disposition Decision Framework | Stage-8 Step 0 (NOT-MET-AC gate + 5-field operator-override record; CONDITIONAL ACCEPT as the override vehicle); PARTIAL-verdict handling; three-lane integration; the Stage 7 ↔ Stage 8 differentiation note |
 
 **Content-split rule:** the stage-agnostic mechanics (matrix + Steps 1–2 + tie-break + scoring skeleton) live **once**, here. No consumer re-inlines them; each consumer references this doc for the shared core and adds only its Step 0 gate and stage-specific integration.
+
+## § 8. Release follow-ups — how a release applies the filing threshold
+
+The filing threshold is `core/standards/work-item-filing-threshold.md`; this section restates none of it. It states how a release applies it: what a release follow-up is, how each one is tagged where it surfaces, which record holds it, what a release files, what a cut may do, and which step does each part.
+
+### § 8.1 What a release follow-up is
+
+A **release follow-up** is work a release sends out of itself: a finding or criterion remainder dispositioned **Defer**; a recommendation naming work outside the release; a GO WITH CONDITIONS condition the release will not discharge before Stage 13; an incoming deferral re-deferred past the release; a downstream item of an audit the release produced; a post-deploy finding routed at Stage 12 or Stage 13; and a signal automatic intake logging holds for the release. No routing point files one. Each waits in the record where it surfaced until the Stage 9 filing step reads it — or, when it surfaces after Stage 9 Phase A, until the Stage 13 filing step does.
+
+### § 8.2 The follow-up tag — the class, read at the source
+
+Whoever surfaces a release follow-up tags it there, before the release's resolved count is known:
+
+    `follow-up: <class>`   optionally followed by   ` · bug`   or   ` · feature`
+
+`<class>` is `user-visible`, `security`, `privacy` or `none` — the threshold's class limb. ` · bug` marks a defect in shipped behaviour whose reproduction the same record cites. ` · feature` marks a capability a user would ask for, not a remedy for the release's own process. Severity comes from the record's own severity field, or from § 8.3.
+
+| Record | Where the tag goes |
+|---|---|
+| Stage 7 Findings table | first token of the Recommendation cell, on every row dispositioned Defer |
+| Stage 8 Acceptance Report | the acceptance matrix Disposition cell, after `defer →` — `card` when the release PR's Issue References block does not close the card (read at Stage 8), so the card carries the deferral; otherwise the tag |
+| a spoke's `### Decisions & Recommendations` | appended to the finding's Severity line |
+| the Stage 5 Solutioning output | at the end of the recommendation's cell, and in the Routing cell of out-of-scope drift |
+| a hub-surfaced follow-up recorded on a sub-task, a condition or re-deferral in the Stage 9 decision record, or a follow-up in a Stage 12 or Stage 13 record | on the line that records it |
+| an `intake-desk` Mode C held candidate | its `filing-threshold:` line carries the reading |
+| an audit SUMMARY downstream item | on the item's row; an item without one is read at assembly |
+
+A row whose source carries no tag, or whose tag a later step reads differently, counts as `reclassified` on the net work line, with its reason.
+
+### § 8.3 Release sources on the severity limb
+
+| Source | Reads as |
+|---|---|
+| a Stage 7 finding | its Findings-table severity |
+| a Stage 8 remainder on a card that closes | **Major** when the remainder is AC-blocking; otherwise **Minor** when it changes what a user sees or does, else **Cosmetic** |
+| a spoke `### Decisions & Recommendations` finding | its Severity line |
+
+### § 8.4 Where a below-threshold follow-up lands
+
+In the record that surfaced it, with its verdict on the same row: the Stage 7 Findings table, the Stage 8 Acceptance Report, the `### Decisions & Recommendations` block of a sub-task output, the Stage 12 output, or the Stage 13 output. The Stage 9 and Stage 13 filing steps count it, so the count is visible at the gate. The mid-pipeline deferral table of `deferred-item-tracking.md` § 13.4 is not this home: it holds in-scope work moved to a later stage of the same release.
+
+### § 8.5 What a release does not file, beyond the threshold's own exclusions
+
+- **An Operator Override Record declares only on Accept.** A record whose Disposition is **Accept** declares the item, so it is not filed. A record whose Disposition is **Defer** declares nothing: the deferral is a release follow-up and is routed like any other.
+- **Carried by its own card.** A criterion deferred on a card that stays open is carried by that card through the release-boundary deferral of `deferred-item-tracking.md` §§ 1–12, and counts as `folded`. No issue is opened only to hold a deferral.
+
+### § 8.6 One sweep per repository, and its exceptions
+
+The follow-ups a release files are gathered into **one post-release sweep issue per repository** holding one: the repository the release ships (`target`, when that is not this platform), and this platform's own repository (`platform`) for a follow-up about the pipeline itself. A release that ships this platform has only `platform` rows. A row gets an issue of its own only when its source tagged it ` · bug` or ` · feature`. This platform's sweep and issues render against its own issue forms. A target's render against the target's own work-item form, read from the target live at filing; this platform stores nothing about the target except its tracker address. Where the target exposes no form, the body is a title, one checklist line per item with its evidence pointer, and the origin marker, and carries no label the target does not already define.
+
+### § 8.7 What a cut may do
+
+At the Stage 9 gate an excess may be cut. A cut may **consolidate** rows that point at one piece of work into one item, **fold** a row into an open owner, or leave a row **carried by its own card** when the card stays open. It may **return a row to its stage record** only when the operator re-reads that row as below the threshold, with the re-reading recorded on the row. A **protected** row — tagged ` · bug`, or of class `security` or `privacy` — is never returned to its stage record. A row a cut removes counts as `cut`, never again as below-threshold.
+
+### § 8.8 Which step applies it
+
+| Surface | Step |
+|---|---|
+| Stages 5–8 and the hub | tag each follow-up where it surfaces (§ 8.2); file nothing |
+| Stage 9 | Phase A7.6 assembles the ledger and renders the net work line; Phase C adds conditions and re-deferrals, and accepts or cuts an excess (§ 8.7), before GO |
+| Stage 12 | a record-deferred propagation is recorded as a release follow-up in the Stage 12 output |
+| Stage 13 | Phase A10.5 reads what surfaced after Stage 9 Phase A as an operator-confirmed addendum, re-renders the line, and files the sweeps and separate issues |
+| Automatic intake logging during a run | `intake-desk` Mode C holds a passing signal for this release when the hub supplies `release_context` |
+
+*Cutover:* applies to releases whose Stage 9 Phase A starts after the merge SHA of the release that introduced this section, as recorded in the release log. A release whose Stage 9 Phase A started earlier keeps its prior routing to the end of its run — one tracked issue per Defer and per post-deploy finding, as before this rule. A follow-up a bound release already filed under the prior routing enters the ledger as a `pre-filed` row, is counted in `proposed`, and is never filed again.

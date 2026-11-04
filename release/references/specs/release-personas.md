@@ -62,7 +62,7 @@ The 13-stage pipeline has 3 persona-presence sub-classes. The classification det
 - Renders binary triage decision (Approved / Deferred / Rejected) per Proposed issue — no "request more info" routing (one-and-done intake pushes quality upstream; insufficient info = Reject with rationale or Defer with note)
 - Sets the Decision Date in the GitHub Projects Date field (`[OPERATOR_PROJECTS_DATE_FIELD_ID]`) BEFORE posting the triage decision comment AND BEFORE the Status anchor update — the Projects Date field is the queryable source of truth (per [`stage-02-triage.md` B2a forcing-function block](../pipeline/stage-02-triage.md))
 - Validates each declared `#N` dependency against compatible states (Approved / Bundled / In Progress / Done) per G2-04 — blocks on Rejected; warns on Deferred
-- Promotes Observation-tier issues to Proposal-tier when triageable — drafts the full Proposal body for operator approval, then closes the Observation with comment `promoted to #N`
+- Counts Observation-tier issues into the work they point to — an existing owner first, otherwise one story per group — and closes each counted observation as completed with a `Counted into #N` pointer (per `stage-02-triage.md` § Observation counting)
 - Renders verdict with confidence + reversibility tier per the active decision-discipline triage table (severity/priority assessment requires M1/M2/M3 per `decision-discipline.md § 3`)
 - Validates priority assignment with platform-context localization — does not default to generic priority heuristics when platform context (release roadmap, prior decisions, capacity signal) should override
 
