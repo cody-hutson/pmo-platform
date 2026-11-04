@@ -282,6 +282,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP at ship, trending MODERATE as registry rows and citations accumulate.
 **File:** [ADR-184-automation-registry-is-the-gate-what-how-who-decoupled.md](ADR-184-automation-registry-is-the-gate-what-how-who-decoupled.md)
 
+### ADR-229 — A work item passes a filing threshold; a release files its follow-ups in one sweep per repository
+
+**Status:** Proposed (flips to Accepted at the introducing release's Stage 13 ratification beat).
+**Decision:** One filing threshold — user-visible, security- or privacy-relevant, and at least Minor — decides whether any deferred item, follow-up or automatically detected signal becomes a work item; its single home is `core/standards/work-item-filing-threshold.md`, because the release pipeline and automatic intake logging both consume it. A release tags each follow-up where it surfaces, counts them against the work it resolves at Stage 9, has the operator accept or cut an excess before anything is filed, and files one sweep per repository at Stage 13, with separate issues only for genuine bugs and features. Rejected: housing the threshold in a review discipline, the work-item authoring standard, the decision discipline's pattern cache, or the floored operations file; a new Stage 9 gate criterion; filing at Stage 9.
+**Reversibility:** MODERATE.
+**File:** [ADR-229-filing-threshold-and-release-follow-up-sweep.md](ADR-229-filing-threshold-and-release-follow-up-sweep.md)
+
 ## Config-architecture ADRs
 
 ### ADR-022 — platform-config.toml vs operator.toml split: environment/identity vs platform-behavior

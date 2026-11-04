@@ -62,7 +62,7 @@ For the authoring-time checklist that determines the tier choice (the 5-test rul
 
 **Provenance marker (agent path).** Every issue the agent auto-intake path creates — both `improvement.yml` and `observation.yml` bodies — carries the machine-emitted marker `<!-- provenance: agent-authored -->` as the **first body line**. It is invisible in rendered markdown, grep-checkable, and is the **limb-1 signal** read by the Stage-2 Acceptance-Fit Determination (A4.6 / gate G2-13): an agent-authored issue carries **no presumption of acceptance**. The concrete emitter is [`intake-desk`](../../../operations/skills/intake-desk/SKILL.md) Mode C (the auto-logging author). **Provenance is not trust** — see §6 Outputs for the non-authorization invariant.
 
-**Triage handling:** Stage 2 Triage includes an **Observation → Proposal promotion action** — the triage agent drafts the full Proposal body for operator approval, then closes the Observation with comment `promoted to #N`. Observations that are not promotable (out of scope, duplicate, no longer relevant) close with rationale per the standard Triage Reject path.
+**Triage handling:** Stage 2 Triage counts observations into the work they point to — an existing owner first, otherwise one story per group — and closes each counted observation as `completed` with a `Counted into #N` pointer, per `stage-02-triage.md` § Observation counting. Observations that cannot be counted (out of scope, duplicate, no longer relevant) close with rationale per the standard Triage Reject path.
 
 **Path B — Human intake (Tier 3):** User creates GitHub Issue via `improvement.yml` template → `improvement` label applied → lands in Proposed status.
 

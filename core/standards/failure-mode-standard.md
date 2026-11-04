@@ -570,8 +570,8 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
   Required artifact: 2-part schema (current-state enumeration with
   reproducible grep evidence + canonical-choice justification citing
   audit / upstream / ADR). Out-of-scope drift observed during survey
-  is logged with routing (Tier 1 [ADJUST] / next-release issue /
-  accepted-residual). Collective Review Decision Briefing rejects
+  is logged with routing (Tier 1 [ADJUST] / release follow-up (filing
+  threshold) / accepted-residual). Collective Review Decision Briefing rejects
   scope-lock approval when a canonicalization is detected without
   the artifact (per
   [`.claude/rules/release-process.md`](../../release/governance/release-process.md)

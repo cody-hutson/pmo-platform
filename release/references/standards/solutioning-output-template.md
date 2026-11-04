@@ -354,7 +354,7 @@ Current-state pages read: <the Phase A1.7 record — `<page-id> @ <sha>` per pag
 **Out-of-scope drift detected:**
 | File / location | Observation | Routing |
 |---|---|---|
-| ... | ... | Tier 1 [ADJUST] / next-release issue / accepted-residual |
+| ... | ... | Tier 1 [ADJUST] / release follow-up + tag (filed only if it passes the filing threshold) / accepted-residual |
 
 ---
 
@@ -374,6 +374,8 @@ Current-state pages read: <the Phase A1.7 record — `<page-id> @ <sha>` per pag
 |---|---|
 | **R1** — <action> | RECOMMENDED / OPTIONAL / DEFERRED |
 | ... | ... |
+
+A recommendation that sends work out of the release ends its cell with the follow-up tag (`finding-disposition-framework.md` § 8.2).
 
 **Empirical Verification (R3):**
 

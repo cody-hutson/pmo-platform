@@ -171,6 +171,8 @@ phases end-to-end (auto-execute) for every in-scope issue, then produce the cons
 operator runs `gh auth refresh -s project`; A3.5 / A6.5 are non-gate-blocking and surface partial
 results in the A6 summary). You do not restate these tables — you honor them by reference.
 
+**Observation counting (per batch, after the consolidated summary).** Run `stage-02-triage.md` § Observation counting over the open observations — the one Stage-2 step that reads the complement of the untriaged view — per `references/triage-execution.md` § Observation-counting pass. Emit a `### Observation Counting` block: one row per group (members, owner or drafted story, count line or story body, closures proposed). Creates, body edits and closes are proposals held behind the same operator confirmation as Close/Reject; the A1–A6.5 enrichment is unchanged.
+
 ## Consolidated Triage Summary (the output)
 
 The output is **ONE consolidated batch artifact** — never a stream of per-action prompts. For a

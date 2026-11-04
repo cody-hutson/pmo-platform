@@ -1,0 +1,820 @@
+---
+title: Release Plan — required-checks-enforce-as-declared (Required checks enforce as declared)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: versioned (bump-class minor; provisional display v4.82; the concrete number binds at the Stage-12 atomic claim)
+milestone: required-checks-enforce-as-declared
+release_class: novel
+reversibility: MODERATE / Confidence HIGH — two warn-to-enforce flips plus tool, test and standard edits on one branch with one merge. Reverting the merge restores main byte-for-byte, but the whole-release rollback is ordered — the operator un-registers both contexts first, then the merge is reverted, then GATE_ROLLOUT_ARMED is re-dated past Check 74's escalation window — so it is MODERATE rather than CHEAP. Each context, and items 2 and 3, revert on their own at CHEAP. A claimed version tag is retained and recorded, never deleted.
+---
+# Release Plan — `required-checks-enforce-as-declared`
+
+**Milestone:** `required-checks-enforce-as-declared` (milestone 442). The Stage-4 planning sub-task **#8604** carries the approved plan and the Stage-4 gate's Decision Recorded. The Stage-5 designs and their independent Phase A6.5 adversarial reviews are on **#8615** (#8325) and **#8616** (#8424); the Collective Review scope-lock Decision Recorded is on **#8616**. This file is Engineering Commit 0, authored by the first Stage-6 spoke on **#8617** (#8325).
+
+**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v4.82`** (the next-free minor recomputed at this commit). The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-primary while in flight, and the Header `**Version**` cell carries the double-brace release-version placeholder, which this file reproduces in that cell only.
+
+**Topology:** D-C **SINGLE** — one release branch, `release/required-checks-enforce-as-declared`, one pull request opened in **draft** after #8325's slice lands, one merge into `main`.
+
+**Concurrency posture:** **P0 fully serial** — Commit 0 and step 1 (#8325, sub-task #8617), then steps 2–6 (#8424, sub-task #8618), one Engineering spoke at a time, each syncing `origin/main` before it starts. Force-push, `--force-with-lease` included, is not used on the shared branch.
+
+**Release class:** `novel` — trigger (b), the divergence-definition D-class decision; Stage 9 review depth **Deep** (§ Release Class declaration).
+
+**Date:** merge by **Wednesday 2026-11-25** (Check 74 day 88); the hard date is **Friday 2026-11-27** (day 90). The valve checkpoint is **Tuesday 2026-11-17** (Stage 7 entry, day 80), and steps 1–3 are the valve-safe set.
+
+> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #8604 and is amended by four records, in order: the Stage-4 Decision Recorded on #8604 (plan approved with an AC7 limb added to the Outcome; `novel`; SINGLE; P0; the valve at Stage 7 entry; the #8325 body refresh skipped; D-Version recorded), the two Stage-5 designs, their two Phase A6.5 adversarial reviews, and the Collective Review scope-lock Decision Recorded on #8616 (scope hard-locked through Stage 9; divergence shape (a); bare `posture=required` with AC7 moved into the valve-safe set; a closed posture vocabulary; the five-item adjustment set). Where the plan and a later record differ, the later record wins, and each such change is recorded in § Deviation Log. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): protocol text added and modified, per the Bump-Class Selection Guide. Provisional display `v4.82`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092). It rises to major only if a card selects a skill behavioural change, and none does |
+| **Date Created** | 2026-11-03 (Tuesday, UTC) |
+| **Release Manager** | Agent-assisted (release-hub) |
+| **Status** | Executing — Stage 8 QA Testing complete: #8325 ACCEPT; #8424 CONDITIONAL ACCEPT, its one condition the Stage-12 registration and live read-back; synced with `main` after the sibling release merged (PA-017); Stage 9 Plan Review next |
+| **Branch** | `release/required-checks-enforce-as-declared` |
+| **PR** | opened in **draft** at Stage 6 Phase C2 after #8325's slice; transitions to ready-for-review at the Stage-9 gate |
+| **Milestone** | `required-checks-enforce-as-declared` |
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-11-03, domain: governance }`
+
+#### Domain Practice Provenance
+
+**Form X** (sourcing-exempt): every File Change Matrix row is an internal pmo-platform artifact — CI workflows and a sentinel, the deploy script, a standard, a pipeline stage spec, a tool, its README and its test — so no external body of practice is consumed. Dominant domain **`governance`**; secondary domain software (the reconciler and its conformance suite). Transcribed unchanged from the Stage-4 plan (Phase A1.5).
+
+---
+
+## Commit-0 Version Re-Verify Record
+
+Run at Engineering Commit 0, both halves, per `release/references/how-to/hub-spoke-bridge.md` Procedure 0 § Canonical location (single-branch topology, steps 1 to 3b).
+
+### Version half (steps 1–3, pre-write)
+
+| Step | Action | Observed |
+|---|---|---|
+| **1** | `git fetch --tags origin`, then `git fetch origin main` | both exit 0; `origin/main` = `f8d88626` (`f8d8862668aa373a37f36f309c54eb364fae2d9b`), equal to the Stage-4 baseline pin. This file is written on that base |
+| **2** | Recompute next-free for bump-class **`minor`** through the adapter itself: `release/tools/claim-version.sh --sha f8d8862668aa373a37f36f309c54eb364fae2d9b --bump minor --dry-run` (the adapter's own allocation; no tag pushed) | **`v4.82`** (exit 0; "would claim v4.82 (no tag pushed)"). The Stage-4 plan picked no number, so the planned version is this recomputed next-free |
+| **3** | HALT unless the planned version is absent from the claimed set AND equals the recomputed next-free. The tag arm binds; the published-Release and ledger arms corroborate | **absent on every arm, equal to next-free → PROCEED** |
+
+**Probe record for the step-3 zero** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0 to PV-7):
+
+```
+Probe:       git ls-remote --tags origin                                   (tag arm — binds)
+             gh release list --limit 5000                                  (Release arm)
+             git show origin/main:release/releases/RELEASE_LOG.md          (ledger arm)
+             each read by one python3 line scan that compares exact (major, minor) version
+             tuples carrying no patch component
+Denominator: 452 ls-remote lines (227 distinct versions; the highest is v4.81); 225 published
+             Releases (under the 5000 limit, so not truncated); the ledger at origin/main,
+             2,892 lines
+Control - sensitivity: the same scan on the v4.81 slot — 2 tag lines, 1 Release line and
+             7 ledger lines. Every arm returns non-zero, so a zero on the v4.82 slot is a
+             real negative
+Control - specificity: NOT TRIGGERED — a slot-occupancy question over one exact version tuple
+             has no near-miss class the probe must reject (the comparator is tuple equality,
+             so v4.8.2 and v4.820 are different tuples, not prefixes)
+Extraction:  the whole ls-remote output, the whole Release list and the whole ledger
+             (932,894 bytes) read from origin/main, never the worktree copy
+Result:      0 occupants of the (4,82) slot on every arm
+Verdict:     CLEAN — v4.82 is free and equals the recomputed next-free; no HALT
+```
+
+**In-flight state at Commit 0:** none. 0 open pull requests and 0 remote `release/*` heads (§ Cross-PR Overlap Audit → In-Flight Release Roster).
+
+### Manifest half (step 3b, post-write and pre-commit)
+
+`release/tools/claim-version.sh --verify-stamp required-checks-enforce-as-declared`, run after this file was written and before it was committed; exit 0 is required. The result is recorded in § Verification Evidence.
+
+This file carries **exactly one** literal double-brace release-version placeholder — the Header `**Version**` cell. Every other mention names the placeholder rather than reproducing it, because the claim resolves the token by substitution across the whole file.
+
+### Date variable
+
+`${AUDIT_DATE_UTC}` is resolved **once**, at Engineering Commit 0, as `date -u +%Y-%m-%d` → **`2026-11-03`** (Tuesday). The Stage-5 designs record the date-variable trigger as not firing: no identifier this release creates carries a date, and the dates inside the two flip records (2026-09-11, 2026-10-25, 2026-10-27) are past facts, not identifiers. The valve fallback header's `ratified 2026-10-27` is the operator decision's date, not a resolved variable.
+
+### Commit-0 Survival Set
+
+Every element determined at Stage 4 that a named downstream consumer reads **from this file** (`release/references/pipeline/stage-04-planning.md` § 6). Dropping one is a spec violation, not an oversight.
+
+| # | Survival element | Carried at |
+|---|---|---|
+| 1 | `domain_practice` label (`source` · `date` · in-label `domain`; Form X, so no Mode-B rationale) | § Header |
+| 2 | File Change Matrix (machine-readable, fence-delimited; the Stage-5 conditional resolutions applied at this commit) | § File Change Matrix |
+| 3 | Cross-Issue Acceptance Criteria `CIAC-1`..`CIAC-3` | § Cross-Issue Acceptance Criteria |
+| 4 | Verification Plan, with the AC baseline | § Verification Plan |
+| 5 | Release-version stamp manifest (the double-brace placeholder in the Header `**Version**` cell; bump class in the `**Bump Class**` row) | § Header |
+| 6 | Stage Applicability Matrix | § Stage Applicability Matrix |
+| 7 | Release Class declaration | § Release Class declaration |
+| 8 | Implementation Sequence (the approved build order, as Stage 5 and the scope-lock resolved it) | § Implementation Sequence |
+| 9 | Baseline pin (the Stage-4 `origin/main` SHA, which is also the Commit-0 base) | § Cross-PR Overlap Audit → Baseline SHA |
+
+---
+
+## Scope
+
+### Issues Included
+
+| Issue | Priority | Title | Disposition |
+|---|---|---|---|
+| #8325 | P2 | Check 74 gate-rollout graduation deadline has no card tracking the warn-to-enforce decision it will force | carried; Stage-5 design on #8615 with its A6.5 review (Minor); scope-lock adjustment items 1 and 2 applied in step 1 |
+| #8424 | P2 | Required-context posture: own the two held flips and close the reconciler's blind spots | carried, kept whole with the valve (operator, 2026-10-27); Stage-5 design on #8616 with its A6.5 review (CONDITIONAL, one Major); scope-lock adjustment items 3 and 4 applied in steps 2–6 |
+
+### Exclusions
+
+| Item | Why it is out of scope | Routed to |
+|---|---|---|
+| The token↔phase residual: nothing compares the sentinel token with `GATE_ROLLOUT_PHASE`, an absent or unrecognised token reads `warn`, and no committed self-test exercises the runner's sentinel branch | Disclosed in the flip record and the sentinel note; the runner agreement assertion offered on #8615 (CD-2) is **not adopted** | enriches #7021 (scope-lock item 5); exact text to the operator before posting |
+| The three deferred follow-ons the Stage-5 designs name | outside this release's capability boundary | fold into an existing slice of epic #5867 at Stage 13 (scope-lock item 5) |
+| Check 71's retreat wording (`BLOCK-DESTRUCTIVE-022`), the same widening as Check 74's | another constant family; its graduation card is closed | enriches #8549 (scope-lock item 5) |
+| The skill-count detector's `++` added-line gap | approved and owned outside the release; named as a residual in the skill-count flip record | #8482 |
+| The `RC -eq 0` consumer of the renamed gate step | a dormant sibling's scope; this release changes only the step name, not its body | #7466 (re-baselines on the renamed step) |
+| #4714's containment premise ("the sentinel reads `warn`") | reads false after the merge; not this release's file | a note on #4714 at Stage 13 (AI-002) |
+
+---
+
+## Decision Record
+
+### Stage-4 plan gate (operator, 2026-11-03)
+
+| Decision | Rendered |
+|---|---|
+| PA-001 Plan + Release Outcome Statement | **Approved, with an AC7 limb added.** The Outcome's AFTER gains "A malformed `gate-efficacy:` header fails naming the malformed workflow", the BEFORE its contrast, and the `**Limb owners:**` line carries seven limbs (two owned by #8325, five by #8424) |
+| PA-002 D-ReleaseClass | **`novel`** (trigger (b)): Stage 9 Deep, Stage 5 for both cards, 30-day outcome window |
+| PA-003 D-C branch topology | **SINGLE**: one branch, one PR, the plan file at Engineering Commit 0 |
+| PA-004 D-Concurrency posture | **P0, fully serial** |
+| PA-005 Valve checkpoint | **Stage 7 entry, Tuesday 2026-11-17 (Check 74 day 80).** If steps 4–5 are not committed and self-verified by then, the valve is invoked: Stage 9 ships the two flips and #8424 items 2 and 3 are recorded documented-deferred (amended by PA-009 for step 3) |
+| PA-006 #8325 body refresh | **Skipped.** The 2026-10-27 decision comment on #8325 carries the four shipping files and resolves the open assumption |
+| D-Version | **Recorded, not asked:** bump class minor; the number binds at the Stage-12 atomic claim |
+| Per-card disposition | #8325 `card-disposition:carried` · #8424 `card-disposition:carried`. AI-002 opened: at Stage 13, a note on #4714 (R14). The milestone description gained a `## Parallelization Map (recorded 2026-11-03)` section (the Phase A0 Tier 1 [ADJUST] finding) |
+
+### Collective Review scope-lock (operator, 2026-11-03)
+
+| Decision | Rendered |
+|---|---|
+| PA-007 Scope-lock | **Approved with adjustments** (the adjustment set below). Scope is hard-locked through Stage 9; Engineering is authorized |
+| PA-008 D-Divergence-Definition | **Shape (a).** *Held* means a `required(warn-mode-initial)` declaration with a HOLD-family row in § Declared-required contexts. A qualified declaration with no such row, absent from the live set, is a fourth divergence class (unrecorded hold). *Held and registered* still keys on the qualifier alone. Stated once in Requirement (b) and computed by the reconciler; it must leave behavioral-regression and link-check `RECONCILED` |
+| PA-009 D-HeaderForm and the valve | **Bare `posture=required` on both flipped workflows, with AC7 (step 3) moved into the valve-safe set (steps 1–3).** If step 3 is not committed and self-verified at the Stage 7 entry checkpoint, the two flips ship with `required(enforce; ratified 2026-10-27)` on both headers, and Outcome limb 7 is re-pointed together with limbs 4–6 |
+| PA-010 D-AC7-Mechanism | **A closed posture vocabulary.** The `posture` key is mandatory and its value matches `required` or `advisory` with an optional parenthesized qualifier. The attribution repair is added; the embedded-key check stays as a diagnostic that names the collapsed separator. Arms cover a misspelled posture and a missing posture field; the 44 live declarations are the specificity input |
+| N-way consistency | 7 conventions; 5 aligned; 2 disagreed (the `:614` lead wording and the retreat-note shape), both resolved by adjustment item 1's single wording, so no override is needed |
+
+**Adjustment set (part of PA-007):**
+
+1. **Step 1 text (#8325):** the 14 standard rows, plus the `:514` lede; one `:614` provenance clause for both cards, covering entries that own a row and entries that name a residual a row carries, with #8424's `### Source(s)` entry led by its handle; `:520` names the registration only as following the flip in Requirement (b)'s order, never as taken; one retreat shape for both cards — un-register first, then revert the flip commit's edits to the token, `GATE_ROLLOUT_PHASE`, the workflow header and the flip record together, and past Check 74's escalation window re-date `GATE_ROLLOUT_ARMED`; Check 74's falsification line names a phase below `enforce`, and the four retreat sites are reconciled.
+2. **`deploy.sh`'s dispatcher roster comment** reads Checks 38, 73, 77 and 78 (it omitted 78).
+3. **The ruleset reader dispatches by allow-list.** Rule types known to add no merge gate are ignored, `required_status_checks` is read, and every other type, including any type the host adds later, reads `degraded`. The read lives in the workflow, and a verdict needs both live reads to return.
+4. **Stage 6 instructions:** promote the README and workflow conditional rows; `${WARN_MODE:-false}` in the skill-count flip commit; P1–P3 `runner-def:` anchors in the sentences that carry their verdicts; the table-reader self-test arms renamed TB1–TB6 and registered in tier 2; this plan names both live inputs wherever a reconciler run is expected to read `RECONCILED`; Stage 7 confirms `rules_status=fetched` on the first PR run after step 4.
+5. **Routing, with no new issues** (the exact text goes to the operator before anything is posted): the token↔phase residual enriches #7021; the three deferred follow-ons fold into an existing slice of epic #5867 at Stage 13; Check 71's retreat wording enriches #8549. **Not adopted:** the runner agreement assertion offered on #8615.
+
+---
+
+## Dependency Graph
+
+```
+native edges (GraphQL blockedBy / blocking): 0 in and 0 out on both cards
+parents: #7932 (#8325, an evergreen flow container) · #5867 (#8424, epic)
+logical edges inside the release (A -> B means B consumes A's output):
+  #8325 flip (sentinel + GATE_ROLLOUT_PHASE + header)  -> #8424 AC2 read-back ("each flip" includes this one)
+  #8325 flip + #8424 item 1 flip                       -> #8424 item 2 (the new divergence rule is validated
+                                                          against the post-flip held set: behavioral-regression, link-check)
+  #8424 AC7 (the shared header parser in test_gate_efficacy_declarations.py)
+                                                       -> #8424 item 2 (the reconciler imports that parser; tier-2 arms)
+  #8325 + #8424 item 1 + item 2 + item 3 + AC7 (PR green) -> operator registration -> merge -> live read-back
+  #8424 item 3 (register rows)                         -- independent of items 1 and 2 except the shared standard file
+cross-milestone (no native edges; Parallelization Map recorded 2026-11-03):
+  ms#347 governance-obligations-measured   discharged (merged 2026-10-30)
+  ms#443 releases-file-only-the-follow-ups-that-matter   merged first (2026-11-04, the operator's re-order at its Stage 12 gate); this release synced over it (PA-017)
+  ms#438 guards-judge-every-spelling-alike   this-blocks-other (soft: Check 38 under enforce)
+  ms#422 instrument-failure-is-never-a-verdict   this-blocks-other (the renamed gate step)
+```
+
+Circular chains: **0** — a DAG over 6 nodes; every edge points toward registration.
+
+---
+
+## Implementation Sequence
+
+Single branch `release/required-checks-enforce-as-declared`, posture **P0 (fully serial)**. Every slice is a separate commit so the flips can be read, falsified and, if the valve fires, shipped on their own. Each slice is pushed on landing (Write-Early).
+
+| Step | Card / item | What lands (as Stage 5 and the scope-lock resolved it) | Ends when |
+|---|---|---|---|
+| **0** | plan | this file, carrying the Commit-0 Survival Set and the stamp manifest in its Header `**Version**` cell | `claim-version.sh --verify-stamp` exits 0 before the commit |
+| **1** | #8325 | **one commit**: the sentinel token `enforce` with its note rewritten (graduation note, the one retreat shape, the absent-token disclosure); `GATE_ROLLOUT_PHASE="enforce"`; `deploy.sh`'s 12 reconciled comment sites (the exit set as the code computes it, Check 74's falsification below `enforce`, the C73 tree-resident posture, Checks 77 / 78 posture blocks, the runner header) plus the dispatcher roster comment; `deploy-check-ci.yml` header bare `posture=required`, its falsification line, its warn-mode paragraph rewritten as a condition statement, and its gate step renamed `Gate decision (exit code -> job conclusion)`; the standard's 14 rows (`:324`–`:327`, `:343`, `:359`, `:360`, the census row `:460` in the same commit as the rename, `:520`, `:534`–`:537`, `:588` as a **REGISTER** flip record), the `:514` lede, the `:614` provenance clause for both cards and this card's `### Source(s)` entry | the subset job on the release PR runs in enforce mode and is green |
+| **2** | #8424 item 1 | `WARN_MODE: 'false'` with the `${WARN_MODE:-false}` default; header bare `posture=required`; its posture note and env comment rewritten in the one retreat shape; the standard's skill-count row becomes a **REGISTER** flip record (130-run sample, the empty-firing-population disclosure, #8482 named as a residual); its `### Source(s)` entries, the #8424 entry led by its handle | the skill-count job on the release PR runs in enforce mode and is green |
+| — | Stage 7 G-PR4 (can start here) | falsification run per flipped context in PR context, then revert (§ Verification Plan) | both runs recorded with their check-run links |
+| **3** | #8424 AC7 (valve-safe) | the closed posture vocabulary (PA-010) in `test_gate_efficacy_declarations.py`: mandatory `posture` key, value `required` or `advisory` with an optional parenthesized qualifier; the malformed-header attribution repair; the embedded-key diagnostic naming the collapsed separator; arms for a misspelled posture, a missing posture field and the four single-edit variants; the 44 live declarations as the specificity input | the ratchet and `reconcile-gate-posture.py --self-test --require-parser` both pass |
+| **4** | #8424 item 2 | divergence shape (a) stated once in Requirement (b); the reconciler's unrecorded-hold class and its disposition-table reader (self-test arms TB1–TB6, registered in tier 2); the ruleset read of the rules that apply to `main`, dispatched by allow-list (no-merge-gate types ignored, `required_status_checks` read, every other type `degraded`), living in `gate-posture-reconciliation.yml`, with a verdict only when both live reads return; register row `:372`'s stated limit; the tools README row | reconciler self-test green with the new arms; a run against both live inputs — the branch-protection object and `rules/branches/main` — reads DIVERGED with exactly the two flipped contexts unregistered and held = behavioral-regression and link-check, which is `RECONCILED` with 2 held once both contexts are registered (step 7) |
+| **5** | #8424 item 3 | three register rows for P1, P2, P3 (runner, or NAMED GAP with its observable), each with a `**Population:**` declaration; `runner-def:` anchors in `stage-07-dev-testing.md`, in the sentences that carry their verdicts | Check 62 resolves every new pointer |
+| **6** | release | the standard's Version History row (both cards' clauses merged by the step-6 author); DTA-7 cascade sweeps for every renamed identifier, with pre and post counts | sweeps read post 0 |
+| **7** | operator, Stage 12 | with the PR open and green: register `Pre-merge load-bearing check subset` and `Skill-count / IMP-XXX delta`, re-run both checks on the PR, merge, read back `main`'s live required contexts | 24 live contexts including both; reconciliation on the merge push, with both live inputs returned (the branch-protection object and `rules/branches/main`), reads `RECONCILED`, held = 2 |
+
+**Valve (PA-005 as amended by PA-009).** At the Stage 7 entry checkpoint, Tuesday 2026-11-17: if steps 4–5 are not committed and self-verified, Stage 9 ships the two flips, #8424 items 2 and 3 are recorded documented-deferred, and Outcome limbs 4–6 are re-pointed, in the same edit, to an open owner outside the release (an existing epic-#5867 slice, not a new issue). If step 3 is not committed and self-verified, both flipped headers ship as `required(enforce; ratified 2026-10-27)` instead of the bare form, and Outcome limb 7 is re-pointed together with limbs 4–6.
+
+### #8325 — change specification (step 1; Stage-5 design on #8615, scope-lock items 1 and 2 applied)
+
+**Files:** `.github/deploy-check-ci.enforce`, `core/deploy/deploy.sh`, `.github/workflows/deploy-check-ci.yml`, `core/standards/gate-efficacy-standard.md`. All four land in **one commit**: the ratchet keys the census on `(workflow, step, var)`, so the renamed step and its census row must land together, and the token and the phase must move together because nothing compares them.
+
+**Design decisions applied.** D-HeaderForm (a) bare `posture=required` (PA-009). D-StepName (a) `Gate decision (exit code -> job conclusion)` — a mode-independent name for a mode-independent step, so a later retreat does not rename it; the job `name:`, which is the registered context, does not change. D-DeployShScope — the semantic-touch criterion: reconcile every line that states the subset's pre-merge posture, the sentinel's current value or Check 74's exit set, and leave lines that describe the mechanism conditionally and lines about the deploy-time lifecycle surface, which this change does not touch. D-FlipRecordForm **REGISTER** — the section's closed three-disposition vocabulary. D-ProvenanceLead — one `:614` clause for both cards.
+
+**The scope-lock's item-1 amendments, as this card applies them.**
+- **The standard's edit set** is the 14 rows plus the `:514` lede (A6.5 PR-2): the flip-decision table now records a flipped limb, so its lede reads "deferred, declined or flipped".
+- **`:520`** records the token flip on the operator's graduation decision and states that the context's registration follows it in Requirement (b)'s order; it never records the registration as taken (A6.5 FM-3).
+- **One retreat shape**, written into the sentinel note and the `:588` flip record: un-register the context first, then revert the flip commit's edits to the token, `GATE_ROLLOUT_PHASE`, the workflow header and the flip record together, and past Check 74's escalation window re-date `GATE_ROLLOUT_ARMED` (A6.5 FM-2).
+- **Check 74's exits** are stated as the code computes them — advance the phase to `enforce`, or re-date the arming constant; a retreat alone discharges nothing — at the four sites (`deploy.sh` constants comment, Check 74's header, its remediation log line, the standard's `:520`), and its falsification line names a phase below `enforce`, because at `enforce` the deadline arm is short-circuited.
+- **`:614`** gains one clause that covers both kinds of later entry: work items that own a row, and residuals a row carries.
+
+**Not adopted from the A6.5 review:** relabelling the "GRADUATED." notes as history (FM-1 mitigation 2) and the runner agreement assertion (CD-2); the residual they address routes to #7021.
+
+**Census and cascade.** DTA-7 over the pair this release renames: the old step name on `deploy-check-ci.yml` and its census row, **pre 2 / post 0**; tree-wide the old name reads 7 before and 5 after (four other workflows and the `version-freeness.yml` census row keep it, as different census members). The step's `run:` body is unchanged; #7466 owns that consumer.
+
+**Version History clause** (handed to the step-6 author, who merges it with #8424's): "**The pre-merge load-bearing subset graduates to enforce.** The sentinel token and the rollout phase move together, the workflow header declares `required`, and § Declared-required contexts records the flip as REGISTER with its specificity reading and owner; every register, census and flip-decision row that stated the subset's warn-mode posture is reconciled, and Check 74's exits are stated as the code computes them — advance to enforce, or re-date; a retreat alone discharges nothing."
+
+### #8424 — change specification (steps 2–6)
+
+Carried by its own Stage-5 design (#8616, comment on that sub-task), its A6.5 review and scope-lock items 3 and 4, and recorded in this file by its own Stage-6 spoke (#8618) as each slice lands. The File Change Matrix below already carries every path its design and the scope-lock name.
+
+**Step 2 — the skill-count flip (landed, `61e2bcc6`, two files).** `skill-count-imp-check.yml`: `WARN_MODE: 'false'`, and the fail-open default `${WARN_MODE:-true}` becomes `${WARN_MODE:-false}` (DEV-10); the header declares bare `posture=required`; the falsification line, the posture note and the env comment are rewritten, the posture note carrying the one retreat shape — un-register the context first, then revert the flip commit's edits to `WARN_MODE`, the header and the flip record together (no Check 74 constant moves with it). The standard's `Skill-count / IMP-XXX delta` row becomes a **REGISTER** flip record in the shape of the subset's: the specificity reading (a 1-in-10 systematic sample of the 1,300 listed pull-request runs, 2026-09-03 to 2026-10-25 — 130 runs, 128 scanned clean, 2 with nothing in scope), the empty-firing-population disclosure, the three REGISTER conditions, the registration order, the `++` added-line residual and its owner, the retreat, and the owner — the required-context posture card — named in prose. Two `### Source(s)` entries are appended: this card's, led by its handle, and the `++` residual's owner. The `:614` lead clause already reads "own a row … or a residual a row carries", so it covers both entries and is not edited.
+
+**Step 3 — AC7 (landed, `f8a16d9f`, one file).** `core/deploy/tests/test_gate_efficacy_declarations.py` only, per PA-010. The posture field becomes mandatory with a closed vocabulary — `required` or `advisory`, with an optional parenthesized qualifier — as a sixth `evaluate()` branch over every declaration, so a misspelled, missing or separator-swallowed posture is a finding rather than a silent drop-out. The embedded-key check is kept as a diagnostic line naming the collapsed separator, emitted only on a declaration that already fails (DEV-17). The attribution repair runs in all three harnesses: each arm reads the multiset delta its own mutation added, victims are drawn from workflows with no baseline finding, and a delta on another file is the arm's own INSTRUMENT FAILURE. Every real-tree finding is printed before a harness-failure exit 2. A new `attribution_harness` carries MH1–MH6 (the four single-edit variants — separator, `always-reports`, prefix, context — plus a misspelled and a deleted posture) and AT1–AT4. Its victim is drawn from the live tree at run time (`behavioral-regression.yml` today), and the 44 live declarations are the specificity input: 0 fire. The reconciler's `PARSER_NAMES` is unchanged, so the stale `:230` import-contract statement is left to step 4 (DEV-18).
+
+**Step 4 — item 2, the reconciler (landed, `c11f4b27`, five files).** Shape (a) is stated once, in Requirement (b): a context *discloses a hold* when every declaration naming it carries `warn-mode-initial`, and it is *held* only when § Declared-required contexts carries a HOLD or CORRECT-THEN-HOLD row for it; with no such row and absent from the live set it is the fourth divergence class, *unrecorded hold*; *held and registered* keys on the qualifier alone. `main`'s live set is two reads — classic branch protection and the `required_status_checks` rules that `rules/branches/main?per_page=100` returns, never the repository ruleset list — and a verdict needs both (otherwise `NOT-EVALUATED`). `reconcile-gate-posture.py` reads the disposition table through the shared `_table_cells` (added to `PARSER_NAMES`) and fails the instrument (exit 2) on any format drift; it dispatches rule types by allow-list — 15 types known to add no merge gate ignored, `required_status_checks` read, every other type `degraded` (DEV-21); the qualifier-only held predicate is renamed `discloses_hold`; `emit()` writes `rules_status=` beside `live_status=`; `render()` names both reads. Self-test arms H3–H6 and RS1–RS4 join tier 1 and TB1–TB6 join tier 2, 40 arms in all. `gate-posture-reconciliation.yml` performs the rules read in its own un-gated step and passes `--live-rules-json`; its header names four classes and the two reads, and its stated limit is replaced. The tools README row, register row `:372` (invariant, falsification, anti-vacuity list, stated limit) and the `:574` paragraph follow; the Source(s) entry for this card is extended; the ratchet's stated import contract now points at `PARSER_NAMES` (DEV-18). A run against both live inputs reads DIVERGED with exactly the two flipped contexts unregistered and held = behavioral-regression and link-check, both rowed.
+
+**Step 5 — item 3 (landed, `92ecd8dd`, two files).** P1–P3 state verdicts, so they are class 3-V and get runner rows, not named gaps. Three register rows follow the dark-branch row, each naming the Stage 7 Dev Testing spoke at Phase A as runner, a declared observable, what it does not detect, and a `**Population:**` presence census at 100% (`stage7-required-gate-p1-reads`, `-p2-reads`, `-p3-reads`). Each `runner-def:` anchor sits in the stage-07 sentence that carries the verdict it registers — P1 in the `CONFLICTING`/`DIRTY` Blocker sentence, P2 in the shortfall sentence, P3 in the state-2 severity row — and each passage gains a `**Runner:**` label (DEV-22). The Source(s) entry names the rows. Check 62 resolves every pointer.
+
+**Step 6 — Version History, wording repairs, sweeps and the Change Description (landed, `567e90c0`, two files).** One Version History row merges #8325's clause above with this card's. Rows `:537`–`:540` (the step-1 `:534`–`:537`) now require the subset's context to be registered before admission is merge-blocking, and the G3-14/G3-15 row (`:523`, the step-1 `:520`) reads `--check` (strict by default) for `--check --strict` (DEV-23). The DTA-7 and cascade sweeps are in § Verification Evidence, and § Change Description is appended.
+
+### Back-schedule against the date
+
+[RECOMMENDED — derived backwards from the merge-by date, not an effort estimate.]
+
+| Stage | Latest-safe finish | Check 74 day |
+|---|---|---|
+| 4 plan gate | Tuesday 2026-11-03 to Wednesday 2026-11-04 | 66–67 |
+| 5 Solutioning (D-class rendered at Collective Review) | Monday 2026-11-09 | 72 |
+| 6 steps 0–2 (both flips pushed) | Tuesday 2026-11-10 | 73 |
+| 6 steps 3–6 | Monday 2026-11-16 | 79 |
+| **Valve checkpoint** — Stage 7 entry | **Tuesday 2026-11-17** | 80 |
+| 7 Dev Testing | Wednesday 2026-11-18 | 81 |
+| 8 QA | Friday 2026-11-20 | 83 |
+| 9 Plan Review GO | Monday 2026-11-23 | 86 |
+| 12 registration + merge | Tuesday 2026-11-24 (target), Wednesday 2026-11-25 (latest) | 87–88 |
+
+Stages 4 and 5 both finished on Tuesday 2026-11-03 (day 66), ahead of their latest-safe dates. Check 74 counts days on the UTC date, so day 90 begins at 00:00 UTC on Friday 2026-11-27 — the evening of Thursday 2026-11-26 (a US holiday) on any clock west of UTC. The merge-by date is unaffected; a slipped merge meets the hard date about half a day earlier than it reads.
+
+---
+
+## Stage Applicability Matrix
+
+| Card | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|
+| #8325 | APPLY (ran) | APPLY | APPLY (G-PR4 run 1; Check 74 strict run) | APPLY | APPLY (Deep) | COMPRESS (git-native) | COMPRESS (git-native) | APPLY (registration, merge, read-back) | APPLY |
+| #8424 | APPLY (ran) | APPLY | APPLY (G-PR4 run 2; reconciler run) | APPLY | APPLY (Deep) | COMPRESS | COMPRESS | APPLY | APPLY |
+
+Skips: none at 5–9 — both cards change merge-blocking behaviour, so neither is trivial and neither is free of functional impact.
+
+---
+
+## File Change Matrix
+
+One path per line, `<path>  <VERB>`, fence-delimited for deterministic extraction. A shared path is listed once, under the first card that edits it; the cards that edit it are named after the verb.
+
+```
+# ── Engineering Commit 0 ──
+release/releases/plans/required-checks-enforce-as-declared_RELEASE_PLAN.md  ADD
+# ── #8325 (step 1) ──
+.github/deploy-check-ci.enforce  EDIT
+core/deploy/deploy.sh  EDIT
+.github/workflows/deploy-check-ci.yml  EDIT
+core/standards/gate-efficacy-standard.md  EDIT  8325 step 1 · 8424 steps 2, 4, 5, 6
+# ── #8424 (steps 2–5) ──
+.github/workflows/skill-count-imp-check.yml  EDIT
+core/deploy/tests/test_gate_efficacy_declarations.py  EDIT
+core/deploy/tools/reconcile-gate-posture.py  EDIT
+.github/workflows/gate-posture-reconciliation.yml  EDIT
+core/deploy/tools/README.md  EDIT
+release/references/pipeline/stage-07-dev-testing.md  EDIT
+```
+
+#### Read-only inputs
+
+```
+core/deploy/tools/check-skill-count-imp.py  READ
+release/tools/check-dark-branch.py  READ
+.github/workflows/install-tests.yml  READ
+core/schemas/gate-criteria-spec.md  READ
+release/references/specs/release-outcome-statement-template.md  READ
+core/deploy/tools/build-hook-registry.py  READ
+```
+
+#### Release-wide explicit non-scope
+
+```
+core/ADRs/ADR-166-split-predicate-gate-graduation.md  NOT EDITED
+release/releases/RELEASE_LOG.md  NOT TOUCHED
+release/releases/notes/  NOT TOUCHED
+core/rules/  NOT TOUCHED
+```
+
+The repository-root `CHANGELOG.md` is also not touched (the Stage-13 chore PR writes it). It is named here rather than as a fenced row because the matrix reader recognises no repository-root path that carries no directory segment, so a fenced row would read as uninterpreted rather than excluded.
+
+**The Stage-4 conditional rows are resolved at this commit.** `STAGE5-RULESET-READ-IN-WORKFLOW` fired — the ruleset read lives in the workflow (scope-lock item 3) — so `.github/workflows/gate-posture-reconciliation.yml` and `core/deploy/tools/README.md` are promoted into the unconditional set. `STAGE5-P1P3-RUNNER-ANCHORS` fired — the P1–P3 `runner-def:` anchors go in the sentences of `stage-07-dev-testing.md` that carry their verdicts (scope-lock item 4) — so that file is promoted too. No CONDITIONAL row remains.
+
+**Non-scope reasons.** ADR-166 is an Accepted record; its "sentinel still reads warn" line is history-anchored. The release log, notes and changelog are written by the Stage-12 and Stage-13 chore PRs. `core/rules/`: no mirror-pair member changes, so no rules-mirror deploy is owed; the Stage-7 G-PR4 run 1 falsification commit edits one `core/rules/bypass-mode-readiness/` source and its revert restores it, so the net diff on `core/rules/` across the release is zero.
+
+**Zero `ADD` rows for executables** → the new-executable companion obligation (an allowlist row and CI wiring) does not fire. **No path is renamed, moved or deleted** → the mover set is empty. **One `pipeline/stage-*.md` file** is edited (stage-07), below the cross-cutting threshold, and none of the six rule-defining surfaces, so the class stays `novel`. Branch protection is the operator's out-of-tree step 7; no file carries it.
+
+### Agent-Editability Read
+
+Transcribed from the Stage-4 derivation, controls read at `f8d88626`, and re-applied to the promoted rows. The Tier-0 floor's surviving union is the basenames `CLAUDE.md`, `OPERATIONS.md` and `RELEASE_PROTOCOL.md` at any depth; no matrix path carries one. The sanctioned-session gate's first conjunct needs a `*/skills/<name>/` segment; no matrix path carries one, so conjunct 3 (its exemption list, recorded `undetermined` at Stage 4 under a control firing) decides no row.
+
+| Card | Write-set paths | Tier-0 ∩ | Skill-gate ∩ | Card class | Execution path |
+|---|---|---|---|---|---|
+| plan | this file | ∅ | ∅ — conjunct 1 false | — | first Engineering spoke (Commit 0) |
+| #8325 | the sentinel · `deploy.sh` · `deploy-check-ci.yml` · gate-efficacy standard | ∅ | ∅ — conjunct 1 false | `unconstrained` | ordinary Engineering spoke |
+| #8424 | `skill-count-imp-check.yml` · gate-efficacy standard · the conformance suite · the reconciler · `gate-posture-reconciliation.yml` · tools README · stage-07 | ∅ | ∅ — conjunct 1 false | `unconstrained` | ordinary Engineering spoke |
+
+Every card is `unconstrained`. That says no control refuses the writes; it does not make them ungoverned — the branch-protection registration is still an irreducible operator act.
+
+---
+
+## Contention Map
+
+**Within release (serial P0 order resolves every row):**
+
+| File | Cards | Regions | Resolution |
+|---|---|---|---|
+| `core/standards/gate-efficacy-standard.md` | #8325, #8424 | #8325: `:324`–`:327`, `:343`, `:359`, `:360`, `:460`, `:514`, `:520`, `:534`–`:537`, `:588`, `:614`; #8424: Requirement (b)'s divergence paragraph, `:372`, `:574`, new P1–P3 rows, `:590`; both: `### Source(s)` (append) and Version History (step 6) | sequence 1 → 2 → 4 → 5 → 6; adjacent rows `:588` and `:590` are written in steps 1 and 2, never in parallel |
+| `core/deploy/tests/test_gate_efficacy_declarations.py` ↔ `core/deploy/tools/reconcile-gate-posture.py` | #8424 AC7, #8424 item 2 | the reconciler imports the parser | AC7 first (step 3), then item 2 (step 4) |
+
+**Cross-release** (baseline-pinned at `f8d88626`; Stage 9 A6.5 re-measures):
+
+| File / surface | This release | Sibling or dormant item | Disposition |
+|---|---|---|---|
+| `release/references/pipeline/stage-07-dev-testing.md` | P1–P3 `runner-def:` anchors | ms#443's card edits its *Routing on Defer* rows | different section; ms#443 merged first and this release synced over it under PA-017; the merge was textually clean |
+| `.github/workflows/deploy-check-ci.yml` | header, falsification, warn-mode paragraph, step name | #7466 (dormant) converts the step's `RC -eq 0` consumer | this release lands first; #7466 re-baselines on the renamed step |
+| `.github/workflows/skill-count-imp-check.yml` | header, env, default | #8482 (approved, unbundled) edits the awk guard | distinct line ranges: informational |
+| `core/standards/gate-efficacy-standard.md` | many rows | 17 milestone-assigned issues cite it | `append-pattern`, structurally high and operationally low; none is in the decided order |
+| `core/deploy/deploy.sh` | constants comment, Checks 73 / 74 / 77 / 78 comments, the runner header, the dispatcher comment | 52 milestone-assigned issues cite it; 0 in ms#443 or ms#438 | single-PR in the decided order |
+| **Gate behaviour, not a file** | enforces Checks 38 / 73 / 77 / 78 and the skill-count delta on every PR from the merge | ms#443 merged before this release, so its added `.md` lines never met the enforcing skill-count gate; ms#438's hook-source edits need the regenerated index | behavioural coupling, recorded in the Risk Register (R9); no serialization edge |
+
+## Cross-PR Overlap Audit
+
+### Baseline SHA
+
+`dfe48bdb337c4771c00aad6f104a7db193baa57d` — the `main` commit carrying the sibling release ms#443 (its merge `0aeac05d` and its Stage 12 release-log merge), brought into this branch by the merge commit `4fbf8a6a` under PA-017, record #8623 c6632702171. The original pin is `f8d8862668aa373a37f36f309c54eb364fae2d9b` — the Stage-4 Phase A0 pin, re-read unchanged by both Stage-5 designs and both adversarial reviews, and the Commit-0 base: this file is written on exactly that commit.
+
+**Pre-change reconciler measurement (Stage 4, the tool before step 4 adds its rules read):** against the branch-protection object alone, `RECONCILED`; 26 declared-required contexts, 22 live, 4 held (the two flipped here plus behavioral-regression and link-check). This is a baseline observation, not an expectation; every `RECONCILED` this plan expects after step 4 rests on both live inputs.
+
+### In-Flight Release Roster
+
+**Measured at:** `f8d88626` · `2026-11-03T22:38Z` (Engineering Commit 0) · **Population:** n=0 sibling(s)
+
+**None in flight at `f8d88626` / Engineering Commit 0.** Probe: open pull requests, limit 200 → 0 (control: the same reader on merged pull requests, limit 3 → 3); remote heads → 1, `main` only, so 0 remote `release/*` heads (control: the `main` head itself is returned). This is a pinned measurement with no verdict; Stage 9 Phase A6.6 re-measures it. ms#443 and ms#438 are planned siblings with no branch yet.
+
+### Structural sub-audit
+
+No file is renamed, moved or deleted, so the mover set is empty. `SURFACE(R)` is the version-slot token `Δversion/minor@v4.81` only.
+
+---
+
+## Risk Register
+
+| # | Risk | Owner | Mitigation | Reversibility / Confidence |
+|---|---|---|---|---|
+| R1 | **Deadline.** A merge after Friday 2026-11-27 turns every strict `deploy.sh --check` red on Check 74 — every operator run and every release's Stage 12 / 13 deploy check — until the phase reads `enforce` or the arming date moves | hub, at each stage gate | Back-schedule above; flips first (steps 1–2 by 2026-11-10); valve checkpoint 2026-11-17; last resort, an operator re-date of `GATE_ROLLOUT_ARMED` with its reason (a retreat alone does not discharge Check 74) | MODERATE / HIGH |
+| R2 | **Items 2 and 3, or AC7, overrun.** The reconciler work or the posture vocabulary slips | operator (valve) | At the 2026-11-17 checkpoint: steps 4–5 not committed and self-verified → Stage 9 ships the flips, #8424 items 2 and 3 are recorded documented-deferred, Outcome limbs 4–6 re-pointed in the same edit to an existing epic-#5867 slice; step 3 not committed and self-verified → both flipped headers ship as `required(enforce; ratified 2026-10-27)` and limb 7 is re-pointed with limbs 4–6 | CHEAP / MEDIUM |
+| R3 | **Bare issue numbers in the standard.** Naming a card's number in a disposition row reddens `Durable-corpus fragile-reference delta`, a registered required check | Stage 6 | Name the owner in prose in the row; carry the number in `### Source(s)` with an inline summary; 0 of the standard's table rows carry a bare number at the pin | CHEAP / HIGH |
+| R4 | **Rename cascade.** Renaming the `deploy-check-ci.yml` gate step leaves the census row naming a step that no longer exists; the census is graded as a set by the conformance suite | Stage 6 | The step and its census row land in one commit; DTA-7 over the pair, pre 2 / post 0. The other 4 workflows using the old step name keep it | CHEAP / HIGH |
+| R5 | **The release PR meets its own gate.** After step 2, the skill-count detector scans this PR's added `.md` lines in enforce mode, including this file and the standard's new text | Stage 6 | No totalizing skill-roster phrase in added text; run `check-skill-count-imp.py` over the added lines before each push | CHEAP / HIGH |
+| R6 | **Registration window.** Between registration and merge, `main`'s reconciler reads DIVERGED (held and registered); any PR open then shows that red. From step 1 until registration, the release PR's own `Gate posture reconciliation (declared vs live)` check reads DIVERGED (unregistered), which is that check's declared falsification | operator | Expected and advisory; Stages 7, 8 and 9 record it as expected, not as a regression; Stage 12 re-runs it after registration and merges only once it reads RECONCILED | CHEAP / HIGH |
+| R7 | **Empty firing population.** The skill-count specificity reading has 0 firings in 130 sampled runs; specificity rests on the detector's constructed self-test | operator (accepted at Stage 9) | Disclosed in the flip record; G-PR4 run 2 gives one real firing in PR context | CHEAP / MEDIUM |
+| R8 | **Known sensitivity gap.** #8482: an added line whose content starts with `++` is dropped by the detector's added-line mapper | #8482 (approved, outside the release) | Named as a residual in the flip record; a missed line is a false negative and cannot block a merge wrongly | CHEAP / HIGH |
+| R9 | **Sibling PRs meet enforcing gates.** ms#438 opens its PR after this merge; ms#438's hook-source edits need the regenerated index (Check 38). ms#443 merged before this release (PA-017), so its `.md` additions never met the enforcing skill-count gate | sibling hubs | A cross-milestone notice at merge; sibling Stage 6 runs `deploy.sh --check-required-subset` and the detector before pushing | CHEAP / HIGH |
+| R10 | **macOS required job.** The subset job runs on `macos-latest`; a runner outage leaves a required context pending on every PR | operator | Temporary un-registration is the settings-side escape; the job's cost was accepted when its filter was removed | MODERATE / MEDIUM |
+| R11 | **New verdict input for the reconciler.** Reading the disposition table makes the standard's table format a verdict input; a format drift must fail the instrument (exit 2), never read as a clean set | Stage 6 (#8424) | The read fails closed, with self-test arms TB1–TB6 on malformed tables, registered in tier 2 | CHEAP / MEDIUM |
+| R12 | **Ruleset read permission.** The `rules/branches/main` read with the workflow token may refuse or fail | Stage 6 (#8424) | A refused or failed read is `NOT-EVALUATED`, never `RECONCILED`; scoped to rules on `main` (0 today), not the repository's ruleset list (1, `tag`); unknown rule types read `degraded`; Stage 7 confirms `rules_status=fetched` on the first PR run after step 4 | CHEAP / MEDIUM |
+| R13 | **Falsification commits.** The G-PR4 commits could trip unrelated required gates or the commit-message gates | Stage 7 | Use the two variants in § Verification Plan; commit messages carry no close-family verb or identity string; revert by a new commit (no force-push) | CHEAP / HIGH |
+| R14 | **Stale downstream premises.** #4714 (dormant) states its blast is bounded because the subset sentinel reads `warn`; that sentence reads false after the merge | hub | AI-002: a note on #4714 at Stage 13; not in scope here | CHEAP / MEDIUM |
+| R15 | **The disarm-by-edit residual.** After the flip, an absent sentinel file or a first token other than `enforce` reads as `warn`, so removing or blanking the token disarms a registered gate while it reads green; nothing compares the token with `GATE_ROLLOUT_PHASE` | operator | Disclosed in the flip record and the sentinel note; routed to #7021 (scope-lock item 5); a disarming edit is a visible one-file diff in review | CHEAP / MEDIUM |
+
+Rollback complexity is MODERATE for the whole release (the settings-then-revert order plus the re-date) and CHEAP per context or item (§ Rollback Strategy).
+
+---
+
+## Cross-Issue Acceptance Criteria
+
+**Cross-Issue Acceptance Criteria**
+- [ ] **CIAC-1 (#8325 × #8424 on `core/standards/gate-efficacy-standard.md` § Declared-required contexts):** neither flipped context's disposition row still carries a hold disposition after the release. *Method:* `grep -c -E "^[|] .(Pre-merge load-bearing check subset|Skill-count / IMP-XXX delta). [|].*\*\*(HOLD|CORRECT-THEN-HOLD)\*\*" core/standards/gate-efficacy-standard.md` expect 0. *Graded at Stage 9 QC3.5 on the merged PR.* Control on the same instrument and file: `grep -c -E "^[|] .(Behavioral-regression pass-rate gate|Cross-reference integrity [(]governance [+] reference [+] rules [+] skills[)]). [|].*\*\*(HOLD|CORRECT-THEN-HOLD)\*\*" core/standards/gate-efficacy-standard.md` → 2 (at the pin the subject arm reads 2 and the control 2).
+- [ ] **CIAC-2 (#8325 × #8424 on `core/standards/gate-efficacy-standard.md` § Declared-required contexts):** both flip records carry a specificity reading, so the two flips are recorded in one shape. *Method:* `grep -c -E "^[|] .(Pre-merge load-bearing check subset|Skill-count / IMP-XXX delta). [|].*[Ss]pecificity reading" core/standards/gate-efficacy-standard.md` at least 2. *Graded at Stage 9 QC3.5 on the merged PR.* (0 at the pin; the same pattern on any row reads 8.)
+- [ ] **CIAC-3 (#8325 × #8424 on `main`'s live required contexts and the posture reconciler):** after the merge both flipped contexts are live, and the reconciler on the merge push — with both live inputs returned, the branch-protection object and `rules/branches/main` — reads `RECONCILED` with exactly the two unflipped held contexts. *Method:* declared, verification deferred to `core/deploy/tools/reconcile-gate-posture.py` as run by the measurement job of `gate-posture-reconciliation.yml` on the merge-commit push, beside the Stage 12 live required-context read-back. *Graded at Stage 9 QC3.5 on the merged PR.*
+
+The CIAC lint on the Stage-4 body read `declared=3 parsed=3 clean=2 declared-deferral=1 flagged=0`; it is re-read on this committed file at Stage 6 A1 (§ Verification Evidence) and at Stage 9 A3.6.
+
+---
+
+## Verification Plan
+
+**AC baseline:** #8325 = **2** criteria, #8424 = **7** criteria, read at `f8d88626` (bodies at `2026-11-03T19:48:29Z` and `2026-10-27T21:20:50Z`).
+
+### Per-Issue Verification
+
+| Issue | AC | Verification Method | Expected Result |
+|---|---|---|---|
+| #8325 | AC-1 | `grep -c -F 'readonly GATE_ROLLOUT_PHASE="enforce"' core/deploy/deploy.sh` expect 1 | 1 — the phase reads `enforce`; the decision and its owner are on record in the card's 2026-10-27 operator comment |
+| #8325 | AC-2 | [DEFERRED — Stage 7 runs a strict deploy-check on the release head and records Check 74's own line reading OK for the GRADUATED reason; the deploy check's exit status covers the whole run, so it cannot carry one Check's verdict] | Check 74 OK because the phase is enforce, not because of the date |
+| #8424 | AC-1 | `grep -c -E "^- #8[34]2[45] — " core/standards/gate-efficacy-standard.md` at least 2 [READER-GRADED — each of the two disposition rows names its owning card in prose and points at that Source(s) entry] | at least 2 Source(s) entries (0 at the pin; control: 3 existing entries on the same pattern shape) |
+| #8424 | AC-2 | `grep -c -x -F "enforce" .github/deploy-check-ci.enforce` expect 1 [READER-GRADED — skill-count-imp-check.yml sets WARN_MODE to 'false', and the Stage 12 live read-back lists both contexts] | 1 (0 at the pin; control token `warn` reads 1 at the pin) |
+| #8424 | AC-3 | [DEFERRED — answered on the record by the operator's 2026-10-27 decision comments on both cards, before the 2026-10-28 review; no file in this release carries it] | both decision comments present |
+| #8424 | AC-4 | [DEFERRED — the reconciler self-test arm for a seeded held declaration with no disposition row, named at Stage 5 and run by the measurement job of gate-posture-reconciliation.yml] | DIVERGED, naming the context |
+| #8424 | AC-5 | [DEFERRED — the reconciler self-test arm for a ruleset-delivered required context, named at Stage 5 and run by the same measurement job] | reconciled, or NOT-EVALUATED; never a clean verdict over an unread ruleset |
+| #8424 | AC-6 | `grep -c -F "stage-07-dev-testing.md" core/standards/gate-efficacy-standard.md` at least 4 [READER-GRADED — P1, P2 and P3 each have their own row with a runner or a NAMED GAP and its observable, each row declares a Population, and Check 62 resolves every new pointer] | at least 4 (1 at the pin) |
+| #8424 | AC-7 | [DEFERRED — the four single-edit malformed-header variants and the PA-010 closed-vocabulary arms in core/deploy/tests/test_gate_efficacy_declarations.py, run by install-tests.yml; arm labels named at Stage 5] | each variant fails naming its own workflow; the specificity arm reports an unattributable over-match as its own instrument failure |
+
+`ac_baseline: { #8325: 2, #8424: 7, read_at: f8d88626 }`
+
+**Null and threshold rows carry a same-target control** (AC-Binding Limb 2): every count row names a control read with the same instrument on the same file, and that control returns non-zero at the baseline.
+
+### G-PR4 observed-acting runs (Stage 7, one per flipped context, in pull-request context)
+
+1. **`Pre-merge load-bearing check subset`** (after step 1 is pushed, with the release PR open as a draft). Record the subset job green on that head (`all 4 load-bearing check(s) passed`). **F:** in `core/rules/bypass-mode-readiness/block-mcp-writes.md`, change its `Scope` row's text without running `build-hook-registry.py`; the commit message carries no issue reference. **Expected:** the job is red, and its step output carries both `required-subset: hook-registry-index-freshness — FAIL (STALE)` and `load-bearing check(s) FAILed (sentinel enforce) — blocking exit 1`. A red job without the second string is an ERROR or fail-closed red, which is **not** evidence of the flip: record it NOT-EVALUATED and repair the input. **R:** revert by a new commit and confirm byte-exactness (`git diff <F>^ HEAD -- <the source>` empty); expect green. Cite the warn-side arm: the 2026-09-19 STALE episode in the 985-run reading, same job and input class, which read STALE and passed.
+2. **`Skill-count / IMP-XXX delta`** (after step 2 is pushed): push a commit that adds a stale literal skill-roster total to a changed `.md` line → the job exits 1 (red); push the revert → green. Prefer this variant to a deprecated IMP-series reference: that variant also reddens the required `Issue-reference validity gate`, which muddies the reading.
+3. Both contexts are still unregistered at Stage 7, so the observation is "the job turns red in PR context". That a registered red context blocks the merge is host behaviour, observed at Stage 12 only as the read-back; state it as the residual.
+
+**Also at Stage 7:** a strict `deploy.sh --check` on the release head, reading Check 74's own block (#8325 AC-2): subject `ok=1 denom_enforce=1 fail_or_warn=0` (the `OK: … GRADUATED to enforce` line and a `DENOM` line carrying `phase=enforce`); sensitivity arm the same read at Commit 0, where the phase is `warn` and the day count is past the review threshold → `WARN: … GRADUATION-DUE`; a block of 0 lines means Check 74 did not run (NOT-EVALUATED, never a pass). And the reconciler against both live inputs — the branch-protection object and `rules/branches/main` — reading DIVERGED with exactly the two flipped contexts unregistered and held = behavioral-regression and link-check, once the flips are in the PR tree and step 4 has landed (`RECONCILED` with the same 2 held only after the Stage-12 registration, R6); Stage 7 confirms `rules_status=fetched` on the first PR run after step 4.
+
+### G-CL10 arm (i) — prose rows this release adds
+
+The three P1–P3 rows lead their Surface cell with `prose`, so each carries `**Population:** <name> — population: …; probe: …; threshold: …%`, and this file's § Verification Evidence carries each population's record at close.
+
+### Release-Level Verification
+
+These checks use tools or shapes outside the plan verifier's runnable set, so each is declared deferred to the Stage-6 C4 run that executes it; the commands and observed results land in § Verification Evidence as each slice lands.
+
+| Check | Verification Method | Expected |
+|---|---|---|
+| Required subset under enforce | [DEFERRED — deploy.sh --check-required-subset at Stage 6 C4 after step 1; result in § Verification Evidence] | all 4 load-bearing checks pass, and the runner reads `enforce` |
+| Conformance ratchet | [DEFERRED — core/deploy/tests/test_gate_efficacy_declarations.py at Stage 6 C4 per slice] | exit 0, no unrecorded or stale census member |
+| Reconciler self-test | [DEFERRED — reconcile-gate-posture.py --self-test at Stage 6 C4 per slice] | pass |
+| Doc-link integrity | [DEFERRED — the doc-link checker over each slice's edited docs, with the plan-depth lint on this plan, at Stage 6 C4] | no new broken link |
+| Skill-roster totals on added lines (R5) | [DEFERRED — check-skill-count-imp.py over each slice's added lines, at Stage 6 C4] | clean |
+| Fragile references in the standard (R3) | [DEFERRED — a scan of the standard's table rows for a bare issue number, at Stage 6 C4 per slice] | 0 in table rows; the numbers sit in Source(s) |
+| Cascade sweeps (DTA-7) | [DEFERRED — the Stage-5 sweeps S-a to S-h plus S-i over the four step-1 files, pre and post, at Stage 6 C4] | every surviving hit is a PRESERVE or N/A row |
+| CIAC authoring lint | [DEFERRED — the plan verifier's CIAC lint over this file, at Stage 6 A1 and Stage 9 A3.6] | declared=3 parsed=3 flagged=0 |
+| Package consequence | [DEFERRED — the package resolver reading each changed path on STDIN, at Stage 6 C4 per slice] | empty — no rostered skill's package is staled |
+
+---
+
+## Delivery Strategy
+
+| Aspect | Decision |
+|---|---|
+| Implementation approach | Sequential (P0 serial; contention-driven) |
+| Commit strategy | Commit 0 (this plan), then one commit per plan step, each pushed on landing (Write-Early); messages carry the `required-checks-enforce-as-declared:` prefix and a reference-only `(#N)` |
+| Review approach | Single release PR, draft until Stage 9 Phase A8 |
+| Registration | Operator, Stage 12: both contexts registered with the PR open and green, immediately before the merge; both checks re-run; live required contexts read back after the merge |
+| Deployment mechanism | Git merge. No skill package and no rules-mirror member changes |
+| Stacked-base cleanup | N/A (single branch) |
+
+The PR body is parser-clean: each card is named in the dedicated Issue References block; no close-family verb precedes an issue number anywhere else.
+
+---
+
+## Rollback Strategy
+
+| Scope | Method | Complexity |
+|---|---|---|
+| Whole release | The operator un-registers both contexts first, then the merge is reverted (`git revert -m 1 <merge>`). The order matters: reverting first leaves two registered contexts whose jobs swallow findings. The revert puts `GATE_ROLLOUT_PHASE` back to `warn` past day 90, so Check 74 reads GRADUATION-OVERDUE; the rollback therefore carries a re-date of `GATE_ROLLOUT_ARMED` with its reason | MODERATE / HIGH |
+| One context (the retreat shape, both cards alike) | Un-register the context first, then revert the flip commit's edits together — for the subset: the sentinel token, `GATE_ROLLOUT_PHASE`, the workflow header and the flip record; for the skill-count delta: `WARN_MODE`, the header qualifier and the flip record — and, for the subset past Check 74's escalation window, re-date `GATE_ROLLOUT_ARMED`, because below `enforce` that deadline re-arms. The skill-count flip reverts without touching Check 74 | CHEAP / HIGH |
+| Items 2 and 3, AC7 | Tool, test and standard edits revert by commit; nothing outside the tree changes | CHEAP / HIGH |
+| Version tag | Retained and recorded per Tag Retention; never deleted | — |
+
+Rollback infeasibility: none; every step is a commit or a settings change.
+
+---
+
+## Quota Budget
+
+**Verdict:** PASS (per `quota-budget-protocol.md` Checkpoint A), transcribed from Stage 4.
+**Parallel-eligible spokes per parallel stage:** Stage 5: 2 · Stage 7: 2 · Stage 8: 2 (Stage 6 is serial).
+**Per-spoke cost estimate:** ordinal band — `size:L` moderate–high, `size:XS` below the lowest named bucket (heuristic).
+**Assumed remaining usage-window envelope:** unstated at hub start; conservative default 50% of a window [ASSUMPTION – CONFIRM].
+**Estimated cumulative draw (worst parallel batch):** about 15% of a window, about 30% of the assumed envelope.
+**Routing:** PASS → proceed; Checkpoint B re-validates at every launch.
+
+---
+
+## Release Class declaration
+
+**`novel`** — trigger (b) fires: #8424 item 2 needed a D-class decision on the divergence definition, rendered at the Collective Review as shape (a) (PA-008). `cross-cutting` does not fire: 1 `pipeline/stage-*.md` file (stage-07), 0 of the six rule-defining surfaces, and 1 cross-issue compositional edge (#8325 → #8424). `hotfix` does not fire: no deployed-release defect. `effective_pts: 9 × 1.15 = 10.35`, in the acceptable band (10–15), under the 15–25 target; the deadline argues against adding scope. Differentiation posture: engagement density **Standard** · Stage 9 review depth **Deep** · Stage 5 activation bias **ALL** · Stage 13 outcome window **30-day**.
+
+---
+
+## Release Outcome Statement
+
+Transcribed from the milestone description at Engineering Commit 0. The AFTER sentence's reconciler clause and limb 5 were re-transcribed verbatim at Stage 7 from the amended milestone description (DEV-26).
+
+**AFTER** — The two required checks held in warn mode block a merge: the pre-merge load-bearing subset (Checks 38, 73, 77 and 78) and the skill-count delta. Each context is registered in branch protection and read back, each workflow header declares `posture=required` with no hold qualifier, and the gate-efficacy standard records each flip with its specificity reading and its owner. Check 74 reads green because the phase is `enforce`, not because of the date. The posture reconciler reports a held declaration with no disposition row as diverged, reads the required status checks a ruleset delivers, and reports any other ruleset rule that could gate a merge as not evaluated; Stage 7's roster predicates P1 to P3 each have a register row or a named-gap disposition. A malformed `gate-efficacy:` header fails naming the malformed workflow.
+
+**BEFORE** — Both contexts run in warn mode: `.github/deploy-check-ci.enforce` and `GATE_ROLLOUT_PHASE` read `warn`, and the skill-count workflow sets `WARN_MODE: 'true'`, so neither blocks a merge. Check 74's deadline, armed 2026-08-29 (Saturday), turns a strict `deploy.sh --check` red on Friday 2026-11-27 unless the phase reads `enforce`. The reconciler treats a `(warn-mode-initial)` qualifier as an exemption and reads only classic branch protection, and Stage 7's P1 to P3 have no register row. A malformed header can be reported against the wrong workflow.
+
+**Actor(s):** every pull request against `main`; the operator, who registers both contexts.
+
+**Success Indicator:** both contexts appear in the live required contexts read after the merge; a strict `deploy.sh --check` on the merge commit reads Check 74 green; the reconciler's new fixtures read `DIVERGED` and `NOT-EVALUATED`; one PR for the milestone.
+
+**Limb owners:** pre-merge load-bearing subset blocks a merge (flip committed, context registered and read back, header `required`, flip record with its reading and owner) → #8325 · skill-count delta blocks a merge (the same four parts) → #8424 · Check 74 reads green because the phase is `enforce` → #8325 · a held declaration with no disposition row reads diverged → #8424 · a ruleset's required status checks are read, and any other ruleset rule that could gate a merge reads not evaluated → #8424 · Stage 7's P1–P3 each have a register row or a named-gap disposition → #8424 · a malformed `gate-efficacy:` header fails naming its own workflow → #8424
+
+If the valve fires, limbs 4–6 (and limb 7, when step 3 is not committed and self-verified) are re-pointed in the same edit to an open owner outside the release (R2).
+
+---
+
+## Operational Deployment Manifest
+
+| Surface | Propagation | Mechanism |
+|---|---|---|
+| Every matrix path | **Repository-only** — none is under a skills tree or in the rules mirror set, so no installed copy exists | none required |
+| `core/deploy/deploy.sh`, the reconciler and the conformance suite | Run from the repository at check time and in CI; nothing is copied | none required |
+| Branch protection (`main`'s required contexts) | Out-of-tree repository settings, operator-side at Stage 12 | the registration, then the live read-back |
+
+**`deliverable_state: deployed-copy-synced`** — the release declares no Layer-2 propagation target, which this state admits ("or the release declares no propagation target").
+
+### Schema Migrations
+
+N/A — enumerated over data-file formats, register and ledger schemas, the pipeline-event-log schema, the deploy-check warn-log row shape and the gate-criteria schema columns; none migrates. The `gate-efficacy:` header grammar is narrowed to a closed posture vocabulary (PA-010) that every one of the 44 live declarations already satisfies.
+
+### Memory Evictions
+
+N/A — enumerated over memory eviction, memory re-point and archive disposition; no codification card in this release is tied to an auto-memory entry, so nothing is evicted.
+
+---
+
+## Verification Evidence
+
+### Engineering Commit 0 — Stage 6 A1
+
+Run by the Stage-6 spoke on #8617 after this file was written and before it was committed, on base `f8d88626`.
+
+| Check | Command | Observed |
+|---|---|---|
+| Stamp manifest (step 3b) | `bash release/tools/claim-version.sh --verify-stamp required-checks-enforce-as-declared` | exit 0 — "verify-stamp OK … carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s))". The file carries exactly 1 literal placeholder (python count) |
+| CIAC authoring lint (A1) | `bash release/tools/verify-release-plan.sh --ciac-lint release/releases/plans/required-checks-enforce-as-declared_RELEASE_PLAN.md` | exit 0 — `CIAC-LINT-SUMMARY declared=3 parsed=3 clean=2 declared-deferral=1 flagged=0`; CIAC-1 and CIAC-2 CLEAN, CIAC-3 DECLARED. G4-06 holds on the committed plan |
+| Full verifier (RED arm) | `bash release/tools/verify-release-plan.sh release/releases/plans/required-checks-enforce-as-declared_RELEASE_PLAN.md` | exit 3 — **4 PASS / 7 FAIL / 16 SKIP / 0 UNRUNNABLE / 0 ERROR over 27 records** (18 per-issue, 3 cross-issue, 6 always-on). Every runnable per-issue row (4) reads FAIL against the baseline tree — each row's sensitivity arm for its later GREEN; CIAC-1 reads 2 (wanted 0) and CIAC-2 reads 0 (wanted at least 2), likewise. `FCM-COVERAGE` PASS: `declared=21 interpreted=21 obligations=1 excluded=10 conditional=0 uninterpreted=0 pathless=0 prose_led=0`; FCM-1 FAIL pre-commit (this file, which delivers at this commit). `PROV-PRESENCE` / `PROV-GRAMMAR` PASS (Form X) |
+| Doc links and plan depth | `python3 core/deploy/tools/check-doc-links.py --target-paths release/releases/plans/required-checks-enforce-as-declared_RELEASE_PLAN.md --require-targets`; `python3 release/tools/check-release-links.py`, bare and with `--plan-depth-lint` | doc links exit 0, no findings; release links exit 0 and plan depth exit 0, 0 findings. Sensitivity arm: with CIAC-1 spelled as the Stage-4 comment wrote it, the same two reads returned exit 1 and 2 findings each (DEV-15) |
+| Skill-roster totals (R5) | `python3 core/deploy/tools/check-skill-count-imp.py --files <this file> --mode both` | exit 0, no finding. Control: a one-line content file carrying a seeded roster total, scanned as this path with `--scan-pair`, exits 1 with one count finding |
+| Identity strings, host URLs, link sequences | a python line scan of this file for the operator handle, name and home path, an email address, a hyphen-suffixed repository slug, a raw host URL and a markdown link sequence | 0 in every class. Control: one constructed line carrying one of each fires every class but the bare-username class, whose input it does not carry; the home-path class covers that spelling |
+| Close-family keywords | a python scan for a close-family verb followed by an issue number | 0 in this file |
+
+### Plan step 1 (#8325) — Stage 6 C4
+
+Run by the Stage-6 spoke on #8617 on the step-1 tree, before its push. The step-1 commit is `6590b1d9`; it touches exactly the four step-1 files (84 insertions, 65 deletions).
+
+| Check | Command | Observed |
+|---|---|---|
+| Required subset under enforce | `bash core/deploy/deploy.sh --check-required-subset` | exit 0 — `all 4 load-bearing check(s) passed` (Checks 38 FRESH, 73 PASS, 77 PASS, 78 PASS). The sentinel's first non-comment token, parsed the way the runner parses it, reads `enforce`; the same parse at Commit 0 reads `warn` |
+| Hook-registry index | `/usr/bin/python3 core/deploy/tools/build-hook-registry.py --check` | exit 0 — in sync, so the flip does not turn a stale index into a red subset job |
+| Conformance ratchet | `/usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py` | exit 0 — 44/44 declarations across 27 workflow files; the census's 3 population records match their re-derived populations, so the renamed step and its census row agree; every anti-vacuity arm fired |
+| Reconciler self-test | `python3 core/deploy/tools/reconcile-gate-posture.py --self-test` | exit 0 — 26 arms PASS (tier 1 and tier 2) |
+| Reconciler on the live branch object (informational) | `python3 core/deploy/tools/reconcile-gate-posture.py --live-branch-json <GET branches/main>` | exit 1, **DIVERGED as expected**: 22 reconciled, 3 held (behavioral-regression, link-check, skill-count), 1 unregistered — `Pre-merge load-bearing check subset` (`posture=required`). The Stage-4 baseline on the pre-flip tree read RECONCILED with 4 held, which is this read's opposite arm. It clears at the Stage-12 registration (R6) |
+| Skill-roster totals (R5) | `python3 core/deploy/tools/check-skill-count-imp.py --scan-pair core/standards/gate-efficacy-standard.md::=::<its 17 added lines> --mode both` | exit 0. Control: a seeded roster total scanned as the same path exits 1 |
+| Fragile references (R3; the design's Probe Z3) | a python scan of the standard's 229 table rows for an issue-number token, and of its 17 added lines for a link sequence, a raw URL, a bare issue reference, cutover phrasing and an IMP-series literal | 0 issue references in table rows (the one token the pattern reaches is the pre-existing `#[0-9]+` regex class, not an issue reference); `- #N — ` Source(s) lines: 4; added lines: the only issue reference is the new Source(s) entry, inside the reference block; 0 in every other class. Control: one constructed line per class fires each class |
+| Doc links | `python3 core/deploy/tools/check-doc-links.py --target-paths core/standards/gate-efficacy-standard.md,<this file> --require-targets`, and its `--self-test` | exit 0, no findings; self-test 12 fixtures OK |
+| Package consequence | the four changed paths and this file on STDIN to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | empty. Control: a skill's `SKILL.md` on the same reader returns its skill name |
+| Identity strings and close-family keywords | the python scans above, over the 84 added lines | 0 in every class |
+| Commit-message close keywords | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | exit 0 — 2 commits examined, 0 findings |
+| Shell syntax | `bash -n core/deploy/deploy.sh` | exit 0 |
+| Plan verifier (step-1 state) | `bash release/tools/verify-release-plan.sh release/releases/plans/required-checks-enforce-as-declared_RELEASE_PLAN.md` | exit 3 — **6 PASS / 4 FAIL / 16 SKIP / 1 UNRUNNABLE / 0 ERROR over 27 records**, the expected intermediate state: #8325 AC-1 PASS (count 1); #8424 AC-2's command limb PASS, so the row reads UNRUNNABLE only for its reader-graded limb; FCM-1 PASS (this file delivered, range `f8d88626..6590b1d9`); FCM-COVERAGE and PROV PASS. The four FAILs are owned by #8424's steps: #8424 AC-1 reads 1 of 2 Source(s) entries and AC-6 1 of 4 (steps 2 and 5), CIAC-1 reads 1 (the skill-count row is still CORRECT-THEN-HOLD until step 2) and CIAC-2 reads 1 of 2 (step 2) |
+| Runtime suite | `runtime-suite-selection-map.md` row 2 (`core/deploy/**`) selects the deploy steps of `install-tests.yml` | not run locally: the change to `deploy.sh` is comment text plus one constant read by Check 74 alone; the selected suite runs on the release PR, and Stage 7 A8 re-runs it as the authoritative gate input |
+
+**Cascade sweeps** (the Stage-5 sweeps S-a to S-h, plus S-i from the A6.5 review, as one python line scan over the four files): **pre 81 hits** (S-a..S-h 79, equal to the design's count, plus S-i 2) → **post 54**. Every surviving hit is a PRESERVE or N/A site of the design's table, or is the step's own new wording: the retreat sentences now say a retreat is not an exit (S-e), the new notes name the sentinel file and its past `warn` state as history (S-b, S-f, S-g). By sweep, pre → post: S-a 30 → 13 (the 13 are the standard's definitions, other gates' sentinels, the two held rows and frozen history); S-b 7 → 3; S-c 3 → 1 (the `version-freeness.yml` census row, a different member); S-d 1 → 0; S-e 10 → 13 (Check 71 and another check's notes, plus the corrected retreat wording); S-f 17 → 17 (conditional mechanism and the rewritten lines); S-g 5 → 1 (the new past-tense paragraph); S-h 6 → 4 (other checks' lifecycle labels); S-i 2 → 2 — the lede token `DEFERRED OR DECLINED` reads 1 → 0, and the two survivors are the paragraph's pass-anchored closing sentence about the deploy-time cohort, which stays, and frozen Version History.
+
+`[REFCASCADE: git grep -F 'Gate decision (warn-mode-initial)' over .github/workflows/deploy-check-ci.yml and the standard's deploy-check-ci census row → pre 2 / post 0]` — tree-wide the old name reads 7 → 5 (four workflows and the `version-freeness.yml` census row keep it, as different census members).
+
+### Plan steps 2 and 3 (#8424) — Stage 6 C4
+
+Run by the Stage-6 spoke on #8618 on each slice's tree, before its push. Step 2 is `61e2bcc6` (two files, 26 insertions, 27 deletions); step 3 is `f8a16d9f` (one file, 462 insertions, 76 deletions).
+
+| Check | Command | Observed |
+|---|---|---|
+| Conformance ratchet, step 2 | `/usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py` | exit 0 — 44/44 declarations across 27 workflow files; posture reach 17 (2 ledgered residuals); every anti-vacuity arm fired |
+| Conformance ratchet, step 3 | the same | exit 0 — 44/44; the posture branch fires on 0 of the 44 live declarations, its specificity input; MH1–MH6 and AT1–AT4 pass, victim `behavioral-regression.yml`; runtime 31.8s, against about 7s before (DEV-16) |
+| Malformed-header variants (AC7) | one edit at a time to the live header — `skill-count-imp-check.yml:3`, bare `posture=required` after step 2, and `deploy-check-ci.yml:3` for the sibling — each run under the step-3 ratchet and under the pre-step-3 ratchet (`61e2bcc6`); the original bytes restored and checked equal | every variant exits 1 under step 3 naming only its own workflow (variant table below); restored byte-equal. Control: the pre-step-3 ratchet reads the unmutated tree as exit 0 |
+| Attribution-harness sensitivity | the pre-repair "were there findings at all" read put back in place of `attribute_delta`, in-process only | control (repaired) 0 failures; regressed 8 failures — MH1–MH6 each report a sibling harness that could not assert over the mutated tree (for MH5 and MH6 the first is A5, blaming another workflow), and AT3 and AT4 fail |
+| Reconciler self-test, both steps | `python3 core/deploy/tools/reconcile-gate-posture.py --self-test --require-parser` | exit 0 — 26 arms PASS, tier 1 and tier 2; the shared parser's imported names are unchanged |
+| Required subset, both steps | `bash core/deploy/deploy.sh --check-required-subset` | exit 0 — all 4 load-bearing checks passed |
+| Reconciler on the live branch object (informational) | `python3 core/deploy/tools/reconcile-gate-posture.py --live-branch-json <GET branches/main>` on the step-3 tree | exit 1, **DIVERGED as expected**: 22 reconciled, 2 held (behavioral-regression, link-check), 2 unregistered — `Pre-merge load-bearing check subset` and `Skill-count / IMP-XXX delta`, both `posture=required`. Step 1's read (3 held, 1 unregistered) is the opposite arm for the skill-count context. It clears at the Stage-12 registration (R6) |
+| Skill-roster totals (R5) | `check-skill-count-imp.py --scan-pair` over each slice's added `.md` lines — the standard's 3 at step 2, this file's at the plan update; step 3 adds no `.md` line | exit 0 each. Control: a seeded roster total scanned as the standard's path exits 1 with one count finding |
+| Fragile references (R3) | a python scan of the standard's 229 table rows for an issue-number token, and of the added lines for a link sequence, a raw host URL, a bare issue reference outside a reference block, an IMP-series literal and cutover phrasing | 0 issue-number tokens in table rows (control: a planted row carrying one reads 1, and a near-miss row reads 0); step 2's 3 added lines: its 2 issue references are `### Source(s)` entries, 0 in every other class; step 3's 462 added lines: 0 in every class. Control: one constructed line per class fires each class |
+| Flip tokens, step 2 | `git grep -c -F` on `skill-count-imp-check.yml` | `warn-mode-initial` 0 (control: 1 at `HEAD~1`); `WARN_MODE: 'false'` 1; `WARN_MODE:-false` 1 (`WARN_MODE:-true` read 1 at `HEAD~1`) |
+| CIAC-1, CIAC-2, #8424 AC-1 | the plan's own greps on the standard | CIAC-1 0, its control arm 2; CIAC-2 2; AC-1 2 Source(s) entries on the pattern |
+| Workflow lint, step 2 | `actionlint .github/workflows/skill-count-imp-check.yml`; a structural YAML parse | exit 0; `env.WARN_MODE` parses as `'false'`. Control: a planted workflow with a bad expression exits 1 |
+| Doc links | `check-doc-links.py --target-paths <the standard>,<this file> --require-targets` | exit 0, no findings |
+| Package consequence | each slice's changed paths on STDIN to `build-skill-packages.sh --skills-for-paths` | empty. Control: a skill's `SKILL.md` on the same reader returns its skill name |
+| Identity strings and close-family keywords | the python class scan over every added line | 0 in every class |
+| Commit-message close keywords | `check-commit-close-keywords.py --base origin/main --head HEAD`, before each push | exit 0 — 4, then 5 commits examined, 0 findings; its self-test passes (2 flagged, near miss silent) |
+| Runtime suite | `runtime-suite-selection-map.md` row 2 (`core/deploy/**`) selects the deploy steps of `install-tests.yml` | the step the change touches — the ratchet — ran locally on each slice; the rest of the selected suite runs on the release PR, and Stage 7 A8 re-runs it as the authoritative gate input |
+| Plan verifier, step-3 state | `bash release/tools/verify-release-plan.sh <this file>` | exit 3 — **8 PASS / 1 FAIL / 16 SKIP / 2 UNRUNNABLE / 0 ERROR over 27 records**, the expected intermediate state: CIAC-1 PASS (0) and CIAC-2 PASS (2), both FAIL at step 1; #8424 AC-1's command limb PASS, so the row reads UNRUNNABLE only for its reader-graded limb, as AC-2 does; the one FAIL is #8424 AC-6 (1 of 4), owned by step 5. CIAC lint `declared=3 parsed=3 clean=2 declared-deferral=1 flagged=0`; FCM-1 and FCM-COVERAGE PASS |
+| This file | the stamp manifest (`claim-version.sh --verify-stamp`), a placeholder count, `check-release-links.py` bare and with `--plan-depth-lint` | stamp exit 0; exactly 1 literal placeholder; release links and plan depth exit 0 |
+
+**Malformed-header variants (AC7).** Each row is one edit to the header line; "only" means no other workflow is named by a finding or a harness failure.
+
+| Variant | Step 3 ratchet | Pre-step-3 ratchet |
+|---|---|---|
+| SEP — separator collapsed before `enforcement=`, bare header | exit 1, `skill-count-imp-check.yml` only: posture outside the vocabulary, plus the collapsed-separator diagnostic | exit 0, undetected |
+| ARV — `always-reports=no` | exit 1, that file only | exit 2 — A5 and A10 blame `automation-registry-check.yml` and `close-completeness.yml` |
+| SURF — `branch-protection:` to `ci-enforce:` | exit 1, that file only | exit 1, that file |
+| CTX — the quoted context renamed | exit 1, that file only: its job's check-run is unnamed | exit 1, that file |
+| PFX — `# gate-efficacy;` | exit 1, that file only: no header | exit 2 — the same misattribution |
+| SEP2 — separator collapsed before `always-reports=` | exit 1, that file only, with the diagnostic | exit 2 — the same misattribution |
+| MIS — `posture=requird` | exit 1, that file only | exit 0, undetected |
+| DEL — the posture field deleted | exit 1, that file only | exit 0, undetected |
+| KEY — `postur=required` | exit 1, that file only | exit 0, undetected |
+| DC-SEP — SEP on `deploy-check-ci.yml:3` | exit 1, `deploy-check-ci.yml` only, with the diagnostic | exit 0, undetected |
+
+The four single-edit variants of the card's criterion — SEP, ARV, PFX and CTX — read 0, 2, 2, 1 before step 3 on the bare header and 1, 1, 1, 1 after, each naming its own workflow.
+
+### Plan steps 4–6 (#8424) — Stage 6 C4
+
+Run by the Stage-6 spoke on #8618 on each slice's tree, before its push. Step 4 is `c11f4b27` (five files, 579 insertions, 117 deletions); step 5 is `92ecd8dd` (two files); step 6 is `567e90c0` (two files).
+
+| Check | Command | Observed |
+|---|---|---|
+| Reconciler self-test, each slice | `python3 core/deploy/tools/reconcile-gate-posture.py --self-test --require-parser` | exit 0 — 40 arms PASS: tier 1 adds H3–H6 and RS1–RS4 (27 arms), tier 2 adds TB1–TB6 (13 arms); 26 before |
+| Arm sensitivity (in-process mutants) | five regressions, each loaded into the module in place of the shipped code, then the self-test | control 0 failures. The qualifier alone holds → H3, H5 fail; a deny-list dispatch (only `workflows` degraded) → RS3; the classic status alone → RS2, T1; a lenient table reader → TB2–TB6; the page limit raised → RS3. The first run of this probe read 0 on the last mutant, because RS3's page-limit leg read the tool's own constant; the leg now asserts the literals 100 and 99 |
+| Live reconciliation, both inputs | `--live-branch-json <GET branches/main> --live-rules-json <GET rules/branches/main?per_page=100>` on the step-4 tree | exit 1, **DIVERGED as expected**: 22 reconciled, 2 held (behavioral-regression with its HOLD row, link-check with its CORRECT-THEN-HOLD row), 2 unregistered (`Pre-merge load-bearing check subset`, `Skill-count / IMP-XXX delta`), 0 held and registered, 0 unrecorded hold, 0 undeclared; branch protection `fetched` (22), rules `fetched` (0); `rules_status=fetched` written. It clears at the Stage-12 registration (R6) |
+| Live reconciliation, branch only | the same without `--live-rules-json` | exit 3, NOT-EVALUATED, the rules read `not-run` and named in the report — the conjunction acting |
+| Rules endpoint controls | `gh api` on `rules/branches/main?per_page=100`, `rules/branches/no-such-branch-zz9?per_page=100` and the repository ruleset list | `[]`, `[]`, and 1 ruleset targeting `tag`. The endpoint answers `[]` for a branch that does not exist, so only the branch-object read proves `main` exists |
+| Table read fails closed | the same live run with `--standard` set to a copy of the standard whose behavioral-regression disposition reads `PARK` | exit 2, naming the context and the disposition; no report published |
+| First PR run after step 4 (R11) | `Gate posture reconciliation (measurement)` on `c11f4b27`, its job log | success; branch protection `fetched` (22) and the rules for `main` `fetched` (0), so `rules_status=fetched` is observed in CI; DIVERGED with the same two contexts, so the verdict check is red as expected (R6); the 40-arm self-test ran with `--require-parser` |
+| Conformance ratchet, each slice | `/usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py` | exit 0 — 44/44 declarations across 27 workflow files; every anti-vacuity arm fired |
+| Required subset, each slice | `bash core/deploy/deploy.sh --check-required-subset` | exit 0 — all 4 load-bearing checks passed |
+| Register resolution (Check 62) | a full `bash core/deploy/deploy.sh --check` on the step-5 tree, Check 62's own lines | `OK: all 59 gate-coverage register resolution pointer(s) resolve`; `runner-def:` pointers 48 → 51, `runner-src:` 8. Sensitivity arm: the same anchor-presence predicate over a copy of stage-07 with `p2-denominator-floor-read` removed → 1 unresolved. Check 14 OK. The run's exit 1 carries 2 issues, neither in a file this branch touches: Check 47 (13 published Release bodies, out of tree) and Check 63 (`SECURITY.md`, an operator-instance reference, the release-notes standard) |
+| Anchors | a python count over stage-07 | each of `p1-mergeability-read`, `p2-denominator-floor-read`, `p3-state-classification-read` once (0 at `e818c34b`); control `mergeStateStatus` 3 |
+| Populations (G-CL10 arm (i)) | `python3 core/deploy/tools/check-doc-gates.py --gate g-cl10 --list --base origin/main --head HEAD`, with the milestone description and members; G-CL10's own `parse_population` on each new row | the list names exactly three obligations, `stage7-required-gate-p1-reads`, `-p2-reads` and `-p3-reads`, each at 100% with its presence-census probe, and all seven Outcome limbs with owners; each new row parses (5 cells, Surface `prose`), the G-PR4 row as control. Their records are owed at Stage 13 close, not here |
+| Skill-roster totals (R5) | `check-skill-count-imp.py --scan-pair` over each slice's added `.md` lines | exit 0 each. Control: a seeded roster total scanned as the standard's path exits 1 |
+| Fragile references (R3) | a python scan of the standard's 233 table rows for an issue-number token, and of the added lines for ten classes (link sequence, raw host URL, bare issue reference, IMP-series literal, cutover phrasing, close-family keyword, operator handle, name, home path, email) | 0 issue-number tokens in table rows (control: a planted row reads 1, a near miss 0). Added lines — 579, 8 and 50: 0 in every class except this file's 4 issue references (the release-tracking surface, exempt by path) and 2 pre-existing links on two modified stage-07 lines (that file carries the `allow-link` marker). A constructed control line fires 10 of 10 classes |
+| Workflow | `actionlint .github/workflows/gate-posture-reconciliation.yml`; a structural YAML parse | exit 0; the measurement job carries 7 steps, the rules read before the reconcile step |
+| Doc links | `check-doc-links.py --target-paths <the standard>,<this file>,<stage-07>,<the tools README> --require-targets`; `check-release-links.py` bare and with `--plan-depth-lint` | exit 0 each, no findings |
+| Package consequence | the seven changed paths on STDIN to `build-skill-packages.sh --skills-for-paths` | empty. Control: a skill's `SKILL.md` returns its skill name |
+| Commit-message close keywords | `check-commit-close-keywords.py --base origin/main --head HEAD`, before each push | exit 0 — 7, 8, then 9 commits, 0 findings |
+| Plan verifier, step-6 state | `bash release/tools/verify-release-plan.sh <this file>` | exit 0 — **8 PASS / 0 FAIL / 16 SKIP / 3 UNRUNNABLE / 0 ERROR over 27 records** (8 / 1 / 16 / 2 at step 3). #8424 AC-6's command limb now passes (count 4), so the row reads UNRUNNABLE only for its reader-graded limb, as AC-1 and AC-2 do. CIAC lint `declared=3 parsed=3 clean=2 declared-deferral=1 flagged=0` |
+| This file | `claim-version.sh --verify-stamp`; a placeholder count | stamp exit 0; exactly 1 literal placeholder |
+
+**DTA-7 sweeps** (a python word or literal match over every tracked file, pre at `e818c34b` and post on the head):
+
+`[REFCASCADE: \bis_held\b over every tracked file → pre 7 / post 0]` — control: `discloses_hold` reads 0 → 6 (4 in the reconciler, 2 in this file's records).
+
+`[REFCASCADE: the old held-section heading ending "not registered" over every tracked file → pre 1 / post 0]`
+
+`[REFCASCADE: step 1's old gate-step name over every tracked file → pre 6 / post 6]` — step 1's pair stays at 0; the six survivors are four other workflows, the `version-freeness.yml` census row and this file's own step-1 record, each a different census member or history.
+
+**Cascade sweep** (the Stage-5 engine's patterns over the seven matrix files, pre → post): three classes 4 → 1 (the survivor is a past release's Version History row); held wording 5 → 5 (four are the new wording, one the same frozen row); `ruleset` 2 → 10 (the new rules-read text, and P2's row, whose non-detection of a ruleset-delivered context is true); mode tokens 29 → 33 (grammar text, fixtures, the two remaining holds and the new class text); "six qualified" 0 → 0; "admission is merge-blocking" without the registration clause 4 → 0; `--check --strict` 2 → 1 (Check 71's row, left to #8549 with that row's retreat wording).
+
+### Stage 7 DT-fix iteration 1 — Tier 1 [ADJUST] (PA-012)
+
+Run by the Stage-7 DT-fix Engineering spoke on #8620 (#8325's pointer on #8619), from G-PR4 run 1's revert `47ebaa1e`, whose tree equals the Engineering head's. F-01 is `ee84a487` (one file, one line); F-04 is `734dd9e3` (the standard, two lines added); F-05 is `bf04643d` (the standard, one row). Code-reading checks ran on `bf04643d`, whose code tree is this commit's; the plan-reading checks ran on this file before its commit.
+
+| Check | Command | Observed |
+|---|---|---|
+| Rename-reference cascade (F-01, DTA-7) | `git grep -n -F` over every tracked file for six phrasings: the three-member roster in four spellings (the comma-and form, the comma list closed by a parenthesis, the Oxford-comma form and the slash form), and the roster's size written before "load-bearing", in words and in digits; then a python sweep of the 2,115 readable tracked text files for the three members in sequence not followed by the fourth (comma, slash, ampersand or `and`), on one line or wrapped across two, and the `Check NN` word form. Re-run at DT-fix iteration 2 (PA-015), once this row named the six phrasings without spelling them | the three-member roster: **pre 1** (`deploy.sh:16265`) **/ post 0**. In the order above, the six searches read 1 / 0 / 0 / 0 / 8 / 2 at `47ebaa1e`, and 0 / 0 / 0 / 0 / 8 / 2 at `bf04643d` and at DT-fix iteration 2's commit; the python sweep reads 1 → 0 (5 at `57487e5d`, every one this row's own former spelling, F-04). Control, the four-member roster over the same files: 13 → 14 at `bf04643d`, the corrected line joining it, and 15 at the iteration-2 commit, the fifteenth being DEV-27's record. The two count phrasings' hits are other subjects (a test assertion, a protocol's properties, release records), so none is a reference. The wrapped-line and word-form arms read 0, and each fires on a constructed input |
+| Shell syntax | `bash -n core/deploy/deploy.sh` | exit 0 |
+| Register pointers (Check 62's own pattern) | the two `/usr/bin/grep -o` patterns `deploy.sh`'s `_rr_compute_verdict` uses, over the standard | 51 `runner-def:` and 8 `runner-src:`, unchanged: F-04's bullets name the anchors in prose and add no pointer |
+| G-CL10 arm (i) | `python3 core/deploy/tools/check-doc-gates.py --gate g-cl10 --list --base origin/main --head HEAD --outcome <milestone 442 description> --members "8325 8424" --repo <this repository>` at `bf04643d`; the tool's own `parse_population` over the three rows on the working tree | exit 0 — three Populations, `stage7-required-gate-p1-reads`, `-p2-reads` and `-p3-reads`, each at 100%, the P3 probe carrying the count-stable reading; seven limbs, limb 5 the amended wording; owners 8325 and 8424. Each row parses (5 cells, Surface `prose`). Control: the P3 row with its probe's closing backtick removed does not parse |
+| Old P3 reading | `git grep -c -F "P2 settled"` over the standard | 0 (1 row before F-05); the new reading's phrase reads 1 |
+| Conformance ratchet | `/usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py` | exit 0 — 44/44 declarations across 27 workflow files; every anti-vacuity arm fired |
+| Reconciler self-test | `python3 core/deploy/tools/reconcile-gate-posture.py --self-test --require-parser` | exit 0 — 40 arms PASS: tier 1 27, tier 2 13, TB1–TB6 among them |
+| Reconciler, both live inputs | `--live-branch-json <GET branches/main> --live-rules-json <GET rules/branches/main?per_page=100> --github-output <file>`, reading the standard F-04 and F-05 edited | exit 1, **DIVERGED as expected**: 22 reconciled, 2 held (behavioral-regression with its HOLD row, link-check with its CORRECT-THEN-HOLD row), 2 unregistered (`Pre-merge load-bearing check subset`, `Skill-count / IMP-XXX delta`), 0 held and registered, 0 unrecorded hold, 0 undeclared; branch protection `fetched` (22), the rules for `main` `fetched` (0); `verdict=DIVERGED`, `live_status=fetched` and `rules_status=fetched` written. The edited table reads; it clears at the Stage-12 registration (R6) |
+| Required subset | `bash core/deploy/deploy.sh --check-required-subset` | exit 0 — all 4 load-bearing checks passed (38 FRESH, 73, 77 and 78 PASS) |
+| Count-structure (Check 63's primitive) | `/usr/bin/python3 core/deploy/tools/check-count-structure.py --root . --output-format tsv` after F-04 | exit 1 on the same five pre-existing sites (`SECURITY.md:55`, `:75`; `core/references/reference/operator-instance-home-and-isolation-key.md:128`, `:182`; `release/references/standards/release-notes-standard.md:529`), none in a file this release touches |
+| Skill-roster totals (R5) | `check-skill-count-imp.py --scan-pair` over each slice's added `.md` lines, the standard's at F-04 and F-05 and this file's at this commit | exit 0 each. Control: a seeded roster total scanned as the standard's path exits 1 with one count finding |
+| Doc links | `check-doc-links.py --target-paths <the standard>,<this file> --require-targets` | exit 0, no findings |
+| Commit-message close keywords | `check-commit-close-keywords.py --base origin/main --head HEAD`, before each push | exit 0 — 16, 17, then 18 commits examined, 0 findings |
+| Outcome copy (AI-006) | a python byte-compare of § Release Outcome Statement's five labelled lines with the milestone description's, read live | before this commit, AFTER and `**Limb owners:**` differed at the reconciler clause and limb 5 and the other three were equal; after it, all five are byte-equal |
+| Full deploy check | `bash core/deploy/deploy.sh --check` at `bf04643d`, in the background from the worktree root | exit 1, `2 issue(s) found`, neither in a file this release touches: Check 47 `release-body-drift` (13 published Release bodies differ from their in-repo notes; out of tree) and Check 63 `count-structure` (the five pre-existing sites above; its control arms PASS and its fixtures read 14/14). Check 62 `OK: all 59 gate-coverage register resolution pointer(s) resolve`; Check 14 `OK: no broken cross-refs in scope`; Check 74 `DENOM: … phase=enforce … elapsed=67d` and `OK: … the integrity limb has GRADUATED to enforce` |
+| Plan verifier | `bash release/tools/verify-release-plan.sh --format=table <this file>`, on this file before and after this commit's edit; and `--ciac-lint` | exit 0 both times — **8 PASS / 0 FAIL / 16 SKIP / 3 UNRUNNABLE / 0 ERROR over 27 records**, equal to the step-6 and Stage 7 runs, and the two table outputs are byte-identical, so no row moved (the verdict-laundering comparison). CIAC lint `declared=3 parsed=3 clean=2 declared-deferral=1 flagged=0`. #8424 AC-6's count reads 5 at this head, against at least 4, because F-04's bullet names `stage-07-dev-testing.md` once more |
+| This file | `claim-version.sh --verify-stamp required-checks-enforce-as-declared`; a placeholder count; `check-release-links.py` bare and with `--plan-depth-lint`; a scan of the added lines for an identity string, a raw host URL and a close-family keyword before an issue number | stamp exit 0; exactly 1 literal placeholder; release links and plan depth exit 0; 0 in every scan class |
+
+### Stage 7 DT-fix iteration 2 — Tier 1 [ADJUST] (PA-015)
+
+Run by the Stage-7 DT-fix Engineering spoke on #8620 (#8325's pointer on #8619), from `57487e5d`. One plan-only commit: the rename-reference row above (#8325 F-04), DEV-27's two clauses (#8424 F-11), the Header **Status** cell and DEV-28; #8424 F-12 is accepted with no change. The pull request body's sentence on F-01's sweep is corrected outside the tree.
+
+| Check | Command | Observed |
+|---|---|---|
+| This commit's own checks | the six `git grep -n -F` searches and the python sweep of the rename-reference row above, on this file before the commit and at the commit; `bash release/tools/verify-release-plan.sh --format=table <this file>` before and after the edit, and `--ciac-lint`; `git diff --stat 57487e5d..HEAD`; `check-commit-close-keywords.py --base origin/main --head HEAD` before the push | the six searches 0 / 0 / 0 / 0 / 8 / 2 and the sweep 0, before the commit and at it, with the four-member control at 15; verifier exit 0 — **8 PASS / 0 FAIL / 16 SKIP / 3 UNRUNNABLE / 0 ERROR over 27 records**, the two table outputs byte-identical; CIAC lint `declared=3 parsed=3 clean=2 declared-deferral=1 flagged=0`; the diff names this file only; close keywords exit 0 — 20 commits examined, 0 findings |
+
+### Stage 9 sync with main — Tier 2 [SCOPE CHANGE] (PA-017)
+
+Run by the Stage 9 sync Engineering spoke on #8623. The merge commit is `4fbf8a6a` (`git merge --no-ff -S` of `dfe48bdb` into `a08432bb`); the merge assertions ran on it, and the other checks ran on this commit's tree before its push. The merge brings `main`'s changes only; this commit changes this file only.
+
+| Check | Command | Observed |
+|---|---|---|
+| Merge parents | `git rev-parse 'HEAD^1' 'HEAD^2'` at the merge commit | `a08432bb` and `dfe48bdb` — **PASS** |
+| Merge tree | `git rev-parse 'HEAD^{tree}'` at the merge commit | `52d8945bfe235bc7d5b1efeba199db83c1483e2e`, the tree of the hub's `git merge-tree --write-tree dfe48bdb a08432bb` (rc 0); the merge reported no conflict — **PASS** |
+| Matrix unchanged | `git diff --name-only dfe48bdb HEAD`, at the merge commit and at this commit | the 11 File Change Matrix paths, both times — **PASS** |
+| The merge brought exactly `main`'s changes | `git diff --name-only a08432bb HEAD` against `git diff --name-only f8d88626 dfe48bdb`, compared as sets | 51 = 51, no path on one side only — **PASS** |
+| Both sides' lines survive in the two shared files | a python check of every added line of `git diff -U0 f8d88626 dfe48bdb` and of `git diff -U0 f8d88626 a08432bb` over the standard and stage-07, against the merged files | 41 of 41 present (the standard: `main` 3, this release 29; stage-07: `main` 5, this release 4). Control: a line neither side added reads absent; the 2 stage-07 lines `main` removed read absent — **PASS** |
+| Signature | `git log -1 --format='%G?' HEAD` at the merge commit | `G` — **PASS** |
+| Commit-message close keywords | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | exit 0 — 21 commits examined at the merge commit and 22 at this commit, 0 findings — **CLEAN** |
+| Conformance ratchet | `/usr/bin/python3 core/deploy/tests/test_gate_efficacy_declarations.py` | exit 0 — 44/44 declarations across 27 workflow files on the combined tree, which carries `main`'s three new register rows; 15/17 `required` declarations name a blocking surface (2 ledgered residuals); every anti-vacuity arm fired — **PASS** |
+| Reconciler self-test | `python3 core/deploy/tools/reconcile-gate-posture.py --self-test --require-parser` | exit 0 — 40 arms PASS, tier 1 27 and tier 2 13 — **PASS** |
+| Required subset | `bash core/deploy/deploy.sh --check-required-subset` | exit 0 — all 4 load-bearing checks passed (38 FRESH, 73, 77 and 78 PASS) — **PASS** |
+| Plan verifier | `bash release/tools/verify-release-plan.sh --format=table <this file>` at `a08432bb` and on this file after the edit, and `--ciac-lint` | exit 0 both times — **8 PASS / 0 FAIL / 16 SKIP / 3 UNRUNNABLE / 0 ERROR over 27 records**, and the two table outputs are byte-identical, so no row moved; CIAC lint `declared=3 parsed=3 clean=2 declared-deferral=1 flagged=0` — **PASS** |
+| G-CL10 arm (i) | `python3 core/deploy/tools/check-doc-gates.py --gate g-cl10 --list --base origin/main --head HEAD --outcome <milestone 442 description> --members "8325 8424" --repo <this repository>` | exit 0 — three Populations, `stage7-required-gate-p1-reads`, `-p2-reads` and `-p3-reads`, each at 100%; seven limbs; owners 8325 and 8424, as at `a08432bb` — **PASS** |
+| Skill-roster totals (R5) | `python3 core/deploy/tools/check-skill-count-imp.py --scan-pair <this file>::=::<its added lines> --mode both` | exit 0, no finding. Control: a seeded roster total in a shape the detector names, scanned as this path, exits 1 with one count finding; a near miss counting skill packages exits 0 — **CLEAN** |
+| Identity strings, host URLs, link sequences, close keywords | a python scan of this commit's added lines for the operator handle, name and home path, an email address, a hyphen-suffixed repository slug, a raw host URL, a markdown link sequence, and a close-family keyword before an issue number (the host's grammar and the pull-request-body arm's) | 0 in all nine classes. Control: one constructed line per class fires it, and one near miss per class stays silent — **CLEAN** |
+| This file | `claim-version.sh --verify-stamp required-checks-enforce-as-declared`; a placeholder count; `check-doc-links.py --target-paths <this file> --require-targets`; `check-release-links.py` bare and with `--plan-depth-lint` | stamp exit 0; exactly 1 literal placeholder; doc links, release links and plan depth exit 0, no findings — **PASS** |
+| This file's diff | `git diff --stat a08432bb..HEAD -- <this file>` | 1 file, 31 insertions, 7 deletions: edits a to e, DEV-29 and this subsection — **PASS** |
+
+---
+
+## Change Description
+
+Authored at Stage 6 Phase C1 by the last Engineering spoke (#8618, plan steps 4–6), after every Engineering step landed and before the draft pull request is marked ready-for-review. Operator-facing; the user-facing release note is a separate Stage-13 artifact. A Tier 1 [ADJUST] at Stage 7 or 8 that changes which issues land or which decision stands refreshes **Issues resolved**, **Key decisions** and **Downstream impact** in a later commit.
+
+### Outcome
+
+The two required checks that were held in warn mode now fail on a finding: the pre-merge load-bearing subset (Checks 38, 73, 77 and 78) and the skill-count delta. Each workflow header declares bare `posture=required`, and the gate-efficacy standard records each flip as REGISTER with its specificity reading and owner; Check 74 reads green because the rollout phase is `enforce`. Both contexts become merge-blocking when the operator registers them at Stage 12. The posture reconciler no longer lets a `warn-mode-initial` qualifier buy an exemption — a held declaration with no disposition row is the new *unrecorded hold* divergence — and it reads the rules that apply to `main` as well as classic branch protection, giving a verdict only when both reads return. Stage 7's roster predicates P1–P3 each have a register row with a runner, and a malformed `gate-efficacy:` header now fails naming its own workflow.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8325 | The subset's sentinel token and `GATE_ROLLOUT_PHASE` read `enforce` together, its header reads bare `required`, and every row that stated its warn posture is reconciled, with Check 74's exits stated as the code computes them | DONE (landed at Stage 6; registration at Stage 12) |
+| #8424 | The skill-count delta flips with `${WARN_MODE:-false}`; the reconciler gains the unrecorded-hold class, a fail-closed read of the disposition table and an allow-list read of the rules for `main`; P1–P3 gain runner rows with Populations; the ratchet closes the posture vocabulary and attributes every harness result to its own mutation | DONE (landed at Stage 6; registration at Stage 12) |
+
+### Key decisions
+
+Each is recorded in this file's § Decision Record.
+
+- **PA-008 D-Divergence-Definition — shape (a):** *held* needs the qualifier and a HOLD-family row; a qualified declaration with no row, absent from live, is *unrecorded hold*; *held and registered* keys on the qualifier alone. Behavioral-regression and link-check stay held, because both have rows.
+- **PA-009 D-HeaderForm — bare `posture=required`** on both flipped workflows, with AC7 moved into the valve-safe set, which landed ahead of the 2026-11-17 checkpoint.
+- **PA-010 D-AC7-Mechanism — a closed posture vocabulary:** the `posture` key is mandatory and reads `required` or `advisory` with an optional parenthesized qualifier; the embedded-key check stays a diagnostic.
+- **Scope-lock item 3 — the rules reader dispatches by allow-list.** Of GitHub's 25 rule types, 15 that restrict refs, commit content or file shape are ignored, `required_status_checks` is read, and the other 9 — and any type added later — read `degraded`, so the run is `NOT-EVALUATED` rather than a verdict over an unread gate (DEV-21).
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** Reverting the merge restores `main` byte-for-byte, but the whole-release rollback is ordered: un-register both contexts first, then `git revert -m 1` the merge, then re-date `GATE_ROLLOUT_ARMED` past Check 74's escalation window. Each context, and the reconciler, ratchet and register changes, revert on their own at CHEAP; the version tag is retained, never deleted.
+
+### Downstream impact
+
+- **Stage 12:** the operator registers `Pre-merge load-bearing check subset` and `Skill-count / IMP-XXX delta` immediately before the merge, re-runs both checks, and reads back `main`'s live required contexts; the reconciler on the merge push reads `RECONCILED` with held = behavioral-regression and link-check (CIAC-3).
+- **Until then:** `Gate posture reconciliation (declared vs live)` reads DIVERGED on this pull request with exactly the two flipped contexts unregistered — the expected red (R6).
+- **Every pull request after the merge** meets both enforcing gates; ms#438's hook-source edits need a regenerated index (R9). ms#443 merged before this release, so its added markdown lines never met the skill-count gate.
+- **A ruleset on `main`:** a `required_status_checks` rule is reconciled; a review, merge-queue, deployment, scan or workflow rule turns every reconciliation `NOT-EVALUATED` until the reader is extended — the fail-closed cost scope-lock item 3 accepted.
+- **Stage 13:** G-CL10 measures the three new Populations (`stage7-required-gate-p1-reads`, `-p2-reads`, `-p3-reads`) over this release's Stage 7 outputs; AI-002 adds a note on #4714; the token↔phase residual enriches #7021 and Check 71's retreat wording enriches #8549.
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `required-checks-enforce-as-declared`.
+- User-facing release note: authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`, under `release/releases/notes/`.
+
+---
+
+## Deviation Log
+
+| # | Deviation | Authority | Disposition |
+|---|---|---|---|
+| **DEV-1** | **The Outcome gains a seventh limb** — "a malformed `gate-efficacy:` header fails naming its own workflow → #8424" — with its AFTER sentence and BEFORE contrast; the `**Limb owners:**` line carries 7 limbs (2 owned by #8325, 5 by #8424) | Stage-4 Decision Recorded, PA-001 | **APPLIED** — § Release Outcome Statement |
+| **DEV-2** | **The valve.** Its checkpoint is Stage 7 entry, Tuesday 2026-11-17 (PA-005), not Stage 9; AC7 (step 3) moved into the valve-safe set, steps 1–3, with the qualified-header fallback `required(enforce; ratified 2026-10-27)` and limb 7 re-pointed with limbs 4–6 when step 3 is not ready (PA-009). R2 is rewritten to match | Stage-4 Decision Recorded PA-005; scope-lock PA-009 | **APPLIED** — § Implementation Sequence, § Risk Register |
+| **DEV-3** | **D-Divergence-Definition rendered as shape (a)** — *held* needs the qualifier and a HOLD-family row; a qualified declaration with no row, absent from the live set, is the fourth class (unrecorded hold); *held and registered* keys on the qualifier alone. The Stage-4 plan routed three candidate shapes to Stage 5 without a recommendation | scope-lock PA-008 | **APPLIED** — step 4 |
+| **DEV-4** | **D-HeaderForm rendered as bare `posture=required`** for both flipped workflows; the Stage-4 plan routed the bare form and `required(enforce; ratified <date>)` to Stage 5 | scope-lock PA-009 | **APPLIED** — steps 1 and 2 |
+| **DEV-5** | **D-AC7-Mechanism rendered as a closed posture vocabulary** (mandatory `posture` key; `required` or `advisory` with an optional parenthesized qualifier; the attribution repair; the embedded-key check kept as a diagnostic; arms for a misspelled posture and a missing posture field; 44 live declarations as the specificity input) | scope-lock PA-010 | **APPLIED** — step 3 |
+| **DEV-6** | **Step 1 widened.** The Stage-4 step named 4 standard rows; Stage 5 found 14 (13 the flip makes false, plus the census row the rename touches), and the scope-lock adds the `:514` lede, one `:614` clause for both cards, `:520` wording that never records the registration as taken, one retreat shape for both cards, and Check 74's falsification line below `enforce`. `deploy.sh`'s edit set is the 12 sites of the semantic-touch criterion. The gate step is renamed `Gate decision (exit code -> job conclusion)`, so the census row changes in the same commit; the warn-mode paragraph is `:85-90`, not the Stage-4 `:85-92`. The flip-record disposition token is `**REGISTER**` | Stage-5 design on #8615; its A6.5 review (PR-2, FM-2, FM-3); scope-lock adjustment item 1 | **APPLIED** — step 1 |
+| **DEV-7** | **`deploy.sh`'s dispatcher roster comment** reads Checks 38, 73, 77 and 78 — a site the Stage-5 design routed as out-of-scope drift, taken into step 1 by the scope-lock | scope-lock adjustment item 2 | **APPLIED** — step 1 |
+| **DEV-8** | **The ruleset reader dispatches by allow-list**, lives in the workflow, and yields a verdict only when both live reads return. Every place this plan expects a reconciler run to read `RECONCILED` names both live inputs — the branch-protection object and `rules/branches/main` (step 4, step 7, CIAC-3, the Stage-7 reconciler run) | scope-lock adjustment items 3 and 4 | **APPLIED** — step 4; § Implementation Sequence, § Cross-Issue Acceptance Criteria, § Verification Plan |
+| **DEV-9** | **The three Stage-4 CONDITIONAL matrix rows are promoted** into the unconditional set: `.github/workflows/gate-posture-reconciliation.yml` and `core/deploy/tools/README.md` (`STAGE5-RULESET-READ-IN-WORKFLOW` fired) and `release/references/pipeline/stage-07-dev-testing.md` (`STAGE5-P1P3-RUNNER-ANCHORS` fired; anchors in the sentences that carry their verdicts) | scope-lock adjustment item 4 | **APPLIED** — § File Change Matrix |
+| **DEV-10** | **Stage-6 instructions for #8424:** `${WARN_MODE:-false}` in the skill-count flip commit; the table-reader self-test arms renamed TB1–TB6 and registered in tier 2; Stage 7 confirms `rules_status=fetched` on the first PR run after step 4; #8424's `### Source(s)` entry led by its handle | scope-lock adjustment items 1 and 4 | **APPLIED** — `${WARN_MODE:-false}` and the Source(s) handle in step 2 (`61e2bcc6`); TB1–TB6 in tier 2 at step 4 (`c11f4b27`); `rules_status=fetched` observed on the first PR run after step 4 (§ Verification Evidence), which Stage 7 confirms |
+| **DEV-11** | **Routing with no new issues:** the token↔phase residual enriches #7021; the three deferred follow-ons fold into an existing epic-#5867 slice at Stage 13; Check 71's retreat wording enriches #8549; the exact text goes to the operator before anything is posted. The runner agreement assertion offered on #8615 is not adopted | scope-lock adjustment item 5 | **RECORDED** — § Exclusions |
+| **DEV-12** | **#8325's body is not refreshed** (A0.6 advisory): its Affected Files still lists `core/hooks/` and its open assumption stands in the body; the 2026-10-27 decision comment resolves both | Stage-4 Decision Recorded, PA-006 | **RECORDED** — the body stays as historical record |
+| **DEV-13** | **The milestone description gained a Parallelization Map** recorded 2026-11-03, the Phase A0 Tier 1 [ADJUST] finding | Stage-4 Decision Recorded | **APPLIED** (milestone description, read back equal) |
+| **DEV-14** | **Commit 0 and step 1 were authored outside the hub-named release worktree.** The spoke's session harness isolated it to its own worktree on the same base (`f8d88626`) and refused git operations in the hub's release worktree; the commits are pushed to `release/required-checks-enforce-as-declared` by the detached-HEAD refspec. The hub's local release branch stays at the base until it is fast-forwarded to the remote | the harness control; the persona's branch-checkout-conflict recovery | **RECORDED** — execution only; no plan content changes |
+| **DEV-15** | **CIAC-1's method respelled, not changed.** As the Stage-4 comment wrote it, the bold-token class `[*][*]` followed by the parenthesized alternation reads to the release link checker as two markdown links whose target is the alternation, so committing it verbatim made `check-release-links.py` report two broken links in this file (exit 1) — the reader behind the required Dead-file-reference gate. The subject and control arms now spell the literal `**` as `\*\*`. The match set is unchanged: at the pin both spellings read 2 on the subject arm and 2 on the control arm, under `grep -E`, `/usr/bin/grep -E` and Python `re` alike | Stage-6 A1 (this commit) | **APPLIED** — § Cross-Issue Acceptance Criteria |
+| **DEV-16** | **The ratchet's runtime is about 32s, not about 20s.** The design estimated about 13s for four MH arms re-running `harness()` alone. Step 3 carries six arms (MH5 and MH6 from PA-010), and each re-runs every sibling harness whose own evaluator gained the arm's finding. A harness whose evaluator gained nothing reads the mutated tree exactly as it reads the real one, which the run has already graded, so it is not re-run. Measured: about 7s before, 31.8s after, inside the 70-minute `Shell harness (macOS)` job, whose step carries no timeout of its own | Stage-6 B3 (minor adjustment) | **RECORDED** — step 3 |
+| **DEV-17** | **The embedded-key check is a diagnostic line, not a finding of its own.** It is emitted only on a declaration that already carries a finding, naming the collapsed separator, so it never decides a verdict. The design's Change 3 item 2 made it a finding; PA-010 keeps it "as a diagnostic". Every collapse position is caught by another branch — the variant table's SEP, SEP2 and DC-SEP rows each read exit 1 with the diagnostic attached | scope-lock PA-010 | **APPLIED** — step 3 |
+| **DEV-18** | **The ratchet's stated import contract (near `:230`) is left for step 4.** It names `parse_headers`, `QUOTED_RE` and `declared_contexts`; the reconciler's `PARSER_NAMES` names six — `parse_headers`, `QUOTED_RE`, `POSTURE_REQUIRED_RE`, `BLOCKING_SURFACE`, `ENFORCEMENT_KEYS`, `enforcement_surface`. Step 3 changes none of the six, so the brief's condition ("if this step touches it") does not fire; step 4 adds `_table_cells` to `PARSER_NAMES` and reconciles the statement in the same commit | the Stage-6 brief for #8618 | **APPLIED** — step 4 (`c11f4b27`): the statement, at `:271`, now names the contract as the names `PARSER_NAMES` lists rather than enumerating them, so it cannot fall out of step again; the `:1791` statement stays true and is unedited |
+| **DEV-19** | **The skill-count retreat follows the scope-lock's single shape**, not the design's Change 1 wording ("set WARN_MODE to 'true' and restore the hold qualifier together with its disposition row"): un-register the context first, then revert the flip commit's edits to `WARN_MODE`, the header and the flip record together, as § Rollback Strategy states it. The posture note calls the old qualifier "the hold qualifier" rather than spelling the token, so the design's own verify — a `warn-mode-initial` count of 0 in the workflow — holds | scope-lock adjustment item 1 | **APPLIED** — step 2 |
+| **DEV-20** | **The AC7 arms run on a victim drawn from the live tree**, `behavioral-regression.yml` at this head (a qualified header), not on the `skill-count-imp-check.yml:3` line the design's variants edited; the bare-header exposure the design found (its R5) is covered on both flipped headers by the real-tree variant set in § Verification Evidence. Each harness's `flags()` now returns a three-valued result, so an arm that cannot assert records one failure, not two. The A6.5 review's line drift holds at the pin: the harness-failure exit is at `:2939` and `harness().flags()` at `:2634-2642` | Stage-6 B3 (minor adjustment); A6.5 review FM-5 | **RECORDED** — step 3 |
+| **DEV-21** | **The rules reader's allow-list membership, settled against the host's schema.** Scope-lock item 3 left the membership to Stage 6. GitHub's REST schema for repository rules names 25 types. 15 are ignored, because each restricts which refs may be created, updated or deleted, or what a pushed commit, ref name or file may look like, and none holds a merge on a result: `creation`, `update`, `deletion`, `non_fast_forward`, `required_linear_history`, `required_signatures`, the five `*_pattern` types, `file_path_restriction`, `max_file_path_length`, `file_extension_restriction`, `max_file_size`. `required_status_checks` is read. The other 9 — `pull_request`, `merge_queue`, `required_deployments`, `workflows`, `code_scanning`, `code_quality`, `code_coverage`, `copilot_code_review`, `license_compliance_scanning` — and any type added later read `degraded`. `pull_request` and `merge_queue` hold a merge on a review or a queue, so they are degraded under the item's wording too: a future review rule on `main` makes every reconciliation `NOT-EVALUATED` until the reader is extended. The review's and the design's `[ASSUMPTION – CONFIRM]` markers (the parameter path, the page size of 100) are retired against the same schema | scope-lock adjustment item 3; A6.5 review CD-2 | **APPLIED** — step 4 |
+| **DEV-22** | **The P1–P3 anchors sit inside the verdict sentences**, not in the trailing runner sentences the design's Change 7 appended: P1 in the `CONFLICTING`/`DIRTY` Blocker sentence, P2 in the shortfall sentence, P3 in the state-2 row of the severity table. Each passage still gains a `**Runner:**` label. Each register row's Enforcing-gate cell says where its anchor sits, and closes the `runner-def:` code span before any period | scope-lock adjustment item 4; A6.5 review FM-4 | **APPLIED** — step 5 |
+| **DEV-23** | **Line drift and the wording repairs.** Step 5's three rows shift the step-1 rows: `:534`–`:537` are now `:537`–`:540` and `:520` is `:523`. All four rows read "while that token reads `enforce` and the subset's context is registered, admission is merge-blocking from the first run"; `:523` reads `--check` (strict by default), because `deploy.sh` defaults `STRICT=true` and only `--warn` changes it. Check 71's row (`:557`) carries the same `--check --strict` phrase and is left unedited: its wording routes to #8549 (scope-lock item 5) | #8617's output (two Cosmetic/Informational notes); the Stage-6 brief | **APPLIED** — step 6 |
+| **DEV-24** | **Reconciler implementation choices the design left open.** The NOT-EVALUATED section heading stays byte-identical, because arms M1 and M2 assert it as a literal; the body names the read that did not return. `live_status=` stays the combined status, and `rules_status=` is added beside it. RS3's page-limit leg asserts the literals 100 and 99 rather than the constant, after an in-process mutant showed a constant-read oracle moves with the code it checks | Stage-6 B3 (minor adjustment) | **APPLIED** — step 4 |
+| **DEV-25** | **Step 4's end condition corrected.** The Implementation Sequence expected a run against both live inputs to read `RECONCILED` with 2 held at the end of step 4. Before the Stage-12 registration the two flipped contexts are unregistered, so the run reads DIVERGED with exactly those two unregistered and the same 2 held — the state the Stage-6 brief names and R6 records; `RECONCILED` with 2 held is step 7's end condition. The Stage-7 reconciler line in § Verification Plan carried the same expectation and is corrected the same way | the Stage-6 brief for #8618; R6 | **APPLIED** — § Implementation Sequence, § Verification Plan |
+| **DEV-26** | **The Outcome's limb 5 is amended (PA-011).** The AFTER sentence's reconciler clause and limb 5 were written at Stage 4, when the reconciler could not read rulesets, so they said a ruleset-delivered required check reads not evaluated. Scope-lock item 3 made the reconciler read the rules for `main` by allow-list: a `required_status_checks` rule is now read and reconciled, and only a rule that could gate a merge and is not read, an unknown type included, leaves the run `NOT-EVALUATED`. The operator amended the milestone description, read back equal, and § Release Outcome Statement now carries the amended AFTER clause and limb 5 verbatim from it; its provenance line records the re-transcription. Limb 5 is still owned by #8424, the Success Indicator is unchanged, and scope does not change. Stages 7 and 8 grade limb 5 against the amended wording | Decision Recorded PA-011, #8620 comment 6619759358 (operator, Tuesday 2026-11-03) | **APPLIED** — § Release Outcome Statement, in this commit (action item AI-006, mirrored before Stage 9 entry and outside every G-PR4 commit) |
+| **DEV-27** | **Stage 7 Phase E dispositions (PA-012 to PA-014), and the DT-fix iteration they set.** **PA-012 — four findings dispositioned fix-now**; three landed as their own Tier 1 [ADJUST] commits after G-PR4 run 1, and the fourth as a pull-request body edit: #8325 F-01, Check 63's header comment in `deploy.sh` names the required-subset roster as Checks 38, 73, 77 and 78 (`ee84a487`; the rename-reference sweep over every tracked file read the three-member phrasing 1 → 0); #8424 F-04, § Consumer references names `stage-07-dev-testing.md` and `reconcile-gate-posture.py` (`734dd9e3`); #8424 F-05, the P3 register row's Population and probe name the count-stable reading (`bf04643d`); #8325 F-02, the release pull request's body refreshed to the current state after these commits, with no file change. **PA-013 — the count-stable reading of "settled":** the P3 Population admits an output whose P2 read found the required-row count stable across consecutive polls on the same head, at the required-context count, whether or not every row has completed, so state 3 `checks-unresolved` can be in it; stage-07's rule 1 and rule 2 wording is left as it is, and that tension goes into AI-004's follow-on text. **PA-014 — the rest, as logged:** #8424 F-03 deferred into AI-004's follow-on text; #8325 F-03 accepted, with one sentence added to AI-003's #7021 text; #8424 F-02, F-06, F-07 and F-09 accepted; #8424 F-08 re-read at Stage 8; the invalid JSON from `verify-release-plan.sh --format=json` folded into an existing owner at Stage 13 (AI-007), and filed only if none exists. #8424 F-01 is DEV-26 | Decision Recorded PA-012 to PA-014, #8620 comment 6620320442 (operator, Tuesday 2026-11-03), with its pointer on #8619 | **APPLIED** — the three commits named, this commit and the pull request body; a targeted DT re-review follows (§ Verification Evidence → Stage 7 DT-fix iteration 1) |
+| **DEV-28** | **Stage 7 Pass-2 dispositions (PA-015), and the plan-text DT fix they set.** **#8325 F-04 — fixed now:** the rename-reference row of § Verification Evidence → Stage 7 DT-fix iteration 1 spelled its own search strings, so each literal search read one hit more at `57487e5d` than the row recorded; the row now names the six phrasings without spelling them, the repair `c635ba9c` made at Stage 6, and the counts it records were re-run at this commit; the pull request body's sentence on that sweep is corrected to match. **#8424 F-11 — fixed now:** DEV-27's PA-012 clause now says three of the four fix-now findings landed as commits and the fourth as a pull-request body edit, and its PA-014 clause restores "and filed only if none exists". **#8424 F-12 — accepted:** the stage-07 bullet in the standard's § Consumer references says a deleted anchor turns Check 62 red, while Check 62 runs in warn mode; the phrase matches its stage-09 sibling and becomes literal when Check 62 is flipped to enforce. The Header **Status** cell is refreshed in the same commit | Decision Recorded PA-015, #8620 comment 6621443424 (operator, Tuesday 2026-11-03), with its pointer on #8619 | **APPLIED** — this commit and the pull request body; F-12 recorded with no change; a Pass-3 targeted DT re-review follows (§ Verification Evidence → Stage 7 DT-fix iteration 2) |
+| **DEV-29** | **Stage 9 sync with `main` (PA-017).** Stage 9 Phase A6.5's G-PR8 read `DIVERGED-RELEASE-FILES-TOUCHED`: 2 of the 11 File Change Matrix paths were touched on `main` since the Stage-4 pin `f8d88626` — `core/standards/gate-efficacy-standard.md` by `0d3c0e0f` (three class 3-O register rows appended) and `release/references/pipeline/stage-07-dev-testing.md` by `2a1ad738` — of 20 commits on `main` since `f8d88626` at `0aeac05d`. It follows from the merge-order change at ms#443's Stage 12 gate, where the operator merged that release ahead of this one (#8613 c6621506415). The operator chose a sync from `main`, by a normal merge commit (PA-017). The sync merged `dfe48bdb`, 23 commits past `f8d88626`; the 3 after the reading are ms#443's Stage 12 release-log chore (its version stamp, its release-log row and their merge) and touch no matrix path (the hub's re-pin record, #8623 c6633040729). The merge commit is `4fbf8a6a`: signed, textually clean, and its tree is the one the hub previewed. This commit reconciles the plan text the new order made false: the Dependency Graph's ms#443 line, the `stage-07-dev-testing.md` row and the gate-behaviour row of § Contention Map, R9, § Change Description → Downstream impact, and the Header **Status** cell; § Cross-PR Overlap Audit → Baseline SHA now names `dfe48bdb` and keeps `f8d88626` as the original pin | Decision Recorded PA-017, #8623 comment 6632702171 (operator, Wednesday 2026-11-04); the hub's re-pin, #8623 comment 6633040729 | **APPLIED** — the merge commit `4fbf8a6a`, this commit and the pull request body; the hub re-validates the new head at Stage 9 Phase A6.5 (§ Verification Evidence → Stage 9 sync with main) |
+
+---
+
+## Issue References
+
+- **#8325** — the gate-rollout graduation card: the pre-merge load-bearing subset flips to enforce and Check 74 reads green for the recorded reason. Mark as closed at Stage 13.
+- **#8424** — the required-context posture card: the skill-count flip, the reconciler's blind spots, the P1–P3 register rows and the malformed-header attribution. Mark as closed at Stage 13.
+- **#8604 · #8615 · #8616 · #8617 · #8618** — the Stage-4 sub-task (plan and gate record), the two Stage-5 sub-tasks (designs, adversarial reviews, scope-lock), and the two Stage-6 sub-tasks.
+- **#7932 · #5867** — the parents: an evergreen flow container (#8325) and the epic (#8424).
+- **#7021** — owner of the sentinel-and-restated-mode class; enriched with the token↔phase residual.
+- **#8549** — enriched with Check 71's retreat wording.
+- **#8482** — the skill-count detector's `++` added-line gap, a residual of the skill-count flip record.
+- **#7466** — the dormant consumer of the renamed gate step.
+- **#4714** — the containment premise that reads false after the merge (AI-002).
+- **#6195 · #7026** — the same-shape graduation-deadline cards for the egress rule and Check 71.

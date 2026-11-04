@@ -97,7 +97,7 @@ rule plus the WHAT/HOW boundary; the loop and the rule are in
 | A demand signal (gap / inconsistency / broken handoff / missing artifact / improvement) is detected **programmatically** during any skill's run, with no interactive operator present | **Mode C — Ambient Auto-Log** |
 | Ambiguous | Ask once: "Do you want me to help shape this from scratch, or check a draft you already have?" |
 
-Modes A and B are the interactive front door — a human is present and confirms every filed item via an explicit binary AskUserQuestion (Autonomy Tier 1). Mode C is the **non-interactive** path: it is never triggered by a conversational phrase; it is invoked programmatically (by the CLAUDE.md auto-logging rule or an ambient consumer) and substitutes the `automation_level` ceiling + the Tier-0 floor for the human confirm.
+Modes A and B are the interactive front door — a human is present and confirms every filed item via an explicit binary AskUserQuestion (Autonomy Tier 1). Mode C is the **non-interactive** path: it is never triggered by a conversational phrase; it is invoked programmatically (by the CLAUDE.md auto-logging rule or an ambient consumer) and applies the filing threshold, then substitutes the `automation_level` ceiling + the Tier-0 floor for the human confirm.
 
 ## Mode A — Elicit (the four-phase loop)
 
@@ -152,6 +152,24 @@ Mode C removes is the human `AskUserQuestion` confirm — replaced by the
 `automation_level` clamp plus the Tier-0 floor below. There is **no parallel emit
 schema** and **no new persistence surface**.
 
+### The filing threshold (before the clamp, at every dial)
+
+Before the clamp, Mode C reads the signal against the filing threshold — `core/standards/work-item-filing-threshold.md`, the rule's single home, cited and not restated. The caller's input gains three optional fields beside the triplet and the implied type: `class` and `severity` (the threshold's two limbs, read by the caller where it surfaced the signal) and `release_context` (the milestone slug of a release run). Where the caller supplies no reading, Mode C reads one from the signal under the threshold's § 3 and records it. The test runs at **every** `automation_level`, in or out of a release run, and every outcome leaves a trace:
+
+| Threshold result | Mode C returns | Creates |
+|---|---|---|
+| Below the threshold, or unreadable | a structured **"signal recorded, held — below the filing threshold"** record with the reading and its reason; the caller notes it in its own output (during a run, its stage record) | nothing, at any dial |
+| Passes, and `release_context` names a release run | a structured **"follow-up candidate — held for the release sweep"** record with the rendered body and the reading; the caller writes it into its stage record for that release's filing steps | nothing, at any dial |
+| Passes, no `release_context` | continues to the duplicate guard, the Tier-0 floor and the clamp, unchanged | per the clamp |
+
+The hub supplies `release_context` only for a run the release-follow-up cutover binds (`release/skills/release-hub/SKILL.md` § Mode O); no other caller supplies it.
+
+When a body is rendered for a create, the threshold step writes its reading as the line directly after the provenance marker: `<!-- filing-threshold: pass; <class>; <severity> -->`. The line shows the step ran; it does not show the reading was right, which Stage 2 Triage checks against the item.
+
+Outside a release run, the held record lives where the caller's output lives; a caller with no persisted output leaves it only in the session transcript — an accepted residual whose monitoring criteria are in the introducing ADR.
+
+*Cutover:* the hold binds every Mode C invocation on a deployment carrying the skill version that introduced it — a run already in flight files less, never more. The held-for-sweep row binds only when the caller supplies `release_context`.
+
 ### The `automation_level` clamp (the confirm-gate substitution)
 
 Mode C reads `operator.toml [automation].automation_level` as a **ceiling** (not a
@@ -163,7 +181,7 @@ Tier-0 item is always **manual** (the floor below), regardless of the dial.
 |---|---|
 | `off` | **No-op on creation, but never a silent black hole.** Author nothing, create nothing — but return a structured **"signal detected, held — dial is off"** record to the caller so the signal is visible (the calling skill notes the held signal in its own output). A dropped signal is indistinguishable from no signal; `off` means "create nothing," not "do nothing." |
 | `recommend` | **Author + surface, create nothing.** Render the item body (reused Mode-A render), run the 5-test + title-informativeness gate, and surface the rendered body **plus the exact `gh issue create` command** to the caller. Do NOT create. (This is the `recommend` equivalent — the operator can file it by hand.) |
-| `bounded_auto` | **Author → validate → create** without the interactive confirm gate. Render → 5-test → structured-field carriage → `gh issue create` → read-back → report (the full `output-contract.md` create path), **unless** the Tier-0 floor forces surface-only (below). |
+| `bounded_auto` | **Author → validate → create** without the interactive confirm gate. Render → 5-test → structured-field carriage → `gh issue create` → read-back → report (the full `output-contract.md` create path), **unless** the filing threshold holds the signal (above) or the Tier-0 floor forces surface-only (below). |
 
 `bounded_auto` is the **sole auto-create surface**. `recommend` and `off` never
 create.
@@ -809,3 +827,11 @@ handling.
 - **Principal response vs. junior response:** Principal makes `off` visible-but-inert
   (the held signal is surfaced); junior treats `off` as "skip entirely" and the gap
   evaporates.
+
+### Filing a below-threshold signal because it is well-formed and unowned (Mode C) — OUT
+
+- **Signature (observable signal):** Mode C creates an issue for an internal record-consistency gap, or for one that reads below Minor — an agent-authored issue whose `filing-threshold:` line is absent, or whose recorded class or severity Stage 2 Triage reads as failing the threshold.
+- **Conditional:** do NOT continue to the duplicate guard and the clamp with a signal the filing threshold holds, whatever the dial, because a well-formed, unowned item is not by that fact worth a work item — the threshold decides, not the template.
+- **Root cause:** process-substitution → the 5-test and the dedup scan answer "is it well-formed and new?" and were read as "is it worth filing?" → agent-authored issues for internal gaps that triage later closes in bulk.
+- **Mitigation:** run § The filing threshold first, at every dial; return the held record; write the threshold line on every body rendered for a create.
+- **Principal response vs. junior response:** Principal states the threshold reading and holds an internal gap in the run output. Junior files it because the template passed and no duplicate exists.
