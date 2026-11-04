@@ -32,7 +32,7 @@ reversibility: MODERATE / Confidence HIGH — additive and in-place text edits t
 | **Bump Class** | major — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a skill behavioural change — `intake-desk` Mode C gains a filing-threshold step that changes its processing at every dial, and `release-hub` gains a Stage 9 and Stage 13 filing step — per the Bump-Class Selection Guide row "Skill behavioral change (new mode, altered processing logic)". Provisional display `v5.0`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-03 (Tuesday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 and Changes 1–32 landed; Change 33 (four `core/governance/OPERATIONS.md` lines) is operator-executed on this branch before Stage 7; Stage 7 Dev Testing next |
+| **Status** | Executing — Commit 0 and Changes 1–33 landed (Change 33, the operator's four `core/governance/OPERATIONS.md` lines, is `b3511f2e`). Stage 7 Dev Testing read PASS on #8608; the Stage 6 fix(dt) pass 1 addressed its Tier-1 findings F-01 to F-05, F-09 and F-11. The Stage 7 Pass-2 re-review is next, then Stage 8 |
 | **Branch** | `release/releases-file-only-the-follow-ups-that-matter` |
 | **PR** | #8646 — opened in **draft** at Stage 6 Phase C2 after the first content slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `releases-file-only-the-follow-ups-that-matter` |
@@ -458,38 +458,40 @@ No file is renamed, moved or deleted, so the mover set is empty. `SURFACE(R)` is
 
 **AC baseline:** #8146 had **7 criteria at `f8d88626`** (Stage-4 Phase A0). The probe strings are Stage 5 revision 1's AC-Binding, each checked by that revision against its Change's literal text; each zero-expected row names its non-zero sensitivity count at `f8d88626`. Every AC also carries a reader-graded limb, graded at Stage 8.
 
+**One `AC-k` row per criterion** (the plan template's rule): the criterion's designated probe, then every reader-graded limb the criterion carries. The criterion's further probes from the same AC-Binding are rows `OBL-1` to `OBL-21`; each names the criterion it supports. They are obligations of the Changes rather than criteria, so the AC binder excludes them from the criterion set, and the plan verifier still runs each one (DEV-16).
+
 ### Per-Issue Verification
 
 | Issue | AC | Verification Method | Expected Result |
 |---|---|---|---|
-| #8146 | AC-1 | `grep -c -F "## 1. The rule — two limbs" core/standards/work-item-filing-threshold.md` expect 1 [READER-GRADED — the two limbs, the 2026-10-24 user-visible ruling and the severity reading; trace fixture rows a (user-visible), j (security), f (privacy) and b (none) through the core standard and FDF § 8, b staying in its stage record] | 1 (file absent at f8d88626) |
-| #8146 | AC-1 | `grep -c -F "filed nowhere" core/standards/work-item-filing-threshold.md` expect 1 | 1 (file absent at f8d88626) |
-| #8146 | AC-1 | `grep -c -F "next-release issue" release/references/pipeline/stage-07-dev-testing.md` expect 0 | 0 (sensitivity: 2 at f8d88626) |
-| #8146 | AC-1 | `grep -c -F "follow-up issue reference" release/references/pipeline/stage-12-execute.md` expect 0 | 0 (sensitivity: 3 at f8d88626) |
-| #8146 | AC-1 | `grep -c -F "Carry-forward Issue," release/governance/release-process.md` expect 0 | 0 (sensitivity: 2 at f8d88626) |
-| #8146 | AC-1 | `grep -c -F "1 Issue per audit SUMMARY" release/references/how-to/hub-spoke-bridge.md` expect 0 | 0 (sensitivity: 1 at f8d88626) |
-| #8146 | AC-1 | `grep -c -F "It is the only step of the release that files a follow-up." release/references/pipeline/stage-13-close.md` expect 1 [READER-GRADED — each filing path in the Stage-5 census reaches Stage 9 Phase A7.6 or Stage 13 Phase A10.5] | 1 (0 at f8d88626) |
-| #8146 | AC-1 | `grep -c -F "one post-release sweep issue per repository" release/references/standards/finding-disposition-framework.md` expect 1 [READER-GRADED — on the target: trace fixture row d to the target's sweep; § 8.6's live read of the target's form and its no-form fallback] | 1 (0 at f8d88626) |
-| #8146 | AC-1 | `grep -c -F "target=<T> · platform=<L>" release/references/pipeline/stage-09-plan-review.md` expect 1 [READER-GRADED — on this platform: trace fixture rows f and g to the platform sweep or the cut] | 1 (0 at f8d88626) |
-| #8146 | AC-2 | `grep -c -F "Phase A10.5 — Follow-up sweep filing" release/references/pipeline/stage-13-close.md` expect 1 [READER-GRADED — Phase A10.5 steps 1–5: one sweep per repository holding an item; the close arm files two sweeps for a release that touches two repositories] | 1 (0 at f8d88626) |
-| #8146 | AC-2 | `grep -c -F "net-work-ledger" release/references/pipeline/stage-09-plan-review.md` expect 1 | 1 (0 at f8d88626) |
-| #8146 | AC-2 | `grep -c -F "A row gets an issue of its own only when its source tagged it" release/references/standards/finding-disposition-framework.md` expect 1 [READER-GRADED — § 8.2's definitions of the bug and feature kinds] | 1 (0 at f8d88626) |
-| #8146 | AC-3 | `grep -c -F "next-release issue" release/references/pipeline/stage-08-qa-testing.md` expect 0 [READER-GRADED — the Stage 7 Defer row, the Stage 8 landing field and differentiation row, and the template's Disposition cell] | 0 (sensitivity: 3 at f8d88626) |
-| #8146 | AC-3 | `grep -c -F "defer → #NNN" operations/templates/qa-acceptance-report-template.md` expect 0 | 0 (sensitivity: 1 at f8d88626) |
-| #8146 | AC-3 | `grep -c -F "disposition:defer:#NNN" operations/templates/qa-acceptance-report-template.md` expect 0 | 0 (sensitivity: 1 at f8d88626) |
-| #8146 | AC-3 | `grep -c -F "declares nothing" release/references/pipeline/stage-08-qa-testing.md` expect 1 | 1 (0 at f8d88626) |
-| #8146 | AC-3 | `grep -c -F "re-deferred past this release" release/references/pipeline/stage-09-plan-review.md` at least 1 [READER-GRADED — Phase C: an undischarged condition and a re-deferral join the ledger and the line is re-rendered before GO; G-PR6 names it] | at least 1 (0 at f8d88626) |
-| #8146 | AC-4 | `grep -c -F "Already declared." core/standards/work-item-filing-threshold.md` expect 1 [READER-GRADED — Phase A7.6 step 3 searches ADRs, CHANGELOG.md and the decision records; fixture rows c and e are declared, row d is not] | 1 (file absent at f8d88626) |
-| #8146 | AC-4 | `grep -c -F "A record declares an item only when it accepts it." core/standards/work-item-filing-threshold.md` expect 1 | 1 (file absent at f8d88626) |
-| #8146 | AC-4 | `grep -c -F "which declares only on Accept" release/references/pipeline/stage-09-plan-review.md` expect 1 | 1 (0 at f8d88626) |
-| #8146 | AC-5 | `grep -c -F "Fixture — excess arm" release/references/pipeline/stage-09-plan-review.md` expect 1 [READER-GRADED — render the excess arm, the cut (refusing row a), the balanced arm and the close arm from their input tables before reading the expected lines, then compare] | 1 (0 at f8d88626) |
-| #8146 | AC-5 | `grep -c -F "**Net work disposition:**" release/references/pipeline/stage-09-plan-review.md` at least 1 | at least 1 (0 at f8d88626) |
-| #8146 | AC-6 | `grep -c -F "held — below the filing threshold" operations/skills/intake-desk/SKILL.md` at least 1 [READER-GRADED — Mode C § The filing threshold runs at every dial, in or out of a run; the hub is the producer of release_context] | at least 1 (0 at f8d88626) |
-| #8146 | AC-6 | `grep -c -F "release_context" release/skills/release-hub/SKILL.md` at least 1 | at least 1 (0 at f8d88626) |
-| #8146 | AC-7 | `grep -c -F "promoted to #N" release/references/pipeline/stage-01-intake.md` expect 0 [READER-GRADED — trace three related observations through stage-02 § Observation counting: one story and three counted closures] | 0 (sensitivity: 1 at f8d88626) |
-| #8146 | AC-7 | `grep -c -F "not planned" release/skills/release-executor/SKILL.md` expect 0 | 0 (sensitivity: 1 at f8d88626) |
-| #8146 | AC-7 | `grep -c -F "not planned" core/governance/OPERATIONS.md` expect 0 | 0 after the operator's Change 33 commit (sensitivity: 1 at f8d88626) |
-| #8146 | AC-7 | `grep -c -F "Counted into #" release/references/pipeline/stage-02-triage.md` at least 1 | at least 1 (0 at f8d88626) |
+| #8146 | AC-1 | `grep -c -F "## 1. The rule — two limbs" core/standards/work-item-filing-threshold.md` expect 1 [READER-GRADED — the two limbs, the 2026-10-24 user-visible ruling and the severity reading; trace fixture rows a (user-visible), j (security), f (privacy) and b (none) through the core standard and FDF § 8, b staying in its stage record] [READER-GRADED — each filing path in the Stage-5 census reaches Stage 9 Phase A7.6 or Stage 13 Phase A10.5] [READER-GRADED — on the target: trace fixture row d to the target's sweep; § 8.6's live read of the target's form and its no-form fallback] [READER-GRADED — on this platform: trace fixture rows f and g to the platform sweep or the cut] | 1 (file absent at f8d88626); its further probes are OBL-1 to OBL-8 |
+| #8146 | AC-2 | `grep -c -F "Phase A10.5 — Follow-up sweep filing" release/references/pipeline/stage-13-close.md` expect 1 [READER-GRADED — Phase A10.5 steps 1–5: one sweep per repository holding an item; the close arm files two sweeps for a release that touches two repositories] [READER-GRADED — § 8.2's definitions of the bug and feature kinds] | 1 (0 at f8d88626); its further probes are OBL-9 and OBL-10 |
+| #8146 | AC-3 | `grep -c -F "next-release issue" release/references/pipeline/stage-08-qa-testing.md` expect 0 [READER-GRADED — the Stage 7 Defer row, the Stage 8 landing field and differentiation row, and the template's Disposition cell] [READER-GRADED — Phase C: an undischarged condition and a re-deferral join the ledger and the line is re-rendered before GO; G-PR6 names it] | 0 (sensitivity: 3 at f8d88626); its further probes are OBL-11 to OBL-14 |
+| #8146 | AC-4 | `grep -c -F "Already declared." core/standards/work-item-filing-threshold.md` expect 1 [READER-GRADED — Phase A7.6 step 3 searches ADRs, CHANGELOG.md and the decision records; fixture rows c and e are declared, row d is not] | 1 (file absent at f8d88626); its further probes are OBL-15 and OBL-16 |
+| #8146 | AC-5 | `grep -c -F "Fixture — excess arm" release/references/pipeline/stage-09-plan-review.md` expect 1 [READER-GRADED — render the excess arm, the cut (refusing row a), the balanced arm and the close arm from their input tables before reading the expected lines, then compare] | 1 (0 at f8d88626); its further probe is OBL-17 |
+| #8146 | AC-6 | `grep -c -F "held — below the filing threshold" operations/skills/intake-desk/SKILL.md` at least 1 [READER-GRADED — Mode C § The filing threshold runs at every dial, in or out of a run; the hub is the producer of release_context] | at least 1 (0 at f8d88626); its further probe is OBL-18 |
+| #8146 | AC-7 | `grep -c -F "promoted to #N" release/references/pipeline/stage-01-intake.md` expect 0 [READER-GRADED — trace three related observations through stage-02 § Observation counting: one story and three counted closures] | 0 (sensitivity: 1 at f8d88626); its further probes are OBL-19 to OBL-21 |
+| #8146 | OBL-1 | `grep -c -F "filed nowhere" core/standards/work-item-filing-threshold.md` expect 1 | 1 (file absent at f8d88626) · supports AC-1 |
+| #8146 | OBL-2 | `grep -c -F "next-release issue" release/references/pipeline/stage-07-dev-testing.md` expect 0 | 0 (sensitivity: 2 at f8d88626) · supports AC-1 |
+| #8146 | OBL-3 | `grep -c -F "follow-up issue reference" release/references/pipeline/stage-12-execute.md` expect 0 | 0 (sensitivity: 3 at f8d88626) · supports AC-1 |
+| #8146 | OBL-4 | `grep -c -F "Carry-forward Issue," release/governance/release-process.md` expect 0 | 0 (sensitivity: 2 at f8d88626) · supports AC-1 |
+| #8146 | OBL-5 | `grep -c -F "1 Issue per audit SUMMARY" release/references/how-to/hub-spoke-bridge.md` expect 0 | 0 (sensitivity: 1 at f8d88626) · supports AC-1 |
+| #8146 | OBL-6 | `grep -c -F "It is the only step of the release that files a follow-up." release/references/pipeline/stage-13-close.md` expect 1 | 1 (0 at f8d88626) · supports AC-1 |
+| #8146 | OBL-7 | `grep -c -F "one post-release sweep issue per repository" release/references/standards/finding-disposition-framework.md` expect 1 | 1 (0 at f8d88626) · supports AC-1 |
+| #8146 | OBL-8 | `grep -c -F "target=<T> · platform=<L>" release/references/pipeline/stage-09-plan-review.md` expect 1 | 1 (0 at f8d88626) · supports AC-1 |
+| #8146 | OBL-9 | `grep -c -F "net-work-ledger" release/references/pipeline/stage-09-plan-review.md` expect 1 | 1 (0 at f8d88626) · supports AC-2 |
+| #8146 | OBL-10 | `grep -c -F "A row gets an issue of its own only when its source tagged it" release/references/standards/finding-disposition-framework.md` expect 1 | 1 (0 at f8d88626) · supports AC-2 |
+| #8146 | OBL-11 | `grep -c -F "defer → #NNN" operations/templates/qa-acceptance-report-template.md` expect 0 | 0 (sensitivity: 1 at f8d88626) · supports AC-3 |
+| #8146 | OBL-12 | `grep -c -F "disposition:defer:#NNN" operations/templates/qa-acceptance-report-template.md` expect 0 | 0 (sensitivity: 1 at f8d88626) · supports AC-3 |
+| #8146 | OBL-13 | `grep -c -F "declares nothing" release/references/pipeline/stage-08-qa-testing.md` expect 1 | 1 (0 at f8d88626) · supports AC-3 |
+| #8146 | OBL-14 | `grep -c -F "re-deferred past this release" release/references/pipeline/stage-09-plan-review.md` at least 1 | at least 1 (0 at f8d88626) · supports AC-3 |
+| #8146 | OBL-15 | `grep -c -F "A record declares an item only when it accepts it." core/standards/work-item-filing-threshold.md` expect 1 | 1 (file absent at f8d88626) · supports AC-4 |
+| #8146 | OBL-16 | `grep -c -F "which declares only on Accept" release/references/pipeline/stage-09-plan-review.md` expect 1 | 1 (0 at f8d88626) · supports AC-4 |
+| #8146 | OBL-17 | `grep -c -F "**Net work disposition:**" release/references/pipeline/stage-09-plan-review.md` at least 1 | at least 1 (0 at f8d88626) · supports AC-5 |
+| #8146 | OBL-18 | `grep -c -F "release_context" release/skills/release-hub/SKILL.md` at least 1 | at least 1 (0 at f8d88626) · supports AC-6 |
+| #8146 | OBL-19 | `grep -c -F "not planned" release/skills/release-executor/SKILL.md` expect 0 | 0 (sensitivity: 1 at f8d88626) · supports AC-7 |
+| #8146 | OBL-20 | `grep -c -F "not planned" core/governance/OPERATIONS.md` expect 0 | 0 after the operator's Change 33 commit `b3511f2e` (sensitivity: 1 at f8d88626) · supports AC-7 |
+| #8146 | OBL-21 | `grep -c -F "Counted into #" release/references/pipeline/stage-02-triage.md` at least 1 | at least 1 (0 at f8d88626) · supports AC-7 |
 
 `ac_baseline: { #8146: 7, read_at: f8d88626 }`
 
@@ -633,6 +635,23 @@ Run by the Stage-6 spoke on #8607 after this file was written and before it was 
 | Runtime suite | `runtime-suite-selection-map.md` | row 8, no match — `test-run/suite-skip` emitted (stage 6, actor `spoke:#8607`; read back 0 → 1) |
 | Skill-edit discipline | `pmo-skill-editor` Mode A | release-hub, pmo-release-manager, pmo-qa-lead and release-executor edited in sessions minted and ended by `core/deploy/tools/start-skill-editor-session.sh`; intake-desk and pipeline-triage by conduct; every commit carries the `Skill-Editor-Audit-Trail:` trailer; no version field changed |
 
+### Stage 6 — after Change 33 (at head `b3511f2e`)
+
+| Check | Command | Observed |
+|---|---|---|
+| Full verifier (GREEN arm) | `bash release/tools/verify-release-plan.sh <this file>` | exit 0 — **23 PASS / 0 FAIL / 10 SKIP / 12 UNRUNNABLE / 0 ERROR** over 45 records. AC-7's `not planned` row on `core/governance/OPERATIONS.md` moved from FAIL to PASS on the operator's commit, and no other row moved. Read by the Stage 7 spoke on #8608 and reproduced at the same head by the fix(dt) pass before its first edit |
+
+### Stage 6 fix(dt) pass 1 — the Stage 7 findings on #8608 (this commit; parent `42c7540c`)
+
+| Check | Command | Observed |
+|---|---|---|
+| AC binder | `python3 release/tools/check-ac-binding.py --fetch <this file>` | exit 0 — `VERDICT BOUND`: 7 `AC-` rows, one per criterion, each `BOUND` (none `WEAK-ORACLE`); 21 `OBL-` rows reported as displaced. Before the restructure the same command read `VERDICT ORDINAL-GAP`, exit 1: 28 `AC-` rows, duplicate ordinals 1–7, 12 rows `UNBOUND` |
+| Full verifier | `bash release/tools/verify-release-plan.sh <this file>` | exit 0 — **28 PASS / 0 FAIL / 10 SKIP / 7 UNRUNNABLE / 0 ERROR** over 45 records. The 7 UNRUNNABLE are the `AC-` rows: each designated grep PASSES and each carries its reader-graded limbs for Stage 8. Every `OBL-` row runs and PASSES. SKIP is unchanged at 10 |
+| Deferral-pointer probe (F-02) | the Stage 7 probe for an issue-number pointer in deferral text, over the seven corpus trees it named | pre 1 (`stage-12-execute.md`, the references-only worked example) → post 0 |
+| Cutover citations (F-03) | `git grep -c -F "filing-step cutover"` on the Stage 8 report template and on `stage-09-plan-review.md` | 0 → 1 on each (sensitivity: `stage-07-dev-testing.md` and `stage-08-qa-testing.md` read 1 each) |
+| Record form and fixture split (F-04, F-11) | the stage-09 fixture region split on its expected-line markers; a fixed-string count of "exactly one of" before the disposition literal | 4 arms, with 0 rendered lines on the input side (control: 4 on the expected side); "exactly one of" 1 → 0, and both disposition literals kept |
+| Package consequence | the five paths this pass touches, on STDIN to `build-skill-packages.sh --skills-for-paths` | empty (control: `release/skills/release-hub/SKILL.md` → `release-hub`); no package rebuilt |
+
 **`deliverable_state`:** `deployed-copy-synced` at Stage 12, once the six skills and the rules mirror are deployed (C3 sync is N/A at Stage 6: deployment is Stage 12's).
 
 ---
@@ -649,7 +668,7 @@ A release now files only the follow-ups that matter, and files them once. One fi
 
 | # | Outcome (one line) | Status |
 |---|---|---|
-| #8146 | The filing threshold has one home in `core/`; the release pipeline tags, counts and files its follow-ups through Stage 9 Phase A7.6 and Stage 13 Phase A10.5; `intake-desk` Mode C applies the threshold always; Stage 2 counts observations into one story | DONE at Stage 6 for Changes 1–32; Change 33 (four `OPERATIONS.md` lines) is the operator's, before Stage 7 |
+| #8146 | The filing threshold has one home in `core/`; the release pipeline tags, counts and files its follow-ups through Stage 9 Phase A7.6 and Stage 13 Phase A10.5; `intake-desk` Mode C applies the threshold always; Stage 2 counts observations into one story | DONE — Changes 1–32 at Stage 6; Change 33 (four `OPERATIONS.md` lines) by the operator, `b3511f2e`; the Stage 7 findings addressed by the Stage 6 fix(dt) pass 1 |
 
 ### Key decisions
 
@@ -699,6 +718,8 @@ A release now files only the follow-ups that matter, and files them once. One fi
 | **DEV-13** | **Cutover citations added where revision 1's Rule 5 binds a surface whose Change text named no sentence:** Procedure 7 Step 4's audit rows (one sentence after the sequencing note), `release-hub` Mode O step 7, `pmo-release-manager` Modes 1 and 3, and `pmo-qa-lead`'s defer branch each cite the filing-step cutover in `finding-disposition-framework.md` § 8. Additive, and required by the binding rule | revision 1 § Rules that bind every Change, Rule 5 | **APPLIED** |
 | **DEV-14** | **The new ADR carries no `allow-issue-ref` marker.** Every bare issue reference in it sits in its `## References` block, a recognized reference block, so the file declares no override the declaration obligation could not justify (`core/ADRs/README.md` § Repo-integrity authoring discipline; `git-workflow.md` § Declaring an issue-ref override). The issue-reference gate reads it clean (§ Verification Evidence) | Stage 6 authoring | **RECORDED** |
 | **DEV-15** | **One ADR Context sentence worded to keep the retired routing phrase out of the release** (Rule 2): the deferral mechanism is described as "an issue of its own, opened only to hold the deferral" | revision 1 § Rules, Rule 2 | **APPLIED** |
+| **DEV-16** | **Per-Issue Verification restructured to one `AC-k` row per criterion** (Stage 7 F-01). Engineering Commit 0 transcribed one row per probe, 28 `AC-` rows for 7 criteria, which the AC binder read as duplicate ordinals. Each criterion keeps its first row as its `AC-k` row and gathers every reader-graded limb the criterion carried; the other 21 probes become `OBL-1` to `OBL-21`, each naming the criterion it supports. Folding them into the `AC-` rows as further commands was not taken: the plan verifier runs only a row's designated command, so 21 probes, the null probes among them, would have stopped running. Every probe string, comparator and sensitivity read is copied unchanged | Stage 7 Dev Testing on #8608, F-01 | **APPLIED** — binder `BOUND` (§ Verification Evidence) |
+| **DEV-17** | **Stage 7 fix(dt) pass 1 edits beyond revision 1's Change text:** the Stage 12 references-only worked example points at the Stage 12 record (F-02); the Stage 8 report template and stage-09 Phase C's condition paragraph cite the filing-step cutover (F-03); stage-09 Phase C states the record form for a cut that leaves an excess, the cut line then the accepted line (F-04); the fixture's cut arm splits its input sentence from its expected line (F-11); the stage-02 counting diagram routes the convert-in-place node through the operator's confirmation, and labels the close edge as counted observations only (F-09). No skill file and no Change's scope changed | Stage 7 Dev Testing on #8608, F-02, F-03, F-04, F-09, F-11 | **APPLIED** |
 
 ---
 

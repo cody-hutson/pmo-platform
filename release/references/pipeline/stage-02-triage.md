@@ -204,7 +204,8 @@ flowchart TD
     cl --> p["Read each member's thread for a prior operator decision"]
     st --> p
     p --> op[["Operator confirms each create, body edit and close"]]
-    op --> close(["Post 'Counted into #N'; status: done; close as completed"])
+    cv --> op
+    op -->|counted observations| close(["Post 'Counted into #N'; status: done; close as completed"])
     classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;
     classDef human fill:#D1ECF1,stroke:#17A2B8,color:#0C5460;
     classDef gate fill:#FFF3CD,stroke:#FFC107,color:#856404;
