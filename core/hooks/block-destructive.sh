@@ -2534,10 +2534,17 @@ case "$TOOL_NAME" in
     # Canary: a one-line function body whose canonical form MUST expose the inner command
     # at an anchor position. Same posture as block-fragile-refs.sh's classifier canary
     # (GHSA-g9g6-28c9-vrx5) and the same fail-closed direction as the dependency guard.
+    # Two probes (#8314): the first catches a present-but-empty or truncated copy; the
+    # second — a wrapper carrying a separate-argument option before a benign verb, exposed
+    # at an anchor only by the walk that reads wrapper grammar — catches a VERSION SKEW, a
+    # copy that predates that grammar, so a wrapped command never falls back to the pre-fix
+    # verdict while the hook believes the primitive healthy.
     CMDPOS_OK=0
     if [ -r "$CMDPOS_AWK" ]; then
       if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
-         && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+         && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
+         && _cp_canary2="$("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+         && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q'; then
         CMDPOS_OK=1
       fi
     fi

@@ -1162,7 +1162,8 @@ PN04|block-destructive|wrap-prec-name|-|?|a|exec --zz=@D@/x.sh ls
 # recorded now; eg-head is located by the head walk before and after; eg-day1 is refused before
 # and after; eg-near must stay allowed; open-eg-unreached is a write this rule's own walk does
 # not reach, declared open; open-eg-canon is a credential read behind a prefix command's
-# option, which the shared canonicalizer does not reach, declared open; eg-counter is the
+# option, which the shared canonicalizer now reaches (card #8314), so EG160-EG162 moved from
+# an open allow to a refusal (group eg-canon, verdict B) in #8314's fix commit; eg-counter is the
 # design's generated then-write corpus — the prefix words none, env, sudo, xargs, timeout,
 # nice, stdbuf and nohup × the option shapes none, -u NAME, --zz VALUE, 5, a-b=1 and -x × four
 # gh shapes, each followed by `; gh api -X POST @NO@` — whose verdicts no correct change
@@ -1283,9 +1284,9 @@ EG146|block-egress|open-eg-unreached|-|?|a|watch gh api -X POST @NO@
 EG147|block-egress|open-eg-unreached|-|?|a|bash -c 'gh api -X POST @NO@'
 EG148|block-egress|open-eg-unreached|-|?|a|env -S "gh api -X POST @NO@"
 EG149|block-egress|open-eg-unreached|-|?|a|env -u X $GH api -X POST @NO@
-EG160|block-egress|open-eg-canon|-|?|a|sudo -u nobody cat ~/.ssh/id_rsa
-EG161|block-egress|open-eg-canon|-|?|a|env -u X cat ~/.ssh/id_rsa
-EG162|block-egress|open-eg-canon|-|?|a|timeout 5 cat ~/.ssh/id_rsa
+EG160|block-egress|eg-canon|-|?|B|sudo -u nobody cat ~/.ssh/id_rsa
+EG161|block-egress|eg-canon|-|?|B|env -u X cat ~/.ssh/id_rsa
+EG162|block-egress|eg-canon|-|?|B|timeout 5 cat ~/.ssh/id_rsa
 EG200|block-egress|eg-counter|-|?|B|gh api -X POST @NO@ ; gh api -X POST @NO@
 EG201|block-egress|eg-counter|-|?|B|echo gh api -X POST @NO@ ; gh api -X POST @NO@
 EG202|block-egress|eg-counter|-|?|W|gh api -X POST @OK@ ; gh api -X POST @NO@

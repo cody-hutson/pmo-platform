@@ -170,6 +170,75 @@ test_case "EXT-POS-D5: escaped verb rm -rf / blocks" \
   "$(bash_payload '\rm -rf /')" \
   2 "BLOCK-DESTRUCTIVE-004"
 
+# --- EXT-POS (#8314): the canonicalizer walks a wrapper's own grammar ---
+#
+# The canonicalizer stopped at a wrapper's first flag, matched a prefix word as an exact
+# token, and omitted three wrappers and the condition keywords, so the identical deletion
+# reached this rule in plain form and did not behind any of those spellings. Each case is
+# the plain-form refusal above (AC-004), reached through one face: a wrapper option that
+# takes a separate argument (D6, D8, D10), a wrapper flag that takes none (D7, D16), an
+# absolute-path wrapper (D9), a wrapper missing from the set (D10-D12), a condition
+# position (D13-D15), and a quoted or escaped wrapper word (D17, D18).
+test_case "EXT-POS-D6: sudo -u root rm -rf / blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'sudo -u root rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D7: sudo -n rm -rf / blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'sudo -n rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D8: env -u X rm -rf / blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'env -u X rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D9: /usr/bin/env rm -rf / blocks (absolute-path wrapper)" \
+  "$(bash_payload '/usr/bin/env rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D10: nice -n 10 rm -rf / blocks (wrapper missing from the set, with its option)" \
+  "$(bash_payload 'nice -n 10 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D11: stdbuf -o0 rm -rf / blocks (wrapper missing from the set)" \
+  "$(bash_payload 'stdbuf -o0 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D12: timeout 5 rm -rf / blocks (wrapper missing from the set, with its duration)" \
+  "$(bash_payload 'timeout 5 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D13: if-condition rm -rf / blocks (condition position)" \
+  "$(bash_payload 'if rm -rf / ; then :; fi')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D14: while-condition rm -rf / blocks (condition position)" \
+  "$(bash_payload 'while rm -rf / ; do :; done')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D15: until-condition rm -rf / blocks (condition position)" \
+  "$(bash_payload 'until rm -rf / ; do :; done')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D16: time -p rm -rf / blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'time -p rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D17: escaped wrapper word rm -rf / blocks (one leading backslash on sudo)" \
+  "$(bash_payload '\sudo rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D18: quoted wrapper word rm -rf / blocks (full-token quotes on sudo)" \
+  "$(bash_payload '"sudo" rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+# The prefix cap, from both sides. The walk counts prefix-run tokens (keywords, wrappers,
+# assignments, redirections) and stops after ten, so a verb behind ten is reached and a
+# verb behind eleven is not: a deliberate bound, declared in the readiness text. A
+# wrapper's own options and operands do not count toward it.
+test_case "EXT-POS-D19: ten assignments then rm -rf / blocks (inside the prefix cap)" \
+  "$(bash_payload 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
 # --- EXT-RES (#5644): residual boundary of THIS rule, pinned deliberately ---
 #
 # ALLOW assertions on purpose, and NOT because the position is still blind — it is not.
@@ -186,6 +255,35 @@ test_case "EXT-RES-D1: { rm -rf /; } allows HERE — terminator class, not posit
 test_case "EXT-RES-D2: nested-shell program string allows (documented nested-shell residual)" \
   "$(bash_payload 'bash -c '"'"'rm -rf /'"'"'')" \
   0
+
+test_case "EXT-RES-D3: eleven assignments then rm -rf / allows HERE — the prefix cap, a declared residual" \
+  "$(bash_payload 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 rm -rf /')" \
+  0
+
+# --- EXT-RES-D-GIT (#8314): the declared precision class of the git rules ---
+#
+# The git rules anchor on a WORD BOUNDARY, not on a command position, so they read `git`
+# wherever it appears. Once the canonicalizer walks a wrapper's own grammar, a `git` that
+# the wrapper consumes as an option value or a positional is followed by the inserted
+# separator, and the rule no longer reads a git subcommand there. Each pin below is a
+# command that never runs git (it runs `push` as the user git, or with the variable git
+# unset, or is rejected by nice for its adjustment), so the move from refused to allowed is
+# a declared precision improvement. The control is the same command running git: refused.
+test_case "EXT-RES-D-GIT-1: sudo -u git push --force allows (git is sudo's user, not the command)" \
+  "$(bash_payload 'sudo -u git push --force')" \
+  0
+
+test_case "EXT-RES-D-GIT-2: env -u git push --force allows (git is the variable env unsets)" \
+  "$(bash_payload 'env -u git push --force')" \
+  0
+
+test_case "EXT-RES-D-GIT-3: nice -n git push --force allows (git is nice's adjustment)" \
+  "$(bash_payload 'nice -n git push --force')" \
+  0
+
+test_case "EXT-RES-D-GIT-CTL: sudo -u root git push --force blocks (the same wrapper running git)" \
+  "$(bash_payload 'sudo -u root git push --force')" \
+  2 "BLOCK-DESTRUCTIVE-001"
 
 # --- /Users subdirs — block at /Users bare, allow deeper ---
 test_case "rm -rf /Users blocks (catastrophic)" \
@@ -7035,12 +7133,6 @@ WRAP_DECL='egress|keyword|in|missing|no shell construct puts a command word dire
 egress|keyword|{|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
 egress|keyword|}|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
 egress|keyword|{}|extra|the egress walk resolves an xargs replacement token with it; this rule declares the replacement operand open
-canon|wrapper|nice|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|wrapper|stdbuf|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|wrapper|timeout|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|keyword|if|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|keyword|while|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|keyword|until|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
 lint|wrapper|doas|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|setsid|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|ionice|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
@@ -7226,14 +7318,21 @@ else
   /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M1 an extra wrapper word was not reported (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
   FAIL=$((FAIL + 1))
 fi
+# M2 removes one word from a canonicalizer copy: the canonicalizer now holds every word of
+# this walk, so a copy that loses one must be reported as an undeclared difference. The
+# removal is asserted live twice — the copy differs, and the word is gone from what the
+# extractor reads — so a sed that matched nothing cannot pass.
 wrap_pm_canon2="${WRAP_ROOT}/parity-m2.awk"
-/usr/bin/sed -e '/PREFIX\["exec"\]=1/s/$/; PREFIX["nice"]=1/' "$WRAP_CANON" > "$wrap_pm_canon2"
-wrap_parity_arm "M2" wrapper "$wrap_w_hook" "$(wrap_words_canon "$wrap_pm_canon2")"
-if ! /usr/bin/cmp -s "$WRAP_CANON" "$wrap_pm_canon2" && [[ "$WRAP_PARITY_RESULT" == *"STALE:canon-nice"* ]]; then
-  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M2 a canonicalizer copy that gains a declared-missing word is reported as a stale declaration\n'
+/usr/bin/sed -e 's/PREFIX\["nice"\]=[0-9];[ ]*//' "$WRAP_CANON" > "$wrap_pm_canon2"
+wrap_pm2_words="$(wrap_words_canon "$wrap_pm_canon2")"
+wrap_pm2_gone=1
+case " $(/usr/bin/printf '%s' "$wrap_pm2_words" | /usr/bin/tr '\n' ' ') " in *" nice "*) wrap_pm2_gone=0 ;; esac
+wrap_parity_arm "M2" wrapper "$wrap_w_hook" "$wrap_pm2_words"
+if ! /usr/bin/cmp -s "$WRAP_CANON" "$wrap_pm_canon2" && [ "$wrap_pm2_gone" = 1 ] && [[ "$WRAP_PARITY_RESULT" == *"UNDECLARED:canon-nice"* ]]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M2 a canonicalizer copy that loses a word of this walk is reported as an undeclared difference\n'
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M2 a stale declaration was not reported (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M2 a lost word was not reported (word removed=%s, result: %s)\n' "$wrap_pm2_gone" "${WRAP_PARITY_RESULT:-none}"
   FAIL=$((FAIL + 1))
 fi
 wrap_pm_hook3="${WRAP_ROOT}/parity-m3.sh"
@@ -7274,6 +7373,192 @@ else
   /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-DOC readiness item 2 does not name: fragment [%s] registry [%s]\n' "$wrap_doc_frag" "$wrap_doc_index"
   FAIL=$((FAIL + 1))
 fi
+
+# --- WRAPROWS-PARITY — the canonicalizer's copy of this walk's wrapper rows (#8314) -----------
+# The shared canonicalizer walks each wrapper's own option grammar from a COPY of this
+# walk's rows (script_wrapper_row): the option facts are data about a program, so both walks
+# read the same facts, and the copy is asserted here instead of shared at run time (a shared
+# runtime file would put one more dependency on four always-on hooks). The arms compare
+# every field of every wrapper after defaults, and the key sets three ways (the rows here,
+# the rows there, and the canonicalizer's wrapper words), and the mutants below show the
+# comparison able to fail. Both extractors read code lines only: a comment that spells a
+# row is not a row. The walkers' LOGIC is a second copy this arm does not see; the corpus
+# rows of each card that changes either walker are where a logic difference shows.
+wraprows_hook() { # $1 = a copy of this hook -> "<wrapper|*default*><TAB><field><TAB><value>" and "LABEL<TAB><wrapper>" lines, or EXTRACTION-FAILED
+  /usr/bin/awk '
+    /^script_wrapper_row\(\) \{/ { inrow = 1; fn++; next }
+    inrow && /^\}/ { inrow = 0; next }
+    !inrow { next }
+    /^[ \t]*#/ { next }
+    {
+      line = $0
+      if (match(line, /^[ \t]*[a-z*]+\)/)) {
+        cur = substr(line, RSTART, RLENGTH); gsub(/[ \t)]/, "", cur)
+        if (cur != "*") { print "LABEL\t" cur; nl++ }
+      }
+      while (match(line, /script_w(opt|larg|nox|split|lsplit|long|pos)="[^"]*"/)) {
+        a = substr(line, RSTART, RLENGTH); line = substr(line, RSTART + RLENGTH)
+        f = a; sub(/^script_w/, "", f); sub(/=.*$/, "", f)
+        v = a; sub(/^[^"]*"/, "", v); sub(/"$/, "", v)
+        print ((cur == "") ? "*default*" : cur) "\t" f "\t" v; nv++
+      }
+    }
+    END { if (fn != 1 || nl == 0 || nv == 0) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+wraprows_canon() { # $1 = a copy of the canonicalizer -> "<wrapper|*default*><TAB><field><TAB><value>" and "ROW<TAB><wrapper>" lines, or EXTRACTION-FAILED
+  /usr/bin/awk '
+    /^[ \t]*#/ { next }
+    {
+      line = $0
+      while (match(line, /W(ROW|DEF|OPT|LARG|NOX|SPLIT|LSPLIT|LONG|POS)\["[^"]*"\]=("[^"]*"|[0-9]+)/)) {
+        a = substr(line, RSTART, RLENGTH); line = substr(line, RSTART + RLENGTH)
+        t = a; sub(/\[.*$/, "", t); sub(/^W/, "", t)
+        k = a; sub(/^[^"]*"/, "", k); sub(/".*$/, "", k)
+        v = a; sub(/^[^=]*=/, "", v); sub(/^"/, "", v); sub(/"$/, "", v)
+        if (t == "ROW") { print "ROW\t" k; nr++ }
+        else if (t == "DEF") { print "*default*\t" k "\t" v; nd++ }
+        else { print k "\t" tolower(t) "\t" v; nv++ }
+      }
+    }
+    END { if (nr == 0 || nd == 0 || nv == 0) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+# $1 = the hook rows  $2 = the canonicalizer rows  $3 = the canonicalizer words -> WRAPROWS_RESULT
+# (empty = parity; otherwise space-separated FIELD:/KEY:/NODEFAULT:/EXTRACTION-FAILED tokens)
+wraprows_compare() {
+  local cwords
+  wrap_classify "$3" wrapper; cwords="$WRAP_SET"
+  case "$1 $2" in
+    *EXTRACTION-FAILED*) WRAPROWS_RESULT="EXTRACTION-FAILED"; return 0 ;;
+  esac
+  WRAPROWS_RESULT="$( { /usr/bin/printf '%s\n' "$1" | /usr/bin/sed 's/^/H	/'
+      /usr/bin/printf '%s\n' "$2" | /usr/bin/sed 's/^/C	/'; } | /usr/bin/awk -F'\t' -v cwords="$cwords" '
+    BEGIN { nf = split("opt larg nox split lsplit long pos", F, " "); nw = split(cwords, W, " ") }
+    $1 == "H" && $2 == "LABEL" { hk[$3] = 1; next }
+    $1 == "C" && $2 == "ROW" { ck[$3] = 1; next }
+    $1 == "H" { hv[$2, $3] = $4; hs[$2, $3] = 1; next }
+    $1 == "C" { cv[$2, $3] = $4; cs[$2, $3] = 1; next }
+    END {
+      for (i = 1; i <= nf; i++) {
+        f = F[i]
+        if (!(("*default*", f) in hs)) printf "NODEFAULT:hook.%s ", f
+        if (!(("*default*", f) in cs)) printf "NODEFAULT:canon.%s ", f
+      }
+      for (w in hk) if (!(w in ck)) printf "KEY:canon-%s ", w
+      for (w in ck) if (!(w in hk)) printf "KEY:hook-%s ", w
+      for (i = 1; i <= nw; i++) if (W[i] != "" && !(W[i] in ck)) printf "KEY:row-%s ", W[i]
+      for (w in ck) { seen = 0; for (i = 1; i <= nw; i++) if (W[i] == w) seen = 1; if (!seen) printf "KEY:word-%s ", w }
+      for (w in hk) {
+        if (!(w in ck)) continue
+        for (i = 1; i <= nf; i++) {
+          f = F[i]
+          h = ((w, f) in hs) ? hv[w, f] : hv["*default*", f]
+          c = ((w, f) in cs) ? cv[w, f] : cv["*default*", f]
+          if (h != c) printf "FIELD:%s.%s ", w, f
+        }
+      }
+    }' )"
+  WRAPROWS_RESULT="${WRAPROWS_RESULT% }"
+}
+
+wrap_r_hook="$(wraprows_hook "$HOOK")"
+wrap_r_canon="$(wraprows_canon "$WRAP_CANON")"
+wraprows_compare "$wrap_r_hook" "$wrap_r_canon" "$wrap_w_canon"
+wrap_r_fields="$(/usr/bin/printf '%s' "$WRAPROWS_RESULT" | /usr/bin/tr ' ' '\n' | /usr/bin/grep -v -e '^KEY:' -e '^$' | /usr/bin/tr '\n' ' ')"
+wrap_r_keys="$(/usr/bin/printf '%s' "$WRAPROWS_RESULT" | /usr/bin/tr ' ' '\n' | /usr/bin/grep -e '^KEY:' -e '^EXTRACTION-FAILED$' | /usr/bin/tr '\n' ' ')"
+wrap_r_nlab="$(/usr/bin/printf '%s\n' "$wrap_r_hook" | /usr/bin/grep -c '^LABEL	' || true)"
+if [ -z "$wrap_r_fields" ] && [ "$wrap_r_nlab" -ge 11 ]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-01 every field of every wrapper row (%s wrappers x 7 fields, after defaults) is equal in this walk and in the canonicalizer\n' "$wrap_r_nlab"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-01 the canonicalizer copy of the wrapper rows differs from this walk (wrappers read=%s): %s\n' "$wrap_r_nlab" "${wrap_r_fields:-none}"
+  FAIL=$((FAIL + 1))
+fi
+if [ -z "$wrap_r_keys" ] && [ "$wrap_r_nlab" -ge 11 ]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-02 the wrapper key sets are one set: the rows here, the rows in the canonicalizer, and its wrapper words\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-02 the wrapper key sets differ: %s\n' "${wrap_r_keys:-none}"
+  FAIL=$((FAIL + 1))
+fi
+
+# The row comparison is shown able to fail, three ways, each mutation asserted live.
+wrap_rm1="${WRAP_ROOT}/rows-m1.awk"
+/usr/bin/sed -e 's/WOPT\["nice"\]="n:"/WOPT["nice"]="m:"/' "$WRAP_CANON" > "$wrap_rm1"
+wraprows_compare "$wrap_r_hook" "$(wraprows_canon "$wrap_rm1")" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$WRAP_CANON" "$wrap_rm1" && [[ " $WRAPROWS_RESULT " == *" FIELD:nice.opt "* ]]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-M1 a canonicalizer copy with one option letter changed is reported\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-M1 a changed option letter was not reported (result: %s)\n' "${WRAPROWS_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+wrap_rm2="${WRAP_ROOT}/rows-m2.sh"
+/usr/bin/sed -e '/^    nice)/s/script_wlarg=" --adjustment "/script_wlarg=" "/' "$HOOK" > "$wrap_rm2"
+wraprows_compare "$(wraprows_hook "$wrap_rm2")" "$wrap_r_canon" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$HOOK" "$wrap_rm2" && [[ " $WRAPROWS_RESULT " == *" FIELD:nice.larg "* ]]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-M2 a hook copy whose nice row loses a long option is reported\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-M2 a lost long option was not reported (result: %s)\n' "${WRAPROWS_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+wrap_rm3="${WRAP_ROOT}/rows-m3.sh"
+/usr/bin/sed -e 's/^script_wrapper_row() {/script_wrapper_rowx() {/' "$HOOK" > "$wrap_rm3"
+wrap_rm3_rows="$(wraprows_hook "$wrap_rm3")"
+wraprows_compare "$wrap_rm3_rows" "$wrap_r_canon" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$HOOK" "$wrap_rm3" && [ "$wrap_rm3_rows" = "EXTRACTION-FAILED" ] && [ "$WRAPROWS_RESULT" = "EXTRACTION-FAILED" ]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-M3 a hook copy without the row function reports an extraction failure, never parity\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-M3 a missing row function did not report an extraction failure (result: %s)\n' "${WRAPROWS_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+
+# --- CMDPOS-SKEW — the canonicalizer's version-skew canary (#8314) ---------------------------
+# The hook trusts the shared canonicalizer only after two probes: a one-line function body,
+# and a wrapper carrying a separate-argument option before a benign word, whose canonical
+# form exposes the word only on the walk that reads wrapper grammar. A copy of the
+# canonicalizer that predates that grammar, or whose row table is damaged, passes the first
+# probe and fails the second, so the hook must fail CLOSED rather than read every wrapped
+# command the old way while believing the primitive healthy. Modelled by a copy whose sudo
+# row is removed; the control is the same sandbox with the shipped copy.
+cps_root="$(/usr/bin/mktemp -d)"
+cps_hooks="${cps_root}/.claude/hooks"
+/bin/mkdir -p "${cps_hooks}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh "${cps_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${cps_hooks}/block-destructive.sh"
+/usr/bin/printf 'enforce' > "${cps_hooks}/.mode"
+cps_run() { # $1 = command -> CPS_RC and CPS_ERR
+  CPS_RC=0
+  CPS_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$1" "$cps_root")" | /bin/bash "${cps_hooks}/block-destructive.sh" 2>&1 >/dev/null ) )" || CPS_RC="$?"
+}
+/usr/bin/sed -e 's/WROW\["nice"\]=1//' "${HOOK%/*}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_live=0
+if ! /usr/bin/cmp -s "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" \
+   && ! /usr/bin/grep -q -F 'WROW["nice"]' "${cps_hooks}/lib/command-position.awk"; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'PRIMITIVE-MISSING'; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar fails the hook closed (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$cps_live" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+/bin/cp "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
+cps_run 'echo hello'
+cps_ctl_benign="$CPS_RC"
+cps_run 'rm -rf /'
+if [ "$cps_ctl_benign" = 0 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-004'; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command and refuses the plain form\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-CTL the sandbox with the shipped canonicalizer is not live (benign exit=%s, plain-form exit=%s)\n' "$cps_ctl_benign" "$CPS_RC"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$cps_root"
 
 # --- pairing mutants: every control and pin below is shown able to fail (Stage 7 F-02) -------
 # A control or a pin keeps its verdict across the change by design, so its two limbs cannot

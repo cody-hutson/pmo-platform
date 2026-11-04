@@ -235,8 +235,23 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 # (GHSA-g9g6-28c9-vrx5), and the same fail-closed direction as the dependency guard above.
 CMDPOS_OK=0
 if [ -r "$CMDPOS_AWK" ]; then
+  # Two probes. The first — a one-line function body — detects a present-but-empty or
+  # truncated copy. The second — a wrapper carrying a separate-argument option before a
+  # benign verb — detects a VERSION SKEW (#8314): a copy that predates the wrapper-grammar
+  # walk resolves the benign verb identically on both versions for the first probe, but
+  # leaves it unreached here, where the walk that reads wrapper grammar exposes it at an
+  # anchor. A stale or damaged row table therefore fails this probe, so the hook denies
+  # rather than reading every wrapped command the old way while believing the primitive OK.
+  # A third probe guards the EXIT VIEW this hook uniquely reads: the exit view of the same
+  # wrapped input must NOT expose the verb (its walk predates the wrapper grammar), so a
+  # copy that ignores or lacks the view — emitting the widened form for both — fails here
+  # and the hook denies rather than letting the two allow-exits read a widened view.
   if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
-     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
+     && _cp_canary2="$("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+     && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q' \
+     && _cp_canary3="$("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null)" \
+     && ! "$PRINTF" '%s' "$_cp_canary3" | "$GREP" -q '; q'; then
     CMDPOS_OK=1
   fi
 fi
@@ -248,6 +263,13 @@ fi
 COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
 # Belt-and-braces: a non-empty command must never canonicalize to nothing.
 [ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
+# The EXIT VIEW (#8314): the canonicalizer's quote-masked but UN-WIDENED output — the walk
+# as it stood before the wrapper grammar. The two exits below ALLOW on a match, so reading
+# the widened COMMAND_CMDPOS would turn a refusal into an allow every time the walk newly
+# resolved a command start (R→A-1, R→A-2). They read this view instead, so they keep the
+# verdicts they have today; closing the line-laundering those verdicts leave is #8122's.
+COMMAND_CMDPOS_EXIT="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
+[ -n "$COMMAND_CMDPOS_EXIT" ] || COMMAND_CMDPOS_EXIT="$COMMAND"
 
 # --- HELPERS ---
 log_block() {
@@ -286,6 +308,23 @@ block_cwd_unknown() {
 matches() {
   local pattern="$1"
   "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
+}
+
+# exit_matches(pattern) — the same test against the canonicalizer's EXIT VIEW, read only by
+# the two allow-on-match exits (#8314). A widening of the command walk does not reach it.
+exit_matches() {
+  local pattern="$1"
+  "$PRINTF" '%s' "$COMMAND_CMDPOS_EXIT" | "$GREP" -qE "$pattern"
+}
+
+# first_deletion_verb(matcher) — the deletion verb at a command start under the given
+# matcher (matches | exit_matches), or empty. The no-target exit uses it with exit_matches,
+# so a verb visible only under the widened walk does not grant the target-less allow.
+first_deletion_verb() {
+  local m="$1"
+  if "$m" "${ANCHOR_PREFIX_BASH}"'rm([[:space:]]+|$)'; then "$PRINTF" 'rm'; return; fi
+  if "$m" "${ANCHOR_PREFIX_BASH}"'rmdir([[:space:]]+|$)'; then "$PRINTF" 'rmdir'; return; fi
+  if "$m" "${ANCHOR_PREFIX_BASH}"'unlink([[:space:]]+|$)'; then "$PRINTF" 'unlink'; return; fi
 }
 
 # classify_path(path) — Steps 5-6 below: normalize an absolute path and prefix-match it
@@ -797,7 +836,7 @@ MEMORY_ADMISSIONS=0
 # Per requirement #6: "git rm and other git <verb> invocations are exempt"
 # Broader than the Stage 5 spoke's narrow allowlist — exempts ALL git subcommands.
 # Absolute-path-aware: also exempts /usr/bin/git, /bin/git, etc.
-if matches "${ANCHOR_PREFIX_BASH}"'git[[:space:]]+[^[:space:]]+'; then
+if exit_matches "${ANCHOR_PREFIX_BASH}"'git[[:space:]]+[^[:space:]]+'; then  # M-TRASH-GITEXEMPT
   exit 0
 fi
 
@@ -855,9 +894,13 @@ if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
       esac
     done < <(extract_target_tokens "$verb")
 
-    # If verb matched but no target tokens were extracted (e.g., bare `rm` with no args),
-    # there is nothing to delete — allow.
-    if [ "$found_target" = 0 ]; then
+    # If the verb matched but no target tokens were extracted (e.g., bare `rm` with no
+    # args), there is nothing to delete — allow. (#8314) Only a verb that is a command
+    # start in the EXIT VIEW grants this allow: a verb visible only under the widened walk
+    # (`nice rm ; trash …`, where rm has no target but a later segment is refusable) must
+    # NOT short-circuit past Steps 3-4, so the no-target exit reads the un-widened view.
+    exit_verb="$(first_deletion_verb exit_matches)"  # M-TRASH-NOTARGET
+    if [ "$found_target" = 0 ] && [ -n "$exit_verb" ]; then
       exit 0
     fi
   fi

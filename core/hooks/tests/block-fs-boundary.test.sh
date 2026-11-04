@@ -155,6 +155,89 @@ test_case "EXT-POS-F4: escaped verb cat outside-root blocks" \
 test_case "EXT-FP-F1: quoted outside-root path as message content allows" \
   "$(bash_payload 'git commit -m "cat /Users/otheruser/notes.txt was the bug"')" 0
 
+# ----- EXT-POS (#8314): the canonicalizer walks a wrapper's own grammar -----
+#
+# The identical out-of-boundary read of EXT-POS-F1, reached through a wrapper option that
+# takes a separate argument (F5), a wrapper flag that takes none (F6), an absolute-path
+# wrapper (F7), a wrapper missing from the set (F8-F10) and a condition position (F11). Each
+# allowed before the canonicalizer walked wrapper grammar. F12 is the declared xargs class:
+# xargs behind its own option feeding a read verb reaches the stdin sentinel, as a bare
+# `xargs cat` does. The out-of-boundary operand here is an absolute path outside every
+# allowed root and outside any home directory (the PII pre-commit guard flags a newly-added
+# /Users/<name> shape; F1-F4 above predate it); its out-of-boundary meaning is unchanged.
+test_case "EXT-POS-F5: sudo -u root cat outside-root blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'sudo -u root cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F6: command -p cat outside-root blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'command -p cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F7: /usr/bin/env cat outside-root blocks (absolute-path wrapper)" \
+  "$(bash_payload '/usr/bin/env cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F8: nice -n 10 cat outside-root blocks (wrapper missing from the set)" \
+  "$(bash_payload 'nice -n 10 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F9: stdbuf -o 0 cat outside-root blocks (wrapper missing from the set)" \
+  "$(bash_payload 'stdbuf -o 0 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F10: timeout 5 cat outside-root blocks (wrapper missing from the set)" \
+  "$(bash_payload 'timeout 5 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F11: if-condition cat outside-root blocks (condition position)" \
+  "$(bash_payload 'if cat /opt/other/notes.txt ; then :; fi')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F12: xargs -0 cat reaches the stdin sentinel (declared xargs class)" \
+  "$(bash_payload 'printf x | xargs -0 cat')" 2 "BLOCK-FS-BOUNDARY-003"
+
+# Content and near-miss controls: a read verb that is text, or an option value, stays allowed.
+test_case "EXT-FP-F2: grep alternation naming wrapped reads allows" \
+  "$(bash_payload "grep -E 'if cat |timeout 5 cat ' notes.txt")" 0
+
+test_case "EXT-FP-F3: a read verb named as the variable env unsets allows" \
+  "$(bash_payload 'env -u cat printenv HOME')" 0
+
+# ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
+#
+# The hook trusts the shared canonicalizer only after two probes: a one-line function body,
+# and a wrapper carrying a separate-argument option before a benign word, whose canonical
+# form exposes the word only on the walk that reads wrapper grammar. A copy that predates
+# that grammar, or whose row table is damaged, passes the first probe and fails the second,
+# so in enforce the hook fails CLOSED. Modelled by a copy whose sudo row is removed; the
+# control is the same sandbox with the shipped copy.
+cps_root="$(/usr/bin/mktemp -d)"
+cps_hooks="${cps_root}/.claude/hooks"
+/bin/mkdir -p "${cps_hooks}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${cps_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${cps_hooks}/block-fs-boundary.sh"
+/usr/bin/printf 'enforce' > "${cps_hooks}/.mode"
+cps_run() { # $1 = command -> CPS_RC and CPS_ERR
+  CPS_RC=0
+  CPS_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$1" "$cps_root")" | /bin/bash "${cps_hooks}/block-fs-boundary.sh" 2>&1 >/dev/null ) )" || CPS_RC="$?"
+}
+/usr/bin/sed -e 's/WROW\["nice"\]=1//' "${HOOK_DIR}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_live=0
+if ! /usr/bin/cmp -s "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" \
+   && ! /usr/bin/grep -q -F 'WROW["nice"]' "${cps_hooks}/lib/command-position.awk"; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'PRIMITIVE-MISSING'; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar fails the hook closed in enforce (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$cps_live" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+/bin/cp "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
+cps_run 'echo hello'
+if [ "$CPS_RC" = 0 ]; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-CTL the sandbox with the shipped canonicalizer refused a benign command (exit=%s): %s\n' "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$cps_root"
+
 test_case "head ~/Desktop blocks" \
   "$(bash_payload 'head ~/Desktop/foo.log')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 

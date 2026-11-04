@@ -297,6 +297,36 @@ test_case "EXT-POS9: xargs-fed rm blocks via the existing unresolvable branch" \
 test_case "EXT-POS10: case-arm blocks (compound keyword)" \
   "$(bash_payload 'case x in a) rm /tmp/foo;; esac')" 2 "BLOCK-TRASH-001"
 
+# ----- EXT-POS (#8314): the canonicalizer walks a wrapper's own grammar -----
+#
+# The same deletion of the same absolute literal, reached through a wrapper's own option
+# (EXT-POS11, 15, 18), an absolute-path wrapper (12), a wrapper missing from the set (13-15),
+# a condition position (16) and a wrapper flag that takes no argument (17). Each allowed
+# before the canonicalizer walked wrapper grammar.
+test_case "EXT-POS11: env -u X rm blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'env -u X rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS12: /usr/bin/sudo rm blocks (absolute-path wrapper)" \
+  "$(bash_payload '/usr/bin/sudo rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS13: nice rm blocks (wrapper missing from the set)" \
+  "$(bash_payload 'nice rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS14: stdbuf -oL rm blocks (wrapper missing from the set, attached option value)" \
+  "$(bash_payload 'stdbuf -oL rm /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS15: timeout -s KILL 5 rm blocks (wrapper option, then its duration)" \
+  "$(bash_payload 'timeout -s KILL 5 rm /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS16: if-condition rm blocks (condition position)" \
+  "$(bash_payload 'if rm /tmp/foo ; then :; fi')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS17: time -p rm blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'time -p rm /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS18: xargs with its own option feeding rm blocks via the stdin sentinel" \
+  "$(bash_payload 'printf x | xargs -n 1 rm')" 2 "BLOCK-TRASH-001"
+
 # ----- EXT-FP: false-positive guards for the widened positions (#5644) -----
 #
 # Shell text carried AS CONTENT is not a command. These are ordinary engineering commands
@@ -334,6 +364,140 @@ test_case "EXT-FP7: escaped parens are literal, not grouping" \
 # silent behaviour change nobody notices.
 test_case "EXT-RES1: nested-shell program string allows (documented residual, not a defect)" \
   "$(bash_payload 'bash -c '"'"'rm /tmp/foo'"'"'')" 0
+
+# ----- EXT-FP (#8314): wrapper grammar carried as content stays content -----
+test_case "EXT-FP8: echoed wrapper-and-option text allows" \
+  "$(bash_payload 'echo "nice -n 10 rm -rf /tmp/x"')" 0
+
+test_case "EXT-FP9: commit message carrying a wrapped deletion allows" \
+  "$(bash_payload 'git commit -m "if rm fails, sudo -u root rm -rf /tmp/x"')" 0
+
+# ----- EXT-RA (#8314): the two allow exits read the exit view -----
+#
+# This hook has two exits that ALLOW on a match: Step 1's git exemption (a git command at a
+# command start exempts the line) and Step 2's no-target exit (a deletion verb with no
+# operand ends the evaluation). Both read the canonicalized text, so every command start
+# the canonicalizer newly resolves would ALSO widen them, turning refusals into allows. Each
+# sentinel below is refused today and must stay refused: a git command, or a target-less
+# deletion verb, newly resolved behind a face, beside a deletion the hook refuses (T1-T5);
+# and a newly resolved target-less verb that would displace the verb Step 2 judged before
+# (T6). The two exits read the canonicalizer's exit view instead, the form the walk produced
+# before the wrapper grammar, so they keep today's verdicts. Each sentinel is paired below
+# with a copy of the hook whose marked exit line reads the widened text again, which allows
+# it: the sentinel is shown able to fire.
+test_case "EXT-RA-T1: a git status behind nice does not exempt the deletion beside it" \
+  "$(bash_payload 'nice git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-RA-T2: a git condition does not exempt the deletion in its branch" \
+  "$(bash_payload 'if git diff --quiet ; then rm -rf /tmp/foo ; fi')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-RA-T3: a git log behind an absolute-path env does not exempt the deletion beside it" \
+  "$(bash_payload '/usr/bin/env git log ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-RA-T4: a target-less rm behind nice does not end the evaluation before the trash call" \
+  "$(bash_payload 'nice rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
+
+test_case "EXT-RA-T5: a target-less rm behind a long sudo flag does not end the evaluation" \
+  "$(bash_payload 'sudo --list rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
+
+# The neutrality pins: a line the walk resolved BEFORE the wrapper grammar keeps the
+# verdict it had, which the exit view exists to preserve. Both are allowed today and stay
+# allowed here; the per-segment closure of these lines is #8122's, which must flip them.
+test_case "EXT-RES-T1: a sudo-prefixed git status keeps today's exemption (exit view; line laundering is #8122's)" \
+  "$(bash_payload 'sudo git status ; rm -rf /tmp/foo')" 0
+
+test_case "EXT-RES-T2: a sudo-prefixed target-less rm keeps today's no-target exit (exit view; #8122's)" \
+  "$(bash_payload 'sudo rm ; trash /etc/hosts')" 0
+
+# The pairs. Each mutant is a copy of the hook with exactly one marked exit line reading the
+# widened text again (`matches` for M-TRASH-GITEXEMPT; the Step-2 verb for
+# M-TRASH-NOTARGET), shown live first: it differs from the hook by that one line, and it
+# parses. The sentinel's command through that copy must be allowed.
+ra_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-ra.XXXXXX" 2>/dev/null)" || ra_dir=""
+ra_live() { # $1 = mutant file -> 0 when it differs from the hook by exactly one line and parses
+  local n
+  n="$(/usr/bin/diff "$HOOK" "$1" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+  [ "$n" = 2 ] && /bin/bash -n "$1" 2>/dev/null
+}
+ra_pair() { # $1 = arm label  $2 = mutant file  $3 = command
+  local rc=0 err
+  if ! ra_live "$2"; then
+    /usr/bin/printf 'FAIL: %s the mutant is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n' "$1"
+    FAIL=$((FAIL + 1)); return
+  fi
+  err="$(/usr/bin/printf '%s' "$(bash_payload "$3")" | /bin/bash "$2" 2>&1 >/dev/null)" || rc="$?"
+  if [ "$rc" = 0 ]; then
+    /usr/bin/printf 'PASS: %s the sentinel is allowed through the mutant, so it can fire\n' "$1"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s the mutant did not allow the sentinel (exit=%s): %s\n' "$1" "$rc" "$err"
+    FAIL=$((FAIL + 1))
+  fi
+}
+if [ -z "$ra_dir" ]; then
+  /usr/bin/printf 'FAIL: EXT-RA pairs could not create a sandbox, so the pairs did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${ra_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${ra_dir}/lib/"
+  /usr/bin/sed -e 's/^if exit_matches \(.*# M-TRASH-GITEXEMPT\)$/if matches \1/' \
+    "$HOOK" > "${ra_dir}/block-rm-prefer-trash-git.sh"
+  /usr/bin/sed -e 's/exit_verb="\$(first_deletion_verb exit_matches)"\(.*# M-TRASH-NOTARGET\)$/exit_verb="$verb"\1/' \
+    "$HOOK" > "${ra_dir}/block-rm-prefer-trash-notarget.sh"
+  ra_pair "EXT-RA-T1-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" 'nice git status ; rm -rf /tmp/foo'
+  ra_pair "EXT-RA-T2-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" 'if git diff --quiet ; then rm -rf /tmp/foo ; fi'
+  ra_pair "EXT-RA-T3-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" '/usr/bin/env git log ; rm -rf /tmp/foo'
+  ra_pair "EXT-RA-T4-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; trash /etc/hosts'
+  ra_pair "EXT-RA-T5-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'sudo --list rm ; trash /etc/hosts'
+  case "${ra_dir##*/}" in rmt-ra.*) /bin/rm -rf "$ra_dir" ;; esac
+fi
+
+# ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
+#
+# This hook trusts the shared canonicalizer only after three probes: a one-line function
+# body; a wrapper carrying a separate-argument option before a benign word, whose canonical
+# form exposes the word only on the walk that reads wrapper grammar; and the same input in
+# the exit view, which must keep the form the walk produced before that grammar. A stale or
+# damaged copy beside this hook passes the first probe and fails a later one, so the hook
+# fails CLOSED. Modelled by a copy whose sudo row is removed (SKEW-01) and a copy whose exit
+# view is unreachable (SKEW-02); the control is the same sandbox with the shipped copy.
+cps_root="$(/usr/bin/mktemp -d)"
+cps_hooks="${cps_root}/.claude/hooks"
+/bin/mkdir -p "${cps_hooks}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${cps_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${cps_hooks}/block-rm-prefer-trash.sh"
+cps_run() { # $1 = command -> CPS_RC and CPS_ERR
+  CPS_RC=0
+  CPS_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$1" "$cps_root")" | /bin/bash "${cps_hooks}/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || CPS_RC="$?"
+}
+cps_skew() { # $1 = arm label  $2 = sed program for the canonicalizer copy  $3 = what the copy lacks
+  /usr/bin/sed -e "$2" "${HOOK_DIR}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+  local live=0
+  if ! /usr/bin/cmp -s "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"; then live=1; fi
+  cps_run 'echo hello'
+  if [ "$live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'PRIMITIVE-MISSING'; then
+    /usr/bin/printf 'PASS: %s a canonicalizer copy without %s fails the hook closed (exit 2, PRIMITIVE-MISSING)\n' "$1" "$3"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s a canonicalizer copy without %s did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$1" "$3" "$live" "$CPS_RC" "$CPS_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+cps_skew "CMDPOS-SKEW-01" 's/WROW\["nice"\]=1//' "the wrapper grammar"
+cps_skew "CMDPOS-SKEW-02" 's/CMDPOS_VIEW == "exit"/CMDPOS_VIEW == "zzexit"/' "the exit view"
+/bin/cp "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
+cps_run 'echo hello'
+cps_ctl_benign="$CPS_RC"
+cps_run 'rm -rf /tmp/foo'
+if [ "$cps_ctl_benign" = 0 ] && [ "$CPS_RC" = 2 ] && /usr/bin/printf '%s' "$CPS_ERR" | /usr/bin/grep -q 'BLOCK-TRASH-001'; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command and refuses the plain form\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-CTL the sandbox with the shipped canonicalizer is not live (benign exit=%s, plain-form exit=%s)\n' "$cps_ctl_benign" "$CPS_RC"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$cps_root"
 
 # ----- CWD-*: a relative target is judged from the directory the command can be in -----
 #

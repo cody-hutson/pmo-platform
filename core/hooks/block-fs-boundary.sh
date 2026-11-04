@@ -242,10 +242,16 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 # Mode-gated severity, mirroring this hook's dependency gate and block-fragile-refs.sh
 # (GHSA-g9g6-28c9-vrx5): enforce DENIES, warn degrades to the raw command — which is
 # exactly this hook's pre-#5644 behaviour, so warn never loses coverage it already had.
+# Two probes (#8314): the first catches a present-but-empty or truncated copy; the second
+# — a wrapper carrying a separate-argument option before a benign verb, exposed at an
+# anchor only by the walk that reads wrapper grammar — catches a VERSION SKEW, a copy that
+# predates that grammar.
 CMDPOS_OK=0
 if [ -r "$CMDPOS_AWK" ]; then
   if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
-     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
+     && _cp_canary2="$("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+     && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q'; then
     CMDPOS_OK=1
   fi
 fi
