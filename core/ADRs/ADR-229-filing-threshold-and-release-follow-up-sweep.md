@@ -18,7 +18,7 @@ supersedes: none
 
 **Proposed.** Flips to Accepted at the introducing release's Stage 13 ratification beat (Phase A13). The number binds at merge.
 
-**Numbering provenance.** Claimed as **229** against an anchor of **228** on `origin/main`, read from `release/tools/renumber-adr.py --next-free` at Engineering Commit 0. A branch claim is detection-only and never binds; should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations from other branch-authored artifacts use the slug token `{{ADR:filing-threshold-and-release-follow-up-sweep}}`, which carries no number shape and resolves at the claim.
+**Numbering provenance.** Claimed as **229** against an anchor of **228** on `origin/main`, read from `release/tools/renumber-adr.py --next-free` at Engineering Commit 0. A branch claim is detection-only and never binds; should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations from other branch-authored artifacts use the slug token `{{ADR:<slug>}}`, which carries no number shape and resolves at the claim.
 
 ## Context
 

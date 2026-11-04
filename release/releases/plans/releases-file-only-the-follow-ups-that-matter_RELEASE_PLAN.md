@@ -214,7 +214,7 @@ Single branch `release/releases-file-only-the-follow-ups-that-matter`, posture *
 
 | Change | Path | What it does |
 |---|---|---|
-| 1 | `core/ADRs/ADR-229-filing-threshold-and-release-follow-up-sweep.md` (ADD) | The decision record: one filing threshold whose home is `core/`; tag at source; Stage 9 ledger and accept-or-cut; Stage 13 sweep per repository; Mode C threshold always; Stage 2 counting. Consequences state the line is a disposition prompt not a bound, the GO on an EXCESS is held by conduct, the charter residual is widened, and an outside-run hold lives in the caller's output with monitoring criteria. Its number is allocated by `renumber-adr.py --next-free` over the mainline anchor and bound at merge; this file and other branch-authored prose cite it as `{{ADR:filing-threshold-and-release-follow-up-sweep}}` |
+| 1 | `core/ADRs/ADR-229-filing-threshold-and-release-follow-up-sweep.md` (ADD) | The decision record: one filing threshold whose home is `core/`; tag at source; Stage 9 ledger and accept-or-cut; Stage 13 sweep per repository; Mode C threshold always; Stage 2 counting. Consequences state the line is a disposition prompt not a bound, the GO on an EXCESS is held by conduct, the charter residual is widened, and an outside-run hold lives in the caller's output with monitoring criteria. Its number is allocated by `renumber-adr.py --next-free` over the mainline anchor and bound at merge; this file and other branch-authored prose cite it as `{{ADR:<slug>}}` |
 | 2 | `core/ADRs/README.md` | A curated entry under § Automation-governance ADRs, after the ADR-184 entry |
 | 3 | `core/standards/work-item-filing-threshold.md` (ADD) | The threshold's single home: two limbs (class: user-visible, security- or privacy-relevant; severity: at least Minor); the 2026-10-24 user-visible ruling for platform-internal items; reading the severity limb; below-threshold lands where it surfaced, filed nowhere; not filed when already declared (a record declares only when it accepts) or owned; security items withheld and reported privately; consumers |
 | 4 | `release/references/standards/finding-disposition-framework.md` | Frontmatter and § 1/§ 7 notes; `:119` Defer row; new § 8 — release follow-ups (definition, tag at source, release severity sources, where below-threshold lands, Accept-only declaration, one sweep per repository, what a cut may do, which step applies it, the family cutover) |
@@ -693,7 +693,7 @@ A release now files only the follow-ups that matter, and files them once. One fi
 ### Cross-references
 
 - Release plan: this file, top section; the authoritative change specification is Stage 5 revision 1 on #8606.
-- Decision record: `{{ADR:filing-threshold-and-release-follow-up-sweep}}` in `core/ADRs/`, `Proposed` until Stage 13 Phase A13.
+- Decision record: `ADR-229` in `core/ADRs/`, `Proposed` until Stage 13 Phase A13.
 - Milestone: `releases-file-only-the-follow-ups-that-matter`.
 - User-facing release note: authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`, under `release/releases/notes/`.
 
