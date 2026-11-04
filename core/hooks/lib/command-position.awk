@@ -56,7 +56,10 @@
 # builtin exec nohup time xargs nice stdbuf timeout), an assignment — `NAME=value` or its
 # append form `NAME+=value`, which bash and zsh both read as an assignment word — and a
 # redirection. A prefix word is matched on its BASENAME (`/usr/bin/env` is env), after one
-# leading backslash and full-token quotes are dropped (`\sudo` and `"sudo"` are sudo). A
+# leading backslash and full-token quotes are dropped (`\sudo` and `"sudo"` are sudo). That
+# lookup comes after the token, as written, is tested as an assignment and as a redirection,
+# so an assignment whose value is a path and a redirection whose attached target is one are
+# what the shell reads them as, never the wrapper their last path segment names. A
 # wrapper is stepped together with its OWN grammar: its option run, then its positional
 # operands, read from the rows below — so `nice -n 10 rm …`, `sudo -u root rm …` and
 # `timeout 5 rm …` resolve `rm`, as `rm` alone does. The rows are a COPY of the wrapper
@@ -468,8 +471,26 @@ function resolve_segment(lo, hi,   i, t_start, t_end, tok, w, skips, xflag) {
     t_start = TK_S
     t_end = TK_E
     tok = substr(out, t_start, t_end - t_start + 1)
-    w = cp_lookup(tok)
 
+    # The token AS WRITTEN is tested as an assignment and as a redirection before it is
+    # looked up as a prefix word — the order the -022 walk uses. The shell reads either
+    # shape as what it is, never as a command, while the lookup's basename would read an
+    # assignment whose value is a path, or a redirection whose attached target is one, as
+    # the wrapper its last path segment names (`X=/usr/bin/timeout`, `>/tmp/timeout`), and a
+    # wrapper that takes a positional would then consume the command word behind it.
+    if (tok ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) {                    # VAR=value or VAR+=value  CMDPOS-APPEND
+      if (t_start > 1) ins[t_start] = "; "   # (e) CMDPOS-E
+      i = t_end + 1; skips++; continue
+    }
+    if (tok ~ /^[0-9]*(>>|>|<)/) {                                               # redirect
+      i = t_end + 1; skips++
+      if (tok ~ /(>>|>|<)$/) {                        # operand is a separate token
+        while (i <= hi && is_blank(substr(out, i, 1))) i++
+        while (i <= hi && !is_blank(substr(out, i, 1))) i++
+      }
+      continue
+    }
+    w = cp_lookup(tok)
     if (w in PREFIX) {
       skips++
       if (w in WROW) {
@@ -480,18 +501,6 @@ function resolve_segment(lo, hi,   i, t_start, t_end, tok, w, skips, xflag) {
         i = CP_I
       } else {
         i = t_end + 1
-      }
-      continue
-    }
-    if (tok ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) {                    # VAR=value or VAR+=value  CMDPOS-APPEND
-      if (t_start > 1) ins[t_start] = "; "   # (e) CMDPOS-E
-      i = t_end + 1; skips++; continue
-    }
-    if (tok ~ /^[0-9]*(>>|>|<)/) {                                               # redirect
-      i = t_end + 1; skips++
-      if (tok ~ /(>>|>|<)$/) {                        # operand is a separate token
-        while (i <= hi && is_blank(substr(out, i, 1))) i++
-        while (i <= hi && !is_blank(substr(out, i, 1))) i++
       }
       continue
     }

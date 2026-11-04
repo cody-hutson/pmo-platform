@@ -207,6 +207,26 @@ test_case "EXT-APPEND-F1-CTL: a NAME=value assignment then cat outside-root bloc
 test_case "EXT-APPEND-F1: an append-form assignment then cat outside-root blocks" \
   "$(bash_payload 'FOO+=1 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
 
+# ----- EXT-ORDER (#8314, DT pass 2): an assignment or a redirection is read as what it is -----
+#
+# The canonicalizer's default walk looked a token up as a wrapper word by its basename before
+# it tested the token as an assignment or a redirection, so an assignment whose value ends in
+# /timeout, or a redirection to a file named timeout, was read as the timeout wrapper, whose
+# duration operand consumed the read verb behind it. F1 and F2 are the out-of-boundary read
+# behind each shape; the CTLs are the plain form and the same read behind a plain assignment,
+# refused before and after.
+test_case "EXT-ORDER-F-CTL0: cat outside-root blocks (plain-form control)" \
+  "$(bash_payload 'cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-ORDER-F-CTL1: an assignment with a plain value, then cat outside-root blocks" \
+  "$(bash_payload 'X=1 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-ORDER-F1: an assignment whose value's last path segment is timeout, then cat outside-root blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-ORDER-F2: an output redirection to a file named timeout, then cat outside-root blocks" \
+  "$(bash_payload '>/tmp/timeout cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
 # ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
 #
 # The hook trusts the shared canonicalizer only after two probes: a one-line function body,

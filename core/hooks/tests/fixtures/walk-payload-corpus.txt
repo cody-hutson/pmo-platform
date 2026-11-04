@@ -1779,3 +1779,32 @@ EW42|block-egress|ewa-near|-|?|a|FOO++=1 gh api -X POST @NO@
 EW43|block-egress|ewa-near|-|?|a|FOO+=1 gh api -X POST @OK@
 EW44|block-egress|ewa-near|-|?|a|FOO+=1 gh api -X POST @NO@ ; echo it\'s
 EW50|block-egress|ewa-prec|-|?|a|FOO+=/opt/homebrew/bin/gh api -X POST @NO@
+# --- seed 13: the DT pass-2 fix on card #8314 — a prefix-run assignment or redirection read before the wrapper lookup (14 rows) ---
+# Ids OR. The canonicalizer's default walk looked a token up as a prefix word by its basename
+# before it tested the token as an assignment or a redirection, so an assignment whose value
+# is a path, or a redirection whose attached target is one, read as the wrapper its last path
+# segment names, and a wrapper that takes a positional consumed the word behind it. The shell
+# reads either shape as an assignment or a redirection, and the walk now tests both first. The
+# rows reach the misread through the assignment-anchored rules, which this reader grades; the
+# verb-rule spellings of the same class are suite arms (EXT-ORDER-*) in the four consuming
+# suites. ord-ctl holds the shapes with a value or target that names no positional-taking
+# wrapper, refused before and after. ord is what this fix moves from allowed to refused. ord-near
+# keeps today's allow: another name, the shape as an argument of the real command, and a quoted
+# word, which the shell runs as the command word. gt is `?`. The verdicts are the fix commit's;
+# the red-before reading of ord is the suite run against the pre-change canonicalizer, kept as
+# executed evidence. This header does not take the card-block form the cross-issue criterion
+# counts: #8314's own seed block is still deferred.
+OR01|block-destructive|ord-ctl|-|?|B|X=1 PATH=x true
+OR02|block-destructive|ord-ctl|-|?|B|X=/usr/bin/env PATH=x true
+OR03|block-destructive|ord-ctl|-|?|B|>/tmp/out PATH=x true
+OR04|block-destructive|ord-ctl|-|?|B|X=1 PATH=/tmp/evil/bin true
+OR10|block-destructive|ord|-|?|B|X=/usr/bin/timeout PATH=x true
+OR11|block-destructive|ord|-|?|B|>/tmp/timeout PATH=x true
+OR12|block-destructive|ord|-|?|B|2>/tmp/x/timeout PATH=x true
+OR13|block-destructive|ord|-|?|B|X+=/usr/bin/timeout PATH=x true
+OR14|block-destructive|ord|-|?|B|X=1 PATH=/tmp/evil/sudo true
+OR15|block-destructive|ord|-|?|B|X=/usr/bin/timeout CLAUDE_HOOK_BYPASS=1 true
+OR16|block-destructive|ord|-|?|B|>/tmp/timeout PMO_SCOPE_GUARD_ROOT=x true
+OR20|block-destructive|ord-near|-|?|a|X=/usr/bin/timeout MYPATH=x true
+OR21|block-destructive|ord-near|-|?|a|echo X=/usr/bin/timeout PATH=x
+OR22|block-destructive|ord-near|-|?|a|"X=/usr/bin/timeout" PATH=x true

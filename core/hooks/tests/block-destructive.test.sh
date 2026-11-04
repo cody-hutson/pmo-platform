@@ -329,6 +329,64 @@ test_case "EXT-APPEND-PREC-CTL: an append-form assignment ahead of sudo -u root 
   "$(bash_payload 'FOO+=1 sudo -u root git push --force')" \
   2 "BLOCK-DESTRUCTIVE-001"
 
+# --- EXT-ORDER (#8314, DT pass 2): an assignment or a redirection is read as what it is ---
+#
+# The default walk looked a token up as a prefix word (one leading backslash and full-token
+# quotes dropped, then the basename) BEFORE it tested the token as an assignment or a
+# redirection. A prefix-run assignment whose value is a path, or a redirection whose
+# attached target is one, was therefore read as the wrapper its last path segment names;
+# the walk stepped that wrapper's grammar, and a wrapper that takes a positional consumed
+# the real command word as its operand, so the deletion behind it reached no anchored rule.
+# The shell reads such a token as an assignment or a redirection, never as a command, and
+# the walk now tests those two shapes first, the order the -022 walk already uses. Each arm
+# below is the plain-form refusal (CTL0) reached through one spelling of the class. CTL1 to
+# CTL4 hold the same shapes with a value or target that names no positional-taking wrapper,
+# refused before and after; CTL5 is a real wrapper written by absolute path, which must keep
+# its walk. The exit view's walk is unchanged.
+test_case "EXT-ORDER-D-CTL0: rm -rf / blocks (plain-form control)" \
+  "$(bash_payload 'rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL1: an assignment with a plain value, then rm -rf / blocks" \
+  "$(bash_payload 'X=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL2: an assignment whose value is a path to env, then rm -rf / blocks" \
+  "$(bash_payload 'X=/usr/bin/env rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL3: an assignment whose value is a path to nice, then rm -rf / blocks" \
+  "$(bash_payload 'X=/usr/bin/nice rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL4: a redirection to a file that names no wrapper, then rm -rf / blocks" \
+  "$(bash_payload '>/tmp/out rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL5: a real timeout wrapper written by absolute path, with its duration, then rm -rf / blocks" \
+  "$(bash_payload '/usr/bin/timeout 5 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D1: an assignment whose value's last path segment is timeout, then rm -rf / blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D2: an output redirection to a file named timeout, then rm -rf / blocks" \
+  "$(bash_payload '>/tmp/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D3: a numbered redirection whose target's last segment is timeout, then rm -rf / blocks" \
+  "$(bash_payload '2>/tmp/x/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D4: an append-form assignment whose value names timeout, then rm -rf / blocks" \
+  "$(bash_payload 'X+=/usr/bin/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D5: a plain assignment, then one whose value names timeout, then rm -rf / blocks" \
+  "$(bash_payload 'Y=1 X=/opt/tools/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
 # --- /Users subdirs — block at /Users bare, allow deeper ---
 test_case "rm -rf /Users blocks (catastrophic)" \
   "$(bash_payload 'rm -rf /Users')" \
@@ -856,6 +914,40 @@ test_case "EXT-APPEND-NEAR-5: an append-form assignment ahead of a variable whos
 test_case "EXT-APPEND-NEAR-6: an append-form line written as quoted content allows" \
   "$(bash_payload 'echo "FOO+=1 PATH=x true"')" \
   0
+
+# --- EXT-ORDER-D020 / -D023 (#8314, DT pass 2): the ordering class at the assignment-anchored rules ---
+#
+# The misread of EXT-ORDER above also kept transformation (e) from marking an assignment. An
+# assignment whose value's last path segment names a positional-taking wrapper consumed the
+# PATH assignment behind it as that wrapper's operand (D020-1), and a PATH assignment whose own
+# value ends in a wrapper's name was itself read as that wrapper and never marked (D020-2).
+# Each CTL is the same PATH assignment behind a plain prefix assignment, refused before and
+# after. D023-1 is D020-1's shape on the anti-injection rule, a position D-Scope-023 declares.
+# The CANON pins hold the default view's exact text for both shapes and the exit view's.
+test_case "EXT-ORDER-D020-CTL1: a PATH assignment behind a plain assignment blocks (control)" \
+  "$(bash_payload 'X=1 PATH=/tmp/evil ls')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-ORDER-D020-1: a PATH assignment behind an assignment whose value names timeout blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout PATH=/tmp/evil ls')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-ORDER-D020-CTL2: a PATH assignment to a directory path, behind a plain assignment, blocks (control)" \
+  "$(bash_payload 'X=1 PATH=/tmp/evil/bin ls')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-ORDER-D020-2: a PATH assignment whose value's last segment is sudo, behind a plain assignment, blocks" \
+  "$(bash_payload 'X=1 PATH=/tmp/evil/sudo ls')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-ORDER-D023-1: a hook-bypass assignment behind an assignment whose value names timeout blocks (declared tightening)" \
+  "$(bash_payload 'X=/usr/bin/timeout CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+d020_canon "EXT-ORDER-CANON-1" 'X=/usr/bin/timeout PATH=x true' 'X=/usr/bin/timeout ; PATH=x ; true' default
+d020_canon "EXT-ORDER-CANON-2" 'X=1 PATH=/tmp/evil/sudo ls' 'X=1 ; PATH=/tmp/evil/sudo ; ls' default
+d020_canon "EXT-ORDER-CANON-3" '>/tmp/timeout rm x' '>/tmp/timeout ; rm x' default
+d020_canon "EXT-ORDER-CANON-EXIT" 'X=/usr/bin/timeout rm x' 'X=/usr/bin/timeout ; rm x' exit
 
 test_case "alias grep='echo ok' blocks" \
   "$(bash_payload 'alias grep='\''echo ok'\''')" \

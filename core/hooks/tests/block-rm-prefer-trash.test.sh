@@ -338,6 +338,26 @@ test_case "EXT-APPEND-T1-CTL: a NAME=value assignment then rm blocks (plain-form
 test_case "EXT-APPEND-T1: an append-form assignment then rm blocks" \
   "$(bash_payload 'FOO+=1 rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
+# ----- EXT-ORDER (#8314, DT pass 2): an assignment or a redirection is read as what it is -----
+#
+# The canonicalizer's default walk looked a token up as a wrapper word by its basename before
+# it tested the token as an assignment or a redirection, so an assignment whose value ends in
+# /timeout, or a redirection to a file named timeout, was read as the timeout wrapper, whose
+# duration operand consumed the rm behind it. T1 and T2 are that deletion behind each shape;
+# the CTLs are the plain form and the same deletion behind a plain assignment, refused before
+# and after. The allow-on-match exits read the exit view, whose walk is unchanged.
+test_case "EXT-ORDER-T-CTL0: rm blocks (plain-form control)" \
+  "$(bash_payload 'rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-ORDER-T-CTL1: an assignment with a plain value, then rm blocks" \
+  "$(bash_payload 'X=1 rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-ORDER-T1: an assignment whose value's last path segment is timeout, then rm blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-ORDER-T2: an output redirection to a file named timeout, then rm blocks" \
+  "$(bash_payload '>/tmp/timeout rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
 # ----- EXT-FP: false-positive guards for the widened positions (#5644) -----
 #
 # Shell text carried AS CONTENT is not a command. These are ordinary engineering commands
