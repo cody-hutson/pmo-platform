@@ -255,6 +255,8 @@ GO WITH CONDITIONS boundary rule: if a condition requires code changes, it is a 
 
 **A condition or a re-deferral is a follow-up too.** A GO WITH CONDITIONS condition the release will not discharge before Stage 13, and an incoming deferral re-deferred past this release, is recorded as a release follow-up in the decision record, tagged per `finding-disposition-framework.md` § 8.2. It joins the Phase A7.6 ledger under the `hub` source, and the line is re-rendered before GO is recorded. A condition discharged before Stage 13 is not a follow-up.
 
+*Cutover:* recording a condition or a re-deferral as a release follow-up follows the filing-step cutover in `release/references/standards/finding-disposition-framework.md` § 8, as Phase A7.6 does.
+
 **An excess is accepted or cut before anything is filed.** When the Phase A7.6 line reads **EXCESS**, GO and GO WITH CONDITIONS are recordable only once the decision record carries exactly one of `**Net work disposition:** accepted — excess <n> — <operator rationale>` or `**Net work disposition:** cut — <rows and what each cut did>`, followed by the re-rendered line. A cut does only what `finding-disposition-framework.md` § 8.7 allows, and a protected row is never returned to its stage record. An excess that remains after a cut needs the accepted form. The excess is not a NO-GO input: it asks for the operator's accept-or-cut call, and the verdict stays the operator's alone. On NO-GO the ledger stays on this sub-task and nothing is filed.
 
 **Phase C1 — Record the verdict (one action with rendering it).** A Stage 9 verdict is recorded on two surfaces at the routing point where the operator renders it, and read back, before the gate sub-task closes:

@@ -173,6 +173,11 @@ replaces, and a `defer` row's landing (`card`, or the follow-up tag) is a
 fill-in slot. Fenced blocks render as real fenced blocks in
 the instance.
 
+*Cutover:* a `defer` row's landing follows the filing-step cutover in
+`release/references/standards/finding-disposition-framework.md` § 8 — it applies
+to releases whose Stage 9 Phase A starts after the merge SHA of the release that
+introduced it; an earlier release keeps its prior routing to the end of its run.
+
 ---
 
 # Acceptance Report — <issue #N> (<release vX.Y>)
