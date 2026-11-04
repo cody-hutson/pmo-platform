@@ -1808,3 +1808,13 @@ OR16|block-destructive|ord|-|?|B|>/tmp/timeout PMO_SCOPE_GUARD_ROOT=x true
 OR20|block-destructive|ord-near|-|?|a|X=/usr/bin/timeout MYPATH=x true
 OR21|block-destructive|ord-near|-|?|a|echo X=/usr/bin/timeout PATH=x
 OR22|block-destructive|ord-near|-|?|a|"X=/usr/bin/timeout" PATH=x true
+# --- seed 14: the DT pass-2 text finding on card #8315 — a quoted backslash read as its unquoted twin (1 row) ---
+# Id QB. BLOCK-EGRESS-007's escape and brace steps run on quote-erased text, so a backslash or a
+# brace group inside a quoted command word is read as its unquoted twin, although the shell runs
+# a command named with those literal characters, which does not exist. The row pins today's
+# verdict of the declared over-read, refused at the head of a segment as row EG142, the escaped
+# verb the shell does resolve to gh, is refused; its twin field is `-` because the quoted word is
+# not that invocation. A change that carries the quote mark through to those steps moves it to an
+# allow, as a declared precision improvement. gt is `?`. This header does not take the card-block
+# form the cross-issue criterion counts.
+QB01|block-egress|qbs-over|-|?|B|'\gh' api -X POST @NO@
