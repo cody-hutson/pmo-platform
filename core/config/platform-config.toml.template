@@ -498,6 +498,7 @@ calibration_model = ""
 # PER-MODEL AXIS (optional). One entry per probed model, keyed by the model id the
 # store's per-model split records. An ABSENT entry means the model's draw is
 # UNPROBED: its figures use the shared values above and carry the unprobed label.
+# The calibration model needs no entry; it is the multipliers' reference.
 #
 # The draw multiplier: the model's draw per weighted token relative to the
 # calibration model's, applied per model over the store's per-model split.

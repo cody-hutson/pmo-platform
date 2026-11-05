@@ -53,7 +53,7 @@ source_observations:
    - A figure is `wp = W(w) / K(w)`, summed over the responses it covers.
    - Thinking is part of output. A cache write with no tier split (written before the one-hour tier existed) is weighted at the five-minute tier.
    - The price-relative weights are **API-price-relative assumptions, not fitted**; the output weight is unconstrained by the authoring data. Only `w` is bracketed, and only `K` is fitted, until a revisit fits the output weight (Decision 8). Their values were seeded once, at authoring — `c5` 1.25, `c1` 2.0, `o` 5.0 — and are named by role everywhere else.
-   - **Per-model draw.** A model's draw per weighted token can differ from the calibration model's. The numeric home carries an optional per-model axis: a **draw multiplier** relative to the calibration model, and the **weekly window or windows** the model draws. The conversion applies a recorded multiplier per model over the store's exact per-model split. A model with no recorded entry is **unprobed**: its figures use the shared values and say so. A model whose recorded windows exclude the shared all-models window draws no weekly points; its draw is a figure in its own unit (Decision 1).
+   - **Per-model draw.** A model's draw per weighted token can differ from the calibration model's. The numeric home carries an optional per-model axis: a **draw multiplier** relative to the calibration model, and the **weekly window or windows** the model draws. The conversion applies a recorded multiplier per model over the store's exact per-model split. A model with no recorded entry, other than the calibration model itself, is **unprobed**: its figures use the shared values and say so. A model whose recorded windows exclude the shared all-models window draws no weekly points; its draw is a figure in its own unit (Decision 1).
 4. **The bracket.**
    - `w` is bracketed between a low end, where the meter readings point, and a high end, the API list-price ratio. At authoring the bracket is **0.0075–0.10**, the ends seeded in the numeric home and named by role everywhere else.
    - A figure in this unit **is a pair**: the low end computed with the low `w` and its own `K`, the high end with the high `w` and its own `K`.
@@ -91,7 +91,7 @@ source_observations:
 8. **Calibration and its revisit.**
    - A *clean pair* is two readings of one meter instance (one window label, one reset time), at settled boundaries and at least two points apart. Over its interval exactly one instrumented session tree drew on the account, and the operator attests no other Claude usage — chat and desktop-agent usage draw the same meter and leave no transcript.
    - A clean pair is **eligible** for the shared calibration only when its interval is also:
-     - **single-model** — every response ran on the calibration model or on a model with a recorded multiplier; while the numeric home names no calibration model, a revisit whose eligible pairs all ran on one model names that model;
+     - **single-model** — every response ran on the calibration model or on a model with a recorded multiplier. While the numeric home names no calibration model, a pair whose responses all ran on one model qualifies, and a revisit whose qualifying pairs all ran on the same model names that model the calibration model;
      - **advisor-free** — no response carries an advisor or fallback iteration, while the store cannot read them;
      - **store-complete** — no response is flagged incomplete, and no message id is duplicated across transcript files.
 
