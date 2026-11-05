@@ -537,12 +537,16 @@ egress_cat() {
 }
 
 # True when the string ends in an ODD number of backslashes — i.e. a following
-# quote character is escaped and is not a terminator. A long string is read once, a
-# backslash-delimited field at a time, counting the run of empty fields that ends it;
-# a short one is trimmed a backslash at a time, as before.
+# quote character is escaped and is not a terminator. A long string that ends in a
+# backslash is read once, a backslash-delimited field at a time, counting the run of
+# empty fields that ends it, and one that does not is answered by one match; a short
+# one is trimmed a backslash at a time, as before.
 egress_trailing_backslash_odd() {
   local t="$1" c=0 f=""
   if egress_long "$t"; then  # linear: trail
+    # A text that does not end in a backslash ends in a run of none, which is even: one match, and no
+    # read of the text.
+    case "$t" in *'\') ;; *) return 1 ;; esac
     while IFS= read -r -d '\' f; do
       if [ -n "$f" ]; then c=1; else c=$(( c + 1 )); fi
     done <<< "$t"
@@ -861,8 +865,14 @@ egress_ansic_span() {
 # backslash and character. A decoded NUL ends the string, as the shell ends it. Builtins only, and
 # no command-derived text ever reaches a format string: a character is produced from a number the
 # decoder computed.
+#
+# The loop below steps through the body left to decode, once per escape, with removals and slices
+# that re-measure that text each time, so on bash 3.2 it costs more than linear time in a body of
+# many escapes (see EGRESS_LINEAR_MIN). A long body is decoded by egress_ansic_decode_long, which
+# reads it once, and the loop then finds nothing left; a short one keeps the loop.
 egress_ansic_decode() {
   local s="$1" out="" c d n lim v
+  if egress_long "$s"; then egress_ansic_decode_long "$s"; out="$EGRESS_J"; s=""; fi  # linear: ansic
   while : ; do
     case "$s" in
       *\\*) ;;
@@ -925,6 +935,104 @@ egress_ansic_decode() {
     out="${out}${c}"
   done
   EGRESS_AC="$out"
+  return 0
+}
+
+# The text $1 split at every backslash, into EGRESS_BS: the text before the first backslash, then the
+# text after each, so an empty field stands between two adjacent backslashes and after a final one.
+# One word split with the backslash as the only separator, globbing off, is one pass over the text; it
+# keeps every empty field but the one after a final backslash, which is added back, and an empty text
+# is one empty field.
+egress_split_bs() {
+  local IFS='\' gl=1
+  case "$-" in *f*) gl=0 ;; esac
+  set -f
+  # shellcheck disable=SC2206
+  EGRESS_BS=( $1 )
+  if [ "$gl" -eq 1 ]; then set +f; fi
+  case "$1" in
+    '') EGRESS_BS=("") ;;
+    *'\') EGRESS_BS[${#EGRESS_BS[@]}]="" ;;
+  esac
+  return 0
+}
+
+# The decoder above, for a long body, into EGRESS_J: the same text on every input, at a cost linear
+# in the body. The body is split once at its backslashes (egress_split_bs), and each field is decoded
+# as the loop decodes the text it reaches there. The first field is text; each later one follows a
+# backslash that opens an escape, and the escape reads only that field, since no escape above reads
+# past the next backslash: its first character names it, its digits follow, and the rest of the field
+# is text. An empty field is the escape `\\`, whose second backslash opens nothing, so the field after
+# it is text; an empty last field is a backslash that ends the body, kept as written. The decoded
+# parts are gathered and joined once, and a decoded NUL ends the string there.
+egress_ansic_decode_long() {
+  local f c d n lim v esc=0 rest
+  local -a AP
+  AP=("")
+  egress_split_bs "$1"
+  for f in "${EGRESS_BS[@]}"; do
+    if [ "$esc" -eq 0 ]; then
+      AP[${#AP[@]}]="$f"; esc=1
+      continue
+    fi
+    if [ -z "$f" ]; then
+      AP[${#AP[@]}]='\'
+      esc=0
+      continue
+    fi
+    c="${f:0:1}"
+    v=-1
+    rest=""
+    case "$c" in
+      [01234567])
+        d=""; n=0
+        while [ "$n" -lt 3 ]; do
+          case "${f:$n:1}" in
+            [01234567]) d="${d}${f:$n:1}"; n=$(( n + 1 )) ;;
+            *) break ;;
+          esac
+        done
+        v=$(( 8#$d & 255 ))
+        rest="${f:$n}"
+        ;;
+      x|u|U)
+        case "$c" in x) lim=2 ;; u) lim=4 ;; *) lim=8 ;; esac
+        d=""; n=1
+        while [ "$n" -le "$lim" ]; do
+          case "${f:$n:1}" in
+            [0123456789abcdefABCDEF]) d="${d}${f:$n:1}"; n=$(( n + 1 )) ;;
+            *) break ;;
+          esac
+        done
+        if [ -z "$d" ]; then
+          AP[${#AP[@]}]="\\${f}"
+          continue
+        fi
+        v=$(( 16#$d ))
+        if [ "$c" != x ] && [ "$v" -gt 127 ]; then
+          AP[${#AP[@]}]="\\${f}"
+          continue
+        fi
+        rest="${f:$n}"
+        ;;
+      "'"|'"'|'?') AP[${#AP[@]}]="$f"; continue ;;
+      a) AP[${#AP[@]}]=$'\a'"${f:1}"; continue ;;
+      b) AP[${#AP[@]}]=$'\b'"${f:1}"; continue ;;
+      e|E) AP[${#AP[@]}]=$'\033'"${f:1}"; continue ;;
+      f) AP[${#AP[@]}]=$'\f'"${f:1}"; continue ;;
+      n) AP[${#AP[@]}]=$'\n'"${f:1}"; continue ;;
+      r) AP[${#AP[@]}]=$'\r'"${f:1}"; continue ;;
+      t) AP[${#AP[@]}]=$'\t'"${f:1}"; continue ;;
+      v) AP[${#AP[@]}]=$'\v'"${f:1}"; continue ;;
+      *) AP[${#AP[@]}]="\\${f}"; continue ;;
+    esac
+    # A decoded NUL ends the string: nothing after it is kept.
+    [ "$v" -ne 0 ] || break
+    builtin printf -v d '%o' "$v"
+    builtin printf -v c "\\${d}"
+    AP[${#AP[@]}]="${c}${rest}"
+  done
+  egress_cat AP
   return 0
 }
 
@@ -1048,6 +1156,11 @@ egress_brace_words() {
 # R4 (b) — each `\c` in a word becomes `c`, in one left-to-right pass, as quote removal does. The
 # scanner has already dropped quote marks, so a backslash that sat inside a quoted span is read
 # here too: such a word reads as its escaped twin, stricter and never looser.
+#
+# The loop below steps through the word left to read, once per backslash, with removals and slices
+# that re-measure that text each time, so on bash 3.2 it costs more than linear time in a long word
+# dense with escapes (see EGRESS_LINEAR_MIN). A long word is read once by egress_unescape_long, and
+# the loop then finds nothing left; a short one keeps the loop.
 egress_unescape_rv() {
   local j=0 s out
   while [ "$j" -lt "$EGRESS_RVN" ]; do
@@ -1055,6 +1168,7 @@ egress_unescape_rv() {
     case "$s" in
       *\\*)
         out=""
+        if egress_long "$s"; then egress_unescape_long "$s"; out="$EGRESS_J"; s=""; fi  # linear: unescape
         while : ; do
           case "$s" in
             *\\*) ;;
@@ -1074,18 +1188,76 @@ egress_unescape_rv() {
   return 0
 }
 
+# The loop above, for a long word, into EGRESS_J: the same text on every input, at a cost linear in
+# the word. The word is split once at its backslashes (egress_split_bs). The first field is text;
+# each later one follows a backslash, and the loop keeps the character after that backslash and the
+# text up to the next one, which is the whole field. An empty field is a backslash escaping the next,
+# kept as one backslash, and the field after it is text; an empty last field is a backslash that ends
+# the word, which the loop drops. The parts are gathered and joined once; a word in which no two
+# backslashes stand together has no empty field to read, and its fields are joined as they are.
+egress_unescape_long() {
+  local f="" esc=0 i=0 k out s=""
+  local -a UP
+  UP=("")
+  egress_split_bs "$1"
+  k="${#EGRESS_BS[@]}"
+  case "$1" in
+    *'\\'*)
+      for f in "${EGRESS_BS[@]}"; do
+        i=$(( i + 1 ))
+        if [ "$esc" -eq 1 ] && [ -z "$f" ]; then
+          if [ "$i" -lt "$k" ]; then UP[${#UP[@]}]='\'; fi
+          esc=0
+        else
+          UP[${#UP[@]}]="$f"; esc=1
+        fi
+      done
+      egress_cat UP
+      ;;
+    *)
+      # No two backslashes stand together, so every field after the first is non-empty but a last
+      # one after a final backslash, and the loop keeps each field whole: the fields are joined once.
+      egress_cat EGRESS_BS
+      case "$1" in *'\') i="$k"; f=""; esc=0 ;; *) esc=1 ;; esac
+      ;;
+  esac
+  # A word that ends in a backslash with nothing after it: the loop takes the character after that
+  # backslash as `${s:0:1}` of an empty s, and on bash 3.2 that empty expansion, appended in a
+  # double-quoted assignment, also drops every DEL byte from the text it joins. The same statement runs
+  # here once, on the same text, so the word reads as the loop reads it.
+  if [ "$esc" -eq 0 ] && [ "$i" -eq "$k" ] && [ -z "$f" ]; then
+    out="$EGRESS_J"
+    out="${out}${s:0:1}"
+    EGRESS_J="$out"
+  fi
+  return 0
+}
+
 # R4 (c) — a command word's basename of at most seven characters that holds an upper-case ASCII
 # letter is folded to lower case: on a case-insensitive volume `GH`, `ENV` and `Sudo` name gh, env
 # and sudo. Letters are listed, never a range, because a bracket range follows the locale's
 # collation. The subcommand is never folded: gh rejects `API`.
+#
+# A long word's basename is read from its last eight characters, rather than by removing its longest
+# prefix up to a slash, which on bash 3.2 retries the match at every position it could end: a slash
+# among them ends the prefix the removal would take, and a longer word with none there has a basename
+# of at least eight characters, which is never folded. A short word keeps the removal.
 egress_fold_rv() {
-  local w dir="" base out="" c p i=0
+  local w dir="" base out="" c p i=0 t
   [ "$EGRESS_RVN" -ge 1 ] || return 0
   w="${EGRESS_RV[0]}"
-  case "$w" in
-    */*) dir="${w%/*}/"; base="${w##*/}" ;;
-    *) base="$w" ;;
-  esac
+  if egress_long "$w"; then  # linear: fold
+    t="${w:$(( ${#w} > 8 ? ${#w} - 8 : 0 ))}"
+    case "$t" in
+      */*) dir="${w%/*}/"; base="${t##*/}" ;;
+      *) base="$t" ;;
+    esac
+  else
+    case "$w" in
+      */*) dir="${w%/*}/"; base="${w##*/}" ;;
+      *) base="$w" ;;
+    esac
+  fi
   [ "${#base}" -le 7 ] || return 0
   case "$base" in
     *[ABCDEFGHIJKLMNOPQRSTUVWXYZ]*) ;;
@@ -1300,6 +1472,15 @@ egress_protect_redirect_ops() {
   return 0
 }
 
+# True when the basename of the word $1 is gh. A long word is matched once against the two forms that
+# basename takes — the word is gh, or it ends in /gh — rather than by removing its longest prefix up
+# to a slash, which on bash 3.2 retries the match at every position it could end; a short word keeps
+# the removal.
+egress_base_gh() {
+  if egress_long "$1"; then case "$1" in gh|*/gh) return 0 ;; *) return 1 ;; esac; fi  # linear: base
+  [ "${1##*/}" = gh ]
+}
+
 # R3's keep rule: the physical line $1 holds an adjacent pair whose first word's basename is gh once
 # normalized and whose second word is api, and its first word is neither api nor a dash-led word
 # without a slash. Such a line earns a verdict on its own — the shipped hook reads it as a fresh
@@ -1321,7 +1502,7 @@ egress_keep_line() {
   esac
   while [ "$i" -lt "$n" ]; do
     egress_respell_word "${EGRESS_KW[$i]}" abc
-    if [ "$EGRESS_RVN" -ge 1 ] && [ "${EGRESS_RV[0]##*/}" = gh ]; then
+    if [ "$EGRESS_RVN" -ge 1 ] && egress_base_gh "${EGRESS_RV[0]}"; then
       w2=""
       if [ "$EGRESS_RVN" -ge 2 ]; then
         w2="${EGRESS_RV[1]}"

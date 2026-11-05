@@ -3398,7 +3398,7 @@ fi
 # holds the walk's fallback.
 E007_Y_R="${E007_W_BASE}/y"
 /bin/mkdir -p "${E007_Y_R}/in"
-E007_Y_FUNCS="egress_long egress_cat egress_trailing_backslash_odd egress_comment_open_at_end egress_neutralize_into egress_neutralize_long egress_comment_neutralize egress_span_neutralize egress_ansic_span egress_ansic_decode egress_keep_line egress_respell_word egress_brace_words egress_unescape_rv egress_fold_rv egress_mark_free_text egress_join_state egress_join_continuations egress_join_lines"
+E007_Y_FUNCS="egress_long egress_cat egress_trailing_backslash_odd egress_comment_open_at_end egress_neutralize_into egress_neutralize_long egress_comment_neutralize egress_span_neutralize egress_ansic_span egress_ansic_decode egress_ansic_decode_long egress_split_bs egress_keep_line egress_base_gh egress_respell_word egress_brace_words egress_unescape_rv egress_unescape_long egress_fold_rv egress_mark_free_text egress_join_state egress_join_continuations egress_join_lines"
 # e007_y_lift <src> <out> — the walk, the join and every function they call; EGRESS_LINEAR_MIN is
 # left to the caller. Returns 1 unless every function is found.
 e007_y_lift() {
@@ -3523,6 +3523,189 @@ if [ -z "$_y_why" ]; then
 else
   e007_d_fail "AC-E007-Y-CTL: the walk's loop and the join re-testing its grown line are each stopped at the budget" \
     "${_y_why} a copy that finishes cannot show Y1-Y12 measure anything (BROKEN PROBE)"
+fi
+
+# ---- AC-E007-Z* (#8315, DT pass 5): the ANSI-C decode and the word normalization are linear ----
+#
+# Two more steps of the scanner, both this release's code, cost more than linear time on bash 3.2 in
+# what they read. The ANSI-C decode stepped through the body left to decode once per escape, and the
+# word normalization through the word left to read once per backslash, each with removals and slices
+# that re-measure that text; and the keep rule and the case step took a long word's basename by a
+# removal that retries its match at every position it could end. A command holding one long ANSI-C
+# span of many escapes, or one long word dense with escapes on a line the join would take, could
+# therefore hold the hook past the runtime's command-hook timeout, after which a PreToolUse hook does
+# not block. A long body or word is now split once at its backslashes and read a field at a time
+# (egress_ansic_decode_long, egress_unescape_long, through egress_split_bs), a word in which no two
+# backslashes stand together having its fields joined as they are, and a long word's basename is
+# matched once (egress_base_gh) or read from its last characters (the case step). The trailing-
+# backslash test, which the ANSI-C reading applies to a long body and the join to a long line before
+# either is read, answers a text that does not end in a backslash by one match; Y-EQ pins it. Z-EQ
+# lifts these functions and runs them with the bound at 0 (every long path) and at 10^9 (the code
+# before this pass) on a dense set of texts — every escape the decoder reads and many it does not,
+# escapes that decode to NUL, runs of backslashes, multibyte letters, undecodable bytes, the scanner's
+# sentinels, glob characters, slashes, braces and case variants — in en_US.UTF-8 and in C: the decoded
+# text, the unescaped words, the normalized words, the basename test and the keep rule's verdicts must
+# be equal byte for byte, and eight near misses, each one edit of a long path, must each differ. Z1 to
+# Z16 run the whole sandbox hook under the watchdog on a command holding one long ANSI-C span of many
+# escapes and on a command whose continuation line is one long word dense with escapes, at 10, 20, 40
+# and 80 KB in both locales, each inside the budget and allowed. Z-CTL is the instrument's
+# sensitivity, one copy per site: the decode that never takes its long path is stopped at the budget
+# on the 80 KB ANSI-C command, and the word normalization and basename test that never take theirs on
+# the 80 KB escaped-word command, both in UTF-8.
+E007_Z_R="${E007_W_BASE}/z"
+/bin/mkdir -p "${E007_Z_R}/in"
+E007_Z_FUNCS="egress_long egress_cat egress_split_bs egress_ansic_decode egress_ansic_decode_long egress_unescape_rv egress_unescape_long egress_brace_words egress_fold_rv egress_respell_word egress_base_gh egress_keep_line"
+# e007_z_lift <src> <out> — the decode, the normalization, the keep rule and every function they call.
+e007_z_lift() {
+  F="$E007_Z_FUNCS" /usr/bin/awk '
+    BEGIN { n = split(ENVIRON["F"], f, " "); for (i = 1; i <= n; i++) want[f[i] "() {"] = 1 }
+    !inf { for (k in want) if (index($0, k) == 1) { inf = 1; seen[k] = 1; break } }
+    inf { print; if ($0 == "}") inf = 0 }
+    END { c = 0; for (k in want) if (!(k in seen)) c++; exit c == 0 ? 0 : 1 }' "$1" > "$2"
+}
+# The texts: units cycled by a fixed generator to four lengths around and above the bound, then the
+# same units ending in each edge the long paths treat apart — a final backslash, an even and an odd run
+# of them, an escape cut short, an escape that decodes to NUL with text after it, a basename gh with
+# and without a slash before it, a case variant with and without one, and a newline; then four texts
+# in which no two backslashes stand together, two of them ending in a lone backslash.
+LC_ALL=C /usr/bin/awk -v d="${E007_Z_R}/in" 'BEGIN {
+  n = split("", u)
+  u[++n] = "\\x41"; u[++n] = "\\x4"; u[++n] = "\\xg"; u[++n] = "\\x"; u[++n] = "\\xFf"; u[++n] = "\\x7e"
+  u[++n] = "\\u0041"; u[++n] = "\\u00e9"; u[++n] = "\\u07"; u[++n] = "\\u"; u[++n] = "\\U00000067"; u[++n] = "\\U0001F600"
+  u[++n] = "\\UZ"; u[++n] = "\\101"; u[++n] = "\\7"; u[++n] = "\\18"; u[++n] = "\\377"; u[++n] = "\\777"; u[++n] = "\\1234"
+  u[++n] = "\\\\"; u[++n] = "\\\047"; u[++n] = "\\\""; u[++n] = "\\?"; u[++n] = "\\a"; u[++n] = "\\b"; u[++n] = "\\e"
+  u[++n] = "\\E"; u[++n] = "\\f"; u[++n] = "\\n"; u[++n] = "\\r"; u[++n] = "\\t"; u[++n] = "\\v"; u[++n] = "\\q"
+  u[++n] = "\\ "; u[++n] = "\\g\\h"; u[++n] = "\\\303\251"; u[++n] = "\\\377"; u[++n] = "\\\303"; u[++n] = "\\\001"
+  u[++n] = "\\\177"; u[++n] = "\\\n"; u[++n] = "abc"; u[++n] = "/"; u[++n] = "/gh"; u[++n] = "/GH"; u[++n] = "gh"
+  u[++n] = " api"; u[++n] = "{a,b}"; u[++n] = ","; u[++n] = "\303\251"; u[++n] = "\346\227\245"; u[++n] = "\377"
+  u[++n] = "\303"; u[++n] = "\001\004\005\006"; u[++n] = "\177"; u[++n] = " "; u[++n] = "\t"; u[++n] = "\n"
+  u[++n] = "$"; u[++n] = "*?["
+  split("40 300 900 2500", size, " ")
+  split("|\\|\\\\|\\\\\\|\\x|\\u12|\\0tail\\x41|\\x00z\\101|\\400z|\\u0000z|xgh|/gh|\\/\\g\\h|xxxxxxGH|/usr/GH|\n", tail, "|")
+  x = 11; t = 0
+  for (r = 1; r <= 3; r++) for (z = 1; z <= 4; z++) {
+    s = ""; while (length(s) < size[z]) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+    printf "%s", s > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+  for (e = 1; e <= 16; e++) {
+    s = ""; while (length(s) < 600) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+    printf "%s%s", s, tail[e] > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+  for (w = 1; w <= 4; w++) {
+    s = ""; while (length(s) < (w <= 2 ? 300 : 2500)) {
+      x = (x * 1103515245 + 12345) % 2147483648; k = u[int(x / 65536) % n + 1]; if (k != "\\\\") s = s k }
+    printf "%s%s", s, (w % 2 ? "\\" : "z") > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+}'
+# e007_z_eval <locale> <bound> <lib> <out-dir> — each text through the decode, the escape step over
+# three words, the normalization with and without the case step, the basename test, and the keep rule
+# on the text alone, followed by `api`, and behind a word; one output file per text.
+e007_z_eval() {
+  /bin/mkdir -p "$4"
+  LC_ALL="$1" /bin/bash -c '. "$1"; readonly EGRESS_UC=ABCDEFGHIJKLMNOPQRSTUVWXYZ EGRESS_LC=abcdefghijklmnopqrstuvwxyz
+    EGRESS_LINEAR_MIN="$2"; . "$3"
+    for f in "$4"/t-*; do
+      s="$(/bin/cat "$f"; printf x)"; s="${s%x}"; g=0; k1=0; k2=0; k3=0
+      egress_ansic_decode "$s"; ac="$EGRESS_AC"
+      EGRESS_RV=( "$s" "a\\b" "$s" ); EGRESS_RVN=3; EGRESS_RVCH=0; egress_unescape_rv
+      un="${EGRESS_RV[0]}|${EGRESS_RV[1]}|${EGRESS_RV[2]}|${EGRESS_RVCH}"
+      egress_respell_word "$s" abc; r1="${EGRESS_RVN}|${EGRESS_RVCH}|${EGRESS_RVFOLD}|${EGRESS_RV[*]}"
+      egress_respell_word "$s" ab; r2="${EGRESS_RVN}|${EGRESS_RVCH}|${EGRESS_RVFOLD}|${EGRESS_RV[*]}"
+      egress_base_gh "$s" && g=1
+      egress_keep_line "$s" && k1=1
+      egress_keep_line "$s api" && k2=1
+      egress_keep_line "x $s api" && k3=1
+      printf "%s %s %s %s\n%s\n--\n%s\n--\n%s\n--\n%s" "$g" "$k1" "$k2" "$k3" "$ac" "$un" "$r1" "$r2" > "$5/${f##*/}"
+    done' _ "${E007_L_R}/prelude.sh" "$2" "$3" "${E007_Z_R}/in" "$4"
+}
+_z_why=""
+e007_z_lift "$E007_W_SRC" "${E007_Z_R}/lib" || _z_why="${_z_why} a function of the decode, the normalization or the keep rule is missing from the hook;"
+# The near misses, each one edit of a long path: the decode drops the backslash an escaped backslash
+# yields; it drops the quote character an escaped quote yields; it reads on past a decoded NUL; the
+# escape step keeps a backslash that ends the word, and joins a word holding two backslashes together
+# as if none were; the split loses the field after a final backslash; the basename test takes any word
+# ending in gh; and the case step reads a basename one character short.
+_z_nm="nm-esc nm-quote nm-nul nm-trail nm-fast nm-split nm-base nm-fold"
+e007_l_swap "${E007_Z_R}/lib" 'AP[${#AP[@]}]='"'"'\'"'" 'AP[${#AP[@]}]='"''" "${E007_Z_R}/nm-esc" || _z_why="${_z_why} the escaped-backslash near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" 'AP[${#AP[@]}]="$f"; continue ;;' 'AP[${#AP[@]}]="${f:1}"; continue ;;' "${E007_Z_R}/nm-quote" || _z_why="${_z_why} the escaped-quote near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" '[ "$v" -ne 0 ] || break' '[ "$v" -ne 0 ] || :' "${E007_Z_R}/nm-nul" || _z_why="${_z_why} the NUL near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" 'if [ "$i" -lt "$k" ]; then' 'if true; then' "${E007_Z_R}/nm-trail" || _z_why="${_z_why} the final-backslash near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" '*'"'"'\\'"'"'*)' '*'"'"'\\\\'"'"'*)' "${E007_Z_R}/nm-fast" || _z_why="${_z_why} the joined-fields near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" 'EGRESS_BS[${#EGRESS_BS[@]}]=""' ':' "${E007_Z_R}/nm-split" || _z_why="${_z_why} the split near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" 'gh|*/gh) return 0' 'gh|*gh) return 0' "${E007_Z_R}/nm-base" || _z_why="${_z_why} the basename near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" '*) base="$t" ;;' '*) base="${t#?}" ;;' "${E007_Z_R}/nm-fold" || _z_why="${_z_why} the case-step near miss did not apply;"
+_z_n="$(/bin/ls "${E007_Z_R}/in" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+[ "$_z_n" -ge 32 ] || _z_why="${_z_why} only ${_z_n} texts were written;"
+if [ -z "$_z_why" ]; then
+  for _z_loc in en_US.UTF-8 C; do
+    e007_z_eval "$_z_loc" 1000000000 "${E007_Z_R}/lib" "${E007_Z_R}/${_z_loc}/ref" || _z_why="${_z_why} [${_z_loc}] the code before this pass did not run;"
+    e007_z_eval "$_z_loc" 0 "${E007_Z_R}/lib" "${E007_Z_R}/${_z_loc}/lin" || _z_why="${_z_why} [${_z_loc}] the long paths did not run;"
+    for _z_f in "${E007_Z_R}/in"/t-*; do
+      _z_k="${_z_f##*/}"
+      /usr/bin/cmp -s "${E007_Z_R}/${_z_loc}/ref/${_z_k}" "${E007_Z_R}/${_z_loc}/lin/${_z_k}" || _z_why="${_z_why} [${_z_loc} ${_z_k}] the long paths differ;"
+    done
+    for _z_m in $_z_nm; do
+      e007_z_eval "$_z_loc" 0 "${E007_Z_R}/${_z_m}" "${E007_Z_R}/${_z_loc}/${_z_m}" || _z_why="${_z_why} [${_z_loc}] ${_z_m} did not run;"
+      _z_d=0
+      for _z_f in "${E007_Z_R}/in"/t-*; do
+        _z_k="${_z_f##*/}"
+        /usr/bin/cmp -s "${E007_Z_R}/${_z_loc}/ref/${_z_k}" "${E007_Z_R}/${_z_loc}/${_z_m}/${_z_k}" || _z_d=$(( _z_d + 1 ))
+      done
+      [ "$_z_d" -gt 0 ] || _z_why="${_z_why} [${_z_loc}] ${_z_m} reads like the code before it (the comparison cannot see a difference);"
+    done
+  done
+fi
+if [ -z "$_z_why" ]; then
+  e007_d_pass "AC-E007-Z-EQ: the linear decode, escape step, basename test and case step equal the code before them byte for byte on ${_z_n} dense texts in UTF-8 and C, through the keep rule as well, and eight near misses each differ"
+else
+  e007_d_fail "AC-E007-Z-EQ: the linear decode, escape step, basename test and case step equal the code before them byte for byte" "$_z_why"
+fi
+# e007_z_cmd <shape> <bytes> <file> — a benign command holding one long ANSI-C span of many escapes, or
+# one whose continuation line is one long word dense with escapes; each carries `gh`, so the fast path
+# hands it to the scanner, and ends in a gh api read.
+e007_z_cmd() {
+  case "$1" in
+    ansic) e007_l_fill "$2" "echo gh \$'" '\\\x41\101\t' "'"$'\n''gh api repos/o/r' > "$3" ;;
+    word)  e007_l_fill "$2" 'echo gh \'$'\n' '\g\h' $'\n''gh api repos/o/r' > "$3" ;;
+  esac
+}
+for _z_shape in ansic word; do
+  for _z_kb in 10 20 40 80; do e007_z_cmd "$_z_shape" $(( _z_kb * 1024 )) "${E007_Z_R}/${_z_shape}-${_z_kb}.cmd"; done
+done
+_z_n=0
+for _z_shape in ansic word; do
+  for _z_loc in en_US.UTF-8 C; do
+    for _z_kb in 10 20 40 80; do
+      _z_n=$(( _z_n + 1 ))
+      e007_t_timed "$E007_W_S" "$_z_loc" "${E007_Z_R}/${_z_shape}-${_z_kb}.cmd" "$E007_T_LIMIT"
+      if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+        e007_d_pass "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+      else
+        e007_d_fail "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the hook inside the budget and is allowed" \
+          "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+      fi
+    done
+  done
+done
+# The sensitivity copies: one whose decode never takes its long path, and one whose escape step and
+# basename test never take theirs.
+E007_Z_X_NOANSIC='s|^\(  if \)egress_long "\$s"\(; then egress_ansic_decode_long .*  # linear: ansic\)$|\1false\2|'
+E007_Z_X_NOUNESC='s|^\(        if \)egress_long "\$s"\(; then egress_unescape_long .*  # linear: unescape\)$|\1false\2|'
+E007_Z_X_NOBASE='s|^\(  if \)egress_long "\$1"\(; then case .*  # linear: base\)$|\1false\2|'
+E007_Z_AC="${E007_W_BASE}/zac"; e007_w_copy "$E007_Z_AC" "$E007_Z_X_NOANSIC"
+E007_Z_WD="${E007_W_BASE}/zwd"; e007_w_copy "$E007_Z_WD" "$E007_Z_X_NOUNESC" "$E007_Z_X_NOBASE"
+_z_why=""
+e007_t_timed "$E007_Z_AC" en_US.UTF-8 "${E007_Z_R}/ansic-80.cmd" "$E007_T_LIMIT"
+[ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the decode's copy finished the 80 KB ANSI-C command in ${E007_T_DS} tenths;"
+[ "$(/usr/bin/grep -c -e '^  if false; then egress_ansic_decode_long ' "${E007_Z_AC}/mut.sh")" = 1 ] || _z_why="${_z_why} the decode's copy does not carry its edit;"
+e007_t_timed "$E007_Z_WD" en_US.UTF-8 "${E007_Z_R}/word-80.cmd" "$E007_T_LIMIT"
+[ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the word copy finished the 80 KB escaped-word command in ${E007_T_DS} tenths;"
+[ "$(/usr/bin/grep -c -e '^        if false; then egress_unescape_long ' -e '^  if false; then case ' "${E007_Z_WD}/mut.sh")" = 2 ] || _z_why="${_z_why} the word copy does not carry its two edits;"
+if [ -z "$_z_why" ]; then
+  e007_d_pass "AC-E007-Z-CTL: the decode without its long path is stopped at ${E007_T_LIMIT} tenths on the 80 KB ANSI-C command, and the escape step and basename test without theirs on the 80 KB escaped-word command, in UTF-8 — the instrument sees each cost"
+else
+  e007_d_fail "AC-E007-Z-CTL: the decode, and the escape step and basename test, each without its long path, are stopped at the budget" \
+    "${_z_why} a copy that finishes cannot show Z1-Z16 measure anything (BROKEN PROBE)"
 fi
 
 # ---- Behind a prefix: each respelling reaches the record its plain twin gets ----
