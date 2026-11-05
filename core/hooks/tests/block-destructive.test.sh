@@ -9795,8 +9795,7 @@ fi
 # walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
 # command, clears one long command word, a long option cluster and a long split string in its short and
 # long spelling inside the budget, in en_US.UTF-8 and C, and allows each. The cells are the ones on which
-# `main`'s own hook keeps a wide margin under the budget: the long word at 10, 20 and 40 KB; the cluster
-# and both split spellings at 10 KB, and at 20 KB in C. On the larger cells the cost is `main`'s own code
+# `main`'s own hook keeps a wide margin under the budget. On the larger cells the cost is `main`'s own code
 # — the -022 rule's reading of a long word and of a long option cluster, which grows faster than the
 # command — and is that rule's work-ceiling card's to change, not this release's. The false-positive
 # control's AC-CP-L arms time the canonicalizer alone on every size of every shape, beside their

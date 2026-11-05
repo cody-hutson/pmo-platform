@@ -1522,25 +1522,26 @@ print("-1 -1" if None in h or None in c else "%.3f %.3f" % (min(h), min(c)))'
     local out
     out="$(/usr/bin/python3 -c "$CPV_PY" "$1" "${HOOK_DIR}/lib/command-position.awk" "$2" 3 "$CPV_LIMIT" "${CPV_BASE}/word-80.cmd" 2>/dev/null)" || out="-1 -1"
     CPV_H="${out% *}"; CPV_C="${out#* }"
-    CPV_OK=0
+    CPV_OK=0; CPV_RATIO=stopped
+    [ "$CPV_H" = -1 ] || CPV_RATIO="$(/usr/bin/awk -v h="$CPV_H" -v c="$CPV_C" 'BEGIN { printf "%.2f", (c > 0 ? h / c : 0) }')"
     if [ "$CPV_H" != -1 ] && /usr/bin/awk -v h="$CPV_H" -v c="$CPV_C" -v b="$CPV_BOUND" 'BEGIN { exit !(c > 0 && h <= b * c) }'; then CPV_OK=1; fi
   }
   for cpv_loc in en_US.UTF-8 C; do
     cpv_ratio "$HOOK" "$cpv_loc"
     cpv_tag="U"; [ "$cpv_loc" = C ] && cpv_tag="C"
     if [ "$CPV_OK" = 1 ]; then
-      /usr/bin/printf 'PASS: %s\n' "AC-CPV-R-${cpv_tag}: on the 80 KB long word in ${cpv_loc} the hook costs ${CPV_H}s against ${CPV_C}s for one run of the canonicalizer, within ${CPV_BOUND} times"; PASS=$((PASS + 1))
+      /usr/bin/printf 'PASS: %s\n' "AC-CPV-R-${cpv_tag}: on the 80 KB long word in ${cpv_loc} the hook costs within ${CPV_BOUND} times one run of the canonicalizer"; PASS=$((PASS + 1))
     else
-      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-R-${cpv_tag}: on the 80 KB long word in ${cpv_loc} the hook costs at most ${CPV_BOUND} times one run of the canonicalizer" \
-        "hook ${CPV_H}s, one run ${CPV_C}s (-1 = stopped at ${CPV_LIMIT}s)"; FAIL=$((FAIL + 1))
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-R-${cpv_tag}: on the 80 KB long word in ${cpv_loc} the hook costs at most ${CPV_BOUND} times one run of the canonicalizer — measured ratio ${CPV_RATIO}, bound ${CPV_BOUND}" \
+        "\"stopped\" is the watchdog ending a run"; FAIL=$((FAIL + 1))
     fi
   done
   cpv_ratio "${CPV_BASE}/two/block-rm-prefer-trash.sh" en_US.UTF-8
   if [ "$cpv_live" = 1 ] && [ "$CPV_H" != -1 ] && [ "$CPV_OK" = 0 ]; then
-    /usr/bin/printf 'PASS: %s\n' "AC-CPV-CTL: the copy with two runs costs ${CPV_H}s against ${CPV_C}s for one run on the 80 KB long word in UTF-8, beyond ${CPV_BOUND} times — the instrument sees the second run"; PASS=$((PASS + 1))
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-CTL: the copy with two runs costs beyond ${CPV_BOUND} times one run of the canonicalizer on the 80 KB long word in UTF-8 — the instrument sees the second run"; PASS=$((PASS + 1))
   else
-    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-CTL: the copy with two runs exceeds the bound (BROKEN PROBE)" \
-      "copy live=${cpv_live}; two-run hook ${CPV_H}s, one run ${CPV_C}s"; FAIL=$((FAIL + 1))
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-CTL: the copy with two runs exceeds the bound (BROKEN PROBE) — measured ratio ${CPV_RATIO}, bound ${CPV_BOUND}" \
+      "copy live=${cpv_live}"; FAIL=$((FAIL + 1))
   fi
   case "${CPV_BASE##*/}" in rmt-cpv.*) /bin/rm -rf "$CPV_BASE" ;; esac
 fi

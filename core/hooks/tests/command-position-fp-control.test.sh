@@ -756,7 +756,8 @@ cpl_ratio() {
   local out
   out="$(/usr/bin/python3 -c "$CPL_PY" "$1" "$2" "$3" "$CPL_LIMIT" "$4" "$5" 2>/dev/null)" || out="-1 -1"
   CPL_S="${out% *}"; CPL_W="${out#* }"
-  CPL_OK=0
+  CPL_OK=0; CPL_RATIO=stopped
+  [ "$CPL_S" = -1 ] || CPL_RATIO="$(/usr/bin/awk -v s="$CPL_S" -v w="$CPL_W" 'BEGIN { printf "%.2f", (w > 0 ? s / w : 0) }')"
   if [ "$CPL_S" != -1 ] && /usr/bin/awk -v s="$CPL_S" -v w="$CPL_W" -v b="$CPL_BOUND" 'BEGIN { exit !(w > 0 && s <= b * w) }'; then CPL_OK=1; fi
 }
 cpl_n=0
@@ -768,9 +769,9 @@ for cpl_shape_name in word cluster split lsplit; do
       cpl_n=$((cpl_n + 1))
       cpl_ratio "$CMDPOS_AWK" "$cpl_loc" "$cpl_reps" "${CPL_BASE}/s-${cpl_shape_name}-${cpl_kb}" "${CPL_BASE}/t-${cpl_shape_name}-${cpl_kb}"
       if [ "$CPL_OK" = 1 ]; then
-        pass "AC-CP-L${cpl_n}: the long ${cpl_shape_name} shape at ${cpl_kb} KB in ${cpl_loc} costs the canonicalizer ${CPL_S}s against ${CPL_W}s for its neutral twin, within ${CPL_BOUND} times"
+        pass "AC-CP-L${cpl_n}: the long ${cpl_shape_name} shape at ${cpl_kb} KB in ${cpl_loc} costs the canonicalizer within ${CPL_BOUND} times its neutral twin"
       else
-        fail "AC-CP-L${cpl_n}: the long ${cpl_shape_name} shape at ${cpl_kb} KB in ${cpl_loc} costs the canonicalizer within ${CPL_BOUND} times its neutral twin (shape ${CPL_S}s, twin ${CPL_W}s; -1 = stopped at ${CPL_LIMIT}s)"
+        fail "AC-CP-L${cpl_n}: the long ${cpl_shape_name} shape at ${cpl_kb} KB in ${cpl_loc} costs the canonicalizer within ${CPL_BOUND} times its neutral twin — measured ratio ${CPL_RATIO}, bound ${CPL_BOUND} (\"stopped\" is the watchdog ending a run)"
       fi
     done
   done
@@ -782,7 +783,7 @@ if [ ! -s "$CPL_OLD" ]; then
 else
   for cpl_shape_name in word cluster split; do
     cpl_ratio "$CPL_OLD" en_US.UTF-8 1 "${CPL_BASE}/s-${cpl_shape_name}-40" "${CPL_BASE}/t-${cpl_shape_name}-40"
-    [ "$CPL_OK" = 0 ] || cpl_why="${cpl_why} [${cpl_shape_name}] the code before this change stays within the bound (shape ${CPL_S}s, twin ${CPL_W}s);"
+    [ "$CPL_OK" = 0 ] || cpl_why="${cpl_why} [${cpl_shape_name}] the code before this change stays within the bound (measured ratio ${CPL_RATIO}, bound ${CPL_BOUND});"
   done
 fi
 if [ -z "$cpl_why" ]; then
