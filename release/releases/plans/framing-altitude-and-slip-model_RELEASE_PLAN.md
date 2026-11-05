@@ -32,9 +32,9 @@ reversibility: CHEAP / Confidence HIGH before the Stage-13 ratification gate —
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a decision record is added, per the Bump-Class Selection Guide's "reference document addition or update"; no skill and no governance file changes. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub Mode O) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file), then the decision record, then the register row |
+| **Status** | Executing — Stage 6 Engineering complete: Commit 0 (this file), the decision record and the register row landed; draft PR open; next Stage 7 Dev Testing |
 | **Branch** | `release/framing-altitude-and-slip-model` |
-| **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
+| **PR** | #8816 — opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `framing-altitude-and-slip-model` (milestone 431) |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-11-05, domain: governance }`
@@ -386,19 +386,19 @@ No verdict is rendered here; Stage 9 A6.6 re-measures. Two of the three are new 
 
 ### Release-Level Verification (Stage-7 REDUCE battery; Stage-6 C4 runs it first)
 
-| Check | Runner | Expected |
+| Check | Method | Expected |
 |---|---|---|
-| ADR number contiguity | `python3 release/tools/check-adr-numbers.py` (CI `adr-number-integrity`) | no duplicate, no gap |
-| ADR durability lint | `python3 release/tools/check-adr-durability.py --files <record> --diff-base origin/main` (CI, warn-mode) | no finding on added lines; a seeded `#N`-in-`title:` mutant flags R4 |
-| ADR schema | the seven sections present (`core/schemas/adr-schema.md` § 3), the three coverage sections after `## Related ADRs`, `## References` last; `status:` leading token `Proposed` | all present |
-| Slug-token residue | `renumber-adr.py --stamp --check` (Stage 12, after stamping) | zero residual tokens; no token in a link target |
-| Doc links and plan depth | `check-release-links.py --plan-depth-lint` (release PR) | workspace-rooted links only |
-| Plan families | `verify-release-plan.sh` (`provenance-survival`, `fcm-delivery`) | PASS; promoted or NOT DELIVERED rows recorded |
-| Change 2 — pointer-free row | Check 62's own pointer pattern over the new row | 0 on the new row; non-zero on a row that carries a pointer, as the control |
-| `domain_practice` presence | Stage 7 provenance verification | label present, Form X, `domain:` in-label |
-| Depersonalization | `repo-integrity.yml`, and the Stage-6 pre-push grep for consumer identifiers and the operator handle | 0, with a control arm |
-| **Blind re-code (Stage 8)** | the AC-4 row's method | k at least 12 of 15 |
-| Check 58 | `deploy.sh --check` lists the record as Proposed with a flip promise | advisory and expected; the Stage-13 ratification settles it |
+| ADR number contiguity | declared, verification deferred to the CI `adr-number-integrity` job, which runs `check-adr-numbers.py`; the Stage-6 C4 run is in § Verification Evidence | no duplicate, no gap |
+| ADR durability lint | declared, verification deferred to the CI ADR durability job (warn-mode), which lints added lines with `check-adr-durability.py`; the Stage-6 C4 run and its mutant arm are in § Verification Evidence | no finding on added lines; a seeded issue reference in `title:` flags R4 |
+| ADR schema — section set | `grep -c '^## ' core/ADRs/ADR-230-framing-declares-its-altitude-and-surfaces-the-slip.md` expect 11 | the seven schema sections, the three coverage sections after `## Related ADRs`, and `## References` last |
+| Slug-token residue | declared, verification deferred to Stage 12: `renumber-adr.py --stamp --check` after the stamp | zero residual tokens; no token in a link target |
+| Doc links and plan depth | declared, verification deferred to the release PR's `repo-integrity.yml` dead-file-reference gate and the plan-depth lint; the Stage-6 C4 run is in § Verification Evidence | no dead link; workspace-rooted links only |
+| Plan families | declared, verification deferred to the always-on `fcm-delivery` and `provenance-survival` families of `verify-release-plan.sh`, which run on every invocation | PASS; promoted or NOT DELIVERED rows recorded |
+| Change 2 — pointer-free row | declared, verification deferred to Stage 7: Check 62's own pointer pattern over the new register row, with a pointer-bearing row as the control; the Stage-6 C4 reading is in § Verification Evidence | 0 on the new row; non-zero on the control |
+| `domain_practice` presence | declared, verification deferred to Stage 7's provenance verification | label present, Form X, `domain:` in-label |
+| Depersonalization | declared, verification deferred to CI `repo-integrity.yml` (the depersonalization gate); the Stage-6 pre-push grep for consumer identifiers and the operator handle is in § Verification Evidence | 0, with a control arm |
+| **Blind re-code (Stage 8)** | declared, verification deferred to Stage 8 per the AC-4 row's method | k at least 12 of 15 |
+| Check 58 | declared, verification deferred to Stage 13: `deploy.sh --check` lists the record as Proposed with a flip promise | advisory and expected; the ratification settles it |
 
 **ADR index:** N/A — this release adds no record under `release/ADRs/` (`core/ADRs/README.md` is curated and has no projector).
 
@@ -508,11 +508,62 @@ Populated at C4 self-verification (Stage 6), then re-run at Stage 7.
 - **A1 CIAC lint on the plan** — `bash release/tools/verify-release-plan.sh --ciac-lint <this plan>` → `CIAC-LINT-SUMMARY declared=0 parsed=0 clean=0 declared-deferral=0 flagged=0`, exit 0 — consistent with the population of one card (Survival-Set row 3). Gate verdict: **PROCEED**.
 - **Plan links** — this file carries no markdown link sequence (a count of the link-opening sequence over the file → 0; the same count over the release-planning template's exemplar file is non-zero), so the plan-depth lint has nothing to grade here.
 
+### Stage 6 C4 self-verification (head `813c54cd`, base `b1042eec`)
+
+- **A2 container** — PR-body checklist: three file-level units (this plan, the record, the register row) plus the sync, plan-update and verification rows; at most five units, doc-only, no calibration-sensitive or structural change, so the threshold predicate selects the checklist. The checklist is in the PR body.
+- **A3 file-state snapshot** — the three File Change Matrix paths were read at `b1042eec`; the base has not moved since planning, so no file diverged. The register tail (the Stage-2 observation-counting row) and the Version History tail were re-read before the append.
+- **ADR numbers** — `python3 release/tools/check-adr-numbers.py` → "PASS (contiguous 001..230, no duplicates)", exit 0. `renumber-adr.py --detect --mainline-ref origin/main` → anchor 229, next-free 230, branch-only claims 230 and 231 (detection only).
+- **ADR durability** — `python3 release/tools/check-adr-durability.py --files <record> --diff-base origin/main` on the committed record → `COUNT 0`. Sensitivity: a working-tree mutant carrying an issue reference in `title:` → R4, `COUNT 1`; a whole-file run on a mutant that also carried a commit hash → R4 and R2-SHA, `COUNT 2`. A delta-mode run on the record before it was committed scanned no added lines and is not counted as evidence.
+- **Issue references** — `bash core/deploy/tools/check-issue-ref-validity.sh --path <record>` with the repository named in the environment → exit 0: every reference resolves and sits in `## References` (8 lines there; 0 outside it). A mutant with one out-of-block reference → exit 1.
+- **Links** — the record and this plan carry no markdown link. `check-release-links.py --files <the three changed files> --check-anchors` and `--plan-depth-lint` on this plan → 0 findings; a seeded broken link and a seeded depth-sensitive relative link → 1 finding each. `check-doc-links.py --target-paths <the three changed files> --require-targets --allowlist core/deploy/allowlists/skip-doc-link-check-ci.txt` → 0 findings (its `--self-test`: 12 fixtures OK).
+- **Plan verifier** — `bash release/tools/verify-release-plan.sh --format=md <this plan>` → 0 FAIL / 0 ERROR: FCM coverage PASS (2 unconditional ADDs delivered; the conditional rows recorded NOT DELIVERED or unfired), provenance presence and grammar PASS (Form X, date 2026-11-05), the ADR section-set row PASS (11 H2 sections), and every declared-deferred row SKIP. **Provenance delta limb:** with `--stage4-comment` the local run printed PASS, but on the macOS `awk` the limb's comparison aborts on a multi-line `-v` value ("newline in string") and returns an empty loss list, so that PASS is not evidence. Recomputed in `python3` with the same five element patterns: the Stage-4 comment carries 4 elements, this plan carries the same 4, 0 lost; a plan mutant with the File Change Matrix heading renamed loses 1. CLEAN.
+- **Change 2** — the release diff on `core/standards/gate-efficacy-standard.md` is +2 / −0 (the register row after the register tail; the Version History line last). Check 62's own pointer pattern on the new row → 0; on the whole file → 50 (the control). The row has five cells and the Version History line two, matching their tables.
+- **Depersonalization** — the consumer-repository identifiers named in the epic-framing epic's body and the operator's handle → 0 in the record, this plan, the register row and the PR body. Controls: the same consumer pattern on the epic's body → 4; the handle on `README.md` → 1.
+- **Skill-package freshness** — the three changed paths on STDIN to `build-skill-packages.sh --skills-for-paths` → no skill; control: `release/skills/release-planner/SKILL.md` → `release-planner`. No package to rebuild.
+- **ADR index:** N/A — this release adds no record under `release/ADRs/`.
+- **Mirror pairs and sync (C3):** N/A — no `core/rules/` file, skill tree or harness artifact is in the change set.
+- **Runtime suite:** the change matches the runtime-suite selection map's no-match row (doc and governance only) → `test-run/suite-skip`. The event row is held for the hub (AI-002) rather than written from this spoke.
+- **Commit messages** — `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` → CLEAN before every push. **PR body** — the close-keyword grep matches one line, `Closes #7965`, inside the Issue References block.
+
 ---
 
 ## Change Description
 
-Authored at Phase C1 once the record and the register row land; until then this section records the in-flight state. **Outcome so far:** Engineering Commit 0 — this plan, transcribed from the approved Stage-4 plan with the revised Stage-5 design's Change 0.
+### Outcome
+
+The platform gains one decision record, `core/ADRs/ADR-230-framing-declares-its-altitude-and-surfaces-the-slip.md` (`status: Proposed`, flipped at the Stage-13 ratification gate), that fixes how an epic's framing declares the altitude it operates at — an `Altitude:` line valued from the work-item type schema's `general_level` enum, with the question it answers and an ordered `Open questions` list — and how a decision taken ahead of an open question is surfaced as a **framing slip**. One class-3-O named-gap row in `core/standards/gate-efficacy-standard.md` makes the check observable once the framing method records altitude, question order and decisions.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7965 | The declaration's form, value rule and place; the framing slip measured in steps of the declared question order with a cited presupposition limb; the three declared moves and their relation to ADR-211's continuity rule; the census of senses; detection split by moment with the named gap; the C1–C15 case table with its tally | DONE (pending the Stage-8 blind re-code: k at least 12 of 15, or AC-4 returns to Engineering) |
+
+### Key decisions
+
+- **The measure** (D-S5-Measure (a)) — one step in the framing's declared question order, never a ladder level, so "altitude" keeps ADR-211's meaning; a ladder measure finds nothing on the measured instance's lead case.
+- **The declaration** — `**Altitude:** <general_level value> — <question>`, valued by the smallest entity whose outcome the question's answer governs; the slip test does not read the value.
+- **One meaning of "declared"** — provisional (with a re-test when its question is answered, D-S5-ProvisionalExit), hand-down, or stated change; nothing else counts.
+- **Where detection lives** (D-S5-Home (a)) — the design-time arm extends the design-review checklist § 4 and the Stage-4 Phase A0 re-review (R6's build card authors both); the framing-time and cut-time arms are the registered named gap. The architecture lens's altitude circle is not the home: it places components.
+- **Coverage** (D-S5-Coverage) — the record carries Current State, Future State and a twelve-row Gap Map.
+- **Stage-4 gate:** `novel`, SINGLE, P0, D-Amendments (A); D-Version minor, provisional v5.02.
+
+### Reversibility
+
+CHEAP / HIGH before the Stage-13 ratification gate — drop or revert the record and register-row commits (or the single release merge); after ratification the record is immutable and a change takes a superseding record (MODERATE).
+
+### Downstream impact
+
+- R6's build card, drafted by #8100, builds the framing-method step, the design-review checklist item and Phase A0 line (splitting the row), the decision-time-adherence index row and the lens pointer; the Stage-13 notification names the population key `framing-slip-test-records` (AI-004).
+- #7960 (the cut-basis card) shares the altitude term and is offered the assignment rule; #7963 (the framing-to-cut card) carries the parent's altitude line and unhanded questions in order (AI-005).
+- Stage 8 re-codes C1–C15 blind from the codebook sections the hub pastes into its brief (AI-003).
+- At Stage 12 the record is likely renumbered: three sibling heads hold slot 230.
+
+### Cross-references
+
+- Release plan: `release/releases/plans/framing-altitude-and-slip-model_RELEASE_PLAN.md` (this file; renamed to its versioned form at the Stage-12 claim).
+- Milestone: `framing-altitude-and-slip-model` (milestone 431).
+- Release PR: #8816. User-facing release notes: authored at Stage 13 under `release/releases/notes/`.
 
 ---
 
