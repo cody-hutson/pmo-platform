@@ -25,7 +25,7 @@ ambiguity. The `audit_class` declaration lives in the frontmatter only.
 
 # Release Plan — stage-document-model-decision
 
-> **Status:** Stage 9 Plan Review — the operator's pre-GO decisions PA-011 to PA-015 are recorded and applied; the GO / NO-GO and the ratification of the founding ADR (still `Proposed`) are pending (release branch `release/stage-document-model-decision`).
+> **Status:** Stage 12 Execute, authorized by the operator. Stage 9 rendered GO WITH CONDITIONS (PA-016), and the founding ADR is `Accepted`, ratified with amendments (PA-017). The merge waits on condition C1, every required check green on the final head (release branch `release/stage-document-model-decision`).
 > **Identity: VERSION-LESS.** The release identity is the capability slug `stage-document-model-decision`. No version key is claimed at any stage, no release-version stamp token is authored, and the Stage-12 rename never fires. The plan moves to `plans/_unversioned/` at Stage 13 close.
 > **Topology:** D-C SINGLE — one release branch, one pull request, one merge.
 > **Release Class:** `novel` · **Milestone:** `stage-document-model-decision`.
@@ -39,7 +39,7 @@ ambiguity. The `audit_class` declaration lives in the frontmatter only.
 | **Bump Class** | N/A — version-less release; no number binds at Stage 12 (D-Version re-rendered version-less by the operator on 2026-11-05 after the PA-007 scope change) |
 | **Date Created** | 2026-11-05 (Thursday) |
 | **Release Manager** | Agent-assisted (release hub + stage spokes) |
-| **Status** | Executing — Stage 9 Plan Review; pre-GO decisions applied, GO / NO-GO and ratification pending |
+| **Status** | Executing — Stage 12 Execute, authorized; GO WITH CONDITIONS (PA-016), ADR ratified (PA-017); the merge waits on condition C1 |
 | **Branch** | `release/stage-document-model-decision` |
 | **PR** | #8814, the draft release PR opened at Stage 6 Phase C2; the frontmatter `pr:` field was populated by the Wave-2 commit |
 | **Milestone** | stage-document-model-decision |
@@ -83,8 +83,12 @@ The label takes the pipeline-internal exemption form: the File Change Matrix hol
 | PA-013 | Stage 9 pre-GO, D-8156-QA | (A) + (a): the Scrum/Kanban-design join rule stated in the #8156 record, the ADR's figure staying 19; the record's sunset extended with a reason and the record named as slice S3's input (DEV-28) | CHEAP |
 | PA-014 | Stage 9 pre-GO, D-DeliveryCutDeps | Slice S7 split to a later milestone, so milestone 2 is back to two external dependencies (DEV-29) | CHEAP |
 | PA-015 | Stage 9 pre-GO, D-OwnedFindingsFiling | The 28 owned findings stay unfiled, owned by #8150's delivery cut, with the 8 bug-tag candidates listed in the Stage-9 ledger (DEV-30) | CHEAP |
+| PA-016 | Stage 9 GO / NO-GO | **GO WITH CONDITIONS.** C1: every required check passes on the final head before the merge. C2: the ratification head re-read. C3: the draft-to-ready transition, read back. C4: the R7/R9 re-dispositions and the CIAC-2..CIAC-6 grade lines recorded (DEV-31) | EXPENSIVE |
+| PA-017 | Stage 9, D-Ratify-8157 | **Ratify with amendments:** the founding ADR goes `Proposed` → `Accepted` with RQ-2, RQ-3, RQ-4 and RQ-5 as proposed, the risk-class home re-check recorded, and the node-delta lint adopted on its supporting-grade premise (DEV-32) | EXPENSIVE |
+| PA-018 | Stage 9, D-8150-Body | #8150's body changes per RQ-1: the three Out bullets stay, and "system documentation" repoints from #8110 to #8111 and #8114 (DEV-33) | CHEAP |
+| D-Execute | Stage 12 Execute | **Authorized:** the pre-merge plan update, then the merge only once every required check is green (C1), ADR number binding, B3 N/A (version-less), B4, and the B5 RELEASE_LOG chore PR (DEV-34) | IRREVERSIBLE |
 
-Every choice equals the hub's recommendation, so there is no recommendation-versus-choice delta. PA-011 to PA-015 were rendered together on 2026-11-05 ("Approve all five"; Decision Recorded, comment 6670710105 on #8794). Recorded determinations, not gates: D-C SINGLE; Stage 5 ACTIVATE release-wide under the all-or-nothing rule; one PR (now carrying this plan and the founding ADR, DEV-12).
+Every choice equals the hub's recommendation, so there is no recommendation-versus-choice delta. PA-011 to PA-015 were rendered together on 2026-11-05 ("Approve all five"; Decision Recorded, comment 6670710105 on #8794). PA-016 to PA-018 were rendered together the same day ("Approve all three"; comment 6671846290 on #8794). D-Execute was rendered the same day ("Authorize Execute"; comment 6672132704 on #8797). Recorded determinations, not gates: D-C SINGLE; Stage 5 ACTIVATE release-wide under the all-or-nothing rule; one PR (now carrying this plan and the founding ADR, DEV-12).
 
 ## Phase A0 — Triage→Design re-review and currency gates (transcribed from the Stage-4 output)
 
@@ -700,6 +704,10 @@ Departures from the Stage-4 comment (comment 6664007762 on #8751), each with the
 | DEV-28 | **PA-013 D-8156-QA (A) + (a).** The #8156 record states the binding rule that joins the Scrum and Kanban design cadences to their grid cells, so the founding ADR's "19 with a source-stated cadence" stays 19; the record's sunset is extended with a reason, and the record is named as slice S3's input | Stage 9 pre-GO Decision Recorded, PA-013, CHEAP | Option (A) keeps the evidence and moves no decision (#8793 QA-05); option (a) keeps the member-grain data alive for S3 | APPLIED in the git-ignored #8156 record, Revision 3, placed by the hub (comment 6670797979 on #8782). No tracked text changes: the ADR figure stays 19 |
 | DEV-29 | **PA-014 D-DeliveryCutDeps.** Slice S7, the catalog integrity checks, is split from the second delivery milestone into a third, so the second milestone carries two external dependencies rather than three | Stage 9 pre-GO Decision Recorded, PA-014, CHEAP; Stage-7 F-03 on #8788 | The composition doctrine targets at most two external dependencies per milestone; S7 waits on the catalog generator | APPLIED in the ADR's § Delivery cut at `64615ed5`, and in § Change Description → Downstream impact at this commit |
 | DEV-30 | **PA-015 D-OwnedFindingsFiling.** The 28 process-baseline findings this release's cards own (#8153 7, #8154 15, #8155 6) stay unfiled, owned by epic #8150's delivery cut. The 8 bug-tag candidates (#8154's seven ` · bug` rows plus F-032, under Stage-7 F-03's reading on #8785) are listed in the Stage-9 ledger. This replaces the "Stage 13 files them" clause of PA-008 (a) and DEV-15 | Stage 9 pre-GO Decision Recorded, PA-015, CHEAP | Every owned finding carries class `none` at its source, so all 28 sit below the filing threshold's class limb; their remedies are the delivery cut's work | APPLIED: the Stage-9 Phase A7.6 ledger on #8794 counts them below-threshold, and Stage 13 files none of them |
+| DEV-31 | **PA-016, GO WITH CONDITIONS.** The release passes Stage 9 with four conditions, none needing a code change. C1: every required check passes on the final head before the merge. C2: the ratification head is re-read. C3: the draft-to-ready transition is made and read back. C4: the R7/R9 re-dispositions and the CIAC-2..CIAC-6 grade lines are recorded | Stage 9 Decision Recorded (comment 6671846290 on #8794), PA-016, EXPENSIVE | The readiness scan read ANY-PARTIAL: required checks queued, and package hygiene open. The content gates read MET | C2, C3 and C4 DISCHARGED (comment 6672012208 on #8794: CIAC-1 PASS and MATRIX-DELIVERED on the ratification head; R7 and R9 dispositioned; five CIAC grade lines MET; the PR ready, read back). C1 OPEN until Stage 12 reads every required check green |
+| DEV-32 | **PA-017, ratified with amendments.** The founding ADR moves `Proposed` → `Accepted` and records what the ratification settled: point-in-time binds to Domain C, reopening the frozen Axis-2 set only on a shown need; the timeboxed and continuous design default is a labelled default; the vocabulary and the design's home stand as proposed; the risk-class home decision is re-checked, still `Proposed`, with every home nameable; and the node-delta lint is adopted on its supporting-grade premise | Stage 9 Decision Recorded, PA-017, EXPENSIVE; the ratification posted verbatim on #8157 (comment 6671846544) | The ADR left these clauses to the gate; settling them in its text makes the `Accepted` record self-contained | APPLIED in the ADR at `78db45aa`; the gap map, Consequences and Reversibility are reconciled to it |
+| DEV-33 | **PA-018, #8150's body per RQ-1.** In the Out list's system-documentation bullet, #8110 (completed) is repointed to #8111 and #8114; the three Out bullets the widening touched stay | Stage 9 Decision Recorded, PA-018, CHEAP | #8110 closed as completed on 2026-10-25; the 2026-10-24 Scope note left the body to the ratification | APPLIED on #8150 by a one-line body edit, read back. It touches no tracked file; this row records it |
+| DEV-34 | **Stage 12 Execute authorized.** This plan is brought current before the merge: #8157 reads DONE, the Status reads Stage 12, and PA-016 to PA-018 and the authorization are recorded | Stage 12 Decision Recorded (comment 6672132704 on #8797), D-Execute, IRREVERSIBLE | The plan is the record the merge lands; it states the ratified state rather than the pending one | APPLIED in this file. The merge itself waits on C1 |
 
 ## Change Description
 
@@ -707,7 +715,7 @@ Authored at Engineering Commit 0 per `release/governance/RELEASE_PROTOCOL.md` §
 
 ### Outcome
 
-This release produces the evidence and the design for how each delivery stage records its work. Four discovery cards verify or produce the current-state records (what each release stage writes, what project delivery produces, a shared stage vocabulary, and how methodology changes cadence), and #8157 designs the stage-to-document model on them. The design is held in a founding ADR, `{{ADR:stage-documents-are-declared-once-and-projected-twice}}`, that ships in this release as `Proposed` and becomes `Accepted` when the operator ratifies it at Stage 9. In one line, the design: every stage's documents are declared once, in a new core standard that both the release pipeline and project delivery read; every pipeline stage, and every project phase or stage, belongs to one of eight delivery spans; a document's lifecycle class binds to the field its file already carries; homes are named by role; a delivery approach varies cadence through one member-grain section; and a change's process design is written as DRAFT catalog pages at Engineering Commit 0 and becomes current when its code is built.
+This release produces the evidence and the design for how each delivery stage records its work. Four discovery cards verify or produce the current-state records (what each release stage writes, what project delivery produces, a shared stage vocabulary, and how methodology changes cadence), and #8157 designs the stage-to-document model on them. The design is held in a founding ADR, `{{ADR:stage-documents-are-declared-once-and-projected-twice}}`, that ships in this release `Accepted`. It was authored `Proposed` and ratified with amendments by the operator at Stage 9 (PA-017). In one line, the design: every stage's documents are declared once, in a new core standard that both the release pipeline and project delivery read; every pipeline stage, and every project phase or stage, belongs to one of eight delivery spans; a document's lifecycle class binds to the field its file already carries; homes are named by role; a delivery approach varies cadence through one member-grain section; and a change's process design is written as DRAFT catalog pages at Engineering Commit 0 and becomes current when its code is built.
 
 ### Issues resolved
 
@@ -717,9 +725,9 @@ This release produces the evidence and the design for how each delivery stage re
 | #8154 | The project-delivery inventory, verified and refreshed, with the 2026-10-25 observations noted beside it | DONE — Stage 8 CONDITIONAL ACCEPT, 4 of 5 MET; AC-3 PARTIAL, its three `not stated` lifecycle rows accepted as-is by the operator (PA-012) |
 | #8155 | The stage-vocabulary crosswalk, verified and refreshed | DONE — Stage 8 ACCEPT, 4 of 4 MET, accepted by the operator (PA-012) |
 | #8156 | How each delivery approach changes when documents are written and how long they stay current | DONE — Stage 8 ACCEPT, 4 of 4 MET, accepted by the operator (PA-012); record Revision 3 per PA-013 |
-| #8157 | The stage-to-document model design and the founding ADR, brought to ratification | PARTIAL — Stage 8 ACCEPT once PA-011 landed (`64615ed5`), accepted by the operator (PA-012); the ratification is pending at the Stage 9 gate, and AC-6 is graded at Stage 13 |
+| #8157 | The stage-to-document model design and the founding ADR, brought to ratification | DONE — Stage 8 ACCEPT once PA-011 landed (`64615ed5`), accepted by the operator (PA-012); ratified with amendments at the Stage 9 gate (PA-017), recorded on #8157; AC-6 is graded at Stage 13 from that record |
 
-Each status follows the operator's Stage-8 acceptance, rendered at the Stage 9 pre-GO gate (PA-012). #8157's becomes DONE only once the ratification is recorded.
+Each status follows the operator's Stage-8 acceptance, rendered at the Stage 9 pre-GO gate (PA-012). #8157's also follows the ratification (PA-017).
 
 ### Key decisions
 
@@ -729,6 +737,8 @@ Each status follows the operator's Stage-8 acceptance, rendered at the Stage 9 p
 - **D-DurableHome (B) + (C):** the design ships as a founding ADR in this release; the inventories feed the process-catalog pages.
 - **D-Version:** version-less, re-confirmed after the ADR joined the release.
 - **Stage 9 pre-GO, PA-011 to PA-015 ("Approve all five"):** the founding ADR's pre-GO wording commit (the delivery-engine map, `Span-Build` against `Engine-Build`, `platform-instance` by role); the Stage-8 verdicts accepted as listed; #8156's join rule stated, with the ADR's "19" kept and the record's sunset extended; slice S7 split to a third milestone; the 28 owned findings kept unfiled, owned by #8150's delivery cut.
+- **Stage 9 GO and ratification, PA-016 to PA-018 ("Approve all three"):** GO WITH CONDITIONS; the founding ADR ratified with amendments and now `Accepted`; #8150's Out list repointed from #8110 to #8111 and #8114.
+- **Stage 12, D-Execute ("Authorize Execute"):** the merge proceeds once every required check is green (C1).
 
 ### Reversibility
 
