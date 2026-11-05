@@ -18,19 +18,18 @@ each time.
 
 This standard defines that location, the artifact **frontmatter**, and the **sunset
 rule** that prevents unbounded accumulation. It is the tracked *framework* for the
-git-ignored `analysis/` workspace — the same framework-tracked / instances-ignored split
-the platform already uses for initiative roadmaps
-(`core/standards/initiative-roadmap-framework.md` tracked;
-`<module>/governance/roadmaps/` instances git-ignored).
+git-ignored `analysis/` workspace. The workspace is a registered in-repo home of the
+working-state class: its placement, its admission rule and its protection are set by the
+instance-data placement standard (`core/standards/instance-data-placement-standard.md`),
+which codifies once the folder-plus-README-tracked idiom this folder shares with the
+roadmaps home.
 
 ## 1. Location & mechanics
 
 | Aspect | Rule |
 |---|---|
 | **Path** | The repo-root `analysis/` folder. Cross-cutting working material owned by no single module → sited at the root, parallel to the git-ignored `audit-output/` working dir. |
-| **Tracked** | Only `analysis/README.md` (the in-folder signpost). The folder ships on clone so the location is always discoverable. |
-| **Git-ignored** | Everything else under `analysis/` — every `<name>-YYYY-MM-DD/` subfolder and its contents. Enforced by `.gitignore` (`/analysis/*` with `!/analysis/README.md`). Operator-written analysis never enters git history. |
-| **Scaffolding** | None required — the folder exists in the repo via the tracked README; there is no install/resolver step. |
+| **Placement** | A registered in-repo working-state home that applies the folder-plus-README-tracked idiom of the instance-data placement standard (`core/standards/instance-data-placement-standard.md`). For this home: `analysis/README.md` is the only tracked file; every `<name>-YYYY-MM-DD/` subfolder is git-ignored by the `/analysis/*` and `!/analysis/README.md` pair; and the folder ships on clone, so no install or resolver step creates it. Operator-written analysis never enters git history. |
 | **Write path** | Any session shape may write the workspace — worktree or not, `Write`/`Edit` or Bash — with **no hook bypass**. `BLOCK-DESTRUCTIVE-019` exempts `analysis/<subfolder>/…` for Write/Edit; the tracked `analysis/README.md` is **not** exempt and is edited from a worktree like any other tracked file. |
 
 **Scope boundary.** This workspace is for analysis **about the platform/repo** (release,
@@ -39,6 +38,9 @@ backlog, platform audits/reviews/gap analyses). It is **not** for:
 - **Project** analysis → lives with the project (the Operations domain, `projects/`).
 - **Operator personal / cross-cutting** analysis unrelated to the repo → the operator-local
   personal analysis space (outside the repo entirely; an operator-instance location, never tracked).
+
+Both exclusions are the placement standard's admission test applied to this home: a
+repository's in-repo homes admit only content about that repository.
 
 ## 2. Folder convention
 
