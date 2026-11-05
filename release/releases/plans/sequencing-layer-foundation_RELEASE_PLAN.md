@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH — one branch and one merge; reverting t
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): tool behaviour changes, a new release tool, and gate and reference text added inside existing structure, per the Bump-Class Selection Guide's "protocol text addition or modification" and "reference document addition or update"; no new skill and no new governance file. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file and the shared-home ADR, `5c6ea3fd`) and #7177's slice (`5634b68e`) landed; #6397's and #6398's slices follow in their own spokes |
+| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file and the shared-home ADR, `5c6ea3fd`), #7177's slice (`5634b68e`) and #6397's slice (`3c3acb6c`, `00785cd4`) landed; #6398's slice follows in its own spoke |
 | **Branch** | `release/sequencing-layer-foundation` |
 | **PR** | **#8811**, opened in **draft** at Stage 6 Phase C2 after #7177's slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `sequencing-layer-foundation` |
@@ -209,9 +209,23 @@ Single branch `release/sequencing-layer-foundation`, posture **P0 (fully serial)
 
 **Smoke label.** The suite's two count-bearing labels in `.github/workflows/release-tooling-smoke.yml` become count-free: the header comment reads "its legs and section-read arms over the committed frozen sample", and the step name reads `bundle-issues-parser regression suite (frozen sample + section-read arms)`. A step name is not a check context, and no census keys on it. The precision probe's anchor line in the parser is untouched.
 
-### #6397 — change specification (slice 2)
+### #6397 — change specification (slice 2; Stage-5 design on #8699 as the scope lock and the A6.5 review on #8778 amended it)
 
-Carried by its own Stage-5 design (#8699), its A6.5 review (#8778) and the scope lock, and recorded in this file by its own Stage-6 spoke (#8700) as the slice lands. Four scope-lock items bind it beyond the design: the negated label ("not blocked by") is fixed inside the shared grammar and covered by AC2 (D-6397-Negation); unlabelled references are reported rather than dropped under `clean`; the G3-07 text is matched to the code; and the mirror gets no `from __future__ import annotations` — the design's Change 2 step 1 is superseded, so annotations that name a bound name are avoided instead. The grammar moves into the parser along slice 1's load; the mirror self-test still passes all 24 cases.
+**Files:** `release/tools/bundle-issues-parser.py`, `release/tools/native-dep-mirror.py`, `release/tools/compute-milestone-positions.py`, `release/tools/tests/test_bundle_issues_parser.py`, `release/tools/tests/test_native_dep_mirror.py`, `core/schemas/gate-criteria-spec.md`.
+
+**One direction grammar (S5-D1).** The grammar region moves verbatim from the mirror into the parser, after `DEP_HEADING_ALIASES`: `SEGMENT_LABELS`, `_SEGMENT_LABEL_RE`, `_LABEL_KIND_BY_GROUP`, `DEP_TOKEN_RE`, `_LIST_MARKER_RE`, `_PROSE_WORD_RE`, `DIRECTIONAL_HEADINGS`, `_is_bare_ref_run`, `BodyDep`, `_attribute_segments`, `_parse_token`, `_segments_for_body`, `unattributed_refs` and `parse_body_dependencies`. Three changes ride along and nothing else differs: the section's header comment, `_parse_token`'s stderr prefix (`bundle-issues-parser:`), and the negated-label rule below. The mirror deletes the region and binds the six public names it exposed — `SEGMENT_LABELS`, `DEP_TOKEN_RE`, `DIRECTIONAL_HEADINGS`, `BodyDep`, `parse_body_dependencies`, `unattributed_refs` — beside slice 1's three. Its two annotations that name `BodyDep` are quoted, with no `from __future__ import annotations`, so a mirror with no parser beside it still reaches its exit-2 path; its `re` import, used only by the moved region, goes.
+
+**The directed parse (D-6397-2).** `parse_dependencies` returns the `blocked_by` targets of `parse_body_dependencies`, of any dependency type or lag, and `DEP_RE` is deleted. The status vocabulary is unchanged: `clean` for an absent or read section, `deferred` for the intake deferral marker. No `failed` source is added, because D-7177-Extractor left no degraded verdict to map.
+
+**The negated label (D-6397-Negation).** In `_attribute_segments`, a `blocked_by`-kind label whose same-line prefix ends in `not`, `no longer`, `never` or an `n't` contraction (markdown emphasis tolerated) is attributed `relates`: no edge, and no unattributed reference. The A3.5 mirror inherits it through its binding (self-test case 25).
+
+**Unattributed references reported (A6.5 FM-2).** `IssueRecord` gains two defaulted, data-only fields — `dependencies_unattributed` (the numbers) and `dependencies_unattributed_count` — filled from `unattributed_refs`. Neither feeds `parse_status`; the JSON output carries both; `parse_dependencies` keeps its two-value return.
+
+**The position tool (`STAGE5-CONSUMER-ADJUST`).** `IssueLite` carries `dep_status`, `gh_open_issues` keeps it, and `aggregate_edges` lists a source whose status is not `clean` among the unresolvable edges. The `--check-drift` TSV is unchanged.
+
+**G3-07 (the card's Documentation Impact row).** The criterion reads "directed dependency edge", and an **Edge source** paragraph names `parse_dependencies` as the authority and describes the grammar as the code behaves, its imprecisions included (A6.5 FM-3).
+
+**Tests.** Parser self-test DG-1..DG-22; mirror self-test case 25 (25 cases); parser suite arms `6397-AC1 one direction grammar` and `6397-AC2 relation fixtures`, each with a reference copy of the old scrape as its sensitivity arm; CIAC-1's identity check extended to the grammar names; mirror suite the single-source assertion; the position-tool self-test a parse-status fixture with its `clean` control. CIAC-3's arm is unchanged and green over the rewritten `parse_dependencies`.
 
 ### #6398 — change specification (slice 3)
 
@@ -584,6 +598,72 @@ Verdict:     CLEAN
 
 `extract_section_with_alias` and `extract_section_aliased` keep their names in the mirror (DEV-3): the definition moved from the mirror to the parser (`def extract_section_with_alias` pre 1 in the mirror, post 0 in the mirror and 1 in the parser), and the call sites stay by design. The Stage-5 mirror sweep reads 10 lines before and 5 after — the three bindings, the rewritten header comment, and the unchanged caller; the "mirrors bundle-issues-parser" and "canonical body parser" phrases read 0. The parser sweep reads 3 before and 2 after: the module docstring's opening line (still true; the shared-home role is stated in the paragraph added beneath it) and a self-test comment that describes the old defect (PRESERVE). The test file's reference copy of the old terminator is the RED arm's instrument and is out of the sweep's scope.
 
+### Plan step 2 (#6397) — Stage 6 C4
+
+Run by the Stage-6 spoke on #8700 against slice 2's commits `3c3acb6c` (the grammar move and the directed parse) and `00785cd4` (the position tool and G3-07), on Python 3.9.6. The live reads are one snapshot taken on 2026-11-05 at 18:45Z: 799 open issues (equal to the search total of 799, so not truncated) and 57 open milestones, none of which carries `position:`.
+
+| Check | Command | Observed |
+|---|---|---|
+| Parser regression suite | `python3 release/tools/tests/test_bundle_issues_parser.py` | exit 0, `TEST OK`; combined-clean 39/40 = 97.5%, unchanged; section-read arms 6 run, 0 failures; direction-grammar arms 2 run, 0 failures. `6397-AC1` read all 40 frozen bodies through the grammar, and the old scrape reads 26 of them differently, so the arm is not vacuous |
+| Tool self-tests | `python3 release/tools/bundle-issues-parser.py --self-test` · `python3 release/tools/native-dep-mirror.py --self-test` · `python3 release/tools/compute-milestone-positions.py --self-test` | `SELF-TEST OK` ×3 — the parser's DG-1..DG-22, the mirror's case 25, and the position tool's parse-status fixture with its `clean` control included |
+| Mirror frozen suite | `python3 release/tools/tests/test_native_dep_mirror.py` | exit 0, `TEST OK`, 20 cases; the grammar is read from `bundle_issues_parser` |
+| RED arm | both suites run against the parser and the mirror taken from `6b76da98`, the slice's base, with the suites, their fixtures, the G-CL8 engine and its `_frontmatter.py` beside them | parser suite exit 1 with 7 failure lines, every one a new arm: `6397-AC1` ×5, `6397-AC2` ×1 (it raises: the old parser has no `unattributed_refs`), `CIAC-1` ×1 (the grammar names are not the parser's objects). The `7177-` arms, CIAC-3, the 90% floor and T-13 read 0 there. Mirror suite exit 1 on the single-source assertion |
+| Mutation probes | each on a copy of the shipped tools; the unmutated copies exit 0 on all five runs | M1, the undirected scrape restored: 17 DG lines in the parser self-test, and both `6397-` arms in the suite. M2, the negation rule removed: DG-13..DG-18 and DG-20, 8 `6397-AC2` lines, and mirror case 25. M3, the position tool discarding the status again: its parse-status arm. M4, the mirror defining its own `parse_body_dependencies`: `6397-AC1`, `CIAC-1` and the mirror suite |
+| AC3 (snapshot) | the position tool's own `aggregate_edges` and `derive_positions` over the snapshot, once per parser: the base parser (`6b76da98`), the shipped parser, and the shipped parser with the negation rule disabled | the old scrape: 647 issue-level refs, 19 milestone edges, **10** cycle-resident (ms 349, 358, 360, 361, 365, 382, 406, 407, 408, 417). Directed: 154 refs, 4 edges, **0**. Directed without the negation rule: 177 refs, 5 edges, 0 — the rule removes one milestone edge, 408 → 349, a merge-order gate its author disclaimed as a blocker. Every body reads `clean`, so the new parse-status line fires on none |
+| AC3 (the live command) | `python3 release/tools/compute-milestone-positions.py --dry-run` at 19:03Z | exit 0; no `CYCLE:` block; 68 unresolvable edges listed; "would PATCH 57 milestone(s)". The open-issue search total read 798 at that moment |
+| G3-07 text against the code | each behaviour the Edge-source paragraph states, run through `parse_dependencies` | 17 of 17 hold, the imprecisions it names included: `requires` mid-sentence opens a segment, and a segment runs past its sentence to the next recognised label |
+| Reference durability | the link, cutover, raw-URL and issue-reference detectors of `core/hooks/lib/fragile-ref-patterns.sh`, read as patterns, over the lines this slice adds to `core/schemas/gate-criteria-spec.md` | 0 on each over 2 added lines; a seeded control line fires each detector once |
+| Doc links | `python3 core/deploy/tools/check-doc-links.py --target-paths core/schemas/gate-criteria-spec.md --require-targets`; `python3 release/tools/check-release-links.py --roots core --files core/schemas/gate-criteria-spec.md --check-anchors` | exit 0, no findings; 0 broken links |
+| Degraded-root arm | `bash core/deploy/tests/test_g1_form_family.sh` | exit 0 — 41 passed, 0 failed; the parser still loads alone |
+| Package consequence | `printf '%s\n' <the seven changed paths> \| bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | empty — no rostered skill's package is staled. Sensitivity: the release-planner dependency reference resolves `release-planner` |
+| Runtime-suite selection | `release/references/standards/runtime-suite-selection-map.md` rows 4 and 6; row 8 for the gate specification | row 6: the two suites above. Row 4: `python3 release/tools/check-selftest-coverage.py --run` exit 1 — **77 of 78** discovered self-tests pass, the parser's, the mirror's and the position tool's among them; the one failure is `release/tools/cleanup-orphan-state.sh --self-test`, which hit the runner's 300-second per-tool timeout (exit 124) as it did at slice 1. That tool is unchanged by this slice, so it is recorded **NOT-EVALUATED here**, not as a pass and not as a regression; the `selftest-discovery` job on #8811 is the enforced reading. The killed self-test left its mutated script copy untracked in `release/tools/`, as at slice 1; it was this run's own artifact and was moved to the Trash before the commit. `--reconcile`: `RECONCILE VERDICT: CLEAN`. Row 8: the gate specification maps to no suite. The `test-run` event is not emitted by this spoke — the pipeline-event log is outside its write boundary |
+| AC5, deploy-check limb | — | not run here (DEV-17): Stage 7 diffs the `  FAIL:` lines against the `b1042eec` baseline |
+| Plan verifier and CIAC lint | `bash release/tools/verify-release-plan.sh <this file>`, and with `--ciac-lint` | exit 3 — 9 PASS / 4 FAIL / 25 SKIP / 5 UNRUNNABLE / 0 ERROR over 43 records, as at slice 1; the 4 FAILs are slice 3's ADDs; CIAC-1..CIAC-3 PASS, CIAC-4 declared. The lint reads `declared=4 parsed=4 clean=3 declared-deferral=1 flagged=0` |
+| ADR index | — | N/A — this slice adds no record under `release/ADRs/` |
+| Close-keyword self-check | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | exit 0, CLEAN, before each push |
+
+**Probe record for the AC3 directed zero** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0 to PV-7):
+
+```
+Probe:       compute-milestone-positions.py aggregate_edges + derive_positions over the
+             snapshot, its records built from the shipped parse_dependencies; the count of
+             cycle_members
+Denominator: 799 open issues (gh issue list --limit 5000 returned 799, equal to the search
+             total 799); 57 open milestones (REST, paginated); 397 Dependencies sections
+Control - sensitivity: the same code over the same snapshot with the base parser -> 10
+Control - specificity: NOT TRIGGERED — cycle membership is computed, not matched, so it has
+             no lexical near-miss; the tool's own self-test pairs an X <-> Y cycle with an
+             acyclic Z
+Extraction:  799 bodies, 4,360,185 bytes, 0 empty, read by every arm
+Result:      0
+Verdict:     CLEAN
+```
+
+**Probe record for the stderr exposure** (the moved grammar warns on stderr for a comma-grouped token, and Check 52 captures the position tool's output with stderr merged):
+
+```
+Probe:       parse_dependencies and unattributed_refs from the shipped parser on each snapshot
+             body, stderr captured; the count of bodies that write to it
+Denominator: 799 open bodies, 397 Dependencies sections
+Control - sensitivity: a comma-grouped token in a Blocked by segment, and in unlabelled
+             prose -> each writes
+Control - specificity: the same number without the separator, and a comma after a whole
+             reference -> neither writes
+Extraction:  799 bodies, 4,360,185 bytes
+Result:      0
+Verdict:     CLEAN
+```
+
+**Reference cascade (DTA-7).**
+
+```
+[REFCASCADE: git grep -nE '^(SEGMENT_LABELS|_SEGMENT_LABEL_RE|_LABEL_KIND_BY_GROUP|DEP_TOKEN_RE|_LIST_MARKER_RE|_PROSE_WORD_RE|DIRECTIONAL_HEADINGS)[ :=]' over release/tools/native-dep-mirror.py → pre 7 / post 0]
+[REFCASCADE: git grep -nE '^def (_is_bare_ref_run|_attribute_segments|_parse_token|_segments_for_body|unattributed_refs|parse_body_dependencies)|^class BodyDep|native-dep-mirror: skipping' over release/tools/native-dep-mirror.py → pre 8 / post 0]
+[REFCASCADE: git grep -nwF DEP_RE over release/tools/bundle-issues-parser.py → pre 2 / post 0]
+```
+
+The first two sweeps read 7 and 8 over the parser after the change — the definitions' new home — so the mirror's zeros are not a blind probe. The public names keep their call sites by design, because the mirror binds them: `parse_body_dependencies` in the Stage-2 triage shard's and the ticket specification's pseudocode, the runner string in `check-doc-gates.py`, and both suites read unchanged (PRESERVE). The position tool's method paragraph and its `gh_open_issues` docstring are updated in place to say the edges are directed; its "reuse parse_dependencies() as-is" comment is PRESERVE, still true. The shared-home ADR already records the grammar's move into this home and needs no edit.
+
 ---
 
 ## Deviation Log
@@ -601,6 +681,12 @@ Verdict:     CLEAN
 | **DEV-9** | **The mirror's load guard in `main()` sits after the `--verify-write-surface` dispatch**, not as its first statement, so `--help` and the write-surface introspection — neither reads a body — still run with no parser beside the tool; every body-reading path and the self-test still exit 2 first | Stage-6 B3 (minor adjustment) | **APPLIED** — slice 1 |
 | **DEV-10** | **Only the shared-home ADR is written at Commit 0.** The scope-lock alignment reads "both new ADR records are written `Proposed` at Engineering Commit 0"; the hub's Stage-6 brief scoped this spoke to the shared-home record and left #6398's to its own slice, so the chain-head ADR is authored `Proposed` by slice 3 and takes the next number on this branch | the hub's Stage-6 brief for #8696 | **RECORDED** — for the hub to confirm |
 | **DEV-11** | **#6398's integration criterion INT-2 names "#7177's degraded verdict"** as a non-clean case; that verdict does not exist under D-7177-Extractor, so INT-2's non-clean population is the deferred and failed statuses alone. Recorded for slice 3; its body is not edited here | scope lock D-7177-Extractor | **RECORDED** — slice 3 |
+| **DEV-12** | **The design's degraded handling is not built.** D-6397-4 returned `failed` for a degraded section and split `_segments_for_body` into a record-taking `_segments_for_section`; D-6397-6 warned only on `failed`. Under D-7177-Extractor no degraded verdict exists, so `parse_dependencies` keeps `clean` / `deferred`, `_segments_for_body` moves unchanged, and the position tool routes any status that is not `clean` (today `deferred`) into its unresolvable list. No status token is minted, because G3-14 counts only `clean` and `failed` | scope lock D-7177-Extractor; the hub's Stage-6 brief for #8700 | **APPLIED** — slice 2 |
+| **DEV-13** | **The negated-label rule, and its fixture asserted.** D-6397-Negation is implemented as a same-line test on `blocked_by`-kind labels: the text from the start of the label's line must end in `not`, `no longer`, `never` or an `n't` contraction, markdown emphasis tolerated; such a label reads `relates`. The design's Change 1 step 4 and Change 5(b), which excluded the negation fixture so as not to lock the trap in, are superseded: the fixtures assert no edge. The rule is lexical — a negation separated from its label by other words is not recognised (residual, MEDIUM) | scope lock D-6397-Negation; A6.5 CD-1 | **APPLIED** — slice 2 |
+| **DEV-14** | **Where unattributed references surface.** A6.5 FM-2 is applied on the parse record — `IssueRecord.dependencies_unattributed` and `dependencies_unattributed_count`, data only — as the hub's brief scoped it. The position tool does not list them; its unresolvable list carries the parse status only. Recorded as a finding for the operator in the Stage-6 output on #8700 | the hub's Stage-6 brief for #8700; A6.5 FM-2 | **APPLIED** — slice 2 |
+| **DEV-15** | **The G3-07 Edge-source text is written to the code, not the design's literal.** D-6397-7's paragraph stated a narrower grammar (labels as segment heads only; prose never an edge) and a `failed` status for an unreadable section. The committed text names `parse_dependencies` as the authority and states the grammar's actual reach — a label matches mid-sentence with an optional colon, a segment runs to the next recognised label — plus the negated label, unattributed references and the `deferred` status | scope-lock Stage-6 fix (G3-07 matched to the code); A6.5 FM-3 | **APPLIED** — slice 2 |
+| **DEV-16** | **The mirror self-test gains case 25** (a negated label is not mirror-eligible), so it passes 25 cases rather than the 24 this file's slice-2 note anticipated; the frozen mirror suite stays at 20 cases | A6.5 CD-1 ("add one mirror self-test case") | **APPLIED** — slice 2 |
+| **DEV-17** | **AC5's `deploy.sh --check` limb is not run by this spoke.** `--check` appends to the operator-instance warn log, which is outside the Stage-6 spoke's write boundary; the FAIL-line diff against the `b1042eec` baseline stays at Stage 7, as § Verification Plan already assigns it | the Stage-6 brief's write boundary | **RECORDED** — Stage 7 |
 
 ---
 
