@@ -34,9 +34,9 @@ reversibility: EXPENSIVE once ratified / Confidence MEDIUM — one superseding A
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): one ADR, one reference-tier standard, protocol text inside existing structure and one config key, per the Bump-Class Selection Guide rows "Protocol text addition or modification" and "Reference document addition or update". Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file), then slice 1 (#8016) |
+| **Status** | Executing — Stage 6 Engineering complete: Commit 0 and slices 1–4 (#8016, #6627, #8017, #8018) landed, each with its plan update, and § Change Description added; next, Stage 7 Dev Testing |
 | **Branch** | `release/placement-rules-and-adr` |
-| **PR** | opened in **draft** at Stage 6 Phase C2 after slice 1; transitions to ready-for-review at the Stage-9 gate |
+| **PR** | #8817 — opened in **draft** at Stage 6 Phase C2 after slice 1; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `placement-rules-and-adr` |
 | **Baseline pin** | `origin/main` `ac96b3ea` (the Stage-4 pin); Commit 0 is written on `b1042eec`, which adds only the v5.01 close-out records to the pin |
 | **Parent epic** | #8005, wave 1 of 8 |
@@ -669,6 +669,55 @@ The population #8018 AC-1 grades: every statement this slice adds or rewords in 
 | 25 | hub-state standard, § 9 | the placement standard's row | Working state | by reference | § 2's paragraph |
 
 **Two statements name today's container and claim no governed home:** the template's step (3) and the overview tree's container entry name `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/` as today's container and say it is never Layer 1, or never tracked. **Rows 3, 9, 13 and 17** place install-scoped working state at an install-level home outside every repository, as the standard's class table and CR-1 set it; no statement names today's out-of-tree container as a governed home.
+
+---
+
+## Change Description
+
+Authored at Stage 6 Phase C1 by the last Engineering spoke (#8677, slice 4), after every Engineering slice landed and before the draft pull request is marked ready-for-review. Operator-facing; the user-facing release note is a separate Stage-13 artifact. A Tier 1 [ADJUST] at Stage 7 or 8 that changes which issues land or which decision stands refreshes **Issues resolved**, **Key decisions** and **Downstream impact** in a later commit.
+
+### Outcome
+
+The platform now has one source for where every kind of data it keeps out of git lives. A superseding decision record, `status: Proposed`, classes that data by risk — working state in the repository it belongs to, install-scoped telemetry in the user's XDG state home, leak-risk content in the user's XDG data home outside every tree — and supersedes ADR-141 whole, with ADR-141's transition at the Stage-13 ratification. `core/standards/instance-data-placement-standard.md` is its operational half: the classes and homes, the three registered in-repo git-ignored homes, the admission test, the protections, a 38-row surface register and the five-step new-surface checklist. Six governance surfaces now cite the standard and keep today's resolving path beside each target home, and `operator.toml [adapters] corpus_home` declares the release corpus's home, `tracked` only. Nothing moves: no file, resolver or runtime write path changes, and every running hub keeps resolving hub state through `<OPERATOR_INSTANCE_HUB_STATE_PATH>`.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8016 | The superseding record, `Proposed`: the class table, D1 to D8 with the enumerated main-checkout carve-out, the carried-forward subsection and the CR-2 build obligations; appended in-part pointers on ADR-017, ADR-032, ADR-046 and ADR-096; ADR-141 untouched on this branch | DONE (landed at Stage 6; ratification and ADR-141's transition at Stage 13) |
+| #6627 | `corpus_home` declared in the template and the schema and validated by Check 33, default and only value `tracked`, declared and not yet read; the record's corpus-location item; five documents stop framing a corpus migration as pending | DONE |
+| #8017 | The placement standard with its 38-row register (two `Undecided`, one conditional); the token registry's Class column on 17 rows; three standards cite it; the gate-efficacy named-gap row with its member census, 16 of 16 | DONE |
+| #8018 | Six surfaces cite the standard, each target home with today's pointer beside it (25 statements); the charter's Classification Rule no longer classes the out-of-tree container or an in-repo home's git-ignored contents as tracked | DONE |
+
+### Key decisions
+
+Each is recorded in § Decision Record.
+
+- **D-hubstate-wording = A** — the hub-state standard joined #8018 as target wording only; every runtime path keeps today's token.
+- **D-ADR141-Scope = A** — whole supersession, its `status:` flip at the Stage-13 ratification beat, with a decline branch (DEV-2, DEV-13).
+- **CR-1 and CR-2** — telemetry at `${XDG_STATE_HOME:-$HOME/.local/state}/pmo-platform/telemetry/`; leak-risk content at `${XDG_DATA_HOME:-$HOME/.local/share}/pmo-platform/pmo-private/`, with sandbox parity and a loud failure on an empty home as build obligations.
+- **CR-3** — the main-checkout carve-out is the enumerated set `/local-state/`, `/analysis/<sub>/`, `/roadmaps/<name>`, held to the hook's static set by a parity check.
+- **CR-4 and CR-5** — the release corpus is tracked repository content, and no non-tracked `corpus_home` value is reserved.
+- **CR-6** — `core/rules/operations-bridge.md` carries the per-file allow-link marker for its rooted link to the standard.
+
+### Reversibility
+
+**EXPENSIVE once ratified — MEDIUM confidence.** Before merge any slice drops by a branch revert (CHEAP); after merge and before the Stage-13 ratification, `git revert -m 1` of the merge restores every file, because nothing moved and no runtime write path changed (MODERATE); once the record is Accepted it changes only by a superseding record. The version tag is retained, never deleted.
+
+### Downstream impact
+
+- **Stages 7 and 8:** grade each card from § Verification Plan; #8018 AC-1 is graded over the 25-row statement list in § Verification Evidence → Slice 4; INT-4's reserved-value limb is void under CR-5 (a).
+- **Stage 12:** the version claim, then `renumber-adr.py --detect`, `--renumber` on a collision, `--stamp` and `--stamp --check` (23 tokens across 16 files at this head); three sibling branches hold the record's slot (R-1).
+- **After the merge:** `./deploy.sh --deploy` re-lays the operations-bridge mirror, which Check 9 reads DRIFTED until then; each install's charter picks up the Classification Rule at its next `update.sh`.
+- **Stage 13:** the operator ratifies the record and retires ADR-141, one decision each; the whole-corpus durability lint runs twice on the bound base (one R6 row at the merge, none after A13); G-CL10 records the `placement-member-census` population.
+- **Later waves of #8005** build against the standard — the resolver and switch, the carve-out hook and its parity check, the commit guard, the installer, the needle update, the migrations — and the cleanup wave removes the "until each repository's cutover" clauses.
+- **Open for the operator:** the layer of platform working state (the #8018 review's CD-1, C1 or C2) is undecided; the taxonomy's § 7.4 counts it in Layer 2, so the operations bridge's Rule 1 reads against a hub writing hub state (DEV-42).
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `placement-rules-and-adr`.
+- User-facing release note: authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`, under `release/releases/notes/`.
 
 ---
 
