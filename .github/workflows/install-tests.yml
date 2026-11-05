@@ -1138,7 +1138,7 @@ jobs:
     # turns this required job red. Those arms stay in this job and need this limit:
     # it is the harness's estimated run time with them, plus at least a third of
     # headroom.
-    timeout-minutes: 70
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v7
 
@@ -1191,7 +1191,7 @@ jobs:
     # budget in the job plus three times the slowest observed total of its unbounded
     # steps, rounded up to five minutes, so neither runner's own timeout, nor an
     # observer step after it, is cut short by the job's.
-    timeout-minutes: 130
+    timeout-minutes: 250
     steps:
       - uses: actions/checkout@v7
 
@@ -1208,9 +1208,13 @@ jobs:
         # the hook floor), so this is a single step. Its non-zero exit on any
         # member failure fails the job → red CI. PMO_REGRESSION_EMIT=0 disables
         # the test-run event emission (CI has no operator-instance event log).
+        # Each gating run of the regression runner includes the hook-test floor, which
+        # carries the release guards-judge-every-spelling-alike's timed arms. Its budget
+        # is that run's estimated time with them, the floor scaled as the hook-test job's
+        # own estimate is, plus at least a third of headroom.
         env:
           PMO_REGRESSION_EMIT: '0'
-        timeout-minutes: 55
+        timeout-minutes: 115
         run: bash core/deploy/tests/run-install-regression.sh
 
       - name: Precision probe — a broken fixture MUST fail the suite
@@ -1325,9 +1329,10 @@ jobs:
         # observer even when an earlier step failed, so every commit records both
         # verdicts; the steps above keep their own conditions.
         if: ${{ !cancelled() }}
+        # The budget of the first gating run above, for the same reason.
         env:
           PMO_REGRESSION_EMIT: '0'
-        timeout-minutes: 55
+        timeout-minutes: 115
         run: |
           USER_BASE="$(/usr/bin/python3 -c 'import site; print(site.USER_BASE)')"
           override_home="$(mktemp -d)"
