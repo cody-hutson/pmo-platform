@@ -35,6 +35,10 @@ pass vacuously, carries a control that must come out the other way:
   ENC   untrusted text cannot break a table row or inject HTML
   ORD   the output declares that its order is not a sequence
   G1A   the view and the epic rollup-close audit share one child-set rule
+  Q01   a failed child-set read renders the epic's open children, and a lone-epic
+        head's blocked count, unmeasured in the Markdown and the JSON — never "No
+        open children" and never 0 (control: the same snapshot read ok renders the
+        child row and a measured 0)
 
 Run:  python3 release/tools/tests/test_compute_chain_head_rollup.py
 Exit: 0 = all arms pass (TEST OK), 1 = one or more failed (TEST FAIL).
@@ -84,6 +88,7 @@ LABEL_PART = "PART partition invariant holds"
 LABEL_ENC = "ENC untrusted title cannot break the table or inject HTML"
 LABEL_ORD = "ORD output declares ordering is not a sequence"
 LABEL_G1A = "G1A view and audit share one child-set rule"
+LABEL_Q01 = "Q01 failed child-set read renders children and blocked count unmeasured"
 
 DEFERRAL = "[ASSUMPTION – CONFIRM] TBD — identified in Planning"
 # The naive scrape the governed grammar replaced: every issue number in the section.
@@ -617,8 +622,56 @@ def arm_g1a(fail) -> None:
         fail(LABEL_G1A, "the label-only open child was missed (fixture 7): %s" % nodes[7]["child_set"])
 
 
+def q01_snapshot(status: str) -> Dict:
+    """A lone epic (#80) and an initiative's epic (#10), each with one open child; the
+    two snapshots the arm compares differ only in the child-read status."""
+    alpha, flow = P + "alpha", P + "flow"
+    return snapshot(
+        [{"name": alpha, "description": "Finite"}, {"name": flow, "description": "Standing"}],
+        [issue(80, ["type:epic"], subs=1), issue(81, [], parent=80),
+         issue(10, ["type:epic", alpha], subs=1), issue(11, [alpha], parent=10), issue(40, [flow])],
+        {80: {"status": status, "native": [kid(81, "open", [])], "label": []},
+         10: {"status": status, "native": [kid(11, "open", [alpha])], "label": []}})
+
+
+def _cells(row: str) -> List[str]:
+    return [c.strip() for c in row.strip().strip("|").split("|")]
+
+
+def arm_q01(fail) -> None:
+    lone_id, lone_section = "#80", "#80 issue 80"
+    for status in ("ok", "failed"):
+        snap = q01_snapshot(status)
+        rc, out, err = run_main(["--json"], snap)
+        if rc != 0:
+            fail(LABEL_Q01, "%s read: --json exited %d: %s" % (status, rc, err.strip()))
+            continue
+        heads = heads_of(json.loads(out))
+        md = TOOL.render_markdown(TOOL.derive(snap, GRAMMAR, RULE))
+        lone, blocks = heads.get(lone_id), drill_block(md, lone_section, 80) + drill_block(md, P + "alpha", 10)
+        row = _cells(row_for(md, lone_section))
+        if lone is None or len(row) != 7 or not blocks:
+            fail(LABEL_Q01, "%s read: the lone-epic head, its table row or a drill block is missing" % status)
+            continue
+        if status == "ok":
+            # Control: a measured child set renders its child row and a measured zero.
+            if lone["blocked"] != {"count": 0, "unmeasured": 0} or row[5] != "0":
+                fail(LABEL_Q01, "control: a read child set must render blocked 0: %s / %r" % (lone["blocked"], row[5]))
+            if "_No open children._" in blocks or not any(ln.startswith("| #81 |") for ln in blocks):
+                fail(LABEL_Q01, "control: a read child set must render its open child row")
+            continue
+        if lone["blocked"].get("count") is not None or lone["blocked"].get("status") != "unmeasured":
+            fail(LABEL_Q01, "a failed child read rendered the blocked count %s, not unmeasured" % lone["blocked"])
+        if row[5] != "unmeasured":
+            fail(LABEL_Q01, "the Markdown Blocked cell reads %r, not unmeasured" % row[5])
+        if "_No open children._" in blocks:
+            fail(LABEL_Q01, "a failed child read rendered 'No open children'")
+        if sum(1 for ln in blocks if "unmeasured" in ln and not ln.startswith("<details>")) != 2:
+            fail(LABEL_Q01, "each failed node block must say its open children are unmeasured: %r" % blocks)
+
+
 ARMS = [arm_ac1, arm_ac2, arm_ac3, arm_ac4, arm_ac5, arm_int1, arm_int2, arm_cd1, arm_ciac4,
-        arm_evg, arm_part, arm_enc, arm_ord, arm_g1a]
+        arm_evg, arm_part, arm_enc, arm_ord, arm_g1a, arm_q01]
 
 
 def main() -> int:

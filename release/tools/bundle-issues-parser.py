@@ -271,12 +271,23 @@ DIRECTIONAL_HEADINGS = {"depends on", "blocked by"}
 # boundary on the left, nothing on the right) reads "not blocked by #N" as "blocked by
 # #N" and manufactures the very edge the author disclaimed. The test is the text between
 # the start of the label's line and the label: it must END in a negation word -
-# "not", "no longer", "never" or an "n't" contraction - optionally followed by markdown
-# emphasis. Lexical by design; a negation separated from its label by other words
-# ("not, however, blocked by") is not recognised.
+# "not", "no longer", "never" or an "n't" contraction - optionally wrapped in markdown
+# emphasis (`**not**`, `_not_`, `__not__`). The word's left edge is the start of the
+# line or a non-word character, with any `*` or `_` emphasis run in between; an
+# underscore inside a word ("do_not") is not emphasis, so it is not a negation. Lexical
+# by design; a negation separated from its label by other words ("not, however,
+# blocked by") is not recognised.
 _NEGATED_LABEL_TAIL_RE = re.compile(
-    r"(?:\bnot|\bno\s+longer|\bnever|n['\u2019]t)[\s*_]*$", re.IGNORECASE
+    r"(?:(?<!\w)[*_]*(?:not|no\s+longer|never)|n['\u2019]t)[\s*_]*$", re.IGNORECASE
 )
+
+# A blank line: a line holding only spaces or tabs, CR-tolerant. It ends a directional
+# run once the run has text (see _attribute_segments).
+_BLANK_LINE_RE = re.compile(r"\n[ \t]*\r?\n")
+_FIRST_TEXT_RE = re.compile(r"\S")
+# The kinds whose run a blank line ends: the two that produce a BodyDep. A `relates`
+# run, a negated label included, yields no edge however far it runs.
+_PARAGRAPH_SCOPED_KINDS = ("blocked_by", "blocks")
 
 
 def _is_negated_label(section: str, label_start: int) -> bool:
@@ -342,8 +353,9 @@ def _attribute_segments(
     """Slice a Dependencies section into (kind, text) segments by labeled marker.
 
     Walks the section left-to-right; the text from one label up to the next carries
-    that label's kind. Segment slicing is whitespace/newline-blind, so it handles
-    BOTH the single-line `A · B · C` form and the multi-line form.
+    that label's kind. Slicing at labels is newline-blind, so it handles BOTH the
+    single-line `A · B · C` form and the multi-line form; the one whitespace rule is
+    the paragraph end below.
 
     An UNLABELED run — no label anywhere, or the leading text before the first
     label — is attributed by EVIDENCE rather than by default:
@@ -362,6 +374,17 @@ def _attribute_segments(
     "gated on, not blocked by: ...") is attributed "relates": the text after it states
     what the issue is NOT blocked by, so it yields no edge and no unattributed ref.
     See _is_negated_label.
+
+    A DIRECTIONAL run - a `blocked_by` or `blocks` segment - ends at the first blank
+    line after its first text, so a reference in a later paragraph is not read in that
+    direction. Blank lines between the label and its first text do not end it, so a
+    list set under its label keeps its edges. The text after the blank line, up to the
+    next label, is unlabeled text beneath the section heading: under a directional
+    heading it takes the heading's direction; otherwise it is "unlabeled" - no edge,
+    and its refs are reported by unattributed_refs. The legacy bare-ref shim covers
+    only the run before the first label, so it does not apply here: a list after a
+    `Blocks:` paragraph is never turned into a blocker. A `relates` run, a negated
+    label included, is not ended this way; it yields no edge however far it runs.
     """
 
     def _unlabeled_kind(text: str) -> str:
@@ -388,7 +411,18 @@ def _attribute_segments(
             kind = "relates"  # "not blocked by #N" disclaims the edge; no edge, not unattributed
         seg_start = m.end()
         seg_end = matches[i + 1].start() if i + 1 < len(matches) else len(section)
-        segments.append((kind, section[seg_start:seg_end]))
+        text = section[seg_start:seg_end]
+        if kind in _PARAGRAPH_SCOPED_KINDS:
+            first = _FIRST_TEXT_RE.search(text)
+            gap = _BLANK_LINE_RE.search(text, first.start()) if first else None
+            if gap is not None:
+                # The run ends at its paragraph; the rest is unlabeled text beneath the heading.
+                segments.append((kind, text[: gap.start()]))
+                rest = text[gap.start():]
+                if rest.strip():
+                    segments.append((heading_direction or "unlabeled", rest))
+                continue
+        segments.append((kind, text))
     return segments
 
 

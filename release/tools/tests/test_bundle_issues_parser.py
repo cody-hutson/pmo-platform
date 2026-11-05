@@ -84,10 +84,12 @@ shows it bites — a reference copy of the old scrape, kept here and never shipp
             and the old scrape reads some of those bodies differently.
   6397-AC2  one fixture per relation — Blocks, Part of epic, Children, Relates to,
             unlabelled prose, the Hard: and Soft: labels (prose markers, reported as
-            unattributed) and the negated label ("not blocked by", "gated on, not
-            blocked by") — each reading no edge where the old scrape read one; the
-            Blocked by: control reads its edge both ways; the record carries the
-            unattributed references and keeps its status.
+            unattributed), the negated label ("not blocked by", "gated on, not
+            blocked by", "_not_ blocked by") and a reference in a later paragraph
+            after a blank line — each reading no edge where the old scrape read one;
+            the Blocked by: control reads its edge both ways, and a list set under its
+            label, with or without a blank line between, keeps its edges; the record
+            carries the unattributed references and keeps its status.
 """
 
 import ast
@@ -498,6 +500,16 @@ RELATION_FIXTURES = [
      set(), []),
     ("negation after a prose ref", "Gated on #25, not blocked by #26.", set(), [25]),
     ("negated label at line start", "Not blocked by #27: the contract can be specified first.", set(), []),
+    # A blank line ends a directional run: a reference in a later paragraph reads as
+    # unlabelled text, not as a blocker (the bare list is the shape the legacy shim
+    # would otherwise claim; the prose row is the live shape).
+    ("a later paragraph after a blank line (bare list)", "Blocked by: #30\n\n- #31", {30}, [31]),
+    ("a later paragraph after a blank line (prose)",
+     "Blocked by: FS+0d #32 — its partition is this card's input.\n\n"
+     "Coordination (not a blocker): #33 (same milestone).", {32}, [33]),
+    ("a list after a Blocks paragraph is not a blocker", "Blocks: #34\n\n- #35", set(), [35]),
+    ("underscore-emphasised negation", "This is _not_ blocked by #36.", set(), []),
+    ("double-underscore negation", "This is __not__ blocked by #37.", set(), []),
 ]
 # Rows that must still read their edge: a list of bare references, typed and lagged
 # edges, and a Hard: line beneath a heading that is itself directional.
@@ -507,6 +519,13 @@ EDGE_FIXTURES = [
     ("directional heading", "### Depends on\nHard: #19\n", {19}),
     ("control: a negation that does not end the prefix",
      "### Dependencies\nNot urgent; blocked by #31.\n", {31}),
+    ("control: a list directly under the label", "### Dependencies\nBlocked by:\n- #38\n- #39\n", {38, 39}),
+    ("control: a blank line between the label and its list",
+     "### Dependencies\nBlocked by:\n\n- #40\n- #41\n", {40, 41}),
+    ("control: a directional heading claims the later paragraph",
+     "### Blocked by\nBlocked by: #42\n\nAlso #43 once the spike lands.\n", {42, 43}),
+    ("control: an underscore inside a word is not emphasis",
+     "### Dependencies\nThe do_not blocked by #44 flag stays set.\n", {44}),
 ]
 
 

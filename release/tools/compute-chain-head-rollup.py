@@ -40,7 +40,8 @@ WHAT IS COUNTED, AND WHAT IS NOT CLAIMED.
     unmeasured, never "not blocked".
   * An epic's children come from _epic_child_set.py, the one child-set rule this
     view shares with audit-epic-rollup-close.sh. A child-set read that failed is
-    unmeasured, never "no children".
+    unmeasured, never "no children": the epic's open children read unmeasured, and
+    so does a lone-epic head's blocked count, which is counted over those children.
   * The order is a display order (open-member count, then name), never a run
     sequence. The output says so.
 
@@ -544,8 +545,14 @@ def derive(snapshot: Dict, grammar: Grammar, child_rule) -> Dict:
         node = make_node(epic, "epic", item["absorption"])
         measured = node["child_set"]["status"] == "measured"
         kids = node["children"]
-        blocked = sum(1 for c in kids if _is_blocked(c["edges"]))
-        unmeasured_edges = sum(1 for c in kids if c["edges"]["status"] != "measured")
+        if measured:
+            blocked_facet = {"count": sum(1 for c in kids if _is_blocked(c["edges"])),
+                             "unmeasured": sum(1 for c in kids if c["edges"]["status"] != "measured")}
+        else:
+            # A lone epic's members are its children, so an unread child set leaves the
+            # blocked count unread too: unmeasured, never 0.
+            blocked_facet = {"status": "unmeasured", "count": None, "unmeasured": None,
+                             "reason": "the child-set read failed"}
         lone_heads.append({
             "id": "#%d" % epic["number"], "kind": "lone-epic", "mode": "finite", "mode_basis": "lone-epic",
             "title": epic["title"], "description": "", "absorption": item["absorption"],
@@ -555,7 +562,7 @@ def derive(snapshot: Dict, grammar: Grammar, child_rule) -> Dict:
             "unparented": ({"status": "measured", "count": 0, "issues": [], "reason": None} if measured
                            else {"status": "unmeasured", "count": None, "issues": [],
                                  "reason": "the child-set read failed"}),
-            "progress": node["progress"], "blocked": {"count": blocked, "unmeasured": unmeasured_edges},
+            "progress": node["progress"], "blocked": blocked_facet,
             "nodes": [node]})
 
     unlabeled = [m for m in members_all if not any(lb.startswith(PROJECT_PREFIX) for lb in m["labels"])]
@@ -635,13 +642,14 @@ def render_markdown(rollup: Dict) -> str:
     add("| Head | Kind | Mode | Open members | Unparented | Blocked | Progress |")
     add("|---|---|---|---|---|---|---|")
     for h in rollup["heads"]:
-        up = h["unparented"]
-        add("| %s | %s | %s | %s | %s | %d%s | %s |" % (
+        up, bl = h["unparented"], h["blocked"]
+        blocked_cell = "unmeasured" if bl["count"] is None else "%d%s" % (
+            bl["count"], " (%d unmeasured)" % bl["unmeasured"] if bl["unmeasured"] else "")
+        add("| %s | %s | %s | %s | %s | %s | %s |" % (
             md_cell(h["id"] if h["kind"] == "initiative" else "%s %s" % (h["id"], h["title"])),
             h["kind"], h["mode"], "unmeasured" if h["members_open"] is None else h["members_open"],
             up["count"] if up["status"] == "measured" else "unmeasured",
-            h["blocked"]["count"], " (%d unmeasured)" % h["blocked"]["unmeasured"] if h["blocked"]["unmeasured"] else "",
-            md_cell(_progress_text(h["progress"]))))
+            blocked_cell, md_cell(_progress_text(h["progress"]))))
     add("")
     for h in rollup["heads"]:
         add("## %s\n" % md_cell(h["id"] if h["kind"] == "initiative" else "%s %s" % (h["id"], h["title"])))
@@ -663,7 +671,9 @@ def render_markdown(rollup: Dict) -> str:
                 n["number"], md_cell(n["title"]), cs["open"] if cs["status"] == "measured" else "unmeasured",
                 cs["total"] if cs["status"] == "measured" else "unmeasured",
                 md_cell(_progress_text(n["progress"])), share))
-            if n["children"]:
+            if cs["status"] != "measured":
+                add("_Open children unmeasured — the child-set read failed._")
+            elif n["children"]:
                 add("| Child | Title | Milestone | Dependencies |")
                 add("|---|---|---|---|")
                 for c in n["children"]:
