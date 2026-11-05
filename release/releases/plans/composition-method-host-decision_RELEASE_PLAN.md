@@ -1,0 +1,511 @@
+---
+title: Release Plan — composition-method-host-decision (Composition method host decision)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: versioned (bump-class minor; provisional display v5.02; the concrete number binds at the Stage-12 atomic claim)
+milestone: composition-method-host-decision
+release_class: novel
+reversibility: CHEAP pre-merge / MODERATE once the record is Accepted — Confidence HIGH. The release adds one decision record and this plan. Before merge the record is revised in place or reverted; after ratification it is superseded rather than edited, because the codification story and the toolkit card will cite it. A claimed version tag is retained and recorded, never deleted.
+---
+# Release Plan — `composition-method-host-decision`
+
+**Milestone:** `composition-method-host-decision` (milestone 420), one card: #6390, a size:S spike. The Stage-4 planning sub-task **#8750** carries the approved plan and the Stage-4 gate's Decision Recorded. The Stage-5 design, the Phase A6.5 adversarial review, the scope-lock Decision Recorded and the bounded Stage-5 revision are on **#8752** (the review itself on #8808). This file is Engineering Commit 0, authored by the Stage-6 spoke on **#8753**.
+
+**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v5.02`** (the next-free minor recomputed at this commit). The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-primary while in flight, and the Header `**Version**` cell carries the double-brace release-version placeholder, which this file reproduces in that cell only.
+
+**Topology:** D-C **SINGLE** — one release branch, `release/composition-method-host-decision`, one pull request opened in **draft** at Stage 6 Phase C2, one merge into `main`.
+
+**Concurrency posture:** **P0 fully serial** — one card, one wave, one Engineering spoke. Force-push, `--force-with-lease` included, is not used on the shared branch.
+
+**Release class:** `novel` — trigger (b), the single deliverable is a D-class architectural decision, and trigger (c), it is recorded as an ADR; Stage 9 review depth **Deep** (§ Release Class declaration).
+
+> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #8750 and is amended by four records, in order: the Stage-4 Decision Recorded on #8750 (plan and Release Outcome Statement approved with the sharpened Success Indicator; `novel` confirmed; Stage 7 reduced to doc-conformance), the Stage-5 design on #8752, the scope-lock Decision Recorded on #8752 (D-Host (A), D-RecordModule (A), the bounded record amendments, the no-kind path (A)), and the bounded Stage-5 revision on #8752, whose record replaces the design's record in full. Where the plan and a later record differ, the later record wins, and each such change is recorded in § Deviation Log. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a reference decision record is added, per the Bump-Class Selection Guide's "reference document addition or update"; no skill and no governance file changes. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
+| **Date Created** | 2026-11-05 (Thursday, UTC) |
+| **Release Manager** | Agent-assisted (release-hub) |
+| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file), then the decision record |
+| **Branch** | `release/composition-method-host-decision` |
+| **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
+| **Milestone** | `composition-method-host-decision` |
+
+`domain_practice: { source: N/A — pipeline-internal release, date: 2026-11-05, domain: governance }`
+
+#### Domain Practice Provenance
+
+**Form X** (sourcing-exempt): every File Change Matrix row is an internal pmo-platform artifact — one architecture decision record, its module's curated README (a conditional renumber-log line only) and this plan — so no external body of practice is consumed. Dominant domain **`governance`**. Transcribed unchanged from the Stage-4 plan (Phase A1.5).
+
+---
+
+## Commit-0 Version Re-Verify Record
+
+Run at Engineering Commit 0, both halves, per `release/references/how-to/hub-spoke-bridge.md` Procedure 0 § Canonical location (single-branch topology, steps 1 to 3b).
+
+### Version half (steps 1–3, pre-write)
+
+| Step | Action | Observed |
+|---|---|---|
+| **1** | `git fetch --tags origin`, then `git fetch origin main` | both exit 0; `origin/main` = `b1042eec` (`b1042eecd6294d4c460c109f2c4b8dd6ed9896a9`), equal to the Stage-4 baseline pin. This file is written on that base |
+| **2** | Recompute next-free for bump-class **`minor`** through the adapter itself: `release/tools/claim-version.sh --sha b1042eecd6294d4c460c109f2c4b8dd6ed9896a9 --bump minor --dry-run` (the adapter's own allocation; no tag pushed) | **`v5.02`** (exit 0; "would claim v5.02 (no tag pushed)"), equal to the Stage-4 planned provisional `v5.02` |
+| **3** | HALT unless the planned version is absent from the claimed set AND equals the recomputed next-free. The tag arm binds; the published-Release and ledger arms corroborate | **absent on every arm, equal to next-free → PROCEED** |
+
+**Probe record for the step-3 zero** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0 to PV-7):
+
+```
+Probe:       git ls-remote --tags origin, filtered to refs/tags/v5.02     (tag arm — binds)
+             gh release list --limit 5                                   (Release arm; newest first)
+             git show origin/main:release/releases/RELEASE_LOG.md, count of the literal 'v5.02'
+                                                                         (ledger arm)
+Denominator: the remote tag list after a fresh tag fetch (the highest v5 tags are v5.01 and v5.00);
+             the five newest published Releases (v5.01, v5.00, v4.81, v4.80.1, v4.80);
+             the ledger at origin/main, read from the ref, never the worktree copy
+Control - sensitivity: the same three reads on the v5.01 slot — 2 tag refs (tag and peeled),
+             1 Release (the newest), 7 ledger hits. Every arm returns non-zero, so a zero on the
+             v5.02 slot is a real negative
+Control - specificity: NOT TRIGGERED — a slot-occupancy question over one exact version has no
+             near-miss class the probe must reject (PV-2c)
+Extraction:  the whole ls-remote tag output, the Release list, and the whole ledger from origin/main
+Result:      0 occupants of the v5.02 slot on every arm
+Verdict:     CLEAN — v5.02 is free and equals the recomputed next-free; no HALT
+```
+
+**In-flight state at Commit 0:** two sibling release branches, each with a draft pull request, both declaring bump-class minor and provisional `v5.02` (§ Cross-PR Overlap Audit → In-Flight Release Roster). The slot binds in merge order at the atomic claim; this is the expected Tier-S version-axis edge, not a HALT condition, because neither sibling has merged and no tag exists.
+
+### Manifest half (step 3b, post-write and pre-commit)
+
+`release/tools/claim-version.sh --verify-stamp composition-method-host-decision`, run after this file was written and before it was committed; exit 0 is required. The result is recorded in § Verification Evidence.
+
+This file carries **exactly one** literal double-brace release-version placeholder — the Header `**Version**` cell. Every other mention names the placeholder rather than reproducing it, because the claim resolves the token by substitution across the whole file.
+
+### Date variable
+
+`${AUDIT_DATE_UTC}` is resolved **once**, at Engineering Commit 0, as `date -u +%Y-%m-%d` → **`2026-11-05`** (Thursday). It fills the decision record's `date:` frontmatter only. The record's source-observation measurement dates are historical facts pinned to `b1042eec` and stay literal.
+
+### Commit-0 Survival Set
+
+Every element determined at Stage 4 that a named downstream consumer reads **from this file** (`release/references/pipeline/stage-04-planning.md` § 6). Dropping one is a spec violation, not an oversight.
+
+| # | Survival element | Carried at |
+|---|---|---|
+| 1 | `domain_practice` label (`source` · `date` · in-label `domain`; Form X, so no Mode-B rationale) | § Header |
+| 2 | File Change Matrix (machine-readable, fence-delimited; the Stage-5 module decision promoted at this commit) | § File Change Matrix |
+| 3 | Cross-Issue Acceptance Criteria | **None, and the section is omitted** (the non-ceremony signal). Enumerated over the in-release card set `{#6390}`: a CIAC spans at least 2 issues, and the release has 1 |
+| 4 | Verification Plan, with the AC baseline | § Verification Plan |
+| 5 | Release-version stamp manifest (the double-brace placeholder in the Header `**Version**` cell; bump class in the `**Bump Class**` row) | § Header |
+| 6 | Stage Applicability Matrix | § Stage Applicability Matrix |
+| 7 | Release Class declaration | § Release Class declaration |
+| 8 | Implementation Sequence | § Implementation Sequence |
+| 9 | Baseline pin (the Stage-4 `origin/main` SHA, which is also the Commit-0 base) | § Cross-PR Overlap Audit → Baseline SHA |
+
+---
+
+## Scope
+
+### Issues Included
+
+| Issue | Priority | Title | Disposition |
+|---|---|---|---|
+| #6390 | P2 | Decide where the composition method is hosted and how it is triggered across altitudes | carried (`card-disposition:carried`, PA-002); Stage-5 design, adversarial review and bounded revision on #8752; the record is this release's deliverable |
+
+### Exclusions
+
+| Item | Why it is out of scope | Routed to |
+|---|---|---|
+| The codification story: the core method document, the release-planner mode, the release-executor write step | The record decides the host; building on it is the gated card's work. No candidate host skill is edited here | #6389 (held; this release unblocks it) |
+| The Scrum grouping declaration (`level_role = "grouping"` on the Scrum `epic`, plus every reader it moves) | A pack and validator change, not a decision record; recorded in the record as a precondition (D10.4) | #6389's edit set or a card of its own — the operator's call (Stage-5 open question Q2) |
+| The three out-of-scope observations of the adversarial review (the curator's resolver naming the retired initiative namespace; the glossary's "Epic" row; the upstream catalog's missing line budget) | Outside items 1–5 of the bounded revision | not carried; recorded on #8752 |
+| The milestone doctrine, the roadmap authoring criteria, the single-item intake path | The record states it changes none of the three entry points (AC-5) | #5870 owns the doctrine's inductive-entry work |
+
+---
+
+## Decision Record
+
+### Stage-4 plan gate (operator, 2026-11-05)
+
+| Decision | Rendered |
+|---|---|
+| PA-001 Plan + Release Outcome Statement (scope-lock) | **Approved**, with the sharpened Success Indicator. Release class `novel` confirmed (ratified 2026-09-27; triggers (b) and (c) unchanged) |
+| PA-002 D-Stage7 posture for #6390 | **(B) Reduce** to doc-conformance checks, with no test authoring |
+| D-Version | **Recorded, not asked:** bump class minor, provisional `v5.02`; the number binds at the Stage-12 atomic claim |
+| D-C branch topology | **SINGLE** (recorded determination) |
+| D-Concurrency posture | **P0, fully serial** |
+| Applied under the approval | The #6390 body took the Tier 1 [ADJUST] amendments (all six criteria keep their numbers; the Documentation Impact row uses the action `update` with the regeneration qualifier in the reason). The milestone description took the refreshed coordination line, a Parallelization Map recorded 2026-11-05, the sharpened Success Indicator, Stage 5 activation bias ALL, and an Amendment Log entry; the Composition Lock is unchanged |
+
+### Stage-5 scope lock (operator, 2026-11-05)
+
+| Decision | Rendered |
+|---|---|
+| PA-003 D-Host | **(A)** a core method document in `core/disciplines/` that role skills cite, entered through one thin read-only dispatcher mode on `release-planner` |
+| PA-004 D-RecordModule | **(A)** `core/ADRs/`, slug `composition-method-is-core-and-enters-through-the-release-planner` |
+| PA-005 Record amendments | **(A)** a bounded Stage-5 revision applies the adversarial review's P-1 (cite ADR-049; the forward clause conditional on the grouping-tier card reconciling with it), CD-1 (one persisted proposal, an intake-desk readiness check on each draft, one execute step filing approved bodies verbatim), P-2, P-3, F-2 and F-3, and adds Current state, Future state and Gaps inside the record's Context |
+| PA-006 No-kind path | **(A)** CD-2: when no grouping kind resolves, the execute step tags each member with a grouping label |
+
+### Stage-5 bounded revision (#8752)
+
+The revision's `### Output for Stage 6` is the literal record Stage 6 transcribes, and it **replaces in full** the design's earlier record. Unchanged by it: D-Host (A), D-RecordModule (A), the slug and title, the altitude ladder, the extend-before-create (SR-G6) text, the trigger phrases, the sibling answers (D9), Status and Reversibility. The File Change Matrix is unchanged by it.
+
+---
+
+## Dependency Graph
+
+Edges are read from **native GraphQL** (`blocking` / `blockedBy` / `parent` / `subIssues`), never from `bundle-issues-parser.py`'s `dependencies` field, which inverts `Blocks: #6389` (the #6397 defect).
+
+### Topologically Sorted Sequence
+
+| Position | Issue | Priority | Status | Dependencies (in-release) | Edge Type |
+|---|---|---|---|---|---|
+| 1 | #6390 | P2 | in-progress | (none — root) | — |
+
+### Artifact Relationship Graph
+
+| Source | Type | Target | Direction | Derived from |
+|---|---|---|---|---|
+| #6390 | BLOCKS | #6389 (out of release: size:L, `status: approved`, no milestone) | #6390 → #6389 | native `blocking` |
+| #6390 | GENERATES | `core/ADRs/ADR-NNN-composition-method-is-core-and-enters-through-the-release-planner.md` | #6390 → file | File Change Matrix (add) |
+
+Native-edge probe (Stage 4, re-read at Stage 5): #6390 `blockedBy` 0; `blocking` 1 (#6389); the reciprocal read on #6389 gives `blockedBy` 1 (#6390). One node cannot form a cycle, and the only edge leaves the release.
+
+### Cross-milestone and soft edges (informational; not in the dependency graph)
+
+| Edge | Class | Evidence |
+|---|---|---|
+| this release → `epic-framing-states-axis-coverage` (milestone 430) | **soft, ordering**: this lands first | its description names this milestone as its one external dependency; #7961 decides the design-axis toolkit's carrier against this record at its Stage 5 |
+| ↔ #6420 (epic; its decomposition-host question has no card) / #8099 | soft, coordination | #6420's body records that the two hosting questions must not be answered differently; the record answers both (D9) |
+| ↔ `bundle-doctrine-runs-from-evidence` (milestone 419, #5870) | soft, semantic | #5870 edits the release planner's backlog-analysis step, which the record's mode routes to; no shared write path in this release |
+| ↔ `framing-altitude-and-slip-model` (milestone 431, #7965) | soft, semantic | #7965 decides how a framing states its altitude; the record reuses the same ADR-211 term and adds no vocabulary |
+| #7539 (grouping tier above epic) | soft, named owner | `status: deferred`; the record conditions any kind for that tier on it reconciling with ADR-049 Decision 1 |
+
+### G3-07 Status
+
+`PASS — 1 dependency edge checked (#6390 → #6389), 0 cross-milestone violations.` The blocked card is unmilestoned and this release ships the blocker, so no ordering can be inverted.
+
+---
+
+## Implementation Sequence
+
+**Wave 1 (the only wave): #6390.** Stage 5 (ran) → 6 → 7 (reduced) → 8, then the release-scoped Stages 9–13. P0, fully serial.
+
+### #6390 — change specification (Stage-5 bounded revision on #8752, scope lock PA-003 to PA-006 applied)
+
+| Step | Commit | Content |
+|---|---|---|
+| 0 | Engineering Commit 0 | this plan file, with the Commit-0 version re-verify and the stamp-manifest assertion |
+| 1 | the decision record | `core/ADRs/ADR-NNN-composition-method-is-core-and-enters-through-the-release-planner.md`, transcribed from the revision's literal record. `NNN` is the mainline next-free number at authoring (`release/tools/renumber-adr.py --next-free` → 230 at `b1042eec`), stamped in the filename, the title and the H1 only, never in prose; `${AUDIT_DATE_UTC}` substituted; `status: Proposed`. `core/ADRs/README.md` is not edited: it is curated, not an index |
+| 2 | C1 | § Change Description in this file, and the Stage-6 verification evidence |
+
+- **Number binding (ADR-115, ADR-181):** the record's number binds at merge through Stage 12 A.5.7a–c. Two sibling branches hold the same number on their branches (advisory only; § In-Flight Release Roster). This plan and any other branch prose cite the record by its slug token, `{{ADR:composition-method-is-core-and-enters-through-the-release-planner}}`, which A.5.7e stamps last. Never a hand-typed number.
+- **Status lifecycle:** authored `Proposed`; ratified `Accepted` at the Stage-13 close gate. The flip is read from the record's own `status:` line (the ADR-flip check is advisory-only).
+- **No candidate host skill is edited.** `release-planner`, `roadmap-curator` and `intake-desk` are read-only inputs; the chosen host's own edits belong to #6389.
+- **Estimated complexity:** Medium — one file, judgment-dense.
+- **Dependencies:** none in-release.
+
+**What the record contains, mapped to the sections Stage 8 grades** (the revision's Stage 8 grading map):
+
+| AC | Record section |
+|---|---|
+| AC-1 | D1 (the SR-G6 determination in the `net-new because in-place is infeasible: …` form; ADR-094; build-philosophy row 3); Reversibility |
+| AC-2 | D2, D4, D5; Context § Gaps (the grouping-tier card, by role) and its References line |
+| AC-3 | D7, with D2 and D3 for the draft–check–execute boundary |
+| AC-4 | D6; the trigger source observation |
+| AC-5 | D8, including the derived-behaviour paragraph |
+| AC-6 | D9; ADR-211; the toolkit card in References |
+
+No Integration Acceptance Criteria: #6390 has no upstream dependency.
+
+**Structural determinations (from the Stage-5 design, unchanged by the revision).** SR-G6 on the method document: `net-new because in-place is infeasible: …`, in the exact text of the record's D1. SR-G1 and SR-G3 on the entry mode: `release-planner`'s mode set was reviewed and changed; its read-only contract was reviewed and retained, stated by mechanism in D2. SR-G2: best practice (cited, not copied; `description:` is the trigger surface), scalability (an altitude is a row, not a skill), maintainability (one body). SR-G5 and SR-G7: N/A.
+
+---
+
+## Stage Applicability Matrix
+
+Activation per `core/standards/planning-solutioning-handoff.md` § 4: T1 ✓ (a new ADR with structural content), T3 ✓ (the host choice constrains how #6389 is written), T4 ✓ (three candidate hosts, each with a stated cost), T6 ✓ (the body deferred the record's module to Stage 5); T2 ✗ (no `skills/*/SKILL.md` in Affected Files), T5 ✗ (0 governance files edited). Verdict: **ACTIVATE**.
+
+| Stage | #6390 / release | Form |
+|---|---|---|
+| 5 Solutioning | APPLY (ran) | decision-record variant on #8752; adversarial review on #8808; bounded revision after the scope lock |
+| 6 Engineering | APPLY | Commit 0 = this plan (version re-verify plus the `--verify-stamp` rung); then one commit carrying the record; then C1 |
+| 7 Dev Testing | **REDUCE → doc-conformance** (PA-002) | `check-adr-numbers.py`; the ADR durability lint and the depersonalization, dead-file-reference, reference-durability and issue-reference gates on added lines; `domain_practice` provenance presence; the seven ADR schema sections present; no consumer-module path in the core record |
+| 8 QA Testing | APPLY | per-criterion verdicts on AC-1..AC-6 (§ Verification Plan, graded by the map above) |
+| 9 Plan Review | APPLY (Deep) | `novel` class; G-PR9 sibling-merge re-check on the version axis |
+| 10 Dry Run / 11 Snapshot | APPLY (compressed: git-native) | the PR diff is the dry run; git history is the snapshot |
+| 12 Execute | APPLY | A.5.7a–e ADR detect / renumber / stamp; atomic version claim |
+| 13 Close | APPLY | ratify the record (`Proposed` → `Accepted`, read from `status:`); mark #6390 as closed at Stage 13; surface #6389 as unblocked for bundling; notify milestone 430 (#7961) and #8099 that the record has landed |
+
+---
+
+## File Change Matrix
+
+One path per line, `<path>  <VERB>`, fence-delimited for deterministic extraction. `NNN` is the record's number, which binds at merge.
+
+```
+# ── Engineering Commit 0 ──
+release/releases/plans/composition-method-host-decision_RELEASE_PLAN.md  ADD
+# ── #6390 (the decision record) ──
+core/ADRs/ADR-NNN-composition-method-is-core-and-enters-through-the-release-planner.md  ADD
+# ── CONDITIONAL — resolves at the Stage-12 merge, not at Commit 0 ──
+core/ADRs/README.md  EDIT  CONDITIONAL:renumber-log
+```
+
+#### Read-only inputs
+
+```
+release/skills/release-planner/SKILL.md  READ
+release/skills/roadmap-curator/SKILL.md  READ
+release/skills/release-executor/SKILL.md  READ
+operations/skills/intake-desk/SKILL.md  READ
+core/ADRs/ADR-019-specialists-compose-not-absorb.md  READ
+core/ADRs/ADR-033-methodology-conditional-skill-activation.md  READ
+release/ADRs/ADR-094-extend-before-create.md  READ
+core/ADRs/ADR-114-composition-aware-trigger-collision-gate.md  READ
+core/ADRs/ADR-211-design-axes-and-cut-patterns-key-on-work-nature.md  READ
+core/packs/scrum/pack.toml  READ
+core/packs/kanban/pack.toml  READ
+core/disciplines/build-philosophy.md  READ
+```
+
+#### Release-wide explicit non-scope
+
+```
+release/references/standards/bundle-composition-doctrine.md  NOT EDITED
+core/standards/initiative-roadmap-framework.md  NOT EDITED
+release/ADRs/README.md  NOT EDITED
+release/releases/RELEASE_LOG.md  NOT TOUCHED
+release/releases/notes/  NOT TOUCHED
+core/rules/  NOT TOUCHED
+```
+
+**The Stage-4 module conditional is resolved at this commit.** Stage 5 placed the record in `core/ADRs/` (PA-004), so `CONDITIONAL:record-module-core` fired and its record row is promoted into the unconditional set with the scope-locked slug. `CONDITIONAL:record-module-release` did not fire, so its two rows — the release-module record and `release/ADRs/README.md` — are dropped; `release/ADRs/README.md` is named as non-scope because this release adds no record under `release/ADRs/`, so its generated index is not regenerated.
+
+**The one CONDITIONAL row left resolves after Commit 0, at the Stage-12 merge.** `core/ADRs/README.md` is curated, not an index. It changes only if `release/tools/renumber-adr.py` moves the record's number at merge (Stage 12 A.5.7c), when that tool appends a renumber-log line; no curated thematic link is added (PA-004). If the number does not move, the row never fires and the file is not touched.
+
+**Non-scope reasons.** The doctrine and the roadmap framework are the AC-5 non-changes. The release log, notes and changelog are written by the Stage-12 and Stage-13 chore PRs. `core/rules/`: no mirror-pair member changes, so no rules-mirror deploy is owed. The repository-root `CHANGELOG.md` is also not touched; it is named here rather than as a fenced row because the matrix reader recognises no repository-root path that carries no directory segment.
+
+**Zero `ADD` rows for executables** → the new-executable companion obligation (an allowlist row and CI wiring) does not fire. **No path is renamed, moved or deleted** → the mover set is empty. The ADR renumber that Stage 12 may perform is a same-directory rename by the tool, not a designed structural change.
+
+### Agent-Editability Read
+
+Transcribed from the Stage-4 derivation, controls read at `b1042eec`, and re-applied to the promoted rows. The Tier-0 floor's surviving union is the basenames `CLAUDE.md`, `OPERATIONS.md` and `RELEASE_PROTOCOL.md` at any depth; no matrix path carries one. The sanctioned-session gate's first conjunct needs a `*/skills/<name>/` segment; no matrix path carries one, so its exemption list decides no row.
+
+| Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
+|---|---|---|---|---|---|---|
+| #6390 | this file | no | no (conjunct 1 false) | unconstrained | unconstrained | ordinary Engineering spoke (Commit 0) |
+| #6390 | `core/ADRs/ADR-NNN-composition-method-is-core-and-enters-through-the-release-planner.md` | no | no (conjunct 1 false) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #6390 | `core/ADRs/README.md` (conditional; tool-written at Stage 12) | no | no (conjunct 1 false) | unconstrained | unconstrained | Stage 12 renumber tool |
+
+`unconstrained` says no control refuses the writes; it does not make them ungoverned — the record is still a D-class decision under issue → plan → PR, ratified at Stage 13.
+
+---
+
+## Contention Map
+
+**Within release:** `No file contention detected`. The release has 1 issue, so within-release contention is structurally impossible rather than measured to be absent (enumerated over `{#6390}`).
+
+## Cross-PR Overlap Audit
+
+### Baseline SHA
+
+`<release-base>` = `b1042eecd6294d4c460c109f2c4b8dd6ed9896a9` · measured 2026-11-05T16:32Z at Stage 4. This is the A4 pin, reused by A0.7, G-PL4 and Stage 9 A6.5. The Commit-0 base equals it.
+
+### In-Flight Release Roster
+
+**Measured at:** `b1042eec` · 2026-11-05T18:54Z (Engineering Commit 0) · **Population:** n=2 siblings — the open pull requests with a `release/*` head (drafts included) together with remote `release/*` heads carrying no open PR, minus this release. `git ls-remote origin 'refs/heads/release/*'` returned 2 heads, each with a draft PR.
+
+| Slug | PR | Head SHA | Bump-class | Carried label | Recomputed next-free | EDITSET ∩ FCM |
+|---|---|---|---|---|---|---|
+| `guards-judge-every-spelling-alike` | `#8651` | `fc556c66` | `minor` | `v4.82` | `v5.02` | `Δversion/5.2.0`; `core/ADRs/README.md` (its PR edits it; this release touches it only through a renumber-log line at merge); ADR numbers 230 and 231 held on its branch (advisory) |
+| `sequencing-layer-foundation` | `#8811` | `6b76da98` | `minor` | `v5.02` | `v5.02` | `Δversion/5.2.0`; ADR number 230 held on its branch for a release-module record (advisory); no file path in common (it regenerates `release/ADRs/README.md`, which this release does not touch) |
+
+The second row is new since Stage 4 (its PR was opened 2026-11-05T18:32Z). This roster is a pinned measurement and carries no verdict; Stage 9 A6.6 re-measures it. Three branches now hold the same ADR number, and three the same version slot: each binds in merge order at its own Stage-12 claim, and the later releases renumber and recompute there.
+
+### Structural sub-audit
+
+This release's mover-set is **∅**: it adds files only, so the path part of `SURFACE(R)` is ∅ and no sibling edit can serialize against it. The version axis carries `Δversion/5.2.0`, which intersects both siblings — the expected Tier-S version-axis edges.
+
+---
+
+## Risk Register
+
+| # | Risk | Likelihood | Impact | Mitigation | Owner | Reversibility / Confidence |
+|---|---|---|---|---|---|---|
+| R-1 | ADR number contention: two sibling branches hold the same number | High | Low | author at `--next-free`; bind at merge via Stage 12 A.5.7a–c; cite only through the slug token, stamped at A.5.7e (ADR-115, ADR-181) | Stage 6 / Stage 12 | CHEAP / HIGH |
+| R-2 | Version slot `v5.02` is contended by both siblings (Tier-S version axis) | High | Low | recorded determination; re-verified at Commit 0; the atomic claim binds (D-Version) | Hub / Stage 12 | CHEAP / HIGH |
+| R-3 | ADR README overlap: `core/ADRs/README.md` is edited by #8651 and by planned siblings | Medium | Low | this release touches it only through a tool-written renumber-log line at merge; append-pattern | Stage 12 | CHEAP / HIGH |
+| R-4 | The record shapes how #6389 (size:L, held) is written; a host #6389 cannot build in one milestone, or one that collides with #5870's pending `release-planner` edit, would carry forward | Medium | Medium | the record states #6389's edit set (D10) and names #5870's edit as a sequencing input | Stage 5 (done) | MODERATE / MEDIUM |
+| R-5 | Milestone 430 reaches its Stage 5 before this record merges | Low | Medium | land this release first; at Stage 13 the hub notifies milestone 430 and #8099 | Hub | CHEAP / HIGH |
+| R-6 | AC-5's "unchanged" read as a freeze of the doctrine, contradicting #5870 | Low | Medium | D8 words the non-change as the entry points, routed "as the doctrine's inductive-entry work leaves it" | Stage 5 (done) | CHEAP / HIGH |
+| R-7 | AC-2 keyed on a kind name, which no pack declares at the coordination position and Kanban lacks at the grouping position | Medium | Medium | D4 and D5: resolution by declared role; the no-kind path stated | Stage 5 (done) | CHEAP / MEDIUM |
+| R-8 | A wrong record module | Low | Medium | resolved at Stage 5 (PA-004, core); a pre-merge move is a rename | Stage 5 / Stage 6 | CHEAP pre-merge, MODERATE post-merge / HIGH |
+| R-9 | Documentation Impact on #6390 still names the release-module index | Medium | Low | the PR body declares the core-module row; the matching #6390 body edit is proposed to the hub as a Tier 1 [ADJUST] | Stage 6 / Hub | CHEAP / HIGH |
+| R-10 | A downstream reader of `bundle-issues-parser.py` sees the inverse of the real edge (#6397) | Medium | Medium | Stages 5–9 read native GraphQL edges | All spokes | CHEAP / HIGH |
+| R-11 | SR-G6 is gate-blocking: a net-new surface with no `net-new because in-place is infeasible: …` returns the design to Solutioning | Low | Medium | D1 carries the determination in that form | Stage 5 (done) | CHEAP / HIGH |
+| R-12 | The ratification flip not actually applied at close (the ADR-flip check is advisory-only) | Low | Medium | Stage 13 reads the record's `status:` line directly | Stage 13 | CHEAP / HIGH |
+| R-13 | No Parallelization Map on the milestone | — | — | **retired**: the map was recorded 2026-11-05 at the Stage-4 gate | — | — |
+| R-14 | Rollback complexity | Low | Low | one new file and this plan: `git revert` before merge; supersession after | Hub | CHEAP / HIGH |
+| R-15 | Scrum degrades until the Scrum grouping declaration lands | Medium | Medium | named in the record (D10.4, Consequences, Gaps); the trigger is #6389 shipping without it | Operator | MODERATE / HIGH |
+| R-16 | A composition's grouping label is applied where a member already carries one in its namespace | Low | Low | the record routes such a member to the disposition queue (D3 step 4) | #6389's execute step | CHEAP / HIGH |
+
+---
+
+## Verification Plan
+
+**AC baseline:** #6390 = **6** criteria, read at `b1042eec` (body revision `2026-11-05T17:07:34Z`, after the Stage-4 gate's amendments, which kept all six ordinals).
+
+### Per-Issue Verification
+
+| Issue | AC | Verification Method | Expected Result |
+|---|---|---|---|
+| #6390 | AC-1 | [DEFERRED — judgment criterion, graded at Stage 8 by a named read of the record's D1 and Reversibility sections] | exactly one host; exactly one SR-G6 determination, in the form `extend … because …` or `net-new because in-place is infeasible: …`; ADR-094 and `core/disciplines/build-philosophy.md` row 3 cited; the record's reversibility tier and confidence stated |
+| #6390 | AC-2 | [DEFERRED — Stage 8 named read of the record's D2, D4 and D5 sections and its Context Gaps table] | one entry point, with the phases each position runs; positions resolved by declared role through the selected pack's kinds, never by a literal kind name; the ladder cross-walked to ADR-211's altitude term; the no-kind case stated, with the grouping-tier card cited |
+| #6390 | AC-3 | [DEFERRED — Stage 8 named read of the record's D7 table, with D2 and D3] | one row each for business analysis, architecture, the release planner, pipeline triage and the intake desk: what the method invokes against what it performs itself (ADR-019) |
+| #6390 | AC-4 | [DEFERRED — Stage 8 named read of the record's D6 section and its trigger source observation] | trigger phrasing recorded, with its ADR-114 collision check against the intake-desk, roadmap-curator and release-planner triggers |
+| #6390 | AC-5 | `git diff --name-only origin/main...HEAD -- release/references/standards/bundle-composition-doctrine.md core/standards/initiative-roadmap-framework.md operations/skills/intake-desk release/skills/roadmap-curator release/skills/release-planner` expect 0 [READER-GRADED — the record's D8 names the three non-changes and routes the milestone altitude to the doctrine as its inductive-entry work leaves it] | 0 changed paths · control: `git diff --name-only origin/main...HEAD -- core/ADRs`, at least 1 (the record itself), observed at grading |
+| #6390 | AC-6 | [DEFERRED — Stage 8 named read of the record's D9 section, its ADR-211 citation and the toolkit card in References] | for the toolkit card's carrier (milestone 430) and for #6420's decomposition-host question: one shared answer, or separate answers with the reason they differ; ADR-211 cited |
+
+`ac_baseline: { #6390: 6, read_at: b1042eecd6294d4c460c109f2c4b8dd6ed9896a9 }`
+
+**The null row carries a same-target control** (AC-Binding Limb 2): AC-5's zero is read beside the record's own directory on the same instrument and the same release diff, which must return at least 1.
+
+### Release-Level Verification
+
+These checks use tools or shapes outside the plan verifier's runnable set, so each is declared deferred to the stage that executes it; the commands and observed results land in § Verification Evidence.
+
+| Check | Verification Method | Expected |
+|---|---|---|
+| Stamp manifest | [DEFERRED — the claim tool's verify-stamp verb over this slug, at Engineering Commit 0 step 3b] | exit 0 |
+| ADR number contiguity | [DEFERRED — check-adr-numbers.py at Stage 6 C4 and Stage 7] | no duplicate, no gap on the branch |
+| ADR durability lint | [DEFERRED — check-adr-durability.py with the mainline as diff base, at Stage 6 C4 and Stage 7] | 0 findings on the added record, R5 active |
+| ADR schema sections | [DEFERRED — a structural read of the record's seven required H2 sections, in order, at Stage 6 C4 and Stage 7] | all seven present and ordered; References additional |
+| No consumer-module path in the core record | [DEFERRED — a scan of the record for a path under the operations or release module, with ADR-033 as the sensitivity input, at Stage 6 C4 and Stage 7] | 0 in the record; non-zero on the control |
+| Doc-link integrity and plan depth | [DEFERRED — the doc-link checker over the added files and the release-link checker with the plan-depth lint over this plan, at Stage 6 C4] | no new broken link |
+| Depersonalization, issue-reference and reference-durability gates on added lines | [DEFERRED — the repository-integrity workflow on the release PR, read at Stage 7] | green |
+| CIAC authoring lint | [DEFERRED — the plan verifier's CIAC lint over this file, at Stage 6 A1 and Stage 9 A3.6] | declared=0 flagged=0 |
+| Package consequence | [DEFERRED — the package resolver reading each changed path on STDIN, at Stage 6 C4] | empty — no rostered skill's package is staled |
+| ADR index (release module) | [DEFERRED — Stage 6 C4 records the question's answer] | N/A — this release adds no record under the release module's ADR directory |
+
+---
+
+## Delivery Strategy
+
+| Aspect | Decision |
+|---|---|
+| Implementation approach | Sequential — one card, one wave |
+| Commit strategy | Commit 0 (this plan); one commit carrying the record; one C1 commit (Change Description and verification evidence), each pushed on landing (Write-Early); messages carry the `composition-method-host-decision:` prefix and a reference-only `(#6390)` |
+| Review approach | Single release PR, draft until Stage 9 Phase A8 |
+| Deployment mechanism | Git merge only. No skill package, no rules-mirror member, no Layer-2 target and no memory-eviction row: the change set is a decision record plus this plan |
+| Stacked-base cleanup | N/A (single branch) |
+
+The PR body is parser-clean: the card is named in the dedicated Issue References block; no close-family verb precedes an issue number anywhere else.
+
+---
+
+## Rollback Strategy
+
+| Scope | Method | Complexity |
+|---|---|---|
+| The record, pre-merge | `git revert` of the record commit | CHEAP / HIGH |
+| The record, post-merge | supersede with a later record. #6389 and #7961 will cite this one, so deletion would orphan their citations | MODERATE / HIGH |
+| Whole release | Full Restore: revert the merge commit (`git revert -m 1 <merge>`); Forward Fix: a superseding record | CHEAP before ratification, MODERATE after / HIGH |
+| Version tag | retained and recorded per Tag Retention; never deleted | — |
+
+Rollback infeasibility: none; every step is a commit.
+
+---
+
+## Quota Budget
+
+**Verdict:** PASS (per `quota-budget-protocol.md` Checkpoint A), transcribed from Stage 4.
+**Parallel-eligible spokes per parallel stage:** Stage 5: 1 · Stage 7: 1 · Stage 8: 1.
+**Per-spoke cost estimate:** size:S, the lowest ordinal band (heuristic; no telemetry medians).
+**Assumed remaining usage-window envelope:** not stated at hub start; conservative default of half a window [ASSUMPTION – CONFIRM].
+**Estimated cumulative draw (worst parallel batch):** about 10% (one spoke against the half-window).
+**Routing:** PASS → proceed; Checkpoint B re-validates at every launch, and also gates on the host-API pools.
+
+---
+
+## Release Class declaration
+
+**`novel`** — trigger (b) fires: the deliverable is a D-class architectural decision; trigger (c) fires: it is recorded as an ADR. No routine trigger holds (a new file is added), and no cross-cutting trigger fires (0 `pipeline/stage-*.md` files, 0 of the six rule-defining surfaces, 0 in-bundle edges). `hotfix` does not fire. Effective points: raw 2 × 1.15 = 2, below the band, kept as a single-item gating slice under the doctrine's noise rule. Differentiation posture: engagement density **Standard** · Stage 9 review depth **Deep** · Stage 5 activation bias **ALL**.
+
+---
+
+## Release Outcome Statement
+
+Transcribed from the milestone description at Engineering Commit 0.
+
+**AFTER** — Where the epic-composition method lives and how it is invoked across altitudes is decided and recorded, with the extend-vs-add posture argued.
+
+**BEFORE** — The epic altitude has consumers and no producer; the method exists only in an archived operator-local playbook.
+
+**Actor(s):** platform engineering session.
+
+**Success Indicator:** at Stage 8 the host-decision record states every element criteria 1–6 of #6390 require, each graded MET; at Stage 13 its `status:` reads Accepted, so `epic-framing-states-axis-coverage` can cite it at its Stage 5 for #7961's carrier decision and #6389 can be bundled against a named host.
+
+---
+
+## Operational Deployment Manifest
+
+| Surface | Propagation | Mechanism |
+|---|---|---|
+| Every matrix path | **Repository-only** — no path is under a skills tree or in the rules mirror set, so no installed copy exists | none required |
+
+**`deliverable_state: deployed-copy-synced`** — the release declares no Layer-2 propagation target, which this state admits ("or the release declares no propagation target").
+
+### Schema Migrations
+
+N/A — enumerated over data-file formats, register and ledger schemas, the pipeline-event-log schema, the ADR schema and the pack manifest schema; none migrates. The record conforms to the existing ADR schema.
+
+### Memory Evictions
+
+N/A — enumerated over memory eviction, memory re-point and archive disposition; no codification card in this release is tied to an auto-memory entry, so nothing is evicted.
+
+---
+
+## Verification Evidence
+
+### Engineering Commit 0 — Stage 6 A1
+
+Run by the Stage-6 spoke on #8753 after this file was written and before it was committed, on base `b1042eec`. Populated in the C1 commit.
+
+---
+
+## Deployment Execution Log
+
+(Populated during Stage 12.)
+
+---
+
+## Deviation Log
+
+| # | Deviation | Authority | Disposition |
+|---|---|---|---|
+| **DEV-1** | **The record module is `core/ADRs/`**, slug `composition-method-is-core-and-enters-through-the-release-planner`, in place of the Stage-4 plan's conditional pair and its noun-form draft slug `composition-method-host`. The release-module pair is dropped; the core record row is promoted at this commit | scope lock PA-004 | **APPLIED** — § File Change Matrix |
+| **DEV-2** | **`core/ADRs/README.md` takes no curated link.** The Stage-4 row fired on either a curated link or a renumber-log line; only the renumber-log line remains, and it is tool-written at merge | scope lock PA-004; Stage-5 Change 2 | **APPLIED** — § File Change Matrix, as `CONDITIONAL:renumber-log` |
+| **DEV-3** | **The record transcribed is the bounded revision's**, which replaces the design's earlier record in full: ADR-049 named for the tier above the epic, one persisted proposal and one execute step, the grouping-label path where no kind resolves, the P-2 / P-3 / F-2 / F-3 corrections, and Current state, Future state and Gaps inside Context | scope lock PA-005, PA-006 | **APPLIED** — the record commit |
+| **DEV-4** | **AC-2's grading surface widens** from "the record's altitude-parameter section" to D2, D4, D5 and Context § Gaps, and AC-3's adds D2 and D3, per the revision's Stage 8 grading map | Stage-5 bounded revision | **APPLIED** — § Verification Plan |
+| **DEV-5** | **R-13 retired** (the Parallelization Map was recorded at the Stage-4 gate); **R-15 and R-16 added** from the Stage-5 design and revision | Stage-4 Decision Recorded; Stage-5 design and revision | **APPLIED** — § Risk Register |
+| **DEV-6** | **A second sibling release joined the in-flight roster after Stage 4**: `sequencing-layer-foundation` (#8811), minor, provisional `v5.02`, holding the same ADR number on its branch for a release-module record | Commit-0 re-measurement | **RECORDED** — § In-Flight Release Roster; no plan change, because both axes bind at merge |
+| **DEV-7** | **#6390's Documentation Impact row still names the release-module index**, which this release does not touch. Its body instructs Stage 5 to rewrite the declaration for a core-module record; the core declaration is carried in the PR body, and the matching body edit is proposed to the hub as a Tier 1 [ADJUST] rather than applied by this spoke | #6390 body; the Stage-6 brief | **RECORDED** — applied by the hub |
+
+---
+
+## Issue References
+
+- **#6390** — the spike this release decides: where the composition method lives and how it is entered across altitudes. Mark as closed at Stage 13.
+- **#6388** — the composition-methods epic, #6390's parent.
+- **#6389** — the codification story this record gates (held; released for bundling when the record is Accepted).
+- **#8750 · #8752 · #8753 · #8808** — the Stage-4 sub-task (plan and gate record), the Stage-5 sub-task (design, scope lock, bounded revision), the Stage-6 sub-task, and the adversarial-review sub-task.
+- **#5870** — the bundle doctrine's inductive-entry work (milestone 419), a sequencing input for #6389.
+- **#6420 · #8099** — the decomposition-method epic and its next-slice card, whose hosting question the record answers.
+- **#7540 · #7961** — the epic-framing epic and its design-axis toolkit card (milestone 430), whose carrier the record answers.
+- **#7965** — how a framing states its altitude (milestone 431); the record reuses the same term.
+- **#7539** — the deferred grouping-tier card above the epic.
+- **#6397** — the dependency-parser inversion that makes Stages 5–9 read native edges.
+- **#8651 · #8811** — the two sibling releases on the version and ADR-number axes.
