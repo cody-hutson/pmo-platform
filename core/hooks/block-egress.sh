@@ -2364,6 +2364,12 @@ case "$TOOL_NAME" in
             egress_hnorm=1
             egress_raw="${egress_toks[$egress_hidx]}"
           fi
+          # A long word's basename is read from its last eight characters, not by removing its longest
+          # prefix up to a slash, which on bash 3.2 retries the match at every position it could end: a
+          # slash among them ends the prefix that removal takes, and a word with none there has a
+          # basename of at least eight characters, which no word below has, so those eight stand in for
+          # it. The walk reads egress_raw only here, and sets it afresh at each step.
+          if egress_long "$egress_raw"; then egress_raw="${egress_raw:$(( ${#egress_raw} - 8 ))}"; fi  # linear: head-word
           case "${egress_raw##*/}" in
             do|then|else|elif|if|while|until|'!'|'{'|'}'|'{}')
               [ "$egress_cfold" -eq 0 ] || break
@@ -2452,11 +2458,9 @@ case "$TOOL_NAME" in
 
         # Basename match subsumes every absolute-path form and is strictly tighter
         # than the prefix enumeration the old anchor carried: an unlisted prefix no
-        # longer evades.
-        case "${egress_toks[$egress_hidx]##*/}" in
-          gh) ;;
-          *) continue ;;
-        esac
+        # longer evades. egress_base_gh matches a long word once, where removing its
+        # longest prefix up to a slash would retry the match at every position.
+        egress_base_gh "${egress_toks[$egress_hidx]}" || continue  # linear: verb
         # The subcommand is read without the case step: gh rejects `API`.
         egress_norm_at "$(( egress_hidx + 1 ))" ab
         case "${egress_toks[$(( egress_hidx + 1 ))]}" in

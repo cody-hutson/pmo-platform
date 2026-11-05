@@ -4244,6 +4244,74 @@ fi
 e007_n_timed "a long short-flag cluster" "AC-E007-NF" cluster 'gh api -' 'i' 'H x repos/o/r' 'gh api -H' 'i' ' x repos/o/r'
 e007_n_ctl "AC-E007-NF-CTL" "$E007_NF_B" cluster 40 en_US.UTF-8 "the short-flag cluster reader"
 
+# -- NH: the head walk's basename read of a long command word --
+#
+# The widened fast path hands the walk a long command word in an upper-case or escaped spelling, which the
+# fast path before this release skipped, and the walk's keyword-and-prefix test and its verb test each took
+# that word's basename by a removal that retries its match at every position. Each now reads a long word
+# once: the first from its last eight characters, the second by egress_base_gh. They are lines of the rule's
+# body, so NH-EQ compares the whole hook, with the phase forced, against the copy with both lines as before,
+# on commands whose long words end in every basename the walk tests — a keyword, a prefix word, gh, the same
+# words with no slash before them, a word longer than any — and with a slash at either end, each command word
+# alone, behind a long prefix word and behind a long word that ends in one, in both locales: the same exit
+# and the same records; and two near misses, a tail one character short and the verb test on the wrong
+# token, each differ.
+E007_N_K=0
+_nh_ph='readonly EGRESS_007_WIDENING_PHASE="shadow"'
+_nh_pe='readonly EGRESS_007_WIDENING_PHASE="enforce"'
+_nh_hw='if egress_long "$egress_raw"; then egress_raw="${egress_raw:$(( ${#egress_raw} - 8 ))}"; fi  # linear: head-word'
+_nh_vb='egress_base_gh "${egress_toks[$egress_hidx]}" || continue  # linear: verb'
+_nh_vo='case "${egress_toks[$egress_hidx]##*/}" in gh) ;; *) continue ;; esac'
+E007_NH_S="${E007_W_BASE}/nhs"; e007_n_copy "$E007_NH_S" "$_nh_ph" "$_nh_pe"; _nh_cw="$E007_N_CW"
+E007_NH_B="${E007_W_BASE}/nhb"; e007_n_copy "$E007_NH_B" "$_nh_ph" "$_nh_pe" "$_nh_hw" ':' "$_nh_vb" "$_nh_vo"; _nh_cw="${_nh_cw}${E007_N_CW}"
+E007_NH_M1="${E007_W_BASE}/nhm1"; e007_n_copy "$E007_NH_M1" "$_nh_ph" "$_nh_pe" '${#egress_raw} - 8 ))' '${#egress_raw} - 7 ))'; _nh_cw="${_nh_cw}${E007_N_CW}"
+E007_NH_M2="${E007_W_BASE}/nhm2"; e007_n_copy "$E007_NH_M2" "$_nh_ph" "$_nh_pe" "$_nh_vb" 'egress_base_gh "${egress_toks[$(( egress_hidx + 1 ))]}" || continue  # linear: verb'; _nh_cw="${_nh_cw}${E007_N_CW}"
+_nh_x="$(/usr/bin/awk 'BEGIN { s = "x"; while (length(s) < 300) s = s s; printf "%s", substr(s, 1, 300) }')"
+_nh_e="$(/usr/bin/awk 'BEGIN { s = "\303\251"; while (length(s) < 400) s = s s; printf "%s", substr(s, 1, 400) }')"
+_nh_cmds=()
+for _nh_h in "${_nh_x}/gh" "${_nh_x}/GH" "${_nh_x}gh" "GH${_nh_x}" "g\\h${_nh_x}" "${_nh_x}/do" "${_nh_x}/sudo" \
+             "${_nh_x}/timeout" "${_nh_x}timeout" "${_nh_x}/abcdefgh" "/${_nh_x}" "${_nh_x}/" "${_nh_e}/gh" "gh"; do
+  for _nh_p in "" "${_nh_x}/sudo " "${_nh_x}timeout "; do
+    _nh_cmds[${#_nh_cmds[@]}]="${_nh_p}${_nh_h} api -X POST ${E007_W_NO}"
+  done
+done
+# e007_nh_read <sandbox> <locale> <command> — "exit/blocks/warns|last block record|last warn record".
+e007_nh_read() {
+  local b w
+  LC_ALL="$2" e007_d_run "$1" enforce "$(e007_d_bash "$3" "$1")"
+  b=""; w=""
+  [ "$E007_D_BLK" = 0 ] || b="$(e007_d_last "$1/.claude/hooks/block-log.jsonl")"
+  [ "$E007_D_WRN" = 0 ] || w="$(e007_d_last "$1/.claude/hooks/egress-warn-log.jsonl")"
+  E007_NH_V="${E007_D_EXIT}/${E007_D_BLK}/${E007_D_WRN}|${b}|${w}"
+}
+_nh_why=""; _nh_n=0; _nh_d1=0; _nh_d2=0; _nh_ref=0
+if [ "$_nh_cw" = 0000 ]; then
+  for _nh_loc in en_US.UTF-8 C; do
+    for _nh_c in "${_nh_cmds[@]}"; do
+      _nh_n=$(( _nh_n + 1 ))
+      e007_nh_read "$E007_NH_S" "$_nh_loc" "$_nh_c"; _nh_s="$E007_NH_V"
+      e007_nh_read "$E007_NH_B" "$_nh_loc" "$_nh_c"
+      [ "$E007_NH_V" = "$_nh_s" ] || _nh_why="${_nh_why} [${_nh_loc} #${_nh_n}] shipped ${_nh_s%%|*}, before ${E007_NH_V%%|*};"
+      case "$_nh_s" in 2/*) _nh_ref=$(( _nh_ref + 1 )) ;; esac
+      if [ "$_nh_d1" = 0 ]; then e007_nh_read "$E007_NH_M1" "$_nh_loc" "$_nh_c"; [ "$E007_NH_V" = "$_nh_s" ] || _nh_d1=1; fi
+      if [ "$_nh_d2" = 0 ]; then e007_nh_read "$E007_NH_M2" "$_nh_loc" "$_nh_c"; [ "$E007_NH_V" = "$_nh_s" ] || _nh_d2=1; fi
+    done
+  done
+  [ "$_nh_d1" = 1 ] || _nh_why="${_nh_why} the short-tail near miss reads like the shipped hook (the comparison cannot see a difference);"
+  [ "$_nh_d2" = 1 ] || _nh_why="${_nh_why} the wrong-token near miss reads like the shipped hook;"
+  [ "$_nh_ref" -gt 0 ] || _nh_why="${_nh_why} no command was refused, so the set reaches no write;"
+else
+  _nh_why=" the copies could not be built (forced, before, then each near miss: ${_nh_cw}; 0 = built);"
+fi
+if [ -z "$_nh_why" ]; then
+  e007_d_pass "AC-E007-NH-EQ: the walk's two basename reads equal the code before them on ${_nh_n} runs of the whole hook with the phase forced, ${_nh_ref} of them refused, in UTF-8 and C, and two near misses each differ"
+else
+  e007_d_fail "AC-E007-NH-EQ: the walk's two basename reads equal the code before them on the whole hook" "$_nh_why"
+fi
+e007_n_timed "a long upper-case command word" "AC-E007-NH" upper 'GH' 'a' ' api repos/o/r' 'GH' 'a' '/x api repos/o/r'
+e007_n_timed "a long escaped command word" "AC-E007-NH" escaped 'g\h' '\a' ' api repos/o/r' 'g\h' '\a' '/x api repos/o/r'
+e007_n_ctl "AC-E007-NH-CTL" "$E007_NH_B" upper 40 en_US.UTF-8 "the walk's two basename reads"
+
 # ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #
 # The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
