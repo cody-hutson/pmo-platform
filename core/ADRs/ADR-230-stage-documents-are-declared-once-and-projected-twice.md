@@ -67,22 +67,23 @@ The standard is net-new because extending `operational-artifacts.md` in place is
 
 ### 3. The shared vocabulary is a layer of eight delivery spans
 
-Every pipeline stage and every project phase belongs to exactly one **delivery span**: **Concept, Define, Design, Build, Test, Transition, Operate, Close**. The spans are a methodology-neutral position in the life of a change or a project. They are a **layer**: no stage is renamed or renumbered, the stage integers and every machine identifier stay as they are, and the five-function spine keeps its role as the classifier of the kind of work (Initiating … Closing), which is a different axis from position.
+Every pipeline stage, and every project phase or stage, belongs to exactly one **delivery span**: **Concept, Define, Design, Build, Test, Transition, Operate, Close**. The spans are a methodology-neutral position in the life of a change or a project. They are a **layer**: no stage is renamed or renumbered, the stage integers and every machine identifier stay as they are, and the five-function spine keeps its role as the classifier of the kind of work (Initiating … Closing), which is a different axis from position.
 
-| Span | Release pipeline | Project delivery |
-|---|---|---|
-| Concept | 1 Intake, 2 Triage | Initiation; agent state ACTIVE begins |
-| Define | 3 Bundle (release-only), 4 Planning | Planning |
-| Design | 5 Solutioning | design work (the gap table has no design phase today) |
-| Build | 6 Engineering | Execution |
-| Test | 7 Dev Testing, 8 QA Testing | Testing |
-| Transition | 9 Plan Review (the span's entry gate), 10 Dry Run (release-only), 11 Snapshot (release-only), 12 Execute | Deployment and cutover |
-| Operate | — (the outcome window sits inside Stage 13) | hypercare; agent state CLOSING |
-| Close | 13 Close | Closure; agent state CLOSED follows |
+| Span | Release pipeline | Project delivery | Delivery-engine lifecycle (its 15 stages) |
+|---|---|---|---|
+| Concept | 1 Intake, 2 Triage | Initiation; agent state ACTIVE begins | 1 Identify, 2 Capture, 3 Classify & Prioritize |
+| Define | 3 Bundle (release-only), 4 Planning | Planning | 4 Define Requirements, 5 Plan & Sequence |
+| Design | 5 Solutioning | design work (the gap table has no design phase today) | 6 Design / Solution |
+| Build | 6 Engineering | Execution | 7 Build / Develop |
+| Test | 7 Dev Testing, 8 QA Testing | Testing | 8 Developer Testing, 9 QA / Acceptance Testing |
+| Transition | 9 Plan Review (the span's entry gate), 10 Dry Run (release-only), 11 Snapshot (release-only), 12 Execute | Deployment and cutover | 10 Plan Review / Authorize, 11 Release Preparation, 12 Deploy / Execute |
+| Operate | — (the outcome window sits inside Stage 13) | hypercare; agent state CLOSING | 13 Verify, 14 Clean / Stabilize |
+| Close | 13 Close | Closure; agent state CLOSED follows | 15 Close / Post-Implementation |
 
-- **Project phases are mapped, not enumerated.** Each phase a project declares in its phase timeline maps to one span; the model imposes no phase list.
+- **Project phases are mapped, not enumerated.** A phase maps to one span when its whole extent sits in one, as the gap table's phases and the phases of a project's own timeline do; the model imposes no phase list. A phase whose stages fall in several spans maps **per member stage**, and the declaration keys its rows on the stage. The delivery engine's lifecycle — the project delivery lifecycle its skill runs, fifteen stages grouped into five phases (Capture, Prepare, Build, Validate, Deliver) — is such a case: only Capture sits in one span, so it is mapped at stage grain (the table's last column). The project agent's nine-gate checklist is reached through gap detection's re-key onto spans (slice S4).
+- **One name crosses the two models: `Build`.** The delivery engine's phase `Build` holds its stage 8 Developer Testing, which the spans place in Test, so it is wider than the span `Build`. Wherever the two meet — the delivery engine's lifecycle reference, and the navigation-layer schema that reuses its phases — the name is written object-typed: `Span-Build` for the delivery span, `Engine-Build` for the engine's phase.
 - **Catalog placement.** The span is an attribute an L2 page template adds, which `design-artifact-standard.md` § 13.3 already permits; it is not a new catalog level. Each release L2 page (one per stage) carries its stage's span. A project-delivery L2 sub-process carries a span where it has a position in the project's life and `continuous` otherwise. Value streams (L1) are capabilities, not positions, and carry no span; they join the declaration through the documents their sub-processes produce.
-- **The term** "delivery span" is registered in the terminology glossary beside Stage, Phase and Step. Its members avoid the reserved and colliding words the crosswalk named: no "Verify", no "Phase", no "Process".
+- **The term** "delivery span" is registered in the terminology glossary beside Stage, Phase and Step. Its members avoid the reserved and colliding words the crosswalk named: no "Verify", no "Phase", no "Process"; the one cross-model collision, `Build`, is object-typed as above.
 
 ### 4. Lifecycle class and status are two axes with one crosswalk
 
@@ -98,19 +99,19 @@ A document is **tracked in the repository only when a future change by any adopt
 
 | Home class | What lives there |
 |---|---|
-| `platform-instance` | a git-ignored instance beside a tracked README, as `analysis/` and `roadmaps/` already work |
+| `platform-instance` | an operator-local instance of platform working data — not a project's — that exists only on the operator's install and is never tracked; whether it sits in a git-ignored folder of the repository (as `analysis/` and `roadmaps/` do) or in a per-user home outside every tree is the risk-class model's to decide |
 | `project-instance` | a file in a project's own folder in the operations domain |
 | `ticketing-record` | an issue body or comment, a milestone, a label or a board field, on the host `[adapters].ticketing` names |
 | `repo-host-record` | a pull request, tag, Release or the git history, on the host `[adapters].repo_host` names |
 | `kb-page` | a page on the knowledge base `[adapters].kb` names |
 | `state-log` | an append-only event or audit log |
 
-A git-ignored instance is durable only for the operator who holds it: it never homes anything a fresh clone needs. Where a git-ignored home physically lives is decided outside this record, by the risk-class model for non-tracked data and by the project data architecture; this rule fixes only the class. It is **provisional** on the pending decision that homes non-tracked data by risk class: if that decision introduces a home this table cannot name — a private tracked store, for example — the table gains that class and nothing else in this record moves. The ratification re-checks that decision's state.
+An operator-local instance is durable only for the operator who holds it: it never homes anything a fresh clone needs. Where a non-tracked home physically lives — a git-ignored folder in the repository, or a per-user home outside every repository and workspace — is decided outside this record, by the risk-class model for non-tracked data and by the project data architecture; this rule fixes only the class, which is a role, not a location. It is **provisional** on the pending decision that homes non-tracked data by risk class. That decision's record is `Proposed` on its own release branch at authoring: it keeps analysis and roadmap instances in the repository, moves release and run state to a git-ignored folder in each repository, and places leak-risk content and install-wide telemetry in per-user homes outside every tree — homes this table already names as `platform-instance` (or `state-log` for telemetry) and `project-instance`. If the ratified decision introduces a home this table cannot name — a private tracked store, for example — the table gains that class and nothing else in this record moves. The ratification re-checks that decision's state.
 
 ### 6. The methodology hook
 
 - **Carrier.** A "Methodology Variation — Document Applicability" section in the declaration, at **member grain**: per archetype, per document, the cadence and — only where it differs from the neutral row — the class. It follows the Methodology Variation section pattern the corpus already uses for trackers, and needs no change to the pack schema or the archetype matrix.
-- **Selector.** `delivery_approach`, resolved per space through Step 0 of the methodology parameterization spec: operations consumers read `operational_methodology` and release consumers read `release_methodology` when a project declares them. A hybrid resolves by the existing union-and-dominance rule, or by its per-space assignment. For a Custom methodology with a base archetype, the document set is the one the parameterization spec's base-archetype case yields — the base archetype's matrix row, overridden by the Custom block — and each document then takes the base archetype's rows in this section; whether the block's artifact list replaces or merges with the base list is the methodology initiative's to settle. A Custom methodology without a base takes the neutral rows, because the Custom block carries no class.
+- **Selector.** `delivery_approach`, resolved per space through Step 0 of the methodology parameterization spec — the step that settles which methodology governs each space, operations or release, before any variant is chosen: operations consumers read `operational_methodology` and release consumers read `release_methodology` when a project declares them. A hybrid resolves by the existing union-and-dominance rule, or by its per-space assignment. For a Custom methodology with a base archetype, the document set is the one the parameterization spec's base-archetype case yields — the base archetype's matrix row, overridden by the Custom block — and each document then takes the base archetype's rows in this section; whether the block's artifact list replaces or merges with the base list is the methodology initiative's to settle. A Custom methodology without a base takes the neutral rows, because the Custom block carries no class.
 - **Defaults where the sources are silent.** Phased approaches write at the phase gate and baseline there (sourced). Timeboxed approaches write within the increment — the sprint, or the program increment for SAFe — and keep design documents living, amended each increment. Continuous flow writes per item, and its policy documents are living (sourced). The timeboxed and continuous design default restates the epic's outcome; the corpus comes closest for Scrum and hybrids, whose documentation is updated within the sprint, but names no design document, so the ratification confirms the default.
 - **What it fixes.** The neutral "per phase" cadence no longer applies to approaches without phases. PRINCE2's design and test documents follow its inner delivery engine, declared as a two-archetype array, so no new field is needed.
 
@@ -124,6 +125,8 @@ A git-ignored instance is durable only for the operator who holds it: it never h
 ### 7. Where a design lives, and the design → build → validate → document loop
 
 The Stage 5 output comment is the **point-in-time** record of a change's design: its readers are Stages 6 to 8 of the same change. Its living successors are the **catalog page of each process node the change alters** and, for a decision that clears the ADR threshold, an **ADR**.
+
+**Engineering Commit 0** is a release's first commit on its branch, which lands the release plan; it is made by one designated Engineering session, the **Commit-0 writer**, before any other Engineering session commits.
 
 | Loop step | Stage | Reads | Writes | Mechanism |
 |---|---|---|---|---|
@@ -144,7 +147,7 @@ The leading hypothesis is adopted with four modifications: the release branch is
 | L3 activity | the Engineering spoke; seeded from source once the catalog generator ships, then corrected by hand | as L0–L2 | as L0–L2, plus the generator's validator once tracked |
 | L4 step rows | generated once the generator ships; hand-written and reviewed until then | the build commit | Stage 7 review |
 
-No seeder or catalog generator is tracked on main at authoring; the generator the engine decision chose exists only as a prototype in the analysis workspace. Until it ships, every level is written by hand.
+No seeder or catalog generator is tracked on main at authoring; the catalog's generator — chosen by the engine decision, which settled that the catalog is built by a new small generator reading page frontmatter, built reuse-first — exists only as a prototype in the analysis workspace. Until it ships, every level is written by hand.
 
 ### 9. The engineering-harness universe takes its projection by reference
 
@@ -162,7 +165,7 @@ The parent epic's Out list sends system documentation to the documentation pipel
 | The documentation pipeline (keeps pages current) | open, coordinating | it verifies the pages this design writes at Stage 6; the loop's feed-back and review steps run through its gates |
 | The drift engine | open, coordinating | page-versus-source drift is its check; designed-versus-built is this design's; sibling checks |
 | Non-tracked homes by risk class | open | decides where `platform-instance` and `project-instance` documents physically live |
-| The risk-class home ADR (supersedes ADR-141) | **provisional** | § 5's home classes are re-checked when it is ratified |
+| The risk-class home ADR (supersedes ADR-141) | **provisional** — `Proposed` on its own release branch at authoring | its draft's homes are all nameable by § 5's classes; § 5 is re-checked when it is ratified |
 | Project data architecture | open | applies the project projection per project; owns owners and folder homes |
 | Methodology and work-item types | open | owns the pack schema and renders the resolved methodology; the hook needs no pack change |
 | The catalog's design-artifact extension and its planning reads | built | the foundation the loop's read and feed-back steps reuse |
@@ -172,7 +175,7 @@ The parent epic's Out list sends system documentation to the documentation pipel
 
 | Element | Today | Designed | Gap | Closed by |
 |---|---|---|---|---|
-| Declaration | two unjoined tables in a file injected into operations skills | one standard, two projections, six attributes plus span and cadence | the standard does not exist | the declaration slice |
+| Declaration | two unjoined tables in a file injected into operations skills | one standard, two projections, each row carrying the attributes of § 2 (the epic's six, plus projection, span, status carrier and cadence) | the standard does not exist | the declaration slice |
 | Stage list | eleven names with "Verify"; three stages missing | the 13 stages, each with a span | defect in the mapping | the declaration slice |
 | Project phases | five vocabularies, no design or hypercare slot | any phase timeline maps to one span; Design and Operate exist | no mapping | the declaration slice; the gap-detection slice |
 | Spans | no shared vocabulary | eight spans, one glossary term | the term and both maps | the declaration slice |
@@ -202,7 +205,10 @@ Each slice carries its parent's framing (work nature, owed axes, altitude, overl
 | Milestone | Slices | Capability (after it ships…) | External dependencies |
 |---|---|---|---|
 | One declaration | S1, S2, S3, S4, S5 | every stage of both projections has a declared document set that gap detection reads and methodology varies | none beyond this release |
-| The design lives in the catalog | S6, S7 | a change's process design is visible as DRAFT pages before its code and becomes the current state at merge | the first milestone; the baseline catalog pages being published |
+| The design lives in the catalog | S6 | a change's process design is visible as DRAFT pages before its code and becomes the current state at merge | the first milestone; the baseline catalog pages being published |
+| The catalog keeps its integrity | S7 | a merged release cannot leave a designed page DRAFT, a broken supersession or an unparseable node-delta unreported | the second milestone; the catalog generator |
+
+S7 sits in a milestone of its own because it waits on the catalog generator: kept with S6, the second milestone would carry three external dependencies, where the composition doctrine targets two at most.
 
 ## Alternatives Considered
 
