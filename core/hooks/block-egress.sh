@@ -1416,16 +1416,21 @@ egress_strip_marks() {
 # or `>`. The protected forms carry the sentinel in place of the `&` of `>&` and `<&` and the `|` of
 # `>|`, and lead with it for `&>` and `&>>`; a quoted `<` or `>` is a stand-in here and never
 # matches. EGRESS_RDR_OP is 1 when the word is the operator alone, so its operand is the next word.
+#
+# The descriptor is stepped over by its length, never removed as a pattern: a prefix removal tries
+# every shorter prefix first, and the removal up to a `}` retries its match at every position before
+# the brace, so on bash 3.2 each costs more than linear time in a long digit run or a long `{name`.
 egress_is_redirection() {
-  local r="$1" nm
+  local r="$1" nm d
   EGRESS_RDR_OP=0
-  r="${r#"${r%%[!0123456789]*}"}"
+  d="${r%%[!0123456789]*}"
+  if [ -n "$d" ]; then r="${r:${#d}}"; fi  # linear: descriptor
   case "$r" in
     '{'*)
       nm="${r%%\}*}"
       nm="${nm#\{}"
       case "$nm" in ''|[!A-Za-z_]*|*[!A-Za-z0-9_]*) return 1 ;; esac
-      case "$r" in *'}'*) r="${r#*\}}" ;; *) return 1 ;; esac
+      case "$r" in *'}'*) r="${r:$(( ${#nm} + 2 ))}" ;; *) return 1 ;; esac
       ;;
   esac
   case "$r" in

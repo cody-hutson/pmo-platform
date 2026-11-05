@@ -4122,6 +4122,48 @@ fi
 e007_n_timed "the long brace group" "AC-E007-NB" brace '{gh,' 'a,' 'a} api repos/o/r' 'gh api repos/o/r {' 'a,' 'a}'
 e007_n_ctl "AC-E007-NB-CTL" "$E007_NB_B" brace 40 en_US.UTF-8 "the brace step, the escape step and the splice"
 
+# -- NR: the redirection-word test on a long word before a redirection --
+E007_N_K=0
+/bin/cat >> "${E007_N_R}/before-funcs.sh" <<'E007_N_BEFORE'
+egress_is_redirection() {
+  local r="$1" nm
+  EGRESS_RDR_OP=0
+  r="${r#"${r%%[!0123456789]*}"}"
+  case "$r" in
+    '{'*)
+      nm="${r%%\}*}"
+      nm="${nm#\{}"
+      case "$nm" in ''|[!A-Za-z_]*|*[!A-Za-z0-9_]*) return 1 ;; esac
+      case "$r" in *'}'*) r="${r#*\}}" ;; *) return 1 ;; esac
+      ;;
+  esac
+  case "$r" in
+    '<'*|'>'*|"${EGRESS_SENT}>"*) ;;
+    *) return 1 ;;
+  esac
+  case "$r" in
+    '<'|'>'|'>>'|'<>'|'<<'|'<<-'|'<<<'|">${EGRESS_SENT}"|"<${EGRESS_SENT}"|"${EGRESS_SENT}>"|"${EGRESS_SENT}>>")
+      EGRESS_RDR_OP=1
+      ;;
+  esac
+  return 0
+}
+E007_N_BEFORE
+E007_NR_B="${E007_W_BASE}/nrb"; e007_n_before "$E007_NR_B" egress_is_redirection
+_nr_cw="$E007_N_CW"
+E007_NR_M1="${E007_W_BASE}/nrm1"; e007_n_copy "$E007_NR_M1" 'then r="${r:${#d}}"; fi  # linear: descriptor' 'then r="${r:1}"; fi  # linear: descriptor'; _nr_cw="${_nr_cw}${E007_N_CW}"
+E007_NR_M2="${E007_W_BASE}/nrm2"; e007_n_copy "$E007_NR_M2" 'r="${r:$(( ${#nm} + 2 ))}"' 'r="${r:$(( ${#nm} + 1 ))}"'; _nr_cw="${_nr_cw}${E007_N_CW}"
+if [ "$_nr_cw" = 000 ]; then
+  e007_n_eq "AC-E007-NR-EQ" "the redirection-word test" "${E007_NR_B}/mut.sh" "${E007_NR_M1}/mut.sh" "${E007_NR_M2}/mut.sh"
+else
+  e007_d_fail "AC-E007-NR-EQ: the redirection-word test equals the code before it byte for byte" \
+    "the copies could not be built (put back, then each near miss: ${_nr_cw}; 0 = built)"
+fi
+e007_n_timed "a long digit run before a redirection" "AC-E007-NR" digits 'gh api ' '1' ' >x repos/o/r' 'gh api ' 'a' ' >x repos/o/r'
+e007_n_timed "a long named-descriptor redirection" "AC-E007-NR" named 'gh api {' 'a' '}>x repos/o/r' 'gh api x' 'a' '}>x repos/o/r'
+e007_n_ctl "AC-E007-NR-CTL1" "$E007_NR_B" digits 40 en_US.UTF-8 "the redirection-word test"
+e007_n_ctl "AC-E007-NR-CTL2" "$E007_NR_B" named 80 C "the redirection-word test"
+
 # ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #
 # The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
