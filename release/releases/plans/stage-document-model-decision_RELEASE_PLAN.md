@@ -6,7 +6,7 @@ date: 2026-11-05
 type: plan
 status: ACTIVE
 issues: ["#8153", "#8154", "#8155", "#8156", "#8157"]
-pr: null
+pr: "#8814"
 links:
   note: release/releases/notes/_unversioned/stage-document-model-decision_RELEASE_NOTES.md
   log_anchor: "#stage-document-model-decision"
@@ -25,7 +25,7 @@ ambiguity. The `audit_class` declaration lives in the frontmatter only.
 
 # Release Plan — stage-document-model-decision
 
-> **Status:** Engineering Commit 0 (release branch `release/stage-document-model-decision`).
+> **Status:** Engineering, Wave 2 — the founding ADR committed `Proposed` (release branch `release/stage-document-model-decision`).
 > **Identity: VERSION-LESS.** The release identity is the capability slug `stage-document-model-decision`. No version key is claimed at any stage, no release-version stamp token is authored, and the Stage-12 rename never fires. The plan moves to `plans/_unversioned/` at Stage 13 close.
 > **Topology:** D-C SINGLE — one release branch, one pull request, one merge.
 > **Release Class:** `novel` · **Milestone:** `stage-document-model-decision`.
@@ -39,9 +39,9 @@ ambiguity. The `audit_class` declaration lives in the frontmatter only.
 | **Bump Class** | N/A — version-less release; no number binds at Stage 12 (D-Version re-rendered version-less by the operator on 2026-11-05 after the PA-007 scope change) |
 | **Date Created** | 2026-11-05 (Thursday) |
 | **Release Manager** | Agent-assisted (release hub + stage spokes) |
-| **Status** | Executing — Stage 6, Wave 1 |
+| **Status** | Executing — Stage 6, Wave 2 |
 | **Branch** | `release/stage-document-model-decision` |
-| **PR** | the draft release PR opened at Stage 6 Phase C2, after this commit; the frontmatter `pr:` field is populated at the next commit that touches this file |
+| **PR** | #8814, the draft release PR opened at Stage 6 Phase C2; the frontmatter `pr:` field was populated by the Wave-2 commit |
 | **Milestone** | stage-document-model-decision |
 
 ### Release Class declaration
@@ -104,7 +104,7 @@ MISS conditions checked and absent: no non-`sub-task` member titled `^Stage [0-9
 | Requirement | D1 finding | D2 finding | D3 finding | Classification | Delta or Premise-Problem Type |
 |---|---|---|---|---|---|
 | AC1 — all 13 stages covered, each with a row or a reason | The coverage claim names its denominator, 13, as `review-discipline-principles.md` § 8.1 PV-1 requires. | `release-process.md` still defines Stages 1–13 at `b1042eec` (`:239`–`:609`). The W1 record already holds 112 (stage, document) rows across all 13, at baseline `cebcf6c2` [SOURCE: W1 files table]. | On 2026-10-24 the operator directed that #8153 "verify against those views rather than re-inventory" [SOURCE: #8150 comment 6390883242 § 3]. The P2 release-universe pages met their refuter gate on 2026-10-25. | C2 | Re-scope the method: verify W1 and the P2 views against the stage specs at the run's `main` head, and record only what they omit. 40 commits have touched `release/references/pipeline/` since `4babbba9`, so refresh the W1 baseline rather than reuse it as it stands. |
-| AC2 — every row names home, lifecycle class in practice, reader or "none" | Rule 3: every row carries all three, with no empty cell. | W1's row grain already encodes `home_class`, `lifecycle_class_in_practice` and `readers` (same-change and future-change) [SOURCE: W1 § 1.2]. | Memory `feedback_structured_probe_not_substring`: read the declared TSV columns, not prose. | C1 | — |
+| AC2 — every row names home, lifecycle class in practice, reader or "none" | Rule 3: every row carries all three, with no empty cell. | W1's row grain already encodes `home_class`, `lifecycle_class_in_practice` and `readers` (same-change and future-change) [SOURCE: W1 § 1.2]. | Read the declared TSV columns, not prose: a structure-shaped probe over the whole population, with a control arm [CONTEXT]. | C1 | — |
 | AC3 — release sample stated with size and selection rule | PV-1: the denominator is stated. | W1 samples three milestones and states its reads [SOURCE: W1 § 1.1, § 1.3]. The 2026-10-25 observation records a release that ran with no sub-tasks (merged by #8453), whose stage reports were never posted [SOURCE: #8153 comment 6394105818]. | The card's own risk says a small sample can miss a compressed stage. | C2 | In the sample note, record that release shape (scaffolded or not) changes what persists, and cite the #8453 case. |
 | AC4 — each Stage 5 output classified durable or comment-only | `decision-discipline.md` § 2.1.1: reconcile the snapshot against live state. | The Stage 5 → 6 boundary in `stage-io-contracts.md` is unchanged since 2026-10-04; its only change is a Stage 12 row [SOURCE: `git diff 4babbba9 origin/main`]. ADR-224 decision 6 gives catalog pages a lifecycle `status` field, which is a new candidate durable home for a design record. | #8495 (shipped in ms#434) added a planning read of current-state process pages at Stages 2 and 5 [SOURCE: commit `627cf5e2`]. | C2 | Classify each Stage 5 output against the catalog page as a candidate home too, not only against comments and tracked files. |
 | AC5 — summary posted on the card, naming where the record is held | PV-0: name the record's location. | The summary was held until Phase 3 [SOURCE: process-baseline `RESUME.md:439`]. Phase 3 has now completed. | G-2 item 5 posted the #8154 and #8155 summaries only after an egress check and the operator's second yes [SOURCE: `planning/G-2-review.md:34`]. | C2 | Draft under the analysis-workspace egress rule: no instance detail on a public card. |
@@ -121,7 +121,7 @@ MISS conditions checked and absent: no non-`sub-task` member titled `^Stage [0-9
 | AC3 — every row names lifecycle class, home class and readers | Rule 3. | Met, per the summary. `operations/templates/` has one template edited and none added or removed [SOURCE: `git diff --name-status`]. | Same refuter. | C1 | — |
 | AC4 — the disagreements are listed | Root-cause format (Rule 4) applies to each disagreement. | 46 disagreement rows [SOURCE: same comment; `table-disagreements.tsv`]. | The 2026-10-25 observations add four more [SOURCE: comment 6394105544]. | C1 | — |
 | AC5 — summary posted on the card | PV-0. | Posted 2026-10-23, naming `<OPERATOR_INSTANCE_ANALYSIS_PATH>/process-baseline-2026-10-22/discovery/records/w2-project-delivery/`. | — the G-2 egress check was applied before posting [SOURCE: G-2 item 5]. | C1 | — |
-| proposed-change-1 — how the card is executed | `reversibility-protocol.md` § The Four Tiers: verify-and-close is CHEAP. | Every acceptance criterion is already evidenced as met, on the card itself. | Memory `feedback_release_ops_intake_pre_rendered_artifacts`: when every criterion passes at the first check, verify and close rather than re-author. | C2 | Stage 6 verifies the record against each criterion and closes the card. Fold the 2026-10-25 observations into the record, or note them there. Re-size. |
+| proposed-change-1 — how the card is executed | `reversibility-protocol.md` § The Four Tiers: verify-and-close is CHEAP. | Every acceptance criterion is already evidenced as met, on the card itself. | When every criterion passes at the first check, verify and close rather than re-author [CONTEXT]. | C2 | Stage 6 verifies the record against each criterion and closes the card. Fold the 2026-10-25 observations into the record, or note them there. Re-size. |
 | risk-1 — Documentation Impact declaration | As #8153. | `ungradable` (trailing period). | As #8153. | C2 | Remove the trailing period. |
 
 **§ 11:** PV-A (the two `operational-artifacts.md` tables are keyed to different stage and phase lists, `:97-120`). **AL-FIT** (investigation; the seam searched is `operational-artifacts.md` and `template-taxonomy.md`).
@@ -132,7 +132,7 @@ MISS conditions checked and absent: no non-`sub-task` member titled `^Stage [0-9
 |---|---|---|---|---|---|
 | AC1 — the crosswalk includes 13 / 11 / 6 / lifecycle states | PV-1: each model is a named denominator. | The crosswalk has 18 aligned rows covering all four models [SOURCE: comment 6368771981]. `release-process.md` still defines 13 stages despite 11 commits. | A refuter re-derived 3 rows independently, and all held. | C1 | — |
 | AC2 — at least two external sources, each with its contribution | Evidence labels: the unreachable ISO rows are marked unverified, which is a declared coverage boundary (§ 8.1). | 16 sources, including PMBOK 7, the Scrum Guide, SAFe, PRINCE2 and ITIL 4 [SOURCE: same comment]. | — the refuter sample covered rows, not sources. | C1 | — |
-| AC3 — each candidate states its tradeoffs and the surfaces it renames | Reversibility: renaming cost is the irreversibility signal. | C1: no renames. C2: five classes. C3: about 18 files as a layer, or about 600 as a replacement [SOURCE: same comment]. | Memory `feedback_reuse_first_design_lens`: extend before adding anything new. | C1 | — |
+| AC3 — each candidate states its tradeoffs and the surfaces it renames | Reversibility: renaming cost is the irreversibility signal. | C1: no renames. C2: five classes. C3: about 18 files as a layer, or about 600 as a replacement [SOURCE: same comment]. | Reuse first: extend what exists before adding anything new [CONTEXT]. | C1 | — |
 | AC4 — summary posted | PV-0. | Posted 2026-10-23, naming `…/w3-crosswalk/`. | G-2 egress check. | C1 | — |
 | proposed-change-1 — execution, and a premise note | `decision-discipline.md` § 2.1.1. | The card says "#6433 names the two process universes". The catalog G-1 approved, and ADR-224 adopted, has **three** universes: release, project delivery and the engineering harness [SOURCE: `w5-synthesis/universes.tsv`]. The 2026-10-25 observations add two vocabulary findings [SOURCE: comment 6394105970]. | Same as #8154 (pre-rendered → verify). | C2 | Verify, then close. Carry the three-universe fact to #8157. The card's criteria are unaffected. |
 | risk-1 — Documentation Impact declaration | As #8153. | `ungradable`. | As #8153. | C2 | Remove the trailing period. |
@@ -144,7 +144,7 @@ MISS conditions checked and absent: no non-`sub-task` member titled `^Stage [0-9
 | Requirement | D1 finding | D2 finding | D3 finding | Classification | Delta or Premise-Problem Type |
 |---|---|---|---|---|---|
 | AC1 — a row for each of the 8 `delivery_approach` values | PV-1: the denominator is 8. | The enum still has 8 values at `b1042eec` (`project-schema.md:66`, V2 `:449`). The methodology spec changed by 2 lines since 2026-10-04 [SOURCE: `git diff --stat`]. | The process-baseline plan lists #8156 as "Partial; confirm in Planning" [SOURCE: `SUMMARY.md:681`], and no record answers it: `w4` covers controls [SOURCE: records listing]. | C1 | — |
-| AC2 — cadence and lifecycle class per document group, or how configuration supplies them | Reversibility: no invented default, so the safe choice is "the configuration supplies it". | The card already routes Hybrid and Custom to the resolved configuration. | Memory `feedback_methodology_framed_views`: methodology is operator-local configuration, and the public corpus stays neutral. | C1 | — |
+| AC2 — cadence and lifecycle class per document group, or how configuration supplies them | Reversibility: no invented default, so the safe choice is "the configuration supplies it". | The card already routes Hybrid and Custom to the resolved configuration. | Methodology is operator-local configuration, and the public corpus stays methodology-neutral [CONTEXT]. | C1 | — |
 | AC3 — each existing methodology rail assessed | Rule 3: every rail gets a finding. | The card lists four rails but not the **per-space resolution**: Step 0, `operational_methodology` / `release_methodology` (`methodology-parameterization-v1.md:226-232`), which was already present at `4babbba9` (7 matches). The model's two projections line up with those two spaces. `core/packs/` holds only `scrum`, `kanban` and `_common` [SOURCE: `git ls-tree`]. | — no retrospective covers this rail. | C2 | Add Step 0 per-space resolution as a fifth rail. State which archetypes have no pack. |
 | AC4 — summary posted | PV-0. | Not yet run. | The public-card egress check that preceded the #8154 and #8155 summaries applies here too [SOURCE: `planning/G-2-review.md:34`]. | C1 | — |
 | risk-1 — Documentation Impact declaration | As #8153. | `ungradable`. | As #8153. | C2 | Remove the trailing period. |
@@ -157,11 +157,11 @@ MISS conditions checked and absent: no non-`sub-task` member titled `^Stage [0-9
 |---|---|---|---|---|---|
 | AC1 — each owed axis gets a coverage state and a concrete element | Rule 3 per axis. | ADR-224 (Accepted) now fixes, for catalog pages, the home (a sibling under `core/`, decision 4), the lifecycle (DRAFT / ACTIVE / SUPERSEDED / DEPRECATED, decision 6) and the generation boundary (L0–L2 written, L3 seeded, L4 generated, decision 7). The card's behaviour-over-time axis names only the three `operational-artifacts.md` classes. | The 2026-10-24 hypothesis: "No new artifact type or status". It leaves one seam open: who writes L0–L3 at Stage 6 [SOURCE: #8150 comment 6390883242 § 4]. | C2 | Reconcile living / point-in-time / baselined with ADR-224's four statuses, and answer the L0–L3 writer seam. |
 | AC2 — one vocabulary, mapped to the 13 stages and the project phases | PV-1: two named projections. | #8155 delivered three candidates with their costs. The catalog has three universes [SOURCE: `universes.tsv`]. | — no prior cycle. | C2 | State whether the engineering-harness universe takes a projection, or why it does not. |
-| AC3 — the methodology hook, shown for at least two methodologies | Reversibility: the hook is config-selected. | It depends on #8156's finding about the per-space rail. | Memory `feedback_methodology_framed_views`. | C1 | — |
+| AC3 — the methodology hook, shown for at least two methodologies | Reversibility: the hook is config-selected. | It depends on #8156's finding about the per-space rail. | Methodology is operator-local configuration; the public corpus stays methodology-neutral [CONTEXT]. | C1 | — |
 | AC4 — the seams with #8117, #8114, #8005 and project-data-architecture | `decision-discipline.md` § 2.1.1. | #8117 is **closed and decided** (ADR-224; ms#434 closed 2026-10-25). #8494 and #8495 shipped. #8016, the risk-class homes ADR, is bundled in ms#428, which is holding at Stage 4. | The card's own rule: a seam with an undecided ADR is recorded as provisional. | C2 | The #8117 seam is final, with ADR-224 as its input. Add #8016/ms#428 as the remaining provisional seam. Cite #8494 and #8495 as foundation already built. |
-| AC5 — the delivery cut: slices, work natures, edges, milestones | `decision-discipline.md` (decision-class output). | `bundle-composition-doctrine.md` has 4 commits since 2026-10-04, and ms#419 `bundle-doctrine-runs-from-evidence` is open [SOURCE]. | Memory `feedback_composition_is_judgment_not_binpacking`. | C1 | — read the doctrine at run time. |
+| AC5 — the delivery cut: slices, work natures, edges, milestones | `decision-discipline.md` (decision-class output). | `bundle-composition-doctrine.md` has 4 commits since 2026-10-04, and ms#419 `bundle-doctrine-runs-from-evidence` is open [SOURCE]. | Composing a release is a judgment of capability coherence and dependency edges, not bin-packing by size [CONTEXT]. | C1 | — read the doctrine at run time. |
 | AC6 — the operator's ratification recorded on the card | `reversibility-protocol.md` EXPENSIVE: an explicit sign-off gate. | The ratification is the operator's gate, and Mode O stops there. | The 2026-10-24 comment makes the ratification also decide whether #8150's body and Out list change [SOURCE: comment 6390883242, Scope note]. | C1 | — |
-| proposed-change-1 — the 2026-10-24 scope widening | `decision-discipline.md` § 2.1.1: it is a recorded operator decision, not recalled framing, so it stands. | The design now covers the loop: read current state, design, build and document in one release, validate, feed back, review over time. The comment carries a leading hypothesis (a node-delta block at Stage 5, DRAFT edits at scope lock, a Stage 6 flip to ACTIVE, four checks in code). It defers any body change to ratification [SOURCE: comment 6390883242 §§ 1, 4]. None of the six criteria names the loop. | Memory `feedback_distill_intent_not_remediation`: the hypothesis is "an input, not a decision". | C2 | **Stage-4 D-decision:** amend the criteria now, or carry the widening as a binding input and decide the body at ratification. Re-check size:L/8. |
+| proposed-change-1 — the 2026-10-24 scope widening | `decision-discipline.md` § 2.1.1: it is a recorded operator decision, not recalled framing, so it stands. | The design now covers the loop: read current state, design, build and document in one release, validate, feed back, review over time. The comment carries a leading hypothesis (a node-delta block at Stage 5, DRAFT edits at scope lock, a Stage 6 flip to ACTIVE, four checks in code). It defers any body change to ratification [SOURCE: comment 6390883242 §§ 1, 4]. None of the six criteria names the loop. | Distil the intent: a proposed remediation is directional, and the hypothesis is "an input, not a decision" [CONTEXT]. | C2 | **Stage-4 D-decision:** amend the criteria now, or carry the widening as a binding input and decide the body at ratification. Re-check size:L/8. |
 | risk-1 — vocabulary collision with #8117 | Reversibility. | Its premise has changed: #8117 has decided, so the risk is now an alignment check against a ratified vocabulary. | The process-baseline D-E question, whether to merge or sequence #8117 and #8157, resolved as a sequence, with #8117 first [SOURCE: `SUMMARY.md:705`]. | C2 | Rewrite the risk as alignment with ADR-224. |
 | risk-2 — coordination with ms#437 | — the coordination edge is recorded in the Parallelization Map. | ms#437 publishes catalog pages, and #8157 designs how pages become ACTIVE. | DEC-26 places ms#437 last. | C2 | Note the edge in the refreshed Parallelization Map. |
 | risk-3 — Documentation Impact declaration | As #8153. | `ungradable`. | As #8153. | C2 | Remove the trailing period. |
@@ -281,7 +281,7 @@ N/A — enumerated over the classes reasoned over: cards removed at the Stage-4 
 | Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
 |---|---|---|---|---|---|---|
 | release (Commit 0) | `release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md` | no | no (conjunct 1 decides) | unconstrained | unconstrained | ordinary Engineering spoke |
-| #8157 | `core/ADRs/ADR-NNN-<slug>.md` (the founding ADR, PA-007 (B)) | no | no (conjunct 1 decides) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8157 | `core/ADRs/ADR-230-stage-documents-are-declared-once-and-projected-twice.md` (the founding ADR, PA-007 (B)) | no | no (conjunct 1 decides) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8153 · #8154 · #8155 · #8156 | none tracked (records git-ignored; BLOCK-DESTRUCTIVE-019 exempts `analysis/<subfolder>/…`) | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 
 **Integration points:** none in code. The integration is the content join #8153–#8156 → #8157, which CIAC-2..CIAC-5 assert, and the ADR, which holds #8157's design.
@@ -309,10 +309,10 @@ There is no CHANGELOG key and no `.version` stamp (SKIP-with-PASS), and no GitHu
 
 ```
 release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md  ADD
-core/ADRs/ADR-NNN-<slug>.md  ADD
+core/ADRs/ADR-230-stage-documents-are-declared-once-and-projected-twice.md  ADD
 ```
 
-The second row is the founding ADR (PA-007 (B)), written by the #8157 Stage-6 session in Wave 2. Its number is allocated at that commit from the mainline anchor (`release/tools/renumber-adr.py --next-free`) and its slug is named by #8157's design; that commit replaces the placeholder row with the literal path. Branch-authored prose elsewhere cites the record as `{{ADR:<its-slug>}}` once the slug exists (ADR-181), never by a provisional number.
+The second row is the founding ADR (PA-007 (B)), written by the #8157 Stage-6 session in Wave 2. Its filename takes the mainline next-free number (`release/tools/renumber-adr.py --next-free`), and its slug is `stage-documents-are-declared-once-and-projected-twice`; the Wave-2 commit replaced the placeholder row with that literal path (DEV-21). Branch-authored prose elsewhere cites the record as `{{ADR:stage-documents-are-declared-once-and-projected-twice}}` (ADR-181), never by its provisional number; a slot collision at merge is reconciled by Stage 12 Phase A.5.7, which also rewrites this row.
 
 #### Read-only inputs
 
@@ -635,6 +635,18 @@ Commit-0 entries. Later stages append theirs.
 - **ADR index:** N/A — this release adds no record under `release/ADRs/`; the founding ADR is under `core/ADRs/`, whose README is curated and has no projector.
 - **Runtime suite:** `test-run/suite-skip` — the change set is a release plan and an ADR, the selection map's no-match row (doc/governance/spec-only).
 
+Wave-2 entries (the #8157 Stage-6 commit that adds the founding ADR):
+
+- **ADR number:** `release/tools/renumber-adr.py --next-free` → the mainline anchor plus one; `--detect` reports the branch's claim and two claims on unmerged branches (detection only). `python3 release/tools/check-adr-numbers.py` → PASS, contiguous, no duplicates.
+- **ADR durability lint:** `python3 release/tools/check-adr-durability.py --files <the ADR> --diff-base origin/main` → `COUNT 0`; sensitivity arm, a copy carrying a live population count and a hardcoded SHA → `COUNT 2` (R2-COUNT, R2-SHA).
+- **Issue-reference validity:** `check-issue-ref-validity.sh --path <the ADR> --resolver gh` → pass (every bare reference resolves and sits in `## References`); sensitivity arm, a file with a bare reference in body prose → the gate's failure text.
+- **Dead-file references:** `check-release-links.py --roots core release docs .github --top-level-md --check-anchors --images --diff-base origin/main --files <plan> <ADR>` → 0 broken links.
+- **Operator-memory references (DEV-25):** the pattern of `.github/workflows/operator-memory-ref.yml`, run with `grep -cE` → this file 7 at Commit 0, 0 now; the ADR 0; control, a line naming a memory-shaped file → 1.
+- **Path-leak scan:** `path-leak-patterns.sh --scan-file` → exit 0 on this file and on the ADR; control → exit 1.
+- **AC binding with the design criteria:** `check-ac-binding.py --fetch --design-file <design criteria, AC-1..AC-12>` → `VERDICT BOUND ns:plan>issue,design>issue`; design AC-1..AC-6 BOUND, AC-7..AC-12 NONE (`Maps-to: none`, as designed).
+- **ADR index:** N/A — the record is under `core/ADRs/`, whose README is curated (DEV-23).
+- **Skill packages:** `printf '%s\n' <changed paths> | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` → no skill named; nothing to rebuild.
+
 ## Deployment Execution Log
 
 (Populated during Stage 12.)
@@ -672,6 +684,12 @@ Departures from the Stage-4 comment (comment 6664007762 on #8751), each with the
 | DEV-17 | PA-010 (b): #8157 gains one graded design criterion for the operator's four § 2 constraints (no bloat; reviewed over releases; repo versus local-folder best practice; repeatable for adopters) | Collective Review, PA-010, CHEAP | The operator's build principles become gradable at Stage 7 | APPLIED in Implementation Sequence row 5 |
 | DEV-18 | AC-Binding Limb 2: the two null expected results (#8153 AC-2 and #8154 AC-3, "no empty cell") gain a control arm on the same read | Commit-0 writer, Tier 1 [ADJUST]; `stage-04-planning.md` § AC-Binding Limb 2 | A null result needs a control arm on the same instrument and target; the Stage-4 rows carried none | APPLIED in § Per-Issue Verification |
 | DEV-19 | The literal release-version stamp token is named in words, never written out, at the six sites where the Stage-4 comment wrote it in prose (the identity note, the Summary risk line, the Delivery Strategy warning, R2, edit 5 and DEV-5) | Commit-0 writer, Tier 1 [ADJUST]; risk R2 | `claim-version.sh` matches the literal token anywhere in a plan: a first transcription that kept it in prose made `--verify-stamp` report `verify-stamp OK` instead of `TOKEN-LESS PLAN`, and the same match would count this plan when a versioned sibling's claim derives its slug — R2's two harms, produced by text that warns against them | APPLIED: 0 literal tokens in this file; step 3b re-run reads `TOKEN-LESS PLAN` (§ Verification Evidence) |
+| DEV-20 | #8155 D-2 (note rather than fold): #8155's 2026-10-25 observations are **noted** beside the W3 crosswalk record (its `verification.md` § 3), not folded into it, and the record's base files stay as verified. Two sites of this plan already carry that wording without a row until now: D-VerifiedCards (A), which reads "verifies and accounts for the 2026-10-25 observations" where the Stage-4 comment read "verifies and folds in", and the #8155 cell of § Size re-check, which reads "Verify, and note two observations" where the Stage-4 comment read "fold in two observations" | #8155 Stage-5 design D-2 and its Phase A6.5 FM-4; #8155 Stage-6 output (comment 6666816989 on #8781); #8155 Stage-7 F-06 (comment 6668420098 on #8786); Collective Review PA-006 (5) | Folding would re-author a refuter-verified record pinned to one baseline; #8157 reads the observations from the note. DEV-10 covers #8154 only | APPLIED: this row records the two existing sites; the W3 record is unchanged and is read by #8157 together with its `verification.md` |
+| DEV-21 | The File Change Matrix row and the Agent-Editability Read write-set path name the founding ADR's literal path, replacing the `ADR-NNN-<slug>` placeholder | #8157 Stage-6 session, per DEV-14's stated disposition | The number is the mainline next-free slot (`renumber-adr.py --next-free`); `--detect` also showed two higher-or-equal numbers claimed on unmerged branches, reported as detection only (adr-helper allocation rule), so a merge-time renumber is possible and Stage 12 A.5.7 owns it | APPLIED in § File Change Matrix and § Agent-Editability Read; DEV-14 is kept as the record of the placeholder |
+| DEV-22 | The founding ADR is authored with its decision prose filled in, where the `adr-helper` scaffold leaves decision sections as author-fill placeholders | Collective Review PA-007 (B): the release ships the founding ADR "holding #8157's design and gap map with the current-state evidence summarized in its Context" | The operator's PA-007 decision is the authorization for the prose, and the prose restates the #8157 design record rather than inventing rationale; the record stays `Proposed`, and only the operator's Stage-9 ratification moves it to `Accepted` | APPLIED; the ADR's own structural lints are in § Verification Evidence |
+| DEV-23 | No `core/ADRs/README.md` entry is added for the founding ADR | R9's README check, run at the #8157 commit | That README is a curated thematic document, not an index (its own opening paragraph, ADR-117); adr-helper registers nothing for a `core/ADRs/` record | APPLIED: the File Change Matrix stays at two rows and CIAC-1 is unchanged |
+| DEV-24 | The #8157 design record is staged in the spoke's run directory with a sha256 manifest for the hub to place, rather than written at the token-resolved analysis home; the harness also refused the subagent's write of the record's index file (`SUMMARY.md`), whose content therefore travels in the spoke's hand-back for hub-direct placement | The operator's record-placement decision (2026-11-05) and the #8157 Wave-2 brief; the Collective Review recorded determination (a refused write is placed hub-direct) | An isolated spoke cannot write the primary analysis workspace; the refusal of the index file is a harness control, recorded as a firing on #8783, not routed around | STAGED at this commit; placing the folder, and checking each file's sha256 and `git check-ignore -v`, is the hub's step |
+| DEV-25 | In the transcribed Phase A0 tables (#8153, #8154, #8155, #8156 and #8157 rows), the seven D3 cells that named an operator-local memory file now state the principle it stands for as one plain clause labelled `[CONTEXT]`, and drop the file name | Hub instruction to the #8157 Wave-2 commit, after the Stage-7 review of #8154 (comment 6668355579 on #8785) found the required check "Operator-memory-reference gate" failing on this file | A public plan may not name operator-local memory files; the principle carries the meaning without the name. The `allow-memory-ref` override is not used | APPLIED: the gate's own pattern finds 7 lines in this file at Commit 0 and 0 after this commit; a control line naming a memory-shaped file reads 1 (§ Verification Evidence) |
 
 ## Change Description
 
@@ -679,19 +697,19 @@ Authored at Engineering Commit 0 per `release/governance/RELEASE_PROTOCOL.md` §
 
 ### Outcome
 
-This release produces the evidence and the design for how each delivery stage records its work. Four discovery cards verify or produce the current-state records (what each release stage writes, what project delivery produces, a shared stage vocabulary, and how methodology changes cadence), and #8157 designs the stage-to-document model on them. The design is held in a founding ADR that ships in this release as `Proposed` and becomes `Accepted` when the operator ratifies it at Stage 9.
+This release produces the evidence and the design for how each delivery stage records its work. Four discovery cards verify or produce the current-state records (what each release stage writes, what project delivery produces, a shared stage vocabulary, and how methodology changes cadence), and #8157 designs the stage-to-document model on them. The design is held in a founding ADR, `{{ADR:stage-documents-are-declared-once-and-projected-twice}}`, that ships in this release as `Proposed` and becomes `Accepted` when the operator ratifies it at Stage 9. In one line, the design: every stage's documents are declared once, in a new core standard that both the release pipeline and project delivery read; each stage and each project phase belongs to one of eight delivery spans; a document's lifecycle class binds to the field its file already carries; homes are named by role; a delivery approach varies cadence through one member-grain section; and a change's process design is written as DRAFT catalog pages at Engineering Commit 0 and becomes current when its code is built.
 
 ### Issues resolved
 
 | # | Outcome (one line) | Status |
 |---|---|---|
-| #8153 | What each release stage writes, where it persists and who reads it, verified as a delta over the W1 record at head | IN FLIGHT — Stage 6, Wave 1 |
-| #8154 | The project-delivery inventory, verified and refreshed, with the 2026-10-25 observations noted beside it | IN FLIGHT — Stage 6, Wave 1 |
-| #8155 | The stage-vocabulary crosswalk, verified and refreshed | IN FLIGHT — Stage 6, Wave 1 |
-| #8156 | How each delivery approach changes when documents are written and how long they stay current | IN FLIGHT — Stage 6, Wave 1 |
-| #8157 | The stage-to-document model design and the founding ADR, brought to ratification | NOT STARTED — Wave 2 |
+| #8153 | What each release stage writes, where it persists and who reads it, verified as a delta over the W1 record at head | IN FLIGHT — Stage 6 record placed; Stages 7–8 in progress |
+| #8154 | The project-delivery inventory, verified and refreshed, with the 2026-10-25 observations noted beside it | IN FLIGHT — Stage 6 record placed; Stages 7–8 in progress |
+| #8155 | The stage-vocabulary crosswalk, verified and refreshed | IN FLIGHT — Stage 6 record placed; Stages 7–8 in progress |
+| #8156 | How each delivery approach changes when documents are written and how long they stay current | IN FLIGHT — Stage 6 record placed; Stages 7–8 in progress |
+| #8157 | The stage-to-document model design and the founding ADR, brought to ratification | IN FLIGHT — design record staged; founding ADR committed `Proposed`; ratification at Stage 9 |
 
-The status column takes its DONE / PARTIAL / DEFERRED value at the Wave-2 refresh.
+The status column takes its DONE / PARTIAL / DEFERRED value once Stage 8 has graded each card; #8157's also waits on the ratification.
 
 ### Key decisions
 
@@ -707,7 +725,7 @@ The status column takes its DONE / PARTIAL / DEFERRED value at the Wave-2 refres
 
 ### Downstream impact
 
-- The ratified design is the build target for epic #8150's delivery milestones, cut by #8157.
+- The ratified design is the build target for epic #8150's delivery milestones, cut by #8157. The proposed cut is two milestones: one declaration (the standard, the lifecycle-register entries, the methodology section, gap detection on spans, the template gap list), then the design living in the catalog (the node-delta block, the Stage-6 page writes, the Stage-7 designed-versus-built read, the integrity checks).
 - The current-state inventories feed the #8115 process-catalog pages (PA-007 (C)).
 - No skill, hook, deploy gate or Layer-2 surface changes.
 
