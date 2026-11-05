@@ -69,10 +69,10 @@
 #     --help, -h               Usage
 #
 # ARCHITECTURE — fetch is separated from classify ON PURPOSE. `fetch` performs
-# every network read and emits a tagged JSONL stream; `classify` is a pure
-# function from that stream to gate verdicts, with no network and no file I/O.
-# The separation is what makes `--self-test` runnable offline in CI, which the
-# selftest-discovery gate requires on both runner partitions.
+# every network read and emits a tagged JSONL stream; `classify` maps that stream
+# to gate verdicts with no network. Its one file read loads the shared G1a rule,
+# _epic_child_set.py, from this directory. The split keeps `--self-test` offline,
+# which the selftest-discovery gate requires on both runner partitions.
 #
 # TRANSPORT — REST ONLY, no GraphQL. Sub-issues, labels, issue search and comments
 # are all reachable over REST, and REST stays healthy when the GraphQL quota is
@@ -95,7 +95,7 @@
 #   - gh resolved by ABSOLUTE path and LAZILY (inside fetch, never at load) so the
 #     script stays loadable — and therefore self-testable — on a runner with no gh
 #
-# Exit codes: 0 = success, 1 = validation failure, 2 = workspace-boundary check failed
+# Exit codes: 0 = success, 1 = validation failure or an unloadable child-set rule, 2 = workspace-boundary check failed
 #   FINDINGS NEVER PRODUCE A NON-ZERO EXIT. A run that surfaces 40 candidates and a
 #   run that surfaces none both exit 0; only a malformed invocation or an
 #   unreachable API is an error. This tool is not a gate.
@@ -109,6 +109,12 @@ export PATH="/usr/bin:/bin"
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+
+# The epic child-set rule (G1a) has one home beside this script, shared with
+# compute-chain-head-rollup.py. A plain assignment, not an environment default, so
+# an inherited variable cannot redirect what classify loads; only the self-test
+# reassigns it, to prove a missing module fails loud.
+EPIC_CHILD_SET_PATH="${SCRIPT_DIR}/_epic_child_set.py"
 
 # WORKSPACE_ROOT resolution (env-override → operator.toml → default), mirroring
 # cleanup-orphan-state.sh. The boundary check below keys on this value.
@@ -304,10 +310,23 @@ fetch_population() {
   done <<< "$epics_jsonl"
 }
 
-# ─── Phase 2: classify (PURE — no network, no file I/O) ──────────────────────
+# ─── Phase 2: classify (no network; one file read — the shared G1a rule) ─────
 classify() {
-  /usr/bin/python3 -c '
-import json, re, sys
+  EPIC_CHILD_SET_PATH="$EPIC_CHILD_SET_PATH" /usr/bin/python3 -c '
+import importlib.util, json, os, re, sys
+
+# The child-set rule (G1a) lives in _epic_child_set.py, which the chain-head view
+# loads too. It is loaded by path, and a failed load is fatal: there is no inline
+# copy to fall back to, so the two readers cannot drift apart.
+RULE_PATH = os.environ.get("EPIC_CHILD_SET_PATH", "")
+try:
+    _spec = importlib.util.spec_from_file_location("_epic_child_set", RULE_PATH)
+    rule = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(rule)
+except Exception as exc:
+    sys.stderr.write("ERROR: cannot load the shared child-set rule from %s: %s\n"
+                     % (RULE_PATH or "(unset)", exc))
+    sys.exit(1)
 
 TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR"}
 SPIKE = "type:spike"
@@ -373,19 +392,12 @@ for n in order:
             supp = m.group(1).strip(" |")
             break
 
-    # ── Child-set union ──
-    # The carrier self-labels, so it must be excluded from its own child set:
+    # ── Child-set union (G1a, from the shared rule) ──
+    # The carrier self-labels, so the rule excludes it from its own child set:
     # left in, the epic is its own perpetually-open child and can NEVER satisfy
-    # G1a. Silent, off-by-one, fatal.
-    native = {c["number"]: c for c in e["native"] if c["number"] != n}
-    label = {}
-    for c in e["label"]:
-        m = c["number"]
-        if m == n or m in native:
-            continue
-        label[m] = c
-    union = dict(native)
-    union.update(label)
+    # G1a. Silent, off-by-one, fatal. Fixtures 6 and 7 below exercise it here.
+    native, label = rule.child_set(n, e["native"], e["label"])
+    union = rule.union(native, label)
 
     open_children = sorted(m for m, c in union.items() if norm_state(c) == "OPEN")
     not_planned = sorted(m for m, c in union.items() if norm_reason(c) == "NOT_PLANNED")
@@ -789,6 +801,20 @@ print(v if isinstance(v, str) else json.dumps(v))
     _assert "K-4 the shipped key read survives a present-but-key-less config" "0" "$kr_rc_new"
     _assert "K-4 sensitivity — the same fixture ABORTS with the tolerance stripped" "aborts" "$([[ "$kr_rc_old" -ne 0 ]] && echo aborts || echo "survived(rc 0)")"
   fi
+
+  # 14. THE SHARED CHILD-SET RULE. classify loads G1a from _epic_child_set.py
+  #     beside this script (the chain-head view loads the same file), and a failed
+  #     load must stop the run rather than fall back to an inline copy. The control
+  #     points the path at a file that does not exist and expects a non-zero exit.
+  local ecs_saved="$EPIC_CHILD_SET_PATH" ecs_rc=0
+  _assert "shared child-set module loads from SCRIPT_DIR" "${SCRIPT_DIR}/_epic_child_set.py" "$EPIC_CHILD_SET_PATH"
+  printf '%s' "$f6" | classify >/dev/null 2>&1 || ecs_rc=$?
+  _assert "shared child-set module loads -> classify exits 0" "0" "$ecs_rc"
+  ecs_rc=0
+  EPIC_CHILD_SET_PATH="${SCRIPT_DIR}/_epic_child_set.absent.py"
+  printf '%s' "$f6" | classify >/dev/null 2>&1 || ecs_rc=$?
+  EPIC_CHILD_SET_PATH="$ecs_saved"
+  _assert "control: a missing child-set module makes classify exit non-zero" "non-zero" "$([[ "$ecs_rc" -ne 0 ]] && echo non-zero || echo zero)"
 
   if [[ "$failures" -eq 0 ]]; then
     echo "audit-epic-rollup-close.sh --self-test: PASS (all classifier fixtures)" >&2

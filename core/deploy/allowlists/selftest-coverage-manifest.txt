@@ -35,6 +35,7 @@ release/tools/reemit-release-bodies.sh
 release/tools/synthesize-release-learnings.sh
 release/tools/version-grammar.sh
 # scope: release/tools/*.py
+release/tools/_epic_child_set.py
 release/tools/av-verify.py
 release/tools/bundle-issues-parser.py
 release/tools/check-ac-binding.py
