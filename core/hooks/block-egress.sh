@@ -449,10 +449,11 @@ digest() {
 # constant is read by three hooks and asserted in two governance documents, so
 # widening it would reach far beyond this rule.
 #
-# Bash 3.2-safe throughout (macOS system bash): parameter expansion and `case`
-# only, no subprocess inside the scanner, and the segment loop runs in the CURRENT
-# shell (here-string, never a pipeline) so apply_block's exit 2 propagates instead
-# of dying in a subshell.
+# Bash 3.2-safe throughout (macOS system bash): parameter expansion and `case`, with a
+# subprocess inside the scanner only for a long piece — one tr, sed or awk pass that
+# keeps its cost linear (see EGRESS_LINEAR_MIN), each with a fallback — and the segment
+# loop runs in the CURRENT shell (here-string, never a pipeline) so apply_block's exit 2
+# propagates instead of dying in a subshell.
 
 # Rollout phase for -007's WIDENING classes, per progressive-rollout-convention.md.
 #   shadow  — evaluate, log `would-fire`, take NO action, surface nothing
@@ -509,14 +510,48 @@ readonly EGRESS_BND_NEW=$'\003'   # `(` `)` backtick — it did not
 # nothing left to replace, which costs one scan of the piece; the redirection operators, two
 # characters each, skip them instead. A shorter piece costs less than the fork the pass takes,
 # so it keeps the substitutions alone, and a pass that fails leaves the piece to them, so the
-# text that comes out is the same on every path. The continuation join keeps a mark-free twin
-# of each line instead of removing marks from a line it grows.
+# text that comes out is the same on every path.
+#
+# The same holds for a removal (`${t#…}`, `${t%…}` and their long forms) and the first-character
+# idiom: on bash 3.2 a removal re-measures the text at every position it tries, so one that has
+# to scan far, or that runs once per step of a loop over the text left to scan, costs more than
+# linear time. The quote walk and the continuation join therefore read a long text once — the
+# walk as pieces split at its quote characters by one awk pass, the join a line at a time with
+# its mark-free twin beside it — and each step reads only the piece in front of it; the comment
+# and trailing-backslash tests read a long text once as well. A short text keeps the code that
+# reads it as before, and the two paths give the same result on every input.
 readonly EGRESS_LINEAR_MIN=256
 
+# True when the text $1 is long: at least EGRESS_LINEAR_MIN characters.
+egress_long() {
+  [ "${#1}" -ge "$EGRESS_LINEAR_MIN" ]
+}
+
+# The parts of the array named $1, joined with nothing between them, into EGRESS_J. Every parts
+# array here starts with one empty part and only grows, because bash 3.2 under `set -u` refuses to
+# expand an empty array; and each is appended to at its end and never read by index, because bash
+# 3.2 finds an indexed element by walking the array from its start.
+egress_cat() {
+  local IFS=
+  eval "EGRESS_J=\"\${$1[*]}\""
+}
+
 # True when the string ends in an ODD number of backslashes — i.e. a following
-# quote character is escaped and is not a terminator.
+# quote character is escaped and is not a terminator. A long string is read once, a
+# backslash-delimited field at a time, counting the run of empty fields that ends it;
+# a short one is trimmed a backslash at a time, as before.
 egress_trailing_backslash_odd() {
-  local t="$1" c=0
+  local t="$1" c=0 f=""
+  if egress_long "$t"; then  # linear: trail
+    while IFS= read -r -d '\' f; do
+      if [ -n "$f" ]; then c=1; else c=$(( c + 1 )); fi
+    done <<< "$t"
+    # The read that ends the loop holds what follows the last backslash, and the here-string's
+    # newline: the run reaches the end only when nothing else is there.
+    [ "$f" = $'\n' ] || c=0
+    [ $(( c % 2 )) -eq 1 ]
+    return
+  fi
   while [ "${t%\\}" != "$t" ]; do
     t="${t%\\}"
     c=$(( c + 1 ))
@@ -537,9 +572,27 @@ egress_trailing_backslash_odd() {
 # unparseable cause rests on ("such a command cannot execute either") is TRUE for an
 # unbalanced quote in command text and FALSE for one in a comment; this is what
 # separates the two.
+#
+# A long text is read once: its final line, a line at a time, and that line's `#`s, a
+# `#`-delimited field at a time, each field being the text the short path tests at
+# that `#` — so the verdict is the same on every input, in every locale.
 egress_comment_open_at_end() {
-  local last="${1##*$'\n'}"
-  local pre
+  local last pre l
+  if egress_long "$1"; then  # linear: comment-open
+    case "$1" in
+      *'#'*) ;;
+      *) return 1 ;;
+    esac
+    last=""
+    while IFS= read -r l; do last="$l"; done <<< "$1"
+    while IFS= read -r -d '#' pre; do
+      case "$pre" in
+        ''|*[[:space:]]) return 0 ;;
+      esac
+    done <<< "$last"
+    return 1
+  fi
+  last="${1##*$'\n'}"
   while : ; do
     case "$last" in
       *'#'*) ;;
@@ -573,9 +626,17 @@ egress_comment_open_at_end() {
 # piece in the current shell, with no fork. An ANSI-C ($'…') or locale ($"…") span is
 # read as the shell reads it (egress_ansic_span): its content changes, never where it
 # ends, so no command crosses the parse boundary in either direction.
+#
+# A long text goes to egress_neutralize_long, the same walk over the text read once as
+# pieces; the loop below steps through the text left to scan, which costs more than
+# linear time on bash 3.2 (see EGRESS_LINEAR_MIN), and keeps a short text.
 egress_neutralize_into() {
   local rest="$1"
   local out="" head body q lp
+  if egress_long "$rest"; then
+    egress_neutralize_long "$rest" && return 0
+    [ "$?" -eq 2 ] || return 1
+  fi
   while [ -n "$rest" ]; do
     head="${rest%%[\"\']*}"
     if [ "$head" = "$rest" ]; then
@@ -593,9 +654,7 @@ egress_neutralize_into() {
         *$'\n'*) body="${rest%%$'\n'*}"; rest="${rest#"$body"}" ;;
         *)       body="$rest"; rest="" ;;
       esac
-      if [ "${#body}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\042\047' '\001\001' <<< "${body}.")"; then body="${lp%.}"; fi  # linear: comment
-      body="${body//\"/${EGRESS_SENT}}"
-      body="${body//\'/${EGRESS_SENT}}"
+      egress_comment_neutralize
       out="${out}${body}"
       continue
     fi
@@ -624,6 +683,28 @@ egress_neutralize_into() {
       done
     fi
     rest="${rest#?}"
+    egress_span_neutralize
+    out="${out}${body}"
+  done
+  EGRESS_NQ="$out"
+  return 0
+}
+
+# A comment's text, from the quote character that met it to the end of its line, with its quote
+# characters neutralized in place (`body`, in the caller). Shared by both walks.
+egress_comment_neutralize() {
+  local lp
+      if [ "${#body}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\042\047' '\001\001' <<< "${body}.")"; then body="${lp%.}"; fi  # linear: comment
+      body="${body//\"/${EGRESS_SENT}}"
+      body="${body//\'/${EGRESS_SENT}}"
+  return 0
+}
+
+# A quoted span's body (`body`, in the caller), neutralized in place: every structural character to
+# the sentinel, a quoted `<` or `>` to its stand-in. Shared by both walks; its lines keep the walk's
+# indentation, which the suite's source mutants match.
+egress_span_neutralize() {
+  local lp
     # The here-string's newline is translated too and comes back as the last byte; `%?` drops it.
     if [ "${#body}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\040\011\012\073\046\174\050\051\043\140\074\076' '\001\001\001\001\001\001\001\001\001\001\005\006' <<< "$body")"; then body="${lp%?}"; fi  # linear: span
     body="${body// /${EGRESS_SENT}}"
@@ -638,9 +719,107 @@ egress_neutralize_into() {
     body="${body//\`/${EGRESS_SENT}}"
     body="${body//</${EGRESS_QLT}}"  # respell: quoted-ops
     body="${body//>/${EGRESS_QGT}}"  # respell: quoted-ops
-    out="${out}${body}"
-  done
-  EGRESS_NQ="$out"
+  return 0
+}
+
+# The walk above, for a long text: the same EGRESS_NQ and status on every input, at a cost linear in
+# the text. One awk pass in the C locale reads the text once as a stream of pieces — "T" and a run of
+# text within one line, "N" for a newline, "D" and a quote character — and the walk takes each piece
+# in turn, gathering a head, a span's body or a comment's text as parts joined once. No step re-reads
+# the text left to scan or copies what it has gathered. A quote character is a single byte that never
+# sits inside a multibyte character, so the pieces split the text where the loop above splits it in
+# every locale; each test the loop applies — the comment test on a head, the ANSI-C reading of a span,
+# the escape test on a closing quote — is applied here to the same text, and the escape test to the
+# span's last run of text, which holds the backslashes the loop's test counts. Returns 2, having set
+# nothing, when the pass cannot run, and the loop above reads the text instead.
+egress_neutralize_long() {
+  local tk l st=0 nl=0 q="" head="" body="" out="" lastf="" seen=0 rest=""
+  local -a HP BP
+  tk="$(LC_ALL=C /usr/bin/awk '{ gsub(/["\047]/, "\nD&\nT"); print "T" $0; print "N" }' <<< "$1")" || return 2  # linear: walk
+  EGRESS_WO=(""); HP=(""); BP=("")
+  while IFS= read -r l; do
+    # A newline is applied when the piece after it arrives, so the here-string's own goes unused.
+    if [ "$nl" -eq 1 ]; then
+      nl=0
+      if [ "$st" -eq 0 ]; then
+        HP[${#HP[@]}]=$'\n'
+      elif [ "$st" -eq 1 ]; then
+        BP[${#BP[@]}]=$'\n'
+      else
+        # The newline that ends a comment: its text is done, and the newline opens the next head.
+        egress_cat BP; body="$EGRESS_J"
+        egress_comment_neutralize
+        EGRESS_WO[${#EGRESS_WO[@]}]="$head"; EGRESS_WO[${#EGRESS_WO[@]}]="$body"
+        HP=("" $'\n'); st=0
+      fi
+    fi
+    case "$l" in
+      T*)
+        if [ "$st" -eq 0 ]; then
+          HP[${#HP[@]}]="${l#T}"
+        else
+          BP[${#BP[@]}]="${l#T}"
+          if [ "$st" -eq 1 ]; then lastf="${l#T}"; fi
+        fi
+        ;;
+      N) nl=1 ;;
+      D*)
+        if [ "$st" -eq 0 ]; then
+          egress_cat HP; head="$EGRESS_J"; HP=("")
+          if egress_comment_open_at_end "$head"; then
+            BP=("" "${l#D}"); st=2
+          else
+            q="${l#D}"; BP=(""); lastf=""; seen=0; out="$head"; st=1
+          fi
+        elif [ "$st" -eq 2 ]; then
+          BP[${#BP[@]}]="${l#D}"
+        elif [ "${l#D}" != "$q" ]; then
+          BP[${#BP[@]}]="${l#D}"
+        else
+          # A closing quote, or an escaped one inside a double-quoted span. The ANSI-C reading
+          # sees the body up to the first such quote, as in the loop above. The escape test reads
+          # the span's last run of text, which ends the body — the stream puts a run, empty or not,
+          # after every quote character and newline — and holds every backslash the loop's test
+          # would count, a quote character or a newline ending the run. So a body is joined only to
+          # be read or closed.
+          if [ "$seen" -eq 0 ]; then
+            seen=1
+            egress_cat BP; body="$EGRESS_J"
+            if egress_ansic_span; then :  # respell: ansi-c
+              egress_span_neutralize
+              EGRESS_WO[${#EGRESS_WO[@]}]="$out"; EGRESS_WO[${#EGRESS_WO[@]}]="$body"
+              HP=(""); st=0
+              continue
+            fi
+          fi
+          if [ "$q" = '"' ] && egress_trailing_backslash_odd "$lastf"; then
+            BP[${#BP[@]}]="$q"
+            continue
+          fi
+          egress_cat BP; body="$EGRESS_J"
+          egress_span_neutralize
+          EGRESS_WO[${#EGRESS_WO[@]}]="$out"; EGRESS_WO[${#EGRESS_WO[@]}]="$body"
+          HP=(""); st=0
+        fi
+        ;;
+    esac
+  done <<< "$tk"
+  egress_cat EGRESS_WO
+  if [ "$st" -eq 1 ]; then
+    # A quote it cannot close: the text before it, with the head as the walk had it then.
+    if [ "$seen" -eq 0 ]; then EGRESS_NQ="${EGRESS_J}${head}"; else EGRESS_NQ="${EGRESS_J}${out}"; fi
+    return 1
+  fi
+  if [ "$st" -eq 2 ]; then
+    l="$EGRESS_J"
+    egress_cat BP; body="$EGRESS_J"
+    egress_comment_neutralize
+    EGRESS_NQ="${l}${head}${body}"
+    return 0
+  fi
+  l="$EGRESS_J"
+  egress_cat HP
+  EGRESS_NQ="${l}${EGRESS_J}"
   return 0
 }
 
@@ -1157,23 +1336,66 @@ egress_keep_line() {
   return 1
 }
 
-# The physical lines of egress_norm with every respelling mark removed, into EGRESS_JS, one entry for
-# each entry of EGRESS_JL: the whole text is rewritten once — by one tr pass when it is long — and
-# read into lines as the join reads them. A text with no mark is its own twin.
-egress_mark_free_lines() {
-  local l j=0 s lp
+# egress_norm with every respelling mark removed, into EGRESS_MFT: the whole text is rewritten once —
+# by one tr pass when it is long — and the join reads it a line at a time beside egress_norm. A text
+# with no mark is its own twin.
+egress_mark_free_text() {
+  local s lp
   case "$egress_norm" in
     *"${EGRESS_RSP}"*) ;;
-    *) EGRESS_JS=( "${EGRESS_JL[@]}" ); return 0 ;;
+    *) EGRESS_MFT="$egress_norm"; return 0 ;;
   esac
   s="$egress_norm"
   if [ "${#s}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" -d '\004' <<< "${s}.")"; then s="${lp%.}"; fi  # linear: mark-free
   s="${s//${EGRESS_RSP}/}"
-  EGRESS_JS=()
-  while IFS= read -r l; do
-    EGRESS_JS[$j]="$l"
-    j=$(( j + 1 ))
-  done <<< "$s"
+  EGRESS_MFT="$s"
+  return 0
+}
+
+# The state of the logical line the join is building, once physical line $1 (mark-free twin $2) has
+# joined it ($3 = joined) or opened it ($3 = fresh): EGRESS_JODD is 1 when the line ends in an odd run
+# of backslashes, EGRESS_JCOPEN is 1 when a `#` comment is open at its end, and EGRESS_JOP (with its
+# last part, EGRESS_JOPL) holds its text after its last `#`.
+#
+# Each is what the join tested on the line it had grown, computed from the line just added. The
+# grown line ends in the physical line's text after its leading blanks, behind a respelling mark, so
+# its run of trailing backslashes is that line's. Its `#`s before this line were tested when the line
+# before joined, and none opened a comment, or that line would not have joined; so only this line's
+# `#`s are new, each tested on the same text the comment test reads there — the first one's reaching
+# back through the open text of the lines before it, which is gathered as parts and joined once.
+egress_join_state() {
+  local pre first=1
+  if egress_trailing_backslash_odd "$1"; then EGRESS_JODD=1; else EGRESS_JODD=0; fi
+  if [ "$3" = fresh ]; then
+    EGRESS_JOP=(""); EGRESS_JOPL=""
+  else
+    EGRESS_JOPL="${EGRESS_JOPL%\\}"
+  fi
+  EGRESS_JCOPEN=0
+  case "$2" in
+    *'#'*) ;;
+    *)
+      if [ "$3" = joined ]; then EGRESS_JOP[${#EGRESS_JOP[@]}]="$EGRESS_JOPL"; fi
+      EGRESS_JOPL="$2"
+      return 0
+      ;;
+  esac
+  pre=""
+  while IFS= read -r -d '#' pre; do
+    if [ "$first" -eq 1 ]; then
+      first=0
+      if [ "$3" = joined ]; then
+        EGRESS_JOP[${#EGRESS_JOP[@]}]="$EGRESS_JOPL"
+        egress_cat EGRESS_JOP
+        pre="${EGRESS_J}${pre}"
+      fi
+    fi
+    case "$pre" in
+      ''|*[[:space:]]) EGRESS_JCOPEN=1 ;;
+    esac
+  done <<< "$2"
+  # What follows the last `#`, with the here-string's newline, is left in `pre` by the final read.
+  EGRESS_JOP=(""); EGRESS_JOPL="${pre%$'\n'}"
   return 0
 }
 
@@ -1183,48 +1405,45 @@ egress_mark_free_lines() {
 # nothing; never on an even backslash run; and not where the keep rule holds for the line it would
 # join. The second reader passes `nokeep`, for a view with every continuation joined.
 #
-# The physical lines are read once into an array, with their mark-free twins, and the result is
-# joined once; nothing runs unless the command carries an unquoted backslash-newline. The cost is
-# NOT linear in the command: each join still tests the line it has grown — for an odd run of
-# trailing backslashes, and for a comment open at its end — and on bash 3.2 each test removes a
-# prefix or a suffix from that line at a cost that grows faster than the line, so a command of many
-# continuation lines costs more than linear time in its length. A declared residual (the readiness
-# fragment's cost row), held for its own decision rather than changed here.
+# Linear in the command: the physical lines are read once, a line at a time with their mark-free
+# twins beside them, and nothing runs unless the command carries an unquoted backslash-newline. The
+# tests the join makes of the line it is building — an odd run of trailing backslashes, a comment
+# open at its end — are read from the line just added (egress_join_state), never from the line grown
+# so far, and the line is gathered as parts and joined once, so no join re-reads or copies it.
 egress_join_continuations() {
-  local i=1 n=0 k=0 l cur nxt lead keep curs nxts
+  local nxt nxts lead keep last="" started=0
+  local -a JC
   case "$egress_norm" in
     *\\$'\n'*) ;;
     *) return 0 ;;
   esac
-  EGRESS_JL=(); EGRESS_JO=()
-  while IFS= read -r l; do
-    EGRESS_JL[$n]="$l"
-    n=$(( n + 1 ))
-  done <<< "$egress_norm"
-  # The comment test and the keep rule read a line with its respelling marks removed. Each line's
-  # mark-free twin is read once (EGRESS_JS), and `curs` grows with `cur`, so no join removes marks
-  # from the line it has grown.
-  egress_mark_free_lines
-  cur="${EGRESS_JL[0]}"; curs="${EGRESS_JS[0]}"
-  while [ "$i" -lt "$n" ]; do
-    nxt="${EGRESS_JL[$i]}"; nxts="${EGRESS_JS[$i]}"
+  egress_mark_free_text
+  # EGRESS_JO is joined with a newline between its lines, so it starts empty, not with the empty first
+  # part a parts array carries; it holds a line before it is joined.
+  EGRESS_JO=(); JC=("")
+  while IFS= read -r nxt && IFS= read -r nxts <&3; do
+    if [ "$started" -eq 0 ]; then
+      started=1; last="$nxt"
+      egress_join_state "$nxt" "$nxts" fresh
+      continue
+    fi
     keep=1
-    if egress_trailing_backslash_odd "$cur" && ! egress_comment_open_at_end "$curs"; then
+    if [ "$EGRESS_JODD" -eq 1 ] && [ "$EGRESS_JCOPEN" -eq 0 ]; then
       keep=0
       if [ "${1:-}" != nokeep ] && egress_keep_line "$nxts"; then keep=1; fi  # respell: keep
     fi
     if [ "$keep" -eq 1 ]; then
-      EGRESS_JO[$k]="$cur"
-      k=$(( k + 1 ))
-      cur="$nxt"; curs="$nxts"
+      JC[${#JC[@]}]="$last"; egress_cat JC; EGRESS_JO[${#EGRESS_JO[@]}]="$EGRESS_J"; JC=("")
+      last="$nxt"
+      egress_join_state "$nxt" "$nxts" fresh
     else
+      JC[${#JC[@]}]="${last%\\}"
       lead="${nxt%%[![:blank:]]*}"
-      cur="${cur%\\}${lead}${EGRESS_RSP}${nxt#"$lead"}"
-      curs="${curs%\\}${lead}${nxts#"$lead"}"
+      last="${lead}${EGRESS_RSP}${nxt#"$lead"}"
+      egress_join_state "$nxt" "$nxts" joined
     fi
-    i=$(( i + 1 ))
-  done
-  EGRESS_JO[$k]="$cur"
+  done <<< "$egress_norm" 3<<< "$EGRESS_MFT"
+  JC[${#JC[@]}]="$last"; egress_cat JC; EGRESS_JO[${#EGRESS_JO[@]}]="$EGRESS_J"
   egress_join_lines
   return 0
 }

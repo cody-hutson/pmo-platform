@@ -2947,7 +2947,7 @@ echo "---"
 
 e007_w_shape "AC-E007-SP0-FP: the copy without the fast-path widening differs in one line taken out, parses, and still denies -001" "$E007_SP_FP" 1 0
 e007_w_shape "AC-E007-SP0-FR: the copy whose fast path tests the raw command differs in one line, parses, and still denies -001" "$E007_SP_FR" 1 1
-e007_w_shape "AC-E007-SP0-NC: the copy without ANSI-C decoding differs in one line, parses, and still denies -001" "$E007_SP_NC" 1 1
+e007_w_shape "AC-E007-SP0-NC: the copy without ANSI-C decoding differs in two lines, the walk's loop and its long path, parses, and still denies -001" "$E007_SP_NC" 2 2
 e007_w_shape "AC-E007-SP0-AX: the copy whose ANSI-C span ends at the first unescaped quote differs in one line, parses, and still denies -001" "$E007_SP_AX" 1 1
 e007_w_shape "AC-E007-SP0-NJ: the copy without the continuation join differs in one line taken out, parses, and still denies -001" "$E007_SP_NJ" 1 0
 e007_w_shape "AC-E007-SP0-NJE: NJE differs in two lines out and one in (no join, phase forced), parses, and still denies -001" "$E007_SP_NJE" 2 1
@@ -3203,11 +3203,10 @@ fi
 # each inside the budget and allowed. X-CTL is the instrument's sensitivity: a copy whose bound
 # never lets a pass run is stopped at the budget on the 20 KB quoted span in UTF-8. X-FB holds the
 # fallback: a copy whose pass tools do not exist reads the verdicts of the shipped hook on commands
-# that reach every pass, and raises no hook error. The token mark strip and the continuation join's
-# mark-free twin are reached long by no timed shape — a shape that reaches them long is built from
-# many short quoted spans or many continuation lines, and is held instead by the quote walk's or the
-# join's own removals, which the readiness fragment declares — so their blocks are pinned by X-EQ
-# alone.
+# that reach every pass, and raises no hook error. The token mark strip runs long only on one word
+# built from many adjacent ANSI-C spans, which no timed shape builds, so X-EQ alone pins its block;
+# the continuation join's mark-free twin runs long on the continuation-dense shape of the Y arms
+# below (DT pass 4), which times it end to end.
 E007_L_R="${E007_W_BASE}/l"
 /bin/mkdir -p "$E007_L_R"
 /usr/bin/printf '%s\n' 'set -euo pipefail' 'readonly TR=/usr/bin/tr' \
@@ -3336,7 +3335,8 @@ else
     "elapsed=${E007_T_DS} tenths exit=${E007_T_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X30 measure anything (BROKEN PROBE)"
 fi
 # X-FB: every pass's tool repointed to a path that does not exist, so each pass fails and leaves its
-# piece to the substitutions. Three commands that reach every pass long: a write to an unlisted
+# piece to the substitutions — and, since DT pass 4, the quote walk's awk with them, so a long text
+# is read by the walk's loop instead. Three commands that reach every pass long: a write to an unlisted
 # path behind a long quoted comment, a long quoted span, a long redirection run, an ANSI-C span on
 # a long word and a continuation (refused on day one); the same with a read (allowed); and a
 # respelled write in a long separator-dense command ending in an unclosed quote (refused by the
@@ -3352,7 +3352,7 @@ _l_fbr="$(/bin/cat "${E007_L_R}/fb.c" "${E007_L_R}/fb.q" "${E007_L_R}/fb.r")gh a
 _l_fbu="$(e007_l_fill 300 '' 'echo a;echo b|cat&echo c;' '')\\gh api -X POST ${E007_W_NO} 'x"
 _l_why=""
 _l_tools="$(/usr/bin/grep -c -F '/nonexistent/' "${E007_L_NT}/mut.sh")" || true
-[ "$_l_tools" = 8 ] || _l_why="${_l_why} the copy repoints ${_l_tools} pass lines, want 8;"
+[ "$_l_tools" = 9 ] || _l_why="${_l_why} the copy repoints ${_l_tools} pass lines, want 9;"
 for _l_c in "w:2:1:${_l_fbw}" "r:0:0:${_l_fbr}" "u:2:1:${_l_fbu}"; do
   _l_tag="${_l_c%%:*}"; _l_rest="${_l_c#*:}"
   _l_wx="${_l_rest%%:*}"; _l_rest="${_l_rest#*:}"
@@ -3367,9 +3367,162 @@ for _l_c in "w:2:1:${_l_fbw}" "r:0:0:${_l_fbr}" "u:2:1:${_l_fbu}"; do
   case "$E007_D_ERR" in *HOOK-ERROR*) _l_why="${_l_why} [${_l_tag}] the copy without its tools raised a hook error;" ;; esac
 done
 if [ -z "$_l_why" ]; then
-  e007_d_pass "AC-E007-X-FB: with every pass's tool missing, each pass falls back to its substitutions — a refused write, an allowed read and an unparseable respelled write read as the shipped hook reads them, with no hook error"
+  e007_d_pass "AC-E007-X-FB: with every pass's tool missing, each pass falls back to its substitutions and the walk to its loop — a refused write, an allowed read and an unparseable respelled write read as the shipped hook reads them, with no hook error"
 else
   e007_d_fail "AC-E007-X-FB: with every pass's tool missing, the verdicts equal the shipped hook's" "$_l_why"
+fi
+
+# ---- AC-E007-Y* (#8315, DT pass 4): the quote walk and the continuation join are linear ----
+#
+# Two loops of the scanner cost more than linear time on bash 3.2 in what they read. The quote walk
+# stepped through the text left to scan once per quoted span, with removals that re-measure that text
+# at every position they try, the first-character idiom among them; the continuation join re-tested
+# the line it had grown, once per joined line, for trailing backslashes and an open comment. A command
+# of many short quoted spans, or of many continuation lines, could therefore hold the hook past the
+# runtime's command-hook timeout, after which a PreToolUse hook does not block; on the continuation
+# shape this was the release's own regression, since main has no join. A long text now takes the walk
+# over pieces that one awk pass reads once (egress_neutralize_long), and the join reads a line at a
+# time beside its mark-free twin and tests only the line just added (egress_join_state); the comment
+# and trailing-backslash tests read a long text once. Y-EQ lifts the scanner's functions and runs them
+# with the bound at 0 (every long path) and at 10^9 (the code before this pass) on a dense set of
+# texts — quotes of both kinds, escaped quotes, comments, ANSI-C and locale spans, continuations,
+# multibyte letters and spaces, undecodable bytes, an unclosed quote — in en_US.UTF-8 and in C: the
+# walk's text and status, the join's text in both readings, and the two tests must be equal byte for
+# byte, and three near misses, each one edit of a long path, must each differ. Y1 to Y12 run the whole
+# sandbox hook under the watchdog on a continuation-dense and a quote-span-dense command at 10, 20
+# and 40 KB in both locales, each inside the budget and allowed. Y-CTL is the instrument's
+# sensitivity, one copy per loop: the raised-bound copy of X-CTL, whose walk is the loop before this
+# pass, is stopped at the budget on the 10 KB quote-span-dense command in UTF-8; the join has no bound,
+# so its copy also tests the line it has grown for an open comment at every join, as the join before
+# this pass did, and is stopped at the budget on the 20 KB continuation-dense command in UTF-8. X-FB
+# holds the walk's fallback.
+E007_Y_R="${E007_W_BASE}/y"
+/bin/mkdir -p "${E007_Y_R}/in"
+E007_Y_FUNCS="egress_long egress_cat egress_trailing_backslash_odd egress_comment_open_at_end egress_neutralize_into egress_neutralize_long egress_comment_neutralize egress_span_neutralize egress_ansic_span egress_ansic_decode egress_keep_line egress_respell_word egress_brace_words egress_unescape_rv egress_fold_rv egress_mark_free_text egress_join_state egress_join_continuations egress_join_lines"
+# e007_y_lift <src> <out> — the walk, the join and every function they call; EGRESS_LINEAR_MIN is
+# left to the caller. Returns 1 unless every function is found.
+e007_y_lift() {
+  F="$E007_Y_FUNCS" /usr/bin/awk '
+    BEGIN { n = split(ENVIRON["F"], f, " "); for (i = 1; i <= n; i++) want[f[i] "() {"] = 1 }
+    !inf { for (k in want) if (index($0, k) == 1) { inf = 1; seen[k] = 1; break } }
+    inf { print; if ($0 == "}") inf = 0 }
+    END { c = 0; for (k in want) if (!(k in seen)) c++; exit c == 0 ? 0 : 1 }' "$1" > "$2"
+}
+# The texts: units cycled by a fixed generator to three lengths around and above the bound, then the
+# same units ending in an unclosed quote, an escaped quote left open, a continuation, an open comment,
+# a run of backslashes and a newline.
+LC_ALL=C /usr/bin/awk -v d="${E007_Y_R}/in" 'BEGIN {
+  n = split("", u)
+  u[++n] = "\047a\047 "; u[++n] = "\"b\" "; u[++n] = "\"a\\\"b\" "; u[++n] = "$\047\\x41\\047\047 "
+  u[++n] = "$\"z\" "; u[++n] = "# it\047s \"x\" "; u[++n] = "\\\n"; u[++n] = "  --flag value \\\n"
+  u[++n] = "x #y \\\n"; u[++n] = "# c \\\n"; u[++n] = "a##"; u[++n] = "\\\\\\"; u[++n] = "\n"
+  u[++n] = " "; u[++n] = "\t"; u[++n] = ";"; u[++n] = "&|"; u[++n] = "(x)"; u[++n] = "`y`"; u[++n] = "<>"
+  u[++n] = "gh api"; u[++n] = " -X POST "; u[++n] = "\303\251"; u[++n] = "\346\227\245"; u[++n] = "\343\200\200#"
+  u[++n] = "\302\240#"; u[++n] = "\342\200\203"; u[++n] = "\377"; u[++n] = "\303"; u[++n] = "\001\004\005"
+  u[++n] = "{a,b}"; u[++n] = "x=y"; u[++n] = "\047\047"; u[++n] = "$\047a\\\047b\047"
+  split("299 860 2100", size, " ")
+  split("|\047x|\"a\\\"x|\\\n|# open \047q|\\\\\\\\\\|\n", tail, "|")
+  x = 7; t = 0
+  for (r = 1; r <= 4; r++) for (z = 1; z <= 3; z++) {
+    s = ""; while (length(s) < size[z]) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+    printf "%s", s > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+  for (e = 1; e <= 7; e++) {
+    s = ""; while (length(s) < 600) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+    printf "%s%s", s, tail[e] > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+}'
+# e007_y_eval <locale> <bound> <lib> <out-dir> — each text through the walk (its text and status), the
+# two tests, and the join in both readings, one output file per text.
+e007_y_eval() {
+  /bin/mkdir -p "$4"
+  LC_ALL="$1" /bin/bash -c '. "$1"; readonly EGRESS_UC=ABCDEFGHIJKLMNOPQRSTUVWXYZ EGRESS_LC=abcdefghijklmnopqrstuvwxyz
+    EGRESS_LINEAR_MIN="$2"; . "$3"
+    for f in "$4"/t-*; do
+      s="$(/bin/cat "$f"; printf x)"; s="${s%x}"; st=0; a=0; b=0
+      EGRESS_NQ=""; egress_neutralize_into "$s" || st=$?
+      egress_comment_open_at_end "$s" && a=1
+      egress_trailing_backslash_odd "$s" && b=1
+      egress_norm="$s"; egress_join_continuations; j1="$egress_norm"
+      egress_norm="$s"; egress_join_continuations nokeep; j2="$egress_norm"
+      printf "%s %s %s\n%s\n--\n%s\n--\n%s" "$st" "$a" "$b" "$EGRESS_NQ" "$j1" "$j2" > "$5/${f##*/}"
+    done' _ "${E007_L_R}/prelude.sh" "$2" "$3" "${E007_Y_R}/in" "$4"
+}
+_y_why=""
+e007_y_lift "$E007_W_SRC" "${E007_Y_R}/lib" || _y_why="${_y_why} a function of the walk or the join is missing from the hook;"
+/usr/bin/grep -q '^egress_neutralize_long() {' "${E007_Y_R}/lib" && /usr/bin/grep -q '^egress_join_state() {' "${E007_Y_R}/lib" \
+  || _y_why="${_y_why} the hook carries no linear walk or join;"
+e007_l_swap "${E007_Y_R}/lib" 'HP=("" $'"'"'\n'"'"'); st=0' 'HP=(""); st=0' "${E007_Y_R}/nm-walk" || _y_why="${_y_why} the walk near miss did not apply;"
+e007_l_swap "${E007_Y_R}/lib" 'EGRESS_JOPL="${EGRESS_JOPL%\\}"' 'EGRESS_JOPL="${EGRESS_JOPL}"' "${E007_Y_R}/nm-join" || _y_why="${_y_why} the join near miss did not apply;"
+e007_l_swap "${E007_Y_R}/lib" 'if [ -n "$f" ]; then c=1; else' 'if [ -n "$f" ]; then c=0; else' "${E007_Y_R}/nm-trail" || _y_why="${_y_why} the trailing-backslash near miss did not apply;"
+_y_n="$(/bin/ls "${E007_Y_R}/in" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+[ "$_y_n" -ge 19 ] || _y_why="${_y_why} only ${_y_n} texts were written;"
+if [ -z "$_y_why" ]; then
+  for _y_loc in en_US.UTF-8 C; do
+    e007_y_eval "$_y_loc" 1000000000 "${E007_Y_R}/lib" "${E007_Y_R}/${_y_loc}/ref" || _y_why="${_y_why} [${_y_loc}] the code before this pass did not run;"
+    e007_y_eval "$_y_loc" 0 "${E007_Y_R}/lib" "${E007_Y_R}/${_y_loc}/lin" || _y_why="${_y_why} [${_y_loc}] the long paths did not run;"
+    for _y_f in "${E007_Y_R}/in"/t-*; do
+      _y_k="${_y_f##*/}"
+      /usr/bin/cmp -s "${E007_Y_R}/${_y_loc}/ref/${_y_k}" "${E007_Y_R}/${_y_loc}/lin/${_y_k}" || _y_why="${_y_why} [${_y_loc} ${_y_k}] the long paths differ;"
+    done
+    for _y_nm in nm-walk nm-join nm-trail; do
+      e007_y_eval "$_y_loc" 0 "${E007_Y_R}/${_y_nm}" "${E007_Y_R}/${_y_loc}/${_y_nm}" || _y_why="${_y_why} [${_y_loc}] ${_y_nm} did not run;"
+      _y_d=0
+      for _y_f in "${E007_Y_R}/in"/t-*; do
+        _y_k="${_y_f##*/}"
+        /usr/bin/cmp -s "${E007_Y_R}/${_y_loc}/ref/${_y_k}" "${E007_Y_R}/${_y_loc}/${_y_nm}/${_y_k}" || _y_d=$(( _y_d + 1 ))
+      done
+      [ "$_y_d" -gt 0 ] || _y_why="${_y_why} [${_y_loc}] ${_y_nm} reads like the code before it (the comparison cannot see a difference);"
+    done
+  done
+fi
+if [ -z "$_y_why" ]; then
+  e007_d_pass "AC-E007-Y-EQ: the linear walk, join and tests equal the code before them byte for byte on ${_y_n} dense texts in UTF-8 and C, and three near misses each differ"
+else
+  e007_d_fail "AC-E007-Y-EQ: the linear walk, join and tests equal the code before them byte for byte" "$_y_why"
+fi
+# e007_y_cmd <shape> <bytes> <file> — a continuation-dense or quote-span-dense benign command; each
+# carries `gh`, so the fast path hands it to the scanner, and ends in a gh api read.
+e007_y_cmd() {
+  case "$1" in
+    continuation) e007_l_fill "$2" 'echo gh \'$'\n' '  --flag value word \'$'\n' '  end'$'\n''gh api repos/o/r' > "$3" ;;
+    spans)        e007_l_fill "$2" 'echo gh ' "'a' \"b\" " $'\n''gh api repos/o/r' > "$3" ;;
+  esac
+}
+for _y_shape in continuation spans; do
+  for _y_kb in 10 20 40; do e007_y_cmd "$_y_shape" $(( _y_kb * 1024 )) "${E007_Y_R}/${_y_shape}-${_y_kb}.cmd"; done
+done
+_y_n=0
+for _y_shape in continuation spans; do
+  for _y_loc in en_US.UTF-8 C; do
+    for _y_kb in 10 20 40; do
+      _y_n=$(( _y_n + 1 ))
+      e007_t_timed "$E007_W_S" "$_y_loc" "${E007_Y_R}/${_y_shape}-${_y_kb}.cmd" "$E007_T_LIMIT"
+      if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+        e007_d_pass "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+      else
+        e007_d_fail "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the hook inside the budget and is allowed" \
+          "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+      fi
+    done
+  done
+done
+# The join's copy: the raised bound, and the keep test also asking whether the line grown so far ends
+# in an open comment — the test the join before this pass made at every join, on that line.
+E007_Y_X_GROWN='s|^    if \[ "\$EGRESS_JODD" -eq 1 ] && \[ "\$EGRESS_JCOPEN" -eq 0 ]; then$|    if [ "$EGRESS_JODD" -eq 1 ] \&\& egress_cat JC \&\& ! egress_comment_open_at_end "${EGRESS_J}${last}"; then|'
+E007_Y_GR="${E007_W_BASE}/ygr"; e007_w_copy "$E007_Y_GR" "$E007_L_X_NOPASS" "$E007_Y_X_GROWN"
+_y_why=""
+e007_t_timed "$E007_L_NP" en_US.UTF-8 "${E007_Y_R}/spans-10.cmd" "$E007_T_LIMIT"
+[ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the walk's copy finished the 10 KB quote-span-dense command in ${E007_T_DS} tenths;"
+/usr/bin/grep -q -F -x 'readonly EGRESS_LINEAR_MIN=1000000000' "${E007_L_NP}/mut.sh" || _y_why="${_y_why} the walk's copy carries no raised bound;"
+e007_t_timed "$E007_Y_GR" en_US.UTF-8 "${E007_Y_R}/continuation-20.cmd" "$E007_T_LIMIT"
+[ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the join's copy finished the 20 KB continuation-dense command in ${E007_T_DS} tenths;"
+/usr/bin/grep -q -F 'egress_comment_open_at_end "${EGRESS_J}${last}"' "${E007_Y_GR}/mut.sh" || _y_why="${_y_why} the join's copy carries no test of the grown line;"
+if [ -z "$_y_why" ]; then
+  e007_d_pass "AC-E007-Y-CTL: the walk's loop is stopped at ${E007_T_LIMIT} tenths on the 10 KB quote-span-dense command and the join re-testing its grown line on the 20 KB continuation-dense command, in UTF-8 — the instrument sees each cost"
+else
+  e007_d_fail "AC-E007-Y-CTL: the walk's loop and the join re-testing its grown line are each stopped at the budget" \
+    "${_y_why} a copy that finishes cannot show Y1-Y12 measure anything (BROKEN PROBE)"
 fi
 
 # ---- Behind a prefix: each respelling reaches the record its plain twin gets ----
