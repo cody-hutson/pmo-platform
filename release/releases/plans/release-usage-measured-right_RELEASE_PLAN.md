@@ -34,7 +34,7 @@ reversibility: MODERATE / Confidence MEDIUM — the FinOps store's counting unit
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): new decision records and new scripts, per the Bump-Class Selection Guide. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092). Five of the six in-flight sibling releases also compute `v5.02`, so the claim will likely resolve higher; the atomic claim absorbs the race (R6) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | In progress — Stage 6 Engineering; Engineering Commit 0 and beat 1 (#7940) landed; beat 2 (#7937) next |
+| **Status** | In progress — Stage 6 Engineering; Engineering Commit 0, beat 1 (#7940) and beat 2 (#7937) landed; beat 3 (#7938) next |
 | **Branch** | `release/release-usage-measured-right` |
 | **PR** | opened in **draft** at Stage 6 Phase C2 after beat 1; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `release-usage-measured-right` |
@@ -281,6 +281,7 @@ core/schemas/finops-usage-store-schema.md  EDIT
 core/skills/finops-usage-extractor/scripts/rollup-attribution.sh  EDIT
 core/skills/finops-usage-extractor/references/reporting-contract.md  EDIT
 core/skills/finops-usage-extractor/SKILL.md  EDIT
+core/standards/finops-attribution-convention.md  EDIT
 # ── #7939 (beat 4) ──
 core/skills/finops-usage-extractor/scripts/report-usage.sh  EDIT
 core/skills/finops-usage-extractor/test-fixtures/report/usage.jsonl  EDIT
@@ -310,7 +311,6 @@ release/ADRs/ADR-NNN-model-use-policy-for-release-runs.md  ADD
 packages/finops-usage-extractor.skill  EDIT
 packages/finops-usage-extractor.skill.sha256  EDIT
 # ── conditional ──
-core/standards/finops-attribution-convention.md  EDIT  CONDITIONAL:attribution-note-accepted
 core/ADRs/README.md  EDIT  CONDITIONAL:adr-renumbered-at-claim
 ```
 
@@ -359,7 +359,7 @@ The `[spoke_runtime]` section of `core/config/platform-config.toml.template` is 
 ### Per-card write sets
 
 - #7940: the cost-unit ADR, `release/ADRs/README.md`, the gate-coverage register row, the `[cost_unit]` section, its schema rows and its catalog section; conditionally `core/ADRs/README.md`.
-- #7937: `extract-usage.sh`, the per-response fixtures, `usage.expected.json`, the fixture README, the store schema, `rollup-attribution.sh`, the reporting contract's § 2, the SKILL.md note, `.gitignore`; conditionally the attribution convention.
+- #7937: `extract-usage.sh`, the per-response fixtures, `usage.expected.json`, the fixture README, the store schema, `rollup-attribution.sh`, the reporting contract's § 2, the SKILL.md note, `.gitignore`, and the attribution convention (its conditional note accepted at beat 2, DEV-17).
 - #7938: `extract-usage.sh`, the store schema, a per-response fixture, `usage.expected.json`, the fixture README.
 - #7939: `report-usage.sh`, the report fixture, the report fixture README, the reporting contract's §§ 1, 6 and 8.
 - #7943: `convert-usage.sh`, the allowlist, the smoke workflow, SKILL.md, `core/README.md`, `docs/module-apis.md`, the velocity standard, the velocity tool, and at beat 5b `.gitignore`, `lib-instance-path.sh`, `operator.toml.template`, `operator-toml-schema.json`, `depersonalization-spec.md`, the close-out pair and `test_lib_instance_path.sh`.
@@ -376,7 +376,7 @@ Transcribed from the Stage-4 derivation (controls read at `ac96b3ea`) and re-app
 |---|---|---|---|---|---|
 | plan | this file | ∅ | ∅ — conjunct 1 false | — | first Engineering spoke (Commit 0) |
 | #7940 | the ADR · the index · the standard · the configuration template, schema and catalog | ∅ | ∅ — conjunct 1 false | `unconstrained` | ordinary Engineering spoke |
-| #7937 | the extractor, fixtures, schema, rollup, contract, SKILL.md, `.gitignore` | ∅ | SKILL.md and the contract: conjunct 1 true, **conjunct 2 false** | `unconstrained` | ordinary Engineering spoke; pmo-skill-editor discipline still applies by conduct (`Skill-Editor-Audit-Trail:` trailer) |
+| #7937 | the extractor, fixtures, schema, rollup, contract, SKILL.md, `.gitignore`, the attribution convention | ∅ | SKILL.md and the contract: conjunct 1 true, **conjunct 2 false** | `unconstrained` | ordinary Engineering spoke; pmo-skill-editor discipline still applies by conduct (`Skill-Editor-Audit-Trail:` trailer) |
 | #7938 · #7939 | extractor or report scripts, fixtures, schema, contract | ∅ | the contract: conjunct 2 false | `unconstrained` | ordinary Engineering spoke |
 | #7943 | the conversion, allowlist, workflow, READMEs, standards, config template and schema, the lib and its test, the velocity tool, the close-out pair | ∅ | SKILL.md: conjunct 2 false | `unconstrained` | ordinary Engineering spoke |
 | #7945 | the ranker, fixtures, allowlist, workflow, lib, test, SKILL.md, framework | ∅ | SKILL.md: conjunct 2 false | `unconstrained` | ordinary Engineering spoke |
@@ -678,6 +678,31 @@ Run by the Stage-6 spoke on #8724 over the beat-1 commit `783048a8` (the cost-un
 | Package consequence | the seven beat paths on STDIN to `build-skill-packages.sh --skills-for-paths` | no rostered package staled; control (a FinOps skill path) → `finops-usage-extractor` |
 | Identity strings, host URLs, link sequences, close-family keywords | a python line scan of the ADR and of every added line | 0 identity strings in either; 2 link sequences in added lines, both pre-existing in kind (the schema § 6 line's existing link and the generated index row) |
 
+### Beat 2 (#7937) — Stage 6 C4
+
+Run by the Stage-6 spoke on #8721 over the beat-2 commits `9722b9c6` (the extractor's per-response reduction, the counting-unit boundary, the self-test arms, two fixtures, two oracle rows, the fixture README), `ca5b9dce` (the roll-up preserves the version; the reporting contract § 2), `e2aa4610` (store schema `2.0.0`, the SKILL.md note, the ignore rule, the attribution convention) and `3e7acea0` (the extractor's help prints its whole header). Head at the runs: `3e7acea0`.
+
+| Check | Command | Observed |
+|---|---|---|
+| FinOps self-tests | `bash core/skills/finops-usage-extractor/scripts/<script>.sh --self-test`, for extract-usage, rollup-attribution, report-usage and estimate-usage | all four PASS, exit 0. The roll-up prints 21 PASS lines and 0 FAIL; the extractor prints only failures, and printed none |
+| Runtime suite (selection-map row 7: `core/skills/*/scripts/*.sh`) | each changed script's `--self-test </dev/null`: extract-usage and rollup-attribution | both PASS. Two `test-run/suite-pass` events emitted (stage 6, actor `spoke:#8721`, subject #7937, payload `selected-by:glob-7`, `sha:3e7acea0`), read back with `query-pipeline-event.sh --release release-usage-measured-right --stage 6 --event-type test-run --count`: 1 → 3 |
+| Authoring-time mutation arms | seven mutations applied in place to the committed beat, one at a time, each run then reverted; the tree read back byte-identical to the commit (`git diff` clean) | every one turns the self-test RED at the arm built for it: last-line-wins merge → three-block arm (cache-read 232, want 233); per-line counting → three-block arm `[109,71,48,491,6,2]` and partial-output arm `[27,2,80]`; the fail-closed `return 3` removed → arm 11b (exit 0, store rewritten); the boundary keyed on the full version string → arm 11c (fell back, and kept a same-unit store); a message calling every store per-line → arm 11d; first-line-wins merge → partial-output arm `[2,1,40]` and `[2,1]`; the roll-up re-stamp restored → roll-up (H) (got 1.2.0, want the sentinel) |
+| CI precision-probe anchors | the dim_agg seed line and the carry-forward binding line, each found by another token on the line (the anchors' own text holds a token a hook reads as a script path); `git diff -U0` over the beat for changed lines touching them | each line present once; 0 changed lines touch either. Sensitivity: the same diff probe sees the 6 changed `dim_agg(` call lines. The CI steps assert exactly-once at run time |
+| #7937 AC-2, AC-3, AC-4 | the § Verification Plan grep methods, on this head and on the pre-beat base `a8e3ac6d` | AC-2 `three-block` 4 (base 0) · AC-3 `partial-output` 6 (base 0) · AC-4 `2.33` 2 on the schema (base 0). AC-4's reader limb, read: frontmatter `schema_version: "2.0.0"`, meta row `current "2.0.0"` |
+| #7937 AC-1 on real transcript shapes (Stage 7 grades the criterion) | a scratch store built by the committed extractor from a deterministic sample of the local transcripts (every 6th main and every 27th spawned-agent file under 400 KB, by sorted path: 25 + 24 = 49 files), compared with an independent python parser's per-`message.id` max-merge | 43 of 43 session records equal on all four token fields; 6 files carry no assistant record and yield none. Sensitivity: 34 of the 43 files hold a multi-line response, and on all 34 the per-line sum differs from the per-response sum, so the prior counting would fail them. Aggregates only; no value leaves the machine |
+| CIAC-1 | `grep -c -F "CIAC-1 per-response-incomplete"` on the extractor | 0 — the marker belongs to beat 3 (#7938), placed when the second behaviour exists |
+| Plan verifier after beat 2 | `bash release/tools/verify-release-plan.sh --stage4-comment <the Stage-4 comment, saved> <this file>`, range `b1042eec..3e7acea0` (merge-base) | 11 PASS / 13 FAIL / 29 SKIP / 2 UNRUNNABLE / 1 ERROR over 56 records. FCM-3 (the `per-response/` ADD) and #7937 AC-2 and AC-3 now PASS; #7937 AC-4 reads UNRUNNABLE, its grep limb PASS beside its reader-graded limb (read above); `FCM-COVERAGE` PASS with 0 uninterpreted rows. Every remaining FAIL is a later beat's row or ADD |
+| Doc links and release links | `check-doc-links.py --require-targets` over the five edited documents; `check-release-links.py --roots core release docs .github --check-anchors` over the same files; its `--self-test` | 0 findings each; the subjects carry 11 link sequences, and the release-link self-test reports its planted absent target |
+| Skill-roster totals | `check-skill-count-imp.py --files <the five edited documents> --mode both` | exit 0, no finding |
+| Issue references | `check-issue-ref-validity.sh --base a8e3ac6d --head HEAD` | pass; the schema and SKILL.md carry the whole-file marker and are skipped |
+| Skill-edit probes (SKILL.md, the reporting contract) | the issue-reference, absolute-path, home-path, identity, raw-URL, link-sequence, strikethrough, placeholder and bypass-token classes over the added lines, with one planted control line | 0 in every class over the contract's 7 added lines; SKILL.md's 15 read 0 except 1 home-path hit, a pre-existing shell-variable expression on the line this beat appended to. Each of 9 controls fires |
+| Reference-durability cutover pattern | the shared detector's pattern over every added line of the beat, under BSD grep | 0; control (a planted cutover sentence) 1. The local default grep rejected the pattern as too complex and returned nothing for the control as well, so that run was discarded as a broken probe |
+| Pipe into a short-circuiting reader | a grep over the beat's added shell lines for a pipe into `head`, a quiet or max-count grep, `read`, or a `sed`/`awk` that quits | 0. Sensitivity: the same pattern finds the 2 such pipes this beat removed |
+| Ignore rule | `git check-ignore -v --no-index` | `x/finops/prior/schema-1.0.0/usage.jsonl` ignored by the new rule; control `x/finops/usage.jsonl` ignored by the existing rule; near-miss `x/finops/notprior/…` not ignored |
+| Close-family keywords | `check-commit-close-keywords.py --base origin/main --head HEAD` before each push | CLEAN at 4, 5 and 7 commits examined; 0 findings each |
+| Package consequence | the beat's 11 changed paths on STDIN to `build-skill-packages.sh --skills-for-paths` | `finops-usage-extractor` only (control: `.gitignore` alone → none). Not rebuilt here: the single rebuild is beat 7, so the pre-merge package-freshness job is expected to read the package stale until then |
+| ADR index | — | N/A — this beat adds no record under `release/ADRs/` |
+
 ---
 
 ## Deviation Log
@@ -698,6 +723,11 @@ Run by the Stage-6 spoke on #8724 over the beat-1 commit `783048a8` (the cost-un
 | **DEV-12** | **CD-1's state keys are not adopted, and FM-4's reader and override arm are not beat 1's.** PA-010 renders D-Home (A) with CD-2's per-model axis and names no other counter-design, so `calibration_clean_pairs` and a plan label are not added; the `calibration: insufficient` label takes its pair count from the revisit lines. FM-4 (the section-aware reader and a rung-5 override arm) binds the single conversion, which is #7943's at beat 5a | scope-lock PA-010; the #7940 Stage-6 brief | **RECORDED** — carried to beat 5a's brief |
 | **DEV-13** | **Stale enumerations reconciled on the lines beat 1 edits.** The template header listed 3 of its sections and now orients without enumerating; the schema's § 1 orientation and § 6 section list, and the catalog's § 1 category list, gain the cost-unit section and the behavioral-regression floor they already omitted. Check 33's comment names only the fields its default-presence arm gates, which do not include `[cost_unit]` (the `pass_rate_floor` precedent), so it stays accurate and is not edited | #8716 Cascade-Sweep handoff; reconcile-not-annotate | **APPLIED** — beat 1 |
 | **DEV-14** | **The standard's Version History gains one line** for the new register row, as the file's convention records register additions; and the ADR's `## Status` leads with the bold status token rather than the design's bullet, so the durability lint's status-agreement rule reads it | Stage-6 B3 (minor adjustment) | **APPLIED** — beat 1 |
+| **DEV-15** | **The prior store is kept in the `prior/` form, layout only.** `--rebuild` keeps a store of another counting unit once at `<store>/prior/schema-<old>/usage.jsonl`, a verbatim hard link the existing tools open with `STORE=<store>/prior/schema-<old>`, instead of the design's `usage.schema-<old>.jsonl`; the ignore rule is `**/finops/prior/`. CD-2's optional projection of `cwd` to its basename while preserving was not rendered at the scope-lock and is not applied, so the copy stays byte-identical to the store it replaces (asserted by `cmp`). A failed preservation removes only what it created (a partial copy, the directories it made), so the store directory is left as it was | scope-lock PA-009 (CD-2 of #8801) | **APPLIED** — beat 2 |
+| **DEV-16** | **CD-1 adopted in full.** The boundary keys on the schema major — the counting unit — never on the full version string, in both `--rebuild` (preserve) and `--incremental` (fall back); an unreadable version never matches. The operator messages say "counted per transcript line" for a 1.x store only. Sub-test 11 carries the review's arms: 11b makes the fail-closed path fire (FM-3), 11c is the same-unit near-miss (`2.0.1-selftest`), and 11d pins the non-1.x message | the beat-2 brief (#8801 CD-1 and FM-3, folded at the scope-lock) | **APPLIED** — beat 2 |
+| **DEV-17** | **The conditional attribution-convention note fired.** The design's recommended C11 removes two store-schema version parentheticals that would read as a stale pointer once the schema is `2.0.0`; the beat-2 brief did not decline it, so the row moves from the conditional block to the beat-2 block as an EDIT, and the convention's version moves to `1.2.1` | #8713 C11; the beat-2 brief | **APPLIED** — beat 2; § File Change Matrix, § Per-card write sets |
+| **DEV-18** | **Stale text reconciled on lines beat 2 edits, beyond the design's sweep.** The extractor's exit-code line still said "four causes" in lowercase (the sweep's case-sensitive grep for the capitalised word missed it), now "five". SKILL.md's roll-up-has-run failure mode said both phases stamp the version, which the roll-up no longer does; it now says a store carries the same version whether or not the roll-up has run. And the extractor's `--help` printed a fixed 40 comment lines, which cut the grown header off mid-sentence; it now prints the header block itself | Stage-6 B3 (minor adjustment; reconcile, not annotate) | **APPLIED** — beat 2 |
+| **DEV-19** | **The per-file scope is stated wherever the unit is named.** Beyond the three places #8801 PR-1 names (the schema's § Counting unit, its Version-History row, the SKILL.md scope note), the extractor's header comment and the reporting contract's § 2 also say "within one transcript file", matching the cost-unit ADR's Decision 2, which INT-1 grades for the same scope | Stage-6 B3 (minor adjustment; wording only) | **APPLIED** — beat 2 |
 
 ---
 
@@ -711,5 +741,5 @@ Run by the Stage-6 spoke on #8724 over the beat-1 commit `783048a8` (the cost-un
 - **#7945** — the command-template cost ranking. Mark as closed at Stage 13.
 - **#7935** — the seven harness and meter probes. Mark as closed at Stage 13.
 - **#8041** — the model-use policy decision record. Mark as closed at Stage 13.
-- **#8662** — the Stage-4 planning sub-task (plan, plan gate, scope-lock). **#8712–#8719** — the Stage-5 sub-tasks. **#8799 · #8800 · #8801 · #8809 · #8810 · #8812 · #8813 · #8819** — the Phase A6.5 adversarial reviews. **#8724** — the Stage-6 sub-task for #7940 (this commit).
+- **#8662** — the Stage-4 planning sub-task (plan, plan gate, scope-lock). **#8712–#8719** — the Stage-5 sub-tasks. **#8799 · #8800 · #8801 · #8809 · #8810 · #8812 · #8813 · #8819** — the Phase A6.5 adversarial reviews. **#8724** — the Stage-6 sub-task for #7940 (this commit). **#8721** — the Stage-6 sub-task for #7937 (beat 2).
 - **#7934** — the token-efficiency thrust (epic). **#8051** — the successor card that composes MS-1. **#7854** — the outcome check whose criteria use the unit. **#7536** — the weekly-allowance axis that adopts the unit. **#7942 · #7936 · #7950 · #1494 · #8049** — downstream and related cards named in the graph and the specifications.
