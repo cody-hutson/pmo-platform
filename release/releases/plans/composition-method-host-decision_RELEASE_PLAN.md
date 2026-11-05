@@ -32,7 +32,7 @@ reversibility: CHEAP pre-merge / MODERATE once the record is Accepted — Confid
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a reference decision record is added, per the Bump-Class Selection Guide's "reference document addition or update"; no skill and no governance file changes. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file), then the decision record |
+| **Status** | Executing — Stage 6 Engineering: Commit 0 (this file), the decision record and C1 landed; the release PR opens in draft at Phase C2 |
 | **Branch** | `release/composition-method-host-decision` |
 | **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `composition-method-host-decision` |
@@ -472,13 +472,90 @@ N/A — enumerated over memory eviction, memory re-point and archive disposition
 
 ### Engineering Commit 0 — Stage 6 A1
 
-Run by the Stage-6 spoke on #8753 after this file was written and before it was committed, on base `b1042eec`. Populated in the C1 commit.
+Run by the Stage-6 spoke on #8753 after this file was written and before it was committed, on base `b1042eec`.
+
+| Check | Command | Observed |
+|---|---|---|
+| Stamp manifest (step 3b) | `bash release/tools/claim-version.sh --verify-stamp composition-method-host-decision` | exit 0 — "verify-stamp OK … carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s))". The file carries exactly 1 literal release-version placeholder and 1 ADR slug token (python count) |
+| CIAC authoring lint (A1) | `bash release/tools/verify-release-plan.sh --ciac-lint release/releases/plans/composition-method-host-decision_RELEASE_PLAN.md` | exit 0 — `CIAC-LINT-SUMMARY declared=0 parsed=0 clean=0 declared-deferral=0 flagged=0`; G4-06 holds on the committed plan (the section is omitted, enumerated over `{#6390}`) |
+| Full verifier (RED arm, pre-commit) | `bash release/tools/verify-release-plan.sh --format=md --stage4-comment <the Stage-4 comment> release/releases/plans/composition-method-host-decision_RELEASE_PLAN.md` | exit 3 — **5 PASS / 2 FAIL / 15 SKIP / 1 UNRUNNABLE / 0 ERROR over 23 records**. `FCM-1` and `FCM-2` FAIL on the empty pre-commit range (each row's sensitivity arm for its later PASS); AC-5 UNRUNNABLE because the release diff was empty (a vacuous scope assertion is not a pass). `FCM-COVERAGE` PASS: `declared=21 interpreted=21 obligations=2 excluded=18 uninterpreted=0 pathless=0`. `PROV-PRESENCE`, `PROV-GRAMMAR` (Form X) and `PROV-DELTA` (`comment_elements=3 all present`) PASS |
+| Doc links and plan depth | `python3 core/deploy/tools/check-doc-links.py --target-paths <this file> --require-targets`; `python3 release/tools/check-release-links.py --files <this file>`, bare and with `--plan-depth-lint` | all exit 0, 0 findings. The file carries 0 markdown link sequences (python count; control: a constructed line carrying one inline markdown link reads 1), so every intra-repo reference is a backticked path and the claim-time rename cannot break one |
+| Identity strings, host URLs, link sequences, close-family keywords | a python line scan of this file for the operator handle, a home path, an email address, a raw host URL, a markdown link sequence and a close-family verb followed by an issue number | 0 in every class. Control: one constructed line carrying one of each fires every class |
+| Commit-message close keywords | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | `verdict: CLEAN`, 0 findings over 1 commit |
+
+### The decision record — Stage 6 B1 and C4
+
+Run on the branch after the record commit (`c0c91afa`), base `b1042eec`.
+
+| Check | Command | Observed |
+|---|---|---|
+| Transcription fidelity | `cmp` of the written record against the revision's literal record, extracted from the comment by python with only the three permitted substitutions applied | byte-identical (38,157 bytes, 302 lines). Sensitivity: a one-character mutation of the written file makes `cmp` exit 1. The number appears in the filename, `title:` and the H1 only; `date:` reads `2026-11-05` |
+| ADR number contiguity | `python3 release/tools/check-adr-numbers.py` | exit 0 — "PASS (230 ADRs, contiguous 001..230, no duplicates)" |
+| ADR durability lint | `python3 release/tools/check-adr-durability.py --files <the record> --diff-base origin/main` | exit 0, `COUNT 0` with R5 and R6 active. Sensitivity: a scratch copy with `status: Draft`, a full SHA and a live skill count in Context reads `COUNT 4` (R1, R2-SHA, R2-COUNT, R7) |
+| ADR claim state | `python3 release/tools/renumber-adr.py --detect` | the record's claim line reads `BINDS BRANCH-CLAIM` at the next-free number; `NEXT-FREE 230`; branch-only claims 230 and 231 elsewhere (advisory; § In-Flight Release Roster) |
+| Slug-token stamp check | `python3 release/tools/renumber-adr.py --stamp --check` | 1 residual token (this file's slug citation, resolved at Stage 12 A.5.7e), **0 in link position** |
+| ADR schema sections | python: the index of each required H2 | all seven present and in order, plus `## References`. Sensitivity: a copy with Consequences and Reversibility swapped reads not-ordered |
+| No consumer-module path in the core record | python count of `(operations\|release)/` in the record | 0. Sensitivity: the same count on ADR-033 reads 5. Specificity: the frontmatter key `release:` (no slash) is present and not matched |
+| Bare issue references outside the reference block | python walk of each H2 section for `#<digits>` | 0 outside `## References`; 11 inside it. Each of the 11 resolves to an issue in this repository (none is a pull request; control: a pull-request number reads PR) |
+| Identity strings and links in the record | python scan for the operator handle and surname, a home path, an email address, a URL and a markdown link sequence | 0 in every class; control fires every class |
+| Doc links | `python3 core/deploy/tools/check-doc-links.py --target-paths <the record> --require-targets` | exit 0, no findings |
+| Package consequence | `git diff --name-only origin/main...HEAD \| bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` (paths on STDIN) | empty — no rostered skill's package is staled. Sensitivity: `release/skills/release-planner/SKILL.md` on the same STDIN returns `release-planner` |
+| ADR index (release module) | the C4 question | **ADR index: N/A — this release adds no record under release/ADRs/** |
+| Runtime suite | `runtime-suite-selection-map.md` row 8, no match (a decision record and a plan) | `test-run/suite-skip` emitted (stage 6, actor `spoke:#8753`, subject `issue:#6390`); read back 0 → 1 test-run rows for this release (control: 23 rows already logged for the slug) |
+| Plan verifier (GREEN arm) | `bash release/tools/verify-release-plan.sh --format=md --stage4-comment <the Stage-4 comment> <this file>` at `c0c91afa` | exit 0 — **7 PASS / 0 FAIL / 15 SKIP / 1 UNRUNNABLE / 0 ERROR over 23 records**. `FCM-1` and `FCM-2` PASS (range `b1042eec..c0c91afa`, merge-base); AC-5's limb 1 PASS (`count=0` over 2 changed paths; control `git diff --name-only origin/main...HEAD -- core/ADRs` reads 1), its reader-graded limb left to Stage 8 by design, which is the one UNRUNNABLE |
+| Documentation Impact (G-CL8 rehearsal) | `python3 core/deploy/tools/check-doc-gates.py --gate g-cl8 --base origin/main --head HEAD --issues-dir <dir>`, over three candidate bodies for #6390 | the current body's `release/ADRs/README.md \| update` row: **FAIL** (unchanged). The Stage-5 row `core/ADRs/README.md \| update`: **FAIL** unless the number moves at merge. A directory-keyed `core/ADRs/ \| create` row: **PASS**, and it stays resolvable whether or not the number moves (DEV-7) |
 
 ---
 
 ## Deployment Execution Log
 
 (Populated during Stage 12.)
+
+---
+
+## Change Description
+
+Authored at Stage 6 Phase C1 by the Engineering spoke on #8753, after the record landed and before the draft pull request is marked ready-for-review. Operator-facing; the user-facing release note is a separate Stage-13 artifact. A Tier 1 [ADJUST] at Stage 7 or 8 that changes which decision stands refreshes **Key decisions** and **Downstream impact** in a later commit.
+
+### Outcome
+
+The platform now has a recorded answer to where the epic-composition method lives and how it is entered. One decision record, `{{ADR:composition-method-is-core-and-enters-through-the-release-planner}}` (status `Proposed`), places the method in a core method document that role skills cite, entered through one thin, read-only, altitude-dispatching mode on the release planner, with every write in one operator-explicit execute step on the release executor. It argues the extend-versus-add posture as an SR-G6 determination, and it answers the sibling hosting questions — the decomposition method and the design-axis toolkit — so the codification story and the toolkit card can build against a named host. Nothing executable ships: the release is the record and this plan.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #6390 | The host, entry point, write contract, altitude parameter, no-kind path, per-specialist boundary, trigger phrasing, non-changes and sibling answers are recorded in one core decision record; each of the six criteria maps to a named record section for Stage 8 | DONE (record landed at Stage 6; ratified at the Stage-13 close gate) |
+
+### Key decisions
+
+Each is recorded in this file's § Decision Record.
+
+- **PA-003 D-Host — (A):** the method is a core method document in `core/disciplines/`, because the module boundary admits a surface citable from both consumer modules only in core; its one entry point is a read-only mode on the release planner, which already holds the platform's grouping verbs and their draft-then-execute split. The roadmap curator was the strongest rejected alternative.
+- **PA-004 D-RecordModule — (A):** the record sits in `core/ADRs/` under a statement-form slug, because its answer is shared by composition, decomposition and the toolkit; `core/ADRs/README.md` gets no curated link.
+- **PA-005 Record amendments — (A):** ADR-049 governs the tier above the epic (a grouping label plus a roadmap, never a filed item); one persisted proposal, an intake-desk readiness check on each literal draft, and one execute step that files approved bodies verbatim and reads them back.
+- **PA-006 No-kind path — (A):** where no grouping kind resolves, members carry a grouping label rather than the grouping being lost.
+- **SR-G6:** `net-new because in-place is infeasible: …` for the method document (ADR-094; build-philosophy row 3); the entry mode extends the planner's mode set and keeps its read-only contract.
+
+### Reversibility
+
+**MODERATE — MEDIUM confidence** (the record's own tier). Before merge the record is revised in place or reverted with `git revert`; after ratification it is superseded rather than edited, at a cost that grows as #6389 and #7961 build on it. The version tag is retained, never deleted.
+
+### Downstream impact
+
+- **#6389 (the codification story):** unblocked for bundling once the record is Accepted. Its edit set is the record's D10 — the core method document, the planner mode with its procedure in references, the executor's write step — plus the Scrum grouping declaration as a precondition (the operator decides whether that rides #6389 or its own card). It sequences after #5870's edit to the planner's backlog-analysis step, or rebases onto it.
+- **Milestone 430 (`epic-framing-states-axis-coverage`):** #7961 decides the toolkit's carrier against D9 at its Stage 5; the Stage-13 notice (AI-001) carries D9 to it and to #8099.
+- **#7965:** the record reuses ADR-211's altitude term and adds only the declared `level_role`, so it introduces no second vocabulary.
+- **#7539:** any kind for the tier above the epic is now conditional on reconciling with ADR-049 Decision 1, or on a superseding record.
+- **Stage 12:** the record's number binds at merge (A.5.7a–c); two sibling branches hold the same number, so a renumber and a tool-written renumber-log line in `core/ADRs/README.md` are expected if either merges first. The slug token in this file is stamped at A.5.7e.
+- **No skill, package, hook, gate or rules-mirror member changes** — no deployment beyond the merge.
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `composition-method-host-decision`.
+- The decision record: `core/ADRs/`, slug `composition-method-is-core-and-enters-through-the-release-planner`.
+- User-facing release note: authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`, under `release/releases/notes/`.
 
 ---
 
@@ -492,7 +569,7 @@ Run by the Stage-6 spoke on #8753 after this file was written and before it was 
 | **DEV-4** | **AC-2's grading surface widens** from "the record's altitude-parameter section" to D2, D4, D5 and Context § Gaps, and AC-3's adds D2 and D3, per the revision's Stage 8 grading map | Stage-5 bounded revision | **APPLIED** — § Verification Plan |
 | **DEV-5** | **R-13 retired** (the Parallelization Map was recorded at the Stage-4 gate); **R-15 and R-16 added** from the Stage-5 design and revision | Stage-4 Decision Recorded; Stage-5 design and revision | **APPLIED** — § Risk Register |
 | **DEV-6** | **A second sibling release joined the in-flight roster after Stage 4**: `sequencing-layer-foundation` (#8811), minor, provisional `v5.02`, holding the same ADR number on its branch for a release-module record | Commit-0 re-measurement | **RECORDED** — § In-Flight Release Roster; no plan change, because both axes bind at merge |
-| **DEV-7** | **#6390's Documentation Impact row still names the release-module index**, which this release does not touch. Its body instructs Stage 5 to rewrite the declaration for a core-module record; the core declaration is carried in the PR body, and the matching body edit is proposed to the hub as a Tier 1 [ADJUST] rather than applied by this spoke | #6390 body; the Stage-6 brief | **RECORDED** — applied by the hub |
+| **DEV-7** | **#6390's Documentation Impact row still names the release-module index**, which this release does not touch, and the Stage-5 rewrite for core (`core/ADRs/README.md \| update`) resolves only if the number moves at merge. Rehearsed on the G-CL8 engine at `c0c91afa`, both rows FAIL; the gradable core declaration is the directory-keyed row `core/ADRs/ \| create`, which resolves on the record whether or not the number moves. It is carried in the PR body's Documentation Impact; the matching #6390 body edit is proposed to the hub as a Tier 1 [ADJUST] rather than applied by this spoke | #6390 body; the Stage-6 brief; the G-CL8 row of the gate-criteria spec | **RECORDED** — the body edit is the hub's |
 
 ---
 
