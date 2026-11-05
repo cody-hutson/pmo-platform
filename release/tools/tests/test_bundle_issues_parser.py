@@ -67,9 +67,27 @@ that shows it bites:
             ends the section, LF and CRLF alike; the return is a plain string, so the
             two G3-20 readers keep their contract.
   CIAC-1    the parser loads nothing of the mirror's, loads alone from a copy, and the
-            mirror's extractor names are the parser's own objects.
+            mirror's extractor and direction-grammar names are the parser's own objects.
   CIAC-3    a doubled blank line reads identically through parse_dependencies — the
             property the directed-parse rewrite must keep.
+
+### Direction-grammar arms (added with the directed dependency read, #6397)
+parse_dependencies used to scrape every #N in the Dependencies section as an
+undirected dependency, so a reciprocal `Blocks #N` and a hierarchy reference read as
+blockers. It now returns only the blocked_by targets of the one direction grammar,
+which moved from native-dep-mirror.py into the parser. Each arm carries the arm that
+shows it bites — a reference copy of the old scrape, kept here and never shipped:
+
+  6397-AC1  one direction grammar: the parser carries no naive scrape; the mirror
+            defines none of the grammar's names and reads the parser's; on every
+            frozen body parse_dependencies equals the grammar's blocked_by targets,
+            and the old scrape reads some of those bodies differently.
+  6397-AC2  one fixture per relation — Blocks, Part of epic, Children, Relates to,
+            unlabelled prose, the Hard: and Soft: labels (prose markers, reported as
+            unattributed) and the negated label ("not blocked by", "gated on, not
+            blocked by") — each reading no edge where the old scrape read one; the
+            Blocked by: control reads its edge both ways; the record carries the
+            unattributed references and keeps its status.
 """
 
 import ast
@@ -82,7 +100,7 @@ import re
 import shutil
 import sys
 import tempfile
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PARSER_PATH = os.path.join(HERE, os.pardir, "bundle-issues-parser.py")
@@ -410,7 +428,7 @@ def arm_ciac1(failures: List[str]) -> None:
     if mirror._BIP is None:
         failures.append(f"{LABEL_CIAC1}: the mirror did not load its parser: {mirror._BIP_CAUSE}")
         return
-    for name in ("extract_section_with_alias", "extract_section_aliased", "DEP_HEADING_ALIASES"):
+    for name in ("extract_section_with_alias", "extract_section_aliased", "DEP_HEADING_ALIASES") + GRAMMAR_BOUND:
         if getattr(mirror, name, None) is not getattr(mirror._BIP, name):
             failures.append(f"{LABEL_CIAC1}: the mirror's {name} is not the parser's own object")
 
@@ -437,6 +455,161 @@ def run_section_read_arms(bip, fixtures: Dict[str, Dict]) -> Tuple[List[str], in
         (LABEL_AC5, lambda: arm_ac5(bip, failures)),
         (LABEL_CIAC1, lambda: arm_ciac1(failures)),
         (LABEL_CIAC3, lambda: arm_ciac3(bip, failures)),
+    )
+    for label, arm in arms:
+        try:
+            arm()
+        except Exception as e:  # noqa: BLE001 — a raising arm is a failing arm
+            failures.append(f"{label}: the arm raised {type(e).__name__}: {e}")
+    return failures, len(arms)
+
+
+# ---- Direction-grammar arms (#6397) --------------------------------------------
+
+LABEL_6397_AC1 = "6397-AC1 one direction grammar"
+LABEL_6397_AC2 = "6397-AC2 relation fixtures"
+
+# The grammar's names, as the Stage-5 reference-cascade sweep enumerated them.
+GRAMMAR_CONSTANTS = ("SEGMENT_LABELS", "_SEGMENT_LABEL_RE", "_LABEL_KIND_BY_GROUP", "DEP_TOKEN_RE",
+                     "_LIST_MARKER_RE", "_PROSE_WORD_RE", "DIRECTIONAL_HEADINGS")
+GRAMMAR_DEFINITIONS = ("_is_bare_ref_run", "BodyDep", "_attribute_segments", "_parse_token",
+                       "_segments_for_body", "unattributed_refs", "parse_body_dependencies")
+# The public names the mirror has always exposed, now bound from the parser.
+GRAMMAR_BOUND = ("SEGMENT_LABELS", "DEP_TOKEN_RE", "DIRECTIONAL_HEADINGS", "BodyDep",
+                 "parse_body_dependencies", "unattributed_refs")
+
+# (leg, Dependencies text, directed targets, unattributed refs). Every row but the
+# control names an issue the old scrape reads as a dependency.
+RELATION_FIXTURES = [
+    ("control: Blocked by:", "Blocked by: #10", {10}, []),
+    ("Blocks (the reciprocal)", "Blocks #11", set(), []),
+    ("Part of epic", "Part of epic #12", set(), []),
+    ("Children", "Children: #13, #14", set(), []),
+    ("Relates to", "Relates to #15", set(), []),
+    ("unlabelled prose", "See the note in #16 for context.", set(), [16]),
+    ("Hard: label", "Hard: #17 (DONE).", set(), [17]),
+    ("Soft: label", "Soft: #18", set(), [18]),
+    ("Hard: bullet", "- Hard: #22", set(), [22]),
+    ("a #45-shaped body", "Hard: #341 (DONE). Parallelizes with #43. **Blocks #44**", set(), [43, 341]),
+    ("a #342-shaped body", "Children: #45, #43, #44", set(), []),
+    ("negated label", "not blocked by: merge after #23", set(), []),
+    ("gated on, not blocked by",
+     "Release gate (gated on, not blocked by): merge after #24. It is a merge-order gate, not a build edge.",
+     set(), []),
+    ("negation after a prose ref", "Gated on #25, not blocked by #26.", set(), [25]),
+    ("negated label at line start", "Not blocked by #27: the contract can be specified first.", set(), []),
+]
+# Rows that must still read their edge: a list of bare references, typed and lagged
+# edges, and a Hard: line beneath a heading that is itself directional.
+EDGE_FIXTURES = [
+    ("bare-reference list", "### Dependencies\n- #46\n- #57\n", {46, 57}),
+    ("typed and lagged", "### Dependencies\nBlocked by: SS #20, FS+2d #21\n", {20, 21}),
+    ("directional heading", "### Depends on\nHard: #19\n", {19}),
+    ("control: a negation that does not end the prefix",
+     "### Dependencies\nNot urgent; blocked by #31.\n", {31}),
+]
+
+
+def _top_level_definitions(src: str) -> Set[str]:
+    """Names a module's top level defines: def, class, plain or annotated assignment.
+    A name bound inside an `if` block (the mirror's binding from the parser) is not one."""
+    out: Set[str] = set()
+    for node in ast.parse(src).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            out.add(node.name)
+        elif isinstance(node, ast.Assign):
+            out.update(t.id for t in node.targets if isinstance(t, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            out.add(node.target.id)
+    return out
+
+
+def _naive_targets(bip, body: str) -> Set[int]:
+    """The read before the directed parse, kept ONLY as this suite's sensitivity arm:
+    every #N in the Dependencies section as an undirected dependency. Never used to
+    grade the shipped parser."""
+    section = bip.extract_section_aliased(body, bip.DEP_HEADING_ALIASES)
+    return set() if section is None else {int(n) for n in re.findall(r"#(\d+)", section)}
+
+
+def arm_6397_ac1(bip, fixtures: Dict[str, Dict], failures: List[str]) -> None:
+    if hasattr(bip, "DEP_RE"):
+        failures.append(f"{LABEL_6397_AC1}: the parser still carries the naive DEP_RE scrape")
+    grammar = set(GRAMMAR_CONSTANTS) | set(GRAMMAR_DEFINITIONS)
+    with open(PARSER_PATH, encoding="utf-8") as fh:
+        in_parser = _top_level_definitions(fh.read())
+    with open(MIRROR_PATH, encoding="utf-8") as fh:
+        in_mirror = _top_level_definitions(fh.read())
+    # Sensitivity: the same scan over the parser finds every grammar name — the home.
+    if not grammar <= in_parser:
+        failures.append(f"{LABEL_6397_AC1}: sensitivity arm — the parser does not define "
+                        f"{sorted(grammar - in_parser)}")
+    if grammar & in_mirror:
+        failures.append(f"{LABEL_6397_AC1}: the mirror defines its own {sorted(grammar & in_mirror)}")
+    mirror = load_mirror()
+    if mirror._BIP is None:
+        failures.append(f"{LABEL_6397_AC1}: the mirror did not load its parser: {mirror._BIP_CAUSE}")
+    else:
+        _expect(failures, LABEL_6397_AC1, "module of the mirror's parse_body_dependencies",
+                mirror.parse_body_dependencies.__module__, "bundle_issues_parser")
+    # parse_dependencies reads through that grammar, on every frozen body; the old
+    # scrape reads some of them differently, so the comparison is not vacuous.
+    read = with_targets = differs = 0
+    for num, rec in fixtures.items():
+        body = rec["body"]
+        targets, status = bip.parse_dependencies(body)
+        if status == "deferred":
+            continue
+        read += 1
+        via_grammar = {d.target for d in bip.parse_body_dependencies(body) if d.direction == "blocked_by"}
+        if targets != via_grammar:
+            failures.append(f"{LABEL_6397_AC1}: #{num} parse_dependencies {sorted(targets)} != the grammar's "
+                            f"blocked_by targets {sorted(via_grammar)}")
+        with_targets += bool(targets)
+        differs += _naive_targets(bip, body) != targets
+    if with_targets == 0 or differs == 0:
+        failures.append(f"{LABEL_6397_AC1}: vacuous — bodies with directed targets {with_targets}, bodies the "
+                        f"old scrape reads differently {differs}; each must be >= 1")
+    print(f"  {LABEL_6397_AC1}: frozen bodies read {read}, with directed targets {with_targets}, "
+          f"read differently by the old scrape {differs}")
+
+
+def arm_6397_ac2(bip, failures: List[str]) -> None:
+    mirror = load_mirror()
+    for leg, text, want, want_u in RELATION_FIXTURES:
+        body = f"### Dependencies\n{text}\n\n### Notes\nx\n"
+        _expect(failures, LABEL_6397_AC2, f"{leg}: parse_dependencies", bip.parse_dependencies(body), (want, "clean"))
+        _expect(failures, LABEL_6397_AC2, f"{leg}: unattributed_refs", bip.unattributed_refs(body), want_u)
+        # Sensitivity: the old scrape reads an edge this row must not (the control: the same edge).
+        old = _naive_targets(bip, body)
+        bites = old == want if leg.startswith("control") else bool(old - want)
+        if not bites:
+            failures.append(f"{LABEL_6397_AC2}: {leg}: sensitivity arm — the old scrape reads {sorted(old)}, "
+                            "so the row does not bite")
+        # The A3.5 mirror reads the same grammar: none of these is mirror-eligible but the control.
+        _expect(failures, LABEL_6397_AC2, f"{leg}: mirror-eligible set",
+                mirror.mirror_eligible_targets(mirror.parse_body_dependencies(body)), want)
+    for leg, body, want in EDGE_FIXTURES:
+        _expect(failures, LABEL_6397_AC2, f"{leg}: parse_dependencies", bip.parse_dependencies(body), (want, "clean"))
+    # The record carries the unattributed references, count and numbers; the status stays.
+    raw = {"number": 1, "title": "t", "state": "open", "labels": [],
+           "body": "### Affected Files\n- `core/a.md` (edit — x)\n\n### Dependencies\n"
+                   "Gated on the spike in #17.\nBlocked by: #10\nBlocks #11\n"}
+    rec = bip.build_issue_record(raw)
+    _expect(failures, LABEL_6397_AC2, "record dependencies / unattributed / count / status",
+            (rec.dependencies, rec.dependencies_unattributed, rec.dependencies_unattributed_count, rec.parse_status),
+            ([10], [17], 1, "clean"))
+    issues = json.loads(bip.emit_json([rec], []))["issues"]
+    _expect(failures, LABEL_6397_AC2, "JSON carries the unattributed references",
+            (issues[0]["dependencies_unattributed"], issues[0]["dependencies_unattributed_count"]), ([17], 1))
+
+
+def run_direction_arms(bip, fixtures: Dict[str, Dict]) -> Tuple[List[str], int]:
+    """Run the #6397 arms; an arm that raises is recorded as that arm's failure."""
+    failures: List[str] = []
+    arms = (
+        (LABEL_6397_AC1, lambda: arm_6397_ac1(bip, fixtures, failures)),
+        (LABEL_6397_AC2, lambda: arm_6397_ac2(bip, failures)),
     )
     for label, arm in arms:
         try:
@@ -525,6 +698,11 @@ def main() -> int:
     section_failures, section_arms = run_section_read_arms(bip, fixtures)
     failures.extend(section_failures)
     print(f"  section-read arms = {section_arms} run, {len(section_failures)} failure(s)")
+
+    # 6. Direction-grammar arms (#6397).
+    direction_failures, direction_arms = run_direction_arms(bip, fixtures)
+    failures.extend(direction_failures)
+    print(f"  direction-grammar arms = {direction_arms} run, {len(direction_failures)} failure(s)")
 
     if failures:
         print("\nTEST FAIL:", file=sys.stderr)
