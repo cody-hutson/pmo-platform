@@ -15,12 +15,15 @@ pass vacuously, carries a control that must come out the other way:
   AC2   a new initiative label becomes a head with no registry edit (and the tool's
         source names no initiative label)
   AC3   a standing head renders without a completion percentage; a finite head
-        renders one; no standing initiative stops the run (exit 1, named)
+        renders one; no standing initiative stops the run (exit 1, named); three
+        drill levels render — head, epic, open child — in the JSON and the Markdown
   AC4   substituting a naive number scrape changes the fixture's edges; the tool's
         source carries no naive number-scrape pattern (with a specimen)
   AC5   an unserved parent field renders unmeasured, not 0; a measured zero renders
         0; a missing parent key counts as unparented (the host omits the key when
-        an issue has no parent)
+        an issue has no parent); a host serving neither the parent field nor the
+        sub-issue summary renders unmeasured (control: the summary served at zero
+        reads measured)
   INT-1 the view's edges equal parse_dependencies' targets, body by body
   INT-2 a dependency parse that is not clean renders unmeasured edges and stays out
         of the blocked count
@@ -61,11 +64,14 @@ LABEL_AC2 = "AC2 new project label becomes a head with no registry edit"
 LABEL_AC3 = "AC3 standing head renders without a completion percentage"
 LABEL_AC3_CONTROL = "AC3 control finite head renders a percentage"
 LABEL_AC3_GUARD = "AC3 no standing initiative fails loudly"
+LABEL_AC3_DRILL = "AC3 three drill levels render head to epic to child"
 LABEL_AC4 = "AC4 naive number scrape substitution changes the fixture edges"
 LABEL_AC4_SCAN = "AC4 source carries no naive number-scrape pattern"
 LABEL_AC5 = "AC5 unreadable parent field renders unmeasured not zero"
 LABEL_AC5_CONTROL = "AC5 control measured zero renders 0"
 LABEL_AC5_KEYLESS = "AC5 missing parent key counts as unparented"
+LABEL_AC5_UNSERVED = "AC5 neither parent field nor sub-issue summary served renders unmeasured"
+LABEL_AC5_UNSERVED_CONTROL = "AC5 control summary served at zero renders measured"
 LABEL_INT1 = "INT-1 view edges equal parse_dependencies targets"
 LABEL_INT2 = "INT-2 non-clean dependency parse renders unmeasured edges"
 LABEL_CD1 = "CD-1 no Dependencies section with open native blockers renders unmeasured"
@@ -155,6 +161,21 @@ def row_for(markdown: str, head_id: str) -> str:
         if line.startswith("| %s |" % head_id):
             return line
     return ""
+
+
+def drill_block(markdown: str, head_id: str, epic: int) -> List[str]:
+    """The lines of one epic's <details> block inside one head's section, or []."""
+    lines = markdown.splitlines()
+    if "## %s" % head_id not in lines:
+        return []
+    start = lines.index("## %s" % head_id) + 1
+    end = next((i for i in range(start, len(lines)) if lines[i].startswith("## ")), len(lines))
+    opener = "<details><summary>#%d " % epic
+    for i in range(start, end):
+        if lines[i].startswith(opener):
+            close = next((j for j in range(i, end) if lines[j] == "</details>"), end)
+            return lines[i:close + 1]
+    return []
 
 
 def run_main(argv: List[str], snap: Dict):
@@ -247,6 +268,18 @@ def arm_ac3(fail) -> None:
     fp = h[alpha]["progress"]
     if fp.get("percent") != 25 or "%" not in row_for(md, alpha):
         fail(LABEL_AC3_CONTROL, "the finite head lacks its percentage: %s / %r" % (fp, row_for(md, alpha)))
+    # Three drill levels: the head, its epic #10, and the epic's open children 11 and 12.
+    node = next((n for n in h[alpha]["nodes"] if n["number"] == 10), None)
+    kids = [c["number"] for c in node["children"]] if node else []
+    if not node or node["role"] != "epic" or kids != [11, 12]:
+        fail(LABEL_AC3_DRILL, "the JSON does not carry head -> epic #10 -> children 11, 12: %s" % kids)
+    block = drill_block(md, alpha, 10)
+    for child in (11, 12):
+        if not any(ln.startswith("| #%d |" % child) for ln in block):
+            fail(LABEL_AC3_DRILL, "the Markdown has no #%d row inside epic #10's block under %s: %r"
+                 % (child, alpha, block[:3]))
+    if drill_block(md, flow, 10):
+        fail(LABEL_AC3_DRILL, "control: epic #10's block was found under the standing head")
     # The guard: drop the word and the run stops, naming why; the control keeps it.
     snap = base_snapshot()
     snap["labels"][1]["description"] = "Quality flow, never closes"
@@ -349,6 +382,30 @@ def arm_ac5(fail) -> None:
         fail(LABEL_AC5_KEYLESS, "a keyless member is not counted unparented: %s" % up)
     if "unparented" not in json.dumps(r3["heads"][0]):
         fail(LABEL_AC5_KEYLESS, "the machine output carries no per-head unparented facet")
+    # Neither the parent field nor the sub-issue summary served, while the epic's own
+    # sub-issue read lists 11 and 12: unmeasured, not a count those reads contradict.
+    labels = [{"name": alpha, "description": "Finite"}, {"name": flow, "description": "Standing flow"}]
+    rows = [issue(10, ["type:epic", alpha], subs=2), issue(11, [alpha]), issue(12, [alpha]), issue(40, [flow])]
+    for row in rows:
+        row.pop("sub_issues_summary", None)
+    r4 = TOOL.derive(snapshot(labels, rows, {10: {"status": "ok", "label": [],
+                                                  "native": [kid(11, "open", [alpha]), kid(12, "open", [alpha])]}}),
+                     GRAMMAR, RULE)
+    h4 = heads_of(r4)[alpha]
+    cells4 = [c.strip() for c in row_for(TOOL.render_markdown(r4), alpha).split("|")]
+    if h4["unparented"]["status"] != "unmeasured" or h4["unparented"]["count"] is not None \
+            or h4["partition"]["status"] != "unmeasured" or len(cells4) < 6 or cells4[5] != "unmeasured":
+        fail(LABEL_AC5_UNSERVED, "neither field served did not read unmeasured: %s / %s / %r"
+             % (h4["unparented"], h4["partition"], cells4))
+    if "sub-issue summary" not in (r4["meta"]["parent_field"]["reason"] or ""):
+        fail(LABEL_AC5_UNSERVED, "the reason does not name the unserved summary: %s" % r4["meta"]["parent_field"])
+    # Control: the summary served at zero everywhere and no native child — every member
+    # is genuinely unparented, so the count is measured.
+    rows5 = [issue(10, ["type:epic", alpha]), issue(11, [alpha]), issue(12, [alpha]), issue(40, [flow])]
+    r5 = TOOL.derive(snapshot(labels, rows5, {10: {"status": "ok", "native": [], "label": []}}), GRAMMAR, RULE)
+    up5 = heads_of(r5)[alpha]["unparented"]
+    if up5 != {"status": "measured", "count": 2, "issues": [11, 12], "reason": None}:
+        fail(LABEL_AC5_UNSERVED_CONTROL, "a served zero summary did not read measured: %s" % up5)
 
 
 def arm_int1(fail) -> None:

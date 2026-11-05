@@ -36,8 +36,9 @@ name: Release tooling smoke
 #              family (doc-tracer default-path regression under a normalized diff + the
 #              domain-fan-out software import-graph scanner), AND the
 #              bundle-issues-parser regression suite
-#              (test_bundle_issues_parser.py — its legs and section-read arms over
-#              the committed frozen sample, paired with a precision probe that
+#              (test_bundle_issues_parser.py — its legs, section-read arms and
+#              direction-grammar arms over the committed frozen sample, paired with
+#              a precision probe that
 #              narrows the priority detector's level class in a throwaway copy and
 #              requires the T-13 liveness guard to fire; the suite previously had
 #              ZERO executors, so ADR-111's "protected against regressing to
@@ -496,7 +497,7 @@ jobs:
         # untrusted-data path into the shell. Gates on exit code.
         run: bash release/tools/tests/test_close_class_telemetry.sh
 
-      - name: bundle-issues-parser regression suite (frozen sample + section-read arms)
+      - name: bundle-issues-parser regression suite (frozen sample + section-read and direction-grammar arms)
         # Wires a suite that shipped with ZERO executors. The release plan names
         # `test_bundle_issues_parser.py` as this card's "Executable regression" and
         # ADR-111 claims the T-13 guard "protects against regressing to silence" —

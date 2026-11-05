@@ -30,7 +30,8 @@ WHAT IS COUNTED, AND WHAT IS NOT CLAIMED.
   * The host omits `parent_issue_url` from an issue that has no parent, so a
     missing key means NO PARENT and the member counts as unparented. The facet is
     marked unmeasured, never 0, only when the field is not served at all: no open
-    issue carries it while some issue reports sub-issues.
+    issue carries it while some issue reports sub-issues, or no open issue carries
+    either it or the sub-issue summary.
   * Dependency edges come from the single-sourced grammar in
     bundle-issues-parser.py (`parse_dependencies`), loaded by path; this file has
     no grammar of its own. A `clean` parse is measured; any other status is
@@ -414,10 +415,13 @@ def derive(snapshot: Dict, grammar: Grammar, child_rule) -> Dict:
 
     # The parent field is unmeasured only when the host does not serve it at all.
     served = any(i["has_parent_key"] for i in issues)
+    summary_served = any(i["sub_issues_total"] is not None for i in issues)
     has_subissues = any((i["sub_issues_total"] or 0) > 0 for i in issues)
-    parent_measured = served or not has_subissues
+    parent_measured = served or (summary_served and not has_subissues)
     parent_reason = None if parent_measured else (
-        "the open-issue read carries no parent field while some issue reports sub-issues")
+        "the open-issue read carries no parent field while some issue reports sub-issues"
+        if summary_served else
+        "the open-issue read carries neither a parent field nor a sub-issue summary")
 
     def child_union(epic: Dict) -> Tuple[str, Dict[int, Dict], int, int]:
         read = child_reads.get(epic["number"])
