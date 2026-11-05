@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.01] - 2026-11-05
+
+Two checks that used to only warn now stop a pull request from merging when they find a problem.
+
+[Full notes](release/releases/notes/v5.01_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.01)
+
 ## [v5.00] - 2026-11-04
 
 A release now files a follow-up issue only when it matters, and gathers the ones that do into one sweep issue per repository.
