@@ -60,9 +60,11 @@ Availability is probed **per field on the windowed `session` records**, never fr
 - From schema v1.2.0 the version no longer encodes which phase has run — both
   extraction and roll-up emit the same value — so it cannot answer "are the
   analysis dimensions present?".
-- The roll-up rewrites `meta.schema_version` unconditionally on every pass, so a
-  consumer gating on it is reading a value the last writer stamped, not a
-  capability.
+- The version is written by extraction and preserved by the roll-up, and from
+  v2.0.0 it names the store's counting unit: 1.x counted tokens per transcript
+  line, 2.x once per API response within a transcript file. That makes it the
+  right signal for which unit a figure is in, and still the wrong one for which
+  optional fields a store's records carry.
 
 The canonical **"a roll-up has run"** predicate is therefore
 `any(.record == "coverage")` — that run-level record is emitted exactly once per
@@ -74,7 +76,8 @@ A dimension absent from every session in the window renders
 `UNAVAILABLE: dimension absent from every session in window ...` — **never a silent
 omission**, because an omitted by-skill section reads as *"no skill spend"*, which
 is a false zero rather than a missing capability. `meta.schema_version` appears in
-the report header as provenance only.
+the report header as provenance — it is how a reader tells a per-line (1.x,
+inflated) store from a per-response (2.x) one.
 
 ## 3. Coverage-label honesty
 

@@ -2,7 +2,8 @@
 # finops-usage-extractor — roll-up + attribution module (slice C2).
 #
 # Reads the operator-local FinOps usage store produced by extract-usage.sh (slice
-# C1) and writes the additive v1.2.0 `rollup` + `coverage` records:
+# C1) and writes the additive `rollup` + `coverage` records (kinds introduced at
+# schema v1.1.0):
 # it resolves each `session` record to its owning work item, rolls per-session token
 # spend up to that work item (honoring C1's summation invariant), and emits a
 # run-level attribution-health `coverage` record. The store schema authority is
@@ -31,8 +32,9 @@
 # Usage:
 #   bash rollup-attribution.sh [--emit] [--resolve-prs] [--self-test]
 #     --emit         (DEFAULT) resolve + roll up the store in place: strip any prior
-#                    rollup/coverage records, append fresh ones, bump meta schema_version
-#                    to 1.2.0. Idempotent over an unchanged store (byte-identical body
+#                    rollup/coverage records, append fresh ones, preserve meta
+#                    schema_version — it names the store's counting unit and is never
+#                    re-stamped. Idempotent over an unchanged store (byte-identical body
 #                    modulo the rolled_up_utc metadata). Session/subagent lines untouched.
 #     --resolve-prs  OPT-IN: additionally resolve fix/feat branches via `gh` (network,
 #                    non-reproducible). Absent → those sessions degrade to `unattributed`.
@@ -505,7 +507,8 @@ apply_pr_resolve() {
 }
 
 # ── Core: resolve + roll up an existing store in place (strip prior rollup/coverage,
-#    append fresh; bump meta schema_version to 1.2.0). Atomic tmp -> mv. ──
+#    append fresh; preserve meta schema_version — it names the store's counting unit
+#    and is never re-stamped). Atomic tmp -> mv. ──
 do_emit() {
   local store_dir="$1" resolve_prs="$2"
   local store_file="$store_dir/usage.jsonl"
@@ -591,9 +594,9 @@ do_emit() {
   # Pass 3: roll up → rollup rows + coverage.
   jq -s -c "$JQ_ROLLUP" "$resolutions" > "$rolled" 2>/dev/null
 
-  # Rewrite store: meta(schema_version=1.2.0) + verbatim session/subagent + rollup/coverage.
+  # Rewrite store: meta (version preserved) + verbatim session/subagent + rollup/coverage.
   tmp="$store_file.tmp"
-  jq -c 'select(.record=="meta") | .schema_version="1.2.0" | .generator_version=$gv' \
+  jq -c 'select(.record=="meta") | .generator_version=$gv' \
      --arg gv "$(generator_version)" "$store_file" > "$tmp" 2>/dev/null
   jq -c 'select(.record=="session" or .record=="subagent")' "$store_file" >> "$tmp" 2>/dev/null
   cat "$rolled" >> "$tmp"
@@ -811,10 +814,20 @@ self_test() {
   [ "${nsess_after:-0}" = "${nsess_before:-x}" ] && echo "  PASS: session records preserved verbatim (count $nsess_after)" \
     || { echo "FAIL: session record count changed ($nsess_before -> $nsess_after)"; fail=1; }
 
-  # (H) meta bumped to 1.2.0.
-  local sv
-  sv="$(jq -r 'select(.record=="meta")|.schema_version' "$st/usage.jsonl" | head -1)"  # sigpipe-idiom: allow — pre-existing at the pin, out of sweep scope; no `set -e` in this script; jq emits one meta field and the value is consumed, not the status
-  [ "$sv" = "1.2.0" ] && echo "  PASS: meta.schema_version bumped to 1.2.0" || { echo "FAIL: meta.schema_version != 1.2.0 (got $sv)"; fail=1; }
+  # (H) meta.schema_version is PRESERVED, never re-stamped: it names the store's counting
+  #     unit (schema § Versioning), so a roll-up that stamped a constant would relabel a
+  #     per-line store as per-response. A sentinel version that no writer emits makes the
+  #     assertion discriminating — a roll-up stamping the fixture's own value would pass
+  #     an equality on that value. Same environment as the (K2) roll-up below.
+  local sv sv_st
+  sv_st="$(mktemp -d "${TMPDIR:-/tmp}/finops-roll-version.XXXXXX")"
+  jq -c 'if .record=="meta" then .schema_version="9.9.9-selftest" else . end' "$fx_store" > "$sv_st/usage.jsonl" 2>/dev/null
+  ( STORE="$sv_st" FINOPS_HUB_STATE_DIR="$fx_hub" FINOPS_PIPELINE_EVENT_LOG="$fx_log" \
+      do_emit "$sv_st" 0 >/dev/null 2>&1 )
+  sv="$(jq -rn 'first(inputs | select(.record=="meta") | .schema_version) // "absent"' "$sv_st/usage.jsonl" 2>/dev/null)"
+  [ "$sv" = "9.9.9-selftest" ] && echo "  PASS: meta.schema_version preserved through the roll-up (never re-stamped)" \
+    || { echo "FAIL: meta.schema_version re-stamped by the roll-up (got ${sv:-nothing}, want 9.9.9-selftest)"; fail=1; }
+  rm -rf "$sv_st"
 
   # (I) FM-2 count-once (hub<->spoke file boundary). A spoke that appears BOTH as an
   #     in-transcript sidechain `subagent` inside a hub session AND as its own standalone
