@@ -3,7 +3,7 @@ title: Corpus-Home Adapter — Path-Resolution Constraints
 purpose: Records the constraints any future corpus-home adapter MUST honour when it makes release/tools/automated-closeout.sh --check-paths instance-aware — chiefly that instance-absence resolves to N/A (exit 0), never HARD-FAIL, because --check-paths is a required CI smoke gate that would otherwise redden on every PR from a fresh clone or CI runner. Constraint record only — defines no adapter, no config selector, and no resolution logic.
 type: standard
 status: ACTIVE
-consumers: "the corpus-home adapter design (the still-owed decision on where the corpus lives; the instance-aware resolution seam itself has landed); release/tools/automated-closeout.sh check_paths() (the function the seam must edit); release/tools/tests/test_corpus_home_tolerance.sh (the executable assertion of CH-1..CH-4); .github/workflows/release-tooling-smoke.yml closeout-smoke (the gate that reddens on violation)"
+consumers: "the corpus-location decision recorded in {{ADR:non-tracked-data-homed-by-risk-class}} and the operator.toml [adapters] corpus_home selector it governs (the instance-aware resolution seam itself has landed); release/tools/automated-closeout.sh check_paths() (the function the seam must edit); release/tools/tests/test_corpus_home_tolerance.sh (the executable assertion of CH-1..CH-4); .github/workflows/release-tooling-smoke.yml closeout-smoke (the gate that reddens on violation)"
 composes_with: [release-corpus-schema.md, ../../../core/standards/repo-host-adapter-versioning.md, ../../../core/standards/public-repo-vs-operator-instance-taxonomy.md, ../../../core/standards/gate-efficacy-standard.md]
 reversibility: CHEAP / Confidence HIGH — a constraint record plus its executable assertion; git revert restores prior state. The document adds no runtime surface of its own, and the seam it constrains is reversible by its own change's revert, so there is no migration to unwind.
 ---
@@ -12,13 +12,13 @@ reversibility: CHEAP / Confidence HIGH — a constraint record plus its executab
 # Corpus-Home Adapter — Path-Resolution Constraints
 
 > Reversibility: CHEAP / Confidence: HIGH.
-> **Status: the seam has landed; the selector has not.** Instance-aware corpus-path resolution exists in `automated-closeout.sh`, the committed arming sentinel reads `armed`, and the suite in §5 reports `PASS-SEAM-LANDED` — so CH-1..CH-4 are graded on every qualifying PR rather than merely anticipated. What has **not** landed is the adapter selector: `operator.toml [adapters]` ships five selectors (`repo_host`, `ticketing`, `kb`, `ai_tool`, `scheduler`) and **no `corpus_home`** — and this document creates none. §6 names the one design still owed.
+> **Status: the seam has landed; the selector is declared and not yet read.** Instance-aware corpus-path resolution exists in `automated-closeout.sh`, the committed arming sentinel reads `armed`, and the suite in §5 reports `PASS-SEAM-LANDED` — so CH-1..CH-4 are graded on every qualifying PR rather than merely anticipated. `operator.toml [adapters]` declares `corpus_home`, whose only value, `tracked`, is its default and ships opt-in, and {{ADR:non-tracked-data-homed-by-risk-class}} records where the corpus lives: tracked repository content in the repository whose releases it records. The resolver does not read the selector — it resolves by presence, the tracked tree first — so CH-1, CH-2 and CH-4 grade its presence-precedence tiers independent of the selector. This document creates no selector; §6 names where the decision lives.
 
 ## 1. Why this exists
 
-The release corpus — `RELEASE_LOG.md`, `RELEASE_INDEX.md`, `RELEASE_DIGEST.md`, and the notes directory — is **in-tree today**. `release/tools/automated-closeout.sh --check-paths` resolves all four off `$REPO_ROOT` and HARD-FAILs (exit 1) if any does not resolve. That probe is wired as a **required step of the `closeout-smoke` CI job**, which triggers on every PR touching `release/tools/**`.
+The release corpus is **in-tree today**. `release/tools/automated-closeout.sh --check-paths` probes four of its paths — `RELEASE_LOG.md`, `RELEASE_INDEX.md`, `RELEASE_DIGEST.md`, and the notes directory — off `$REPO_ROOT`, and HARD-FAILs (exit 1) if any does not resolve. That probe is wired as a **required step of the `closeout-smoke` CI job**, which runs on every pull request.
 
-When the corpus home becomes configurable — the seam the corpus-home adapter design owns — the naive resolver is to resolve the four paths under the operator instance and fail when they are not found. On the operator's own machine that resolver passes. **On a fresh clone, on a CI runner, and in any environment with no operator instance, it fails** — reddening a required gate on every PR, for a condition that is not a defect.
+When the corpus home becomes configurable — a home other than `tracked` behind the `corpus_home` selector, decided by the change that teaches the resolver to read it — the naive resolver is to resolve the four paths under the operator instance and fail when they are not found. On the operator's own machine that resolver passes. **On a fresh clone, on a CI runner, and in any environment with no operator instance, it fails** — reddening a required gate on every PR, for a condition that is not a defect.
 
 The cost asymmetry is the whole argument. Recording the constraint now is one document. Discovering it later means a required gate is red on every PR in the repository, at the moment the adapter lands, with the fix competing against the pressure to disable the gate. Gates that are disabled to unblock a merge do not come back.
 
@@ -30,7 +30,7 @@ The cost asymmetry is the whole argument. Recording the constraint now is one do
 
 **Does not apply:** while the corpus is in-tree. Today's in-tree resolution is conformant by construction — `$REPO_ROOT` always exists.
 
-**Does not govern:** *where* the corpus should live, *whether* the corpus should move, or the adapter's configuration surface. Those are the corpus-home adapter design's decisions. This document constrains only how the resolver must behave once that decision is made.
+**Does not govern:** *where* the corpus should live, *whether* the corpus should move, or the adapter's configuration surface. Those are decided in {{ADR:non-tracked-data-homed-by-risk-class}}, in its Release-corpus location item. This document constrains only how the resolver must behave once that decision is made.
 
 ## 3. The constraints (normative)
 
@@ -42,6 +42,8 @@ The cost asymmetry is the whole argument. Recording the constraint now is one do
 | **CH-4** | The N/A outcome MUST be emitted as a **distinguishable per-path record**, never an undifferentiated `OK`, so an unresolved path cannot be read as a resolved one. | Fixture **B** stdout, **per corpus label** (rule R4) |
 
 > **These IDs are load-bearing.** `release/tools/tests/test_corpus_home_tolerance.sh` rule **R6** greps this file for each of `CH-1`..`CH-4` and fails if the file is absent or any ID is missing. **Do not renumber them.** Adding `CH-5` is safe; renumbering `CH-1`..`CH-4` breaks the doc↔test binding and reddens the gate.
+
+> **What "instance-corpus root" names today.** In CH-1 and CH-2 it is the non-tracked tier of today's resolver: the fallback it consults inside today's out-of-tree container when no tracked corpus is present. {{ADR:non-tracked-data-homed-by-risk-class}} records that tier as a transitional residual, not a governed corpus home. When a non-tracked corpus home is decided, by the change that teaches the resolver to read the `corpus_home` selector, that home is the root these constraints bind.
 
 **CH-2 and CH-1 are a pair, and neither is sufficient alone.** A resolver that returns exit 0 unconditionally satisfies CH-1 (tolerance) while resolving nothing at all. CH-2 forbids that degenerate answer by requiring a *present* instance corpus to actually resolve. **CH-4 closes the remaining hole:** without it, an implementer could satisfy CH-1 by silently downgrading an unresolved path to `OK`, which would defeat CH-3.
 
@@ -55,7 +57,7 @@ Two grounds, both already established in the platform — no new vocabulary is i
 
 **(b) Absence of an operator instance is a supported state, platform-wide.** `core/deploy/lib-instance-path.sh::pmo_instance_path()` resolves an instance path unconditionally, and consumers treat a non-existent instance root as a legitimate environment rather than an error — the public repo is expected to be clonable and testable with no operator instance present at all. A corpus-path probe that HARD-FAILs on instance-absence would be the only surface asserting the opposite.
 
-**(c) The consequence is a required gate, not a warning.** `--check-paths` gates `closeout-smoke`, which is path-filtered onto `release/tools/**`. A HARD-FAIL-on-absence resolver does not degrade one developer's local run; it reddens CI for everyone touching release tooling, immediately and permanently, until someone edits the workflow.
+**(c) The consequence is a required gate, not a warning.** `--check-paths` gates `closeout-smoke`, which runs on every pull request. A HARD-FAIL-on-absence resolver does not degrade one developer's local run; it reddens CI on every pull request, immediately and permanently, until someone edits the workflow.
 
 ## 5. How the constraint is enforced
 
@@ -141,7 +143,7 @@ This standard owns **the constraint** and nothing else. It restates none of the 
 | What content is public-repo vs operator-instance | `core/standards/public-repo-vs-operator-instance-taxonomy.md` |
 | Gate posture / invariant / falsification declarations | `core/standards/gate-efficacy-standard.md` |
 | Instance-path resolution | `core/deploy/lib-instance-path.sh` |
-| Where the corpus lives and whether it moves | the corpus-home adapter design (not yet written) |
+| Where the corpus lives under each `corpus_home` value, and whether it moves | {{ADR:non-tracked-data-homed-by-risk-class}} — its Release-corpus location item |
 
 ## 7. Cutover
 

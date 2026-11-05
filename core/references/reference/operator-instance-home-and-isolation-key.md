@@ -191,6 +191,8 @@ So the genuine un-converged executable set is **two files**, and both resolve th
 
 **Finding surfaced, not actioned — this is outside the spike's scope to fix.** The corpus-split ADR still declares an obligation that "a deferred execution issue must" discharge. That issue closed without discharging it, no successor exists, and the ADR reads as though the work is still queued. Either the ADR's deferred-migration section needs a superseded-by note pointing at the adapter, or a successor card needs to exist. Recorded here so the next reader does not re-derive it a third time.
 
+**Resolved.** {{ADR:non-tracked-data-homed-by-risk-class}} records the corpus's location — tracked repository content, in the repository whose releases it records — and supersedes the corpus-split ADR (ADR-032) on its operator-instance home for the corpus and its deferred-migration section. No corpus migration is pending, and the obligation above is discharged. The `operator.toml [adapters] corpus_home` selector names that home; it is declared and not yet read, so the corpus resolver still resolves by presence, the tracked tree first.
+
 **Reversibility: CHEAP · Confidence HIGH.**
 
 ### 2.6 Fork 4 — author a supersession ADR?

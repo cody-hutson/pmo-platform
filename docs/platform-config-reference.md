@@ -40,7 +40,7 @@ A field set at a higher rung overrides the same field set at a lower rung. A fie
 >
 > **Which keys exist** is declared as data at `core/config/operator-toml-schema.json` — key, section, type, valid values, default-or-none, and whether the generator delivers the key into every config or leaves it opt-in. The template above carries what each key *means*; the declaration carries what *exists*, and a deploy check asserts the two agree in both directions. If your `operator.toml` is missing a key the platform has added since it was generated, `./update.sh` reconciles it, or run `docs/scripts/setup-workspace.sh --reconcile-config` directly; values you set yourself are preserved.
 
-### `[adapters]` — host-adapter selectors (the onboarding seam)
+### `[adapters]` — adapter selectors (the onboarding seam)
 
 | Field | What it selects | Allowed values | Default |
 |---|---|---|---|
@@ -48,8 +48,10 @@ A field set at a higher rung overrides the same field set at a lower rung. A fie
 | `ticketing` | work-tracking surface (issues / milestones / board) | `github` (GitHub issues + Projects) · `jira+github` · `gitlab+jira` | `github` |
 | `kb` | knowledge-base / documentation surface | `markdown` (generic Markdown KB) | `markdown` |
 | `ai_tool` | agent runtime the skills + hub run on | `claude-code` (Claude Code CLI/Desktop) | `claude-code` |
+| `scheduler` | backend that fires a session-fired registered routine on its declared cadence (routines whose entrypoint is a repository workflow are fired by the repository host and do not consult it) | `agent-runtime` (the scheduled-task surface of the runtime `ai_tool` names) · `none` (no scheduler on this install — every routine stays manually invocable) | `none` |
+| `corpus_home` | where this install's release corpus lives — a placement selector, not a host surface; **declared, not yet read**: the release tooling resolves the corpus by presence, the tracked tree first | `tracked` (tracked in this repository under `release/releases/`) — the only value; a home other than `tracked` is decided, and its value added, by the change that teaches the corpus resolver to read this key | `tracked` — shipped opt-in: setup and reconcile never write it, and an absent key reads as `tracked` |
 
-These four are the seam onboarding writes operator choices into. Finer-grained per-project relationship tuning lives in `platform-config.toml [relationship_mapping]` (below) and composes with — does not replace — these install-level selectors.
+The host selectors — every row except `corpus_home` — are the seam onboarding writes operator choices into; `corpus_home` is a placement choice, and {{ADR:non-tracked-data-homed-by-risk-class}} defines the release corpus and records where it lives. Finer-grained per-project relationship tuning lives in `platform-config.toml [relationship_mapping]` (below) and composes with — does not replace — these install-level selectors.
 
 ### `[methodology]` — methodology default
 

@@ -120,7 +120,21 @@ Usage telemetry covers every session on the install, so it is install-scoped wor
 
 ### Release-corpus location
 
-Recorded by the corpus-home slice of this release.
+**The release corpus is tracked repository content.** It is the repository's own record of its releases, not one of this record's non-tracked classes, and it lives under `release/releases/` in the repository whose releases it records. The corpus is the release log with its archives, the release index, the release digest, the reversions ledger, and the notes and plans folders. Other files under that directory are not corpus — the folder's README and the hub-state templates the installer provisions among them — and nothing this item decides governs them.
+
+| `corpus_home` | Class | Home | State |
+|---|---|---|---|
+| `tracked` — the default and the only value; an absent key reads as it | tracked repository content | `release/releases/` in the repository whose releases it records | in force — today's layout |
+
+**The selector is declared, not yet read.** `operator.toml [adapters] corpus_home` names the corpus's home, and its consumer is the release tooling's corpus resolver, the close-out tooling's path check. That resolver does not read the key: it resolves the corpus by presence, the tracked tree first, exactly as before this record. No non-tracked value is reserved. A non-tracked corpus home is decided by the change that teaches the resolver to read the selector; that change admits the value to the declared value space, seeds the selector in the corpus-home tolerance suite so constraints CH-1 to CH-4 stay graded, and decides whether the selector is chosen per install, as the key sits today, or per repository, beside the per-class switch D5 names.
+
+**The resolver's out-of-tree tier is a transitional residual, not a home.** When no tracked corpus is present, today's resolver falls back to a corpus inside today's out-of-tree container, and constraints CH-1, CH-2 and CH-4 grade that fallback tier. This record does not govern that tier as a corpus home: the corpus carries no leak-risk content, so it never belongs in the leak-risk home, and the tier is removed or re-pointed by the change that gives the resolver its reader for the selector.
+
+**ADR-032 is superseded in part on the corpus.** This item replaces ADR-032 Decision 1's classification of the corpus as operator-instance state and its home, Decisions 2 and 3, and the Deferred-migration plan; no corpus migration is pending. It sets aside, for the corpus, two of ADR-032's decision drivers — *no operator content in the package* and *ship the capability, not the history* — and accepts their cost explicitly: a clone of the repository carries the maintainer's release corpus, and an adopter's own releases write into its clone's tracked tree under `release/releases/`. The cost is accepted because the corpus is non-PII operational detail, as ADR-032 itself recorded; because it has shipped in every clone since that record deferred its migration; and because relocating it collides with concurrent releases' close-out writes, the failure that withdrew the original migration.
+
+**Not decided here:** a value that publishes the corpus to the repository host's release records is not a local home, so it falls outside this record's class model and needs its own decision.
+
+Rejected for this item: homing the corpus in the leak-risk home, because it carries no leak-risk content; keeping ADR-032's classification and giving the corpus a governed home in the repository's git-ignored `/local-state/`, with `tracked` as a transitional default, because that commits a non-tracked home no change is scheduled to build; reserving a non-tracked value before its reader exists, because an operator could select it and nothing would change; and naming the values after the resolver's `repo` and `instance` kinds, because `repo` stops telling tracked content from git-ignored content once `/local-state/` sits inside the repository.
 
 ## Alternatives Considered
 
