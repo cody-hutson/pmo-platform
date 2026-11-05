@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH — one branch and one merge; reverting t
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): tool behaviour changes, a new release tool, and gate and reference text added inside existing structure, per the Bump-Class Selection Guide's "protocol text addition or modification" and "reference document addition or update"; no new skill and no new governance file. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering complete: Engineering Commit 0 (this file and the shared-home ADR, `5c6ea3fd`), #7177's slice (`5634b68e`), #6397's slice (`3c3acb6c`, `00785cd4`) and #6398's slice (`94483098`, `3da7400b`, `a0599135`) landed; slice 3's C4 evidence and this file's `## Change Description` follow |
+| **Status** | Executing — Stage 6 Engineering complete: Engineering Commit 0 (this file and the shared-home ADR, `5c6ea3fd`), #7177's slice (`5634b68e`), #6397's slice (`3c3acb6c`, `00785cd4`) and #6398's slice (`94483098`, `3da7400b`, `a0599135`) landed, with slice 3's C4 evidence and this file's `## Change Description`; Stage 7 Dev Testing is next |
 | **Branch** | `release/sequencing-layer-foundation` |
 | **PR** | **#8811**, opened in **draft** at Stage 6 Phase C2 after #7177's slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `sequencing-layer-foundation` |
@@ -692,6 +692,100 @@ Verdict:     CLEAN
 ```
 
 The first two sweeps read 7 and 8 over the parser after the change — the definitions' new home — so the mirror's zeros are not a blind probe. The public names keep their call sites by design, because the mirror binds them: `parse_body_dependencies` in the Stage-2 triage shard's and the ticket specification's pseudocode, the runner string in `check-doc-gates.py`, and both suites read unchanged (PRESERVE). The position tool's method paragraph and its `gh_open_issues` docstring are updated in place to say the edges are directed; its "reuse parse_dependencies() as-is" comment is PRESERVE, still true. The shared-home ADR already records the grammar's move into this home and needs no edit.
+
+### Plan step 3 (#6398) — Stage 6 C4
+
+Run by the Stage-6 spoke on #8704 against slice 3's commits `94483098` (the shared child-set rule and the audit), `3da7400b` (the view, its suite, the manifest, the allowlist and the smoke step) and `a0599135` (the chain-head ADR and the three documents), on Python 3.9.6. `origin/main` is still `b1042eec`.
+
+| Check | Command | Observed |
+|---|---|---|
+| Chain-head suite | `python3 release/tools/tests/test_compute_chain_head_rollup.py` | exit 0, `TEST OK` — 14 arms, 0 failures |
+| Tool self-tests | `python3 release/tools/compute-chain-head-rollup.py --self-test` · `python3 release/tools/_epic_child_set.py --self-test` · `bash release/tools/audit-epic-rollup-close.sh --self-test` | PASS 9 of 9 · PASS (ST-1..ST-4 and a control) · PASS — classifier fixtures 1–13, K-1..K-4, and arm 14 with its missing-module control |
+| RED arm | the new suite run against the parser and the audit taken from `47d27e70`, the slice's base | exit 1 — neither new module exists there, and the base audit still carries the inline union the G1A arm rejects |
+| Mutation probes | eleven mutants, each on a copy of the shipped tool; the unmutated copy is the control (exit 0) | each turns its own arm red: a naive scrape in the view (AC4, INT-1, INT-2); a missing key read as unmeasured (AC5, PART); no standing guard (AC3); a standing percentage (AC3); an absent section read as measured (CD-1); a deferred parse read as measured (INT-2); a half share absorbed (EVG); no encoding (ENC); an inline child set (G1A); a sequence claim (ORD) |
+| Live run (AC1, AC2, AC5, FM-1) | `python3 release/tools/compute-chain-head-rollup.py --json` at 19:42Z, read-only | exit 0. 792 open issues, equal to the search total; 59 reads, 0 failed. 10 initiative heads, one per `project:` label with members, and the eleventh label listed empty; 0 lone-epic heads, the 6 label-less epics absorbed into the standing initiative at shares from 60/94 to 90/90. The parent field reads measured, and the unparented counts read measured on every head — 7, 5 and 3 on the three heads the A6.5 review named, 0 on the rest; every partition sums. The standing head shows no percentage. 3 child edges read unmeasured under CD-1, and 1 child is outside the open-issue read. The same rollup rendered as Markdown: 1,096 lines, 56 balanced `<details>` blocks, 619 child rows, none malformed |
+| Discovered self-tests (selection-map row 4) | `python3 release/tools/check-selftest-coverage.py --run`, and `--reconcile` | exit 1 — **79 of 80** pass, the view's, the child-set module's and the audit's among them; `cleanup-orphan-state.sh --self-test` hit the 300-second per-tool timeout (exit 124) as at slices 1 and 2, untouched by this slice, recorded **NOT-EVALUATED** here (the `selftest-discovery` job on #8811 is the enforced reading); it left no stray copy this time. `--reconcile`: `RECONCILE VERDICT: CLEAN`, Arm F 10 of 10 admitted |
+| Install regression (selection-map row 5, for the allowlist) | `bash core/deploy/tests/run-install-regression.sh` | exit 0 — `INSTALL-REGRESSION: 3392 passed, 0 failed — VERDICT PASS [env: home-account; skipped: 0]`, the hook-test floor included |
+| ADR gates | `check-adr-numbers.py`; `check-adr-durability.py --files <the record> --diff-base origin/main`; `generate-adr-index.py --verify`; `renumber-adr.py --detect` | numbering PASS, contiguous 001..231; durability `COUNT 0` (its self-test passes 156 of 156); index `COUNT 0`; both branch claims `BINDS` |
+| ADR index | — | N/A — this slice adds no record under `release/ADRs/`; the chain-head record is under `core/ADRs/`, whose README is curated, not an index |
+| Doc links | `check-doc-links.py --target-paths <the four documents> --require-targets`; `check-release-links.py --roots core roadmaps --files <the same> --check-anchors` | exit 0, no findings; 0 broken. Four missing-anchor notes name glossary links on lines this slice does not edit (warn mode) |
+| Label parity | `check-label-parity.py` over the taxonomy and the three packs, as Check 51 reads them, at the base taxonomy and at the edited one | identical 51-line output and the same pre-existing exit 1; the taxonomy alone yields zero label rows at both, so the new table adds none |
+| Check 55 H1 | `check-work-hierarchy.py --skip-backlog` | `COUNT 0` over 987 scanned documents |
+| Workflow | the smoke workflow parsed as YAML | `closeout-smoke` has 27 steps; the 5 unmasked suites are the ones its rationale now counts |
+| Package consequence | `printf '%s\n' <the 12 changed paths> \| bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | empty — no rostered skill's package is staled. Sensitivity: the release-planner dependency reference resolves `release-planner` |
+| Skill-roster totals | `check-skill-count-imp.py --files <the four documents> --mode both` | exit 0, no finding |
+| Plan verifier and CIAC lint | `bash release/tools/verify-release-plan.sh <this file>`, and with `--ciac-lint`; `claim-version.sh --verify-stamp sequencing-layer-foundation` | exit 0 — 13 PASS / 0 FAIL / 25 SKIP / 5 UNRUNNABLE / 0 ERROR over 43 records; FCM-3..FCM-6 now PASS (every ADD delivered); the 5 UNRUNNABLE are #7177's reader-graded rows, as before. The lint reads `declared=4 parsed=4 clean=3 declared-deferral=1 flagged=0`; the stamp check passes |
+| Identity, host URL and close-keyword scan | a python scan of each commit's added lines | 0 in every class on every commit; a seeded control line fires every class. The only issue numbers in a durable document are the three in the chain-head ADR's References block |
+| Close-keyword self-check | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | exit 0, CLEAN, before each push |
+
+**Probe record for the live unparented and failed-read readings** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0 to PV-7):
+
+```
+Probe:       compute-chain-head-rollup.py --json, live; per head the unparented status and
+             count, the partition sum, and the count of reads whose status is not ok
+Denominator: 792 open issues (REST list 792, equal to the search total 792); 11 project
+             labels; 56 open epics, 59 reads in all
+Control - sensitivity: the suite's AC5 arm on a population whose rows carry no parent key
+             while an epic reports sub-issues -> unmeasured (and the M2 mutant, which reads
+             a missing key as unmeasured, turns AC5 red)
+Control - specificity: the AC5 keyless arm — a member with no key among members that carry
+             it -> counted unparented, measured
+Extraction:  the whole rollup document; every head, node and read row
+Result:      unparented measured on all 10 heads (7, 5, 3, and 0 on 7 heads); 0 failed reads
+Verdict:     CLEAN
+```
+
+**Cascade sweep (narrative counts this slice changes).** `git grep -c -F` for the four replaced phrasings ("ONE GROUP SINCE", "the one group below", "the two below because all three", "the four trailing") over the allowlist and the smoke workflow reads 4 at `origin/main` and 0 at the head; their replacements read 3. Kept as written, each a dated measurement rather than a census: the allowlist's "32 tools" and "289 non-comment entries", and the workflow's "78 discovered = 74 ubuntu + 4 macOS" (whose own text says to read the live split from the engine) and "all six newly-wired suites". The workflow's header names suites selectively — it omits several already-wired suites — so it gains no entry.
+
+**Deliverable state:** `deployed-copy-synced` for slice 3 — no matrix path has a deployed copy.
+
+---
+
+## Change Description
+
+Authored at Stage 6 Phase C1 by the last Engineering spoke (#8704, slice 3), after all three slices landed and before the draft pull request is marked ready-for-review. Operator-facing; the user-facing release note is a separate Stage-13 artifact. A Tier 1 [ADJUST] at Stage 7 or 8 that changes which issues land or which decision stands refreshes **Issues resolved**, **Key decisions** and **Downstream impact** in a later commit.
+
+### Outcome
+
+Dependency edges are now read with their direction, from one grammar in one parser: `parse_dependencies` returns only the issues a body says block it, so a reciprocal `Blocks`, a hierarchy reference, a negated label and unlabelled prose no longer read as blockers, and on one snapshot the milestone position tool's cycle-resident milestones fell from 10 to 0. The same parser is the single home of the issue-body section extractor, which now ends a section only at a heading or a `---` break line, so a blank line too many no longer empties a section. A new command, `release/tools/compute-chain-head-rollup.py`, prints every chain head — each initiative and any lone epic — with its epics, their open children, and per-head unparented and blocked counts, read live, with anything it could not read marked unmeasured rather than shown as 0.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7177 | A section ends only at an H2/H3 heading or a break line; the dependency mirror loads the parser's extractor instead of carrying a copy; caller output unchanged on 814 of 814 open bodies | DONE |
+| #6397 | `parse_dependencies` returns directed `blocked_by` targets from the one grammar now in the parser, the negated label included; prose references are reported, the position tool keeps the parse status, and G3-07 names its edge source | DONE |
+| #6398 | The chain-head view renders live — 10 initiative heads and 0 lone-epic heads at the Stage-6 run, the six evergreen containers absorbed into the standing initiative — and the epic child-set rule has one home that the view and the rollup-close audit both load | DONE (AC6 is the operator's post-merge step, read at Stage 8) |
+
+### Key decisions
+
+Each is recorded in this file's § Decision Record.
+
+- **D-7177-Extractor — the A6.5 counter-design:** no run of blank lines ends a section; the return stays a plain string, so no caller changes, and #7177's AC5 is restated.
+- **D-6397-Negation — fixed in the shared grammar:** a `blocked_by` label negated on its own line reads non-blocking, and the A3.5 mirror inherits the rule.
+- **D-6398-Standing — the label word, plus a guard:** a label description that begins with `Standing` declares a standing initiative, which shows no percentage; a run that finds none stops with exit 1 rather than turn the standing initiative finite and the flow containers back into heads.
+- **D-6398-AC6 — retire the interim board's portfolio map only:** its hand-ordered milestone lanes stay until #6443 ships.
+- **D-Concurrency P0 and D-C SINGLE:** three serial slices on one branch, one merge.
+
+### Reversibility
+
+**CHEAP — HIGH confidence.** `git revert -m 1` of the merge restores the parser's extractor and grammar, the mirror's copies, the position tool, the audit's inline child-set rule and the documents byte-for-byte, and nothing outside the tree persists: no milestone carries a position, the mirror only ever adds author-declared edges, and the view writes nothing. It becomes MODERATE once a later reader builds on the parser's shared home; a claimed version tag is retained, never deleted.
+
+### Downstream impact
+
+- **Stage 7:** the live `compute-milestone-positions.py --dry-run` (no `CYCLE:` block) and `compute-chain-head-rollup.py --json` (heads equal the labels with members); the `deploy.sh --check` FAIL-line diff against `b1042eec` (DEV-17); the discovered self-test run, whose one local timeout is not evaluated here.
+- **Stage 8:** #6398's AC6 — the operator retires the interim board's portfolio map and points its README at the view, keeping the lanes.
+- **Stage 12:** the two ADR records (provisionally 230 and 231) bind at the claim through `renumber-adr.py`, and their slug-token citations are stamped there; milestone 438 computes the same version slot, and the first merge claims it.
+- **Stage 13:** both records are ratified (G-CL9); G-CL6 reads the taxonomy's chain-head region against the shipped tool; three items are held for the follow-up ledger (§ Exclusions).
+- **Every Stage-13 close-out after the merge** loads `_epic_child_set.py` at its epic rollup-close phase; a missing module stops that phase loudly instead of falling back.
+- **Later work:** b21 (#7678) builds its shared acceptance-criteria reader on the parser's extractor and merges after this release; native-edge reads (#6426) and the sequencing layer (#6443) build on the directed edges.
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `sequencing-layer-foundation`.
+- Decision records: the shared-home ADR under `release/ADRs/` and the chain-head ADR under `core/ADRs/`, both `Proposed` until Stage 13.
+- User-facing release note: authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`, under `release/releases/notes/`.
 
 ---
 
