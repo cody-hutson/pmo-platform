@@ -5,6 +5,7 @@ type: rule
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
 ---
+<!-- reference-durability: allow-link -->
 # Operations Bridge — File Interaction Rules
 
 ## Organizational Model
@@ -19,6 +20,21 @@ Connected via the 13-stage deployment pipeline (see release-process.md).
   `.claude/settings.json`, `.claude/rules/`, `.gitignore`, `README.md`, `deploy.sh`
 - **Layer 2 (Git-Ignored, Operations):** `projects/` (entire tree),
   `.claude/skills/` (deployment target), `.claude/settings.local.json`, `memory/`
+- **Platform working state and leak-risk content (never tracked):** the
+  [placement standard](/core/standards/instance-data-placement-standard.md)'s classes
+  for data the platform itself writes and keeps out of git are never Layer 1 — not
+  even where a home sits inside `pmo-platform/`. **Working state** — hub state, the
+  pipeline event log and the platform's other run state — is homed in the registered
+  in-repo git-ignored homes of the repository it belongs to, release and run state in
+  `/local-state/`, with install-scoped working state such as usage telemetry in an
+  install-level home; **leak-risk** content (the PII scan lists and the people
+  roster) is homed outside every repository and workspace, at
+  `${XDG_DATA_HOME:-$HOME/.local/share}/pmo-platform/pmo-private/`. These are target
+  homes: until each repository's cutover each surface still resolves to today's path
+  through its registered token where one exists — hub state through
+  `<OPERATOR_INSTANCE_HUB_STATE_PATH>` — and otherwise through
+  `core/deploy/lib-instance-path.sh`, which returns today's out-of-tree container,
+  `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/`.
 
 ## Cross-Domain Read Access
 Claude Code MAY READ these Layer 2 files for context:

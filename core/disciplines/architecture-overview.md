@@ -118,6 +118,8 @@ workspace root/
 │   ├── settings.json                   ← settings (git-tracked)
 │   └── hooks/                          ← security/governance hooks (deployed from core/hooks/)
 │
+├── [out-of-tree container]/            ← TODAY: ${CLAUDE_WORKSPACE_ROOT}/pmo-instance/ — never tracked; see "Non-tracked platform data" below
+│
 ├── pmo-platform/                       ← THE PLATFORM (git-tracked, modular monolith)
 │   ├── core/                           ← cross-cutting core
 │   │   ├── governance/                 ← OPERATIONS.md
@@ -140,6 +142,9 @@ workspace root/
 │   │   ├── skills/                     ← release skills (release-planner, pmo-skill-editor, …)
 │   │   └── tools/                      ← release-support scripts
 │   ├── docs/                           ← install/setup docs + scripts
+│   ├── analysis/                       ← working-state home: read-once analysis (README tracked, contents git-ignored)
+│   ├── roadmaps/                       ← working-state home: roadmap instances (README tracked, contents git-ignored)
+│   ├── local-state/                    ← TARGET working-state home: release and run state (README tracked, contents git-ignored; not yet provisioned)
 │   └── packages/                       ← compiled .skill packages
 │
 └── projects/                           ← OPERATIONAL WORKSPACE (git-ignored)
@@ -381,6 +386,13 @@ The actual work being managed by the platform:
 - Project folders with 01-08 structure
 - Archive/ for closed projects
 
+### Non-tracked platform data (homed by risk class)
+The platform's own **working state** and **leak-risk** content are kept out of git and are neither the product nor PMO content. Their risk class and governed home are set by the [placement standard](../standards/instance-data-placement-standard.md), which also places the operator's PMO content and the files other tools own; the decision behind them is {{ADR:non-tracked-data-homed-by-risk-class}}.
+- **Working state** — release and run state such as hub state, the pipeline event log and close-out registers, and read-once analysis and roadmap instances — is homed in the registered in-repo git-ignored homes at the root of the repository it belongs to: release and run state in `/local-state/`, analysis in `/analysis/`, roadmap instances in `/roadmaps/`. Each home's folder and README are tracked; its contents never are. Install-scoped working state, such as usage telemetry, has an install-level home the standard names.
+- **Leak-risk** content — the PII scan lists and the people roster — is homed outside every repository and workspace, at `${XDG_DATA_HOME:-$HOME/.local/share}/pmo-platform/pmo-private/`.
+
+These are target homes. Until each repository's cutover, each surface still resolves to today's path through its registered token where one exists — hub state through `<OPERATOR_INSTANCE_HUB_STATE_PATH>`; analysis and roadmap instances through their tokens, which already default to their in-repo homes — and otherwise through the operator-instance resolver in `core/deploy/lib-instance-path.sh`, which returns today's out-of-tree container, `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/`.
+
 ### Workspace root
 - CLAUDE.md — workspace config read by both agents
 - README.md — repo overview
@@ -397,7 +409,7 @@ The actual work being managed by the platform:
 4. **deploy.sh is the bridge** — all platform-to-runtime propagation goes through it
 5. **Both agents share a filesystem** — schemas, templates, and governance are read in place (no deployment needed for non-skill assets)
 6. **Platform changes never bypass git** — modifications to `pmo-platform/` always flow through branch → PR → merge, even within a single Claude Code session
-7. **Operations changes stay in `projects/`** — project artifacts, status, and operational state never leak into `pmo-platform/`
+7. **Operations changes stay in `projects/`** — project artifacts, status, and operational state never leak into `pmo-platform/`; the platform's own working state is a different class, homed under "Non-tracked platform data" above
 
 ---
 
