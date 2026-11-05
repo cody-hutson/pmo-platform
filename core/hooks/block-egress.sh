@@ -1121,26 +1121,49 @@ egress_old_reachable_gh_api() {
 readonly EGRESS_UC='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 readonly EGRESS_LC='abcdefghijklmnopqrstuvwxyz'
 
+# The text $2 split at every occurrence of the one character $1, into EGRESS_SP, as egress_split_bs
+# splits at a backslash: one word split with that character as the only separator, globbing off, one
+# pass over the text, with an empty field between two adjacent separators and, added back, after a
+# final one; an empty text is one empty field. EGRESS_SPN is the number of separators.
+egress_split_at() {
+  local IFS="$1" gl=1
+  case "$-" in *f*) gl=0 ;; esac
+  set -f
+  # shellcheck disable=SC2206
+  EGRESS_SP=( $2 )
+  if [ "$gl" -eq 1 ]; then set +f; fi
+  case "$2" in
+    '') EGRESS_SP=("") ;;
+    *"$1") EGRESS_SP[${#EGRESS_SP[@]}]="" ;;
+  esac
+  EGRESS_SPN=$(( ${#EGRESS_SP[@]} - 1 ))
+  return 0
+}
+
 # R4 (a) — a word holding exactly one brace group pre{w1,…,wn}post, with n of at least two, no
 # nested group, no `..` sequence, and no backslash, `$`, slash or quoted structure anywhere in it,
 # expands to its non-empty words. Sets EGRESS_RV, EGRESS_RVN and EGRESS_RVCH; returns 1 for any
 # other word, and for a group whose every word is empty.
+#
+# The word is read once: split at its `{`, the text after it at its `}`, and the group at its commas,
+# each by egress_split_at, where a count other than one at either brace is no single group. Taking
+# the words one at a time off the text left to split, or a prefix up to a brace by a pattern removal,
+# re-measures that text at each step, which on bash 3.2 costs more than linear time in a long group.
 egress_brace_words() {
-  local w="$1" pre rest mid post alt k=0 last=0
-  case "$w" in *'{'*','*'}'*) ;; *) return 1 ;; esac
+  local w="$1" pre rest mid post alt k=0
+  case "$w" in *'{'*) ;; *) return 1 ;; esac
   case "$w" in *\\*|*'$'*|*/*|*..*|*"${EGRESS_SENT}"*) return 1 ;; esac
-  pre="${w%%\{*}"
-  rest="${w#*\{}"
-  mid="${rest%%\}*}"
-  post="${rest#*\}}"
-  case "${pre}${mid}${post}" in *'{'*|*'}'*) return 1 ;; esac
+  egress_split_at '{' "$w"  # linear: brace
+  [ "$EGRESS_SPN" -eq 1 ] || return 1
+  pre="${EGRESS_SP[0]}"; rest="${EGRESS_SP[1]}"
+  case "$pre" in *'}'*) return 1 ;; esac
+  egress_split_at '}' "$rest"
+  [ "$EGRESS_SPN" -eq 1 ] || return 1
+  mid="${EGRESS_SP[0]}"; post="${EGRESS_SP[1]}"
   case "$mid" in *,*) ;; *) return 1 ;; esac
+  egress_split_at ',' "$mid"
   EGRESS_BW=()
-  while [ "$last" -eq 0 ]; do
-    case "$mid" in
-      *,*) alt="${mid%%,*}"; mid="${mid#*,}" ;;
-      *) alt="$mid"; last=1 ;;
-    esac
+  for alt in "${EGRESS_SP[@]}"; do
     if [ -n "${pre}${alt}${post}" ]; then
       EGRESS_BW[$k]="${pre}${alt}${post}"
       k=$(( k + 1 ))
@@ -1160,11 +1183,14 @@ egress_brace_words() {
 # The loop below steps through the word left to read, once per backslash, with removals and slices
 # that re-measure that text each time, so on bash 3.2 it costs more than linear time in a long word
 # dense with escapes (see EGRESS_LINEAR_MIN). A long word is read once by egress_unescape_long, and
-# the loop then finds nothing left; a short one keeps the loop.
+# the loop then finds nothing left; a short one keeps the loop. The words are taken in turn from one
+# expansion of the list, never by index, because bash 3.2 finds an indexed element by walking the
+# array from its start, which costs more than linear time over a brace group's many words.
 egress_unescape_rv() {
   local j=0 s out
-  while [ "$j" -lt "$EGRESS_RVN" ]; do
-    s="${EGRESS_RV[$j]}"
+  [ "$EGRESS_RVN" -ge 1 ] || return 0
+  for s in "${EGRESS_RV[@]}"; do  # linear: words
+    [ "$j" -lt "$EGRESS_RVN" ] || break
     case "$s" in
       *\\*)
         out=""
@@ -1292,8 +1318,14 @@ egress_respell_word() {
 # The normalization applied in place to the token at index $1 (steps $2): a changed token is written
 # back and flagged in egress_tflag, and a brace group's words are spliced in, each flagged. Sets
 # egress_cfold.
+#
+# The splice copies each list once — the tokens on either side of $1 and the group's words as slices
+# of one expansion, and the flags in one pass over those that are set, every other index reading 0 as
+# `${egress_tflag[$j]:-0}` reads it — and never reads an element by index, which bash 3.2 finds by
+# walking the array from its start, so a long group or a long segment costs no more than linear time.
 egress_norm_at() {
-  local i="$1" n k j
+  local i="$1" n j=0 m=0 key
+  local -a D O
   egress_respell_word "${egress_toks[$i]}" "$2"
   egress_cfold="$EGRESS_RVFOLD"
   [ "$EGRESS_RVCH" -eq 1 ] || return 0
@@ -1303,21 +1335,20 @@ egress_norm_at() {
     return 0
   fi
   n="${#egress_toks[@]}"
-  EGRESS_NT=(); EGRESS_NF=(); k=0; j=0
-  while [ "$j" -lt "$i" ]; do
-    EGRESS_NT[$k]="${egress_toks[$j]}"; EGRESS_NF[$k]="${egress_tflag[$j]:-0}"
-    k=$(( k + 1 )); j=$(( j + 1 ))
-  done
-  j=0
-  while [ "$j" -lt "$EGRESS_RVN" ]; do
-    EGRESS_NT[$k]="${EGRESS_RV[$j]}"; EGRESS_NF[$k]=1
-    k=$(( k + 1 )); j=$(( j + 1 ))
-  done
-  j=$(( i + 1 ))
-  while [ "$j" -lt "$n" ]; do
-    EGRESS_NT[$k]="${egress_toks[$j]}"; EGRESS_NF[$k]="${egress_tflag[$j]:-0}"
-    k=$(( k + 1 )); j=$(( j + 1 ))
-  done
+  EGRESS_NT=( "${egress_toks[@]:0:$i}" "${EGRESS_RV[@]:0:$EGRESS_RVN}" "${egress_toks[@]:$(( i + 1 ))}" )  # linear: splice
+  D=(); O=()
+  if [ "${#egress_tflag[@]}" -gt 0 ]; then
+    # The set flags' values, in index order, are the positional parameters; their indices the loop.
+    set -- "${egress_tflag[@]}"
+    for key in "${!egress_tflag[@]}"; do
+      [ "$key" -lt "$n" ] || break
+      while [ "$j" -lt "$key" ]; do D[$j]=0; j=$(( j + 1 )); done
+      D[$j]="${1:-0}"; shift; j=$(( j + 1 ))
+    done
+  fi
+  while [ "$j" -lt "$n" ]; do D[$j]=0; j=$(( j + 1 )); done
+  while [ "$m" -lt "$EGRESS_RVN" ]; do O[$m]=1; m=$(( m + 1 )); done
+  EGRESS_NF=( "${D[@]:0:$i}" "${O[@]}" "${D[@]:$(( i + 1 ))}" )
   egress_toks=( "${EGRESS_NT[@]}" )
   egress_tflag=( "${EGRESS_NF[@]}" )
   return 0

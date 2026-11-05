@@ -3398,7 +3398,7 @@ fi
 # holds the walk's fallback.
 E007_Y_R="${E007_W_BASE}/y"
 /bin/mkdir -p "${E007_Y_R}/in"
-E007_Y_FUNCS="egress_long egress_cat egress_trailing_backslash_odd egress_comment_open_at_end egress_neutralize_into egress_neutralize_long egress_comment_neutralize egress_span_neutralize egress_ansic_span egress_ansic_decode egress_ansic_decode_long egress_split_bs egress_keep_line egress_base_gh egress_respell_word egress_brace_words egress_unescape_rv egress_unescape_long egress_fold_rv egress_mark_free_text egress_join_state egress_join_continuations egress_join_lines"
+E007_Y_FUNCS="egress_long egress_cat egress_trailing_backslash_odd egress_comment_open_at_end egress_neutralize_into egress_neutralize_long egress_comment_neutralize egress_span_neutralize egress_ansic_span egress_ansic_decode egress_ansic_decode_long egress_split_bs egress_split_at egress_keep_line egress_base_gh egress_respell_word egress_brace_words egress_unescape_rv egress_unescape_long egress_fold_rv egress_mark_free_text egress_join_state egress_join_continuations egress_join_lines"
 # e007_y_lift <src> <out> — the walk, the join and every function they call; EGRESS_LINEAR_MIN is
 # left to the caller. Returns 1 unless every function is found.
 e007_y_lift() {
@@ -3554,7 +3554,7 @@ fi
 # the 80 KB escaped-word command, both in UTF-8.
 E007_Z_R="${E007_W_BASE}/z"
 /bin/mkdir -p "${E007_Z_R}/in"
-E007_Z_FUNCS="egress_long egress_cat egress_split_bs egress_ansic_decode egress_ansic_decode_long egress_unescape_rv egress_unescape_long egress_brace_words egress_fold_rv egress_respell_word egress_base_gh egress_keep_line"
+E007_Z_FUNCS="egress_long egress_cat egress_split_bs egress_split_at egress_ansic_decode egress_ansic_decode_long egress_unescape_rv egress_unescape_long egress_brace_words egress_fold_rv egress_respell_word egress_base_gh egress_keep_line"
 # e007_z_lift <src> <out> — the decode, the normalization, the keep rule and every function they call.
 e007_z_lift() {
   F="$E007_Z_FUNCS" /usr/bin/awk '
@@ -3707,6 +3707,420 @@ else
   e007_d_fail "AC-E007-Z-CTL: the decode, and the escape step and basename test, each without its long path, are stopped at the budget" \
     "${_z_why} a copy that finishes cannot show Z1-Z16 measure anything (BROKEN PROBE)"
 fi
+
+# ---- AC-E007-N* (#8315, DT pass 8): five more steps of the scanner read their text once ----
+#
+# Five steps of the -007 scanner cost more than linear time on bash 3.2 in what they read, so a command
+# shaped for one of them could hold the hook past the runtime's command-hook timeout, after which a
+# PreToolUse hook does not block. Each now reads its text once, and one block below holds each: NB the
+# command-word normalization of a long brace group (its brace step, the escape step over the group's
+# words, and the splice that puts them in the token list), NR the redirection-word test, NQ the restore
+# of quoted operators, NF the short-flag cluster reader, and NH the head walk's basename read of a long
+# command word, which the widened fast path admits in its upper-case and escaped spellings.
+#
+# A block's EQ arm splices the code before its change back into a copy of the shipped hook and runs both
+# on a dense set of words and token lists — braces and commas in every place, digit runs and `{name}`
+# descriptors, quoted-operator stand-ins, runs of -i, slashes, case variants, backslashes, the scanner's
+# sentinels, multibyte letters and undecodable bytes, around and above the bound — in en_US.UTF-8 and C:
+# equal byte for byte, while near misses, each one edit of the new code, differ (NH compares the whole
+# hook instead, on commands that reach the walk). Its timed arms run the whole sandbox hook under the
+# watchdog on each shape that reaches its step, at 10, 20, 40 and 80 KB in both locales, beside a neutral
+# twin of the same length whose long run the step does not read: the least of three interleaved runs of
+# each keeps the shape within E007_N_BOUND times its twin, inside the budget, and both allowed. Its CTL arm
+# is the instrument's sensitivity: the copy with the code before is beyond the bound on the step's shape.
+# A passing line prints the verdict and the bound, a failing one the measured ratio and the bound; no
+# line prints a time.
+E007_N_R="${E007_W_BASE}/n"
+/bin/mkdir -p "${E007_N_R}/in"
+E007_N_BOUND="${E007_N_BOUND:-2.0}"
+E007_N_K=0
+# The timer: the least of <reps> interleaved runs of the hook on a shape and on its twin, each read by a
+# blocking wait under a timer watchdog that stops the run and its process group at the limit. Prints the
+# shape's and the twin's least run and the largest exit status, or -1 three times when a run was stopped.
+E007_N_PY='import json, os, signal, subprocess, sys, threading, time
+root, loc, reps, limit, shape, twin = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), sys.argv[5], sys.argv[6]
+hook = os.path.join(root, ".claude", "hooks", "block-egress.sh")
+env = dict(os.environ, LC_ALL=loc, PMO_SCOPE_GUARD_ROOT=root, PMO_PLATFORM_CONFIG_ROOT=os.path.join(root, ".cfg"))
+def payload(p):
+    with open(p, encoding="utf-8") as fh:
+        return json.dumps({"tool_name": "Bash", "tool_input": {"command": fh.read()}, "cwd": root}).encode()
+def one(data):
+    stopped = []
+    t0 = time.time()
+    r = subprocess.Popen(["/bin/bash", hook], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, start_new_session=True)
+    def stop():
+        stopped.append(1)
+        try:
+            os.killpg(r.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    dog = threading.Timer(limit, stop)
+    dog.start()
+    r.communicate(data)
+    dog.cancel()
+    return None if stopped else (time.time() - t0, r.returncode)
+s, w = payload(shape), payload(twin)
+S, W = [], []
+for _ in range(reps):
+    S.append(one(s)); W.append(one(w))
+if None in S or None in W:
+    print("-1 -1 -1")
+else:
+    print("%.4f %.4f %d" % (min(x[0] for x in S), min(x[0] for x in W), max(x[1] for x in S + W)))'
+# e007_n_ratio <sandbox> <locale> <reps> <shape-file> <twin-file> — E007_N_OK is 1 when both run inside the
+# budget and are allowed and the shape costs at most E007_N_BOUND times its twin; E007_N_OVER is 1 when the
+# watchdog stopped a run, or both were allowed and the shape costs more than that; E007_N_RATIO is the
+# shape's cost over its twin's, or "stopped".
+e007_n_ratio() {
+  local out s w x
+  /usr/bin/printf '%s' enforce > "$1/.claude/hooks/.mode"
+  out="$(/usr/bin/python3 -c "$E007_N_PY" "$1" "$2" "$3" "$(( E007_T_LIMIT / 10 ))" "$4" "$5" 2>/dev/null)" || out="-1 -1 -1"
+  s="${out%% *}"; out="${out#* }"; w="${out%% *}"; x="${out#* }"
+  E007_N_OK=0; E007_N_OVER=0; E007_N_RATIO=stopped
+  if [ "$s" = -1 ]; then E007_N_OVER=1; return 0; fi
+  E007_N_RATIO="$(/usr/bin/awk -v s="$s" -v w="$w" 'BEGIN { printf "%.2f", (w > 0 ? s / w : 0) }')"
+  if /usr/bin/awk -v s="$s" -v w="$w" -v b="$E007_N_BOUND" 'BEGIN { exit !(w > 0 && s <= b * w) }'; then
+    [ "$x" != 0 ] || E007_N_OK=1
+  else
+    [ "$x" != 0 ] || E007_N_OVER=1
+  fi
+}
+# e007_n_cmd <bytes> <head> <unit> <tail> <file> — the head, as many whole units as fit, then the tail,
+# built by doubling.
+e007_n_cmd() {
+  H="$2" U="$3" T="$4" LC_ALL=C /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = int((n - length(h) - length(t)) / length(u)) * length(u); r = u
+    while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$5"
+}
+# e007_n_timed <label> <arm> <shape> <head> <unit> <tail> <twin-head> <twin-unit> <twin-tail> — the shape's
+# ratio arms at 10, 20, 40 and 80 KB in both locales against its twin, numbered on from E007_N_K.
+e007_n_timed() {
+  local kb loc
+  for kb in 10 20 40 80; do
+    e007_n_cmd $(( kb * 1024 )) "$4" "$5" "$6" "${E007_N_R}/$3-${kb}.cmd"
+    e007_n_cmd $(( kb * 1024 )) "$7" "$8" "$9" "${E007_N_R}/$3-${kb}.twin"
+    for loc in en_US.UTF-8 C; do
+      E007_N_K=$(( E007_N_K + 1 ))
+      e007_n_ratio "$E007_W_S" "$loc" 3 "${E007_N_R}/$3-${kb}.cmd" "${E007_N_R}/$3-${kb}.twin"
+      if [ "$E007_N_OK" = 1 ]; then
+        e007_d_pass "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${E007_N_BOUND} times its neutral twin, inside the budget, and both are allowed"
+      else
+        e007_d_fail "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${E007_N_BOUND} times its neutral twin, inside the budget, and both are allowed — measured ratio ${E007_N_RATIO}, bound ${E007_N_BOUND}" \
+          "\"stopped\" is the watchdog ending a run at the budget; a ratio within the bound fails only on a refusal"
+      fi
+    done
+  done
+}
+# e007_n_ctl <arm> <copy> <shape> <kb> <locale> <what> — the copy with the code before its change is beyond
+# the bound on the shape: the instrument sees the step's cost.
+e007_n_ctl() {
+  e007_n_ratio "$2" "$5" 2 "${E007_N_R}/$3-$4.cmd" "${E007_N_R}/$3-$4.twin"
+  if [ "$E007_N_OVER" = 1 ]; then
+    e007_d_pass "$1: the copy with $6 as before is beyond ${E007_N_BOUND} times its neutral twin on the $3 shape at $4 KB in $5 — the instrument sees its cost"
+  else
+    e007_d_fail "$1: the copy with $6 as before is beyond the bound on the $3 shape (BROKEN PROBE) — measured ratio ${E007_N_RATIO}, bound ${E007_N_BOUND}" \
+      "a copy within the bound cannot show the timed arms measure anything"
+  fi
+}
+# e007_n_splice <in> <out> <from> <to> — <in> with its one occurrence of <from> replaced by <to>; fails
+# unless <from> occurs exactly once.
+e007_n_splice() {
+  /usr/bin/python3 -c 'import sys
+s = open(sys.argv[1], "rb").read()
+f, t = (a.encode("utf-8", "surrogateescape") for a in sys.argv[3:5])
+if s.count(f) != 1:
+    sys.exit(1)
+open(sys.argv[2], "wb").write(s.replace(f, t))' "$1" "$2" "$3" "$4"
+}
+# e007_n_lift <src> <out> <function>... — each named function the file holds, in the order named.
+e007_n_lift() {
+  /usr/bin/python3 -c 'import sys
+L = open(sys.argv[1], "rb").read().split(b"\n")
+out = []
+for nm in sys.argv[3:]:
+    h = nm.encode() + b"() {"
+    i = next((k for k, l in enumerate(L) if l.startswith(h)), None)
+    if i is None:
+        continue
+    j = i
+    while L[j] != b"}":
+        j += 1
+    out += L[i:j + 1]
+open(sys.argv[2], "wb").write(b"\n".join(out) + b"\n")' "$@"
+}
+E007_N_FUNCS="egress_long egress_cat egress_split_bs egress_split_at egress_brace_words egress_unescape_rv egress_unescape_long egress_fold_rv egress_respell_word egress_norm_at egress_is_redirection egress_restore_quoted_ops egress_short_flags egress_base_gh"
+# The dense set: words (w-*) and token lists (l-*), from a fixed generator.
+/usr/bin/python3 -c 'import os, random, sys
+d = sys.argv[1]; R = random.Random(8635); n = 0
+U = [b"a", b"B", b"gh", b"GH", b"api", b"i", b"iii", b"X", b"f", b"H", b"=", b"{", b"}", b",", b",,", b"/", b"\\",
+     b"\\\\", b"$", b".", b"..", b"1", b"123", b"{a,b}", b"{gh,api}", b"{name}", b"{1x}", b"<", b">", b">>", b"&", b"|",
+     b"\x01", b"\x04", b"\x05", b"\x06", b"\x7f", b"\xc3\xa9", b"\xe6\x97\xa5", b"\xff", b"\xc3", b"*", b"?", b"["]
+T = [b"", b"}", b",", b"{", b"/", b"/gh", b"\\", b">", b"}>x", b"i", b"X", b"\xff", b"\xc3"]
+def put(k, s):
+    global n
+    n += 1
+    open(os.path.join(d, "%s-%04d" % (k, n)), "wb").write(s)
+def word(L):
+    s = b""
+    while len(s) < L:
+        s += R.choice(U)
+    return s
+for L in (0, 1, 2, 3, 5, 8, 13, 40, 250, 256, 300, 900):
+    for _ in range(9 if L < 900 else 3):
+        put("w", word(L) + R.choice(T))
+for h in (b"{gh,api}", b"{,}", b"{a,}", b"{,a}", b"{a,,b}", b"x{a,b}y", b"{a,b}{c,d}", b"{a}", b"a{b,c", b"a}b{c,d",
+          b"{a,b}}", b"{{a,b}", b"pre{,}post", b"{\xc3\xa9,\xff}", b"{a\x7f,b}", b"1>", b"12>>", b"{fd}>", b"{fd}>&",
+          b"{f-d}>", b"{fd}", b"1" * 300 + b">x", b"{" + b"a" * 300 + b"}>", b"{" + b"a" * 300, b"\x01>", b"iX", b"iiX",
+          b"iXPOST", b"iX=POST", b"ii", b"iF", b"i" * 300 + b"H", b"i" * 300, b"i\xff", b"x" * 300 + b"/gh", b"/" + b"x" * 300):
+    put("w", h)
+V = [b"a", b"gh", b"api", b"{gh,api}", b"{a,b,c}", b"\x05", b"x\x05y", b"\x06", b"<", b">x", b"2>", b"-X", b"POST",
+     b"\\gh", b"G\\H", b"GH", b"do", b"\xc3\xa9", b"\xff", b"\x7f", b"{,}", b"{a,}"]
+for k in range(48):
+    t = [R.choice(V) for _ in range(R.choice((1, 2, 3, 5, 8, 20)))]
+    if k % 6 == 0:
+        t.append(b"{" + b"w," * R.choice((3, 300)) + b"z}")
+    if k % 9 == 0:
+        t.append(b"\x05" * 300)
+    put("l", b" ".join(t))' "${E007_N_R}/in"
+# The program each EQ arm runs: every changed function on every word and list, one record each.
+/bin/cat > "${E007_N_R}/eval.sh" <<'E007_N_EVAL'
+set -euo pipefail
+readonly TR=/usr/bin/tr
+readonly EGRESS_SENT=$'\001' EGRESS_RSP=$'\004' EGRESS_QLT=$'\005' EGRESS_QGT=$'\006'
+readonly EGRESS_UC='ABCDEFGHIJKLMNOPQRSTUVWXYZ' EGRESS_LC='abcdefghijklmnopqrstuvwxyz'
+EGRESS_LINEAR_MIN=256
+. "$1"
+dumpa() { local n="$1" k; eval "for k in \"\${!$n[@]}\"; do printf '[%s]=%q ' \"\$k\" \"\${$n[\$k]}\"; done"; printf '\n'; }
+exec > "$3"
+for f in "$2"/w-*; do
+  w="$(/bin/cat "$f"; printf x)"; w="${w%x}"
+  printf '== %s\n' "${f##*/}"
+  st=0; EGRESS_RV=(); EGRESS_RVN=0; EGRESS_RVCH=0; egress_brace_words "$w" || st=$?
+  printf 'brace %s %s %s\n' "$st" "$EGRESS_RVN" "$EGRESS_RVCH"; [ "$st" -ne 0 ] || dumpa EGRESS_RV
+  for steps in abc ab; do
+    egress_respell_word "$w" "$steps"; printf 'respell %s %s %s %s\n' "$steps" "$EGRESS_RVN" "$EGRESS_RVCH" "$EGRESS_RVFOLD"; dumpa EGRESS_RV
+  done
+  for pfx in '' 1; do
+    st=0; EGRESS_RDR_OP=x; egress_is_redirection "${pfx}${w}" || st=$?; printf 'redir %s %s\n' "$st" "$EGRESS_RDR_OP"
+  done
+  for nxt in yes no; do
+    egress_tok="-$w"
+    if [ "$nxt" = yes ]; then egress_toks=( x "-$w" "V A" z ); else egress_toks=( x "-$w" ); fi
+    egress_idx=1; egress_method=""; egress_explicit=0; egress_implicit=0
+    egress_short_flags
+    printf 'flags %s %s %q %s %s\n' "$nxt" "$egress_idx" "$egress_method" "$egress_explicit" "$egress_implicit"
+  done
+done
+for f in "$2"/l-*; do
+  c="$(/bin/cat "$f"; printf x)"; c="${c%x}"
+  printf '== %s\n' "${f##*/}"
+  set -f
+  # shellcheck disable=SC2206
+  base=( $c )
+  set +f
+  [ "${#base[@]}" -gt 0 ] || continue
+  egress_toks=( "${base[@]}" ); egress_restore_quoted_ops; printf 'restore\n'; dumpa egress_toks
+  n="${#base[@]}"; [ "$n" -le 10 ] || n=10
+  for fl in empty dense sparse; do
+    i=0
+    while [ "$i" -lt "$n" ]; do
+      egress_toks=( "${base[@]}" ); egress_tflag=()
+      case "$fl" in
+        dense) j=0; while [ "$j" -lt "${#base[@]}" ]; do egress_tflag[$j]=$(( j % 2 )); j=$(( j + 1 )); done ;;
+        sparse) egress_tflag[1]=""; egress_tflag[2]=1; egress_tflag[3]=0; egress_tflag[40]=1 ;;
+      esac
+      egress_cfold=x; egress_norm_at "$i" abc
+      printf 'norm %s %s %s\n' "$fl" "$i" "$egress_cfold"; dumpa egress_toks; dumpa egress_tflag
+      i=$(( i + 1 ))
+    done
+  done
+done
+E007_N_EVAL
+# e007_n_eq <arm> <what> <before-copy> <near-miss-copy>... — the before-copy's changed functions against the
+# shipped hook's on the dense set in both locales: equal, and each near miss differs.
+e007_n_eq() {
+  local arm="$1" what="$2" before="$3" why="" loc m d k
+  shift 3
+  e007_n_lift "$E007_W_SRC" "${E007_N_R}/lib-ship.sh" $E007_N_FUNCS
+  e007_n_lift "$before" "${E007_N_R}/lib-before.sh" $E007_N_FUNCS
+  for loc in en_US.UTF-8 C; do
+    LC_ALL="$loc" /bin/bash "${E007_N_R}/eval.sh" "${E007_N_R}/lib-ship.sh" "${E007_N_R}/in" "${E007_N_R}/out-ship" \
+      || why="${why} [${loc}] the shipped functions did not run;"
+    LC_ALL="$loc" /bin/bash "${E007_N_R}/eval.sh" "${E007_N_R}/lib-before.sh" "${E007_N_R}/in" "${E007_N_R}/out-before" \
+      || why="${why} [${loc}] the code before did not run;"
+    /usr/bin/cmp -s "${E007_N_R}/out-ship" "${E007_N_R}/out-before" || why="${why} [${loc}] the shipped functions differ from the code before;"
+    [ -s "${E007_N_R}/out-ship" ] || why="${why} [${loc}] no record was written;"
+    k=0
+    for m in "$@"; do
+      k=$(( k + 1 ))
+      e007_n_lift "$m" "${E007_N_R}/lib-near.sh" $E007_N_FUNCS
+      LC_ALL="$loc" /bin/bash "${E007_N_R}/eval.sh" "${E007_N_R}/lib-near.sh" "${E007_N_R}/in" "${E007_N_R}/out-near" || true
+      /usr/bin/cmp -s "${E007_N_R}/out-ship" "${E007_N_R}/out-near" \
+        && why="${why} [${loc}] near miss ${k} reads like the shipped code (the comparison cannot see a difference);"
+    done
+  done
+  d="$(/bin/ls "${E007_N_R}/in" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+  [ "$d" -ge 150 ] || why="${why} only ${d} inputs were written;"
+  if [ -z "$why" ]; then
+    e007_d_pass "${arm}: ${what} equals the code before it byte for byte on ${d} dense words and token lists in UTF-8 and C, and $# near misses each differ"
+  else
+    e007_d_fail "${arm}: ${what} equals the code before it byte for byte" "$why"
+  fi
+}
+# e007_n_copy <dir> <from> <to> [<from> <to> ...] — <dir>/mut.sh, the shipped hook with each text spliced in
+# turn, installed as the hook of a sandbox rooted at <dir>; E007_N_CW counts the splices that did not apply.
+e007_n_copy() {
+  local dir="$1"
+  shift
+  E007_N_CW=0
+  /bin/mkdir -p "$dir"
+  /bin/cp "$E007_W_SRC" "${dir}/mut.sh"
+  while [ "$#" -ge 2 ]; do
+    if e007_n_splice "${dir}/mut.sh" "${dir}/mut.next" "$1" "$2"; then
+      /bin/mv "${dir}/mut.next" "${dir}/mut.sh"
+    else
+      E007_N_CW=$(( E007_N_CW + 1 ))
+    fi
+    shift 2
+  done
+  e007_v_sandbox "$dir" "${dir}/mut.sh"
+}
+# e007_n_before <dir> <function>... — a sandbox at <dir> whose hook is the shipped one with each named
+# function put back as it was before this pass (from the file below); E007_N_CW counts the functions that
+# could not be put back.
+e007_n_before() {
+  local dir="$1"
+  shift
+  /bin/mkdir -p "$dir"
+  E007_N_CW="$(/usr/bin/python3 -c 'import sys
+def blocks(b):
+    L = b.split(b"\n"); out = {}; i = 0
+    while i < len(L):
+        l = L[i]
+        if l.endswith(b"() {") and not l.startswith(b" "):
+            j = i
+            while L[j] != b"}":
+                j += 1
+            out.setdefault(l[:-4], []).append(b"\n".join(L[i:j + 1]))
+            i = j
+        i += 1
+    return out
+src = open(sys.argv[1], "rb").read(); old = blocks(open(sys.argv[2], "rb").read()); have = blocks(src); bad = 0
+for nm in sys.argv[4:]:
+    k = nm.encode()
+    if len(have.get(k, [])) != 1 or len(old.get(k, [])) != 1 or src.count(have[k][0]) != 1:
+        bad += 1
+        continue
+    src = src.replace(have[k][0], old[k][0])
+open(sys.argv[3], "wb").write(src)
+print(bad)' "$E007_W_SRC" "${E007_N_R}/before-funcs.sh" "${dir}/mut.sh" "$@" 2>/dev/null)" || E007_N_CW=x
+  e007_v_sandbox "$dir" "${dir}/mut.sh"
+}
+# The changed functions as they were before this pass, verbatim.
+/bin/cat > "${E007_N_R}/before-funcs.sh" <<'E007_N_BEFORE'
+egress_brace_words() {
+  local w="$1" pre rest mid post alt k=0 last=0
+  case "$w" in *'{'*','*'}'*) ;; *) return 1 ;; esac
+  case "$w" in *\\*|*'$'*|*/*|*..*|*"${EGRESS_SENT}"*) return 1 ;; esac
+  pre="${w%%\{*}"
+  rest="${w#*\{}"
+  mid="${rest%%\}*}"
+  post="${rest#*\}}"
+  case "${pre}${mid}${post}" in *'{'*|*'}'*) return 1 ;; esac
+  case "$mid" in *,*) ;; *) return 1 ;; esac
+  EGRESS_BW=()
+  while [ "$last" -eq 0 ]; do
+    case "$mid" in
+      *,*) alt="${mid%%,*}"; mid="${mid#*,}" ;;
+      *) alt="$mid"; last=1 ;;
+    esac
+    if [ -n "${pre}${alt}${post}" ]; then
+      EGRESS_BW[$k]="${pre}${alt}${post}"
+      k=$(( k + 1 ))
+    fi
+  done
+  [ "$k" -gt 0 ] || return 1
+  EGRESS_RV=( "${EGRESS_BW[@]}" )
+  EGRESS_RVN="$k"
+  EGRESS_RVCH=1
+  return 0
+}
+egress_unescape_rv() {
+  local j=0 s out
+  while [ "$j" -lt "$EGRESS_RVN" ]; do
+    s="${EGRESS_RV[$j]}"
+    case "$s" in
+      *\\*)
+        out=""
+        if egress_long "$s"; then egress_unescape_long "$s"; out="$EGRESS_J"; s=""; fi  # linear: unescape
+        while : ; do
+          case "$s" in
+            *\\*) ;;
+            *) out="${out}${s}"; break ;;
+          esac
+          out="${out}${s%%\\*}"
+          s="${s#*\\}"
+          out="${out}${s:0:1}"
+          s="${s:1}"
+        done
+        EGRESS_RV[$j]="$out"
+        EGRESS_RVCH=1
+        ;;
+    esac
+    j=$(( j + 1 ))
+  done
+  return 0
+}
+egress_norm_at() {
+  local i="$1" n k j
+  egress_respell_word "${egress_toks[$i]}" "$2"
+  egress_cfold="$EGRESS_RVFOLD"
+  [ "$EGRESS_RVCH" -eq 1 ] || return 0
+  if [ "$EGRESS_RVN" -eq 1 ]; then
+    egress_toks[$i]="${EGRESS_RV[0]}"
+    egress_tflag[$i]=1
+    return 0
+  fi
+  n="${#egress_toks[@]}"
+  EGRESS_NT=(); EGRESS_NF=(); k=0; j=0
+  while [ "$j" -lt "$i" ]; do
+    EGRESS_NT[$k]="${egress_toks[$j]}"; EGRESS_NF[$k]="${egress_tflag[$j]:-0}"
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  j=0
+  while [ "$j" -lt "$EGRESS_RVN" ]; do
+    EGRESS_NT[$k]="${EGRESS_RV[$j]}"; EGRESS_NF[$k]=1
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  j=$(( i + 1 ))
+  while [ "$j" -lt "$n" ]; do
+    EGRESS_NT[$k]="${egress_toks[$j]}"; EGRESS_NF[$k]="${egress_tflag[$j]:-0}"
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  egress_toks=( "${EGRESS_NT[@]}" )
+  egress_tflag=( "${EGRESS_NF[@]}" )
+  return 0
+}
+E007_N_BEFORE
+
+# -- NB: the normalization of a long brace group --
+E007_NB_B="${E007_W_BASE}/nbb"; e007_n_before "$E007_NB_B" egress_brace_words egress_unescape_rv egress_norm_at
+_nb_cw="$E007_N_CW"
+E007_NB_M1="${E007_W_BASE}/nbm1"; e007_n_copy "$E007_NB_M1" '*"$1") EGRESS_SP[${#EGRESS_SP[@]}]="" ;;' '*"$1") : ;;'; _nb_cw="${_nb_cw}${E007_N_CW}"
+E007_NB_M2="${E007_W_BASE}/nbm2"; e007_n_copy "$E007_NB_M2" 'for alt in "${EGRESS_SP[@]}"; do' 'for alt in "${EGRESS_SP[@]:1}"; do'; _nb_cw="${_nb_cw}${E007_N_CW}"
+E007_NB_M3="${E007_W_BASE}/nbm3"; e007_n_copy "$E007_NB_M3" 'for s in "${EGRESS_RV[@]}"; do  # linear: words' 'for s in "${EGRESS_RV[@]:1}"; do  # linear: words'; _nb_cw="${_nb_cw}${E007_N_CW}"
+E007_NB_M4="${E007_W_BASE}/nbm4"; e007_n_copy "$E007_NB_M4" '"${egress_toks[@]:$(( i + 1 ))}" )  # linear: splice' '"${egress_toks[@]:$(( i + 2 ))}" )  # linear: splice'; _nb_cw="${_nb_cw}${E007_N_CW}"
+E007_NB_M5="${E007_W_BASE}/nbm5"; e007_n_copy "$E007_NB_M5" 'D[$j]="${1:-0}"; shift' 'D[$j]=1; shift'; _nb_cw="${_nb_cw}${E007_N_CW}"
+if [ "$_nb_cw" = 000000 ]; then
+  e007_n_eq "AC-E007-NB-EQ" "the brace step, the escape step over a group's words and the splice" "${E007_NB_B}/mut.sh" \
+    "${E007_NB_M1}/mut.sh" "${E007_NB_M2}/mut.sh" "${E007_NB_M3}/mut.sh" "${E007_NB_M4}/mut.sh" "${E007_NB_M5}/mut.sh"
+else
+  e007_d_fail "AC-E007-NB-EQ: the brace step, the escape step over a group's words and the splice equal the code before them byte for byte" \
+    "the copies could not be built (put back, then each near miss: ${_nb_cw}; 0 = built)"
+fi
+e007_n_timed "the long brace group" "AC-E007-NB" brace '{gh,' 'a,' 'a} api repos/o/r' 'gh api repos/o/r {' 'a,' 'a}'
+e007_n_ctl "AC-E007-NB-CTL" "$E007_NB_B" brace 40 en_US.UTF-8 "the brace step, the escape step and the splice"
 
 # ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #
