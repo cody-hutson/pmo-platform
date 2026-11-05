@@ -32,9 +32,9 @@ reversibility: CHEAP / Confidence HIGH — one branch and one merge; reverting t
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): tool behaviour changes, a new release tool, and gate and reference text added inside existing structure, per the Bump-Class Selection Guide's "protocol text addition or modification" and "reference document addition or update"; no new skill and no new governance file. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file and the shared-home ADR), then #7177's slice, then #6397's and #6398's slices in their own spokes |
+| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file and the shared-home ADR, `5c6ea3fd`) and #7177's slice (`5634b68e`) landed; #6397's and #6398's slices follow in their own spokes |
 | **Branch** | `release/sequencing-layer-foundation` |
-| **PR** | opened in **draft** at Stage 6 Phase C2 after #7177's slice; transitions to ready-for-review at the Stage-9 gate |
+| **PR** | **#8811**, opened in **draft** at Stage 6 Phase C2 after #7177's slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `sequencing-layer-foundation` |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-11-05, domain: software }`
@@ -531,6 +531,58 @@ Run by the Stage-6 spoke on #8696 after this file was written and before it was 
 | ADR gates | `python3 release/tools/generate-adr-index.py --write`, then `--verify`; `python3 release/tools/check-adr-numbers.py`; `python3 release/tools/check-adr-durability.py --files <the record> --diff-base origin/main` | index `COUNT 0` (70 rows; one row added); numbering PASS, contiguous through 230 with no duplicate; durability lint `COUNT 0` on the record — its own self-test passes 156 of 156, so a zero is not a blind lint |
 | Doc links and plan depth | `python3 core/deploy/tools/check-doc-links.py --target-paths <this file>,<the record>,release/ADRs/README.md --require-targets`; `python3 release/tools/check-release-links.py --files <the same> --check-anchors`, and with `--plan-depth-lint` | doc links exit 0, no findings; release links 0 broken, plan depth 0 findings. Both checkers' self-tests pass (the release-link self-test asserts the plan-depth lint fires) |
 | Identity strings, host URLs, close keywords | a python scan of this file and the record for the home path, the bare username, the repository owner's handle, an email address, a raw host URL and a close-family verb before an issue number | 0 in every class. Control: one constructed line carrying one of each fires every class |
+
+Committed as Engineering Commit 0, `5c6ea3fd`.
+
+### Plan step 1 (#7177) — Stage 6 C4
+
+Run by the Stage-6 spoke on #8696 against slice 1's commit `5634b68e`, on Python 3.9.6 (the parser and the mirror compile; no `Union`, no `from __future__ import annotations`).
+
+| Check | Command | Observed |
+|---|---|---|
+| Parser regression suite | `python3 release/tools/tests/test_bundle_issues_parser.py` | exit 0, `TEST OK`; combined-clean 39/40 = 97.5%, unchanged; section-read arms 6 run, 0 failures. The AC4 arm doubled a blank line after a heading in 33 frozen bodies and inside a section in 8; the pre-repair extractor's clean count on the after-heading bodies falls 32 → 0, so the arm bites |
+| Tool self-tests | `python3 release/tools/bundle-issues-parser.py --self-test` · `python3 release/tools/native-dep-mirror.py --self-test` · `python3 release/tools/compute-milestone-positions.py --self-test` | `SELF-TEST OK` ×3 — the parser's SX-1..SX-4 and the mirror's cases 23 and 24 included |
+| Mirror frozen suite | `python3 release/tools/tests/test_native_dep_mirror.py` | exit 0, `TEST OK`, 20 cases |
+| RED arm | the new suite run against the parser and the mirror taken from the base (`git show b1042eec:<path>`), with the suite, its fixtures and the G-CL8 engine beside them | exit 1 — all 6 section-read arms fail, 13 failures: AC1 and CIAC-1 raise on a mirror with no load seam, AC2 reads a break line as section text, AC4 moves a body from clean to failed, AC5 drops the text after each doubled blank line, CIAC-3 reads the doubled form as empty. The frozen-sample legs still pass there, so the failures are the new arms' alone |
+| Precision probe | the `release-tooling-smoke.yml` probe's priority-detector mutation applied to a throwaway copy of `release/tools/` | anchor found exactly once; the suite exits 1 and its output carries `T-13 liveness`, so the probe's pass condition holds with the new arms present. One further failure line appears in that copy — AC5's misheaded leg cannot load the G-CL8 engine, because the copy has no `core/` beside it — which the probe does not read |
+| Live equivalence | the pre-repair and repaired tools compared on every open body and every frozen body (probe record below) | identical caller output on 814 of 814 open bodies and 40 of 40 frozen bodies |
+| Degraded-root arm | `bash core/deploy/tests/test_g1_form_family.sh` | exit 0 — 41 passed, 0 failed; arm G's control holds (`F0/F1 cards are still fully evaluated under a degraded vocabulary`), so the parser still loads alone |
+| Package consequence | `printf '%s\n' <the seven changed paths> \| bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | empty — no rostered skill's package is staled. Sensitivity arm: `release/skills/release-planner/references/dependency-analysis.md` on the same reader resolves `release-planner` |
+| Skill-roster totals | `python3 core/deploy/tools/check-skill-count-imp.py --files <this file>,<the ADR>,release/ADRs/README.md --mode both` | exit 0, no finding; its self-test passes 19 invariants |
+| Plan verifier | `bash release/tools/verify-release-plan.sh release/releases/plans/sequencing-layer-foundation_RELEASE_PLAN.md` | exit 3 — 9 PASS / 4 FAIL / 25 SKIP / 5 UNRUNNABLE / 0 ERROR over 43 records. `FCM-COVERAGE` PASS (32 of 32 interpreted); FCM-1 and FCM-2 PASS (this file and the shared-home ADR, the latter matched through the `NNN` placeholder); FCM-3..FCM-6 FAIL — slice 3's ADDs, not yet delivered; CIAC-1..CIAC-3 PASS; CIAC-4 SKIP (declared). The five #7177 rows read UNRUNNABLE: each grep limb PASSes (count 1, 0 at the base) and the reader-graded limb — the arm's behaviour, graded by the CI suite step — is not graded by this executor, which the verifier states rather than counting as a pass |
+| Runtime-suite selection | `release/references/standards/runtime-suite-selection-map.md` rows 4 (`release/tools/*.py`) and 6 (`release/tools/tests/*.py`) | row 6's suite is the parser suite above. Row 4: `python3 release/tools/check-selftest-coverage.py --run` exit 1 — **77 of 78** discovered self-tests pass, the parser's, the mirror's and the position tool's among them; the one failure is `release/tools/cleanup-orphan-state.sh --self-test`, which hit the runner's 300-second per-tool timeout (exit 124). That tool is unchanged since the base and names neither tool nor the suite (0 references); its self-test walks every process's working directory through `lsof`, which this busy workstation made slow (8.6 s of CPU in over 4 minutes). It is recorded **NOT-EVALUATED here**, not as a pass and not as a regression; the `selftest-discovery` job on #8811 is the enforced reading. `--reconcile`: `RECONCILE VERDICT: CLEAN`. The `test-run` event is not emitted by this spoke — the pipeline-event log is an operator-instance surface outside its write boundary; Stage 7 Phase A8 re-runs both rows as the gate input |
+| Close-keyword self-check | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | exit 0, CLEAN, over 2 commits, before each push |
+| Draft PR (C2) | `gh pr create --draft` with the title, the body from the template, the milestone, the union of the three cards' labels, `--assignee @me` and `--reviewer` | **#8811**, draft, read back with its milestone, 11 labels and an assignee; the reviewer field reads empty, the expected self-review no-op. `--project "PMO Pipeline"` was rejected by the CLI ("not found"), which aborted the first attempt with no PR created; the PR was created without it. The body's close-keyword arm: 0 matches outside the Issue References block |
+
+**Probe record for the live-equivalence zero** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0 to PV-7):
+
+```
+Probe:       per body, compare under the pre-repair tools (from the base) and the repaired
+             tools: Affected Files (paths, status), Dependencies (set, status), Acceptance
+             Criteria (present, count), Documentation Impact presence (is not None, the test
+             both G3-20 readers make), and the mirror's eligible and unattributed sets
+Denominator: 814 open bodies (gh issue list --limit 5000 returned 814, equal to the search
+             total_count 814, so not truncated); 40 frozen bodies
+             (release/tools/tests/conformant_bundleable_sample.json)
+Control - sensitivity: a body whose Affected Files and Dependencies headings each carry two
+             blank lines -> the two tool sets differ (True)
+Control - specificity: the same body with one blank line -> the two tool sets agree (True)
+Extraction:  814 bodies, 4,382,915 bytes, 0 empty; 40 frozen bodies, 205,454 bytes
+Result:      0 differing bodies on the live set; 0 on the frozen set
+Verdict:     CLEAN
+```
+
+**The break-line class (R-14).** Of 2,105 parser-read sections on the live set, 4 end at a break line, and 3 of those have no blank-line gap before the break — the only sections the old extractor read past. Each is followed by a provenance or reconciliation footer (on #6637's Affected Files, #5280's and #5064's Acceptance Criteria), and none changes a read. On the frozen set, 10 of 128 sections end at a break line, every one after a gap — the separator footers the Stage-5 design measured. Sensitivity: a constructed section with a break line and no gap before it is counted (1 of 1).
+
+**Reference cascade (DTA-7).**
+
+```
+[REFCASCADE: git grep -c -w -F SECTION_HEADING_RE over release/tools/native-dep-mirror.py → pre 2 / post 0]
+[REFCASCADE: git grep -c -F 'n\s*\n\s*\n' over release/tools/bundle-issues-parser.py + release/tools/native-dep-mirror.py → pre 2 / post 0]
+[REFCASCADE: git grep -c -F '13 legs' over .github/workflows/release-tooling-smoke.yml → pre 2 / post 0]
+```
+
+`extract_section_with_alias` and `extract_section_aliased` keep their names in the mirror (DEV-3): the definition moved from the mirror to the parser (`def extract_section_with_alias` pre 1 in the mirror, post 0 in the mirror and 1 in the parser), and the call sites stay by design. The Stage-5 mirror sweep reads 10 lines before and 5 after — the three bindings, the rewritten header comment, and the unchanged caller; the "mirrors bundle-issues-parser" and "canonical body parser" phrases read 0. The parser sweep reads 3 before and 2 after: the module docstring's opening line (still true; the shared-home role is stated in the paragraph added beneath it) and a self-test comment that describes the old defect (PRESERVE). The test file's reference copy of the old terminator is the RED arm's instrument and is out of the sweep's scope.
 
 ---
 
