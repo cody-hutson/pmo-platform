@@ -1138,7 +1138,7 @@ jobs:
     # turns this required job red. Those arms stay in this job and need this limit:
     # it is the harness's estimated run time with them, plus at least a third of
     # headroom.
-    timeout-minutes: 60
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v7
 
