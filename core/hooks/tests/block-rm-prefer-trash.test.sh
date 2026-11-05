@@ -1296,6 +1296,77 @@ else
   esac
 fi
 
+# ----- AC-CPH-T* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget -----
+#
+# The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
+# walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
+# command, clears one long command word, a long option cluster and a long split string in its short and
+# long spelling inside the budget at 10, 20, 40 and 80 KB in en_US.UTF-8 and C, and allows each. The arms
+# that see each site's cost apart from the rest of the hook are the false-positive control's AC-CP-L arms,
+# on the canonicalizer alone, beside their sensitivity copy.
+TRSC_LIMIT="${TRSC_LIMIT_DS:-200}"   # tenths of a second
+TRSC_BASE="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-cph.XXXXXX" 2>/dev/null)" || TRSC_BASE=""
+# trsc_cmd <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling.
+trsc_cmd() {
+  local h u t
+  case "$1" in
+    word)    h='';                     u='a';    t='' ;;
+    cluster) h='sudo -';               u='b';    t=' q' ;;
+    split)   h='env -S-';              u='b';    t=' q' ;;
+    lsplit)  h='env --split-string=-'; u='b';    t=' q' ;;
+    segs)    h='';                     u='a; ';  t='a' ;;
+  esac
+  H="$h" U="$u" T="$t" LC_ALL=C /usr/bin/awk -v n="$2" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = int((n - length(h) - length(t)) / length(u)) * length(u); r = u; while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$3"
+}
+# trsc_reap <pid> — stop a process and every process under it, children first, with KILL.
+trsc_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do trsc_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
+# trsc_timed <hook-file> <locale> <command-file> <limit> — the hook on the Bash payload of the command
+# under a watchdog; sets TRSC_DS (tenths elapsed, -1 when stopped) and TRSC_EXIT.
+TRSC_DS=0
+TRSC_EXIT=0
+trsc_timed() {
+  local pay="${TRSC_BASE}/payload.json" pid n=0
+  bash_payload "$(/bin/cat "$3")" > "$pay"
+  LC_ALL="$2" /bin/bash "$1" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      trsc_reap "$pid"; wait "$pid" 2>/dev/null
+      TRSC_DS=-1; TRSC_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  TRSC_EXIT=0; wait "$pid" || TRSC_EXIT=$?
+  TRSC_DS="$n"
+}
+if [ -z "$TRSC_BASE" ]; then
+  /usr/bin/printf 'FAIL: AC-CPH-T the timed arms could not create a sandbox, so they did not run\n'; FAIL=$((FAIL + 1))
+else
+  trsc_n=0
+  for trsc_shape in word cluster split lsplit; do
+    for trsc_kb in 10 20 40 80; do trsc_cmd "$trsc_shape" $(( trsc_kb * 1024 )) "${TRSC_BASE}/${trsc_shape}-${trsc_kb}.cmd"; done
+    for trsc_loc in en_US.UTF-8 C; do
+      for trsc_kb in 10 20 40 80; do
+        trsc_n=$(( trsc_n + 1 ))
+        trsc_timed "$HOOK" "$trsc_loc" "${TRSC_BASE}/${trsc_shape}-${trsc_kb}.cmd" "$TRSC_LIMIT"
+        if [ "$TRSC_DS" != -1 ] && [ "$TRSC_EXIT" = 0 ]; then
+          /usr/bin/printf 'PASS: %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook in ${TRSC_DS} tenths of a second (budget ${TRSC_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+        else
+          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook inside the budget and is allowed" \
+            "elapsed=${TRSC_DS} tenths (-1 = stopped at ${TRSC_LIMIT}) exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+        fi
+      done
+    done
+  done
+fi
+case "${TRSC_BASE##*/}" in rmt-cph.*) /bin/rm -rf "$TRSC_BASE" ;; esac
+
 # Summary
 echo ""
 echo "================================"

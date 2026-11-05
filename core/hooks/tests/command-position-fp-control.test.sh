@@ -503,6 +503,264 @@ else
 fi
 /bin/rm -rf "$ss_sbx"
 
+# --- AC-CP-L (#8314, DT pass 7): the walk's three changed sites read their token once ---
+# Three sites of the walk this release added cost more than linear time in the token they
+# read: the basename step of a prefix word, a pattern removal that retries its match at every
+# position of a word that holds no slash; and the option-cluster walk and the split-string
+# scan, each copying what is left of its token at every character. Each now reads its token
+# once: the basename step skips the removal on a word with no slash, which it could only leave
+# unchanged, and the two loops step through the token by index. L-EQ splices the code before
+# this change back into a copy of the shipped file and runs both on a dense set of commands in
+# en_US.UTF-8 and C, in the default and the exit view: equal byte for byte, while three near
+# misses — a basename guard that misses a leading slash, a cluster end-test one character
+# early, a split scan that skips its first option character — each differ. L1 to L32 time the
+# canonicalizer alone on one long command word, a long option cluster and a long split string
+# in its short and long spelling, at 10, 20, 40 and 80 KB in both locales, against a neutral
+# twin of the same length whose long run the changed site does not read (a word that opens
+# with a slash; the run after the command word): the least of three interleaved runs of each
+# (five at the two smaller sizes), under a watchdog, keeps the shape within CPL_BOUND times its
+# twin. L-CTL is the instrument's
+# sensitivity: the spliced copy of the code before this change exceeds the bound on each
+# site's shape at 40 KB in UTF-8.
+CPL_BOUND="${CPL_BOUND:-2.0}"
+CPL_LIMIT="${CPL_LIMIT_S:-20}"   # seconds a run may take before the watchdog stops it
+CPL_BASE="$(/usr/bin/mktemp -d)"
+# cpl_splice <in> <out> <old> <new> — <in> with its one occurrence of <old> replaced by <new>;
+# fails, writing nothing useful, unless <old> occurs exactly once.
+cpl_splice() {
+  F="$3" T="$4" LC_ALL=C /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] } { s = s $0 "\n" }
+    END { i = index(s, f); if (i == 0 || index(substr(s, i + 1), f) > 0) exit 1
+          printf "%s", substr(s, 1, i - 1) t substr(s, i + length(f)) }' "$1" > "$2"
+}
+CPL_NEW_LOOKUP='  if (index(tok, "/") > 0) sub(/.*\//, "", tok)
+'
+CPL_OLD_LOOKUP='  sub(/.*\//, "", tok)
+'
+CPL_NEW_SPLIT_HEAD='function cp_split_scan(v, hi,   c2, nm, p, n) {'
+CPL_OLD_SPLIT_HEAD='function cp_split_scan(v, hi,   c2, nm) {'
+CPL_NEW_SPLIT='  n = length(v)
+  for (p = 2; p <= n; p++) {
+    c2 = substr(v, p, 1)
+    if (index(R_OPT, c2 "::") > 0) break
+    if (index(R_OPT, c2 ":") > 0) { if (p == n) cp_skip_one(hi); break }
+  }
+'
+CPL_OLD_SPLIT='  v = substr(v, 2)
+  while (v != "") {
+    c2 = substr(v, 1, 1); v = substr(v, 2)
+    if (index(R_OPT, c2 "::") > 0) v = ""
+    else if (index(R_OPT, c2 ":") > 0) { if (v == "") cp_skip_one(hi); v = "" }
+  }
+'
+CPL_NEW_WALK_HEAD='function cp_wrapper_walk(w, hi,   tok, ts, c, lname, p, n, e) {'
+CPL_OLD_WALK_HEAD='function cp_wrapper_walk(w, hi,   tok, ts, rest, c, lname) {'
+CPL_NEW_WALK='      n = length(tok)
+      for (p = 2; p <= n; p++) {
+        c = substr(tok, p, 1)
+        if (c == ":") continue
+        if (R_NOX != "" && index(R_NOX, c) > 0) { CP_STOP = 1; CP_STOP_S = ts; return }
+        e = (p == n)
+        if (R_SPLIT != "" && index(R_SPLIT, c) > 0 && !e) {
+          if (cp_split_scan(substr(tok, p + 1), hi)) { CP_STOP = 1; CP_STOP_S = ts; return }
+          e = 1; p = n
+        }
+        if (index(R_OPT, c "::") > 0) p = n
+        else if (index(R_OPT, c ":") > 0) { if (e) cp_skip_one(hi); p = n }
+      }
+'
+CPL_OLD_WALK='      rest = substr(tok, 2)
+      while (rest != "") {
+        c = substr(rest, 1, 1); rest = substr(rest, 2)
+        if (c == ":") continue
+        if (R_NOX != "" && index(R_NOX, c) > 0) { CP_STOP = 1; CP_STOP_S = ts; return }
+        if (R_SPLIT != "" && index(R_SPLIT, c) > 0 && rest != "") {
+          if (cp_split_scan(rest, hi)) { CP_STOP = 1; CP_STOP_S = ts; return }
+          rest = ""
+        }
+        if (index(R_OPT, c "::") > 0) rest = ""
+        else if (index(R_OPT, c ":") > 0) { if (rest == "") cp_skip_one(hi); rest = "" }
+      }
+'
+cpl_why=""
+CPL_OLD="${CPL_BASE}/before.awk"
+cpl_splice "$CMDPOS_AWK" "${CPL_BASE}/b1" "$CPL_NEW_LOOKUP" "$CPL_OLD_LOOKUP" || cpl_why="${cpl_why} the basename step's guarded line is not in the shipped file once;"
+cpl_splice "${CPL_BASE}/b1" "${CPL_BASE}/b2" "$CPL_NEW_SPLIT_HEAD" "$CPL_OLD_SPLIT_HEAD" || cpl_why="${cpl_why} the split scan's locals line is not there once;"
+cpl_splice "${CPL_BASE}/b2" "${CPL_BASE}/b3" "$CPL_NEW_SPLIT" "$CPL_OLD_SPLIT" || cpl_why="${cpl_why} the split scan's indexed loop is not there once;"
+cpl_splice "${CPL_BASE}/b3" "${CPL_BASE}/b4" "$CPL_NEW_WALK_HEAD" "$CPL_OLD_WALK_HEAD" || cpl_why="${cpl_why} the cluster walk's locals line is not there once;"
+cpl_splice "${CPL_BASE}/b4" "$CPL_OLD" "$CPL_NEW_WALK" "$CPL_OLD_WALK" || cpl_why="${cpl_why} the cluster walk's indexed loop is not there once;"
+cpl_splice "$CMDPOS_AWK" "${CPL_BASE}/mut-lookup.awk" '  if (index(tok, "/") > 0) sub(' '  if (index(tok, "/") > 1) sub(' || cpl_why="${cpl_why} the lookup near miss did not apply;"
+cpl_splice "$CMDPOS_AWK" "${CPL_BASE}/mut-cluster.awk" '        e = (p == n)' '        e = (p == n - 1)' || cpl_why="${cpl_why} the cluster near miss did not apply;"
+cpl_splice "$CMDPOS_AWK" "${CPL_BASE}/mut-split.awk" '  for (p = 2; p <= n; p++) {
+    c2 = ' '  for (p = 3; p <= n; p++) {
+    c2 = ' || cpl_why="${cpl_why} the split near miss did not apply;"
+# The dense set: wrappers and their clusters, attached and long split strings, slashes in every
+# place, quotes, keywords, assignments, redirections, multibyte letters and an undecodable byte.
+/bin/mkdir -p "${CPL_BASE}/in"
+cpl_k=0
+while IFS= read -r cpl_line; do
+  cpl_k=$((cpl_k + 1))
+  /usr/bin/printf '%s' "$cpl_line" > "${CPL_BASE}/in/$(/usr/bin/printf '%03d' "$cpl_k")"
+done <<'CPL_EOF'
+sudo -u root rm x
+sudo -bu root rm x
+sudo -bbb rm x
+sudo -bbbu root rm x
+sudo -bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbu root rm x
+sudo -l rm x
+sudo -bl rm
+sudo -a: -u x rm
+sudo -:u x rm
+sudo -u
+/usr/bin/env -u x rm
+/usr/bin/sudo -u root rm
+/sudo rm x
+\sudo -u r rm
+"nice" -n 5 rm
+a/b/c rm
+x/y/sudo -u r rm
+env -S-u x rm
+env -S-ux rm
+env -S-iu x rm
+env -S-bbbbbbbbbbbbbbbbbbbbbbbbbbbbu x rm
+env -S-u
+env -Srm x
+env -S/bin/rm x
+env -SA=1 rm
+env -S- rm
+env --split-string=-u x rm
+env --split-string=-iu x q
+env --split-string=rm x
+env --split-string=-bbbbbbbbbbbbbbbbbbbbu x rm
+env -i -S-u x rm
+xargs -e rm
+xargs -ex rm
+nice -n5 rm
+stdbuf -oL rm
+timeout -k 5 9 rm
+timeout -s KILL 9 rm
+env -C /tmp -u x rm
+A+=1 sudo -u root rm; nice -n 1 q
+if sudo -u x rm; then env -S-u y rm; fi
+X=/usr/bin/timeout rm
+>/tmp/x sudo -u r rm
+'sudo -u root rm'
+cmd | sudo -bu root rm && env -S-u x rm
+sudo -é rm
+naïve -u 日本 rm
+sudo -u é/x rm
+CPL_EOF
+/usr/bin/printf 'sudo -\377 rm' > "${CPL_BASE}/in/900"
+/usr/bin/printf 'env -S-\377u x rm' > "${CPL_BASE}/in/901"
+/usr/bin/printf 'sudo -u root r\nnice -n 1 /bin/rm x' > "${CPL_BASE}/in/902"
+cpl_n=0
+cpl_m_lookup=0; cpl_m_cluster=0; cpl_m_split=0
+cpl_view() { # <awk> <locale> <view> <input> -> stdout
+  if [ "$3" = exit ]; then
+    LC_ALL="$2" /usr/bin/awk -v CMDPOS_VIEW=exit -f "$1" "$4" 2>/dev/null
+  else
+    LC_ALL="$2" /usr/bin/awk -f "$1" "$4" 2>/dev/null
+  fi
+}
+if [ -z "$cpl_why" ]; then
+  for cpl_f in "${CPL_BASE}"/in/*; do
+    for cpl_loc in en_US.UTF-8 C; do
+      for cpl_v in default exit; do
+        cpl_n=$((cpl_n + 1))
+        cpl_s="$(cpl_view "$CMDPOS_AWK" "$cpl_loc" "$cpl_v" "$cpl_f"; /usr/bin/printf x)"
+        cpl_o="$(cpl_view "$CPL_OLD" "$cpl_loc" "$cpl_v" "$cpl_f"; /usr/bin/printf x)"
+        [ "$cpl_s" = "$cpl_o" ] || cpl_why="${cpl_why} [${cpl_loc} ${cpl_v} ${cpl_f##*/}] the shipped walk differs from the code before it;"
+        [ "$(cpl_view "${CPL_BASE}/mut-lookup.awk" "$cpl_loc" "$cpl_v" "$cpl_f"; /usr/bin/printf x)" = "$cpl_s" ] || cpl_m_lookup=$((cpl_m_lookup + 1))
+        [ "$(cpl_view "${CPL_BASE}/mut-cluster.awk" "$cpl_loc" "$cpl_v" "$cpl_f"; /usr/bin/printf x)" = "$cpl_s" ] || cpl_m_cluster=$((cpl_m_cluster + 1))
+        [ "$(cpl_view "${CPL_BASE}/mut-split.awk" "$cpl_loc" "$cpl_v" "$cpl_f"; /usr/bin/printf x)" = "$cpl_s" ] || cpl_m_split=$((cpl_m_split + 1))
+      done
+    done
+  done
+  [ "$cpl_m_lookup" -gt 0 ] || cpl_why="${cpl_why} the lookup near miss equals the shipped walk everywhere (the comparison cannot see a difference);"
+  [ "$cpl_m_cluster" -gt 0 ] || cpl_why="${cpl_why} the cluster near miss equals the shipped walk everywhere;"
+  [ "$cpl_m_split" -gt 0 ] || cpl_why="${cpl_why} the split near miss equals the shipped walk everywhere;"
+fi
+if [ -z "$cpl_why" ]; then
+  pass "AC-CP-L-EQ: the walk equals the code before this change byte for byte on ${cpl_n} cells (dense commands x UTF-8 and C x default and exit view), and the three near misses differ on ${cpl_m_lookup}, ${cpl_m_cluster} and ${cpl_m_split}"
+else
+  fail "AC-CP-L-EQ: the walk equals the code before this change byte for byte —${cpl_why}"
+fi
+# The timer: the least of <reps> interleaved runs of the canonicalizer on a shape and on its
+# twin — a loaded host only ever adds time, so the least run is the steadiest reading — each
+# under a watchdog that stops a run (and its process group) at the limit.
+CPL_PY='import os, signal, subprocess, sys, time
+awk, loc, reps, limit, shape, twin = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), sys.argv[5], sys.argv[6]
+def one(p):
+    t0 = time.time()
+    r = subprocess.Popen(["/usr/bin/awk", "-f", awk, p], env=dict(os.environ, LC_ALL=loc), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        r.wait(timeout=limit)
+    except subprocess.TimeoutExpired:
+        os.killpg(r.pid, signal.SIGKILL); r.wait(); return None
+    return time.time() - t0
+s, w = [], []
+for _ in range(reps):
+    s.append(one(shape)); w.append(one(twin))
+if None in s or None in w:
+    print("-1 -1")
+else:
+    print("%.3f %.3f" % (min(s), min(w)))'
+# cpl_fill <bytes> <head> <unit> <tail> — the head, as many units as fit, then the tail.
+cpl_fill() {
+  H="$2" U="$3" T="$4" LC_ALL=C /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = int((n - length(h) - length(t)) / length(u)) * length(u); r = u
+    while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }'
+}
+cpl_shape() { # <shape> <bytes> <shape-file> <twin-file>
+  case "$1" in
+    word)    cpl_fill "$2" '' 'a' '' > "$3";                       cpl_fill "$2" '/' 'a' '' > "$4" ;;
+    cluster) cpl_fill "$2" 'sudo -' 'b' ' q' > "$3";               cpl_fill "$2" 'sudo -b q ' 'b' '' > "$4" ;;
+    split)   cpl_fill "$2" 'env -S-' 'b' ' q' > "$3";              cpl_fill "$2" 'env -S-b q ' 'b' '' > "$4" ;;
+    lsplit)  cpl_fill "$2" 'env --split-string=-' 'b' ' q' > "$3"; cpl_fill "$2" 'env --split-string=-b q ' 'b' '' > "$4" ;;
+  esac
+}
+# cpl_ratio <awk> <locale> <reps> <shape-file> <twin-file> — sets CPL_S, CPL_W (seconds; -1 when
+# the watchdog stopped a run) and CPL_OK (1 when the shape costs at most CPL_BOUND times its twin).
+cpl_ratio() {
+  local out
+  out="$(/usr/bin/python3 -c "$CPL_PY" "$1" "$2" "$3" "$CPL_LIMIT" "$4" "$5" 2>/dev/null)" || out="-1 -1"
+  CPL_S="${out% *}"; CPL_W="${out#* }"
+  CPL_OK=0
+  if [ "$CPL_S" != -1 ] && /usr/bin/awk -v s="$CPL_S" -v w="$CPL_W" -v b="$CPL_BOUND" 'BEGIN { exit !(w > 0 && s <= b * w) }'; then CPL_OK=1; fi
+}
+cpl_n=0
+for cpl_shape_name in word cluster split lsplit; do
+  for cpl_kb in 10 20 40 80; do
+    cpl_shape "$cpl_shape_name" $((cpl_kb * 1024)) "${CPL_BASE}/s-${cpl_shape_name}-${cpl_kb}" "${CPL_BASE}/t-${cpl_shape_name}-${cpl_kb}"
+    cpl_reps=3; [ "$cpl_kb" -le 20 ] && cpl_reps=5
+    for cpl_loc in en_US.UTF-8 C; do
+      cpl_n=$((cpl_n + 1))
+      cpl_ratio "$CMDPOS_AWK" "$cpl_loc" "$cpl_reps" "${CPL_BASE}/s-${cpl_shape_name}-${cpl_kb}" "${CPL_BASE}/t-${cpl_shape_name}-${cpl_kb}"
+      if [ "$CPL_OK" = 1 ]; then
+        pass "AC-CP-L${cpl_n}: the long ${cpl_shape_name} shape at ${cpl_kb} KB in ${cpl_loc} costs the canonicalizer ${CPL_S}s against ${CPL_W}s for its neutral twin, within ${CPL_BOUND} times"
+      else
+        fail "AC-CP-L${cpl_n}: the long ${cpl_shape_name} shape at ${cpl_kb} KB in ${cpl_loc} costs the canonicalizer within ${CPL_BOUND} times its neutral twin (shape ${CPL_S}s, twin ${CPL_W}s; -1 = stopped at ${CPL_LIMIT}s)"
+      fi
+    done
+  done
+done
+# L-CTL: the code before this change, on each site's shape at 40 KB in UTF-8, is beyond the bound.
+cpl_why=""
+if [ ! -s "$CPL_OLD" ]; then
+  cpl_why=" no copy of the code before this change could be built (L-EQ names why);"
+else
+  for cpl_shape_name in word cluster split; do
+    cpl_ratio "$CPL_OLD" en_US.UTF-8 1 "${CPL_BASE}/s-${cpl_shape_name}-40" "${CPL_BASE}/t-${cpl_shape_name}-40"
+    [ "$CPL_OK" = 0 ] || cpl_why="${cpl_why} [${cpl_shape_name}] the code before this change stays within the bound (shape ${CPL_S}s, twin ${CPL_W}s);"
+  done
+fi
+if [ -z "$cpl_why" ]; then
+  pass "AC-CP-L-CTL: the code before this change exceeds ${CPL_BOUND} times its neutral twin on the word, cluster and split shapes at 40 KB in UTF-8 — the instrument sees each site's cost"
+else
+  fail "AC-CP-L-CTL: the code before this change exceeds the bound on each site's shape (BROKEN PROBE) —${cpl_why}"
+fi
+/bin/rm -rf "$CPL_BASE"
+
 # --- (5) AGGREGATE ASSERTIONS ---------------------------------------------------------
 if [ "$N_CORPUS" -ge 15 ]; then
   pass "corpus size $N_CORPUS meets the >=15 floor"

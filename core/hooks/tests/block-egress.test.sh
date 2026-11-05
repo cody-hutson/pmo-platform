@@ -3708,6 +3708,46 @@ else
     "${_z_why} a copy that finishes cannot show Z1-Z16 measure anything (BROKEN PROBE)"
 fi
 
+# ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
+#
+# The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
+# walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
+# command, clears one long command word, a long option cluster and a long split string in its short and
+# long spelling inside the budget at 10, 20, 40 and 80 KB in en_US.UTF-8 and C, and allows each. The arms
+# that see each site's cost apart from the rest of the hook are the false-positive control's AC-CP-L arms,
+# on the canonicalizer alone, beside their sensitivity copy.
+E007_CPH_R="${E007_W_BASE}/cph"
+/bin/mkdir -p "$E007_CPH_R"
+# e007_cph_cmd <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling.
+e007_cph_cmd() {
+  local h u t
+  case "$1" in
+    word)    h='';                     u='a'; t='' ;;
+    cluster) h='sudo -';               u='b'; t=' q' ;;
+    split)   h='env -S-';              u='b'; t=' q' ;;
+    lsplit)  h='env --split-string=-'; u='b'; t=' q' ;;
+  esac
+  H="$h" U="$u" T="$t" LC_ALL=C /usr/bin/awk -v n="$2" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = n - length(h) - length(t); r = u; while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$3"
+}
+_cph_n=0
+for _cph_shape in word cluster split lsplit; do
+  for _cph_kb in 10 20 40 80; do e007_cph_cmd "$_cph_shape" $(( _cph_kb * 1024 )) "${E007_CPH_R}/${_cph_shape}-${_cph_kb}.cmd"; done
+  for _cph_loc in en_US.UTF-8 C; do
+    for _cph_kb in 10 20 40 80; do
+      _cph_n=$(( _cph_n + 1 ))
+      e007_t_timed "$E007_W_S" "$_cph_loc" "${E007_CPH_R}/${_cph_shape}-${_cph_kb}.cmd" "$E007_T_LIMIT"
+      if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+        e007_d_pass "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+      else
+        e007_d_fail "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the hook inside the budget and is allowed" \
+          "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+      fi
+    done
+  done
+done
+
 # ---- Behind a prefix: each respelling reaches the record its plain twin gets ----
 e007_w_pair "AC-E007-SP-W4: \\env -u X gh api -X POST <unlisted> — an escaped prefix word — is located behind the option's argument and recorded" \
   "\\env -u X gh api -X POST ${E007_W_NO}"

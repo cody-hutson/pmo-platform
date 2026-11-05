@@ -1599,6 +1599,79 @@ else
 fi
 /bin/rm -rf "$FSBX_BASE"
 
+# ----- AC-CPH-F* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget -----
+#
+# The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
+# walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
+# command, clears one long command word, a long option cluster and a long split string in its short and
+# long spelling inside the budget at 10, 20, 40 and 80 KB in en_US.UTF-8 and C, and allows each. The arms
+# that see each site's cost apart from the rest of the hook are the false-positive control's AC-CP-L arms,
+# on the canonicalizer alone, beside their sensitivity copy.
+FSBC_LIMIT="${FSBC_LIMIT_DS:-200}"   # tenths of a second
+FSBC_BASE="$(/usr/bin/mktemp -d)"
+FSBC_D="${FSBC_BASE}/s/hooks"
+/bin/mkdir -p "$FSBC_D"
+/bin/cp -R "${HOOK_DIR}/lib" "${FSBC_D}/lib"
+/bin/cp "${HOOK_DIR}/../fs-boundary-allowlist.txt" "${FSBC_D}/../fs-boundary-allowlist.txt"
+/bin/cp "$HOOK" "${FSBC_D}/block-fs-boundary.sh"
+/bin/chmod +x "${FSBC_D}/block-fs-boundary.sh"
+/usr/bin/printf 'enforce' > "${FSBC_D}/.mode"
+# fsbc_cmd <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling.
+fsbc_cmd() {
+  local h u t
+  case "$1" in
+    word)    h='';                     u='a'; t='' ;;
+    cluster) h='sudo -';               u='b'; t=' q' ;;
+    split)   h='env -S-';              u='b'; t=' q' ;;
+    lsplit)  h='env --split-string=-'; u='b'; t=' q' ;;
+  esac
+  H="$h" U="$u" T="$t" LC_ALL=C /usr/bin/awk -v n="$2" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = n - length(h) - length(t); r = u; while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$3"
+}
+# fsbc_reap <pid> — stop a process and every process under it, children first, with KILL.
+fsbc_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do fsbc_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
+# fsbc_timed <locale> <command-file> <limit> — the hook on the Bash payload of the command under a
+# watchdog; sets FSBC_DS (tenths elapsed, -1 when stopped) and FSBC_EXIT.
+FSBC_DS=0
+FSBC_EXIT=0
+fsbc_timed() {
+  local pay="${FSBC_BASE}/payload.json" pid n=0
+  bash_payload "$(/bin/cat "$2")" "$FSBC_BASE" > "$pay"
+  LC_ALL="$1" /bin/bash "${FSBC_D}/block-fs-boundary.sh" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$3" ]; then
+      fsbc_reap "$pid"; wait "$pid" 2>/dev/null
+      FSBC_DS=-1; FSBC_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  FSBC_EXIT=0; wait "$pid" || FSBC_EXIT=$?
+  FSBC_DS="$n"
+}
+fsbc_n=0
+for fsbc_shape in word cluster split lsplit; do
+  for fsbc_kb in 10 20 40 80; do fsbc_cmd "$fsbc_shape" $(( fsbc_kb * 1024 )) "${FSBC_BASE}/${fsbc_shape}-${fsbc_kb}.cmd"; done
+  for fsbc_loc in en_US.UTF-8 C; do
+    for fsbc_kb in 10 20 40 80; do
+      fsbc_n=$(( fsbc_n + 1 ))
+      fsbc_timed "$fsbc_loc" "${FSBC_BASE}/${fsbc_shape}-${fsbc_kb}.cmd" "$FSBC_LIMIT"
+      if [ "$FSBC_DS" != -1 ] && [ "$FSBC_EXIT" = 0 ]; then
+        /usr/bin/printf 'PASS: %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook in ${FSBC_DS} tenths of a second (budget ${FSBC_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+      else
+        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook inside the budget and is allowed" \
+          "elapsed=${FSBC_DS} tenths (-1 = stopped at ${FSBC_LIMIT}) exit=${FSBC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+      fi
+    done
+  done
+done
+/bin/rm -rf "$FSBC_BASE"
+
 # ----- Summary -----
 
 echo ""

@@ -344,7 +344,7 @@ function cp_lookup(tok,   q, n) {
     q = substr(tok, 1, 1)
     if ((q == "'" || q == "\"") && substr(tok, n, 1) == q) tok = substr(tok, 2, n - 2)
   }
-  sub(/.*\//, "", tok)
+  if (index(tok, "/") > 0) sub(/.*\//, "", tok)
   return tok
 }
 
@@ -387,7 +387,7 @@ function cp_skip_one(hi) {
 # token), 0 when it is only options, an assignment or empty (the walk goes on to the
 # command that follows; an option in it that takes a separate argument takes the next
 # token). A value holding a `/` is read as a command word.
-function cp_split_scan(v, hi,   c2, nm) {
+function cp_split_scan(v, hi,   c2, nm, p, n) {
   if (v == "") return 0
   if (index(v, "/") > 0) return 1
   if (substr(v, 1, 1) != "-") {
@@ -398,11 +398,11 @@ function cp_split_scan(v, hi,   c2, nm) {
     }
     return 1
   }
-  v = substr(v, 2)
-  while (v != "") {
-    c2 = substr(v, 1, 1); v = substr(v, 2)
-    if (index(R_OPT, c2 "::") > 0) v = ""
-    else if (index(R_OPT, c2 ":") > 0) { if (v == "") cp_skip_one(hi); v = "" }
+  n = length(v)
+  for (p = 2; p <= n; p++) {
+    c2 = substr(v, p, 1)
+    if (index(R_OPT, c2 "::") > 0) break
+    if (index(R_OPT, c2 ":") > 0) { if (p == n) cp_skip_one(hi); break }
   }
   return 0
 }
@@ -412,7 +412,7 @@ function cp_split_scan(v, hi,   c2, nm) {
 # CP_STOP=1 and CP_STOP_S to a token's first offset when the walk ends ON that token (a
 # describe-only option, or an attached split value carrying a command word): that token
 # is then the command word, so nothing behind it is promoted.
-function cp_wrapper_walk(w, hi,   tok, ts, rest, c, lname) {
+function cp_wrapper_walk(w, hi,   tok, ts, c, lname, p, n, e) {
   CP_STOP = 0
   cp_row(w)
   while (cp_token(CP_I, hi)) {
@@ -435,17 +435,18 @@ function cp_wrapper_walk(w, hi,   tok, ts, rest, c, lname) {
     }
     if (substr(tok, 1, 1) == "-" && length(tok) > 1) {
       CP_I = TK_E + 1
-      rest = substr(tok, 2)
-      while (rest != "") {
-        c = substr(rest, 1, 1); rest = substr(rest, 2)
+      n = length(tok)
+      for (p = 2; p <= n; p++) {
+        c = substr(tok, p, 1)
         if (c == ":") continue
         if (R_NOX != "" && index(R_NOX, c) > 0) { CP_STOP = 1; CP_STOP_S = ts; return }
-        if (R_SPLIT != "" && index(R_SPLIT, c) > 0 && rest != "") {
-          if (cp_split_scan(rest, hi)) { CP_STOP = 1; CP_STOP_S = ts; return }
-          rest = ""
+        e = (p == n)
+        if (R_SPLIT != "" && index(R_SPLIT, c) > 0 && !e) {
+          if (cp_split_scan(substr(tok, p + 1), hi)) { CP_STOP = 1; CP_STOP_S = ts; return }
+          e = 1; p = n
         }
-        if (index(R_OPT, c "::") > 0) rest = ""
-        else if (index(R_OPT, c ":") > 0) { if (rest == "") cp_skip_one(hi); rest = "" }
+        if (index(R_OPT, c "::") > 0) p = n
+        else if (index(R_OPT, c ":") > 0) { if (e) cp_skip_one(hi); p = n }
       }
       continue
     }

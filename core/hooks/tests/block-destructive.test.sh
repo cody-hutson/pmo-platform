@@ -9788,6 +9788,46 @@ if [ -z "$lin_why" ]; then
 else
   /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-FB: with the pass's awk missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
 fi
+
+# ---- AC-CPH-D* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
+#
+# The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
+# walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
+# command, clears one long command word, a long option cluster and a long split string in its short and
+# long spelling inside the budget, in en_US.UTF-8 and C, and allows each. The cells are the ones on which
+# `main`'s own hook keeps a wide margin under the budget: the long word at 10, 20 and 40 KB; the cluster
+# and both split spellings at 10 KB, and at 20 KB in C. On the larger cells the cost is `main`'s own code
+# — the -022 rule's reading of a long word and of a long option cluster, which grows faster than the
+# command — and is that rule's work-ceiling card's to change, not this release's. The false-positive
+# control's AC-CP-L arms time the canonicalizer alone on every size of every shape, beside their
+# sensitivity copy.
+lin_cph_cmd() { # <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling
+  local h u t
+  case "$1" in
+    word)    h='';                     u='a'; t='' ;;
+    cluster) h='sudo -';               u='b'; t=' q' ;;
+    split)   h='env -S-';              u='b'; t=' q' ;;
+    lsplit)  h='env --split-string=-'; u='b'; t=' q' ;;
+  esac
+  H="$h" U="$u" T="$t" LC_ALL=C /usr/bin/awk -v n="$2" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = n - length(h) - length(t); r = u; while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$3"
+}
+lin_n=0
+for lin_cell in word:10:en_US.UTF-8 word:20:en_US.UTF-8 word:40:en_US.UTF-8 word:10:C word:20:C word:40:C \
+                cluster:10:en_US.UTF-8 cluster:10:C cluster:20:C split:10:en_US.UTF-8 split:10:C split:20:C \
+                lsplit:10:en_US.UTF-8 lsplit:10:C lsplit:20:C; do
+  lin_shape="${lin_cell%%:*}"; lin_rest="${lin_cell#*:}"; lin_kb="${lin_rest%%:*}"; lin_loc="${lin_rest#*:}"
+  lin_n=$(( lin_n + 1 ))
+  lin_cph_cmd "$lin_shape" $(( lin_kb * 1024 )) "${LIN_ROOT}/cph-${lin_shape}-${lin_kb}.cmd"
+  lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/cph-${lin_shape}-${lin_kb}.cmd" "$LIN_LIMIT"
+  if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
+    /usr/bin/printf 'PASS: %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook in ${LIN_DS} tenths of a second (budget ${LIN_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed" \
+      "elapsed=${LIN_DS} tenths (-1 = stopped at ${LIN_LIMIT}) exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+  fi
+done
 /bin/rm -rf "$LIN_ROOT"
 
 # --- Summary ---
