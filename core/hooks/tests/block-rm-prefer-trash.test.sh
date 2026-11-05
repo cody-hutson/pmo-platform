@@ -1488,19 +1488,32 @@ CPV_EOF
     done
   done
   # R and CTL — the hook against one run of the canonicalizer's default view, on the 80 KB long word.
-  CPV_PY='import json, os, signal, subprocess, sys, time
+  CPV_PY='import json, os, signal, subprocess, sys, threading, time
 hook, awk, loc, reps, limit, cmdf = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), float(sys.argv[5]), sys.argv[6]
 cmd = open(cmdf, "rb").read().decode("utf-8", "surrogateescape")
 pay = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": os.environ.get("HOME", "/") + "/Claude/.claude/worktrees/planning"}).encode()
 env = dict(os.environ, LC_ALL=loc)
 def one(argv, stdin):
+    # A blocking wait reads the run exactly; a wait with a timeout polls at steps that grow to
+    # a twentieth of a second. The watchdog is a timer instead.
+    stopped = []
     t0 = time.time()
     p = subprocess.Popen(argv, env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    def stop():
+        stopped.append(1)
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    dog = threading.Timer(limit, stop)
+    dog.start()
     try:
-        p.communicate(stdin, timeout=limit)
-    except subprocess.TimeoutExpired:
-        os.killpg(p.pid, signal.SIGKILL); p.wait(); return None
-    return time.time() - t0
+        p.communicate(stdin)
+    except OSError:
+        pass
+    p.wait()
+    dog.cancel()
+    return None if stopped else time.time() - t0
 h, c = [], []
 for _ in range(reps):
     h.append(one(["/bin/bash", hook], pay)); c.append(one(["/usr/bin/awk", "-f", awk, cmdf], b""))

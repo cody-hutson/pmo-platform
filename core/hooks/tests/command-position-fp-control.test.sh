@@ -709,16 +709,25 @@ fi
 # The timer: the least of <reps> interleaved runs of the canonicalizer on a shape and on its
 # twin — a loaded host only ever adds time, so the least run is the steadiest reading — each
 # under a watchdog that stops a run (and its process group) at the limit.
-CPL_PY='import os, signal, subprocess, sys, time
+CPL_PY='import os, signal, subprocess, sys, threading, time
 awk, loc, reps, limit, shape, twin = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), sys.argv[5], sys.argv[6]
 def one(p):
+    # A blocking wait reads the run exactly; a wait with a timeout polls at steps that grow to
+    # a twentieth of a second, which is the size of a small run. The watchdog is a timer instead.
+    stopped = []
     t0 = time.time()
     r = subprocess.Popen(["/usr/bin/awk", "-f", awk, p], env=dict(os.environ, LC_ALL=loc), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
-    try:
-        r.wait(timeout=limit)
-    except subprocess.TimeoutExpired:
-        os.killpg(r.pid, signal.SIGKILL); r.wait(); return None
-    return time.time() - t0
+    def stop():
+        stopped.append(1)
+        try:
+            os.killpg(r.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    dog = threading.Timer(limit, stop)
+    dog.start()
+    r.wait()
+    dog.cancel()
+    return None if stopped else time.time() - t0
 s, w = [], []
 for _ in range(reps):
     s.append(one(shape)); w.append(one(twin))
