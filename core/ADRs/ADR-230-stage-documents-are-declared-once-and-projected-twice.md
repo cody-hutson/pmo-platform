@@ -6,11 +6,11 @@ release: stage-document-model-decision
 deciders: "Workspace owner (operator) — ratification at Stage 9"
 tags: [architecture, documentation, stage-document-model, lifecycle, methodology, process-catalog, delivery-spans]
 source_observations:
-  - "Release-pipeline inventory, verified at head on 2026-11-05: 128 (stage, document) rows across all 13 stages, built as the original 112-row inventory plus a 40-row delta; none of its lifecycle-in-practice cells was verified by any arm, so that column supports and never decides; of the 11 Stage 5 outputs the stage contract names, 4 reach a durable home by contract and 7 live only in a stage comment, and 1 is a candidate for a catalog page."
+  - "Release-pipeline inventory, verified at head on 2026-11-05 and corrected after its Stage-7 review (Revision 2): 133 (stage, document) rows across all 13 stages, built as the original 112-row inventory plus a 46-row delta, including five conditional-path records bound by the inter-stage signal protocol (Tier-2 HALT and scope-change records at Stages 9 and 12, signal event rows and comments at Stages 7 and 8, a resolving review-thread reply at Stage 8); none of its lifecycle-in-practice cells and only 4 of its readers cells are verified, so those columns support and never decide; of the 11 Stage 5 outputs the stage contract names, 4 reach a durable home by contract and 7 live only in a stage comment, and 1 is a candidate for a catalog page."
   - "Project-delivery inventory, verified on 2026-11-05: 90 document rows, 46 disagreements between the two stage tables of the operational-artifacts standard plus 4 observations noted beside it, five project-phase vocabularies none of which is mapped to another, and no design slot in the gap-detection table."
   - "Stage and phase crosswalk, verified on 2026-11-05: 18 aligned rows and three candidate shared vocabularies; renaming the stages outright would touch 614 live files and leave 402 release records on the old names, while a class layer touches about 18 files plus catalog pages; the project agent states and the catalog page statuses both collide with names the lifecycle register already holds, and neither machine is registered."
   - "Methodology-variation discovery, 2026-11-05: 32 archetype cells, 19 with a source-stated cadence; 14 of the 18 source-stated classes are Baselined, 7 of them from the frozen Plan entity; no source states a class for an iterative design document, the nearest statement being sprint-embedded documentation updates for Scrum and hybrids in the process designer's documentation-philosophy table, which a Stage-7 review found the census had missed (it also makes Kanban's test documents mixed, its policies being living documentation); three archetype pairs sharing a Lifecycle value differ in document behaviour; eight hook options, two eliminated on hard constraints."
-  - "Design record for this decision, delivery-doc-practice-design-2026-11-05 in the analysis workspace: 218 coded rows, nine model decisions with their candidates, eliminators and reduction rule, and the self-check against the design criteria."
+  - "Design record for this decision, delivery-doc-practice-design-2026-11-05 in the analysis workspace (Revision 2): 223 coded rows, nine model decisions with their candidates, eliminators and reduction rule, and the self-check against the design criteria."
 supersedes: none
 ---
 
@@ -62,6 +62,8 @@ The standard is net-new because extending `operational-artifacts.md` in place is
 | cadence | from the methodology hook (§ 6) |
 
 **Minimal-set rule.** A document earns a row only when it names a reader: a later stage of the same change or a future change to the same area. A document no one reads is listed in the declaration's excluded list with its reason, never silently dropped. A document that exists only as a section of another is declared as a member of its host's row, not as a document of its own.
+
+**Records bound by cross-cutting protocol text.** A record that the inter-stage feedback protocol binds rather than one stage spec — a signal comment, a signal event row, a HALT record — is declared at each stage that raises it, marked conditional, with the protocol named as its binding source. Its class follows its home: a comment is point-in-time, an event row is an append-only state log. No protocol-level projection is added.
 
 ### 3. The shared vocabulary is a layer of eight delivery spans
 
