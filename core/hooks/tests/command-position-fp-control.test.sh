@@ -453,6 +453,16 @@ single_source_report() { # $1 = hooks dir -> SS_01, SS_02, SS_03 problem strings
           if (index($0, "/usr/bin/awk -f \"$CMDPOS_AWK\"") == 0 && $0 !~ /COMMAND_CMDPOS="\$COMMAND"[ \t]*$/) bad = 1
         }
         END { exit bad ? 0 : 1 }' "$h"; then SS_02="${SS_02} ${b}:assignment"; fi
+    # a read into COMMAND_CMDPOS (the deletion hook's both view, #8314 DT pass 7) sits in a
+    # group whose closing line feeds it the shared file's both view
+    if /usr/bin/awk '
+        /^[ \t]*#/ { next }
+        /(^|[ \t;{])read[ \t]/ && /[ \t]COMMAND_CMDPOS([ \t;&|]|$)/ { pending = 1; next }
+        pending && /^[ \t]*\}[ \t]*<[ \t]*<\(/ {
+          if (index($0, "/usr/bin/awk -v CMDPOS_VIEW=both -f \"$CMDPOS_AWK\"") == 0) bad = 1
+          pending = 0
+        }
+        END { exit (bad || pending) ? 0 : 1 }' "$h"; then SS_02="${SS_02} ${b}:read"; fi
     # its matches() reads COMMAND_CMDPOS
     if ! /usr/bin/awk '
         /^matches\(\) \{/ { inm = 1; next }
@@ -500,6 +510,18 @@ if ! /usr/bin/cmp -s "$HOOK_DIR/block-fs-boundary.sh" "${ss_sbx}/block-fs-bounda
   pass "CMDPOS-SINGLE-SOURCE-M3 a consumer whose matches() reads the raw command is reported"
 else
   fail "CMDPOS-SINGLE-SOURCE-M3 a consumer whose matches() reads the raw command was not reported (result [${SS_02}])"
+fi
+/bin/cp "$HOOK_DIR/block-fs-boundary.sh" "${ss_sbx}/block-fs-boundary.sh"
+# (#8314, DT pass 7) the deletion hook reads both of its views with one run of the shared file;
+# a copy whose both-view read is fed another file is reported, and the read in the shipped hook
+# is shown to be the one the check sees.
+/usr/bin/sed -e '/^} < <(/s#-f "$CMDPOS_AWK"#-f "$OTHER_AWK"#' "$HOOK_DIR/block-rm-prefer-trash.sh" > "${ss_sbx}/block-rm-prefer-trash.sh"
+single_source_report "$ss_sbx"
+if [ -z "$ss_base" ] && ! /usr/bin/cmp -s "$HOOK_DIR/block-rm-prefer-trash.sh" "${ss_sbx}/block-rm-prefer-trash.sh" \
+   && [[ "$SS_02" == *"block-rm-prefer-trash.sh:read"* ]]; then
+  pass "CMDPOS-SINGLE-SOURCE-M4 a consumer whose both-view read takes another file is reported"
+else
+  fail "CMDPOS-SINGLE-SOURCE-M4 a consumer whose both-view read takes another file was not reported (sandbox base [${ss_base}], result [${SS_02}])"
 fi
 /bin/rm -rf "$ss_sbx"
 

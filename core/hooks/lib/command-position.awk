@@ -91,6 +91,16 @@
 # so those exits keep the verdicts they had while the default output widens. The exit
 # view is frozen: a transformation added to the default walk does not reach it.
 #
+# BOTH VIEWS FROM ONE RUN
+# -----------------------
+# Run with `-v CMDPOS_VIEW=both`, this file emits the exit view and then the default output,
+# each ended by a NUL byte, from one quote mask: the exit view's walk and then the default
+# walk run over the same segments, and each view is the one its own mode emits, without its
+# trailing newlines, as a command substitution captures it. A consumer that reads both views
+# (the deletion hook) pays for one run of this file, not two. When the two walks record the
+# same edits the two views are the same text, built once. No input can hold a NUL byte, so
+# the two records cannot be confused; a copy without this mode emits no NUL at all.
+#
 # TRANSFORMATIONS (the complete list)
 #   (a) `; ` inserted before each resolved command-start token (never at offset 1).
 #   (b) a single leading backslash dropped from a resolved command-start token, so `\rm`
@@ -210,6 +220,7 @@ BEGIN {
   WNOX["command"]="vV"
 
   EXIT_VIEW = (CMDPOS_VIEW == "exit")
+  BOTH_VIEW = (CMDPOS_VIEW == "both")
 }
 
 # Accumulate the whole command; a Bash tool call may legitimately span lines and a quoted
@@ -576,7 +587,47 @@ function emit(   i, n, res) {
   return res
 }
 
+# BOTH VIEWS FROM ONE RUN (see the header): one scan, then the exit view's walk over every
+# segment, whose view is emitted first; then its edits are moved aside and the default walk
+# records its own. The default output is built again only when its edits differ from the exit
+# walk's; otherwise it is the same text. The exit view goes out before the default walk runs,
+# so a run that fails in the default walk still leaves the exit view whole, as two runs did.
+function both(   x, k) {
+  if (!scan()) { x = cp_chomp(buf); printf "%s%c%s%c", x, 0, x, 0; return }   # unbalanced quotes
+  EXIT_VIEW = 1
+  locate()
+  x = cp_chomp(emit())
+  printf "%s%c", x, 0
+  for (k in ins)  xins[k] = ins[k]
+  for (k in drop) xdrop[k] = drop[k]
+  for (k in tail) xtail[k] = tail[k]
+  split("", ins); split("", drop); split("", tail)
+  EXIT_VIEW = 0
+  locate()
+  if (same_edits()) { printf "%s%c", x, 0; return }
+  printf "%s%c", cp_chomp(emit()), 0
+}
+
+# 1 when the default walk's edits (ins, drop, tail) equal the exit walk's (xins, xdrop, xtail).
+function same_edits(   k) {
+  for (k in ins)   if (!(k in xins) || xins[k] != ins[k]) return 0
+  for (k in xins)  if (!(k in ins)) return 0
+  for (k in drop)  if (!(k in xdrop)) return 0
+  for (k in xdrop) if (!(k in drop)) return 0
+  for (k in tail)  if (!(k in xtail) || xtail[k] != tail[k]) return 0
+  for (k in xtail) if (!(k in tail)) return 0
+  return 1
+}
+
+# The text without its trailing newlines, as a command substitution captures it.
+function cp_chomp(s,   j) {
+  j = length(s)
+  while (j > 0 && substr(s, j, 1) == "\n") j--
+  return substr(s, 1, j)
+}
+
 END {
+  if (BOTH_VIEW) { both(); exit 0 }
   if (!scan()) { printf "%s", buf; exit 0 }   # unbalanced quotes — status quo, unchanged
   locate()
   printf "%s", emit()

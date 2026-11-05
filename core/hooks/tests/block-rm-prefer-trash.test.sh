@@ -584,10 +584,13 @@ apx_case "EXT-APPEND-X4" 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo'
 # This hook trusts the shared canonicalizer only after three probes: a one-line function
 # body; a wrapper carrying a separate-argument option before a benign word, whose canonical
 # form exposes the word only on the walk that reads wrapper grammar; and the same input in
-# the exit view, which must keep the form the walk produced before that grammar. A stale or
-# damaged copy beside this hook passes the first probe and fails a later one, so the hook
-# fails CLOSED. Modelled by a copy whose nice row is removed (SKEW-01) and a copy whose exit
-# view is unreachable (SKEW-02); the control is the same sandbox with the shipped copy.
+# the both view the hook reads (#8314, DT pass 7), whose exit view must keep the form the walk
+# produced before that grammar while its default output exposes the word. A stale or damaged
+# copy beside this hook passes the first probe and fails a later one, so the hook fails
+# CLOSED. Modelled by a copy whose nice row is removed (SKEW-01), a copy whose both view
+# carries the widened form in place of the exit view (SKEW-02), and a copy without the both
+# view (SKEW-BOTH, a primitive that predates it); the control is the same sandbox with the
+# shipped copy.
 cps_root="$(/usr/bin/mktemp -d)"
 cps_hooks="${cps_root}/.claude/hooks"
 /bin/mkdir -p "${cps_hooks}/lib"
@@ -612,7 +615,8 @@ cps_skew() { # $1 = arm label  $2 = sed program for the canonicalizer copy  $3 =
   fi
 }
 cps_skew "CMDPOS-SKEW-01" 's/WROW\["nice"\]=1//' "the wrapper grammar"
-cps_skew "CMDPOS-SKEW-02" 's/CMDPOS_VIEW == "exit"/CMDPOS_VIEW == "zzexit"/' "the exit view"
+cps_skew "CMDPOS-SKEW-02" 's/^  EXIT_VIEW = 1$/  EXIT_VIEW = 0/' "the exit view"
+cps_skew "CMDPOS-SKEW-BOTH" 's/CMDPOS_VIEW == "both"/CMDPOS_VIEW == "zzboth"/' "the both view"
 # (#8314, follow-up pass) The second probe puts an append-form prefix assignment ahead of its
 # wrapper, so a copy whose walk reads that word as the command word fails it too.
 cps_skew "CMDPOS-SKEW-APPEND" '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "the append form of a prefix assignment"
@@ -1366,6 +1370,167 @@ else
   done
 fi
 case "${TRSC_BASE##*/}" in rmt-cph.*) /bin/rm -rf "$TRSC_BASE" ;; esac
+
+# ----- AC-CPV-T* (#8314, DT pass 7): one canonicalizer run gives the hook both of its views -----
+#
+# The hook read its two views from two runs of the shared canonicalizer, the default output and then
+# the EXIT VIEW, so each command cost two full runs. It now makes one run in the canonicalizer's both
+# view, which emits the exit view and then the default output, each ended by a NUL byte, and reads them
+# with two reads. ONE reads the hook's source: one run on the command, in the both view, and none in the
+# exit view. EQ holds the verdicts: a copy of this hook with the two runs spliced back in is shown live
+# (it differs only in that block, and it parses), then both copies judge a set of commands — the two
+# allow-on-match exits and their sentinels, wrapped and quoted spellings, refused and allowed deletions
+# and Trash calls — and must return the same exit code and the same message on each. T1 to T16 run the
+# hook under a watchdog on one long command word and on a separator-dense command at 10, 20, 40 and
+# 80 KB in en_US.UTF-8 and C, each inside the budget and allowed. R-U and R-C time the hook against the
+# canonicalizer's default view alone on the 80 KB long word, the least of three interleaved runs of
+# each: the hook costs at most CPV_BOUND times the one run. CTL is the instrument's sensitivity: the
+# copy with the two runs exceeds the bound on the same command in UTF-8.
+CPV_BOUND="${CPV_BOUND:-1.75}"
+CPV_LIMIT="${CPV_LIMIT_S:-60}"   # seconds a timed run may take before the watchdog stops it
+CPV_BASE="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-cpv.XXXXXX" 2>/dev/null)" || CPV_BASE=""
+CPV_ONE='{
+  IFS= read -r -d '"''"' COMMAND_CMDPOS_EXIT || COMMAND_CMDPOS_EXIT="$COMMAND"
+  IFS= read -r -d '"''"' COMMAND_CMDPOS || COMMAND_CMDPOS="$COMMAND"
+} < <("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null)
+'
+CPV_TWO='COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
+COMMAND_CMDPOS_EXIT="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
+'
+# ONE — the runs of the canonicalizer on the command, read from the hook's source.
+cpv_runs="$(/usr/bin/awk '/^[ \t]*#/ { next } index($0, "-f \"$CMDPOS_AWK\"") && index($0, "\"$COMMAND\"") { n++; if (index($0, "-v CMDPOS_VIEW=both")) b++; if (index($0, "-v CMDPOS_VIEW=exit")) x++ }
+  END { printf "%d %d %d", n, b, x }' "$HOOK")"
+if [ "$cpv_runs" = "1 1 0" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the both view, and never in the exit view alone"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the both view" \
+    "runs on the command / in the both view / in the exit view alone: ${cpv_runs} (want 1 1 0)"; FAIL=$((FAIL + 1))
+fi
+if [ -z "$CPV_BASE" ]; then
+  /usr/bin/printf 'FAIL: AC-CPV the arms could not create a sandbox, so they did not run\n'; FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${CPV_BASE}/one/lib" "${CPV_BASE}/two/lib"
+  for cpv_d in one two; do
+    /bin/cp "${HOOK_DIR}/lib/"*.sh "${CPV_BASE}/${cpv_d}/lib/" 2>/dev/null || true
+    /bin/cp "${HOOK_DIR}/lib/command-position.awk" "${CPV_BASE}/${cpv_d}/lib/"
+  done
+  /bin/cp "$HOOK" "${CPV_BASE}/one/block-rm-prefer-trash.sh"
+  cpv_live=0
+  if F="$CPV_ONE" T="$CPV_TWO" LC_ALL=C /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] } { s = s $0 "\n" }
+       END { i = index(s, f); if (i == 0 || index(substr(s, i + 1), f) > 0) exit 1
+             printf "%s", substr(s, 1, i - 1) t substr(s, i + length(f)) }' "$HOOK" > "${CPV_BASE}/two/block-rm-prefer-trash.sh" \
+     && /bin/bash -n "${CPV_BASE}/two/block-rm-prefer-trash.sh" 2>/dev/null \
+     && ! /usr/bin/cmp -s "$HOOK" "${CPV_BASE}/two/block-rm-prefer-trash.sh"; then
+    cpv_live=1
+  fi
+  # EQ — the same exit code and message through both copies.
+  cpv_why=""; cpv_k=0
+  while IFS= read -r cpv_c; do
+    [ -n "$cpv_c" ] || continue
+    cpv_k=$((cpv_k + 1))
+    cpv_r1=0; cpv_r2=0
+    cpv_e1="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+        /usr/bin/printf '%s' "$(bash_payload "$cpv_c" "$CPV_BASE")" | /bin/bash "${CPV_BASE}/one/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || cpv_r1="$?"
+    cpv_e2="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+        /usr/bin/printf '%s' "$(bash_payload "$cpv_c" "$CPV_BASE")" | /bin/bash "${CPV_BASE}/two/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || cpv_r2="$?"
+    [ "$cpv_r1" = "$cpv_r2" ] && [ "$cpv_e1" = "$cpv_e2" ] || cpv_why="${cpv_why} [${cpv_c}] exit ${cpv_r1} through one run, ${cpv_r2} through two;"
+  done <<'CPV_EOF'
+rm -rf /tmp/foo
+echo hello
+rm
+sudo rm ; trash /etc/hosts
+nice rm ; trash /etc/hosts
+nice rm ; sudo unlink /tmp/foo
+sudo --list rm ; trash /etc/hosts
+FOO+=1 rm ; trash /etc/hosts
+FOO+=1 rm ; sudo unlink /tmp/foo
+rm -rf "/tmp/a b" ; echo "x; rm -rf /etc"
+echo "rm -rf /tmp/foo"
+\rm -rf /tmp/foo
+xargs rm < /tmp/list
+find /tmp -delete
+trash /etc/hosts
+unlink /tmp/foo ; rmdir /tmp/d
+if true ; then rm -rf /tmp/foo ; fi
+env -S-u x rm -rf /tmp/foo
+osascript -e 'tell application "Finder" to delete POSIX file "/tmp/foo"'
+git status ; rm -rf /tmp/foo
+sudo git status ; rm -rf /tmp/foo
+nice git status ; rm -rf /tmp/foo
+if git diff --quiet ; then rm -rf /tmp/foo ; fi
+/usr/bin/env git log ; rm -rf /tmp/foo
+FOO+=1 git status ; rm -rf /tmp/foo
+git rm -rf /tmp/foo
+echo '; git status' ; rm -rf /tmp/foo
+CPV_EOF
+  if [ "$cpv_live" = 1 ] && [ -z "$cpv_why" ]; then
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-EQ: through one run and through the two runs spliced back in, the hook returns the same exit code and message on ${cpv_k} commands"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-EQ: the hook's verdicts are the same through one run as through two" \
+      "two-run copy live=${cpv_live};${cpv_why}"; FAIL=$((FAIL + 1))
+  fi
+  # T1-T16 — the hook inside the budget, by the AC-CPH-T timer above, writing its payload here.
+  TRSC_BASE="$CPV_BASE"
+  cpv_n=0
+  for cpv_shape in word segs; do
+    for cpv_kb in 10 20 40 80; do trsc_cmd "$cpv_shape" $(( cpv_kb * 1024 )) "${CPV_BASE}/${cpv_shape}-${cpv_kb}.cmd"; done
+    for cpv_loc in en_US.UTF-8 C; do
+      for cpv_kb in 10 20 40 80; do
+        cpv_n=$(( cpv_n + 1 ))
+        trsc_timed "$HOOK" "$cpv_loc" "${CPV_BASE}/${cpv_shape}-${cpv_kb}.cmd" "$TRSC_LIMIT"
+        if [ "$TRSC_DS" != -1 ] && [ "$TRSC_EXIT" = 0 ]; then
+          /usr/bin/printf 'PASS: %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook in ${TRSC_DS} tenths of a second (budget ${TRSC_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+        else
+          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook inside the budget and is allowed" \
+            "elapsed=${TRSC_DS} tenths (-1 = stopped at ${TRSC_LIMIT}) exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+        fi
+      done
+    done
+  done
+  # R and CTL — the hook against one run of the canonicalizer's default view, on the 80 KB long word.
+  CPV_PY='import json, os, signal, subprocess, sys, time
+hook, awk, loc, reps, limit, cmdf = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), float(sys.argv[5]), sys.argv[6]
+cmd = open(cmdf, "rb").read().decode("utf-8", "surrogateescape")
+pay = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": os.environ.get("HOME", "/") + "/Claude/.claude/worktrees/planning"}).encode()
+env = dict(os.environ, LC_ALL=loc)
+def one(argv, stdin):
+    t0 = time.time()
+    p = subprocess.Popen(argv, env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        p.communicate(stdin, timeout=limit)
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL); p.wait(); return None
+    return time.time() - t0
+h, c = [], []
+for _ in range(reps):
+    h.append(one(["/bin/bash", hook], pay)); c.append(one(["/usr/bin/awk", "-f", awk, cmdf], b""))
+print("-1 -1" if None in h or None in c else "%.3f %.3f" % (min(h), min(c)))'
+  cpv_ratio() { # <hook> <locale> -> CPV_H, CPV_C (seconds; -1 when stopped) and CPV_OK
+    local out
+    out="$(/usr/bin/python3 -c "$CPV_PY" "$1" "${HOOK_DIR}/lib/command-position.awk" "$2" 3 "$CPV_LIMIT" "${CPV_BASE}/word-80.cmd" 2>/dev/null)" || out="-1 -1"
+    CPV_H="${out% *}"; CPV_C="${out#* }"
+    CPV_OK=0
+    if [ "$CPV_H" != -1 ] && /usr/bin/awk -v h="$CPV_H" -v c="$CPV_C" -v b="$CPV_BOUND" 'BEGIN { exit !(c > 0 && h <= b * c) }'; then CPV_OK=1; fi
+  }
+  for cpv_loc in en_US.UTF-8 C; do
+    cpv_ratio "$HOOK" "$cpv_loc"
+    cpv_tag="U"; [ "$cpv_loc" = C ] && cpv_tag="C"
+    if [ "$CPV_OK" = 1 ]; then
+      /usr/bin/printf 'PASS: %s\n' "AC-CPV-R-${cpv_tag}: on the 80 KB long word in ${cpv_loc} the hook costs ${CPV_H}s against ${CPV_C}s for one run of the canonicalizer, within ${CPV_BOUND} times"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-R-${cpv_tag}: on the 80 KB long word in ${cpv_loc} the hook costs at most ${CPV_BOUND} times one run of the canonicalizer" \
+        "hook ${CPV_H}s, one run ${CPV_C}s (-1 = stopped at ${CPV_LIMIT}s)"; FAIL=$((FAIL + 1))
+    fi
+  done
+  cpv_ratio "${CPV_BASE}/two/block-rm-prefer-trash.sh" en_US.UTF-8
+  if [ "$cpv_live" = 1 ] && [ "$CPV_H" != -1 ] && [ "$CPV_OK" = 0 ]; then
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-CTL: the copy with two runs costs ${CPV_H}s against ${CPV_C}s for one run on the 80 KB long word in UTF-8, beyond ${CPV_BOUND} times — the instrument sees the second run"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-CTL: the copy with two runs exceeds the bound (BROKEN PROBE)" \
+      "copy live=${cpv_live}; two-run hook ${CPV_H}s, one run ${CPV_C}s"; FAIL=$((FAIL + 1))
+  fi
+  case "${CPV_BASE##*/}" in rmt-cpv.*) /bin/rm -rf "$CPV_BASE" ;; esac
+fi
 
 # Summary
 echo ""

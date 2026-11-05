@@ -245,17 +245,22 @@ if [ -r "$CMDPOS_AWK" ]; then
   # The second probe opens with the append form of a prefix assignment (#8314, follow-up
   # pass), so a copy whose walk reads that word as the command word — one that predates the
   # append form — fails it too.
-  # A third probe guards the EXIT VIEW this hook uniquely reads: the exit view of the same
-  # wrapped input, without that prefix, must NOT expose the verb (its walk predates the
-  # wrapper grammar), so a copy that ignores or lacks the view — emitting the widened form
-  # for both — fails here and the hook denies rather than letting the two allow-exits read a
-  # widened view.
+  # A third probe guards the EXIT VIEW this hook uniquely reads, in the form it reads it: the
+  # both view of the same wrapped input, without that prefix (#8314, DT pass 7), must carry the
+  # exit view and then the default output, each ended by a NUL byte, and the exit view must NOT
+  # expose the verb (its walk predates the wrapper grammar) while the default output does. A copy
+  # that lacks the both view emits no NUL, and one that ignores the exit view emits the widened
+  # form twice; either fails here and the hook denies rather than letting the two allow-exits
+  # read a widened view.
+  _cp_x3=""; _cp_d3=""
   if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
      && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
      && _cp_canary2="$("$PRINTF" '%s' 'Z+=0 nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
      && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q' \
-     && _cp_canary3="$("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null)" \
-     && ! "$PRINTF" '%s' "$_cp_canary3" | "$GREP" -q '; q'; then
+     && { IFS= read -r -d '' _cp_x3 && IFS= read -r -d '' _cp_d3; } \
+          < <("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null) \
+     && case "$_cp_x3" in *'; q'*) false ;; *) true ;; esac \
+     && case "$_cp_d3" in *'; q'*) true ;; *) false ;; esac; then
     CMDPOS_OK=1
   fi
 fi
@@ -264,15 +269,23 @@ if [ "$CMDPOS_OK" != 1 ]; then
   deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
   exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
 fi
-COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
-# Belt-and-braces: a non-empty command must never canonicalize to nothing.
-[ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
 # The EXIT VIEW (#8314): the canonicalizer's quote-masked but UN-WIDENED output — the walk
 # as it stood before the wrapper grammar. The two exits below ALLOW on a match, so reading
 # the widened COMMAND_CMDPOS would turn a refusal into an allow every time the walk newly
 # resolved a command start (R→A-1, R→A-2). They read this view instead, so they keep the
 # verdicts they have today; closing the line-laundering those verdicts leave is #8122's.
-COMMAND_CMDPOS_EXIT="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
+# Both views come from ONE run of the canonicalizer (#8314, DT pass 7): its both view emits
+# the exit view and then the default output, each ended by a NUL byte and each as a command
+# substitution would capture it, so the hook pays for one run, not two, and reads each with
+# one read. A read that meets the end of the output first takes the raw command, as a failed
+# run did; the exit view is emitted before the default walk runs, so a run that fails there
+# still leaves it.
+{
+  IFS= read -r -d '' COMMAND_CMDPOS_EXIT || COMMAND_CMDPOS_EXIT="$COMMAND"
+  IFS= read -r -d '' COMMAND_CMDPOS || COMMAND_CMDPOS="$COMMAND"
+} < <("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null)
+# Belt-and-braces: a non-empty command must never canonicalize to nothing.
+[ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
 [ -n "$COMMAND_CMDPOS_EXIT" ] || COMMAND_CMDPOS_EXIT="$COMMAND"
 
 # --- HELPERS ---
