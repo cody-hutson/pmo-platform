@@ -3,10 +3,12 @@
 #
 # Extracts per-session and per-in-transcript-subagent token spend from local Claude
 # Code session transcripts into the operator-local, git-ignored FinOps usage store
-# defined by core/schemas/finops-usage-store-schema.md (schema v1.2.0). Exact
+# defined by core/schemas/finops-usage-store-schema.md (schema v2.0.0). Exact
 # message.usage counts are PRIMARY; the context-budget-auditor (#16) word->token
 # heuristic is the FALLBACK for usage-less records only. Read-only on the source
 # transcripts; writes only the resolved store (atomic tmp -> mv).
+# Every token and turn figure is counted once per API RESPONSE within one transcript
+# file — lines grouped by message.id, each usage field max-merged (schema § Counting unit).
 #
 # Store path resolution (no hardcoded operator path):
 #   env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path
@@ -22,18 +24,20 @@
 #     --self-test    run built-in assertions against the synthetic test-fixtures; no
 #                    source or operator-store access.
 #
-# Exit codes: 0 ok · 2 usage error · 3 fail-closed read failure (four causes, below)
-#             · 4 store-not-git-ignored (fail-closed public-repo exfil guard)
+# Exit codes: 0 ok · 2 usage error · 3 fail-closed read/preserve failure (five causes,
+#             below) · 4 store-not-git-ignored (fail-closed public-repo exfil guard)
 #             · 5 missing dependency (jq/git).
 #
-# Exit 3 has FOUR distinct causes, not one. Every one leaves an existing store
+# Exit 3 has FIVE distinct causes, not one. Every one leaves an existing store
 # UNCHANGED, and every one prints its own `FATAL (exit 3):` line naming itself — so
 # the cause is READ OFF STDERR and never inferred from the code alone:
 #     - session-data source root unreadable            (both modes, pre-dispatch)
 #     - --incremental drop-set read failed over the re-extracted records
 #     - --incremental drop-set could not be assembled
 #     - --incremental carry-forward could not read the store
-# The carry-forward cause came from #4188; the two drop-set causes are new in #5240.
+#     - --rebuild could not preserve a store of another counting unit (schema major)
+# The carry-forward cause came from #4188; the two drop-set causes are new in #5240;
+# the preservation cause is new in schema v2.0.0.
 # A caller that branches on the exit code alone cannot tell "there was nothing to
 # read" from "the store is intact but now stale" — match the message, not just 3.
 
@@ -69,6 +73,33 @@ generator_version() {
   printf '%s' "${v:-unknown}"
 }
 
+# ── Store schema version this writer emits — the counting-unit identity (schema § Versioning). ──
+SCHEMA_VERSION="2.0.0"
+# The schema version an on-disk store declares; "unknown" when its meta is unreadable.
+# Filename-safe charset only, because the value names the preserved copy.
+store_schema_version() {
+  local v
+  v="$(jq -rn 'first(inputs | select(.record=="meta") | (.schema_version // "unknown")) // "unknown"' "$1" 2>/dev/null)" || v="unknown"
+  case "$v" in ''|*[!0-9A-Za-z.+-]*) v="unknown" ;; esac
+  printf '%s' "$v"
+}
+# The counting unit is the MAJOR component of the schema version (schema § Counting
+# unit): 1.x counted per transcript line, 2.x once per API response within one
+# transcript file. An additive (minor) bump keeps the unit, so the boundary keys on the
+# major alone, never on the full string; an unreadable version ("unknown") never matches.
+same_counting_unit() {
+  [ "$1" != "unknown" ] && [ "${1%%.*}" = "${SCHEMA_VERSION%%.*}" ]
+}
+# What a store's declared version says about its counting unit — for operator messages,
+# so a store of the current unit is never described as per-line.
+counting_unit_note() {
+  case "${1%%.*}" in
+    1)       printf 'counted per transcript line (inflated; schema § Versioning)' ;;
+    unknown) printf 'its schema version is unreadable, so its counting unit is unknown' ;;
+    *)       printf "a counting unit other than this writer's" ;;
+  esac
+}
+
 # ── Store path resolution (env → operator.toml → default). ──
 resolve_store() {
   local store="${STORE:-${FINOPS_STORE_PATH:-}}"
@@ -89,10 +120,12 @@ resolve_store() {
 # ── FM-2 fail-closed store guard — resolve-time, BEFORE any write/mkdir. ──
 #    Refuses (exit 4) if the resolved store is inside a git repo but NOT git-ignored
 #    there. A store outside any repo (rc=128 — the default case) is not committable
-#    and proceeds. Keys on the store's CONTAINING repo, not the script's repo.
+#    and proceeds. Keys on the store's CONTAINING repo, not the script's repo. An
+#    optional second argument names another store-relative file to check (the
+#    preserved prior-unit store), so every write path passes the same guard.
 guard_store_git_ignored() {
   local store_dir="$1"
-  local store_file="$store_dir/usage.jsonl"
+  local store_file="$store_dir/${2:-usage.jsonl}"
   # Nearest existing ancestor (store dir may not exist on first run) so `git -C` has a valid cwd.
   local probe="$store_dir"
   while [ ! -d "$probe" ] && [ "$probe" != "/" ] && [ -n "$probe" ]; do
@@ -194,6 +227,62 @@ def dim_cov($map; $total):
   | { covered_token_fraction: ( if $total <= 0 then 1 else (($total - $u) / $total) end ),
       basis: "best-effort" } ;
 
+# ── Per-response aggregation (schema v2.0.0). The unit of spend is the API RESPONSE: the
+# transcript writes one line per content block and repeats the response's whole usage
+# on each; a subagent transcript's first line can carry a PARTIAL streaming
+# output_tokens. Every reducer consumes ONE line-shaped record per response, built
+# here, so the reducers stay unchanged; a per-response property belongs here.
+# resp_key is the source-format seam for the key; an id-less line is its own response.
+# The grouping is per transcript file: a response that a resumed or forked session
+# copied into another file is counted once in each (schema § Counting unit).
+def resp_key($i):
+  if   ((.message.id? // null) | type) == "string" and ((.message.id | length) > 0) then "id:" + .message.id
+  elif ((.uuid? // null) | type) == "string" and ((.uuid | length) > 0)             then "uuid:" + .uuid
+  else "ix:" + ($i | tostring) end ;
+def umax($us; f): ([ $us[] | f | numbers ] | max) ;
+def lastnn($vals): ([ $vals[] | select(. != null and . != "") ] | last) ;
+# Each usage field is its MAXIMUM across the response's lines — order-independent, so a
+# partial streaming output_tokens loses to its final value wherever the final line sits.
+def merge_usage($us):
+  if ($us | length) == 0 then null
+  else { input_tokens:                umax($us; .input_tokens),
+         output_tokens:               umax($us; .output_tokens),
+         cache_creation_input_tokens: umax($us; .cache_creation_input_tokens),
+         cache_creation: { ephemeral_1h_input_tokens: umax($us; .cache_creation.ephemeral_1h_input_tokens?),
+                           ephemeral_5m_input_tokens: umax($us; .cache_creation.ephemeral_5m_input_tokens?) },
+         cache_read_input_tokens:     umax($us; .cache_read_input_tokens),
+         server_tool_use: { web_search_requests: umax($us; .server_tool_use.web_search_requests?),
+                            web_fetch_requests:  umax($us; .server_tool_use.web_fetch_requests?) },
+         service_tier: lastnn([ $us[] | .service_tier? ]) } end ;
+def blocks: (.message.content // []) | if type == "string" then [ { type: "text", text: . } ]
+                                       elif type == "array" then . else [] end ;
+# A response's content blocks, with a tool_use block that its lines repeat kept once
+# (by tool_use id), so tool_calls counts one call per id.
+def dedupe_tool_use:
+  reduce .[] as $b ({ seen: {}, out: [] };
+    if (($b | type) == "object") and ($b.type == "tool_use") and ((($b.id // null) | type) == "string")
+    then (if .seen[$b.id] then . else (.seen[$b.id] = true | .out += [ $b ]) end)
+    else .out += [ $b ] end)
+  | .out ;
+# One record per response, in first-line order. It keeps the FIRST line's envelope
+# (uuid, parentUuid, isSidechain, timestamp), takes the last non-null skill, MCP server,
+# model and stop reason across the response's lines, and the max-merged usage.
+def per_response($lines):
+  [ $lines | to_entries[] | { k: (.key as $i | .value | resp_key($i)), i: .key, r: .value } ]
+  | group_by(.k)
+  | map({ first: (map(.i) | min), ls: (sort_by(.i) | map(.r)) })
+  | sort_by(.first)
+  | map( .ls as $ls
+         | ( [ $ls[] | .message.usage | objects ] ) as $us
+         | $ls[0]
+           + { attributionSkill:     lastnn([ $ls[] | skill_of(.) ]),
+               attributionMcpServer: lastnn([ $ls[] | mcp_of(.) ]),
+               message: ( ($ls[0].message // {})
+                          + { model:       lastnn([ $ls[] | .message.model? ]),
+                              stop_reason: lastnn([ $ls[] | stop_of(.) ]),
+                              content:     ([ $ls[] | blocks[] ] | dedupe_tool_use),
+                              usage:       merge_usage($us) } ) } ) ;
+
 . as $all
 | [ $all[] | select(.type=="assistant") ] as $asst
 | [ $all[] | .timestamp // empty ] as $ts
@@ -225,18 +314,20 @@ def dim_cov($map; $total):
           | .u ) as $root
       | { root: $root, rec: $rec } ] ) as $side
 | ( $side | group_by(.root) ) as $groups
-| toksum($asst) as $st
-# ── v1.2.0 analysis dimensions — session-grain sub-aggregates over the SAME $asst set
-#    the session total is computed from, so every map partitions session.tokens exactly.
-| dim_agg($asst; skill_of(.))         as $by_skill
-| dim_agg($asst; mcp_of(.))           as $by_mcp
-| dim_agg($asst; .message.model)      as $by_model
+| per_response($asst) as $resp
+| toksum($resp) as $st
+# ── v1.2.0 analysis dimensions — session-grain sub-aggregates over the SAME $resp set
+#    (one record per API response) the session total is computed from, so every map
+#    partitions session.tokens exactly.
+| dim_agg($resp; skill_of(.))         as $by_skill
+| dim_agg($resp; mcp_of(.))           as $by_mcp
+| dim_agg($resp; .message.model)      as $by_model
 | ( leaf_total(tokens_obj($st)) )     as $sess_total
 # tool_calls counts CLIENT-SIDE invocations by name from the turn content — distinct
 # from `tool_use`, which counts SERVER-SIDE requests from message.usage.server_tool_use.
-| count_agg([ $asst[] | .message.content[]? | select(.type == "tool_use") | .name // empty ]; {})
+| count_agg([ $resp[] | .message.content[]? | select(.type == "tool_use") | .name // empty ]; {})
     as $tool_calls
-| count_agg([ $asst[] | stop_of(.) | dim_key ]; { "unknown": 0 }) as $stop_reason
+| count_agg([ $resp[] | stop_of(.) | dim_key ]; { "unknown": 0 }) as $stop_reason
 # Only spend-bearing sessions (>=1 assistant record) yield a record. Files with zero
 # assistant turns (project summary/index files, empty transcripts) carry no token spend
 # and are skipped — this also excludes non-session `.jsonl` files under the projects root.
@@ -259,7 +350,7 @@ def dim_cov($map; $total):
   # subagent drill-down records (NOT summed on top of session.tokens)
   ( $groups[]
     | { root: .[0].root, recs: [ .[].rec ] } as $g
-    | toksum($g.recs) as $gt
+    | toksum(per_response($g.recs)) as $gt
     | [ $g.recs[] | .timestamp // empty ] as $gts
     | { record: "subagent", session_id: $sid, subagent_id: $g.root,
         parent_uuid: ($pmap[$g.root] // null), git_branch: $branch,
@@ -303,7 +394,7 @@ build_body() {
 write_store() {
   local store_dir="$1" src_root="$2" created="$3" last="$4" body="$5"
   local tmp="$store_dir/usage.jsonl.tmp"
-  jq -cn --arg sv "1.2.0" --arg gen "finops-usage-extractor" --arg genver "$(generator_version)" \
+  jq -cn --arg sv "$SCHEMA_VERSION" --arg gen "finops-usage-extractor" --arg genver "$(generator_version)" \
      --arg root "$src_root" --arg created "$created" --arg last "$last" \
      '{record:"meta", schema:"finops-usage-store", schema_version:$sv, generated_by:$gen,
        generator_version:$genver, source_root:$root, created_utc:$created,
@@ -318,11 +409,46 @@ write_store() {
   mv -f "$tmp" "$store_dir/usage.jsonl"
 }
 
+# A store of another counting unit is never rebuilt over: a 1.x store counted per
+# transcript line (inflated), and a session whose transcript is gone exists nowhere
+# else. Keep it ONCE, as a store, at prior/schema-<old>/usage.jsonl — a hard link (no
+# copy, no moment without a store; cp is the fallback), so the existing tools read it
+# with STORE=<store>/prior/schema-<old>. A store of the current unit (same major) is
+# rebuilt over as before. Fails closed: exit 3, the store and its directory unchanged.
+preserve_prior_unit_store() {
+  local store_dir="$1" f="$1/usage.jsonl" old rel dest dest_dir made_prior=0 made_dir=0
+  [ -f "$f" ] || return 0
+  old="$(store_schema_version "$f")"
+  same_counting_unit "$old" && return 0
+  rel="prior/schema-${old}/usage.jsonl"
+  [ -e "$store_dir/$rel" ] && rel="prior/schema-${old}-$(date -u +%Y%m%dT%H%M%SZ)/usage.jsonl"
+  dest="$store_dir/$rel"
+  dest_dir="$(dirname "$dest")"
+  if [ -e "$dest" ]; then
+    printf 'FATAL (exit 3): could not preserve the schema-%s store — %s already exists; the store is left UNCHANGED at %s\n' "$old" "$rel" "$f" >&2
+    return 3
+  fi
+  guard_store_git_ignored "$store_dir" "$rel"
+  [ -d "$store_dir/prior" ] || made_prior=1
+  [ -d "$dest_dir" ] || made_dir=1
+  if mkdir -p "$dest_dir" 2>/dev/null && { ln "$f" "$dest" 2>/dev/null || cp -p "$f" "$dest" 2>/dev/null; }; then
+    printf 'finops-usage-extractor: kept the schema-%s store as %s — %s; sessions whose transcripts are gone exist only there\n' "$old" "$rel" "$(counting_unit_note "$old")" >&2
+    return 0
+  fi
+  # Undo only what this call created: a partial copy, then the directories it made.
+  rm -f "$dest" 2>/dev/null
+  [ "$made_dir" -eq 1 ] && rmdir "$dest_dir" 2>/dev/null
+  [ "$made_prior" -eq 1 ] && rmdir "$store_dir/prior" 2>/dev/null
+  printf 'FATAL (exit 3): could not preserve the schema-%s store before rebuilding; the store is left UNCHANGED at %s\n' "$old" "$f" >&2
+  return 3
+}
+
 do_rebuild() {
   local store_dir="$1" src_root="$2"
   local now body
   now="$(NOW_UTC)"
   mkdir -p "$store_dir"
+  preserve_prior_unit_store "$store_dir" || return 3
   body="$(mktemp "${TMPDIR:-/tmp}/finops-body.XXXXXX")"
   build_body "$src_root" "$now" "$body"
   write_store "$store_dir" "$src_root" "$now" "$now" "$body"
@@ -335,6 +461,16 @@ do_incremental() {
   local store_dir="$1" src_root="$2"
   local store_file="$store_dir/usage.jsonl"
   [ -f "$store_file" ] || { do_rebuild "$store_dir" "$src_root"; return; }
+  # Records of another counting unit cannot be upserted into: a per-response record
+  # beside per-line ones would put two units under one version. Same unit (same schema
+  # major) → upsert as usual; anything else → rebuild, which preserves the prior store.
+  local on_disk
+  on_disk="$(store_schema_version "$store_file")"
+  if ! same_counting_unit "$on_disk"; then
+    printf "finops-usage-extractor: incremental — the store declares schema %s: %s. This writer counts under schema %s, so its records cannot be upserted into that store; falling back to --rebuild\n" "$on_disk" "$(counting_unit_note "$on_disk")" "$SCHEMA_VERSION" >&2
+    do_rebuild "$store_dir" "$src_root"
+    return $?
+  fi
   local now created changed body merged
   now="$(NOW_UTC)"
   created="$( { jq -r 'select(.record=="meta") | .created_utc' "$store_file" 2>/dev/null || true; } | head -1)"
@@ -478,12 +614,57 @@ self_test() {
     fi
   fi
 
-  # 8b) Subagent drill-down record emitted for the sidechain fixture (root grouping).
+  # 8b) Subagent drill-down records emitted for the sidechain fixtures (root grouping):
+  #     proj-gamma's in-transcript sidechain, and the partial-output subagent transcript,
+  #     every record of which is a sidechain as in a real spawned-agent file. The input
+  #     check is scoped to proj-gamma, so a further sidechain fixture moves the count only.
   local nsub subin
   nsub="$(jq -s '[.[] | select(.record=="subagent")] | length' "$st_store/usage.jsonl" 2>/dev/null)"
-  [ "${nsub:-0}" -eq 1 ] || { echo "FAIL: expected exactly 1 subagent record, got ${nsub:-0}"; fail=1; }
-  subin="$(jq -s '[.[] | select(.record=="subagent") | .tokens.input] | add // 0' "$st_store/usage.jsonl" 2>/dev/null)"
-  [ "${subin:-0}" -eq 28 ] || { echo "FAIL: subagent input tokens != 28 (got ${subin:-0})"; fail=1; }
+  [ "${nsub:-0}" -eq 2 ] || { echo "FAIL: expected exactly 2 subagent records (proj-gamma's sidechain + the partial-output subagent transcript), got ${nsub:-0}"; fail=1; }
+  subin="$(jq -s '[.[] | select(.record=="subagent" and .session_id=="00000000-0000-4000-8000-000000000003") | .tokens.input] | add // 0' "$st_store/usage.jsonl" 2>/dev/null)"
+  [ "${subin:-0}" -eq 28 ] || { echo "FAIL: proj-gamma subagent input tokens != 28 (got ${subin:-0})"; fail=1; }
+
+  # R1) three-block — a response written across several transcript lines (one per content
+  #     block, each repeating the response's usage) is counted ONCE. Fixture
+  #     per-response/proj-zeta/…0006: three responses on six assistant lines. The
+  #     three-block response's last line carries a deliberately LOWER cache_read (97
+  #     against 98), so a last-line-wins merge reads cache_read 232 and fails here, as
+  #     does the per-line sum [109,71,48,491,6,2]; only the per-field max-merge reads
+  #     [42,27,18,233,3,1]. The repeated tool_use id counts one Read call, not two.
+  #     Non-vacuity first: the fixture must still write a response across several lines.
+  local f6 f6_lines f6_resp r1_got
+  f6="$FIXTURES_DIR/per-response/proj-zeta/00000000-0000-4000-8000-000000000006.jsonl"
+  f6_lines="$(jq -s '[.[] | select(.type=="assistant")] | length' "$f6" 2>/dev/null)"
+  f6_resp="$(jq -s '[.[] | select(.type=="assistant") | .message.id] | unique | length' "$f6" 2>/dev/null)"
+  if [ -z "$f6_lines" ] || [ -z "$f6_resp" ] || [ "$f6_lines" -le "$f6_resp" ]; then
+    echo "FAIL: three-block arm is vacuous — its fixture no longer writes a response across several lines (lines=${f6_lines:-?}, responses=${f6_resp:-?})"; fail=1
+  fi
+  r1_got="$(jq -c 'select(.record=="session" and .session_id=="00000000-0000-4000-8000-000000000006")
+                   | [.tokens.input, .tokens.output, .tokens.cache_creation.total, .tokens.cache_read, .turns, (.tool_calls.Read // 0)]' \
+            "$st_store/usage.jsonl" 2>/dev/null)"
+  [ "$r1_got" = "[42,27,18,233,3,1]" ] \
+    || { echo "FAIL: three-block response not counted once per API response (got ${r1_got:-nothing}, want [42,27,18,233,3,1])"; fail=1; }
+
+  # R2) partial-output — a subagent response whose FIRST line carries a partial streaming
+  #     output_tokens is recorded at its final value. Fixture per-response/proj-eta/
+  #     …0007/subagents/agent-00000000000000007, in the real spawned-agent layout:
+  #     first-line output 2, final 25. The per-line sum reads [27,2,80], and a
+  #     first-line-wins merge reads output 2. Non-vacuity first, as in R1.
+  local f7 f7_first f7_last r2_sess r2_sub
+  f7="$FIXTURES_DIR/per-response/proj-eta/00000000-0000-4000-8000-000000000007/subagents/agent-00000000000000007.jsonl"
+  f7_first="$(jq -s '[.[] | select(.type=="assistant") | .message.usage.output_tokens] | first' "$f7" 2>/dev/null)"
+  f7_last="$(jq -s '[.[] | select(.type=="assistant") | .message.usage.output_tokens] | last' "$f7" 2>/dev/null)"
+  case "${f7_first:-x}${f7_last:-x}" in
+    *[!0-9]*) f7_first=0; f7_last=0 ;;
+  esac
+  [ "$f7_first" -lt "$f7_last" ] \
+    || { echo "FAIL: partial-output arm is vacuous — its fixture's first line no longer carries an output_tokens below the final"; fail=1; }
+  r2_sess="$(jq -c 'select(.record=="session" and .session_id=="agent-00000000000000007") | [.tokens.output, .turns, .tokens.input]' "$st_store/usage.jsonl" 2>/dev/null)"
+  [ "$r2_sess" = "[25,1,40]" ] \
+    || { echo "FAIL: partial-output subagent response: the session record did not take the final output_tokens (got ${r2_sess:-nothing}, want [25,1,40])"; fail=1; }
+  r2_sub="$(jq -c 'select(.record=="subagent" and .session_id=="agent-00000000000000007") | [.tokens.output, .turns]' "$st_store/usage.jsonl" 2>/dev/null)"
+  [ "$r2_sub" = "[25,1]" ] \
+    || { echo "FAIL: partial-output subagent response: the subagent record did not take the final output_tokens (got ${r2_sub:-nothing}, want [25,1])"; fail=1; }
 
   # K) v1.2.0 analysis dimensions — STRUCTURAL invariants, asserted independently of the
   #    oracle (the oracle pins values; this pins the contract, so it still holds if the
@@ -792,6 +973,100 @@ DSSTUBEOF
     fi
   fi
   rm -rf "$ds_src" "$ds_store" "$ds_bin"
+
+  # 11) COUNTING-UNIT BOUNDARY (schema v2.0.0). A store of another counting unit (another
+  #     schema MAJOR) is never rebuilt over and never upserted into: --rebuild first keeps
+  #     it once, as a store, at prior/schema-<old>/usage.jsonl, and --incremental falls
+  #     back to --rebuild. A store of the current unit (same major — an additive minor)
+  #     is neither kept nor falls back. Every store here is a throwaway mktemp dir built
+  #     from the synthetic fixtures. INVARIANT: every failure message below contains the
+  #     literal "counting-unit boundary".
+  local cu_store cu_ref cu_bin cu_err cu_rc cu_n cu_fc cu_nm cu_other
+  cu_store="$(mktemp -d "${TMPDIR:-/tmp}/finops-custore.XXXXXX")"
+  cu_ref="$(mktemp -d "${TMPDIR:-/tmp}/finops-curef.XXXXXX")"
+  cu_bin="$(mktemp -d "${TMPDIR:-/tmp}/finops-cubin.XXXXXX")"
+  cu_fc="$(mktemp -d "${TMPDIR:-/tmp}/finops-custore.XXXXXX")"
+  cu_nm="$(mktemp -d "${TMPDIR:-/tmp}/finops-custore.XXXXXX")"
+  cu_other="$(mktemp -d "${TMPDIR:-/tmp}/finops-custore.XXXXXX")"
+  cu_err="$cu_ref/boundary.err"
+
+  # (11a) A 1.x store (counted per transcript line), crossed by --incremental.
+  do_rebuild "$cu_store" "$src" 2>/dev/null
+  jq -c 'if .record=="meta" then .schema_version="1.2.0" else . end' "$cu_store/usage.jsonl" > "$cu_ref/prior.jsonl" 2>/dev/null
+  cp -f "$cu_ref/prior.jsonl" "$cu_store/usage.jsonl"
+  do_incremental "$cu_store" "$src" 2>"$cu_err"; cu_rc=$?
+  [ "$cu_rc" -eq 0 ] \
+    || { echo "FAIL: counting-unit boundary — --incremental over a schema-1.2.0 store exited $cu_rc, want 0"; fail=1; }
+  grep -q 'falling back to --rebuild' "$cu_err" \
+    || { echo "FAIL: counting-unit boundary — --incremental over a schema-1.2.0 store did not fall back to --rebuild"; fail=1; }
+  grep -q 'counted per transcript line' "$cu_err" \
+    || { echo "FAIL: counting-unit boundary — the message did not describe a 1.x store as counted per transcript line"; fail=1; }
+  [ "$(store_schema_version "$cu_store/usage.jsonl")" = "$SCHEMA_VERSION" ] \
+    || { echo "FAIL: counting-unit boundary — the rebuilt store does not declare schema $SCHEMA_VERSION"; fail=1; }
+  cmp -s "$cu_store/prior/schema-1.2.0/usage.jsonl" "$cu_ref/prior.jsonl" \
+    || { echo "FAIL: counting-unit boundary — the schema-1.2.0 store was not kept byte-identical at prior/schema-1.2.0/usage.jsonl"; fail=1; }
+  # Control: a second --rebuild meets the current unit and keeps nothing more.
+  do_rebuild "$cu_store" "$src" 2>/dev/null
+  cu_n="$(find "$cu_store/prior" -type f -name usage.jsonl 2>/dev/null | wc -l | tr -d ' ')"
+  [ "${cu_n:-0}" -eq 1 ] \
+    || { echo "FAIL: counting-unit boundary — a second --rebuild changed the preserved-store count (want 1, got ${cu_n:-0})"; fail=1; }
+
+  # (11b) MUTATION — the fail-closed path. With ln and cp both failing on PATH (in a
+  #       subshell, so nothing leaks), the boundary cannot keep the prior store: the run
+  #       must exit 3, leave the store byte-identical, and leave no prior/ directory. A
+  #       rebuild that went on regardless would overwrite the only copy of every session
+  #       whose transcript is gone, which no success-path assertion above can catch.
+  printf '#!/bin/sh\nexit 1\n' > "$cu_bin/ln"
+  printf '#!/bin/sh\nexit 1\n' > "$cu_bin/cp"
+  chmod +x "$cu_bin/ln" "$cu_bin/cp"
+  cp -f "$cu_ref/prior.jsonl" "$cu_fc/usage.jsonl"
+  (
+    export PATH="$cu_bin:$PATH"
+    do_incremental "$cu_fc" "$src"
+  ) 2>"$cu_err"; cu_rc=$?
+  [ "$cu_rc" -eq 3 ] \
+    || { echo "FAIL: counting-unit boundary — a preservation failure did not fail closed (exit $cu_rc, want 3)"; fail=1; }
+  grep -q 'could not preserve' "$cu_err" \
+    || { echo "FAIL: counting-unit boundary — the preservation guard did not report its own failure (message missing from stderr)"; fail=1; }
+  cmp -s "$cu_fc/usage.jsonl" "$cu_ref/prior.jsonl" \
+    || { echo "FAIL: counting-unit boundary — a preservation failure rewrote the store; fail-closed must leave it UNCHANGED"; fail=1; }
+  [ ! -e "$cu_fc/prior" ] \
+    || { echo "FAIL: counting-unit boundary — a preservation failure left a prior/ directory behind"; fail=1; }
+
+  # (11c) NEAR-MISS — the same counting unit. An additive-minor store (2.0.1-selftest)
+  #       keeps the unit, so --incremental must not fall back and --rebuild must keep
+  #       nothing; keyed on the full version string, every future additive bump would
+  #       split the store's history. The stamp is read back first, so the arm cannot
+  #       pass on a store that never carried the near-miss version.
+  do_rebuild "$cu_nm" "$src" 2>/dev/null
+  jq -c 'if .record=="meta" then .schema_version="2.0.1-selftest" else . end' "$cu_nm/usage.jsonl" > "$cu_ref/minor.jsonl" 2>/dev/null
+  cp -f "$cu_ref/minor.jsonl" "$cu_nm/usage.jsonl"
+  [ "$(store_schema_version "$cu_nm/usage.jsonl")" = "2.0.1-selftest" ] \
+    || { echo "FAIL: counting-unit boundary — near-miss arm is vacuous: the store does not declare 2.0.1-selftest"; fail=1; }
+  do_incremental "$cu_nm" "$src" 2>"$cu_err"; cu_rc=$?
+  [ "$cu_rc" -eq 0 ] \
+    || { echo "FAIL: counting-unit boundary — --incremental over a same-unit (2.0.1-selftest) store exited $cu_rc, want 0"; fail=1; }
+  if grep -q 'falling back to --rebuild' "$cu_err"; then
+    echo "FAIL: counting-unit boundary — --incremental fell back to --rebuild over a store of the same counting unit (2.0.1-selftest)"; fail=1
+  fi
+  cp -f "$cu_ref/minor.jsonl" "$cu_nm/usage.jsonl"
+  do_rebuild "$cu_nm" "$src" 2>/dev/null
+  [ ! -e "$cu_nm/prior" ] \
+    || { echo "FAIL: counting-unit boundary — a same-unit (2.0.1-selftest) store was kept under prior/, which splits its history at an additive bump"; fail=1; }
+
+  # (11d) A store of another unit that is NOT 1.x is kept too, and its message does not
+  #       call it per-line: only a 1.x store counted per transcript line (11a is the
+  #       positive control for that wording).
+  do_rebuild "$cu_other" "$src" 2>/dev/null
+  jq -c 'if .record=="meta" then .schema_version="3.0.0-selftest" else . end' "$cu_other/usage.jsonl" > "$cu_ref/other.jsonl" 2>/dev/null
+  cp -f "$cu_ref/other.jsonl" "$cu_other/usage.jsonl"
+  do_rebuild "$cu_other" "$src" 2>"$cu_err"
+  cmp -s "$cu_other/prior/schema-3.0.0-selftest/usage.jsonl" "$cu_ref/other.jsonl" \
+    || { echo "FAIL: counting-unit boundary — a schema-3.0.0-selftest store was not kept at prior/schema-3.0.0-selftest/usage.jsonl"; fail=1; }
+  if grep -q 'per transcript line' "$cu_err"; then
+    echo "FAIL: counting-unit boundary — a store that is not 1.x was described as counted per transcript line"; fail=1
+  fi
+  rm -rf "$cu_store" "$cu_ref" "$cu_bin" "$cu_fc" "$cu_nm" "$cu_other"
 
   rm -rf "$st_store"
   if [ "$fail" -eq 0 ]; then
