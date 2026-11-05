@@ -60,7 +60,7 @@ The same release moves the dependency direction grammar out of the mirror into a
 - One extractor: a repair lands once, and the two tools cannot drift apart on how a section reads.
 - The gated parse rate no longer moves on blank-line count anywhere in a section — after a heading or inside it.
 - The parser's public names become a two-tool contract. Renaming or removing one breaks the mirror's binding at load, and the mirror reports that as exit 2 rather than misreading.
-- Text after a blank-line gap that is neither a heading nor a break line now joins the section. Un-headed trailing text a body appends to a section is read as part of it. The authoring-time measurement found no case where that changes a read; the residual is recorded at MEDIUM confidence for bodies not yet written.
+- Text after a blank-line gap that is neither an H2 or H3 heading nor a break line now joins the section. Un-headed trailing text a body appends to a section is read as part of it. The authoring-time measurement found no case where that changes a read; the residual is recorded at MEDIUM confidence for bodies not yet written.
 - A break line now ends a section where the old extractor read past it, including a hyphen line inside a fenced example — the extractor was already fence-blind for headings.
 - Later readers — the release's chain-head view, and a shared acceptance-criteria reader planned after this release — read through this home rather than adding a reader of their own.
 
