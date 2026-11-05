@@ -36,8 +36,8 @@
 #     - --incremental drop-set could not be assembled
 #     - --incremental carry-forward could not read the store
 #     - --rebuild could not preserve a store of another counting unit (schema major)
-# The carry-forward cause came from #4188; the two drop-set causes are new in #5240;
-# the preservation cause is new in schema v2.0.0.
+# The carry-forward cause came from #4188; the two drop-set causes are new in #5240.
+# The preservation cause is new in schema v2.0.0.
 # A caller that branches on the exit code alone cannot tell "there was nothing to
 # read" from "the store is intact but now stale" — match the message, not just 3.
 
@@ -1086,7 +1086,9 @@ while [ $# -gt 0 ]; do
     --incremental) MODE="incremental" ;;
     --self-test)   DO_SELFTEST=1 ;;
     -h|--help)
-      grep -E '^#( |$)' "$0" | sed -E 's/^# ?//' | head -40
+      # The header block — every comment line up to the first non-comment line — whatever
+      # its length; a fixed line count cut it off mid-sentence once the header grew.
+      awk 'NR == 1 { next } /^# |^#$/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
       exit 0 ;;
     *)
       printf 'FATAL (exit 2): unknown argument: %s\n' "$1" >&2
