@@ -374,7 +374,7 @@
     {
       "name": "adapters",
       "delivery": "delivered",
-      "description": "Host-adapter selectors — the five external surfaces the platform integrates with. ADR-022 §1/§4 names this the #703 onboarding seam and gives each selector a v1 default.",
+      "description": "Adapter selectors — install-level choices of which implementation backs a platform seam. Each host selector picks an external surface the platform integrates with; corpus_home is a placement selector that names where the release corpus is homed. ADR-022 §1/§4 names this the #703 onboarding seam and gives each selector a v1 default.",
       "keys": [
         {
           "key": "repo_host",
@@ -426,6 +426,17 @@
           "required": false,
           "description": "Scheduler adapter — the backend that fires a SESSION-FIRED registered routine on its declared cadence. Repo-fired routines (entrypoint is a repository workflow) are fired by the repository host and do not consult it. Defaults to \"none\" deliberately: registration is an operator step the installer cannot perform, so a working-backend default would assert a backend the install documentation states is not registered. Under \"none\" every routine stays invocable manually and the adapter says so per routine — see core/standards/scheduler-adapter-routine-firing.md §4.",
           "since": "4.51"
+        },
+        {
+          "key": "corpus_home",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "tracked",
+          "enum": ["tracked"],
+          "required": false,
+          "description": "Release-corpus home — where this install's release corpus lives, named by its home class; {{ADR:non-tracked-data-homed-by-risk-class}} defines the corpus and records where it lives. A placement selector, not a host surface. \"tracked\" keeps the corpus tracked in this repository under release/releases/. DECLARED, NOT YET READ: the release tooling's corpus resolver resolves by presence, the tracked tree first, and does not consult this key; a value other than \"tracked\" joins the enum only in the change that teaches that resolver to read it. Shipped opt-in, so no live config carries a value nothing reads and an absent key resolves to the default.",
+          "since": "5.02"
         }
       ]
     },
