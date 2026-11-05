@@ -125,7 +125,7 @@ Every element determined at Stage 4 that a named downstream consumer reads **fro
 | Order | Issue | Title (abridged) | Size | Sub-task (Stage 6) |
 |---|---|---|---|---|
 | 1 | #8016 | Author the ADR that supersedes ADR-141: non-tracked data is homed by its risk class | M | #8671 |
-| 2 | #6627 | Declare the release-corpus home selector and decide the corpus location | M | per Procedure 1 |
+| 2 | #6627 | Declare the release-corpus home selector and decide the corpus location | M | #8673 |
 | 3 | #8017 | Codify the instance-data placement standard | M | per Procedure 1 |
 | 4 | #8018 | Reconcile the governance surfaces that state where data lives to the placement standard | M | per Procedure 1 |
 
@@ -553,6 +553,32 @@ Run by the Stage-6 spoke on #8671 after this file was written and before it was 
 
 **A1 entry contract.** Every Planning-stage input is present in this file (sequence, per-card specs, matrix, delivery strategy, risks, verification, rollback), at Solutioning-level spec depth for all four cards. **A2 decomposition:** under hub-spoke, the decomposition is this file's Implementation Sequence and File Change Matrix with one Stage-6 sub-task per card (Procedure 1); the operator's plan approval and the scope-lock discharge the A1–A2 checkpoint. **A3 file-state snapshot:** every slice-1 path was read at `b1042eec`; none diverged from the Stage-5 baseline.
 
+### Slice 2 — #6627 — Stage 6 C4
+
+Run by the Stage-6 spoke on #8673 over commits `372dc2c8` (the selector, its declaration and Check 33, one commit for the template-to-declaration parity) and `02ea2e42` (the record's Release-corpus location item and the six reconciled documents), on the release head after slice 1 (`b21a3e99`). Every slice-2 path was read at `b21a3e99` before editing; none diverged from the Stage-5 baseline beyond slice 1's own record.
+
+| Check | Command | Observed |
+|---|---|---|
+| Declaration parity, `[adapters]` | a python read of `core/config/operator-toml-schema.json` and of the template's `[adapters]` key lines | 6 declared keys equal the template's 6; `declaration_version` stays 1; the key is `opt-in`, enum `["tracked"]` on one line, `since` `5.02` (provisional; Stage-12 re-verify). The Check 70 primitive itself is refused to agent sessions (BLOCK-DESTRUCTIVE-022, no allowlist row), so its own verdict is read from deploy.sh Check 70 below and from the `operator.toml declared-schema gate` CI job |
+| JSON parse | `python3 -c "import json; json.load(…)"` | parses |
+| Check 33 predicate on fixtures | one plain `/usr/bin/grep -qE` per fixture with the loop's predicate for `corpus_home` | shipped template 0; key removed 1; key with no value 1; `""` 0 and an undeclared value 0 (declared boundaries). Control: the `scheduler` predicate on the key-removed fixture reads 0. The base loop carries no `corpus_home` token, so at the base the same fixtures raise nothing |
+| deploy.sh Check 33 and Check 70 | `bash core/deploy/deploy.sh --check`, the instance path redirected to the run directory; each check's own lines read, never the run's exit | Check 33 `OK:` — the template parses, every field has a default, `[adapters]` present, `work_board` preserved. Check 70 `OK:` — its own self-test 9/9 arms (4 specificity silent, 5 sensitivity fired); C70c compared 53 declared keys against 53 template keys, 0 findings; C70b 0 literal emits; C70d 17 = 17 = 17; C70a 28 delivered keys against the live config, 0 misses (the opt-in key adds none). The run's two issues are pre-existing and outside this slice: Check 47's published-body drift, and Check 63's five count-structure rows, which read identically (same file, line and content hash) on the three files when run against the slice-1 head's copies |
+| Corpus-home tolerance suite | `bash release/tools/tests/test_corpus_home_tolerance.sh` | exit 0, `verdict: PASS-SEAM-LANDED`; ARMED (structural and behavioural); R1–R8 PASS; R6 finds CH-1..CH-4 in the edited standard; the sentinel reads `armed`, unchanged |
+| Install/onboarding/update regression (runtime-suite map rows 2 and 5: `core/deploy/**`, `core/config/*.template`) | `bash core/deploy/tests/run-install-regression.sh` | `INSTALL-REGRESSION: 3392 passed, 0 failed — VERDICT PASS [env: home-account; skipped: 0]`. `core/config/operator-toml-schema.json` matches no map row although setup and reconcile read it — a map gap, exercised here by the row-5 suite |
+| ADR durability, whole corpus with diff base `origin/main` | `python3 release/tools/check-adr-durability.py --diff-base origin/main` | exactly 1 R6 row — the pending ADR-141 whole edge; no rule fires on the item's added lines. Sensitivity: the lint's self-test, 156/156 |
+| ADR durability, whole corpus without a diff base | `python3 release/tools/check-adr-durability.py` | 24 rows, equal to the base's 24; 0 on the new record |
+| ADR-number integrity | `python3 release/tools/check-adr-numbers.py` | PASS, contiguous, no duplicates |
+| Slug-token stamp rehearsal | `python3 release/tools/renumber-adr.py --stamp` (dry run) | 18 tokens across 13 files over 15 in-scope files; 0 refusals; 0 in link position (slice 1 read 6 across 6) |
+| No reserved non-tracked value (CR-5 (a)) | a python scan of the slice's added lines for `local-state` written as a value (quoted or backticked) | 0. Sensitivity: the same regex over the Stage-5 design's part 3 reads 9 lines. Specificity: the one added line carrying the path form `/local-state/` (a rejected alternative in the item) reads 0 |
+| Path-leak scan, each edited file | `bash core/deploy/tools/path-leak-patterns.sh --scan-file <file>` | no new hit; the template's one hit is pre-existing at the base (the projects-path key comment). Sensitivity: a run-directory fixture with a bare relative container path reads 1, exit 1; its prose-only line is not flagged |
+| Doc links over the six edited documents | `python3 core/deploy/tools/check-doc-links.py --target-paths <files> --require-targets` | 0 findings. Sensitivity: a one-line dead-link fixture reads 1 `broken-cross-ref`; the tool's self-test passes |
+| Close keywords in commit messages | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | CLEAN on every push. Sensitivity: the tool's self-test, 14/14 must-flag fired |
+| Package consequence | the changed paths on STDIN to `build-skill-packages.sh --skills-for-paths` | empty. Sensitivity: a skill path on the same invocation names its skill |
+| CIAC authoring lint and AC-Binding on this file | `verify-release-plan.sh --ciac-lint`; `check-ac-binding.py --fetch` | `declared=8 parsed=8 clean=7 declared-deferral=1 flagged=0`; `VERDICT BOUND`, #6627 AC-1..AC-5 bound |
+| ADR index | — | N/A — this release adds no record under `release/ADRs/` |
+
+**AC2's failing control is a Stage-7 fixture run** (DEV-25 gives its admitted form): the head loop's token list ends `scheduler corpus_home` and the base's ends `scheduler`; fixtures built in python from the shipped template; one plain predicate grep per fixture; pass when the shipped template reads 0, the key-removed and no-value fixtures read 1, and the empty-string and undeclared-value fixtures read 0 as declared boundaries; then Check 33's own `OK:` line on the branch head.
+
 ---
 
 ## Deviation Log
@@ -577,6 +603,13 @@ Run by the Stage-6 spoke on #8671 after this file was written and before it was 
 | DEV-16 | 4 → 6 | CIAC-1 to CIAC-3 widened to the hub-state standard (expect 6 / 7 / 7); CIAC-7 reworded to the whole-corpus grading form | gate D-hubstate-wording = A; #8016 Stage-5 R5; review FM-2 | Minor |
 | DEV-17 | 4 → 6 | R-18 is measured on slice 1 at 2 CI-form rows, not the design's 3: ADR-046 joined the changed set, so its entry on ADR-017 resolves | Stage-6 measurement | Minor |
 | DEV-18 | 4 → 6 | The Outcome Statement's leak-risk container is transcribed in rooted form instead of the bare leaf | the plan's N4 spelling rule | Cosmetic |
+| DEV-19 | 5 → 6 | The corpus-location item departs from the #6627 design's item text: no non-tracked value is reserved; ADR-032's two package-purity decision drivers are named and their cost accepted; the corpus is defined once, by its members (the reversions ledger and the log archives included), with the folder README and hub-state templates stated as not corpus; the resolver's out-of-tree fallback tier is named a transitional residual, not a home; the selector's granularity is left to its reader; the consumer is named by surface (the close-out tooling's corpus resolver), with no work-item number | CR-5 (a); CR-4 (W); #6627 review FM-3, FM-2 (1), P-2; plan R-11 and the § Exclusions relay residual | Minor |
+| DEV-20 | 5 → 6 | The item keeps slice 1's `### Release-corpus location` heading instead of the design's retitle, because the record's Related ADRs and the README's ADR-032 clause cite the item by that name | the § Contention Map row for the new ADR | Cosmetic |
+| DEV-21 | 5 → 6 | The configuration catalog's `[adapters]` heading reads "adapter selectors" rather than "host-adapter selectors"; no tracked file links to that heading's anchor | #6627 design N5 (a placement selector is not a host surface) | Cosmetic |
+| DEV-22 | 5 → 6 | The release-notes standard's release-log row is reconciled whole — its label and audience, beside the new Privacy cell — so the row does not contradict itself; the illustrative example under `_examples/` still mirrors the old label and is left as a residual outside this matrix | #6627 review, out-of-scope note on that row | Minor |
+| DEV-23 | 5 → 6 | The constraints standard also gains a note under the CH table on what "instance-corpus root" names today, a § 1 lead that no longer defines the corpus as the four probed paths, and a § 1 clause re-pointed from the never-written adapter design to the selector's reader; CH-1 to CH-4 are untouched | #6627 review FM-2 (2), FM-3; the same stale pointer the design retires in § 2 and § 6 | Minor |
+| DEV-24 | 5 → 6 | The release-notes footnote and the isolation-key record's resolution paragraph each carry a "declared, not yet read" qualifier, and the footnote says readers use the in-repo path rather than that the token resolves there | #6627 review FM-1 (iii) and probe P-g | Minor |
+| DEV-25 | 5 → 6 | AC2's Stage-7 fixture run is restated in a form the script-execution guard admits — the design's form executes the extracted loop from a run-directory file, which the guard refuses — and gains a fixture with an undeclared value, recorded as a declared boundary beside the empty-string fixture | BLOCK-DESTRUCTIVE-022 observed on slice 2; #6627 review FM-1 (v) | Minor |
 
 ---
 
