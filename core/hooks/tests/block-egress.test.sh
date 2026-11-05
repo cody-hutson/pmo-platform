@@ -3282,7 +3282,7 @@ e007_l_eq() {
 e007_l_eq comment 3 body "'\\042\\047' '\\001\\001'" "'\\042\\047' '\\001\\002'"
 e007_l_eq span 13 body "\\005\\006'" "\\006\\005'"
 e007_l_eq mark 2 t "-d '\\004'" "-d '\\005'"
-e007_l_eq stand-in 3 'egress_toks[0]' "'\\074\\076'" "'\\076\\074'"
+e007_l_eq stand-in 3 t "'\\074\\076'" "'\\076\\074'"
 e007_l_eq redirect-ops 8 s " -e \"s/&>/\${EGRESS_SENT}>/g\"" ""
 e007_l_eq mark-free 2 s "-d '\\004'" "-d '\\005'"
 e007_l_eq view 4 view "'\\012\\012\\012'" "'\\012\\012\\001'"
@@ -4163,6 +4163,37 @@ e007_n_timed "a long digit run before a redirection" "AC-E007-NR" digits 'gh api
 e007_n_timed "a long named-descriptor redirection" "AC-E007-NR" named 'gh api {' 'a' '}>x repos/o/r' 'gh api x' 'a' '}>x repos/o/r'
 e007_n_ctl "AC-E007-NR-CTL1" "$E007_NR_B" digits 40 en_US.UTF-8 "the redirection-word test"
 e007_n_ctl "AC-E007-NR-CTL2" "$E007_NR_B" named 80 C "the redirection-word test"
+
+# -- NQ: the restore of quoted operators over a segment of many tokens --
+E007_N_K=0
+/bin/cat >> "${E007_N_R}/before-funcs.sh" <<'E007_N_BEFORE'
+egress_restore_quoted_ops() {
+  local i=0 n="${#egress_toks[@]}" lp
+  case "${egress_toks[*]}" in
+    *"${EGRESS_QLT}"*|*"${EGRESS_QGT}"*) ;;
+    *) return 0 ;;
+  esac
+  while [ "$i" -lt "$n" ]; do
+    if [ "${#egress_toks[$i]}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\005\006' '\074\076' <<< "${egress_toks[$i]}.")"; then egress_toks[$i]="${lp%.}"; fi  # linear: stand-in
+    egress_toks[$i]="${egress_toks[$i]//${EGRESS_QLT}/<}"
+    egress_toks[$i]="${egress_toks[$i]//${EGRESS_QGT}/>}"
+    i=$(( i + 1 ))
+  done
+  return 0
+}
+E007_N_BEFORE
+E007_NQ_B="${E007_W_BASE}/nqb"; e007_n_before "$E007_NQ_B" egress_restore_quoted_ops
+_nq_cw="$E007_N_CW"
+E007_NQ_M1="${E007_W_BASE}/nqm1"; e007_n_copy "$E007_NQ_M1" 'for t in "${egress_toks[@]}"; do  # linear: restore' 'for t in "${egress_toks[@]:1}"; do  # linear: restore'; _nq_cw="${_nq_cw}${E007_N_CW}"
+E007_NQ_M2="${E007_W_BASE}/nqm2"; e007_n_copy "$E007_NQ_M2" 'RQ[${#RQ[@]}]="$t"' 'RQ[${#RQ[@]}]="${t%?}"'; _nq_cw="${_nq_cw}${E007_N_CW}"
+if [ "$_nq_cw" = 000 ]; then
+  e007_n_eq "AC-E007-NQ-EQ" "the restore of quoted operators" "${E007_NQ_B}/mut.sh" "${E007_NQ_M1}/mut.sh" "${E007_NQ_M2}/mut.sh"
+else
+  e007_d_fail "AC-E007-NQ-EQ: the restore of quoted operators equals the code before it byte for byte" \
+    "the copies could not be built (put back, then each near miss: ${_nq_cw}; 0 = built)"
+fi
+e007_n_timed "a long run of quoted operator tokens" "AC-E007-NQ" qops "gh api '<' " 'a ' 'repos/o/r' "gh api 'x' " 'a ' 'repos/o/r'
+e007_n_ctl "AC-E007-NQ-CTL" "$E007_NQ_B" qops 80 C "the restore of quoted operators"
 
 # ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #

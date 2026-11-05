@@ -1474,19 +1474,25 @@ egress_strip_redirections() {
 }
 
 # Put the quoted-operator stand-ins back once the redirection strip has run, so a path, a field or a
-# logged value carries the characters the command wrote.
+# logged value carries the characters the command wrote. The tokens are taken in turn from one
+# expansion of the list and gathered into a new one, never read or written by index, because bash 3.2
+# finds an indexed element by walking the array from its start, which costs more than linear time
+# over a segment of many tokens.
 egress_restore_quoted_ops() {
-  local i=0 n="${#egress_toks[@]}" lp
+  local t lp
+  local -a RQ
   case "${egress_toks[*]}" in
     *"${EGRESS_QLT}"*|*"${EGRESS_QGT}"*) ;;
     *) return 0 ;;
   esac
-  while [ "$i" -lt "$n" ]; do
-    if [ "${#egress_toks[$i]}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\005\006' '\074\076' <<< "${egress_toks[$i]}.")"; then egress_toks[$i]="${lp%.}"; fi  # linear: stand-in
-    egress_toks[$i]="${egress_toks[$i]//${EGRESS_QLT}/<}"
-    egress_toks[$i]="${egress_toks[$i]//${EGRESS_QGT}/>}"
-    i=$(( i + 1 ))
+  RQ=()
+  for t in "${egress_toks[@]}"; do  # linear: restore
+    if [ "${#t}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\005\006' '\074\076' <<< "${t}.")"; then t="${lp%.}"; fi  # linear: stand-in
+    t="${t//${EGRESS_QLT}/<}"
+    t="${t//${EGRESS_QGT}/>}"
+    RQ[${#RQ[@]}]="$t"
   done
+  egress_toks=( "${RQ[@]}" )
   return 0
 }
 
