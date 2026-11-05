@@ -9647,6 +9647,147 @@ if [ -z "$lin_why" ]; then
 else
   /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-FB: with the pass's tr missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
 fi
+
+# ---- AC-022-Y* (#8314, DT pass 4): the -022 quote scan is linear ----
+#
+# The script-execution rule carries its quote state across a command's segments with a scan
+# (script_qadvance) whose steps the work cap bounds but whose cost per step it does not: on bash
+# 3.2 each step re-read the text left to scan — a removal that re-measures it at every position it
+# tries, once per searched character, an absent one the costliest — so a long line dense with quote
+# characters cost more than linear time and could hold the hook past the runtime's command-hook
+# timeout, after which a PreToolUse hook does not block. A segment of at least SCRIPT_LINEAR_MIN
+# characters is now scanned by one awk pass with the same steps (script_qadvance_linear, the line
+# marked `# linear: qadvance`). Y-EQ lifts the scan and runs it with the bound at 0 (the pass) and at
+# 10^9 (the loop, the code before this pass) over segment sequences carried from a starting state,
+# work counts near the cap among them, on dense segments — quotes of both kinds, $'...' and its
+# escaped quote, backslashes before multibyte and undecodable bytes, `$` and backticks — in
+# en_US.UTF-8 and in C: the carried state, taint, work count and bail after every segment must be
+# equal, and a near miss that never opens $'...' must differ. Y1 to Y6 run the hook under the
+# watchdog on a long comment line dense with quote characters at 10, 20 and 40 KB in both locales,
+# each inside the budget and allowed. Y-CTL is the instrument's sensitivity: the raised-bound copy
+# of X-CTL is stopped at the budget on the 20 KB line in UTF-8. Y-FB holds the fallback: a copy
+# whose pass has no awk reads the shipped hook's verdicts on a long quoted argument — suppressed
+# behind a carrier, refused behind another command — and raises no hook error.
+/usr/bin/sed '/# linear: qadvance$/s#/usr/bin/awk#/nonexistent/awk#' "$HOOK" > "${LIN_HOOKS}/block-destructive-noawk.sh"
+LIN_Y="${LIN_ROOT}/y"
+/bin/mkdir -p "${LIN_Y}/in"
+# The cases: a starting state and up to three segments each, from fixed units cycled by a fixed
+# generator; segments never carry a newline, as the rule's segments do not.
+LC_ALL=C /usr/bin/awk -v d="${LIN_Y}/in" 'BEGIN {
+  n = split("", u)
+  u[++n] = "\047"; u[++n] = "\""; u[++n] = "\\"; u[++n] = "$"; u[++n] = "`"; u[++n] = "$\047"; u[++n] = "\\\047"
+  u[++n] = "\\\""; u[++n] = "\\\\"; u[++n] = " "; u[++n] = "a"; u[++n] = "bc"; u[++n] = "# c"; u[++n] = "it\047s"
+  u[++n] = "\"x\""; u[++n] = "\047y\047"; u[++n] = "$(z)"; u[++n] = "\303\251"; u[++n] = "\346\227\245"
+  u[++n] = "\\\303\251"; u[++n] = "\\\343\200\200"; u[++n] = "\377"; u[++n] = "\303"; u[++n] = "\\\377"
+  split("0 0 0|1 1 0|2 1 0|3 0 0|0 0 990|2 1 998|1 0 999|0 0 1000", st, "|")
+  split("300 900 2600", size, " ")
+  x = 11; c = 0
+  for (a = 1; a <= 8; a++) for (b = 1; b <= 3; b++) {
+    cd = d "/case-" sprintf("%02d", ++c); system("/bin/mkdir -p " cd)
+    printf "%s\n", st[a] > (cd "/start"); close(cd "/start")
+    for (g = 1; g <= b; g++) {
+      s = ""; while (length(s) < size[(a + b + g) % 3 + 1]) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+      printf "%s", s > (cd "/seg-" g); close(cd "/seg-" g)
+    }
+  }
+}'
+# lin_y_lift <src> <out> — the scan, its search helper, its linear pass and the pass's program.
+lin_y_lift() {
+  /usr/bin/awk '
+    /^readonly SCRIPT_QADVANCE_AWK=/ { inp = 1 }
+    inp { print; if ($0 == "    }\047") inp = 0; next }
+    /^script_qnext\(\) \{/ || /^script_qadvance\(\) \{/ || /^script_qadvance_linear\(\) \{/ { inf = 1; k++ }
+    inf { print; if ($0 == "}") inf = 0 }
+    END { exit k == 3 ? 0 : 1 }' "$1" > "$2"
+}
+# lin_y_eval <locale> <bound> <lib> <out> — each case: its segments scanned in turn from its state,
+# the state after each written to <out>/<case>.
+lin_y_eval() {
+  /bin/mkdir -p "$4"
+  LC_ALL="$1" /bin/bash -c 'set -euo pipefail; SCRIPT_LINEAR_MIN="$1"; . "$2"
+    script_q1="'"'"'"; script_q2="\""; script_bs="\\"; script_qd="\$"; script_qbt="\`"
+    for c in "$3"/case-*; do
+      read -r script_qstate script_qtaint script_qwork < "$c/start"; script_qbail=0; o=""
+      for g in "$c"/seg-*; do
+        s="$(/bin/cat "$g"; printf x)"; s="${s%x}"
+        script_qadvance "$s"
+        o="${o}${script_qstate} ${script_qtaint} ${script_qwork} ${script_qbail};"
+      done
+      printf "%s\n" "$o" > "$4/${c##*/}"
+    done' _ "$2" "$3" "${LIN_Y}/in" "$4"
+}
+lin_why=""
+lin_y_lift "$HOOK" "${LIN_Y}/lib" || lin_why="${lin_why} the scan, its pass or the pass's program is missing from the hook;"
+F='if (k - 1 > i0 && tok[k - 1] == "" && tok[k - 2] == "$") st = 3' T='if (0) st = 3' /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+  !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
+  { print }
+  END { exit d ? 0 : 1 }' "${LIN_Y}/lib" > "${LIN_Y}/near" || lin_why="${lin_why} the near-miss edit did not apply;"
+lin_y_n="$(/bin/ls -d "${LIN_Y}/in"/case-* | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+[ "$lin_y_n" -ge 24 ] || lin_why="${lin_why} only ${lin_y_n} cases were written;"
+if [ -z "$lin_why" ]; then
+  for lin_loc in en_US.UTF-8 C; do
+    lin_y_eval "$lin_loc" 1000000000 "${LIN_Y}/lib" "${LIN_Y}/${lin_loc}/ref" || lin_why="${lin_why} [${lin_loc}] the loop did not run;"
+    lin_y_eval "$lin_loc" 0 "${LIN_Y}/lib" "${LIN_Y}/${lin_loc}/lin" || lin_why="${lin_why} [${lin_loc}] the pass did not run;"
+    lin_y_eval "$lin_loc" 0 "${LIN_Y}/near" "${LIN_Y}/${lin_loc}/near" || lin_why="${lin_why} [${lin_loc}] the near miss did not run;"
+    lin_y_d=0
+    for lin_c in "${LIN_Y}/in"/case-*; do
+      lin_k="${lin_c##*/}"
+      /usr/bin/cmp -s "${LIN_Y}/${lin_loc}/ref/${lin_k}" "${LIN_Y}/${lin_loc}/lin/${lin_k}" || lin_why="${lin_why} [${lin_loc} ${lin_k}] the pass differs;"
+      /usr/bin/cmp -s "${LIN_Y}/${lin_loc}/ref/${lin_k}" "${LIN_Y}/${lin_loc}/near/${lin_k}" || lin_y_d=$(( lin_y_d + 1 ))
+    done
+    [ "$lin_y_d" -gt 0 ] || lin_why="${lin_why} [${lin_loc}] the near miss reads like the loop (the comparison cannot see a difference);"
+  done
+fi
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-EQ: the \`# linear: qadvance\` pass carries the loop's state, taint, work count and bail across ${lin_y_n} segment sequences in UTF-8 and C, and a near miss differs"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-EQ: the \`# linear: qadvance\` pass carries the loop's state, taint, work count and bail" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+for lin_kb in 10 20 40; do
+  lin_fill $(( lin_kb * 1024 )) "echo gh # it's \"x\" " "don't \"stop\" " $'\n' > "${LIN_ROOT}/comment-${lin_kb}.cmd"
+done
+lin_n=0
+for lin_loc in en_US.UTF-8 C; do
+  for lin_kb in 10 20 40; do
+    lin_n=$(( lin_n + 1 ))
+    lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/comment-${lin_kb}.cmd" "$LIN_LIMIT"
+    if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
+      /usr/bin/printf 'PASS: %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook in ${LIN_DS} tenths of a second (budget ${LIN_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed" \
+        "elapsed=${LIN_DS} tenths (-1 = stopped at ${LIN_LIMIT}) exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+    fi
+  done
+done
+lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/comment-20.cmd" "$LIN_LIMIT"
+if [ "$LIN_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly SCRIPT_LINEAR_MIN=1000000000' "${LIN_HOOKS}/block-destructive-nopass.sh"; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at ${LIN_LIMIT} tenths on the 20 KB comment line in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget" \
+    "elapsed=${LIN_DS} tenths exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show Y1-Y6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+fi
+# Y-FB: the pass's awk repointed to a path that does not exist, so the pass fails and the loop scans.
+# A long single-quoted argument holding an interpreter run: behind gh, a carrier, the run is a quoted
+# fragment and is suppressed (allowed); behind cat it is adjudicated and refused.
+lin_why=""
+lin_tools="$(/usr/bin/grep -c -F '/nonexistent/awk' "${LIN_HOOKS}/block-destructive-noawk.sh")" || true
+[ "$lin_tools" = 1 ] || lin_why="${lin_why} the copy repoints ${lin_tools} pass lines, want 1;"
+lin_pad="$(lin_fill 400 '' 'note ' '')"
+for lin_c in "g:0:gh issue comment 1 --body '${lin_pad}; bash /tmp/pmo-lin-na.sh'" "c:2:cat --body '${lin_pad}; bash /tmp/pmo-lin-na.sh'"; do
+  lin_tag="${lin_c%%:*}"; lin_rest="${lin_c#*:}"
+  lin_want="${lin_rest%%:*}"; lin_cmd_s="${lin_rest#*:}"
+  lin_s=0; lin_t=0
+  ( /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive.sh" > /dev/null 2>&1 ) || lin_s="$?"
+  lin_err="$( { /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive-noawk.sh" > /dev/null; } 2>&1 )" || lin_t="$?"
+  [ "$lin_s" = "$lin_want" ] || lin_why="${lin_why} [${lin_tag}] shipped exits ${lin_s}, want ${lin_want};"
+  [ "$lin_t" = "$lin_s" ] || lin_why="${lin_why} [${lin_tag}] the copy without its awk exits ${lin_t}, the shipped hook ${lin_s};"
+  case "$lin_err" in *HOOK-ERROR*) lin_why="${lin_why} [${lin_tag}] the copy without its awk raised a hook error;" ;; esac
+done
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-FB: with the pass's awk missing, the scan falls back to its loop — a suppressed quoted fragment and a refused interpreter run read as the shipped hook reads them, with no hook error"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-FB: with the pass's awk missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
+fi
 /bin/rm -rf "$LIN_ROOT"
 
 # --- Summary ---

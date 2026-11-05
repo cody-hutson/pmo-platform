@@ -1983,9 +1983,18 @@ script_qnext() {
 # that runs before every Bash call. On exceeding the cap the scan STOPS and
 # script_qbail latches, which forces the caller to suppress nothing at all for
 # the rest of the command — degradation lands on "adjudicate everything".
+#
+# The cap bounds the steps, not their cost: on bash 3.2 each step re-reads the
+# text left to scan — a removal that re-measures it at every position it tries,
+# its length, its remainder — so a step on a long segment costs more than its
+# length, and a long line dense with quote characters held the hook for longer
+# than the segment was long. A segment of at least SCRIPT_LINEAR_MIN characters is
+# therefore scanned by script_qadvance_linear, one pass of awk with the same steps,
+# work count and bail; a shorter one, or one whose pass fails, by the loop below.
 script_qadvance() {
   script_qt="$1"
   local _pre
+  if [ "${#1}" -ge "$SCRIPT_LINEAR_MIN" ] && script_qadvance_linear "$1"; then return 0; fi
   while [ -n "$script_qt" ]; do
     if [ "$script_qwork" -ge 1000 ]; then
       script_qbail=1
@@ -2046,6 +2055,78 @@ script_qadvance() {
       fi
     fi
   done
+  return 0
+}
+
+# The scan above for a long segment, in one pass of awk in the C locale: the same
+# steps over the same text, so the same carried state, taint, work count and bail
+# on every input. The pass reads the text the loop's own length and substring reach,
+# `${1:0:${#1}}`, and steps a character at a time after a backslash as the loop
+# does — one byte in the C locale, one character otherwise, a byte that does not
+# open a well-formed character counting as one. The pass splits that text at the five
+# characters the loop searches for and walks the pieces once, counting one step
+# per search as the loop does, the last unsuccessful one included. Returns 1,
+# having set nothing, when the pass cannot run, and the loop reads the segment.
+#
+# The program: tok[1], tok[3], … are runs of text (possibly empty) and tok[2],
+# tok[4], … one searched character each; i is the run the scan is in, p the next
+# byte it has not read. clen is the length of the character a run opens with, in
+# bytes. A `'` opens $'…' when a `$` ahead of it, with nothing between, is still
+# unread — the test the loop makes of the text before the quote.
+readonly SCRIPT_QADVANCE_AWK='
+    function clen(t,   b, n, j, c) {
+      b = ord[substr(t, 1, 1)]
+      if (b < 192) return 1
+      n = (b < 224) ? 2 : (b < 240) ? 3 : (b < 248) ? 4 : (b < 252) ? 5 : (b < 254) ? 6 : 1
+      if (length(t) < n) return 1
+      for (j = 2; j <= n; j++) { c = ord[substr(t, j, 1)]; if (c < 128 || c > 191) return 1 }
+      return n
+    }
+    BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i }
+    { s = s $0 }
+    END {
+      st = ENVIRON["QA_ST"] + 0; ta = ENVIRON["QA_TA"] + 0; wk = ENVIRON["QA_WK"] + 0
+      ne = ENVIRON["QA_NE"] + 0; mb = ENVIRON["QA_MB"] + 0
+      t = s; gsub(/[\\\047"$`]/, "\n&\n", t); m = split(t, tok, "\n")
+      pos[1] = 1; for (j = 2; j <= m; j++) pos[j] = pos[j - 1] + length(tok[j - 1])
+      len = length(s); p = 1; i = 1; first = 1; bail = 0
+      while (1) {
+        if (first) { first = 0; if (!ne) break } else if (p > len) break
+        if (wk >= 1000) { bail = 1; st = 0; ta = 0; break }
+        wk++
+        i0 = i
+        for (k = i + 1; k <= m; k += 2) {
+          c = tok[k]
+          if (st == 1) { if (c == "\047") break }
+          else if (st == 3) { if (c == "\\" || c == "\047") break }
+          else if (st == 2) { if (c == "\\" || c == "\"" || c == "$" || c == "`") break }
+          else if (c == "\\" || c == "\047" || c == "\"") break
+        }
+        if (k > m) break
+        p = pos[k] + 1; i = k + 1
+        if (c == "\\") {
+          if (i <= m && length(tok[i]) > 0) { n = mb ? clen(tok[i]) : 1; p += n; tok[i] = substr(tok[i], n + 1); pos[i] += n }
+          else if (i + 1 <= m) { p += 1; i += 2 }
+        } else if (st == 1 || st == 3) st = 0
+        else if (st == 2) { if (c == "\"") { st = 0; ta = 0 } else ta = 1 }
+        else if (c == "\047") { st = 1; if (k - 1 > i0 && tok[k - 1] == "" && tok[k - 2] == "$") st = 3 }
+        else { st = 2; ta = 0 }
+      }
+      printf "%d %d %d %d\n", st, ta, wk, bail
+    }'
+script_qadvance_linear() {   # $1 = the segment
+  local _v _r _st _ta _wk _b _ne=0 _mb=0 _x=$'\303\251'
+  [ "${#_x}" -eq 1 ] && _mb=1
+  [ -n "$1" ] && _ne=1
+  _v="${1:0:${#1}}"
+  _r="$(LC_ALL=C QA_ST="$script_qstate" QA_TA="$script_qtaint" QA_WK="$script_qwork" QA_NE="$_ne" QA_MB="$_mb" /usr/bin/awk "$SCRIPT_QADVANCE_AWK" <<< "$_v")" || return 1  # linear: qadvance
+  read -r _st _ta _wk _b <<< "$_r"
+  case "${_st}:${_ta}:${_wk}:${_b}" in
+    [0123]:[01]:[0123456789]*:[01]) ;;
+    *) return 1 ;;
+  esac
+  script_qstate="$_st"; script_qtaint="$_ta"; script_qwork="$_wk"
+  if [ "$_b" -eq 1 ]; then script_qbail=1; fi
   return 0
 }
 
