@@ -25,7 +25,7 @@ ambiguity. The `audit_class` declaration lives in the frontmatter only.
 
 # Release Plan — stage-document-model-decision
 
-> **Status:** Engineering, Wave 2 — the founding ADR committed `Proposed` (release branch `release/stage-document-model-decision`).
+> **Status:** Stage 9 Plan Review — the operator's pre-GO decisions PA-011 to PA-015 are recorded and applied; the GO / NO-GO and the ratification of the founding ADR (still `Proposed`) are pending (release branch `release/stage-document-model-decision`).
 > **Identity: VERSION-LESS.** The release identity is the capability slug `stage-document-model-decision`. No version key is claimed at any stage, no release-version stamp token is authored, and the Stage-12 rename never fires. The plan moves to `plans/_unversioned/` at Stage 13 close.
 > **Topology:** D-C SINGLE — one release branch, one pull request, one merge.
 > **Release Class:** `novel` · **Milestone:** `stage-document-model-decision`.
@@ -39,7 +39,7 @@ ambiguity. The `audit_class` declaration lives in the frontmatter only.
 | **Bump Class** | N/A — version-less release; no number binds at Stage 12 (D-Version re-rendered version-less by the operator on 2026-11-05 after the PA-007 scope change) |
 | **Date Created** | 2026-11-05 (Thursday) |
 | **Release Manager** | Agent-assisted (release hub + stage spokes) |
-| **Status** | Executing — Stage 6, Wave 2 |
+| **Status** | Executing — Stage 9 Plan Review; pre-GO decisions applied, GO / NO-GO and ratification pending |
 | **Branch** | `release/stage-document-model-decision` |
 | **PR** | #8814, the draft release PR opened at Stage 6 Phase C2; the frontmatter `pr:` field was populated by the Wave-2 commit |
 | **Milestone** | stage-document-model-decision |
@@ -78,8 +78,13 @@ The label takes the pipeline-internal exemption form: the File Change Matrix hol
 | PA-009 | D-VerifyOnlyRigor | (a): Stage 7 is restored for #8154 and #8155 (#8785 and #8786 reopen); Stage 6 derives its answers fresh before comparing them, as verify-and-refresh (DEV-16) | CHEAP |
 | PA-010 | D-8157-BuildPrinciples | (b): #8157 gains one graded design criterion for the operator's four § 2 constraints (no bloat; reviewed over releases; repo versus local-folder best practice; repeatable for adopters) (DEV-17) | CHEAP |
 | D-Version | Re-render after PA-007 | Version-less, re-confirmed by the operator ("Stay version-less (Recommended)") | CHEAP / HIGH (reversible up to Stage 12) |
+| PA-011 | Stage 9 pre-GO, D-PreGateADRFix | (A): one Tier 1 wording commit on the founding ADR while it is `Proposed` (DEV-26) | CHEAP |
+| PA-012 | Stage 9 pre-GO, D-Stage8Acceptance | Accepted as listed: #8153, #8155 and #8156 ACCEPT; #8154 CONDITIONAL, AC-3's three `not stated` lifecycle rows accepted as-is; #8157 ACCEPT once PA-011 lands (DEV-27) | CHEAP |
+| PA-013 | Stage 9 pre-GO, D-8156-QA | (A) + (a): the Scrum/Kanban-design join rule stated in the #8156 record, the ADR's figure staying 19; the record's sunset extended with a reason and the record named as slice S3's input (DEV-28) | CHEAP |
+| PA-014 | Stage 9 pre-GO, D-DeliveryCutDeps | Slice S7 split to a later milestone, so milestone 2 is back to two external dependencies (DEV-29) | CHEAP |
+| PA-015 | Stage 9 pre-GO, D-OwnedFindingsFiling | The 28 owned findings stay unfiled, owned by #8150's delivery cut, with the 8 bug-tag candidates listed in the Stage-9 ledger (DEV-30) | CHEAP |
 
-Every choice equals the hub's recommendation, so there is no recommendation-versus-choice delta. Recorded determinations, not gates: D-C SINGLE; Stage 5 ACTIVATE release-wide under the all-or-nothing rule; one PR (now carrying this plan and the founding ADR, DEV-12).
+Every choice equals the hub's recommendation, so there is no recommendation-versus-choice delta. PA-011 to PA-015 were rendered together on 2026-11-05 ("Approve all five"; Decision Recorded, comment 6670710105 on #8794). Recorded determinations, not gates: D-C SINGLE; Stage 5 ACTIVATE release-wide under the all-or-nothing rule; one PR (now carrying this plan and the founding ADR, DEV-12).
 
 ## Phase A0 — Triage→Design re-review and currency gates (transcribed from the Stage-4 output)
 
@@ -690,6 +695,11 @@ Departures from the Stage-4 comment (comment 6664007762 on #8751), each with the
 | DEV-23 | No `core/ADRs/README.md` entry is added for the founding ADR | R9's README check, run at the #8157 commit | That README is a curated thematic document, not an index (its own opening paragraph, ADR-117); adr-helper registers nothing for a `core/ADRs/` record | APPLIED: the File Change Matrix stays at two rows and CIAC-1 is unchanged |
 | DEV-24 | The #8157 design record is staged in the spoke's run directory with a sha256 manifest for the hub to place, rather than written at the token-resolved analysis home; the harness also refused the subagent's write of the record's index file (`SUMMARY.md`), whose content therefore travels in the spoke's hand-back for hub-direct placement | The operator's record-placement decision (2026-11-05) and the #8157 Wave-2 brief; the Collective Review recorded determination (a refused write is placed hub-direct) | An isolated spoke cannot write the primary analysis workspace; the refusal of the index file is a harness control, recorded as a firing on #8783, not routed around | STAGED at this commit; placing the folder, and checking each file's sha256 and `git check-ignore -v`, is the hub's step |
 | DEV-25 | In the transcribed Phase A0 tables (#8153, #8154, #8155, #8156 and #8157 rows), the seven D3 cells that named an operator-local memory file now state the principle it stands for as one plain clause labelled `[CONTEXT]`, and drop the file name | Hub instruction to the #8157 Wave-2 commit, after the Stage-7 review of #8154 (comment 6668355579 on #8785) found the required check "Operator-memory-reference gate" failing on this file | A public plan may not name operator-local memory files; the principle carries the meaning without the name. The `allow-memory-ref` override is not used | APPLIED: the gate's own pattern finds 7 lines in this file at Commit 0 and 0 after this commit; a control line naming a memory-shaped file reads 1 (§ Verification Evidence) |
+| DEV-26 | **PA-011 D-PreGateADRFix (A).** One Tier 1 wording commit on the founding ADR while it is `Proposed`: § 3 maps the delivery-engine lifecycle (15 stages in 5 phases) at stage grain, states that a phase spanning several spans maps per member stage, and writes `Build` object-typed where the two models meet (`Span-Build`, `Engine-Build`) (#8793 QA-01; Stage-7 F-02 on #8788); § 5 defines `platform-instance` by role and reads #8016's draft against the home-class table (Stage-7 F-01); F-11's attribute count and the in-place definitions of the Commit-0 writer, Step 0 and the engine decision | Stage 9 pre-GO Decision Recorded (comment 6670710105 on #8794), PA-011, CHEAP | Cheap while the ADR is `Proposed` and EXPENSIVE once built (the QA-01 weighted layer); it turns #8157 AC-2 from PARTIAL to MET | APPLIED in the ADR at `64615ed5`, whose checks are recorded in comment 6670835521 on #8793. The ADR stays `Proposed`; only the ratification moves it |
+| DEV-27 | **PA-012 D-Stage8Acceptance, accepted as listed.** #8153, #8155 and #8156 ACCEPT; #8154 CONDITIONAL ACCEPT, with AC-3's three `not stated` lifecycle rows (Intake form, Business case, Resource Plan) accepted as-is; #8157 ACCEPT once PA-011 lands | Stage 9 pre-GO Decision Recorded, PA-012, CHEAP | The operator renders Stage 8's Phase E at the Stage 9 gate; PA-011 has landed (`64615ed5`) | APPLIED in § Change Description → Issues resolved. #8157 reads PARTIAL there until the ratification is recorded, per this plan's own status rule |
+| DEV-28 | **PA-013 D-8156-QA (A) + (a).** The #8156 record states the binding rule that joins the Scrum and Kanban design cadences to their grid cells, so the founding ADR's "19 with a source-stated cadence" stays 19; the record's sunset is extended with a reason, and the record is named as slice S3's input | Stage 9 pre-GO Decision Recorded, PA-013, CHEAP | Option (A) keeps the evidence and moves no decision (#8793 QA-05); option (a) keeps the member-grain data alive for S3 | APPLIED in the git-ignored #8156 record, Revision 3, placed by the hub (comment 6670797979 on #8782). No tracked text changes: the ADR figure stays 19 |
+| DEV-29 | **PA-014 D-DeliveryCutDeps.** Slice S7, the catalog integrity checks, is split from the second delivery milestone into a third, so the second milestone carries two external dependencies rather than three | Stage 9 pre-GO Decision Recorded, PA-014, CHEAP; Stage-7 F-03 on #8788 | The composition doctrine targets at most two external dependencies per milestone; S7 waits on the catalog generator | APPLIED in the ADR's § Delivery cut at `64615ed5`, and in § Change Description → Downstream impact at this commit |
+| DEV-30 | **PA-015 D-OwnedFindingsFiling.** The 28 process-baseline findings this release's cards own (#8153 7, #8154 15, #8155 6) stay unfiled, owned by epic #8150's delivery cut. The 8 bug-tag candidates (#8154's seven ` · bug` rows plus F-032, under Stage-7 F-03's reading on #8785) are listed in the Stage-9 ledger. This replaces the "Stage 13 files them" clause of PA-008 (a) and DEV-15 | Stage 9 pre-GO Decision Recorded, PA-015, CHEAP | Every owned finding carries class `none` at its source, so all 28 sit below the filing threshold's class limb; their remedies are the delivery cut's work | APPLIED: the Stage-9 Phase A7.6 ledger on #8794 counts them below-threshold, and Stage 13 files none of them |
 
 ## Change Description
 
@@ -697,19 +707,19 @@ Authored at Engineering Commit 0 per `release/governance/RELEASE_PROTOCOL.md` §
 
 ### Outcome
 
-This release produces the evidence and the design for how each delivery stage records its work. Four discovery cards verify or produce the current-state records (what each release stage writes, what project delivery produces, a shared stage vocabulary, and how methodology changes cadence), and #8157 designs the stage-to-document model on them. The design is held in a founding ADR, `{{ADR:stage-documents-are-declared-once-and-projected-twice}}`, that ships in this release as `Proposed` and becomes `Accepted` when the operator ratifies it at Stage 9. In one line, the design: every stage's documents are declared once, in a new core standard that both the release pipeline and project delivery read; each stage and each project phase belongs to one of eight delivery spans; a document's lifecycle class binds to the field its file already carries; homes are named by role; a delivery approach varies cadence through one member-grain section; and a change's process design is written as DRAFT catalog pages at Engineering Commit 0 and becomes current when its code is built.
+This release produces the evidence and the design for how each delivery stage records its work. Four discovery cards verify or produce the current-state records (what each release stage writes, what project delivery produces, a shared stage vocabulary, and how methodology changes cadence), and #8157 designs the stage-to-document model on them. The design is held in a founding ADR, `{{ADR:stage-documents-are-declared-once-and-projected-twice}}`, that ships in this release as `Proposed` and becomes `Accepted` when the operator ratifies it at Stage 9. In one line, the design: every stage's documents are declared once, in a new core standard that both the release pipeline and project delivery read; every pipeline stage, and every project phase or stage, belongs to one of eight delivery spans; a document's lifecycle class binds to the field its file already carries; homes are named by role; a delivery approach varies cadence through one member-grain section; and a change's process design is written as DRAFT catalog pages at Engineering Commit 0 and becomes current when its code is built.
 
 ### Issues resolved
 
 | # | Outcome (one line) | Status |
 |---|---|---|
-| #8153 | What each release stage writes, where it persists and who reads it, verified as a delta over the W1 record at head | IN FLIGHT — Stage 6 record placed; Stages 7–8 in progress |
-| #8154 | The project-delivery inventory, verified and refreshed, with the 2026-10-25 observations noted beside it | IN FLIGHT — Stage 6 record placed; Stages 7–8 in progress |
-| #8155 | The stage-vocabulary crosswalk, verified and refreshed | IN FLIGHT — Stage 6 record placed; Stages 7–8 in progress |
-| #8156 | How each delivery approach changes when documents are written and how long they stay current | IN FLIGHT — Stage 6 record placed; Stages 7–8 in progress |
-| #8157 | The stage-to-document model design and the founding ADR, brought to ratification | IN FLIGHT — design record staged; founding ADR committed `Proposed`; ratification at Stage 9 |
+| #8153 | What each release stage writes, where it persists and who reads it, verified as a delta over the W1 record at head | DONE — Stage 8 ACCEPT, 5 of 5 criteria MET, accepted by the operator (PA-012) |
+| #8154 | The project-delivery inventory, verified and refreshed, with the 2026-10-25 observations noted beside it | DONE — Stage 8 CONDITIONAL ACCEPT, 4 of 5 MET; AC-3 PARTIAL, its three `not stated` lifecycle rows accepted as-is by the operator (PA-012) |
+| #8155 | The stage-vocabulary crosswalk, verified and refreshed | DONE — Stage 8 ACCEPT, 4 of 4 MET, accepted by the operator (PA-012) |
+| #8156 | How each delivery approach changes when documents are written and how long they stay current | DONE — Stage 8 ACCEPT, 4 of 4 MET, accepted by the operator (PA-012); record Revision 3 per PA-013 |
+| #8157 | The stage-to-document model design and the founding ADR, brought to ratification | PARTIAL — Stage 8 ACCEPT once PA-011 landed (`64615ed5`), accepted by the operator (PA-012); the ratification is pending at the Stage 9 gate, and AC-6 is graded at Stage 13 |
 
-The status column takes its DONE / PARTIAL / DEFERRED value once Stage 8 has graded each card; #8157's also waits on the ratification.
+Each status follows the operator's Stage-8 acceptance, rendered at the Stage 9 pre-GO gate (PA-012). #8157's becomes DONE only once the ratification is recorded.
 
 ### Key decisions
 
@@ -718,6 +728,7 @@ The status column takes its DONE / PARTIAL / DEFERRED value once Stage 8 has gra
 - **D-Concurrency P1:** parallel compute, one commit lane.
 - **D-DurableHome (B) + (C):** the design ships as a founding ADR in this release; the inventories feed the process-catalog pages.
 - **D-Version:** version-less, re-confirmed after the ADR joined the release.
+- **Stage 9 pre-GO, PA-011 to PA-015 ("Approve all five"):** the founding ADR's pre-GO wording commit (the delivery-engine map, `Span-Build` against `Engine-Build`, `platform-instance` by role); the Stage-8 verdicts accepted as listed; #8156's join rule stated, with the ADR's "19" kept and the record's sunset extended; slice S7 split to a third milestone; the 28 owned findings kept unfiled, owned by #8150's delivery cut.
 
 ### Reversibility
 
@@ -725,7 +736,7 @@ The status column takes its DONE / PARTIAL / DEFERRED value once Stage 8 has gra
 
 ### Downstream impact
 
-- The ratified design is the build target for epic #8150's delivery milestones, cut by #8157. The proposed cut is two milestones: one declaration (the standard, the lifecycle-register entries, the methodology section, gap detection on spans, the template gap list), then the design living in the catalog (the node-delta block, the Stage-6 page writes, the Stage-7 designed-versus-built read, the integrity checks).
+- The ratified design is the build target for epic #8150's delivery milestones, cut by #8157. The proposed cut is three milestones (PA-014 split slice S7 out of the second): one declaration (the standard, the lifecycle-register entries, the methodology section, gap detection on spans, the template gap list); then the design living in the catalog (the node-delta block, the Stage-6 page writes, the Stage-7 designed-versus-built read); then the catalog keeping its integrity (the integrity checks, warn-mode first, which wait on the catalog generator). The second milestone therefore carries two external dependencies, the composition doctrine's target.
 - The current-state inventories feed the #8115 process-catalog pages (PA-007 (C)).
 - No skill, hook, deploy gate or Layer-2 surface changes.
 
