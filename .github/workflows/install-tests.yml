@@ -1130,10 +1130,15 @@ jobs:
     # FAIL) fails this step → fails the job → red CI. Distinct job (not a step)
     # so a hook failure is attributable separately from a deploy-test failure.
     runs-on: macos-latest
-    # Job-level OUTER bound: three times this job's slowest observed run, rounded up
-    # to five minutes. Its gating step runs the hook harness, which is not a
-    # core/deploy/tests suite, so this is the only bound on it.
-    timeout-minutes: 30
+    # Job-level OUTER bound. Its gating step runs the hook harness, which is not a
+    # core/deploy/tests suite, so this is the only bound on it. The release
+    # guards-judge-every-spelling-alike adds timed arms to the harness — each hook,
+    # and the shared canonicalizer alone, run on long commands at several sizes in
+    # two locales under a watchdog, so that a cost growing faster than the command
+    # turns this required job red. Those arms stay in this job and need this limit:
+    # it is the harness's estimated run time with them, plus at least a third of
+    # headroom.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
