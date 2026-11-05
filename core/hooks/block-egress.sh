@@ -1682,14 +1682,14 @@ egress_join_lines() {
 # then one value-taking flag (-X -f -F -H -q -t -p) whose value is the rest of the word with one
 # leading `=` dropped, or the next word when nothing is attached. A word that parser would reject is
 # stepped over as one token, as before. Reads and advances the operand walk's state.
+#
+# The run of -i is stepped over by its length, found by one removal of the text after it, never one
+# -i at a time: each step copies the text left to read, which on bash 3.2 costs more than linear time
+# in a long cluster.
 egress_short_flags() {
-  local s="${egress_tok#-}" f v sep=0 hasv=1
-  while : ; do
-    case "$s" in
-      i*) s="${s#i}" ;;
-      *) break ;;
-    esac
-  done
+  local s="${egress_tok#-}" f v sep=0 hasv=1 run
+  run="${s%%[!i]*}"
+  if [ -n "$run" ]; then s="${s:${#run}}"; fi  # linear: cluster
   f="${s:0:1}"
   v="${s:1}"
   case "$f" in

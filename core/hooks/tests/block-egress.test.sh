@@ -4195,6 +4195,55 @@ fi
 e007_n_timed "a long run of quoted operator tokens" "AC-E007-NQ" qops "gh api '<' " 'a ' 'repos/o/r' "gh api 'x' " 'a ' 'repos/o/r'
 e007_n_ctl "AC-E007-NQ-CTL" "$E007_NQ_B" qops 80 C "the restore of quoted operators"
 
+# -- NF: the short-flag cluster reader on a long cluster --
+E007_N_K=0
+/bin/cat >> "${E007_N_R}/before-funcs.sh" <<'E007_N_BEFORE'
+egress_short_flags() {
+  local s="${egress_tok#-}" f v sep=0 hasv=1
+  while : ; do
+    case "$s" in
+      i*) s="${s#i}" ;;
+      *) break ;;
+    esac
+  done
+  f="${s:0:1}"
+  v="${s:1}"
+  case "$f" in
+    X|f|F|H|q|t|p) ;;
+    *) egress_idx=$(( egress_idx + 1 )); return 0 ;;
+  esac
+  case "$v" in
+    '') sep=1 ;;
+    '='?*) v="${v#=}" ;;
+  esac
+  if [ "$sep" -eq 1 ]; then
+    if [ $(( egress_idx + 1 )) -lt "${#egress_toks[@]}" ]; then
+      v="${egress_toks[$(( egress_idx + 1 ))]}"
+    else
+      hasv=0
+    fi
+  fi
+  case "$f" in
+    X) if [ "$hasv" -eq 1 ]; then egress_method="$v"; egress_explicit=1; fi ;;
+    f|F) egress_implicit=1 ;;
+  esac
+  egress_idx=$(( egress_idx + 1 + sep ))
+  return 0
+}
+E007_N_BEFORE
+E007_NF_B="${E007_W_BASE}/nfb"; e007_n_before "$E007_NF_B" egress_short_flags
+_nf_cw="$E007_N_CW"
+E007_NF_M1="${E007_W_BASE}/nfm1"; e007_n_copy "$E007_NF_M1" 'run="${s%%[!i]*}"' 'run="${s%%[!iX]*}"'; _nf_cw="${_nf_cw}${E007_N_CW}"
+E007_NF_M2="${E007_W_BASE}/nfm2"; e007_n_copy "$E007_NF_M2" 'then s="${s:${#run}}"; fi  # linear: cluster' 'then s="${s:1}"; fi  # linear: cluster'; _nf_cw="${_nf_cw}${E007_N_CW}"
+if [ "$_nf_cw" = 000 ]; then
+  e007_n_eq "AC-E007-NF-EQ" "the short-flag cluster reader" "${E007_NF_B}/mut.sh" "${E007_NF_M1}/mut.sh" "${E007_NF_M2}/mut.sh"
+else
+  e007_d_fail "AC-E007-NF-EQ: the short-flag cluster reader equals the code before it byte for byte" \
+    "the copies could not be built (put back, then each near miss: ${_nf_cw}; 0 = built)"
+fi
+e007_n_timed "a long short-flag cluster" "AC-E007-NF" cluster 'gh api -' 'i' 'H x repos/o/r' 'gh api -H' 'i' ' x repos/o/r'
+e007_n_ctl "AC-E007-NF-CTL" "$E007_NF_B" cluster 40 en_US.UTF-8 "the short-flag cluster reader"
+
 # ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #
 # The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
