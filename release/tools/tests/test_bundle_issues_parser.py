@@ -47,16 +47,46 @@ Audit baseline for the liveness guard: measured over the frozen fixture set
 P-level. The assertion is >=1, not ==22, so it constrains liveness without pinning a
 count that a future fixture refresh would rot; the observed count is printed so a
 silent collapse from 22 toward 1 is visible in the run output.
+
+### Section-read arms (added with the blank-line extractor repair, #7177)
+The section extractor used to end a section at the first two-blank-line run after
+its heading, so a heading carrying two blank lines read as an empty section — one
+newline moved a gated measurement. It now ends a section only at the next H2/H3
+heading or a break line, and native-dep-mirror.py reads that one extractor by path
+instead of carrying a copy. The arms below assert it by fixture, each with the arm
+that shows it bites:
+
+  7177-AC1  one, two or three blank lines after each parser-read heading read the
+            section, in the parser and through the mirror; the pre-repair extractor
+            (kept here as a reference copy, never shipped) misreads the same fixtures.
+  7177-AC2  present-and-empty, absent and populated stay three distinct reads.
+  7177-AC4  the frozen sample's combined-clean count is unchanged when a blank line
+            is doubled after a heading or inside a section, and the pre-repair
+            extractor's count is not.
+  7177-AC5  a doubled blank line inside a section reads as a single one; a break line
+            ends the section, LF and CRLF alike; the return is a plain string, so the
+            two G3-20 readers keep their contract.
+  CIAC-1    the parser loads nothing of the mirror's, loads alone from a copy, and the
+            mirror's extractor names are the parser's own objects.
+  CIAC-3    a doubled blank line reads identically through parse_dependencies — the
+            property the directed-parse rewrite must keep.
 """
 
+import ast
+import contextlib
 import importlib.util
+import io
 import json
 import os
+import re
+import shutil
 import sys
-from typing import Dict, Tuple
+import tempfile
+from typing import Dict, List, Optional, Tuple
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PARSER_PATH = os.path.join(HERE, os.pardir, "bundle-issues-parser.py")
+MIRROR_PATH = os.path.join(HERE, os.pardir, "native-dep-mirror.py")
 FIXTURES_PATH = os.path.join(HERE, "conformant_bundleable_sample.json")
 
 # The >=90% acceptance criterion on the conformant-bundleable denominator.
@@ -100,6 +130,320 @@ def combined_status(mod, body: str) -> str:
     if "deferred" in (af, dep):
         return "deferred"
     return "clean"
+
+
+# ---- Section-read arms (#7177) -------------------------------------------------
+
+LABEL_AC1 = "7177-AC1 blank-line tolerance"
+LABEL_AC2 = "7177-AC2 empty, absent and populated stay distinct"
+LABEL_AC4 = "7177-AC4 parse rate unchanged under the two-blank shape"
+LABEL_AC5 = "7177-AC5 no whitespace-only gap ends a section"
+LABEL_CIAC1 = "CIAC-1 no import cycle between the parser and the mirror"
+LABEL_CIAC3 = "CIAC-3 blank-line-invariant extraction survives the directed parse"
+
+AF_LINE = "- `release/tools/bundle-issues-parser.py` (edit — fix)"
+DEP_LINE = "Blocked by: FS+0d #6396 — x."
+AC_LINE = "- [ ] Verify that it works."
+
+
+def load_mirror():
+    spec = importlib.util.spec_from_file_location("native_dep_mirror", MIRROR_PATH)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _prefix_extract_section(body: str, heading: str) -> Optional[str]:
+    """The extractor as it stood before the repair, kept ONLY as this suite's
+    sensitivity arm. It ends a section at the first two-blank-line run after the
+    heading — the defect. Never used to grade the shipped parser."""
+    if not body:
+        return None
+    pat = re.compile(rf"^#{{2,4}}\s+{re.escape(heading)}\b[^\n]*$", re.MULTILINE | re.IGNORECASE)
+    m = pat.search(body)
+    if not m:
+        return None
+    rest = body[m.end():]
+    cands = [c.start() for c in (re.search(r"^###\s+", rest, re.MULTILINE),
+                                 re.search(r"^##\s+", rest, re.MULTILINE),
+                                 re.search(r"\n\s*\n\s*\n", rest)) if c is not None]
+    return rest[: min(cands)] if cands else rest
+
+
+def load_prefix_parser():
+    """A second parser copy reading through the pre-repair extractor. Every reader
+    looks extract_section up in the module namespace, so rebinding it reaches all."""
+    mod = load_parser()
+    mod.extract_section = _prefix_extract_section
+    return mod
+
+
+def load_prefix_mirror():
+    """A mirror whose own parser copy reads through the pre-repair extractor."""
+    mod = load_mirror()
+    mod._BIP.extract_section = _prefix_extract_section
+    return mod
+
+
+def _expect(failures: List[str], label: str, what: str, got, want) -> None:
+    if got != want:
+        failures.append(f"{label}: {what}: got {got!r}, want {want!r}")
+
+
+def arm_ac1(bip, mirror, failures: List[str]) -> None:
+    old, old_mirror = load_prefix_parser(), load_prefix_mirror()
+    for n in (1, 2, 3):
+        gap = "\n" * (n + 1)  # the heading line's own newline, then n blank lines
+        dep = f"### Dependencies{gap}{DEP_LINE}\n"
+        af = f"### Affected Files{gap}{AF_LINE}\n"
+        ac = f"### Acceptance Criteria{gap}{AC_LINE}\n"
+        files, af_status = bip.parse_affected_files(af)
+        _expect(failures, LABEL_AC1, f"Dependencies, {n} blank", bip.parse_dependencies(dep), ({6396}, "clean"))
+        _expect(failures, LABEL_AC1, f"Affected Files, {n} blank",
+                ([f.path for f in files], af_status), (["release/tools/bundle-issues-parser.py"], "clean"))
+        _expect(failures, LABEL_AC1, f"Acceptance Criteria, {n} blank", bip.parse_acceptance_criteria(ac), (True, 1))
+        # Both readers: the mirror's extractor name reads every heading the same.
+        for body, heading, line in ((dep, "Dependencies", DEP_LINE), (af, "Affected Files", AF_LINE),
+                                    (ac, "Acceptance Criteria", AC_LINE)):
+            via_mirror = mirror.extract_section_with_alias(body, [heading])
+            if via_mirror is None or line not in via_mirror[1] or via_mirror[1] != bip.extract_section(body, heading):
+                failures.append(f"{LABEL_AC1}: mirror read of {heading}, {n} blank: got {via_mirror!r}")
+        _expect(failures, LABEL_AC1, f"mirror eligible, {n} blank",
+                mirror.mirror_eligible_targets(mirror.parse_body_dependencies(dep)), {6396})
+        # Pre-repair arm: one blank line read correctly, two and three misread — the
+        # three misreads measured on 2026-09-26, plus the mirror's empty set.
+        want_old = (({6396}, "clean"), "clean", (True, 1), {6396}) if n == 1 else \
+            ((set(), "clean"), "failed", (True, 0), set())
+        got_old = (old.parse_dependencies(dep), old.parse_affected_files(af)[1],
+                   old.parse_acceptance_criteria(ac),
+                   old_mirror.mirror_eligible_targets(old_mirror.parse_body_dependencies(dep)))
+        _expect(failures, LABEL_AC1, f"pre-repair arm, {n} blank", got_old, want_old)
+
+
+def arm_ac2(bip, failures: List[str]) -> None:
+    empty = "### Dependencies\n### Notes\nx\n"
+    s = bip.extract_section(empty, "Dependencies")
+    if s is None or s.strip() != "":
+        failures.append(f"{LABEL_AC2}: empty section must read present-and-empty: got {s!r}")
+    _expect(failures, LABEL_AC2, "empty section is not flagged", bip.parse_dependencies(empty), (set(), "clean"))
+    before_break = "### Dependencies\n---\nBlocked by: #9\n"
+    s = bip.extract_section(before_break, "Dependencies")
+    if s is None or s.strip() != "":
+        failures.append(f"{LABEL_AC2}: section closed by a break line must read present-and-empty: got {s!r}")
+    _expect(failures, LABEL_AC2, "absent heading", bip.extract_section("### Notes\nx\n", "Dependencies"), None)
+    populated = bip.extract_section("### Dependencies\nBlocked by: #5\n### Notes\nx\n", "Dependencies")
+    if populated is None or "Blocked by: #5" not in populated:
+        failures.append(f"{LABEL_AC2}: populated section: got {populated!r}")
+    _expect(failures, LABEL_AC2, "empty AC section reads present with zero",
+            bip.parse_acceptance_criteria("### Acceptance Criteria\n### Notes\nx\n"), (True, 0))
+    _expect(failures, LABEL_AC2, "absent AC section reads absent",
+            bip.parse_acceptance_criteria("### Notes\nx\n"), (False, 0))
+
+
+_HEADING_ONE_BLANK_RE = re.compile(r"^(#{2,4}\s[^\n]*\n[ \t]*\n)(?![ \t]*\n)", re.MULTILINE)
+_INTERNAL_BLANK_RE = re.compile(r"\n[ \t]*\n(?=[ \t]*\S)")
+
+
+def _double_first_internal_blank(bip, body: str) -> Optional[str]:
+    """Double the first single blank line INSIDE the Affected Files or Dependencies
+    section (after its first text), or return None when there is none."""
+    for aliases in (bip.AF_HEADING_ALIASES, bip.DEP_HEADING_ALIASES):
+        found = bip.extract_section_with_alias(body, aliases)
+        if found is None:
+            continue
+        alias, sec = found
+        m = re.compile(rf"^#{{2,4}}\s+{re.escape(alias)}\b[^\n]*$", re.MULTILINE | re.IGNORECASE).search(body)
+        first = re.search(r"\S", sec)
+        if m is None or first is None:
+            continue
+        gap = _INTERNAL_BLANK_RE.search(sec, first.start())
+        if gap is None:
+            continue
+        pos = m.end() + gap.start()
+        return body[:pos] + "\n" + body[pos:]
+    return None
+
+
+def arm_ac4(bip, fixtures: Dict[str, Dict], failures: List[str]) -> None:
+    old = load_prefix_parser()
+    head_bodies = internal_bodies = 0
+    clean_base = clean_head = old_clean_head_base = old_clean_head = 0
+    for num, rec in fixtures.items():
+        body = rec["body"]
+        base = combined_status(bip, body)
+        clean_base += base == "clean"
+        variant, k = _HEADING_ONE_BLANK_RE.subn(lambda mm: mm.group(1) + "\n", body)
+        clean_head += combined_status(bip, variant) == "clean"
+        if k:
+            head_bodies += 1
+            old_clean_head_base += combined_status(old, body) == "clean"
+            old_clean_head += combined_status(old, variant) == "clean"
+            if combined_status(bip, variant) != base:
+                failures.append(f"{LABEL_AC4}: #{num} after-heading doubling moved {base} -> "
+                                f"{combined_status(bip, variant)}")
+        internal = _double_first_internal_blank(bip, body)
+        if internal is not None:
+            internal_bodies += 1
+            if combined_status(bip, internal) != base:
+                failures.append(f"{LABEL_AC4}: #{num} internal doubling moved {base} -> "
+                                f"{combined_status(bip, internal)}")
+    if head_bodies == 0 or internal_bodies == 0:
+        failures.append(f"{LABEL_AC4}: vacuous — after-heading bodies {head_bodies}, internal bodies "
+                        f"{internal_bodies}; each must be >= 1")
+    _expect(failures, LABEL_AC4, "combined-clean count, after-heading variant", clean_head, clean_base)
+    if not old_clean_head < old_clean_head_base:
+        failures.append(f"{LABEL_AC4}: pre-repair arm did not bite — clean {old_clean_head_base} -> "
+                        f"{old_clean_head} on the doubled bodies; the variant tests nothing")
+    print(f"  {LABEL_AC4}: after-heading bodies {head_bodies}, internal bodies {internal_bodies}; "
+          f"pre-repair clean on the doubled bodies {old_clean_head_base} -> {old_clean_head}")
+
+
+def arm_ac5(bip, failures: List[str]) -> None:
+    pairs = (
+        ("Affected Files", "### Affected Files\n- `core/a.md` (edit)\n{gap}- `core/b.md` (edit)\n",
+         lambda b: ([f.path for f in bip.parse_affected_files(b)[0]], bip.parse_affected_files(b)[1]),
+         (["core/a.md", "core/b.md"], "clean")),
+        ("Dependencies", "### Dependencies\nBlocked by: #5\n{gap}Blocked by: #6\n",
+         bip.parse_dependencies, ({5, 6}, "clean")),
+        ("Acceptance Criteria", "### Acceptance Criteria\n- [ ] one\n{gap}- [ ] two\n",
+         bip.parse_acceptance_criteria, (True, 2)),
+    )
+    for heading, shape, read, want in pairs:
+        single, double = shape.format(gap="\n"), shape.format(gap="\n\n")
+        _expect(failures, LABEL_AC5, f"{heading}, single blank", read(single), want)
+        _expect(failures, LABEL_AC5, f"{heading}, doubled blank", read(double), want)
+        if not isinstance(bip.extract_section(double, heading), str):
+            failures.append(f"{LABEL_AC5}: {heading} return must stay a plain string")
+    # Footer arm: the observed shape — a gap, a break line, an HTML marker comment,
+    # then text — and the CRLF arm of the same body. Control: no break line, and the
+    # footer's text is read, so the break line is what ends the section.
+    footer = ("### Affected Files\n- `core/a.md` (edit)\n\n\n---\n<!-- roadmap-deps -->\n- `core/z.md` (edit)\n"
+              "### Dependencies\nBlocked by: #5\n\n\n---\n<!-- roadmap-deps -->\nBlocked by: #9\n")
+    for tag, body in (("LF", footer), ("CRLF", footer.replace("\n", "\r\n"))):
+        files, st = bip.parse_affected_files(body)
+        _expect(failures, LABEL_AC5, f"break-line footer, Affected Files ({tag})",
+                ([f.path for f in files], st), (["core/a.md"], "clean"))
+        _expect(failures, LABEL_AC5, f"break-line footer, Dependencies ({tag})",
+                bip.parse_dependencies(body), ({5}, "clean"))
+    no_break = footer.replace("---\n", "")
+    _expect(failures, LABEL_AC5, "control: no break line reads the footer",
+            bip.parse_dependencies(no_break), ({5, 9}, "clean"))
+    # The break line itself: CR-tolerant; two hyphens or a hyphen run with text is not one.
+    if bip.SECTION_BREAK_RE.search("x\n---\r\ny") is None:
+        failures.append(f"{LABEL_AC5}: a CRLF break line must match")
+    for near in ("x\n--\ny", "x\n--- text\ny", "x\n    ---\ny"):
+        if bip.SECTION_BREAK_RE.search(near) is not None:
+            failures.append(f"{LABEL_AC5}: near-miss {near!r} must not read as a break line")
+    # The two G3-20 readers test `is not None`: a doubled blank line keeps them as they were.
+    doc = ("### Description\nx\n\n## Documentation Impact (proposed)\n\n\n"
+           "`core/x.md` | update | y\n")
+    _expect(failures, LABEL_AC5, "g3_20_applicability on a doubled-blank kind-form body",
+            bip.g3_20_applicability(["type:task"], doc)[0], "kind-form")
+    if bip._load_doc_gates()[0] is None:
+        failures.append(f"{LABEL_AC5}: the G-CL8 engine did not load, so the misheaded arm cannot run")
+    else:
+        _expect(failures, LABEL_AC5, "parse_documentation_impact on a doubled-blank misheaded body",
+                bip.parse_documentation_impact(doc)[0], "misheaded")
+
+
+def _non_docstring_strings(src: str) -> Tuple[List[str], List[str]]:
+    """(string constants that are not docstrings, imported module names) of a source."""
+    tree = ast.parse(src)
+    docs = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = getattr(node, "body", [])
+            if body and isinstance(body[0], ast.Expr) and isinstance(getattr(body[0], "value", None), ast.Constant):
+                docs.add(id(body[0].value))
+    strings, imports = [], []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docs:
+            strings.append(node.value)
+        elif isinstance(node, ast.Import):
+            imports.extend(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.append(node.module)
+    return strings, imports
+
+
+def arm_ciac1(failures: List[str]) -> None:
+    def names_mirror(text: str) -> bool:
+        return "native-dep-mirror" in text or "native_dep_mirror" in text
+
+    with open(PARSER_PATH, encoding="utf-8") as fh:
+        p_strings, p_imports = _non_docstring_strings(fh.read())
+    hits = [s for s in p_strings if names_mirror(s)] + [m for m in p_imports if names_mirror(m)]
+    if hits:
+        failures.append(f"{LABEL_CIAC1}: the parser's code names the mirror: {hits!r}")
+    # Sensitivity: the same scan over the mirror finds its by-path load of the parser.
+    with open(MIRROR_PATH, encoding="utf-8") as fh:
+        m_src = fh.read()
+    m_strings, _ = _non_docstring_strings(m_src)
+    if not any("bundle-issues-parser.py" in s for s in m_strings):
+        failures.append(f"{LABEL_CIAC1}: sensitivity arm — the scan did not see the mirror's load literal")
+    if any(isinstance(n, ast.FunctionDef) and n.name.startswith("extract_section")
+           for n in ast.walk(ast.parse(m_src))):
+        failures.append(f"{LABEL_CIAC1}: the mirror defines its own extract_section* — the copy is back")
+    with tempfile.TemporaryDirectory() as tmp:
+        alone = os.path.join(tmp, "bundle-issues-parser.py")
+        shutil.copy(PARSER_PATH, alone)
+        spec = importlib.util.spec_from_file_location("bip_alone", alone)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _expect(failures, LABEL_CIAC1, "the parser copied alone loads and reads",
+                mod.parse_dependencies("### Dependencies\nBlocked by: #5\n"), ({5}, "clean"))
+    # Control: the mirror copied alone (its own directory, no parser beside it) cannot
+    # load its parser, and says so with exit 2 rather than misreading or tracing back.
+    with tempfile.TemporaryDirectory() as tmp:
+        lone = os.path.join(tmp, "native-dep-mirror.py")
+        shutil.copy(MIRROR_PATH, lone)
+        spec = importlib.util.spec_from_file_location("ndm_alone", lone)
+        ndm = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ndm)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            rc = ndm.run_self_test()
+        if ndm._BIP is not None or rc != 2 or "cannot load its parser" not in err.getvalue():
+            failures.append(f"{LABEL_CIAC1}: control — a mirror with no parser beside it must exit 2: "
+                            f"_BIP={ndm._BIP!r} rc={rc} stderr={err.getvalue()!r}")
+    mirror = load_mirror()
+    if mirror._BIP is None:
+        failures.append(f"{LABEL_CIAC1}: the mirror did not load its parser: {mirror._BIP_CAUSE}")
+        return
+    for name in ("extract_section_with_alias", "extract_section_aliased", "DEP_HEADING_ALIASES"):
+        if getattr(mirror, name, None) is not getattr(mirror._BIP, name):
+            failures.append(f"{LABEL_CIAC1}: the mirror's {name} is not the parser's own object")
+
+
+def arm_ciac3(bip, failures: List[str]) -> None:
+    single = "### Dependencies\n\nBlocked by: #5\n\nBlocked by: #6\n\n### Notes\nx\n"
+    doubled = "### Dependencies\n\n\nBlocked by: #5\n\n\nBlocked by: #6\n\n### Notes\nx\n"
+    _expect(failures, LABEL_CIAC3, "single-blank read", bip.parse_dependencies(single), ({5, 6}, "clean"))
+    _expect(failures, LABEL_CIAC3, "doubled-blank read equals the single-blank read",
+            bip.parse_dependencies(doubled), bip.parse_dependencies(single))
+    old = load_prefix_parser()
+    if old.parse_dependencies(doubled) == old.parse_dependencies(single):
+        failures.append(f"{LABEL_CIAC3}: sensitivity arm — the pre-repair extractor must read the two differently")
+
+
+def run_section_read_arms(bip, fixtures: Dict[str, Dict]) -> Tuple[List[str], int]:
+    """Run every arm; an arm that raises is recorded as that arm's failure, so one
+    broken arm can never hide the verdicts of the others."""
+    failures: List[str] = []
+    arms = (
+        (LABEL_AC1, lambda: arm_ac1(bip, load_mirror(), failures)),
+        (LABEL_AC2, lambda: arm_ac2(bip, failures)),
+        (LABEL_AC4, lambda: arm_ac4(bip, fixtures, failures)),
+        (LABEL_AC5, lambda: arm_ac5(bip, failures)),
+        (LABEL_CIAC1, lambda: arm_ciac1(failures)),
+        (LABEL_CIAC3, lambda: arm_ciac3(bip, failures)),
+    )
+    for label, arm in arms:
+        try:
+            arm()
+        except Exception as e:  # noqa: BLE001 — a raising arm is a failing arm
+            failures.append(f"{label}: the arm raised {type(e).__name__}: {e}")
+    return failures, len(arms)
 
 
 def main() -> int:
@@ -176,6 +520,11 @@ def main() -> int:
     print(f"  clean-or-deferred = {clean + deferred}/{n} = {(clean + deferred) / n:.1%}")
     print(f"  per-class recovery cases: {len(CLASS_RECOVERY)}  residual set-aside: {len(RESIDUAL_FAILED)}")
     print(f"  priority resolved = {resolved}/{n}  (T-13 liveness guard: >= 1)")
+
+    # 5. Section-read arms (#7177 and the two cross-issue criteria on its seam).
+    section_failures, section_arms = run_section_read_arms(bip, fixtures)
+    failures.extend(section_failures)
+    print(f"  section-read arms = {section_arms} run, {len(section_failures)} failure(s)")
 
     if failures:
         print("\nTEST FAIL:", file=sys.stderr)

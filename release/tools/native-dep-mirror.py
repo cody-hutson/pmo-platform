@@ -69,6 +69,8 @@ Exit codes:
   1 — one or more native add operations failed on an EDGE-level cause (dep cap,
       per-issue permission, transient API); operator awareness, non-gating
   2 — API / network / scope failure resolving repo or reading issue/native deps,
+      OR the parser beside this tool (bundle-issues-parser.py, the home of the
+      section extractor this tool reads bodies through) cannot be loaded,
       OR a CONTRACT-level write failure (the write surface itself is broken —
       e.g. the mutation field is absent from the schema AND the REST fallback
       also failed). A contract breach is deliberately NOT reported as exit 1:
@@ -77,11 +79,13 @@ Exit codes:
 """
 
 import argparse
+import importlib.util
 import json
 import re
 import subprocess
 import sys
 from dataclasses import dataclass, asdict, field
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 
@@ -93,8 +97,9 @@ from typing import Dict, List, Optional, Set, Tuple
 # HASH_REF    ::= "#" INTEGER                   (required)
 #
 # Untyped `#N` normalizes to FS+0d (backward-compat shim). The dep-section
-# heading is matched suffix-tolerantly and against a closed alias set, mirroring
-# bundle-issues-parser.py's DEP_HEADING_ALIASES (the canonical body parser).
+# heading match, its closed alias set (DEP_HEADING_ALIASES) and the section
+# extractor are read from bundle-issues-parser.py, their single home, which this
+# tool loads by path from beside itself (see _load_bip below) — no copy lives here.
 #
 # DIRECTION IS SEGMENT-SCOPED (#662 Blocker fix). The live body format (rendered
 # from improvement.yml's `Dependencies` field) is a labeled-segment grammar, NOT a
@@ -114,15 +119,33 @@ from typing import Dict, List, Optional, Set, Tuple
 # correct claim"), the reciprocal-`Blocks:` edge is NOT asserted as a current-issue
 # blocked-by; it is left to the target issue's own `Blocked by:` segment to express.
 
-SECTION_HEADING_RE = re.compile(r"^###\s+", re.MULTILINE)
+_BIP_PATH = Path(__file__).resolve().parent / "bundle-issues-parser.py"
 
-DEP_HEADING_ALIASES = [
-    "Dependencies",
-    "Dependency",
-    "Depends on",
-    "Blocked by",
-    "Relationships",
-]
+
+def _load_bip():
+    """-> (module, None) or (None, cause). Never raises; modelled on the parser's own
+    _load_doc_gates. A failed load is reported by main() and run_self_test() as exit 2,
+    the infrastructure-failure class, never as an import-time traceback (exit 1, which
+    this tool reserves for an edge-level add failure)."""
+    try:
+        if not _BIP_PATH.is_file():
+            raise FileNotFoundError(f"{_BIP_PATH.name} not found beside {Path(__file__).name}")
+        spec = importlib.util.spec_from_file_location("bundle_issues_parser", _BIP_PATH)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return mod, None
+    except Exception as e:  # noqa: BLE001 — reported by main(), never raised at import
+        return None, f"{type(e).__name__}: {e}"
+
+
+_BIP, _BIP_CAUSE = _load_bip()
+if _BIP is not None:
+    # The names this tool has always exposed, now bound from their one home. Two
+    # separately loaded copies of the parser are distinct module objects, so nothing
+    # here type-checks an object from one copy against a class from another.
+    DEP_HEADING_ALIASES = _BIP.DEP_HEADING_ALIASES
+    extract_section_with_alias = _BIP.extract_section_with_alias
+    extract_section_aliased = _BIP.extract_section_aliased
 
 # Segment-label grammar inside the Dependencies section. The section body is sliced
 # into labeled segments at these markers; each `#N` is attributed to the label that
@@ -258,45 +281,6 @@ class BodyDep:
             and self.offset_days == 0
             and self.direction == "blocked_by"
         )
-
-
-def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
-    """Return the first '### <alias>' section body (suffix-tolerant; first-match-wins).
-
-    Thin wrapper over extract_section_with_alias for callers that need only the
-    section text. Kept as-is so the pre-existing call signature stays stable.
-    """
-    found = extract_section_with_alias(body, aliases)
-    return None if found is None else found[1]
-
-
-def extract_section_with_alias(
-    body: str, aliases: List[str]
-) -> Optional[Tuple[str, str]]:
-    """Return (matched_alias, section_body) for the first '### <alias>' section.
-
-    Mirrors bundle-issues-parser.py extract_section semantics: prefix-anchored,
-    suffix-tolerant heading match (a trailing parenthetical/colon does not defeat
-    it); section ends at the next H2/H3 heading or a two-blank-line gap. The matched
-    alias is returned because a directional heading (`### Depends on`) confers
-    direction on an otherwise unlabeled run — see DIRECTIONAL_HEADINGS.
-    """
-    if not body:
-        return None
-    for heading in aliases:
-        pat = re.compile(
-            rf"^#{{2,4}}\s+{re.escape(heading)}\b[^\n]*$", re.MULTILINE | re.IGNORECASE
-        )
-        m = pat.search(body)
-        if not m:
-            continue
-        rest = body[m.end():]
-        end_h3 = SECTION_HEADING_RE.search(rest)
-        end_h2 = re.search(r"^##\s+", rest, re.MULTILINE)
-        end_blank = re.search(r"\n\s*\n\s*\n", rest)
-        cands = [c.start() for c in (end_h3, end_h2, end_blank) if c is not None]
-        return heading, (rest[: min(cands)] if cands else rest)
-    return None
 
 
 def _attribute_segments(
@@ -859,6 +843,9 @@ def run_self_test() -> int:
     to), the real improvement.yml single-line `Blocked by: — · Blocks: #N` body
     format, non-blocking-relationship exclusion, and comma-grouped `#1,234` safety.
     """
+    if _BIP is None:
+        print(f"ERROR: native-dep-mirror cannot load its parser: {_BIP_CAUSE}", file=sys.stderr)
+        return 2
     failures: List[str] = []
 
     def check(name: str, got, want):
@@ -1115,6 +1102,23 @@ Stuff.
           _is_already_present("Validation failed: Target issue has already been taken"),
           True)
 
+    # 23. BLANK LINES AFTER THE HEADING. The section extractor (read from the parser)
+    #     used to end a section at the first two-blank-line run, and that search began
+    #     at the heading line's own newline — so a heading followed by two or three
+    #     blank lines read as an empty section and mirrored nothing, exiting 0.
+    for blanks in (2, 3):
+        check(f"{blanks} blank lines after the heading still mirror",
+              mirror_eligible_targets(parse_body_dependencies(
+                  "### Dependencies" + "\n" * (blanks + 1) + "Blocked by: FS+0d #6396 — x.\n")),
+              {6396})
+
+    # 24. A DOUBLED BLANK LINE INSIDE the section reads as a single one: only a
+    #     heading or a break line ends a section, never whitespace.
+    check("doubled internal blank line keeps both edges",
+          mirror_eligible_targets(parse_body_dependencies(
+              "### Dependencies\n\nBlocked by: #5\n\n\nBlocked by: #6\n\n### Notes\nx\n")),
+          {5, 6})
+
     if failures:
         print("SELF-TEST FAIL:", file=sys.stderr)
         for f in failures:
@@ -1183,6 +1187,11 @@ def main() -> int:
     if not args.issue and not args.milestone:
         print("ERROR: provide --issue N or --milestone TITLE (or --self-test)",
               file=sys.stderr)
+        return 2
+
+    # Every path below reads issue bodies through the parser's extractor.
+    if _BIP is None:
+        print(f"ERROR: native-dep-mirror cannot load its parser: {_BIP_CAUSE}", file=sys.stderr)
         return 2
 
     try:

@@ -9,6 +9,12 @@ Per CR Conflict A resolution: single shared tool with umbrella name
 'bundle-issues-parser.py' rather than per-concern tools. Stdlib-only Python 3.9+;
 matches check-doc-links.py / lint_release_corpus.py precedent.
 
+This file is the single home of the issue-body section extractor (extract_section,
+extract_section_aliased, extract_section_with_alias) and of DEP_HEADING_ALIASES.
+native-dep-mirror.py loads this file by path and binds those names rather than
+carrying a copy, so a fix to the extractor lands once. This module loads nothing
+local at import, so a reader that loads it alone by path keeps working.
+
 Parse semantics (#291 v3.20 robustification — DS-1..DS-4 of the ratified Stage 5 spec):
   - Section headings are matched suffix-tolerantly (a trailing parenthetical/colon
     no longer defeats the match) and against a closed alias set (e.g. "Files Affected").
@@ -108,6 +114,11 @@ class IssueRecord:
 
 DEFERRAL_MARKER = "[ASSUMPTION – CONFIRM] TBD — identified in Planning"
 SECTION_HEADING_RE = re.compile(r"^###\s+", re.MULTILINE)
+# A break line ends a section the way a heading does: three or more hyphens, indented
+# at most three spaces, with optional trailing spaces or tabs. The `\r?` makes it hold
+# for a CRLF body too, where `$` matches before the `\n` and the `\r` is still on the
+# line. Hyphens only — the separator issue bodies use before a footer.
+SECTION_BREAK_RE = re.compile(r"^ {0,3}-{3,}[ \t]*\r?$", re.MULTILINE)
 
 # DS-2 (#291) — heading-variant alias sets. Closed, evidence-bounded sets drawn
 # from the live open-issue corpus survey (#461 Stage 5 spec); NOT fuzzy matching.
@@ -158,12 +169,28 @@ DEP_RE = re.compile(r"#(\d+)")
 
 
 def extract_section(body: str, heading: str) -> Optional[str]:
-    """Extract content of a '## <heading>' section until next H2/H3 or two blank lines.
+    """Extract the content of a '## <heading>' section, up to the next H2/H3 heading or
+    a break line.
 
     DS-1 (#291): heading match is prefix-anchored and suffix-tolerant — a trailing
     parenthetical or colon (e.g. '### Affected Files (proposed)', '## Affected Files:')
     no longer defeats the match. Monotonic widening: `\\b[^\\n]*$` is a superset of the
     prior `\\s*$`, so no previously-matched heading is lost.
+
+    A section ends only at structure: the next H2/H3 heading, or a break line
+    (SECTION_BREAK_RE — three or more hyphens, the separator that opens a body's
+    footer). A run of blank lines never ends a section. The extractor used to end at
+    the first two-blank-line run after the heading, and that search began at the
+    heading line's own newline, so one extra blank line after a heading returned ''
+    — the same value a genuinely empty section returns. Removing the whitespace
+    terminator removes that misread at its source: a doubled blank line anywhere in a
+    section reads exactly as a single one.
+
+    Returns None only when the heading is absent. A present heading always returns a
+    string, which is empty (or blank) when the next heading or break line follows it
+    directly, so present-and-empty stays distinguishable from absent. Leading blank
+    lines are kept, as they always were. This module is the single home of the
+    issue-body section extractor; native-dep-mirror.py loads it by path and binds it.
     """
     if not body:
         return None
@@ -175,24 +202,36 @@ def extract_section(body: str, heading: str) -> Optional[str]:
     if not m:
         return None
     start = m.end()
-    # End at next H2/H3 or two blank lines
+    # End at the next H2/H3 heading or a break line — never at blank lines.
     rest = body[start:]
     end_h = SECTION_HEADING_RE.search(rest)
     end_h2 = re.search(r"^##\s+", rest, re.MULTILINE)
-    end_blank = re.search(r"\n\s*\n\s*\n", rest)
-    candidates = [c.start() for c in [end_h, end_h2, end_blank] if c is not None]
+    end_break = SECTION_BREAK_RE.search(rest)
+    candidates = [c.start() for c in [end_h, end_h2, end_break] if c is not None]
     if candidates:
         return rest[: min(candidates)]
     return rest
 
 
-def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
-    """DS-2 (#291): return the first section matching any heading alias (first-match-wins)."""
+def extract_section_with_alias(body: str, aliases: List[str]) -> Optional[Tuple[str, str]]:
+    """Return (matched_alias, section) for the first heading alias present in the body.
+
+    DS-2 (#291) first-match-wins over the closed alias set. The matched alias is
+    returned because a directional heading (e.g. '### Depends on') confers direction
+    on an otherwise unlabelled dependency run — native-dep-mirror.py reads it, under
+    this same name, from here.
+    """
     for heading in aliases:
         section = extract_section(body, heading)
         if section is not None:
-            return section
+            return heading, section
     return None
+
+
+def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
+    """DS-2 (#291): return the first section matching any heading alias (first-match-wins)."""
+    found = extract_section_with_alias(body, aliases)
+    return None if found is None else found[1]
 
 
 def _extract_paths(text: str) -> List[str]:
@@ -845,6 +884,34 @@ Stuff.
         "core/deploy/tools/",
     ]:
         failures.append(f"FC-1d trailing-slash dir: got {s1d} / {[x.path for x in f1d]}")
+
+    # SX-1..SX-4 — the section extractor ends a section only at structure. A run of
+    # blank lines never ends it (the old two-blank terminator returned '' when a
+    # heading carried two blank lines, and cut a section at a doubled blank line).
+    # SX-1: one, two or three blank lines after the heading read the same section.
+    for _n in (1, 2, 3):
+        _sx = "### Dependencies\n" + "\n" * _n + "Blocked by: FS+0d #6396 — x.\n"
+        if parse_dependencies(_sx) != ({6396}, "clean"):
+            failures.append(f"SX-1 {_n} blank line(s) after the heading: got {parse_dependencies(_sx)}")
+    # SX-2: a doubled blank line INSIDE a section reads as a single one.
+    _sx2 = "### Affected Files\n- `core/a.md` (edit)\n\n\n- `core/b.md` (edit)\n"
+    _f_sx2, _s_sx2 = parse_affected_files(_sx2)
+    if _s_sx2 != "clean" or [x.path for x in _f_sx2] != ["core/a.md", "core/b.md"]:
+        failures.append(f"SX-2 doubled internal blank line: got {_s_sx2} / {[x.path for x in _f_sx2]}")
+    # SX-3: a break line ends the section, LF and CRLF alike — a footer after it is
+    # not read. Control: the same body with no break line reads the footer's refs.
+    _sx3 = "### Dependencies\n\nBlocked by: #5\n\n\n---\n<!-- footer -->\nBlocked by: #9\n"
+    for _tag, _b in (("LF", _sx3), ("CRLF", _sx3.replace("\n", "\r\n"))):
+        if parse_dependencies(_b) != ({5}, "clean"):
+            failures.append(f"SX-3 break line ends the section ({_tag}): got {parse_dependencies(_b)}")
+    if parse_dependencies(_sx3.replace("---\n", "")) != ({5, 9}, "clean"):
+        failures.append("SX-3 control: with no break line the footer's ref must be read")
+    # SX-4: present-and-empty stays distinct from absent.
+    _sx4 = extract_section("### Dependencies\n### Notes\nx\n", "Dependencies")
+    if _sx4 is None or _sx4.strip() != "":
+        failures.append(f"SX-4 empty section must read present-and-empty: got {_sx4!r}")
+    if extract_section("### Notes\nx\n", "Dependencies") is not None:
+        failures.append("SX-4 absent heading must read None")
 
     # FC-2: heading parenthetical suffix — extract_section must still match (DS-1).
     fc2 = "### Affected Files (directional — confirmed in Planning)\n- `core/foo.md` (edit)\n"
