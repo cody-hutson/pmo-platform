@@ -20,7 +20,7 @@ reversibility: CHEAP / Confidence HIGH — one branch and one merge; reverting t
 
 **Release class:** `novel` — Stage 9 review depth **Deep** (§ Release Class declaration).
 
-> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #8664 and is amended by two decision records, in order: the Stage-4 gate's Decision Recorded on #8664 (plan approved with the milestone's Release Outcome Statement kept verbatim; `novel`; SINGLE; P0; D-Version recorded), and the Collective Review scope-lock Decision Recorded on #8695 (scope hard-locked through Stage 9; D-7177-Extractor; D-6397-Negation; D-6398-AC6; D-6398-Standing; the recorded alignments; the Stage-6 fixes; the items held for the Stage 9 follow-up ledger). The three Stage-5 designs and the approved findings of their adversarial reviews are design inputs as that record adopts them. Where the plan and a later record differ, the later record wins, and each such change is recorded in § Deviation Log with the decision that caused it. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
+> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #8664 and is amended by three decision records, in order: the Stage-4 gate's Decision Recorded on #8664 (plan approved with the milestone's Release Outcome Statement kept verbatim; `novel`; SINGLE; P0; D-Version recorded), the Collective Review scope-lock Decision Recorded on #8695 (scope hard-locked through Stage 9; D-7177-Extractor; D-6397-Negation; D-6398-AC6; D-6398-Standing; the recorded alignments; the Stage-6 fixes; the items held for the Stage 9 follow-up ledger), and the pre-Stage-9 Decision Recorded on #8707 (D-6397-AC2-Gap; D-6398-Q01; D-6398-AC6-ReadPoint; D-CIAC3-Restated). The three Stage-5 designs and the approved findings of their adversarial reviews are design inputs as that record adopts them. Where the plan and a later record differ, the later record wins, and each such change is recorded in § Deviation Log with the decision that caused it. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
 
 ---
 
@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH — one branch and one merge; reverting t
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): tool behaviour changes, a new release tool, and gate and reference text added inside existing structure, per the Bump-Class Selection Guide's "protocol text addition or modification" and "reference document addition or update"; no new skill and no new governance file. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering complete: Engineering Commit 0 (this file and the shared-home ADR, `5c6ea3fd`), #7177's slice (`5634b68e`), #6397's slice (`3c3acb6c`, `00785cd4`) and #6398's slice (`94483098`, `3da7400b`, `a0599135`) landed, with slice 3's C4 evidence and this file's `## Change Description`, and the hub's exec-mode repair (`f23837a3`, DEV-26). Stage 7 Dev Testing returned PASS on all three cards; DT iteration 1's Tier 1 fixes landed (`63fdc04c` and this file's DT commit, DEV-27). Next: Dev Testing's targeted re-review of those fixes, per the iteration loop, then Stage 8 QA Testing |
+| **Status** | Executing — Stage 6 Engineering complete: Engineering Commit 0 (this file and the shared-home ADR, `5c6ea3fd`), #7177's slice (`5634b68e`), #6397's slice (`3c3acb6c`, `00785cd4`) and #6398's slice (`94483098`, `3da7400b`, `a0599135`) landed, with slice 3's C4 evidence and this file's `## Change Description`, and the hub's exec-mode repair (`f23837a3`, DEV-26). Stage 7 Dev Testing returned PASS on all three cards; DT iteration 1's Tier 1 fixes landed (`63fdc04c` and `beb07cf4`, DEV-27) and the hub re-reviewed them. Stage 8 QA Testing reviewed all three cards (#8698, #8702, #8706), and DT iteration 2 applied the operator's pre-Stage-9 decisions (`bd19879b` and this file's DT commit, DEV-28 and DEV-29). Next: the hub's re-check of DT iteration 2, then Stage 9 Plan Review |
 | **Branch** | `release/sequencing-layer-foundation` |
 | **PR** | **#8811**, opened in **draft** at Stage 6 Phase C2 after #7177's slice; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `sequencing-layer-foundation` |
@@ -162,6 +162,17 @@ Every element determined at Stage 4 that a named downstream consumer reads **fro
 
 **Held for the Stage 9 follow-up ledger (not filed):** the three items in § Exclusions so marked. The b21 inputs recorded on #8695 stay in this release's records.
 
+### Pre-Stage-9 decisions (operator, 2026-11-05)
+
+Rendered in the release-hub session from the Stage 8 acceptance reviews on #8698, #8702 and #8706, and recorded on #8707.
+
+| Decision | Rendered |
+|---|---|
+| D-6397-AC2-Gap | **Fix now (DT iteration 2):** a blank line ends a `Blocked by:` run, and every other directional label's, so a reference in a later paragraph is not read as a blocker — 1 of 154 live directed references changes (#7466 → #7889); the underscore-emphasis spelling `_not_ blocked by` reads as negated too |
+| D-6398-Q01 | **Fix now (DT iteration 2):** a failed epic child-set read renders that epic's children and the blocked count unmeasured, never "No open children" or Blocked 0 |
+| D-6398-AC6-ReadPoint | **AC6 is read and recorded at Stage 13 close-out:** the operator's post-merge interim-board step follows the merge, which Stage 8 precedes; the pull request's Issue References block is unchanged; a plan-only change (DEV-28) |
+| D-CIAC3-Restated | **Confirmed:** CIAC-3 as restated under DEV-4 — a doubled blank line reads the same through the directed parse; AI-001 resolves |
+
 ---
 
 ## Dependency Graph
@@ -195,7 +206,7 @@ Single branch `release/sequencing-layer-foundation`, posture **P0 (fully serial)
 | **1** | #7177 | the parser becomes the single home of the issue-body section extractor and ends a section only at a heading or a break line; the mirror loads the parser by path and binds its extractor names; the section-read regression arms and two mirror self-test cases; the smoke suite's count-free label | the parser suite (`TEST OK`) and the three self-tests pass; the pre-repair extractor fails the new arms |
 | **2** | #6397 | the direction grammar moves into the parser; `parse_dependencies` returns directed `blocked_by` targets only, the negated label included (D-6397-Negation), unlabelled references reported rather than dropped; the position tool carries the parse status; the G3-07 text matched to the code; the mirror binds the moved names | its Stage-5 verification plan, with CIAC-3's arm still green over the rewritten `parse_dependencies` |
 | **3** | #6398 | `_epic_child_set.py` (the G1a child-set rule, one home) and the chain-head view `compute-chain-head-rollup.py`, reading edges through the parser's `parse_dependencies`; the standing-initiative label word and its guard (D-6398-Standing); the selftest manifest, the script-execution allowlist row and the smoke step; the chain-head ADR (`Proposed`); the taxonomy, framework and roadmap README edits; AC6 restated (D-6398-AC6); the release's `## Change Description` (Phase C1) after all three slices land | its Stage-5 verification plan; CIAC-4's arm |
-| post-merge | operator | #6398 AC6: retire the interim board's portfolio map and point its README at the view — git-ignored, so not in the diff; read at Stage 8. The milestone lanes stay until #6443 ships | read at Stage 8 |
+| post-merge | operator | #6398 AC6: retire the interim board's portfolio map and point its README at the view — git-ignored, so not in the diff; read and recorded at Stage 13 close-out (D-6398-AC6-ReadPoint). The milestone lanes stay until #6443 ships | read and recorded at Stage 13 close-out |
 
 ### #7177 — change specification (slice 1; Stage-5 design on #8695 as D-7177-Extractor amended it)
 
@@ -219,13 +230,15 @@ Single branch `release/sequencing-layer-foundation`, posture **P0 (fully serial)
 
 **The negated label (D-6397-Negation).** In `_attribute_segments`, a `blocked_by`-kind label whose same-line prefix ends in `not`, `no longer`, `never` or an `n't` contraction (markdown emphasis tolerated) is attributed `relates`: no edge, and no unattributed reference. The A3.5 mirror inherits it through its binding (self-test case 25).
 
+**The paragraph end (D-6397-AC2-Gap, DT iteration 2 — DEV-29).** In `_attribute_segments`, a `blocked_by` or `blocks` run ends at the first blank line after its first text; blank lines between the label and that text do not end it, so a list set under its label keeps its edges. The rest, up to the next label, is unlabelled text beneath the section heading: under a directional heading it takes the heading's direction, and otherwise it yields no edge and is reported as unattributed. The bare-reference shim is not applied to it — it covers only the run before the first label — and a `relates` run, a negated label included, is not ended. The negated-label rule accepts underscore emphasis before the word (`_not_`, `__not__`); an underscore inside a word is not emphasis. One blank line and several end a run alike, so CIAC-3's property holds by construction.
+
 **Unattributed references reported (A6.5 FM-2).** `IssueRecord` gains two defaulted, data-only fields — `dependencies_unattributed` (the numbers) and `dependencies_unattributed_count` — filled from `unattributed_refs`. Neither feeds `parse_status`; the JSON output carries both; `parse_dependencies` keeps its two-value return.
 
 **The position tool (`STAGE5-CONSUMER-ADJUST`).** `IssueLite` carries `dep_status`, `gh_open_issues` keeps it, and `aggregate_edges` lists a source whose status is not `clean` among the unresolvable edges. The `--check-drift` TSV is unchanged.
 
 **G3-07 (the card's Documentation Impact row).** The criterion reads "directed dependency edge", and an **Edge source** paragraph names `parse_dependencies` as the authority and describes the grammar as the code behaves, its imprecisions included (A6.5 FM-3).
 
-**Tests.** Parser self-test DG-1..DG-22; mirror self-test case 25 (25 cases); parser suite arms `6397-AC1 one direction grammar` and `6397-AC2 relation fixtures`, each with a reference copy of the old scrape as its sensitivity arm; CIAC-1's identity check extended to the grammar names; mirror suite the single-source assertion; the position-tool self-test a parse-status fixture with its `clean` control. CIAC-3's arm is unchanged and green over the rewritten `parse_dependencies`.
+**Tests.** Parser self-test DG-1..DG-22; mirror self-test case 25 (25 cases); parser suite arms `6397-AC1 one direction grammar` and `6397-AC2 relation fixtures`, each with a reference copy of the old scrape as its sensitivity arm (`6397-AC2` gains, at DT iteration 2, the later-paragraph, `Blocks`-paragraph and underscore-negation rows and four edge controls); CIAC-1's identity check extended to the grammar names; mirror suite the single-source assertion; the position-tool self-test a parse-status fixture with its `clean` control. CIAC-3's arm is unchanged and green over the rewritten `parse_dependencies`.
 
 ### #6398 — change specification (slice 3; Stage-5 design on #8703 as the scope lock and the A6.5 review on #8780 amended it)
 
@@ -240,7 +253,7 @@ Single branch `release/sequencing-layer-foundation`, posture **P0 (fully serial)
 - **Members and the partition (FM-1).** Members are open issues carrying the label that are not epics or sub-tasks; each is in an epic tree of the head, parented outside it, or unparented, and the three must sum (exit 1 otherwise). A missing `parent_issue_url` key means no parent. The facet, and the partition, read unmeasured only when the host serves the field on no open issue while some issue reports sub-issues, or serves neither the field nor the sub-issue summary on any open issue (DT iteration 1 — DEV-27); the sum is asserted only when measured.
 - **Edges (CIAC-4, CD-1).** Edges come from the parser's `parse_dependencies`, loaded by path; the view defines no grammar. `clean` is measured; any other status (today `deferred`) is unmeasured and out of the blocked count. Each member also carries `edges.section` (`present` / `absent`, from the parser's `extract_section_aliased` over `DEP_HEADING_ALIASES`) and `native_blocked_by_open` (the REST `issue_dependencies_summary.blocked_by`); an absent section with open native blockers is unmeasured, never "not blocked". A target is tagged `in_open_set`; a member is blocked when one is.
 - **Progress.** A finite epic: closed `completed` children over its child set, `not_planned` reported beside; an empty set is undefined and a failed read unmeasured. A finite head sums its finite epics. A standing head and every flow container are not-applicable.
-- **Drill-down and order.** Head, then epics and flow containers (open-child count descending, then number), then each node's open children (by number; closed children count in progress). `meta.ordering.is_sequence` is `false` and the Markdown says the order is not a sequence. The milestone-chain payload is not a render input (R5); each child carries its milestone.
+- **Drill-down and order.** Head, then epics and flow containers (open-child count descending, then number), then each node's open children (by number; closed children count in progress). `meta.ordering.is_sequence` is `false` and the Markdown says the order is not a sequence. The milestone-chain payload is not a render input (R5); each child carries its milestone. A failed child-set read renders the node's open children unmeasured, and a lone-epic head's blocked facet unmeasured — `status`, null counts and a reason — never "No open children" or 0 (D-6398-Q01, DT iteration 2); an initiative head counts blocked over its members, so its count stays measured.
 - **Encoding.** Every interpolated title, description and milestone passes through `md_cell()` (ampersand, angle brackets, backtick and square brackets to entities, the pipe escaped, line breaks folded).
 
 **Integration criteria (restated against the live statuses, DEV-11).**
@@ -248,11 +261,11 @@ Single branch `release/sequencing-layer-foundation`, posture **P0 (fully serial)
 - [ ] **INT-1 (vs #6397):** for every fixture body in `test_compute_chain_head_rollup.py`, the targets the view records equal the targets `parse_dependencies` returns for the same body, with no second parse, filter or union. *Method:* `grep -c -F "INT-1 view edges equal parse_dependencies targets" release/tools/tests/test_compute_chain_head_rollup.py` at least 1, and the suite step passes. *Graded at Stage 8 Phase B.*
 - [ ] **INT-2 (vs #6397):** a body whose Dependencies parse is not `clean` — today the `deferred` status, the only other value `parse_dependencies` returns — has its edges recorded unmeasured and is left out of the blocked count; it is never shown as having zero blockers. *Method:* `grep -c -F "INT-2 non-clean dependency parse renders unmeasured edges" release/tools/tests/test_compute_chain_head_rollup.py` at least 1. *Graded at Stage 8 Phase B.*
 
-**Tests.** The suite's 14 arms carry the design's labels verbatim — AC1, AC2, AC3 (and its control and guard), AC4 (substitution and source scan), AC5 (unmeasured, measured-zero control, and the keyless member), INT-1, INT-2, CD-1, CIAC-4, the four EVG arms, PART, ENC, ORD, G1A — each with a control where a pass could be vacuous. The view's `--self-test` (9 checks) and `_epic_child_set.py --self-test` (ST-1..ST-4 and a control) join the selftest manifest; the suite runs as an unmasked step of the required `closeout-smoke` job.
+**Tests.** The suite's 15 arms carry the design's labels verbatim — AC1, AC2, AC3 (and its control and guard), AC4 (substitution and source scan), AC5 (unmeasured, measured-zero control, and the keyless member), INT-1, INT-2, CD-1, CIAC-4, the four EVG arms, PART, ENC, ORD, G1A — and, from DT iteration 2, Q01 (a failed child-set read renders unmeasured), each with a control where a pass could be vacuous. The view's `--self-test` (9 checks) and `_epic_child_set.py --self-test` (ST-1..ST-4 and a control) join the selftest manifest; the suite runs as an unmasked step of the required `closeout-smoke` job.
 
 **Documentation (the card's three Documentation Impact rows, and R8).** The label taxonomy states that standing is declared on the label (with the guard) and gains `#### Derived chain-head view` — a design-artifact marker and a producer/consumer table — at the end of § Initiative Labels; its dead "§6.1(f)" citation now names §7.6 criterion (f), the `sunset_criteria` field of §6.1. The roadmap framework gains § 4.6 (the view is a read surface, not a roadmap). The roadmaps README points at the live command.
 
-**AC6 (D-6398-AC6)** is the operator's post-merge step on the git-ignored interim board — retire its portfolio map and point its README at the view, keeping the milestone lanes until #6443 ships — read at Stage 8. Neither this slice nor the view edits that board.
+**AC6 (D-6398-AC6)** is the operator's post-merge step on the git-ignored interim board — retire its portfolio map and point its README at the view, keeping the milestone lanes until #6443 ships — read and recorded at Stage 13 close-out against the closed card, because the step follows the merge and Stage 8 runs before it (D-6398-AC6-ReadPoint, DEV-28). Neither this slice nor the view edits that board.
 
 ### Tier-A Activated Design Artifacts
 
@@ -268,7 +281,7 @@ Single branch `release/sequencing-layer-foundation`, posture **P0 (fully serial)
 |---|---|---|---|---|---|---|---|---|---|
 | #7177 | APPLY (ran; joint S5-D1 with #6397) | APPLY (slice 1) | APPLY | APPLY | APPLY (Deep) | COMPRESS (platform-satisfied) | COMPRESS (platform-satisfied) | APPLY (release-scoped) | APPLY (release-scoped) |
 | #6397 | APPLY (ran; joint S5-D1 with #7177) | APPLY (slice 2) | APPLY | APPLY | APPLY (Deep) | COMPRESS | COMPRESS | APPLY | APPLY |
-| #6398 | APPLY (ran; consumes S5-D1's grammar home) | APPLY (slice 3) | APPLY | APPLY (AC6 operator step read here) | APPLY (Deep) | COMPRESS | COMPRESS | APPLY | APPLY |
+| #6398 | APPLY (ran; consumes S5-D1's grammar home) | APPLY (slice 3) | APPLY | APPLY | APPLY (Deep) | COMPRESS | COMPRESS | APPLY | APPLY (AC6 operator step read and recorded at close-out) |
 
 Skips: none at 5–9 — all three cards change tool behaviour. Stage-5 activation was ACTIVATE for all three (T3 + T4 on every card).
 
@@ -425,7 +438,7 @@ Rollback complexity is CHEAP for the release (§ Rollback Strategy).
 - [ ] **CIAC-3 (#7177 × #6397 on `parse_dependencies`):** after #6397 rewrites `parse_dependencies`, a Dependencies section whose heading carries a doubled blank line, or that carries one between its lines, still reads the same targets and the same status as its single-blank form — #7177's blank-line-invariant extraction survives the directed parse. *Method:* `grep -c -F "CIAC-3 blank-line-invariant extraction survives the directed parse" release/tools/tests/test_bundle_issues_parser.py` at least 1. *Graded at Stage 9 QC3.5 on the merged PR;* the suite's CI step grades the arm's behaviour.
 - [ ] **CIAC-4 (#6397 × #6398 on the direction grammar):** the chain-head view takes its dependency edges from the same single-sourced grammar `parse_dependencies` uses — no third grammar and no naive number scrape. *Method:* declared, verification deferred to #6397 AC-1 and #6398 AC-4 — the latter through the `CIAC-4 view loads the single-sourced grammar` arm of the view's suite (slice 3). *Graded at Stage 9 QC3.5 on the merged PR.*
 
-The CIAC lint on the Stage-4 body read `declared=4 parsed=4 clean=3 declared-deferral=1 flagged=0`; it is re-read on this committed file at Stage 6 A1 (§ Verification Evidence) and at Stage 9 A3.6. CIAC-3 is restated under D-7177-Extractor (DEV-4): the Stage-4 text asserted a degraded extractor verdict that no longer exists.
+The CIAC lint on the Stage-4 body read `declared=4 parsed=4 clean=3 declared-deferral=1 flagged=0`; it is re-read on this committed file at Stage 6 A1 (§ Verification Evidence) and at Stage 9 A3.6. CIAC-3 is restated under D-7177-Extractor (DEV-4): the Stage-4 text asserted a degraded extractor verdict that no longer exists. The operator confirmed the restatement before Stage 9 (D-CIAC3-Restated).
 
 ---
 
@@ -452,7 +465,7 @@ The CIAC lint on the Stage-4 body read `declared=4 parsed=4 clean=3 declared-def
 | #6398 | AC-3 | declared, verification deferred to the view's suite (slice 3) | three drill levels; a standing initiative (label description's first word `Standing`) shows no percentage; the no-standing guard fails loudly |
 | #6398 | AC-4 | declared, verification deferred to the view's suite and CIAC-4 (slice 3) | the fixture differs under a naive number scrape; edges from `parse_dependencies` |
 | #6398 | AC-5 | declared, verification deferred to the view's suite (slice 3) | per-head unparented counts; an unreadable count reads unmeasured, never 0 |
-| #6398 | AC-6 | [DEFERRED — operator post-merge step on the git-ignored interim board, read at Stage 8: the portfolio map retired, the milestone lanes kept until #6443 ships] | the map retired; its README points to the view |
+| #6398 | AC-6 | [DEFERRED — operator post-merge step on the git-ignored interim board, read and recorded at Stage 13 close-out (D-6398-AC6-ReadPoint): the portfolio map retired, the milestone lanes kept until #6443 ships] | the map retired; its README points to the view |
 
 `ac_baseline: { #7177: 5, #6397: 5, #6398: 6, read_at: b1042eec }`
 
@@ -740,6 +753,75 @@ Verdict:     CLEAN
 
 **Deliverable state:** `deployed-copy-synced` for slice 3 — no matrix path has a deployed copy.
 
+### DT iteration 2 — Stage 6 Phase E
+
+Run by the Stage-6 spoke on #8704 against `bd19879b`, on Python 3.9.6, for the operator's pre-Stage-9 decisions (DEV-29). `origin/main` is still `b1042eec`. The live reads are one REST snapshot taken on 2026-11-05 at 23:12Z: 749 open issues, equal to the search total of 749 read before and after, and 57 open milestones; no measurement below reads through GraphQL.
+
+| Check | Command | Observed |
+|---|---|---|
+| Parser regression suite | `python3 release/tools/tests/test_bundle_issues_parser.py` | exit 0, `TEST OK`; combined-clean 39/40, unchanged; section-read arms 6 run, 0 failures; direction-grammar arms 2 run, 0 failures |
+| Chain-head suite | `python3 release/tools/tests/test_compute_chain_head_rollup.py` | exit 0, `TEST OK` — 15 arms, 0 failures; INT-2 and the EVG arms pass unchanged |
+| Tool self-tests | the parser's, the mirror's, the position tool's, the view's and the child-set module's `--self-test` | `SELF-TEST OK` ×3 and PASS ×2; the view's 9 checks unchanged |
+| Mirror frozen suite | `python3 release/tools/tests/test_native_dep_mirror.py` | exit 0, `TEST OK`; the grammar is read from `bundle_issues_parser` |
+| RED arm, parser | the new parser suite against the parser and the mirror from `beb07cf4`, with the G-CL8 engine and `_frontmatter.py` beside them | exit 1 with 11 failure lines, every one a new `6397-AC2` row: the two later-paragraph rows (3 each), the `Blocks`-paragraph row (1), `_not_` and `__not__` (2 each). The four new edge controls pass there, and the section-read arms read 0 |
+| RED arm, view | the new chain-head suite against the view, the parser, the child-set module and the audit from `beb07cf4` | exit 1 — only `arm_q01` fails, with 4 lines (blocked `{count 0, unmeasured 0}`, the Markdown cell `0`, "No open children", no unmeasured line); every other arm passes, 14 of 15 |
+| Mutation probes | each on a copy of the fixed view | the node-block branch reverted: `arm_q01` alone, 2 lines; the lone-epic blocked branch reverted: `arm_q01` alone, 2 lines |
+| Live re-measure | `parse_dependencies` and `unattributed_refs` over every snapshot body, through the `beb07cf4` parser and the fixed parser | directed references **154 → 153**: removed #7466 → #7889, added none. Unattributed references 116 → 120: added #42 → #43, #44 and #45 (still directed from #42's first line) and #7466 → #7889, removed none. Every body reads `clean`; 0 stderr bytes |
+| AC3 (snapshot) | each tree's own `compute-milestone-positions.py` `run_dry_run()`, with only `subprocess.run` answered from the snapshot | fixed head: 153 references, 4 milestone edges, **0** cycle-resident, no `cycle` line, 68 unresolvable. `beb07cf4`: 154, 4, 0. `b1042eec`, the naive arm: 647 references, 19 edges, **10** cycle-resident (ms 349, 358, 360, 361, 365, 382, 406, 407, 408, 417) |
+| Underscore negation, live | the spelling's pattern over every Dependencies section | 0 of 397 sections; 19 sections carry "not blocked by", and no reference in them is newly read as a target, since the fixed parser adds no directed reference |
+| G3-07 text against the code | each claim the reconciled Edge-source paragraph makes — the segment end, the label-to-list blank line, the emphasised negation, the later-paragraph reference — run through `parse_dependencies` | 11 of 11 hold. The same probe over the `beb07cf4` parser holds 7 of 11: the four claims this iteration changes fail there |
+| Reference durability | the link, raw-URL, issue-reference and cutover patterns of `core/hooks/lib/fragile-ref-patterns.sh` over the line this iteration changes in `core/schemas/gate-criteria-spec.md` | 0 on each; a seeded control line fires each |
+| Doc links | `check-doc-links.py --target-paths <gate-criteria-spec.md, this file> --require-targets`; `check-release-links.py --files <each> --check-anchors`, with `--plan-depth-lint` on this file | 0 findings; 0 broken links; both checkers' `--self-test` pass |
+| Tool exec mode | `python3 core/deploy/tools/check-tool-exec-mode.py` | exit 0 — 0 findings, 7 exempt; no file mode changed |
+| Plan verifier and CIAC lint | `bash release/tools/verify-release-plan.sh <this file>`, and with `--ciac-lint`; `claim-version.sh --verify-stamp sequencing-layer-foundation` | exit 0 — 13 PASS / 0 FAIL / 25 SKIP / 5 UNRUNNABLE / 0 ERROR over 43 records, as at slice 3; the lint reads `declared=4 parsed=4 clean=3 declared-deferral=1 flagged=0`; the stamp check passes |
+| AC binding | `python3 release/tools/check-ac-binding.py <this file> --fetch`, before and after the AC-6 row edit | `VERDICT BOUND` both times; #6398 AC-6 `BOUND` on the same five tokens |
+| Close-keyword self-check | `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` | exit 0, CLEAN, before each push |
+
+**Probe records** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0 to PV-7):
+
+```
+Probe:       directed (source, target) references — parse_dependencies over every snapshot body,
+             the beb07cf4 parser against the fixed parser; the set difference each way
+Denominator: 749 open issues (REST paginated; 749 = the search total, read before and after);
+             154 directed references at beb07cf4
+Control - sensitivity: the parser suite's later-paragraph rows read {30, 31} and {32, 33} under
+             the beb07cf4 parser and {30} and {32} under the fixed one, so a moved reference is seen
+Control - specificity: the same comparison with the beb07cf4 parser on both sides -> 0 removed,
+             0 added
+Extraction:  749 bodies, 4,250,034 bytes, 0 empty, read by every arm
+Result:      1 removed (#7466 -> #7889), 0 added
+Verdict:     N-of-M: 1 of 154
+```
+
+```
+Probe:       AC3 — each tree's own run_dry_run() over the snapshot; the count of cycle_members and
+             of output lines containing "cycle"
+Denominator: 749 open issues; 57 open milestones (REST, paginated)
+Control - sensitivity: the same harness and snapshot with the b1042eec tree -> 10 cycle-resident,
+             1 cycle line
+Control - specificity: NOT TRIGGERED — cycle membership is computed, not matched; the position
+             tool's own self-test pairs an X <-> Y cycle with an acyclic Z (SELF-TEST OK)
+Extraction:  749 bodies; each tree's whole dry-run output
+Result:      0
+Verdict:     CLEAN
+```
+
+```
+Probe:       underscore-emphasised negation before a blocked_by label (_not_ / __not__ then
+             blocked by / depends on / requires) in live Dependencies sections
+Denominator: 397 Dependencies sections in 749 open bodies
+Control - sensitivity: the pattern over the suite's _not_ and __not__ rows -> 1 each
+Control - specificity: "do_not blocked by" (an underscore inside a word) -> 0; plain
+             "not blocked by" -> 0
+Extraction:  397 sections, each read whole
+Result:      0
+Verdict:     CLEAN
+```
+
+**Cascade sweeps.** Each pattern brackets one character so that it does not match its own line here. The AC6 read point: `grep -oE 'read at Stage [8]|step read [h]ere|Stage 8:[*][*] #6398'` over this file → pre 7 / post 1; the survivor is DEV-28's own description of the old read point (PRESERVE). The view suite's arm count: `grep -oE '1[4] arms|stays 1[4]'` → pre 3 / post 2; § #6398 — change specification now reads 15 (UPDATE), and the slice-3 evidence row and DEV-27 keep 14 as dated records (PRESERVE).
+
+**Deliverable state:** `deployed-copy-synced` for DT iteration 2 — no matrix path has a deployed copy.
+
 ---
 
 ## Change Description
@@ -755,8 +837,8 @@ Dependency edges are now read with their direction, from one grammar in one pars
 | # | Outcome (one line) | Status |
 |---|---|---|
 | #7177 | A section ends only at an H2/H3 heading or a break line; the dependency mirror loads the parser's extractor instead of carrying a copy; caller output unchanged on 814 of 814 open bodies | DONE |
-| #6397 | `parse_dependencies` returns directed `blocked_by` targets from the one grammar now in the parser, the negated label included; prose references are reported, the position tool keeps the parse status, and G3-07 names its edge source | DONE |
-| #6398 | The chain-head view renders live — 10 initiative heads and 0 lone-epic heads at the Stage-6 run, the six evergreen containers absorbed into the standing initiative — and the epic child-set rule has one home that the view and the rollup-close audit both load | DONE (AC6 is the operator's post-merge step, read at Stage 8) |
+| #6397 | `parse_dependencies` returns directed `blocked_by` targets from the one grammar now in the parser, the negated label included, and a reference in a later paragraph of a `Blocked by:` run no longer reads as a blocker; prose references are reported, the position tool keeps the parse status, and G3-07 names its edge source | DONE |
+| #6398 | The chain-head view renders live — 10 initiative heads and 0 lone-epic heads at the Stage-6 run, the six evergreen containers absorbed into the standing initiative — and the epic child-set rule has one home that the view and the rollup-close audit both load | DONE (AC6 is the operator's post-merge step, read and recorded at Stage 13 close-out) |
 
 ### Key decisions
 
@@ -766,6 +848,8 @@ Each is recorded in this file's § Decision Record.
 - **D-6397-Negation — fixed in the shared grammar:** a `blocked_by` label negated on its own line reads non-blocking, and the A3.5 mirror inherits the rule.
 - **D-6398-Standing — the label word, plus a guard:** a label description that begins with `Standing` declares a standing initiative, which shows no percentage; a run that finds none stops with exit 1 rather than turn the standing initiative finite and the flow containers back into heads.
 - **D-6398-AC6 — retire the interim board's portfolio map only:** its hand-ordered milestone lanes stay until #6443 ships.
+- **D-6397-AC2-Gap — a blank line ends a directional run:** a reference in a later paragraph no longer reads as a blocker (1 of 154 live references changed), and `_not_ blocked by` reads as negated.
+- **D-6398-AC6-ReadPoint — AC6 is read at Stage 13 close-out:** the operator's post-merge step is read and recorded against the closed card.
 - **D-Concurrency P0 and D-C SINGLE:** three serial slices on one branch, one merge.
 
 ### Reversibility
@@ -775,9 +859,8 @@ Each is recorded in this file's § Decision Record.
 ### Downstream impact
 
 - **Stage 7:** the live `compute-milestone-positions.py --dry-run` (no `CYCLE:` block) and `compute-chain-head-rollup.py --json` (heads equal the labels with members); the `deploy.sh --check` FAIL-line diff against `b1042eec` (DEV-17); the discovered self-test run, whose one local timeout is not evaluated here.
-- **Stage 8:** #6398's AC6 — the operator retires the interim board's portfolio map and points its README at the view, keeping the lanes.
 - **Stage 12:** the two ADR records (provisionally 230 and 231) bind at the claim through `renumber-adr.py`, and their slug-token citations are stamped there; milestone 438 computes the same version slot, and the first merge claims it.
-- **Stage 13:** both records are ratified (G-CL9); G-CL6 reads the taxonomy's chain-head region against the shipped tool; three items are held for the follow-up ledger (§ Exclusions).
+- **Stage 13:** both records are ratified (G-CL9); G-CL6 reads the taxonomy's chain-head region against the shipped tool; #6398's AC6 — the operator's post-merge step that retires the interim board's portfolio map and points its README at the view, keeping the lanes — is read and recorded in the close-out record (D-6398-AC6-ReadPoint); three items are held for the follow-up ledger (§ Exclusions).
 - **Every Stage-13 close-out after the merge** loads `_epic_child_set.py` at its epic rollup-close phase; a missing module stops that phase loudly instead of falling back.
 - **Later work:** b21 (#7678) builds its shared acceptance-criteria reader on the parser's extractor and merges after this release; native-edge reads (#6426) and the sequencing layer (#6443) build on the directed edges.
 
@@ -797,7 +880,7 @@ Each is recorded in this file's § Decision Record.
 | **DEV-1** | **D-7177-Extractor replaces the Stage-5 extractor design (S5-D2).** A section ends at the next H2/H3 heading or a break line; the two-blank-line terminator is removed; the return stays `Optional[str]`. There are no record types, no per-caller rendering change, no mirror WARNING and no new `failed` source for whitespace. The Stage-5 design's D-7177-1 leading-blank skip is not applied: once no whitespace ends a section it has no reading effect, and skipping it would change the text every caller receives and the present-and-empty control arm Stages 4 and 5 recorded | scope lock D-7177-Extractor; A6.5 review on #8777 (PRF-1, FM-1, CD-1) | **APPLIED** — slice 1 |
 | **DEV-2** | **The break line's definition.** The decision names "a `---` line"; it is implemented as three or more hyphens, indented at most three spaces, optional trailing spaces or tabs, CRLF-safe (`\r?` before the line end). `***` and `___` are not break lines, and HTML comments are not stripped: the decision names the hyphen line, and the observed separator footers are all of that shape | scope lock D-7177-Extractor and its Stage-6 fix (CRLF-safe detection); A6.5 FM-3 | **APPLIED** — slice 1 |
 | **DEV-3** | **S5-D1 keeps every public name of the mirror, `extract_section_with_alias` and `extract_section_aliased` included.** The Stage-5 design deleted both; the hub's scope-lock reading keeps them, bound from the parser. So the parser gains `extract_section_with_alias` (returning the matched alias with the section, the contract the mirror's copy had), and `extract_section_aliased` delegates to it. The Stage-5 reference-cascade expectation of a post-0 count for `extract_section_with_alias` does not apply — the name's definition moves and its call sites stay | the hub's Stage-6 brief for #8696 (S5-D1 stands, every public name kept) | **APPLIED** — slice 1 |
-| **DEV-4** | **CIAC-3 is restated.** The Stage-4 text asserted that "a Dependencies heading whose content the extractor cannot locate still yields a non-clean status — #7177's degraded verdict survives the rewrite", and its grep label named a degraded verdict. Under D-7177-Extractor that state is unreachable by construction, so the criterion now asserts the property that does survive — a doubled blank line reads the same targets and status as the single-blank form through the rewritten `parse_dependencies` — under the label `CIAC-3 blank-line-invariant extraction survives the directed parse`. The ID, the cards, the seam and the grep-for-a-label method are unchanged | scope lock D-7177-Extractor (AC5 restated "because the cannot-locate case no longer exists") | **APPLIED** — § Cross-Issue Acceptance Criteria; the arm lands in slice 1 |
+| **DEV-4** | **CIAC-3 is restated.** The Stage-4 text asserted that "a Dependencies heading whose content the extractor cannot locate still yields a non-clean status — #7177's degraded verdict survives the rewrite", and its grep label named a degraded verdict. Under D-7177-Extractor that state is unreachable by construction, so the criterion now asserts the property that does survive — a doubled blank line reads the same targets and status as the single-blank form through the rewritten `parse_dependencies` — under the label `CIAC-3 blank-line-invariant extraction survives the directed parse`. The ID, the cards, the seam and the grep-for-a-label method are unchanged | scope lock D-7177-Extractor (AC5 restated "because the cannot-locate case no longer exists") | **APPLIED** — § Cross-Issue Acceptance Criteria; the arm lands in slice 1. **Confirmed** by the operator before Stage 9 (D-CIAC3-Restated) |
 | **DEV-5** | **CIAC-1's test is structural, not a text search.** The Stage-5 arm asserted the parser's source contains no `native-dep-mirror`, which the parser's own docstring now names; the arm instead asserts no non-docstring string and no import in the parser names the mirror, with the same scan over the mirror as its sensitivity arm, plus the copy-alone loads | scope-lock Stage-6 fix (CIAC-1's test reconciled with the docstrings); A6.5 FM-2 | **APPLIED** — slice 1 |
 | **DEV-6** | **The ADR is written `Proposed`, not `Accepted`**, and covers S5-D1 with D-7177-Extractor; the record types become a rejected alternative, and the new-module candidate stays the opposing view | scope-lock recorded alignment | **APPLIED** — Commit 0 |
 | **DEV-7** | **The Stage-4 conditional rows are resolved and the matrix gains the rows Stage 5 and the scope lock added** — the shared-home ADR and its index row, `_epic_child_set.py`, the epic rollup-close audit, the chain-head ADR and the script-execution allowlist row; the two `STAGE5-SHARED-HOME` rows and the two `STAGE5-MODEA-DOC` rows resolved not-fired | Stage-5 designs (R3 on #8695, R1 on #8703); scope-lock alignments and Stage-6 fixes | **APPLIED** — § File Change Matrix |
@@ -821,6 +904,8 @@ Each is recorded in this file's § Decision Record.
 | **DEV-25** | **The Tier-A design artifact is declared in this file.** The Stage-5 design declared one Tier-A activated artifact — the taxonomy's derived chain-head view region — which Stage 13 G-CL6 reads from this file; Commit 0 did not carry the section, so it is added under § Implementation Sequence | Stage-5 design on #8703 (Tier-A table) | **APPLIED** — slice 3 |
 | **DEV-26** | **`f23837a3` — the hub's exec-mode repair delivers one path the matrix did not declare.** After slice 3 the `Tool exec-mode gate` found three new files that begin with an interpreter line tracked 100644. The commit tracks `compute-chain-head-rollup.py` and its suite 100755, as their sibling tools and suites are, and adds an `imported-module` row for `_epic_child_set.py`, which the audit and the view load by path, to `core/deploy/allowlists/skip-tool-exec-mode-check.txt`. The mode changes touch only matrix paths; the allowlist is now the slice-3 `EDIT` row of § File Change Matrix. It is absent from § #6398 — change specification's file list because the repair followed that specification. Evidence: `check-tool-exec-mode.py` exits 0 with 0 findings and 7 exempt, and the CI `Tool exec-mode gate` passes at `f23837a3` | the hub's Stage-6 self-repair; recorded at DT iteration 1 for the #6398 Stage-7 finding F-03 | **APPLIED** — `f23837a3`; the matrix row at DT iteration 1 |
 | **DEV-27** | **DT iteration 1 (Stage 6 Phase E).** The three Stage-7 passes (#8697, #8701, #8705) each returned PASS with Tier 1 fix-now findings; the hub routed six to Engineering, and none changes an acceptance criterion or a design decision. (1) #7177 F-01: the #7177 AC-1 verification row's note now says what the arm grades — `extract_section` returns the section after one, two or three blank lines — with the grep label unchanged, so `check-ac-binding.py --fetch` reads AC-1 `BOUND` and `VERDICT BOUND`. (2) #7177 F-02: the shared-home ADR's Consequences bullet and R-13 name "an H2 or H3 heading" where they named "a heading", as Decision 3 and the code read. (3) #6398 F-01: `derive()` reads the unparented facet and the partition unmeasured when the host serves neither `parent_issue_url` nor the sub-issue summary on any open issue, where it read them measured; this extends DEV-19's rule, and the tool's docstring, the suite's docstring and the FM-1 bullet of § #6398 — change specification state the new limb. `arm_ac5` gains the check and a control (the summary served at zero, no native child, stays measured); run against the base tool, exactly the new label fails. (4) #6398 F-02: `arm_ac3` asserts three drill levels — head, epic, open child — in the JSON and the Markdown, with a control; three mutants (no child rows, no children, no details block) each turn it red. The arm count stays 14. (5) #6398 F-03: the matrix row and DEV-26. (6) #6397 F-03: the smoke workflow's parser-suite step name and header comment name the direction-grammar arms, without a count, and § #7177 — change specification's smoke-label paragraph quotes the new strings. Also refreshed: the Header Status. Not acted on: #6397 F-01, the operator's call at Stage 9. The Change Description's refresh rule does not fire, because no issue or decision changes | the Stage-7 outputs on #8697, #8701 and #8705; the hub's DT-iteration brief for #8704 | **APPLIED** — `63fdc04c` (the view, its suite, the smoke workflow) and the DT plan commit (the shared-home ADR and this file) |
+| **DEV-28** | **#6398 AC6 is read and recorded at Stage 13 close-out, not at Stage 8.** The restated AC6 asked for the operator's post-merge interim-board step to be read at Stage 8, which runs before the merge, so Stage 8 could not grade it (it returned `FLAG-UPSTREAM`). The read point moves to the Stage-13 close-out record for #6398, against the closed card; the criterion's content — retire the portfolio map, point the README at the view, keep the milestone lanes until #6443 ships — is unchanged. Re-pointed in every place this file stated it: the Implementation Sequence's post-merge row, § #6398 — change specification's AC6 paragraph, the Stage Applicability Matrix (the note moves from column 8 to column 13), the § Verification Plan AC-6 row (still a declared deferral, so the plan verifier reads it as one), and the Change Description's Issues resolved row and Downstream impact (the Stage 8 bullet, which carried only this step, is folded into the Stage 13 bullet). The card's body is not edited, following DEV-11's precedent, and the pull request's Issue References block is unchanged | pre-Stage-9 decision D-6398-AC6-ReadPoint (#8707), from the #6398 Stage 8 review on #8706 (Q-03) | **APPLIED** — DT iteration 2, this file |
+| **DEV-29** | **DT iteration 2 (Stage 6 Phase E).** The operator's pre-Stage-9 decisions routed four changes to Engineering, and no other criterion or design decision changes. (1) D-6397-AC2-Gap: in the parser's direction grammar a `blocked_by` or `blocks` run ends at the first blank line after its first text; the rest, up to the next label, is unlabelled text beneath the heading (the heading's direction under a directional heading, otherwise no edge and an unattributed reference); blank lines between a label and its first text do not end it; a `relates` run is not ended. The negated-label rule accepts `_not_` and `__not__`. Two shapes were chosen beyond the decision's text and are stated so Stage 9 can see them: the run starts at its first text, so `Blocked by:` with its list one blank line below keeps the list's edges; and the bare-reference shim is not applied to the remainder, so a list after a `Blocks:` paragraph never becomes a blocker. Both read identically to the decision on the live backlog. `6397-AC2` gains five relation rows and four edge controls; against the base parser exactly the five new rows fail. Live, directed references 154 → 153 (only #7466 → #7889 removed, none added) and unattributed references 116 → 120 (#42's `Hard:` paragraph surfaces #43, #44 and #45, which stay directed from its first line, and #7466 → #7889); AC3 reads 0 cycle-resident milestones. (2) D-6398-Q01: a failed child-set read renders the node's open children unmeasured, and a lone-epic head's blocked facet unmeasured with null counts and a reason, where both read "No open children" and 0; the measured shape is unchanged. The suite gains `arm_q01` (15 arms); against the base tool only it fails, and each single-branch mutant turns only its own assertions red. (3) D-6398-AC6-ReadPoint: DEV-28. (4) D-CIAC3-Restated: recorded in § Decision Record, § Cross-Issue Acceptance Criteria and DEV-4. Also reconciled, because each stated what the code no longer does: G3-07's Edge-source paragraph in `core/schemas/gate-criteria-spec.md` (the segment end, the label-to-list blank line, the emphasised negation, the later-paragraph reference), the parser's grammar docstring and comments, the view's docstring, both suites' docstrings, § #6397 and § #6398 — change specification, the Change Description's #6397 row and Key decisions, the provenance note at the top of this file, and the Header Status. Evidence: § Verification Evidence → DT iteration 2 | pre-Stage-9 decisions on #8707, from the Stage 8 reviews on #8702 and #8706; the hub's DT-iteration brief for #8704 | **APPLIED** — `bd19879b` (the parser, the view, both suites, G3-07) and the DT plan commit (this file) |
 
 ---
 
