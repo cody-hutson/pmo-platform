@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v5.01 (2026-11-05) — Two checks that only warned now stop a pull request from merging
+
 ### v5.00 (2026-11-04) — Releases file only the follow-ups that matter
 
 ### v4.81 (2026-10-30) — Governance promises are now measured when a release closes
