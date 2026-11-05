@@ -46,6 +46,7 @@ release/tools/check-dark-branch.py
 release/tools/check-line-range-overlap.py
 release/tools/check-release-links.py
 release/tools/check-selftest-coverage.py
+release/tools/compute-chain-head-rollup.py
 release/tools/compute-milestone-positions.py
 release/tools/generate-adr-index.py
 release/tools/native-dep-mirror.py
