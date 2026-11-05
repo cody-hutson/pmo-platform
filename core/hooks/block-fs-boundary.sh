@@ -369,8 +369,20 @@ readonly EXPANSION_SENTINEL='EXPANSION'
 # render_token(token)
 #   Message-safe rendering. The 286 sentinel-bearing operands would otherwise emit a raw
 #   \001 control byte to the operator and display as a corrupted path.
+#
+#   THE LINEAR PASS. On bash 3.2 a global pattern substitution costs more than linear time
+#   in the text it scans once that text carries the character it replaces, and this builds
+#   the refusal message: a token large enough could hold the hook past the runtime's
+#   command-hook timeout here, and a hook that times out does not block, so the refusal
+#   would become an allow. A token of at least FSB_LINEAR_MIN characters is therefore
+#   rewritten first by one sed pass in the C locale, whose output equals the substitution's
+#   byte for byte (AC-FSB-X-EQ); the substitution still runs after it and finds nothing left
+#   to replace, which costs one scan. A shorter token costs less than the fork the pass
+#   takes, so it keeps the substitution alone, and a pass that fails leaves the token to it.
+readonly FSB_LINEAR_MIN=256
 render_token() {
-  local t="$1"
+  local t="$1" lp
+  if [ "${#t}" -ge "$FSB_LINEAR_MIN" ] && lp="$(LC_ALL=C /usr/bin/sed "s/${CMDPOS_SENTINEL}/<quoted-expansion>/g" <<< "${t}.")"; then t="${lp%.}"; fi  # linear: render
   "$PRINTF" '%s' "${t//$CMDPOS_SENTINEL/<quoted-expansion>}"
 }
 
