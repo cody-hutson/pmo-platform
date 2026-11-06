@@ -14,7 +14,7 @@ reversibility: MODERATE / Confidence MEDIUM
 
 The platform keeps several kinds of data out of git: release-hub run state, the pipeline event log, close-out registers, warn logs, usage telemetry, allowlist instances, the PII scan lists and the people roster, the operator's project content, and the files other tools own. For each of them this standard answers one question: **where does it live, and what protects it there?**
 
-The answer is decided by the data's **risk class** — what would follow if it reached a repository — and not by who writes it. The decision, its alternatives and its consequences are recorded in {{ADR:non-tracked-data-homed-by-risk-class}} (the record under `core/ADRs/` whose file name ends `non-tracked-data-homed-by-risk-class.md`). This standard is its operational half: it names the classes and their homes, registers every non-tracked surface against one class, and states the checklist a new surface passes before it has a home.
+The answer is decided by the data's **risk class** — what would follow if it reached a repository — and not by who writes it. The decision, its alternatives and its consequences are recorded in ADR-231 (the record under `core/ADRs/` whose file name ends `non-tracked-data-homed-by-risk-class.md`). This standard is its operational half: it names the classes and their homes, registers every non-tracked surface against one class, and states the checklist a new surface passes before it has a home.
 
 ## Scope and composition
 
@@ -80,7 +80,7 @@ classes → homes
 
 **Every repository the platform runs releases for has its own homes.** An external target ships its own `/local-state/`, ignore rule and commit guard; a hub reads the target at run time and stores nothing about it in another repository's home. Where an operator holds more than one clone of a repository, every clone resolves to one designated main checkout's homes.
 
-**No platform folder remains at the workspace root once today's container is retired.** The workspace root then holds the operator's own areas of work, the repository checkouts and `projects/`. The operator's own areas of work, the personal area included, are no class's home: the platform creates nothing there, reads nothing from them and writes no runtime state there, as {{ADR:non-tracked-data-homed-by-risk-class}} carries forward from ADR-141 (its § Carried forward from ADR-141, clause 1).
+**No platform folder remains at the workspace root once today's container is retired.** The workspace root then holds the operator's own areas of work, the repository checkouts and `projects/`. The operator's own areas of work, the personal area included, are no class's home: the platform creates nothing there, reads nothing from them and writes no runtime state there, as ADR-231 carries forward from ADR-141 (its § Carried forward from ADR-141, clause 1).
 
 ### Registered in-repo git-ignored homes
 
@@ -100,7 +100,7 @@ The release corpus — the release log with its archives, the release index, the
 |---|---|---|---|
 | `tracked` — the default and the only value; an absent key reads as it | Tracked repository content | `release/releases/` in the repository whose releases it records | In force — today's layout |
 
-**No non-tracked value is reserved.** The selector is declared and not yet read: the close-out tooling's corpus resolver resolves the corpus by presence, the tracked tree first. A non-tracked corpus home is decided, with its class and its path, by the change that teaches that resolver to read the selector, and that change registers the home here through § New-surface checklist. **The leak-risk home is never a corpus home:** the corpus carries no leak-risk content. The decision and its reasons are recorded in {{ADR:non-tracked-data-homed-by-risk-class}}, in its release-corpus location item.
+**No non-tracked value is reserved.** The selector is declared and not yet read: the close-out tooling's corpus resolver resolves the corpus by presence, the tracked tree first. A non-tracked corpus home is decided, with its class and its path, by the change that teaches that resolver to read the selector, and that change registers the home here through § New-surface checklist. **The leak-risk home is never a corpus home:** the corpus carries no leak-risk content. The decision and its reasons are recorded in ADR-231, in its release-corpus location item.
 
 ### Until each repository's cutover
 

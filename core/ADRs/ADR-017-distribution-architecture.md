@@ -159,7 +159,7 @@ This *applies* Decision 3; it is not a separate decision and asks for nothing th
 - **ADR-012** (instance de-scope) — names the S3 boundary (instance content operator-local, never in S1); this ADR places it in the lifecycle model.
 - **ADR-008** (deploy per-module arrays) — the S1→S4 deploy *engine*; unchanged.
 - **ADR-010** (secrets / public-safety) — the reason S2/S3 must never leak into S1.
-- **{{ADR:non-tracked-data-homed-by-risk-class}}** (non-tracked platform data is homed by its risk class) — supersedes Decision 4 in part: leak-risk content leaves the workspace for the user's XDG data home, and the pipeline event log and the deploy warn logs are working state homed in each repository's git-ignored `/local-state/` rather than in XDG state. Decision 4's routing of telemetry to the XDG state home is realized there, and Decisions 1–3 still bind.
+- **ADR-231** (non-tracked platform data is homed by its risk class) — supersedes Decision 4 in part: leak-risk content leaves the workspace for the user's XDG data home, and the pipeline event log and the deploy warn logs are working state homed in each repository's git-ignored `/local-state/` rather than in XDG state. Decision 4's routing of telemetry to the XDG state home is realized there, and Decisions 1–3 still bind.
 - **#338** packaging, **#14** onboarding journey, **#364** multi-tenant deploy — the three anchors this ADR is the spine for; each should reference ADR-017 as its architectural foundation.
 - **#22** (unified config) implements S2 consolidation; **#383** (lossless round-trip) protects S2 across updates (prerequisite for Decision 3); **#342/#44/#43/#341** implement the S1→S4 deploy mechanics portably; **#529** is the checkout-independent-resolution prerequisite for Decision 3.
 

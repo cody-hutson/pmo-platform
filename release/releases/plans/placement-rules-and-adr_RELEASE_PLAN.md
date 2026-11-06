@@ -94,7 +94,7 @@ This file carries **exactly one** literal double-brace release-version placehold
 
 ### ADR number
 
-The new decision record's number was taken at this commit from `release/tools/renumber-adr.py --next-free` against the mainline anchor, and it is written **only** in machine-read positions: the record's filename, `title:` and H1, its `core/ADRs/README.md` heading and link, and the appended `superseded_by:` entries on ADR-017, ADR-032, ADR-046 and ADR-096. Every prose citation of the record, in every file of this release, is the slug token `{{ADR:non-tracked-data-homed-by-risk-class}}`, never inside a link target. This plan carries the number nowhere: its matrix row spells it `ADR-NNN`. Stage 12 binds it with `renumber-adr.py --detect`, `--renumber` on a collision, then `--stamp` and `--stamp --check`.
+The new decision record's number was taken at this commit from `release/tools/renumber-adr.py --next-free` against the mainline anchor, and it is written **only** in machine-read positions: the record's filename, `title:` and H1, its `core/ADRs/README.md` heading and link, and the appended `superseded_by:` entries on ADR-017, ADR-032, ADR-046 and ADR-096. Every prose citation of the record, in every file of this release, is the slug token `ADR-231`, never inside a link target. This plan carries the number nowhere: its matrix row spells it `ADR-NNN`. Stage 12 binds it with `renumber-adr.py --detect`, `--renumber` on a collision, then `--stamp` and `--stamp --check`.
 
 ### Date variable
 

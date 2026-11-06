@@ -281,7 +281,7 @@ scheduler = "none"
 
 # Release-corpus home — where this install's release corpus lives. A placement
 # selector, not a host surface: its value names a home class, and
-# {{ADR:non-tracked-data-homed-by-risk-class}} defines the corpus and records
+# ADR-231 defines the corpus and records
 # where it lives.
 #
 # DECLARED, NOT YET READ. The release tooling's corpus resolver resolves the

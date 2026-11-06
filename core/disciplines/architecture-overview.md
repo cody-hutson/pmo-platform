@@ -387,7 +387,7 @@ The actual work being managed by the platform:
 - Archive/ for closed projects
 
 ### Non-tracked platform data (homed by risk class)
-The platform's own **working state** and **leak-risk** content are kept out of git and are neither the product nor PMO content. Their risk class and governed home are set by the [placement standard](../standards/instance-data-placement-standard.md), which also places the operator's PMO content and the files other tools own; the decision behind them is {{ADR:non-tracked-data-homed-by-risk-class}}.
+The platform's own **working state** and **leak-risk** content are kept out of git and are neither the product nor PMO content. Their risk class and governed home are set by the [placement standard](../standards/instance-data-placement-standard.md), which also places the operator's PMO content and the files other tools own; the decision behind them is ADR-231.
 - **Working state** — release and run state such as hub state, the pipeline event log and close-out registers, and read-once analysis and roadmap instances — is homed in the registered in-repo git-ignored homes at the root of the repository it belongs to: release and run state in `/local-state/`, analysis in `/analysis/`, roadmap instances in `/roadmaps/`. Each home's folder and README are tracked; its contents never are. Install-scoped working state, such as usage telemetry, has an install-level home the standard names.
 - **Leak-risk** content — the PII scan lists and the people roster — is homed outside every repository and workspace, at `${XDG_DATA_HOME:-$HOME/.local/share}/pmo-platform/pmo-private/`.
 

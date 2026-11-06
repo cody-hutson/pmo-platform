@@ -3,7 +3,7 @@ title: Corpus-Home Adapter — Path-Resolution Constraints
 purpose: Records the constraints any future corpus-home adapter MUST honour when it makes release/tools/automated-closeout.sh --check-paths instance-aware — chiefly that instance-absence resolves to N/A (exit 0), never HARD-FAIL, because --check-paths is a required CI smoke gate that would otherwise redden on every PR from a fresh clone or CI runner. Constraint record only — defines no adapter, no config selector, and no resolution logic.
 type: standard
 status: ACTIVE
-consumers: "the corpus-location decision recorded in {{ADR:non-tracked-data-homed-by-risk-class}} and the operator.toml [adapters] corpus_home selector it governs (the instance-aware resolution seam itself has landed); release/tools/automated-closeout.sh check_paths() (the function the seam must edit); release/tools/tests/test_corpus_home_tolerance.sh (the executable assertion of CH-1..CH-4); .github/workflows/release-tooling-smoke.yml closeout-smoke (the gate that reddens on violation)"
+consumers: "the corpus-location decision recorded in ADR-231 and the operator.toml [adapters] corpus_home selector it governs (the instance-aware resolution seam itself has landed); release/tools/automated-closeout.sh check_paths() (the function the seam must edit); release/tools/tests/test_corpus_home_tolerance.sh (the executable assertion of CH-1..CH-4); .github/workflows/release-tooling-smoke.yml closeout-smoke (the gate that reddens on violation)"
 composes_with: [release-corpus-schema.md, ../../../core/standards/repo-host-adapter-versioning.md, ../../../core/standards/public-repo-vs-operator-instance-taxonomy.md, ../../../core/standards/gate-efficacy-standard.md]
 reversibility: CHEAP / Confidence HIGH — a constraint record plus its executable assertion; git revert restores prior state. The document adds no runtime surface of its own, and the seam it constrains is reversible by its own change's revert, so there is no migration to unwind.
 ---
@@ -12,7 +12,7 @@ reversibility: CHEAP / Confidence HIGH — a constraint record plus its executab
 # Corpus-Home Adapter — Path-Resolution Constraints
 
 > Reversibility: CHEAP / Confidence: HIGH.
-> **Status: the seam has landed; the selector is declared and not yet read.** Instance-aware corpus-path resolution exists in `automated-closeout.sh`, the committed arming sentinel reads `armed`, and the suite in §5 reports `PASS-SEAM-LANDED` — so CH-1..CH-4 are graded on every qualifying PR rather than merely anticipated. `operator.toml [adapters]` declares `corpus_home`, whose only value, `tracked`, is its default and ships opt-in, and {{ADR:non-tracked-data-homed-by-risk-class}} records where the corpus lives: tracked repository content in the repository whose releases it records. The resolver does not read the selector — it resolves by presence, the tracked tree first — so CH-1, CH-2 and CH-4 grade its presence-precedence tiers independent of the selector. This document creates no selector; §6 names where the decision lives.
+> **Status: the seam has landed; the selector is declared and not yet read.** Instance-aware corpus-path resolution exists in `automated-closeout.sh`, the committed arming sentinel reads `armed`, and the suite in §5 reports `PASS-SEAM-LANDED` — so CH-1..CH-4 are graded on every qualifying PR rather than merely anticipated. `operator.toml [adapters]` declares `corpus_home`, whose only value, `tracked`, is its default and ships opt-in, and ADR-231 records where the corpus lives: tracked repository content in the repository whose releases it records. The resolver does not read the selector — it resolves by presence, the tracked tree first — so CH-1, CH-2 and CH-4 grade its presence-precedence tiers independent of the selector. This document creates no selector; §6 names where the decision lives.
 
 ## 1. Why this exists
 
@@ -30,7 +30,7 @@ The cost asymmetry is the whole argument. Recording the constraint now is one do
 
 **Does not apply:** while the corpus is in-tree. Today's in-tree resolution is conformant by construction — `$REPO_ROOT` always exists.
 
-**Does not govern:** *where* the corpus should live, *whether* the corpus should move, or the adapter's configuration surface. Those are decided in {{ADR:non-tracked-data-homed-by-risk-class}}, in its Release-corpus location item. This document constrains only how the resolver must behave once that decision is made.
+**Does not govern:** *where* the corpus should live, *whether* the corpus should move, or the adapter's configuration surface. Those are decided in ADR-231, in its Release-corpus location item. This document constrains only how the resolver must behave once that decision is made.
 
 ## 3. The constraints (normative)
 
@@ -43,7 +43,7 @@ The cost asymmetry is the whole argument. Recording the constraint now is one do
 
 > **These IDs are load-bearing.** `release/tools/tests/test_corpus_home_tolerance.sh` rule **R6** greps this file for each of `CH-1`..`CH-4` and fails if the file is absent or any ID is missing. **Do not renumber them.** Adding `CH-5` is safe; renumbering `CH-1`..`CH-4` breaks the doc↔test binding and reddens the gate.
 
-> **What "instance-corpus root" names today.** In CH-1 and CH-2 it is the non-tracked tier of today's resolver: the fallback it consults inside today's out-of-tree container when no tracked corpus is present. {{ADR:non-tracked-data-homed-by-risk-class}} records that tier as a transitional residual, not a governed corpus home. When a non-tracked corpus home is decided, by the change that teaches the resolver to read the `corpus_home` selector, that home is the root these constraints bind.
+> **What "instance-corpus root" names today.** In CH-1 and CH-2 it is the non-tracked tier of today's resolver: the fallback it consults inside today's out-of-tree container when no tracked corpus is present. ADR-231 records that tier as a transitional residual, not a governed corpus home. When a non-tracked corpus home is decided, by the change that teaches the resolver to read the `corpus_home` selector, that home is the root these constraints bind.
 
 **CH-2 and CH-1 are a pair, and neither is sufficient alone.** A resolver that returns exit 0 unconditionally satisfies CH-1 (tolerance) while resolving nothing at all. CH-2 forbids that degenerate answer by requiring a *present* instance corpus to actually resolve. **CH-4 closes the remaining hole:** without it, an implementer could satisfy CH-1 by silently downgrading an unresolved path to `OK`, which would defeat CH-3.
 
@@ -143,7 +143,7 @@ This standard owns **the constraint** and nothing else. It restates none of the 
 | What content is public-repo vs operator-instance | `core/standards/public-repo-vs-operator-instance-taxonomy.md` |
 | Gate posture / invariant / falsification declarations | `core/standards/gate-efficacy-standard.md` |
 | Instance-path resolution | `core/deploy/lib-instance-path.sh` |
-| Where the corpus lives under each `corpus_home` value, and whether it moves | {{ADR:non-tracked-data-homed-by-risk-class}} — its Release-corpus location item |
+| Where the corpus lives under each `corpus_home` value, and whether it moves | ADR-231 — its Release-corpus location item |
 
 ## 7. Cutover
 
