@@ -1113,7 +1113,8 @@ egress_old_reachable_gh_api() {
 #
 # Not resolved, and declared rather than implied: a command word produced by an expansion these
 # helpers do not perform (zsh's `=cmd`, a pathname pattern, a nested, sequence, escape-bearing or
-# all-empty brace group, an ANSI-C escape outside the decoded set), a redirection written against
+# all-empty brace group, a brace group whose expansion is past the brace step's bound, an ANSI-C
+# escape outside the decoded set), a redirection written against
 # the word before it, a method value that is itself escaped or brace-expanded, a continuation that
 # leaves a prefix command's option argument or operand at the head of a line that also holds the
 # verb, and arguments that arrive on standard input.
@@ -1143,12 +1144,30 @@ egress_split_at() {
 # R4 (a) — a word holding exactly one brace group pre{w1,…,wn}post, with n of at least two, no
 # nested group, no `..` sequence, and no backslash, `$`, slash or quoted structure anywhere in it,
 # expands to its non-empty words. Sets EGRESS_RV, EGRESS_RVN and EGRESS_RVCH; returns 1 for any
-# other word, and for a group whose every word is empty.
+# other word, for a group whose every word is empty, and for a group whose expansion is past the
+# bound below.
 #
 # The word is read once: split at its `{`, the text after it at its `}`, and the group at its commas,
 # each by egress_split_at, where a count other than one at either brace is no single group. Taking
 # the words one at a time off the text left to split, or a prefix up to a brace by a pattern removal,
 # re-measures that text at each step, which on bash 3.2 costs more than linear time in a long group.
+#
+# The expansion is bounded. Each of the group's n words carries the prefix and the suffix, so what
+# the step builds is n times their length plus the words' own text, the product of two parts of the
+# command: a group whose words share a long prefix or suffix expands to far more text than it holds,
+# and building it, and reading what it built, grows faster than the command. The total — the sum of
+# the lengths of the words the group would build, in characters as the shell counts them (bytes in
+# the C locale) — is computed from the split, before any word is built. Past the bound the step
+# returns as it does for a group it does not resolve, so the word stays one token, as the shipped
+# hook reads every brace group, and the rest of the command is still evaluated; a write spelled only
+# inside such a group is not resolved, a declared spelling of the rule. The bound is 65536. A brace
+# group a real command carries expands to tens or hundreds of characters — the largest the egress
+# corpus and the hook suites hold expands to 14 — and the longest the suites generate, the timed
+# long-group shape at its largest size, expands to about 41 thousand, so it still reaches the step.
+# A group whose words share a prefix or suffix of a few hundred characters is past the bound, so its
+# cost grows with the command. Each group is bounded alone: a command of many groups each just under
+# the bound builds at most the bound per group, which grows with the number of groups, linearly in
+# the command.
 egress_brace_words() {
   local w="$1" pre rest mid post alt k=0
   case "$w" in *'{'*) ;; *) return 1 ;; esac
@@ -1162,6 +1181,7 @@ egress_brace_words() {
   mid="${EGRESS_SP[0]}"; post="${EGRESS_SP[1]}"
   case "$mid" in *,*) ;; *) return 1 ;; esac
   egress_split_at ',' "$mid"
+  [ $(( (EGRESS_SPN + 1) * (${#pre} + ${#post}) + ${#mid} - EGRESS_SPN )) -le 65536 ] || return 1  # bound: brace
   EGRESS_BW=()
   for alt in "${EGRESS_SP[@]}"; do
     if [ -n "${pre}${alt}${post}" ]; then

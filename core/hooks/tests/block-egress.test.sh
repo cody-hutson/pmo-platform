@@ -4440,6 +4440,177 @@ e007_n_timed "a long escaped command word in a command the scanner cannot tokeni
 E007_NU_B1="${E007_W_BASE}/nub1"; e007_n_copy "$E007_NU_B1" "$_nu_n9" "$_nu_o9"
 e007_n_ctl "AC-E007-NU-CTL" "$E007_NU_B1" unpfold 80 en_US.UTF-8 "the second reader's basename test"
 
+# -- NG: the brace step's bound --
+#
+# The bound is the sum of the lengths of the words a group would build. A group at the bound is built from a
+# write — gh, api, a method flag and its value, and one long attached header value that brings the sum to the
+# bound — so it is refused on day one as its plain spelling is; the same group one character longer is read as
+# written, the one word the shell would not run as gh, as the hook before this release read every brace group.
+E007_N_K=0
+_ng_line='  [ $(( (EGRESS_SPN + 1) * (${#pre} + ${#post}) + ${#mid} - EGRESS_SPN )) -le 65536 ] || return 1  # bound: brace'
+E007_NG_NB="${E007_W_BASE}/ngnb"; e007_n_copy "$E007_NG_NB" "${_ng_line}${E007_SP_NL}" ''; _ng_cw="$E007_N_CW"
+# e007_ng_group <header-length> — {gh,api,-iX,POST,-iH<A x header-length>}: its words sum to 15 + the length.
+e007_ng_group() {
+  /usr/bin/awk -v n="$1" 'BEGIN { s = "A"; while (length(s) < n) s = s s; printf "{gh,api,-iX,POST,-iH%s}", substr(s, 1, n) }'
+}
+_ng_at="$(e007_ng_group 65521)"
+_ng_past="$(e007_ng_group 65522)"
+if [ "$_ng_cw" = 0 ] && [ "${#_ng_at}" = 65542 ] && [ "${#_ng_past}" = 65543 ]; then
+  e007_sp_arm "AC-E007-NG-AT: a brace group whose words sum to the bound and spell an unlisted write is expanded and refused on day one, as its plain spelling is" \
+    "${_ng_at} ${E007_W_NO}" "$E007_W_S" 2 1 0
+  e007_sp_arm "AC-E007-NG-PAST: the same group one character past the bound is read as written, one word, and allowed with no record, where the copy without the bound refuses it" \
+    "${_ng_past} ${E007_W_NO}" "$E007_W_S" 0 0 0 "$E007_NG_NB" 2 1 0
+  e007_sp_arm "AC-E007-NG-ELSE: an unlisted write at the head of a later segment of a command holding the group past the bound is refused on day one" \
+    "${_ng_past} ${E007_W_NO}; gh api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0
+else
+  e007_d_fail "AC-E007-NG-AT/PAST/ELSE: the verdicts at and past the brace step's bound" \
+    "the copy without the bound could not be built (${_ng_cw}; 0 = built) or a group has the wrong length (${#_ng_at}, ${#_ng_past})"
+fi
+# NG-EQ: the brace step against the code before it — on the dense set, and on groups whose words sum to just under,
+# exactly and just past the bound, the prefix, the suffix or the words' own text carrying the length — equal on
+# every group within the bound; past it the step returns 1 and builds nothing, where the code before expanded it.
+/bin/mkdir -p "${E007_N_R}/ng"
+/usr/bin/python3 -c 'import os, sys
+d = sys.argv[1]; B = 65536
+def grp(pre, alts, post):
+    return pre + b"{" + b",".join(alts) + b"}" + post, sum(len(pre) + len(a) + len(post) for a in alts if pre + a + post)
+k = 0
+for delta, tag in ((-1, "in"), (0, "in"), (1, "past")):
+    T = B + delta
+    for kind in ("pre", "post", "both", "alts", "empty", "mixed"):
+        k += 1
+        if kind in ("pre", "post"):
+            n = 64; L = (T - n) // n; alts = [b"b"] * (n - 1) + [b"b" * (T - n * L - (n - 1))]
+            s, t = grp(b"p" * L, alts, b"") if kind == "pre" else grp(b"", alts, b"q" * L)
+        elif kind == "both":
+            h = (T - 2) // 4; s, t = grp(b"p" * h, [b"a", b"a" + b"b" * (T - 2 - 4 * h)], b"q" * h)
+        elif kind == "alts":
+            s, t = grp(b"", [b"gh", b"api", b"z" * (T - 5)], b"")
+        elif kind == "empty":
+            L = T // 256; s, t = grp(b"p" * L, [b""] * 255 + [b"b" * (T - 256 * L)], b"")
+        else:
+            s, t = grp(b"x" * 100, [b"a"] * 200 + [b""] * 50 + [b"c" * (T - 251 * 100 - 200)], b"")
+        assert t == T, (kind, t, T)
+        open(os.path.join(d, "g-%s-%02d-%s" % (tag, k, kind)), "wb").write(s)
+' "${E007_N_R}/ng"
+/bin/cat > "${E007_N_R}/ng-eval.sh" <<'E007_NG_EVAL'
+set -euo pipefail
+readonly EGRESS_SENT=$'\001'
+. "$1"
+exec > "$3"
+for f in "$2"/w-* "$2"/../ng/g-*; do
+  w="$(/bin/cat "$f"; printf x)"; w="${w%x}"
+  st=0; EGRESS_RV=(); EGRESS_RVN=0; EGRESS_RVCH=0; EGRESS_BW=(); egress_brace_words "$w" || st=$?
+  printf '== %s %s %s %s %s\n' "${f##*/}" "$st" "$EGRESS_RVN" "$EGRESS_RVCH" "${#EGRESS_BW[@]}"
+  [ "$st" -ne 0 ] || printf '%s\n' "${EGRESS_RV[@]}"
+done
+E007_NG_EVAL
+/bin/cat > "${E007_N_R}/ng-before.sh" <<'E007_NG_BEFORE'
+egress_brace_words() {
+  local w="$1" pre rest mid post alt k=0
+  case "$w" in *'{'*) ;; *) return 1 ;; esac
+  case "$w" in *\\*|*'$'*|*/*|*..*|*"${EGRESS_SENT}"*) return 1 ;; esac
+  egress_split_at '{' "$w"  # linear: brace
+  [ "$EGRESS_SPN" -eq 1 ] || return 1
+  pre="${EGRESS_SP[0]}"; rest="${EGRESS_SP[1]}"
+  case "$pre" in *'}'*) return 1 ;; esac
+  egress_split_at '}' "$rest"
+  [ "$EGRESS_SPN" -eq 1 ] || return 1
+  mid="${EGRESS_SP[0]}"; post="${EGRESS_SP[1]}"
+  case "$mid" in *,*) ;; *) return 1 ;; esac
+  egress_split_at ',' "$mid"
+  EGRESS_BW=()
+  for alt in "${EGRESS_SP[@]}"; do
+    if [ -n "${pre}${alt}${post}" ]; then
+      EGRESS_BW[$k]="${pre}${alt}${post}"
+      k=$(( k + 1 ))
+    fi
+  done
+  [ "$k" -gt 0 ] || return 1
+  EGRESS_RV=( "${EGRESS_BW[@]}" )
+  EGRESS_RVN="$k"
+  EGRESS_RVCH=1
+  return 0
+}
+E007_NG_BEFORE
+# e007_ng_out <lib> <locale> <out> — the brace step of <lib> over every word and group.
+e007_ng_out() {
+  LC_ALL="$2" /bin/bash "${E007_N_R}/ng-eval.sh" "$1" "${E007_N_R}/in" "$3"
+}
+E007_NG_M1="${E007_W_BASE}/ngm1"; e007_n_copy "$E007_NG_M1" '${#mid} - EGRESS_SPN )) -le 65536 ]' '${#mid} - EGRESS_SPN )) -lt 65536 ]'; _ng_ecw="$E007_N_CW"
+E007_NG_M2="${E007_W_BASE}/ngm2"; e007_n_copy "$E007_NG_M2" '(${#pre} + ${#post})' '(${#pre})'; _ng_ecw="${_ng_ecw}${E007_N_CW}"
+E007_NG_M3="${E007_W_BASE}/ngm3"; e007_n_copy "$E007_NG_M3" '(${#pre} + ${#post})' '(${#post})'; _ng_ecw="${_ng_ecw}${E007_N_CW}"
+_ng_why=""; _ng_k=0; _ng_p=0
+if [ "$_ng_ecw" = 000 ]; then
+  e007_n_lift "$E007_W_SRC" "${E007_N_R}/ng-ship.sh" egress_split_at egress_brace_words
+  { e007_n_lift "$E007_W_SRC" "${E007_N_R}/ng-split.sh" egress_split_at; /bin/cat "${E007_N_R}/ng-split.sh" "${E007_N_R}/ng-before.sh"; } > "${E007_N_R}/ng-old.sh"
+  for _ng_loc in en_US.UTF-8 C; do
+    e007_ng_out "${E007_N_R}/ng-ship.sh" "$_ng_loc" "${E007_N_R}/ng-out-ship" || _ng_why="${_ng_why} [${_ng_loc}] the shipped step did not run;"
+    e007_ng_out "${E007_N_R}/ng-old.sh" "$_ng_loc" "${E007_N_R}/ng-out-old" || _ng_why="${_ng_why} [${_ng_loc}] the code before did not run;"
+    # Within the bound: every record equal. Past it: the shipped step returns 1 with nothing built, the code before 0.
+    _ng_cmp="$(/usr/bin/python3 -c 'import sys
+def recs(p):
+    out = {}; cur = None
+    for line in open(p, "rb").read().split(b"\n"):
+        if line.startswith(b"== "):
+            cur = line.split(b" ")[1]; out[cur] = [line]
+        elif cur is not None:
+            out[cur].append(line)
+    return out
+a, b = recs(sys.argv[1]), recs(sys.argv[2]); bad = 0; past = 0
+for k in a:
+    if k.startswith(b"g-past-"):
+        past += 1
+        if not (a[k][0].split(b" ")[2:] == [b"1", b"0", b"0", b"0"] and b[k][0].split(b" ")[2] == b"0"):
+            bad += 1
+    elif a[k] != b.get(k):
+        bad += 1
+print("%d %d %d" % (len(a), past, bad))' "${E007_N_R}/ng-out-ship" "${E007_N_R}/ng-out-old")"
+    _ng_k="${_ng_cmp%% *}"; _ng_r="${_ng_cmp#* }"; _ng_p="${_ng_r%% *}"
+    [ "${_ng_r#* }" = 0 ] || _ng_why="${_ng_why} [${_ng_loc}] ${_ng_r#* } words differ from the code before where they must not;"
+    for _ng_m in "$E007_NG_M1" "$E007_NG_M2" "$E007_NG_M3"; do
+      e007_n_lift "${_ng_m}/mut.sh" "${E007_N_R}/ng-near.sh" egress_split_at egress_brace_words
+      e007_ng_out "${E007_N_R}/ng-near.sh" "$_ng_loc" "${E007_N_R}/ng-out-near" || true
+      /usr/bin/cmp -s "${E007_N_R}/ng-out-ship" "${E007_N_R}/ng-out-near" \
+        && _ng_why="${_ng_why} [${_ng_loc}] near miss ${_ng_m##*/} reads like the shipped step (the comparison cannot see a difference);"
+    done
+  done
+  [ "$_ng_k" -ge 150 ] && [ "$_ng_p" = 6 ] || _ng_why="${_ng_why} only ${_ng_k} words, ${_ng_p} of them past the bound, were read;"
+else
+  _ng_why=" the near misses could not be built (${_ng_ecw}; 0 = built);"
+fi
+if [ -z "$_ng_why" ]; then
+  e007_d_pass "AC-E007-NG-EQ: the brace step equals the code before it on ${_ng_k} words and groups within its bound in UTF-8 and C, returns 1 and builds nothing on the ${_ng_p} past it, and three near misses at the bound each differ"
+else
+  e007_d_fail "AC-E007-NG-EQ: the brace step equals the code before it within its bound, and reads a group past it as written" "$_ng_why"
+fi
+# e007_ng_timed <label> <arm> <shape> <pre|post> — the ratio arms on a brace group whose words share a long prefix
+# (or suffix), half the command, at 10, 20, 40 and 80 KB in both locales, against its twin, the same command
+# with the group's opening brace an ordinary letter, which the brace step leaves at once.
+e007_ng_timed() {
+  local kb loc
+  for kb in 10 20 40 80; do
+    /usr/bin/awk -v n="$(( kb * 1024 ))" -v k="$4" 'BEGIN { x = "x"; while (length(x) < n / 2) x = x x; x = substr(x, 1, int(n / 2))
+      g = "b,"; while (length(g) < 2 * (int(n / 4) - 4)) g = g g; g = substr(g, 1, 2 * (int(n / 4) - 4)) "c}"
+      if (k == "pre") { s = x "{" g } else { s = "{" g x }
+      printf "%s gh api repos/o/r", s > ARGV[1]; t = s; sub(/\{/, "x", t); printf "%s gh api repos/o/r", t > ARGV[2] }' \
+      "${E007_N_R}/$3-${kb}.cmd" "${E007_N_R}/$3-${kb}.twin"
+    for loc in en_US.UTF-8 C; do
+      E007_N_K=$(( E007_N_K + 1 ))
+      e007_n_ratio "$E007_W_S" "$loc" 3 "${E007_N_R}/$3-${kb}.cmd" "${E007_N_R}/$3-${kb}.twin"
+      if [ "$E007_N_OK" = 1 ]; then
+        e007_d_pass "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${E007_N_BOUND} times its neutral twin, inside the budget, and both are allowed"
+      else
+        e007_d_fail "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${E007_N_BOUND} times its neutral twin, inside the budget, and both are allowed — measured ratio ${E007_N_RATIO}, bound ${E007_N_BOUND}" \
+          "\"stopped\" is the watchdog ending a run at the budget; a ratio within the bound fails only on a refusal"
+      fi
+    done
+  done
+}
+e007_ng_timed "a brace group whose words share a long prefix" "AC-E007-NG" bracepre pre
+e007_ng_timed "a brace group whose words share a long suffix" "AC-E007-NG" bracesuf post
+e007_n_ctl "AC-E007-NG-CTL" "$E007_NG_NB" bracepre 10 en_US.UTF-8 "the brace step without its bound"
+
 # ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #
 # The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
