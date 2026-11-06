@@ -4326,6 +4326,61 @@ e007_n_timed "a long upper-case command word" "AC-E007-NH" upper 'GH' 'a' ' api 
 e007_n_timed "a long escaped command word" "AC-E007-NH" escaped 'g\h' '\a' ' api repos/o/r' 'g\h' '\a' '/x api repos/o/r'
 e007_n_ctl "AC-E007-NH-CTL" "$E007_NH_B" upper 40 en_US.UTF-8 "the walk's two basename reads"
 
+# ---- AC-E007-NH-LEN (#8315, DT pass 11): the head walk's eight-character stand-in, pinned ----
+#
+# The walk reads a long command word's basename from its last eight characters (the line marked
+# `# linear: head-word`) and tests it against the keyword list and the prefix-word list of the case
+# statement right below that line. Those eight characters stand in for the basename only while every
+# word in the two lists has seven characters or fewer: a basename of eight or more is then read as
+# eight characters that match no listed word, which is what the removal it replaced would find. A
+# listed word of eight characters would match the tail of any longer basename that ends in it, so a
+# long command word that is neither a keyword nor a prefix word would be stepped over as one, and the
+# write behind it read at the wrong position. NH-EQ compares the hook against the code before it on
+# the words the lists hold today, so it cannot see a longer word added later. This arm protects the
+# stand-in's assumption: it reads the two lists from the hook source and fails if any word in them is
+# longer than seven characters. Its sensitivity limb runs the same check on the list with one
+# eight-character word added, which must report that word; and the read must find both lists, so a
+# read that finds nothing cannot pass.
+# e007_hwl_lists <hook source> — the words of the walk's case arms under the head-word line, one a
+# line, each arm opened by a line reading ARM.
+e007_hwl_lists() {
+  /usr/bin/awk '
+    index($0, "# linear: head-word") { seen = 1; next }
+    seen && !open && index($0, "case \"${egress_raw##*/}\" in") { open = 1; match($0, /^ */); ind = RLENGTH; next }
+    open {
+      match($0, /^ */)
+      if (RLENGTH == ind && $0 ~ /^ *esac/) exit
+      if (RLENGTH == ind + 2 && $0 ~ /\)[ \t]*$/) {
+        line = $0; sub(/^ */, "", line); sub(/\)[ \t]*$/, "", line)
+        if (line == "*") next
+        print "ARM"
+        n = split(line, w, "|")
+        for (i = 1; i <= n; i++) { gsub(/\047/, "", w[i]); print w[i] }
+      }
+    }
+  ' "$1"
+}
+# e007_hwl_long <words, one a line> — each word longer than seven characters, followed by a blank.
+e007_hwl_long() { /usr/bin/awk '$0 != "ARM" && length($0) > 7 { printf "%s ", $0 }' <<<"$1"; }
+_hwl_all="$(e007_hwl_lists "${E007_D_HOOK_SRC}/block-egress.sh")"
+_hwl_arms="$(/usr/bin/awk '$0 == "ARM" { n++ } END { print n + 0 }' <<<"$_hwl_all")"
+_hwl_n="$(/usr/bin/awk '$0 != "ARM" && $0 != "" { n++ } END { print n + 0 }' <<<"$_hwl_all")"
+_hwl_over="$(e007_hwl_long "$_hwl_all")"
+_hwl_ctl="$(e007_hwl_long "${_hwl_all}
+abcdefgh")"
+_hwl_why=""
+[ "$_hwl_arms" -ge 2 ] || _hwl_why="${_hwl_why} the walk's keyword and prefix lists were not found under the head-word line (${_hwl_arms} found);"
+[ -z "$_hwl_over" ] || _hwl_why="${_hwl_why} a listed word is longer than seven characters: ${_hwl_over};"
+case " ${_hwl_ctl}" in
+  *" abcdefgh "*) ;;
+  *) _hwl_why="${_hwl_why} sensitivity: the list with an eight-character word added reads [${_hwl_ctl}], without that word;" ;;
+esac
+if [ -z "$_hwl_why" ]; then
+  e007_d_pass "AC-E007-NH-LEN: every word the walk's keyword-and-prefix test compares a long word's last eight characters against has at most seven characters (${_hwl_n} words in ${_hwl_arms} lists, read from the hook source), and the same check on the list with an eight-character word added reports that word"
+else
+  e007_d_fail "AC-E007-NH-LEN: every word the walk's keyword-and-prefix test compares a long word's last eight characters against has at most seven characters" "$_hwl_why"
+fi
+
 # ---- AC-E007-NL*, -NU*, -NG* (#8315, DT pass 9): two more basename tests, and the brace step's bound ----
 #
 # Three more places of the -007 scanner grew faster than the command on bash 3.2. The look-ahead behind a
