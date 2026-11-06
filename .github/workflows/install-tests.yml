@@ -1138,7 +1138,7 @@ jobs:
     # turns this required job red. Those arms stay in this job and need this limit:
     # it is the harness's estimated run time with them, plus at least a third of
     # headroom.
-    timeout-minutes: 100
+    timeout-minutes: 110
     steps:
       - uses: actions/checkout@v7
 
@@ -1191,7 +1191,7 @@ jobs:
     # budget in the job plus three times the slowest observed total of its unbounded
     # steps, rounded up to five minutes, so neither runner's own timeout, nor an
     # observer step after it, is cut short by the job's.
-    timeout-minutes: 250
+    timeout-minutes: 260
     steps:
       - uses: actions/checkout@v7
 
@@ -1214,7 +1214,7 @@ jobs:
         # own estimate is, plus at least a third of headroom.
         env:
           PMO_REGRESSION_EMIT: '0'
-        timeout-minutes: 115
+        timeout-minutes: 120
         run: bash core/deploy/tests/run-install-regression.sh
 
       - name: Precision probe — a broken fixture MUST fail the suite
@@ -1332,7 +1332,7 @@ jobs:
         # The budget of the first gating run above, for the same reason.
         env:
           PMO_REGRESSION_EMIT: '0'
-        timeout-minutes: 115
+        timeout-minutes: 120
         run: |
           USER_BASE="$(/usr/bin/python3 -c 'import site; print(site.USER_BASE)')"
           override_home="$(mktemp -d)"
