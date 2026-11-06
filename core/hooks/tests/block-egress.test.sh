@@ -3729,13 +3729,22 @@ fi
 # hook instead, on commands that reach the walk). Its timed arms run the whole sandbox hook under the
 # watchdog on each shape that reaches its step, at 10, 20, 40 and 80 KB in both locales, beside a neutral
 # twin of the same length whose long run the step does not read: the least of three interleaved runs of
-# each keeps the shape within E007_N_BOUND times its twin, inside the budget, and both allowed. Its CTL arm
-# is the instrument's sensitivity: the copy with the code before is beyond the bound on the step's shape.
+# each keeps the shape within E007_N_BOUND times its twin (NB's within its own bound, E007_NB_BOUND), inside
+# the budget, and both allowed. Its CTL arm is the instrument's sensitivity: the copy with the code before
+# is beyond the block's bound on the step's shape.
 # A passing line prints the verdict and the bound, a failing one the measured ratio and the bound; no
 # line prints a time.
 E007_N_R="${E007_W_BASE}/n"
 /bin/mkdir -p "${E007_N_R}/in"
 E007_N_BOUND="${E007_N_BOUND:-2.0}"
+# NB's own bound (DT pass 10). The long brace group's words are built and normalized on the shape and not on
+# its twin, so the shape costs a near-constant multiple of the twin that sits close to 2.0, and a run on a
+# loaded host could read it over E007_N_BOUND with no change behind it. Set from measurement on the head:
+# every NB cell in both locales over ten interleaved rounds, beside other suites running on the same host.
+# Each cell's reading moved by at most about 0.3 across the rounds, and every reading lay between about 1.5
+# and about 2.0; 3.0 leaves about half again the largest reading as headroom for slower, noisier runners,
+# and the NB control, the code before pass 8, still runs to the watchdog, far beyond it.
+E007_NB_BOUND="${E007_NB_BOUND:-3.0}"
 E007_N_K=0
 # The timer: the least of <reps> interleaved runs of the hook on a shape and on its twin, each read by a
 # blocking wait under a timer watchdog that stops the run and its process group at the limit. Prints the
@@ -3770,19 +3779,19 @@ if None in S or None in W:
     print("-1 -1 -1")
 else:
     print("%.4f %.4f %d" % (min(x[0] for x in S), min(x[0] for x in W), max(x[1] for x in S + W)))'
-# e007_n_ratio <sandbox> <locale> <reps> <shape-file> <twin-file> — E007_N_OK is 1 when both run inside the
-# budget and are allowed and the shape costs at most E007_N_BOUND times its twin; E007_N_OVER is 1 when the
-# watchdog stopped a run, or both were allowed and the shape costs more than that; E007_N_RATIO is the
-# shape's cost over its twin's, or "stopped".
+# e007_n_ratio <sandbox> <locale> <reps> <shape-file> <twin-file> [<bound>] — E007_N_OK is 1 when both run
+# inside the budget and are allowed and the shape costs at most <bound> (E007_N_BOUND when none is given)
+# times its twin; E007_N_OVER is 1 when the watchdog stopped a run, or both were allowed and the shape costs
+# more than that; E007_N_RATIO is the shape's cost over its twin's, or "stopped".
 e007_n_ratio() {
-  local out s w x
+  local out s w x b="${6:-$E007_N_BOUND}"
   /usr/bin/printf '%s' enforce > "$1/.claude/hooks/.mode"
   out="$(/usr/bin/python3 -c "$E007_N_PY" "$1" "$2" "$3" "$(( E007_T_LIMIT / 10 ))" "$4" "$5" 2>/dev/null)" || out="-1 -1 -1"
   s="${out%% *}"; out="${out#* }"; w="${out%% *}"; x="${out#* }"
   E007_N_OK=0; E007_N_OVER=0; E007_N_RATIO=stopped
   if [ "$s" = -1 ]; then E007_N_OVER=1; return 0; fi
   E007_N_RATIO="$(/usr/bin/awk -v s="$s" -v w="$w" 'BEGIN { printf "%.2f", (w > 0 ? s / w : 0) }')"
-  if /usr/bin/awk -v s="$s" -v w="$w" -v b="$E007_N_BOUND" 'BEGIN { exit !(w > 0 && s <= b * w) }'; then
+  if /usr/bin/awk -v s="$s" -v w="$w" -v b="$b" 'BEGIN { exit !(w > 0 && s <= b * w) }'; then
     [ "$x" != 0 ] || E007_N_OK=1
   else
     [ "$x" != 0 ] || E007_N_OVER=1
@@ -3796,33 +3805,35 @@ e007_n_cmd() {
     while (length(r) < m) r = r r
     printf "%s", h substr(r, 1, m) t }' > "$5"
 }
-# e007_n_timed <label> <arm> <shape> <head> <unit> <tail> <twin-head> <twin-unit> <twin-tail> — the shape's
-# ratio arms at 10, 20, 40 and 80 KB in both locales against its twin, numbered on from E007_N_K.
+# e007_n_timed <label> <arm> <shape> <head> <unit> <tail> <twin-head> <twin-unit> <twin-tail> [<bound>] — the
+# shape's ratio arms at 10, 20, 40 and 80 KB in both locales against its twin, numbered on from E007_N_K, each
+# held to <bound> (E007_N_BOUND when none is given).
 e007_n_timed() {
-  local kb loc
+  local kb loc b="${10:-$E007_N_BOUND}"
   for kb in 10 20 40 80; do
     e007_n_cmd $(( kb * 1024 )) "$4" "$5" "$6" "${E007_N_R}/$3-${kb}.cmd"
     e007_n_cmd $(( kb * 1024 )) "$7" "$8" "$9" "${E007_N_R}/$3-${kb}.twin"
     for loc in en_US.UTF-8 C; do
       E007_N_K=$(( E007_N_K + 1 ))
-      e007_n_ratio "$E007_W_S" "$loc" 3 "${E007_N_R}/$3-${kb}.cmd" "${E007_N_R}/$3-${kb}.twin"
+      e007_n_ratio "$E007_W_S" "$loc" 3 "${E007_N_R}/$3-${kb}.cmd" "${E007_N_R}/$3-${kb}.twin" "$b"
       if [ "$E007_N_OK" = 1 ]; then
-        e007_d_pass "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${E007_N_BOUND} times its neutral twin, inside the budget, and both are allowed"
+        e007_d_pass "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${b} times its neutral twin, inside the budget, and both are allowed"
       else
-        e007_d_fail "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${E007_N_BOUND} times its neutral twin, inside the budget, and both are allowed — measured ratio ${E007_N_RATIO}, bound ${E007_N_BOUND}" \
+        e007_d_fail "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${b} times its neutral twin, inside the budget, and both are allowed — measured ratio ${E007_N_RATIO}, bound ${b}" \
           "\"stopped\" is the watchdog ending a run at the budget; a ratio within the bound fails only on a refusal"
       fi
     done
   done
 }
-# e007_n_ctl <arm> <copy> <shape> <kb> <locale> <what> — the copy with the code before its change is beyond
-# the bound on the shape: the instrument sees the step's cost.
+# e007_n_ctl <arm> <copy> <shape> <kb> <locale> <what> [<bound>] — the copy with the code before its change is
+# beyond <bound> (E007_N_BOUND when none is given) on the shape: the instrument sees the step's cost.
 e007_n_ctl() {
-  e007_n_ratio "$2" "$5" 2 "${E007_N_R}/$3-$4.cmd" "${E007_N_R}/$3-$4.twin"
+  local b="${7:-$E007_N_BOUND}"
+  e007_n_ratio "$2" "$5" 2 "${E007_N_R}/$3-$4.cmd" "${E007_N_R}/$3-$4.twin" "$b"
   if [ "$E007_N_OVER" = 1 ]; then
-    e007_d_pass "$1: the copy with $6 as before is beyond ${E007_N_BOUND} times its neutral twin on the $3 shape at $4 KB in $5 — the instrument sees its cost"
+    e007_d_pass "$1: the copy with $6 as before is beyond ${b} times its neutral twin on the $3 shape at $4 KB in $5 — the instrument sees its cost"
   else
-    e007_d_fail "$1: the copy with $6 as before is beyond the bound on the $3 shape (BROKEN PROBE) — measured ratio ${E007_N_RATIO}, bound ${E007_N_BOUND}" \
+    e007_d_fail "$1: the copy with $6 as before is beyond the bound on the $3 shape (BROKEN PROBE) — measured ratio ${E007_N_RATIO}, bound ${b}" \
       "a copy within the bound cannot show the timed arms measure anything"
   fi
 }
@@ -4122,8 +4133,9 @@ else
   e007_d_fail "AC-E007-NB-EQ: the brace step, the escape step over a group's words and the splice equal the code before them byte for byte" \
     "the copies could not be built (put back, then each near miss: ${_nb_cw}; 0 = built)"
 fi
-e007_n_timed "the long brace group" "AC-E007-NB" brace '{gh,' 'a,' 'a} api repos/o/r' 'gh api repos/o/r {' 'a,' 'a}'
-e007_n_ctl "AC-E007-NB-CTL" "$E007_NB_B" brace 40 en_US.UTF-8 "the brace step, the escape step and the splice"
+# NB's ratio arms and its control are held to E007_NB_BOUND, its own bound; every other block keeps E007_N_BOUND.
+e007_n_timed "the long brace group" "AC-E007-NB" brace '{gh,' 'a,' 'a} api repos/o/r' 'gh api repos/o/r {' 'a,' 'a}' "$E007_NB_BOUND"
+e007_n_ctl "AC-E007-NB-CTL" "$E007_NB_B" brace 40 en_US.UTF-8 "the brace step, the escape step and the splice" "$E007_NB_BOUND"
 
 # -- NR: the redirection-word test on a long word before a redirection --
 E007_N_K=0
