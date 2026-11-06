@@ -2,7 +2,7 @@
 title: Release Plan — release-usage-measured-right (Usage measured right)
 type: release-plan
 plan_type: release
-status: IN PROGRESS
+status: ACTIVE
 release: versioned (bump-class minor; provisional display v5.02; the concrete number binds at the Stage-12 atomic claim)
 milestone: release-usage-measured-right
 release_class: novel
