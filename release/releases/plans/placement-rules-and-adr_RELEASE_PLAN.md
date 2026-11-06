@@ -3,7 +3,7 @@ title: Release Plan — placement-rules-and-adr (Non-tracked data is homed by it
 type: release-plan
 plan_type: release
 status: ACTIVE
-release: versioned (bump-class minor; provisional display v5.02; the concrete number binds at the Stage-12 atomic claim)
+release: versioned (bump-class minor; provisional display v5.03, re-versioned at Stage 12 because v5.02 was claimed by the framing-altitude-and-slip-model release; the concrete number binds at the Stage-12 atomic claim)
 milestone: placement-rules-and-adr
 release_class: cross-cutting
 reversibility: EXPENSIVE once ratified / Confidence MEDIUM — one superseding ADR, one standard, one config selector and wording on governance surfaces, on one branch with one merge. Before merge every slice drops by branch revert (CHEAP); after merge and before the Stage-13 ratification a revert of the merge restores every file, because nothing moves and no runtime write path changes (MODERATE); once the ADR is ratified it changes only by a superseding ADR (EXPENSIVE). A claimed version tag is retained and recorded, never deleted.
@@ -12,7 +12,7 @@ reversibility: EXPENSIVE once ratified / Confidence MEDIUM — one superseding A
 
 **Milestone:** `placement-rules-and-adr` (milestone 428), wave 1 of the parent epic #8005. The Stage-4 planning sub-task **#8663** carries the approved plan (three parts), the Stage-4 gate's Decision Recorded and the Collective Review scope-lock Decision Recorded. The Stage-5 designs and their independent Phase A6.5 adversarial reviews are on **#8665** (#8016), **#8666** (#6627), **#8668** (#8017) and **#8670** (#8018). This file is Engineering Commit 0, authored by the first Stage-6 spoke on **#8671** (#8016).
 
-**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v5.02`** (the next-free minor recomputed at this commit). The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-primary while in flight, and the Header `**Version**` cell carries the double-brace release-version placeholder, which this file reproduces in that cell only.
+**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v5.03`**, the next-free minor recomputed at the Stage-12 pre-merge pass. Commit 0 recomputed `v5.02`, which the `framing-altitude-and-slip-model` release (#8816) claimed after this release's Stage-9 GO (DEV-59). The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-primary while in flight, and the Header `**Version**` cell carries the double-brace release-version placeholder, which this file reproduces in that cell only.
 
 **Topology:** D-C **SINGLE** — one release branch, `release/placement-rules-and-adr`, one pull request opened in **draft** after slice 1 (#8016) lands, one merge into `main`.
 
@@ -31,10 +31,10 @@ reversibility: EXPENSIVE once ratified / Confidence MEDIUM — one superseding A
 | Field | Value |
 |-------|-------|
 | **Version** | {{RELEASE_VERSION}} |
-| **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): one ADR, one reference-tier standard, protocol text inside existing structure and one config key, per the Bump-Class Selection Guide rows "Protocol text addition or modification" and "Reference document addition or update". Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092) |
+| **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): one ADR, one reference-tier standard, protocol text inside existing structure and one config key, per the Bump-Class Selection Guide rows "Protocol text addition or modification" and "Reference document addition or update". Provisional display `v5.03`, recomputed at the Stage-12 pre-merge pass (DEV-59); `v5.02` was re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record) and later claimed by #8816's release; the concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 9 NO-GO return pass: the Q-02 (c) commit to the placement standard (`8fe65dfe`) and these plan records landed; next, the targeted Stage 7 and Stage 8 re-reads, then Stage 9 re-entry |
+| **Status** | Executing — Stage 12 Phase A prepared, after the Stage-9 GO WITH CONDITIONS and the operator's Execute authorization: the record renumbered to the next-free ADR number before `origin/main` was merged (`06ad49ca`), `origin/main` merged with both `gate-efficacy-standard.md` rows kept (`45eb9e4d`), the deferred citations stamped (`7baba489`) and the provisional display re-versioned to `v5.03` in this plan commit (DEV-58 to DEV-60); next, all 24 required checks green on the new head, a fresh `renumber-adr.py --detect`, then the Stage-12 merge |
 | **Branch** | `release/placement-rules-and-adr` |
 | **PR** | #8817 — opened in **draft** at Stage 6 Phase C2 after slice 1; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `placement-rules-and-adr` |
@@ -182,6 +182,32 @@ Answer, verbatim: *"C1 as recommended"*. An inter-stage escalation from Stage 7,
 | CD-1 — the layer of platform working state and leak-risk content | **C1** — they are Layer 2; Rule 1 of `core/rules/operations-bridge.md` gains one scoped clause: platform working state is written by the platform's own runs and its installer |
 
 Applied in `c31b4dd7` (#8018) by the final Stage-6 writer (DEV-54); § Change Description's Key decisions and Downstream impact state it (`793383de`). Recommendation-vs-choice delta: none.
+
+### Stage-9 Plan Review (operator, 2026-11-06)
+
+Two Decision Recorded comments on the Stage-9 sub-task #8690.
+
+**First entry** (`issuecomment-6677494675`). Answer, verbatim: *"NO-GO, fix Q-02 (c)"*.
+
+| Decision | Chosen |
+|---|---|
+| Verdict | **NO-GO, scoped** — return to Stage 6 for one bounded commit, then targeted Stage 7 and Stage 8 re-reads and a Stage 9 re-entry |
+| Q-02 — the 12 hook-tier allowlists the placement standard's register did not name | **(c)** — name them by role in one clause of the placement standard and leave their class to the consumer-routing card; Q-01's "and its backups" rides the same commit |
+
+Applied in `8fe65dfe` (#8017) and the return-pass plan commit (DEV-56, DEV-57).
+
+**Second entry** (`issuecomment-6686837693`), on head `57291dd9`. Answer, verbatim: *"GO with conditions"*, accepting the evidence's recommended package (`issuecomment-6678777029`).
+
+| Decision | Chosen |
+|---|---|
+| Verdict | **GO WITH CONDITIONS** — MODERATE until the Stage-13 ratification, then EXPENSIVE; confidence MEDIUM |
+| CIAC-7 | graded **MET** on its named evidence: exactly one expected R6 row, ADR-141's whole edge, whose status flip lands at Stage 13 Phase A13 |
+| R-16 | re-dispositioned as the evidence recommends |
+| Q-04 (#8017) | route **(a)** — accepted as covered by S-23; its census-input relay to #8029 is held with the other cross-milestone writes for Stage 13 |
+| Q-07 (#8018) | route **(b)** — a recorded residual, Rule 1 governing |
+| The A7 citation and the dim-12 acceptance | as the evidence states |
+
+Conditions carried to Stage 12: all 24 required contexts green on the final head before the merge; this pre-merge plan update, which refreshes the Status cell and records Q-02 (c) and this verdict here; the remaining conditions exactly as the evidence's Recommended verdict lists them. Recommendation-vs-choice delta: none.
 
 ---
 
@@ -902,6 +928,9 @@ Each is recorded in § Decision Record.
 | DEV-55 | 7 → 6 | § Release Outcome Statement's Success Indicator is re-transcribed from the milestone description as updated after Commit 0: "the five (or six) reconciled surfaces" reads "the six reconciled surfaces", the description's only change to that statement. The AFTER paragraph keeps DEV-18's rooted spelling | the hub-ruled count cascade; the milestone description | Cosmetic |
 | DEV-56 | 9 → 6 | Q-02 lands as option (c), the operator's choice at the Stage-9 gate, in a #8017 commit. The surface register gains S-44, one `Undecided` row for the twelve hook-tier allowlists the installer provisions into the workspace's agent-config root. Its Surface cell names them by role — the eight security-hook allowlists, the reference-durability allowlist, the cleanup tool's protect list and the two deploy-check escape lists — and its Resolves-today cell spells their leaves, as S-07 spells its own, so the register's file-level lookup reads them. The consumer-routing card decides their class, and its `## References` line names S-44. The completeness sentence and the `code` arm are unchanged and now hold for these twelve. Q-01 rides the same commit: S-10 reads "Roster clarification queue and its backups". The register reads 44 rows, four `Undecided`, and § Change Description's two count lines follow in the plan commit. `[REFCASCADE: python re '43-row\|43 rows\|three Undecided\|S-01 to S-43' over this file and PR #8817's body → pre 2 current-state in this file (the Outcome and the #8017 row) / post 0; the body's 2 current-state hits are held for the hub's body edit; historical hits classified, not swept: § Slice 3, Stage-7 iteration 2's shape row, DEV-52, DEV-53 and the body's iteration-2 table row]` | the Stage-9 NO-GO record on #8690; the Stage-8 Q-02 and Q-01 findings on #8688 | Major |
 | DEV-57 | 9 → 6 | The plan records that the Stage-9 evidence names land in one plan commit. § Decision Record gains `### CD-1 decision (operator, 2026-11-06)`, so § Change Description's Key decisions lead holds for its CD-1 bullet. § Verification Evidence gains `### Slice 1 — #8016 — Stage 6 C4`, transcribed from the slice-1 Stage-6 output on #8671 rather than re-run, with the new record's number left out as § ADR number requires. The Header `Status` cell reads the return pass. #8016's Stage-7 F-02, the slug token § ADR number reproduces, stays accepted as recorded and is not batched here | the Stage-9 evidence on #8690 (open operator items 3 and 4); #8016's Stage-7 F-01 on #8678; route (a) of the slice-3 touch-up output on #8675 | Minor |
+| DEV-58 | 12 | `origin/main` is merged into the release branch before the release merges (A.5.3, `45eb9e4d`): 9 commits, the `framing-altitude-and-slip-model` release (#8816), which merged at `1c985c2f` after this release's Stage-9 GO. One path conflicted, `core/standards/gate-efficacy-standard.md`, in two append collisions at one insertion point each: the gate-coverage register (main's class 3-O row for the framing-slip check, this branch's class 3-O row for the new-surface checklist) and the change table (one `—` row from each side). Both are resolved by keeping both rows, main's first and this branch's after, with no other edit. The register's class 3-O rows read 27 (25 at the merge base, 26 on each side), and the file's diff against `origin/main` is this branch's own +2 / −0. No count of those rows is stated anywhere, so nothing cascades | the A.5.5 [SCOPE CHANGE] on #8693 (`issuecomment-6687525597`) and the operator's Decision Recorded, option (b) (`issuecomment-6688361869`) | Minor |
+| DEV-59 | 12 | The provisional display moves from `v5.02` to `v5.03` (A.5.6c). `v5.02` is tagged at `1c985c2f`, claimed by #8816's release, and `claim-version.sh --bump minor --dry-run` on the new head prints `would claim v5.03`; the tag, published-Release and ledger arms read `v5.03` unoccupied. The front-matter `release:` line, the `**Version identity:**` line and the `**Bump Class**` cell carry the new display. The Header `**Version**` cell keeps the release-version placeholder, and the number still binds only at the Stage-12 atomic claim. Kept as recorded: § Commit-0 Version Re-Verify Record, the Stage-4 D-Version determination, the In-Flight Release Roster row, R-16 and § Slice 2's measured `since` row. PR #8817's title carries no version, and its body's one `v5.02` is the Commit-0 record, so neither is edited. `core/config/operator-toml-schema.json` still declares `corpus_home` `since` `5.02`; that file is outside this pass's edit set, so the value is surfaced to the hub on #8693. `[REFCASCADE: python re '(?i)provisional display[^v\n]{0,8}v5\.02' over this file → pre 3 (the front-matter line, the Version identity line, the Bump Class cell) / post 0; 8 historical 5.02 lines classified, not swept]` | A.5.6c; the [SCOPE CHANGE] and the operator's option (b) on #8693 | Minor |
+| DEV-60 | 12 | The record binds as ADR-231. `renumber-adr.py --detect` read ADR-230 `DUPLICATE MAINLINE next=231`, because #8816's framing record took 230 on the mainline. A.5.7c therefore ran `--renumber 230 231 --apply` (`06ad49ca`) **before** `origin/main` was merged, not after. R3 sweeps whole files in the branch diff, and once main is merged in, `gate-efficacy-standard.md` sits in that diff carrying main's own literal ADR-230 citations of the framing record, which a post-merge sweep would rewrite. The seven steps: R1 PROCEED; R2 `git mv`; R3 9 citations (ADR-017, ADR-032, ADR-046 and ADR-096 one each, the record two, `core/ADRs/README.md` three) with `R3 REVIEW` 0 sites; R4 the README entry and its § Renumber log row, the projected index unchanged; R5 the provenance note; R6 zero dangling; R7 no package affected. A.5.7e then stamped the 23 deferred citations across 16 files (`7baba489`): `--stamp --check` reads 0 residual tokens, main's 12 ADR-230 lines are byte-identical, and `check-adr-numbers.py` passes 001..231. § ADR number stays as written at Commit 0; its stamped sentence and DEV-58 to DEV-60 now carry the bound number. The `sequencing-layer-foundation` release (#8811) still claims 231 on its own branch, so the tail re-runs `--detect` immediately before the merge | A.5.7; the [SCOPE CHANGE] and the operator's option (b) on #8693 | Minor |
 
 ---
 
