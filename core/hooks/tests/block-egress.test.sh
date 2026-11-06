@@ -3087,15 +3087,14 @@ e007_sp_arm "AC-E007-SP-F5: \$'g'\$'h' api -X POST <unlisted> — the verb as tw
 # ---- AC-E007-T* (#8315, DT pass 2): the fast path's cost is linear in the command ----
 #
 # The fast-path strip runs on every Bash command that reaches -007, before the gh decision, so
-# its cost bounds the whole hook on any command. On bash 3.2 a global pattern substitution over
-# the whole command grows superlinearly once the command carries a character it replaces: the
-# bracket class grew about 7x per doubling, and three single-character substitutions about 8x
-# (a smaller constant, the same growth). Past a file-sized command the hook outlasted the
-# runtime's command-hook timeout, and a timed-out PreToolUse hook does not block. The strip is
-# now one pass of tr in the C locale, which deletes the same three bytes. EQ holds its output
-# byte for byte against the bracket class on a dense input, beside a near miss that keeps `$`
-# and must differ. T1 to T6 run the whole sandbox hook on a large benign command (no gh, one `$`
-# a line) at 10, 20 and 40 KB, in en_US.UTF-8 and in C, under a watchdog: each must finish
+# its cost bounds the whole hook on any command, and a PreToolUse hook that outlasts the
+# runtime's command-hook timeout does not block. On bash 3.2 a global pattern substitution over
+# the whole command grows faster than the command once the command carries a character it
+# replaces, the bracket class and three single-character substitutions alike, so the strip is
+# now one linear pass: one pass of tr in the C locale, which deletes the same three bytes. EQ
+# holds its output byte for byte against the bracket class on a dense input, beside a near miss
+# that keeps `$` and must differ. T1 to T6 run the whole sandbox hook on a large benign command
+# (no gh, one `$` a line) at 10, 20 and 40 KB, in en_US.UTF-8 and in C, under a watchdog: each must finish
 # inside the budget and allow. T-CTL is the instrument's sensitivity: the same hook with its
 # fast-strip line set back to the bracket class, on the 10 KB command in UTF-8, must be stopped
 # at the budget. The budget is a ceiling with headroom for a loaded host, not the expected time.
