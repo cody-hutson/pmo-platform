@@ -1,5 +1,5 @@
 ---
-title: ADR-230 — BLOCK-EGRESS-007 reads a respelled gh api write as the shell resolves it, and rungs it by the position the shell resolves it to
+title: ADR-232 — BLOCK-EGRESS-007 reads a respelled gh api write as the shell resolves it, and rungs it by the position the shell resolves it to
 status: Proposed — authored at Stage 6 Engineering for the guards-judge-every-spelling-alike release. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter status field, never inferred from milestone closure.
 date: 2026-11-04
 release: guards-judge-every-spelling-alike
@@ -14,7 +14,7 @@ source_observations:
   - "At this card's Stage-6 entry the egress suite read 423 of 423, and with this card's arms and corpus rows run against the pre-change hook in the worktree's hook layout it read 89 failures out of 528, every one of them this card's own arm or the re-pointed pin; with the change in place it read 528 of 528."
 ---
 
-# ADR-230 — BLOCK-EGRESS-007 reads a respelled write as the shell resolves it, and rungs it by the resolved position
+# ADR-232 — BLOCK-EGRESS-007 reads a respelled write as the shell resolves it, and rungs it by the resolved position
 
 ## Status
 
@@ -23,6 +23,8 @@ source_observations:
 **Numbering provenance.** This record was authored at the next free number computed from the mainline anchor plus one, advanced past the slot the release's own first record already holds on this same branch. A branch claim is detection-only and never binds for mainline purposes, but a same-branch claim is a file that already exists, and taking its number would be a duplicate rather than a claim. Citations use the slug token `{{ADR:egress-respelling-takes-the-resolved-positions-rung}}`, which carries no number shape and resolves at the claim.
 
 **Extends ADR-226 and keeps its constraints.** ADR-226 decided that the egress rule's head walk stays its own, that a gh api write behind a prefix command is located by a domain-test look-ahead and recorded at the rule's current phase, and that no phase constant moves. All of that stands. This record decides how the rule reads a write whose verb, position or flag is written in a spelling the shell resolves to the plain one.
+
+**Numbering provenance — `230 → 232`.** Held **ADR-230** branch-local; renumbered to **ADR-232** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 230. In-release citations that read "ADR-230" denote this record.
 
 ## Context
 
