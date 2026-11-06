@@ -766,6 +766,7 @@ Each is recorded in § Decision Record.
 - **CR-3** — the main-checkout carve-out is the enumerated set `/local-state/`, `/analysis/<sub>/`, `/roadmaps/<name>`, held to the hook's static set by a parity check.
 - **CR-4 and CR-5** — the release corpus is tracked repository content, and no non-tracked `corpus_home` value is reserved.
 - **CR-6** — `core/rules/operations-bridge.md` carries the per-file allow-link marker for its rooted link to the standard.
+- **CD-1 = C1** — platform working state and leak-risk content are Layer 2; Rule 1 of `core/rules/operations-bridge.md` names the platform's own runs and its installer as the writers of platform working state (DEV-54).
 
 ### Reversibility
 
@@ -778,7 +779,7 @@ Each is recorded in § Decision Record.
 - **After the merge:** `./deploy.sh --deploy` re-lays the operations-bridge mirror, which Check 9 reads DRIFTED until then; each install's charter picks up the Classification Rule at its next `update.sh`.
 - **Stage 13:** the operator ratifies the record and retires ADR-141, one decision each; the whole-corpus durability lint runs twice on the bound base (one R6 row at the merge, none after A13); G-CL10 records the `placement-member-census` population.
 - **Later waves of #8005** build against the standard — the resolver and switch, the carve-out hook and its parity check, the commit guard, the installer, the needle update, the migrations — and the cleanup wave removes the "until each repository's cutover" clauses.
-- **Open for the operator:** the layer of platform working state (the #8018 review's CD-1, C1 or C2) is undecided; the taxonomy's § 7.4 counts it in Layer 2, so the operations bridge's Rule 1 reads against a hub writing hub state (DEV-42).
+- **Decided by the operator (CD-1 = C1):** platform working state and leak-risk content are Layer 2, as the taxonomy's § 7.4 counts them, and the operations bridge's Rule 1 names the platform's own runs and its installer as the writers of platform working state, so a hub writing hub state no longer reads against it (DEV-54).
 
 ### Cross-references
 
