@@ -117,7 +117,10 @@ anchor restates either one.
 ## Rules for Claude Code
 1. NEVER modify Layer 2 files. They are the Operations domain. The correct response to
    needing one changed is to relaunch the work in the operations workspace, where it is
-   in-domain — not to cross-write from a repo checkout.
+   in-domain — not to cross-write from a repo checkout. Platform working state is the one
+   scoped exception: it is Layer 2, but it is written by the platform's own runs and its
+   installer, so a hub writing its own hub state is that state's writer, not a cross-write
+   into the Operations domain.
 2. Cross-domain reads are read-only. Never write to `projects/` files. Enforced as a
    mode-gated layer-discipline signal (`BLOCK-AUTONOMY-004`), because the target sits
    outside the repository and no write there can reach git. The converse direction — an
