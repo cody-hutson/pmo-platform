@@ -1459,6 +1459,9 @@ fi
 # the 20 KB operand in UTF-8. X-FB holds the fallback: a copy whose sed does not exist refuses a long
 # operand with the shipped hook's message and raises no hook error.
 FSBX_LIMIT="${FSBX_LIMIT_DS:-200}"   # tenths of a second
+# fsbx_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+fsbx_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
 FSBX_BASE="$(/usr/bin/mktemp -d)"
 # fsbx_copy <name> [<sed edit>] — a sandbox copy of the hook, enforcing; prints its hooks directory.
 fsbx_copy() {
@@ -1562,19 +1565,19 @@ for fsbx_loc in en_US.UTF-8 C; do
     fsbx_n=$(( fsbx_n + 1 ))
     fsbx_timed "$FSBX_S" "$fsbx_loc" "${FSBX_BASE}/token-${fsbx_kb}.cmd" "$FSBX_LIMIT"
     if [ "$FSBX_DS" != -1 ] && [ "$FSBX_EXIT" = 2 ]; then
-      /usr/bin/printf 'PASS: %s\n' "AC-FSB-X${fsbx_n}: a read of a ${fsbx_kb} KB quoted operand carrying structure throughout, in ${fsbx_loc}, is refused in ${FSBX_DS} tenths of a second (budget ${FSBX_LIMIT})"; PASS=$((PASS + 1))
+      /usr/bin/printf 'PASS: %s\n' "AC-FSB-X${fsbx_n}: a read of a ${fsbx_kb} KB quoted operand carrying structure throughout, in ${fsbx_loc}, is refused within the budget"; PASS=$((PASS + 1))
     else
-      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X${fsbx_n}: a read of a ${fsbx_kb} KB quoted operand carrying structure throughout, in ${fsbx_loc}, is refused inside the budget" \
-        "elapsed=${FSBX_DS} tenths (-1 = stopped at ${FSBX_LIMIT}) exit=${FSBX_EXIT} (want 2)"; FAIL=$((FAIL + 1))
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X${fsbx_n}: a read of a ${fsbx_kb} KB quoted operand carrying structure throughout, in ${fsbx_loc}, is refused inside the budget — measured ratio $(fsbx_ratio "${FSBX_DS}" "${FSBX_LIMIT}") of the budget, bound 1.00" \
+        "\"stopped\" is the watchdog ending the run at the budget; exit=${FSBX_EXIT} (want 2)"; FAIL=$((FAIL + 1))
     fi
   done
 done
 fsbx_timed "$FSBX_NP" en_US.UTF-8 "${FSBX_BASE}/token-20.cmd" "$FSBX_LIMIT"
 if [ "$FSBX_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly FSB_LINEAR_MIN=1000000000' "${FSBX_NP}/block-fs-boundary.sh"; then
-  /usr/bin/printf 'PASS: %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at ${FSBX_LIMIT} tenths on the 20 KB operand in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+  /usr/bin/printf 'PASS: %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at the budget on the 20 KB operand in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at the budget" \
-    "elapsed=${FSBX_DS} tenths exit=${FSBX_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(fsbx_ratio "${FSBX_DS}" "${FSBX_LIMIT}") of the budget, bound 1.00" \
+    "exit=${FSBX_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
 fi
 # X-FB: the pass's sed repointed to a path that does not exist, so the pass fails and the substitution
 # renders the token; a read of a 400-byte quoted operand carrying structure is refused alike.
@@ -1608,6 +1611,9 @@ fi
 # that see each site's cost apart from the rest of the hook are the false-positive control's AC-CP-L arms,
 # on the canonicalizer alone, beside their sensitivity copy.
 FSBC_LIMIT="${FSBC_LIMIT_DS:-200}"   # tenths of a second
+# fsbc_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+fsbc_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
 FSBC_BASE="$(/usr/bin/mktemp -d)"
 FSBC_D="${FSBC_BASE}/s/hooks"
 /bin/mkdir -p "$FSBC_D"
@@ -1662,10 +1668,10 @@ for fsbc_shape in word cluster split lsplit; do
       fsbc_n=$(( fsbc_n + 1 ))
       fsbc_timed "$fsbc_loc" "${FSBC_BASE}/${fsbc_shape}-${fsbc_kb}.cmd" "$FSBC_LIMIT"
       if [ "$FSBC_DS" != -1 ] && [ "$FSBC_EXIT" = 0 ]; then
-        /usr/bin/printf 'PASS: %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook in ${FSBC_DS} tenths of a second (budget ${FSBC_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+        /usr/bin/printf 'PASS: %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
       else
-        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook inside the budget and is allowed" \
-          "elapsed=${FSBC_DS} tenths (-1 = stopped at ${FSBC_LIMIT}) exit=${FSBC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook inside the budget and is allowed — measured ratio $(fsbc_ratio "${FSBC_DS}" "${FSBC_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${FSBC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
       fi
     done
   done

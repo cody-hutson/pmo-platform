@@ -9496,6 +9496,9 @@ encl_mut_arm "AC-ENCL-TEXEC6-pair: with the first view's carrier suppression off
 # separator-dense command in UTF-8. X-FB holds the fallback: a copy whose tr does not exist reads
 # the shipped hook's verdicts on a long command and raises no hook error.
 LIN_LIMIT="${LIN_LIMIT_DS:-200}"   # tenths of a second
+# lin_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+lin_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
 LIN_ROOT="$(/usr/bin/mktemp -d)"
 LIN_HOOKS="${LIN_ROOT}/.claude/hooks"
 /bin/mkdir -p "${LIN_HOOKS}/lib"
@@ -9610,20 +9613,20 @@ for lin_shape in dollar separator quoted redirection; do
       lin_n=$(( lin_n + 1 ))
       lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/${lin_shape}-${lin_kb}.cmd" "$LIN_LIMIT"
       if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
-        /usr/bin/printf 'PASS: %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook in ${LIN_DS} tenths of a second (budget ${LIN_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+        /usr/bin/printf 'PASS: %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
       else
-        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed" \
-          "elapsed=${LIN_DS} tenths (-1 = stopped at ${LIN_LIMIT}) exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
       fi
     done
   done
 done
 lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/separator-40.cmd" "$LIN_LIMIT"
 if [ "$LIN_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly SCRIPT_LINEAR_MIN=1000000000' "${LIN_HOOKS}/block-destructive-nopass.sh"; then
-  /usr/bin/printf 'PASS: %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at ${LIN_LIMIT} tenths on the 40 KB separator-dense command in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+  /usr/bin/printf 'PASS: %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget on the 40 KB separator-dense command in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget" \
-    "elapsed=${LIN_DS} tenths exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X24 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+    "exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X24 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
 fi
 # X-FB: the pass's tr repointed to a path that does not exist, so the pass fails and leaves the
 # split to the substitutions. A long separator-dense command ending in an unlisted script run by an
@@ -9752,19 +9755,19 @@ for lin_loc in en_US.UTF-8 C; do
     lin_n=$(( lin_n + 1 ))
     lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/comment-${lin_kb}.cmd" "$LIN_LIMIT"
     if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
-      /usr/bin/printf 'PASS: %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook in ${LIN_DS} tenths of a second (budget ${LIN_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+      /usr/bin/printf 'PASS: %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
     else
-      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed" \
-        "elapsed=${LIN_DS} tenths (-1 = stopped at ${LIN_LIMIT}) exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+        "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
     fi
   done
 done
 lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/comment-20.cmd" "$LIN_LIMIT"
 if [ "$LIN_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly SCRIPT_LINEAR_MIN=1000000000' "${LIN_HOOKS}/block-destructive-nopass.sh"; then
-  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at ${LIN_LIMIT} tenths on the 20 KB comment line in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget on the 20 KB comment line in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget" \
-    "elapsed=${LIN_DS} tenths exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show Y1-Y6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+    "exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show Y1-Y6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
 fi
 # Y-FB: the pass's awk repointed to a path that does not exist, so the pass fails and the loop scans.
 # A long single-quoted argument holding an interpreter run: behind gh, a carrier, the run is a quoted
@@ -9821,10 +9824,10 @@ for lin_cell in word:10:en_US.UTF-8 word:20:en_US.UTF-8 word:40:en_US.UTF-8 word
   lin_cph_cmd "$lin_shape" $(( lin_kb * 1024 )) "${LIN_ROOT}/cph-${lin_shape}-${lin_kb}.cmd"
   lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/cph-${lin_shape}-${lin_kb}.cmd" "$LIN_LIMIT"
   if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
-    /usr/bin/printf 'PASS: %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook in ${LIN_DS} tenths of a second (budget ${LIN_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+    /usr/bin/printf 'PASS: %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
   else
-    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed" \
-      "elapsed=${LIN_DS} tenths (-1 = stopped at ${LIN_LIMIT}) exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+      "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
   fi
 done
 /bin/rm -rf "$LIN_ROOT"

@@ -1309,6 +1309,9 @@ fi
 # that see each site's cost apart from the rest of the hook are the false-positive control's AC-CP-L arms,
 # on the canonicalizer alone, beside their sensitivity copy.
 TRSC_LIMIT="${TRSC_LIMIT_DS:-200}"   # tenths of a second
+# trsc_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+trsc_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
 TRSC_BASE="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-cph.XXXXXX" 2>/dev/null)" || TRSC_BASE=""
 # trsc_cmd <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling.
 trsc_cmd() {
@@ -1360,10 +1363,10 @@ else
         trsc_n=$(( trsc_n + 1 ))
         trsc_timed "$HOOK" "$trsc_loc" "${TRSC_BASE}/${trsc_shape}-${trsc_kb}.cmd" "$TRSC_LIMIT"
         if [ "$TRSC_DS" != -1 ] && [ "$TRSC_EXIT" = 0 ]; then
-          /usr/bin/printf 'PASS: %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook in ${TRSC_DS} tenths of a second (budget ${TRSC_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+          /usr/bin/printf 'PASS: %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
         else
-          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook inside the budget and is allowed" \
-            "elapsed=${TRSC_DS} tenths (-1 = stopped at ${TRSC_LIMIT}) exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook inside the budget and is allowed — measured ratio $(trsc_ratio "${TRSC_DS}" "${TRSC_LIMIT}") of the budget, bound 1.00" \
+            "\"stopped\" is the watchdog ending the run at the budget; exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
         fi
       done
     done
@@ -1479,10 +1482,10 @@ CPV_EOF
         cpv_n=$(( cpv_n + 1 ))
         trsc_timed "$HOOK" "$cpv_loc" "${CPV_BASE}/${cpv_shape}-${cpv_kb}.cmd" "$TRSC_LIMIT"
         if [ "$TRSC_DS" != -1 ] && [ "$TRSC_EXIT" = 0 ]; then
-          /usr/bin/printf 'PASS: %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook in ${TRSC_DS} tenths of a second (budget ${TRSC_LIMIT}) and is allowed"; PASS=$((PASS + 1))
+          /usr/bin/printf 'PASS: %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
         else
-          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook inside the budget and is allowed" \
-            "elapsed=${TRSC_DS} tenths (-1 = stopped at ${TRSC_LIMIT}) exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook inside the budget and is allowed — measured ratio $(trsc_ratio "${TRSC_DS}" "${TRSC_LIMIT}") of the budget, bound 1.00" \
+            "\"stopped\" is the watchdog ending the run at the budget; exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
         fi
       done
     done

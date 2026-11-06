@@ -3100,6 +3100,9 @@ e007_sp_arm "AC-E007-SP-F5: \$'g'\$'h' api -X POST <unlisted> — the verb as tw
 # fast-strip line set back to the bracket class, on the 10 KB command in UTF-8, must be stopped
 # at the budget. The budget is a ceiling with headroom for a loaded host, not the expected time.
 E007_T_LIMIT="${E007_T_LIMIT_DS:-200}"   # tenths of a second
+# e007_t_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+e007_t_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
 E007_T_R="${E007_W_BASE}/t"
 /bin/mkdir -p "$E007_T_R"
 E007_T_X_BRACKET='s|^\( *\)egress_fq=.*  # respell: fast-strip$|\1egress_fq="${COMMAND//[\\"\\'"'"'\\$]/}"  # respell: fast-strip|'
@@ -3170,19 +3173,19 @@ for _t_loc in en_US.UTF-8 C; do
     _t_n=$(( _t_n + 1 ))
     e007_t_timed "$E007_W_S" "$_t_loc" "${E007_T_R}/c${_t_kb}.cmd" "$E007_T_LIMIT"
     if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
-      e007_d_pass "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+      e007_d_pass "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the whole hook within the budget and is allowed"
     else
-      e007_d_fail "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the hook inside the budget and is allowed" \
-        "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+      e007_d_fail "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+        "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
     fi
   done
 done
 e007_t_timed "$E007_T_BK" en_US.UTF-8 "${E007_T_R}/c10.cmd" "$E007_T_LIMIT"
 if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F 'egress_fq="${COMMAND//[' "${E007_T_BK}/mut.sh"; then
-  e007_d_pass "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at ${E007_T_LIMIT} tenths on the 10 KB command in UTF-8 — the instrument sees the cost"
+  e007_d_pass "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget on the 10 KB command in UTF-8 — the instrument sees the cost"
 else
-  e007_d_fail "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget" \
-    "elapsed=${E007_T_DS} tenths exit=${E007_T_EXIT}; a copy that finishes, or that carries no bracket-class line, cannot show T1-T6 measure anything (BROKEN PROBE)"
+  e007_d_fail "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+    "exit=${E007_T_EXIT}; a copy that finishes, or that carries no bracket-class line, cannot show T1-T6 measure anything (BROKEN PROBE)"
 fi
 
 # ---- AC-E007-X* (#8315, DT pass 3): every substitution of the scanner is a linear pass ----
@@ -3317,10 +3320,10 @@ for _l_shape in dollar separator quoted redirection unparseable; do
       _l_n=$(( _l_n + 1 ))
       e007_t_timed "$E007_W_S" "$_l_loc" "${E007_L_R}/${_l_shape}-${_l_kb}.cmd" "$E007_T_LIMIT"
       if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
-        e007_d_pass "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+        e007_d_pass "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the whole hook within the budget and is allowed"
       else
-        e007_d_fail "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the hook inside the budget and is allowed" \
-          "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+        e007_d_fail "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
       fi
     done
   done
@@ -3329,10 +3332,10 @@ E007_L_X_NOPASS='s|^readonly EGRESS_LINEAR_MIN=256$|readonly EGRESS_LINEAR_MIN=1
 E007_L_NP="${E007_W_BASE}/lnp"; e007_w_copy "$E007_L_NP" "$E007_L_X_NOPASS"
 e007_t_timed "$E007_L_NP" en_US.UTF-8 "${E007_L_R}/quoted-20.cmd" "$E007_T_LIMIT"
 if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly EGRESS_LINEAR_MIN=1000000000' "${E007_L_NP}/mut.sh"; then
-  e007_d_pass "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at ${E007_T_LIMIT} tenths on the 20 KB quoted span in UTF-8 — the instrument sees the cost"
+  e007_d_pass "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget on the 20 KB quoted span in UTF-8 — the instrument sees the cost"
 else
-  e007_d_fail "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget" \
-    "elapsed=${E007_T_DS} tenths exit=${E007_T_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X30 measure anything (BROKEN PROBE)"
+  e007_d_fail "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+    "exit=${E007_T_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X30 measure anything (BROKEN PROBE)"
 fi
 # X-FB: every pass's tool repointed to a path that does not exist, so each pass fails and leaves its
 # piece to the substitutions — and, since DT pass 4, the quote walk's awk with them, so a long text
@@ -3499,10 +3502,10 @@ for _y_shape in continuation spans; do
       _y_n=$(( _y_n + 1 ))
       e007_t_timed "$E007_W_S" "$_y_loc" "${E007_Y_R}/${_y_shape}-${_y_kb}.cmd" "$E007_T_LIMIT"
       if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
-        e007_d_pass "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+        e007_d_pass "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the whole hook within the budget and is allowed"
       else
-        e007_d_fail "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the hook inside the budget and is allowed" \
-          "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+        e007_d_fail "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
       fi
     done
   done
@@ -3513,13 +3516,13 @@ E007_Y_X_GROWN='s|^    if \[ "\$EGRESS_JODD" -eq 1 ] && \[ "\$EGRESS_JCOPEN" -eq
 E007_Y_GR="${E007_W_BASE}/ygr"; e007_w_copy "$E007_Y_GR" "$E007_L_X_NOPASS" "$E007_Y_X_GROWN"
 _y_why=""
 e007_t_timed "$E007_L_NP" en_US.UTF-8 "${E007_Y_R}/spans-10.cmd" "$E007_T_LIMIT"
-[ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the walk's copy finished the 10 KB quote-span-dense command in ${E007_T_DS} tenths;"
+[ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the walk's copy finished the 10 KB quote-span-dense command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
 /usr/bin/grep -q -F -x 'readonly EGRESS_LINEAR_MIN=1000000000' "${E007_L_NP}/mut.sh" || _y_why="${_y_why} the walk's copy carries no raised bound;"
 e007_t_timed "$E007_Y_GR" en_US.UTF-8 "${E007_Y_R}/continuation-20.cmd" "$E007_T_LIMIT"
-[ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the join's copy finished the 20 KB continuation-dense command in ${E007_T_DS} tenths;"
+[ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the join's copy finished the 20 KB continuation-dense command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
 /usr/bin/grep -q -F 'egress_comment_open_at_end "${EGRESS_J}${last}"' "${E007_Y_GR}/mut.sh" || _y_why="${_y_why} the join's copy carries no test of the grown line;"
 if [ -z "$_y_why" ]; then
-  e007_d_pass "AC-E007-Y-CTL: the walk's loop is stopped at ${E007_T_LIMIT} tenths on the 10 KB quote-span-dense command and the join re-testing its grown line on the 20 KB continuation-dense command, in UTF-8 — the instrument sees each cost"
+  e007_d_pass "AC-E007-Y-CTL: the walk's loop is stopped at the budget on the 10 KB quote-span-dense command and the join re-testing its grown line on the 20 KB continuation-dense command, in UTF-8 — the instrument sees each cost"
 else
   e007_d_fail "AC-E007-Y-CTL: the walk's loop and the join re-testing its grown line are each stopped at the budget" \
     "${_y_why} a copy that finishes cannot show Y1-Y12 measure anything (BROKEN PROBE)"
@@ -3679,10 +3682,10 @@ for _z_shape in ansic word; do
       _z_n=$(( _z_n + 1 ))
       e007_t_timed "$E007_W_S" "$_z_loc" "${E007_Z_R}/${_z_shape}-${_z_kb}.cmd" "$E007_T_LIMIT"
       if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
-        e007_d_pass "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+        e007_d_pass "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the whole hook within the budget and is allowed"
       else
-        e007_d_fail "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the hook inside the budget and is allowed" \
-          "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+        e007_d_fail "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
       fi
     done
   done
@@ -3696,13 +3699,13 @@ E007_Z_AC="${E007_W_BASE}/zac"; e007_w_copy "$E007_Z_AC" "$E007_Z_X_NOANSIC"
 E007_Z_WD="${E007_W_BASE}/zwd"; e007_w_copy "$E007_Z_WD" "$E007_Z_X_NOUNESC" "$E007_Z_X_NOBASE"
 _z_why=""
 e007_t_timed "$E007_Z_AC" en_US.UTF-8 "${E007_Z_R}/ansic-80.cmd" "$E007_T_LIMIT"
-[ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the decode's copy finished the 80 KB ANSI-C command in ${E007_T_DS} tenths;"
+[ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the decode's copy finished the 80 KB ANSI-C command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
 [ "$(/usr/bin/grep -c -e '^  if false; then egress_ansic_decode_long ' "${E007_Z_AC}/mut.sh")" = 1 ] || _z_why="${_z_why} the decode's copy does not carry its edit;"
 e007_t_timed "$E007_Z_WD" en_US.UTF-8 "${E007_Z_R}/word-80.cmd" "$E007_T_LIMIT"
-[ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the word copy finished the 80 KB escaped-word command in ${E007_T_DS} tenths;"
+[ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the word copy finished the 80 KB escaped-word command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
 [ "$(/usr/bin/grep -c -e '^        if false; then egress_unescape_long ' -e '^  if false; then case ' "${E007_Z_WD}/mut.sh")" = 2 ] || _z_why="${_z_why} the word copy does not carry its two edits;"
 if [ -z "$_z_why" ]; then
-  e007_d_pass "AC-E007-Z-CTL: the decode without its long path is stopped at ${E007_T_LIMIT} tenths on the 80 KB ANSI-C command, and the escape step and basename test without theirs on the 80 KB escaped-word command, in UTF-8 — the instrument sees each cost"
+  e007_d_pass "AC-E007-Z-CTL: the decode without its long path is stopped at the budget on the 80 KB ANSI-C command, and the escape step and basename test without theirs on the 80 KB escaped-word command, in UTF-8 — the instrument sees each cost"
 else
   e007_d_fail "AC-E007-Z-CTL: the decode, and the escape step and basename test, each without its long path, are stopped at the budget" \
     "${_z_why} a copy that finishes cannot show Z1-Z16 measure anything (BROKEN PROBE)"
@@ -4642,10 +4645,10 @@ for _cph_shape in word cluster split lsplit; do
       _cph_n=$(( _cph_n + 1 ))
       e007_t_timed "$E007_W_S" "$_cph_loc" "${E007_CPH_R}/${_cph_shape}-${_cph_kb}.cmd" "$E007_T_LIMIT"
       if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
-        e007_d_pass "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the whole hook in ${E007_T_DS} tenths of a second (budget ${E007_T_LIMIT}) and is allowed"
+        e007_d_pass "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the whole hook within the budget and is allowed"
       else
-        e007_d_fail "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the hook inside the budget and is allowed" \
-          "elapsed=${E007_T_DS} tenths (-1 = stopped at ${E007_T_LIMIT}) exit=${E007_T_EXIT} (want 0)"
+        e007_d_fail "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
       fi
     done
   done
