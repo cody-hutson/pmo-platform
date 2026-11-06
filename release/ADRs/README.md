@@ -93,7 +93,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-218](ADR-218-checkpoint-b-host-api-axis-reads-its-own-probe-in-band.md) | Checkpoint B's host-API axis reads its own probe, in-band | Accepted | 2026-09-27 | controls-fail-loud |
 | [ADR-222](ADR-222-signal-tags-bind-durable-surfaces.md) | Signal tags bind durable records, not conversational turns | Accepted | 2026-10-16 | authoring-conventions-enforced-or-retired |
 | [ADR-223](ADR-223-cleanup-excludes-active-items-not-only-live-ones.md) | The orphan cleanup excludes active items, not only live ones | Accepted | 2026-10-24 | fix-cleanup-active-exclusions |
-| [ADR-230](ADR-230-release-graph-cost-unit.md) | Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket | Proposed | 2026-11-05 | release-usage-measured-right |
+| [ADR-231](ADR-231-release-graph-cost-unit.md) | Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket | Proposed | 2026-11-05 | release-usage-measured-right |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
