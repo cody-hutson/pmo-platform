@@ -809,10 +809,10 @@ self_test() {
                         | [.record, .incomplete_responses, .unevaluated_responses] ] | sort' "$st_store/usage.jsonl" 2>/dev/null)"
   [ "$nf_got" = '[["session",3,3],["subagent",3,3]]' ] \
     || { echo "FAIL: no-final-output — the fixture's [record, incomplete_responses, unevaluated_responses] read ${nf_got:-nothing}, want one session and one subagent record, each [3,3]"; fail=1; }
-  # Corpus specificity: no other fixture counts as incomplete — #7937's per-response
-  # fixtures write a snapshot line before the closing one, which an any-line-null test
-  # would flag — and the unevaluated set is the 7 responses of the id-less pre-v2.0.0
-  # fixtures that carry no stop reason, plus E, F and G.
+  # Corpus specificity: no other fixture counts as incomplete — the proj-zeta and proj-eta
+  # per-response fixtures write a snapshot line before the closing one, which an
+  # any-line-null test would flag — and the unevaluated set is the 7 responses of the
+  # id-less pre-v2.0.0 fixtures that carry no stop reason, plus E, F and G.
   nf_tot="$(jq -s -c '[ .[] | select(.record=="session") ] | [ ([ .[].incomplete_responses ] | add), ([ .[].unevaluated_responses ] | add) ]' "$st_store/usage.jsonl" 2>/dev/null)"
   [ "$nf_tot" = "[3,10]" ] \
     || { echo "FAIL: no-final-output — the fixture corpus's session records carry [incomplete, unevaluated] = ${nf_tot:-nothing}, want [3,10]"; fail=1; }
