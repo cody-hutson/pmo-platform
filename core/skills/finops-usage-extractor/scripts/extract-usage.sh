@@ -9,6 +9,10 @@
 # transcripts; writes only the resolved store (atomic tmp -> mv).
 # Every token and turn figure is counted once per API RESPONSE within one transcript
 # file — lines grouped by message.id, each usage field max-merged (schema § Counting unit).
+# A response with no stop reason on any of its lines never received its final usage,
+# which arrives in the same streaming event: it is recorded at its snapshot and counted in
+# incomplete_responses, or in unevaluated_responses when the flag cannot decide (schema
+# § Incomplete responses).
 #
 # Store path resolution (no hardcoded operator path):
 #   env STORE > env FINOPS_STORE_PATH > operator.toml [paths].operator_instance_finops_store_path
@@ -177,6 +181,8 @@ def stop_of($r):  ($r.message.stop_reason // $r.stop_reason // null) ;
 # "unknown" bucket (the honesty mechanism — see schema § Analysis sub-aggregates).
 def dim_key: if (. == null or . == "") then "unknown" else tostring end ;
 
+# inc / unev count the completeness tag per_response puts on each response (below); every
+# caller passes per_response output, so each record carries the tag.
 def toksum($arr):
   ( [ $arr[] | select(.message.usage != null) ] ) as $ex
   | ( [ $arr[] | select(.message.usage == null) ] ) as $he
@@ -190,6 +196,8 @@ def toksum($arr):
       ws:       ([ $ex[] | .message.usage.server_tool_use.web_search_requests? // 0 ] | add // 0),
       wf:       ([ $ex[] | .message.usage.server_tool_use.web_fetch_requests? // 0 ] | add // 0),
       ht:       ($he | length),
+      inc:      ([ $arr[] | select(.response_completeness == "incomplete") ] | length),
+      unev:     ([ $arr[] | select(.response_completeness == "unevaluated") ] | length),
       turns:    ($arr | length) } ;
 
 def tokens_obj($t): { input: $t.input, output: $t.output,
@@ -264,15 +272,44 @@ def dedupe_tool_use:
     then (if .seen[$b.id] then . else (.seen[$b.id] = true | .out += [ $b ]) end)
     else .out += [ $b ] end)
   | .out ;
+# ── Response completeness (schema § Incomplete responses). The stop reason and the final
+# cumulative usage arrive in one streaming event, so a response none of whose lines carries
+# a stop reason holds only its opening snapshot: its output is provisional, its other usage
+# fields can be too, and its server-side tool counts are absent. Three states:
+#   complete     the response carries a stop reason;
+#   incomplete   no stop reason, and the response is evaluable;
+#   unevaluated  no stop reason, and not evaluable — never counted incomplete, and never
+#                silently counted complete either.
+# Evaluable: the lines were grouped by message.id — the group's key comes from resp_key's
+# id branch, which holds only when EVERY line carries that id, because the lines are
+# grouped by key — and every line carries a usage object and the stop_reason key, in either
+# placement stop_of reads. Both line tests run on the raw lines: the merged record always
+# carries message.stop_reason, so it cannot tell an absent key from a null one.
+def msg_obj: (.message | if type == "object" then . else {} end) ;
+def evaluable($k; $ls):
+  ($k | startswith("id:"))
+  and ([ $ls[] | select((msg_obj | .usage | type) != "object") ] | length) == 0
+  and ([ $ls[] | select(((msg_obj | has("stop_reason")) or has("stop_reason")) | not) ] | length) == 0 ;
+# Run on the merged record. Its stop reason is read through stop_of and dim_key, exactly as
+# the stop_reason histogram reads it, so incomplete + unevaluated is that map's "unknown".
+def completeness($k; $ls):
+  if   (stop_of(.) | dim_key) != "unknown" then "complete"
+  elif evaluable($k; $ls)                then "incomplete"
+  else                                        "unevaluated" end ;
+
+# CIAC-1 per-response-incomplete — this one per-response reduction carries both behaviours:
+# a response written across several transcript lines is counted once (its usage
+# max-merged), and the same merged record is tagged complete, incomplete or unevaluated
+# (response_completeness) from the same group of lines. No second grouping pass exists.
 # One record per response, in first-line order. It keeps the FIRST line's envelope
 # (uuid, parentUuid, isSidechain, timestamp), takes the last non-null skill, MCP server,
 # model and stop reason across the response's lines, and the max-merged usage.
 def per_response($lines):
   [ $lines | to_entries[] | { k: (.key as $i | .value | resp_key($i)), i: .key, r: .value } ]
   | group_by(.k)
-  | map({ first: (map(.i) | min), ls: (sort_by(.i) | map(.r)) })
+  | map({ k: .[0].k, first: (map(.i) | min), ls: (sort_by(.i) | map(.r)) })
   | sort_by(.first)
-  | map( .ls as $ls
+  | map( .k as $k | .ls as $ls
          | ( [ $ls[] | .message.usage | objects ] ) as $us
          | $ls[0]
            + { attributionSkill:     lastnn([ $ls[] | skill_of(.) ]),
@@ -281,7 +318,8 @@ def per_response($lines):
                           + { model:       lastnn([ $ls[] | .message.model? ]),
                               stop_reason: lastnn([ $ls[] | stop_of(.) ]),
                               content:     ([ $ls[] | blocks[] ] | dedupe_tool_use),
-                              usage:       merge_usage($us) } ) } ) ;
+                              usage:       merge_usage($us) } ) }
+         | . + { response_completeness: completeness($k; $ls) } ) ;
 
 . as $all
 | [ $all[] | select(.type=="assistant") ] as $asst
@@ -346,7 +384,9 @@ def per_response($lines):
       dimension_coverage: { by_skill: dim_cov($by_skill; $sess_total),
                             by_mcp:   dim_cov($by_mcp;   $sess_total) },
       subagent_count: ($groups | length), token_source: tsrc($st),
-      heuristic_turns: $st.ht, extracted_utc: $now } ),
+      heuristic_turns: $st.ht,
+      incomplete_responses: $st.inc, unevaluated_responses: $st.unev,
+      extracted_utc: $now } ),
   # subagent drill-down records (NOT summed on top of session.tokens)
   ( $groups[]
     | { root: .[0].root, recs: [ .[].rec ] } as $g
@@ -359,7 +399,9 @@ def per_response($lines):
         ended_utc:   ( if ($gts|length)>0 then ($gts|last)  else null end ),
         model: ( [ $g.recs[] | .message.model // empty ] | last ),
         turns: $gt.turns, tokens: tokens_obj($gt), tool_use: tooluse_obj($gt),
-        token_source: tsrc($gt), heuristic_turns: $gt.ht, extracted_utc: $now } )
+        token_source: tsrc($gt), heuristic_turns: $gt.ht,
+        incomplete_responses: $gt.inc, unevaluated_responses: $gt.unev,
+        extracted_utc: $now } )
   )
   end
 JQEOF
@@ -443,6 +485,16 @@ preserve_prior_unit_store() {
   return 3
 }
 
+# The rebuild summary's completeness clause: the two counts summed over the session
+# records. A record without them was not evaluated, so a missing count prints "?", never 0.
+completeness_summary() {
+  jq -rs '[ .[] | select(.record=="session") ] as $s
+          | if ([ $s[] | select((.incomplete_responses | type) != "number" or (.unevaluated_responses | type) != "number") ] | length) > 0
+            then "? API response(s) flagged incomplete (a session record lacks the counts)"
+            else "\([ $s[].incomplete_responses ] | add // 0) API response(s) flagged incomplete, \([ $s[].unevaluated_responses ] | add // 0) not evaluated"
+            end' "$1" 2>/dev/null || printf '? API response(s) flagged incomplete'
+}
+
 do_rebuild() {
   local store_dir="$1" src_root="$2"
   local now body
@@ -453,8 +505,9 @@ do_rebuild() {
   build_body "$src_root" "$now" "$body"
   write_store "$store_dir" "$src_root" "$now" "$now" "$body"
   rm -f "$body"
-  printf 'finops-usage-extractor: rebuilt %s (%s session record(s))\n' \
-    "$store_dir/usage.jsonl" "$(jq -r 'select(.record=="session")' "$store_dir/usage.jsonl" 2>/dev/null | jq -s 'length' 2>/dev/null || echo '?')" >&2
+  printf 'finops-usage-extractor: rebuilt %s (%s session record(s); %s)\n' \
+    "$store_dir/usage.jsonl" "$(jq -r 'select(.record=="session")' "$store_dir/usage.jsonl" 2>/dev/null | jq -s 'length' 2>/dev/null || echo '?')" \
+    "$(completeness_summary "$store_dir/usage.jsonl")" >&2
 }
 
 do_incremental() {
@@ -615,12 +668,13 @@ self_test() {
   fi
 
   # 8b) Subagent drill-down records emitted for the sidechain fixtures (root grouping):
-  #     proj-gamma's in-transcript sidechain, and the partial-output subagent transcript,
-  #     every record of which is a sidechain as in a real spawned-agent file. The input
-  #     check is scoped to proj-gamma, so a further sidechain fixture moves the count only.
+  #     proj-gamma's in-transcript sidechain, and the partial-output and no-final-output
+  #     subagent transcripts, every record of which is a sidechain as in a real
+  #     spawned-agent file. The input check is scoped to proj-gamma, so a further sidechain
+  #     fixture moves the count only.
   local nsub subin
   nsub="$(jq -s '[.[] | select(.record=="subagent")] | length' "$st_store/usage.jsonl" 2>/dev/null)"
-  [ "${nsub:-0}" -eq 2 ] || { echo "FAIL: expected exactly 2 subagent records (proj-gamma's sidechain + the partial-output subagent transcript), got ${nsub:-0}"; fail=1; }
+  [ "${nsub:-0}" -eq 3 ] || { echo "FAIL: expected exactly 3 subagent records (proj-gamma's sidechain + the partial-output and no-final-output subagent transcripts), got ${nsub:-0}"; fail=1; }
   subin="$(jq -s '[.[] | select(.record=="subagent" and .session_id=="00000000-0000-4000-8000-000000000003") | .tokens.input] | add // 0' "$st_store/usage.jsonl" 2>/dev/null)"
   [ "${subin:-0}" -eq 28 ] || { echo "FAIL: proj-gamma subagent input tokens != 28 (got ${subin:-0})"; fail=1; }
 
@@ -736,6 +790,55 @@ self_test() {
     echo "FAIL: v1.2.0 analysis-dimension invariants:"
     printf '%s\n' "$dim_bad" | sed 's/^/       /'
     fail=1
+  fi
+
+  # NF) no-final-output — the incomplete-response flag (CIAC-1 per-response-incomplete).
+  #     Fixture per-response/subagents/agent-afixture-no-final-output: eight API responses,
+  #     every record a sidechain as in a real spawned-agent file. A to D are write shapes
+  #     measured in real transcripts: A writes a snapshot line and then its stop reason
+  #     (complete — the near-miss an any-line-null test flags), B (two lines) and C (one)
+  #     carry no stop reason on any line (incomplete), and D is one closing line. E, F and
+  #     G carry no stop reason and each fails exactly ONE evaluability clause — no
+  #     stop_reason key, no message.id, no usage block — so each is not evaluated, and
+  #     deleting that clause would count it incomplete. H carries the stop_reason key only
+  #     at the record's top level, the other placement stop_of reads, so it is evaluable
+  #     and incomplete. Every failure message below names this arm; no CI precision probe
+  #     reads it.
+  local nf_got nf_tot nf_bad nf_rc
+  nf_got="$(jq -s -c '[ .[] | select((.record=="session" or .record=="subagent") and .session_id=="agent-afixture-no-final-output")
+                        | [.record, .incomplete_responses, .unevaluated_responses] ] | sort' "$st_store/usage.jsonl" 2>/dev/null)"
+  [ "$nf_got" = '[["session",3,3],["subagent",3,3]]' ] \
+    || { echo "FAIL: no-final-output — the fixture's [record, incomplete_responses, unevaluated_responses] read ${nf_got:-nothing}, want one session and one subagent record, each [3,3]"; fail=1; }
+  # Corpus specificity: no other fixture counts as incomplete — #7937's per-response
+  # fixtures write a snapshot line before the closing one, which an any-line-null test
+  # would flag — and the unevaluated set is the 7 responses of the id-less pre-v2.0.0
+  # fixtures that carry no stop reason, plus E, F and G.
+  nf_tot="$(jq -s -c '[ .[] | select(.record=="session") ] | [ ([ .[].incomplete_responses ] | add), ([ .[].unevaluated_responses ] | add) ]' "$st_store/usage.jsonl" 2>/dev/null)"
+  [ "$nf_tot" = "[3,10]" ] \
+    || { echo "FAIL: no-final-output — the fixture corpus's session records carry [incomplete, unevaluated] = ${nf_tot:-nothing}, want [3,10]"; fail=1; }
+  # Presence (an absent count is not a zero) and the bounds, on every record. An incomplete
+  # response carries usage on every line, so it is never a heuristic one; an unevaluated one
+  # may be, so the two bounds differ. On a session record the two counts are exactly the
+  # stop_reason map's "unknown" bucket, because both read the stop reason through stop_of
+  # on the same merged response.
+  nf_bad="$(jq -s -r '
+    [ .[] | select(.record=="session" or .record=="subagent") | . as $r
+      | if ((($r.incomplete_responses | type) != "number") or (($r.unevaluated_responses | type) != "number")
+            or ($r.incomplete_responses < 0) or ($r.unevaluated_responses < 0))
+        then "\($r.record) \($r.session_id): incomplete_responses / unevaluated_responses absent or negative"
+        elif $r.incomplete_responses > (($r.turns // 0) - ($r.heuristic_turns // 0))
+        then "\($r.record) \($r.session_id): incomplete_responses exceeds turns - heuristic_turns"
+        elif ($r.incomplete_responses + $r.unevaluated_responses) > ($r.turns // 0)
+        then "\($r.record) \($r.session_id): incomplete_responses + unevaluated_responses exceeds turns"
+        elif ($r.record == "session") and (($r.incomplete_responses + $r.unevaluated_responses) != ($r.stop_reason["unknown"] // -1))
+        then "\($r.session_id): incomplete_responses + unevaluated_responses != stop_reason.unknown"
+        else empty end ] | .[]' "$st_store/usage.jsonl" 2>&1)"; nf_rc=$?
+  if [ "$nf_rc" -ne 0 ]; then
+    echo "FAIL: no-final-output — the invariant check could not run (jq exit $nf_rc), not treated as clean:"
+    printf '%s\n' "$nf_bad" | sed 's/^/       /'; fail=1
+  elif [ -n "$nf_bad" ]; then
+    echo "FAIL: no-final-output invariants:"
+    printf '%s\n' "$nf_bad" | sed 's/^/       /'; fail=1
   fi
 
   # 8) Incremental idempotence: no source change -> session digest unchanged, no dup.
