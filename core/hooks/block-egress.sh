@@ -1756,6 +1756,8 @@ egress_old_reachable_respelled() {
 }
 
 # One piece of an untokenizable command: does it open with gh api, in a spelling the walk resolves?
+# The first word's basename is tested by egress_base_gh, which matches a long word once, where removing
+# its longest prefix up to a slash retries the match at every position it could end on bash 3.2.
 egress_piece_is_gh_api() {
   local p="$1"
   egress_neutralize_into "$p" || true
@@ -1769,7 +1771,7 @@ egress_piece_is_gh_api() {
   egress_strip_redirections || return 1
   egress_respell_word "${egress_toks[0]}" abc
   [ "$EGRESS_RVN" -ge 1 ] || return 1
-  [ "${EGRESS_RV[0]##*/}" = gh ] || return 1
+  egress_base_gh "${EGRESS_RV[0]}" || return 1  # linear: second reader
   if [ "$EGRESS_RVN" -ge 2 ]; then
     [ "${EGRESS_RV[1]}" = api ] || return 1
     return 0

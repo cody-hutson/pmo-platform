@@ -4397,6 +4397,49 @@ e007_n_ctl "AC-E007-NL-CTL1" "$E007_NL_B1" lafold 80 en_US.UTF-8 "the look-ahead
 E007_NL_B2="${E007_W_BASE}/nlb2"; e007_n_copy "$E007_NL_B2" "$_nl_rn" "$_nl_ro"
 e007_n_ctl "AC-E007-NL-CTL2" "$E007_NL_B2" lafoldopt 80 en_US.UTF-8 "the look-ahead's respelled basename test"
 
+# -- NU: the unparseable branch's second reader's basename test --
+E007_N_K=0
+_nu_n9='egress_base_gh "${EGRESS_RV[0]}" || return 1  # linear: second reader'
+_nu_o9='[ "${EGRESS_RV[0]##*/}" = gh ] || return 1'
+E007_NU_B="${E007_W_BASE}/nub"; e007_n_copy "$E007_NU_B" "$_nl_ph" "$_nl_pe" "$_nu_n9" "$_nu_o9"; _nu_cw="$E007_N_CW"
+E007_NU_M1="${E007_W_BASE}/num1"; e007_n_copy "$E007_NU_M1" "$_nl_ph" "$_nl_pe" "$_nu_n9" 'case "${EGRESS_RV[0]}" in gh|*gh) ;; *) return 1 ;; esac'; _nu_cw="${_nu_cw}${E007_N_CW}"
+E007_NU_M2="${E007_W_BASE}/num2"; e007_n_copy "$E007_NU_M2" "$_nl_ph" "$_nl_pe" "$_nu_n9" 'egress_base_gh "${egress_toks[0]}" || return 1  # linear: second reader'; _nu_cw="${_nu_cw}${E007_N_CW}"
+_nu_cmds=()
+for _nu_w in "${_nl_words[@]}"; do
+  for _nu_p in "@ api -X POST ${E007_W_NO} '" "echo a; @ api -X POST ${E007_W_NO} '" "echo a | @ api ${E007_W_NO} '" \
+               ">x @ api -X POST ${E007_W_NO} '" "@ api -X POST ${E007_W_NO}${E007_SP_ESQ}" "echo a${E007_SP_NL}@ api -X POST ${E007_W_NO} '"; do
+    _nu_cmds[${#_nu_cmds[@]}]="${_nu_p%%@*}${_nu_w}${_nu_p#*@}"
+  done
+done
+_nu_why=""; _nu_n=0; _nu_ref=0; _nu_d1=0; _nu_d2=0
+if [ "$_nu_cw" = 000 ]; then
+  for _nu_loc in en_US.UTF-8 C; do
+    for _nu_c in "${_nu_cmds[@]}"; do
+      _nu_n=$(( _nu_n + 1 ))
+      e007_nh_read "$E007_NL_S" "$_nu_loc" "$_nu_c"; _nu_s="$E007_NH_V"
+      e007_nh_read "$E007_NU_B" "$_nu_loc" "$_nu_c"
+      [ "$E007_NH_V" = "$_nu_s" ] || _nu_why="${_nu_why} [${_nu_loc} #${_nu_n}] shipped ${_nu_s%%|*}, before ${E007_NH_V%%|*};"
+      case "$_nu_s" in 2/*) _nu_ref=$(( _nu_ref + 1 )) ;; esac
+      if [ "$_nu_d1" = 0 ]; then e007_nh_read "$E007_NU_M1" "$_nu_loc" "$_nu_c"; [ "$E007_NH_V" = "$_nu_s" ] || _nu_d1=1; fi
+      if [ "$_nu_d2" = 0 ]; then e007_nh_read "$E007_NU_M2" "$_nu_loc" "$_nu_c"; [ "$E007_NH_V" = "$_nu_s" ] || _nu_d2=1; fi
+    done
+  done
+  [ "$_nu_d1" = 1 ] || _nu_why="${_nu_why} the widened test reads like the shipped hook (the comparison cannot see a difference);"
+  [ "$_nu_d2" = 1 ] || _nu_why="${_nu_why} the test on the word before its normalization reads like the shipped hook;"
+  [ "$_nu_ref" -gt 0 ] || _nu_why="${_nu_why} no command was refused, so the set reaches no write;"
+else
+  _nu_why=" the copies could not be built (before, then each near miss: ${_nu_cw}; 0 = built);"
+fi
+if [ -z "$_nu_why" ]; then
+  e007_d_pass "AC-E007-NU-EQ: the second reader's basename test equals the code before it on ${_nu_n} runs of the whole hook with the phase forced, ${_nu_ref} of them refused, in UTF-8 and C, and two near misses each differ"
+else
+  e007_d_fail "AC-E007-NU-EQ: the second reader's basename test equals the code before it on the whole hook" "$_nu_why"
+fi
+e007_n_timed "a long upper-case command word in a command the scanner cannot tokenize" "AC-E007-NU" unpfold 'GH' 'a' " api repos/o/r '" 'GH' 'a' "/x api repos/o/r '"
+e007_n_timed "a long escaped command word in a command the scanner cannot tokenize" "AC-E007-NU" unpesc 'g\h' '\a' " api repos/o/r '" 'g\h' '\a' "/x api repos/o/r '"
+E007_NU_B1="${E007_W_BASE}/nub1"; e007_n_copy "$E007_NU_B1" "$_nu_n9" "$_nu_o9"
+e007_n_ctl "AC-E007-NU-CTL" "$E007_NU_B1" unpfold 80 en_US.UTF-8 "the second reader's basename test"
+
 # ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #
 # The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
