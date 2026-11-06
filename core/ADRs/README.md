@@ -138,6 +138,7 @@ ADR-221 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-224** b
 ADR-222 (`enclosure-positions-are-adjudicated-by-a-second-view`) → **ADR-225** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 222; the record's Status section carries the provenance note.
 ADR-223 (`egress-prefix-walk-stops-on-the-gated-verb`) → **ADR-226** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 223; the record's Status section carries the provenance note.
 ADR-224 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-227** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 224; the record's Status section carries the provenance note.
+ADR-230 (`non-tracked-data-homed-by-risk-class`) → **ADR-231** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
@@ -351,12 +352,12 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP (this ADR is design-only; its deferred migration is superseded and does not run).
 **File:** [ADR-032-release-corpus-public-vs-instance-split.md](ADR-032-release-corpus-public-vs-instance-split.md)
 
-### ADR-230 — Non-tracked platform data is homed by its risk class
+### ADR-231 — Non-tracked platform data is homed by its risk class
 
 **Status:** recorded in the record's own `status:` field, which is the authority (authored at Stage 6 for the `placement-rules-and-adr` release; ratified at its Stage 13 close). Supersedes ADR-141 whole — that transition lands with ratification — and ADR-017, ADR-032, ADR-046 and ADR-096 in part.
 **Decision:** Every kind of data the platform keeps out of git is homed by its risk class. Working state lives in the repository it belongs to — release and run state in a git-ignored `/local-state/` at the root of its main checkout, beside the in-repo `/analysis/` and `/roadmaps/` homes — and install-scoped working state such as usage telemetry lives in the user's XDG state home. Leak-risk content lives outside every repository and workspace, in the user's XDG data home. Operator PMO content stays in `projects/`, and tool-owned surfaces are unchanged. A worktree session may write the main checkout only inside those three enumerated in-repo homes, through a static hook predicate held in parity with the placement standard's register. One resolver per class sits behind a switch that keeps today's homes until each repository's cutover, and no platform folder remains at the workspace root once the cleanup wave retires today's container.
 **Reversibility:** EXPENSIVE (MEDIUM confidence) — nothing moves in the release that ships it; once ratified it changes only by supersession, and each cutover that executes it carries its own rehearsal.
-**File:** [ADR-230-non-tracked-data-homed-by-risk-class.md](ADR-230-non-tracked-data-homed-by-risk-class.md)
+**File:** [ADR-231-non-tracked-data-homed-by-risk-class.md](ADR-231-non-tracked-data-homed-by-risk-class.md)
 
 ## Release-ops / capacity ADRs
 

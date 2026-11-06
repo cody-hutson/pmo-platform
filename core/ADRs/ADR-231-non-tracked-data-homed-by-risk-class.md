@@ -1,5 +1,5 @@
 ---
-title: ADR-230 — Non-tracked platform data is homed by its risk class
+title: ADR-231 — Non-tracked platform data is homed by its risk class
 status: Proposed — authored at Stage 6 Engineering for the `placement-rules-and-adr` release; flips to Accepted at that release's Stage 13 close gate (Phase A13), where the operator ratifies it, recorded in this field.
 date: 2026-11-05
 release: placement-rules-and-adr
@@ -19,7 +19,7 @@ source_observations:
   - "Measured at this record's adversarial design review (2026-11-05): the shipped write-guard hook already exempted the git-ignored analysis subfolders and roadmap instances from the main-checkout write block, through a static predicate in the hook source; and the sandbox test asserted isolation of the per-user config root only, never of an XDG data or state base."
 ---
 
-# ADR-230 — Non-tracked platform data is homed by its risk class
+# ADR-231 — Non-tracked platform data is homed by its risk class
 
 ## Status
 
@@ -28,6 +28,8 @@ source_observations:
 **Supersedes ADR-141 whole, and ADR-017, ADR-032, ADR-046 and ADR-096 in part.** The partial edges carry their reciprocal pointers from the moment this record merges. ADR-141's `status:` transition to `Superseded` is applied in the same commit that ratifies this record and never earlier: a superseded record is frozen, so retiring it ahead of ratification would leave it retired by a record not yet in force, with no edit able to undo that. Until then the whole supersession is pending, as this record's `Proposed` status says.
 
 **Numbering.** Allocated at Engineering Commit 0 from `release/tools/renumber-adr.py --next-free` against the mainline anchor; it binds at the Stage 12 claim. In-release prose cites this record by its slug token.
+
+**Numbering provenance — `230 → 231`.** Held **ADR-230** branch-local; renumbered to **ADR-231** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 230. In-release citations that read "ADR-230" denote this record.
 
 ## Context
 
