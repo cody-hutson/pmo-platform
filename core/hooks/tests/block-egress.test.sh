@@ -4312,6 +4312,91 @@ e007_n_timed "a long upper-case command word" "AC-E007-NH" upper 'GH' 'a' ' api 
 e007_n_timed "a long escaped command word" "AC-E007-NH" escaped 'g\h' '\a' ' api repos/o/r' 'g\h' '\a' '/x api repos/o/r'
 e007_n_ctl "AC-E007-NH-CTL" "$E007_NH_B" upper 40 en_US.UTF-8 "the walk's two basename reads"
 
+# ---- AC-E007-NL*, -NU*, -NG* (#8315, DT pass 9): two more basename tests, and the brace step's bound ----
+#
+# Three more places of the -007 scanner grew faster than the command on bash 3.2. The look-ahead behind a
+# prefix command tested each candidate's basename, in its plain spelling and in a respelling, by removing
+# its longest prefix up to a slash, which retries the match at every position it could end, and the widened
+# fast path hands it a long command word in an upper-case or escaped spelling; the unparseable branch's
+# second reader tested the first word of each piece the same way. Each now tests by egress_base_gh, which
+# matches a long word once. The brace step built every word of a group, each carrying the prefix and the
+# suffix, so a group whose words share a long one expanded to the product of the two; it now computes that
+# size from its split, before any word is built, and past its bound reads the group as written, as the hook
+# before this release read every brace group.
+#
+# NL-EQ and NU-EQ compare the whole hook, with the phase forced, against the copy with the lines as before,
+# on commands that reach each test's long-word branch densely — long words ending in gh with a slash before
+# it and without one, in lower and upper case, escaped and with multibyte letters, behind a prefix word, a
+# passed-over word and an option, or opening a piece of a command the scanner cannot tokenize — in both
+# locales: the same exit and records; and near misses, each one edit of the new line, differ. A look-ahead hit
+# on a word whose basename is not gh is rejected by the verb test after it, so a widened test changes a verdict
+# only where its wrong hit hides a real pair later in the segment: the set carries that decoy — each long word,
+# then api, then a real write. Their timed and CTL arms are AC-E007-N*'s. NG-EQ pins the brace step against the code before it on the dense set and
+# on groups at and around the bound, beside near misses at the bound; NG-AT, NG-PAST and NG-ELSE pin the
+# verdicts: a group at the bound still expands and its write is refused, one a character past it is read as
+# written where the copy without the bound refuses it, and a write elsewhere in the same command is refused.
+
+# -- NL: the look-ahead's two basename tests --
+E007_N_K=0
+_nl_ph='readonly EGRESS_007_WIDENING_PHASE="shadow"'
+_nl_pe='readonly EGRESS_007_WIDENING_PHASE="enforce"'
+_nl_pn='if egress_base_gh "${egress_toks[$egress_sidx]}" && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then  # linear: look-ahead'
+_nl_po='if [ "${egress_toks[$egress_sidx]##*/}" = "gh" ] && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then'
+_nl_rn='egress_base_gh "${EGRESS_RV[0]}" || return 1  # linear: look-ahead respelled'
+_nl_ro='[ "${EGRESS_RV[0]##*/}" = gh ] || return 1'
+E007_NL_S="${E007_W_BASE}/nls"; e007_n_copy "$E007_NL_S" "$_nl_ph" "$_nl_pe"; _nl_cw="$E007_N_CW"
+E007_NL_B="${E007_W_BASE}/nlb"; e007_n_copy "$E007_NL_B" "$_nl_ph" "$_nl_pe" "$_nl_pn" "$_nl_po" "$_nl_rn" "$_nl_ro"; _nl_cw="${_nl_cw}${E007_N_CW}"
+E007_NL_M1="${E007_W_BASE}/nlm1"; e007_n_copy "$E007_NL_M1" "$_nl_ph" "$_nl_pe" "$_nl_pn" \
+  'if { case "${egress_toks[$egress_sidx]}" in gh|*gh) true ;; *) false ;; esac; } && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then'; _nl_cw="${_nl_cw}${E007_N_CW}"
+E007_NL_M2="${E007_W_BASE}/nlm2"; e007_n_copy "$E007_NL_M2" "$_nl_ph" "$_nl_pe" "$_nl_rn" 'case "${EGRESS_RV[0]}" in gh|*gh) ;; *) return 1 ;; esac'; _nl_cw="${_nl_cw}${E007_N_CW}"
+E007_NL_M3="${E007_W_BASE}/nlm3"; e007_n_copy "$E007_NL_M3" "$_nl_ph" "$_nl_pe" "$_nl_pn" \
+  'if egress_base_gh "${egress_toks[$(( egress_sidx + 1 ))]}" && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then'; _nl_cw="${_nl_cw}${E007_N_CW}"
+_nl_x="$(/usr/bin/awk 'BEGIN { s = "x"; while (length(s) < 300) s = s s; printf "%s", substr(s, 1, 300) }')"
+_nl_u="$(/usr/bin/awk 'BEGIN { s = "X"; while (length(s) < 300) s = s s; printf "%s", substr(s, 1, 300) }')"
+_nl_e="$(/usr/bin/awk 'BEGIN { s = "\303\251"; while (length(s) < 400) s = s s; printf "%s", substr(s, 1, 400) }')"
+_nl_words=( "${_nl_x}/gh" "${_nl_x}/GH" "${_nl_x}gh" "${_nl_u}GH" "GH${_nl_x}" "g\\h${_nl_x}" "${_nl_x}g\\h" "${_nl_x}/g\\h" \
+            "${_nl_e}/gh" "${_nl_e}gh" "${_nl_x}/" "/${_nl_x}" "${_nl_x}/sudo" "${_nl_x}" "gh" "GH" )
+_nl_cmds=()
+for _nl_w in "${_nl_words[@]}"; do
+  for _nl_p in "sudo @ api -X POST ${E007_W_NO}" "sudo x @ api -X POST ${E007_W_NO}" "sudo -E @ api -X POST ${E007_W_NO}" \
+               "env -u X @ api -X POST ${E007_W_NO}" "${_nl_x}/sudo @ api -X POST ${E007_W_NO}" "timeout 5 @ api ${E007_W_NO} -f a=1" \
+               "nice @ api -X POST ${E007_W_OK}" "sudo x @ api y gh api -X POST ${E007_W_NO}" "sudo -E @ api y gh api -X POST ${E007_W_NO}"; do
+    _nl_cmds[${#_nl_cmds[@]}]="${_nl_p%%@*}${_nl_w}${_nl_p#*@}"
+  done
+done
+_nl_why=""; _nl_n=0; _nl_ref=0; _nl_d1=0; _nl_d2=0; _nl_d3=0
+if [ "$_nl_cw" = 00000 ]; then
+  for _nl_loc in en_US.UTF-8 C; do
+    for _nl_c in "${_nl_cmds[@]}"; do
+      _nl_n=$(( _nl_n + 1 ))
+      e007_nh_read "$E007_NL_S" "$_nl_loc" "$_nl_c"; _nl_s="$E007_NH_V"
+      e007_nh_read "$E007_NL_B" "$_nl_loc" "$_nl_c"
+      [ "$E007_NH_V" = "$_nl_s" ] || _nl_why="${_nl_why} [${_nl_loc} #${_nl_n}] shipped ${_nl_s%%|*}, before ${E007_NH_V%%|*};"
+      case "$_nl_s" in 2/*) _nl_ref=$(( _nl_ref + 1 )) ;; esac
+      if [ "$_nl_d1" = 0 ]; then e007_nh_read "$E007_NL_M1" "$_nl_loc" "$_nl_c"; [ "$E007_NH_V" = "$_nl_s" ] || _nl_d1=1; fi
+      if [ "$_nl_d2" = 0 ]; then e007_nh_read "$E007_NL_M2" "$_nl_loc" "$_nl_c"; [ "$E007_NH_V" = "$_nl_s" ] || _nl_d2=1; fi
+      if [ "$_nl_d3" = 0 ]; then e007_nh_read "$E007_NL_M3" "$_nl_loc" "$_nl_c"; [ "$E007_NH_V" = "$_nl_s" ] || _nl_d3=1; fi
+    done
+  done
+  [ "$_nl_d1" = 1 ] || _nl_why="${_nl_why} the widened plain test reads like the shipped hook (the comparison cannot see a difference);"
+  [ "$_nl_d2" = 1 ] || _nl_why="${_nl_why} the widened respelled test reads like the shipped hook;"
+  [ "$_nl_d3" = 1 ] || _nl_why="${_nl_why} the plain test on the wrong token reads like the shipped hook;"
+  [ "$_nl_ref" -gt 0 ] || _nl_why="${_nl_why} no command was refused, so the set reaches no write;"
+else
+  _nl_why=" the copies could not be built (forced, before, then each near miss: ${_nl_cw}; 0 = built);"
+fi
+if [ -z "$_nl_why" ]; then
+  e007_d_pass "AC-E007-NL-EQ: the look-ahead's two basename tests equal the code before them on ${_nl_n} runs of the whole hook with the phase forced, ${_nl_ref} of them refused, in UTF-8 and C, and three near misses each differ"
+else
+  e007_d_fail "AC-E007-NL-EQ: the look-ahead's two basename tests equal the code before them on the whole hook" "$_nl_why"
+fi
+e007_n_timed "a long upper-case command word behind a prefix word" "AC-E007-NL" lafold 'sudo GH' 'a' ' api repos/o/r' 'sudo GH' 'a' '/x api repos/o/r'
+e007_n_timed "a long upper-case command word behind a prefix word's option" "AC-E007-NL" lafoldopt 'sudo -E GH' 'a' ' api repos/o/r' 'sudo -E GH' 'a' '/x api repos/o/r'
+E007_NL_B1="${E007_W_BASE}/nlb1"; e007_n_copy "$E007_NL_B1" "$_nl_pn" "$_nl_po"
+e007_n_ctl "AC-E007-NL-CTL1" "$E007_NL_B1" lafold 80 en_US.UTF-8 "the look-ahead's plain basename test"
+E007_NL_B2="${E007_W_BASE}/nlb2"; e007_n_copy "$E007_NL_B2" "$_nl_rn" "$_nl_ro"
+e007_n_ctl "AC-E007-NL-CTL2" "$E007_NL_B2" lafoldopt 80 en_US.UTF-8 "the look-ahead's respelled basename test"
+
 # ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #
 # The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster

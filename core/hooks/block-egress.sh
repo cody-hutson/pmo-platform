@@ -1357,12 +1357,14 @@ egress_norm_at() {
 # The look-ahead's test in a respelling: the token at $1 normalizes to words whose first has the
 # basename `gh` and is followed by `api` — the next word of its own brace group, or the next token
 # normalized without the case step. A plain pair is the shipped test's, not this one's. On a hit
-# both words are written back, normalized and flagged.
+# both words are written back, normalized and flagged. The basename is tested by egress_base_gh,
+# which matches a long word once, where removing its longest prefix up to a slash retries the match at
+# every position it could end on bash 3.2.
 egress_la_respelled() {
   local i="$1" g
   egress_respell_word "${egress_toks[$i]}" abc
   [ "$EGRESS_RVN" -ge 1 ] || return 1
-  [ "${EGRESS_RV[0]##*/}" = gh ] || return 1
+  egress_base_gh "${EGRESS_RV[0]}" || return 1  # linear: look-ahead respelled
   if [ "$EGRESS_RVN" -ge 2 ]; then
     [ "${EGRESS_RV[1]}" = api ] || return 1
     egress_norm_at "$i" abc
@@ -2428,11 +2430,15 @@ case "$TOOL_NAME" in
         # the would-fire row this hit writes (`pos: "look-ahead"`), so the drain can tell
         # the two populations apart: it says which locator found the verb, never that the
         # words it found are executed. A candidate is read in a respelling only once: the
-        # token the walk already normalized is tested in its normalized form alone.
+        # token the walk already normalized is tested in its normalized form alone. Each
+        # candidate's basename is tested by egress_base_gh, which matches a long word once,
+        # where removing its longest prefix up to a slash would retry the match at every
+        # position — a cost this block met on a long command word in its upper-case or
+        # escaped spelling once the fast-path gate admitted those spellings.
         if [ "$egress_pfxseen" -eq 1 ]; then
           egress_sidx="$egress_hidx"
           while [ $(( egress_sidx + 1 )) -lt "${#egress_toks[@]}" ]; do
-            if [ "${egress_toks[$egress_sidx]##*/}" = "gh" ] && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then
+            if egress_base_gh "${egress_toks[$egress_sidx]}" && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then  # linear: look-ahead
               if [ "$egress_sidx" -ne "$egress_hidx" ]; then
                 egress_hidx="$egress_sidx"
                 egress_scanhit=1
