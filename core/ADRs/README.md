@@ -138,6 +138,7 @@ ADR-221 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-224** b
 ADR-222 (`enclosure-positions-are-adjudicated-by-a-second-view`) → **ADR-225** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 222; the record's Status section carries the provenance note.
 ADR-223 (`egress-prefix-walk-stops-on-the-gated-verb`) → **ADR-226** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 223; the record's Status section carries the provenance note.
 ADR-224 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-227** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 224; the record's Status section carries the provenance note.
+ADR-230 (`release-graph-cost-unit`) → **ADR-231** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 

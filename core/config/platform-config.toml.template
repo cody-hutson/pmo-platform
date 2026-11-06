@@ -2,8 +2,10 @@
 #
 # Canonical platform-BEHAVIOR configuration surface. Holds the parameterized
 # platform-behavior choices the pipeline tunes over time: bundling frame +
-# release-size target, the release-class enum default, and relationship-mapping
-# tuning. Composition-surface category per core/standards/composition-surface-spec.md §1.
+# release-size target, the release-class enum default and relationship-mapping
+# tuning first, and each behavior category added since in a section of its own.
+# This header orients and does not enumerate; the schema's field table does.
+# Composition-surface category per core/standards/composition-surface-spec.md §1.
 #
 # DISTINCT from operator.toml: operator.toml is the operator-ENVIRONMENT /
 # IDENTITY surface (identity, paths, [adapters] host-selectors, methodology
@@ -419,3 +421,97 @@ comment_auto_resolution = false
 # Valid: a decimal fraction in [0.0, 1.0].
 # Default: 1.00
 pass_rate_floor = 1.00
+
+[cost_unit]
+# The calibrated values of the release cost unit: the cache-read weight at both ends
+# of its bracket, the weighted tokens per weekly point at both ends, the price-relative
+# weights of the other token types, the calibration model, and the optional per-model
+# axis. The cost row, the command-template ranking and the model-use policy state
+# their figures in this unit.
+#
+# THIS SECTION IS THE SINGLE NUMERIC HOME FOR THOSE VALUES AND RESTATES NOTHING ELSE.
+# What the unit MEANS -- one weekly point of one account's shared all-models weekly
+# allowance, counted once per API response within a transcript file, reported as a
+# (low, high) pair, and when a value may move -- is canonical in
+# {{ADR:release-graph-cost-unit}}, which names these values BY ROLE and never restates
+# their magnitude, so a recalibration moves a line here and nothing else. (Same
+# convention as [behavioral_regression].pass_rate_floor above.)
+#
+# ONE CONVERSION, FAIL-CLOSED. Every figure-producing tool gets weekly points from the
+# FinOps measurement layer's single conversion, which reads this section. A consumer
+# that cannot resolve a value here must yield an UNRESOLVED figure, never zero and
+# never a built-in constant: a zero K divides by zero, and a zero weight erases a
+# token type from every figure.
+#
+# RESOLVES ON 2 RUNGS, NOT 5 -- the global default (this file) and the individual rung
+# (the XDG platform-config.toml). The calibration is per plan and per account, not per
+# portfolio, program or project, so rungs 2-4 are inapplicable. An operator on another
+# plan sets their own values at the individual rung (Track B); editing a default here
+# is a governed Track A change.
+#
+# Calibration policy: CALIBRATE-AFTER-3 -- every value below is a seed. The authoring
+# census found fewer than three clean meter pairs, so w is bracketed rather than
+# fitted, K is a median over account-clean pairs, and the price-relative weights are
+# assumptions. Each instrumented run revisits the calibration under the record's rule,
+# and a value here moves only when that rule's sufficiency condition is met.
+
+# The cache-read weight at the LOW end of its bracket, in uncached-input-equivalent
+# tokens per cache-read token: the end the meter readings point to.
+# Valid: a decimal > 0 and below cache_read_weight_high.
+# Default: 0.0075
+cache_read_weight_low = 0.0075
+# The cache-read weight at the HIGH end of its bracket: the API list-price ratio.
+# Valid: a decimal above cache_read_weight_low, at most 1.0.
+# Default: 0.10
+cache_read_weight_high = 0.10
+# K at the LOW end: weighted (uncached-input-equivalent) tokens per weekly point,
+# paired with cache_read_weight_low. A figure never mixes one end's w with the
+# other end's K.
+# Valid: a positive integer.
+# Default: 3940000
+tokens_per_weekly_point_low = 3940000
+# K at the HIGH end, paired with cache_read_weight_high.
+# Valid: a positive integer.
+# Default: 12390000
+tokens_per_weekly_point_high = 12390000
+# Price-relative weight of a five-minute cache-write token (an assumption, not fitted).
+# A cache write with no tier split is weighted here.
+# Valid: a decimal > 0.
+# Default: 1.25
+cache_write_5m_weight = 1.25
+# Price-relative weight of a one-hour cache-write token (an assumption, not fitted).
+# Valid: a decimal > 0.
+# Default: 2.0
+cache_write_1h_weight = 2.0
+# Price-relative weight of an output token, thinking included (an assumption, not
+# fitted; the authoring data does not constrain it).
+# Valid: a decimal > 0.
+# Default: 5.0
+output_weight = 5.0
+# The calibration model: the model whose responses the current K values were fitted
+# on, and the model every draw multiplier below is relative to. Empty means the
+# calibration names no model -- the seed census recorded no per-model split -- so
+# every model's figures carry the unprobed label until a revisit names one.
+# Valid: a model id as the store's per-model split records it, or empty.
+# Default: "" (no calibration model)
+calibration_model = ""
+# PER-MODEL AXIS (optional). One entry per probed model, keyed by the model id the
+# store's per-model split records. An ABSENT entry means the model's draw is
+# UNPROBED: its figures use the shared values above and carry the unprobed label.
+# The calibration model needs no entry; it is the multipliers' reference.
+#
+# The draw multiplier: the model's draw per weighted token relative to the
+# calibration model's, applied per model over the store's per-model split.
+# Valid: a TOML inline table mapping a quoted model id to a decimal > 0;
+#   {} = no model probed.  Example: { "<model-id>" = 0.5 }
+# Default: {}
+model_draw_multipliers = {}
+# The weekly window or windows the model's usage moves: "all-models" (the shared
+# window that defines a weekly point) and/or "model-specific" (a weekly window of
+# that model alone, whose points are a figure in their own unit). A model whose
+# windows exclude "all-models" draws no weekly points.
+# Valid: a TOML inline table mapping a quoted model id to a comma-separated string
+#   of those two tokens; {} = no model probed.
+#   Example: { "<model-id>" = "all-models,model-specific" }
+# Default: {}
+model_weekly_windows = {}
