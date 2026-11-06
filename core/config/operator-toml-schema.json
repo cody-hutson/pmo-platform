@@ -436,7 +436,7 @@
           "enum": ["tracked"],
           "required": false,
           "description": "Release-corpus home — where this install's release corpus lives, named by its home class; ADR-231 defines the corpus and records where it lives. A placement selector, not a host surface. \"tracked\" keeps the corpus tracked in this repository under release/releases/. DECLARED, NOT YET READ: the release tooling's corpus resolver resolves by presence, the tracked tree first, and does not consult this key; a value other than \"tracked\" joins the enum only in the change that teaches that resolver to read it. Shipped opt-in, so no live config carries a value nothing reads and an absent key resolves to the default.",
-          "since": "5.02"
+          "since": "5.03"
         }
       ]
     },
