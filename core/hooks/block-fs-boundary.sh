@@ -242,10 +242,18 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 # Mode-gated severity, mirroring this hook's dependency gate and block-fragile-refs.sh
 # (GHSA-g9g6-28c9-vrx5): enforce DENIES, warn degrades to the raw command — which is
 # exactly this hook's pre-#5644 behaviour, so warn never loses coverage it already had.
+# Two probes (#8314): the first catches a present-but-empty or truncated copy; the second
+# — a wrapper carrying a separate-argument option before a benign verb, exposed at an
+# anchor only by the walk that reads wrapper grammar — catches a VERSION SKEW, a copy that
+# predates that grammar. The second probe opens with the append form of a prefix assignment
+# (#8314, follow-up pass), so a copy whose walk reads that word as the command word — one
+# that predates the append form — fails it too.
 CMDPOS_OK=0
 if [ -r "$CMDPOS_AWK" ]; then
   if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
-     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
+     && _cp_canary2="$("$PRINTF" '%s' 'Z+=0 nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+     && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q'; then
     CMDPOS_OK=1
   fi
 fi
@@ -361,8 +369,20 @@ readonly EXPANSION_SENTINEL='EXPANSION'
 # render_token(token)
 #   Message-safe rendering. The 286 sentinel-bearing operands would otherwise emit a raw
 #   \001 control byte to the operator and display as a corrupted path.
+#
+#   THE LINEAR PASS. On bash 3.2 a global pattern substitution costs more than linear time
+#   in the text it scans once that text carries the character it replaces, and this builds
+#   the refusal message: a token large enough could hold the hook past the runtime's
+#   command-hook timeout here, and a hook that times out does not block, so the refusal
+#   would become an allow. A token of at least FSB_LINEAR_MIN characters is therefore
+#   rewritten first by one sed pass in the C locale, whose output equals the substitution's
+#   byte for byte (AC-FSB-X-EQ); the substitution still runs after it and finds nothing left
+#   to replace, which costs one scan. A shorter token costs less than the fork the pass
+#   takes, so it keeps the substitution alone, and a pass that fails leaves the token to it.
+readonly FSB_LINEAR_MIN=256
 render_token() {
-  local t="$1"
+  local t="$1" lp
+  if [ "${#t}" -ge "$FSB_LINEAR_MIN" ] && lp="$(LC_ALL=C /usr/bin/sed "s/${CMDPOS_SENTINEL}/<quoted-expansion>/g" <<< "${t}.")"; then t="${lp%.}"; fi  # linear: render
   "$PRINTF" '%s' "${t//$CMDPOS_SENTINEL/<quoted-expansion>}"
 }
 

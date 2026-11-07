@@ -144,8 +144,13 @@ readonly ANCHOR_PREFIX_GIT='(^|[^[:alnum:]_-])(/(usr/(local/)?|opt/(homebrew|loc
 #
 # ANCHOR_PREFIX_GIT is a word-boundary anchor, not a command-position one, so it was never
 # blind in this way. Canonicalization only ever INSERTS `;` and replaces in-quote structure
-# with a non-alphanumeric sentinel — both of which are already `[^[:alnum:]_-]` — so it can
-# add boundaries for the git rules but never remove one.
+# with a non-alphanumeric sentinel — both of which are already `[^[:alnum:]_-]` — so it never
+# removes a boundary character the git rules read. It can still cost them a match: when a
+# wrapper's own grammar consumes `git` as an option value or a positional (`sudo -u git push
+# --force`), the separator lands between `git` and its subcommand, and the rule no longer
+# reads a git subcommand there. That command runs another program and never runs git, so
+# the move is a declared precision improvement (the readiness text and the command-position
+# decision record's Consequences), pinned beside a refused control that does run git.
 #
 # BLOCK-DESTRUCTIVE-022 is deliberately NOT routed through this: its segment loop and
 # cumulative quote-parity tracking read "$COMMAND" directly and own their own lexical
@@ -1628,6 +1633,9 @@ readonly SCRIPT_BND_PAREN=$'\003'  # a position opened by `(`
 readonly SCRIPT_BND_TICK=$'\004'   # a position opened by a backtick
 readonly SCRIPT_ENCL_POS_MAX=512
 readonly SCRIPT_ENCL_TAIL_BYTES=262144
+# The separator split's linear pass, a bound in characters (see THE LINEAR PASS in the
+# script-execution rule): a command this long or longer is split by one tr pass first.
+readonly SCRIPT_LINEAR_MIN=256
 
 # ── THE ENCLOSURE VIEW'S SHELL FINDINGS: A THIRD FAMILY, AND A SIBLING FOR THE REASON
 # THE NON-SHELL FAMILY IS ONE.
@@ -1975,9 +1983,18 @@ script_qnext() {
 # that runs before every Bash call. On exceeding the cap the scan STOPS and
 # script_qbail latches, which forces the caller to suppress nothing at all for
 # the rest of the command — degradation lands on "adjudicate everything".
+#
+# The cap bounds the steps, not their cost: on bash 3.2 each step re-reads the
+# text left to scan — a removal that re-measures it at every position it tries,
+# its length, its remainder — so a step on a long segment costs more than its
+# length, and a long line dense with quote characters held the hook for longer
+# than the segment was long. A segment of at least SCRIPT_LINEAR_MIN characters is
+# therefore scanned by script_qadvance_linear, one pass of awk with the same steps,
+# work count and bail; a shorter one, or one whose pass fails, by the loop below.
 script_qadvance() {
   script_qt="$1"
   local _pre
+  if [ "${#1}" -ge "$SCRIPT_LINEAR_MIN" ] && script_qadvance_linear "$1"; then return 0; fi
   while [ -n "$script_qt" ]; do
     if [ "$script_qwork" -ge 1000 ]; then
       script_qbail=1
@@ -2038,6 +2055,78 @@ script_qadvance() {
       fi
     fi
   done
+  return 0
+}
+
+# The scan above for a long segment, in one pass of awk in the C locale: the same
+# steps over the same text, so the same carried state, taint, work count and bail
+# on every input. The pass reads the text the loop's own length and substring reach,
+# `${1:0:${#1}}`, and steps a character at a time after a backslash as the loop
+# does — one byte in the C locale, one character otherwise, a byte that does not
+# open a well-formed character counting as one. The pass splits that text at the five
+# characters the loop searches for and walks the pieces once, counting one step
+# per search as the loop does, the last unsuccessful one included. Returns 1,
+# having set nothing, when the pass cannot run, and the loop reads the segment.
+#
+# The program: tok[1], tok[3], … are runs of text (possibly empty) and tok[2],
+# tok[4], … one searched character each; i is the run the scan is in, p the next
+# byte it has not read. clen is the length of the character a run opens with, in
+# bytes. A `'` opens $'…' when a `$` ahead of it, with nothing between, is still
+# unread — the test the loop makes of the text before the quote.
+readonly SCRIPT_QADVANCE_AWK='
+    function clen(t,   b, n, j, c) {
+      b = ord[substr(t, 1, 1)]
+      if (b < 192) return 1
+      n = (b < 224) ? 2 : (b < 240) ? 3 : (b < 248) ? 4 : (b < 252) ? 5 : (b < 254) ? 6 : 1
+      if (length(t) < n) return 1
+      for (j = 2; j <= n; j++) { c = ord[substr(t, j, 1)]; if (c < 128 || c > 191) return 1 }
+      return n
+    }
+    BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i }
+    { s = s $0 }
+    END {
+      st = ENVIRON["QA_ST"] + 0; ta = ENVIRON["QA_TA"] + 0; wk = ENVIRON["QA_WK"] + 0
+      ne = ENVIRON["QA_NE"] + 0; mb = ENVIRON["QA_MB"] + 0
+      t = s; gsub(/[\\\047"$`]/, "\n&\n", t); m = split(t, tok, "\n")
+      pos[1] = 1; for (j = 2; j <= m; j++) pos[j] = pos[j - 1] + length(tok[j - 1])
+      len = length(s); p = 1; i = 1; first = 1; bail = 0
+      while (1) {
+        if (first) { first = 0; if (!ne) break } else if (p > len) break
+        if (wk >= 1000) { bail = 1; st = 0; ta = 0; break }
+        wk++
+        i0 = i
+        for (k = i + 1; k <= m; k += 2) {
+          c = tok[k]
+          if (st == 1) { if (c == "\047") break }
+          else if (st == 3) { if (c == "\\" || c == "\047") break }
+          else if (st == 2) { if (c == "\\" || c == "\"" || c == "$" || c == "`") break }
+          else if (c == "\\" || c == "\047" || c == "\"") break
+        }
+        if (k > m) break
+        p = pos[k] + 1; i = k + 1
+        if (c == "\\") {
+          if (i <= m && length(tok[i]) > 0) { n = mb ? clen(tok[i]) : 1; p += n; tok[i] = substr(tok[i], n + 1); pos[i] += n }
+          else if (i + 1 <= m) { p += 1; i += 2 }
+        } else if (st == 1 || st == 3) st = 0
+        else if (st == 2) { if (c == "\"") { st = 0; ta = 0 } else ta = 1 }
+        else if (c == "\047") { st = 1; if (k - 1 > i0 && tok[k - 1] == "" && tok[k - 2] == "$") st = 3 }
+        else { st = 2; ta = 0 }
+      }
+      printf "%d %d %d %d\n", st, ta, wk, bail
+    }'
+script_qadvance_linear() {   # $1 = the segment
+  local _v _r _st _ta _wk _b _ne=0 _mb=0 _x=$'\303\251'
+  [ "${#_x}" -eq 1 ] && _mb=1
+  [ -n "$1" ] && _ne=1
+  _v="${1:0:${#1}}"
+  _r="$(LC_ALL=C QA_ST="$script_qstate" QA_TA="$script_qtaint" QA_WK="$script_qwork" QA_NE="$_ne" QA_MB="$_mb" /usr/bin/awk "$SCRIPT_QADVANCE_AWK" <<< "$_v")" || return 1  # linear: qadvance
+  read -r _st _ta _wk _b <<< "$_r"
+  case "${_st}:${_ta}:${_wk}:${_b}" in
+    [0123]:[01]:[0123456789]*:[01]) ;;
+    *) return 1 ;;
+  esac
+  script_qstate="$_st"; script_qtaint="$_ta"; script_qwork="$_wk"
+  if [ "$_b" -eq 1 ]; then script_qbail=1; fi
   return 0
 }
 
@@ -2534,10 +2623,19 @@ case "$TOOL_NAME" in
     # Canary: a one-line function body whose canonical form MUST expose the inner command
     # at an anchor position. Same posture as block-fragile-refs.sh's classifier canary
     # (GHSA-g9g6-28c9-vrx5) and the same fail-closed direction as the dependency guard.
+    # Two probes (#8314): the first catches a present-but-empty or truncated copy; the
+    # second — a wrapper carrying a separate-argument option before a benign verb, exposed
+    # at an anchor only by the walk that reads wrapper grammar — catches a VERSION SKEW, a
+    # copy that predates that grammar, so a wrapped command never falls back to the pre-fix
+    # verdict while the hook believes the primitive healthy. The second probe opens with the
+    # append form of a prefix assignment (#8314, follow-up pass), so a copy whose walk reads
+    # that word as the command word — one that predates the append form — fails it too.
     CMDPOS_OK=0
     if [ -r "$CMDPOS_AWK" ]; then
       if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
-         && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+         && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
+         && _cp_canary2="$("$PRINTF" '%s' 'Z+=0 nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+         && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q'; then
         CMDPOS_OK=1
       fi
     fi
@@ -2667,14 +2765,20 @@ case "$TOOL_NAME" in
 
     # ----- NEW-B: tamper resistance (PATH / alias / function / unset) -----
 
-    # BLOCK-DESTRUCTIVE-020 — PATH assignment (export PATH=, PATH=<value>, unset PATH)
-    # Blocks both plain assignment and command-prefix assignment (PATH=/tmp:$PATH cmd)
+    # BLOCK-DESTRUCTIVE-020 — PATH assignment, judged alike however it is spelled (#8444):
+    # PATH=<value> and PATH+=<value> at any command position the shared canonicalizer
+    # resolves — its transformation (e) marks every assignment its prefix walk skips, so one
+    # handed to a wrapper, behind another assignment or a redirection, after a keyword or
+    # `!`, at a condition position or inside a group sits at a command start; export,
+    # declare, typeset, readonly or local carrying a PATH assignment anywhere in its
+    # argument list; and unset PATH (the arm below). The declared over-blocks and the
+    # spellings this rule does not judge are listed in its registry row.
     # Note: shell-assignment rules (PATH=, export, unset) are NOT verb-invocations and
     # the absolute-path prefix is structurally inapplicable — these forms cannot be
     # invoked via /usr/bin/PATH=... However, ANCHOR_PREFIX_BASH is applied uniformly
     # per Stage 5 Spec A4.2 (mechanical uniform anchor transformation). The
     # optional prefix group degenerates to the existing pattern for these rules.
-    if matches "${ANCHOR_PREFIX_BASH}"'(export[[:space:]]+)?PATH='; then
+    if matches "${ANCHOR_PREFIX_BASH}"'((export|declare|typeset|readonly|local)[[:space:]]+([^;&|]*[[:space:]])?)?PATH[+]?='; then
       block "BLOCK-DESTRUCTIVE-020" \
         "PATH manipulation denied (enables hook-tool substitution attacks per Red Team H2)." \
         "if you need a modified PATH, set it in your shell before launching claude, or set CLAUDE_HOOK_BYPASS=1"
@@ -2703,7 +2807,11 @@ case "$TOOL_NAME" in
     # vector, so they carry one posture and one rule ID rather than drifting apart.
     # The escape hatch must be operator-only (set BEFORE claude launch), not accessible to
     # Claude via prompt injection. This rule enforces the asymmetry.
-    if matches "${ANCHOR_PREFIX_BASH}"'(export[[:space:]]+)?CLAUDE_HOOK_BYPASS='; then
+    # Positions are the canonicalizer's (#8444): its transformation (e) puts a wrapped,
+    # behind-assignment, grouped or condition-position assignment at a command start, a
+    # declared tightening of this rule's spellings; the two export-capable lines also read
+    # a declaration builtin's argument list and the append operator, as -020's line does.
+    if matches "${ANCHOR_PREFIX_BASH}"'((export|declare|typeset|readonly|local)[[:space:]]+([^;&|]*[[:space:]])?)?CLAUDE_HOOK_BYPASS[+]?='; then
       block "BLOCK-DESTRUCTIVE-023" \
         "CLAUDE_HOOK_BYPASS cannot be set mid-session (defeats the operator-only escape-hatch design)." \
         "to bypass hooks, exit claude and relaunch with: CLAUDE_HOOK_BYPASS=1 claude"
@@ -2713,7 +2821,7 @@ case "$TOOL_NAME" in
         "CLAUDE_HOOK_BYPASS command-prefix assignment denied (injection-attack vector)." \
         "to bypass hooks, exit claude and relaunch with: CLAUDE_HOOK_BYPASS=1 claude"
     fi
-    if matches "${ANCHOR_PREFIX_BASH}"'(export[[:space:]]+)?PMO_SCOPE_GUARD_ROOT='; then
+    if matches "${ANCHOR_PREFIX_BASH}"'((export|declare|typeset|readonly|local)[[:space:]]+([^;&|]*[[:space:]])?)?PMO_SCOPE_GUARD_ROOT[+]?='; then
       block "BLOCK-DESTRUCTIVE-023" \
         "PMO_SCOPE_GUARD_ROOT cannot be set mid-session (it re-points the layer-3 workspace-scope guard)." \
         "to change the governed scope root, exit claude and relaunch with: PMO_SCOPE_GUARD_ROOT=<path> claude"
@@ -2759,9 +2867,11 @@ case "$TOOL_NAME" in
     # operand FILTER differs per verb, because an interpreter takes a script and
     # `source` takes any file.
     #
-    # Bash 3.2-safe throughout (macOS system bash): parameter expansion only, no
-    # `tr`, no associative arrays, and the loop runs in the CURRENT shell (here-string,
-    # never a pipeline) so `block`'s exit 2 propagates rather than dying in a subshell.
+    # Bash 3.2-safe throughout (macOS system bash): parameter expansion only — save
+    # the separator split's one `tr` pass on a long command, inside a command
+    # substitution whose output the current shell reads (THE LINEAR PASS, below) — no
+    # associative arrays, and the loop runs in the CURRENT shell (here-string, never a
+    # pipeline) so `block`'s exit 2 propagates rather than dying in a subshell.
 
     # THE SEPARATOR SUBSTITUTION MOVED DOWN, and the move is load-bearing. It now
     # runs AFTER the here-document pre-pass, on script_hdstripped rather than on
@@ -2925,6 +3035,7 @@ case "$TOOL_NAME" in
     script_esc=""
     script_mark=""
     script_cut_out=""
+    script_lp=""
     # The flag walk's effective subject (raw token, or its normalized view when
     # that view is a flag outside every operand domain). Initialised for the same
     # reason as the three below: an unset read under `set -u` exits 1, and exit 1
@@ -2966,7 +3077,20 @@ case "$TOOL_NAME" in
 
     # Separator substitution, on the pre-pass output. Excised bodies are already
     # gone; a declined command reaches this line as $COMMAND verbatim.
-    script_segments="${script_hdstripped//;/$'\n'}"
+    #
+    # THE LINEAR PASS. On bash 3.2 a global pattern substitution costs more than
+    # linear time in the text it scans once that text carries the character it
+    # replaces, so on a large command these three lines could hold the hook past the
+    # runtime's command-hook timeout, and a hook that times out does not block. A
+    # command of at least SCRIPT_LINEAR_MIN characters is therefore split first by
+    # one pass of tr in the C locale, whose output equals the three substitutions'
+    # byte for byte (AC-022-X-EQ); they still run after it and find nothing left to
+    # replace, which costs one scan. A shorter command costs less than the fork the
+    # pass takes, so it keeps the substitutions alone, and a pass that fails leaves
+    # the text to them, so the segments are the same on every path.
+    script_segments="$script_hdstripped"
+    if [ "${#script_segments}" -ge "$SCRIPT_LINEAR_MIN" ] && script_lp="$(LC_ALL=C /usr/bin/tr '\073\046\174' '\012\012\012' <<< "${script_segments}.")"; then script_segments="${script_lp%.}"; fi  # linear: segments
+    script_segments="${script_segments//;/$'\n'}"
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
 
@@ -3161,7 +3285,14 @@ case "$TOOL_NAME" in
       # not even fail safe.
       #
       # A token is a prefix assignment IFF it contains `=` AND its NAME part
-      # (everything before the FIRST `=`) is a valid shell name. A token that is
+      # (everything before the FIRST `=`) is a valid shell name, or a valid name and
+      # one `+`: the append form `NAME+=value`, which bash and zsh read as an
+      # assignment word too, is stepped over with the same skip (#8314, the walk-fix
+      # pass; before it, an append-form word ended the run as the command word, so the
+      # script behind it was never adjudicated and a value naming an interpreter or a
+      # script was adjudicated in its place). An append whose value opens an array
+      # (`NAME+=(...)`) ends the run, as a subscript and every other indirect form do;
+      # those belong to another card. A token that is
       # none of an assignment, a listed keyword or wrapper (below), or a token of a
       # listed wrapper's own option grammar (the wrapper rows, script_wrapper_row)
       # TERMINATES the run and is the command word — so `a-b=1` and `--body=x` both
@@ -3169,7 +3300,12 @@ case "$TOOL_NAME" in
       # any token containing `=`". (Behind `env` the operand loop is env's own
       # grammar, which takes any `name=value`: env sets `a-b=1` and runs what follows.)
       # The two tests are ordered: `${tok%%=*}` returns the whole token when there is
-      # no `=`, so the pattern test must gate it.
+      # no `=`, so the pattern test must gate it. The egress rule's head walk spells
+      # this predicate identically (its suite's AC-E007-AP-PARITY arm reads both). The
+      # head resolver the quoted-fragment suppression reads (script_resolve_head) keeps
+      # its NAME=value-only test on purpose: it fails closed, so an append-form word
+      # there costs a false positive and never an admission, and widening it would
+      # turn refusals into allows.
       #
       # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION,
       # and each wrapper's own options and operands are walked from its row. `sudo
@@ -3184,10 +3320,11 @@ case "$TOOL_NAME" in
       # egress rule's prefix-command walk and the shared canonicalizer
       # lib/command-position.awk each hold a list and walk it with their own grammar,
       # and the SIGPIPE-idiom lint of the repository-integrity workflow holds a fourth
-      # for a different question. This walk and the egress walk match the basename;
-      # the canonicalizer matches the exact token, and it alone steps over a leading
-      # redirection and an escaped verb; only the egress walk steps over every
-      # dash-led token. This rule is deliberately not routed through the
+      # for a different question. All three walks match the basename; the canonicalizer
+      # and the egress walk each step over a leading redirection and an escaped verb,
+      # and this walk does not; only the egress walk steps over every dash-led token,
+      # and the canonicalizer alone serves a frozen un-widened view to the deletion
+      # hook's two allow-on-match exits. This rule is deliberately not routed through the
       # canonicalizer. The suite's WRAPVOCAB-PARITY arms read every list and fail on a
       # word-level difference their declared table does not carry, and on a
       # declaration whose difference no longer exists.
@@ -3215,7 +3352,8 @@ case "$TOOL_NAME" in
         case "$script_ptok" in
           [A-Za-z_]*=*)
             case "${script_ptok%%=*}" in
-              *[!A-Za-z0-9_]*) break ;;
+              *[!A-Za-z0-9_+]*|*+?*) break ;;   # M-WRAP-APPEND
+              *+) case "${script_ptok#*=}" in '('*) break ;; esac ;;   # M-WRAP-APPEND-ARRAY
             esac
             script_hidx=$(( script_hidx + 1 ))
             continue

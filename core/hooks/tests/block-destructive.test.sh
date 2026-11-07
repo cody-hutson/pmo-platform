@@ -170,6 +170,75 @@ test_case "EXT-POS-D5: escaped verb rm -rf / blocks" \
   "$(bash_payload '\rm -rf /')" \
   2 "BLOCK-DESTRUCTIVE-004"
 
+# --- EXT-POS (#8314): the canonicalizer walks a wrapper's own grammar ---
+#
+# The canonicalizer stopped at a wrapper's first flag, matched a prefix word as an exact
+# token, and omitted three wrappers and the condition keywords, so the identical deletion
+# reached this rule in plain form and did not behind any of those spellings. Each case is
+# the plain-form refusal above (AC-004), reached through one face: a wrapper option that
+# takes a separate argument (D6, D8, D10), a wrapper flag that takes none (D7, D16), an
+# absolute-path wrapper (D9), a wrapper missing from the set (D10-D12), a condition
+# position (D13-D15), and a quoted or escaped wrapper word (D17, D18).
+test_case "EXT-POS-D6: sudo -u root rm -rf / blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'sudo -u root rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D7: sudo -n rm -rf / blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'sudo -n rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D8: env -u X rm -rf / blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'env -u X rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D9: /usr/bin/env rm -rf / blocks (absolute-path wrapper)" \
+  "$(bash_payload '/usr/bin/env rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D10: nice -n 10 rm -rf / blocks (wrapper missing from the set, with its option)" \
+  "$(bash_payload 'nice -n 10 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D11: stdbuf -o0 rm -rf / blocks (wrapper missing from the set)" \
+  "$(bash_payload 'stdbuf -o0 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D12: timeout 5 rm -rf / blocks (wrapper missing from the set, with its duration)" \
+  "$(bash_payload 'timeout 5 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D13: if-condition rm -rf / blocks (condition position)" \
+  "$(bash_payload 'if rm -rf / ; then :; fi')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D14: while-condition rm -rf / blocks (condition position)" \
+  "$(bash_payload 'while rm -rf / ; do :; done')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D15: until-condition rm -rf / blocks (condition position)" \
+  "$(bash_payload 'until rm -rf / ; do :; done')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D16: time -p rm -rf / blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'time -p rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D17: escaped wrapper word rm -rf / blocks (one leading backslash on sudo)" \
+  "$(bash_payload '\sudo rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-POS-D18: quoted wrapper word rm -rf / blocks (full-token quotes on sudo)" \
+  "$(bash_payload '"sudo" rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+# The prefix cap, from both sides. The walk counts prefix-run tokens (keywords, wrappers,
+# assignments, redirections) and stops after ten, so a verb behind ten is reached and a
+# verb behind eleven is not: a deliberate bound, declared in the readiness text. A
+# wrapper's own options and operands do not count toward it.
+test_case "EXT-POS-D19: ten assignments then rm -rf / blocks (inside the prefix cap)" \
+  "$(bash_payload 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
 # --- EXT-RES (#5644): residual boundary of THIS rule, pinned deliberately ---
 #
 # ALLOW assertions on purpose, and NOT because the position is still blind — it is not.
@@ -186,6 +255,137 @@ test_case "EXT-RES-D1: { rm -rf /; } allows HERE — terminator class, not posit
 test_case "EXT-RES-D2: nested-shell program string allows (documented nested-shell residual)" \
   "$(bash_payload 'bash -c '"'"'rm -rf /'"'"'')" \
   0
+
+test_case "EXT-RES-D3: eleven assignments then rm -rf / allows HERE — the prefix cap, a declared residual" \
+  "$(bash_payload 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 rm -rf /')" \
+  0
+
+# --- EXT-RES-D-GIT (#8314): the declared precision class of the git rules ---
+#
+# The git rules anchor on a WORD BOUNDARY, not on a command position, so they read `git`
+# wherever it appears. Once the canonicalizer walks a wrapper's own grammar, a `git` that
+# the wrapper consumes as an option value or a positional is followed by the inserted
+# separator, and the rule no longer reads a git subcommand there. Each pin below is a
+# command that never runs git (it runs `push` as the user git, or with the variable git
+# unset, or is rejected by nice for its adjustment), so the move from refused to allowed is
+# a declared precision improvement. The control is the same command running git: refused.
+test_case "EXT-RES-D-GIT-1: sudo -u git push --force allows (git is sudo's user, not the command)" \
+  "$(bash_payload 'sudo -u git push --force')" \
+  0
+
+test_case "EXT-RES-D-GIT-2: env -u git push --force allows (git is the variable env unsets)" \
+  "$(bash_payload 'env -u git push --force')" \
+  0
+
+test_case "EXT-RES-D-GIT-3: nice -n git push --force allows (git is nice's adjustment)" \
+  "$(bash_payload 'nice -n git push --force')" \
+  0
+
+test_case "EXT-RES-D-GIT-CTL: sudo -u root git push --force blocks (the same wrapper running git)" \
+  "$(bash_payload 'sudo -u root git push --force')" \
+  2 "BLOCK-DESTRUCTIVE-001"
+
+# --- EXT-APPEND (#8314, follow-up pass): the append form of a prefix assignment ---
+#
+# A prefix assignment has two spellings, NAME=value and its append form NAME+=value, and
+# bash and zsh read both as an assignment word and run the command behind it. The
+# canonicalizer's prefix walk recognized only the first, so it read an append-form word as
+# the command word, and nothing behind that word sat at a command start: the deletion
+# behind it reached no anchored rule. Each arm below is the plain-form refusal of
+# EXT-POS-D4 (a NAME=value prefix, the CTL arm) reached through the append form: alone, not
+# at the start of the line, with an empty value, ahead of a wrapper, and twice. PREC is the
+# declared precision class of EXT-RES-D-GIT reached behind the append form: the command runs
+# `push` as the user git and never runs git, so it is allowed exactly as its NAME=value
+# spelling already is; PREC-CTL is the same wrapper running git, refused.
+test_case "EXT-APPEND-D-CTL: a NAME=value assignment then rm -rf / blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D1: an append-form assignment then rm -rf / blocks" \
+  "$(bash_payload 'FOO+=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D2: an append-form assignment opening a later segment, then rm -rf / blocks" \
+  "$(bash_payload 'true; FOO+=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D3: an append-form assignment with an empty value, then rm -rf / blocks" \
+  "$(bash_payload 'FOO+= rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D4: an append-form assignment, then a wrapper, then rm -rf / blocks" \
+  "$(bash_payload 'FOO+=1 sudo rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-D5: two append-form assignments then rm -rf / blocks" \
+  "$(bash_payload 'FOO+=1 BAR+=2 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-APPEND-PREC: an append-form assignment ahead of sudo -u git push --force allows (the declared precision class)" \
+  "$(bash_payload 'FOO+=1 sudo -u git push --force')" \
+  0
+
+test_case "EXT-APPEND-PREC-CTL: an append-form assignment ahead of sudo -u root git push --force blocks" \
+  "$(bash_payload 'FOO+=1 sudo -u root git push --force')" \
+  2 "BLOCK-DESTRUCTIVE-001"
+
+# --- EXT-ORDER (#8314, DT pass 2): an assignment or a redirection is read as what it is ---
+#
+# The default walk looked a token up as a prefix word (one leading backslash and full-token
+# quotes dropped, then the basename) BEFORE it tested the token as an assignment or a
+# redirection. A prefix-run assignment whose value is a path, or a redirection whose
+# attached target is one, was therefore read as the wrapper its last path segment names;
+# the walk stepped that wrapper's grammar, and a wrapper that takes a positional consumed
+# the real command word as its operand, so the deletion behind it reached no anchored rule.
+# The shell reads such a token as an assignment or a redirection, never as a command, and
+# the walk now tests those two shapes first, the order the -022 walk already uses. Each arm
+# below is the plain-form refusal (CTL0) reached through one spelling of the class. CTL1 to
+# CTL4 hold the same shapes with a value or target that names no positional-taking wrapper,
+# refused before and after; CTL5 is a real wrapper written by absolute path, which must keep
+# its walk. The exit view's walk is unchanged.
+test_case "EXT-ORDER-D-CTL0: rm -rf / blocks (plain-form control)" \
+  "$(bash_payload 'rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL1: an assignment with a plain value, then rm -rf / blocks" \
+  "$(bash_payload 'X=1 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL2: an assignment whose value is a path to env, then rm -rf / blocks" \
+  "$(bash_payload 'X=/usr/bin/env rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL3: an assignment whose value is a path to nice, then rm -rf / blocks" \
+  "$(bash_payload 'X=/usr/bin/nice rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL4: a redirection to a file that names no wrapper, then rm -rf / blocks" \
+  "$(bash_payload '>/tmp/out rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D-CTL5: a real timeout wrapper written by absolute path, with its duration, then rm -rf / blocks" \
+  "$(bash_payload '/usr/bin/timeout 5 rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D1: an assignment whose value's last path segment is timeout, then rm -rf / blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D2: an output redirection to a file named timeout, then rm -rf / blocks" \
+  "$(bash_payload '>/tmp/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D3: a numbered redirection whose target's last segment is timeout, then rm -rf / blocks" \
+  "$(bash_payload '2>/tmp/x/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D4: an append-form assignment whose value names timeout, then rm -rf / blocks" \
+  "$(bash_payload 'X+=/usr/bin/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
+
+test_case "EXT-ORDER-D5: a plain assignment, then one whose value names timeout, then rm -rf / blocks" \
+  "$(bash_payload 'Y=1 X=/opt/tools/timeout rm -rf /')" \
+  2 "BLOCK-DESTRUCTIVE-004"
 
 # --- /Users subdirs — block at /Users bare, allow deeper ---
 test_case "rm -rf /Users blocks (catastrophic)" \
@@ -385,6 +585,369 @@ test_case "export PATH=/tmp blocks" \
 test_case "unset PATH blocks" \
   "$(bash_payload 'unset PATH')" \
   2 "BLOCK-DESTRUCTIVE-020"
+
+# --- AC-D020 (#8444): the PATH-manipulation rule judges every spelling alike ---
+#
+# BLOCK-DESTRUCTIVE-020 anchors a PATH assignment at a command start, and the shared
+# canonicalizer marked only the command word, so an assignment its prefix walk stepped over
+# never sat where the anchor reads. The prefix form above was refused while the same
+# assignment handed to a wrapper, placed behind another assignment or a redirection, after a
+# keyword or `!`, at a condition position or inside a group was admitted, and so were the
+# declaration builtins and the append operator. The canonicalizer's transformation (e) now
+# marks every assignment the walk skips, and the rule's own line reads a declaration
+# builtin's argument list and `PATH+=`. Each arm is the refused plain form (CTL) reached
+# through one spelling. The NEAR arms hold the same shapes with another name, or the name as
+# content, and must stay allowed, so each refusal is attributable to the PATH assignment
+# itself. CAP pins the prefix cap's boundary: an assignment behind ten prefix-run tokens is
+# judged, one behind eleven is the declared residual. OVER pins the declared over-block of
+# an assignment written as a heredoc body line, which the canonicalizer reads as a command
+# start because heredoc bodies are outside its model.
+test_case "AC-D020-CTL-PFX: a prefix PATH assignment blocks (plain-form control)" \
+  "$(bash_payload 'PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-CTL-EXPORT: export PATH before the command blocks (plain-form control)" \
+  "$(bash_payload 'export PATH=x; true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAP: a PATH assignment handed to env blocks" \
+  "$(bash_payload 'env PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAP-SUDO: a PATH assignment handed to sudo blocks" \
+  "$(bash_payload 'sudo PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAP-TIME: a PATH assignment behind time blocks" \
+  "$(bash_payload 'time PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAPOPT-1: a PATH assignment behind env's own flag blocks" \
+  "$(bash_payload 'env -i PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAPOPT-2: a PATH assignment behind env's own option and its argument blocks" \
+  "$(bash_payload 'env -u FOO PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-WRAPABS: a PATH assignment handed to env by absolute path blocks" \
+  "$(bash_payload '/usr/bin/env PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-COND-IF: a PATH assignment at an if condition blocks" \
+  "$(bash_payload 'if PATH=x true; then true; fi')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-COND-WHILE: a PATH assignment at a while condition blocks" \
+  "$(bash_payload 'while PATH=x false; do true; done')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-COND-UNTIL: a PATH assignment at an until condition blocks" \
+  "$(bash_payload 'until PATH=x true; do true; done')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-COND-EXPORT: export PATH at an if condition blocks" \
+  "$(bash_payload 'if export PATH=x; then true; fi')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-ASSIGN-1: a PATH assignment behind another assignment blocks" \
+  "$(bash_payload 'FOO=1 PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-ASSIGN-2: a PATH assignment behind a redirection blocks" \
+  "$(bash_payload '>/dev/null PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-GROUP-1: a PATH assignment opening a subshell blocks" \
+  "$(bash_payload '(PATH=x; true)')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-GROUP-2: a PATH assignment opening a brace group blocks" \
+  "$(bash_payload '{ PATH=x; true; }')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-GROUP-3: a PATH assignment opening a function body blocks" \
+  "$(bash_payload 'f() { PATH=x true; }')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-KW-1: a PATH assignment after then blocks" \
+  "$(bash_payload 'if true; then PATH=x true; fi')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-KW-2: a PATH assignment after do blocks" \
+  "$(bash_payload 'for i in 1; do PATH=x true; done')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-KW-3: a PATH assignment after ! blocks" \
+  "$(bash_payload '! PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-EXPORT-ARGS-1: export with a PATH assignment later in its argument list blocks" \
+  "$(bash_payload 'export FOO=1 PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-EXPORT-ARGS-2: export with an end-of-options marker before PATH blocks" \
+  "$(bash_payload 'export -- PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-DECL-1: declare carrying a PATH assignment blocks" \
+  "$(bash_payload 'declare -x PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-DECL-2: typeset carrying a PATH assignment blocks" \
+  "$(bash_payload 'typeset -x PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-DECL-3: readonly carrying a PATH assignment blocks" \
+  "$(bash_payload 'readonly PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-DECL-4: local carrying a PATH assignment blocks" \
+  "$(bash_payload 'local PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-APPEND: an appending PATH assignment blocks" \
+  "$(bash_payload 'PATH+=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-CAP-TEN: a PATH assignment behind ten prefix-run tokens blocks (the cap's boundary)" \
+  "$(bash_payload 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-CAP-RESID: a PATH assignment behind eleven prefix-run tokens allows (the declared cap residual)" \
+  "$(bash_payload 'A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 PATH=x true')" \
+  0
+
+test_case "AC-D020-OVER-HEREDOC: a PATH assignment written as a heredoc body line blocks (declared over-block)" \
+  "$(bash_payload "$(/usr/bin/printf '%s\n%s\n%s' "cat > notes.txt <<'EOF'" 'local PATH=x' 'EOF')")" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "AC-D020-NEAR-1: another variable handed to env allows" \
+  "$(bash_payload 'env FOO=x true')" \
+  0
+
+test_case "AC-D020-NEAR-2: another variable opening a subshell allows" \
+  "$(bash_payload '(FOO=x; true)')" \
+  0
+
+test_case "AC-D020-NEAR-3: another variable at an if condition allows" \
+  "$(bash_payload 'if FOO=x true; then true; fi')" \
+  0
+
+test_case "AC-D020-NEAR-4: a variable whose name ends in PATH allows" \
+  "$(bash_payload 'MYPATH=x true')" \
+  0
+
+test_case "AC-D020-NEAR-5: a variable whose name begins with PATH allows" \
+  "$(bash_payload 'PATHX=x true')" \
+  0
+
+test_case "AC-D020-NEAR-6: a PATH assignment as an argument of echo allows" \
+  "$(bash_payload 'echo PATH=x')" \
+  0
+
+test_case "AC-D020-NEAR-7: a PATH assignment as a search pattern allows" \
+  "$(bash_payload 'grep -c PATH= f')" \
+  0
+
+test_case "AC-D020-NEAR-8: a wrapped PATH assignment inside a quoted string allows" \
+  "$(bash_payload 'echo "env PATH=x true"')" \
+  0
+
+test_case "AC-D020-NEAR-9: export of a variable whose name ends in PATH allows" \
+  "$(bash_payload 'export MYPATH=x')" \
+  0
+
+test_case "AC-D020-NEAR-10: declare of another variable allows" \
+  "$(bash_payload 'declare -x FOO=x')" \
+  0
+
+# AC-D020-CANON — transformation (e)'s text contract, exact. The default output marks every
+# assignment the walk skips and never the one at offset 1; the exit view, which the deletion
+# hook's allow-on-match exits read, marks no assignment.
+d020_canon() { # $1 = arm label  $2 = input  $3 = expected output  $4 = view (default | exit)
+  local got
+  if [ "$4" = exit ]; then
+    got="$(/usr/bin/awk -v CMDPOS_VIEW=exit -f "${HOOK%/*}/lib/command-position.awk" <<<"$2" 2>/dev/null)"
+  else
+    got="$(/usr/bin/awk -f "${HOOK%/*}/lib/command-position.awk" <<<"$2" 2>/dev/null)"
+  fi
+  if [ "$got" = "$3" ]; then
+    /usr/bin/printf 'PASS: %s the %s view of [%s] is [%s]\n' "$1" "$4" "$2" "$3"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s the %s view of [%s]: wanted [%s] got [%s]\n' "$1" "$4" "$2" "$3" "$got"
+    FAIL=$((FAIL + 1))
+  fi
+}
+d020_canon "AC-D020-CANON-1" 'env PATH=x true' 'env ; PATH=x ; true' default
+d020_canon "AC-D020-CANON-2" 'FOO=1 PATH=x true' 'FOO=1 ; PATH=x ; true' default
+d020_canon "AC-D020-CANON-3" '(PATH=x; true)' '(; PATH=x; ; true)' default
+d020_canon "AC-D020-CANON-4" 'PATH=x true' 'PATH=x ; true' default
+d020_canon "AC-D020-CANON-EXIT" 'env PATH=x true' 'env PATH=x ; true' exit
+
+# --- AC-D023 (#8444): the anti-injection rule reads the positions -020 reads ---
+#
+# BLOCK-DESTRUCTIVE-023 shares -020's anchored-assignment shape, so transformation (e) moves
+# its wrapped, behind-assignment, grouped and condition-position spellings from admitted to
+# refused, a declared tightening; its two export-capable lines also read a declaration
+# builtin's argument list and the append operator, as -020's line does. No arm pinned this
+# rule's patterns before, so CTL is the plain-form control, and NEAR holds a name that only
+# resembles the variable, or the variable as content.
+test_case "AC-D023-CTL: a prefix hook-bypass assignment blocks (plain-form control)" \
+  "$(bash_payload 'CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-CTL-SCOPE: a prefix scope-root assignment blocks (plain-form control)" \
+  "$(bash_payload 'PMO_SCOPE_GUARD_ROOT=x true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-WRAP: a hook-bypass assignment handed to env blocks (declared tightening)" \
+  "$(bash_payload 'env CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-WRAP-OPT: a hook-bypass assignment behind env's own flag blocks (declared tightening)" \
+  "$(bash_payload 'env -i CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-WRAP-SCOPE: a scope-root assignment handed to env blocks (declared tightening)" \
+  "$(bash_payload 'env PMO_SCOPE_GUARD_ROOT=x true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-ASSIGN: a hook-bypass assignment behind another assignment blocks (declared tightening)" \
+  "$(bash_payload 'FOO=1 CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-GROUP: a hook-bypass assignment opening a subshell blocks (declared tightening)" \
+  "$(bash_payload '(CLAUDE_HOOK_BYPASS=1 true)')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-COND: a hook-bypass assignment at an if condition blocks (declared tightening)" \
+  "$(bash_payload 'if CLAUDE_HOOK_BYPASS=1 true; then true; fi')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-DECL: declare carrying a hook-bypass assignment blocks" \
+  "$(bash_payload 'declare -x CLAUDE_HOOK_BYPASS=1')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-DECL-SCOPE: export with a scope-root assignment later in its argument list blocks" \
+  "$(bash_payload 'export FOO=1 PMO_SCOPE_GUARD_ROOT=x')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-APPEND: an appending hook-bypass assignment blocks" \
+  "$(bash_payload 'CLAUDE_HOOK_BYPASS+=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-APPEND-SCOPE: an appending scope-root assignment blocks" \
+  "$(bash_payload 'PMO_SCOPE_GUARD_ROOT+=x true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "AC-D023-NEAR-1: a variable whose name only resembles the bypass variable allows" \
+  "$(bash_payload 'env FOO_HOOK_BYPASS=1 true')" \
+  0
+
+test_case "AC-D023-NEAR-2: the bypass assignment as an argument of echo allows" \
+  "$(bash_payload 'echo CLAUDE_HOOK_BYPASS=1')" \
+  0
+
+# --- EXT-APPEND-D020 / -D023 (#8314, follow-up pass): an assignment behind the append form ---
+#
+# -020 and -023 read the append operator on their own variable at a command start, but an
+# append-form word was the canonicalizer's command word, so a guarded assignment BEHIND one
+# was never reached and never marked by transformation (e). Each arm is a guarded assignment
+# placed behind an append-form assignment; each CTL is the same assignment behind a
+# NAME=value word, refused before and after. The NEAR arms hold words that only look like
+# the append form — quoted, an argument of the real command, an invalid name, a doubled
+# operator — or the append form ahead of another name, and must keep today's allow.
+test_case "EXT-APPEND-D020-CTL: a PATH assignment behind a NAME=value assignment blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D020-1: a PATH assignment behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D020-2: an appending PATH assignment behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 PATH+=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D020-3: a PATH assignment handed to env behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 env PATH=x true')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D020-4: export PATH behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 export PATH=x')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-APPEND-D023-CTL: a hook-bypass assignment behind a NAME=value assignment blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "EXT-APPEND-D023-1: a hook-bypass assignment behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "EXT-APPEND-D023-2: a scope-root assignment behind an append-form assignment blocks" \
+  "$(bash_payload 'FOO+=1 PMO_SCOPE_GUARD_ROOT=x true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+test_case "EXT-APPEND-NEAR-1: a quoted append-form word is the command word, so the PATH word behind it allows" \
+  "$(bash_payload '"FOO+=1" PATH=x true')" \
+  0
+
+test_case "EXT-APPEND-NEAR-2: an append-form word as an argument of echo allows" \
+  "$(bash_payload 'echo FOO+=1 PATH=x')" \
+  0
+
+test_case "EXT-APPEND-NEAR-3: an invalid name before the append operator is the command word and allows" \
+  "$(bash_payload '1FOO+=1 PATH=x true')" \
+  0
+
+test_case "EXT-APPEND-NEAR-4: a doubled plus is not the append operator and allows" \
+  "$(bash_payload 'FOO++=1 PATH=x true')" \
+  0
+
+test_case "EXT-APPEND-NEAR-5: an append-form assignment ahead of a variable whose name ends in PATH allows" \
+  "$(bash_payload 'FOO+=1 MYPATH=x true')" \
+  0
+
+test_case "EXT-APPEND-NEAR-6: an append-form line written as quoted content allows" \
+  "$(bash_payload 'echo "FOO+=1 PATH=x true"')" \
+  0
+
+# --- EXT-ORDER-D020 / -D023 (#8314, DT pass 2): the ordering class at the assignment-anchored rules ---
+#
+# The misread of EXT-ORDER above also kept transformation (e) from marking an assignment. An
+# assignment whose value's last path segment names a positional-taking wrapper consumed the
+# PATH assignment behind it as that wrapper's operand (D020-1), and a PATH assignment whose own
+# value ends in a wrapper's name was itself read as that wrapper and never marked (D020-2).
+# Each CTL is the same PATH assignment behind a plain prefix assignment, refused before and
+# after. D023-1 is D020-1's shape on the anti-injection rule, a position D-Scope-023 declares.
+# The CANON pins hold the default view's exact text for both shapes and the exit view's.
+test_case "EXT-ORDER-D020-CTL1: a PATH assignment behind a plain assignment blocks (control)" \
+  "$(bash_payload 'X=1 PATH=/tmp/evil ls')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-ORDER-D020-1: a PATH assignment behind an assignment whose value names timeout blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout PATH=/tmp/evil ls')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-ORDER-D020-CTL2: a PATH assignment to a directory path, behind a plain assignment, blocks (control)" \
+  "$(bash_payload 'X=1 PATH=/tmp/evil/bin ls')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-ORDER-D020-2: a PATH assignment whose value's last segment is sudo, behind a plain assignment, blocks" \
+  "$(bash_payload 'X=1 PATH=/tmp/evil/sudo ls')" \
+  2 "BLOCK-DESTRUCTIVE-020"
+
+test_case "EXT-ORDER-D023-1: a hook-bypass assignment behind an assignment whose value names timeout blocks (declared tightening)" \
+  "$(bash_payload 'X=/usr/bin/timeout CLAUDE_HOOK_BYPASS=1 true')" \
+  2 "BLOCK-DESTRUCTIVE-023"
+
+d020_canon "EXT-ORDER-CANON-1" 'X=/usr/bin/timeout PATH=x true' 'X=/usr/bin/timeout ; PATH=x ; true' default
+d020_canon "EXT-ORDER-CANON-2" 'X=1 PATH=/tmp/evil/sudo ls' 'X=1 ; PATH=/tmp/evil/sudo ; ls' default
+d020_canon "EXT-ORDER-CANON-3" '>/tmp/timeout rm x' '>/tmp/timeout ; rm x' default
+d020_canon "EXT-ORDER-CANON-EXIT" 'X=/usr/bin/timeout rm x' 'X=/usr/bin/timeout ; rm x' exit
 
 test_case "alias grep='echo ok' blocks" \
   "$(bash_payload 'alias grep='\''echo ok'\''')" \
@@ -1579,6 +2142,115 @@ case "${b022_probe_rc}:${b022_probe_err}" in
     FAIL=$((FAIL + 1))
     ;;
 esac
+
+# ==========================================================================
+# BLOCK-022 — the append form of a prefix assignment (#8314, the walk-fix pass)
+# ==========================================================================
+#
+# A prefix assignment has two spellings, NAME=value and its append form NAME+=value, and
+# bash and zsh read both as an assignment word and run the command behind it. This rule's
+# command-position walk recognized only the first, so it took an append-form word for the
+# command word: an interpreter or `source` invocation behind it matched no verb and was never
+# adjudicated, while an append-form word whose own value named an interpreter or a script was
+# adjudicated as though it were the command. The walk now steps over the append form exactly
+# as it steps over NAME=value. Each must-flag arm below is a must-flag arm of the
+# assignment-prefix block above (its NAME=value control) reached through the append form, and
+# each was allowed, with nothing adjudicated, before this pass.
+#
+# THE DECLARED PRECISION CLASS. An append-form word is an assignment, so its value is not the
+# command and the word after it is: `VAR+=/bin/bash <script>` runs <script> directly, which the
+# direct-execution arm records at its rollout phase where the old reading refused it as an
+# interpreter invocation, and `VAR+=<script> <command>` executes nothing, which the old reading
+# recorded as a direct execution. Each takes the verdict its NAME=value spelling already has,
+# and the twin arm beside it pins that.
+#
+# THE DECLARED LIMIT. The head resolver the quoted-fragment suppression reads keeps its
+# NAME=value-only test on purpose: it fails closed, so a carrier behind the append form keeps a
+# false positive its NAME=value spelling does not have, and widening it would turn refusals
+# into allows. Pinned, not closed.
+
+echo ""
+echo "BLOCK-022 the append form of a prefix assignment (walk-fix pass)"
+echo "---"
+
+test_case "BLOCK-022 append: VAR+=v before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV+=1 bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: two append-form assignments before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'FOO+=bar BAZ+=qux bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: VAR+= with an empty value before bash, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV+= bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: VAR+=v before source, non-allowlisted, blocks" \
+  "$(bash_payload 'ENVV+=1 source /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: VAR+=v, then a wrapper and its option, then bash, blocks" \
+  "$(bash_payload 'ENVV+=1 sudo -u bot bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append: VAR+=v opening a later segment, then bash, blocks" \
+  "$(bash_payload 'true; ENVV+=1 bash /tmp/evil.sh')" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+exec_warn_case "BLOCK-022 append: VAR+=v before a direct execution records it at the exec arm's phase" \
+  'ENVV+=1 /tmp/evil.sh' 'not-allowlisted'
+
+# must-not-flag control -- the same prefix over an allowlisted target.
+test_case "BLOCK-022 append control: VAR+=v before bash, allowlisted, allows" \
+  "$(bash_payload 'ENVV+=1 bash core/deploy/deploy.sh')" \
+  0
+
+# skip-precision controls. Each word below only looks like the append form, or stands where the
+# walk does not step, so it stays the command word -- not an interpreter -- and the verdict is
+# UNCHANGED from before this pass. If the skip ever loosens into a general advance past any
+# token carrying `+=`, or into the array or indirect forms another card owns, these flip to
+# blocking and fail.
+test_case "BLOCK-022 append precision: a quoted append-form word is the command word" \
+  "$(bash_payload '"ENVV+=1" bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 append precision: an append-form word after the command word is an argument" \
+  "$(bash_payload 'echo ENVV+=1 bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 append precision: invalid NAME before the append operator does not advance" \
+  "$(bash_payload 'a-b+=1 bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 append precision: a doubled plus is not the append operator" \
+  "$(bash_payload 'ENVV++=1 bash /tmp/evil.sh')" \
+  0
+
+test_case "BLOCK-022 append precision: an array append ends the run (an indirect form another card owns)" \
+  "$(bash_payload 'ENVV+=(x) bash /tmp/evil.sh')" \
+  0
+
+# The declared precision class, each beside its NAME=value twin.
+exec_warn_case "BLOCK-022 append precision class: VAR+=/bin/bash <script> is the direct execution of <script>, recorded" \
+  'ENVV+=/bin/bash /tmp/evil.sh' 'not-allowlisted'
+
+exec_warn_case "BLOCK-022 append precision class twin: VAR=/bin/bash <script> is recorded the same way" \
+  'ENVV=/bin/bash /tmp/evil.sh' 'not-allowlisted'
+
+exec_notflag_case "BLOCK-022 append precision class: VAR+=<script> before another command executes nothing" \
+  'ENVV+=/tmp/evil.sh true'
+
+exec_notflag_case "BLOCK-022 append precision class twin: VAR=<script> before another command executes nothing" \
+  'ENVV=/tmp/evil.sh true'
+
+# The declared limit of the head resolver, beside its NAME=value spelling.
+test_case "BLOCK-022 append limit: a carrier behind the append form keeps the quoted-fragment false positive (pinned)" \
+  "$(bash_payload "ENVV+=1 gh issue comment 1 --body 'x; bash /tmp/evil.sh'")" \
+  2 "BLOCK-DESTRUCTIVE-022"
+
+test_case "BLOCK-022 append limit control: the NAME=value spelling of that carrier suppresses the fragment" \
+  "$(bash_payload "ENVV=1 gh issue comment 1 --body 'x; bash /tmp/evil.sh'")" \
+  0
 
 # ==========================================================================
 # BLOCK-022 F1 — normalization must not MANUFACTURE an allow (deny-don't-sanitize)
@@ -7035,12 +7707,6 @@ WRAP_DECL='egress|keyword|in|missing|no shell construct puts a command word dire
 egress|keyword|{|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
 egress|keyword|}|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
 egress|keyword|{}|extra|the egress walk resolves an xargs replacement token with it; this rule declares the replacement operand open
-canon|wrapper|nice|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|wrapper|stdbuf|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|wrapper|timeout|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|keyword|if|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|keyword|while|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
-canon|keyword|until|missing|the canonicalizer is a ratified bounded enumeration this change does not edit; its gaps are routed to their own card
 lint|wrapper|doas|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|setsid|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|ionice|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
@@ -7226,14 +7892,21 @@ else
   /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M1 an extra wrapper word was not reported (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
   FAIL=$((FAIL + 1))
 fi
+# M2 removes one word from a canonicalizer copy: the canonicalizer now holds every word of
+# this walk, so a copy that loses one must be reported as an undeclared difference. The
+# removal is asserted live twice — the copy differs, and the word is gone from what the
+# extractor reads — so a sed that matched nothing cannot pass.
 wrap_pm_canon2="${WRAP_ROOT}/parity-m2.awk"
-/usr/bin/sed -e '/PREFIX\["exec"\]=1/s/$/; PREFIX["nice"]=1/' "$WRAP_CANON" > "$wrap_pm_canon2"
-wrap_parity_arm "M2" wrapper "$wrap_w_hook" "$(wrap_words_canon "$wrap_pm_canon2")"
-if ! /usr/bin/cmp -s "$WRAP_CANON" "$wrap_pm_canon2" && [[ "$WRAP_PARITY_RESULT" == *"STALE:canon-nice"* ]]; then
-  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M2 a canonicalizer copy that gains a declared-missing word is reported as a stale declaration\n'
+/usr/bin/sed -e 's/PREFIX\["nice"\]=[0-9];[ ]*//' "$WRAP_CANON" > "$wrap_pm_canon2"
+wrap_pm2_words="$(wrap_words_canon "$wrap_pm_canon2")"
+wrap_pm2_gone=1
+case " $(/usr/bin/printf '%s' "$wrap_pm2_words" | /usr/bin/tr '\n' ' ') " in *" nice "*) wrap_pm2_gone=0 ;; esac
+wrap_parity_arm "M2" wrapper "$wrap_w_hook" "$wrap_pm2_words"
+if ! /usr/bin/cmp -s "$WRAP_CANON" "$wrap_pm_canon2" && [ "$wrap_pm2_gone" = 1 ] && [[ "$WRAP_PARITY_RESULT" == *"UNDECLARED:canon-nice"* ]]; then
+  /usr/bin/printf 'PASS: WRAPVOCAB-PARITY-M2 a canonicalizer copy that loses a word of this walk is reported as an undeclared difference\n'
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M2 a stale declaration was not reported (result: %s)\n' "${WRAP_PARITY_RESULT:-none}"
+  /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-M2 a lost word was not reported (word removed=%s, result: %s)\n' "$wrap_pm2_gone" "${WRAP_PARITY_RESULT:-none}"
   FAIL=$((FAIL + 1))
 fi
 wrap_pm_hook3="${WRAP_ROOT}/parity-m3.sh"
@@ -7274,6 +7947,210 @@ else
   /usr/bin/printf 'FAIL: WRAPVOCAB-PARITY-DOC readiness item 2 does not name: fragment [%s] registry [%s]\n' "$wrap_doc_frag" "$wrap_doc_index"
   FAIL=$((FAIL + 1))
 fi
+
+# --- WRAPROWS-PARITY — the canonicalizer's copy of this walk's wrapper rows (#8314) -----------
+# The shared canonicalizer walks each wrapper's own option grammar from a COPY of this
+# walk's rows (script_wrapper_row): the option facts are data about a program, so both walks
+# read the same facts, and the copy is asserted here instead of shared at run time (a shared
+# runtime file would put one more dependency on four always-on hooks). The arms compare
+# every field of every wrapper after defaults, and the key sets three ways (the rows here,
+# the rows there, and the canonicalizer's wrapper words), and the mutants below show the
+# comparison able to fail. Both extractors read code lines only: a comment that spells a
+# row is not a row. The walkers' LOGIC is a second copy this arm does not see; the corpus
+# rows of each card that changes either walker are where a logic difference shows.
+wraprows_hook() { # $1 = a copy of this hook -> "<wrapper|*default*><TAB><field><TAB><value>" and "LABEL<TAB><wrapper>" lines, or EXTRACTION-FAILED
+  /usr/bin/awk '
+    /^script_wrapper_row\(\) \{/ { inrow = 1; fn++; next }
+    inrow && /^\}/ { inrow = 0; next }
+    !inrow { next }
+    /^[ \t]*#/ { next }
+    {
+      line = $0
+      if (match(line, /^[ \t]*[a-z*]+\)/)) {
+        cur = substr(line, RSTART, RLENGTH); gsub(/[ \t)]/, "", cur)
+        if (cur != "*") { print "LABEL\t" cur; nl++ }
+      }
+      while (match(line, /script_w(opt|larg|nox|split|lsplit|long|pos)="[^"]*"/)) {
+        a = substr(line, RSTART, RLENGTH); line = substr(line, RSTART + RLENGTH)
+        f = a; sub(/^script_w/, "", f); sub(/=.*$/, "", f)
+        v = a; sub(/^[^"]*"/, "", v); sub(/"$/, "", v)
+        print ((cur == "") ? "*default*" : cur) "\t" f "\t" v; nv++
+      }
+    }
+    END { if (fn != 1 || nl == 0 || nv == 0) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+wraprows_canon() { # $1 = a copy of the canonicalizer -> "<wrapper|*default*><TAB><field><TAB><value>" and "ROW<TAB><wrapper>" lines, or EXTRACTION-FAILED
+  /usr/bin/awk '
+    /^[ \t]*#/ { next }
+    {
+      line = $0
+      while (match(line, /W(ROW|DEF|OPT|LARG|NOX|SPLIT|LSPLIT|LONG|POS)\["[^"]*"\]=("[^"]*"|[0-9]+)/)) {
+        a = substr(line, RSTART, RLENGTH); line = substr(line, RSTART + RLENGTH)
+        t = a; sub(/\[.*$/, "", t); sub(/^W/, "", t)
+        k = a; sub(/^[^"]*"/, "", k); sub(/".*$/, "", k)
+        v = a; sub(/^[^=]*=/, "", v); sub(/^"/, "", v); sub(/"$/, "", v)
+        if (t == "ROW") { print "ROW\t" k; nr++ }
+        else if (t == "DEF") { print "*default*\t" k "\t" v; nd++ }
+        else { print k "\t" tolower(t) "\t" v; nv++ }
+      }
+    }
+    END { if (nr == 0 || nd == 0 || nv == 0) print "EXTRACTION-FAILED" }
+  ' "$1"
+}
+# $1 = the hook rows  $2 = the canonicalizer rows  $3 = the canonicalizer words -> WRAPROWS_RESULT
+# (empty = parity; otherwise space-separated FIELD:/KEY:/NODEFAULT:/EXTRACTION-FAILED tokens)
+wraprows_compare() {
+  local cwords
+  wrap_classify "$3" wrapper; cwords="$WRAP_SET"
+  case "$1 $2" in
+    *EXTRACTION-FAILED*) WRAPROWS_RESULT="EXTRACTION-FAILED"; return 0 ;;
+  esac
+  WRAPROWS_RESULT="$( { /usr/bin/printf '%s\n' "$1" | /usr/bin/sed 's/^/H	/'
+      /usr/bin/printf '%s\n' "$2" | /usr/bin/sed 's/^/C	/'; } | /usr/bin/awk -F'\t' -v cwords="$cwords" '
+    BEGIN { nf = split("opt larg nox split lsplit long pos", F, " "); nw = split(cwords, W, " ") }
+    $1 == "H" && $2 == "LABEL" { hk[$3] = 1; next }
+    $1 == "C" && $2 == "ROW" { ck[$3] = 1; next }
+    $1 == "H" { hv[$2, $3] = $4; hs[$2, $3] = 1; next }
+    $1 == "C" { cv[$2, $3] = $4; cs[$2, $3] = 1; next }
+    END {
+      for (i = 1; i <= nf; i++) {
+        f = F[i]
+        if (!(("*default*", f) in hs)) printf "NODEFAULT:hook.%s ", f
+        if (!(("*default*", f) in cs)) printf "NODEFAULT:canon.%s ", f
+      }
+      for (w in hk) if (!(w in ck)) printf "KEY:canon-%s ", w
+      for (w in ck) if (!(w in hk)) printf "KEY:hook-%s ", w
+      for (i = 1; i <= nw; i++) if (W[i] != "" && !(W[i] in ck)) printf "KEY:row-%s ", W[i]
+      for (w in ck) { seen = 0; for (i = 1; i <= nw; i++) if (W[i] == w) seen = 1; if (!seen) printf "KEY:word-%s ", w }
+      for (w in hk) {
+        if (!(w in ck)) continue
+        for (i = 1; i <= nf; i++) {
+          f = F[i]
+          h = ((w, f) in hs) ? hv[w, f] : hv["*default*", f]
+          c = ((w, f) in cs) ? cv[w, f] : cv["*default*", f]
+          if (h != c) printf "FIELD:%s.%s ", w, f
+        }
+      }
+    }' )"
+  WRAPROWS_RESULT="${WRAPROWS_RESULT% }"
+}
+
+wrap_r_hook="$(wraprows_hook "$HOOK")"
+wrap_r_canon="$(wraprows_canon "$WRAP_CANON")"
+wraprows_compare "$wrap_r_hook" "$wrap_r_canon" "$wrap_w_canon"
+wrap_r_fields="$(/usr/bin/printf '%s' "$WRAPROWS_RESULT" | /usr/bin/tr ' ' '\n' | /usr/bin/grep -v -e '^KEY:' -e '^$' | /usr/bin/tr '\n' ' ')"
+wrap_r_keys="$(/usr/bin/printf '%s' "$WRAPROWS_RESULT" | /usr/bin/tr ' ' '\n' | /usr/bin/grep -e '^KEY:' -e '^EXTRACTION-FAILED$' | /usr/bin/tr '\n' ' ')"
+wrap_r_nlab="$(/usr/bin/printf '%s\n' "$wrap_r_hook" | /usr/bin/grep -c '^LABEL	' || true)"
+if [ -z "$wrap_r_fields" ] && [ "$wrap_r_nlab" -ge 11 ]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-01 every field of every wrapper row (%s wrappers x 7 fields, after defaults) is equal in this walk and in the canonicalizer\n' "$wrap_r_nlab"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-01 the canonicalizer copy of the wrapper rows differs from this walk (wrappers read=%s): %s\n' "$wrap_r_nlab" "${wrap_r_fields:-none}"
+  FAIL=$((FAIL + 1))
+fi
+if [ -z "$wrap_r_keys" ] && [ "$wrap_r_nlab" -ge 11 ]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-02 the wrapper key sets are one set: the rows here, the rows in the canonicalizer, and its wrapper words\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-02 the wrapper key sets differ: %s\n' "${wrap_r_keys:-none}"
+  FAIL=$((FAIL + 1))
+fi
+
+# The row comparison is shown able to fail, three ways, each mutation asserted live.
+wrap_rm1="${WRAP_ROOT}/rows-m1.awk"
+/usr/bin/sed -e 's/WOPT\["nice"\]="n:"/WOPT["nice"]="m:"/' "$WRAP_CANON" > "$wrap_rm1"
+wraprows_compare "$wrap_r_hook" "$(wraprows_canon "$wrap_rm1")" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$WRAP_CANON" "$wrap_rm1" && [[ " $WRAPROWS_RESULT " == *" FIELD:nice.opt "* ]]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-M1 a canonicalizer copy with one option letter changed is reported\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-M1 a changed option letter was not reported (result: %s)\n' "${WRAPROWS_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+wrap_rm2="${WRAP_ROOT}/rows-m2.sh"
+/usr/bin/sed -e '/^    nice)/s/script_wlarg=" --adjustment "/script_wlarg=" "/' "$HOOK" > "$wrap_rm2"
+wraprows_compare "$(wraprows_hook "$wrap_rm2")" "$wrap_r_canon" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$HOOK" "$wrap_rm2" && [[ " $WRAPROWS_RESULT " == *" FIELD:nice.larg "* ]]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-M2 a hook copy whose nice row loses a long option is reported\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-M2 a lost long option was not reported (result: %s)\n' "${WRAPROWS_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+wrap_rm3="${WRAP_ROOT}/rows-m3.sh"
+/usr/bin/sed -e 's/^script_wrapper_row() {/script_wrapper_rowx() {/' "$HOOK" > "$wrap_rm3"
+wrap_rm3_rows="$(wraprows_hook "$wrap_rm3")"
+wraprows_compare "$wrap_rm3_rows" "$wrap_r_canon" "$wrap_w_canon"
+if ! /usr/bin/cmp -s "$HOOK" "$wrap_rm3" && [ "$wrap_rm3_rows" = "EXTRACTION-FAILED" ] && [ "$WRAPROWS_RESULT" = "EXTRACTION-FAILED" ]; then
+  /usr/bin/printf 'PASS: WRAPROWS-PARITY-M3 a hook copy without the row function reports an extraction failure, never parity\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: WRAPROWS-PARITY-M3 a missing row function did not report an extraction failure (result: %s)\n' "${WRAPROWS_RESULT:-none}"
+  FAIL=$((FAIL + 1))
+fi
+
+# --- CMDPOS-SKEW — the canonicalizer's version-skew canary (#8314) ---------------------------
+# The hook trusts the shared canonicalizer only after two probes: a one-line function body,
+# and a wrapper carrying a separate-argument option before a benign word, whose canonical
+# form exposes the word only on the walk that reads wrapper grammar. A copy of the
+# canonicalizer that predates that grammar, or whose row table is damaged, passes the first
+# probe and fails the second, so the hook must fail CLOSED rather than read every wrapped
+# command the old way while believing the primitive healthy. Modelled by a copy whose nice
+# row is removed; the control is the same sandbox with the shipped copy.
+cps_root="$(/usr/bin/mktemp -d)"
+cps_hooks="${cps_root}/.claude/hooks"
+/bin/mkdir -p "${cps_hooks}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh "${cps_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${cps_hooks}/block-destructive.sh"
+/usr/bin/printf 'enforce' > "${cps_hooks}/.mode"
+cps_run() { # $1 = command -> CPS_RC and CPS_ERR
+  CPS_RC=0
+  CPS_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$1" "$cps_root")" | /bin/bash "${cps_hooks}/block-destructive.sh" 2>&1 >/dev/null ) )" || CPS_RC="$?"
+}
+/usr/bin/sed -e 's/WROW\["nice"\]=1//' "${HOOK%/*}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_live=0
+if ! /usr/bin/cmp -s "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" \
+   && ! /usr/bin/grep -q -F 'WROW["nice"]' "${cps_hooks}/lib/command-position.awk"; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar fails the hook closed (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$cps_live" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+# CMDPOS-SKEW-APPEND (#8314, follow-up pass): the second probe puts an append-form prefix
+# assignment ahead of its wrapper, so a copy whose walk reads that word as the command word —
+# the walk before this pass — never exposes the benign word, and the hook fails CLOSED rather
+# than read every append-prefixed command the old way. Modelled by a copy whose marked
+# assignment test is reverted to the NAME=value form alone, shown live first: it differs from
+# the shipped copy by exactly that one line, and it parses.
+/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "${HOOK%/*}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_n="$(/usr/bin/diff "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+cps_live=0
+if [ "$cps_n" = 2 ] && /usr/bin/awk -f "${cps_hooks}/lib/command-position.awk" </dev/null >/dev/null 2>&1; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form of a prefix assignment fails the hook closed (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form did not fail the hook closed (mutant live=%s, differing lines=%s, exit=%s): %s\n' "$cps_live" "${cps_n:-none}" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+/bin/cp "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
+cps_run 'echo hello'
+cps_ctl_benign="$CPS_RC"
+cps_run 'rm -rf /'
+if [ "$cps_ctl_benign" = 0 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-004' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command and refuses the plain form\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-CTL the sandbox with the shipped canonicalizer is not live (benign exit=%s, plain-form exit=%s)\n' "$cps_ctl_benign" "$CPS_RC"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$cps_root"
 
 # --- pairing mutants: every control and pin below is shown able to fail (Stage 7 F-02) -------
 # A control or a pin keeps its verdict across the change by design, so its two limbs cannot
@@ -8600,6 +9477,360 @@ encl_mut_arm "AC-ENCL-TEXEC6-pair: with the first view's carrier suppression off
   block-destructive-suppall.sh "gh issue comment 1 --body '| step | \`./tmp/x.sh\` | run it |'" W
 
 /bin/rm -rf "$ENCL_ROOT"
+
+# ---- AC-022-X* (#8314, DT pass 3): the -022 separator split is a linear pass ----
+#
+# The script-execution rule split every command that reaches it into segments with three global
+# pattern substitutions over the whole command, and on bash 3.2 each costs more than linear time
+# in the text it scans once that text carries the separator it replaces — so a large command could
+# hold this hook past the runtime's command-hook timeout, after which a PreToolUse hook does not
+# block. A command of at least SCRIPT_LINEAR_MIN characters is now split first by one tr pass in
+# the C locale, on the line marked `# linear: segments`. X-EQ lifts that block out of the hook and
+# runs it with the bound at 0 (the pass runs) and at 10^9 (the substitutions alone, the code before
+# this change): equal byte for byte on a dense input — every byte from 1 to 255, multibyte letters,
+# invalid UTF-8 and each operator — and on its edge endings, in en_US.UTF-8 and in C, alone and with
+# them, beside a near miss that must differ. X1 to X24 run the hook under a watchdog on four benign
+# shapes at 10, 20 and 40 KB in both locales — the dollar filler, separator-dense, one big quoted
+# span and redirection-dense — each inside the budget and allowed. X-CTL is the instrument's
+# sensitivity: a copy whose bound never lets the pass run is stopped at the budget on a long
+# separator-dense command in UTF-8. X-FB holds the fallback: a copy whose tr does not exist reads
+# the shipped hook's verdicts on a long command and raises no hook error.
+LIN_LIMIT="${LIN_LIMIT_DS:-200}"   # tenths of a second
+# lin_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+lin_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
+LIN_ROOT="$(/usr/bin/mktemp -d)"
+LIN_HOOKS="${LIN_ROOT}/.claude/hooks"
+/bin/mkdir -p "${LIN_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${LIN_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${LIN_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '%s\n' '/tmp/pmo-lin-ok.sh' > "${LIN_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${LIN_HOOKS}/.mode"
+/bin/cp "$HOOK" "${LIN_HOOKS}/block-destructive.sh"
+/usr/bin/sed 's/^readonly SCRIPT_LINEAR_MIN=256$/readonly SCRIPT_LINEAR_MIN=1000000000/' "$HOOK" > "${LIN_HOOKS}/block-destructive-nopass.sh"
+/usr/bin/sed '/# linear: segments$/s#/usr/bin/tr#/nonexistent/tr#' "$HOOK" > "${LIN_HOOKS}/block-destructive-notool.sh"
+
+# The dense input, three times over, and its edge endings.
+LC_ALL=C /usr/bin/awk 'BEGIN { for (r = 0; r < 3; r++) { for (i = 1; i < 256; i++) printf "%c", i
+  printf "%s", "naïve 日本 ü \377\303 x\342\202 y\200 ;&|()#`<>\"'"'"'\001\002\003\004\005\006\177>&<&&>>|.$\\ \t\n" } }' \
+  > "${LIN_ROOT}/in-0"
+{ /bin/cat "${LIN_ROOT}/in-0"; /usr/bin/printf '\n'; } > "${LIN_ROOT}/in-1"
+{ /bin/cat "${LIN_ROOT}/in-0"; /usr/bin/printf '\n\n\n'; } > "${LIN_ROOT}/in-2"
+{ /bin/cat "${LIN_ROOT}/in-0"; /usr/bin/printf ';'; } > "${LIN_ROOT}/in-3"
+{ /bin/cat "${LIN_ROOT}/in-0"; /usr/bin/printf '.'; } > "${LIN_ROOT}/in-4"
+: > "${LIN_ROOT}/in-5"
+# lin_eval <locale> <bound> <block> <input> <out> — the block in a fresh /bin/bash on the input.
+lin_eval() {
+  LC_ALL="$1" /bin/bash -c 'set -euo pipefail; SCRIPT_LINEAR_MIN="$1"; script_lp=""
+    script_segments="$(/bin/cat "$3"; printf x)"; script_segments="${script_segments%x}"
+    . "$2"
+    printf %s "$script_segments" > "$4"' _ "$2" "$3" "$4" "$5"
+}
+lin_why=""
+M='# linear: segments' /usr/bin/awk 'BEGIN { m = ENVIRON["M"] }
+  length($0) >= length(m) && substr($0, length($0) - length(m) + 1) == m { c++; n = 4 }
+  n > 0 { print; n-- }
+  END { exit c == 1 ? 0 : 1 }' "$HOOK" > "${LIN_ROOT}/block" || lin_why="${lin_why} no single line marked \`# linear: segments\`;"
+/usr/bin/head -1 "${LIN_ROOT}/block" > "${LIN_ROOT}/one"
+F="'\\012\\012\\012'" T="'\\012\\012\\001'" /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+  !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
+  { print }
+  END { exit d ? 0 : 1 }' "${LIN_ROOT}/block" > "${LIN_ROOT}/near" || lin_why="${lin_why} the near-miss edit did not apply;"
+if [ -z "$lin_why" ]; then
+  for lin_loc in en_US.UTF-8 C; do
+    for lin_k in 0 1 2 3 4 5; do
+      lin_eval "$lin_loc" 1000000000 "${LIN_ROOT}/block" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/ship.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the substitutions did not run;"
+      lin_eval "$lin_loc" 0 "${LIN_ROOT}/block" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/pass.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass did not run;"
+      lin_eval "$lin_loc" 0 "${LIN_ROOT}/one" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/one.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass line alone did not run;"
+      /usr/bin/cmp -s "${LIN_ROOT}/ship.out" "${LIN_ROOT}/pass.out" || lin_why="${lin_why} [${lin_loc} in-${lin_k}] pass != substitutions;"
+      /usr/bin/cmp -s "${LIN_ROOT}/ship.out" "${LIN_ROOT}/one.out" || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass alone != substitutions;"
+    done
+    lin_eval "$lin_loc" 1000000000 "${LIN_ROOT}/block" "${LIN_ROOT}/in-0" "${LIN_ROOT}/ship.out" || lin_why="${lin_why} [${lin_loc}] the reference did not run;"
+    lin_eval "$lin_loc" 0 "${LIN_ROOT}/near" "${LIN_ROOT}/in-0" "${LIN_ROOT}/near.out" || lin_why="${lin_why} [${lin_loc}] the near miss did not run;"
+    [ -s "${LIN_ROOT}/ship.out" ] || lin_why="${lin_why} [${lin_loc}] empty reference output;"
+    /usr/bin/cmp -s "${LIN_ROOT}/ship.out" "${LIN_ROOT}/near.out" \
+      && lin_why="${lin_why} [${lin_loc}] the near miss equals the substitutions (the comparison cannot see a difference);"
+  done
+fi
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-X-EQ: the \`# linear: segments\` pass equals the three substitutions byte for byte on a dense input and its edge endings in UTF-8 and C, alone and with them, and a near miss differs"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-EQ: the \`# linear: segments\` pass equals the three substitutions byte for byte" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+
+# lin_fill <bytes> <head> <unit> <tail> — the head, as many units as fit, then the tail.
+lin_fill() {
+  H="$2" U="$3" T="$4" /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]; s = h
+    while (length(s) + length(u) + length(t) <= n) s = s u
+    printf "%s", s t }'
+}
+# lin_cmd <shape> <bytes> <file> — one of the four benign shapes.
+lin_cmd() {
+  case "$1" in
+    dollar)      lin_fill "$2" '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "$3" ;;
+    separator)   lin_fill "$2" 'echo gh;' 'echo a;echo b|cat&echo c;' 'gh api repos/o/r' > "$3" ;;
+    quoted)      lin_fill "$2" "echo '" 'a b'$'\t''c;d&e|f(g)h#i`j<k>l"m'$'\n' "'"$'\n''gh api repos/o/r' > "$3" ;;
+    redirection) lin_fill "$2" 'echo gh' ' >&2 2>&1 <&0 &>/dev/null >|/dev/null' ' ; gh api repos/o/r' > "$3" ;;
+  esac
+}
+# lin_reap <pid> — stop a process and every process under it, children first, with KILL: bash
+# defers a TERM until a running parameter expansion returns, which is the cost being timed, and a
+# command-substitution subshell outlives a parent that dies.
+lin_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do lin_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
+# lin_timed <hook-file> <locale> <command-file> <limit> — the hook on the Bash payload of the
+# command under a watchdog; sets LIN_DS (tenths elapsed, -1 when stopped) and LIN_EXIT.
+LIN_DS=0
+LIN_EXIT=0
+lin_timed() {
+  local pay="${LIN_ROOT}/payload.json" pid n=0
+  bash_payload "$(/bin/cat "$3")" "$LIN_ROOT" > "$pay"
+  LC_ALL="$2" /bin/bash "$1" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      lin_reap "$pid"; wait "$pid" 2>/dev/null
+      LIN_DS=-1; LIN_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  LIN_EXIT=0; wait "$pid" || LIN_EXIT=$?
+  LIN_DS="$n"
+}
+for lin_shape in dollar separator quoted redirection; do
+  for lin_kb in 10 20 40; do lin_cmd "$lin_shape" $(( lin_kb * 1024 )) "${LIN_ROOT}/${lin_shape}-${lin_kb}.cmd"; done
+done
+lin_n=0
+for lin_shape in dollar separator quoted redirection; do
+  for lin_loc in en_US.UTF-8 C; do
+    for lin_kb in 10 20 40; do
+      lin_n=$(( lin_n + 1 ))
+      lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/${lin_shape}-${lin_kb}.cmd" "$LIN_LIMIT"
+      if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
+        /usr/bin/printf 'PASS: %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
+      else
+        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X${lin_n}: the long ${lin_shape} shape in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+      fi
+    done
+  done
+done
+lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/separator-40.cmd" "$LIN_LIMIT"
+if [ "$LIN_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly SCRIPT_LINEAR_MIN=1000000000' "${LIN_HOOKS}/block-destructive-nopass.sh"; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget on a long separator-dense command in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+    "exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X24 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+fi
+# X-FB: the pass's tr repointed to a path that does not exist, so the pass fails and leaves the
+# split to the substitutions. A long separator-dense command ending in an unlisted script run by an
+# interpreter (refused), and the same ending in an echo (allowed).
+lin_why=""
+lin_tools="$(/usr/bin/grep -c -F '/nonexistent/tr' "${LIN_HOOKS}/block-destructive-notool.sh")" || true
+[ "$lin_tools" = 1 ] || lin_why="${lin_why} the copy repoints ${lin_tools} pass lines, want 1;"
+lin_pad="$(lin_fill 400 '' 'echo a;echo b|cat&echo c;' '')"
+for lin_c in "b:2:${lin_pad}bash /tmp/pmo-lin-na.sh" "a:0:${lin_pad}echo done"; do
+  lin_tag="${lin_c%%:*}"; lin_rest="${lin_c#*:}"
+  lin_want="${lin_rest%%:*}"; lin_cmd_s="${lin_rest#*:}"
+  lin_s=0; lin_t=0
+  ( /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive.sh" > /dev/null 2>&1 ) || lin_s="$?"
+  lin_err="$( { /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive-notool.sh" > /dev/null; } 2>&1 )" || lin_t="$?"
+  [ "$lin_s" = "$lin_want" ] || lin_why="${lin_why} [${lin_tag}] shipped exits ${lin_s}, want ${lin_want};"
+  [ "$lin_t" = "$lin_s" ] || lin_why="${lin_why} [${lin_tag}] the copy without its tr exits ${lin_t}, the shipped hook ${lin_s};"
+  case "$lin_err" in *HOOK-ERROR*) lin_why="${lin_why} [${lin_tag}] the copy without its tr raised a hook error;" ;; esac
+done
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-X-FB: with the pass's tr missing, the split falls back to its substitutions — a refused interpreter run and an allowed echo read as the shipped hook reads them, with no hook error"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-FB: with the pass's tr missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+
+# ---- AC-022-Y* (#8314, DT pass 4): the -022 quote scan is linear ----
+#
+# The script-execution rule carries its quote state across a command's segments with a scan
+# (script_qadvance) whose steps the work cap bounds but whose cost per step it does not: on bash
+# 3.2 each step re-read the text left to scan — a removal that re-measures it at every position it
+# tries, once per searched character, an absent one the costliest — so a long line dense with quote
+# characters cost more than linear time and could hold the hook past the runtime's command-hook
+# timeout, after which a PreToolUse hook does not block. A segment of at least SCRIPT_LINEAR_MIN
+# characters is now scanned by one awk pass with the same steps (script_qadvance_linear, the line
+# marked `# linear: qadvance`). Y-EQ lifts the scan and runs it with the bound at 0 (the pass) and at
+# 10^9 (the loop, the code before this pass) over segment sequences carried from a starting state,
+# work counts near the cap among them, on dense segments — quotes of both kinds, $'...' and its
+# escaped quote, backslashes before multibyte and undecodable bytes, `$` and backticks — in
+# en_US.UTF-8 and in C: the carried state, taint, work count and bail after every segment must be
+# equal, and a near miss that never opens $'...' must differ. Y1 to Y6 run the hook under the
+# watchdog on a long comment line dense with quote characters at 10, 20 and 40 KB in both locales,
+# each inside the budget and allowed. Y-CTL is the instrument's sensitivity: the raised-bound copy
+# of X-CTL is stopped at the budget on a long comment line in UTF-8. Y-FB holds the fallback: a copy
+# whose pass has no awk reads the shipped hook's verdicts on a long quoted argument — suppressed
+# behind a carrier, refused behind another command — and raises no hook error.
+/usr/bin/sed '/# linear: qadvance$/s#/usr/bin/awk#/nonexistent/awk#' "$HOOK" > "${LIN_HOOKS}/block-destructive-noawk.sh"
+LIN_Y="${LIN_ROOT}/y"
+/bin/mkdir -p "${LIN_Y}/in"
+# The cases: a starting state and up to three segments each, from fixed units cycled by a fixed
+# generator; segments never carry a newline, as the rule's segments do not.
+LC_ALL=C /usr/bin/awk -v d="${LIN_Y}/in" 'BEGIN {
+  n = split("", u)
+  u[++n] = "\047"; u[++n] = "\""; u[++n] = "\\"; u[++n] = "$"; u[++n] = "`"; u[++n] = "$\047"; u[++n] = "\\\047"
+  u[++n] = "\\\""; u[++n] = "\\\\"; u[++n] = " "; u[++n] = "a"; u[++n] = "bc"; u[++n] = "# c"; u[++n] = "it\047s"
+  u[++n] = "\"x\""; u[++n] = "\047y\047"; u[++n] = "$(z)"; u[++n] = "\303\251"; u[++n] = "\346\227\245"
+  u[++n] = "\\\303\251"; u[++n] = "\\\343\200\200"; u[++n] = "\377"; u[++n] = "\303"; u[++n] = "\\\377"
+  split("0 0 0|1 1 0|2 1 0|3 0 0|0 0 990|2 1 998|1 0 999|0 0 1000", st, "|")
+  split("300 900 2600", size, " ")
+  x = 11; c = 0
+  for (a = 1; a <= 8; a++) for (b = 1; b <= 3; b++) {
+    cd = d "/case-" sprintf("%02d", ++c); system("/bin/mkdir -p " cd)
+    printf "%s\n", st[a] > (cd "/start"); close(cd "/start")
+    for (g = 1; g <= b; g++) {
+      s = ""; while (length(s) < size[(a + b + g) % 3 + 1]) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+      printf "%s", s > (cd "/seg-" g); close(cd "/seg-" g)
+    }
+  }
+}'
+# lin_y_lift <src> <out> — the scan, its search helper, its linear pass and the pass's program.
+lin_y_lift() {
+  /usr/bin/awk '
+    /^readonly SCRIPT_QADVANCE_AWK=/ { inp = 1 }
+    inp { print; if ($0 == "    }\047") inp = 0; next }
+    /^script_qnext\(\) \{/ || /^script_qadvance\(\) \{/ || /^script_qadvance_linear\(\) \{/ { inf = 1; k++ }
+    inf { print; if ($0 == "}") inf = 0 }
+    END { exit k == 3 ? 0 : 1 }' "$1" > "$2"
+}
+# lin_y_eval <locale> <bound> <lib> <out> — each case: its segments scanned in turn from its state,
+# the state after each written to <out>/<case>.
+lin_y_eval() {
+  /bin/mkdir -p "$4"
+  LC_ALL="$1" /bin/bash -c 'set -euo pipefail; SCRIPT_LINEAR_MIN="$1"; . "$2"
+    script_q1="'"'"'"; script_q2="\""; script_bs="\\"; script_qd="\$"; script_qbt="\`"
+    for c in "$3"/case-*; do
+      read -r script_qstate script_qtaint script_qwork < "$c/start"; script_qbail=0; o=""
+      for g in "$c"/seg-*; do
+        s="$(/bin/cat "$g"; printf x)"; s="${s%x}"
+        script_qadvance "$s"
+        o="${o}${script_qstate} ${script_qtaint} ${script_qwork} ${script_qbail};"
+      done
+      printf "%s\n" "$o" > "$4/${c##*/}"
+    done' _ "$2" "$3" "${LIN_Y}/in" "$4"
+}
+lin_why=""
+lin_y_lift "$HOOK" "${LIN_Y}/lib" || lin_why="${lin_why} the scan, its pass or the pass's program is missing from the hook;"
+F='if (k - 1 > i0 && tok[k - 1] == "" && tok[k - 2] == "$") st = 3' T='if (0) st = 3' /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+  !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
+  { print }
+  END { exit d ? 0 : 1 }' "${LIN_Y}/lib" > "${LIN_Y}/near" || lin_why="${lin_why} the near-miss edit did not apply;"
+lin_y_n="$(/bin/ls -d "${LIN_Y}/in"/case-* | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+[ "$lin_y_n" -ge 24 ] || lin_why="${lin_why} only ${lin_y_n} cases were written;"
+if [ -z "$lin_why" ]; then
+  for lin_loc in en_US.UTF-8 C; do
+    lin_y_eval "$lin_loc" 1000000000 "${LIN_Y}/lib" "${LIN_Y}/${lin_loc}/ref" || lin_why="${lin_why} [${lin_loc}] the loop did not run;"
+    lin_y_eval "$lin_loc" 0 "${LIN_Y}/lib" "${LIN_Y}/${lin_loc}/lin" || lin_why="${lin_why} [${lin_loc}] the pass did not run;"
+    lin_y_eval "$lin_loc" 0 "${LIN_Y}/near" "${LIN_Y}/${lin_loc}/near" || lin_why="${lin_why} [${lin_loc}] the near miss did not run;"
+    lin_y_d=0
+    for lin_c in "${LIN_Y}/in"/case-*; do
+      lin_k="${lin_c##*/}"
+      /usr/bin/cmp -s "${LIN_Y}/${lin_loc}/ref/${lin_k}" "${LIN_Y}/${lin_loc}/lin/${lin_k}" || lin_why="${lin_why} [${lin_loc} ${lin_k}] the pass differs;"
+      /usr/bin/cmp -s "${LIN_Y}/${lin_loc}/ref/${lin_k}" "${LIN_Y}/${lin_loc}/near/${lin_k}" || lin_y_d=$(( lin_y_d + 1 ))
+    done
+    [ "$lin_y_d" -gt 0 ] || lin_why="${lin_why} [${lin_loc}] the near miss reads like the loop (the comparison cannot see a difference);"
+  done
+fi
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-EQ: the \`# linear: qadvance\` pass carries the loop's state, taint, work count and bail across ${lin_y_n} segment sequences in UTF-8 and C, and a near miss differs"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-EQ: the \`# linear: qadvance\` pass carries the loop's state, taint, work count and bail" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+for lin_kb in 10 20 40; do
+  lin_fill $(( lin_kb * 1024 )) "echo gh # it's \"x\" " "don't \"stop\" " $'\n' > "${LIN_ROOT}/comment-${lin_kb}.cmd"
+done
+lin_n=0
+for lin_loc in en_US.UTF-8 C; do
+  for lin_kb in 10 20 40; do
+    lin_n=$(( lin_n + 1 ))
+    lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/comment-${lin_kb}.cmd" "$LIN_LIMIT"
+    if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
+      /usr/bin/printf 'PASS: %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+        "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+    fi
+  done
+done
+lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/comment-20.cmd" "$LIN_LIMIT"
+if [ "$LIN_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly SCRIPT_LINEAR_MIN=1000000000' "${LIN_HOOKS}/block-destructive-nopass.sh"; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget on a long comment line in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+    "exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show Y1-Y6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+fi
+# Y-FB: the pass's awk repointed to a path that does not exist, so the pass fails and the loop scans.
+# A long single-quoted argument holding an interpreter run: behind gh, a carrier, the run is a quoted
+# fragment and is suppressed (allowed); behind cat it is adjudicated and refused.
+lin_why=""
+lin_tools="$(/usr/bin/grep -c -F '/nonexistent/awk' "${LIN_HOOKS}/block-destructive-noawk.sh")" || true
+[ "$lin_tools" = 1 ] || lin_why="${lin_why} the copy repoints ${lin_tools} pass lines, want 1;"
+lin_pad="$(lin_fill 400 '' 'note ' '')"
+for lin_c in "g:0:gh issue comment 1 --body '${lin_pad}; bash /tmp/pmo-lin-na.sh'" "c:2:cat --body '${lin_pad}; bash /tmp/pmo-lin-na.sh'"; do
+  lin_tag="${lin_c%%:*}"; lin_rest="${lin_c#*:}"
+  lin_want="${lin_rest%%:*}"; lin_cmd_s="${lin_rest#*:}"
+  lin_s=0; lin_t=0
+  ( /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive.sh" > /dev/null 2>&1 ) || lin_s="$?"
+  lin_err="$( { /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive-noawk.sh" > /dev/null; } 2>&1 )" || lin_t="$?"
+  [ "$lin_s" = "$lin_want" ] || lin_why="${lin_why} [${lin_tag}] shipped exits ${lin_s}, want ${lin_want};"
+  [ "$lin_t" = "$lin_s" ] || lin_why="${lin_why} [${lin_tag}] the copy without its awk exits ${lin_t}, the shipped hook ${lin_s};"
+  case "$lin_err" in *HOOK-ERROR*) lin_why="${lin_why} [${lin_tag}] the copy without its awk raised a hook error;" ;; esac
+done
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-FB: with the pass's awk missing, the scan falls back to its loop — a suppressed quoted fragment and a refused interpreter run read as the shipped hook reads them, with no hook error"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-FB: with the pass's awk missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+
+# ---- AC-CPH-D* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
+#
+# The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
+# walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
+# command, clears one long command word, a long option cluster and a long split string in its short and
+# long spelling inside the budget, in en_US.UTF-8 and C, and allows each. The cells are the ones on which
+# `main`'s own hook keeps a wide margin under the budget. On the larger cells the cost is `main`'s own code
+# — the -022 rule's reading of a long word and of a long option cluster, which grows faster than the
+# command — and is that rule's work-ceiling card's to change, not this release's. The false-positive
+# control's AC-CP-L arms time the canonicalizer alone on every size of every shape, beside their
+# sensitivity copy.
+lin_cph_cmd() { # <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling
+  local h u t
+  case "$1" in
+    word)    h='';                     u='a'; t='' ;;
+    cluster) h='sudo -';               u='b'; t=' q' ;;
+    split)   h='env -S-';              u='b'; t=' q' ;;
+    lsplit)  h='env --split-string=-'; u='b'; t=' q' ;;
+  esac
+  H="$h" U="$u" T="$t" LC_ALL=C /usr/bin/awk -v n="$2" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = n - length(h) - length(t); r = u; while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$3"
+}
+lin_n=0
+for lin_cell in word:10:en_US.UTF-8 word:20:en_US.UTF-8 word:40:en_US.UTF-8 word:10:C word:20:C word:40:C \
+                cluster:10:en_US.UTF-8 cluster:10:C cluster:20:C split:10:en_US.UTF-8 split:10:C split:20:C \
+                lsplit:10:en_US.UTF-8 lsplit:10:C lsplit:20:C; do
+  lin_shape="${lin_cell%%:*}"; lin_rest="${lin_cell#*:}"; lin_kb="${lin_rest%%:*}"; lin_loc="${lin_rest#*:}"
+  lin_n=$(( lin_n + 1 ))
+  lin_cph_cmd "$lin_shape" $(( lin_kb * 1024 )) "${LIN_ROOT}/cph-${lin_shape}-${lin_kb}.cmd"
+  lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/cph-${lin_shape}-${lin_kb}.cmd" "$LIN_LIMIT"
+  if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
+    /usr/bin/printf 'PASS: %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+      "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+  fi
+done
+/bin/rm -rf "$LIN_ROOT"
 
 # --- Summary ---
 echo ""

