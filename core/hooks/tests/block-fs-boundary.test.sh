@@ -1456,7 +1456,7 @@ fi
 # X6 run a copy of the hook under a watchdog on a read whose one quoted operand carries structure
 # throughout, at 10, 20 and 40 KB in both locales: each inside the budget and refused. X-CTL is the
 # instrument's sensitivity: a copy whose bound never lets the pass run is stopped at the budget on
-# the 20 KB operand in UTF-8. X-FB holds the fallback: a copy whose sed does not exist refuses a long
+# a long operand in UTF-8. X-FB holds the fallback: a copy whose sed does not exist refuses a long
 # operand with the shipped hook's message and raises no hook error.
 FSBX_LIMIT="${FSBX_LIMIT_DS:-200}"   # tenths of a second
 # fsbx_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
@@ -1574,7 +1574,7 @@ for fsbx_loc in en_US.UTF-8 C; do
 done
 fsbx_timed "$FSBX_NP" en_US.UTF-8 "${FSBX_BASE}/token-20.cmd" "$FSBX_LIMIT"
 if [ "$FSBX_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly FSB_LINEAR_MIN=1000000000' "${FSBX_NP}/block-fs-boundary.sh"; then
-  /usr/bin/printf 'PASS: %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at the budget on the 20 KB operand in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+  /usr/bin/printf 'PASS: %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at the budget on a long operand in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(fsbx_ratio "${FSBX_DS}" "${FSBX_LIMIT}") of the budget, bound 1.00" \
     "exit=${FSBX_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))

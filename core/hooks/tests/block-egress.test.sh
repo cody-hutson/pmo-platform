@@ -2206,13 +2206,13 @@ else
     "commands=${_v_total} (want $(( _v_hand + 200 ))) differing lines=${_v_diff} classes seen=[${_v_seen}]${_v_bad}"
 fi
 
-# V10-ctl (the instrument's sensitivity) — the reference model on the 60K payload must be
+# V10-ctl (the instrument's sensitivity) — the reference model on the long payload must be
 # STOPPED at the limit: the watchdog and the locale reproduce the pre-fix cost, so a pass
 # below is a measurement, not an instrument that cannot see a slow scan.
-/usr/bin/printf 'PREDICT: AC-E007-V10-ctl — the pre-fix scan on the %s-character payload is stopped at the %s-tenths limit\n' "$_v_amplen" "$E007_V_LIMIT"
+/usr/bin/printf 'PREDICT: AC-E007-V10-ctl — the pre-fix scan on the long payload is stopped at the limit\n'
 e007_v_timed "$E007_V_REFDEF" e007_v_ref_kind "${E007_V_R}/amp.cmd" "$E007_V_LIMIT"
 if [ "$E007_V_DS" = -1 ]; then
-  e007_d_pass "AC-E007-V10-ctl: the pre-fix scan outlasts ${E007_V_LIMIT} tenths of a second on the ${_v_amplen}-character payload — the instrument sees the cost"
+  e007_d_pass "AC-E007-V10-ctl: the pre-fix scan outlasts the limit on the long payload — the instrument sees the cost"
 else
   e007_d_fail "AC-E007-V10-ctl: the pre-fix scan is stopped at the limit" "it finished in ${E007_V_DS} tenths with '${E007_V_KIND}' — the locale or watchdog cannot reproduce the cost, so V10a/V10b prove nothing (BROKEN PROBE)"
 fi
@@ -3181,7 +3181,7 @@ for _t_loc in en_US.UTF-8 C; do
 done
 e007_t_timed "$E007_T_BK" en_US.UTF-8 "${E007_T_R}/c10.cmd" "$E007_T_LIMIT"
 if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F 'egress_fq="${COMMAND//[' "${E007_T_BK}/mut.sh"; then
-  e007_d_pass "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget on the 10 KB command in UTF-8 — the instrument sees the cost"
+  e007_d_pass "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget on a large command in UTF-8 — the instrument sees the cost"
 else
   e007_d_fail "AC-E007-T-CTL: the hook with the bracket-class strip is stopped at the budget — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
     "exit=${E007_T_EXIT}; a copy that finishes, or that carries no bracket-class line, cannot show T1-T6 measure anything (BROKEN PROBE)"
@@ -3203,7 +3203,7 @@ fi
 # dollar filler, separator-dense, one big quoted span after a long quoted comment, redirection-
 # dense, and separator-dense ending in a quote it never closes (the unparseable branch's reader) —
 # each inside the budget and allowed. X-CTL is the instrument's sensitivity: a copy whose bound
-# never lets a pass run is stopped at the budget on the 20 KB quoted span in UTF-8. X-FB holds the
+# never lets a pass run is stopped at the budget on a long quoted span in UTF-8. X-FB holds the
 # fallback: a copy whose pass tools do not exist reads the verdicts of the shipped hook on commands
 # that reach every pass, and raises no hook error. The token mark strip runs long only on one word
 # built from many adjacent ANSI-C spans, which no timed shape builds, so X-EQ alone pins its block;
@@ -3331,7 +3331,7 @@ E007_L_X_NOPASS='s|^readonly EGRESS_LINEAR_MIN=256$|readonly EGRESS_LINEAR_MIN=1
 E007_L_NP="${E007_W_BASE}/lnp"; e007_w_copy "$E007_L_NP" "$E007_L_X_NOPASS"
 e007_t_timed "$E007_L_NP" en_US.UTF-8 "${E007_L_R}/quoted-20.cmd" "$E007_T_LIMIT"
 if [ "$E007_T_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly EGRESS_LINEAR_MIN=1000000000' "${E007_L_NP}/mut.sh"; then
-  e007_d_pass "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget on the 20 KB quoted span in UTF-8 — the instrument sees the cost"
+  e007_d_pass "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget on a long quoted span in UTF-8 — the instrument sees the cost"
 else
   e007_d_fail "AC-E007-X-CTL: a copy whose bound never lets a pass run is stopped at the budget — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
     "exit=${E007_T_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X30 measure anything (BROKEN PROBE)"
@@ -3394,9 +3394,9 @@ fi
 # sandbox hook under the watchdog on a continuation-dense and a quote-span-dense command at 10, 20
 # and 40 KB in both locales, each inside the budget and allowed. Y-CTL is the instrument's
 # sensitivity, one copy per loop: the raised-bound copy of X-CTL, whose walk is the loop before this
-# pass, is stopped at the budget on the 10 KB quote-span-dense command in UTF-8; the join has no bound,
+# pass, is stopped at the budget on a long quote-span-dense command in UTF-8; the join has no bound,
 # so its copy also tests the line it has grown for an open comment at every join, as the join before
-# this pass did, and is stopped at the budget on the 20 KB continuation-dense command in UTF-8. X-FB
+# this pass did, and is stopped at the budget on a long continuation-dense command in UTF-8. X-FB
 # holds the walk's fallback.
 E007_Y_R="${E007_W_BASE}/y"
 /bin/mkdir -p "${E007_Y_R}/in"
@@ -3521,7 +3521,7 @@ e007_t_timed "$E007_Y_GR" en_US.UTF-8 "${E007_Y_R}/continuation-20.cmd" "$E007_T
 [ "$E007_T_DS" = -1 ] || _y_why="${_y_why} the join's copy finished the 20 KB continuation-dense command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
 /usr/bin/grep -q -F 'egress_comment_open_at_end "${EGRESS_J}${last}"' "${E007_Y_GR}/mut.sh" || _y_why="${_y_why} the join's copy carries no test of the grown line;"
 if [ -z "$_y_why" ]; then
-  e007_d_pass "AC-E007-Y-CTL: the walk's loop is stopped at the budget on the 10 KB quote-span-dense command and the join re-testing its grown line on the 20 KB continuation-dense command, in UTF-8 — the instrument sees each cost"
+  e007_d_pass "AC-E007-Y-CTL: the walk's loop is stopped at the budget on a long quote-span-dense command and the join re-testing its grown line on a long continuation-dense command, in UTF-8 — the instrument sees each cost"
 else
   e007_d_fail "AC-E007-Y-CTL: the walk's loop and the join re-testing its grown line are each stopped at the budget" \
     "${_y_why} a copy that finishes cannot show Y1-Y12 measure anything (BROKEN PROBE)"
@@ -3552,8 +3552,8 @@ fi
 # escapes and on a command whose continuation line is one long word dense with escapes, at 10, 20, 40
 # and 80 KB in both locales, each inside the budget and allowed. Z-CTL is the instrument's
 # sensitivity, one copy per site: the decode that never takes its long path is stopped at the budget
-# on the 80 KB ANSI-C command, and the word normalization and basename test that never take theirs on
-# the 80 KB escaped-word command, both in UTF-8.
+# on a long ANSI-C command, and the word normalization and basename test that never take theirs on
+# a long escaped-word command, both in UTF-8.
 E007_Z_R="${E007_W_BASE}/z"
 /bin/mkdir -p "${E007_Z_R}/in"
 E007_Z_FUNCS="egress_long egress_cat egress_split_bs egress_split_at egress_ansic_decode egress_ansic_decode_long egress_unescape_rv egress_unescape_long egress_brace_words egress_fold_rv egress_respell_word egress_base_gh egress_keep_line"
@@ -3704,7 +3704,7 @@ e007_t_timed "$E007_Z_WD" en_US.UTF-8 "${E007_Z_R}/word-80.cmd" "$E007_T_LIMIT"
 [ "$E007_T_DS" = -1 ] || _z_why="${_z_why} the word copy finished the 80 KB escaped-word command inside the budget, measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of it;"
 [ "$(/usr/bin/grep -c -e '^        if false; then egress_unescape_long ' -e '^  if false; then case ' "${E007_Z_WD}/mut.sh")" = 2 ] || _z_why="${_z_why} the word copy does not carry its two edits;"
 if [ -z "$_z_why" ]; then
-  e007_d_pass "AC-E007-Z-CTL: the decode without its long path is stopped at the budget on the 80 KB ANSI-C command, and the escape step and basename test without theirs on the 80 KB escaped-word command, in UTF-8 — the instrument sees each cost"
+  e007_d_pass "AC-E007-Z-CTL: the decode without its long path is stopped at the budget on a long ANSI-C command, and the escape step and basename test without theirs on a long escaped-word command, in UTF-8 — the instrument sees each cost"
 else
   e007_d_fail "AC-E007-Z-CTL: the decode, and the escape step and basename test, each without its long path, are stopped at the budget" \
     "${_z_why} a copy that finishes cannot show Z1-Z16 measure anything (BROKEN PROBE)"

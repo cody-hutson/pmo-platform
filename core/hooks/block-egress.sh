@@ -1967,9 +1967,8 @@ egress_shell_parse() {
 # LINEAR in the command's length, so the cap bounds the scan's cost and not only its
 # input: two extended-regex searches, byte-wise in the C locale, each stopping at its first
 # match. The per-occurrence scan these replace rescanned and re-copied the remainder at
-# every operator, which is superlinear under a multibyte locale — tens of seconds on the
-# deny path for a well-formed command of 60K characters — and a hook that outlasts its
-# timeout does not block.
+# every operator, which is superlinear under a multibyte locale, on the deny path where it
+# runs. A hook that outlasts its timeout does not block.
 #
 # The two expressions state, operator by operator, the scan that loop was written to
 # perform. A maximal run of `<` opens a heredoc only when its length is two more than a

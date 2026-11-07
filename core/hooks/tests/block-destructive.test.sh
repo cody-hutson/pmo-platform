@@ -9492,7 +9492,7 @@ encl_mut_arm "AC-ENCL-TEXEC6-pair: with the first view's carrier suppression off
 # them, beside a near miss that must differ. X1 to X24 run the hook under a watchdog on four benign
 # shapes at 10, 20 and 40 KB in both locales — the dollar filler, separator-dense, one big quoted
 # span and redirection-dense — each inside the budget and allowed. X-CTL is the instrument's
-# sensitivity: a copy whose bound never lets the pass run is stopped at the budget on the 40 KB
+# sensitivity: a copy whose bound never lets the pass run is stopped at the budget on a long
 # separator-dense command in UTF-8. X-FB holds the fallback: a copy whose tr does not exist reads
 # the shipped hook's verdicts on a long command and raises no hook error.
 LIN_LIMIT="${LIN_LIMIT_DS:-200}"   # tenths of a second
@@ -9623,7 +9623,7 @@ for lin_shape in dollar separator quoted redirection; do
 done
 lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/separator-40.cmd" "$LIN_LIMIT"
 if [ "$LIN_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly SCRIPT_LINEAR_MIN=1000000000' "${LIN_HOOKS}/block-destructive-nopass.sh"; then
-  /usr/bin/printf 'PASS: %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget on the 40 KB separator-dense command in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+  /usr/bin/printf 'PASS: %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget on a long separator-dense command in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
     "exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X24 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
@@ -9668,7 +9668,7 @@ fi
 # equal, and a near miss that never opens $'...' must differ. Y1 to Y6 run the hook under the
 # watchdog on a long comment line dense with quote characters at 10, 20 and 40 KB in both locales,
 # each inside the budget and allowed. Y-CTL is the instrument's sensitivity: the raised-bound copy
-# of X-CTL is stopped at the budget on the 20 KB line in UTF-8. Y-FB holds the fallback: a copy
+# of X-CTL is stopped at the budget on a long comment line in UTF-8. Y-FB holds the fallback: a copy
 # whose pass has no awk reads the shipped hook's verdicts on a long quoted argument — suppressed
 # behind a carrier, refused behind another command — and raises no hook error.
 /usr/bin/sed '/# linear: qadvance$/s#/usr/bin/awk#/nonexistent/awk#' "$HOOK" > "${LIN_HOOKS}/block-destructive-noawk.sh"
@@ -9764,7 +9764,7 @@ for lin_loc in en_US.UTF-8 C; do
 done
 lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/comment-20.cmd" "$LIN_LIMIT"
 if [ "$LIN_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly SCRIPT_LINEAR_MIN=1000000000' "${LIN_HOOKS}/block-destructive-nopass.sh"; then
-  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget on the 20 KB comment line in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget on a long comment line in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
     "exit=${LIN_EXIT}; a copy that finishes, or that carries no raised bound, cannot show Y1-Y6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
