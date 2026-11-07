@@ -140,6 +140,7 @@ ADR-223 (`egress-prefix-walk-stops-on-the-gated-verb`) → **ADR-226** by `relea
 ADR-224 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-227** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 224; the record's Status section carries the provenance note.
 ADR-230 (`non-tracked-data-homed-by-risk-class`) → **ADR-231** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 ADR-230 (`stage-documents-are-declared-once-and-projected-twice`) → **ADR-232** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
+ADR-230 (`composition-method-is-core-and-enters-through-the-release-planner`) → **ADR-233** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
