@@ -1,5 +1,5 @@
 ---
-title: ADR-235 — The chain-head set derives from tracker labels, standing is declared on the label, and the epic child-set rule has one home
+title: ADR-237 — The chain-head set derives from tracker labels, standing is declared on the label, and the epic child-set rule has one home
 status: Proposed — authored at Stage 6 Engineering of the sequencing-layer-foundation release; ratified at that release's Stage 13 Close
 date: 2026-11-05
 release: sequencing-layer-foundation
@@ -14,7 +14,7 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-235 — The chain-head set derives from tracker labels, standing is declared on the label, and the epic child-set rule has one home
+# ADR-237 — The chain-head set derives from tracker labels, standing is declared on the label, and the epic child-set rule has one home
 
 ## Status
 
@@ -23,6 +23,8 @@ supersedes: none
 **Numbering provenance.** This record was authored at the next free number on its branch. The mainline anchor plus one is claimed by a sibling record shipping in this same release, so this record takes the slot after it rather than duplicating it; stepping further would leave a gap, which the contiguity gate fails as readily as a duplicate. A branch claim is detection-only and never binds for mainline purposes. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Other branch-authored artifacts cite this record by the ADR slug token carrying the slug `chain-head-set-derives-from-tracker-labels`, which has no number shape and resolves at the claim.
 
 **Numbering provenance — `231 → 235`.** Held **ADR-231** branch-local; renumbered to **ADR-235** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 231. In-release citations that read "ADR-231" denote this record.
+
+**Numbering provenance — `235 → 237`.** Held **ADR-235** branch-local; renumbered to **ADR-237** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 235. In-release citations that read "ADR-235" denote this record.
 
 ## Context
 
