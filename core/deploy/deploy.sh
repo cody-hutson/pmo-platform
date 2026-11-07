@@ -13291,7 +13291,7 @@ print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromiso
         log "  detail: operator.toml.template missing [adapters] table (#703 seam)"
       fi
       local _ad
-      for _ad in repo_host ticketing kb ai_tool scheduler; do
+      for _ad in repo_host ticketing kb ai_tool scheduler corpus_home; do
         if ! /usr/bin/grep -qE "^[[:space:]]*${_ad}[[:space:]]*=[[:space:]]*\S" "$c33_op" 2>/dev/null; then
           c33_findings=$((c33_findings + 1))
           log "  detail: operator.toml.template [adapters].$_ad has no default"
