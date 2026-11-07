@@ -685,6 +685,9 @@ Stage-13 entries (the version-less close; `automated-closeout.sh` rejects a vers
   - the note at `notes/_unversioned/`;
   - this plan, moved to `plans/_unversioned/` and set `CLOSED`.
 - **A8.1 note-content lint:** `lint_release_corpus.py --check note-content` → exit 0, with no line naming this release's note. Sensitivity arm: a banned term planted in the note's Section 6a reads `NOTE-BANNED-JARGON` with exit 1, and the note was restored byte-identical.
+- **A8 corpus checks on the close tree:**
+  - `deploy.sh --check-release-corpus` → exit 2, ADVISORY, 4 findings across 255 rows, none naming this release. Before this PR's outputs, the same check named this release 3 times (the index row, the digest entry and the note), so the instrument does read it.
+  - `deploy.sh --check-close-completeness` (Check 48) → exit 2, ADVISORY, 15 findings, none naming this release. Its population is version-anchored and never selects a slug row (Phase A8, "Which completion gates actually bind"), so that result is silence, not evidence. The binding gates for this close are the Step 4 table and the A8.1 note lint.
 - **A8.2 decision emission:** `deploy.sh --check-decision-emission` → exit 2, ADVISORY, INCOMPLETE across other releases. The gate reads `VERIFIED` rows only, so it does not cover this release until it is `VERIFIED`. Read directly, this release carries all three asserted classes: `decision/scope-lock` 2, `decision/d-class` 25 and `gate-outcome/plan-review-go` 1.
 - **A8.3 plan identity:** N/A — version-less. There is no Version cell for a filename to disagree with, and the plan-identity lint names nothing for this release.
 - **A10 QC4-06, goal attainment: ATTAINED.**
@@ -692,8 +695,14 @@ Stage-13 entries (the version-less close; `automated-closeout.sh` rejects a vers
   - Its § Delivery cut proposes seven slices in three milestones for epic #8150.
   - The Success Indicator holds: #8157 records the operator's ratification (comment 6671846544), and the founding ADR shipped, authored `Proposed` and merged `Accepted`.
   - Evidence: `git show origin/main:core/ADRs/ADR-232-stage-documents-are-declared-once-and-projected-twice.md` (frontmatter `status: Accepted`), and the ratification comment read over REST.
-- **A10.5 follow-up sweep:** `**Phase A10.5 net-work-ledger (close):** resolved=0 · proposed=0 (sweep=0 · bug=0 · feature=0 · target=0 · platform=0) · net=0 → NON-NEGATIVE · below-threshold=82 · declared=0 · folded=0 · cut=0 · reclassified=39 · sources: s7=0 s8=0 dr=45 hub=0 modec=0 audit=37 late=0`.
-  - The addendum has 0 rows. Stage 12 deferred no propagation, QC4-05 and QC4-06 routed nothing, and nothing later was held, so nothing is filed.
+- **A10.5 follow-up sweep:** `**Phase A10.5 net-work-ledger (close):** resolved=0 · proposed=0 (sweep=0 · bug=0 · feature=0 · target=0 · platform=0) · net=0 → NON-NEGATIVE · below-threshold=83 · declared=0 · folded=0 · cut=0 · reclassified=39 · sources: s7=0 s8=0 dr=45 hub=0 modec=0 audit=37 late=1`.
+  - **The addendum has 1 row, from Stage 12.** A file-integrity CIAC written for a release that adds an ADR did not admit the line the A.5.7c renumber appends to the ADR index's renumber log, so CIAC-1 read NOT MET as written on the merged release. The row reads **below the filing threshold**, so it is recorded here and filed nowhere:
+    - Class limb: not user-visible (`work-item-filing-threshold.md` § 2). Two of the platform's own records disagreed, the hub caught the disagreement before anyone acted on it, and nobody was blocked or misled.
+    - Severity: Minor at most.
+    - DEV-35 already accepts it as a residual.
+
+    Its lesson is carried as this release's learnings triple. No row passes the threshold, so the A10.5 stop-if at the Hub Gate Register does not fire.
+  - Stage 12 deferred no propagation, and QC4-05 and QC4-06 routed nothing.
   - The 28 owned process-baseline findings stay with #8150's delivery cut (PA-015).
   - Audit-class SUMMARY downstream items:
     - the founding ADR — shipped in this release;
