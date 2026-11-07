@@ -1150,11 +1150,17 @@ core/deploy/tests/test_deploy_path_literals.sh
 # blocks graduation, and its remedy is a sanctioned form for that logic, not a row.
 # The `.pl`, `.pm`, `.rb`, `.js`, `.mjs` and `.cjs` domains hold no row yet.
 #
-# ONE GROUP SINCE, NOT READ FROM THE DRAIN. release/tools/check-dark-branch.py was
+# THREE GROUPS SINCE, NOT READ FROM THE DRAIN. release/tools/check-dark-branch.py was
 # rowed when this section first met a mainline that added it: a pipeline
 # specification mandates that tool, and with this section holding `.py` rows Arm F
 # of release/tools/check-selftest-coverage.py grades an unrowed mandated tool as
-# remediable now. It is the one group below that did not come from the drain.
+# remediable now. release/tools/compute-chain-head-rollup.py and
+# release/tools/_epic_child_set.py were rowed by the release that added them: the
+# first is the chain-head view, a command its release's verification runs and an
+# operator runs by hand, and the second is the child-set module it loads, whose
+# self-test the same verification runs. Rowing them at birth keeps both runnable
+# once this arm reads `enforce`. These three are the groups below that did not come
+# from the drain.
 #
 # WHAT A ROW CHANGES. A row stops the drain recording that tool, so the next reading
 # measures what remains. It also opens one shape the walk does not see past: with no
@@ -1254,6 +1260,10 @@ core/deploy/tools/stamp-node-frontmatter.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/skills/pmo-skill-refiner/scripts/assert_branch_fresh.py
 ./release/skills/pmo-skill-refiner/scripts/assert_branch_fresh.py
 release/skills/pmo-skill-refiner/scripts/assert_branch_fresh.py
+[PMO_PLATFORM_ROOT]/release/tools/_epic_child_set.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/_epic_child_set.py
+./release/tools/_epic_child_set.py
+release/tools/_epic_child_set.py
 [PMO_PLATFORM_ROOT]/release/tools/bundle-issues-parser.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/bundle-issues-parser.py
 ./release/tools/bundle-issues-parser.py
@@ -1286,6 +1296,10 @@ release/tools/check-release-links.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/check-selftest-coverage.py
 ./release/tools/check-selftest-coverage.py
 release/tools/check-selftest-coverage.py
+[PMO_PLATFORM_ROOT]/release/tools/compute-chain-head-rollup.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/compute-chain-head-rollup.py
+./release/tools/compute-chain-head-rollup.py
+release/tools/compute-chain-head-rollup.py
 [PMO_PLATFORM_ROOT]/release/tools/generate-adr-index.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/generate-adr-index.py
 ./release/tools/generate-adr-index.py
