@@ -91,7 +91,7 @@ MODERATE. A revert of the change's commits restores the plain-spelling reads, an
 - ADR-205 — a refusal record carries structure, never the command. The unparseable record a respelled twin writes is the shipped record, feature set included.
 - ADR-206 — egress allowlist rows declare their match domain. A respelled write's path is matched against the rows declared for gh api paths, like any other.
 - ADR-227 — the sibling guard's decision on the same grammar problem; each guard keeps its own vocabulary.
-- ADR-233 — the shared canonicalizer's wrapper-grammar walk in the same release, whose redirection handling the parity table declares.
+- ADR-235 — the shared canonicalizer's wrapper-grammar walk in the same release, whose redirection handling the parity table declares.
 
 ## References
 

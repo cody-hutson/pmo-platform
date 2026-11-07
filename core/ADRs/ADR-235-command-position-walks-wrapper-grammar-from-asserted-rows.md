@@ -1,6 +1,6 @@
 <!-- repo-integrity: allow-issue-ref — limb 1: the precedent number cited under Related ADRs is a principle number, not an issue in this repository -->
 ---
-title: ADR-233 — The command-position canonicalizer walks each wrapper's own option grammar from an asserted copy of the script-walk rows, matches a prefix word on its basename, and serves a frozen un-widened view to the allow-on-match exits
+title: ADR-235 — The command-position canonicalizer walks each wrapper's own option grammar from an asserted copy of the script-walk rows, matches a prefix word on its basename, and serves a frozen un-widened view to the allow-on-match exits
 status: Proposed — authored at Stage 6 Engineering for the guards-judge-every-spelling-alike release. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter status field, never inferred from milestone closure.
 date: 2026-11-04
 release: guards-judge-every-spelling-alike
@@ -14,19 +14,21 @@ source_observations:
   - "Two rules read the canonical text anchored on an assignment rather than a verb: the PATH-manipulation rule and the anti-injection rule of block-destructive. The canonicalizer marked only the command word, so an assignment its prefix walk stepped over — handed to a wrapper, behind another assignment or a redirection, after a keyword, at a condition position, inside a group — never sat where the anchor reads, and the same assignment was refused in plain form and admitted in every other spelling."
 ---
 
-# ADR-233 — The command-position canonicalizer walks wrapper grammar from asserted rows, matches on basename, and serves a frozen view to the allow-on-match exits
+# ADR-235 — The command-position canonicalizer walks wrapper grammar from asserted rows, matches on basename, and serves a frozen view to the allow-on-match exits
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering for the `guards-judge-every-spelling-alike` release, per the Stage-6 ADR-authoring precedent. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter `status:` field, which is where it must be verified.
 
-**Numbering.** This record's number was derived at Engineering Commit 0 against the mainline anchor, per the rule ADR-115 ratifies and ADR-181 extends: an enumerate-and-parse over both ADR directories returned anchor 228 and next-free 229. A sibling release held 229 branch-local and merged first, so the number was reconciled when the mainline was merged into this release branch, as the provenance note below records; in-release citations use the slug token `ADR-233`, which binds at the Stage-12 claim.
+**Numbering.** This record's number was derived at Engineering Commit 0 against the mainline anchor, per the rule ADR-115 ratifies and ADR-181 extends: an enumerate-and-parse over both ADR directories returned anchor 228 and next-free 229. A sibling release held 229 branch-local and merged first, so the number was reconciled when the mainline was merged into this release branch, as the provenance note below records; in-release citations use the slug token `ADR-235`, which binds at the Stage-12 claim.
 
 **Extends ADR-187.** ADR-187 decided that command-start detection across the four regex-anchored PreToolUse hooks is resolved by pre-match canonicalization — not by a parser, and not by widening the anchor — with one shared implementation, insertion-only on the syntactic axis and quote-neutralized. All of that stands. This record widens the canonicalizer's reach to the faces ADR-187's first implementation left open, and narrows two of ADR-187's stated properties that the widening makes untrue as written.
 
 **Numbering provenance — `229 → 231`.** Held **ADR-229** branch-local; renumbered to **ADR-231** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 229. In-release citations that read "ADR-229" denote this record.
 
 **Numbering provenance — `231 → 233`.** Held **ADR-231** branch-local; renumbered to **ADR-233** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 231. In-release citations that read "ADR-231" denote this record.
+
+**Numbering provenance — `233 → 235`.** Held **ADR-233** branch-local; renumbered to **ADR-235** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 233. In-release citations that read "ADR-233" denote this record.
 
 ## Context
 
