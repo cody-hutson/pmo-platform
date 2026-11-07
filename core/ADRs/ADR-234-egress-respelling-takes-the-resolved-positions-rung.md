@@ -20,7 +20,7 @@ source_observations:
 
 **Proposed** — authored at Stage 6 Engineering for the `guards-judge-every-spelling-alike` release. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter `status:` field, which is where it must be verified.
 
-**Numbering provenance.** This record was authored at the next free number computed from the mainline anchor plus one, advanced past the slot the release's own first record already holds on this same branch. A branch claim is detection-only and never binds for mainline purposes, but a same-branch claim is a file that already exists, and taking its number would be a duplicate rather than a claim. Citations use the slug token `{{ADR:egress-respelling-takes-the-resolved-positions-rung}}`, which carries no number shape and resolves at the claim.
+**Numbering provenance.** This record was authored at the next free number computed from the mainline anchor plus one, advanced past the slot the release's own first record already holds on this same branch. A branch claim is detection-only and never binds for mainline purposes, but a same-branch claim is a file that already exists, and taking its number would be a duplicate rather than a claim. Citations use the slug token `ADR-234`, which carries no number shape and resolves at the claim.
 
 **Extends ADR-226 and keeps its constraints.** ADR-226 decided that the egress rule's head walk stays its own, that a gh api write behind a prefix command is located by a domain-test look-ahead and recorded at the rule's current phase, and that no phase constant moves. All of that stands. This record decides how the rule reads a write whose verb, position or flag is written in a spelling the shell resolves to the plain one.
 
@@ -91,7 +91,7 @@ MODERATE. A revert of the change's commits restores the plain-spelling reads, an
 - ADR-205 — a refusal record carries structure, never the command. The unparseable record a respelled twin writes is the shipped record, feature set included.
 - ADR-206 — egress allowlist rows declare their match domain. A respelled write's path is matched against the rows declared for gh api paths, like any other.
 - ADR-227 — the sibling guard's decision on the same grammar problem; each guard keeps its own vocabulary.
-- {{ADR:command-position-walks-wrapper-grammar-from-asserted-rows}} — the shared canonicalizer's wrapper-grammar walk in the same release, whose redirection handling the parity table declares.
+- ADR-233 — the shared canonicalizer's wrapper-grammar walk in the same release, whose redirection handling the parity table declares.
 
 ## References
 
