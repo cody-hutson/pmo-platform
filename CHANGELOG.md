@@ -21,6 +21,18 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.03] - 2026-11-07
+
+One standard now names the class and home of every kind of data the platform keeps out of git, and one Accepted decision says why.
+
+[Full notes](release/releases/notes/v5.03_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.03)
+
+## [v5.02] - 2026-11-06
+
+Epic framings now have one agreed way to state the level their question sits at, and a decision made ahead of an open question it depends on is named a framing slip.
+
+[Full notes](release/releases/notes/v5.02_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.02)
+
 ## [v5.01] - 2026-11-05
 
 Two checks that used to only warn now stop a pull request from merging when they find a problem.

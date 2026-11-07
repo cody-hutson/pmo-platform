@@ -6,7 +6,7 @@ status: Accepted
 date: 2026-07-25
 release: agent-finops-foundation (v3.96)
 deciders: "Workspace owner (ratified D-DataHome option A at the Stage-4 D-Gate, 2026-07-25; carried unchanged through the r2 Collective Review scope-lock, 2026-07-25). Design resolved at the FinOps data-foundation Stage-5 Solutioning (r1 + r2 revision)."
-superseded_by: ADR-141 in-part (stated store default)
+superseded_by: ADR-141 in-part (stated store default), ADR-231 in-part (the store's home as install-scoped working state and Decision 3's admission of a git-ignored in-repo path)
 tags: [architecture, finops, token-spend, data-store, schema, git-ignore, operator-instance, security, reversibility, derived-cache]
 source_observations:
   - "#3909 (C1) establishes the FinOps data foundation: extract per-session/per-subagent token counts from local Claude Code session data into an operator-local, git-ignored store, path resolved from config, no hardcoded operator path. On a flat-rate Max plan the local data is authoritative; a provider connector is optional plan-gated enrichment only."
@@ -59,3 +59,5 @@ This mirrors the tracked-schema / git-ignored-instance split used for hub-state 
 - ADR-031 — autonomy-ceiling unified payload-triggered hook (the Stage-6 ADR-authoring + own-lifecycle precedent this ADR follows).
 - ADR-046 — roadmap-instance in-repo home (the tracked-folder / git-ignored-instance "analysis-workspace" pattern the operator-instance store home echoes).
 - D-AttributionConvention (C2 #3910) is authored as its own ADR at C2's Stage 5 — one decision per ADR (the Stage-4 combined-ADR assumption was refined at Stage 5); this ADR owns D-DataHome only.
+- ADR-141 — supersedes this record in part, on its stated store default.
+- ADR-231 — supersedes this record in part: the usage store is install-scoped working state, homed in the user's XDG state home, and it no longer admits a git-ignored path inside a repository. Its schema authority still binds, its resolve-time guard binds as the floor that record tightens, and its `status:` stays `Accepted`.

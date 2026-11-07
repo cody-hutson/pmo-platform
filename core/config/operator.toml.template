@@ -223,10 +223,12 @@ operator_instance_projects_config_path = ""
 operator_instance_evals_path = ""
 
 [adapters]
-# Host-adapter selectors — the five external surfaces the platform integrates
-# with (ADR-017 §S2 names operator.toml as the home for "identity, paths,
-# methodology, adapters"). This is the canonical onboarding seam: onboarding-time
-# operator choices about which host surfaces to use are written here.
+# Adapter selectors — install-level choices of which implementation backs a
+# platform seam (ADR-017 §S2 names operator.toml as the home for "identity,
+# paths, methodology, adapters"). Each host selector picks an external surface
+# the platform integrates with; corpus_home, last, is a placement selector that
+# names where the release corpus is homed. This is the canonical onboarding seam:
+# onboarding-time operator choices about which host surfaces to use are written here.
 # Each selector ships a v1 default so a fresh install runs end-to-end with no
 # operator action. These are install-level / individual-tier choices; finer-
 # grained per-project relationship-mapping tuning lives in platform-config.toml
@@ -276,6 +278,24 @@ ai_tool = "claude-code"
 #        [adapters].ai_tool) | "none" (no scheduler on this install — manual degrade)
 # Default: "none"
 scheduler = "none"
+
+# Release-corpus home — where this install's release corpus lives. A placement
+# selector, not a host surface: its value names a home class, and
+# ADR-231 defines the corpus and records
+# where it lives.
+#
+# DECLARED, NOT YET READ. The release tooling's corpus resolver resolves the
+# corpus by presence, the tracked tree first, and does not consult this key.
+# A home other than "tracked" is decided by the change that teaches that
+# resolver to read the key, and that change adds its value here; until then
+# "tracked" is the only value, and it is what the resolver already does.
+#
+# SHIPPED OPT-IN: setup and reconcile never write this key, so an install that
+# does not set it carries no corpus_home line and reads as "tracked".
+#
+# Valid: "tracked" (the corpus is tracked in this repository under release/releases/)
+# Default: "tracked"
+corpus_home = "tracked"
 
 # --- Multi-destination work-tracker config (#384) -------------------------------
 # The [trackers.<id>] NAMED SUBTABLES declare N segregated work-tracker
