@@ -1,5 +1,5 @@
 ---
-title: ADR-230 — Issue-body section reads are single-sourced in the bundle parser, and a section ends only at structure
+title: ADR-234 — Issue-body section reads are single-sourced in the bundle parser, and a section ends only at structure
 status: Proposed — authored at Engineering Commit 0 of the sequencing-layer-foundation release; ratified at that release's Stage 13 Close
 date: 2026-11-05
 release: sequencing-layer-foundation
@@ -15,13 +15,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-230 — Issue-body section reads are single-sourced in the bundle parser, and a section ends only at structure
+# ADR-234 — Issue-body section reads are single-sourced in the bundle parser, and a section ends only at structure
 
 ## Status
 
 **Proposed** — authored at Engineering Commit 0 of the `sequencing-layer-foundation` release, after the operator's Collective Review scope lock rendered the decisions it records. It is ratified at that release's Stage 13 Close; the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure.
 
 **Numbering provenance.** Claimed as **230** against an anchor of **229** on `origin/main`, read from `release/tools/renumber-adr.py --detect --mainline-ref origin/main` at Engineering Commit 0. The detector also reported branch-only claims on 230 and 231 on other release branches; a branch claim is detection-only and never binds, so this record takes the mainline next-free slot rather than stepping above them. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Other branch-authored artifacts cite this record by the ADR slug token carrying the slug `issue-body-reads-single-sourced-in-the-bundle-parser`, which has no number shape and resolves at the claim.
+
+**Numbering provenance — `230 → 234`.** Held **ADR-230** branch-local; renumbered to **ADR-234** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 230. In-release citations that read "ADR-230" denote this record.
 
 ## Context
 

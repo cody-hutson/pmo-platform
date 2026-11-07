@@ -93,7 +93,7 @@ A number is **allocated at authorship and bound at merge** — an unmerged claim
 | [ADR-218](ADR-218-checkpoint-b-host-api-axis-reads-its-own-probe-in-band.md) | Checkpoint B's host-API axis reads its own probe, in-band | Accepted | 2026-09-27 | controls-fail-loud |
 | [ADR-222](ADR-222-signal-tags-bind-durable-surfaces.md) | Signal tags bind durable records, not conversational turns | Accepted | 2026-10-16 | authoring-conventions-enforced-or-retired |
 | [ADR-223](ADR-223-cleanup-excludes-active-items-not-only-live-ones.md) | The orphan cleanup excludes active items, not only live ones | Accepted | 2026-10-24 | fix-cleanup-active-exclusions |
-| [ADR-230](ADR-230-issue-body-reads-single-sourced-in-the-bundle-parser.md) | Issue-body section reads are single-sourced in the bundle parser, and a section ends only at structure | Proposed | 2026-11-05 | sequencing-layer-foundation |
+| [ADR-234](ADR-234-issue-body-reads-single-sourced-in-the-bundle-parser.md) | Issue-body section reads are single-sourced in the bundle parser, and a section ends only at structure | Proposed | 2026-11-05 | sequencing-layer-foundation |
 <!-- ADR-INDEX:END -->
 
 ADR-001 / ADR-002 / ADR-005 were migrated from an earlier `governance/adr/` layout; every record after them was authored natively in the modular-monolith layout.
