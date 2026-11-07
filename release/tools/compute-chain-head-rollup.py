@@ -65,7 +65,7 @@ Exit codes:
      not load
 
 Python 3.9, stdlib only. The decision this tool implements is recorded as
-{{ADR:chain-head-set-derives-from-tracker-labels}}.
+ADR-235.
 """
 
 import argparse

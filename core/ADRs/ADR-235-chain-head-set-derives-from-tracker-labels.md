@@ -20,7 +20,7 @@ supersedes: none
 
 **Proposed** — authored at Stage 6 Engineering of the `sequencing-layer-foundation` release, after the operator's Collective Review scope lock rendered the decisions it records. It is ratified at that release's Stage 13 Close; the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure.
 
-**Numbering provenance.** This record was authored at the next free number on its branch. The mainline anchor plus one is claimed by a sibling record shipping in this same release, so this record takes the slot after it rather than duplicating it; stepping further would leave a gap, which the contiguity gate fails as readily as a duplicate. A branch claim is detection-only and never binds for mainline purposes. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations use the slug token `{{ADR:chain-head-set-derives-from-tracker-labels}}`, which carries no number shape and resolves at the claim.
+**Numbering provenance.** This record was authored at the next free number on its branch. The mainline anchor plus one is claimed by a sibling record shipping in this same release, so this record takes the slot after it rather than duplicating it; stepping further would leave a gap, which the contiguity gate fails as readily as a duplicate. A branch claim is detection-only and never binds for mainline purposes. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Other branch-authored artifacts cite this record by the ADR slug token carrying the slug `chain-head-set-derives-from-tracker-labels`, which has no number shape and resolves at the claim.
 
 **Numbering provenance — `231 → 235`.** Held **ADR-231** branch-local; renumbered to **ADR-235** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 231. In-release citations that read "ADR-231" denote this record.
 
@@ -80,7 +80,7 @@ The view also needs each epic's children. The platform already had one rule for 
 - ADR-049 — an initiative is a grouping label, never an issue; this record derives the view that grouping implies.
 - ADR-012 and ADR-046 — roadmap instances are operator-local, which is why the standing declaration cannot live in roadmap frontmatter.
 - ADR-094 — extend-before-create: the child-set module is net-new only because in-place extension is infeasible.
-- `{{ADR:issue-body-reads-single-sourced-in-the-bundle-parser}}` — the bundle parser as the single home of issue-body reads, whose dependency grammar this view reads edges through.
+- `ADR-234` — the bundle parser as the single home of issue-body reads, whose dependency grammar this view reads edges through.
 
 ## References
 
