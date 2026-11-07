@@ -235,8 +235,32 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 # (GHSA-g9g6-28c9-vrx5), and the same fail-closed direction as the dependency guard above.
 CMDPOS_OK=0
 if [ -r "$CMDPOS_AWK" ]; then
+  # Two probes. The first — a one-line function body — detects a present-but-empty or
+  # truncated copy. The second — a wrapper carrying a separate-argument option before a
+  # benign verb — detects a VERSION SKEW (#8314): a copy that predates the wrapper-grammar
+  # walk resolves the benign verb identically on both versions for the first probe, but
+  # leaves it unreached here, where the walk that reads wrapper grammar exposes it at an
+  # anchor. A stale or damaged row table therefore fails this probe, so the hook denies
+  # rather than reading every wrapped command the old way while believing the primitive OK.
+  # The second probe opens with the append form of a prefix assignment (#8314, follow-up
+  # pass), so a copy whose walk reads that word as the command word — one that predates the
+  # append form — fails it too.
+  # A third probe guards the EXIT VIEW this hook uniquely reads, in the form it reads it: the
+  # both view of the same wrapped input, without that prefix (#8314, DT pass 7), must carry the
+  # exit view and then the default output, each ended by a NUL byte, and the exit view must NOT
+  # expose the verb (its walk predates the wrapper grammar) while the default output does. A copy
+  # that lacks the both view emits no NUL, and one that ignores the exit view emits the widened
+  # form twice; either fails here and the hook denies rather than letting the two allow-exits
+  # read a widened view.
+  _cp_x3=""; _cp_d3=""
   if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
-     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r'; then
+     && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
+     && _cp_canary2="$("$PRINTF" '%s' 'Z+=0 nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
+     && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q' \
+     && { IFS= read -r -d '' _cp_x3 && IFS= read -r -d '' _cp_d3; } \
+          < <("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null) \
+     && case "$_cp_x3" in *'; q'*) false ;; *) true ;; esac \
+     && case "$_cp_d3" in *'; q'*) true ;; *) false ;; esac; then
     CMDPOS_OK=1
   fi
 fi
@@ -245,9 +269,24 @@ if [ "$CMDPOS_OK" != 1 ]; then
   deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
   exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
 fi
-COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
+# The EXIT VIEW (#8314): the canonicalizer's quote-masked but UN-WIDENED output — the walk
+# as it stood before the wrapper grammar. The two exits below ALLOW on a match, so reading
+# the widened COMMAND_CMDPOS would turn a refusal into an allow every time the walk newly
+# resolved a command start (R→A-1, R→A-2). They read this view instead, so they keep the
+# verdicts they have today; closing the line-laundering those verdicts leave is #8122's.
+# Both views come from ONE run of the canonicalizer (#8314, DT pass 7): its both view emits
+# the exit view and then the default output, each ended by a NUL byte and each as a command
+# substitution would capture it, so the hook pays for one run, not two, and reads each with
+# one read. A read that meets the end of the output first takes the raw command, as a failed
+# run did; the exit view is emitted before the default walk runs, so a run that fails there
+# still leaves it.
+{
+  IFS= read -r -d '' COMMAND_CMDPOS_EXIT || COMMAND_CMDPOS_EXIT="$COMMAND"
+  IFS= read -r -d '' COMMAND_CMDPOS || COMMAND_CMDPOS="$COMMAND"
+} < <("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null)
 # Belt-and-braces: a non-empty command must never canonicalize to nothing.
 [ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
+[ -n "$COMMAND_CMDPOS_EXIT" ] || COMMAND_CMDPOS_EXIT="$COMMAND"
 
 # --- HELPERS ---
 log_block() {
@@ -286,6 +325,23 @@ block_cwd_unknown() {
 matches() {
   local pattern="$1"
   "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
+}
+
+# exit_matches(pattern) — the same test against the canonicalizer's EXIT VIEW, read only by
+# the two allow-on-match exits (#8314). A widening of the command walk does not reach it.
+exit_matches() {
+  local pattern="$1"
+  "$PRINTF" '%s' "$COMMAND_CMDPOS_EXIT" | "$GREP" -qE "$pattern"
+}
+
+# first_deletion_verb(matcher) — the deletion verb at a command start under the given
+# matcher (matches | exit_matches), or empty. The no-target exit uses it with exit_matches,
+# so a verb visible only under the widened walk does not grant the target-less allow.
+first_deletion_verb() {
+  local m="$1"
+  if "$m" "${ANCHOR_PREFIX_BASH}"'rm([[:space:]]+|$)'; then "$PRINTF" 'rm'; return; fi
+  if "$m" "${ANCHOR_PREFIX_BASH}"'rmdir([[:space:]]+|$)'; then "$PRINTF" 'rmdir'; return; fi
+  if "$m" "${ANCHOR_PREFIX_BASH}"'unlink([[:space:]]+|$)'; then "$PRINTF" 'unlink'; return; fi
 }
 
 # classify_path(path) — Steps 5-6 below: normalize an absolute path and prefix-match it
@@ -786,6 +842,55 @@ basis_note() {
   fi
 }
 
+# judge_targets(verb) — extract and classify every target token of a deletion verb on the
+# canonicalized command, blocking on the first one (every classification of rm/rmdir/unlink
+# blocks). Sets the caller-scoped `found_target=1` when the verb carries at least one
+# operand. Called for the detected (widened) verb; and, when the exit-view verb differs
+# (#8314), for that verb too, so a target-less verb the widening promoted ahead of today's
+# command-start verb cannot short-circuit past the real deletion that verb carries.
+judge_targets() {
+  local verb="$1" tseg token classification verdict resolved suggestion
+  while IFS="$TAB" read -r tseg token; do
+    [ -z "$token" ] && continue
+    found_target=1
+    classification=0
+    verdict="$(resolve_and_classify "$token" "$tseg")" || classification="$?"
+    split_verdict "$verdict"; resolved="$RESOLVED"
+    case "$classification" in
+      0)
+        # Inside workspace — block with Trash suggestion
+        suggestion="$(suggest_trash_command "$resolved")"
+        block "BLOCK-TRASH-002" \
+          "permanent deletion inside workspace blocked: $resolved$(basis_note)" \
+          "use Trash instead: $suggestion (or set CLAUDE_HOOK_BYPASS=1 only if intentional)"
+        ;;
+      1)
+        # Outside workspace — blocked. An auto-memory entry (MEMORY-STORE ARM) is still
+        # refused for a permanent-deletion verb, but the refusal names the Trash move.
+        if [ "$(memory_arm_verdict "$token")" = "ELIGIBLE" ]; then
+          case "$token" in \"*\"|\'*\') suggestion="trash '${token:1:${#token}-2}'" ;; *) suggestion="trash '$token'" ;; esac
+          block "BLOCK-TRASH-001" \
+            "permanent deletion of an auto-memory entry is refused — evict it with a Trash move instead: $suggestion" \
+            "eviction is a Trash move (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary, EVICT); no bypass is needed"
+        fi
+        block "BLOCK-TRASH-001" \
+          "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved$(basis_note)" \
+          "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+        ;;
+      2)
+        # Unresolvable under strict policy
+        block "BLOCK-TRASH-001" \
+          "path is unresolvable under strict policy (variable/subshell/backtick token): $token" \
+          "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+        ;;
+      3)
+        # Relative operand after a directory change the hook cannot follow
+        block_cwd_unknown "BLOCK-TRASH-001" "$token"
+        ;;
+    esac
+  done < <(extract_target_tokens "$verb")
+}
+
 # ==========================================================================
 # RULE EVALUATION
 # ==========================================================================
@@ -797,7 +902,7 @@ MEMORY_ADMISSIONS=0
 # Per requirement #6: "git rm and other git <verb> invocations are exempt"
 # Broader than the Stage 5 spoke's narrow allowlist — exempts ALL git subcommands.
 # Absolute-path-aware: also exempts /usr/bin/git, /bin/git, etc.
-if matches "${ANCHOR_PREFIX_BASH}"'git[[:space:]]+[^[:space:]]+'; then
+if exit_matches "${ANCHOR_PREFIX_BASH}"'git[[:space:]]+[^[:space:]]+'; then  # M-TRASH-GITEXEMPT
   exit 0
 fi
 
@@ -813,51 +918,23 @@ if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
 
   if [ -n "$verb" ]; then
     ensure_cwd_table
-    # Iterate target tokens
     found_target=0
-    while IFS="$TAB" read -r tseg token; do
-      [ -z "$token" ] && continue
-      found_target=1
-      classification=0
-      verdict="$(resolve_and_classify "$token" "$tseg")" || classification="$?"
-      split_verdict "$verdict"; resolved="$RESOLVED"
-      case "$classification" in
-        0)
-          # Inside workspace — block with Trash suggestion
-          suggestion="$(suggest_trash_command "$resolved")"
-          block "BLOCK-TRASH-002" \
-            "permanent deletion inside workspace blocked: $resolved$(basis_note)" \
-            "use Trash instead: $suggestion (or set CLAUDE_HOOK_BYPASS=1 only if intentional)"
-          ;;
-        1)
-          # Outside workspace — blocked. An auto-memory entry (MEMORY-STORE ARM) is still
-          # refused for a permanent-deletion verb, but the refusal names the Trash move.
-          if [ "$(memory_arm_verdict "$token")" = "ELIGIBLE" ]; then
-            case "$token" in \"*\"|\'*\') suggestion="trash '${token:1:${#token}-2}'" ;; *) suggestion="trash '$token'" ;; esac
-            block "BLOCK-TRASH-001" \
-              "permanent deletion of an auto-memory entry is refused — evict it with a Trash move instead: $suggestion" \
-              "eviction is a Trash move (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary, EVICT); no bypass is needed"
-          fi
-          block "BLOCK-TRASH-001" \
-            "deletion outside Claude/ is forbidden — cancel operation. Path: $resolved$(basis_note)" \
-            "all deletions outside ${WORKSPACE_ROOT}/ are blocked; cancel the operation, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
-          ;;
-        2)
-          # Unresolvable under strict policy
-          block "BLOCK-TRASH-001" \
-            "path is unresolvable under strict policy (variable/subshell/backtick token): $token" \
-            "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
-          ;;
-        3)
-          # Relative operand after a directory change the hook cannot follow
-          block_cwd_unknown "BLOCK-TRASH-001" "$token"
-          ;;
-      esac
-    done < <(extract_target_tokens "$verb")
+    judge_targets "$verb"
 
-    # If verb matched but no target tokens were extracted (e.g., bare `rm` with no args),
-    # there is nothing to delete — allow.
-    if [ "$found_target" = 0 ]; then
+    # If the verb matched but no target tokens were extracted (e.g., bare `rm` with no
+    # args), there is nothing to delete — allow. (#8314) The no-target allow is granted
+    # only on the verb the EXIT VIEW (un-widened) places at a command start: a verb the
+    # widened walk promoted ahead of today's command-start verb must not short-circuit.
+    # When the exit-view verb DIFFERS from the widened-first verb (e.g. `nice rm ; sudo
+    # unlink <path>`: widened picks a target-less `rm`, but today's start is `unlink`),
+    # its own targets are judged first, so the real deletion is not skipped. When they are
+    # the SAME verb (`sudo rm ; trash …`, `rm` at a start in both views), today's verdict
+    # is kept and the line-laundering those exits leave stays its own rule's card.
+    exit_verb="$(first_deletion_verb exit_matches)"  # M-TRASH-NOTARGET
+    if [ "$found_target" = 0 ] && [ -n "$exit_verb" ] && [ "$exit_verb" != "$verb" ]; then
+      judge_targets "$exit_verb"
+    fi
+    if [ "$found_target" = 0 ] && [ -n "$exit_verb" ]; then
       exit 0
     fi
   fi

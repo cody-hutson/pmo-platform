@@ -138,9 +138,14 @@ ADR-221 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-224** b
 ADR-222 (`enclosure-positions-are-adjudicated-by-a-second-view`) → **ADR-225** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 222; the record's Status section carries the provenance note.
 ADR-223 (`egress-prefix-walk-stops-on-the-gated-verb`) → **ADR-226** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 223; the record's Status section carries the provenance note.
 ADR-224 (`script-wrapper-walk-reads-option-grammar-from-rows`) → **ADR-227** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 224; the record's Status section carries the provenance note.
+ADR-229 (`command-position-walks-wrapper-grammar-from-asserted-rows`) → **ADR-231** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 229; the record's Status section carries the provenance note.
+ADR-230 (`egress-respelling-takes-the-resolved-positions-rung`) → **ADR-232** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 ADR-230 (`non-tracked-data-homed-by-risk-class`) → **ADR-231** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 ADR-230 (`stage-documents-are-declared-once-and-projected-twice`) → **ADR-232** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
+ADR-231 (`command-position-walks-wrapper-grammar-from-asserted-rows`) → **ADR-233** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 231; the record's Status section carries the provenance note.
 ADR-230 (`composition-method-is-core-and-enters-through-the-release-planner`) → **ADR-233** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
+ADR-232 (`egress-respelling-takes-the-resolved-positions-rung`) → **ADR-234** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 232; the record's Status section carries the provenance note.
+ADR-233 (`command-position-walks-wrapper-grammar-from-asserted-rows`) → **ADR-235** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 233; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
