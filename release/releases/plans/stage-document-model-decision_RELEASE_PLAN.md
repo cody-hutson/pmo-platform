@@ -319,9 +319,12 @@ There is no CHANGELOG key and no `.version` stamp (SKIP-with-PASS), and no GitHu
 ```
 release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md  ADD
 core/ADRs/ADR-232-stage-documents-are-declared-once-and-projected-twice.md  ADD
+core/ADRs/README.md  MODIFY (one § Renumber log line, written by the Stage-12 A.5.7c renumber)
 ```
 
-The second row is the founding ADR (PA-007 (B)), written by the #8157 Stage-6 session in Wave 2. Its filename takes the mainline next-free number (`release/tools/renumber-adr.py --next-free`), and its slug is `stage-documents-are-declared-once-and-projected-twice`; the Wave-2 commit replaced the placeholder row with that literal path (DEV-21). Until the number bound at Stage 12, branch-authored prose cited the record by its slug token, `{{ADR:<slug>}}` (ADR-181), and carried no number. Stage 12 Phase A.5.7 confirmed the number free on the mainline and stamped each token with it, before the merge. A slot collision before the merge is reconciled by A.5.7, which renumbers the file and rewrites this row.
+The second row is the founding ADR (PA-007 (B)), written by the #8157 Stage-6 session in Wave 2. Its filename takes the mainline next-free number (`release/tools/renumber-adr.py --next-free`), and its slug is `stage-documents-are-declared-once-and-projected-twice`; the Wave-2 commit replaced the placeholder row with that literal path (DEV-21). Until the number bound at Stage 12, branch-authored prose cited the record by its slug token, `{{ADR:<slug>}}` (ADR-181), and carried no number. The stamp resolved those tokens at the ratification head. A sibling release then merged its own ADR-230 first, so Stage 12 Phase A.5.7 read this release's claim as a duplicate and renumbered the record to ADR-232 before the merge. That rewrote this row and moved the stamped citations (DEV-35).
+
+The third row is that renumber's R4 step: one line appended to the § Renumber log of `core/ADRs/README.md`. Nothing else in that curated file changes, and DEV-23 still holds — the founding ADR gets no thematic entry.
 
 #### Read-only inputs
 
@@ -423,7 +426,7 @@ This release is version-less, so the slot predicate does not apply to it.
 ## Cross-Issue Acceptance Criteria
 
 **Cross-Issue Acceptance Criteria**
-- [ ] **CIAC-1 (#8153 × #8154 × #8155 × #8156 × #8157 on the release diff):** the release changes no tracked file other than its own plan and the founding ADR under `core/ADRs/`. *Method:* `git diff --name-only origin/main...HEAD -- . ':!release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md' ':!core/ADRs/ADR-*.md'` expect 0. *Graded at Stage 9 QC3.5 on the merged PR.* Control arm, same instrument and target: `git diff --name-only origin/main...HEAD -- release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md` expect 1.
+- [ ] **CIAC-1 (#8153 × #8154 × #8155 × #8156 × #8157 on the release diff):** the release changes no tracked file other than its own plan and the founding ADR under `core/ADRs/`, plus, only when Stage 12 Phase A.5.7c renumbers that ADR, the one line its R4 step appends to the § Renumber log of `core/ADRs/README.md` (DEV-35). *Method:* `git diff --name-only origin/main...HEAD -- . ':!release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md' ':!core/ADRs/ADR-*.md' ':!core/ADRs/README.md'` expect 0. *Graded at Stage 9 QC3.5 on the merged PR, and re-graded at Stage 12 after the renumber; after the merge, the same instrument reads the range `<merge>^1 <merge>`.* Control arm, same instrument and target: `git diff --name-only origin/main...HEAD -- release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md` expect 1. Bound on the README exclusion, read alongside: `git diff --numstat origin/main...HEAD -- core/ADRs/README.md` reads empty, or `1 0` with the one added line opening `` ADR-<old> (`stage-documents-are-declared-once-and-projected-twice`) → **ADR-<new>** ``. Residual, stated: the method alone admits any edit to `core/ADRs/README.md`; the bound is what holds it to the one renumber-log line.
 - [ ] **CIAC-2 (#8153 × #8157 on the release projection):** every Stage 5 output that #8153 classifies as comment-only appears in the release projection of #8157's design record with a lifecycle class and a named reader, or "none" with a reason. *Method:* declared, verification deferred to #8153 AC-4, #8157 AC-1. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-3 (#8154 × #8157 on the project-delivery projection):** every document row in the project-delivery projection of #8157's design record traces to a row of the #8154 record, or is named as new or dropped with a reason, and each of the #8154 disagreements is either resolved by the design or carried as an open item. *Method:* declared, verification deferred to #8154 AC-4, #8157 AC-1. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-4 (#8155 × #8157 on the shared stage vocabulary):** the vocabulary #8157 chooses is one of the #8155 candidates, or a named derivative of one, and carries that candidate's stated rename cost. *Method:* declared, verification deferred to #8155 AC-3, #8157 AC-2. *Graded at Stage 9 QC3.5 on the merged PR.*
@@ -599,7 +602,7 @@ ac_baseline: { #8153: 5, #8154: 5, #8155: 4, #8156: 4, #8157: 6, read_at: b1042e
 
 ### Release-Level Verification
 
-- [ ] File Integrity — the release diff equals the two FCM rows (CIAC-1; `fcm-delivery`)
+- [ ] File Integrity — the release diff equals the three FCM rows (CIAC-1; `fcm-delivery`)
 - [ ] Content Correctness — the Stage-8 per-criterion verdicts above
 - [ ] Cross-Reference Validity — the PR-time link gates on this plan and the ADR
 - [ ] Skill Invocation — N/A: no skill changes
@@ -656,17 +659,23 @@ Wave-2 entries (the #8157 Stage-6 commit that adds the founding ADR):
 - **ADR index:** N/A — the record is under `core/ADRs/`, whose README is curated (DEV-23).
 - **Skill packages:** `printf '%s\n' <changed paths> | bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` → no skill named; nothing to rebuild.
 
-## Deployment Execution Log
+Stage-12 entries (the A.5.7 reconciliation, the merge, and Phases B1.1 and B4):
 
-(Populated during Stage 12.)
+- **ADR number (A.5.7a/c/e):** after the signed merge of `origin/main` (`02f72af6`), `release/tools/renumber-adr.py --detect` read this release's ADR-230 as DUPLICATE (anchor 231, next-free 232). `--renumber 230 232 --apply` exited 0 (`bab6e677`, signed): R1 PROCEED; R3 moved 5 citations, and its REVIEW block named 0 sites; R4 added one § Renumber log line to `core/ADRs/README.md`, and the `release/ADRs/` index regenerated UNCHANGED; R5 wrote the provenance note; R6 found zero dangling; R7 found no package affected. Re-read before the merge: `--detect` reads `CLAIM ADR-232 … BINDS`, and `--stamp --check` finds 0 residual tokens. `[REFCASCADE: git grep ADR-230 over the release diff → pre 5 / post 0]`; the ADR-230 mentions that remain are the provenance note and the renumber-log records.
+- **Required checks (GO condition C1):** on `bab6e677`, 24 of 24 branch-protection contexts read `completed / success`, matched by name from REST `check-runs` to `branches/main/protection/required_status_checks`; 57 of 57 runs read the same. Control: a name absent from the roster reads missing.
+- **CIAC-1 re-grade:** as first written, the predicate returned 1 file on the release merge (`core/ADRs/README.md`), so it was not met. Amended (DEV-35), its first command returns 0, its README numstat reads `1 0`, and the added line is the renumber-log entry. Control: the plan reads 1. Sensitivity arm: the unamended command on the same range reads 1.
+- **Phase B1.1 sibling dark-branch sweep:** `release/tools/check-dark-branch.py sweep … --before ef7a0ec5 --after b0763aac` exited 0. Of 5 open pull requests on `main`, 0 were newly dark. 2 were still dark (#8821 and #8651), and each was already conflicted before this push. `state=none-new`.
+- **Phase B4 release-stamped deploy:** run from the hub worktree detached at `origin/main` (`b0763aac`; `merge-base --is-ancestor` exit 0). Before the deploy, the join key `stage-document-model-decision` was read back non-empty with 76 rows. The merge changed 0 paths under the skill and package roots, so the command was `bash core/deploy/deploy.sh --deploy --release stage-document-model-decision --no-targets`; it exited 0 and wrote the rules mirror (9 files). It appended one `deployment-status/deploy-rules-mirror` row, making 77 rows. The run did not report `Deploy mode: user-local only`.
+
+## Deployment Execution Log
 
 | Step | Timestamp | Result | Notes |
 |------|-----------|--------|-------|
-| Pre-execution check | | | |
-| Merge PR | | | |
-| ADR number reconciliation and stamp (A.5.7) | | | |
+| Pre-execution check | 2026-11-07T06:00Z | PASS | 24/24 required checks green on `bab6e677`; `main` (`ef7a0ec5`) an ancestor; merge state `clean` |
+| Merge PR | 2026-11-07T06:02:31Z | MERGED | #8814 → `b0763aac` (parents `ef7a0ec5`, `bab6e677`); REST merge pinned to the head SHA; no admin override; read back `merged == true` |
+| ADR number reconciliation and stamp (A.5.7) | 2026-11-07T03:29:31Z | RENUMBERED | ADR-230 DUPLICATE → ADR-232 (`bab6e677`); BINDS; stamp check 0 residual (DEV-35) |
 | Version claim | N/A | N/A | version-less |
-| Post-execution verification | | | |
+| Post-execution verification | 2026-11-07T06:05:14Z | PASS | B1.1 exit 0, 0 newly dark; B4 `--no-targets` exit 0, one rules-mirror row; primary checkout fast-forwarded to `b0763aac` |
 
 ## Deviation Log
 
@@ -708,6 +717,7 @@ Departures from the Stage-4 comment (comment 6664007762 on #8751), each with the
 | DEV-32 | **PA-017, ratified with amendments.** The founding ADR moves `Proposed` → `Accepted` and records what the ratification settled: point-in-time binds to Domain C, reopening the frozen Axis-2 set only on a shown need; the timeboxed and continuous design default is a labelled default; the vocabulary and the design's home stand as proposed; the risk-class home decision is re-checked, still `Proposed`, with every home nameable; and the node-delta lint is adopted on its supporting-grade premise | Stage 9 Decision Recorded, PA-017, EXPENSIVE; the ratification posted verbatim on #8157 (comment 6671846544) | The ADR left these clauses to the gate; settling them in its text makes the `Accepted` record self-contained | APPLIED in the ADR at `78db45aa`; the gap map, Consequences and Reversibility are reconciled to it |
 | DEV-33 | **PA-018, #8150's body per RQ-1.** In the Out list's system-documentation bullet, #8110 (completed) is repointed to #8111 and #8114; the three Out bullets the widening touched stay | Stage 9 Decision Recorded, PA-018, CHEAP | #8110 closed as completed on 2026-10-25; the 2026-10-24 Scope note left the body to the ratification | APPLIED on #8150 by a one-line body edit, read back. It touches no tracked file; this row records it |
 | DEV-34 | **Stage 12 Execute authorized.** This plan is brought current before the merge: #8157 reads DONE, the Status reads Stage 12, and PA-016 to PA-018 and the authorization are recorded | Stage 12 Decision Recorded (comment 6672132704 on #8797), D-Execute, IRREVERSIBLE | The plan is the record the merge lands; it states the ratified state rather than the pending one | APPLIED in this file. The merge itself waits on C1 |
+| DEV-35 | **Stage 12 A.5.7c renumber, ADR-230 → ADR-232, and CIAC-1 widened to admit its one renumber-log line.** A sibling release's ADR-230 merged first. The renumber tool moved the record and its 5 citations, and its R4 step appended one line to the § Renumber log of `core/ADRs/README.md`. This adds a third File Change Matrix row; widens CIAC-1 to that line alone, with a second command that bounds it; and makes the Release-Level File Integrity line read three rows | `stage-12-execute.md` Phase A.5.7c (a Tier-1 mechanical remediation) and this plan's R9 row; recorded on #8797 (comment 6703123372) | ADR numbers bind at merge (ADR-115), so the collision could not surface before the sibling merged. R9 named both remedies: A.5.7 for a collided slot, and an FCM row with a CIAC-1 widening whenever the README changes. The widening lands after the merge, in the Stage-12 chore PR, because no pre-merge step runs the plan verifier and a fresh head would have re-queued every required check. Residual, stated: CIAC-1 read NOT MET as written on the merged release until this amendment | APPLIED in § File Change Matrix, § Cross-Issue Acceptance Criteria, § Release-Level Verification and § Verification Evidence. CIAC-1 grades MET on `b0763aac^1 b0763aac` under the amended method |
 
 ## Change Description
 
