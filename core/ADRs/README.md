@@ -147,6 +147,7 @@ ADR-230 (`composition-method-is-core-and-enters-through-the-release-planner`) �
 ADR-232 (`egress-respelling-takes-the-resolved-positions-rung`) → **ADR-234** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 232; the record's Status section carries the provenance note.
 ADR-233 (`command-position-walks-wrapper-grammar-from-asserted-rows`) → **ADR-235** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 233; the record's Status section carries the provenance note.
 ADR-230 (`release-graph-cost-unit`) → **ADR-231** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
+ADR-231 (`release-graph-cost-unit`) → **ADR-236** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 231; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
