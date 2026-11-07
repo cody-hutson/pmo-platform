@@ -6,6 +6,7 @@ date: 2026-06-27
 release: 40-initiative-roadmap-vocabulary-and-home
 deciders: "Workspace owner (architecture ratified at the Stage 9 review); design authored at Stage 5 Solutioning"
 supersedes: ADR-012 in-part (location clause), ADR-017 in-part (roadmaps placement in the operator-instance path family)
+superseded_by: ADR-231 in-part (Decision 4's criterion that keeps runtime state in the operator-instance path family)
 tags: [architecture, roadmaps, plug-and-play, in-repo-home, git-ignored, token-override, analysis-workspace-pattern, operator-instance-path-family, migration, reversibility]
 ---
 
@@ -52,3 +53,9 @@ Existing roadmap instances at the prior operator-local home (the `<OPERATOR_INST
 ## Reversibility
 
 **MODERATE** — folder + `.gitignore` idiom + token-default redefinition + framework/template reconcile; revertable in days (`git revert` + token-default rollback), no data loss.
+
+## Related ADRs
+
+- ADR-012 — superseded in part, on its location clause; its "instances are not tracked" decision is preserved (§ Status).
+- ADR-017 — superseded in part, on the roadmaps member of its operator-instance path family (§ Status).
+- ADR-231 (non-tracked platform data is homed by its risk class) — supersedes this record in part, on Decision 4's criterion that keeps runtime state in the operator-instance path family: release and run state now has an in-repo git-ignored home, and placement is decided by risk class rather than by who writes the data. Decisions 1 to 3 bind unchanged — the shipped `/roadmaps/` folder is one of that record's enumerated in-repo homes — and this record's `status:` stays `Accepted`.
