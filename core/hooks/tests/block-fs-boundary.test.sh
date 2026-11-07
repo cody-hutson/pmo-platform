@@ -155,6 +155,137 @@ test_case "EXT-POS-F4: escaped verb cat outside-root blocks" \
 test_case "EXT-FP-F1: quoted outside-root path as message content allows" \
   "$(bash_payload 'git commit -m "cat /Users/otheruser/notes.txt was the bug"')" 0
 
+# ----- EXT-POS (#8314): the canonicalizer walks a wrapper's own grammar -----
+#
+# The identical out-of-boundary read of EXT-POS-F1, reached through a wrapper option that
+# takes a separate argument (F5), a wrapper flag that takes none (F6), an absolute-path
+# wrapper (F7), a wrapper missing from the set (F8-F10) and a condition position (F11). Each
+# allowed before the canonicalizer walked wrapper grammar. F12 is the declared xargs class:
+# xargs behind its own option feeding a read verb reaches the stdin sentinel, as a bare
+# `xargs cat` does. The out-of-boundary operand here is an absolute path outside every
+# allowed root and outside any home directory (the PII pre-commit guard flags a newly-added
+# /Users/<name> shape; F1-F4 above predate it); its out-of-boundary meaning is unchanged.
+test_case "EXT-POS-F5: sudo -u root cat outside-root blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'sudo -u root cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F6: command -p cat outside-root blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'command -p cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F7: /usr/bin/env cat outside-root blocks (absolute-path wrapper)" \
+  "$(bash_payload '/usr/bin/env cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F8: nice -n 10 cat outside-root blocks (wrapper missing from the set)" \
+  "$(bash_payload 'nice -n 10 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F9: stdbuf -o 0 cat outside-root blocks (wrapper missing from the set)" \
+  "$(bash_payload 'stdbuf -o 0 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F10: timeout 5 cat outside-root blocks (wrapper missing from the set)" \
+  "$(bash_payload 'timeout 5 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F11: if-condition cat outside-root blocks (condition position)" \
+  "$(bash_payload 'if cat /opt/other/notes.txt ; then :; fi')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-POS-F12: xargs -0 cat reaches the stdin sentinel (declared xargs class)" \
+  "$(bash_payload 'printf x | xargs -0 cat')" 2 "BLOCK-FS-BOUNDARY-003"
+
+# Content and near-miss controls: a read verb that is text, or an option value, stays allowed.
+test_case "EXT-FP-F2: grep alternation naming wrapped reads allows" \
+  "$(bash_payload "grep -E 'if cat |timeout 5 cat ' notes.txt")" 0
+
+test_case "EXT-FP-F3: a read verb named as the variable env unsets allows" \
+  "$(bash_payload 'env -u cat printenv HOME')" 0
+
+# ----- EXT-APPEND (#8314, follow-up pass): the append form of a prefix assignment -----
+#
+# The canonicalizer read a NAME+=value word as the command word, so the out-of-boundary read
+# behind it was never at a command start. F1 is that read behind the append form; F1-CTL the
+# same read behind a NAME=value word, refused before and after.
+test_case "EXT-APPEND-F1-CTL: a NAME=value assignment then cat outside-root blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-APPEND-F1: an append-form assignment then cat outside-root blocks" \
+  "$(bash_payload 'FOO+=1 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+# ----- EXT-ORDER (#8314, DT pass 2): an assignment or a redirection is read as what it is -----
+#
+# The canonicalizer's default walk looked a token up as a wrapper word by its basename before
+# it tested the token as an assignment or a redirection, so an assignment whose value ends in
+# /timeout, or a redirection to a file named timeout, was read as the timeout wrapper, whose
+# duration operand consumed the read verb behind it. F1 and F2 are the out-of-boundary read
+# behind each shape; the CTLs are the plain form and the same read behind a plain assignment,
+# refused before and after.
+test_case "EXT-ORDER-F-CTL0: cat outside-root blocks (plain-form control)" \
+  "$(bash_payload 'cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-ORDER-F-CTL1: an assignment with a plain value, then cat outside-root blocks" \
+  "$(bash_payload 'X=1 cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-ORDER-F1: an assignment whose value's last path segment is timeout, then cat outside-root blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+test_case "EXT-ORDER-F2: an output redirection to a file named timeout, then cat outside-root blocks" \
+  "$(bash_payload '>/tmp/timeout cat /opt/other/notes.txt')" 2 "BLOCK-FS-BOUNDARY-001"
+
+# ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
+#
+# The hook trusts the shared canonicalizer only after two probes: a one-line function body,
+# and a wrapper carrying a separate-argument option before a benign word, whose canonical
+# form exposes the word only on the walk that reads wrapper grammar. A copy that predates
+# that grammar, or whose row table is damaged, passes the first probe and fails the second,
+# so in enforce the hook fails CLOSED. Modelled by a copy whose nice row is removed; the
+# control is the same sandbox with the shipped copy.
+cps_root="$(/usr/bin/mktemp -d)"
+cps_hooks="${cps_root}/.claude/hooks"
+/bin/mkdir -p "${cps_hooks}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${cps_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${cps_hooks}/block-fs-boundary.sh"
+/usr/bin/printf 'enforce' > "${cps_hooks}/.mode"
+cps_run() { # $1 = command -> CPS_RC and CPS_ERR
+  CPS_RC=0
+  CPS_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$1" "$cps_root")" | /bin/bash "${cps_hooks}/block-fs-boundary.sh" 2>&1 >/dev/null ) )" || CPS_RC="$?"
+}
+/usr/bin/sed -e 's/WROW\["nice"\]=1//' "${HOOK_DIR}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_live=0
+if ! /usr/bin/cmp -s "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" \
+   && ! /usr/bin/grep -q -F 'WROW["nice"]' "${cps_hooks}/lib/command-position.awk"; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar fails the hook closed in enforce (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-01 a canonicalizer copy without the wrapper grammar did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$cps_live" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+# CMDPOS-SKEW-APPEND (#8314, follow-up pass): the second probe puts an append-form prefix
+# assignment ahead of its wrapper, so a copy whose walk reads that word as the command word —
+# the walk before this pass — never exposes the benign word, and in enforce the hook fails
+# CLOSED. Modelled by a copy whose marked assignment test is reverted to the NAME=value form
+# alone, shown live first: it differs from the shipped copy by exactly that line, and parses.
+/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "${HOOK_DIR}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+cps_n="$(/usr/bin/diff "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+cps_live=0
+if [ "$cps_n" = 2 ] && /usr/bin/awk -f "${cps_hooks}/lib/command-position.awk" </dev/null >/dev/null 2>&1; then cps_live=1; fi
+cps_run 'echo hello'
+if [ "$cps_live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form of a prefix assignment fails the hook closed in enforce (exit 2, PRIMITIVE-MISSING)\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-APPEND a canonicalizer copy without the append form did not fail the hook closed (mutant live=%s, differing lines=%s, exit=%s): %s\n' "$cps_live" "${cps_n:-none}" "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+/bin/cp "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
+cps_run 'echo hello'
+if [ "$CPS_RC" = 0 ]; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-CTL the sandbox with the shipped canonicalizer refused a benign command (exit=%s): %s\n' "$CPS_RC" "$CPS_ERR"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$cps_root"
+
 test_case "head ~/Desktop blocks" \
   "$(bash_payload 'head ~/Desktop/foo.log')" 2 "BLOCK-FS-BOUNDARY-001" "$FSB_HOME_ENV"
 
@@ -1309,6 +1440,243 @@ else
   FAIL=$((FAIL + 1))
 fi
 /bin/rm -rf "$XFORM_BASE"
+
+# ----- AC-FSB-X* (#8314, DT pass 4): the refusal message's renderer is linear -----
+#
+# render_token builds the message of a refusal, and the -004 advisory record, with a global pattern
+# substitution of the canonicalizer's sentinel, which on bash 3.2 costs more than linear time in the
+# token once the token carries one. A refusal whose operand is a large quoted token could therefore
+# hold the hook past the runtime's command-hook timeout, and a hook that times out does not block:
+# the refusal would become an allow. A token of at least FSB_LINEAR_MIN characters is now rewritten
+# first by one sed pass in the C locale, on the line marked `# linear: render`. X-EQ lifts that line
+# and the substitution after it and runs them with the bound at 0 (the pass runs) and at 10^9 (the
+# substitution alone, the code before this change): equal byte for byte on a dense input — every byte
+# from 1 to 255, multibyte letters, undecodable bytes and the sentinel — and on its edge endings, in
+# en_US.UTF-8 and in C, alone and with the substitution, beside a near miss that must differ. X1 to
+# X6 run a copy of the hook under a watchdog on a read whose one quoted operand carries structure
+# throughout, at 10, 20 and 40 KB in both locales: each inside the budget and refused. X-CTL is the
+# instrument's sensitivity: a copy whose bound never lets the pass run is stopped at the budget on
+# a long operand in UTF-8. X-FB holds the fallback: a copy whose sed does not exist refuses a long
+# operand with the shipped hook's message and raises no hook error.
+FSBX_LIMIT="${FSBX_LIMIT_DS:-200}"   # tenths of a second
+# fsbx_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+fsbx_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
+FSBX_BASE="$(/usr/bin/mktemp -d)"
+# fsbx_copy <name> [<sed edit>] — a sandbox copy of the hook, enforcing; prints its hooks directory.
+fsbx_copy() {
+  local d="${FSBX_BASE}/${1}/hooks"
+  /bin/mkdir -p "$d"
+  /bin/cp -R "${HOOK_DIR}/lib" "${d}/lib"
+  /bin/cp "${HOOK_DIR}/../fs-boundary-allowlist.txt" "${d}/../fs-boundary-allowlist.txt"
+  if [ -n "${2:-}" ]; then /usr/bin/sed -e "$2" "$HOOK" > "${d}/block-fs-boundary.sh"; else /bin/cp "$HOOK" "${d}/block-fs-boundary.sh"; fi
+  /bin/chmod +x "${d}/block-fs-boundary.sh"
+  /usr/bin/printf 'enforce' > "${d}/.mode"
+  /usr/bin/printf '%s' "$d"
+}
+FSBX_S="$(fsbx_copy s)"
+FSBX_NP="$(fsbx_copy np 's/^readonly FSB_LINEAR_MIN=256$/readonly FSB_LINEAR_MIN=1000000000/')"
+FSBX_NT="$(fsbx_copy nt '/# linear: render$/s#/usr/bin/sed#/nonexistent/sed#')"
+# The dense input, three times over, and its edge endings.
+LC_ALL=C /usr/bin/awk 'BEGIN { for (r = 0; r < 3; r++) { for (i = 1; i < 256; i++) printf "%c", i
+  printf "%s", "naïve 日本 ü \377\303 x\342\202 y\200 \001<quoted-expansion>\001\001 ;&|()#`<>\"'"'"'.$\\ \t\n" } }' \
+  > "${FSBX_BASE}/in-0"
+{ /bin/cat "${FSBX_BASE}/in-0"; /usr/bin/printf '\n'; } > "${FSBX_BASE}/in-1"
+{ /bin/cat "${FSBX_BASE}/in-0"; /usr/bin/printf '\n\n\n'; } > "${FSBX_BASE}/in-2"
+{ /bin/cat "${FSBX_BASE}/in-0"; /usr/bin/printf '\001'; } > "${FSBX_BASE}/in-3"
+{ /bin/cat "${FSBX_BASE}/in-0"; /usr/bin/printf '.'; } > "${FSBX_BASE}/in-4"
+: > "${FSBX_BASE}/in-5"
+# fsbx_eval <locale> <bound> <block> <input> <out> <block|one> — the block in a fresh /bin/bash with t
+# holding the input; `block` writes what the block prints, `one` (the pass line alone) prints t after.
+fsbx_eval() {
+  LC_ALL="$1" /bin/bash -c 'set -euo pipefail; readonly PRINTF=/usr/bin/printf CMDPOS_SENTINEL=$'"'"'\001'"'"'
+    FSB_LINEAR_MIN="$1"; lp=""; t="$(/bin/cat "$3"; printf x)"; t="${t%x}"
+    if [ "$5" = one ]; then . "$2"; printf "%s" "$t" > "$4"; else . "$2" > "$4"; fi' _ "$2" "$3" "$4" "$5" "$6"
+}
+fsbx_why=""
+M='# linear: render' /usr/bin/awk 'BEGIN { m = ENVIRON["M"] }
+  length($0) >= length(m) && substr($0, length($0) - length(m) + 1) == m { c++; n = 2 }
+  n > 0 { print; n-- }
+  END { exit c == 1 ? 0 : 1 }' "$HOOK" > "${FSBX_BASE}/block" || fsbx_why="${fsbx_why} no single line marked \`# linear: render\`;"
+/usr/bin/head -1 "${FSBX_BASE}/block" > "${FSBX_BASE}/one"
+F='/<quoted-expansion>/g' T='/<quoted_expansion>/g' /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+  !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
+  { print }
+  END { exit d ? 0 : 1 }' "${FSBX_BASE}/block" > "${FSBX_BASE}/near" || fsbx_why="${fsbx_why} the near-miss edit did not apply;"
+if [ -z "$fsbx_why" ]; then
+  for fsbx_loc in en_US.UTF-8 C; do
+    for fsbx_k in 0 1 2 3 4 5; do
+      fsbx_eval "$fsbx_loc" 1000000000 "${FSBX_BASE}/block" "${FSBX_BASE}/in-${fsbx_k}" "${FSBX_BASE}/ship.out" block \
+        || fsbx_why="${fsbx_why} [${fsbx_loc} in-${fsbx_k}] the substitution did not run;"
+      fsbx_eval "$fsbx_loc" 0 "${FSBX_BASE}/block" "${FSBX_BASE}/in-${fsbx_k}" "${FSBX_BASE}/pass.out" block \
+        || fsbx_why="${fsbx_why} [${fsbx_loc} in-${fsbx_k}] the pass did not run;"
+      fsbx_eval "$fsbx_loc" 0 "${FSBX_BASE}/one" "${FSBX_BASE}/in-${fsbx_k}" "${FSBX_BASE}/one.out" one \
+        || fsbx_why="${fsbx_why} [${fsbx_loc} in-${fsbx_k}] the pass line alone did not run;"
+      /usr/bin/cmp -s "${FSBX_BASE}/ship.out" "${FSBX_BASE}/pass.out" || fsbx_why="${fsbx_why} [${fsbx_loc} in-${fsbx_k}] pass != substitution;"
+      /usr/bin/cmp -s "${FSBX_BASE}/ship.out" "${FSBX_BASE}/one.out" || fsbx_why="${fsbx_why} [${fsbx_loc} in-${fsbx_k}] the pass alone != substitution;"
+    done
+    fsbx_eval "$fsbx_loc" 1000000000 "${FSBX_BASE}/block" "${FSBX_BASE}/in-0" "${FSBX_BASE}/ship.out" block || fsbx_why="${fsbx_why} [${fsbx_loc}] the reference did not run;"
+    fsbx_eval "$fsbx_loc" 0 "${FSBX_BASE}/near" "${FSBX_BASE}/in-0" "${FSBX_BASE}/near.out" block || fsbx_why="${fsbx_why} [${fsbx_loc}] the near miss did not run;"
+    [ -s "${FSBX_BASE}/ship.out" ] || fsbx_why="${fsbx_why} [${fsbx_loc}] empty reference output;"
+    /usr/bin/cmp -s "${FSBX_BASE}/ship.out" "${FSBX_BASE}/near.out" \
+      && fsbx_why="${fsbx_why} [${fsbx_loc}] the near miss equals the substitution (the comparison cannot see a difference);"
+  done
+fi
+if [ -z "$fsbx_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-FSB-X-EQ: the \`# linear: render\` pass equals the substitution byte for byte on a dense input and its edge endings in UTF-8 and C, alone and with it, and a near miss differs"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X-EQ: the \`# linear: render\` pass equals the substitution byte for byte" "$fsbx_why"; FAIL=$((FAIL + 1))
+fi
+# fsbx_fill <bytes> <head> <unit> <tail> — the head, as many units as fit, then the tail.
+fsbx_fill() {
+  H="$2" U="$3" T="$4" /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]; s = h
+    while (length(s) + length(u) + length(t) <= n) s = s u
+    printf "%s", s t }'
+}
+# fsbx_reap <pid> — stop a process and every process under it, children first, with KILL.
+fsbx_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do fsbx_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
+# fsbx_timed <hooks-dir> <locale> <command-file> <limit> — the hook on the Bash payload of the command
+# under a watchdog; sets FSBX_DS (tenths elapsed, -1 when stopped) and FSBX_EXIT.
+FSBX_DS=0
+FSBX_EXIT=0
+fsbx_timed() {
+  local pay="${FSBX_BASE}/payload.json" pid n=0
+  bash_payload "$(/bin/cat "$3")" "$FSBX_BASE" > "$pay"
+  LC_ALL="$2" /bin/bash "$1/block-fs-boundary.sh" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      fsbx_reap "$pid"; wait "$pid" 2>/dev/null
+      FSBX_DS=-1; FSBX_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  FSBX_EXIT=0; wait "$pid" || FSBX_EXIT=$?
+  FSBX_DS="$n"
+}
+for fsbx_kb in 10 20 40; do fsbx_fill $(( fsbx_kb * 1024 )) 'cat "' 'a;b|c&d(e)f' '"' > "${FSBX_BASE}/token-${fsbx_kb}.cmd"; done
+fsbx_n=0
+for fsbx_loc in en_US.UTF-8 C; do
+  for fsbx_kb in 10 20 40; do
+    fsbx_n=$(( fsbx_n + 1 ))
+    fsbx_timed "$FSBX_S" "$fsbx_loc" "${FSBX_BASE}/token-${fsbx_kb}.cmd" "$FSBX_LIMIT"
+    if [ "$FSBX_DS" != -1 ] && [ "$FSBX_EXIT" = 2 ]; then
+      /usr/bin/printf 'PASS: %s\n' "AC-FSB-X${fsbx_n}: a read of a ${fsbx_kb} KB quoted operand carrying structure throughout, in ${fsbx_loc}, is refused within the budget"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X${fsbx_n}: a read of a long quoted operand carrying structure throughout, in ${fsbx_loc}, is refused inside the budget — measured ratio $(fsbx_ratio "${FSBX_DS}" "${FSBX_LIMIT}") of the budget, bound 1.00" \
+        "\"stopped\" is the watchdog ending the run at the budget; exit=${FSBX_EXIT} (want 2)"; FAIL=$((FAIL + 1))
+    fi
+  done
+done
+fsbx_timed "$FSBX_NP" en_US.UTF-8 "${FSBX_BASE}/token-20.cmd" "$FSBX_LIMIT"
+if [ "$FSBX_DS" = -1 ] && /usr/bin/grep -q -F -x 'readonly FSB_LINEAR_MIN=1000000000' "${FSBX_NP}/block-fs-boundary.sh"; then
+  /usr/bin/printf 'PASS: %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at the budget on a long operand in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X-CTL: a copy whose bound never lets the pass run is stopped at the budget — measured ratio $(fsbx_ratio "${FSBX_DS}" "${FSBX_LIMIT}") of the budget, bound 1.00" \
+    "exit=${FSBX_EXIT}; a copy that finishes, or that carries no raised bound, cannot show X1-X6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+fi
+# X-FB: the pass's sed repointed to a path that does not exist, so the pass fails and the substitution
+# renders the token; a read of a 400-byte quoted operand carrying structure is refused alike.
+fsbx_why=""
+fsbx_tools="$(/usr/bin/grep -c -F '/nonexistent/sed' "${FSBX_NT}/block-fs-boundary.sh")" || true
+[ "$fsbx_tools" = 1 ] || fsbx_why="${fsbx_why} the copy repoints ${fsbx_tools} pass lines, want 1;"
+fsbx_cmd="$(fsbx_fill 400 'cat "' 'a;b|c&d(e)f' '"')"
+fsbx_s=0; fsbx_t=0
+fsbx_es="$( { /usr/bin/printf '%s' "$(bash_payload "$fsbx_cmd" "$FSBX_BASE")" | /bin/bash "${FSBX_S}/block-fs-boundary.sh" > /dev/null; } 2>&1 )" || fsbx_s="$?"
+fsbx_et="$( { /usr/bin/printf '%s' "$(bash_payload "$fsbx_cmd" "$FSBX_BASE")" | /bin/bash "${FSBX_NT}/block-fs-boundary.sh" > /dev/null; } 2>&1 )" || fsbx_t="$?"
+[ "$fsbx_s" = 2 ] || fsbx_why="${fsbx_why} the shipped hook exits ${fsbx_s}, want 2;"
+[ "$fsbx_t" = "$fsbx_s" ] || fsbx_why="${fsbx_why} the copy without its sed exits ${fsbx_t}, the shipped hook ${fsbx_s};"
+case "$fsbx_et" in *HOOK-ERROR*) fsbx_why="${fsbx_why} the copy without its sed raised a hook error;" ;; esac
+fsbx_ms="$(/usr/bin/grep -F 'BLOCK-FS-BOUNDARY-003' <<< "$fsbx_es")" || true
+fsbx_mt="$(/usr/bin/grep -F 'BLOCK-FS-BOUNDARY-003' <<< "$fsbx_et")" || true
+case "$fsbx_ms" in *'<quoted-expansion>b<quoted-expansion>c'*) ;; *) fsbx_why="${fsbx_why} the shipped refusal renders no sentinel;" ;; esac
+[ "$fsbx_mt" = "$fsbx_ms" ] || fsbx_why="${fsbx_why} the copy without its sed words the refusal differently;"
+if [ -z "$fsbx_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-FSB-X-FB: with the pass's sed missing, the substitution renders the token — a long operand is refused with the shipped hook's message, with no hook error"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X-FB: with the pass's sed missing, the refusal equals the shipped hook's" "$fsbx_why"; FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$FSBX_BASE"
+
+# ----- AC-CPH-F* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget -----
+#
+# The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
+# walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
+# command, clears one long command word, a long option cluster and a long split string in its short and
+# long spelling inside the budget at 10, 20, 40 and 80 KB in en_US.UTF-8 and C, and allows each. The arms
+# that see each site's cost apart from the rest of the hook are the false-positive control's AC-CP-L arms,
+# on the canonicalizer alone, beside their sensitivity copy.
+FSBC_LIMIT="${FSBC_LIMIT_DS:-200}"   # tenths of a second
+# fsbc_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+fsbc_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
+FSBC_BASE="$(/usr/bin/mktemp -d)"
+FSBC_D="${FSBC_BASE}/s/hooks"
+/bin/mkdir -p "$FSBC_D"
+/bin/cp -R "${HOOK_DIR}/lib" "${FSBC_D}/lib"
+/bin/cp "${HOOK_DIR}/../fs-boundary-allowlist.txt" "${FSBC_D}/../fs-boundary-allowlist.txt"
+/bin/cp "$HOOK" "${FSBC_D}/block-fs-boundary.sh"
+/bin/chmod +x "${FSBC_D}/block-fs-boundary.sh"
+/usr/bin/printf 'enforce' > "${FSBC_D}/.mode"
+# fsbc_cmd <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling.
+fsbc_cmd() {
+  local h u t
+  case "$1" in
+    word)    h='';                     u='a'; t='' ;;
+    cluster) h='sudo -';               u='b'; t=' q' ;;
+    split)   h='env -S-';              u='b'; t=' q' ;;
+    lsplit)  h='env --split-string=-'; u='b'; t=' q' ;;
+  esac
+  H="$h" U="$u" T="$t" LC_ALL=C /usr/bin/awk -v n="$2" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = n - length(h) - length(t); r = u; while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$3"
+}
+# fsbc_reap <pid> — stop a process and every process under it, children first, with KILL.
+fsbc_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do fsbc_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
+# fsbc_timed <locale> <command-file> <limit> — the hook on the Bash payload of the command under a
+# watchdog; sets FSBC_DS (tenths elapsed, -1 when stopped) and FSBC_EXIT.
+FSBC_DS=0
+FSBC_EXIT=0
+fsbc_timed() {
+  local pay="${FSBC_BASE}/payload.json" pid n=0
+  bash_payload "$(/bin/cat "$2")" "$FSBC_BASE" > "$pay"
+  LC_ALL="$1" /bin/bash "${FSBC_D}/block-fs-boundary.sh" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$3" ]; then
+      fsbc_reap "$pid"; wait "$pid" 2>/dev/null
+      FSBC_DS=-1; FSBC_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  FSBC_EXIT=0; wait "$pid" || FSBC_EXIT=$?
+  FSBC_DS="$n"
+}
+fsbc_n=0
+for fsbc_shape in word cluster split lsplit; do
+  for fsbc_kb in 10 20 40 80; do fsbc_cmd "$fsbc_shape" $(( fsbc_kb * 1024 )) "${FSBC_BASE}/${fsbc_shape}-${fsbc_kb}.cmd"; done
+  for fsbc_loc in en_US.UTF-8 C; do
+    for fsbc_kb in 10 20 40 80; do
+      fsbc_n=$(( fsbc_n + 1 ))
+      fsbc_timed "$fsbc_loc" "${FSBC_BASE}/${fsbc_shape}-${fsbc_kb}.cmd" "$FSBC_LIMIT"
+      if [ "$FSBC_DS" != -1 ] && [ "$FSBC_EXIT" = 0 ]; then
+        /usr/bin/printf 'PASS: %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
+      else
+        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape in ${fsbc_loc} clears the hook inside the budget and is allowed — measured ratio $(fsbc_ratio "${FSBC_DS}" "${FSBC_LIMIT}") of the budget, bound 1.00" \
+          "\"stopped\" is the watchdog ending the run at the budget; exit=${FSBC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+      fi
+    done
+  done
+done
+/bin/rm -rf "$FSBC_BASE"
 
 # ----- Summary -----
 

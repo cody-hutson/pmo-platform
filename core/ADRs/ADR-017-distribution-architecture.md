@@ -3,7 +3,7 @@ title: ADR-017 — Distribution architecture: four lifecycle surfaces, version-p
 status: Accepted
 date: 2026-06-07
 deciders: "operator (distribution-perspective directive 2026-06-07) + distribution-architecture analysis (post the path-portability trigger recorded below)"
-superseded_by: ADR-046 in-part (roadmaps placement in the operator-instance path family)
+superseded_by: ADR-046 in-part (roadmaps placement in the operator-instance path family), ADR-231 in-part (Decision 4's workspace placement of leak-risk content and its routing of event logs to XDG state)
 tags: [architecture, distribution, install, deploy, config, xdg, operator-instance, dev-workflow, public-repo-boundary]
 source_observations:
   - "Operator directive 2026-06-07 — think about the platform from a distribution perspective: an install package puts the toolkit in place for a Claude-Code user; ties into version-durability and user-config; creates an install-path (users) vs a clone-path (builders), and the operator is in the small set that does BOTH on one device and must manage it properly."
@@ -159,6 +159,7 @@ This *applies* Decision 3; it is not a separate decision and asks for nothing th
 - **ADR-012** (instance de-scope) — names the S3 boundary (instance content operator-local, never in S1); this ADR places it in the lifecycle model.
 - **ADR-008** (deploy per-module arrays) — the S1→S4 deploy *engine*; unchanged.
 - **ADR-010** (secrets / public-safety) — the reason S2/S3 must never leak into S1.
+- **ADR-231** (non-tracked platform data is homed by its risk class) — supersedes Decision 4 in part: leak-risk content leaves the workspace for the user's XDG data home, and the pipeline event log and the deploy warn logs are working state homed in each repository's git-ignored `/local-state/` rather than in XDG state. Decision 4's routing of telemetry to the XDG state home is realized there, and Decisions 1–3 still bind.
 - **#338** packaging, **#14** onboarding journey, **#364** multi-tenant deploy — the three anchors this ADR is the spine for; each should reference ADR-017 as its architectural foundation.
 - **#22** (unified config) implements S2 consolidation; **#383** (lossless round-trip) protects S2 across updates (prerequisite for Decision 3); **#342/#44/#43/#341** implement the S1→S4 deploy mechanics portably; **#529** is the checkout-independent-resolution prerequisite for Decision 3.
 

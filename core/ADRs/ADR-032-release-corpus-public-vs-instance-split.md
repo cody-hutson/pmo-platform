@@ -3,7 +3,7 @@ title: ADR-032 — Release-corpus public-vs-instance split: ship the capability,
 status: Accepted
 date: 2026-06-20
 deciders: "operator (D-1412-Scope at the 62-close-out-registers Stage 4 plan-approval gate, 2026-06-19) + the 62-close-out-registers Stage 5 Solutioning design and its design sub-task"
-superseded_by: ADR-141 in-part (Decision 1's operator-instance home path) — derived from ADR-141's identical treatment of the FinOps usage-store record whose stated default spells the same retired leaf
+superseded_by: ADR-141 in-part (Decision 1's operator-instance home path) — derived from ADR-141's identical treatment of the FinOps usage-store record whose stated default spells the same retired leaf, ADR-231 in-part (Decision 1's classification and home for the release corpus and Decisions 2 and 3 and the Deferred-migration plan and the operator-instance home in Decision 5 and the Bootstrap)
 tags: [architecture, distribution, release-corpus, operator-instance, public-repo-boundary, gitignore, deploy-checks]
 source_observations:
   - "#1412 — the release-corpus audit trail (RELEASE_LOG, INDEX, DIGEST, notes/, plans/) is tracked in the public install-oriented repo and ships in every clone; this is maintainer content (operational detail, not PII), not install capability."
@@ -106,6 +106,7 @@ The execution issue (filed post-review per D-1412-Scope) carries: `.gitignore` b
 ## Related ADRs
 
 - **ADR-141** (operator-instance home is a workspace-root sibling) — **supersedes this record in part**, on Decision 1's operator-instance home path only. The rest of this record still binds and its `status:` stays `Accepted`; the frontmatter `superseded_by:` field above is the authoritative half of the pair, and this bullet is the `## Related ADRs` limb the partial-supersession form requires on both sides.
+- **ADR-231** (non-tracked platform data is homed by its risk class) — **supersedes this record in part**: Decision 1's classification and home for the release corpus, Decisions 2 and 3, the Deferred-migration plan, and the operator-instance home in Decision 5 and the Bootstrap. The corpus's classification and location are that record's Release-corpus location item. This record's classification of the release mechanism as public package, its HEAD-only removal rule, its template-public register rule and its canonical workspace-root resolver still bind, and its `status:` stays `Accepted`.
 - **ADR-017** (distribution architecture — S1/S3 surfaces + the canonical `CLAUDE_WORKSPACE_ROOT` resolver; the model this applies)
 - **ADR-012** (instance-content de-scope to operator-local)
 - **ADR-013** (install-path resolution via operator.toml)

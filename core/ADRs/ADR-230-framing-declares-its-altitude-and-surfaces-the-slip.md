@@ -1,6 +1,6 @@
 ---
 title: "ADR-230 — A framing declares its altitude, its question and the order of its open questions, and a decision taken ahead of an open predecessor is surfaced as a framing slip"
-status: Proposed (flips to Accepted at the framing-altitude-and-slip-model Stage-13 ratification gate)
+status: Accepted — operator-ratified at the framing-altitude-and-slip-model Stage 13 Close ratification beat (Phase A13), 2026-11-06
 date: 2026-11-05
 release: framing-altitude-and-slip-model
 deciders: "Stage 5 Solutioning spoke (Principal Engineer) + Stage 6 Engineering spoke + Stage 8 QA spoke (blind re-code) + the operator at the Stage-13 ratification gate"
@@ -17,7 +17,7 @@ supersedes: none
 
 ## Status
 
-Proposed; revised in place until the framing-altitude-and-slip-model Stage-13 ratification gate flips it to Accepted. Once Accepted it is immutable: changing the declaration, the measure or the test takes a record that supersedes this one.
+Accepted — operator-ratified at the framing-altitude-and-slip-model Stage 13 Close ratification beat (Phase A13), 2026-11-06, by a decision rendered for this record alone. Once Accepted it is immutable: changing the declaration, the measure or the test takes a record that supersedes this one.
 
 **Numbering provenance.** This record was authored at the next-free number computed from the mainline anchor at Engineering Commit 0. An ADR number is allocated at authorship but claimed at merge; should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations of this record elsewhere use its slug token, which carries no number shape and resolves at the claim.
 

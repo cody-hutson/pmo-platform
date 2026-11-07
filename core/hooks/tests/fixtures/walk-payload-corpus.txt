@@ -1161,8 +1161,13 @@ PN04|block-destructive|wrap-prec-name|-|?|a|exec --zz=@D@/x.sh ls
 # text the look-ahead evaluates as a write (a printed command, env -S's own argv), declared,
 # recorded now; eg-head is located by the head walk before and after; eg-day1 is refused before
 # and after; eg-near must stay allowed; open-eg-unreached is a write this rule's own walk does
-# not reach, declared open; open-eg-canon is a credential read behind a prefix command's
-# option, which the shared canonicalizer does not reach, declared open; eg-counter is the
+# not reach, declared open; of its rows, the rule's walk now reads the respelled ones (card
+# #8315), so EG140 and EG142-EG144 — a leading redirection and an escaped, brace-expanded or
+# ANSI-C-quoted verb — moved to a day-one refusal (group eg-respelled, twin EG100) and EG141, a
+# redirection before a prefix command, to a record (group eg-respelled-look) in #8315's fix
+# commit; open-eg-canon is a credential read behind a prefix command's
+# option, which the shared canonicalizer now reaches (card #8314), so EG160-EG162 moved from
+# an open allow to a refusal (group eg-canon, verdict B) in #8314's fix commit; eg-counter is the
 # design's generated then-write corpus — the prefix words none, env, sudo, xargs, timeout,
 # nice, stdbuf and nohup × the option shapes none, -u NAME, --zz VALUE, 5, a-b=1 and -x × four
 # gh shapes, each followed by `; gh api -X POST @NO@` — whose verdicts no correct change
@@ -1273,19 +1278,19 @@ EG131|block-egress|eg-near|-|?|a|nice -n 5 echo hello
 EG132|block-egress|eg-near|-|?|a|env X=1 echo "gh api -X POST @NO@"
 EG133|block-egress|eg-near|-|?|a|env -u NAME gh api -X POST @OK@/5541/comments -f body=x
 EG135|block-egress|eg-near|-|?|a|xargs -I R echo done
-EG140|block-egress|open-eg-unreached|-|?|a|>/dev/null gh api -X POST @NO@
-EG141|block-egress|open-eg-unreached|-|?|a|2>/dev/null env -u X gh api -X POST @NO@
-EG142|block-egress|open-eg-unreached|-|?|a|\gh api -X POST @NO@
-EG143|block-egress|open-eg-unreached|-|?|a|{gh,api} -X POST @NO@
-EG144|block-egress|open-eg-unreached|-|?|a|$'gh' api -X POST @NO@
+EG140|block-egress|eg-respelled|EG100|?|B|>/dev/null gh api -X POST @NO@
+EG141|block-egress|eg-respelled-look|-|?|W|2>/dev/null env -u X gh api -X POST @NO@
+EG142|block-egress|eg-respelled|EG100|?|B|\gh api -X POST @NO@
+EG143|block-egress|eg-respelled|EG100|?|B|{gh,api} -X POST @NO@
+EG144|block-egress|eg-respelled|EG100|?|B|$'gh' api -X POST @NO@
 EG145|block-egress|open-eg-unreached|-|?|a|echo -X POST @NO@ | xargs gh api
 EG146|block-egress|open-eg-unreached|-|?|a|watch gh api -X POST @NO@
 EG147|block-egress|open-eg-unreached|-|?|a|bash -c 'gh api -X POST @NO@'
 EG148|block-egress|open-eg-unreached|-|?|a|env -S "gh api -X POST @NO@"
 EG149|block-egress|open-eg-unreached|-|?|a|env -u X $GH api -X POST @NO@
-EG160|block-egress|open-eg-canon|-|?|a|sudo -u nobody cat ~/.ssh/id_rsa
-EG161|block-egress|open-eg-canon|-|?|a|env -u X cat ~/.ssh/id_rsa
-EG162|block-egress|open-eg-canon|-|?|a|timeout 5 cat ~/.ssh/id_rsa
+EG160|block-egress|eg-canon|-|?|B|sudo -u nobody cat ~/.ssh/id_rsa
+EG161|block-egress|eg-canon|-|?|B|env -u X cat ~/.ssh/id_rsa
+EG162|block-egress|eg-canon|-|?|B|timeout 5 cat ~/.ssh/id_rsa
 EG200|block-egress|eg-counter|-|?|B|gh api -X POST @NO@ ; gh api -X POST @NO@
 EG201|block-egress|eg-counter|-|?|B|echo gh api -X POST @NO@ ; gh api -X POST @NO@
 EG202|block-egress|eg-counter|-|?|W|gh api -X POST @OK@ ; gh api -X POST @NO@
@@ -1478,3 +1483,338 @@ EG388|block-egress|eg-counter|-|?|W|nohup -x gh api -X POST @NO@ ; gh api -X POS
 EG389|block-egress|eg-counter|-|?|B|nohup -x echo gh api -X POST @NO@ ; gh api -X POST @NO@
 EG390|block-egress|eg-counter|-|?|W|nohup -x gh api -X POST @OK@ ; gh api -X POST @NO@
 EG391|block-egress|eg-counter|-|?|W|nohup -x gh api @NO@ -f a=b ; gh api -X POST @NO@
+# --- seed 9: card #8444 — BLOCK-DESTRUCTIVE-020 and -023 by spelling (73 rows) ---
+# Ids DP (-020) and DQ (-023). Every command is benign and every assigned value is
+# slash-free, so BLOCK-DESTRUCTIVE-022 cannot contribute a verdict; the d020-near and
+# d023-near groups hold the same shapes with another name, or the name as content, and
+# d020-cap pins the prefix cap's boundary (behind ten prefix-run tokens judged, behind
+# eleven not). gt is `?`: no row was executed outside the suite's hermetic copies. No group
+# is `open-`: that contract asserts an executing payload, which an assignment row cannot
+# carry. The verdicts are the fix commit's, because this block lands with the fix; the
+# red-before reading of each group that moves is the suite run against the pre-fix hook,
+# kept as executed evidence.
+DP01|block-destructive|d020-ctl|-|?|B|PATH=x true
+DP02|block-destructive|d020-ctl|-|?|B|true; PATH=x true
+DP03|block-destructive|d020-ctl|-|?|B|true && PATH=x true
+DP04|block-destructive|d020-ctl|-|?|B|export PATH=x
+DP05|block-destructive|d020-ctl|-|?|B|export PATH=x; true
+DP06|block-destructive|d020-ctl|-|?|B|unset PATH
+DP07|block-destructive|d020-ctl|-|?|B|unset -v PATH
+DP10|block-destructive|d020-wrap|-|?|B|env PATH=x true
+DP11|block-destructive|d020-wrap|-|?|B|sudo PATH=x true
+DP12|block-destructive|d020-wrap|-|?|B|time PATH=x true
+DP13|block-destructive|d020-wrap|-|?|B|env -i PATH=x true
+DP14|block-destructive|d020-wrap|-|?|B|env -u FOO PATH=x true
+DP15|block-destructive|d020-wrap|-|?|B|/usr/bin/env PATH=x true
+DP20|block-destructive|d020-cond|-|?|B|if PATH=x true; then true; fi
+DP21|block-destructive|d020-cond|-|?|B|while PATH=x false; do true; done
+DP22|block-destructive|d020-cond|-|?|B|until PATH=x true; do true; done
+DP23|block-destructive|d020-cond|-|?|B|if export PATH=x; then true; fi
+DP30|block-destructive|d020-pos|-|?|B|FOO=1 PATH=x true
+DP31|block-destructive|d020-pos|-|?|B|>/dev/null PATH=x true
+DP32|block-destructive|d020-pos|-|?|B|(PATH=x; true)
+DP33|block-destructive|d020-pos|-|?|B|( PATH=x true )
+DP34|block-destructive|d020-pos|-|?|B|{ PATH=x; true; }
+DP35|block-destructive|d020-pos|-|?|B|f() { PATH=x true; }
+DP36|block-destructive|d020-pos|-|?|B|if true; then PATH=x true; fi
+DP37|block-destructive|d020-pos|-|?|B|for i in 1; do PATH=x true; done
+DP38|block-destructive|d020-pos|-|?|B|! PATH=x true
+DP40|block-destructive|d020-decl|-|?|B|export FOO=1 PATH=x
+DP41|block-destructive|d020-decl|-|?|B|export -- PATH=x
+DP42|block-destructive|d020-decl|-|?|B|declare -x PATH=x
+DP43|block-destructive|d020-decl|-|?|B|typeset -x PATH=x
+DP44|block-destructive|d020-decl|-|?|B|readonly PATH=x
+DP45|block-destructive|d020-decl|-|?|B|local PATH=x
+DP46|block-destructive|d020-decl|-|?|B|PATH+=x true
+DP47|block-destructive|d020-decl|-|?|B|env PATH+=x true
+DP48|block-destructive|d020-cap|-|?|B|A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 PATH=x true
+DP49|block-destructive|d020-cap|-|?|a|A=1 B=1 C=1 D=1 E=1 F=1 G=1 H=1 I=1 J=1 K=1 PATH=x true
+DP50|block-destructive|d020-over|-|?|B|nohup PATH=x true
+DP51|block-destructive|d020-over|-|?|B|exec PATH=x true
+DP52|block-destructive|d020-over|-|?|B|env PATH=x
+DP53|block-destructive|d020-over|-|?|B|nice PATH=x true
+DP60|block-destructive|d020-near|-|?|a|FOO=x true
+DP61|block-destructive|d020-near|-|?|a|env FOO=x true
+DP62|block-destructive|d020-near|-|?|a|export FOO=x
+DP63|block-destructive|d020-near|-|?|a|(FOO=x; true)
+DP64|block-destructive|d020-near|-|?|a|if FOO=x true; then true; fi
+DP65|block-destructive|d020-near|-|?|a|MYPATH=x true
+DP66|block-destructive|d020-near|-|?|a|PATHX=x true
+DP67|block-destructive|d020-near|-|?|a|echo PATH=x
+DP68|block-destructive|d020-near|-|?|a|grep -c PATH= f
+DP69|block-destructive|d020-near|-|?|a|for v in PATH=x; do true; done
+DP70|block-destructive|d020-near|-|?|a|echo "env PATH=x true"
+DP71|block-destructive|d020-near|-|?|a|printf "%s\n" "(PATH=x; true)"
+DP72|block-destructive|d020-near|-|?|a|export MYPATH=x
+DP80|block-destructive|d020-resid|-|?|a|bash -c 'PATH=x true'
+DP81|block-destructive|d020-resid|-|?|a|eval PATH=x true
+DP82|block-destructive|d020-resid|-|?|a|env -u PATH true
+DP83|block-destructive|d020-resid|-|?|a|env -S "PATH=x true"
+DQ01|block-destructive|d023-ctl|-|?|B|CLAUDE_HOOK_BYPASS=1 true
+DQ02|block-destructive|d023-ctl|-|?|B|export CLAUDE_HOOK_BYPASS=1
+DQ03|block-destructive|d023-ctl|-|?|B|PMO_SCOPE_GUARD_ROOT=x true
+DQ04|block-destructive|d023-ctl|-|?|B|export PMO_SCOPE_GUARD_ROOT=x
+DQ05|block-destructive|d023-wrap|-|?|B|env -i CLAUDE_HOOK_BYPASS=1 true
+DQ06|block-destructive|d023-wrap|-|?|B|env CLAUDE_HOOK_BYPASS=1 true
+DQ07|block-destructive|d023-wrap|-|?|B|FOO=1 CLAUDE_HOOK_BYPASS=1 true
+DQ08|block-destructive|d023-wrap|-|?|B|(CLAUDE_HOOK_BYPASS=1 true)
+DQ09|block-destructive|d023-wrap|-|?|B|env PMO_SCOPE_GUARD_ROOT=x true
+DQ10|block-destructive|d023-wrap|-|?|B|if CLAUDE_HOOK_BYPASS=1 true; then true; fi
+DQ11|block-destructive|d023-decl|-|?|B|declare -x CLAUDE_HOOK_BYPASS=1
+DQ12|block-destructive|d023-decl|-|?|B|export FOO=1 PMO_SCOPE_GUARD_ROOT=x
+DQ13|block-destructive|d023-decl|-|?|B|CLAUDE_HOOK_BYPASS+=1 true
+DQ14|block-destructive|d023-decl|-|?|B|PMO_SCOPE_GUARD_ROOT+=x true
+DQ20|block-destructive|d023-near|-|?|a|env FOO_HOOK_BYPASS=1 true
+DQ21|block-destructive|d023-near|-|?|a|echo CLAUDE_HOOK_BYPASS=1
+# --- seed 10: card #8315 — BLOCK-EGRESS-007 by spelling: the verb, its position and its flags (113 rows) ---
+# Ids ES. Read by block-egress.test.sh (arms EGRESSCORPUS-*) exactly as seed 8 is: at the rule's
+# shipped rollout phase, in a hermetic root at enforce mode, @OK@ the one gh api path that root
+# allowlists and @NO@ a path no row of it grants. Each row writes one gh api invocation in a
+# spelling the shell resolves to the plain one — a redirection word, an escaped, brace-expanded,
+# ANSI-C- or locale-quoted or letter-case-variant command word, a verb split by quote characters,
+# or a method or field flag in its attached or clustered short form — and its twin, where one
+# exists, is the plain spelling. A row ending in `; echo it\'s` carries an unquoted escaped
+# apostrophe: well-formed shell that the rule's scanner reads as an unterminated quote, so the row
+# reaches the rule's unparseable branch. A command needing a newline (a line continuation, a
+# heredoc quotation line) is a suite arm only. Groups: es-head, es-fast, es-unparse and es-flag
+# move to the verdict their plain twin gets; es-tighten and es-r2tight are declared tightenings;
+# es-prefix and es-later move from no record to the rollout phase's record; es-precision,
+# es-r2prec and es-flag-prec are declared precision improvements; es-boundary with its twins in
+# es-boundary-twin pins that no command crosses the scanner's parse boundary; es-counter pins the
+# first-invocation counter; es-ampgt pins a mid-command `&>`; es-quote pins the declared
+# quotation-line reading; es-unparse-ctl is the unparseable refusal of the plain spelling;
+# es-near, es-unparse-near, es-flag-near and es-ok must stay allowed; open-es-resid is declared
+# open. gt is `?`: a row's outcome is a gh api write, which no suite performs. The verdicts are the
+# fix commit's, because this block lands with the fix; the red-before reading of each group that
+# moves is the suite run against the pre-fix hook, kept as executed evidence.
+ES001|block-egress|es-head|EG100|?|B|2>/dev/null gh api -X POST @NO@
+ES002|block-egress|es-head|EG100|?|B|</dev/null gh api -X POST @NO@
+ES003|block-egress|es-head|EG100|?|B|>> /tmp/es.log gh api -X POST @NO@
+ES004|block-egress|es-head|EG100|?|B|2>&1 gh api -X POST @NO@
+ES005|block-egress|es-head|EG100|?|B|&>/dev/null gh api -X POST @NO@
+ES006|block-egress|es-head|EG100|?|B|>|/tmp/es.out gh api -X POST @NO@
+ES007|block-egress|es-head|EG100|?|B|<<<x gh api -X POST @NO@
+ES008|block-egress|es-head|EG100|?|B|g\h api -X POST @NO@
+ES009|block-egress|es-head|EG100|?|B|$'\x67h' api -X POST @NO@
+ES010|block-egress|es-head|EG100|?|B|$'\147\150' api -X POST @NO@
+ES011|block-egress|es-head|EG100|?|B|$"gh" api -X POST @NO@
+ES012|block-egress|es-head|EG100|?|B|$'g\x68' api -X POST @NO@
+ES013|block-egress|es-head|EG100|?|B|GH api -X POST @NO@
+ES014|block-egress|es-head|EG100|?|B|Gh api -X POST @NO@
+ES015|block-egress|es-head|EG100|?|B|/opt/homebrew/bin/GH api -X POST @NO@
+ES020|block-egress|es-tighten|EG100|?|B|gh \api -X POST @NO@
+ES021|block-egress|es-tighten|EG100|?|B|gh api -X >/dev/null POST @NO@
+ES022|block-egress|es-tighten|EG100|?|B|gh api -X 2>/dev/null POST @NO@
+ES030|block-egress|es-prefix|EG080|?|W|\env gh api -X POST @NO@
+ES031|block-egress|es-prefix|EG080|?|W|ENV gh api -X POST @NO@
+ES032|block-egress|es-prefix|EG080|?|W|env GH api -X POST @NO@
+ES033|block-egress|es-prefix|EG001|?|W|\env -u NAME gh api -X POST @NO@
+ES034|block-egress|es-prefix|EG001|?|W|env -u NAME GH api -X POST @NO@
+ES035|block-egress|es-prefix|EG001|?|W|env -u NAME \gh api -X POST @NO@
+ES036|block-egress|es-prefix|EG001|?|W|env -u NAME $'gh' api -X POST @NO@
+ES037|block-egress|es-prefix|EG001|?|W|env -u NAME {gh,api} -X POST @NO@
+ES038|block-egress|es-prefix|EG001|?|W|2>/dev/null env -u NAME gh api -X POST @NO@
+ES039|block-egress|es-prefix|EG081|?|W|Sudo gh api -X POST @NO@
+ES050|block-egress|es-near|-|?|a|>/dev/null gh api @NO@
+ES051|block-egress|es-near|-|?|a|> gh api -X POST @NO@
+ES052|block-egress|es-near|-|?|a|\\gh api -X POST @NO@
+ES053|block-egress|es-near|-|?|a|{gx,api} -X POST @NO@
+ES054|block-egress|es-near|-|?|a|$'gx' api -X POST @NO@
+ES055|block-egress|es-near|-|?|a|$'\x67x' api -X POST @NO@
+ES056|block-egress|es-near|-|?|a|GX api -X POST @NO@
+ES057|block-egress|es-near|-|?|a|gh API -X POST @NO@
+ES058|block-egress|es-near|-|?|a|THEN gh api -X POST @NO@
+ES059|block-egress|es-near|-|?|a|echo \gh api -X POST @NO@
+ES060|block-egress|es-near|-|?|a|\env -u NAME ls
+ES061|block-egress|es-ok|-|?|a|gh api -X POST @OK@
+ES062|block-egress|es-ok|ES061|?|a|>/dev/null gh api -X POST @OK@
+ES063|block-egress|es-ok|ES061|?|a|\gh api -X POST @OK@
+ES064|block-egress|es-ok|ES061|?|a|$'gh' api -X POST @OK@
+ES065|block-egress|es-ok|ES061|?|a|GH api -X POST @OK@
+ES066|block-egress|es-ok|ES061|?|a|{gh,api} -X POST @OK@
+ES070|block-egress|es-precision|-|?|a|gh api -X POST >/dev/null @OK@
+ES071|block-egress|es-precision|-|?|a|gh api -X POST 2>&1 @OK@
+ES072|block-egress|es-precision|-|?|a|gh api -X POST > /tmp/out.json @OK@
+ES080|block-egress|es-counter|-|?|B|\gh api @OK@ ; gh api -X POST @NO@
+ES081|block-egress|es-counter|-|?|B|>/dev/null gh api @OK@ ; gh api -X POST @NO@
+ES082|block-egress|es-counter|-|?|B|GH api @OK@ ; gh api -X POST @NO@
+ES083|block-egress|es-counter|-|?|B|$'gh' api @OK@ ; gh api -X POST @NO@
+ES084|block-egress|es-counter|-|?|B|{gh,api} @OK@ ; gh api -X POST @NO@
+ES085|block-egress|es-later|-|?|W|gh api @OK@ ; \gh api -X POST @NO@
+ES086|block-egress|es-later|-|?|W|\gh api @OK@ ; \gh api -X POST @NO@
+ES090|block-egress|open-es-resid|-|?|a|=gh api -X POST @NO@
+ES091|block-egress|open-es-resid|-|?|a|/opt/homebrew/bin/g[h] api -X POST @NO@
+ES100|block-egress|es-unparse-ctl|-|?|B|gh api -X POST @NO@ ; echo it\'s
+ES111|block-egress|es-unparse-ctl|-|?|B|gh api @OK@ ; echo it\'s
+ES101|block-egress|es-unparse|ES100|?|B|>/dev/null gh api -X POST @NO@ ; echo it\'s
+ES102|block-egress|es-unparse|ES100|?|B|2>/dev/null gh api -X POST @NO@ ; echo it\'s
+ES103|block-egress|es-unparse|ES100|?|B|\gh api -X POST @NO@ ; echo it\'s
+ES104|block-egress|es-unparse|ES100|?|B|g\h api -X POST @NO@ ; echo it\'s
+ES105|block-egress|es-unparse|ES100|?|B|{gh,api} -X POST @NO@ ; echo it\'s
+ES106|block-egress|es-unparse|ES100|?|B|$'gh' api -X POST @NO@ ; echo it\'s
+ES107|block-egress|es-unparse|ES100|?|B|$'\x67h' api -X POST @NO@ ; echo it\'s
+ES108|block-egress|es-unparse|ES100|?|B|GH api -X POST @NO@ ; echo it\'s
+ES109|block-egress|es-unparse|ES100|?|B|g""h api -X POST @NO@ ; echo it\'s
+ES110|block-egress|es-unparse|ES111|?|B|\gh api @OK@ ; echo it\'s
+ES115|block-egress|es-unparse-near|-|?|a|env \gh api -X POST @NO@ ; echo it\'s
+ES116|block-egress|es-unparse-near|-|?|a|( \gh api -X POST @NO@ ) ; echo it\'s
+ES117|block-egress|es-unparse-near|-|?|a|if true; then \gh api -X POST @NO@; fi ; echo it\'s
+ES118|block-egress|es-unparse-near|-|?|a|X=1 \gh api -X POST @NO@ ; echo it\'s
+ES119|block-egress|es-unparse-near|-|?|a|\gx api -X POST @NO@ ; echo it\'s
+ES120|block-egress|es-unparse-near|-|?|a|echo x &>/dev/null \gh api -X POST @NO@ ; echo it\'s
+ES125|block-egress|es-fast|EG100|?|B|g''h api -X POST @NO@
+ES126|block-egress|es-fast|EG100|?|B|"g"h api -X POST @NO@
+ES127|block-egress|es-fast|EG100|?|B|$'g'$'h' api -X POST @NO@
+ES128|block-egress|es-fast|EG100|?|B|$'g'h api -X POST @NO@
+ES073|block-egress|es-boundary|ES134|?|B|echo $'it\'s' ; gh api @OK@
+ES131|block-egress|es-boundary|ES135|?|B|gh api @NO@ -f body=$'it\'s'
+ES132|block-egress|es-boundary|ES136|?|B|gh api @OK@ ; gh api -X POST @NO@ -f body=$'it\'s'
+ES133|block-egress|es-boundary|ES137|?|B|gh api @OK@ ; env gh api -X POST @NO@ -f body=$'it\'s'
+ES134|block-egress|es-boundary-twin|-|?|a|echo "it's" ; gh api @OK@
+ES135|block-egress|es-boundary-twin|-|?|W|gh api @NO@ -f body="it's"
+ES136|block-egress|es-boundary-twin|-|?|W|gh api @OK@ ; gh api -X POST @NO@ -f body="it's"
+ES137|block-egress|es-boundary-twin|-|?|W|gh api @OK@ ; env gh api -X POST @NO@ -f body="it's"
+ES140|block-egress|es-r2tight|EG100|?|B|gh api -X $'POST' @NO@
+ES141|block-egress|es-r2tight|EG100|?|B|gh api --method=$'POST' @NO@
+ES142|block-egress|es-r2tight|EG001|?|W|env -u NAME gh api -X $'POST' @NO@
+ES145|block-egress|es-r2prec|ES147|?|a|gh api -X POST $'@OK@'
+ES146|block-egress|es-r2prec|ES147|?|a|gh api -X POST $"@OK@"
+ES147|block-egress|es-r2prec|-|?|a|gh api -X POST '@OK@'
+ES148|block-egress|es-r2prec|-|?|B|gh api -X POST $'@NO@'
+ES150|block-egress|es-ampgt|-|?|a|echo x &>/dev/null gh api -X POST @NO@
+ES151|block-egress|es-ampgt|EG080|?|W|env &>/dev/null gh api -X POST @NO@
+ES152|block-egress|es-ampgt|-|?|a|echo x &>>/tmp/es.log gh api -X POST @NO@
+ES155|block-egress|es-quote|EG100|?|B|> note gh api -X POST @NO@
+ES156|block-egress|es-quote|ES111|?|B|> note gh api @OK@ ; echo it\'s
+ES160|block-egress|es-flag|EG100|?|B|gh api -XPOST @NO@
+ES161|block-egress|es-flag|EG100|?|B|gh api -X=POST @NO@
+ES162|block-egress|es-flag|EG100|?|B|gh api -iX POST @NO@
+ES163|block-egress|es-flag|EG100|?|B|gh api -iXPOST @NO@
+ES164|block-egress|es-flag|-|?|B|gh api @NO@ -XDELETE
+ES165|block-egress|es-flag|-|?|W|gh api @NO@ -fbody=x
+ES166|block-egress|es-flag|-|?|W|gh api @NO@ -Fbody=x
+ES167|block-egress|es-flag|-|?|W|gh api -ifbody=x @NO@
+ES168|block-egress|es-flag|EG001|?|W|env -u NAME gh api -XPOST @NO@
+ES170|block-egress|es-flag-near|-|?|a|gh api -XGET @NO@
+ES171|block-egress|es-flag-near|-|?|a|gh api -iXPOST @OK@
+ES172|block-egress|es-flag-near|-|?|a|gh api -Hx:y @NO@
+ES175|block-egress|es-flag-prec|-|?|a|gh api -iH accept:x @OK@ -X POST
+ES176|block-egress|es-flag-prec|-|?|a|gh api -XGET @NO@ -f q=1
+# --- seed 11: the follow-up pass on card #8314 — the append form of a prefix assignment (12 rows) ---
+# Ids AP. bash and zsh read NAME+=value, the append form of a prefix assignment, as an
+# assignment word, as they read NAME=value. The canonicalizer's prefix walk recognized only
+# the second, so it took an append-form word for the command word, and a guarded assignment
+# behind it never sat at a command start. As in seed 9, every command is benign and every
+# assigned value is slash-free. apnd-ctl holds guarded assignments behind a NAME=value word,
+# refused before and after; with seed 9's DP30 and DQ07 they are the plain-form spellings of
+# the apnd rows. apnd holds the shapes this pass moves from allowed to refused; apnd-near words
+# that only look like the append form — quoted, an argument of the real command, an invalid
+# name — and the form ahead of another name, which keep today's allow. gt is `?`. The verdicts
+# are the fix commit's; the red-before reading of apnd is the suite run against the
+# pre-change canonicalizer, kept as executed evidence. This header does not take the
+# card-block form the cross-issue criterion counts: #8314's own seed block is still deferred.
+AP01|block-destructive|apnd-ctl|-|?|B|FOO=1 PATH+=x true
+AP02|block-destructive|apnd-ctl|-|?|B|FOO=1 PMO_SCOPE_GUARD_ROOT=x true
+AP10|block-destructive|apnd|-|?|B|FOO+=1 PATH=x true
+AP11|block-destructive|apnd|-|?|B|FOO+=1 PATH+=x true
+AP12|block-destructive|apnd|-|?|B|FOO+=1 env PATH=x true
+AP13|block-destructive|apnd|-|?|B|true; FOO+=1 PATH=x true
+AP14|block-destructive|apnd|-|?|B|FOO+=1 CLAUDE_HOOK_BYPASS=1 true
+AP15|block-destructive|apnd|-|?|B|FOO+=1 PMO_SCOPE_GUARD_ROOT=x true
+AP20|block-destructive|apnd-near|-|?|a|"FOO+=1" PATH=x true
+AP21|block-destructive|apnd-near|-|?|a|echo FOO+=1 PATH=x
+AP22|block-destructive|apnd-near|-|?|a|1FOO+=1 PATH=x true
+AP23|block-destructive|apnd-near|-|?|a|FOO+=1 MYPATH=x true
+# --- seed 12: the walk-fix pass on cards #8314 and #8315 — the append form of a prefix assignment in the two walks that keep their own prefix logic (33 rows) ---
+# Ids SW (BLOCK-DESTRUCTIVE-022's interpreter prefix walk, card #8314) and EW (BLOCK-EGRESS-007's
+# head walk, card #8315). bash and zsh read NAME+=value, the append form of a prefix assignment,
+# as an assignment word, as they read NAME=value. Neither walk is routed through the shared
+# canonicalizer, and each recognized only the second spelling: the -022 walk took an append-form
+# word for the command word, so the script behind it was not adjudicated, and the -007 walk took it
+# for an unlisted leading word, which the rule treats as the command, so a write behind it was
+# admitted with no record. swa-ctl and ewa-ctl hold the NAME=value spellings, at the verdicts they
+# had. swa and ewa are what this pass moves from allowed: refused, or recorded at the direct-
+# execution or non-shell interpreter arm's phase (-022), or recorded at the shipped phase as the
+# widening a write behind an assignment is (-007). swa-near and ewa-near only look like the form,
+# or stand where neither walk steps, and keep today's allow. swa-prec and ewa-prec are the declared
+# precision class: an append-form word whose value the old reading took for the command (an
+# interpreter, a script path, a path ending in gh) is the assignment it is, so the word after it is
+# the command, as for its NAME=value spelling. ewa-quote is a quoted append-form word, which the
+# egress scanner reads with its quote marks dropped, recorded as its quoted NAME=value twin is.
+# ewa-counter is a read behind the form before a later write, whose day-one refusal stays: an
+# invocation reached behind the form advances neither first-invocation counter, so this spelling is
+# stricter than its NAME=value twin. gt is `?`. The verdicts are the fix commits'; the red-before
+# reading of each group that moves is the suite run against the pre-change hooks, kept as executed
+# evidence. This header does not take the card-block form the cross-issue criterion counts.
+SW01|block-destructive|swa-ctl|-|?|B|FOO=1 bash @D@/na.sh
+SW02|block-destructive|swa-ctl|-|?|W|FOO=/bin/bash @D@/na.sh
+SW03|block-destructive|swa-ctl|-|?|a|FOO=@D@/na.sh true
+SW10|block-destructive|swa|-|?|B|FOO+=1 bash @D@/na.sh
+SW11|block-destructive|swa|-|?|B|FOO+=1 source @D@/na.sh
+SW12|block-destructive|swa|-|?|B|FOO+=1 sudo -u bot bash @D@/na.sh
+SW13|block-destructive|swa|-|?|W|FOO+=1 @D@/na.sh
+SW14|block-destructive|swa|-|?|W|FOO+=1 python3 @D@/na.py
+SW20|block-destructive|swa-near|-|?|a|"FOO+=1" bash @D@/na.sh
+SW21|block-destructive|swa-near|-|?|a|echo FOO+=1 bash @D@/na.sh
+SW22|block-destructive|swa-near|-|?|a|a-b+=1 bash @D@/na.sh
+SW23|block-destructive|swa-near|-|?|a|FOO+=(x) bash @D@/na.sh
+SW24|block-destructive|swa-near|-|?|a|FOO+=1 bash @D@/ok.sh
+SW30|block-destructive|swa-prec|-|?|W|FOO+=/bin/bash @D@/na.sh
+SW31|block-destructive|swa-prec|-|?|a|FOO+=@D@/na.sh true
+EW01|block-egress|ewa-ctl|-|?|W|FOO=1 gh api -X POST @NO@
+EW02|block-egress|ewa-ctl|-|?|W|FOO=1 gh api @OK@ ; gh api -X POST @NO@
+EW03|block-egress|ewa-ctl|-|?|W|"FOO=1" gh api -X POST @NO@
+EW04|block-egress|ewa-ctl|-|?|a|FOO=/opt/homebrew/bin/gh api -X POST @NO@
+EW10|block-egress|ewa|-|?|W|FOO+=1 gh api -X POST @NO@
+EW11|block-egress|ewa|-|?|W|true; FOO+=1 gh api -X POST @NO@
+EW12|block-egress|ewa|-|?|W|FOO+=1 env -u NAME gh api -X POST @NO@
+EW13|block-egress|ewa|-|?|W|FOO+=1 gh api @NO@ -f body=x
+EW14|block-egress|ewa|-|?|W|FOO+=1 \gh api -X POST @NO@
+EW20|block-egress|ewa-quote|-|?|W|"FOO+=1" gh api -X POST @NO@
+EW30|block-egress|ewa-counter|-|?|B|FOO+=1 gh api @OK@ ; gh api -X POST @NO@
+EW31|block-egress|ewa-counter|-|?|B|FOO+=1 gh api @OK@ ; \gh api -X POST @NO@
+EW40|block-egress|ewa-near|-|?|a|echo FOO+=1 gh api -X POST @NO@
+EW41|block-egress|ewa-near|-|?|a|a-b+=1 gh api -X POST @NO@
+EW42|block-egress|ewa-near|-|?|a|FOO++=1 gh api -X POST @NO@
+EW43|block-egress|ewa-near|-|?|a|FOO+=1 gh api -X POST @OK@
+EW44|block-egress|ewa-near|-|?|a|FOO+=1 gh api -X POST @NO@ ; echo it\'s
+EW50|block-egress|ewa-prec|-|?|a|FOO+=/opt/homebrew/bin/gh api -X POST @NO@
+# --- seed 13: the DT pass-2 fix on card #8314 — a prefix-run assignment or redirection read before the wrapper lookup (14 rows) ---
+# Ids OR. The canonicalizer's default walk looked a token up as a prefix word by its basename
+# before it tested the token as an assignment or a redirection, so an assignment whose value
+# is a path, or a redirection whose attached target is one, read as the wrapper its last path
+# segment names, and a wrapper that takes a positional consumed the word behind it. The shell
+# reads either shape as an assignment or a redirection, and the walk now tests both first. The
+# rows reach the misread through the assignment-anchored rules, which this reader grades; the
+# verb-rule spellings of the same class are suite arms (EXT-ORDER-*) in the four consuming
+# suites. ord-ctl holds the shapes with a value or target that names no positional-taking
+# wrapper, refused before and after. ord is what this fix moves from allowed to refused. ord-near
+# keeps today's allow: another name, the shape as an argument of the real command, and a quoted
+# word, which the shell runs as the command word. gt is `?`. The verdicts are the fix commit's;
+# the red-before reading of ord is the suite run against the pre-change canonicalizer, kept as
+# executed evidence. This header does not take the card-block form the cross-issue criterion
+# counts: #8314's own seed block is still deferred.
+OR01|block-destructive|ord-ctl|-|?|B|X=1 PATH=x true
+OR02|block-destructive|ord-ctl|-|?|B|X=/usr/bin/env PATH=x true
+OR03|block-destructive|ord-ctl|-|?|B|>/tmp/out PATH=x true
+OR04|block-destructive|ord-ctl|-|?|B|X=1 PATH=/tmp/evil/bin true
+OR10|block-destructive|ord|-|?|B|X=/usr/bin/timeout PATH=x true
+OR11|block-destructive|ord|-|?|B|>/tmp/timeout PATH=x true
+OR12|block-destructive|ord|-|?|B|2>/tmp/x/timeout PATH=x true
+OR13|block-destructive|ord|-|?|B|X+=/usr/bin/timeout PATH=x true
+OR14|block-destructive|ord|-|?|B|X=1 PATH=/tmp/evil/sudo true
+OR15|block-destructive|ord|-|?|B|X=/usr/bin/timeout CLAUDE_HOOK_BYPASS=1 true
+OR16|block-destructive|ord|-|?|B|>/tmp/timeout PMO_SCOPE_GUARD_ROOT=x true
+OR20|block-destructive|ord-near|-|?|a|X=/usr/bin/timeout MYPATH=x true
+OR21|block-destructive|ord-near|-|?|a|echo X=/usr/bin/timeout PATH=x
+OR22|block-destructive|ord-near|-|?|a|"X=/usr/bin/timeout" PATH=x true
+# --- seed 14: the DT pass-2 text finding on card #8315 — a quoted backslash read as its unquoted twin (1 row) ---
+# Id QB. BLOCK-EGRESS-007's escape and brace steps run on quote-erased text, so a backslash or a
+# brace group inside a quoted command word is read as its unquoted twin, although the shell runs
+# a command named with those literal characters, which does not exist. The row pins today's
+# verdict of the declared over-read, refused at the head of a segment as row EG142, the escaped
+# verb the shell does resolve to gh, is refused; its twin field is `-` because the quoted word is
+# not that invocation. A change that carries the quote mark through to those steps moves it to an
+# allow, as a declared precision improvement. gt is `?`. This header does not take the card-block
+# form the cross-issue criterion counts.
+QB01|block-egress|qbs-over|-|?|B|'\gh' api -X POST @NO@

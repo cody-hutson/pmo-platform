@@ -8,6 +8,12 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### stage-document-model-decision (2026-11-07, version-less) — One ratified design now says what every delivery stage writes
+
+### v5.03 (2026-11-07) — One standard now says where every kind of out-of-git data lives
+
+### v5.02 (2026-11-06) — Framings state their question's level, and out-of-order decisions are named
+
 ### v5.01 (2026-11-05) — Two checks that only warned now stop a pull request from merging
 
 ### v5.00 (2026-11-04) — Releases file only the follow-ups that matter
