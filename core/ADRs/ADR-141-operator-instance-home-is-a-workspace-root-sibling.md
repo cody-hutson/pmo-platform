@@ -1,7 +1,7 @@
 <!-- reference-durability: allow-link -->
 ---
 title: "ADR-141 — The operator-instance runtime-state home is a workspace-root sibling, not a tenant of the operator's personal area"
-status: Accepted
+status: Superseded by ADR-231 (non-tracked platform data is homed by its risk class; this record remains for audit trail). Originally Accepted.
 date: 2026-08-23
 release: operator-instance-home-and-install-scaffold
 deciders: "operator (home-class ratification; isolation-key scope; slice-9 retention) + Stage 5 Solutioning spoke (design) + independent adversarial review (Blocker) + Collective Review (scope-lock) + Stage 6 Engineering spoke (build, re-derivation)"
@@ -21,6 +21,8 @@ source_observations:
 # ADR-141 — The operator-instance runtime-state home is a workspace-root sibling
 
 ## Status
+
+**Superseded by [ADR-231](ADR-231-non-tracked-data-homed-by-risk-class.md)** — non-tracked platform data is homed by its risk class. This record remains unchanged for audit trail; the historical status follows.
 
 **Accepted.** Authored at Engineering for the `operator-instance-home-and-install-scaffold` release, against the operator's ratification of the home class at Stage 5 and the Collective Review scope-lock.
 
@@ -97,3 +99,4 @@ Platform-written runtime state is a peer of the operator's content, never a tena
 - The roadmap-instance in-repo home ADR — the executed precedent for relocating one family member's canonical default across the SSOT surfaces, and the origin of the authored-content-versus-runtime-state distinction this decision applies.
 - The FinOps usage-store ADR — superseded in part, on its stated store default only.
 - The release-corpus public-versus-instance split ADR — superseded in part, on its Decision 1 operator-instance home path only. Its deferred corpus migration targets this family's home; that migration remains unscheduled, so the relocation raises no sequencing obligation against it.
+- [ADR-231](ADR-231-non-tracked-data-homed-by-risk-class.md) — supersedes this record whole.
