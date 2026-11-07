@@ -1567,7 +1567,7 @@ for fsbx_loc in en_US.UTF-8 C; do
     if [ "$FSBX_DS" != -1 ] && [ "$FSBX_EXIT" = 2 ]; then
       /usr/bin/printf 'PASS: %s\n' "AC-FSB-X${fsbx_n}: a read of a ${fsbx_kb} KB quoted operand carrying structure throughout, in ${fsbx_loc}, is refused within the budget"; PASS=$((PASS + 1))
     else
-      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X${fsbx_n}: a read of a ${fsbx_kb} KB quoted operand carrying structure throughout, in ${fsbx_loc}, is refused inside the budget — measured ratio $(fsbx_ratio "${FSBX_DS}" "${FSBX_LIMIT}") of the budget, bound 1.00" \
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-FSB-X${fsbx_n}: a read of a long quoted operand carrying structure throughout, in ${fsbx_loc}, is refused inside the budget — measured ratio $(fsbx_ratio "${FSBX_DS}" "${FSBX_LIMIT}") of the budget, bound 1.00" \
         "\"stopped\" is the watchdog ending the run at the budget; exit=${FSBX_EXIT} (want 2)"; FAIL=$((FAIL + 1))
     fi
   done
@@ -1670,7 +1670,7 @@ for fsbc_shape in word cluster split lsplit; do
       if [ "$FSBC_DS" != -1 ] && [ "$FSBC_EXIT" = 0 ]; then
         /usr/bin/printf 'PASS: %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
       else
-        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape at ${fsbc_kb} KB in ${fsbc_loc} clears the hook inside the budget and is allowed — measured ratio $(fsbc_ratio "${FSBC_DS}" "${FSBC_LIMIT}") of the budget, bound 1.00" \
+        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-F${fsbc_n}: the long ${fsbc_shape} shape in ${fsbc_loc} clears the hook inside the budget and is allowed — measured ratio $(fsbc_ratio "${FSBC_DS}" "${FSBC_LIMIT}") of the budget, bound 1.00" \
           "\"stopped\" is the watchdog ending the run at the budget; exit=${FSBC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
       fi
     done

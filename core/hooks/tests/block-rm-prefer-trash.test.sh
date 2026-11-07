@@ -1365,7 +1365,7 @@ else
         if [ "$TRSC_DS" != -1 ] && [ "$TRSC_EXIT" = 0 ]; then
           /usr/bin/printf 'PASS: %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
         else
-          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook inside the budget and is allowed — measured ratio $(trsc_ratio "${TRSC_DS}" "${TRSC_LIMIT}") of the budget, bound 1.00" \
+          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape in ${trsc_loc} clears the hook inside the budget and is allowed — measured ratio $(trsc_ratio "${TRSC_DS}" "${TRSC_LIMIT}") of the budget, bound 1.00" \
             "\"stopped\" is the watchdog ending the run at the budget; exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
         fi
       done
@@ -1484,7 +1484,7 @@ CPV_EOF
         if [ "$TRSC_DS" != -1 ] && [ "$TRSC_EXIT" = 0 ]; then
           /usr/bin/printf 'PASS: %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
         else
-          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook inside the budget and is allowed — measured ratio $(trsc_ratio "${TRSC_DS}" "${TRSC_LIMIT}") of the budget, bound 1.00" \
+          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-T${cpv_n}: the long ${cpv_shape} shape in ${cpv_loc} clears the hook inside the budget and is allowed — measured ratio $(trsc_ratio "${TRSC_DS}" "${TRSC_LIMIT}") of the budget, bound 1.00" \
             "\"stopped\" is the watchdog ending the run at the budget; exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
         fi
       done

@@ -9615,7 +9615,7 @@ for lin_shape in dollar separator quoted redirection; do
       if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
         /usr/bin/printf 'PASS: %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
       else
-        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X${lin_n}: the ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+        /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X${lin_n}: the long ${lin_shape} shape in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
           "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
       fi
     done
@@ -9757,7 +9757,7 @@ for lin_loc in en_US.UTF-8 C; do
     if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
       /usr/bin/printf 'PASS: %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
     else
-      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y${lin_n}: a long comment line dense with quote characters in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
         "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
     fi
   done
@@ -9826,7 +9826,7 @@ for lin_cell in word:10:en_US.UTF-8 word:20:en_US.UTF-8 word:40:en_US.UTF-8 word
   if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
     /usr/bin/printf 'PASS: %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
   else
-    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape at ${lin_kb} KB in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-D${lin_n}: the long ${lin_shape} shape in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
       "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
   fi
 done

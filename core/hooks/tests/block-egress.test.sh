@@ -2219,18 +2219,18 @@ fi
 
 # V10a (F-01) — the hook's scan on the same 60K payload finishes inside the limit and reads
 # `both`. V10b — at the shipped cap, inside twice the limit.
-/usr/bin/printf 'PREDICT: AC-E007-V10a — the hook scan on the %s-character payload finishes within %s tenths and reads both\n' "$_v_amplen" "$E007_V_LIMIT"
+/usr/bin/printf 'PREDICT: AC-E007-V10a — the hook scan on the long payload finishes within %s tenths and reads both\n' "$E007_V_LIMIT"
 e007_v_timed "$E007_V_SCAN" egress_heredoc_kind "${E007_V_R}/amp.cmd" "$E007_V_LIMIT"
 if [ "$E007_V_DS" != -1 ] && [ "$E007_V_KIND" = both ]; then
-  e007_d_pass "AC-E007-V10a: the heredoc scan of a ${_v_amplen}-character command finishes in ${E007_V_DS} tenths of a second (limit ${E007_V_LIMIT}) and reads both"
+  e007_d_pass "AC-E007-V10a: the heredoc scan of a long command finishes in ${E007_V_DS} tenths of a second (limit ${E007_V_LIMIT}) and reads both"
 else
-  e007_d_fail "AC-E007-V10a: the heredoc scan of a ${_v_amplen}-character command finishes inside the limit" "elapsed=${E007_V_DS} tenths (-1 = stopped at ${E007_V_LIMIT}) verdict='${E007_V_KIND}' (want both)"
+  e007_d_fail "AC-E007-V10a: the heredoc scan of a long command finishes inside the limit" "elapsed=${E007_V_DS} tenths (-1 = stopped at ${E007_V_LIMIT}) verdict='${E007_V_KIND}' (want both)"
 fi
 _v_cap2=$(( E007_V_LIMIT * 2 ))
-/usr/bin/printf 'PREDICT: AC-E007-V10b — the hook scan on the %s-character cap payload finishes within %s tenths and reads none\n' "$_v_caplen" "$_v_cap2"
+/usr/bin/printf 'PREDICT: AC-E007-V10b — the hook scan on the cap payload finishes within %s tenths and reads none\n' "$_v_cap2"
 e007_v_timed "$E007_V_SCAN" egress_heredoc_kind "${E007_V_R}/cap.cmd" "$_v_cap2"
 if [ "$E007_V_DS" != -1 ] && [ "$E007_V_KIND" = none ]; then
-  e007_d_pass "AC-E007-V10b: the heredoc scan of a command at the shipped cap (${_v_caplen} characters) finishes in ${E007_V_DS} tenths of a second (limit ${_v_cap2}) and reads none"
+  e007_d_pass "AC-E007-V10b: the heredoc scan of a command at the shipped cap finishes in ${E007_V_DS} tenths of a second (limit ${_v_cap2}) and reads none"
 else
   e007_d_fail "AC-E007-V10b: the heredoc scan of a command at the shipped cap finishes inside twice the limit" "elapsed=${E007_V_DS} tenths (-1 = stopped at ${_v_cap2}) verdict='${E007_V_KIND}' (want none)"
 fi
@@ -3174,7 +3174,7 @@ for _t_loc in en_US.UTF-8 C; do
     if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
       e007_d_pass "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the whole hook within the budget and is allowed"
     else
-      e007_d_fail "AC-E007-T${_t_n}: a ${_t_kb} KB benign command in ${_t_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+      e007_d_fail "AC-E007-T${_t_n}: a long benign command in ${_t_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
         "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
     fi
   done
@@ -3321,7 +3321,7 @@ for _l_shape in dollar separator quoted redirection unparseable; do
       if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
         e007_d_pass "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the whole hook within the budget and is allowed"
       else
-        e007_d_fail "AC-E007-X${_l_n}: the ${_l_shape} shape at ${_l_kb} KB in ${_l_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+        e007_d_fail "AC-E007-X${_l_n}: the long ${_l_shape} shape in ${_l_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
           "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
       fi
     done
@@ -3503,7 +3503,7 @@ for _y_shape in continuation spans; do
       if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
         e007_d_pass "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the whole hook within the budget and is allowed"
       else
-        e007_d_fail "AC-E007-Y${_y_n}: the ${_y_shape} shape at ${_y_kb} KB in ${_y_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+        e007_d_fail "AC-E007-Y${_y_n}: the long ${_y_shape} shape in ${_y_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
           "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
       fi
     done
@@ -3683,7 +3683,7 @@ for _z_shape in ansic word; do
       if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
         e007_d_pass "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the whole hook within the budget and is allowed"
       else
-        e007_d_fail "AC-E007-Z${_z_n}: the ${_z_shape} shape at ${_z_kb} KB in ${_z_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+        e007_d_fail "AC-E007-Z${_z_n}: the long ${_z_shape} shape in ${_z_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
           "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
       fi
     done
@@ -4713,7 +4713,7 @@ for _cph_shape in word cluster split lsplit; do
       if [ "$E007_T_DS" != -1 ] && [ "$E007_T_EXIT" = 0 ]; then
         e007_d_pass "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the whole hook within the budget and is allowed"
       else
-        e007_d_fail "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape at ${_cph_kb} KB in ${_cph_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
+        e007_d_fail "AC-CPH-E${_cph_n}: the long ${_cph_shape} shape in ${_cph_loc} clears the hook inside the budget and is allowed — measured ratio $(e007_t_ratio "${E007_T_DS}" "${E007_T_LIMIT}") of the budget, bound 1.00" \
           "\"stopped\" is the watchdog ending the run at the budget; exit=${E007_T_EXIT} (want 0)"
       fi
     done
