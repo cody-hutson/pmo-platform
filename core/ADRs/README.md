@@ -142,6 +142,7 @@ ADR-230 (`non-tracked-data-homed-by-risk-class`) → **ADR-231** by `release/too
 ADR-230 (`stage-documents-are-declared-once-and-projected-twice`) → **ADR-232** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 ADR-230 (`composition-method-is-core-and-enters-through-the-release-planner`) → **ADR-233** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 ADR-230 (`issue-body-reads-single-sourced-in-the-bundle-parser`) → **ADR-234** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
+ADR-231 (`chain-head-set-derives-from-tracker-labels`) → **ADR-235** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 231; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 

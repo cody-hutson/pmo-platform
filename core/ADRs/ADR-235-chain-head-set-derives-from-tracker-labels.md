@@ -1,5 +1,5 @@
 ---
-title: ADR-231 — The chain-head set derives from tracker labels, standing is declared on the label, and the epic child-set rule has one home
+title: ADR-235 — The chain-head set derives from tracker labels, standing is declared on the label, and the epic child-set rule has one home
 status: Proposed — authored at Stage 6 Engineering of the sequencing-layer-foundation release; ratified at that release's Stage 13 Close
 date: 2026-11-05
 release: sequencing-layer-foundation
@@ -14,13 +14,15 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-231 — The chain-head set derives from tracker labels, standing is declared on the label, and the epic child-set rule has one home
+# ADR-235 — The chain-head set derives from tracker labels, standing is declared on the label, and the epic child-set rule has one home
 
 ## Status
 
 **Proposed** — authored at Stage 6 Engineering of the `sequencing-layer-foundation` release, after the operator's Collective Review scope lock rendered the decisions it records. It is ratified at that release's Stage 13 Close; the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure.
 
 **Numbering provenance.** This record was authored at the next free number on its branch. The mainline anchor plus one is claimed by a sibling record shipping in this same release, so this record takes the slot after it rather than duplicating it; stepping further would leave a gap, which the contiguity gate fails as readily as a duplicate. A branch claim is detection-only and never binds for mainline purposes. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations use the slug token `{{ADR:chain-head-set-derives-from-tracker-labels}}`, which carries no number shape and resolves at the claim.
+
+**Numbering provenance — `231 → 235`.** Held **ADR-231** branch-local; renumbered to **ADR-235** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 231. In-release citations that read "ADR-231" denote this record.
 
 ## Context
 
