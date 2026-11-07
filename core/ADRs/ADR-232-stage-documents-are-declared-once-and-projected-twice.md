@@ -1,5 +1,5 @@
 ---
-title: "ADR-230 — Each delivery stage's documents are declared once, keyed to a shared layer of delivery spans, and projected onto the release pipeline and project delivery"
+title: "ADR-232 — Each delivery stage's documents are declared once, keyed to a shared layer of delivery spans, and projected onto the release pipeline and project delivery"
 status: Accepted — ratified with amendments by the operator at the Stage 9 gate of the stage-document-model-decision release, 2026-11-05
 date: 2026-11-05
 release: stage-document-model-decision
@@ -14,7 +14,7 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-230 — Each delivery stage's documents are declared once, keyed to a shared layer of delivery spans, and projected onto the release pipeline and project delivery
+# ADR-232 — Each delivery stage's documents are declared once, keyed to a shared layer of delivery spans, and projected onto the release pipeline and project delivery
 
 ## Status
 
@@ -30,6 +30,8 @@ Accepted. Authored `Proposed` at Stage 6 Engineering of the `stage-document-mode
 - **The node-delta lint is adopted on a supporting-grade premise** (§ 7). Its deciding premise has the design record's weakest grade, a supporting reading rather than a deciding one. The operator accepted that knowingly; the lint ships warn-mode first.
 
 Other branch-authored files cite this record by its slug token until the release claim binds its number.
+
+**Numbering provenance — `230 → 232`.** Held **ADR-230** branch-local; renumbered to **ADR-232** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 230. In-release citations that read "ADR-230" denote this record.
 
 ## Context
 

@@ -290,7 +290,7 @@ N/A — enumerated over the classes reasoned over: cards removed at the Stage-4 
 | Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
 |---|---|---|---|---|---|---|
 | release (Commit 0) | `release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md` | no | no (conjunct 1 decides) | unconstrained | unconstrained | ordinary Engineering spoke |
-| #8157 | `core/ADRs/ADR-230-stage-documents-are-declared-once-and-projected-twice.md` (the founding ADR, PA-007 (B)) | no | no (conjunct 1 decides) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8157 | `core/ADRs/ADR-232-stage-documents-are-declared-once-and-projected-twice.md` (the founding ADR, PA-007 (B)) | no | no (conjunct 1 decides) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8153 · #8154 · #8155 · #8156 | none tracked (records git-ignored; BLOCK-DESTRUCTIVE-019 exempts `analysis/<subfolder>/…`) | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 
 **Integration points:** none in code. The integration is the content join #8153–#8156 → #8157, which CIAC-2..CIAC-5 assert, and the ADR, which holds #8157's design.
@@ -318,7 +318,7 @@ There is no CHANGELOG key and no `.version` stamp (SKIP-with-PASS), and no GitHu
 
 ```
 release/releases/plans/stage-document-model-decision_RELEASE_PLAN.md  ADD
-core/ADRs/ADR-230-stage-documents-are-declared-once-and-projected-twice.md  ADD
+core/ADRs/ADR-232-stage-documents-are-declared-once-and-projected-twice.md  ADD
 ```
 
 The second row is the founding ADR (PA-007 (B)), written by the #8157 Stage-6 session in Wave 2. Its filename takes the mainline next-free number (`release/tools/renumber-adr.py --next-free`), and its slug is `stage-documents-are-declared-once-and-projected-twice`; the Wave-2 commit replaced the placeholder row with that literal path (DEV-21). Until the number bound at Stage 12, branch-authored prose cited the record by its slug token, `{{ADR:<slug>}}` (ADR-181), and carried no number. Stage 12 Phase A.5.7 confirmed the number free on the mainline and stamped each token with it, before the merge. A slot collision before the merge is reconciled by A.5.7, which renumbers the file and rewrites this row.
@@ -715,7 +715,7 @@ Authored at Engineering Commit 0 per `release/governance/RELEASE_PROTOCOL.md` §
 
 ### Outcome
 
-This release produces the evidence and the design for how each delivery stage records its work. Four discovery cards verify or produce the current-state records (what each release stage writes, what project delivery produces, a shared stage vocabulary, and how methodology changes cadence), and #8157 designs the stage-to-document model on them. The design is held in a founding ADR, `ADR-230`, that ships in this release `Accepted`. It was authored `Proposed` and ratified with amendments by the operator at Stage 9 (PA-017). In one line, the design: every stage's documents are declared once, in a new core standard that both the release pipeline and project delivery read; every pipeline stage, and every project phase or stage, belongs to one of eight delivery spans; a document's lifecycle class binds to the field its file already carries; homes are named by role; a delivery approach varies cadence through one member-grain section; and a change's process design is written as DRAFT catalog pages at Engineering Commit 0 and becomes current when its code is built.
+This release produces the evidence and the design for how each delivery stage records its work. Four discovery cards verify or produce the current-state records (what each release stage writes, what project delivery produces, a shared stage vocabulary, and how methodology changes cadence), and #8157 designs the stage-to-document model on them. The design is held in a founding ADR, `ADR-232`, that ships in this release `Accepted`. It was authored `Proposed` and ratified with amendments by the operator at Stage 9 (PA-017). In one line, the design: every stage's documents are declared once, in a new core standard that both the release pipeline and project delivery read; every pipeline stage, and every project phase or stage, belongs to one of eight delivery spans; a document's lifecycle class binds to the field its file already carries; homes are named by role; a delivery approach varies cadence through one member-grain section; and a change's process design is written as DRAFT catalog pages at Engineering Commit 0 and becomes current when its code is built.
 
 ### Issues resolved
 
