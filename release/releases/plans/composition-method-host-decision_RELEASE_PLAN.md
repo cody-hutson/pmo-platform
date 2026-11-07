@@ -201,7 +201,7 @@ Native-edge probe (Stage 4, re-read at Stage 5): #6390 `blockedBy` 0; `blocking`
 | 1 | the decision record | `core/ADRs/ADR-NNN-composition-method-is-core-and-enters-through-the-release-planner.md`, transcribed from the revision's literal record. `NNN` is the mainline next-free number at authoring (`release/tools/renumber-adr.py --next-free` → 230 at `b1042eec`), stamped in the filename, the title and the H1 only, never in prose; `${AUDIT_DATE_UTC}` substituted; `status: Proposed`. `core/ADRs/README.md` is not edited: it is curated, not an index |
 | 2 | C1 | § Change Description in this file, and the Stage-6 verification evidence |
 
-- **Number binding (ADR-115, ADR-181):** the record's number binds at merge through Stage 12 A.5.7a–c. Two sibling branches hold the same number on their branches (advisory only; § In-Flight Release Roster). This plan and any other branch prose cite the record by its slug token, `{{ADR:composition-method-is-core-and-enters-through-the-release-planner}}`, which A.5.7e stamps last. Never a hand-typed number.
+- **Number binding (ADR-115, ADR-181):** the record's number binds at merge through Stage 12 A.5.7a–c. Two sibling branches hold the same number on their branches (advisory only; § In-Flight Release Roster). This plan and any other branch prose cite the record by its slug token, `ADR-233`, which A.5.7e stamps last. Never a hand-typed number.
 - **Status lifecycle:** authored `Proposed`; ratified `Accepted` at the Stage-13 close gate. The flip is read from the record's own `status:` line (the ADR-flip check is advisory-only).
 - **No candidate host skill is edited.** `release-planner`, `roadmap-curator` and `intake-desk` are read-only inputs; the chosen host's own edits belong to #6389.
 - **Estimated complexity:** Medium — one file, judgment-dense.
@@ -519,7 +519,7 @@ Authored at Stage 6 Phase C1 by the Engineering spoke on #8753, after the record
 
 ### Outcome
 
-The platform now has a recorded answer to where the epic-composition method lives and how it is entered. One decision record, `{{ADR:composition-method-is-core-and-enters-through-the-release-planner}}` (status `Proposed`), places the method in a core method document that role skills cite, entered through one thin, read-only, altitude-dispatching mode on the release planner, with every write in one operator-explicit execute step on the release executor. It argues the extend-versus-add posture as an SR-G6 determination, and it answers the sibling hosting questions — the decomposition method and the design-axis toolkit — so the codification story and the toolkit card can build against a named host. Nothing executable ships: the release is the record and this plan.
+The platform now has a recorded answer to where the epic-composition method lives and how it is entered. One decision record, `ADR-233` (status `Proposed`), places the method in a core method document that role skills cite, entered through one thin, read-only, altitude-dispatching mode on the release planner, with every write in one operator-explicit execute step on the release executor. It argues the extend-versus-add posture as an SR-G6 determination, and it answers the sibling hosting questions — the decomposition method and the design-axis toolkit — so the codification story and the toolkit card can build against a named host. Nothing executable ships: the release is the record and this plan.
 
 ### Issues resolved
 
