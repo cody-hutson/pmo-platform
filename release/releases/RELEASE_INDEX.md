@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v5.03 | placement-rules-and-adr | 2026-11-07 | — | #8817 | [notes/v5.03_RELEASE_NOTES.md](notes/v5.03_RELEASE_NOTES.md) |
 | v5.02 | framing-altitude-and-slip-model | 2026-11-06 | — | #8816 | [notes/v5.02_RELEASE_NOTES.md](notes/v5.02_RELEASE_NOTES.md) |
 | v5.01 | required-checks-enforce-as-declared | 2026-11-04 | — | #8645 | [notes/v5.01_RELEASE_NOTES.md](notes/v5.01_RELEASE_NOTES.md) |
 | v5.00 | releases-file-only-the-follow-ups-that-matter | 2026-11-04 | — | #8646 | [notes/v5.00_RELEASE_NOTES.md](notes/v5.00_RELEASE_NOTES.md) |
