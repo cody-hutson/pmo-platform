@@ -1,5 +1,5 @@
 ---
-title: "ADR-230 — The composition method is a core method that role skills cite, entered through one altitude-dispatching mode on the release planner"
+title: "ADR-233 — The composition method is a core method that role skills cite, entered through one altitude-dispatching mode on the release planner"
 status: Proposed
 date: 2026-11-05
 release: composition-method-host-decision
@@ -18,11 +18,13 @@ source_observations:
 supersedes: none
 ---
 
-# ADR-230 — The composition method is a core method that role skills cite, entered through one altitude-dispatching mode on the release planner
+# ADR-233 — The composition method is a core method that role skills cite, entered through one altitude-dispatching mode on the release planner
 
 ## Status
 
 Proposed — authored in the `composition-method-host-decision` release. The operator ratifies it at that release's Stage 13 close gate, and the ratification is read from this file's `status:` field, never inferred from milestone closure. Once Accepted, it changes only through a superseding record.
+
+**Numbering provenance — `230 → 233`.** Held **ADR-230** branch-local; renumbered to **ADR-233** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 230. In-release citations that read "ADR-230" denote this record.
 
 ## Context
 
