@@ -80,7 +80,7 @@ The view also needs each epic's children. The platform already had one rule for 
 - ADR-049 — an initiative is a grouping label, never an issue; this record derives the view that grouping implies.
 - ADR-012 and ADR-046 — roadmap instances are operator-local, which is why the standing declaration cannot live in roadmap frontmatter.
 - ADR-094 — extend-before-create: the child-set module is net-new only because in-place extension is infeasible.
-- `ADR-234` — the bundle parser as the single home of issue-body reads, whose dependency grammar this view reads edges through.
+- `ADR-236` — the bundle parser as the single home of issue-body reads, whose dependency grammar this view reads edges through.
 
 ## References
 

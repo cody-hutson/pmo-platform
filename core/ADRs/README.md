@@ -148,6 +148,7 @@ ADR-230 (`issue-body-reads-single-sourced-in-the-bundle-parser`) → **ADR-234**
 ADR-231 (`chain-head-set-derives-from-tracker-labels`) → **ADR-235** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 231; the record's Status section carries the provenance note.
 ADR-232 (`egress-respelling-takes-the-resolved-positions-rung`) → **ADR-234** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 232; the record's Status section carries the provenance note.
 ADR-233 (`command-position-walks-wrapper-grammar-from-asserted-rows`) → **ADR-235** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 233; the record's Status section carries the provenance note.
+ADR-234 (`issue-body-reads-single-sourced-in-the-bundle-parser`) → **ADR-236** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 234; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
