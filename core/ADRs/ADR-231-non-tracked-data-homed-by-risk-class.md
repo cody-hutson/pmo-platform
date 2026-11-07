@@ -1,6 +1,6 @@
 ---
 title: ADR-231 — Non-tracked platform data is homed by its risk class
-status: Proposed — authored at Stage 6 Engineering for the `placement-rules-and-adr` release; flips to Accepted at that release's Stage 13 close gate (Phase A13), where the operator ratifies it, recorded in this field.
+status: Accepted — operator-ratified at the placement-rules-and-adr Stage 13 Close ratification beat (Phase A13), 2026-11-07
 date: 2026-11-05
 release: placement-rules-and-adr
 deciders: "Workspace owner (placement design agreed on the parent epic; the layering inputs at an operator review; the whole supersession of ADR-141 and the per-user and install-level homes at the Stage 4 plan gate; the exact home paths, the enumerated main-checkout carve-out, the release-corpus classification and the added supersession edges at the Collective Review scope-lock; ratification at Stage 13) + Stage 5 Solutioning spoke (design) + independent adversarial design review + Stage 6 Engineering spoke (authorship)"
@@ -23,9 +23,9 @@ source_observations:
 
 ## Status
 
-**Proposed.** Authored at Stage 6 Engineering for the `placement-rules-and-adr` release from the design rendered at its Stage 5 Solutioning, as amended by that design's adversarial review and by the release's Collective Review scope-lock. It flips to Accepted at the release's Stage 13 close gate (Phase A13) when the operator ratifies it, recorded in this file's `status:` field.
+**Accepted** — operator-ratified at the `placement-rules-and-adr` Stage 13 Close ratification beat (Phase A13), 2026-11-07, by a decision rendered for this record alone. Authored at Stage 6 Engineering for that release from the design rendered at its Stage 5 Solutioning, as amended by that design's adversarial review and by the release's Collective Review scope-lock. Once Accepted it changes only through a record that supersedes it.
 
-**Supersedes ADR-141 whole, and ADR-017, ADR-032, ADR-046 and ADR-096 in part.** The partial edges carry their reciprocal pointers from the moment this record merges. ADR-141's `status:` transition to `Superseded` is applied in the same commit that ratifies this record and never earlier: a superseded record is frozen, so retiring it ahead of ratification would leave it retired by a record not yet in force, with no edit able to undo that. Until then the whole supersession is pending, as this record's `Proposed` status says.
+**Supersedes ADR-141 whole, and ADR-017, ADR-032, ADR-046 and ADR-096 in part.** The partial edges carried their reciprocal pointers from the moment this record merged. ADR-141's `status:` transition to `Superseded` was applied in the commit that ratified this record, and never earlier: a superseded record is frozen, so retiring it ahead of ratification would have left it retired by a record not yet in force, with no edit able to undo that. The whole supersession is in force from that commit.
 
 **Numbering.** Allocated at Engineering Commit 0 from `release/tools/renumber-adr.py --next-free` against the mainline anchor; it binds at the Stage 12 claim. In-release prose cites this record by its slug token.
 
