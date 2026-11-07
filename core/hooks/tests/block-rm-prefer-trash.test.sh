@@ -297,6 +297,67 @@ test_case "EXT-POS9: xargs-fed rm blocks via the existing unresolvable branch" \
 test_case "EXT-POS10: case-arm blocks (compound keyword)" \
   "$(bash_payload 'case x in a) rm /tmp/foo;; esac')" 2 "BLOCK-TRASH-001"
 
+# ----- EXT-POS (#8314): the canonicalizer walks a wrapper's own grammar -----
+#
+# The same deletion of the same absolute literal, reached through a wrapper's own option
+# (EXT-POS11, 15, 18), an absolute-path wrapper (12), a wrapper missing from the set (13-15),
+# a condition position (16) and a wrapper flag that takes no argument (17). Each allowed
+# before the canonicalizer walked wrapper grammar.
+test_case "EXT-POS11: env -u X rm blocks (wrapper option with a separate argument)" \
+  "$(bash_payload 'env -u X rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS12: /usr/bin/sudo rm blocks (absolute-path wrapper)" \
+  "$(bash_payload '/usr/bin/sudo rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS13: nice rm blocks (wrapper missing from the set)" \
+  "$(bash_payload 'nice rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS14: stdbuf -oL rm blocks (wrapper missing from the set, attached option value)" \
+  "$(bash_payload 'stdbuf -oL rm /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS15: timeout -s KILL 5 rm blocks (wrapper option, then its duration)" \
+  "$(bash_payload 'timeout -s KILL 5 rm /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS16: if-condition rm blocks (condition position)" \
+  "$(bash_payload 'if rm /tmp/foo ; then :; fi')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS17: time -p rm blocks (wrapper flag that takes no argument)" \
+  "$(bash_payload 'time -p rm /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-POS18: xargs with its own option feeding rm blocks via the stdin sentinel" \
+  "$(bash_payload 'printf x | xargs -n 1 rm')" 2 "BLOCK-TRASH-001"
+
+# ----- EXT-APPEND (#8314, follow-up pass): the append form of a prefix assignment -----
+#
+# The canonicalizer read a NAME+=value word as the command word, so the deletion behind it was
+# never at a command start. T1 is that deletion behind the append form; T1-CTL the same
+# deletion behind a NAME=value word (EXT-POS7's class), refused before and after.
+test_case "EXT-APPEND-T1-CTL: a NAME=value assignment then rm blocks (plain-form control)" \
+  "$(bash_payload 'FOO=1 rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-APPEND-T1: an append-form assignment then rm blocks" \
+  "$(bash_payload 'FOO+=1 rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+# ----- EXT-ORDER (#8314, DT pass 2): an assignment or a redirection is read as what it is -----
+#
+# The canonicalizer's default walk looked a token up as a wrapper word by its basename before
+# it tested the token as an assignment or a redirection, so an assignment whose value ends in
+# /timeout, or a redirection to a file named timeout, was read as the timeout wrapper, whose
+# duration operand consumed the rm behind it. T1 and T2 are that deletion behind each shape;
+# the CTLs are the plain form and the same deletion behind a plain assignment, refused before
+# and after. The allow-on-match exits read the exit view, whose walk is unchanged.
+test_case "EXT-ORDER-T-CTL0: rm blocks (plain-form control)" \
+  "$(bash_payload 'rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-ORDER-T-CTL1: an assignment with a plain value, then rm blocks" \
+  "$(bash_payload 'X=1 rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-ORDER-T1: an assignment whose value's last path segment is timeout, then rm blocks" \
+  "$(bash_payload 'X=/usr/bin/timeout rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-ORDER-T2: an output redirection to a file named timeout, then rm blocks" \
+  "$(bash_payload '>/tmp/timeout rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
 # ----- EXT-FP: false-positive guards for the widened positions (#5644) -----
 #
 # Shell text carried AS CONTENT is not a command. These are ordinary engineering commands
@@ -334,6 +395,322 @@ test_case "EXT-FP7: escaped parens are literal, not grouping" \
 # silent behaviour change nobody notices.
 test_case "EXT-RES1: nested-shell program string allows (documented residual, not a defect)" \
   "$(bash_payload 'bash -c '"'"'rm /tmp/foo'"'"'')" 0
+
+# ----- EXT-FP (#8314): wrapper grammar carried as content stays content -----
+test_case "EXT-FP8: echoed wrapper-and-option text allows" \
+  "$(bash_payload 'echo "nice -n 10 rm -rf /tmp/x"')" 0
+
+test_case "EXT-FP9: commit message carrying a wrapped deletion allows" \
+  "$(bash_payload 'git commit -m "if rm fails, sudo -u root rm -rf /tmp/x"')" 0
+
+# ----- EXT-RA (#8314): the two allow exits read the exit view -----
+#
+# This hook has two exits that ALLOW on a match: Step 1's git exemption (a git command at a
+# command start exempts the line) and Step 2's no-target exit (a deletion verb with no
+# operand ends the evaluation). Both read the canonicalized text, so every command start
+# the canonicalizer newly resolves would ALSO widen them, turning refusals into allows. Each
+# sentinel below is refused today and must stay refused: a git command, or a target-less
+# deletion verb, newly resolved behind a face, beside a deletion the hook refuses (T1-T5);
+# and a newly resolved target-less verb that would displace the verb Step 2 judged before
+# (T6). The two exits read the canonicalizer's exit view instead, the form the walk produced
+# before the wrapper grammar, so they keep today's verdicts. Each sentinel is paired below
+# with a copy of the hook whose marked exit line reads the widened text again, which allows
+# it: the sentinel is shown able to fire.
+test_case "EXT-RA-T1: a git status behind nice does not exempt the deletion beside it" \
+  "$(bash_payload 'nice git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-RA-T2: a git condition does not exempt the deletion in its branch" \
+  "$(bash_payload 'if git diff --quiet ; then rm -rf /tmp/foo ; fi')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-RA-T3: a git log behind an absolute-path env does not exempt the deletion beside it" \
+  "$(bash_payload '/usr/bin/env git log ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-RA-T4: a target-less rm behind nice does not end the evaluation before the trash call" \
+  "$(bash_payload 'nice rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
+
+test_case "EXT-RA-T5: a target-less rm behind a long sudo flag does not end the evaluation" \
+  "$(bash_payload 'sudo --list rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
+
+test_case "EXT-RA-T6: a target-less rm the widening promotes does not displace today's start-verb unlink" \
+  "$(bash_payload 'nice rm ; sudo unlink /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+# The neutrality pins: a line the walk resolved BEFORE the wrapper grammar keeps the
+# verdict it had, which the exit view exists to preserve. Both are allowed today and stay
+# allowed here; the per-segment closure of these lines is #8122's, which must flip them.
+test_case "EXT-RES-T1: a sudo-prefixed git status keeps today's exemption (exit view; line laundering is #8122's)" \
+  "$(bash_payload 'sudo git status ; rm -rf /tmp/foo')" 0
+
+test_case "EXT-RES-T2: a sudo-prefixed target-less rm keeps today's no-target exit (exit view; #8122's)" \
+  "$(bash_payload 'sudo rm ; trash /etc/hosts')" 0
+
+# The pairs. Each mutant is a copy of the hook with exactly one marked exit line reading the
+# widened text again (`matches` for M-TRASH-GITEXEMPT; the Step-2 verb for
+# M-TRASH-NOTARGET), shown live first: it differs from the hook by that one line, and it
+# parses. The sentinel's command through that copy must be allowed.
+ra_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-ra.XXXXXX" 2>/dev/null)" || ra_dir=""
+ra_live() { # $1 = mutant file -> 0 when it differs from the hook by exactly one line and parses
+  local n
+  n="$(/usr/bin/diff "$HOOK" "$1" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+  [ "$n" = 2 ] && /bin/bash -n "$1" 2>/dev/null
+}
+ra_pair() { # $1 = arm label  $2 = mutant file  $3 = command
+  local rc=0 err
+  if ! ra_live "$2"; then
+    /usr/bin/printf 'FAIL: %s the mutant is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n' "$1"
+    FAIL=$((FAIL + 1)); return
+  fi
+  err="$(/usr/bin/printf '%s' "$(bash_payload "$3")" | /bin/bash "$2" 2>&1 >/dev/null)" || rc="$?"
+  if [ "$rc" = 0 ]; then
+    /usr/bin/printf 'PASS: %s the sentinel is allowed through the mutant, so it can fire\n' "$1"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s the mutant did not allow the sentinel (exit=%s): %s\n' "$1" "$rc" "$err"
+    FAIL=$((FAIL + 1))
+  fi
+}
+if [ -z "$ra_dir" ]; then
+  /usr/bin/printf 'FAIL: EXT-RA pairs could not create a sandbox, so the pairs did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${ra_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${ra_dir}/lib/"
+  /usr/bin/sed -e 's/^if exit_matches \(.*# M-TRASH-GITEXEMPT\)$/if matches \1/' \
+    "$HOOK" > "${ra_dir}/block-rm-prefer-trash-git.sh"
+  /usr/bin/sed -e 's/exit_verb="\$(first_deletion_verb exit_matches)"\(.*# M-TRASH-NOTARGET\)$/exit_verb="$verb"\1/' \
+    "$HOOK" > "${ra_dir}/block-rm-prefer-trash-notarget.sh"
+  ra_pair "EXT-RA-T1-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" 'nice git status ; rm -rf /tmp/foo'
+  ra_pair "EXT-RA-T2-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" 'if git diff --quiet ; then rm -rf /tmp/foo ; fi'
+  ra_pair "EXT-RA-T3-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" '/usr/bin/env git log ; rm -rf /tmp/foo'
+  ra_pair "EXT-RA-T4-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; trash /etc/hosts'
+  ra_pair "EXT-RA-T5-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'sudo --list rm ; trash /etc/hosts'
+  ra_pair "EXT-RA-T6-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; sudo unlink /tmp/foo'
+  case "${ra_dir##*/}" in rmt-ra.*) /bin/rm -rf "$ra_dir" ;; esac
+fi
+
+# ----- EXT-APPEND-X (#8314, follow-up pass): the two allow exits keep the exit view's walk -----
+#
+# The default walk now steps over the append form of a prefix assignment (NAME+=value). The
+# exit view does not: it is frozen at the walk the two allow exits read before, so they keep
+# today's verdicts. Were its assignment test widened the same way, a git command or a
+# target-less deletion verb behind an append-form word would reach Step 1's git exemption or
+# Step 2's no-target exit, and each sentinel below — refused before this pass and after it —
+# would be allowed. Shown, not argued. X1-X4 read the shipped hook; their refusal is the same
+# on the hook before this pass, which the pass's red-before run records. Then two copies of
+# the canonicalizer are each shown live (one line from the shipped copy, and it parses): one
+# with this pass's marked line reverted, and one whose exit view also takes the append form.
+# On every sentinel the exit view is byte-identical through the shipped and the reverted copy
+# while the default view is not (XV: the exit view is unchanged by this edit, and the sentinel
+# carries the form the edit reads). The hook is not run through the reverted copy: its
+# version-skew canary refuses that copy by design (CMDPOS-SKEW-APPEND). Through the copy whose
+# exit view takes the append form, in a sandbox, the hook allows the sentinel (PAIR, the
+# sentinel shown able to fire).
+test_case "EXT-APPEND-X1: a git status behind an append-form assignment does not exempt the deletion beside it (Step 1)" \
+  "$(bash_payload 'FOO+=1 git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-APPEND-X2: a target-less rm behind an append-form assignment does not end the evaluation before the trash call (Step 2)" \
+  "$(bash_payload 'FOO+=1 rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
+
+test_case "EXT-APPEND-X3: a target-less rm behind an append-form assignment does not displace today's start-verb unlink (Step 2)" \
+  "$(bash_payload 'FOO+=1 rm ; sudo unlink /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+test_case "EXT-APPEND-X4: a git log behind two append-form assignments does not exempt the deletion beside it (Step 1)" \
+  "$(bash_payload 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
+
+apx_root="$(/usr/bin/mktemp -d)"
+apx_hooks="${apx_root}/.claude/hooks"
+/bin/mkdir -p "${apx_hooks}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${apx_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${apx_hooks}/block-rm-prefer-trash.sh"
+apx_ship="${HOOK_DIR}/lib/command-position.awk"
+apx_rev="${apx_root}/command-position-no-append.awk"
+apx_exit="${apx_root}/command-position-exit-append.awk"
+/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "$apx_ship" > "$apx_rev"
+/usr/bin/sed -e '/skips++; continue }   # VAR=value$/s/\*=\//*[+]?=\//' "$apx_ship" > "$apx_exit"
+apx_lines() { # $1 = copy -> the number of lines it differs from the shipped copy by, counted on both sides
+  /usr/bin/diff "$apx_ship" "$1" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true
+}
+apx_rev_live=0; apx_exit_live=0
+if [ "$(apx_lines "$apx_rev")" = 2 ] && /usr/bin/awk -f "$apx_rev" </dev/null >/dev/null 2>&1; then apx_rev_live=1; fi
+if [ "$(apx_lines "$apx_exit")" = 2 ] && /usr/bin/awk -f "$apx_exit" </dev/null >/dev/null 2>&1; then apx_exit_live=1; fi
+if [ "$apx_rev_live" = 1 ] && [ "$apx_exit_live" = 1 ]; then
+  /usr/bin/printf 'PASS: EXT-APPEND-XV-LIVE the reverted copy and the exit-append copy each differ from the shipped canonicalizer by exactly one line, and parse\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EXT-APPEND-XV-LIVE a sandbox copy is not live (reverted live=%s, exit-append live=%s)\n' "$apx_rev_live" "$apx_exit_live"
+  FAIL=$((FAIL + 1))
+fi
+apx_view() { # $1 = canonicalizer copy  $2 = view (default | exit)  $3 = command -> stdout
+  if [ "$2" = exit ]; then
+    /usr/bin/awk -v CMDPOS_VIEW=exit -f "$1" <<<"$3" 2>/dev/null
+  else
+    /usr/bin/awk -f "$1" <<<"$3" 2>/dev/null
+  fi
+}
+apx_run() { # $1 = canonicalizer copy  $2 = command -> APX_RC and APX_ERR
+  /bin/cp "$1" "${apx_hooks}/lib/command-position.awk"
+  APX_RC=0
+  APX_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$2" "$apx_root")" | /bin/bash "${apx_hooks}/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || APX_RC="$?"
+}
+apx_case() { # $1 = sentinel label  $2 = command
+  local ev_same=no dv_diff=no
+  if [ "$(apx_view "$apx_ship" exit "$2")" = "$(apx_view "$apx_rev" exit "$2")" ]; then ev_same=yes; fi
+  if [ "$(apx_view "$apx_ship" default "$2")" != "$(apx_view "$apx_rev" default "$2")" ]; then dv_diff=yes; fi
+  if [ "$apx_rev_live" = 1 ] && [ "$ev_same" = yes ] && [ "$dv_diff" = yes ]; then
+    /usr/bin/printf 'PASS: %s-XV the exit view is byte-identical with and without the append form, and the default view walks it\n' "$1"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s-XV reverted copy live=%s, exit view unchanged=%s, default view differs=%s\n' \
+      "$1" "$apx_rev_live" "$ev_same" "$dv_diff"
+    FAIL=$((FAIL + 1))
+  fi
+  apx_run "$apx_exit" "$2"
+  if [ "$apx_exit_live" = 1 ] && [ "$APX_RC" = 0 ]; then
+    /usr/bin/printf 'PASS: %s-PAIR a copy whose exit view also takes the append form allows the sentinel, so it can fire\n' "$1"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s-PAIR the exit-append copy did not allow the sentinel (copy live=%s, exit=%s): %s\n' "$1" "$apx_exit_live" "$APX_RC" "$APX_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+apx_case "EXT-APPEND-X1" 'FOO+=1 git status ; rm -rf /tmp/foo'
+apx_case "EXT-APPEND-X2" 'FOO+=1 rm ; trash /etc/hosts'
+apx_case "EXT-APPEND-X3" 'FOO+=1 rm ; sudo unlink /tmp/foo'
+apx_case "EXT-APPEND-X4" 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo'
+/bin/rm -rf "$apx_root"
+
+# ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
+#
+# This hook trusts the shared canonicalizer only after three probes: a one-line function
+# body; a wrapper carrying a separate-argument option before a benign word, whose canonical
+# form exposes the word only on the walk that reads wrapper grammar; and the same input in
+# the both view the hook reads (#8314, DT pass 7), whose exit view must keep the form the walk
+# produced before that grammar while its default output exposes the word. A stale or damaged
+# copy beside this hook passes the first probe and fails a later one, so the hook fails
+# CLOSED. Modelled by a copy whose nice row is removed (SKEW-01), a copy whose both view
+# carries the widened form in place of the exit view (SKEW-02), and a copy without the both
+# view (SKEW-BOTH, a primitive that predates it); the control is the same sandbox with the
+# shipped copy.
+cps_root="$(/usr/bin/mktemp -d)"
+cps_hooks="${cps_root}/.claude/hooks"
+/bin/mkdir -p "${cps_hooks}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${cps_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${cps_hooks}/block-rm-prefer-trash.sh"
+cps_run() { # $1 = command -> CPS_RC and CPS_ERR
+  CPS_RC=0
+  CPS_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$1" "$cps_root")" | /bin/bash "${cps_hooks}/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || CPS_RC="$?"
+}
+cps_skew() { # $1 = arm label  $2 = sed program for the canonicalizer copy  $3 = what the copy lacks
+  /usr/bin/sed -e "$2" "${HOOK_DIR}/lib/command-position.awk" > "${cps_hooks}/lib/command-position.awk"
+  local live=0
+  if ! /usr/bin/cmp -s "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"; then live=1; fi
+  cps_run 'echo hello'
+  if [ "$live" = 1 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'PRIMITIVE-MISSING' <<<"$CPS_ERR"; then
+    /usr/bin/printf 'PASS: %s a canonicalizer copy without %s fails the hook closed (exit 2, PRIMITIVE-MISSING)\n' "$1" "$3"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s a canonicalizer copy without %s did not fail the hook closed (mutant live=%s, exit=%s): %s\n' "$1" "$3" "$live" "$CPS_RC" "$CPS_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+cps_skew "CMDPOS-SKEW-01" 's/WROW\["nice"\]=1//' "the wrapper grammar"
+cps_skew "CMDPOS-SKEW-02" 's/^  EXIT_VIEW = 1$/  EXIT_VIEW = 0/' "the exit view"
+cps_skew "CMDPOS-SKEW-BOTH" 's/CMDPOS_VIEW == "both"/CMDPOS_VIEW == "zzboth"/' "the both view"
+# (#8314, follow-up pass) The second probe puts an append-form prefix assignment ahead of its
+# wrapper, so a copy whose walk reads that word as the command word fails it too.
+cps_skew "CMDPOS-SKEW-APPEND" '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "the append form of a prefix assignment"
+/bin/cp "${HOOK_DIR}/lib/command-position.awk" "${cps_hooks}/lib/command-position.awk"
+cps_run 'echo hello'
+cps_ctl_benign="$CPS_RC"
+cps_run 'rm -rf /tmp/foo'
+if [ "$cps_ctl_benign" = 0 ] && [ "$CPS_RC" = 2 ] && /usr/bin/grep -q 'BLOCK-TRASH-001' <<<"$CPS_ERR"; then
+  /usr/bin/printf 'PASS: CMDPOS-SKEW-CTL the same sandbox with the shipped canonicalizer allows a benign command and refuses the plain form\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: CMDPOS-SKEW-CTL the sandbox with the shipped canonicalizer is not live (benign exit=%s, plain-form exit=%s)\n' "$cps_ctl_benign" "$CPS_RC"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -rf "$cps_root"
+
+# ----- AC-D020-NEUTRAL (#8444): transformation (e) leaves the exit view and both exits unchanged -----
+#
+# (e) inserts `; ` before every assignment the canonicalizer's default walk skips, so a rule
+# anchored on an assignment (BLOCK-DESTRUCTIVE-020, -023) reads it at a command start. This
+# hook's two allow-on-match exits read the EXIT VIEW, which (e) does not reach, and no exit
+# pattern can match an assignment token, so both exits must keep their verdicts. Shown, not
+# argued: a copy of the canonicalizer with (e)'s two marked lines removed is built and shown
+# live (it differs from the shipped copy by exactly those lines, and it parses). Then, on each
+# witness, the exit view is byte-identical across the two copies, the default view is not (the
+# witness really carries an (e) mark), and this hook returns the same exit code and the same
+# message through either copy. The witnesses put a marked assignment ahead of a git command at
+# Step 1's exemption, of a target-less deletion verb at Step 2's no-target exit, and of a
+# refused deletion, in plain form and behind a wrapper or a condition keyword; the control
+# shows the sandbox live.
+neu_root="$(/usr/bin/mktemp -d)"
+neu_hooks="${neu_root}/.claude/hooks"
+/bin/mkdir -p "${neu_hooks}/lib"
+/bin/cp "${HOOK_DIR}/lib/"*.sh "${neu_hooks}/lib/" 2>/dev/null || true
+/bin/cp "$HOOK" "${neu_hooks}/block-rm-prefer-trash.sh"
+neu_ship="${HOOK_DIR}/lib/command-position.awk"
+neu_noe="${neu_root}/command-position-no-e.awk"
+/usr/bin/sed -e '/# (e) CMDPOS-E$/d' "$neu_ship" > "$neu_noe"
+neu_n="$(/usr/bin/diff "$neu_ship" "$neu_noe" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+neu_live=0
+if [ "$neu_n" = 2 ] && /usr/bin/awk -f "$neu_noe" </dev/null >/dev/null 2>&1; then neu_live=1; fi
+if [ "$neu_live" = 1 ]; then
+  /usr/bin/printf 'PASS: AC-D020-NEUTRAL-LIVE the copy without (e) differs from the shipped canonicalizer by exactly its two marked lines, and parses\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D020-NEUTRAL-LIVE the copy without (e) is not live (differing lines: %s, expected 2)\n' "${neu_n:-none}"
+  FAIL=$((FAIL + 1))
+fi
+neu_view() { # $1 = canonicalizer copy  $2 = view (default | exit)  $3 = command -> stdout
+  if [ "$2" = exit ]; then
+    /usr/bin/awk -v CMDPOS_VIEW=exit -f "$1" <<<"$3" 2>/dev/null
+  else
+    /usr/bin/awk -f "$1" <<<"$3" 2>/dev/null
+  fi
+}
+neu_run() { # $1 = canonicalizer copy  $2 = command -> NEU_RC and NEU_ERR
+  /bin/cp "$1" "${neu_hooks}/lib/command-position.awk"
+  NEU_RC=0
+  NEU_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+      /usr/bin/printf '%s' "$(bash_payload "$2" "$neu_root")" | /bin/bash "${neu_hooks}/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || NEU_RC="$?"
+}
+neu_case() { # $1 = arm label  $2 = command
+  local ev_same=no dv_diff=no rc_ship err_ship
+  if [ "$(neu_view "$neu_ship" exit "$2")" = "$(neu_view "$neu_noe" exit "$2")" ]; then ev_same=yes; fi
+  if [ "$(neu_view "$neu_ship" default "$2")" != "$(neu_view "$neu_noe" default "$2")" ]; then dv_diff=yes; fi
+  neu_run "$neu_ship" "$2"; rc_ship="$NEU_RC"; err_ship="$NEU_ERR"
+  neu_run "$neu_noe" "$2"
+  if [ "$neu_live" = 1 ] && [ "$ev_same" = yes ] && [ "$dv_diff" = yes ] \
+     && [ "$rc_ship" = "$NEU_RC" ] && [ "$err_ship" = "$NEU_ERR" ]; then
+    /usr/bin/printf 'PASS: %s exit view unchanged, default view marked, verdict unchanged through either copy (exit %s)\n' "$1" "$rc_ship"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s copy live=%s, exit view unchanged=%s, default view marked=%s, exit %s with (e) and %s without\n' \
+      "$1" "$neu_live" "$ev_same" "$dv_diff" "$rc_ship" "$NEU_RC"
+    FAIL=$((FAIL + 1))
+  fi
+}
+neu_run "$neu_ship" 'echo hello'
+neu_ctl_benign="$NEU_RC"
+neu_run "$neu_ship" 'rm -rf /tmp/foo'
+if [ "$neu_ctl_benign" = 0 ] && [ "$NEU_RC" = 2 ] && /usr/bin/grep -q 'BLOCK-TRASH-001' <<<"$NEU_ERR"; then
+  /usr/bin/printf 'PASS: AC-D020-NEUTRAL-CTL the sandbox allows a benign command and refuses the plain-form deletion\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: AC-D020-NEUTRAL-CTL the sandbox is not live (benign exit=%s, plain-form exit=%s)\n' "$neu_ctl_benign" "$NEU_RC"
+  FAIL=$((FAIL + 1))
+fi
+neu_case "AC-D020-NEUTRAL-1: a git command behind a marked assignment, beside a deletion (Step 1)" 'FOO=1 BAR=2 git status ; rm -rf /tmp/foo'
+neu_case "AC-D020-NEUTRAL-2: a git command behind env and its assignment, beside a deletion (Step 1)" 'env FOO=1 git log ; rm -rf /tmp/foo'
+neu_case "AC-D020-NEUTRAL-3: a target-less rm behind a marked assignment, before a trash call (Step 2)" 'FOO=1 BAR=2 rm ; trash /etc/hosts'
+neu_case "AC-D020-NEUTRAL-4: a target-less rm behind env and its assignment, before an unlink (Step 2)" 'env FOO=1 rm ; sudo unlink /tmp/foo'
+neu_case "AC-D020-NEUTRAL-5: a refused deletion behind a marked assignment" 'FOO=1 BAR=2 rm -rf /tmp/foo'
+neu_case "AC-D020-NEUTRAL-6: a git condition behind a marked assignment, with a deletion in its branch" 'if FOO=1 git diff --quiet ; then rm -rf /tmp/foo ; fi'
+/bin/rm -rf "$neu_root"
 
 # ----- CWD-*: a relative target is judged from the directory the command can be in -----
 #
@@ -921,6 +1298,255 @@ else
   case "${MEM_ROOT##*/}" in
     rmt-mem.*) /bin/rm -rf "$MEM_ROOT" ;;
   esac
+fi
+
+# ----- AC-CPH-T* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget -----
+#
+# The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
+# walk and the split-string scan — each read their token once, so this hook, which canonicalizes every Bash
+# command, clears one long command word, a long option cluster and a long split string in its short and
+# long spelling inside the budget at 10, 20, 40 and 80 KB in en_US.UTF-8 and C, and allows each. The arms
+# that see each site's cost apart from the rest of the hook are the false-positive control's AC-CP-L arms,
+# on the canonicalizer alone, beside their sensitivity copy.
+TRSC_LIMIT="${TRSC_LIMIT_DS:-200}"   # tenths of a second
+# trsc_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
+# what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
+trsc_ratio() { if [ "$1" = -1 ]; then /usr/bin/printf stopped; else /usr/bin/awk -v d="$1" -v l="$2" 'BEGIN { printf "%.2f", (l > 0 ? d / l : 0) }'; fi; }
+TRSC_BASE="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-cph.XXXXXX" 2>/dev/null)" || TRSC_BASE=""
+# trsc_cmd <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling.
+trsc_cmd() {
+  local h u t
+  case "$1" in
+    word)    h='';                     u='a';    t='' ;;
+    cluster) h='sudo -';               u='b';    t=' q' ;;
+    split)   h='env -S-';              u='b';    t=' q' ;;
+    lsplit)  h='env --split-string=-'; u='b';    t=' q' ;;
+    segs)    h='';                     u='a; ';  t='a' ;;
+  esac
+  H="$h" U="$u" T="$t" LC_ALL=C /usr/bin/awk -v n="$2" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = int((n - length(h) - length(t)) / length(u)) * length(u); r = u; while (length(r) < m) r = r r
+    printf "%s", h substr(r, 1, m) t }' > "$3"
+}
+# trsc_reap <pid> — stop a process and every process under it, children first, with KILL.
+trsc_reap() {
+  local c
+  for c in $(/usr/bin/pgrep -P "$1" 2>/dev/null); do trsc_reap "$c"; done
+  kill -9 "$1" 2>/dev/null
+}
+# trsc_timed <hook-file> <locale> <command-file> <limit> — the hook on the Bash payload of the command
+# under a watchdog; sets TRSC_DS (tenths elapsed, -1 when stopped) and TRSC_EXIT.
+TRSC_DS=0
+TRSC_EXIT=0
+trsc_timed() {
+  local pay="${TRSC_BASE}/payload.json" pid n=0
+  bash_payload "$(/bin/cat "$3")" > "$pay"
+  LC_ALL="$2" /bin/bash "$1" < "$pay" > /dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      trsc_reap "$pid"; wait "$pid" 2>/dev/null
+      TRSC_DS=-1; TRSC_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  TRSC_EXIT=0; wait "$pid" || TRSC_EXIT=$?
+  TRSC_DS="$n"
+}
+if [ -z "$TRSC_BASE" ]; then
+  /usr/bin/printf 'FAIL: AC-CPH-T the timed arms could not create a sandbox, so they did not run\n'; FAIL=$((FAIL + 1))
+else
+  trsc_n=0
+  for trsc_shape in word cluster split lsplit; do
+    for trsc_kb in 10 20 40 80; do trsc_cmd "$trsc_shape" $(( trsc_kb * 1024 )) "${TRSC_BASE}/${trsc_shape}-${trsc_kb}.cmd"; done
+    for trsc_loc in en_US.UTF-8 C; do
+      for trsc_kb in 10 20 40 80; do
+        trsc_n=$(( trsc_n + 1 ))
+        trsc_timed "$HOOK" "$trsc_loc" "${TRSC_BASE}/${trsc_shape}-${trsc_kb}.cmd" "$TRSC_LIMIT"
+        if [ "$TRSC_DS" != -1 ] && [ "$TRSC_EXIT" = 0 ]; then
+          /usr/bin/printf 'PASS: %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape at ${trsc_kb} KB in ${trsc_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
+        else
+          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPH-T${trsc_n}: the long ${trsc_shape} shape in ${trsc_loc} clears the hook inside the budget and is allowed — measured ratio $(trsc_ratio "${TRSC_DS}" "${TRSC_LIMIT}") of the budget, bound 1.00" \
+            "\"stopped\" is the watchdog ending the run at the budget; exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+        fi
+      done
+    done
+  done
+fi
+case "${TRSC_BASE##*/}" in rmt-cph.*) /bin/rm -rf "$TRSC_BASE" ;; esac
+
+# ----- AC-CPV-T* (#8314, DT pass 7): one canonicalizer run gives the hook both of its views -----
+#
+# The hook read its two views from two runs of the shared canonicalizer, the default output and then
+# the EXIT VIEW, so each command cost two full runs. It now makes one run in the canonicalizer's both
+# view, which emits the exit view and then the default output, each ended by a NUL byte, and reads them
+# with two reads. ONE reads the hook's source: one run on the command, in the both view, and none in the
+# exit view. EQ holds the verdicts: a copy of this hook with the two runs spliced back in is shown live
+# (it differs only in that block, and it parses), then both copies judge a set of commands — the two
+# allow-on-match exits and their sentinels, wrapped and quoted spellings, refused and allowed deletions
+# and Trash calls — and must return the same exit code and the same message on each. T1 to T16 run the
+# hook under a watchdog on one long command word and on a separator-dense command at 10, 20, 40 and
+# 80 KB in en_US.UTF-8 and C, each inside the budget and allowed. R-U and R-C time the hook against the
+# canonicalizer's default view alone on the 80 KB long word, the least of three interleaved runs of
+# each: the hook costs at most CPV_BOUND times the one run. CTL is the instrument's sensitivity: the
+# copy with the two runs exceeds the bound on the same command in UTF-8.
+CPV_BOUND="${CPV_BOUND:-1.75}"
+CPV_LIMIT="${CPV_LIMIT_S:-60}"   # seconds a timed run may take before the watchdog stops it
+CPV_BASE="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-cpv.XXXXXX" 2>/dev/null)" || CPV_BASE=""
+CPV_ONE='{
+  IFS= read -r -d '"''"' COMMAND_CMDPOS_EXIT || COMMAND_CMDPOS_EXIT="$COMMAND"
+  IFS= read -r -d '"''"' COMMAND_CMDPOS || COMMAND_CMDPOS="$COMMAND"
+} < <("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null)
+'
+CPV_TWO='COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
+COMMAND_CMDPOS_EXIT="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
+'
+# ONE — the runs of the canonicalizer on the command, read from the hook's source.
+cpv_runs="$(/usr/bin/awk '/^[ \t]*#/ { next } index($0, "-f \"$CMDPOS_AWK\"") && index($0, "\"$COMMAND\"") { n++; if (index($0, "-v CMDPOS_VIEW=both")) b++; if (index($0, "-v CMDPOS_VIEW=exit")) x++ }
+  END { printf "%d %d %d", n, b, x }' "$HOOK")"
+if [ "$cpv_runs" = "1 1 0" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the both view, and never in the exit view alone"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the both view" \
+    "runs on the command / in the both view / in the exit view alone: ${cpv_runs} (want 1 1 0)"; FAIL=$((FAIL + 1))
+fi
+if [ -z "$CPV_BASE" ]; then
+  /usr/bin/printf 'FAIL: AC-CPV the arms could not create a sandbox, so they did not run\n'; FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${CPV_BASE}/one/lib" "${CPV_BASE}/two/lib"
+  for cpv_d in one two; do
+    /bin/cp "${HOOK_DIR}/lib/"*.sh "${CPV_BASE}/${cpv_d}/lib/" 2>/dev/null || true
+    /bin/cp "${HOOK_DIR}/lib/command-position.awk" "${CPV_BASE}/${cpv_d}/lib/"
+  done
+  /bin/cp "$HOOK" "${CPV_BASE}/one/block-rm-prefer-trash.sh"
+  cpv_live=0
+  if F="$CPV_ONE" T="$CPV_TWO" LC_ALL=C /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] } { s = s $0 "\n" }
+       END { i = index(s, f); if (i == 0 || index(substr(s, i + 1), f) > 0) exit 1
+             printf "%s", substr(s, 1, i - 1) t substr(s, i + length(f)) }' "$HOOK" > "${CPV_BASE}/two/block-rm-prefer-trash.sh" \
+     && /bin/bash -n "${CPV_BASE}/two/block-rm-prefer-trash.sh" 2>/dev/null \
+     && ! /usr/bin/cmp -s "$HOOK" "${CPV_BASE}/two/block-rm-prefer-trash.sh"; then
+    cpv_live=1
+  fi
+  # EQ — the same exit code and message through both copies.
+  cpv_why=""; cpv_k=0
+  while IFS= read -r cpv_c; do
+    [ -n "$cpv_c" ] || continue
+    cpv_k=$((cpv_k + 1))
+    cpv_r1=0; cpv_r2=0
+    cpv_e1="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+        /usr/bin/printf '%s' "$(bash_payload "$cpv_c" "$CPV_BASE")" | /bin/bash "${CPV_BASE}/one/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || cpv_r1="$?"
+    cpv_e2="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+        /usr/bin/printf '%s' "$(bash_payload "$cpv_c" "$CPV_BASE")" | /bin/bash "${CPV_BASE}/two/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || cpv_r2="$?"
+    [ "$cpv_r1" = "$cpv_r2" ] && [ "$cpv_e1" = "$cpv_e2" ] || cpv_why="${cpv_why} [${cpv_c}] exit ${cpv_r1} through one run, ${cpv_r2} through two;"
+  done <<'CPV_EOF'
+rm -rf /tmp/foo
+echo hello
+rm
+sudo rm ; trash /etc/hosts
+nice rm ; trash /etc/hosts
+nice rm ; sudo unlink /tmp/foo
+sudo --list rm ; trash /etc/hosts
+FOO+=1 rm ; trash /etc/hosts
+FOO+=1 rm ; sudo unlink /tmp/foo
+rm -rf "/tmp/a b" ; echo "x; rm -rf /etc"
+echo "rm -rf /tmp/foo"
+\rm -rf /tmp/foo
+xargs rm < /tmp/list
+find /tmp -delete
+trash /etc/hosts
+unlink /tmp/foo ; rmdir /tmp/d
+if true ; then rm -rf /tmp/foo ; fi
+env -S-u x rm -rf /tmp/foo
+osascript -e 'tell application "Finder" to delete POSIX file "/tmp/foo"'
+git status ; rm -rf /tmp/foo
+sudo git status ; rm -rf /tmp/foo
+nice git status ; rm -rf /tmp/foo
+if git diff --quiet ; then rm -rf /tmp/foo ; fi
+/usr/bin/env git log ; rm -rf /tmp/foo
+FOO+=1 git status ; rm -rf /tmp/foo
+git rm -rf /tmp/foo
+echo '; git status' ; rm -rf /tmp/foo
+CPV_EOF
+  if [ "$cpv_live" = 1 ] && [ -z "$cpv_why" ]; then
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-EQ: through one run and through the two runs spliced back in, the hook returns the same exit code and message on ${cpv_k} commands"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-EQ: the hook's verdicts are the same through one run as through two" \
+      "two-run copy live=${cpv_live};${cpv_why}"; FAIL=$((FAIL + 1))
+  fi
+  # T1-T16 — the hook inside the budget, by the AC-CPH-T timer above, writing its payload here.
+  TRSC_BASE="$CPV_BASE"
+  cpv_n=0
+  for cpv_shape in word segs; do
+    for cpv_kb in 10 20 40 80; do trsc_cmd "$cpv_shape" $(( cpv_kb * 1024 )) "${CPV_BASE}/${cpv_shape}-${cpv_kb}.cmd"; done
+    for cpv_loc in en_US.UTF-8 C; do
+      for cpv_kb in 10 20 40 80; do
+        cpv_n=$(( cpv_n + 1 ))
+        trsc_timed "$HOOK" "$cpv_loc" "${CPV_BASE}/${cpv_shape}-${cpv_kb}.cmd" "$TRSC_LIMIT"
+        if [ "$TRSC_DS" != -1 ] && [ "$TRSC_EXIT" = 0 ]; then
+          /usr/bin/printf 'PASS: %s\n' "AC-CPV-T${cpv_n}: the ${cpv_shape} shape at ${cpv_kb} KB in ${cpv_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
+        else
+          /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-T${cpv_n}: the long ${cpv_shape} shape in ${cpv_loc} clears the hook inside the budget and is allowed — measured ratio $(trsc_ratio "${TRSC_DS}" "${TRSC_LIMIT}") of the budget, bound 1.00" \
+            "\"stopped\" is the watchdog ending the run at the budget; exit=${TRSC_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+        fi
+      done
+    done
+  done
+  # R and CTL — the hook against one run of the canonicalizer's default view, on the 80 KB long word.
+  CPV_PY='import json, os, signal, subprocess, sys, threading, time
+hook, awk, loc, reps, limit, cmdf = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), float(sys.argv[5]), sys.argv[6]
+cmd = open(cmdf, "rb").read().decode("utf-8", "surrogateescape")
+pay = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": os.environ.get("HOME", "/") + "/Claude/.claude/worktrees/planning"}).encode()
+env = dict(os.environ, LC_ALL=loc)
+def one(argv, stdin):
+    # A blocking wait reads the run exactly; a wait with a timeout polls at steps that grow to
+    # a twentieth of a second. The watchdog is a timer instead.
+    stopped = []
+    t0 = time.time()
+    p = subprocess.Popen(argv, env=env, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    def stop():
+        stopped.append(1)
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    dog = threading.Timer(limit, stop)
+    dog.start()
+    try:
+        p.communicate(stdin)
+    except OSError:
+        pass
+    p.wait()
+    dog.cancel()
+    return None if stopped else time.time() - t0
+h, c = [], []
+for _ in range(reps):
+    h.append(one(["/bin/bash", hook], pay)); c.append(one(["/usr/bin/awk", "-f", awk, cmdf], b""))
+print("-1 -1" if None in h or None in c else "%.3f %.3f" % (min(h), min(c)))'
+  cpv_ratio() { # <hook> <locale> -> CPV_H, CPV_C (seconds; -1 when stopped) and CPV_OK
+    local out
+    out="$(/usr/bin/python3 -c "$CPV_PY" "$1" "${HOOK_DIR}/lib/command-position.awk" "$2" 3 "$CPV_LIMIT" "${CPV_BASE}/word-80.cmd" 2>/dev/null)" || out="-1 -1"
+    CPV_H="${out% *}"; CPV_C="${out#* }"
+    CPV_OK=0; CPV_RATIO=stopped
+    [ "$CPV_H" = -1 ] || CPV_RATIO="$(/usr/bin/awk -v h="$CPV_H" -v c="$CPV_C" 'BEGIN { printf "%.2f", (c > 0 ? h / c : 0) }')"
+    if [ "$CPV_H" != -1 ] && /usr/bin/awk -v h="$CPV_H" -v c="$CPV_C" -v b="$CPV_BOUND" 'BEGIN { exit !(c > 0 && h <= b * c) }'; then CPV_OK=1; fi
+  }
+  for cpv_loc in en_US.UTF-8 C; do
+    cpv_ratio "$HOOK" "$cpv_loc"
+    cpv_tag="U"; [ "$cpv_loc" = C ] && cpv_tag="C"
+    if [ "$CPV_OK" = 1 ]; then
+      /usr/bin/printf 'PASS: %s\n' "AC-CPV-R-${cpv_tag}: on the 80 KB long word in ${cpv_loc} the hook costs within ${CPV_BOUND} times one run of the canonicalizer"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-R-${cpv_tag}: on the 80 KB long word in ${cpv_loc} the hook costs at most ${CPV_BOUND} times one run of the canonicalizer — measured ratio ${CPV_RATIO}, bound ${CPV_BOUND}" \
+        "\"stopped\" is the watchdog ending a run"; FAIL=$((FAIL + 1))
+    fi
+  done
+  cpv_ratio "${CPV_BASE}/two/block-rm-prefer-trash.sh" en_US.UTF-8
+  if [ "$cpv_live" = 1 ] && [ "$CPV_H" != -1 ] && [ "$CPV_OK" = 0 ]; then
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-CTL: the copy with two runs costs beyond ${CPV_BOUND} times one run of the canonicalizer on the 80 KB long word in UTF-8 — the instrument sees the second run"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-CTL: the copy with two runs exceeds the bound (BROKEN PROBE) — measured ratio ${CPV_RATIO}, bound ${CPV_BOUND}" \
+      "copy live=${cpv_live}"; FAIL=$((FAIL + 1))
+  fi
+  case "${CPV_BASE##*/}" in rmt-cpv.*) /bin/rm -rf "$CPV_BASE" ;; esac
 fi
 
 # Summary

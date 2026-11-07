@@ -187,7 +187,7 @@ The following actions are **never delegable to agents**, regardless of standing 
    - *Enforcement:* `block-autonomy-ceiling.sh` `BLOCK-AUTONOMY-004`, `apply_block`, mode-gated and evaluated below the master-activation and workspace-scope gates. Under the shipped master-OFF default it is inert. A target counts as `projects/` only when it is under the operations root **and** in no working tree of the platform repository — membership is evaluated first — which is what establishes that this direction cannot reach the tracked repository through any working tree of this checkout's repository; a separate clone of the platform remote is a different repository to git and is not covered.
 
 8. **Destructive operations outside `${HOME}/Claude/`** — `rm`/`rmdir`/`unlink`/`trash` targets resolved outside the workspace root. A Trash move of one auto-memory entry is deliberately NOT a member of this set — see item 8a.
-   - *Why irreducible:* Per `.claude/hooks/block-rm-prefer-trash.sh` BLOCK-TRASH-001 / BLOCK-TRASH-003: blocks at hook level; permanent. No agent-reachable bypass: `CLAUDE_HOOK_BYPASS` is set by the operator before launch, and a mid-session assignment is refused by `BLOCK-DESTRUCTIVE-023`.
+   - *Why irreducible:* Per `.claude/hooks/block-rm-prefer-trash.sh` BLOCK-TRASH-001 / BLOCK-TRASH-003: blocks at hook level; permanent. The bypass is the operator's: `CLAUDE_HOOK_BYPASS` is set before launch, and `BLOCK-DESTRUCTIVE-023` refuses a mid-session assignment of it written as an assignment word at any command position the shared canonicalizer resolves, in a declaration builtin's argument list, or with the append operator. That rule is lexical, and it does not judge every spelling: a program string handed to another shell, an assignment behind more than ten prefix-run tokens, and an assignment made through a builtin or keyword that takes the variable's name as an operand or through another indirect spelling are admitted. The last class is owned by the card named under References below.
    - *Source rule:* `.claude/rules/bypass-mode-readiness.md` § block-rm-prefer-trash.sh BLOCK-TRASH-001/003.
 
 8a. **Memory-store eviction — a Trash move of one auto-memory entry out of the operator's declared store** — **not a member of item 8's set.** Governed by the encode-and-evict lifecycle under operator authorization. **Tier 1, not Tier 0.**
@@ -293,3 +293,7 @@ A Tier 1 skill (per OPERATIONS.md skill classification — e.g., comms-writer) c
 - [OPERATIONS.md](../governance/OPERATIONS.md) — Skill Tier classification (1-2) + cascade rules C1-C7
 - [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) — File Management Protocol (Document Tier 1-4); Quality Standards (Reversibility discipline, No ungoverned changes); Prohibited Actions
 - `release/references/pipeline/` — Automation Tier 1-3 convention (inverted from this file's Autonomy Tier — see § Tier Disambiguation Table)
+
+## References
+
+- #8652 — the open card that owns the spellings of a PATH or anti-injection assignment the destructive-guard rules -020 and -023 still admit: an assignment made through a builtin or keyword that takes the variable's name as an operand, arithmetic assignment, an assignment carried inside another option's value or a program's own operand, and the other indirect spellings. Item 8's statement of what -023 does not judge points here.
