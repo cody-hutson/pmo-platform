@@ -3093,11 +3093,11 @@ e007_sp_arm "AC-E007-SP-F5: \$'g'\$'h' api -X POST <unlisted> — the verb as tw
 # replaces, the bracket class and three single-character substitutions alike, so the strip is
 # now one linear pass: one pass of tr in the C locale, which deletes the same three bytes. EQ
 # holds its output byte for byte against the bracket class on a dense input, beside a near miss
-# that keeps `$` and must differ. T1 to T6 run the whole sandbox hook on a large benign command
-# (no gh, one `$` a line) at 10, 20 and 40 KB, in en_US.UTF-8 and in C, under a watchdog: each must finish
-# inside the budget and allow. T-CTL is the instrument's sensitivity: the same hook with its
-# fast-strip line set back to the bracket class, on the 10 KB command in UTF-8, must be stopped
-# at the budget. The budget is a ceiling with headroom for a loaded host, not the expected time.
+# that keeps `$` and must differ. T1 to T6 run the whole sandbox hook on large benign commands
+# (no gh, one `$` a line) at several sizes, in en_US.UTF-8 and in C, under a watchdog: each must
+# finish inside the budget and allow. T-CTL is the instrument's sensitivity: the same hook with its
+# fast-strip line set back to the bracket class, on a large command in UTF-8, must be stopped at
+# the budget. The budget is a ceiling with headroom for a loaded host, not the expected time.
 E007_T_LIMIT="${E007_T_LIMIT_DS:-200}"   # tenths of a second
 # e007_t_ratio <tenths> <limit> — a run's cost as a share of its budget, or "stopped" when the watchdog ended it:
 # what a timed arm prints in place of a time, so no output line pairs a command's size with a time.
