@@ -609,8 +609,8 @@ test_case "AC-4 CONTROL: a plain expansion still exits 0 in the same run — the
 #     cat "$(curl …)"            ->  cat "$<1>curl …<1>"             sentinel PRESENT
 # So on this stream a QUOTED ${VAR} is byte-identical to a QUOTED $(cmd) and must be
 # refused; an UNQUOTED ${VAR} keeps its own glyphs (an unquoted $( or backtick is caught
-# by G2) and is not refused by G1 — one carrying a parameter-transformation operator
-# included, a declared exclusion the XFORM section below pins. RC in the Stage 5 risk register is
+# by G2) and is not refused by G1 — one carrying a parameter-transformation operator's
+# shape is refused at G2's third limb instead, as the XFORM section below pins. RC in the Stage 5 risk register is
 # the edit these three arms exist to fail: "simplify" G1 into a brace test and arm 1 or
 # arm 2 breaks immediately.
 #
@@ -876,13 +876,15 @@ else
 fi
 
 # ==========================================================================
-# XFORM — the parameter-transformation operator: a DECLARED exclusion from G2
+# XFORM — the parameter-transformation operator: REFUSED at G2 by its shape
 # ==========================================================================
 # On a shell that implements it, `${VAR@P}` re-expands the variable's VALUE as a prompt
-# string, which performs command substitution: an execution surface with no `$(` and no
-# backtick for G2's two globs to see. G2 does not refuse it, and that is a decision, not
-# an oversight — the readiness fragment declares it and says why. These arms PIN the
-# current verdicts so a later change to any of them is deliberate.
+# string, which performs command substitution. G2 refuses the operator by its SHAPE (a
+# `${` and, anywhere, `@`, one character other than `]` or `}`, then `}`), because the
+# operand's path is whatever an evaluation produces. These arms pin that refusal, its
+# over-refusal, the positions the walk never hands over, the forms G2 cannot see, the two
+# forms the span split refuses, and an operator use the token walk splits inside a
+# subscript that holds a braced expansion, which the span split refuses (XFORM-FRAG).
 #
 # Every verdict the HOOK gives in this section is LEXICAL: the hook never executes a
 # payload, so the hook arms are evaluable on any host. Two arms assert shell behaviour
@@ -890,12 +892,13 @@ fi
 # demonstrates that the operator EXECUTES, reporting NOT-EVALUATED — never a pass — on an
 # interpreter that rejects it.
 #
-# A PIN SAYS WHICH VERDICT IT PINS. Sixteen pins assert the exit code AND either the
+# A PIN SAYS WHICH VERDICT IT PINS. Forty-two pins: SUBJ 3, PFX 2, OP/PARAM/NEST 4,
+# POS 4, RESID 3, OVER 9, SPLIT 2, FRAG 15. Each asserts the exit code AND either the
 # number of -004 records the call wrote or the rule its refusal names, because one exit
-# code can come from different guards: G6 admits with a record, G4 admits silently, a word
-# the token walk never hands to the cascade writes nothing, G1 refuses under -003 and G5,
-# for a read verb, under -001. The three near misses assert only that they are admitted,
-# as the card's AC-3 asks.
+# code can come from different guards: G2 and the span split refuse under -003, G6 admits
+# with a record, G4 admits silently, a word the token walk never hands to the cascade
+# writes nothing, G1 refuses under -003 and G5, for a read verb, under -001. The nine near
+# misses assert only that they are admitted.
 #
 # EVERY PIN IS PAIRED, ON EVERY DIMENSION IT ASSERTS. A pin is green on the shipped hook
 # by construction, so for each dimension it asserts a pairing arm runs the pin's OWN
@@ -909,18 +912,23 @@ fi
 #   S    G6 writes no record (its advise call -> :)        record dimension of every G6 admit
 #   G1A  G1 admits (return 2 -> return 3)                   exit dimension of the G1 refusal
 #   G1O  G1 refuses as outside (return 2 -> return 1)       rule dimension of the G1 refusal
-#   G4R  G4 records (return 0 -> return 3)                  record dimension of the G4 admit
-#   G4X  G4 refuses (return 0 -> return 2)                  exit dimension of the G4 admit
-#   G5A  G5 admits (return 4 -> return 0)                   exit dimension of the G5 refusal
-#   G5S  G5 refuses as unresolvable (return 4 -> return 2)  rule dimension of the G5 refusal
-#   F    the walk hands a flag-position word to the cascade  record dimension of XFORM-POS-01
-#   FR   F, and G6 refuses                                   exit dimension of XFORM-POS-01
-#   W    the walk hands every word of every segment over     record dimension of XFORM-POS-02
-#   WR   W, and G6 refuses                                   exit dimension of XFORM-POS-02
-#   A    the walk keeps a redirection's & in the segment    record dimension of XFORM-POS-03
-#   AR   A, and G6 refuses                                   exit dimension of XFORM-POS-03
-#   L    the walk joins a continuation line to its line     record dimension of XFORM-POS-04
-#   LR   L, and G6 refuses                                   exit dimension of XFORM-POS-04
+#   T    G2's third limb removed (its call line -> :)       exit dimension of every G2 refusal
+#   TO   G2's third limb refuses as outside (return 1)      rule dimension of every G2 refusal
+#   TG5A T, and G5 admits                                   exit dimension of XFORM-PFX-02
+#   F    the walk hands a flag-position word to the cascade  exit dimension of XFORM-POS-01
+#   FT   F, and T                                            record dimension of XFORM-POS-01
+#   W    the walk hands every word of every segment over     exit dimension of XFORM-POS-02
+#   WT   W, and T                                            record dimension of XFORM-POS-02
+#   A    the walk keeps a redirection's & in the segment    exit dimension of XFORM-POS-03
+#   AT   A, and T                                            record dimension of XFORM-POS-03
+#   L    the walk joins a continuation line to its line     exit dimension of XFORM-POS-04
+#   LT   L, and T                                            record dimension of XFORM-POS-04
+#   U    the span split takes an unterminated ${ as a span   exit dimension of SPLIT and FRAG-15
+#   UO   the span split's failure is refused as outside      rule dimension of SPLIT, FRAG and OVER-05/06/08/09
+#   K    the span split takes a span closed inside a subscript (its check -> :)
+#                                                            exit dimension of every split-subscript
+#                                                            refusal; rule dimension of FRAG-14, OVER-07
+#   KG5A K, and G5 admits                                   exit dimension of FRAG-14 and OVER-07
 # The document arms XFORM-DOC-01 and -02 are paired on both halves: the document half by
 # the XFORM-DOC-03 mutants, the hook half by XFORM-MUT-01. XFORM-RESID-04 and XFORM-SEM-01
 # assert shell behaviour rather than hook behaviour; their own control (a direct
@@ -929,7 +937,7 @@ fi
 # NO PIPELINES ANYWHERE IN THIS BLOCK, for the reason MODEOFF-REC gives above: every
 # payload reaches a hook from a FILE, and every count is one awk pass over a file.
 echo ""
-echo "the parameter-transformation operator — a declared exclusion from G2 (XFORM-*)"
+echo "the parameter-transformation operator — refused at G2 and at the span split (XFORM-*)"
 echo "---"
 
 XFORM_NL='
@@ -1046,10 +1054,7 @@ XFORM_X_S='s/^        advise_unresolvable "\$verb" "\$token"$/        :/'
 XFORM_X_G1A='s/^\(    \*"\$CMDPOS_SENTINEL"\*) \)return 2;;$/\1return 3;;/'
 # shellcheck disable=SC2016
 XFORM_X_G1O='s/^\(    \*"\$CMDPOS_SENTINEL"\*) \)return 2;;$/\1return 1;;/'
-XFORM_X_G4R='s/^        0) return 0;;$/        0) return 3;;/'
-XFORM_X_G4X='s/^        0) return 0;;$/        0) return 2;;/'
 XFORM_X_G5A='s/; return 4;;$/; return 0;;/'
-XFORM_X_G5S='s/; return 4;;$/; return 2;;/'
 XFORM_X_F='s/^          if (substr(t, 1, 1) == "-") continue;$/          t = t;/'
 XFORM_X_W1='s/^        if (first_token != v) continue;$/        first_token = v;/'
 XFORM_X_W2='s/^        for (i = first + 1; i <= m; i++) {$/        for (i = first; i <= m; i++) {/'
@@ -1063,23 +1068,39 @@ XFORM_X_W2='s/^        for (i = first + 1; i <= m; i++) {$/        for (i = firs
 XFORM_X_A='s#^      n = split(\$0, segments, /\[;&|\]+/);$#      gsub(/[<>]\&; /, ">"); n = split($0, segments, /[;\&|]+/);#'
 # shellcheck disable=SC2016
 XFORM_X_L='s#^      n = split(\$0, segments, /\[;&|\]+/);$#      while ($0 ~ /\\\\$/ \&\& (getline nx) > 0) $0 = substr($0, 1, length($0) - 1) " " nx; n = split($0, segments, /[;\&|]+/);#'
+# T removes G2's third limb and TO makes it refuse as outside; U lets the span split take an
+# unterminated ${ as one span and UO makes its failure refuse as outside; K removes the span
+# split's subscript check. Each call line they key on occurs exactly once in the hook.
+# shellcheck disable=SC2016
+XFORM_X_T='s/^  if _carries_transform_op "\$token"; then return 2; fi$/  :/'
+# shellcheck disable=SC2016
+XFORM_X_TO='s/^  if _carries_transform_op "\$token"; then return 2; fi$/  if _carries_transform_op "$token"; then return 1; fi/'
+# shellcheck disable=SC2016
+XFORM_X_U='s/^          \*)    return 1;;$/          *)    consumed="\\$${after}";;/'
+# shellcheck disable=SC2016
+XFORM_X_UO='s/^  _split_expansions "\$token" || return 2$/  _split_expansions "$token" || return 1/'
+# shellcheck disable=SC2016
+XFORM_X_K='s/^                if _span_closed_inside_subscript "\$inner"; then return 1; fi;;$/                :;;/'
 
 XFORM_R="$(xform_copy r "$XFORM_X_R")"
 XFORM_S="$(xform_copy s "$XFORM_X_S")"
 XFORM_G1A="$(xform_copy g1a "$XFORM_X_G1A")"
 XFORM_G1O="$(xform_copy g1o "$XFORM_X_G1O")"
-XFORM_G4R="$(xform_copy g4r "$XFORM_X_G4R")"
-XFORM_G4X="$(xform_copy g4x "$XFORM_X_G4X")"
-XFORM_G5A="$(xform_copy g5a "$XFORM_X_G5A")"
-XFORM_G5S="$(xform_copy g5s "$XFORM_X_G5S")"
+XFORM_T="$(xform_copy t "$XFORM_X_T")"
+XFORM_TO="$(xform_copy to "$XFORM_X_TO")"
+XFORM_TG5A="$(xform_copy tg5a "$XFORM_X_T" "$XFORM_X_G5A")"
 XFORM_F="$(xform_copy f "$XFORM_X_F")"
-XFORM_FR="$(xform_copy fr "$XFORM_X_F" "$XFORM_X_R")"
+XFORM_FT="$(xform_copy ft "$XFORM_X_F" "$XFORM_X_T")"
 XFORM_W="$(xform_copy w "$XFORM_X_W1" "$XFORM_X_W2")"
-XFORM_WR="$(xform_copy wr "$XFORM_X_W1" "$XFORM_X_W2" "$XFORM_X_R")"
+XFORM_WT="$(xform_copy wt "$XFORM_X_W1" "$XFORM_X_W2" "$XFORM_X_T")"
 XFORM_A="$(xform_copy a "$XFORM_X_A")"
-XFORM_AR="$(xform_copy ar "$XFORM_X_A" "$XFORM_X_R")"
+XFORM_AT="$(xform_copy at "$XFORM_X_A" "$XFORM_X_T")"
 XFORM_L="$(xform_copy l "$XFORM_X_L")"
-XFORM_LR="$(xform_copy lr "$XFORM_X_L" "$XFORM_X_R")"
+XFORM_LT="$(xform_copy lt "$XFORM_X_L" "$XFORM_X_T")"
+XFORM_U="$(xform_copy u "$XFORM_X_U")"
+XFORM_UO="$(xform_copy uo "$XFORM_X_UO")"
+XFORM_K="$(xform_copy k "$XFORM_X_K")"
+XFORM_KG5A="$(xform_copy kg5a "$XFORM_X_K" "$XFORM_X_G5A")"
 
 # xform_shape <label> <copy> <lines out> <lines in> — the copy's shape against the shipped
 # hook: exactly <lines out> taken out and <lines in> put in, it parses, it refuses an
@@ -1116,72 +1137,69 @@ xform_shape "XFORM-MUT-SHAPE-R: the copy whose G6 refuses differs in one line, p
 xform_shape "XFORM-MUT-SHAPE-S: the copy whose G6 writes no record differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_S" 1 1
 xform_shape "XFORM-MUT-SHAPE-G1A: the copy whose G1 admits differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_G1A" 1 1
 xform_shape "XFORM-MUT-SHAPE-G1O: the copy whose G1 refuses as outside differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_G1O" 1 1
-xform_shape "XFORM-MUT-SHAPE-G4R: the copy whose G4 records differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_G4R" 1 1
-xform_shape "XFORM-MUT-SHAPE-G4X: the copy whose G4 refuses differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_G4X" 1 1
-xform_shape "XFORM-MUT-SHAPE-G5A: the copy whose G5 admits differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_G5A" 1 1
-xform_shape "XFORM-MUT-SHAPE-G5S: the copy whose G5 refuses as unresolvable differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_G5S" 1 1
 xform_shape "XFORM-MUT-SHAPE-F: the copy whose walk hands flag-position words over differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_F" 1 1
-xform_shape "XFORM-MUT-SHAPE-FR: F with G6 refusing differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_FR" 2 2
 xform_shape "XFORM-MUT-SHAPE-W: the copy whose walk hands every word of every segment over differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_W" 2 2
-xform_shape "XFORM-MUT-SHAPE-WR: W with G6 refusing differs in three lines, parses, and still refuses and admits untouched literals" "$XFORM_WR" 3 3
 xform_shape "XFORM-MUT-SHAPE-A: the copy whose walk keeps a redirection's ampersand in the verb's segment differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_A" 1 1
-xform_shape "XFORM-MUT-SHAPE-AR: A with G6 refusing differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_AR" 2 2
 xform_shape "XFORM-MUT-SHAPE-L: the copy whose walk joins a continuation line to the line it continues differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_L" 1 1
-xform_shape "XFORM-MUT-SHAPE-LR: L with G6 refusing differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_LR" 2 2
+xform_shape "XFORM-MUT-SHAPE-T: the copy without G2's third limb differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_T" 1 1
+xform_shape "XFORM-MUT-SHAPE-TO: the copy whose third limb refuses as outside differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_TO" 1 1
+xform_shape "XFORM-MUT-SHAPE-TG5A: T with G5 admitting differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_TG5A" 2 2
+xform_shape "XFORM-MUT-SHAPE-FT: F without the third limb differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_FT" 2 2
+xform_shape "XFORM-MUT-SHAPE-WT: W without the third limb differs in three lines, parses, and still refuses and admits untouched literals" "$XFORM_WT" 3 3
+xform_shape "XFORM-MUT-SHAPE-AT: A without the third limb differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_AT" 2 2
+xform_shape "XFORM-MUT-SHAPE-LT: L without the third limb differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_LT" 2 2
+xform_shape "XFORM-MUT-SHAPE-U: the copy whose span split takes an unterminated brace differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_U" 1 1
+xform_shape "XFORM-MUT-SHAPE-UO: the copy whose split failure is refused as outside differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_UO" 1 1
+xform_shape "XFORM-MUT-SHAPE-K: the copy without the span split's subscript check differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_K" 1 1
+xform_shape "XFORM-MUT-SHAPE-KG5A: K with G5 admitting differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_KG5A" 2 2
 
 # ----- XFORM-SUBJ / XFORM-PFX: the measured pair, and what the pair hides -----
+# xform_g2_pin <label> <command> <T exit> <T records> — a G2 refusal (exit 2, -003) with both
+# of its pairing arms: T (the third limb removed) must give <T exit> with <T records>
+# records, and TO (the limb refuses as outside) must name -001.
+xform_g2_pin() {
+  xform_pin "$1" "$2" 2 rule BLOCK-FS-BOUNDARY-003
+  xform_pair "${1%%:*}-PAIR-exit: through the copy without G2's third limb, the same operand is not refused at G2" \
+    "$XFORM_T" "$2" 2 rule BLOCK-FS-BOUNDARY-003   "$3" "$4" -
+  xform_pair "${1%%:*}-PAIR-rule: through the copy whose third limb refuses as outside, the refusal names -001 — the -003 reads a live rule" \
+    "$XFORM_TO" "$2" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
+}
 # shellcheck disable=SC2016  # payload text, not expansions
 XFORM_C_SUBJ='cat ${CFG@P}'
-xform_pin "XFORM-SUBJ-01: unquoted \${VAR@P} is ADMITTED under G6 with exactly one -004 record (declared exclusion)" \
-  "$XFORM_C_SUBJ" 0 rec 1
-xform_pair "XFORM-SUBJ-01-PAIR-exit: through the copy whose G6 refuses, the same operand is refused — SUBJ-01's exit reads a live G6" \
-  "$XFORM_R" "$XFORM_C_SUBJ" 0 rec 1   2 0 BLOCK-FS-BOUNDARY-003
-xform_pair "XFORM-SUBJ-01-PAIR-rec: through the copy whose G6 writes no record, the same operand is admitted silently — SUBJ-01's record is G6's" \
-  "$XFORM_S" "$XFORM_C_SUBJ" 0 rec 1   0 0 -
+xform_g2_pin "XFORM-SUBJ-01: unquoted \${VAR@P} is REFUSED at G2 under -003" "$XFORM_C_SUBJ" 0 1
 
 # shellcheck disable=SC2016
 XFORM_C_QUOTED='cat "${CFG@P}"'
 xform_pin "XFORM-SUBJ-02: QUOTED \${VAR@P} is refused under -003 — by G1, which refuses every quoted brace" \
   "$XFORM_C_QUOTED" 2 rule BLOCK-FS-BOUNDARY-003
-xform_pair "XFORM-SUBJ-02-PAIR-exit: through the copy whose G1 admits, the same quoted operand is admitted with a record — SUBJ-02's refusal is G1's" \
+xform_pair "XFORM-SUBJ-02-PAIR-exit: through the copy whose G1 admits, the quoted operand is not refused by G1 — SUBJ-02's refusal is G1's" \
   "$XFORM_G1A" "$XFORM_C_QUOTED" 2 rule BLOCK-FS-BOUNDARY-003   0 1 -
 xform_pair "XFORM-SUBJ-02-PAIR-rule: through the copy whose G1 refuses as outside, the refusal names -001 — SUBJ-02's -003 reads a live rule" \
   "$XFORM_G1O" "$XFORM_C_QUOTED" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
 
-# The quoted refusal exists only while the canonicalizer's quote mask does. Unbalanced
-# quotes hand the command back unchanged; an apostrophe in a here-document body is
-# enough, and the command is still valid shell. Step 1 then strips the quotes and the
-# operand is read as its unquoted spelling — so the difference between the two spellings
-# is G1's, not a judgment about the operator.
+# The quoted refusal by G1 exists only while the canonicalizer's quote mask does.
+# Unbalanced quotes hand the command back unchanged; an apostrophe in a here-document body
+# is enough, and the command is still valid shell. Step 1 then strips the quotes and the
+# operand is read as its unquoted spelling, which G2's third limb refuses by its shape.
 XFORM_C_NOMASK="cat <<'EOF' > /tmp/x.txt${XFORM_NL}it's${XFORM_NL}EOF${XFORM_NL}cat \"\${CFG@P}\""
-xform_pin "XFORM-SUBJ-03: QUOTED \${VAR@P} with the quote mask unavailable is ADMITTED like the unquoted form, one -004 record (declared exclusion)" \
-  "$XFORM_C_NOMASK" 0 rec 1
-xform_pair "XFORM-SUBJ-03-PAIR-exit: through the copy whose G6 refuses, the same command is refused — SUBJ-03 is admitted by G6, not by G1" \
-  "$XFORM_R" "$XFORM_C_NOMASK" 0 rec 1   2 0 BLOCK-FS-BOUNDARY-003
-xform_pair "XFORM-SUBJ-03-PAIR-rec: through the copy whose G6 writes no record, the same command writes none — SUBJ-03's record is G6's" \
-  "$XFORM_S" "$XFORM_C_NOMASK" 0 rec 1   0 0 -
+xform_g2_pin "XFORM-SUBJ-03: QUOTED \${VAR@P} with the quote mask unavailable is REFUSED at G2 under -003" "$XFORM_C_NOMASK" 0 1
 
 # shellcheck disable=SC2016
 XFORM_C_PFXIN='cat /tmp/${CFG@P}'
-xform_pin "XFORM-PFX-01: behind an in-root literal prefix the operator is ADMITTED under G4 and writes NO record (declared exclusion)" \
-  "$XFORM_C_PFXIN" 0 rec 0
-xform_pair "XFORM-PFX-01-PAIR-rec: through the copy whose G4 records, the same operand writes one record — PFX-01's zero is read on a live record" \
-  "$XFORM_G4R" "$XFORM_C_PFXIN" 0 rec 0   0 1 -
-xform_pair "XFORM-PFX-01-PAIR-exit: through the copy whose G4 refuses, the same operand is refused — PFX-01's admit is G4's" \
-  "$XFORM_G4X" "$XFORM_C_PFXIN" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_g2_pin "XFORM-PFX-01: behind an in-root literal prefix the operator is REFUSED at G2 under -003" "$XFORM_C_PFXIN" 0 0
 
 # shellcheck disable=SC2016
 XFORM_C_PFXOUT='cat /etc/${CFG@P}'
-xform_pin "XFORM-PFX-02: behind an out-of-root literal prefix the operand is refused by the prefix rule (-001), not by G2" \
-  "$XFORM_C_PFXOUT" 2 rule BLOCK-FS-BOUNDARY-001
-xform_pair "XFORM-PFX-02-PAIR-exit: through the copy whose G5 admits, the same operand is admitted silently — PFX-02's refusal is G5's" \
-  "$XFORM_G5A" "$XFORM_C_PFXOUT" 2 rule BLOCK-FS-BOUNDARY-001   0 0 -
-xform_pair "XFORM-PFX-02-PAIR-rule: through the copy whose G5 refuses as unresolvable, the refusal names -003 — PFX-02's -001 reads a live rule" \
-  "$XFORM_G5S" "$XFORM_C_PFXOUT" 2 rule BLOCK-FS-BOUNDARY-001   2 0 BLOCK-FS-BOUNDARY-003
+xform_pin "XFORM-PFX-02: behind an out-of-root literal prefix the operand is REFUSED at G2 under -003, before the prefix rule" \
+  "$XFORM_C_PFXOUT" 2 rule BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-PFX-02-PAIR-rule: through the copy without G2's third limb, the prefix rule refuses it under -001 — PFX-02's -003 is G2's" \
+  "$XFORM_T" "$XFORM_C_PFXOUT" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
+xform_pair "XFORM-PFX-02-PAIR-exit: through that copy with G5 admitting, the same operand is admitted silently" \
+  "$XFORM_TG5A" "$XFORM_C_PFXOUT" 2 rule BLOCK-FS-BOUNDARY-003   0 0 -
 
-# ----- The exclusion covers the operator POSITION, not one letter -----
+# ----- The refusal covers the operator POSITION, not one letter -----
 # xform_g6_pin <label> <command> — a G6 pin (exit 0, one record) with both of its pairing
-# arms: R must refuse the command, S must admit it silently.
+# arms: R must refuse the command, S must admit it silently. Used by XFORM-RESID below.
 xform_g6_pin() {
   xform_pin "$1" "$2" 0 rec 1
   xform_pair "${1%%:*}-PAIR-exit: through the copy whose G6 refuses, the same operand is refused" \
@@ -1190,36 +1208,37 @@ xform_g6_pin() {
     "$XFORM_S" "$2" 0 rec 1   0 0 -
 }
 # shellcheck disable=SC2016
-xform_g6_pin "XFORM-OP-Q: \${VAR@Q} ADMITTED under G6 with one record (declared exclusion)" 'cat ${CFG@Q}'
+xform_g2_pin "XFORM-OP-Q: \${VAR@Q} REFUSED at G2" 'cat ${CFG@Q}' 0 1
 # shellcheck disable=SC2016
-xform_g6_pin "XFORM-OP-Z: \${VAR@Z}, a letter no shell assigns today, ADMITTED under G6 with one record (declared exclusion)" 'cat ${CFG@Z}'
+xform_g2_pin "XFORM-OP-Z: \${VAR@Z}, a letter no shell assigns today, REFUSED at G2" 'cat ${CFG@Z}' 0 1
 # shellcheck disable=SC2016
-xform_g6_pin "XFORM-PARAM-01: indexed element \${arr[0]@P} ADMITTED under G6 with one record (declared exclusion)" 'cat ${arr[0]@P}'
+xform_g2_pin "XFORM-PARAM-01: indexed element \${arr[0]@P} REFUSED at G2" 'cat ${arr[0]@P}' 0 1
 # shellcheck disable=SC2016
-xform_g6_pin "XFORM-NEST-01: operator nested in a default word \${A:-\${B@P}} ADMITTED under G6 with one record (declared exclusion)" 'cat ${CFG:-${X@P}}'
+xform_g2_pin "XFORM-NEST-01: operator nested in a default word \${A:-\${B@P}} REFUSED at G2" 'cat ${CFG:-${X@P}}' 0 1
 
 # ----- XFORM-POS: words the token walk never hands to the cascade -----
 # The cascade sees only the target operands extract_target_tokens emits for a listed verb.
 # A flag-position word (it begins with `-`) is skipped there, and an assignment ahead of
 # the verb is a prefix the canonicalizer separates from the verb's segment, so neither is
 # examined whatever it carries. Pinned, with the walk's own mutation as the pairing, so a
-# later change that examines either is a deliberate arm change.
+# later change that examines either is a deliberate arm change: through the walk copy G2
+# refuses the word, and through the walk copy without the third limb G6 admits it.
 # shellcheck disable=SC2016
 XFORM_C_FLAG='cat -${CFG@P} /tmp/f'
 xform_pin "XFORM-POS-01: the operator in a flag-position word is never examined — admitted, no record (declared exclusion)" \
   "$XFORM_C_FLAG" 0 rec 0
-xform_pair "XFORM-POS-01-PAIR-rec: through the copy whose walk hands flag-position words over, the word is admitted under G6 with a record — POS-01's zero is the walk's" \
-  "$XFORM_F" "$XFORM_C_FLAG" 0 rec 0   0 1 -
-xform_pair "XFORM-POS-01-PAIR-exit: through that copy with G6 refusing, the same command is refused" \
-  "$XFORM_FR" "$XFORM_C_FLAG" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-01-PAIR-exit: through the copy whose walk hands flag-position words over, G2 refuses the word — POS-01's zero is the walk's" \
+  "$XFORM_F" "$XFORM_C_FLAG" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-01-PAIR-rec: through that copy without the third limb, the word is admitted under G6 with a record" \
+  "$XFORM_FT" "$XFORM_C_FLAG" 0 rec 0   0 1 -
 # shellcheck disable=SC2016
 XFORM_C_ASSIGN='X=${CFG@P} cat /tmp/f'
 xform_pin "XFORM-POS-02: the operator in an assignment ahead of the verb is never examined — admitted, no record (declared exclusion)" \
   "$XFORM_C_ASSIGN" 0 rec 0
-xform_pair "XFORM-POS-02-PAIR-rec: through the copy whose walk hands every word over, the assignment is admitted under G6 with a record — POS-02's zero is the walk's" \
-  "$XFORM_W" "$XFORM_C_ASSIGN" 0 rec 0   0 1 -
-xform_pair "XFORM-POS-02-PAIR-exit: through that copy with G6 refusing, the same command is refused" \
-  "$XFORM_WR" "$XFORM_C_ASSIGN" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-02-PAIR-exit: through the copy whose walk hands every word over, G2 refuses the assignment — POS-02's zero is the walk's" \
+  "$XFORM_W" "$XFORM_C_ASSIGN" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-02-PAIR-rec: through that copy without the third limb, the assignment is admitted under G6 with a record" \
+  "$XFORM_WT" "$XFORM_C_ASSIGN" 0 rec 0   0 1 -
 # Two operand positions of a listed verb, by the same walk. An ampersand inside a
 # redirection operator ends the verb's segment: the walk splits on every `&`, and the
 # canonicalizer starts a command after it. And the walk reads one physical line at a time,
@@ -1229,17 +1248,17 @@ xform_pair "XFORM-POS-02-PAIR-exit: through that copy with G6 refusing, the same
 XFORM_C_AMPREDIR='cat 2>&1 ${CFG@P}'
 xform_pin "XFORM-POS-03: the operator after a redirection operator that carries an ampersand is never examined — admitted, no record (declared exclusion)" \
   "$XFORM_C_AMPREDIR" 0 rec 0
-xform_pair "XFORM-POS-03-PAIR-rec: through the copy whose walk keeps a redirection's ampersand in the verb's segment, the operand is admitted under G6 with a record — POS-03's zero is the walk's" \
-  "$XFORM_A" "$XFORM_C_AMPREDIR" 0 rec 0   0 1 -
-xform_pair "XFORM-POS-03-PAIR-exit: through that copy with G6 refusing, the same command is refused" \
-  "$XFORM_AR" "$XFORM_C_AMPREDIR" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-03-PAIR-exit: through the copy whose walk keeps a redirection's ampersand in the verb's segment, G2 refuses the operand — POS-03's zero is the walk's" \
+  "$XFORM_A" "$XFORM_C_AMPREDIR" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-03-PAIR-rec: through that copy without the third limb, the operand is admitted under G6 with a record" \
+  "$XFORM_AT" "$XFORM_C_AMPREDIR" 0 rec 0   0 1 -
 XFORM_C_CONT="cat \\${XFORM_NL}\${CFG@P}"
 xform_pin "XFORM-POS-04: the operator on a continuation line is never examined — admitted, no record (declared exclusion)" \
   "$XFORM_C_CONT" 0 rec 0
-xform_pair "XFORM-POS-04-PAIR-rec: through the copy whose walk joins a continuation line to the line it continues, the operand is admitted under G6 with a record — POS-04's zero is the walk's" \
-  "$XFORM_L" "$XFORM_C_CONT" 0 rec 0   0 1 -
-xform_pair "XFORM-POS-04-PAIR-exit: through that copy with G6 refusing, the same command is refused" \
-  "$XFORM_LR" "$XFORM_C_CONT" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-04-PAIR-exit: through the copy whose walk joins a continuation line to the line it continues, G2 refuses the operand — POS-04's zero is the walk's" \
+  "$XFORM_L" "$XFORM_C_CONT" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-04-PAIR-rec: through that copy without the third limb, the operand is admitted under G6 with a record" \
+  "$XFORM_LT" "$XFORM_C_CONT" 0 rec 0   0 1 -
 
 # ----- XFORM-NEAR: the named near misses stay allowed -----
 # xform_near <label> <command> — a must-not-flag arm (exit 0) with its pairing arm: the
@@ -1255,6 +1274,167 @@ xform_near "XFORM-NEAR-01: a plain brace form \${VAR} — admitted" 'cat ${CFG}'
 xform_near "XFORM-NEAR-02: a default value \${VAR:-x} — admitted" 'cat ${CFG:-x}'
 # shellcheck disable=SC2016
 xform_near "XFORM-NEAR-03: a quoted name with no brace — admitted" 'cat "$HOME/x"'
+# shellcheck disable=SC2016
+xform_near "XFORM-NEAR-04: an array subscript holding the at-sign \${arr[@]} — admitted" 'cat ${arr[@]}'
+# shellcheck disable=SC2016
+xform_near "XFORM-NEAR-05: the special-parameter slice \${@:2} — admitted" 'cat ${@:2}'
+# shellcheck disable=SC2016
+xform_near "XFORM-NEAR-06: the indirection prefix-names form nested in a default word — admitted" 'cat ${CFG:-${!prefix@}}'
+# shellcheck disable=SC2016
+xform_near "XFORM-NEAR-07: an at-sign in literal text after a brace, with no closing brace — admitted" 'cat ${CFG}/a@b'
+# shellcheck disable=SC2016
+xform_near "XFORM-NEAR-08: a subscript holding an unbraced expansion \${arr[\$i]} — admitted" 'cat ${arr[$i]}'
+# shellcheck disable=SC2016
+xform_near "XFORM-NEAR-09: a nested default with no bracket \${CFG:-\${HOME}} — admitted" 'cat ${CFG:-${HOME}}'
+
+# ----- XFORM-OVER: the over-refusal the shape and the span split take, as a decision -----
+# G2's shape is wider than the operator: a word ending the same way is refused. The span
+# split refuses any span holding a `[` and a nested `${`, which is wider than a span
+# closed inside a subscript. Each is pinned so a precision change is a deliberate arm change.
+# shellcheck disable=SC2016
+xform_g2_pin "XFORM-OVER-01: a default word ending in the shape \${LOG:-a@b} — REFUSED at G2 (declared over-refusal)" 'cat ${LOG:-a@b}' 0 1
+# shellcheck disable=SC2016
+xform_g2_pin "XFORM-OVER-02: a pattern ending in the shape \${U%@*} — REFUSED at G2 (declared over-refusal)" 'cat ${U%@*}' 0 1
+# shellcheck disable=SC2016
+xform_g2_pin "XFORM-OVER-03: the subject with a backslash before its dollar — REFUSED at G2, as the escaped command substitution is" 'cat \${CFG@P}' 0 1
+# shellcheck disable=SC2016
+xform_g2_pin "XFORM-OVER-04: literal text of the shape before the first opener — REFUSED at G2 (declared order-blindness)" 'cat /tmp/a@b}${X}' 0 0
+# xform_frag_pin <label> <command> <K exit> <K records> <UO rule> — a span-split refusal
+# (exit 2, -003): K (no subscript check) gives <K exit> with <K records> records, and UO
+# (the split's failure refused as outside) names <UO rule>.
+xform_frag_pin() {
+  xform_pin "$1" "$2" 2 rule BLOCK-FS-BOUNDARY-003
+  xform_pair "${1%%:*}-PAIR-exit: through the copy without the span split's subscript check, the same command is not refused under -003" \
+    "$XFORM_K" "$2" 2 rule BLOCK-FS-BOUNDARY-003   "$3" "$4" -
+  xform_pair "${1%%:*}-PAIR-rule: through the copy whose split failure is refused as outside, the refusal names ${5}" \
+    "$XFORM_UO" "$2" 2 rule BLOCK-FS-BOUNDARY-003   2 0 "$5"
+}
+# xform_frag_out_pin <label> <command> — the same refusal behind an out-of-root prefix: K
+# hands it to the prefix rule (-001), and KG5A, with G5 admitting, admits it.
+xform_frag_out_pin() {
+  xform_pin "$1" "$2" 2 rule BLOCK-FS-BOUNDARY-003
+  xform_pair "${1%%:*}-PAIR-rule: through the copy without the subscript check, the prefix rule refuses it under -001 — the -003 is the split's" \
+    "$XFORM_K" "$2" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
+  xform_pair "${1%%:*}-PAIR-exit: through that copy with G5 admitting, the same command is admitted" \
+    "$XFORM_KG5A" "$2" 2 rule BLOCK-FS-BOUNDARY-003   0 0 -
+}
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-OVER-05: a subscript holding a braced expansion, plain — REFUSED by the span split (declared over-refusal)" 'cat ${arr[${i}]}' 0 1 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-OVER-06: a subscript holding a braced expansion, with a default word — REFUSED by the span split (declared over-refusal)" 'cat ${arr[${i}]:-x}' 0 1 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_out_pin "XFORM-OVER-07: OVER-05's form behind an out-of-root prefix — REFUSED by the span split under -003, not the prefix rule's -001" 'cat /etc/${arr[${i}]}'
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-OVER-08: a subscripted parameter whose word nests a braced expansion — REFUSED by the span split (declared over-refusal)" 'cat ${A[0]:-${D}}' 0 1 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-OVER-09: a word nesting a subscripted braced expansion — REFUSED by the span split (declared over-refusal)" 'cat ${X:-${Y[0]}}' 0 1 BLOCK-FS-BOUNDARY-001
+
+# ----- XFORM-SPLIT: two brace forms the span split refuses by where the operand breaks -----
+# zsh's flag form and the brace-form command substitution each execute on a shell that
+# implements them. The canonicalizer starts a command at the first form's parenthesis and
+# after the second form's space, so the walk hands over only an unterminated `${`, which
+# the span split refuses. Pinned, each beside a copy whose split admits an unterminated brace.
+xform_split_pin() {
+  xform_pin "$1" "$2" 2 rule BLOCK-FS-BOUNDARY-003
+  xform_pair "${1%%:*}-PAIR-exit: through the copy whose span split takes an unterminated brace, the same command is admitted with a record" \
+    "$XFORM_U" "$2" 2 rule BLOCK-FS-BOUNDARY-003   0 1 -
+  xform_pair "${1%%:*}-PAIR-rule: through the copy whose split failure is refused as outside, the refusal names -001" \
+    "$XFORM_UO" "$2" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
+}
+# shellcheck disable=SC2016
+xform_split_pin "XFORM-SPLIT-01: zsh's flag form — REFUSED by the span split under -003" 'cat ${(e)CFG}'
+# shellcheck disable=SC2016
+xform_split_pin "XFORM-SPLIT-02: the brace-form command substitution — REFUSED by the span split under -003" 'cat ${ pwd; }'
+
+# ----- XFORM-FRAG: an operator use the walk splits inside a subscript -----
+# The operator's subscript holds a braced expansion and is broken inside the subscript.
+# The shell reads one word; the walk ends a word at whitespace and a segment at `;`, `&`
+# or `|`, and reads one physical line at a time. The word carrying the `${` holds a span
+# the split would close inside the subscript, so the split refuses it under -003. Each arm
+# is paired through K, where that word passes and the rest of the shell's word is split off.
+XFORM_TAB="$(/usr/bin/printf '\t')"
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-01: subscript broken by a space, in-root prefix — REFUSED by the span split" 'cat /tmp/${arr[${i} 0]@P}' 0 0 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-02: subscript broken by a space, no prefix — REFUSED by the span split" 'cat ${arr[${i} 0]@P}' 0 1 BLOCK-FS-BOUNDARY-001
+xform_frag_pin "XFORM-FRAG-03: subscript broken by a tab, in-root prefix — REFUSED by the span split" "cat /tmp/\${arr[\${i}${XFORM_TAB}0]@P}" 0 0 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-04: subscript broken by a space, write verb — REFUSED by the span split" 'cp /tmp/a /tmp/${arr[${i} 0]@P}' 0 0 BLOCK-FS-BOUNDARY-002
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-05: subscript broken by a space, then key text — REFUSED by the span split" 'cat /tmp/${map[${k} key]@P}' 0 0 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-06: subscript broken by a space, then a dash-led tail the walk skips — REFUSED by the span split" 'cat /tmp/${arr[${i} -1]@P}' 0 0 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-07: subscript broken by a pipe — REFUSED by the span split" 'cat /tmp/${arr[${i}|0]@P}' 0 0 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-08: subscript broken by an ampersand — REFUSED by the span split" 'cat /tmp/${arr[${i}&0]@P}' 0 0 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-09: an associative key broken by a semicolon — REFUSED by the span split" 'cat /tmp/${map[${k};x]@P}' 0 0 BLOCK-FS-BOUNDARY-001
+xform_frag_pin "XFORM-FRAG-10: subscript broken by a literal newline — REFUSED by the span split" "cat /tmp/\${arr[\${i}${XFORM_NL}0]@P}" 0 0 BLOCK-FS-BOUNDARY-001
+xform_frag_pin "XFORM-FRAG-11: a line continuation before the closing brace — REFUSED by the span split" "cat /tmp/\${arr[\${i}]@P\\${XFORM_NL}}" 0 0 BLOCK-FS-BOUNDARY-001
+xform_frag_pin "XFORM-FRAG-12: a line continuation between the at-sign and the letter — REFUSED by the span split" "cat /tmp/\${arr[\${i}]@\\${XFORM_NL}P}" 0 0 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-FRAG-13: the nested expansion itself subscripted, broken by a space — REFUSED by the span split" 'cat /tmp/${arr[${b[0]} 1]@P}' 0 0 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_out_pin "XFORM-FRAG-14: FRAG-01's form behind an out-of-root prefix — REFUSED by the span split under -003, not the prefix rule's -001" 'cat /etc/${arr[${i} 0]@P}'
+# FRAG-15 is the control: a broken subscript with no nested brace leaves an unterminated
+# `${`, refused by the existing unterminated-brace rule, not by the subscript check.
+# shellcheck disable=SC2016
+XFORM_C_FRAG15='cat /tmp/${arr[i 0]@P}'
+xform_pin "XFORM-FRAG-15: a broken subscript with no nested brace — REFUSED by the unterminated-brace rule (control)" \
+  "$XFORM_C_FRAG15" 2 rule BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-FRAG-15-PAIR-exit: through the copy whose span split takes an unterminated brace, the same command is admitted" \
+  "$XFORM_U" "$XFORM_C_FRAG15" 2 rule BLOCK-FS-BOUNDARY-003   0 0 -
+xform_pair "XFORM-FRAG-15-PAIR-rule: through the copy whose split failure is refused as outside, the refusal names -001" \
+  "$XFORM_UO" "$XFORM_C_FRAG15" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
+
+# ----- XFORM-COST: both checks stay linear by construction -----
+# xform_cost_lint <function> [<hook file>] — reads that function's body and prints NO-LIMB,
+# FAIL:<reasons>, or LINEAR. A body may hold no loop, no command substitution, no pipe and
+# no parameter expansion, and every `case … in <pattern>)` must hold exactly two stars, one
+# leading and one trailing — one pass per glob.
+xform_cost_lint() {
+  /usr/bin/awk -v fn="$1" '
+    $0 ~ ("^" fn "\\(\\) \\{") { inb = 1; found = 1; next }
+    inb && /^}/ { inb = 0; next }
+    inb {
+      line = $0
+      sub(/^[ \t]*#.*/, "", line)
+      sub(/[ \t]+#.*$/, "", line)
+      if (line ~ /(^|[^A-Za-z_])(while|for|until)([^A-Za-z_]|$)/) bad = bad " loop"
+      if (index(line, "$(") || index(line, "`") || index(line, "|") || index(line, "${")) bad = bad " fork-pipe-expansion"
+      if (match(line, / in [^)]*\)/)) {
+        p = substr(line, RSTART + 4, RLENGTH - 5)
+        n = gsub(/\*/, "*", p)
+        if (n != 2 || substr(p, 1, 1) != "*" || substr(p, length(p), 1) != "*") bad = bad " glob"
+      }
+    }
+    END { if (!found) printf "NO-LIMB"; else if (bad != "") printf "FAIL:%s", bad; else printf "LINEAR" }
+  ' "${2:-$HOOK}"
+}
+# xform_cost_arm <label> <function> <find line> <replacement line> — the shipped function
+# reads LINEAR, and a copy with <find line> replaced must read a glob failure.
+xform_cost_arm() {
+  local xk_got xk_ctl xk_copy
+  xk_got="$(xform_cost_lint "$2")"
+  if [ "$xk_got" = "LINEAR" ]; then
+    /usr/bin/printf 'PASS: %s reads LINEAR\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s reads %s, want LINEAR\n' "$1" "$xk_got"; FAIL=$((FAIL + 1))
+  fi
+  xk_copy="$(/usr/bin/mktemp)"
+  XK_A="$3" XK_B="$4" /usr/bin/awk '$0 == ENVIRON["XK_A"] { print ENVIRON["XK_B"]; c++; next } { print } END { if (c != 1) exit 3 }' "$HOOK" > "$xk_copy"
+  xk_ctl="$(xform_cost_lint "$2" "$xk_copy")"
+  /bin/rm -f "$xk_copy"
+  case "$xk_ctl" in
+    FAIL:*glob*) /usr/bin/printf 'PASS: %s-CTL the superlinear respelling reads %s\n' "$1" "$xk_ctl"; PASS=$((PASS + 1)) ;;
+    *) /usr/bin/printf 'FAIL: %s-CTL the superlinear respelling reads %s, want a glob failure\n' "$1" "$xk_ctl"; FAIL=$((FAIL + 1)) ;;
+  esac
+}
+# shellcheck disable=SC2016
+xform_cost_arm "XFORM-COST-01" _carries_transform_op '  case "$1" in *@[!]}]\}*) return 0;; esac' '  case "$1" in *\$\{*@[!]}]\}*) return 0;; esac'
+# shellcheck disable=SC2016
+xform_cost_arm "XFORM-COST-02" _span_closed_inside_subscript '  case "$1" in *\$\{*) return 0;; esac' '  case "$1" in *\[*\$\{*) return 0;; esac'
 
 # ----- XFORM-RESID: what G2 cannot see at all -----
 # An arithmetic context or an indirection re-evaluates ANOTHER variable's value, so a
@@ -1303,7 +1483,7 @@ else
     "$xform_r_ctl" "$xform_r_spec" "$xform_r_off" "$xform_r_idx" "$xform_r_ind"
   FAIL=$((FAIL + 1))
 fi
-/usr/bin/printf 'RESIDUAL: XFORM arms pin the parameter-transformation operator, four positions the token walk never examines, and three value-re-evaluating expansion forms as ADMITTED. A green run here does not mean any of them is refused.\n'
+/usr/bin/printf 'RESIDUAL: XFORM arms pin four positions the token walk never examines and three value-re-evaluating expansion forms as ADMITTED, and two brace forms refused only by where the operand breaks. A green run here does not mean any of them is refused by a rule.\n'
 
 # ----- XFORM-SEM-01: does the operator EXECUTE? (method b) -----
 # Capability, not a version string: each candidate interpreter is asked whether it
@@ -1343,7 +1523,7 @@ fi
 # ----- XFORM-DOC: the readiness corpus and the hook agree, in the same run -----
 # Same shape and same reason as MODEOFF-REC above: a claim in the document an operator
 # reads before an enforce flip, held against the shipped hook's own verdict.
-XFORM_EXPECT="ADMITTED-DECLARED"
+XFORM_EXPECT="REFUSED-DECLARED"
 
 xform_claim() {   # $1 = readiness file -> REFUSED-DECLARED | ADMITTED-DECLARED | BOTH-WAYS | STALE-CLAIM | NO-DISPOSITION | NO-VALUE-LIMIT | DOC-MISSING
   if [ ! -f "$1" ]; then /usr/bin/printf 'DOC-MISSING'; return 0; fi
@@ -1414,28 +1594,28 @@ xform_doc_control() {   # $1 = arm id  $2 = expected code  $3 = sed script
 xform_doc_control "XFORM-DOC-03a" "STALE-CLAIM" \
   's|keeps its own glyphs|is unambiguous — an unquoted form keeps its own glyphs|'
 # (b) the document saying the opposite of the hook.
-xform_doc_control "XFORM-DOC-03b" "REFUSED-DECLARED" \
-  's|operators are NOT refused at G2|operators are REFUSED at G2|'
+xform_doc_control "XFORM-DOC-03b" "ADMITTED-DECLARED" \
+  's|operators are REFUSED at G2|operators are NOT refused at G2|'
 # (c) the value limit softened into a coverage claim.
 xform_doc_control "XFORM-DOC-03c" "NO-VALUE-LIMIT" \
   's|G2 does not see a value the shell re-evaluates|G2 reads every execution surface|'
 
-# ----- XFORM-MUT-01: a pin on an allow must be able to go red -----
-# Every G6 pin above asserts exit 0, which the shipped hook satisfies by construction. This
+# ----- XFORM-MUT-01: a pin on a refusal must be able to go green -----
+# Every G2 pin above asserts exit 2, which the shipped hook satisfies by construction. This
 # arm is the class's own sensitivity control, kept beside the per-pin pairing arms: the copy
-# whose G6 refuses must REFUSE the subject while the shipped hook still admits it. It is also
-# the hook half of XFORM-DOC-01 and -02: the same payload, through the same copy.
+# without G2's third limb must ADMIT the subject while the shipped hook refuses it. It is
+# also the hook half of XFORM-DOC-01 and -02: the same payload, through the same copy.
 xform_mut_live=0
-if ! /usr/bin/cmp -s "$HOOK" "${XFORM_R}/block-fs-boundary.sh"; then xform_mut_live=1; fi
-xform_observe "$XFORM_R" "$XFORM_C_SUBJ"
+if ! /usr/bin/cmp -s "$HOOK" "${XFORM_T}/block-fs-boundary.sh"; then xform_mut_live=1; fi
+xform_observe "$XFORM_T" "$XFORM_C_SUBJ"
 xform_mut_exit="$XO_EXIT"
 xform_observe "$HOOK_DIR" "$XFORM_C_SUBJ"
 xform_now_exit="$XO_EXIT"
-if [ "$xform_mut_live" = 1 ] && [ "$xform_mut_exit" = 2 ] && [ "$xform_now_exit" = 0 ]; then
-  /usr/bin/printf 'PASS: XFORM-MUT-01 refusing mutant is live and REFUSES the subject (exit 2) while the shipped hook admits it (exit 0): the pins can go red\n'
+if [ "$xform_mut_live" = 1 ] && [ "$xform_mut_exit" = 0 ] && [ "$xform_now_exit" = 2 ]; then
+  /usr/bin/printf 'PASS: XFORM-MUT-01 the copy without the third limb is live and ADMITS the subject (exit 0) while the shipped hook refuses it (exit 2): the pins can go green\n'
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: XFORM-MUT-01 mutant live=%s (expected 1)  mutant exit=%s (expected 2)  shipped exit=%s (expected 0)\n' \
+  /usr/bin/printf 'FAIL: XFORM-MUT-01 mutant live=%s (expected 1)  mutant exit=%s (expected 0)  shipped exit=%s (expected 2)\n' \
     "$xform_mut_live" "$xform_mut_exit" "$xform_now_exit"
   FAIL=$((FAIL + 1))
 fi
