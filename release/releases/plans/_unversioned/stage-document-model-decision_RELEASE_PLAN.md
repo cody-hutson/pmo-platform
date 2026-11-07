@@ -4,7 +4,7 @@
 version: stage-document-model-decision
 date: 2026-11-05
 type: plan
-status: ACTIVE
+status: CLOSED
 issues: ["#8153", "#8154", "#8155", "#8156", "#8157"]
 pr: "#8814"
 links:
@@ -25,7 +25,7 @@ ambiguity. The `audit_class` declaration lives in the frontmatter only.
 
 # Release Plan — stage-document-model-decision
 
-> **Status:** Stage 12 Execute, authorized by the operator. Stage 9 rendered GO WITH CONDITIONS (PA-016), and the founding ADR is `Accepted`, ratified with amendments (PA-017). The merge waits on condition C1, every required check green on the final head (release branch `release/stage-document-model-decision`).
+> **Status:** Stage 13 Close. The release merged at `b0763aac` (#8814) once condition C1 read every required check green, and its Stage-12 chore merged at `97d32b27` (#8828). The founding ADR, ADR-232, is `Accepted` on `main`, ratified with amendments (PA-017). This plan moved to `plans/_unversioned/` at close, the permanent home of a version-less plan.
 > **Identity: VERSION-LESS.** The release identity is the capability slug `stage-document-model-decision`. No version key is claimed at any stage, no release-version stamp token is authored, and the Stage-12 rename never fires. The plan moves to `plans/_unversioned/` at Stage 13 close.
 > **Topology:** D-C SINGLE — one release branch, one pull request, one merge.
 > **Release Class:** `novel` · **Milestone:** `stage-document-model-decision`.
@@ -666,6 +666,46 @@ Stage-12 entries (the A.5.7 reconciliation, the merge, and Phases B1.1 and B4):
 - **CIAC-1 re-grade:** as first written, the predicate returned 1 file on the release merge (`core/ADRs/README.md`), so it was not met. Amended (DEV-35), its first command returns 0, its README numstat reads `1 0`, and the added line is the renumber-log entry. Control: the plan reads 1. Sensitivity arm: the unamended command on the same range reads 1.
 - **Phase B1.1 sibling dark-branch sweep:** `release/tools/check-dark-branch.py sweep … --before ef7a0ec5 --after b0763aac` exited 0. Of 5 open pull requests on `main`, 0 were newly dark. 2 were still dark (#8821 and #8651), and each was already conflicted before this push. `state=none-new`.
 - **Phase B4 release-stamped deploy:** run from the hub worktree detached at `origin/main` (`b0763aac`; `merge-base --is-ancestor` exit 0). Before the deploy, the join key `stage-document-model-decision` was read back non-empty with 76 rows. The merge changed 0 paths under the skill and package roots, so the command was `bash core/deploy/deploy.sh --deploy --release stage-document-model-decision --no-targets`; it exited 0 and wrote the rules mirror (9 files). It appended one `deployment-status/deploy-rules-mirror` row, making 77 rows. The run did not report `Deploy mode: user-local only`.
+
+Stage-13 entries (the version-less close; `automated-closeout.sh` rejects a version-less release at its identity check, so the output set is produced by the Phase-B chore PR, which `stage-13-close.md` Phase A8 names as the expected path for this identity mode):
+
+- **A1 issue closure:** the release PR references the five cards rather than closing them, so all five were open at the audit. They close at Phase C, after the ratification, which is recorded on #8157 (comment 6671846544, by the operator's account).
+- **A2 deferred items:** 0. Every card stays in the release; sub-tasks #8794 and #8798 are closed by the hub.
+- **A3 evidence:** the Stage-12 entries above are all PASS, with one recorded exception: CIAC-1's renumber-log line (DEV-35).
+- **A4 QC4-05:** N/A — the plan declares no AV-N assertion (0 found).
+- **A4.5 native dependencies:** #8157 is blocked by #8153, #8154, #8155 and #8156, all four in this milestone, and no other card carries a dependency. No drift.
+- **A5 G-CL6:** `deploy.sh --check-doc-gates --gate g-cl6 --pr 8814` → exit 3, N/A: no in-scope subject (the plan declares no Tier-A design artifact). Recorded as N/A, not as a pass.
+- **A6 cycle-time baseline:** unchanged. This release's cycle time is N/A, because a rules-mirror row is not an anchor.
+- **A7 learnings:** the triple was captured at `2026-11-07T17:20:06Z` (actor hub), and `synthesize-release-learnings.sh --mode per-release` rendered the RELEASE_LOG block from that one row. The `--mode pattern-detect --window 5` scan, run without `--apply`, found 0 qualifying clusters and 8 near-threshold; it is signal-only and promotes nothing.
+- **A7.1 recommendation versus choice:** `query-pipeline-event.sh --event-subtype recommendation-choice-delta --release stage-document-model-decision` → 0 rows. Every operator choice equalled the hub's recommendation (the Collective Review, Stage 9 pre-GO and Stage 9 Decision Recorded comments each say so), so every decision is aligned.
+- **A7.2 learnings register:** `produce-learnings-register.sh stage-document-model-decision --milestone 432 --apply` wrote the register to the operator-instance `registers/_unversioned/` home (149 lines). Its lesson and action rows are the operator's to author.
+- **A8 output set:** the Stage-13 chore PR carries:
+  - the RELEASE_LOG row `DEPLOYED → VERIFIED`, with Velocity, Outcome and Close-Class-Telemetry, the Release Learnings block, and four Not-produced markers (tag, GitHub Release, CHANGELOG key, `.version`);
+  - the RELEASE_INDEX row and the RELEASE_DIGEST entry, from `generate_release_index.py`;
+  - the note at `notes/_unversioned/`;
+  - this plan, moved to `plans/_unversioned/` and set `CLOSED`.
+- **A8.1 note-content lint:** `lint_release_corpus.py --check note-content` → exit 0, with no line naming this release's note. Sensitivity arm: a banned term planted in the note's Section 6a reads `NOTE-BANNED-JARGON` with exit 1, and the note was restored byte-identical.
+- **A8.2 decision emission:** `deploy.sh --check-decision-emission` → exit 2, ADVISORY, INCOMPLETE across other releases. The gate reads `VERIFIED` rows only, so it does not cover this release until it is `VERIFIED`. Read directly, this release carries all three asserted classes: `decision/scope-lock` 2, `decision/d-class` 25 and `gate-outcome/plan-review-go` 1.
+- **A8.3 plan identity:** N/A — version-less. There is no Version cell for a filename to disagree with, and the plan-identity lint names nothing for this release.
+- **A10 QC4-06, goal attainment: ATTAINED.**
+  - The Outcome Statement's AFTER state holds on `main`: ADR-232 states what each stage writes (with lifecycle class, template, home and readers), one span vocabulary mapped onto both projections, the methodology hook, and the design → build → validate → document loop.
+  - Its § Delivery cut proposes seven slices in three milestones for epic #8150.
+  - The Success Indicator holds: #8157 records the operator's ratification (comment 6671846544), and the founding ADR shipped, authored `Proposed` and merged `Accepted`.
+  - Evidence: `git show origin/main:core/ADRs/ADR-232-stage-documents-are-declared-once-and-projected-twice.md` (frontmatter `status: Accepted`), and the ratification comment read over REST.
+- **A10.5 follow-up sweep:** `**Phase A10.5 net-work-ledger (close):** resolved=0 · proposed=0 (sweep=0 · bug=0 · feature=0 · target=0 · platform=0) · net=0 → NON-NEGATIVE · below-threshold=82 · declared=0 · folded=0 · cut=0 · reclassified=39 · sources: s7=0 s8=0 dr=45 hub=0 modec=0 audit=37 late=0`.
+  - The addendum has 0 rows. Stage 12 deferred no propagation, QC4-05 and QC4-06 routed nothing, and nothing later was held, so nothing is filed.
+  - The 28 owned process-baseline findings stay with #8150's delivery cut (PA-015).
+  - Audit-class SUMMARY downstream items:
+    - the founding ADR — shipped in this release;
+    - the seven delivery slices — owned by #8150 (open);
+    - the current-state inventories as catalog-page input — owned by #8115 (open), through the PA-007 (C) coordination edge.
+  - Follow-ups filed: 0.
+- **A11 G-CL8:** `--gate g-cl8 --pr 8814` → exit 0, CLEAN 5: each card carries an explicit `None` with a rationale.
+- **A12 audit badges:** no-op. No operator-local `recommendations.md` names any of this release's cards (0 of 2 files).
+- **A13 ADR ratification:** no record added by this release reads `Proposed`. ADR-232's frontmatter `status:` and its `## Status` restatement both read `Accepted` on `main`. **Disposition, recorded:** the operator rendered the ratification per record at the Stage 9 gate (PA-017, enumerated for this one record), and it was applied before the merge (`78db45aa`), as this plan and its R8 row planned. It was not applied at Stage 13's beat, so Stage 13 performs no flip; G-CL9's read of `Accepted` on `main` holds.
+- **A14 G-CL10:** `--gate g-cl10 --pr 8814 --list` names the Outcome-Statement limbs and their owners (#8153–#8157). `--gate g-cl10 --pr 8814` → exit 0, CLEAN 5, with every limb owned.
+- **B-OPS:** N/A — the Operational Deployment Manifest is empty. B-OPS4.5 is N/A because no hook source changed; B-OPS5 is N/A because there is no memory-eviction row.
+- **B5.9 skill packages:** none — no skill source changed.
 
 ## Deployment Execution Log
 
