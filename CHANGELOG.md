@@ -27,6 +27,11 @@ Every initiative and lone epic now shows in one live view, and dependencies decl
 
 [Full notes](release/releases/notes/v5.06_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.06)
 
+## [v5.05] - 2026-11-08
+
+The command guards now read a guarded command the way the shell runs it, so a respelling gets the plain form's verdict.
+
+[Full notes](release/releases/notes/v5.05_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.05)
 ## [v5.04] - 2026-11-08
 
 An Accepted decision says where the method for grouping backlog items into epics lives and how it will be started; nothing is built yet.

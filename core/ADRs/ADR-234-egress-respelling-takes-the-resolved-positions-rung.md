@@ -1,6 +1,6 @@
 ---
 title: ADR-234 — BLOCK-EGRESS-007 reads a respelled gh api write as the shell resolves it, and rungs it by the position the shell resolves it to
-status: Proposed — authored at Stage 6 Engineering for the guards-judge-every-spelling-alike release. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter status field, never inferred from milestone closure.
+status: Accepted — operator-ratified at the guards-judge-every-spelling-alike Stage 13 Close ratification beat (Phase A13), 2026-11-07
 date: 2026-11-04
 release: guards-judge-every-spelling-alike
 deciders: "Workspace owner (operator) — the rung doctrine, the counter rule, the join rule and the per-class rungs adopted as recommended at the release's Collective Review scope-lock; the unparseable-branch reader, the derived fast path, the parse-boundary guard and the residual successors rendered at the inter-stage decision on the Stage-5 delta, which also folded the attached and clustered short-flag class into the card. Design by the Stage 5 Solutioning spoke and its bounded delta, reviewed by an independent adversarial design review; authored by the Stage 6 Engineering spoke"
@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering for the `guards-judge-every-spelling-alike` release. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+**Accepted** — operator-ratified at the `guards-judge-every-spelling-alike` Stage 13 Close ratification beat (Phase A13), 2026-11-07, as one record of a decision rendered per record. Authored at Stage 6 Engineering for that release as `Proposed`. The ratification is recorded in this file's frontmatter `status:` field, which is where it must be verified, and is never inferred from milestone closure.
 
 **Numbering provenance.** This record was authored at the next free number computed from the mainline anchor plus one, advanced past the slot the release's own first record already holds on this same branch. A branch claim is detection-only and never binds for mainline purposes, but a same-branch claim is a file that already exists, and taking its number would be a duplicate rather than a claim. Citations use the slug token `ADR-234`, which carries no number shape and resolves at the claim.
 

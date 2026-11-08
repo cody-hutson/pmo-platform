@@ -1,7 +1,7 @@
 <!-- repo-integrity: allow-issue-ref — limb 1: the precedent number cited under Related ADRs is a principle number, not an issue in this repository -->
 ---
 title: ADR-235 — The command-position canonicalizer walks each wrapper's own option grammar from an asserted copy of the script-walk rows, matches a prefix word on its basename, and serves a frozen un-widened view to the allow-on-match exits
-status: Proposed — authored at Stage 6 Engineering for the guards-judge-every-spelling-alike release. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter status field, never inferred from milestone closure.
+status: Accepted — operator-ratified at the guards-judge-every-spelling-alike Stage 13 Close ratification beat (Phase A13), 2026-11-07
 date: 2026-11-04
 release: guards-judge-every-spelling-alike
 deciders: "Workspace owner (ratification at this release's Stage 13 close gate); mechanism chosen at Stage 5 Solutioning against a scored candidate matrix and adopted at the release's Collective Review scope-lock, which also rendered the allow-on-match exits decision as the masked exit view"
@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering for the `guards-judge-every-spelling-alike` release, per the Stage-6 ADR-authoring precedent. Ratification is the operator's at the Stage 13 close gate and is recorded in this file's frontmatter `status:` field, which is where it must be verified.
+**Accepted** — operator-ratified at the `guards-judge-every-spelling-alike` Stage 13 Close ratification beat (Phase A13), 2026-11-07, as one record of a decision rendered per record. Authored at Stage 6 Engineering for that release as `Proposed`, per the Stage-6 ADR-authoring precedent. The ratification is recorded in this file's frontmatter `status:` field, which is where it must be verified, and is never inferred from milestone closure.
 
 **Numbering.** This record's number was derived at Engineering Commit 0 against the mainline anchor, per the rule ADR-115 ratifies and ADR-181 extends: an enumerate-and-parse over both ADR directories returned anchor 228 and next-free 229. A sibling release held 229 branch-local and merged first, so the number was reconciled when the mainline was merged into this release branch, as the provenance note below records; in-release citations use the slug token `ADR-235`, which binds at the Stage-12 claim.
 

@@ -8,6 +8,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
 | v5.06 | sequencing-layer-foundation | 2026-11-08 | — | #8811 | [notes/v5.06_RELEASE_NOTES.md](notes/v5.06_RELEASE_NOTES.md) |
+| v5.05 | guards-judge-every-spelling-alike | 2026-11-07 | — | #8651 | [notes/v5.05_RELEASE_NOTES.md](notes/v5.05_RELEASE_NOTES.md) |
 | v5.04 | composition-method-host-decision | 2026-11-07 | — | #8815 | [notes/v5.04_RELEASE_NOTES.md](notes/v5.04_RELEASE_NOTES.md) |
 | stage-document-model-decision (version-less) | stage-document-model-decision | 2026-11-07 | — | #8814 | [notes/_unversioned/stage-document-model-decision_RELEASE_NOTES.md](notes/_unversioned/stage-document-model-decision_RELEASE_NOTES.md) |
 | v5.03 | placement-rules-and-adr | 2026-11-07 | — | #8817 | [notes/v5.03_RELEASE_NOTES.md](notes/v5.03_RELEASE_NOTES.md) |
