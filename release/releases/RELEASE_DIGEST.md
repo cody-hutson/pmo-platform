@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v5.05 (2026-11-08) — Guards now give a command the same verdict however it is spelled
+
 ### stage-document-model-decision (2026-11-07, version-less) — One ratified design now says what every delivery stage writes
 
 ### v5.03 (2026-11-07) — One standard now says where every kind of out-of-git data lives

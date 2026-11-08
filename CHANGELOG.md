@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.05] - 2026-11-08
+
+The command guards now read a guarded command the way the shell runs it, so a respelling gets the plain form's verdict.
+
+[Full notes](release/releases/notes/v5.05_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.05)
+
 ## [v5.03] - 2026-11-07
 
 One standard now names the class and home of every kind of data the platform keeps out of git, and one Accepted decision says why.
