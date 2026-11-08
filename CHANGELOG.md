@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.06] - 2026-11-08
+
+Every initiative and lone epic now shows in one live view, and dependencies declared in an issue are read in the direction they point instead of being guessed.
+
+[Full notes](release/releases/notes/v5.06_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.06)
+
 ## [v5.05] - 2026-11-08
 
 The command guards now read a guarded command the way the shell runs it, so a respelling gets the plain form's verdict.
