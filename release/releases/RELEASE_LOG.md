@@ -265,7 +265,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.02 | framing-altitude-and-slip-model | #7965 | #8816 | `1c985c2f2d98b6a2c8585e1d7dc3d88d416189e5` | `v5.02` | VERIFIED | 2026-11-06 |
 | v5.03 | placement-rules-and-adr | #8016, #6627, #8017, #8018 | #8817 | `ef7a0ec5625b615919e2c3f4966f8a1edc7e99c6` | `v5.03` | VERIFIED | 2026-11-07 |
 | stage-document-model-decision (version-less) | stage-document-model-decision | #8153, #8154, #8155, #8156, #8157 | #8814 | `b0763aac5c144b241c72b6c20cd827af5a840a0e` | (none) | VERIFIED | 2026-11-07 |
-| v5.04 | composition-method-host-decision | #6390 | #8815 | `60e2369c5aa0ed5626816e3b65e207d3b40342fb` | `v5.04` | DEPLOYED | 2026-11-07 |
+| v5.04 | composition-method-host-decision | #6390 | #8815 | `60e2369c5aa0ed5626816e3b65e207d3b40342fb` | `v5.04` | VERIFIED | 2026-11-07 |
 | v5.05 | guards-judge-every-spelling-alike | #8314, #8444, #8315 | #8651 | `e58a77f03e670351d3249b82fea7fa664053277a` | `v5.05` | DEPLOYED | 2026-11-07 |
 | v5.06 | sequencing-layer-foundation | #7177, #6397, #6398 | #8811 | `b02fa16a90a73df993b7fd31a1eb118b0c19bf34` | `v5.06` | DEPLOYED | 2026-11-08 |
 
@@ -288,8 +288,20 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 **Mechanism:** a git merge commit and the atomic version claim. PR #8815 merged to `main` at `60e2369c5aa0ed5626816e3b65e207d3b40342fb` (parents `97d32b27` / `0881922b`) by `gh pr merge --merge`, pinned with `--match-head-commit` to the reviewed head `0881922b`, with no admin override. `release/tools/claim-version.sh --bump minor --stamp-slug composition-method-host-decision` then claimed `v5.04` by a signed annotated tag at the merge commit (the plan's provisional `v5.02` and the next slot `v5.03` were already claimed) and committed the plan stamp. Before the merge, Phase A.5 merged `main` into the release branch and renumbered the decision record from 230 to 233, because the mainline had claimed 230.
 **Timestamp:** 2026-11-07 17:17 UTC (Saturday). The `Date` cell is the merge event: the merge's `mergedAt`, `2026-11-07T17:17:38Z`. Sequence: A.5 sync and renumber pushed at `0881922b`; one Shell harness (macOS) job failed on a network timeout installing PyYAML and passed on re-run; merge; claim; stamped deploy.
 **Cycle-Time:** N/A (1 deployment-status row(s) exist for composition-method-host-decision, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Velocity:** planned 2 pts / delivered 2 pts (1.00); files-changed 3; allocation 0/2/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — the merge, the version claim and the stamped rules-mirror deploy are complete, each read back. **Before the merge**, re-read on `0881922b`: 57 of 57 checks pass, 24 of 24 required, mergeable and CLEAN; the pull requests merged to `main` after that head's checks began (#8826, #8827, #8828) share no file with it. **After:** the PR reads MERGED at `60e2369c`; `v5.04` verifies as a good signature on the release key and points at the merge commit; the deploy exited 0 with 1 `deployment-status` row.
 **Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 9/9 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.04
+
+**Synthesized at:** 2026-11-08T01:34:46Z
+**Source events:** 2 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.04`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-08T01:19:04Z`, `2026-11-08T01:26:15Z`
+
+**Surprise:** 3 in-flight releases held ADR 230 + slot v5.02; merging third moved the record to 233 and the claim to v5.04 [from 2026-11-08T01:19:04Z]; corrects the 01:19Z row - 3 releases opened after Commit 0, none on its roster, merged first and took ADR 230-232 and v5.02-v5.03, so this one merged fourth: ADR 230->233, claim v5.04 [from 2026-11-08T01:26:15Z]
+**Would-change:** draft the note before S12 so B5.5 posts the canonical body+title there, not at S13 [from 2026-11-08T01:19:04Z];  [from 2026-11-08T01:26:15Z]
+**Watch-for:** the B5 log PR shared RELEASE_LOG.md with a sibling close-out - re-sync+CI [from 2026-11-08T01:19:04Z];  [from 2026-11-08T01:26:15Z]
 
 #### Deployment Log stage-document-model-decision
 **Files deployed:** **The release-stamped rules-mirror deploy is this release's only deploy target, and it is complete.** The merge changed 3 files, measured at the merge commit `b0763aac` against its first parent `ef7a0ec5`: the release plan, the founding ADR (`core/ADRs/ADR-232-stage-documents-are-declared-once-and-projected-twice.md`) and one renumber-log line in `core/ADRs/README.md`. 0 of them sit under a skill or package root, so `changed-paths.txt` is empty and there is no named target. **Phase B4 ran once,** from the hub worktree detached at `origin/main` (`b0763aac`; `merge-base --is-ancestor` exit 0). The command was `bash core/deploy/deploy.sh --deploy --release stage-document-model-decision --no-targets`, at `06:05:13Z`. It exited 0, wrote the 9-file rules mirror, and reported nothing else to deploy. **B4.5 record:** the join key `stage-document-model-decision` was read back non-empty with 76 rows before the deploy; one `deployment-status/deploy-rules-mirror` row was appended, making 77. The run did not report `Deploy mode: user-local only`. The deploy's own banner notes that composition surfaces are out of scope for `--deploy`, and this release edits none.

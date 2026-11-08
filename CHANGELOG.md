@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.04] - 2026-11-08
+
+An Accepted decision says where the method for grouping backlog items into epics lives and how it will be started; nothing is built yet.
+
+[Full notes](release/releases/notes/v5.04_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.04)
+
 ## [v5.03] - 2026-11-07
 
 One standard now names the class and home of every kind of data the platform keeps out of git, and one Accepted decision says why.
