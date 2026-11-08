@@ -1,6 +1,6 @@
 ---
 title: ADR-236 — Issue-body section reads are single-sourced in the bundle parser, and a section ends only at structure
-status: Proposed — authored at Engineering Commit 0 of the sequencing-layer-foundation release; ratified at that release's Stage 13 Close
+status: Accepted — operator-ratified at the sequencing-layer-foundation Stage 13 Close ratification beat (Phase A13), 2026-11-08, on the operator's per-record decision
 date: 2026-11-05
 release: sequencing-layer-foundation
 deciders: "Workspace owner (Stage 4 plan gate and Collective Review scope lock); design authored by the joint Stage 5 Solutioning spokes and revised on the Phase A6.5 adversarial review's counter-design"
@@ -19,7 +19,7 @@ supersedes: none
 
 ## Status
 
-**Proposed** — authored at Engineering Commit 0 of the `sequencing-layer-foundation` release, after the operator's Collective Review scope lock rendered the decisions it records. It is ratified at that release's Stage 13 Close; the ratification is recorded in this file's frontmatter `status:` field and is never inferred from a review comment or from milestone closure.
+**Accepted** — operator-ratified at the `sequencing-layer-foundation` Stage 13 Close ratification beat (Phase A13), 2026-11-08, on the operator's decision rendered for this record alone. Authored at Engineering Commit 0 of that release, after the operator's Collective Review scope lock rendered the decisions it records. The ratification is read from this file's `status:` field, never inferred from a review comment or from milestone closure. Once Accepted, it changes only through a superseding record.
 
 **Numbering provenance.** Claimed as **230** against an anchor of **229** on `origin/main`, read from `release/tools/renumber-adr.py --detect --mainline-ref origin/main` at Engineering Commit 0. The detector also reported branch-only claims on 230 and 231 on other release branches; a branch claim is detection-only and never binds, so this record takes the mainline next-free slot rather than stepping above them. Should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Other branch-authored artifacts cite this record by the ADR slug token carrying the slug `issue-body-reads-single-sourced-in-the-bundle-parser`, which has no number shape and resolves at the claim.
 
