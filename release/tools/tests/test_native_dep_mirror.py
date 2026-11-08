@@ -42,6 +42,11 @@ def main() -> int:
     cases: List[Dict] = fixtures["cases"]
 
     failures: List[str] = []
+    # The direction grammar is the parser's: the mirror binds it rather than carrying a copy.
+    grammar_module = getattr(getattr(mod, "parse_body_dependencies", None), "__module__", None)
+    if grammar_module != "bundle_issues_parser":
+        failures.append(f"6397-AC1 the mirror reads the parser's grammar: parse_body_dependencies "
+                        f"is defined in {grammar_module!r}, not 'bundle_issues_parser'")
     for case in cases:
         name = case["name"]
         deps = mod.parse_body_dependencies(case["body"])
@@ -76,6 +81,7 @@ def main() -> int:
     print(f"native-dep-mirror frozen fixtures: N={len(cases)} case(s)")
     print(f"  cases asserting (eligible, to_add, drift) per Model A contract: {len(cases)}")
     print(f"  cases additionally asserting unattributed-ref reporting: {n_unattributed}")
+    print(f"  direction grammar read from: {grammar_module}")
 
     if failures:
         print("\nTEST FAIL:", file=sys.stderr)
