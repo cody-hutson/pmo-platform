@@ -36,8 +36,9 @@ name: Release tooling smoke
 #              family (doc-tracer default-path regression under a normalized diff + the
 #              domain-fan-out software import-graph scanner), AND the
 #              bundle-issues-parser regression suite
-#              (test_bundle_issues_parser.py — 13 legs + 5 rank/sort assertions over
-#              the committed frozen sample, paired with a precision probe that
+#              (test_bundle_issues_parser.py — its legs, section-read arms and
+#              direction-grammar arms over the committed frozen sample, paired with
+#              a precision probe that
 #              narrows the priority detector's level class in a throwaway copy and
 #              requires the T-13 liveness guard to fire; the suite previously had
 #              ZERO executors, so ADR-111's "protected against regressing to
@@ -496,7 +497,7 @@ jobs:
         # untrusted-data path into the shell. Gates on exit code.
         run: bash release/tools/tests/test_close_class_telemetry.sh
 
-      - name: bundle-issues-parser regression suite (13 legs + 5 rank/sort assertions)
+      - name: bundle-issues-parser regression suite (frozen sample + section-read and direction-grammar arms)
         # Wires a suite that shipped with ZERO executors. The release plan names
         # `test_bundle_issues_parser.py` as this card's "Executable regression" and
         # ADR-111 claims the T-13 guard "protects against regressing to silence" —
@@ -891,14 +892,14 @@ jobs:
         # moment any other step above fails. always() makes the job report the UNION
         # of its failures rather than the first, whichever step is the first to go red.
         #
-        # Safe on this step and the two below because all three are hermetic and
+        # Safe on this step and the four below because all five are hermetic and
         # independent — each states so in its own comment (mktemp fixtures or frozen
         # in-repo fixtures; no network, no gh, no write to the checkout). They consume
         # nothing from any step above except the checkout and the interpreters that
         # 'Verify prerequisites' confirms, so running them after an upstream red
         # produces a real verdict, not cascade noise.
         #
-        # SCOPE, stated because it is a real residual: this unmasks the four trailing
+        # SCOPE, stated because it is a real residual: this unmasks the five trailing
         # suites only. Steps above still short-circuit on the first red, so the job is
         # not yet fully union-reporting; widening that is a larger change to the setup
         # steps' semantics and is deliberately not made here.
@@ -971,6 +972,29 @@ jobs:
         # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
         # it does not gate. This step is what actually runs the suite.
         run: python3 release/tools/tests/test_native_dep_mirror.py
+
+      - name: Chain-head rollup regression suite
+        # UNMASKED — see the rationale on the verify-release-plan step above. This
+        # suite is offline with inline fixtures, so it owes nothing to any step before it.
+        if: always()
+        # Invokes release/tools/tests/test_compute_chain_head_rollup.py, the arms that
+        # grade compute-chain-head-rollup.py: the head set derived from labels, the
+        # standing initiative shown with no percentage and the guard that stops a run
+        # with none, edges read only through the single-sourced grammar, unmeasured
+        # facets never shown as 0, flow-container absorption, the partition sum,
+        # output encoding, and the child-set rule shared with the epic rollup-close
+        # audit. Same bare-invocation Python shape as the steps above.
+        #
+        # What rots without it: the view's honesty contract. A view that read a missing
+        # parent field as unmeasured, or a deferred parse as "not blocked", would still
+        # render a plausible table; only the arms tell the two apart.
+        #
+        # Offline + deterministic: inline fixtures, the fetch layer replaced; no
+        # network, no gh, no write to the checkout.
+        #
+        # Arm D relationship: warn-only. Arm D annotates an unwired suite and exits 0;
+        # it does not gate. This step is what actually runs the suite.
+        run: python3 release/tools/tests/test_compute_chain_head_rollup.py
 
       - name: plan-status lifecycle regression
         # UNMASKED — see the rationale on the verify-release-plan step above. This

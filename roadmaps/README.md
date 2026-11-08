@@ -34,3 +34,10 @@ token is the indirection; this folder is what it points to by default.
 - Instances are **git-ignored** — author freely; nothing here is committed except this
   `README.md`. This mirrors the repo's `analysis/` workspace pattern
   ([`analysis-workspace-standard.md`](../core/standards/analysis-workspace-standard.md)).
+
+## The live view of every initiative
+
+`python3 release/tools/compute-chain-head-rollup.py` prints every chain head — each
+initiative and any lone epic — with its epics and their open children, read live from
+the tracker (`--json` for tools). It replaces hand-kept lists of initiatives; it does
+not replace a roadmap's Now / Next / Later sequence, and its order is not a sequence.

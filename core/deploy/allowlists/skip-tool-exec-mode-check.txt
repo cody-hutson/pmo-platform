@@ -47,3 +47,4 @@ core/deploy/tools/path-leak-patterns.sh  # sourced-library: sourced by the hooks
 core/deploy/tools/_frontmatter.py  # imported-module: the shared frontmatter reader its sibling deploy tools import; a library, not a check
 core/deploy/tools/fixtures/issue-body-anchors/targets/fx-gamma.sh  # fixture: a target file the issue-body anchor check reads as data; never executed
 release/tools/lib/host-refusal-class.sh  # sourced-library: read with `source` by the host-API axis evaluator and the close-out automation; defines functions and has no main or exit
+release/tools/_epic_child_set.py  # imported-module: the shared epic child-set rule, loaded by path into their own process by audit-epic-rollup-close.sh and compute-chain-head-rollup.py; its self-test is run through an interpreter
