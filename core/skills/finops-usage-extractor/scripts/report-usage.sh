@@ -373,9 +373,13 @@ def trend_verdict($rows; $grade; $dim_label):
 # report then renders "No sessions fall in this window" — byte-identical to a
 # legitimately empty window over a store that holds real spend. Abort instead; the
 # fail-closed guard in render() turns the abort into a named FATAL and exit 3.
+# Well-formed = YYYY-MM-DDTHH:MM:SS, an optional fractional part of one or more
+# digits, then Z. The fractional part is the form the extractor copies verbatim
+# from the source transcripts (2026-06-02T00:00:00.250Z), so it must be admitted;
+# a numeric offset, a comma, a bare "." or a missing Z is still rejected.
 | ( [ $all[] | select(.record == "session")
       | select((((.started_utc // "") | tostring)
-                | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) | not)
+                | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$")) | not)
       | ((.session_id // "(record with no session_id)") | tostring) ] ) as $bad_ts
 | ( if ($bad_ts | length) > 0 then
       error("malformed session.started_utc on " + ($bad_ts | length | tostring)
@@ -389,8 +393,16 @@ def trend_verdict($rows; $grade; $dim_label):
             .[$sid] = {work_item: $r.work_item, work_item_kind: $r.work_item_kind,
                        attribution_tier: $r.attribution_tier, reproducible: $r.reproducible}))
    else {} end) as $attr_map
+# Compare on the instant, not the raw string. The bounds are whole-second instants
+# (D + "T00:00:00Z"); a started_utc with a fractional part is not, and "." sorts
+# before "Z", so as raw strings a session 0.25 s after a bound reads as before it:
+# dropped from the window that starts there, counted in the window that ends there.
+# Truncating to the whole second in the bounds' own form is exact against a
+# whole-second bound (t >= B iff floor(t) >= B when B is a whole second), and the
+# validator above guarantees the first 19 characters are YYYY-MM-DDTHH:MM:SS.
 | [ $all[] | select(.record == "session")
-    | select((.started_utc // "") >= $since_iso and (.started_utc // "") < $until_excl_iso) ] as $win
+    | (.started_utc[0:19] + "Z") as $k
+    | select($k >= $since_iso and $k < $until_excl_iso) ] as $win
 | ([$win[] | sess_total] | add // 0) as $grand
 | ([$win[] | .turns // 0] | add // 0) as $grand_turns
 | ([$win[] | .heuristic_turns // 0] | add // 0) as $grand_ht
@@ -1066,8 +1078,9 @@ self_test() {
   #    fixture's KNOWN non-zero skill tokens, not 0. This is the assertion that
   #    would have caught the {turns, tokens} wrapper mis-read. ──
   local want_skill got_skill
-  want_skill="$(jq -r -s --arg s "${W1}T00:00:00Z" '
-      [ .[] | select(.record=="session") | select(.started_utc >= $s)
+  # Date-prefix instrument, independent of the window code under test: a raw >= "<W1>T00:00:00Z" drops the fixture's fractional start inside W1's first second.
+  want_skill="$(jq -r -s --arg d "$W1" '
+      [ .[] | select(.record=="session") | select(.started_utc[0:10] >= $d)
         | (.by_skill // {}) | to_entries[] | select(.key != "unknown")
         | (.value.tokens.input + .value.tokens.output + .value.tokens.cache_creation.total + .value.tokens.cache_read) ]
       | add // 0' "$fx")"
@@ -1122,8 +1135,8 @@ self_test() {
   # ── SM-5 Conservation — Σ rendered work-item rows == Σ session.tokens in window;
   #    subagent records contribute ZERO. ──
   local sess_sum row_sum sub_ct
-  sess_sum="$(jq -r -s --arg a "${W1}T00:00:00Z" '
-      [ .[] | select(.record=="session") | select(.started_utc >= $a)
+  sess_sum="$(jq -r -s --arg d "$W1" '
+      [ .[] | select(.record=="session") | select(.started_utc[0:10] >= $d)
         | (.tokens.input + .tokens.output + .tokens.cache_creation.total + .tokens.cache_read) ] | add // 0' "$fx")"
   row_sum="$(jq '[.dimensions[]|select(.dim=="work-item")|.rows[].tokens]|add // 0' "$JS")"
   sub_ct="$(jq -r -s '[.[]|select(.record=="subagent")]|length' "$fx")"
@@ -1153,6 +1166,66 @@ self_test() {
     ok "SM-6 window (--since D --until D selects exactly the $want_w2 session(s) started on D; the full window holds $n_all)"
   else
     bad "SM-6 window: single-day window selected $n_w2, want $want_w2 (full window $n_all)"
+  fi
+
+  # ── SM-6b Boundary second — a fractional started_utc inside a bound's first
+  #    second lands on the correct side of it. A raw string compare ("." < "Z")
+  #    errs at BOTH bounds, so each bound gets its own window: the two errors
+  #    cannot cancel in one count. ──
+  local W0 n_frac
+  W0="$(date_minus_days "$W1" 1)"
+  n_frac="$(jq -r -s --arg d "$W1" '[.[]|select(.record=="session")|select(.started_utc|test("^" + $d + "T00:00:00[.][0-9]+Z$"))]|length' "$fx")"
+  if [ "${n_frac:-0}" -lt 1 ]; then
+    bad "SM-6b control invalid: the fixture carries no fractional started_utc inside the first second of $W1 — the boundary legs would be vacuous"
+  else
+    local B_LO="$wd/b-lo.json" B_HI="$wd/b-hi.json" B_CTL="$wd/b-ctl.json"
+    local lo hi ctl ctl_b0 ctl_b1 want_lo want_hi leg parity=1
+    if run_report "$B_LO" "$wd/main" --since "$W1" --until "$W1" --json --trend --period day \
+       && run_report "$B_HI" "$wd/main" --since "$W0" --until "$W0" --json --trend --period day \
+       && run_report "$B_CTL" "$wd/main" --since "$W0" --until "$W1" --json --trend --period day; then
+      lo="$(jq '.sessions_in_window' "$B_LO")"
+      hi="$(jq '.sessions_in_window' "$B_HI")"
+      ctl="$(jq '.sessions_in_window' "$B_CTL")"
+      ctl_b0="$(jq --arg b "$W0" '[.trend.overall.rows[]|select(.period==$b)|.sessions]|add // -1' "$B_CTL")"
+      ctl_b1="$(jq --arg b "$W1" '[.trend.overall.rows[]|select(.period==$b)|.sessions]|add // -1' "$B_CTL")"
+      want_lo="$(jq -r -s --arg d "$W1" '[.[]|select(.record=="session")|select(.started_utc[0:10]==$d)]|length' "$fx")"
+      want_hi="$(jq -r -s --arg d "$W0" '[.[]|select(.record=="session")|select(.started_utc[0:10]==$d)]|length' "$fx")"
+      for leg in "$B_LO" "$B_HI" "$B_CTL"; do
+        [ "$(jq '[.trend.overall.rows[].sessions]|add // 0' "$leg")" = "$(jq '.sessions_in_window' "$leg")" ] || parity=0
+      done
+      if [ "$lo" = "$want_lo" ] && [ "$hi" = "$want_hi" ] && [ "$ctl" = "$((want_lo + want_hi))" ] \
+         && [ "$ctl_b0" = "$want_hi" ] && [ "$ctl_b1" = "$want_lo" ] && [ "$parity" -eq 1 ]; then
+        ok "SM-6b boundary second ($n_frac fractional start(s) inside ${W1}'s first second: [$W1..$W1] holds $lo, [$W0..$W0] holds $hi, and every window's trend buckets sum to its session count)"
+      else
+        bad "SM-6b boundary second: [$W1..$W1]=$lo (want $want_lo), [$W0..$W0]=$hi (want $want_hi), [$W0..$W1]=$ctl with buckets $W0:$ctl_b0 $W1:$ctl_b1, trend-sum parity=$parity"
+      fi
+    fi
+  fi
+  # Population leg: ten clones of the first fixture session straddling W1's first
+  # second, in whole-second and 1-9 digit fractional forms. Expected counts are
+  # pinned (8 start on W1, 2 on W0) and re-derived by date prefix as a check on the pin.
+  mkdir -p "$wd/boundary"
+  jq -c -s --arg d "$W1" --arg p "$W0" '
+      (map(select(.record=="meta")) | first) as $m
+      | (map(select(.record=="session")) | first) as $s
+      | [ ($p+"T23:59:59Z"), ($p+"T23:59:59.999Z"),
+          ($d+"T00:00:00Z"), ($d+"T00:00:00.0Z"), ($d+"T00:00:00.000Z"), ($d+"T00:00:00.250Z"),
+          ($d+"T00:00:00.5Z"), ($d+"T00:00:00.999999Z"), ($d+"T00:00:00.123456789Z"), ($d+"T00:00:01Z") ] as $ts
+      | $m, (range(0; $ts|length) as $i | $s + {session_id: ("boundary-" + ($i|tostring)), started_utc: $ts[$i]})
+    ' "$fx" > "$wd/boundary/usage.jsonl"
+  local P_LO="$wd/p-lo.json" P_HI="$wd/p-hi.json" p_lo p_hi d_lo d_hi
+  d_lo="$(jq -r -s --arg d "$W1" '[.[]|select(.record=="session")|select(.started_utc[0:10]==$d)]|length' "$wd/boundary/usage.jsonl")"
+  d_hi="$(jq -r -s --arg d "$W0" '[.[]|select(.record=="session")|select(.started_utc[0:10]==$d)]|length' "$wd/boundary/usage.jsonl")"
+  if [ "$d_lo" != 8 ] || [ "$d_hi" != 2 ]; then
+    bad "SM-6b population control invalid: the synthesized store holds $d_lo / $d_hi sessions on $W1 / $W0, want 8 / 2"
+  elif run_report "$P_LO" "$wd/boundary" --since "$W1" --until "$W1" --json \
+       && run_report "$P_HI" "$wd/boundary" --since "$W0" --until "$W0" --json; then
+    p_lo="$(jq '.sessions_in_window' "$P_LO")"; p_hi="$(jq '.sessions_in_window' "$P_HI")"
+    if [ "$p_lo" = 8 ] && [ "$p_hi" = 2 ]; then
+      ok "SM-6b population (10 starts straddling ${W1}T00:00:00Z, whole-second and 1-9 fractional digits: [$W1..$W1] holds 8, [$W0..$W0] holds 2)"
+    else
+      bad "SM-6b population: [$W1..$W1]=$p_lo (want 8), [$W0..$W0]=$p_hi (want 2) — a raw string comparison gives 2 and 8"
+    fi
   fi
 
   # ── SM-7 Trend — empty period explicit, current period partial + excluded, verdict present. ──
@@ -1370,6 +1443,35 @@ self_test() {
       bad "SM-10e FAIL-CLOSED render: only $ok_kinds of 3 abort causes fail closed"
     fi
   fi
+
+  # ── SM-10f Near-miss timestamps still fail closed — admitting fractional seconds
+  #    must not admit the forms beside them. One record of the good fixture gets each
+  #    near-miss, one per malformed class the reporting contract names (a bare ".",
+  #    a numeric offset, a comma, a missing Z); each store must still parse (so the
+  #    abort is the validator's, not a syntax error), must exit 3, and must name the
+  #    validator. The paired positive leg is the main render at the top of this
+  #    self-test, which passes over the committed fractional value (SM-6b's control
+  #    asserts the value is present). ──
+  local nm_v nm_i=0 nm_rc nm_ok=0
+  for nm_v in "${W1}T00:00:00.Z" "${W1}T00:00:00.250+00:00" "${W1}T00:00:00,250Z" "${W1}T00:00:00.250"; do
+    nm_i=$((nm_i+1))
+    mkdir -p "$wd/mal-frac-$nm_i"
+    jq -c -s --arg v "$nm_v" '(map(select(.record=="session")) | first | .session_id) as $sid
+        | .[] | if .record=="session" and .session_id==$sid then .started_utc=$v else . end' \
+      "$fx" > "$wd/mal-frac-$nm_i/usage.jsonl"
+    if ! jq -e -s . "$wd/mal-frac-$nm_i/usage.jsonl" >/dev/null 2>&1; then
+      bad "SM-10f control invalid: the near-miss store for '$nm_v' does not parse — its abort would prove nothing about the validator"
+      continue
+    fi
+    ( STORE="$wd/mal-frac-$nm_i" bash "$SELF" --window 3650 >/dev/null 2>"$wd/mal-frac-$nm_i.err" ); nm_rc=$?
+    if [ "$nm_rc" -eq 3 ] && grep -aqF 'malformed session.started_utc on 1 session record(s)' "$wd/mal-frac-$nm_i.err"; then
+      nm_ok=$((nm_ok+1))
+    else
+      bad "SM-10f: near-miss started_utc '$nm_v' exited $nm_rc without the validator's named error — the widened validator admits it"
+    fi
+  done
+  [ "$nm_i" -gt 0 ] && [ "$nm_ok" -eq "$nm_i" ] \
+    && ok "SM-10f near-miss timestamps ($nm_ok/$nm_i: a bare '.', a numeric UTC offset, a comma separator and a missing Z each exit 3 naming the validator)"
 
   # ── SM-11 Oracle — --json equals the committed oracle modulo generated_utc. ──
   if [ -f "$oracle" ]; then

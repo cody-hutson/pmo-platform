@@ -25,9 +25,16 @@ A windowed, work-item-sliced figure is therefore computed as:
 
 1. Invert `rollup.session_ids[]` into a map
    `session_id -> {work_item, work_item_kind, attribution_tier, reproducible}`.
-2. Filter `session` records on `started_utc`. ISO-8601 compares chronologically as
-   a string, so the bound is a lexicographic prefix comparison — the same property
-   the extractor's deterministic sort already relies on.
+2. Filter `session` records on `started_utc`, compared as an **instant**, not as a
+   raw string. The bounds are whole-second (`D + "T00:00:00Z"`), while a stored
+   `started_utc` carries the source transcript's fractional seconds
+   (`…T00:00:00.250Z`). ISO-8601 strings sort chronologically only when they share
+   one form: `.` sorts before `Z`, so a raw comparison puts a session that starts
+   inside a bound's first second on the wrong side of it. The filter compares the
+   value truncated to the whole second (`started_utc[0:19] + "Z"`), which is exact
+   against a whole-second bound. (The extractor's sort is a total key for
+   byte-determinism, not a chronological claim, so mixed precision cannot affect
+   it.)
 3. Re-sum the four cost-relevant leaves (`input + output + cache_creation.total +
    cache_read`) over **`session` records only**. `subagent` records are an
    attribution drill-down already inside their session's total and are never added
@@ -181,10 +188,13 @@ Neither is load-bearing; the gate does the honesty work structurally.
 - `--window N[d]` — the last N calendar days **inclusive of today** (so
   `--window 1` is today only). Mutually exclusive with `--since` / `--until`; both
   present -> exit 2.
-- `--since D` means `started_utc >= D + "T00:00:00Z"`; `--until D` means
-  `started_utc < (D plus one day) + "T00:00:00Z"`. **Both bounds are inclusive of
-  the named day.** Bounds are UTC by definition, which is why the argument is
-  date-only rather than full ISO.
+- `--since D` means `started_utc[0:19] + "Z" >= D + "T00:00:00Z"`; `--until D`
+  means `started_utc[0:19] + "Z" < (D plus one day) + "T00:00:00Z"`. **Both bounds
+  are inclusive of the named day.** Bounds are UTC by definition, which is why the
+  argument is date-only rather than full ISO. The comparison is on the instant
+  (§1 step 2): a fractional `started_utc` counts by its whole second, so a session
+  starting at `…T00:00:00.250Z` on day D is inside `--since D` and outside
+  `--until` the day before.
 - `--by` — there is deliberately **no `project` value**. The store carries no
   PMO-project field, so `--by project` exits 2 with a message saying exactly that
   and naming `--by worktree` as the directory dimension. The label discipline is
@@ -204,6 +214,8 @@ Neither is load-bearing; the gate does the honesty work structurally.
   and the empty-window answer is a *full report that says so*. A malformed
   `session.started_utc` aborts as well rather than being silently dropped from every
   window comparison — that drop reached the same fail-open by a different path.
+  Well-formed means `YYYY-MM-DDTHH:MM:SS`, an optional `.` and one or more digits,
+  then `Z`; an offset, a comma, a bare `.` or a missing `Z` is malformed.
 - Test-only clock override: `FINOPS_REPORT_NOW=YYYY-MM-DD`.
 
 **Portability note (load-bearing).** On BSD `date` the `-v` adjustment must precede
@@ -240,10 +252,12 @@ positive control so an empty search space can never read as "no violations".
 | SM-4 | No `/Users/` or `/home/` substring and no `project_dir` value in any render — against fixtures that deliberately contain both forms. |
 | SM-5 | Conservation over the window; `subagent` records contribute zero; the `(not-rolled-up)` bucket exists. |
 | SM-6 | Window bounds are inclusive of the named days and a single-day window selects exactly the expected set. |
+| SM-6b | **The boundary second.** A fractional-seconds `started_utc` inside the first second of a window bound lands on the correct side of it — inside the window that starts there, outside the window that ends there — asserted in separate windows so the two errors cannot cancel, with every window's trend buckets summing to its session count; a population leg repeats it over ten starts straddling the bound in whole-second and 1–9 digit fractional forms. Control: the fixture must carry a fractional start inside that second. |
 | SM-7 | Empty period explicit, current period partial and excluded, a direction at n>=3, `INSUFFICIENT` at n=2. |
 | SM-8 | **The gate.** A rising by-skill signal still yields `NOT CHARACTERIZED`; the coverage-drift note fires. |
 | SM-9 / SM-9b | A pre-v1.2.0 store degrades to explicit `UNAVAILABLE` and still exits 0; a store with no `coverage` record renders the work-item dimension unavailable **despite** declaring a current `schema_version`. |
 | SM-9c | **The availability gate on the trend.** An absent dimension renders `available:false` + a reason, **zero** rows and `TREND: UNAVAILABLE` in JSON, and in markdown its section carries 0 table rows and 0 exactness tags. Three controls: the fixture must hold sessions and zero carriers of the field, the markdown extraction must be non-empty, and a paired positive leg proves a **present** dimension still trends. |
 | SM-10 | The exit-code contract, including the `--by project` message and the empty-window exit 0. |
 | SM-10e | **Fail-closed render.** Three abort causes (truncated line / malformed timestamp / malformed `tokens`) each exit non-zero with a named `FATAL` on stderr and stdout that is **not** byte-identical to the empty-window control rendered from the same good fixture. Discriminating controls: the truncated store must not parse; the bad-timestamp store must parse (so its abort proves the semantic validator fired); the empty-window control must exit 0 with its explicit statement. |
+| SM-10f | **Near-miss timestamps still fail closed.** Each malformed class § 6 names — a bare `.`, a numeric offset, a comma, a missing `Z` — exits 3 naming the validator, over stores that still parse (so the abort is the validator's, not a syntax error); the paired positive leg is the main render over the committed fractional value. |
 | SM-11 | `--json` matches `report.expected.json` modulo `generated_utc`. |
