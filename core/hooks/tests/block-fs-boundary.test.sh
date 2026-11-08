@@ -892,8 +892,8 @@ fi
 # demonstrates that the operator EXECUTES, reporting NOT-EVALUATED — never a pass — on an
 # interpreter that rejects it.
 #
-# A PIN SAYS WHICH VERDICT IT PINS. Forty-two pins: SUBJ 3, PFX 2, OP/PARAM/NEST 4,
-# POS 4, RESID 3, OVER 9, SPLIT 2, FRAG 15. Each asserts the exit code AND either the
+# A PIN SAYS WHICH VERDICT IT PINS. Forty-three pins: SUBJ 3, PFX 2, OP/PARAM/NEST 4,
+# POS 4, RESID 3, OVER 10, SPLIT 2, FRAG 15. Each asserts the exit code AND either the
 # number of -004 records the call wrote or the rule its refusal names, because one exit
 # code can come from different guards: G2 and the span split refuse under -003, G6 admits
 # with a record, G4 admits silently, a word the token walk never hands to the cascade
@@ -924,7 +924,7 @@ fi
 #   L    the walk joins a continuation line to its line     exit dimension of XFORM-POS-04
 #   LT   L, and T                                            record dimension of XFORM-POS-04
 #   U    the span split takes an unterminated ${ as a span   exit dimension of SPLIT and FRAG-15
-#   UO   the span split's failure is refused as outside      rule dimension of SPLIT, FRAG and OVER-05/06/08/09
+#   UO   the span split's failure is refused as outside      rule dimension of SPLIT, FRAG and OVER-05/06/08/09/10
 #   K    the span split takes a span closed inside a subscript (its check -> :)
 #                                                            exit dimension of every split-subscript
 #                                                            refusal; rule dimension of FRAG-14, OVER-07
@@ -1328,6 +1328,8 @@ xform_frag_out_pin "XFORM-OVER-07: OVER-05's form behind an out-of-root prefix �
 xform_frag_pin "XFORM-OVER-08: a subscripted parameter whose word nests a braced expansion — REFUSED by the span split (declared over-refusal)" 'cat ${A[0]:-${D}}' 0 1 BLOCK-FS-BOUNDARY-001
 # shellcheck disable=SC2016
 xform_frag_pin "XFORM-OVER-09: a word nesting a subscripted braced expansion — REFUSED by the span split (declared over-refusal)" 'cat ${X:-${Y[0]}}' 0 1 BLOCK-FS-BOUNDARY-001
+# shellcheck disable=SC2016
+xform_frag_pin "XFORM-OVER-10: a pattern replacement holding a bracket and a nested braced expansion — REFUSED by the span split (declared over-refusal)" 'cat ${X//[${C}]/_}' 0 1 BLOCK-FS-BOUNDARY-001
 
 # ----- XFORM-SPLIT: two brace forms the span split refuses by where the operand breaks -----
 # zsh's flag form and the brace-form command substitution each execute on a shell that
@@ -1440,9 +1442,9 @@ xform_cost_arm "XFORM-COST-02" _span_closed_inside_subscript '  case "$1" in *\$
 # An arithmetic context or an indirection re-evaluates ANOTHER variable's value, so a
 # command substitution carried there runs although the operand shows no `$(`, no backtick
 # and no operator. A lexical guard cannot refuse these without refusing ordinary
-# substring, index and indirection forms. They are the reason the operator is declared
-# rather than half-closed, and RESID-04 holds the "they execute" half of that reasoning
-# against the interpreter in the same run.
+# substring, index and indirection forms. The operator's refusal does not close them,
+# because they carry nothing in the operand; RESID-04 holds the "they execute" half of
+# that reasoning against the interpreter in the same run.
 # shellcheck disable=SC2016
 xform_g6_pin "XFORM-RESID-01: arithmetic offset \${VAR:off} admitted under G6 with one record — declared limit" 'cat ${CFG:off}'
 # shellcheck disable=SC2016

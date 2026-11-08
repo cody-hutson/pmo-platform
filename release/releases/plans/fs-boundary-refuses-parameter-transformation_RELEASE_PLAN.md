@@ -129,7 +129,7 @@ Every element determined at Stage 4 that a named downstream consumer reads **fro
 | The four whole-operand walk positions (`XFORM-POS-01..04`: a flag-position word, an assignment ahead of the verb, an operand after an ampersand-carrying redirection, an operand on a continuation line) | The token walk is not edited (ADR-187's seam); these stay pinned as unexamined | #8547 (unmilestoned) |
 | The value-re-evaluating brace forms (arithmetic offset, arithmetic index, indirection) | A value can arrive from outside the command text, where no reader of the command can see it | declared limit without an owner (D-ValueLimitOwner (A)) |
 | The hook's pre-existing slow place on a large operand of many plain expansions (Stage-5 F-5) | Pre-existing; this release neither worsens nor owns it (D-InboundSlowPlaces (A)) | ms#438's hub, for its class-level note on this guard's slow places |
-| `.github/workflows/install-tests.yml` (the 30-minute harness timeout) | A workflow-budget question for its own card | not edited (R-3) |
+| `.github/workflows/install-tests.yml` (the harness timeout, 110 minutes at the base) | A workflow-budget question for its own card | not edited (R-3) |
 
 ---
 
@@ -293,7 +293,7 @@ The mover-set is ∅: no rename, relocation or delete is planned, and the ADR-09
 | ID | Risk | Likelihood | Impact | Mitigation | Owner |
 |---|---|---|---|---|---|
 | R-1 | Contention with ms#438 on all four write-set files | Discharged | — | ms#438 merged before the cut; edits anchor by content | Hub |
-| R-3 | The hook-harness CI job runs near its 30-minute ceiling, and this release adds 97 arms and 19 copies to one suite | Med | Med | Stage 7 records the suite's duration and the aggregate harness time; a timeout is routed to its own card; the workflow is not edited | Stage 7 |
+| R-3 | The hook-harness CI job runs near its 110-minute ceiling (`install-tests.yml` at the base; `main`'s run at `99c8b442` took 49m46s), and this release adds 97 arms and 19 copies to one suite | Med | Med | Stage 7 records the suite's duration and the aggregate harness time; a timeout is routed to its own card; the workflow is not edited | Stage 7 |
 | R-4 | Over-refusal of an ordinary operand | Med | Med (at `enforce` a file verb is blocked; today's deployed `.mode` is `warn`, so a warn-log row) | The over-refusal classes are declared in the fragment and pinned (`XFORM-OVER-01..09`); must-not-flag arms (`XFORM-NEAR-01..09`); the AC2 differential and the live-log replay | Stage 5/7 |
 | R-5 | Under-refusal: one spelling stays admitted | Med | High | One arm per position class, each red through a pre-fix copy; the fragmented class (`XFORM-FRAG-01..15`) pinned at the span split | Stage 6/7 |
 | R-6 | A timeout turns a refusal into an allow | Low | High | Both new functions are two one-star globs, held by `XFORM-COST-01/02`; Stage 7 re-runs `AC-FSB-X*` and the limb timing matrix on the fix head | Stage 5/7 |
@@ -422,6 +422,7 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 | DEV-5 | 6 | Stage 6 ran hub-direct, not as a spawned spoke. Two spokes (the Stage-5 amendment and the first Stage-6 spoke) were stopped by a model-output safety classifier while authoring this guard's test operands; the operator then authorized the hub to do the work ("you are approved to do the work"). The same Stage-6 checklist binds (Hub-direct ≡ spoke) | Operator authorization, 2026-11-07; blocker comments on #8667 and #8669 |
 | DEV-6 | 6 | The suite floor is 219 arms, not the 187 the Stage-5 design counted: ms#438's final Dev Testing commits added arms to this suite after the design base `fc556c66`. The +97 delta the design specifies is unchanged, so AC3's target is 316 | Floor run on `99c8b442` (§ Verification Evidence) |
 | DEV-7 | 6 | One new shellcheck directive: SC1083 on the second glob of `_carries_transform_op` is suppressed as a false positive (the brace is a member of a bracket expression). The design said "no new finding"; the directive has no effect on the verdict | Stage-6 spoke record on #8669 |
+| DEV-8 | 7 (rework) | Stage 7 pass 1 findings applied as Tier 1 [ADJUST]: `XFORM-OVER-10` pins the pattern-replacement over-refusal the fragment names (suite +3; target floor + 100 = 319); a stale suite comment on the value forms is reworded; R-3 reads the 110-minute ceiling; `main` merged into the branch (F-06). The escape-class measurements S7-E1/E3/E4/E5 are carried as named residuals for the Stage 9 GO, by operator decision (D-S7-Route (A)); S7-E6 (the live replay) was hub-run: 37 brace-bearing distinct `-004` operands, the G2 shape moves 2 (the card's example), the span check moves 0 | Stage 7 report on #8672; operator decision 2026-11-08 |
 
 ---
 
@@ -434,6 +435,10 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 - **Find texts:** every find text the Stage-5 design and Amendment 1 name was counted against the merged files at `99c8b442` by one python3 pass (exact substring counts over each file; sed targets as whole-line regex matches over the hook). 43 substring finds and 11 sed targets each read exactly 1; the new names (`_carries_transform_op`, `_span_closed_inside_subscript`, `XFORM-FRAG`, `XFORM_X_K=`, `XFORM_X_T=`) each read 0; "NOT refused at G2" reads 1 in the fragment and 1 in the index, "REFUSED at G2" 0 in the fragment. The non-zero reads on every existing anchor are the probe's own sensitivity arm.
 - **Floor:** on the post-ms#438 base `99c8b442`, `bash core/hooks/tests/setup-ci-layout.sh` then `bash .claude/hooks/tests/test-runner.sh`: `AGGREGATE: PASS=3819 FAIL=0` (25 suites); `block-fs-boundary.test.sh — Total: 219 PASS: 219 FAIL: 0`; SHA-256 prefixes at the base: hook `337719d865db6b45`, suite `704678eaae2971b6`. `XFORM-SEM-01` reads NOT-EVALUATED on this host. This is AC3's documented floor; the fix head must read at or above floor + 97 arms in this suite (316).
 - **ADR index:** N/A — this release adds no record under `release/ADRs/`.
+
+### Stage 7 rework (pass 1 findings)
+
+- After merging `main` and applying DEV-8: `AGGREGATE: PASS=3919 FAIL=0`; `block-fs-boundary.test.sh` 319/319 (floor 219 + 100, with `XFORM-OVER-10`). Every other suite equals its prior total.
 
 ### The fix commit — Stage 6 B1/C4
 
