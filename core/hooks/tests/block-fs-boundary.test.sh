@@ -892,8 +892,8 @@ fi
 # demonstrates that the operator EXECUTES, reporting NOT-EVALUATED — never a pass — on an
 # interpreter that rejects it.
 #
-# A PIN SAYS WHICH VERDICT IT PINS. Forty-three pins: SUBJ 3, PFX 2, OP/PARAM/NEST 4,
-# POS 4, RESID 3, OVER 10, SPLIT 2, FRAG 15. Each asserts the exit code AND either the
+# A PIN SAYS WHICH VERDICT IT PINS. Forty-four pins: SUBJ 3, PFX 2, OP/PARAM/NEST 4,
+# POS 4, RESID 3, OVER 11, SPLIT 2, FRAG 15. Each asserts the exit code AND either the
 # number of -004 records the call wrote or the rule its refusal names, because one exit
 # code can come from different guards: G2 and the span split refuse under -003, G6 admits
 # with a record, G4 admits silently, a word the token walk never hands to the cascade
@@ -1299,6 +1299,8 @@ xform_g2_pin "XFORM-OVER-02: a pattern ending in the shape \${U%@*} — REFUSED 
 xform_g2_pin "XFORM-OVER-03: the subject with a backslash before its dollar — REFUSED at G2, as the escaped command substitution is" 'cat \${CFG@P}' 0 1
 # shellcheck disable=SC2016
 xform_g2_pin "XFORM-OVER-04: literal text of the shape before the first opener — REFUSED at G2 (declared order-blindness)" 'cat /tmp/a@b}${X}' 0 0
+# shellcheck disable=SC2016
+xform_g2_pin "XFORM-OVER-11: a replacement whose pattern is the at-sign and whose replacement is empty \${U/@/} — REFUSED at G2 (declared over-refusal)" 'cat ${U/@/}' 0 1
 # xform_frag_pin <label> <command> <K exit> <K records> <UO rule> — a span-split refusal
 # (exit 2, -003): K (no subscript check) gives <K exit> with <K records> records, and UO
 # (the split's failure refused as outside) names <UO rule>.
