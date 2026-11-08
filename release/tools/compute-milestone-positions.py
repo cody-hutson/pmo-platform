@@ -9,8 +9,11 @@ consumer already knows how to read. Producer for a live-but-fallback-only
 consumer (card #52).
 
 Method (AC3): reuse bundle-issues-parser.py's parse_dependencies() to extract
-issue-body `### Dependencies` edges (native `blocked-by` is NOT exposed by
-`gh issue view --json` in this environment), aggregate issue-level edges up to a
+the directed `Blocked by` edges of each issue body's `### Dependencies` section
+(reciprocal `Blocks`, hierarchy and prose references are not edges; native
+`blocked-by` is NOT exposed by `gh issue view --json` in this environment), and
+keep its parse status: a section that is not read `clean` is reported among the
+unresolvable edges rather than silently contributing none. Aggregate issue-level edges up to a
 milestone-level dep graph, then derive a total order via Kahn's BFS. An edge
 `mA -> mB` means "mA depends on mB", so mB (the prerequisite) MUST sequence
 earlier (lower position): Kahn's runs on the REVERSED graph so a milestone with
@@ -110,8 +113,9 @@ class Milestone:
 class IssueLite:
     number: int
     milestone_number: Optional[int]
-    deps: Set[int] = field(default_factory=set)  # issue numbers this issue depends on
+    deps: Set[int] = field(default_factory=set)  # directed blocked_by targets (parse_dependencies)
     closed_done: bool = False
+    dep_status: str = "clean"  # parse_dependencies' status for this body; kept, never discarded
 
 
 # ---- position: line parse / render ------------------------------------------
@@ -222,7 +226,8 @@ def gh_open_issues(parse_dependencies) -> List[IssueLite]:
     """Fetch open issues + their milestone + dep edges via `gh issue list` (AC2).
 
     --limit 5000 mirrors bundle-issues-parser.py's generous ceiling. Dep edges are
-    extracted by the REUSED parse_dependencies() (issue-body `### Dependencies`).
+    extracted by the REUSED parse_dependencies() (issue-body `### Dependencies`;
+    directed `blocked_by` targets only), and its parse status is kept on the record.
     """
     res = subprocess.run(
         [
@@ -239,10 +244,11 @@ def gh_open_issues(parse_dependencies) -> List[IssueLite]:
     out: List[IssueLite] = []
     for it in raw:
         body = it.get("body") or ""
-        deps, _status = parse_dependencies(body)
+        deps, status = parse_dependencies(body)
         ms = it.get("milestone") or {}
         ms_num = int(ms["number"]) if ms and ms.get("number") is not None else None
-        out.append(IssueLite(number=int(it["number"]), milestone_number=ms_num, deps=set(deps)))
+        out.append(IssueLite(number=int(it["number"]), milestone_number=ms_num, deps=set(deps),
+                             dep_status=status))
     return out
 
 
@@ -268,6 +274,9 @@ def aggregate_edges(
       - target issue has NO milestone (unbundled): G3-07 would FAIL; we cannot place
         it, so we record an unresolvable-edge WARNING (never silently dropped, R8).
       - target issue not in the open set / unknown: recorded as unresolvable (loud).
+      - source whose Dependencies section did not read `clean` (today: `deferred`, the
+        intake deferral marker): no edges were read from it, so it is recorded as
+        unresolvable rather than silently contributing none.
     De-duplicate parallel milestone edges; retain multiplicity as inbound-leverage.
     """
     g = AggregatedGraph()
@@ -275,6 +284,13 @@ def aggregate_edges(
     open_ms_numbers = {m.number for m in milestones}
 
     for src in issues:
+        if src.dep_status != "clean":
+            g.unresolvable.append(
+                "issue #{}: its Dependencies section reads parse status `{}` — no edges were read "
+                "from it, so any ordering it declares is missing from this derivation".format(
+                    src.number, src.dep_status
+                )
+            )
         if src.milestone_number is None:
             # A source with no milestone still carries ordering signal onto its target,
             # but there is no source-milestone node to order — record loudly and skip.
@@ -698,6 +714,19 @@ def run_self_test() -> int:
     g6 = aggregate_edges(mlist6, ilist6)
     if not any("no milestone" in w for w in g6.unresolvable):
         failures.append("R8 no-milestone: edge to a milestone-less target must surface a loud warning; got {}".format(g6.unresolvable))
+
+    # --- parse status kept (R8): a section that did not read clean is surfaced ---
+    # Issue #1501's Dependencies section read `deferred`, so none of its edges was read;
+    # the derivation must say so rather than treat it as an issue with no dependencies.
+    # Control: the same issue read `clean` produces no such line.
+    mlist_s = [ms(150, "U")]
+    status_line = "issue #1501: its Dependencies section reads parse status `deferred`"
+    g_s = aggregate_edges(mlist_s, [IssueLite(1501, 150, set(), dep_status="deferred")])
+    if not any(w.startswith(status_line) for w in g_s.unresolvable):
+        failures.append("R8 parse status: a `deferred` section must surface an unresolvable line; got {}".format(g_s.unresolvable))
+    g_c = aggregate_edges(mlist_s, [IssueLite(1501, 150, set(), dep_status="clean")])
+    if any("parse status" in w for w in g_c.unresolvable):
+        failures.append("R8 parse status control: a `clean` section must surface nothing; got {}".format(g_c.unresolvable))
 
     # --- derivation idempotency (AC5) over a full fixture ---------------------
     # Re-deriving the same graph yields identical positions (fixed point).

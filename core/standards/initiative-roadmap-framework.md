@@ -202,6 +202,10 @@ The architected path across milestones — the umbrella for a multi-milestone in
 
 The correct decomposition: the **roadmap** holds the umbrella (Now/Next/Later sequence, Capability Outcome, Sunset Criteria); the **Initiative GitHub Issue** (with its `initiative:`/`cluster:` label) aggregates the tracked sub-work; and each **milestone** bundles a release-sized slice of that work. An umbrella that has been given a milestone of its own — rather than a roadmap entry plus per-slice milestones — is mis-homed; route it back to a roadmap and let the milestones carry only the bundled slices. This is the §4.1-table boundary applied to the umbrella case: the umbrella is a Living roadmap concern, and a milestone is the wrong artifact class to carry it.
 
+### 4.6 The derived chain-head view is a read surface, not a roadmap
+
+The set of chain heads is derived from `project:` label membership plus label-less epics (label taxonomy § Initiative Labels, Derived chain-head view); no registry lists them, and a roadmap is not where they are enumerated. A roadmap remains the home of Now/Next/Later sequencing and its rationale: the view renders structure and counts, and it presents no order as a run sequence. A standing initiative is read from its label's description rather than from a roadmap's `sunset_criteria:` field, because a roadmap instance is operator-local and absent from a fresh install; where a roadmap exists, its sunset criteria still state why the initiative is standing.
+
 ## 5. Forcing Function — Event-Bound Triggers + Calendar Fallback
 
 A Living artifact rots into a v1 snapshot without a forcing function. This framework requires every roadmap to specify **four event-bound triggers** plus a **90-day calendar staleness fallback**.

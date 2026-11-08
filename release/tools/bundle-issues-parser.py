@@ -9,6 +9,16 @@ Per CR Conflict A resolution: single shared tool with umbrella name
 'bundle-issues-parser.py' rather than per-concern tools. Stdlib-only Python 3.9+;
 matches check-doc-links.py / lint_release_corpus.py precedent.
 
+This file is the single home of the issue-body section extractor (extract_section,
+extract_section_aliased, extract_section_with_alias), of DEP_HEADING_ALIASES, and of
+the dependency direction grammar (parse_body_dependencies, unattributed_refs, BodyDep
+and the segment-label rules beneath them). native-dep-mirror.py loads this file by
+path and binds those names rather than carrying a copy, so a fix to the extractor or
+the grammar lands once. parse_dependencies returns only the directed blocked_by
+targets that grammar reads, which is what compute-milestone-positions.py orders
+milestones by. This module loads nothing local at import, so a reader that loads it
+alone by path keeps working.
+
 Parse semantics (#291 v3.20 robustification — DS-1..DS-4 of the ratified Stage 5 spec):
   - Section headings are matched suffix-tolerantly (a trailing parenthetical/colon
     no longer defeats the match) and against a closed alias set (e.g. "Files Affected").
@@ -68,7 +78,7 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import List, Set, Dict, Optional, Tuple
 
@@ -91,7 +101,7 @@ class IssueRecord:
     milestone: Optional[str]
     parse_status: str  # one of: clean, deferred, failed
     affected_files: List[FileRecord]
-    dependencies: List[int]  # sorted ascending
+    dependencies: List[int]  # directed blocked_by targets (parse_dependencies), sorted ascending
     # #4232 — AC presence axis. Additive and DEFAULTED, so every positional
     # constructor already in the tree keeps working unchanged. Absence is data,
     # never a parse failure: neither field feeds parse_status.
@@ -102,12 +112,23 @@ class IssueRecord:
     # parse failure, and `not-evaluated` is never a pass.
     doc_impact: str = "not-evaluated"
     doc_impact_detail: str = ""
+    # References in the Dependencies section that the direction grammar attributes to
+    # no direction (unlabelled prose) — reported, not dropped, so a dependency stated
+    # only in prose stays visible for relabelling. Additive and DEFAULTED, like the AC
+    # axis; data only, never a parse failure: neither field feeds parse_status.
+    dependencies_unattributed: List[int] = field(default_factory=list)  # sorted ascending
+    dependencies_unattributed_count: int = 0
 
 
 # ---- Parsing functions --------------------------------------------------------
 
 DEFERRAL_MARKER = "[ASSUMPTION – CONFIRM] TBD — identified in Planning"
 SECTION_HEADING_RE = re.compile(r"^###\s+", re.MULTILINE)
+# A break line ends a section the way a heading does: three or more hyphens, indented
+# at most three spaces, with optional trailing spaces or tabs. The `\r?` makes it hold
+# for a CRLF body too, where `$` matches before the `\n` and the `\r` is still on the
+# line. Hyphens only — the separator issue bodies use before a footer.
+SECTION_BREAK_RE = re.compile(r"^ {0,3}-{3,}[ \t]*\r?$", re.MULTILINE)
 
 # DS-2 (#291) — heading-variant alias sets. Closed, evidence-bounded sets drawn
 # from the live open-issue corpus survey (#461 Stage 5 spec); NOT fuzzy matching.
@@ -127,6 +148,389 @@ DEP_HEADING_ALIASES = [
     "Blocked by",
     "Relationships",
 ]
+
+# ---- Dependency direction grammar (one home; native-dep-mirror.py binds these names) ----
+#
+# DEPENDENCY  ::= [TYPE_PREFIX][OFFSET] HASH_REF
+# TYPE_PREFIX ::= "FS" | "SS" | "FF" | "SF"   (optional; default "FS")
+# OFFSET      ::= ("+"|"-") INTEGER "d"        (optional; default "0d")
+# HASH_REF    ::= "#" INTEGER                   (required)
+#
+# Untyped `#N` normalizes to FS+0d (backward-compat shim). This is the one direction
+# grammar: parse_dependencies (below) returns the blocked_by targets it reads, and
+# native-dep-mirror.py (Stage 2 A3.5) loads this file by path and binds its public names
+# (SEGMENT_LABELS, DEP_TOKEN_RE, DIRECTIONAL_HEADINGS, BodyDep, parse_body_dependencies,
+# unattributed_refs) rather than carrying a copy.
+#
+# DIRECTION IS SEGMENT-SCOPED (#662 Blocker fix). The live body format (rendered
+# from improvement.yml's `Dependencies` field) is a labeled-segment grammar, NOT a
+# flat "every `#N` is a blocker" list. A single Dependencies section commonly reads:
+#
+#     Blocked by: — · Blocks: #213 · Relates to: #149, #61
+#
+# Only `#N` on a **Blocked by: / Depends on:** segment means "current issue IS
+# blocked-by #N" (the mirror-eligible direction → native blocked-by(current ← #N)).
+# A `#N` on a **Blocks:** segment is the RECIPROCAL ("current BLOCKS #N") — mirroring
+# it as blocked-by(current ← #N) INVERTS the edge (the #662 defect: #225's
+# `Blocks: #213` was being asserted as "225 blocked-by 213", the opposite of truth).
+# `#N` on a relates/sibling/pairs/parent segment is a NON-blocking relationship and
+# is never mirrored. Per the precedent in this file
+# (`derive_artifact_relationships`: "BLOCKS is reachable only from native … in that
+# degraded path no BLOCKS edge is emitted and the dependency defaults to the weakest
+# correct claim"), the reciprocal-`Blocks:` edge is NOT asserted as a current-issue
+# blocked-by; it is left to the target issue's own `Blocked by:` segment to express.
+
+# Segment-label grammar inside the Dependencies section. The section body is sliced
+# into labeled segments at these markers; each `#N` is attributed to the label that
+# precedes it. `kind` drives mirror direction:
+#   "blocked_by" — current IS blocked-by #N        → mirror-eligible (the only kind)
+#   "blocks"     — current BLOCKS #N (reciprocal)   → NOT a current-issue blocked-by
+#   "relates"    — non-blocking relationship        → never mirrored
+# A `#N` appearing before any label (an unlabeled run) is treated as "blocked_by"
+# ONLY when that run is the legacy bare-ref list form the shim was written for —
+# `### Dependencies\n- #46`, i.e. list items or bare tokens with no prose. Free-form
+# sentences are attributed "unlabeled" and mirrored NOWHERE: prose asserts no
+# direction, and defaulting it to blocked_by manufactures a dependency the author
+# never stated. See _is_bare_ref_run / _attribute_segments.
+SEGMENT_LABELS: List[Tuple[str, str]] = [
+    # label-kind, regex matching the label token (case-insensitive, colon-tolerant)
+    ("blocked_by", r"Blocked\s*by"),
+    ("blocked_by", r"Depends\s*on"),
+    ("blocked_by", r"Requires"),               # placeholder "Requires #N first"
+    ("blocks",     r"Blocks"),
+    # Epic / parent membership. These MUST be labels, not prose: an epic ref is a
+    # sub-issue parent relationship, never a dependency. Without a label here, a
+    # trailing "Part of epic #N" is swallowed by a still-open `Blocked by:` segment
+    # (segments run to the next RECOGNIZED label) and the epic becomes a false
+    # blocker even in a correctly-labelled body. Longest-first: `Part of epic`
+    # precedes bare `Part of` so it wins at the same start position.
+    ("relates",    r"Part\s*of\s*(?:the\s*)?epic"),
+    ("relates",    r"Part\s*of"),
+    ("relates",    r"Sub-?issue\s*of"),
+    ("relates",    r"Epic"),
+    ("relates",    r"Umbrella"),
+    ("relates",    r"Relates\s*to"),
+    ("relates",    r"Relates"),
+    ("relates",    r"Related"),
+    ("relates",    r"Relationship"),
+    ("relates",    r"Pairs\s*with"),
+    ("relates",    r"Coordinates\s*with"),
+    ("relates",    r"Foundational\s*sibling\s*to"),
+    ("relates",    r"Sibling"),
+    ("relates",    r"Parent"),
+    ("relates",    r"Child"),
+    ("relates",    r"Sub-?task\s*of"),
+    ("relates",    r"Scope-?boundary"),
+    ("relates",    r"See\s*also"),
+]
+
+# A single matcher that finds ANY segment label and reports its kind. Longest /
+# most-specific alternations first so "Relates to" wins over bare "Relates", etc.
+# Anchored to a word boundary on the left; followed by an optional colon.
+_SEGMENT_LABEL_RE = re.compile(
+    r"\b(?P<label>"
+    + "|".join(rf"(?P<k{i}>{pat})" for i, (_kind, pat) in enumerate(SEGMENT_LABELS))
+    + r")\s*:?",
+    re.IGNORECASE,
+)
+_LABEL_KIND_BY_GROUP = {f"k{i}": kind for i, (kind, _pat) in enumerate(SEGMENT_LABELS)}
+
+# One dependency token. Type prefix + offset optional; hash-ref required.
+# Examples matched: "#46", "FS #46", "FS+0d #46", "SS #46", "FS+3d #46",
+# "FS-2d #46". Anchored to a token boundary so "##" or "#46abc" do not match.
+#
+# COMMA-SAFE (#662 fix): the target is `\d[\d,]*\d|\d` — it captures a full
+# comma-grouped integer (`#1,234`) instead of truncating at the comma to `#1`. The
+# captured run's commas are stripped before int() (a comma-grouped issue number is
+# not a real GitHub id, but capturing the whole run prevents a SILENT mirror against
+# the wrong issue `#1`; such tokens are then dropped as out-of-range — see
+# parse_body_dependencies). A trailing `\b` still rejects `#46abc`.
+DEP_TOKEN_RE = re.compile(
+    r"(?P<type>FS|SS|FF|SF)?\s*"
+    r"(?:(?P<sign>[+-])(?P<offset>\d+)d)?\s*"
+    r"#(?P<target>\d[\d,]*\d|\d)\b"
+)
+
+# Legacy bare-ref-run discriminator. An unlabeled run inherits the blocked_by
+# backward-compat shim ONLY when it is the form that shim was written for — list
+# items or bare dependency tokens. Prose is excluded because a sentence asserts no
+# direction; the shim was a concession to a specific legacy SYNTAX, and letting it
+# swallow arbitrary prose is what turns "Part of epic #N" into a native blocker.
+_LIST_MARKER_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+_PROSE_WORD_RE = re.compile(r"[A-Za-z]{2,}")
+
+# Section headings that are themselves directional. `### Depends on` / `### Blocked
+# by` state the direction in the heading, so an unlabeled run beneath one is a real
+# blocked_by list even in prose form. `Dependencies` / `Relationships` are ambiguous
+# containers and confer no direction.
+DIRECTIONAL_HEADINGS = {"depends on", "blocked by"}
+
+# A blocked_by-kind label negated on its own line. The live idiom is "gated on, not
+# blocked by #N": the author names a coordination or merge-order relation and states in
+# the same breath that it is not a blocker. Without this rule the label matcher (a word
+# boundary on the left, nothing on the right) reads "not blocked by #N" as "blocked by
+# #N" and manufactures the very edge the author disclaimed. The test is the text between
+# the start of the label's line and the label: it must END in a negation word -
+# "not", "no longer", "never" or an "n't" contraction - optionally wrapped in markdown
+# emphasis (`**not**`, `_not_`, `__not__`). The word's left edge is the start of the
+# line or a non-word character, with any `*` or `_` emphasis run in between; an
+# underscore inside a word ("do_not") is not emphasis, so it is not a negation. Lexical
+# by design; a negation separated from its label by other words ("not, however,
+# blocked by") is not recognised.
+_NEGATED_LABEL_TAIL_RE = re.compile(
+    r"(?:(?<!\w)[*_]*(?:not|no\s+longer|never)|n['\u2019]t)[\s*_]*$", re.IGNORECASE
+)
+
+# A blank line: a line holding only spaces or tabs, CR-tolerant. It ends a directional
+# run once the run has text (see _attribute_segments).
+_BLANK_LINE_RE = re.compile(r"\n[ \t]*\r?\n")
+_FIRST_TEXT_RE = re.compile(r"\S")
+# The kinds whose run a blank line ends: the two that produce a BodyDep. A `relates`
+# run, a negated label included, yields no edge however far it runs.
+_PARAGRAPH_SCOPED_KINDS = ("blocked_by", "blocks")
+
+
+def _is_negated_label(section: str, label_start: int) -> bool:
+    """True when the text from the start of the label's line up to the label ends in a
+    negation word (see _NEGATED_LABEL_TAIL_RE)."""
+    line_start = section.rfind("\n", 0, label_start) + 1
+    return bool(_NEGATED_LABEL_TAIL_RE.search(section[line_start:label_start]))
+
+
+def _is_bare_ref_run(text: str) -> bool:
+    """True when an unlabeled run is the legacy bare-`#N` list form, not prose.
+
+    Strips one leading list marker per line, removes every dependency token, then
+    asks whether any prose word survives. `- #46\\n- FS #47` reduces to punctuation
+    → True (legacy list). "Gated on the spike. Part of epic #1189." keeps its words
+    → False (prose). A run carrying no dep token at all is False — nothing to mirror
+    either way, so the cheaper answer is also the correct one.
+    """
+    if not DEP_TOKEN_RE.search(text):
+        return False
+    residue_lines = [
+        _LIST_MARKER_RE.sub("", line, count=1)
+        for line in text.splitlines()
+        if line.strip()
+    ]
+    residue = DEP_TOKEN_RE.sub(" ", "\n".join(residue_lines))
+    return not _PROSE_WORD_RE.search(residue)
+
+
+@dataclass
+class BodyDep:
+    """A single parsed body dependency edge.
+
+    `direction` records which labeled segment the edge came from:
+      "blocked_by" — current issue IS blocked-by `target` (the mirror-eligible kind)
+      "blocks"     — current issue BLOCKS `target` (reciprocal; never a current-issue
+                     blocked-by edge — see is_mirror_eligible)
+    Non-blocking relationships (relates/sibling/…) are NOT emitted as BodyDep at all.
+    """
+    type: str          # "FS" | "SS" | "FF" | "SF"
+    offset_days: int   # signed integer; 0 when omitted
+    target: int        # the referenced issue number
+    direction: str = "blocked_by"  # "blocked_by" | "blocks"
+
+    @property
+    def is_mirror_eligible(self) -> bool:
+        """Mirror-eligible = FS, zero lag, AND blocked-by direction (Model A subset).
+
+        The blocked-by direction gate is the #662 fix: a `blocks` (reciprocal) edge
+        is NEVER mirrored as a current-issue native blocked-by, even when FS+0d —
+        mirroring it would invert the dependency direction.
+        """
+        return (
+            self.type == "FS"
+            and self.offset_days == 0
+            and self.direction == "blocked_by"
+        )
+
+
+def _attribute_segments(
+    section: str, heading_direction: Optional[str] = None
+) -> List[Tuple[str, str]]:
+    """Slice a Dependencies section into (kind, text) segments by labeled marker.
+
+    Walks the section left-to-right; the text from one label up to the next carries
+    that label's kind. Slicing at labels is newline-blind, so it handles BOTH the
+    single-line `A · B · C` form and the multi-line form; the one whitespace rule is
+    the paragraph end below.
+
+    An UNLABELED run — no label anywhere, or the leading text before the first
+    label — is attributed by EVIDENCE rather than by default:
+      1. `heading_direction` set (the section heading was itself `Depends on` /
+         `Blocked by`) → that direction. The heading is the label.
+      2. else the run is the legacy bare-ref list form (_is_bare_ref_run) →
+         "blocked_by". The historical shim, held to the syntax it was written for.
+      3. else → "unlabeled". Prose states no direction, so no edge is emitted; the
+         refs inside are reported via unattributed_refs rather than dropped silently.
+
+    Case 3 is the fix for prose being mirrored as blocked_by. Both entry paths (the
+    no-labels-at-all branch and the leading-run branch) route through the same
+    decision, because the defect reproduced through each of them independently.
+
+    A blocked_by-kind label the author negates on its own line ("not blocked by #N",
+    "gated on, not blocked by: ...") is attributed "relates": the text after it states
+    what the issue is NOT blocked by, so it yields no edge and no unattributed ref.
+    See _is_negated_label.
+
+    A DIRECTIONAL run - a `blocked_by` or `blocks` segment - ends at the first blank
+    line after its first text, so a reference in a later paragraph is not read in that
+    direction. Blank lines between the label and its first text do not end it, so a
+    list set under its label keeps its edges. The text after the blank line, up to the
+    next label, is unlabeled text beneath the section heading: under a directional
+    heading it takes the heading's direction; otherwise it is "unlabeled" - no edge,
+    and its refs are reported by unattributed_refs. The legacy bare-ref shim covers
+    only the run before the first label, so it does not apply here: a list after a
+    `Blocks:` paragraph is never turned into a blocker. A `relates` run, a negated
+    label included, is not ended this way; it yields no edge however far it runs.
+    """
+
+    def _unlabeled_kind(text: str) -> str:
+        if heading_direction:
+            return heading_direction
+        return "blocked_by" if _is_bare_ref_run(text) else "unlabeled"
+
+    segments: List[Tuple[str, str]] = []
+    matches = list(_SEGMENT_LABEL_RE.finditer(section))
+    if not matches:
+        # No labels at all → the whole section is one unlabeled run.
+        return [(_unlabeled_kind(section), section)]
+    # Leading run before the first label.
+    if matches[0].start() > 0:
+        lead = section[: matches[0].start()]
+        if lead.strip():
+            segments.append((_unlabeled_kind(lead), lead))
+    for i, m in enumerate(matches):
+        kind = next(
+            (_LABEL_KIND_BY_GROUP[g] for g in _LABEL_KIND_BY_GROUP if m.group(g)),
+            "relates",
+        )
+        if kind == "blocked_by" and _is_negated_label(section, m.start()):
+            kind = "relates"  # "not blocked by #N" disclaims the edge; no edge, not unattributed
+        seg_start = m.end()
+        seg_end = matches[i + 1].start() if i + 1 < len(matches) else len(section)
+        text = section[seg_start:seg_end]
+        if kind in _PARAGRAPH_SCOPED_KINDS:
+            first = _FIRST_TEXT_RE.search(text)
+            gap = _BLANK_LINE_RE.search(text, first.start()) if first else None
+            if gap is not None:
+                # The run ends at its paragraph; the rest is unlabeled text beneath the heading.
+                segments.append((kind, text[: gap.start()]))
+                rest = text[gap.start():]
+                if rest.strip():
+                    segments.append((heading_direction or "unlabeled", rest))
+                continue
+        segments.append((kind, text))
+    return segments
+
+
+def _parse_token(m: "re.Match") -> Optional[Tuple[str, int, int]]:
+    """Normalize one DEP_TOKEN_RE match → (type, offset_days, target).
+
+    Returns None for an out-of-range / ambiguous target (e.g. a comma-grouped
+    `#1,234` — not a real GitHub issue id; captured whole to avoid a SILENT truncated
+    mirror against `#1`, then dropped here so no wrong edge is written).
+    """
+    raw_target = m.group("target").replace(",", "")
+    if "," in m.group("target"):
+        # Comma-grouped run: captured to prevent the `#1,234`→`#1` truncation bug,
+        # but a comma-grouped number is not a valid issue ref — skip it safely.
+        print(
+            f"bundle-issues-parser: skipping ambiguous comma-grouped token "
+            f"'#{m.group('target')}' (not a valid issue id)",
+            file=sys.stderr,
+        )
+        return None
+    target = int(raw_target)
+    dep_type = m.group("type") or "FS"
+    if m.group("offset") is not None:
+        offset = int(m.group("offset"))
+        if m.group("sign") == "-":
+            offset = -offset
+    else:
+        offset = 0
+    return dep_type, offset, target
+
+
+def _segments_for_body(body: str) -> List[Tuple[str, str]]:
+    """Resolve a body to its attributed Dependencies segments ([] when absent).
+
+    Single seam shared by parse_body_dependencies and unattributed_refs, so the two
+    can never disagree about how a given run was attributed.
+    """
+    found = extract_section_with_alias(body, DEP_HEADING_ALIASES)
+    if found is None:
+        return []
+    alias, section = found
+    heading_direction = (
+        "blocked_by" if alias.strip().lower() in DIRECTIONAL_HEADINGS else None
+    )
+    return _attribute_segments(section, heading_direction)
+
+
+def unattributed_refs(body: str) -> List[int]:
+    """Issue refs sitting in unlabeled PROSE — parsed, but claimed by no direction.
+
+    These are deliberately NOT mirrored (prose asserts no direction), but they are
+    also not nothing: a section that names real dependencies only in prose produces
+    a non-empty list here and an empty eligible set, which is precisely the shape
+    worth warning about. Reporting beats both alternatives — inventing a blocked_by
+    edge, or discarding the author's intent without a word.
+    """
+    out: Set[int] = set()
+    for kind, seg_text in _segments_for_body(body):
+        if kind != "unlabeled":
+            continue
+        for m in DEP_TOKEN_RE.finditer(seg_text):
+            parsed = _parse_token(m)
+            if parsed is not None:
+                out.add(parsed[2])
+    return sorted(out)
+
+
+def parse_body_dependencies(body: str) -> List[BodyDep]:
+    """Parse the body Dependencies section into DIRECTIONAL typed edges.
+
+    An ABSENT Dependencies section returns [] (deps are optional at intake). The
+    section is sliced into labeled segments (Blocked by / Blocks / Relates to / …);
+    each `#N` carries the direction of its segment:
+      - Blocked by: / Depends on: / Requires → BodyDep(direction="blocked_by")
+      - Blocks:                                → BodyDep(direction="blocks") (reciprocal)
+      - Relates to: / sibling / pairs / epic /
+        Part of / …                            → NOT emitted (non-blocking prose)
+      - unlabeled PROSE                        → NOT emitted (no direction asserted;
+                                                 surfaced via unattributed_refs)
+    Only "blocked_by" FS+0d edges are mirror-eligible (see BodyDep.is_mirror_eligible)
+    — this is the #662 fix that stops `Blocks:` and `Relates to:` targets from being
+    written as inverted / false native blocked-by edges. Each matched token is
+    normalized (missing type → "FS"; missing offset → 0) and de-duplicated by
+    (type, offset_days, target, direction).
+    """
+    seen: Set[Tuple[str, int, int, str]] = set()
+    deps: List[BodyDep] = []
+    for kind, seg_text in _segments_for_body(body):
+        if kind in ("relates", "unlabeled"):
+            continue  # non-blocking, or no direction asserted — never mirrored
+        for m in DEP_TOKEN_RE.finditer(seg_text):
+            parsed = _parse_token(m)
+            if parsed is None:
+                continue
+            dep_type, offset, target = parsed
+            key = (dep_type, offset, target, kind)
+            if key in seen:
+                continue
+            seen.add(key)
+            deps.append(
+                BodyDep(
+                    type=dep_type,
+                    offset_days=offset,
+                    target=target,
+                    direction=kind,
+                )
+            )
+    return deps
 
 # DS-3 (#291) — generalized path extraction. Replaces the legacy
 # BACKTICK_PATH_RE (required an internal '/') → WORKSPACE_PATH_RE (required a
@@ -154,16 +558,31 @@ NONE_FILES_RE = re.compile(
 INTENT_RE = re.compile(
     r"\((add|edit|delete)\s*(?:—|--|-)\s*[^)]*\)", re.IGNORECASE
 )
-DEP_RE = re.compile(r"#(\d+)")
 
 
 def extract_section(body: str, heading: str) -> Optional[str]:
-    """Extract content of a '## <heading>' section until next H2/H3 or two blank lines.
+    """Extract the content of a '## <heading>' section, up to the next H2/H3 heading or
+    a break line.
 
     DS-1 (#291): heading match is prefix-anchored and suffix-tolerant — a trailing
     parenthetical or colon (e.g. '### Affected Files (proposed)', '## Affected Files:')
     no longer defeats the match. Monotonic widening: `\\b[^\\n]*$` is a superset of the
     prior `\\s*$`, so no previously-matched heading is lost.
+
+    A section ends only at structure: the next H2/H3 heading, or a break line
+    (SECTION_BREAK_RE — three or more hyphens, the separator that opens a body's
+    footer). A run of blank lines never ends a section. The extractor used to end at
+    the first two-blank-line run after the heading, and that search began at the
+    heading line's own newline, so one extra blank line after a heading returned ''
+    — the same value a genuinely empty section returns. Removing the whitespace
+    terminator removes that misread at its source: a doubled blank line anywhere in a
+    section reads exactly as a single one.
+
+    Returns None only when the heading is absent. A present heading always returns a
+    string, which is empty (or blank) when the next heading or break line follows it
+    directly, so present-and-empty stays distinguishable from absent. Leading blank
+    lines are kept, as they always were. This module is the single home of the
+    issue-body section extractor; native-dep-mirror.py loads it by path and binds it.
     """
     if not body:
         return None
@@ -175,24 +594,36 @@ def extract_section(body: str, heading: str) -> Optional[str]:
     if not m:
         return None
     start = m.end()
-    # End at next H2/H3 or two blank lines
+    # End at the next H2/H3 heading or a break line — never at blank lines.
     rest = body[start:]
     end_h = SECTION_HEADING_RE.search(rest)
     end_h2 = re.search(r"^##\s+", rest, re.MULTILINE)
-    end_blank = re.search(r"\n\s*\n\s*\n", rest)
-    candidates = [c.start() for c in [end_h, end_h2, end_blank] if c is not None]
+    end_break = SECTION_BREAK_RE.search(rest)
+    candidates = [c.start() for c in [end_h, end_h2, end_break] if c is not None]
     if candidates:
         return rest[: min(candidates)]
     return rest
 
 
-def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
-    """DS-2 (#291): return the first section matching any heading alias (first-match-wins)."""
+def extract_section_with_alias(body: str, aliases: List[str]) -> Optional[Tuple[str, str]]:
+    """Return (matched_alias, section) for the first heading alias present in the body.
+
+    DS-2 (#291) first-match-wins over the closed alias set. The matched alias is
+    returned because a directional heading (e.g. '### Depends on') confers direction
+    on an otherwise unlabelled dependency run — native-dep-mirror.py reads it, under
+    this same name, from here.
+    """
     for heading in aliases:
         section = extract_section(body, heading)
         if section is not None:
-            return section
+            return heading, section
     return None
+
+
+def extract_section_aliased(body: str, aliases: List[str]) -> Optional[str]:
+    """DS-2 (#291): return the first section matching any heading alias (first-match-wins)."""
+    found = extract_section_with_alias(body, aliases)
+    return None if found is None else found[1]
 
 
 def _extract_paths(text: str) -> List[str]:
@@ -266,7 +697,21 @@ def parse_affected_files(body: str) -> Tuple[List[FileRecord], str]:
 
 
 def parse_dependencies(body: str) -> Tuple[Set[int], str]:
-    """Extract Dependencies references. Returns (deps, parse_status).
+    """Directed blocked_by targets of the Dependencies section. Returns (deps, parse_status).
+
+      absent section   -> (set(), "clean")
+      deferral marker  -> (set(), "deferred")
+      otherwise        -> (the blocked_by targets, "clean")
+
+    A target is an issue the direction grammar (parse_body_dependencies, above) reads as
+    blocking this one, of any dependency type or lag: a #N in a Blocked by: / Depends on:
+    / Requires segment, in an unlabelled list of bare references, or anywhere beneath a
+    heading that is itself Depends on or Blocked by. Never a target: a reciprocal Blocks:
+    reference, a hierarchy or non-blocking relation (Part of epic, Children, Relates to,
+    a sibling, ...), a negated label ("not blocked by #N"), or a reference in unlabelled
+    prose — the last is reported by unattributed_refs instead of being dropped. This used
+    to scrape every #N in the section as an undirected dependency, which read reciprocal
+    and hierarchy references as blockers.
 
     DS-4 (#291): an ABSENT Dependencies section returns (set(), "clean") — deps are
     optional at intake (improvement.yml `required: false`) and absent entirely from
@@ -278,7 +723,7 @@ def parse_dependencies(body: str) -> Tuple[Set[int], str]:
         return set(), "clean"
     if DEFERRAL_MARKER in section:
         return set(), "deferred"
-    deps = {int(m.group(1)) for m in DEP_RE.finditer(section)}
+    deps = {d.target for d in parse_body_dependencies(body) if d.direction == "blocked_by"}
     return deps, "clean"
 
 
@@ -579,6 +1024,7 @@ def build_issue_record(raw: Dict) -> IssueRecord:
     labels = [lab["name"] for lab in raw.get("labels", [])]
     affected, aff_status = parse_affected_files(body)
     deps, dep_status = parse_dependencies(body)
+    unattributed = unattributed_refs(body)
     parse_status = (
         "failed" if "failed" in (aff_status, dep_status)
         else "deferred" if "deferred" in (aff_status, dep_status)
@@ -604,6 +1050,8 @@ def build_issue_record(raw: Dict) -> IssueRecord:
         ac_count=ac_count,
         doc_impact=doc_impact,
         doc_impact_detail=doc_impact_detail,
+        dependencies_unattributed=unattributed,
+        dependencies_unattributed_count=len(unattributed),
     )
 
 
@@ -846,6 +1294,34 @@ Stuff.
     ]:
         failures.append(f"FC-1d trailing-slash dir: got {s1d} / {[x.path for x in f1d]}")
 
+    # SX-1..SX-4 — the section extractor ends a section only at structure. A run of
+    # blank lines never ends it (the old two-blank terminator returned '' when a
+    # heading carried two blank lines, and cut a section at a doubled blank line).
+    # SX-1: one, two or three blank lines after the heading read the same section.
+    for _n in (1, 2, 3):
+        _sx = "### Dependencies\n" + "\n" * _n + "Blocked by: FS+0d #6396 — x.\n"
+        if parse_dependencies(_sx) != ({6396}, "clean"):
+            failures.append(f"SX-1 {_n} blank line(s) after the heading: got {parse_dependencies(_sx)}")
+    # SX-2: a doubled blank line INSIDE a section reads as a single one.
+    _sx2 = "### Affected Files\n- `core/a.md` (edit)\n\n\n- `core/b.md` (edit)\n"
+    _f_sx2, _s_sx2 = parse_affected_files(_sx2)
+    if _s_sx2 != "clean" or [x.path for x in _f_sx2] != ["core/a.md", "core/b.md"]:
+        failures.append(f"SX-2 doubled internal blank line: got {_s_sx2} / {[x.path for x in _f_sx2]}")
+    # SX-3: a break line ends the section, LF and CRLF alike — a footer after it is
+    # not read. Control: the same body with no break line reads the footer's refs.
+    _sx3 = "### Dependencies\n\nBlocked by: #5\n\n\n---\n<!-- footer -->\nBlocked by: #9\n"
+    for _tag, _b in (("LF", _sx3), ("CRLF", _sx3.replace("\n", "\r\n"))):
+        if parse_dependencies(_b) != ({5}, "clean"):
+            failures.append(f"SX-3 break line ends the section ({_tag}): got {parse_dependencies(_b)}")
+    if parse_dependencies(_sx3.replace("---\n", "")) != ({5, 9}, "clean"):
+        failures.append("SX-3 control: with no break line the footer's ref must be read")
+    # SX-4: present-and-empty stays distinct from absent.
+    _sx4 = extract_section("### Dependencies\n### Notes\nx\n", "Dependencies")
+    if _sx4 is None or _sx4.strip() != "":
+        failures.append(f"SX-4 empty section must read present-and-empty: got {_sx4!r}")
+    if extract_section("### Notes\nx\n", "Dependencies") is not None:
+        failures.append("SX-4 absent heading must read None")
+
     # FC-2: heading parenthetical suffix — extract_section must still match (DS-1).
     fc2 = "### Affected Files (directional — confirmed in Planning)\n- `core/foo.md` (edit)\n"
     f2, s2b = parse_affected_files(fc2)
@@ -900,6 +1376,58 @@ Stuff.
     _, s7n = parse_affected_files(fc7n)
     if s7n != "failed":
         failures.append(f"FC-7 component-name-no-path stays failed: got {s7n}")
+
+    # DG-1..DG-21 — parse_dependencies returns DIRECTED blocked_by targets only, read
+    # through the one direction grammar. Each row: (leg, Dependencies text, targets,
+    # unattributed refs). Every non-blocking row names an issue, so a scrape of every
+    # #N would return it — the row bites. DG-1 is the control.
+    _dg = [
+        ("DG-1 Blocked by: (control)", "Blocked by: #10", {10}, []),
+        ("DG-2 Blocks (reciprocal)", "Blocks #11", set(), []),
+        ("DG-3 Part of epic", "Part of epic #12", set(), []),
+        ("DG-4 Children", "Children: #13, #14", set(), []),
+        ("DG-5 Relates to", "Relates to #15", set(), []),
+        ("DG-6 unlabelled prose", "See the note in #16 for context.", set(), [16]),
+        ("DG-7 Hard: is prose", "Hard: #17 (DONE).", set(), [17]),
+        ("DG-8 Soft: is prose", "Soft: #18", set(), [18]),
+        ("DG-9 a #45-shaped body", "Hard: #341 (DONE). Parallelizes with #43. **Blocks #44**",
+         set(), [43, 341]),
+        ("DG-10 bare-reference list", "- #46\n- #57", {46, 57}, []),
+        ("DG-11 typed and lagged", "Blocked by: SS #20, FS+2d #21", {20, 21}, []),
+        ("DG-12 a Hard: bullet", "- Hard: #22", set(), [22]),
+        ("DG-13 negated label", "not blocked by: merge after #23", set(), []),
+        ("DG-14 gated on, not blocked by",
+         "Release gate (gated on, not blocked by): merge after #24. A merge-order gate.", set(), []),
+        ("DG-15 negation after a prose ref", "Gated on #25, not blocked by #26.", set(), [25]),
+        ("DG-16 negation at line start", "Not blocked by #27: the contract can come first.", set(), []),
+        ("DG-17 emphasised negation", "This is **not** blocked by #28.", set(), []),
+        ("DG-18 n't contraction", "It isn't blocked by #29.", set(), []),
+        ("DG-19 control: a negation that does not end the prefix", "Not urgent; blocked by #31.",
+         {31}, []),
+        ("DG-20 control: the next line's label is not negated",
+         "Not blocked by #32.\nBlocked by: #33", {33}, []),
+    ]
+    for _leg, _text, _want, _want_u in _dg:
+        _b = f"### Dependencies\n{_text}\n\n### Notes\nx\n"
+        if parse_dependencies(_b) != (_want, "clean"):
+            failures.append(f"{_leg}: parse_dependencies got {parse_dependencies(_b)}, want {(_want, 'clean')}")
+        if unattributed_refs(_b) != _want_u:
+            failures.append(f"{_leg}: unattributed_refs got {unattributed_refs(_b)}, want {_want_u}")
+    # DG-21 — a directional heading is itself the label: a Hard: line beneath it is a blocker.
+    _dg21 = "### Depends on\nHard: #19\n"
+    if parse_dependencies(_dg21) != ({19}, "clean") or unattributed_refs(_dg21) != []:
+        failures.append(f"DG-21 directional heading: got {parse_dependencies(_dg21)} / {unattributed_refs(_dg21)}")
+    # DG-22 — the record carries the unattributed refs (count and numbers) and the
+    # status stays clean: reporting them never makes a body fail.
+    _rec_u = build_issue_record({
+        "number": 6397, "title": "t", "state": "open", "labels": [],
+        "body": "### Affected Files\n- `core/foo.md` (edit — x)\n\n### Dependencies\n"
+                "Gated on the spike in #17.\nBlocked by: #10\n",
+    })
+    if (_rec_u.dependencies != [10] or _rec_u.dependencies_unattributed != [17]
+            or _rec_u.dependencies_unattributed_count != 1 or _rec_u.parse_status != "clean"):
+        failures.append(f"DG-22 record: deps={_rec_u.dependencies} unattributed={_rec_u.dependencies_unattributed} "
+                        f"count={_rec_u.dependencies_unattributed_count} status={_rec_u.parse_status}")
 
     # Test 4: severity tiers
     recs = [
