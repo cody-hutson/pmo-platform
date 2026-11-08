@@ -1,5 +1,5 @@
 ---
-title: "ADR-236 — Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket"
+title: "ADR-238 — Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket"
 status: Proposed — authored at Stage 6 Engineering for the release-usage-measured-right release; re-grounded while Proposed at the release's first calibration revisit, against its harness-and-meter probe results; ratification is the operator's at the Stage 13 close gate and is recorded in this field.
 date: 2026-11-05
 release: release-usage-measured-right
@@ -15,7 +15,7 @@ source_observations:
   - "Composition at the census mix (cache reads ≈35.7B of ≈36.4B raw tokens; inferred from the census figures): the bracketed cache-read term is at most ≈28% of W at the low end of the bracket and at least ≈50% at the high end. The rest of a low-end figure rides on the price-relative weights, chiefly the unfitted output weight."
 ---
 
-# ADR-236 — Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket
+# ADR-238 — Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket
 
 ## Status
 
@@ -26,6 +26,8 @@ source_observations:
 **Numbering provenance — `230 → 231`.** Held **ADR-230** branch-local; renumbered to **ADR-231** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 230. In-release citations that read "ADR-230" denote this record.
 
 **Numbering provenance — `231 → 236`.** Held **ADR-231** branch-local; renumbered to **ADR-236** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 231. In-release citations that read "ADR-231" denote this record.
+
+**Numbering provenance — `236 → 238`.** Held **ADR-236** branch-local; renumbered to **ADR-238** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 236. In-release citations that read "ADR-236" denote this record.
 
 ## Context
 

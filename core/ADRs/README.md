@@ -152,6 +152,7 @@ ADR-234 (`issue-body-reads-single-sourced-in-the-bundle-parser`) → **ADR-236**
 ADR-235 (`chain-head-set-derives-from-tracker-labels`) → **ADR-237** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 235; the record's Status section carries the provenance note.
 ADR-230 (`release-graph-cost-unit`) → **ADR-231** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 230; the record's Status section carries the provenance note.
 ADR-231 (`release-graph-cost-unit`) → **ADR-236** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 231; the record's Status section carries the provenance note.
+ADR-236 (`release-graph-cost-unit`) → **ADR-238** by `release/tools/renumber-adr.py` at merge time, because the mainline already claimed 236; the record's Status section carries the provenance note.
 
 ## Cross-numbering across the ADR migration + module-restructure ADR materialization
 
