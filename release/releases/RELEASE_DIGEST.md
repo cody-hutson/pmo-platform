@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v5.07 (2026-11-10) — The filesystem guard refuses paths it cannot know in advance
+
 ### v5.06 (2026-11-08) — Every initiative in one live view, and dependencies read the right way round
 
 ### v5.05 (2026-11-08) — Guards now give a command the same verdict however it is spelled
