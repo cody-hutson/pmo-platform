@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.07] - 2026-11-10
+
+The filesystem guard now refuses a file path that only a shell transformation would produce, instead of letting it through.
+
+[Full notes](release/releases/notes/v5.07_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.07)
+
 ## [v5.06] - 2026-11-08
 
 Every initiative and lone epic now shows in one live view, and dependencies declared in an issue are read in the direction they point instead of being guessed.
