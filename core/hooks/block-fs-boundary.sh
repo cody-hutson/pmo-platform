@@ -14,9 +14,10 @@
 #   File-write: cp, mv, tee, dd
 # Resolved-path prefix-match against `.claude/fs-boundary-allowlist.txt`.
 # Operand disposition: an ordered guard cascade over the operand's LITERAL spans
-# (see resolve_and_classify). Command substitution, backticks, the canonicalizer's
-# quoted-span sentinel, literal `..` traversal and normalizer failure are refused
-# under -003; a decidable literal prefix is classified under -001/-002; an operand
+# (see resolve_and_classify). Command substitution, backticks, the shape of a
+# parameter-transformation operator, the canonicalizer's quoted-span sentinel, literal
+# `..` traversal and normalizer failure are refused under -003; a decidable literal
+# prefix is classified under -001/-002; an operand
 # with no decidable prefix is admitted with a -004 advisory record, written on every
 # invocation that reaches check_verb (warn and enforce; at .mode=off this hook exits
 # above that point, so the operand is still admitted but nothing is recorded).
@@ -386,13 +387,54 @@ render_token() {
   "$PRINTF" '%s' "${t//$CMDPOS_SENTINEL/<quoted-expansion>}"
 }
 
+# _span_closed_inside_subscript(inner) — the span split's subscript check
+#   <inner> is the text _split_expansions takes for one unquoted ${...} span: from its `{`
+#   up to the first `}` after it. Returns 0 when that text holds both a `[` and a nested
+#   `${`, and 1 otherwise.
+#
+#   WHY THE SPLIT REFUSES IT. The split closes a span at its first `}`; the shell closes it
+#   at the brace that matches its own opener. Inside a subscript the shell reads on across
+#   whitespace, `;`, `&`, `|` and line breaks, which end a word or a segment for the token
+#   walk. When a subscript holds a braced expansion, the first `}` is that expansion's, so
+#   the split ends the span inside the subscript while the shell is still in it, and the
+#   rest of the shell's word (the subscript's tail, any operator, the closing brace) lies
+#   in text the split never joins to the span: later in this word, in a later word, or in
+#   a word the walk never hands over. G2's third limb cannot see such an operand, because
+#   it needs the `${` and the operator's shape in one walk word. Nothing in the span decides
+#   the operand's path, so the split fails and the caller refuses under -003, as for an
+#   unterminated brace. The suite's XFORM-FRAG arms pin each break.
+#
+#   TWO MARKS, NOT A BRACKET COUNT. Whether the subscript is still open where the span ends
+#   is a matter of counting brackets, which takes a loop. Every span this split closes
+#   inside a subscript carries two marks instead: the subscript's `[`, and the nested `${`
+#   whose brace closed it. Testing the marks refuses more than that class, by decision: a
+#   subscript holding a braced expansion when nothing breaks it, and a word that holds a
+#   bracket and a nested braced expansion. The XFORM-OVER arms hold that width; the
+#   XFORM-NEAR arms hold the forms it must not reach (a subscript holding an unbraced
+#   expansion, a nested default with no bracket).
+#
+#   LINEAR BY CONSTRUCTION. Two globs, each with one leading and one trailing star, over
+#   text the split has already taken. The spans the split takes do not overlap, so the check
+#   adds at most one pass over the token. No loop, no fork, no pipe, no pattern removal;
+#   XFORM-COST-02 holds this shape.
+_span_closed_inside_subscript() {
+  case "$1" in *\[*) ;; *) return 1;; esac
+  case "$1" in *\$\{*) return 0;; esac
+  return 1
+}
+
 # _split_expansions(token)
 #   Split an expansion-bearing token into its SKELETON (each expansion span replaced by
 #   $EXPANSION_SENTINEL) and its literal PREFIX (the text before the FIRST expansion).
 #   Recognized expansion spans: $NAME, an UNQUOTED ${...}, and the $1/$@/$#/$*/$?/$$/$!
 #   positional-and-special class. A `$` that introduces none of these is NOT guessed at —
 #   the function fails and the caller refuses. Conservative by construction.
-#   Sets: _SK, _PFX. Returns 0 on a clean split, 1 when a `$` is unrecognizable.
+#   A ${...} followed later by the transformation operator's shape never reaches this
+#   function: resolve_and_classify refuses it at G2 (see _carries_transform_op).
+#   A ${...} span this function would close inside a subscript fails it, as an
+#   unterminated one does (see _span_closed_inside_subscript).
+#   Sets: _SK, _PFX. Returns 0 on a clean split; 1 when a `$` is unrecognizable, a ${
+#   is unterminated, or a ${...} span would close inside a subscript.
 _split_expansions() {
   local rest="$1"
   local sk="" pfx="" seen_exp=0 head_ after consumed inner name i c
@@ -412,10 +454,16 @@ _split_expansions() {
     consumed=""
     case "$after" in
       \{*)
-        # Unquoted ${...}. A QUOTED one never reaches here — it carries the sentinel
-        # and was already refused by G1.
+        # A ${...} carrying no sentinel. A QUOTED one normally carries the sentinel and
+        # was refused by G1 — but not when the canonicalizer handed the command back
+        # unchanged (unbalanced quotes; an apostrophe in a here-document body is enough).
+        # Step 1 then stripped the quotes, and the quoted spelling arrives here as the
+        # unquoted one. The suite's XFORM-SUBJ-03 arm builds that path.
         case "$after" in
-          *\}*) inner="${after%%\}*}"; consumed="\$${inner}}";;
+          *\}*) inner="${after%%\}*}"; consumed="\$${inner}}"
+                # A span this split would close inside a subscript is refused like an
+                # unterminated one (see _span_closed_inside_subscript).
+                if _span_closed_inside_subscript "$inner"; then return 1; fi;;
           *)    return 1;;
         esac
         ;;
@@ -444,6 +492,46 @@ _split_expansions() {
   done
   _SK="$sk"; _PFX="$pfx"
   return 0
+}
+
+# _carries_transform_op(token) — G2, third limb
+#   Returns 0 when the token carries a `${` and, anywhere in it, `@` followed by exactly one
+#   character that is neither `]` nor `}` and then a closing brace: the shape every use of the
+#   parameter-transformation operator ${parameter@operator} has. Returns 1 otherwise.
+#
+#   WHY G2 REFUSES IT. The cascade classifies an expansion as one unknown segment of a
+#   variable's VALUE. An operator yields not the value but text the shell derives from it,
+#   and which letter derives what is a property of the shell's version: `P` re-expands the
+#   value as a prompt string, command substitutions included. The path is whatever an
+#   evaluation produces, as for $( and a backtick, so it is refused with them. That is what
+#   this guard can decide. It is not a control on execution, which the script-execution
+#   allowlist governs.
+#
+#   A SHAPE, NOT A GRAMMAR. No operator list: a list fails open on the next letter a shell
+#   adds (XFORM-OP-Z). No parameter parsing: a reader that delimits the parameter as the
+#   shell does would exempt a default word or pattern ending the same way (${LOG:-a@b}),
+#   but its per-character walk was measured to cost time quadratic in the operand, past the
+#   hook's timeout on a 40 KB operand, and an earlier text of it admitted a valid use of the
+#   operator through a wrong exemption. The price of the shape is that over-refusal and the
+#   order-blindness below; the XFORM-OVER arms hold both as a decision, and the XFORM-NEAR
+#   arms hold the forms it must not reach (${arr[@]}, ${@:2}, ${!prefix@}).
+#
+#   LINEAR BY CONSTRUCTION. Two globs, each with one leading and one trailing star, so each
+#   is one pass. They do not ask that the `${` come first: the single glob that does (a
+#   `${`, a star, then the shape) backtracks over every `${` and costs time quadratic in the
+#   operand. No loop, no fork, no pipe, no pattern removal; XFORM-COST-01 holds this shape.
+#
+#   Like G2's other limbs it reads the token as text: `\${...}` is refused as `\$(` is. It
+#   only refuses; a token it returns 1 for continues down the cascade unchanged. It does not
+#   see a value the shell re-evaluates (an arithmetic offset or index, an indirection); the
+#   readiness fragment declares that limit and the XFORM-RESID arms pin it. It reads one
+#   word as the token walk hands it over: an operator use the walk splits inside a
+#   subscript is refused by the span split instead (see _span_closed_inside_subscript).
+_carries_transform_op() {
+  case "$1" in *\$\{*) ;; *) return 1;; esac
+  # shellcheck disable=SC1083  # the brace inside the bracket expression is a member, not a brace
+  case "$1" in *@[!]}]\}*) return 0;; esac
+  return 1
 }
 
 # _classify_literal(token)
@@ -517,12 +605,13 @@ _classify_literal() {
 #   apart. It collapsed three distinct epistemic states — decidably-inside,
 #   decidably-outside, and genuinely undecidable — into one refusal.
 #
-#   Ordered guard cascade (refuse-before-decide: G0/G1/G2 precede any span analysis, so
-#   an ambiguous or executable construct can never reach the code that could admit it):
+#   Ordered guard cascade (refuse-before-decide: G0/G1/G2 precede the span split and every
+#   branch that can admit, so an ambiguous or executable construct never reaches them):
 #
 #     G0  token is exactly $XARGS-STDIN (canonicalizer's stdin sentinel)  -> REFUSE  -003
 #     G1  token carries the \001 quoted-span sentinel (ambiguous)         -> REFUSE  -003
-#     G2  token contains $( or a backtick (execution surface)             -> REFUSE  -003
+#     G2  token contains $( or a backtick, or carries a ${ and the shape @X}
+#         of a parameter-transformation operator (see _carries_transform_op) -> REFUSE  -003
 #     G3  a literal span holds `..`; or cwd absent for a relative token;
 #         or python3 unresolvable / realpath fails                        -> REFUSE  -003
 #     G5  decidable literal prefix resolves OUTSIDE all allowed roots     -> REFUSE  -001/-002
@@ -563,12 +652,16 @@ resolve_and_classify() {
     *"$CMDPOS_SENTINEL"*) return 2;;
   esac
 
-  # --- G2: unquoted execution surface. ---
+  # --- G2: a construct whose path only an evaluation produces. Three limbs: $( , a
+  # backtick, and the shape of a parameter-transformation operator. The third is a test
+  # over the token's text, so it also holds for a quoted spelling that reached this point
+  # because the canonicalizer's quote mask was unavailable (see _split_expansions). ---
   # shellcheck disable=SC2016  # literal char matches in case glob; not expansions
   case "$token" in
     *\$\(*) return 2;;
     *\`*)   return 2;;
   esac
+  if _carries_transform_op "$token"; then return 2; fi
 
   # --- No expansion at all: the pre-existing literal path, behaviour unchanged. ---
   case "$token" in
@@ -661,8 +754,9 @@ extract_target_tokens() {
 
 # advise_unresolvable(verb, token) — BLOCK-FS-BOUNDARY-004 (#5555)
 #   The genuinely-undecidable class: an operand whose first character is a parameter
-#   expansion, carrying no $(, no backtick, no \001 sentinel, and no `..` in any literal
-#   span. It is ADMITTED, and the admission is recorded whenever this function is reached.
+#   expansion, carrying no $(, no backtick, no parameter-transformation operator's shape,
+#   no \001 sentinel, and no `..` in any literal span. It is ADMITTED, and the admission is
+#   recorded whenever this function is reached.
 #
 #   THE DISPOSITION IS MODE-INDEPENDENT; THE RECORD IS NOT. This function never reads
 #   $MODE and never blocks at any .mode value, so the false-positive fix ships without
@@ -732,7 +826,7 @@ check_verb() {
         ;;
       2)
         block_or_warn "$strict_rule" \
-          "${verb} target unresolvable under strict policy (variable/subshell/backtick/traversal token, or path-normalizer unavailable): $(render_token "$token")" \
+          "${verb} target unresolvable under strict policy (variable/subshell/backtick/parameter-transformation/traversal token, or path-normalizer unavailable): $(render_token "$token")" \
           "use explicit absolute paths without .. traversal instead of variables/subshells, ensure python3 is installed, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional" || true
         ;;
       3)

@@ -8,6 +8,9 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v5.06 (2026-11-08) — Every initiative in one live view, and dependencies read the right way round
+
+### v5.05 (2026-11-08) — Guards now give a command the same verdict however it is spelled
 ### v5.04 (2026-11-08) — Grouping backlog items into epics now has a decided home and one way in
 
 ### stage-document-model-decision (2026-11-07, version-less) — One ratified design now says what every delivery stage writes
