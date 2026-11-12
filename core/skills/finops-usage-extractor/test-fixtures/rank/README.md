@@ -24,6 +24,9 @@ per line. The ranker never reads that field.
 | `sessions/proj-rank-d/…00d4/subagents/workflows/agent-…d4e5.jsonl.fixture` (E) | A workflow agent under D. `echo ${#…}; git log`, a `for` loop and the commit-message idiom again, so all three rank | stage (workflow role), comment, canonicalizer, substitution |
 | `bound/proj-rank-bound/…00f6.jsonl.fixture` | One segment: a call whose 3,000-character result is re-read by responses whose measured context is 11 tokens | bound (the cost status degrades and the segment is clamped); staged on its own |
 
+The five session files also feed the memory arm: the ranker reads them one at a time, and at most one
+file's records may be alive at once.
+
 ## What ranks
 
 Eight procedures appear in at least two sessions: the control `cd && gh issue view | head` (A, B,

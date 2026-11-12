@@ -21,12 +21,19 @@
 # HOW A COMMAND IS READ. (1) A pre-mask replaces heredoc bodies, $( … ), backticks and
 # ${ … } with inert sentinels, strips comments line by line (a # opens a comment only
 # at a word start, outside quotes, as the shell reads it) and joins continuations.
-# (2) Every command of the run passes once through core/hooks/lib/command-position.awk,
-# the governed command-start canonicalizer, in ONE awk process: it inserts "; " before
-# each genuine command start (after a keyword, a wrapper, an assignment), so a command
-# position resets only after an operator. Its two artifacts — \001 inside quotes and an
-# appended $XARGS-STDIN — classify as <ARG> and <VAR>. (3) shlex tokenizes; each token
-# renders by class, first match wins.
+# (2) Every command passes once through core/hooks/lib/command-position.awk, the
+# governed command-start canonicalizer, in ONE awk process per transcript file: it inserts
+# "; " before each genuine command start (after a keyword, a wrapper, an assignment), so
+# a command position resets only after an operator. Its two artifacts — \001 inside
+# quotes and an appended $XARGS-STDIN — classify as <ARG> and <VAR>. (3) shlex tokenizes;
+# each token renders by class, first match wins.
+#
+# MEMORY FOLLOWS ONE FILE, NOT THE WINDOW. A first pass reads each file only up to its
+# first timestamped record, to fix the order. Then one file at a time is parsed, costed,
+# keyed and folded into the procedure accumulators, and its records are released before
+# the next file is read. Across files only the copied-id set, the procedure accumulators
+# and the session metadata survive. The self-test's memory arm measures it: every file's
+# record list is weakly referenced, and at most one may be alive at once.
 #
 # THE RANKING UNIT is the procedure: each segment's command and subcommand words joined
 # by their operators; its exact masked forms are listed under it as variants. A
@@ -204,7 +211,7 @@ run_main() {
   RANK_CANON_AWK="$CHECKOUT/core/hooks/lib/command-position.awk" RANK_AWK_BIN="$RANK_AWK" \
   RANK_WORK="$work" RANK_FIXTURES="$FIXTURES_DIR/sessions" \
   python3 -I - > "$work/core.json" <<'PYEOF'
-import bisect, datetime, hashlib, json, os, re, shlex, stat, subprocess, sys
+import bisect, datetime, hashlib, json, os, re, shlex, stat, subprocess, sys, weakref
 from fractions import Fraction as F
 
 E = os.environ
@@ -352,8 +359,9 @@ class Tracer:
 
 
 class Canon:
-    """ONE awk process for every command: command-position.awk plus a record driver that
-    calls its own scan / locate / emit per record and resets its state between records."""
+    """ONE awk process per batch — a transcript file's commands: command-position.awk plus a
+    record driver that calls its own scan / locate / emit per record and resets its state
+    between records, so a batch's composition never changes a record's output."""
     DRIVER = ('BEGIN { RS = "\\036" }\n'
               '{\n  if (NR > 1) buf = substr(buf, 2)\n'
               '  if (!scan()) r = buf\n  else { locate(); r = emit() }\n'
@@ -833,8 +841,31 @@ def walk(root, suffix, days):
     return found
 
 
+class Recs(list):
+    """One transcript file's parsed records. A list that can be weakly referenced, so
+    analyze() can count how many files' records are alive at once (the memory arm)."""
+
+
+def first_timestamp(fp):
+    # The order key only: the first parsed record carrying a string timestamp, read no
+    # further. The same predicate the whole-file parse used; bad lines are counted once,
+    # by read_file.
+    with open(fp, "rb") as fh:
+        for raw in fh:
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+            except ValueError:
+                continue
+            if isinstance(obj, dict) and isinstance(obj.get("timestamp"), str):
+                return obj["timestamp"]
+    return None
+
+
 def read_file(fp, root, cov):
-    recs = []
+    recs = Recs()
     with open(fp, "rb") as fh:
         for raw in fh:
             raw = raw.strip()
@@ -849,8 +880,7 @@ def read_file(fp, root, cov):
                 recs.append(obj)
     rel = os.path.relpath(fp, root)
     stem = os.path.basename(fp).split(".jsonl")[0]
-    first_ts = next((r.get("timestamp") for r in recs if isinstance(r.get("timestamp"), str)), None)
-    return {"fp": fp, "rel": rel, "stem": stem, "recs": recs, "first": ts_key(first_ts)}
+    return {"fp": fp, "rel": rel, "stem": stem, "recs": recs}
 
 
 def classify_session(f):
@@ -909,10 +939,16 @@ def analyze(files, root, tr, want_selftest):
     bounds = {"segments_checked": 0, "segments_over": 0, "responses_over": 0, "segments_clamped": 0}
     stage_basis, per_file, sessions_meta = {}, {}, {}
     seen_ids, procs, window_total = set(), {}, zero()
-    loaded = [read_file(fp, root, cov) for fp in files]
-    loaded.sort(key=lambda f: (f["first"], f["rel"]))
-    occs_all, bash_texts = [], []
-    for f in loaded:
+    # One file at a time (F-01). The order is fixed first from each file's first timestamp;
+    # then one() parses, costs, keys and folds a file, and its records die when it returns.
+    # `live` weakly references every file's record list, so the most alive at once is measured.
+    live, live_max = weakref.WeakSet(), [0]
+    by_first = sorted((ts_key(first_timestamp(fp)), os.path.relpath(fp, root), fp) for fp in files)
+
+    def one(fp):
+        f = read_file(fp, root, cov)
+        live.add(f["recs"])
+        live_max[0] = max(live_max[0], len(live))
         cov["files"] += 1
         role, stage, basis = classify_session(f)
         stage_basis[basis] = stage_basis.get(basis, 0) + 1
@@ -972,7 +1008,7 @@ def analyze(files, root, tr, want_selftest):
         for g in resp:
             for k2, k1 in (("input", "input"), ("output", "output"), ("cc", "cc"), ("h", "h"), ("m", "m"), ("cr", "cr")):
                 window_total[k2] += g["usage"][k1]
-        occs, members = [], {}
+        occs, members, bash_texts = [], {}, []
         for ri, g in enumerate(resp):
             members.setdefault(g["seg"], []).append(ri)
         for ri, g in enumerate(resp):
@@ -989,7 +1025,8 @@ def analyze(files, root, tr, want_selftest):
                 res = results.get(bid)
                 res_line = res[0] if res else g["first"]
                 t_r = F(res[1]) / CHARS_PER_TOKEN if res else F(0)
-                occ = {"file": f, "role": role, "stage": stage, "seg": g["seg"], "name": name, "inp": inp,
+                # An occurrence keeps the file's stem, role and stage, never the file or the input.
+                occ = {"stem": f["stem"], "role": role, "stage": stage, "seg": g["seg"], "name": name,
                        "t_c": t_c, "w": t_c + t_r, "kstar": None, "R": 0, "reread": F(0)}
                 for kj in range(ri + 1, len(resp)):
                     if resp[kj]["first"] > res_line and resp[kj]["seg"] == g["seg"]:
@@ -1049,50 +1086,53 @@ def analyze(files, root, tr, want_selftest):
                 bounds["segments_over"] += 1
             for o in so:
                 o["reread"] = o["reread"] * factor
-        occs_all.extend(occs)
-    # one canonicalizer pass over every Bash command of this analysis
-    canon = CANON.batch([o["pre"] for o in bash_texts])
-    if want_selftest:
-        # Compared as a command substitution captures each, trailing newlines dropped: a record
-        # keeps the newline that ends its last line, while a whole-input run ends that line.
-        CANON_EQ.append(all(CANON.single(o["pre"]).rstrip("\n") == c.rstrip("\n")
-                            for o, c in zip(bash_texts, canon)))
-    for o, c in zip(bash_texts, canon):
-        tr.pending = o["trace"]
-        variant, key, contribs = render_command(c, tr, cov)
-        o["trace"] = tr.pending
-        tr.pending = []
-        o["kind"], o["key"], o["variant"], o["contribs"] = "bash", key, variant, contribs
-    for o in occs_all:
-        if "key" not in o:
-            continue
-        tr.pending = o["trace"]
-        tr.commit(o["key"])
-        if o["key"] in ("", "<UNPARSED>"):
-            if o["key"] == "":
-                cov["empty_keys"] += 1
-            continue
-        p = procs.setdefault(o["key"], {"key": o["key"], "kind": o["kind"], "contribs": o["contribs"],
-                                        "variants": {}, "occurrences": 0, "sessions": {}, "tok": zero()})
-        p["occurrences"] += 1
-        p["variants"][o["variant"]] = p["variants"].get(o["variant"], 0) + 1
-        p["sessions"][o["file"]["stem"]] = (o["role"], o["stage"])
-        t = p["tok"]
-        t["output"] += o["t_c"]
-        if o["kstar"] is not None:
-            u = o["kstar_usage"]
-            w = o["w"]
-            if u["h"] + u["m"] > 0:
-                t["cc"] += w
-                t["h"] += w * u["h"] / (u["h"] + u["m"])
-                t["m"] += w * u["m"] / (u["h"] + u["m"])
-            elif u["cc"] > 0:
-                t["cc"] += w
-            else:
-                t["input"] += w
-            t["cr"] += o["reread"]
+        # this file's Bash commands through the canonicalizer, as one batch
+        canon = CANON.batch([o["pre"] for o in bash_texts])
+        if want_selftest and bash_texts:
+            # Compared as a command substitution captures each, trailing newlines dropped: a record
+            # keeps the newline that ends its last line, while a whole-input run ends that line.
+            CANON_EQ.append(all(CANON.single(o["pre"]).rstrip("\n") == c.rstrip("\n")
+                                for o, c in zip(bash_texts, canon)))
+        for o, c in zip(bash_texts, canon):
+            tr.pending = o["trace"]
+            variant, key, contribs = render_command(c, tr, cov)
+            o["trace"] = tr.pending
+            tr.pending = []
+            o["kind"], o["key"], o["variant"], o["contribs"] = "bash", key, variant, contribs
+        # fold this file's occurrences into the procedure accumulators
+        for o in occs:
+            if "key" not in o:
+                continue
+            tr.pending = o["trace"]
+            tr.commit(o["key"])
+            if o["key"] in ("", "<UNPARSED>"):
+                if o["key"] == "":
+                    cov["empty_keys"] += 1
+                continue
+            p = procs.setdefault(o["key"], {"key": o["key"], "kind": o["kind"], "contribs": o["contribs"],
+                                            "variants": {}, "occurrences": 0, "sessions": {}, "tok": zero()})
+            p["occurrences"] += 1
+            p["variants"][o["variant"]] = p["variants"].get(o["variant"], 0) + 1
+            p["sessions"][o["stem"]] = (o["role"], o["stage"])
+            t = p["tok"]
+            t["output"] += o["t_c"]
+            if o["kstar"] is not None:
+                u = o["kstar_usage"]
+                w = o["w"]
+                if u["h"] + u["m"] > 0:
+                    t["cc"] += w
+                    t["h"] += w * u["h"] / (u["h"] + u["m"])
+                    t["m"] += w * u["m"] / (u["h"] + u["m"])
+                elif u["cc"] > 0:
+                    t["cc"] += w
+                else:
+                    t["input"] += w
+                t["cr"] += o["reread"]
+
+    for _first, _rel, fp in by_first:
+        one(fp)
     return {"cov": cov, "bounds": bounds, "stage_basis": stage_basis, "per_file": per_file,
-            "sessions": sessions_meta, "procs": procs, "window_total": window_total}
+            "sessions": sessions_meta, "procs": procs, "window_total": window_total, "live_max": live_max[0]}
 
 
 def tokens_obj(t):
@@ -1280,7 +1320,7 @@ coverage["residuals"] = ["a tool_use id whose first copy predates the window cou
 if SELFTEST:
     coverage["per_file"] = res["per_file"]
     coverage["selftest"] = {"trace": TR.out(), "canon_equal": bool(CANON_EQ) and all(CANON_EQ),
-                            "sessions": res["sessions"],
+                            "sessions": res["sessions"], "live_record_files_max": res["live_max"],
                             "vocabulary": {"words": sorted(COMMANDS | KEYWORDS | set().union(*SUBCOMMANDS.values())),
                                            "flags": sorted(set().union(*FLAGS.values()))}}
 window_wp = {e: pairs[0][e] for e in ENDS} if pairs is not None else "unresolved"
@@ -1599,7 +1639,8 @@ EOF
   after="$(python3 -I -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$SUM")"
   if [ "$(cat "$T/again.rc")" = "0" ] && [ "${#runs[@]}" = "2" ] && [ "$before" = "$after" ]; then ok "collision arm (a second folder; the first SUMMARY.md unchanged)"
   else bad "collision arm: ${#runs[@]} folders, rc $(cat "$T/again.rc")"; fi
-  # 20 — canonicalizer arm (CD-4): one awk process equals one per command; a loop keys on its body.
+  # 20 — canonicalizer arm (CD-4): a batch (one awk process per file) equals one process per command;
+  #      a loop keys on its body.
   if [ "$(jq '.coverage.selftest.canon_equal' "$CAND")" = "true" ] && [ "$(q 'for ; wc' "$pick | .[0].sessions")" = "2" ]; then
     ok "canonicalizer arm (batch output equals per-command output; the loop keys on its command)"
   else bad "canonicalizer arm: canon_equal $(jq '.coverage.selftest.canon_equal' "$CAND"), for-loop sessions $(q 'for ; wc' "$pick | .[0].sessions")"; fi
@@ -1634,6 +1675,14 @@ EOF
   if [ "$rc" = "0" ] && [ -s "${fr[0]}/SUMMARY.md" ] && [ "$(grep -c -F '<OPERATOR_INSTANCE_ANALYSIS_PATH>/command-template-ranking-' "$T/root.stdout")" = "1" ]; then
     ok "root arm (the toml root, env unset: the report lands under its analysis home; the line is in token form)"
   else bad "root arm: rc $rc"; sed -n '1,5p' "$T/root.stderr"; fi
+
+  # 24 — memory arm (F-01): the ranker holds one transcript file's records at a time. Every file's
+  #      record list is weakly referenced as it is read, and the most alive at once, over the five
+  #      fixture files of the window, must be exactly 1. CI probe P5 keeps each file alive and
+  #      turns this arm red.
+  if [ "$(jq -c '[.run.files, .coverage.selftest.live_record_files_max]' "$CAND")" = '[5,1]' ]; then
+    ok "memory arm (5 files read; at most 1 file's records alive at once)"
+  else bad "memory arm: [files, most alive at once] = $(jq -c '[.run.files, .coverage.selftest.live_record_files_max]' "$CAND"), want [5,1]"; fi
 
   if [ "$fail" -eq 0 ]; then echo "rank-command-templates --self-test: PASS"; return 0; fi
   echo "rank-command-templates --self-test: FAIL"

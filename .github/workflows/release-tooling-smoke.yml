@@ -1862,6 +1862,7 @@ jobs:
         #       refuses first; the self-test's near-miss arms are the same control at arm level)
         #   P3  the re-read term counts one response too many                         -> cost arm
         #   P4  a word is added to the privacy-relevant vocabulary without a repin    -> vocabulary arm
+        #   P5  each occurrence keeps its file's records alive past the file          -> memory arm
         # The unmutated self-test ran in the loop step above, so each probe's green twin is that step.
         # The copy sits outside the checkout, so the ranker reads its checkout through PMO_SRC_ROOT.
         run: |
@@ -1882,6 +1883,8 @@ jobs:
                "reread = w * (R + 1)  # CD-2 re-read term", "FAIL: cost arm"),
               ("P4 vocabulary", "cd echo printf export source . set unset test",
                "cd echo printf export source . set unset test fixtureprobeword", "FAIL: vocabulary arm"),
+              ("P5 one file at a time", '            p["occurrences"] += 1\n',
+               '            p["occurrences"] += 1; p.setdefault("keep", []).append(f)  # PROBE\n', "FAIL: memory arm"),
           ]
           failed = 0
           for label, old, new, marker in PROBES:
