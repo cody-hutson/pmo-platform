@@ -365,8 +365,9 @@ def trend_verdict($rows; $grade; $dim_label):
 | ([$all[] | select(.record == "meta")] | first // {}) as $meta
 # The BINDING roll-up gate: the canonical "a roll-up has run" predicate is the
 # presence of the run-level `coverage` record. NEVER meta.schema_version — from
-# v1.2.0 both phases emit the same version, and rollup-attribution.sh rewrites it
-# unconditionally, so the version string cannot answer this question.
+# v1.2.0 both phases emit the same version, and rollup-attribution.sh preserves the
+# version extraction wrote (it never re-stamps it), so a store carries the same version
+# whether or not a roll-up has run and the version string cannot answer this question.
 | ($all | any(.record == "coverage")) as $rolled_up
 # A session whose started_utc is not a well-formed UTC instant cannot be compared
 # against the window bounds, so it is SILENTLY dropped from EVERY window and the

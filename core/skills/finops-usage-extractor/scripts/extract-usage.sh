@@ -453,10 +453,13 @@ write_store() {
 
 # A store of another counting unit is never rebuilt over: a 1.x store counted per
 # transcript line (inflated), and a session whose transcript is gone exists nowhere
-# else. Keep it ONCE, as a store, at prior/schema-<old>/usage.jsonl — a hard link (no
-# copy, no moment without a store; cp is the fallback), so the existing tools read it
-# with STORE=<store>/prior/schema-<old>. A store of the current unit (same major) is
-# rebuilt over as before. Fails closed: exit 3, the store and its directory unchanged.
+# else. Keep it at every crossing, as a store, at prior/schema-<old>/usage.jsonl — a hard
+# link (no copy, no moment without a store; cp is the fallback), so the existing tools read
+# it with STORE=<store>/prior/schema-<old>. A kept store is never overwritten: while that
+# path holds one an earlier crossing from the same version kept, this crossing's goes to
+# prior/schema-<old>-<UTC stamp>/usage.jsonl, and only an existing stamped path refuses
+# (exit 3). A store of the current unit (same major) is rebuilt over as before. Fails
+# closed: exit 3, the store and its directory unchanged.
 preserve_prior_unit_store() {
   local store_dir="$1" f="$1/usage.jsonl" old rel dest dest_dir made_prior=0 made_dir=0
   [ -f "$f" ] || return 0
@@ -1079,12 +1082,13 @@ DSSTUBEOF
 
   # 11) COUNTING-UNIT BOUNDARY (schema v2.0.0). A store of another counting unit (another
   #     schema MAJOR) is never rebuilt over and never upserted into: --rebuild first keeps
-  #     it once, as a store, at prior/schema-<old>/usage.jsonl, and --incremental falls
-  #     back to --rebuild. A store of the current unit (same major — an additive minor)
+  #     it, as a store, at prior/schema-<old>/usage.jsonl (a second crossing from the same
+  #     version: the stamped prior/schema-<old>-<UTC stamp>/usage.jsonl, 11e), and
+  #     --incremental falls back to --rebuild. A store of the current unit (same major — an additive minor)
   #     is neither kept nor falls back. Every store here is a throwaway mktemp dir built
   #     from the synthetic fixtures. INVARIANT: every failure message below contains the
   #     literal "counting-unit boundary".
-  local cu_store cu_ref cu_bin cu_err cu_rc cu_n cu_fc cu_nm cu_other
+  local cu_store cu_ref cu_bin cu_err cu_rc cu_n cu_fc cu_nm cu_other cu_two cu_stamped
   cu_store="$(mktemp -d "${TMPDIR:-/tmp}/finops-custore.XXXXXX")"
   cu_ref="$(mktemp -d "${TMPDIR:-/tmp}/finops-curef.XXXXXX")"
   cu_bin="$(mktemp -d "${TMPDIR:-/tmp}/finops-cubin.XXXXXX")"
@@ -1168,6 +1172,46 @@ DSSTUBEOF
     || { echo "FAIL: counting-unit boundary — a schema-3.0.0-selftest store was not kept at prior/schema-3.0.0-selftest/usage.jsonl"; fail=1; }
   if grep -q 'per transcript line' "$cu_err"; then
     echo "FAIL: counting-unit boundary — a store that is not 1.x was described as counted per transcript line"; fail=1
+  fi
+
+  # (11e) A SECOND crossing from the same version. While prior/schema-1.2.0/ holds the
+  #       store an earlier crossing kept, the next crossing keeps its store at the stamped
+  #       prior/schema-1.2.0-<UTC stamp>/usage.jsonl and never overwrites the first. The two
+  #       pre-crossing stores differ in content, so cmp can tell a kept copy from an
+  #       overwritten one. Controls: after the first crossing the count instrument reads 1
+  #       and the stamped glob 0; the unstamped directory name fails the stamped form. The
+  #       store sits inside cu_ref, so cu_ref's own cleanup below removes it.
+  cu_two="$cu_ref/two"
+  mkdir -p "$cu_two"
+  do_rebuild "$cu_two" "$src" 2>/dev/null
+  jq -c 'if .record=="meta" then .schema_version="1.2.0" else . end' "$cu_two/usage.jsonl" > "$cu_ref/first.jsonl" 2>/dev/null
+  jq -c 'if .record=="meta" then .schema_version="1.2.0" | .selftest_crossing=2 else . end' "$cu_two/usage.jsonl" > "$cu_ref/second.jsonl" 2>/dev/null
+  if cmp -s "$cu_ref/first.jsonl" "$cu_ref/second.jsonl"; then
+    echo "FAIL: counting-unit boundary — second-crossing arm is vacuous: its two schema-1.2.0 stores are identical"; fail=1
+  fi
+  cp -f "$cu_ref/first.jsonl" "$cu_two/usage.jsonl"
+  do_rebuild "$cu_two" "$src" 2>/dev/null
+  cu_n="$(find "$cu_two/prior" -type f -name usage.jsonl 2>/dev/null | wc -l | tr -d ' ')"
+  cu_stamped="$(find "$cu_two/prior" -type f -path '*/prior/schema-1.2.0-*/usage.jsonl' 2>/dev/null)"
+  [ "${cu_n:-0}" -eq 1 ] && [ -z "$cu_stamped" ] \
+    || { echo "FAIL: counting-unit boundary — the first crossing did not keep exactly one unstamped store (count ${cu_n:-0}, stamped '${cu_stamped}')"; fail=1; }
+  if printf '%s\n' "schema-1.2.0" | grep -Eq '^schema-1[.]2[.]0-[0-9]{8}T[0-9]{6}Z$'; then
+    echo "FAIL: counting-unit boundary — the stamped-name check matches the unstamped name, so it tests nothing"; fail=1
+  fi
+  cp -f "$cu_ref/second.jsonl" "$cu_two/usage.jsonl"
+  do_rebuild "$cu_two" "$src" 2>"$cu_err"; cu_rc=$?
+  [ "$cu_rc" -eq 0 ] \
+    || { echo "FAIL: counting-unit boundary — a second crossing from schema 1.2.0 exited $cu_rc, want 0"; fail=1; }
+  cmp -s "$cu_two/prior/schema-1.2.0/usage.jsonl" "$cu_ref/first.jsonl" \
+    || { echo "FAIL: counting-unit boundary — a second crossing changed the store the first one kept at prior/schema-1.2.0/usage.jsonl"; fail=1; }
+  cu_stamped="$(find "$cu_two/prior" -type f -path '*/prior/schema-1.2.0-*/usage.jsonl' 2>/dev/null)"
+  cu_n="$(find "$cu_two/prior" -type f -name usage.jsonl 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "${cu_n:-0}" -ne 2 ] || [ "$(printf '%s\n' "$cu_stamped" | grep -c .)" -ne 1 ]; then
+    echo "FAIL: counting-unit boundary — a second crossing did not keep exactly one stamped store beside the first (count ${cu_n:-0})"; fail=1
+  elif ! basename "$(dirname "$cu_stamped")" | grep -Eq '^schema-1[.]2[.]0-[0-9]{8}T[0-9]{6}Z$'; then
+    echo "FAIL: counting-unit boundary — the second crossing's store is not at prior/schema-1.2.0-<UTC stamp>/usage.jsonl"; fail=1
+  elif ! cmp -s "$cu_stamped" "$cu_ref/second.jsonl"; then
+    echo "FAIL: counting-unit boundary — the stamped store is not byte-identical to the store the second crossing replaced"; fail=1
   fi
   rm -rf "$cu_store" "$cu_ref" "$cu_bin" "$cu_fc" "$cu_nm" "$cu_other"
 
