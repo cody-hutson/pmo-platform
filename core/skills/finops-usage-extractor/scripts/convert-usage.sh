@@ -20,7 +20,8 @@
 # checkout, so it reads rung 1 through one of the two variables or not at all.
 #
 # FAIL CLOSED. A numeric value that is absent at every rung, empty, or not a valid
-# positive number — or a bracket whose low end is not below its high end — exits 3 and
+# positive number — or a bracket whose low end is not below its high end, or whose high
+# end is above 1 (a cache read weighted above an uncached input token) — exits 3 and
 # names the key and the rungs read. The caller then records an UNRESOLVED figure: never
 # zero and never a built-in constant (a zero K divides by zero; a zero weight erases a
 # token type from every figure). The calibration model and the per-model axis are
@@ -80,8 +81,8 @@
 # Exit codes: 0 ok · 1 usage error or missing dependency (jq) · 2 malformed input (not an
 #   array; a missing, non-numeric or negative leaf; tiers above their total; a per-model
 #   split that does not sum to its tokens) · 3 unresolved value (absent at every rung,
-#   empty, not a valid positive number, or a bracket whose low end is not below its high
-#   end; stderr names the key and the rungs read).
+#   empty, not a valid positive number, a bracket whose low end is not below its high
+#   end, or a high end above 1; stderr names the key and the rungs read).
 
 set -uo pipefail
 

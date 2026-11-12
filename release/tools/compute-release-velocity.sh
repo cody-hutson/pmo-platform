@@ -154,9 +154,12 @@
 #   written · 4 written with the unit UNRESOLVED (the conversion could not resolve a
 #   value): raw totals kept, no weekly points, the row degraded.
 #
-# Cutover: applies to releases entering Stage 13 strictly AFTER this field's
-# introducing-release merge SHA. The introducing release itself is exempt. This
-# script does not gate by version — the caller (Stage 13 spoke) honors cutover.
+# Cutover of the **Velocity:** field: it applies to releases entering Stage 13
+# strictly AFTER the field's introducing-release merge SHA, and the field's
+# introducing release itself is exempt. This script does not gate by version — the
+# caller (Stage 13 spoke) honors cutover. The cost row (--cost-row) has a cutover of
+# its own and is NOT exempt in its introducing release: release-velocity-tracking.md
+# § 7a.5.
 #
 # Exit codes:
 #   0 = success (a release may legitimately produce N/A — content-only release
