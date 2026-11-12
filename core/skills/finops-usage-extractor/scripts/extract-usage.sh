@@ -1090,7 +1090,7 @@ DSSTUBEOF
   #     is neither kept nor falls back. Every store here is a throwaway mktemp dir built
   #     from the synthetic fixtures. INVARIANT: every failure message below contains the
   #     literal "counting-unit boundary".
-  local cu_store cu_ref cu_bin cu_err cu_rc cu_n cu_fc cu_nm cu_other cu_two cu_stamped
+  local cu_store cu_ref cu_bin cu_err cu_rc cu_n cu_fc cu_nm cu_other cu_two cu_stamped cu_re
   cu_store="$(mktemp -d "${TMPDIR:-/tmp}/finops-custore.XXXXXX")"
   cu_ref="$(mktemp -d "${TMPDIR:-/tmp}/finops-curef.XXXXXX")"
   cu_bin="$(mktemp -d "${TMPDIR:-/tmp}/finops-cubin.XXXXXX")"
@@ -1184,6 +1184,7 @@ DSSTUBEOF
   #       and the stamped glob 0; the unstamped directory name fails the stamped form. The
   #       store sits inside cu_ref, so cu_ref's own cleanup below removes it.
   cu_two="$cu_ref/two"
+  cu_re='^schema-1[.]2[.]0-[0-9]{8}T[0-9]{6}Z$'
   mkdir -p "$cu_two"
   do_rebuild "$cu_two" "$src" 2>/dev/null
   jq -c 'if .record=="meta" then .schema_version="1.2.0" else . end' "$cu_two/usage.jsonl" > "$cu_ref/first.jsonl" 2>/dev/null
@@ -1197,7 +1198,7 @@ DSSTUBEOF
   cu_stamped="$(find "$cu_two/prior" -type f -path '*/prior/schema-1.2.0-*/usage.jsonl' 2>/dev/null)"
   [ "${cu_n:-0}" -eq 1 ] && [ -z "$cu_stamped" ] \
     || { echo "FAIL: counting-unit boundary — the first crossing did not keep exactly one unstamped store (count ${cu_n:-0}, stamped '${cu_stamped}')"; fail=1; }
-  if printf '%s\n' "schema-1.2.0" | grep -Eq '^schema-1[.]2[.]0-[0-9]{8}T[0-9]{6}Z$'; then
+  if [[ "schema-1.2.0" =~ $cu_re ]]; then
     echo "FAIL: counting-unit boundary — the stamped-name check matches the unstamped name, so it tests nothing"; fail=1
   fi
   cp -f "$cu_ref/second.jsonl" "$cu_two/usage.jsonl"
@@ -1210,7 +1211,7 @@ DSSTUBEOF
   cu_n="$(find "$cu_two/prior" -type f -name usage.jsonl 2>/dev/null | wc -l | tr -d ' ')"
   if [ "${cu_n:-0}" -ne 2 ] || [ "$(printf '%s\n' "$cu_stamped" | grep -c .)" -ne 1 ]; then
     echo "FAIL: counting-unit boundary — a second crossing did not keep exactly one stamped store beside the first (count ${cu_n:-0})"; fail=1
-  elif ! basename "$(dirname "$cu_stamped")" | grep -Eq '^schema-1[.]2[.]0-[0-9]{8}T[0-9]{6}Z$'; then
+  elif ! [[ "$(basename "$(dirname "$cu_stamped")")" =~ $cu_re ]]; then
     echo "FAIL: counting-unit boundary — the second crossing's store is not at prior/schema-1.2.0-<UTC stamp>/usage.jsonl"; fail=1
   elif ! cmp -s "$cu_stamped" "$cu_ref/second.jsonl"; then
     echo "FAIL: counting-unit boundary — the stamped store is not byte-identical to the store the second crossing replaced"; fail=1
