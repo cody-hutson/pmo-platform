@@ -252,6 +252,29 @@ pin "8d: an ambient CLAUDE_WORKSPACE_ROOT does not displace the argument" \
   "$( unset PMO_INSTANCE_PATH; HOME="${TEL_SBX}/empty"; CLAUDE_WORKSPACE_ROOT="/cw"
       pmo_telemetry_path_for /ws )" "${TEL_AT_WS}"
 
+printf '\nCase 9: the analysis workspace resolves to the main checkout, override first\n'
+# Same sandboxing as Case 8, under Case 8's sandbox so its one EXIT trap removes both (a
+# second trap would replace the first). 9c is the control: the override key moves the
+# analysis home and nothing else, so the instance base read under the same seeded HOME
+# stays where it was.
+ANA_SBX="${TEL_SBX}/analysis-case"
+mkdir -p "${ANA_SBX}/empty" "${ANA_SBX}/seeded/.config/pmo-platform"
+printf '[paths]\noperator_instance_analysis_path = "/elsewhere/analysis"\n' \
+  > "${ANA_SBX}/seeded/.config/pmo-platform/operator.toml"
+ANA_AT_WS="/ws/pmo-platform/analysis"
+pin "9a: with no override it resolves under the given root's main checkout" \
+  "$( unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT; HOME="${ANA_SBX}/empty"
+      pmo_analysis_path_for /ws )" "${ANA_AT_WS}"
+pin "9b: the operator.toml override key wins over the default" \
+  "$( unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT; HOME="${ANA_SBX}/seeded"
+      pmo_analysis_path_for /ws )" "/elsewhere/analysis"
+pin "9c: control — the same override leaves the instance base unmoved" \
+  "$( unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT; HOME="${ANA_SBX}/seeded"
+      pmo_instance_path_for /ws )" "/ws/pmo-instance"
+pin "9d: neither PMO_INSTANCE_PATH nor an ambient CLAUDE_WORKSPACE_ROOT moves it" \
+  "$( HOME="${ANA_SBX}/empty"; PMO_INSTANCE_PATH="/tmp/explicit-instance"; CLAUDE_WORKSPACE_ROOT="/cw"
+      pmo_analysis_path_for /ws )" "${ANA_AT_WS}"
+
 printf '\n======================================================================\n'
 printf 'test_lib_instance_path.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
 printf '======================================================================\n'

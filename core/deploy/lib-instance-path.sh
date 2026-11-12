@@ -4,8 +4,9 @@
 # file, the evals-results directory (home of the pipeline event log), the
 # three ambient-intake member directories (inbox drop-zone, Path-A intake-sweep
 # run-log dir, Path-B external-sync dir), the skill-editor exemption list, the
-# set of instance-tier files a deployed security hook reads, and the main
-# checkout's working-state telemetry folder (home of the per-release cost rows).
+# set of instance-tier files a deployed security hook reads, the main
+# checkout's working-state telemetry folder (home of the per-release cost rows),
+# and the main checkout's analysis workspace (home of read-once analysis reports).
 #
 # Design rationale (applies existing ADRs — NO standalone ADR):
 #   - The default base CANONICALIZES on the ADR-032 idiom
@@ -54,6 +55,10 @@
 #                              operator_instance_working_state_telemetry_path, else
 #                              <workspace-root>/pmo-platform/local-state/telemetry
 #                              (2 tiers — no env tier; see the function)
+#   pmo_analysis_path_for()  → the operator.toml key
+#                              operator_instance_analysis_path, else
+#                              <workspace-root>/pmo-platform/analysis
+#                              (2 tiers — no env tier; see the function)
 #
 # Honored-tier contract, per function — stated because "which variables and which
 # operator.toml keys does this function honor, and which does it deliberately
@@ -95,6 +100,10 @@
 #                             NOT honored: PMO_INSTANCE_PATH (the folder is not under
 #                             the instance container) or CLAUDE_WORKSPACE_ROOT (the
 #                             workspace root is the argument)
+#   pmo_analysis_path_for()   env: none
+#                             toml: operator_instance_analysis_path
+#                             NOT honored: PMO_INSTANCE_PATH or CLAUDE_WORKSPACE_ROOT,
+#                             for the telemetry resolver's two reasons
 #
 # Exemption-surface resolution contract. The skill-editor exemption list is the escape
 # half of the Gate 2 skill-edit hook. The composition manifest registers it at the
@@ -365,8 +374,9 @@ pmo_evals_results_path() {
 # Usage: pmo_<member>_path_for <workspace-root>
 
 # Private. Read one key from the canonical operator.toml, else empty. This is THE
-# operator.toml reader for this file — the three ambient resolvers and the
-# telemetry resolver below, and pmo_evals_results_path() above, all call it, so
+# operator.toml reader for this file — the three ambient resolvers, the
+# telemetry resolver and the analysis resolver below, and pmo_evals_results_path()
+# above, all call it, so
 # there is one canonical XDG
 # location, one `|| true` tolerance for an absent key under `set -euo pipefail`,
 # and one first-match-wins rule rather than a copy per consumer. A fourth ambient
@@ -481,4 +491,29 @@ pmo_telemetry_path_for() {
   local _root="$1" _val
   _val="$(_pmo_instance_toml_key "operator_instance_working_state_telemetry_path")"
   printf '%s\n' "${_val:-${_root}/pmo-platform/local-state/telemetry}"
+}
+
+# --- Analysis workspace (in-repo, main checkout) -----------------------------
+#
+# Echo the analysis workspace (no trailing slash) — <OPERATOR_INSTANCE_ANALYSIS_PATH>,
+# the home of read-once analysis reports, each in its own dated subfolder
+# (core/standards/analysis-workspace-standard.md). Its first writer is the FinOps
+# skill's command-template ranker, which writes one report folder per run.
+#
+# IN THE REPOSITORY BY DESIGN. The folder and its README are tracked and every
+# report under it is git-ignored, so a report never reaches a commit while the home
+# stays discoverable. It anchors on <workspace-root>/pmo-platform, the main checkout,
+# for the reason the telemetry folder above does: a report written into a session
+# worktree dies with that worktree. Unlike /local-state/, a session may write a
+# subfolder here — the main-checkout carve-out admits /analysis/<sub>/ today.
+#
+# TWO declared tiers and no env tier: the operator.toml override key the token
+# declares, else the in-repo default. PMO_INSTANCE_PATH does not relocate it and
+# CLAUDE_WORKSPACE_ROOT does not displace the argument. A pure function: it creates
+# nothing.
+# Usage: pmo_analysis_path_for <workspace-root>
+pmo_analysis_path_for() {
+  local _root="$1" _val
+  _val="$(_pmo_instance_toml_key "operator_instance_analysis_path")"
+  printf '%s\n' "${_val:-${_root}/pmo-platform/analysis}"
 }
