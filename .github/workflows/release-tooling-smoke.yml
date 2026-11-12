@@ -107,9 +107,10 @@ name: Release tooling smoke
 #              orchestration playbook INSTRUCTS (check-emission-contract-subset.sh over
 #              the committed asserted set), with the lint's own --self-test run by the
 #              selftest-discovery job so the lint cannot drift into always-passing; AND (4) each of
-#              the five finops-usage-extractor scripts runs its committed --self-test —
-#              the executable home of the store's conservation invariants, of the
-#              cost-unit conversion's pair rule and fail-closed reads, and of the
+#              the finops-usage-extractor scripts in the finops-selftest loop runs its committed
+#              --self-test — the executable home of the store's conservation invariants, of the
+#              cost-unit conversion's pair rule and fail-closed reads, of the ranker's masking and
+#              cost controls, and of the
 #              CIAC / SM / SE fail-closed assertions — in
 #              the finops-selftest job — all asserted behaviorally by executing
 #              the scripts' checks and gating on exit code.
@@ -1429,7 +1430,7 @@ jobs:
 
   finops-selftest:
     name: FinOps usage-extractor script self-tests (Ubuntu)
-    # The four finops-usage-extractor scripts carry the ONLY executable form of the
+    # The finops-usage-extractor scripts in the loop below carry the ONLY executable form of the
     # store's conservation invariants (sum(by_X.*.tokens) == session.tokens leaf by
     # leaf; sum(stop_reason.*) == turns) and of the CIAC-1/1b ground-truth + SM-*/SE-*
     # fail-closed assertions. Before this job, NO workflow and NO deploy.sh check ran
@@ -1452,14 +1453,15 @@ jobs:
           command -v bash
           command -v jq
           command -v git
+          command -v python3
 
       - name: finops script --self-tests (offline, synthetic fixtures only)
-        # Runs all five (no fail-fast) so one run reports every regression; emits a
+        # Runs every script in the loop (no fail-fast) so one run reports every regression; emits a
         # ::error:: annotation per failing script and exits non-zero if any failed.
         run: |
           set -uo pipefail
           rc=0
-          for s in extract-usage rollup-attribution report-usage estimate-usage convert-usage; do
+          for s in extract-usage rollup-attribution report-usage estimate-usage convert-usage rank-command-templates; do
             echo "::group::${s}.sh --self-test"
             if bash "core/skills/finops-usage-extractor/scripts/${s}.sh" --self-test; then
               echo "OK: ${s}"
@@ -1579,7 +1581,7 @@ jobs:
       #
       #    No control arm sits INSIDE these steps, for the same reason the two probes
       #    above carry none: the "finops script --self-tests" step earlier in this job
-      #    already ran all five self-tests UNMUTATED and gated on their exit code, so an
+      #    already ran every self-test in the loop UNMUTATED and gated on their exit code, so an
       #    unmutated failure reddens the job before any probe below is reached. The
       #    control arm is structurally upstream, not absent.
       #
@@ -1847,3 +1849,91 @@ jobs:
           fi
 
           echo "Precision probe OK — a mean-based aggregation correctly failed the SE-4 median assertion (exit $probe_rc)."
+
+      - name: Precision probes — each command-template ranker control FAILS on its own planted defect
+        # The ranker's privacy controls first. Each probe plants ONE defect in a THROWAWAY copy and
+        # requires the self-test to exit non-zero WITH the named control's own FAIL line, so a control
+        # that went blind, or a self-test failing for an unrelated reason, reddens this step:
+        #   P1  the closed-vocabulary default renders an unclassified word as itself  -> leak arm
+        #   P1b a flag no list names renders as itself                               -> leak arm
+        #   P1c a flag after an interpreter's script operand renders as itself       -> leak arm
+        #   P2  the two-session floor drops to one                                    -> the runtime canary
+        #       (every run replays the near-miss fixtures before it reads anything, so the canary
+        #       refuses first; the self-test's near-miss arms are the same control at arm level)
+        #   P3  the re-read term counts one response too many                         -> cost arm
+        #   P4  a word is added to the privacy-relevant vocabulary without a repin    -> vocabulary arm
+        # The unmutated self-test ran in the loop step above, so each probe's green twin is that step.
+        # The copy sits outside the checkout, so the ranker reads its checkout through PMO_SRC_ROOT.
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, shutil, subprocess, sys, tempfile
+          SRC = "core/skills/finops-usage-extractor"
+          PROBES = [
+              ("P1 default class", "        return '<ARG>'  # R10 closed-vocabulary default",
+               "        return t  # PROBE", "FAIL: leak arm"),
+              ("P1b closed flag class", '    return dash + "<FLAG>"  # CD-1 closed flag class',
+               "    return t  # PROBE", "FAIL: leak arm"),
+              ("P1c interpreter-flag class", '        return dash + "<FLAG>"  # CD-1 interpreter-flag class',
+               "        return t  # PROBE", "FAIL: leak arm"),
+              ("P2 session floor", "MIN_SESSIONS = 2  # T-REP", "MIN_SESSIONS = 1  # T-REP",
+               "the runtime canary failed"),
+              ("P3 re-read term", "reread = w * R  # CD-2 re-read term",
+               "reread = w * (R + 1)  # CD-2 re-read term", "FAIL: cost arm"),
+              ("P4 vocabulary", "cd echo printf export source . set unset test",
+               "cd echo printf export source . set unset test fixtureprobeword", "FAIL: vocabulary arm"),
+          ]
+          failed = 0
+          for label, old, new, marker in PROBES:
+              d = tempfile.mkdtemp()
+              shutil.copytree(SRC, os.path.join(d, "finops-usage-extractor"))
+              t = pathlib.Path(d, "finops-usage-extractor", "scripts", "rank-command-templates.sh")
+              s = t.read_text(encoding="utf-8")
+              if s.count(old) != 1:
+                  print("::error::%s: anchor found %d times in rank-command-templates.sh — the probe would "
+                        "test nothing" % (label, s.count(old)))
+                  failed = 1
+                  continue
+              t.write_text(s.replace(old, new), encoding="utf-8")
+              p = subprocess.run(["bash", str(t), "--self-test"], env=dict(os.environ, PMO_SRC_ROOT=os.getcwd()),
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+              out = p.stdout.decode("utf-8", "replace")
+              fails = [l for l in out.splitlines() if l.startswith("FAIL:") or "FATAL" in l]
+              if p.returncode == 0:
+                  print("::error::%s: the self-test PASSED with the defect planted — that control is blind" % label)
+                  failed = 1
+              elif marker not in out:
+                  print("::error::%s: the self-test failed, but not with '%s' — it failed for another reason, "
+                        "which would mask a real regression" % (label, marker))
+                  failed = 1
+              else:
+                  print("Precision probe OK — %s: exit %d with '%s'" % (label, p.returncode, marker))
+              for l in fails:
+                  print("    " + l)
+              if p.returncode == 0 or marker not in out:
+                  print("\n".join(out.splitlines()[:80]))
+          sys.exit(failed)
+          PY
+
+      - name: Stage-pattern parity — the ranker's stage rules equal the velocity tool's
+        # The ranker attributes a session to a stage with the same two patterns the per-release cost
+        # row uses (core cannot import release/tools, so the ranker carries a copy). This step keeps
+        # the copy honest: both pattern lines must appear exactly once in each file and match byte for
+        # byte. A single shared definition is a recorded follow-up; until then the copy is a parity pair.
+        run: |
+          set -euo pipefail
+          rk="$(grep -E '^STAGE_(EXEC|ANY)_RE = ' core/skills/finops-usage-extractor/scripts/rank-command-templates.sh || true)"
+          vt="$(grep -E '^STAGE_(EXEC|ANY)_RE = ' release/tools/compute-release-velocity.sh || true)"
+          n_rk="$(printf '%s\n' "$rk" | grep -c '^STAGE_' || true)"
+          n_vt="$(printf '%s\n' "$vt" | grep -c '^STAGE_' || true)"
+          if [ "$n_rk" != "2" ] || [ "$n_vt" != "2" ]; then
+            echo "::error::Stage-pattern parity: expected the two pattern lines once in each file; found $n_rk in the ranker and $n_vt in the velocity tool."
+            exit 1
+          fi
+          if [ "$rk" != "$vt" ]; then
+            echo "::error::Stage-pattern parity FAILED — the ranker's stage rules differ from the velocity tool's."
+            printf 'ranker:\n%s\nvelocity tool:\n%s\n' "$rk" "$vt"
+            exit 1
+          fi
+          echo "Stage-pattern parity OK — both pattern lines identical:"
+          printf '%s\n' "$rk"

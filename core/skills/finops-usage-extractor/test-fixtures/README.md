@@ -1,7 +1,8 @@
 # finops-usage-extractor — synthetic test fixtures
 
-These files are **fabricated** synthetic Claude Code session transcripts used only by
-`extract-usage.sh --self-test`. They contain **no real extracted values** — every
+These files are **fabricated** synthetic Claude Code session transcripts used by the skill's
+self-tests (each subdirectory's README names its consumer). The `rank/` transcripts carry a
+`.jsonl.fixture` suffix, so the extractor's `*.jsonl` sweep of this tree never reads them. They contain **no real extracted values** — every
 `sessionId`, `gitBranch`, `cwd`, timestamp, and token count is invented (per the CIAC-3
 data-hygiene rule: the tooling's tests never read real `~/.claude/projects` transcripts,
 and no real session-data value appears in any committed artifact on this public repo).
