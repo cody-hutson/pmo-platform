@@ -204,7 +204,7 @@ run_main() {
   RANK_CANON_AWK="$CHECKOUT/core/hooks/lib/command-position.awk" RANK_AWK_BIN="$RANK_AWK" \
   RANK_WORK="$work" RANK_FIXTURES="$FIXTURES_DIR/sessions" \
   python3 -I - > "$work/core.json" <<'PYEOF'
-import datetime, hashlib, json, os, re, shlex, stat, subprocess, sys
+import bisect, datetime, hashlib, json, os, re, shlex, stat, subprocess, sys
 from fractions import Fraction as F
 
 E = os.environ
@@ -390,8 +390,11 @@ class Canon:
 
 
 def close_paren(s, i):
-    d, q = 1, None
-    while i < len(s):
+    # The end of a $( … ) body. Quote-aware, and heredoc-aware: a heredoc body inside the
+    # substitution (the commit-message idiom) is skipped whole, so an apostrophe in it is
+    # text, never an opening quote.
+    d, q, n, pend = 1, None, len(s), []
+    while i < n:
         c = s[i]
         if q:
             if c == q:
@@ -402,6 +405,23 @@ def close_paren(s, i):
             q = c
         elif c == "\\":
             i += 1
+        elif c == "<" and s.startswith("<<", i) and not s.startswith("<<<", i) and HEREDOC_RE.match(s, i):
+            m = HEREDOC_RE.match(s, i)
+            pend.append((m.group(2) or m.group(3) or m.group(4), m.group(1) == "-"))
+            i = m.end()
+            continue
+        elif c == "\n" and pend:
+            i += 1
+            for delim, strip in pend:
+                while i < n:
+                    j = s.find("\n", i)
+                    j = n if j < 0 else j
+                    line = s[i:j]
+                    i = min(j + 1, n)
+                    if (line.lstrip("\t") if strip else line) == delim:
+                        break
+            pend = []
+            continue
         elif c == "(":
             d += 1
         elif c == ")":
@@ -952,7 +972,9 @@ def analyze(files, root, tr, want_selftest):
         for g in resp:
             for k2, k1 in (("input", "input"), ("output", "output"), ("cc", "cc"), ("h", "h"), ("m", "m"), ("cr", "cr")):
                 window_total[k2] += g["usage"][k1]
-        occs = []
+        occs, members = [], {}
+        for ri, g in enumerate(resp):
+            members.setdefault(g["seg"], []).append(ri)
         for ri, g in enumerate(resp):
             for b in g["blocks"]:
                 bid, name = b.get("id"), b.get("name") or ""
@@ -976,7 +998,8 @@ def analyze(files, root, tr, want_selftest):
                 if occ["kstar"] is not None:
                     kj = occ["kstar"]
                     occ["kstar_usage"] = resp[kj]["usage"]
-                    occ["R"] = sum(1 for x in resp[kj + 1:] if x["seg"] == g["seg"])
+                    lst = members[g["seg"]]
+                    occ["R"] = len(lst) - bisect.bisect_right(lst, kj)
                 if name == "Bash":
                     cov["bash_calls"] += 1
                     cmd = inp.get("command")
@@ -1008,9 +1031,12 @@ def analyze(files, root, tr, want_selftest):
                 o["reread"] = reread
             predicted = sum((o["reread"] for o in so), F(0))
             measured = sum((F(g["usage"]["cr"]) for _, g in rs), F(0))
+            by_k, carried, nxt = sorted(so, key=lambda o: o["kstar"]), F(0), 0
             for i, g in rs:
                 ctx = F(g["usage"]["input"] + g["usage"]["cc"] + g["usage"]["cr"])
-                carried = sum((o["w"] for o in so if o["kstar"] <= i), F(0))
+                while nxt < len(by_k) and by_k[nxt]["kstar"] <= i:   # a running sum, not a rescan
+                    carried += by_k[nxt]["w"]
+                    nxt += 1
                 if carried > ctx:
                     bounds["responses_over"] += 1
                     over = True
@@ -1392,6 +1418,7 @@ FIXTURE_SECRET_VALUE	heredoc	python3 <HEREDOC>	yes
 FIXTURE_HUB_SECRET	heredoc	python3 <HEREDOC>	yes
 fixturecommentword	comment	git status	yes
 FIXTURE_ARR	var	echo ; git log	yes
+fixturecommitword	var	git commit	yes
 Fixture Person	default	printf	no
 fixture-once	path	printf	no
 fixture-milestone-slug	tool-input	Agent{description:<STR>,prompt:<STR>,subagent_type:<STR>}	no'
@@ -1582,6 +1609,11 @@ EOF
      && [ "$(jq '.coverage.comment_lines >= 1' "$CAND")" = "true" ]; then
     ok "comment arm (a comment line and \${#…} keep the commands after them; lost tokens 0)"
   else bad "comment arm: git status $(q 'git status' "$pick | .[0].sessions"), echo-and-log $(q 'echo ; git log' "$pick | .[0].sessions")"; fi
+  # 21b — substitution arm: a heredoc inside $( … ), the commit-message idiom, with an apostrophe
+  #       in its body, keeps its command and parses (the body is skipped, never read as a quote).
+  if [ "$(q 'git commit' "$pick | .[0].sessions")" = "2" ] && [ "$(jq '.coverage.unparsed' "$CAND")" = "0" ]; then
+    ok "substitution arm (the commit-message heredoc inside a substitution ranks; unparsed 0)"
+  else bad "substitution arm: git commit sessions $(q 'git commit' "$pick | .[0].sessions"), unparsed $(jq '.coverage.unparsed' "$CAND")"; fi
   # 22 — format-health arm (FM-5, a mutation probe): rename the command key; exit 3, nothing written.
   local frel
   while IFS= read -r frel; do
