@@ -5,7 +5,7 @@ type: schema
 status: ACTIVE
 schema_version: "2.0.0"
 reversibility: MODERATE / HIGH confidence (consumed by the C2 attribution slice + the downstream agent-finops-intelligence milestone; additive extension is backward-compatible, a breaking field change is a major bump + a downstream coordination event **unless the § Versioning frozen-kind exemption's three conditions all hold**)
-consumers: "finops-usage-extractor (producer); the C2 attribution/roll-up slice (extends v1.1.0 rollup record); the agent-finops-intelligence milestone — estimation, reporting, calibration (version-pin >= v2.0.0 wherever token figures are compared across stores; v2.0.0 adds two always-present counts to the session and subagent records and changes no other record shape since v1.2.0)"
+consumers: "finops-usage-extractor (producer); the C2 attribution/roll-up slice (extends v1.1.0 rollup record); the agent-finops-intelligence milestone — estimation, reporting, calibration (version-pin >= v2.0.0 wherever token figures are compared across stores; v2.0.0 adds two always-present counts to the session and subagent records and changes no other record shape since v1.2.0); the per-release cost row (release/tools/compute-release-velocity.sh --cost-row, which reads the two counts)"
 ---
 <!-- reference-durability: allow-link -->
 <!-- reference-durability: allow-version-ref -->
@@ -36,12 +36,6 @@ JSONL — one JSON object per line, discriminated by a top-level `record` field.
 - **Per-response fields:** `turns` (the response count), `heuristic_turns` (usage-less responses), `incomplete_responses` / `unevaluated_responses` (responses with no stop reason; § Incomplete responses), `token_source`, the `by_*` keys, `stop_reason` (the last non-null reason across the response's records; `"unknown"` when none carries one) and `tool_calls` (one call per `tool_use` `id`). `model`, `service_tier` and the timestamps stay record-derived.
 - **Only the top-level `message.usage` fields are read.** Usage that appears only inside other-type `message.usage.iterations` entries (an advisor or fallback sub-call) is not counted.
 - **The unit is scoped to one transcript file.** A response that a resumed or forked session copies into a second transcript file is counted once in each file, which raises the figures. Measured on 2026-11-05 over the full local transcript population (8,352 files), the copies carry 2.52 % of per-response mass overall: 7.39 % of main-session mass and 0.28 % of subagent mass. Removing that residual needs a cross-file `message.id` index, which the store does not carry; a separate follow-up correction owns it, and this version does not.
-- **Data flow (Tier-A):**
-
-  | Producer | Fields | Consumers |
-  |---|---|---|
-  | `extract-usage.sh` | `session` / `subagent` `tokens`, `turns`, `heuristic_turns`, `incomplete_responses`, `unevaluated_responses`, `tool_use`, `by_*`, `stop_reason`, `tool_calls`; `meta.schema_version` | `rollup-attribution.sh` (sums `session.tokens`; preserves the version; does not read the two counts, so a roll-up over a session with incomplete responses inherits its lower bound) · `report-usage.sh` (windowed sums; prints the version; does not read the counts, so it renders such figures without a lower-bound label) · `estimate-usage.sh` (rollup comparables; prints the version; does not read the counts, so a comparable built on such sessions can be understated) |
-
 - **Stores built before v2.0.0 counted per transcript line and are inflated.** Against the per-response sum, over 5,610 session files measured on 2026-09-26:
 
   | Token type | Factor |
@@ -52,6 +46,14 @@ JSONL — one JSON object per line, discriminated by a top-level `record` field.
   | uncached input | ×3.35 |
 
   These are corpus averages that vary by session class and over time (a later sample: output ×2.94 in main sessions, ×1.28 in subagent sessions). They are not a per-store divisor: only a rebuild from source is exact. A store built before v2.0.0 is identifiable by its `meta.schema_version` (1.x).
+
+### Data flow (Tier-A)
+
+<!-- design-artifact: flow-class=data-flow; name=finops-usage-store; depicts=core/skills/finops-usage-extractor/scripts/extract-usage.sh,core/skills/finops-usage-extractor/scripts/rollup-attribution.sh,core/skills/finops-usage-extractor/scripts/report-usage.sh,core/skills/finops-usage-extractor/scripts/estimate-usage.sh,release/tools/compute-release-velocity.sh -->
+
+| Producer | Fields | Consumers |
+|---|---|---|
+| `extract-usage.sh` | `session` / `subagent` `tokens`, `turns`, `heuristic_turns`, `incomplete_responses`, `unevaluated_responses`, `tool_use`, `by_*`, `stop_reason`, `tool_calls`; `meta.schema_version` | `rollup-attribution.sh` (sums `session.tokens`; preserves the version; does not read the two counts, so a roll-up over a session with incomplete responses inherits its lower bound) · `report-usage.sh` (windowed sums; prints the version; does not read the counts, so it renders such figures without a lower-bound label) · `estimate-usage.sh` (rollup comparables; prints the version; does not read the counts, so a comparable built on such sessions can be understated) · `release/tools/compute-release-velocity.sh --cost-row` (per-release cost row, one cell per stage × role; reads both counts and sums each per cell, a contributing record that lacks either making that sum `null`, not evaluated; sets the cell's `lower_bound` `true` when either sum is above zero, `null` when either is not evaluated and neither is above zero, `false` otherwise) |
 
 ## Versioning
 
@@ -196,7 +198,7 @@ A streamed API response reports its usage twice. The opening event carries a pro
 - **Not a `token_source` value.** `token_source` says where a figure came from (exact or heuristic); completeness is a separate question, so it is a separate field, and folding it into that enum would break every consumer that switches on it.
 - **Absence is not zero.** Records this version writes always carry both counts. A record without them — one written before the flag existed, including every record of a store kept under `prior/` — is **not evaluated**.
 - **Invariants** (asserted in the extractor `--self-test`): on every `session` and `subagent` record, `0 ≤ incomplete_responses ≤ turns − heuristic_turns` (an incomplete response carries usage on every record, so it is never a heuristic one) and `incomplete_responses + unevaluated_responses ≤ turns`; on every `session` record, the partition above.
-- **Consumers.** A rendering of a record's `tokens` or `tool_use`, or of a roll-up over records, whose `incomplete_responses` is non-zero SHOULD label those figures a lower bound. No consumer reads the two counts yet (§ Counting unit, the data-flow table).
+- **Consumers.** A rendering of a record's `tokens` or `tool_use`, or of a roll-up over records, whose `incomplete_responses` is non-zero SHOULD label those figures a lower bound. One consumer reads the two counts: the per-release cost row (`release/tools/compute-release-velocity.sh --cost-row`) sums each per stage × role cell — a contributing record that lacks either count makes that sum `null`, not evaluated, never `0` — and sets the cell's `lower_bound` to `true` when either sum is above zero, so a response that was not evaluated reads as a possible lower bound too; to `null` when either sum is not evaluated and neither is above zero; and to `false` otherwise. The row's fields are the velocity standard's; this section owns what the bound covers. The other consumers in § Counting unit → Data flow (Tier-A) do not read the counts.
 
 ## Record: `rollup` (v1.1.0, additive)
 

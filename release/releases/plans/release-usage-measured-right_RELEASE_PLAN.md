@@ -239,6 +239,12 @@ Each card's change specification is its Stage-5 design comment as amended by its
 - **#7935 (beats P, W)** — design #8712; review #8812: hub-run; the per-site decision rules bound to the G1 rubric, the window's control and attribution under D-WindowBudget, the R-6 calibration block for beat 1R.
 - **#8041 (beat 8)** — design #8719; review #8813: the F1–F6 frame, the option × probe table, the four-part pass rule, the admissibility, evidence and cost-leg decisions under PA-015, and the AC-4 section compare (PA-012).
 
+### Tier-A activated design artifacts
+
+| Artifact path | Flow class | Trigger | Activation tier | G-CL6 obligation |
+|---|---|---|---|---|
+| `core/schemas/finops-usage-store-schema.md` § Counting unit → Data flow (Tier-A) (embedded, with marker `name=finops-usage-store`) | data-flow | the store schema gains fields with one producer and four readers: `extract-usage.sh` writes the two completeness counts, `rollup-attribution.sh`, `report-usage.sh` and `estimate-usage.sh` read the store, and the per-release cost row reads the two counts | A (NEW) — design #8714's declared artifact (its R7), which review #8799 CD-2 merged into the store's one data-flow table; declared here at DT fix pass 1 (DEV-55) | Stage 13 confirms the marker is present and the consumer cells still match the scripts |
+
 ---
 
 ## Stage Applicability Matrix
