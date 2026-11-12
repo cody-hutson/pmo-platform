@@ -89,6 +89,27 @@ bash core/skills/finops-usage-extractor/scripts/estimate-usage.sh [--class C --p
 - **`--json`:** the machine shape. Basis rows and the confidence label are produced by the **same** functions the markdown path uses, so an estimate without its basis is unrepresentable in either surface.
 - **`--self-test`:** run the built-in assertions against the synthetic `test-fixtures/estimate/` set — no operator-store or network access. Every assertion **fails closed**, and each negative carries a positive control (the coverage-gate check pins `meta.schema_version` to `1.2.0` on purpose, so a version-based gate could not pass it).
 
+## Cost-unit conversion
+
+```
+bash core/skills/finops-usage-extractor/scripts/convert-usage.sh --convert < objects.json
+bash core/skills/finops-usage-extractor/scripts/convert-usage.sh --params
+bash core/skills/finops-usage-extractor/scripts/convert-usage.sh --self-test
+```
+
+`convert-usage.sh` is the **one conversion** from per-response token totals to weekly points (wp) of one account. What a weekly point is, how tokens are counted, the conversion's terms and the pair rule are canonical in {{ADR:release-graph-cost-unit}}; the script implements that record and restates none of its calibrated values.
+
+- **One implementation.** Every figure-producing tool — the per-release cost row (`release/tools/compute-release-velocity.sh --cost-row`) and the command-template ranking — calls this script for weekly points and never re-implements the weights, the bracket or `K`. A second conversion is a defect, not an optimization.
+- **One numeric home.** It reads the bracket, `K` at both ends, the price-relative weights, the calibration model and the per-model axis only from the `[cost_unit]` section of the platform behaviour configuration, on two rungs: the shipped template, then the operator's individual `platform-config.toml`, which wins key by key. A packaged copy of this skill sits outside any checkout, so it reads the template through `PMO_SRC_ROOT` or `${CLAUDE_WORKSPACE_ROOT}/pmo-platform`.
+- **Fail closed.** A numeric value absent at every rung, empty, non-numeric or not positive — or a bracket whose low end is not below its high end — exits **3** and names the key and the rungs read. The caller records an **unresolved** figure: never zero, and never a built-in constant.
+- **`--convert` contract.** Stdin is a JSON array. Each element is a store `tokens` object, or `{"tokens": …, "by_model": {…}}` carrying the store's exact per-model split, which must sum to its tokens leaf by leaf. Stdout is one JSON object: `params` (the values used, and the rung they came from), `label` and `label_source`, and `pairs` in input order, each `{at_w_low, at_w_high, per_model, unprobed_models, own_window_models}`. `--params` prints the resolved values alone.
+- **The pair is keyed by bracket end, never "low" and "high".** Each end uses its own `w` and its own `K`; no midpoint and no cross-end mix is ever formed. Which member is larger depends on the token mix — an output- or write-heavy figure is larger at the low-`w` end, because that end's `K` is smaller — so neither member is a lower bound, and a consumer must not sort the two into a range.
+- **The per-model axis.** Over a split, a model with a recorded draw multiplier contributes at that multiplier, the calibration model at 1, and any other model at 1 while being named in `unprobed_models`. A model whose recorded weekly windows exclude the shared all-models window draws no weekly points and is listed in `own_window_models`, not summed. An object without a split reads `per_model: "not-split"`.
+- **The calibration label** — `calibration: insufficient` or `calibration: sufficient` — is read from the latest dated seed or revisit line of the cost unit's row in the gate-coverage register (`core/standards/gate-efficacy-standard.md`), the line every calibration revisit leaves. An unreadable register reads `calibration: unresolved`, and the figures are still computed.
+- **It writes nothing**: like the report and the estimator, it prints to stdout only.
+- **Exit codes (this script's own):** `0` OK · `1` usage error or missing `jq` · `2` malformed input (not an array; a missing, non-numeric or negative leaf; cache-write tiers above their total; a split that does not sum) · `3` an unresolved value.
+- **`--self-test`:** offline arms over temporary configurations with synthetic values only — never the shipped calibration, which the record moves by editing the numeric home alone — with both rung seams pinned in every arm.
+
 ## Dependencies
 
 - **`jq`** (REQUIRED) — the extractor parses session JSONL with `jq` throughout. Missing `jq` is a hard preflight failure (**exit 5**). Note: context-budget-auditor is pure-bash; `jq` is a genuinely new runtime dependency here, hence the explicit declaration + preflight.

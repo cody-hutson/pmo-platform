@@ -25,6 +25,13 @@ Skills exposed to BOTH consumer modules:
 | `eval-writer` | invocation | Authors rigorous eval suites for AI agents, skills, LLM systems |
 | `pmo-skill-router` | invocation | Capstone suite router — classifies a role-shaped request against the `core/skills/registry.md` registry and routes it to the correct role-Specialist |
 
+Scripts exposed to consumer modules (a CLI contract, not a skill invocation):
+
+| Script | Contract | Consumer |
+|---|---|---|
+| `core/skills/finops-usage-extractor/scripts/extract-usage.sh` | CLI: env `STORE` (the store directory) and `FINOPS_SOURCE_ROOT` (the transcript root), `--rebuild`; writes `$STORE/usage.jsonl` per `core/schemas/finops-usage-store-schema.md` | the release module's per-release cost row (`compute-release-velocity.sh --cost-row`), over a scratch store it owns |
+| `core/skills/finops-usage-extractor/scripts/convert-usage.sh` | CLI: `--convert` reads a JSON array of store `tokens` objects on stdin and writes weekly-point pairs as JSON on stdout; `--params` prints the resolved `[cost_unit]` values; exit 3 = an unresolved value | the per-release cost row and the command-template ranking — the release cost unit's one conversion |
+
 **Public references:**
 - `core/CLAUDE.md.template` — depersonalized workspace-root template
 - `core/config/*.template` — settings templates
