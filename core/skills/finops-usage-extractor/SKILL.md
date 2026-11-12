@@ -110,6 +110,54 @@ bash core/skills/finops-usage-extractor/scripts/convert-usage.sh --self-test
 - **Exit codes (this script's own):** `0` OK · `1` usage error or missing `jq` · `2` malformed input (not an array; a missing, non-numeric or negative leaf; cache-write tiers above their total; a split that does not sum) · `3` an unresolved value.
 - **`--self-test`:** offline arms over temporary configurations with synthetic values only — never the shipped calibration, which the record moves by editing the numeric home alone — with both rung seams pinned in every arm.
 
+## Promotion-candidate ranking
+
+```
+bash core/skills/finops-usage-extractor/scripts/rank-command-templates.sh [--window N[d]] [--top N] [--signals N] [--work-item REF] [--out-dir DIR]
+bash core/skills/finops-usage-extractor/scripts/rank-command-templates.sh --self-test
+```
+
+`rank-command-templates.sh` reads the local session transcripts directly — the extractor's source root and walk, and the store schema's § Counting unit — and ranks the procedures agents keep retyping, Bash commands and tool inputs reduced to a closed-vocabulary shape, by repetition across sessions and by cost in weekly points at both bracket ends. It is the detector the promotion framework's §1 names: it suggests a rung and never decides one. Its report is local and derived only.
+
+| Option | Default | What it controls |
+|---|---|---|
+| `--window N[d]` | 30 | days of transcripts, selected by file modification time |
+| `--top N` | 25 | rows in `SUMMARY.md` |
+| `--signals N` | 5 | Mode C caller-input records prepared |
+| `--work-item REF` | `unlinked` | the report's `work_item:` frontmatter value |
+| `--out-dir DIR` | the analysis home | the report root |
+
+- **Where it runs.** The ranker needs the platform checkout, because it reads the command-start canonicalizer, the path resolver and the path-leak primitive there, and the checkout's tracked set. It takes `PMO_SRC_ROOT`, else the checkout it sits in, else `<workspace-root>/pmo-platform`; a deployed copy with none of the three exits **2**. Source: `FINOPS_SOURCE_ROOT`, else the session store under the Claude configuration directory. The default report home is `<OPERATOR_INSTANCE_ANALYSIS_PATH>`, resolved by `pmo_analysis_path_for` from the workspace root — `WORKSPACE_ROOT`, else `CLAUDE_WORKSPACE_ROOT`, else `operator.toml`'s `claude_workspace_root`, else the default root — so an install that sets the root only in `operator.toml` still reports under it. The home ships with the checkout; a missing home exits **3**, never created by the ranker.
+- **How it ranks.** Every token outside the closed vocabulary — operators, listed command and subcommand words, flags listed for their own command, tracked paths — becomes a typed placeholder (`<ARG>`, `<PATH>`, `<SLUG>`, `<FLAG>`, `<CODE>`, `<HEREDOC>` and their kind). A flag after an interpreter's script operand is always `<FLAG>`, because the script defines it. Comments are stripped line by line, as the shell reads them, and heredoc bodies, substitutions and `${…}` are masked before tokenizing. Every command then passes once through the governed command-start canonicalizer, `core/hooks/lib/command-position.awk`, in one process per run, so a command after a keyword, a wrapper or an assignment keeps its command word. A procedure is each segment's command and subcommand words joined by their operators, with its exact masked forms listed as variants. An occurrence costs its call and its result, each written once by the next response and re-read by every later response until a compaction, at 1.5 characters per token, converted by `convert-usage.sh` at both bracket ends; shares lead. A procedure ranks only when it appears in at least two sessions, each `tool_use` id counted once across files.
+- **Cost bound.** The attributed figures are checked against the measured usage: the tool tokens attributed to a response never exceed its measured context, and a segment's predicted re-reads never exceed its measured cache reads. A segment over the second bound is clamped to it. Violations are counted in `coverage.cost_bound_violations`, and above 5 % of segments the cost status reads `degraded`. A failed conversion writes the report with the cost `unresolved` and no Mode C record.
+- **Stage and role.** A session's stage comes from the per-release cost row's own two stage patterns, a byte-for-byte copy a CI parity step holds equal. A session whose spawn input names `Milestone <slug>` is a `hub` and carries no stage; others are `main`, `nested` or `workflow-agent` by path.
+- **What it writes.** One run folder, `command-template-ranking-<UTC date>/`; a same-day re-run takes `command-template-ranking-run<N>-<UTC date>/` and never overwrites one. It holds `SUMMARY.md` (the analysis frontmatter, the run, cost, controls and coverage lines, `## Top procedures`, `## Context patterns`, `## Signals prepared for intake`, `## Routing outcomes`), `candidates.json` (schema `rank-command-templates.candidates` 1.0.0) and `mode-c-signals.json`. The folder is reserved only after the same fail-closed `check-ignore` guard the extractor uses (exit **4**) and after the path-leak primitive finds no line of its classes in the rendered files (exit **3**, nothing written). It prints one summary line whose path is in token form. It never writes to the source transcripts or to the store.
+- **Controls.** Before reading the window, every run checks the canonicalizer with the deployed hooks' own canary inputs, then replays the committed rank fixtures: the known-repeated control must rank in three sessions and neither near-miss may rank, else exit **3**. A window whose assistant records yield no tool call exits **3**; so does one where more than 5 % of Bash calls are unreadable, and above 1 % it warns. `--self-test` runs 23 arms over the committed fixtures with a sandboxed `HOME`; the `finops-selftest` CI job runs it and plants six defects — three masking classes, the session floor, the re-read term and an unpinned vocabulary word — each of which must fail its own control.
+
+| Shape | Current | Suggested | Routable |
+|---|---|---|---|
+| a command word or script operand is a tracked path | `AS2+` | none — already a tracked tool | no |
+| Bash with at least two segments other than `cd`, or carrying `<CODE>` or `<HEREDOC>` | `AS0` | `AS2` | yes |
+| Bash with one segment other than `cd` | `AS0` | `AS1` | yes |
+| a `Write` of a `.py`, `.sh` or `.js` file | `AS0` | `AS2` | yes |
+| a harness tool input, an MCP call, any other tool | — | none — context pattern | no |
+
+**Hand-off.** The records in `mode-c-signals.json` are the signals the workspace auto-logging rule routes through `intake-desk` Mode C. The ranker prepares them and files nothing itself, never reads `automation_level`, and never sets `release_context`, which is the hub's alone. Each record reads its class as efficiency, not user-visible, so Mode C holds every one below the filing threshold at every dial and the operator promotes. The invoking agent records the verdict Mode C returns for each record in `## Routing outcomes`: one row per record, expected `held — below the filing threshold`; a row still pending, or any other verdict, is a failed hand-off. A public surface carries the summary line, ids, family words and counts — never a procedure — per `core/standards/analysis-workspace-standard.md` § 6.
+
+<!-- design-artifact: flow-class=data-flow; name=command-template-ranking; depicts=core/skills/finops-usage-extractor/scripts/rank-command-templates.sh,core/skills/finops-usage-extractor/scripts/convert-usage.sh,operations/skills/intake-desk/SKILL.md -->
+
+| Step | Producer | Artifact | Consumer |
+|---|---|---|---|
+| walk and parse | ranker | per-response calls (each id once), result sizes, compaction segments | normalize |
+| normalize | ranker, then `command-position.awk` | procedure and variant keys | controls, cost |
+| controls | ranker | canary and format-health verdicts | gate: exit 3 |
+| cost | ranker, then `convert-usage.sh` | `tokens`, then the `at_w_low` / `at_w_high` pairs and the calibration label | rank |
+| write | ranker | three files (the `check-ignore` guard, the path-leak scan) | the operator; the ladder's consumers |
+| route | invoking agent, then Mode C | held records | `## Routing outcomes` |
+
+- **Exit codes (this script's own):** `0` written · `2` usage error, or not run from a checkout · `3` nothing written (source unreadable, report home missing, a canary failed, format health over its threshold, a path-leak class in the rendered report), **or** written with the cost unresolved · `4` the run folder is inside a repository but not ignored · `5` a missing dependency.
+- **Dependencies (this script's own):** `python3` (shell tokenization and the transcript scan), `awk` (the canonicalizer), `git` (the tracked set and the guard) and `jq` (the conversion). A missing one exits **5**.
+
 ## Dependencies
 
 - **`jq`** (REQUIRED) — the extractor parses session JSONL with `jq` throughout. Missing `jq` is a hard preflight failure (**exit 5**). Note: context-budget-auditor is pure-bash; `jq` is a genuinely new runtime dependency here, hence the explicit declaration + preflight.
@@ -285,6 +333,30 @@ The reporting phase writes **nothing at all** — it reads the resolved store an
 - **Root cause:** the version field *used* to encode which phase had run, and stopped doing so when the two phases converged on one version. The stale predicate keeps returning true, so the failure surfaces as a plausible-looking empty result rather than an error — the most expensive shape a silent failure can take, because the output is indistinguishable from a genuine answer.
 - **Mitigation:** gate on the **presence of the run-level `coverage` record** — `any(.record == "coverage")` — which only the roll-up phase writes, and exit **3** with a named message pointing at `rollup-attribution.sh`. The self-test's negative control is the load-bearing part: its coverage-less fixture carries `meta.schema_version: "1.2.0"` **deliberately**, so a version-based gate would pass it and the assertion would fail. A control that merely omitted the version would not distinguish the two predicates.
 - **Principal response vs. junior response:** a principal asks what an empty result would look like if the *upstream* step had not run, and gates on the artifact that step produces; a junior reads the version because it is right there in the file, and ships a tool that reports "no history" on a full store.
+
+### Publishing a transcript literal through a normalized template — OUT
+
+- **Signature (observable signal):** a ranking report, a Mode C record or a pasted report row carries a word, flag, path or value that appeared in a session transcript — a repository, a file name, a field name, an option a private script defines.
+- **Conditional:** do NOT render a token outside the closed vocabulary, a tracked path or a typed placeholder, and do NOT render a flag that is not listed for its own command, because a denylist fails open on every literal shape nobody anticipated and report rows reach public surfaces by paste.
+- **Root cause:** "strip what looks sensitive" fails open; and a flag class left open beside a closed command class lets a literal through in the one position nobody checked.
+- **Mitigation:** allowlist masking with a closed flag list per command, every flag after an interpreter's script operand masked, and the vocabulary pinned by digest; the leak arm proves each masking class on a literal inside a ranking procedure; three CI probes break a class each; the path-leak primitive scans the rendered files before any is written. Accepted residual: a coincidental tracked-path suffix renders as that public path.
+- **Principal response vs. junior response:** a principal closes every token class by construction and proves each class on a literal that reaches written output; a junior scrubs the literals they can picture and tests the masking on input that never reaches the report.
+
+### Ranking copied history or a one-session repeat as a cross-session pattern — PROC
+
+- **Signature (observable signal):** a procedure ranks with two sessions where one session only resumed or forked the other, or a polling loop inside one session ranks as a repeated procedure.
+- **Conditional:** do NOT count a `tool_use` id twice across files or rank a procedure below two sessions, because resumed and forked sessions copy prior lines with their ids, and a loop within one session is not the framework's N=2 emergence.
+- **Root cause:** the per-file counting unit the extractor uses is correct for spend and wrong for repetition: a copy is spend in each file but one act of retyping.
+- **Mitigation:** a global dedupe of `tool_use` ids, oldest file first; the two-session floor; the copied-history and near-miss arms; the runtime canary refuses a run whose floor admits the near-miss fixtures, and a CI probe proves it.
+- **Principal response vs. junior response:** a principal asks which unit the question counts — acts of retyping, not lines of spend — and dedupes on that unit; a junior reuses the spend unit and ranks every resumed session's history twice.
+
+### Treating a suggested rung as a promotion decision — OUT
+
+- **Signature (observable signal):** a promotion decision line or an intake item copies the ranker's suggested rung as the decision, with no evaluation of the framework's T-DET, T-VAR or T-RISK triggers or its counter-signals.
+- **Conditional:** do NOT copy the rung into a promotion decision without the framework's §1 evaluation, because the judgment triggers and the counter-signals cannot be seen from transcripts, and scripting a judgment step end-to-end is the framework's judgment-laundering failure.
+- **Root cause:** a ranked, costed row reads as a verdict; the rung beside it looks decided because it sits in a table.
+- **Mitigation:** the rung is labelled suggested; the triggers the ranker cannot see are written as not evaluated; Mode C holds every candidate below the filing threshold, so the operator promotes; the framework's §1 keeps the decision with the author.
+- **Principal response vs. junior response:** a principal treats the report as the evidence-gathering substrate of a split promotion and evaluates the triggers before deciding; a junior files the top row at its suggested rung.
 
 ## Guardrails (Platform)
 

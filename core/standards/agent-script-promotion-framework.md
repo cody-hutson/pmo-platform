@@ -87,6 +87,8 @@ A pattern earns promotion when **≥1 trigger fires AND no counter-signal holds*
 | Upstream surface in flux | The promoted form would chase a moving target; wait for upstream stability |
 | An existing guard already owns the failure mode at a higher rung | Redundant promotion: a one-line AS1 block backstopped by an AS4 CI gate gains nothing from an AS2 middle layer |
 
+**Detector.** Repeated session work is surfaced by the FinOps skill's command-template ranker, `core/skills/finops-usage-extractor/scripts/rank-command-templates.sh`. Its report row for a procedure is the `[SOURCE]` evidence form for T-REP (occurrences across distinct sessions) and the step-size evidence for T-TOK (cost in weekly points at both bracket ends). It suggests a target rung from the procedure's shape and records T-DET, T-VAR and T-RISK as not evaluated, so trigger evaluation and the promotion decision line remain the author's (mixed-determinism rule). Its candidates reach intake held below the filing threshold; promotion is the operator's call.
+
 ## §2 Authoring & Review Path
 
 Placement by invocation surface (where the script lives is a function of who invokes it):
