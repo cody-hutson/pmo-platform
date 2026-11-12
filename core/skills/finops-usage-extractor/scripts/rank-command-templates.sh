@@ -941,13 +941,15 @@ def analyze(files, root, tr, want_selftest):
     seen_ids, procs, window_total = set(), {}, zero()
     # One file at a time (F-01). The order is fixed first from each file's first timestamp;
     # then one() parses, costs, keys and folds a file, and its records die when it returns.
-    # `live` weakly references every file's record list, so the most alive at once is measured.
-    live, live_max = weakref.WeakSet(), [0]
+    # `live` holds a weak reference to each file's record list while that list is alive, so the
+    # most alive at once is measured, not asserted.
+    live, live_max = [], [0]
     by_first = sorted((ts_key(first_timestamp(fp)), os.path.relpath(fp, root), fp) for fp in files)
 
     def one(fp):
         f = read_file(fp, root, cov)
-        live.add(f["recs"])
+        live[:] = [ref for ref in live if ref() is not None]
+        live.append(weakref.ref(f["recs"]))
         live_max[0] = max(live_max[0], len(live))
         cov["files"] += 1
         role, stage, basis = classify_session(f)
