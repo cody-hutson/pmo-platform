@@ -1027,7 +1027,10 @@ def analyze(files, root, tr, want_selftest):
     # one canonicalizer pass over every Bash command of this analysis
     canon = CANON.batch([o["pre"] for o in bash_texts])
     if want_selftest:
-        CANON_EQ.append(all(CANON.single(o["pre"]) == c for o, c in zip(bash_texts, canon)))
+        # Compared as a command substitution captures each, trailing newlines dropped: a record
+        # keeps the newline that ends its last line, while a whole-input run ends that line.
+        CANON_EQ.append(all(CANON.single(o["pre"]).rstrip("\n") == c.rstrip("\n")
+                            for o, c in zip(bash_texts, canon)))
     for o, c in zip(bash_texts, canon):
         tr.pending = o["trace"]
         variant, key, contribs = render_command(c, tr, cov)
@@ -1394,11 +1397,13 @@ fixture-once	path	printf	no
 fixture-milestone-slug	tool-input	Agent{description:<STR>,prompt:<STR>,subagent_type:<STR>}	no'
 REQUIRED_CLASSES="path slug default code flag interpreter-flag heredoc comment var"
 
+RANK_ST_TMP=""
 self_test() {
   preflight_deps
   local T fail=0 rc
-  T="$(mktemp -d "${TMPDIR:-/tmp}/rank-command-templates-selftest-XXXXXX")" || die "self-test: mktemp failed" 1
-  trap 'rm -rf "$T"' EXIT
+  RANK_ST_TMP="$(mktemp -d "${TMPDIR:-/tmp}/rank-command-templates-selftest-XXXXXX")" || die "self-test: mktemp failed" 1
+  trap 'rm -rf "$RANK_ST_TMP"' EXIT
+  T="$RANK_ST_TMP"
   ok()  { printf 'PASS: %s\n' "$1"; }
   bad() { printf 'FAIL: %s\n' "$1"; fail=1; }
   mkdir -p "$T/home" "$T/cfg" "$T/src" "$T/out" "$T/bound" "$T/fmt" "$T/home2/.config/pmo-platform" "$T/ws/pmo-platform/analysis"
