@@ -107,8 +107,9 @@ name: Release tooling smoke
 #              orchestration playbook INSTRUCTS (check-emission-contract-subset.sh over
 #              the committed asserted set), with the lint's own --self-test run by the
 #              selftest-discovery job so the lint cannot drift into always-passing; AND (4) each of
-#              the four finops-usage-extractor scripts runs its committed --self-test —
-#              the executable home of the store's conservation invariants and of the
+#              the five finops-usage-extractor scripts runs its committed --self-test —
+#              the executable home of the store's conservation invariants, of the
+#              cost-unit conversion's pair rule and fail-closed reads, and of the
 #              CIAC / SM / SE fail-closed assertions — in
 #              the finops-selftest job — all asserted behaviorally by executing
 #              the scripts' checks and gating on exit code.
@@ -1453,12 +1454,12 @@ jobs:
           command -v git
 
       - name: finops script --self-tests (offline, synthetic fixtures only)
-        # Runs all four (no fail-fast) so one run reports every regression; emits a
+        # Runs all five (no fail-fast) so one run reports every regression; emits a
         # ::error:: annotation per failing script and exits non-zero if any failed.
         run: |
           set -uo pipefail
           rc=0
-          for s in extract-usage rollup-attribution report-usage estimate-usage; do
+          for s in extract-usage rollup-attribution report-usage estimate-usage convert-usage; do
             echo "::group::${s}.sh --self-test"
             if bash "core/skills/finops-usage-extractor/scripts/${s}.sh" --self-test; then
               echo "OK: ${s}"
@@ -1578,7 +1579,7 @@ jobs:
       #
       #    No control arm sits INSIDE these steps, for the same reason the two probes
       #    above carry none: the "finops script --self-tests" step earlier in this job
-      #    already ran all four self-tests UNMUTATED and gated on their exit code, so an
+      #    already ran all five self-tests UNMUTATED and gated on their exit code, so an
       #    unmutated failure reddens the job before any probe below is reached. The
       #    control arm is structurally upstream, not absent.
       #
