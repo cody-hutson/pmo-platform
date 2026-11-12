@@ -323,6 +323,16 @@
           "required": false,
           "description": "Override for the evals root. Empty resolves to the canonical default ${claude_workspace_root}/pmo-instance/evals. The PARENT of operator_instance_evals_results_path; the Calibration Ledger at judge-calibration/ is a sibling of results/, so the two keys are distinct paths rather than variants of one.",
           "since": "4.57"
+        },
+        {
+          "key": "operator_instance_working_state_telemetry_path",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Override for the working-state telemetry folder that holds the per-release cost rows. Empty resolves to the canonical default ${claude_workspace_root}/pmo-platform/local-state/telemetry (in-repo and git-ignored, in the main checkout), through core/deploy/lib-instance-path.sh pmo_telemetry_path_for(). A subfolder of an in-repo home rather than of pmo-instance/ — a stem exception per depersonalization-spec.md §4.",
+          "since": "5.08"
         }
       ]
     },

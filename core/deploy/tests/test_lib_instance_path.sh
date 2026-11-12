@@ -128,8 +128,9 @@ printf '\nCase 6: the NEEDLE-BEARING resolvers land OUTSIDE the repository tree\
 # This is the invariant the operator-instance directory exists to protect, and it is
 # narrower than "no operator-instance path is in-repo" on purpose. That broader claim is
 # FALSE BY DESIGN: <OPERATOR_INSTANCE_ROADMAPS_PATH> and <OPERATOR_INSTANCE_ANALYSIS_PATH>
-# both default to in-repo homes (folder + README tracked, contents git-ignored), so a test
-# asserting it would fail on 2 of the codified tokens while the platform behaved
+# both default to in-repo homes (folder + README tracked, contents git-ignored), and the
+# working-state telemetry folder (Case 8) defaults to a subfolder of a third, so a test
+# asserting it would fail on 3 of the codified tokens while the platform behaved
 # correctly.  # depersonalization-token: allow — naming two codified tokens in an explanatory comment
 #
 # What actually must never be reachable by a git operation is the pair of files the PII
@@ -225,6 +226,31 @@ row_target_for() {
 row_target="$(row_target_for /ws)"
 pin "7e: the manifest row resolves to the same path the readers resolve (the row invariant)" \
   "${row_target}" "${EXEMPT_AT_WS}" "row resolves to '${row_target}'"
+
+printf '\nCase 8: the working-state telemetry folder resolves to the main checkout, override first\n'
+# Literal pins, per this file's doctrine. The resolver's operator.toml tier reads the
+# config under $HOME, so every arm runs in a subshell with HOME pointed at a sandbox:
+# an empty one for the default, a seeded one for the override. Without the redirect an
+# arm would read the live operator config and could pass or fail for a reason that has
+# nothing to do with the resolver. 8a is also the arm that fails if the folder is ever
+# rooted under the instance container instead of the main checkout.
+TEL_SBX="$(mktemp -d)"; trap 'rm -rf "${TEL_SBX}"' EXIT
+mkdir -p "${TEL_SBX}/empty" "${TEL_SBX}/seeded/.config/pmo-platform"
+printf '[paths]\noperator_instance_working_state_telemetry_path = "/elsewhere/telemetry"\n' \
+  > "${TEL_SBX}/seeded/.config/pmo-platform/operator.toml"
+TEL_AT_WS="/ws/pmo-platform/local-state/telemetry"
+pin "8a: with no override it resolves under the given root's main checkout" \
+  "$( unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT; HOME="${TEL_SBX}/empty"
+      pmo_telemetry_path_for /ws )" "${TEL_AT_WS}"
+pin "8b: the operator.toml override key wins over the default" \
+  "$( unset PMO_INSTANCE_PATH CLAUDE_WORKSPACE_ROOT; HOME="${TEL_SBX}/seeded"
+      pmo_telemetry_path_for /ws )" "/elsewhere/telemetry"
+pin "8c: PMO_INSTANCE_PATH does not relocate it (the folder is not under the instance container)" \
+  "$( unset CLAUDE_WORKSPACE_ROOT; HOME="${TEL_SBX}/empty"; PMO_INSTANCE_PATH="/tmp/explicit-instance"
+      pmo_telemetry_path_for /ws )" "${TEL_AT_WS}"
+pin "8d: an ambient CLAUDE_WORKSPACE_ROOT does not displace the argument" \
+  "$( unset PMO_INSTANCE_PATH; HOME="${TEL_SBX}/empty"; CLAUDE_WORKSPACE_ROOT="/cw"
+      pmo_telemetry_path_for /ws )" "${TEL_AT_WS}"
 
 printf '\n======================================================================\n'
 printf 'test_lib_instance_path.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
