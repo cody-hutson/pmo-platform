@@ -94,6 +94,10 @@
 #                                               # human field value, or "N/A — ..."
 #   ./compute-release-velocity.sh <version> --milestone <N> --json
 #                                               # machine detail: JSON of all signals
+#   ./compute-release-velocity.sh <version> --milestone <N> --cost-row --out-dir <dir>
+#        [--hub-session <stem>]... [--store <usage.jsonl>] [--source-root <dir>]
+#        [--since <ISO-8601>] [--force]
+#                                               # the per-release cost row (below)
 #   ./compute-release-velocity.sh --self-test   # validate logic against synthetic input
 #   ./compute-release-velocity.sh --help        # this help text
 #
@@ -108,6 +112,47 @@
 #   --base <ref>     the merge-base / pre-release ref (files-changed start ref).
 #                    Optional — defaults to the merge SHA's first parent
 #                    (<merge-sha>^), i.e. the diff the merge introduced.
+#
+# THE PER-RELEASE COST ROW (--cost-row) — a separate mode, not a fourth signal. It
+# writes ONE JSON row per release, <out-dir>/release-cost/<slug>.json (rewritten
+# atomically; a re-run replaces only that slug's row), holding per-response token
+# totals by stage x role x token type, the release's planned and delivered points
+# from the delivery predicate above, and weekly points at both ends of the cost
+# unit's bracket. Stdout is exactly two lines: one derived-only summary line and the
+# row path. The row is local operator data: the home must be outside any repository
+# or ignored in the one that contains it (exit 2 otherwise). Its schema, method and
+# coverage semantics are normative in release-velocity-tracking.md § Per-release
+# cost row. In outline:
+#   discover  the release's session trees — a main session is a hub when a spawn it
+#             made (Agent, Task or spawn_task) carries "Milestone <slug>" in its
+#             prompt or description; its nested files belong to it by path; a chip
+#             joins by an exact, whitespace-normalized prompt match. The walk skips
+#             symlinked project directories and duplicate inodes, and reads no main
+#             file older than the milestone (or --since).
+#   count     through the FinOps usage extractor over a FRESH scratch store built on
+#             a hard-link view of exactly those files (one directory per file, so
+#             each record keys on its file path), never the operator's live store;
+#             --store injects a store instead (refused below schema 2.0.0).
+#   classify  each session into a stage x role cell, from content — a stage from the
+#             brief, the spawn description, or a chip's stage; the reviewer role
+#             from the review persona header. Hub cells carry no stage.
+#   convert   through the cost unit's ONE conversion (convert-usage.sh); this tool
+#             holds no weight, bracket end or K.
+#   --out-dir <dir>       the row home (required).
+#   --hub-session <stem>  add a tree the predicate cannot see (repeatable).
+#   --store <file>        an injected usage store, instead of a fresh scratch one.
+#   --source-root <dir>   the transcript root; default $FINOPS_SOURCE_ROOT, else
+#                         ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects.
+#   --since <ISO-8601>    the discovery window's start; default the milestone's
+#                         created_at.
+#   --force               replace a stored row whose discovered files the new run
+#                         does not all find (refused otherwise: a shrinking row).
+# Cost-row exit codes: 0 written (its coverage says fetched or degraded) · 1 invalid
+#   args or a missing dependency (gh, jq, python3) · 2 refused — a store below the
+#   minimum schema, a home inside a repository and not ignored there, zero trees
+#   discovered, or a shrinking re-run · 3 the extractor or the write failed; no row
+#   written · 4 written with the unit UNRESOLVED (the conversion could not resolve a
+#   value): raw totals kept, no weekly points, the row degraded.
 #
 # Cutover: applies to releases entering Stage 13 strictly AFTER this field's
 # introducing-release merge SHA. The introducing release itself is exempt. This
@@ -190,6 +235,1239 @@ usage() {
   /usr/bin/sed -n "4,$(( _last - 2 ))p" "${BASH_SOURCE[0]}" | /usr/bin/sed 's/^# \{0,1\}//'
   exit 0
 }
+
+# Resolve jq off the pinned PATH, as find_gh does for gh. The cost row's two
+# subprocesses (the extractor and the conversion) need it on THEIR PATH, so its
+# directory is handed to them explicitly. Empty when not installed.
+find_jq() {
+  local c
+  for c in /usr/bin/jq /opt/homebrew/bin/jq /usr/local/bin/jq "$HOME/.local/bin/jq"; do
+    [[ -x "$c" ]] && { printf '%s' "$c"; return 0; }
+  done
+  return 0
+}
+
+# The lowest usage-store schema the cost row accepts. Bound to the counting change,
+# not to a digit: 2.0.0 is the major that counts once per API response within one
+# transcript file (the store schema's § Counting unit). A store below it counted per
+# transcript line and is refused (exit 2), injected or fresh.
+COST_ROW_MIN_STORE_SCHEMA="2.0.0"
+
+# ─── The per-release cost row engine (--cost-row) ────────────────────────────
+#
+# One python program, run with /usr/bin/python3 -c. The bash side resolves the
+# milestone, its points (the delivery predicate below) and the paths; this engine
+# discovers the release's session trees, counts them through the usage extractor
+# over a scratch store, classifies each session into a stage x role cell, converts
+# through the one cost-unit conversion and writes the row. Its contract — the row
+# schema, the method and the coverage semantics — is normative in
+# release/references/standards/release-velocity-tracking.md § Per-release cost row.
+# `--self-test` runs the cost-row arms offline over inline fixtures (no gh, no
+# operator transcript, store, home or configuration).
+read -r -d '' _RV_COST_ROW_PY <<'PYEOF' || true
+import argparse, hashlib, io, json, os, re, shutil, stat, subprocess, sys, tempfile
+from datetime import datetime, timezone
+
+ROW_RECORD = "release-cost-row"
+ROW_SCHEMA = "1.0.0"
+SPAWN_TOOLS = ("Agent", "Task", "mcp__ccd_session__spawn_task")
+CHIP_TOOL = "mcp__ccd_session__spawn_task"
+ROLE_ORDER = ("hub", "chip", "spoke", "reviewer", "workflow-agent", "subagent-other")
+STAGE_EXEC_RE = re.compile(r"executing Stage[\s-]*(\d{1,2})\b")
+STAGE_ANY_RE = re.compile(r"\bStage[\s-]*(\d{1,2})\b")
+REVIEW_RE = re.compile(r"adversarial design review", re.I)
+PHASE_A65 = "Phase A6.5"
+COUNTING_SCOPE = "once per API response within one transcript file"
+BOUNDARY = ("spend written after measured_utc (the rest of the close-out, the running hub) "
+            "is outside the row, so a row measured at a release's own Stage 13 is a lower bound")
+LEAVES = ("input", "output", "cache_read")
+CC = ("total", "ephemeral_1h", "ephemeral_5m")
+SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+class Refused(Exception):
+    pass
+
+
+class Failed(Exception):
+    pass
+
+
+class UsageError(Exception):
+    pass
+
+
+def norm(s):
+    return " ".join(str(s).split())
+
+
+def semver(v):
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", str(v or ""))
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def iso_epoch(s):
+    s = str(s).strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    dt = datetime.fromisoformat(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def utc_now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def digest(rel):
+    return hashlib.sha256(rel.encode("utf-8")).hexdigest()[:16]
+
+
+def first_line(s):
+    for line in str(s or "").splitlines():
+        if line.strip():
+            return line.strip()[:240]
+    return ""
+
+
+def parse_lines(data):
+    for raw in data.splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            obj = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(obj, dict):
+            yield obj
+
+
+def msg(r):
+    m = r.get("message")
+    return m if isinstance(m, dict) else {}
+
+
+def msg_text(r):
+    c = msg(r).get("content")
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
+        return "\n".join(b.get("text") for b in c
+                         if isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str))
+    return ""
+
+
+def first_user(recs):
+    for r in recs:
+        if r.get("type") == "user" and not r.get("isMeta"):
+            t = msg_text(r)
+            if t.strip():
+                return t
+    return ""
+
+
+def first_user_stream(fp):
+    try:
+        with open(fp, "rb") as fh:
+            for raw in fh:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    r = json.loads(raw)
+                except ValueError:
+                    continue
+                if isinstance(r, dict) and r.get("type") == "user" and not r.get("isMeta"):
+                    t = msg_text(r)
+                    if t.strip():
+                        return t
+    except OSError:
+        return ""
+    return ""
+
+
+def spawn_calls(recs):
+    out = []
+    for r in recs:
+        if r.get("type") != "assistant":
+            continue
+        c = msg(r).get("content")
+        if not isinstance(c, list):
+            continue
+        for b in c:
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") in SPAWN_TOOLS:
+                inp = b.get("input") if isinstance(b.get("input"), dict) else {}
+                out.append((b.get("id"), b.get("name"), inp))
+    return out
+
+
+def spawn_agent_ids(recs):
+    # tool_use id -> the spawned agent's id, read from the tool result. The agent's
+    # transcript is <root>/subagents/agent-<id>.jsonl. A harness per-spawn token
+    # total in the same result is NEVER read: it is final context, not consumption.
+    out = {}
+    for r in recs:
+        if r.get("type") != "user":
+            continue
+        tur = r.get("toolUseResult")
+        if not isinstance(tur, dict) or not tur.get("agentId"):
+            continue
+        c = msg(r).get("content")
+        if not isinstance(c, list):
+            continue
+        for b in c:
+            if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id"):
+                out[b["tool_use_id"]] = str(tur["agentId"])
+    return out
+
+
+def msg_ids(recs):
+    out = set()
+    for r in recs:
+        if r.get("type") == "assistant":
+            i = msg(r).get("id")
+            if isinstance(i, str) and i:
+                out.add(i)
+    return out
+
+
+def stage_of(first, spawn_desc, inherited):
+    m = STAGE_EXEC_RE.search(first or "")
+    if m and 1 <= int(m.group(1)) <= 13:
+        return int(m.group(1)), "executing-stage"
+    m = STAGE_ANY_RE.search(spawn_desc or "")
+    if m and 1 <= int(m.group(1)) <= 13:
+        return int(m.group(1)), "spawn-description"
+    m = STAGE_ANY_RE.search((first or "")[:2000])
+    if m and 1 <= int(m.group(1)) <= 13:
+        return int(m.group(1)), "first-message"
+    if inherited is not None:
+        return inherited, "chip-root"
+    return None, "none"
+
+
+def reviewer_signal(first, spawn):
+    # The role is read from CONTENT: the review persona header in the linked spawn's
+    # description or at the top of the first user message. The agent type is only a
+    # secondary signal — reviews are spawned as general-purpose agents with a persona.
+    desc = str(spawn.get("description") or "")
+    head = (first or "")[:2000]
+    if REVIEW_RE.search(desc) or REVIEW_RE.search(head) or PHASE_A65 in desc or PHASE_A65 in (first or "")[:300]:
+        return "reviewer-marker"
+    if "adversarial" in str(spawn.get("subagent_type") or "").lower():
+        return "reviewer-subagent-type"
+    return None
+
+
+def zero_tokens():
+    return {"input": 0, "output": 0, "cache_creation": {"total": 0, "ephemeral_1h": 0, "ephemeral_5m": 0},
+            "cache_read": 0}
+
+
+def tokens_ok(t):
+    if not isinstance(t, dict) or not isinstance(t.get("cache_creation"), dict):
+        return False
+    vals = [t.get(k) for k in LEAVES] + [t["cache_creation"].get(k) for k in CC]
+    return all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in vals)
+
+
+def tokens_add(a, t):
+    for k in LEAVES:
+        a[k] += t[k]
+    for k in CC:
+        a["cache_creation"][k] += t["cache_creation"][k]
+
+
+def raw_sum(t):
+    return t["input"] + t["output"] + t["cache_creation"]["total"] + t["cache_read"]
+
+
+def add_count(cell, key, rec):
+    v = rec.get(key)
+    if cell[key] is None:
+        return
+    if isinstance(v, int) and not isinstance(v, bool):
+        cell[key] += v
+    else:
+        cell[key] = None  # absent = not evaluated, never 0
+
+
+def new_cell(stage, role):
+    return {"stage": stage, "role": role, "sessions": 0, "responses": 0, "incomplete_responses": 0,
+            "unevaluated_responses": 0, "lower_bound": False, "tokens": zero_tokens(), "by_model": {}}
+
+
+def fold(cell, rec):
+    cell["sessions"] += 1
+    t = rec.get("turns")
+    cell["responses"] += t if isinstance(t, int) and not isinstance(t, bool) else 0
+    add_count(cell, "incomplete_responses", rec)
+    add_count(cell, "unevaluated_responses", rec)
+    tokens_add(cell["tokens"], rec["tokens"])
+    bm = rec.get("by_model")
+    split = []
+    if isinstance(bm, dict) and bm:
+        for m_id, v in bm.items():
+            tv = v.get("tokens") if isinstance(v, dict) and "tokens" in v else v
+            if not tokens_ok(tv):
+                split = None
+                break
+            split.append((str(m_id), tv))
+    else:
+        split = None
+    if split is None:
+        split = [("unknown", rec["tokens"])]
+    for m_id, tv in split:
+        tokens_add(cell["by_model"].setdefault(m_id, zero_tokens()), tv)
+
+
+def finish(cell):
+    inc, unev = cell["incomplete_responses"], cell["unevaluated_responses"]
+    if (inc or 0) > 0 or (unev or 0) > 0:
+        cell["lower_bound"] = True
+    elif inc is None or unev is None:
+        cell["lower_bound"] = None
+    else:
+        cell["lower_bound"] = False
+
+
+def read_store(path):
+    meta, sess = None, []
+    with open(path, "rb") as fh:
+        for r in parse_lines(fh.read()):
+            if r.get("record") == "meta" and meta is None:
+                meta = r
+            elif r.get("record") == "session":
+                sess.append(r)
+    return meta, sess
+
+
+def run_extractor(extractor, store_dir, src, jq_dir):
+    env = dict(os.environ)
+    env.pop("FINOPS_STORE_PATH", None)
+    env["STORE"] = store_dir
+    env["FINOPS_SOURCE_ROOT"] = src
+    env["PATH"] = (jq_dir + ":" if jq_dir else "") + "/usr/bin:/bin"
+    p = subprocess.run(["/bin/bash", extractor, "--rebuild"], env=env, stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE, universal_newlines=True)
+    return p.returncode, p.stderr
+
+
+def convert(converter, objs, jq_dir, extra_env):
+    env = dict(os.environ)
+    env["PATH"] = (jq_dir + ":" if jq_dir else "") + "/usr/bin:/bin"
+    env.update(extra_env)
+    p = subprocess.run(["/bin/bash", converter, "--convert"], input=json.dumps(objs), env=env,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    if p.returncode != 0:
+        return None, "convert-usage exit %d: %s" % (p.returncode, first_line(p.stderr))
+    try:
+        out = json.loads(p.stdout)
+    except ValueError:
+        return None, "convert-usage wrote output that does not parse"
+    if not isinstance(out, dict) or len(out.get("pairs") or []) != len(objs):
+        return None, "convert-usage returned a pair count that does not match its input"
+    return out, None
+
+
+def home_guard(out_dir, target):
+    # Keyed on the home's CONTAINING repository (the extractor's store-guard shape), with
+    # real paths on both sides so a symlinked prefix cannot read as "outside the repo".
+    probe = os.path.realpath(out_dir)
+    while not os.path.isdir(probe) and os.path.dirname(probe) != probe:
+        probe = os.path.dirname(probe)
+    if not os.path.isdir(probe):
+        return
+    p = subprocess.run(["git", "-C", probe, "rev-parse", "--show-toplevel"], stdout=subprocess.PIPE,
+                       stderr=subprocess.DEVNULL, universal_newlines=True)
+    top = os.path.realpath(p.stdout.strip()) if p.returncode == 0 and p.stdout.strip() else ""
+    if not top:
+        return  # outside any repository: not committable
+    q = subprocess.run(["git", "-C", top, "check-ignore", "-q", "--", os.path.realpath(target)],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if q.returncode != 0:
+        raise Refused("the row home is inside a git repository and the row path is NOT ignored there "
+                      "(a row is local operator data; add an ignore rule, or pass an ignored --out-dir)")
+
+
+def discover(a):
+    """The release's session trees: hubs by the spawn predicate, their nested files by path,
+    chips by exact prompt join, all under a symlink-safe, inode-deduplicated walk."""
+    rx = re.compile(r"Milestone " + re.escape(a.slug) + r"(?![a-z0-9-])")
+    pb = ("Milestone " + a.slug).encode("utf-8")
+    since = iso_epoch(a.since)
+    explicit = set(a.hub_session or [])
+    seen, aliases, main = set(), 0, []
+    try:
+        names = sorted(os.listdir(a.source_root))
+    except OSError as e:
+        raise Failed("the transcript root is unreadable: %s" % e)
+    for name in names:
+        pdir = os.path.join(a.source_root, name)
+        if os.path.islink(pdir):
+            aliases += 1  # a symlinked project directory aliases files reached elsewhere
+            continue
+        if not os.path.isdir(pdir):
+            continue
+        try:
+            fns = sorted(os.listdir(pdir))
+        except OSError:
+            continue
+        for fn in fns:
+            if not fn.endswith(".jsonl"):
+                continue
+            fp = os.path.join(pdir, fn)
+            try:
+                st = os.lstat(fp)
+            except OSError:
+                continue
+            if not stat.S_ISREG(st.st_mode):
+                continue
+            key = (st.st_dev, st.st_ino)
+            if key in seen:
+                aliases += 1
+                continue
+            seen.add(key)
+            main.append((fp, fn[:-6], st.st_mtime))
+    hubs, parsed, matched_explicit, scanned = {}, {}, set(), 0
+    for fp, stem, mt in main:
+        is_explicit = stem in explicit
+        if not is_explicit and mt < since:
+            continue
+        scanned += 1
+        try:
+            with open(fp, "rb") as fh:
+                data = fh.read()
+        except OSError:
+            continue
+        if pb not in data and not is_explicit:
+            continue
+        recs = list(parse_lines(data))
+        parsed[fp] = recs
+        if is_explicit:
+            hubs[fp] = "explicit"
+            matched_explicit.add(stem)
+        elif any(rx.search(" ".join(str(inp.get(k, "")) for k in ("prompt", "description")))
+                 for _i, _n, inp in spawn_calls(recs)):
+            hubs[fp] = "predicate"
+    if not hubs:
+        raise Refused("zero trees: no session spawned work for 'Milestone %s' since %s, and no --hub-session "
+                      "named one" % (a.slug, a.since))
+    prompts, n_calls = {}, 0
+    for fp in hubs:
+        for _i, name, inp in spawn_calls(parsed[fp]):
+            if name == CHIP_TOOL:
+                n_calls += 1
+                p = norm(inp.get("prompt", ""))
+                if p:
+                    prompts.setdefault(p, []).append(inp)
+    chips, joined_prompts = {}, set()
+    for fp, stem, mt in main:
+        if fp in hubs or mt < since:
+            continue
+        first = first_user(parsed[fp]) if fp in parsed else (first_user_stream(fp) if prompts else "")
+        nf = norm(first)
+        if nf and nf in prompts:
+            chips[fp] = ("joined", prompts[nf][0])
+            joined_prompts.add(nf)
+        elif fp in parsed and rx.search(first):
+            chips[fp] = ("orphan", {})
+    joined_calls = sum(len(v) for k, v in prompts.items() if k in joined_prompts)
+    tree, tree_seen = [], set()
+
+    def add(fp, kind, root, via=None, spawn=None, sub_rel=""):
+        st = os.lstat(fp)
+        k = (st.st_dev, st.st_ino)
+        if k in tree_seen:
+            return
+        tree_seen.add(k)
+        recs = parsed.get(fp)
+        if recs is None:
+            with open(fp, "rb") as fh:
+                recs = list(parse_lines(fh.read()))
+        tree.append({"fp": fp, "rel": os.path.relpath(fp, a.source_root), "kind": kind, "root": root,
+                     "via": via, "spawn": spawn or {}, "sub_rel": sub_rel, "recs": recs,
+                     "stem": os.path.basename(fp)[:-6]})
+
+    def add_nested(root_fp):
+        sub = os.path.join(root_fp[:-6], "subagents")
+        if os.path.islink(sub) or not os.path.isdir(sub):
+            return
+        for dp, dns, fns in os.walk(sub, followlinks=False):
+            dns[:] = sorted(d for d in dns if not os.path.islink(os.path.join(dp, d)))
+            for fn in sorted(fns):
+                fp = os.path.join(dp, fn)
+                if fn.endswith(".jsonl") and stat.S_ISREG(os.lstat(fp).st_mode):
+                    add(fp, "nested", root_fp, sub_rel=os.path.relpath(fp, sub))
+
+    for fp in sorted(hubs):
+        add(fp, "hub", fp, via=hubs[fp])
+        add_nested(fp)
+    for fp in sorted(chips):
+        add(fp, "chip", fp, via=chips[fp][0], spawn=chips[fp][1])
+        add_nested(fp)
+    return {"tree": tree, "aliases": aliases, "scanned": scanned,
+            "explicit_unmatched": len(explicit - matched_explicit),
+            "chips": {"spawn_task_calls": n_calls, "joined": joined_calls, "unjoined": n_calls - joined_calls,
+                      "orphan": sum(1 for v in chips.values() if v[0] == "orphan")}}
+
+
+def classify(tree):
+    links = {}
+    for t in tree:
+        agent_ids = spawn_agent_ids(t["recs"])
+        for tu, name, inp in spawn_calls(t["recs"]):
+            if name != CHIP_TOOL and tu in agent_ids:
+                links["agent-" + agent_ids[tu]] = inp
+    by_fp = {t["fp"]: t for t in tree}
+    for t in sorted(tree, key=lambda x: 0 if x["kind"] != "nested" else 1):
+        first = first_user(t["recs"])
+        if t["kind"] == "hub":
+            t["stage"], t["stage_basis"], t["role"], t["role_basis"] = None, "hub", "hub", "hub"
+        elif t["kind"] == "chip":
+            sp = t["spawn"]
+            st, sb = stage_of(first, str(sp.get("description") or sp.get("title") or ""), None)
+            t["stage"], t["stage_basis"], t["role"] = st, sb, "chip"
+            t["role_basis"] = "chip-orphan" if t["via"] == "orphan" else "chip-joined"
+        else:
+            sp = links.get(t["stem"], {})
+            root = by_fp.get(t["root"], {})
+            inherited = root.get("stage") if root.get("kind") == "chip" else None
+            st, sb = stage_of(first, str(sp.get("description") or ""), inherited)
+            t["stage"], t["stage_basis"] = st, sb
+            if "workflows" in t["sub_rel"].split(os.sep)[:-1]:
+                t["role"], t["role_basis"] = "workflow-agent", "path-workflows"
+            else:
+                sig = reviewer_signal(first, sp)
+                if sig:
+                    t["role"], t["role_basis"] = "reviewer", sig
+                elif st is not None:
+                    t["role"], t["role_basis"] = "spoke", "stage-attributed"
+                else:
+                    t["role"], t["role_basis"] = "subagent-other", "none"
+
+
+def subset_rule(tree):
+    """A tree file whose message-id set is contained in another's is a resume or fork copy:
+    it is left out of the count (its subagents stay, by path). Equal sets keep the first path."""
+    ids = {t["rel"]: msg_ids(t["recs"]) for t in tree}
+    kept, excluded = [], 0
+    for t in sorted(tree, key=lambda x: (-len(ids[x["rel"]]), x["rel"])):
+        s = ids[t["rel"]]
+        if s and any(s <= ids[k["rel"]] for k in kept):
+            t["excluded"] = True
+            excluded += 1
+        else:
+            t["excluded"] = False
+            kept.append(t)
+    count = {}
+    for t in kept:
+        for i in ids[t["rel"]]:
+            count[i] = count.get(i, 0) + 1
+    shared = sum(1 for v in count.values() if v > 1)
+    hub_kept = [t for t in kept if t["kind"] == "hub"]
+    pairs = sum(1 for x in range(len(hub_kept)) for y in range(x + 1, len(hub_kept))
+                if ids[hub_kept[x]["rel"]] & ids[hub_kept[y]["rel"]])
+    return excluded, shared, len(hub_kept), pairs
+
+
+def count_tokens(a, sessions, causes):
+    """Join every counted session to its store record. Default: a FRESH scratch store built
+    by the extractor over a hard-link view of exactly these files, one directory per file,
+    so the record's (project_dir, session_id) keys on the file path, never the stem alone."""
+    joined, unextracted, ambiguous = {}, 0, 0
+    if a.store:
+        meta, recs = read_store(a.store)
+        source = "injected"
+    else:
+        view = os.path.join(a.run_dir, "view")
+        os.makedirs(view)
+        keyed = {}
+        try:
+            for i, t in enumerate(sessions):
+                d = os.path.join(view, "%05d" % i)
+                os.makedirs(d)
+                os.link(t["fp"], os.path.join(d, os.path.basename(t["fp"])))
+                keyed[("%05d" % i, t["stem"])] = t
+            source = "fresh"
+        except OSError:
+            source = "fallback-full-root"
+        store_dir = os.path.join(a.run_dir, "store")
+        os.makedirs(store_dir)
+        src = view if source == "fresh" else a.source_root
+        rc, err = run_extractor(a.extractor, store_dir, src, a.jq_dir)
+        if rc != 0:
+            raise Failed("the usage extractor exited %d: %s" % (rc, first_line(err)))
+        meta, recs = read_store(os.path.join(store_dir, "usage.jsonl"))
+        if source == "fresh":
+            by_key = {(r.get("project_dir"), r.get("session_id")): r for r in recs}
+            missing = [k for k in keyed if k not in by_key]
+            if missing:  # a live file can be read mid-append: retry once
+                store2 = os.path.join(a.run_dir, "store-retry")
+                os.makedirs(store2)
+                rc, err = run_extractor(a.extractor, store2, view, a.jq_dir)
+                if rc == 0:
+                    _m2, recs2 = read_store(os.path.join(store2, "usage.jsonl"))
+                    for r in recs2:
+                        k = (r.get("project_dir"), r.get("session_id"))
+                        if k in keyed and k not in by_key:
+                            by_key[k] = r
+            for k, t in keyed.items():
+                if k in by_key:
+                    joined[t["rel"]] = by_key[k]
+                else:
+                    unextracted += 1
+    v = semver((meta or {}).get("schema_version"))
+    if v is None or v < semver(a.min_store_schema):
+        raise Refused("store schema %s is below the minimum %s: a store that counted per transcript line "
+                      "yields no figure in this unit" % ((meta or {}).get("schema_version"), a.min_store_schema))
+    if source != "fresh":
+        # Real layout: a record keys on (parent directory basename, file stem); a key two
+        # files share cannot be told apart, so neither is joined and the row says so.
+        want = {}
+        for t in sessions:
+            want.setdefault((os.path.basename(os.path.dirname(t["fp"])), t["stem"]), []).append(t)
+        have = {}
+        for r in recs:
+            have.setdefault((r.get("project_dir"), r.get("session_id")), []).append(r)
+        for k, ts in want.items():
+            rs = have.get(k, [])
+            if len(ts) > 1 or len(rs) > 1:
+                ambiguous += len(ts)
+            elif rs:
+                joined[ts[0]["rel"]] = rs[0]
+            else:
+                unextracted += 1
+    if unextracted:
+        causes.append("unextracted-files")
+    if ambiguous:
+        causes.append("ambiguous-store-key")
+    if source == "fallback-full-root":
+        causes.append("fallback-source")
+    store_meta = {"source": source, "schema_version": (meta or {}).get("schema_version"),
+                  "generator_version": (meta or {}).get("generator_version")}
+    return joined, unextracted, ambiguous, store_meta
+
+
+def summary(a, row, out_path):
+    cov = row["coverage"]
+    by_role = {r: 0 for r in ROLE_ORDER}
+    nonhub = nonhub_null = 0
+    for c in row["cells"]:
+        by_role[c["role"]] += c["sessions"]
+        if c["role"] != "hub":
+            nonhub += c["sessions"]
+            if c["stage"] is None:
+                nonhub_null += c["sessions"]
+    tot = row["total"]
+    inc = "not-evaluated" if tot["incomplete_responses"] is None else str(tot["incomplete_responses"])
+    if "weekly_points" in tot:
+        wp = "wp %.2f at w-low · %.2f at w-high (%s)" % (tot["weekly_points"]["at_w_low"],
+                                                        tot["weekly_points"]["at_w_high"], row["unit"]["label"])
+    else:
+        wp = "wp unresolved"
+    unstaged = ("%d%%" % round(100.0 * nonhub_null / nonhub)) if nonhub else "n/a"
+    line = ("cost-row %s %s: trees %d · sessions %d (hub %d / chip %d / spoke %d / reviewer %d / workflow %d / "
+            "other %d) · responses %d · incomplete %s · %s · unstaged %s · cross-file shared %d · "
+            "unjoined chips %d · state %s") % (
+        row["slug"], row["version"] or "version-less", sum(1 for h in row["hub_trees"] if h["counted"]),
+        tot["sessions"], by_role["hub"], by_role["chip"], by_role["spoke"], by_role["reviewer"],
+        by_role["workflow-agent"], by_role["subagent-other"], tot["responses"], inc, wp, unstaged,
+        cov["cross_file_shared_responses"], cov["chips"]["unjoined"], cov["measurement_state"])
+    return [line, "row: " + out_path]
+
+
+def build_row(a):
+    if not SLUG_RE.fullmatch(a.slug or ""):
+        raise UsageError("the milestone title is not a filename-safe slug: %r" % a.slug)
+    if not a.out_dir:
+        raise UsageError("no row home: pass --out-dir <dir>")
+    causes = []
+    d = discover(a)
+    tree = d["tree"]
+    classify(tree)
+    excluded, shared, hub_files, pairs = subset_rule(tree)
+    if shared:
+        causes.append("cross-file-shared-responses")
+    counted = [t for t in tree if not t["excluded"]]
+    sessions = [t for t in counted if any(r.get("type") == "assistant" for r in t["recs"])]
+    joined, unextracted, ambiguous, store_meta = count_tokens(a, sessions, causes)
+    cells, total, malformed = {}, new_cell(None, "total"), 0
+    stage_basis, role_basis = {}, {}
+    for t in sessions:
+        rec = joined.get(t["rel"])
+        if rec is None:
+            continue
+        if not tokens_ok(rec.get("tokens")):
+            malformed += 1
+            continue
+        key = (t["stage"], t["role"])
+        fold(cells.setdefault(key, new_cell(t["stage"], t["role"])), rec)
+        fold(total, rec)
+        stage_basis[t["stage_basis"]] = stage_basis.get(t["stage_basis"], 0) + 1
+        role_basis[t["role_basis"]] = role_basis.get(t["role_basis"], 0) + 1
+    if malformed:
+        causes.append("malformed-store-record")
+    ordered = sorted(cells.values(), key=lambda c: (c["stage"] is None, c["stage"] or 0, ROLE_ORDER.index(c["role"])))
+    for c in ordered + [total]:
+        finish(c)
+    objs = [{"tokens": c["tokens"], "by_model": c["by_model"]} for c in ordered + [total]]
+    conv, conv_err = convert(a.converter, objs, a.jq_dir, dict(e.split("=", 1) for e in (a.converter_env or [])))
+    if conv is None:
+        unit = {"state": "not-run", "cause": conv_err}
+        causes.append("unit-unresolved")
+    else:
+        unit = {"state": "fetched", "params": conv["params"], "label": conv["label"],
+                "label_source": conv["label_source"]}
+        for c, pr in zip(ordered + [total], conv["pairs"]):
+            c["weekly_points"] = {"at_w_low": pr["at_w_low"], "at_w_high": pr["at_w_high"]}
+            c["per_model"] = {"split": pr.get("per_model"), "unprobed_models": pr.get("unprobed_models", []),
+                              "own_window_models": pr.get("own_window_models", [])}
+    total.pop("stage", None)
+    total.pop("role", None)
+    points = json.loads(a.points_json) if a.points_json else {}
+    version = a.version if re.match(r"^v\d+\.\d+", a.version or "") else None
+    row = {
+        "record": ROW_RECORD, "schema_version": ROW_SCHEMA, "slug": a.slug, "version": version,
+        "milestone": int(a.milestone) if str(a.milestone or "").isdigit() else None,
+        "measured_utc": utc_now(), "since_utc": a.since,
+        "hub_trees": [{"id": t["stem"], "via": t["via"], "counted": not t["excluded"]}
+                      for t in tree if t["kind"] == "hub"],
+        "points": {k: points.get(k) for k in ("planned", "delivered", "ratio", "na_reason", "flag")},
+        "store": store_meta, "cells": ordered, "total": total, "unit": unit,
+        "coverage": {
+            "measurement_state": "degraded" if causes else "fetched",
+            "degraded_causes": sorted(set(causes)),
+            "counting_scope": COUNTING_SCOPE,
+            "cross_file_shared_responses": shared, "hub_files": hub_files, "sharing_hub_pairs": pairs,
+            "subset_files_excluded": excluded,
+            "advisor_iterations": "not counted",
+            "stage_basis": stage_basis, "role_basis": role_basis, "chips": d["chips"],
+            "symlink_aliases_skipped": d["aliases"], "unextracted_files": unextracted,
+            "ambiguous_store_keys": ambiguous, "malformed_store_records": malformed,
+            "measurement_boundary": BOUNDARY,
+            "discovery": {"predicate": "Milestone " + a.slug, "main_files_scanned": d["scanned"],
+                          "tree_files": len(tree), "explicit_unmatched": d["explicit_unmatched"],
+                          "files": sorted(digest(t["rel"]) for t in tree)},
+        },
+    }
+    if "weekly_points" in total:
+        row["weekly_points"] = total["weekly_points"]
+    return row, conv is None
+
+
+def write_row(a, row):
+    final = os.path.join(a.out_dir, "release-cost", a.slug + ".json")
+    home_guard(a.out_dir, final)
+    if os.path.exists(final) and not a.force:
+        try:
+            with open(final, "r", encoding="utf-8") as fh:
+                old = set(json.load(fh)["coverage"]["discovery"]["files"])
+        except Exception:
+            raise Refused("the stored row at the row path cannot be read; --force replaces it")
+        lost = old - set(row["coverage"]["discovery"]["files"])
+        if lost:
+            raise Refused("a re-run would replace the stored row with one that discovered %d fewer file(s) "
+                          "(a shrinking measurement); --force replaces it" % len(lost))
+    try:
+        os.makedirs(os.path.dirname(final), exist_ok=True)
+        tmp = final + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(row, fh, indent=2)
+            fh.write("\n")
+        os.replace(tmp, final)
+    except OSError as e:
+        raise Failed("the row could not be written: %s" % e)
+    return final
+
+
+def main(argv, out=None, err=None):
+    out = out or sys.stdout
+    err = err or sys.stderr
+    ap = argparse.ArgumentParser(prog="compute-release-velocity.sh --cost-row")
+    for f in ("--slug", "--version", "--milestone", "--since", "--source-root", "--out-dir", "--points-json",
+              "--extractor", "--converter", "--jq-dir", "--run-dir", "--store", "--min-store-schema"):
+        ap.add_argument(f, default="")
+    ap.add_argument("--hub-session", action="append")
+    ap.add_argument("--converter-env", action="append")
+    ap.add_argument("--force", action="store_true")
+    a = ap.parse_args(argv)
+    try:
+        row, unresolved = build_row(a)
+        path = write_row(a, row)
+    except UsageError as e:
+        print("ERROR (exit 1): %s" % e, file=err)
+        return 1
+    except Refused as e:
+        print("REFUSED (exit 2): %s" % e, file=err)
+        return 2
+    except Failed as e:
+        print("FAILED (exit 3): %s — no row written" % e, file=err)
+        return 3
+    for line in summary(a, row, path):
+        print(line, file=out)
+    return 4 if unresolved else 0
+
+
+# ─── Self-test: the cost-row arms, offline over inline fixtures ──────────────
+def U(i, o, cw, cr, h=0):
+    return {"input_tokens": i, "output_tokens": o, "cache_creation_input_tokens": cw,
+            "cache_read_input_tokens": cr,
+            "cache_creation": {"ephemeral_1h_input_tokens": h, "ephemeral_5m_input_tokens": cw - h}}
+
+
+class Tx(object):
+    """One fixture transcript. Every assistant line carries message.id, a usage block and
+    the stop_reason key, so the extractor can evaluate each response's completeness."""
+
+    def __init__(self, sid):
+        self.sid, self.lines, self.n = sid, [], 0
+
+    def _base(self, typ):
+        self.n += 1
+        return {"type": typ, "uuid": "%s-%d" % (self.sid, self.n), "parentUuid": None, "isSidechain": False,
+                "sessionId": self.sid, "cwd": "/fixture/wt",
+                "timestamp": "2026-10-01T00:%02d:%02dZ" % (self.n // 60, self.n % 60)}
+
+    def user(self, text):
+        r = self._base("user")
+        r["message"] = {"role": "user", "content": text}
+        self.lines.append(r)
+        return self
+
+    def resp(self, mid, usage, stop="end_turn", blocks=None, model="model-a"):
+        blocks = blocks or [{"type": "text", "text": "ok"}]
+        for k, b in enumerate(blocks):
+            r = self._base("assistant")
+            r["message"] = {"id": mid, "role": "assistant", "model": model, "content": [b],
+                            "stop_reason": stop if k == len(blocks) - 1 else None, "usage": usage}
+            self.lines.append(r)
+        return self
+
+    def spawn(self, mid, tu, name, inp, usage, agent=None, tur=None):
+        self.resp(mid, usage, stop="tool_use", blocks=[{"type": "tool_use", "id": tu, "name": name, "input": inp}])
+        r = self._base("user")
+        r["message"] = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": tu, "content": "ok"}]}
+        r["toolUseResult"] = tur if tur is not None else ({"status": "completed", "agentId": agent} if agent else
+                                                           {"status": "started"})
+        self.lines.append(r)
+        return self
+
+    def write(self, path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            for r in self.lines:
+                fh.write(json.dumps(r) + "\n")
+
+
+def build_multi_hub(root, slug):
+    P = "Milestone " + slug
+    hub1 = Tx("hub1").user("Run the release hub.").resp("h1-1", U(10, 5, 100, 1000))
+    hub1.spawn("h1-2", "tu1", "Agent", {"description": "Stage 5 solutioning spoke", "subagent_type": "general-purpose",
+                                         "prompt": "You are executing Stage 5 (Solutioning) for the card in %s." % P},
+               U(10, 5, 0, 1100), agent="s5")
+    hub1.spawn("h1-3", "tu2", "Agent", {"description": "Stage 6 engineering spoke", "subagent_type": "general-purpose",
+                                         "prompt": "You are executing Stage 6 (Engineering) in %s." % P},
+               U(10, 5, 0, 1200), agent="s6")
+    hub1.spawn("h1-4", "tu3", "Agent", {"description": "Adversarial design review of the Stage 5 output",
+                                         "subagent_type": "general-purpose",
+                                         "prompt": "Review the Stage 5 output for %s." % P},
+               U(10, 5, 0, 1300), agent="rv")
+    hub1.spawn("h1-5", "tu4", CHIP_TOOL, {"title": "a chip", "prompt": "Chip work:   executing Stage 7 for %s\n run the checks." % P},
+               U(10, 5, 0, 1400))
+    hub1.write(os.path.join(root, "projA", "hub1.jsonl"))
+    Tx("s5").user("You are executing Stage 5 (Solutioning) for the card in %s." % P).resp(
+        "s5-1", U(20, 10, 200, 2000)).write(os.path.join(root, "projA", "hub1", "subagents", "agent-s5.jsonl"))
+    Tx("s6").user("You are executing Stage 6 (Engineering) in %s." % P).resp(
+        "s6-1", U(30, 15, 300, 3000), blocks=[{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]).write(
+        os.path.join(root, "projA", "hub1", "subagents", "agent-s6.jsonl"))
+    Tx("rv").user("Review the Stage 5 output for %s." % P).resp("rv-1", U(5, 5, 50, 500)).write(
+        os.path.join(root, "projA", "hub1", "subagents", "agent-rv.jsonl"))
+    Tx("wf").user("A workflow step.").resp("wf-1", U(1, 1, 10, 100)).write(
+        os.path.join(root, "projA", "hub1", "subagents", "workflows", "agent-wf.jsonl"))
+    hub2 = Tx("hub2").user("The second hub.").resp("h2-1", U(10, 5, 100, 1000))
+    hub2.spawn("h2-2", "tu6", "Agent", {"description": "Stage 7 dev testing", "subagent_type": "general-purpose",
+                                         "prompt": "Please test the change for %s." % P}, U(10, 5, 0, 1000), agent="s7")
+    hub2.spawn("h2-3", "tu7", CHIP_TOOL, {"prompt": "An unjoined chip for %s." % P}, U(10, 5, 0, 1000))
+    hub2.write(os.path.join(root, "projB", "hub2.jsonl"))
+    Tx("s7").user("Please test the change for %s." % P).resp("s7-1", U(40, 20, 400, 4000)).write(
+        os.path.join(root, "projB", "hub2", "subagents", "agent-s7.jsonl"))
+    Tx("chip1").user("Chip work: executing Stage 7 for %s run the checks." % P).resp(
+        "c1-1", U(25, 12, 250, 2500)).write(os.path.join(root, "projC", "chip1.jsonl"))
+    Tx("c1s").user("Help with the checks.").resp("c1s-1", U(8, 4, 80, 800)).write(
+        os.path.join(root, "projC", "chip1", "subagents", "agent-c1s.jsonl"))
+    Tx("orph").user("You are executing Stage 8 (QA) for %s." % P).resp("or-1", U(6, 3, 60, 600)).write(
+        os.path.join(root, "projD", "orphan.jsonl"))
+    # A near-miss: the slug in prose (not in a spawn, not in the first message), a spawn
+    # for ANOTHER milestone, and a longer slug that only shares a prefix.
+    other = Tx("oth").user("Status notes.").resp("ot-1", U(1, 1, 1, 1))
+    other.user("We discussed %s yesterday." % P)
+    other.spawn("ot-2", "tuX", "Agent", {"description": "Stage 3", "prompt": "Work on Milestone another-slug."}, U(1, 1, 1, 1))
+    other.spawn("ot-3", "tuY", "Agent", {"description": "x", "prompt": "Work on %s-extended." % P}, U(1, 1, 1, 1))
+    other.write(os.path.join(root, "projC", "other.jsonl"))
+
+
+def self_test(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repo-root", required=True)
+    ap.add_argument("--jq-dir", default="")
+    ap.add_argument("--min-store-schema", required=True)
+    s = ap.parse_args(argv)
+    extractor = os.path.join(s.repo_root, "core/skills/finops-usage-extractor/scripts/extract-usage.sh")
+    converter = os.path.join(s.repo_root, "core/skills/finops-usage-extractor/scripts/convert-usage.sh")
+    base = tempfile.mkdtemp(prefix="cost-row-selftest-")
+    fails = []
+
+    def ok(name):
+        print("  PASS: " + name)
+
+    def bad(name, why):
+        fails.append(name)
+        print("  FAIL: %s — %s" % (name, why))
+
+    os.makedirs(os.path.join(base, "emptycfg"))
+    os.makedirs(os.path.join(base, "nosrc"))
+    conv_env = ["PMO_SRC_ROOT=" + s.repo_root, "PMO_PLATFORM_CONFIG_ROOT=" + os.path.join(base, "emptycfg")]
+
+    def run(slug, root, out_dir, extra=None, env=None):
+        rd = tempfile.mkdtemp(dir=base, prefix="run-")
+        argv2 = ["--slug", slug, "--version", "v0.01", "--milestone", "7", "--since", "2020-01-01T00:00:00Z",
+                 "--source-root", root, "--out-dir", out_dir, "--extractor", extractor, "--converter", converter,
+                 "--jq-dir", s.jq_dir, "--run-dir", rd, "--min-store-schema", s.min_store_schema,
+                 "--points-json", json.dumps({"planned": 8, "delivered": 8, "ratio": "1.00"})]
+        for e in (env if env is not None else conv_env):
+            argv2 += ["--converter-env", e]
+        o, e2 = io.StringIO(), io.StringIO()
+        rc = main(argv2 + (extra or []), out=o, err=e2)
+        return rc, o.getvalue().splitlines(), e2.getvalue()
+
+    def load(out_dir, slug):
+        with open(os.path.join(out_dir, "release-cost", slug + ".json"), encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def cellmap(row):
+        return {(c["stage"], c["role"]): c for c in row["cells"]}
+
+    def strip_cells(row):
+        return [{k: c[k] for k in ("stage", "role", "sessions", "responses", "incomplete_responses",
+                                   "unevaluated_responses", "tokens", "by_model")} for c in row["cells"]]
+
+    try:
+        slug = "fixture-slug-one"
+        root = os.path.join(base, "root")
+        build_multi_hub(root, slug)
+        out1 = os.path.join(base, "out1")
+
+        # CR-1 multi-hub (the cost-row mode end to end): two hubs with disjoint ids, spokes at
+        # stages 5, 6 and 7, a general-purpose reviewer, a workflow agent, an exact-prompt chip
+        # whose nested session inherits its stage, an orphan chip and an unjoined spawn.
+        rc, lines, err = run(slug, root, out1)
+        row = load(out1, slug) if rc == 0 else None
+        want = {(None, "hub"): 2, (None, "workflow-agent"): 1, (5, "spoke"): 1, (5, "reviewer"): 1,
+                (6, "spoke"): 1, (7, "chip"): 1, (7, "spoke"): 2, (8, "chip"): 1}
+        got = {k: c["sessions"] for k, c in cellmap(row).items()} if row else None
+        if rc == 0 and got == want and row["coverage"]["chips"] == {"spawn_task_calls": 2, "joined": 1,
+                                                                   "unjoined": 1, "orphan": 1}:
+            ok("CR-1 multi-hub: the exact stage x role cell set, the chip join and the unjoined spawn")
+        else:
+            bad("CR-1 multi-hub", "rc %s err %s cells %s" % (rc, err.strip(), got))
+        if row:
+            tot = zero_tokens()
+            meta, recs = None, []
+            stg = os.path.join(base, "inj")
+            os.makedirs(stg)
+            rcx, errx = run_extractor(extractor, stg, root, s.jq_dir)
+            meta, recs = read_store(os.path.join(stg, "usage.jsonl"))
+            for c in row["cells"]:
+                tokens_add(tot, c["tokens"])
+            want_tot = zero_tokens()
+            for r in recs:
+                if r.get("session_id") not in ("other",):
+                    tokens_add(want_tot, r["tokens"])
+            if rcx == 0 and tot == want_tot == row["total"]["tokens"]:
+                ok("CR-1 conservation: the sum of the cells equals the store's sessions, the near-miss excluded")
+            else:
+                bad("CR-1 conservation", "cells %s store %s (extractor rc %s)" % (tot, want_tot, rcx))
+            rb, sb = row["coverage"]["role_basis"], row["coverage"]["stage_basis"]
+            if rb.get("reviewer-marker") == 1 and sb.get("chip-root") == 1 and sb.get("spawn-description") == 2:
+                ok("CR-1 role and stage from content: a general-purpose reviewer, a description-staged spoke, a chip-inherited stage")
+            else:
+                bad("CR-1 bases", "role_basis %s stage_basis %s" % (rb, sb))
+            if len(lines) == 2 and lines[0].startswith("cost-row %s v0.01: trees 2 · sessions 10" % slug) \
+                    and lines[1].startswith("row: "):
+                ok("cost-row stdout is exactly two lines: the summary and the row path")
+            else:
+                bad("cost-row stdout", repr(lines))
+            # CR-12: the summary line carries no session id and no parenthesized .md path.
+            leak = [x for x in ("hub1", "hub2", "chip1", "agent-", "orphan", "projA", "projC") if x in lines[0]]
+            if not leak and not re.search(r"\([^)]*\.md\)", "\n".join(lines)):
+                ok("CR-12 the summary line names no fixture session and no .md path")
+            else:
+                bad("CR-12 summary leak", repr(leak))
+            # CR-8 (CIAC-3 both-bracket-ends): the row's pairs ARE the one conversion's pairs over
+            # the same objects, keyed by bracket end, and the two ends differ.
+            objs = [{"tokens": c["tokens"], "by_model": c["by_model"]} for c in row["cells"]]
+            objs.append({"tokens": row["total"]["tokens"], "by_model": row["total"]["by_model"]})
+            conv, cerr = convert(converter, objs, s.jq_dir, dict(e.split("=", 1) for e in conv_env))
+            mine = [c["weekly_points"] for c in row["cells"]] + [row["total"]["weekly_points"]]
+            theirs = [{"at_w_low": p["at_w_low"], "at_w_high": p["at_w_high"]} for p in (conv or {}).get("pairs", [])]
+            if conv and mine == theirs and row["weekly_points"] == theirs[-1] \
+                    and any(abs(p["at_w_low"] - p["at_w_high"]) > 1e-12 for p in theirs):
+                ok("CR-8 CIAC-3 both-bracket-ends: pairs equal the conversion's, at both ends, which differ")
+            else:
+                bad("CR-8 CIAC-3 both-bracket-ends", "conv err %s; row %s vs conversion %s" % (cerr, mine, theirs))
+
+        # CR-2 killed-spoke: a background spawn whose agent died mid-response. Its last response
+        # carries no stop reason on any line; the hub holds a decoy harness total and a failed
+        # notification. Tokens come from the transcript, the stage from the spoke's own prompt.
+        kslug = "fixture-slug-kill"
+        kroot = os.path.join(base, "kroot")
+        P = "Milestone " + kslug
+        decoy = 987654
+        Tx("hub7").user("hub").spawn("k-1", "tuK", "Agent",
+                                     {"description": "background work", "run_in_background": True,
+                                      "prompt": "You are executing Stage 6 (Engineering) for %s." % P},
+                                     U(3, 2, 0, 50),
+                                     tur={"status": "async_launched", "isAsync": True, "agentId": "kk",
+                                          "totalTokens": decoy}).user(
+            "<task-notification><status>failed</status></task-notification>").write(
+            os.path.join(kroot, "projK", "hub7.jsonl"))
+        Tx("kk").user("You are executing Stage 6 (Engineering) for %s." % P).resp(
+            "kk-1", U(11, 7, 60, 600), stop="tool_use").resp(
+            "kk-2", U(13, 3, 0, 700), stop=None,
+            blocks=[{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]).write(
+            os.path.join(kroot, "projK", "hub7", "subagents", "agent-kk.jsonl"))
+        kout = os.path.join(base, "kout")
+        rc, lines, err = run(kslug, kroot, kout)
+        krow = load(kout, kslug) if rc == 0 else None
+        kc = cellmap(krow).get((6, "spoke")) if krow else None
+        flat = json.dumps(krow["cells"]) if krow else ""
+        if kc and kc["incomplete_responses"] == 1 and kc["lower_bound"] is True and kc["tokens"]["input"] == 24 \
+                and kc["tokens"]["cache_read"] == 1300 and str(decoy) not in flat \
+                and krow["coverage"]["stage_basis"].get("executing-stage") == 1:
+            ok("CR-2 killed-spoke: one incomplete response, a lower bound, transcript tokens, the decoy unused")
+        else:
+            bad("CR-2 killed-spoke", "rc %s err %s cell %s" % (rc, err.strip(), kc))
+
+        # CR-3: a symlinked alias of a hub's project directory does not double the trees.
+        os.symlink(os.path.join(root, "projA"), os.path.join(root, "projA-alias"))
+        out3 = os.path.join(base, "out3")
+        rc, lines, err = run(slug, root, out3)
+        r3 = load(out3, slug) if rc == 0 else None
+        if r3 and len(r3["hub_trees"]) == 2 and r3["total"]["sessions"] == 10 \
+                and r3["coverage"]["symlink_aliases_skipped"] >= 1:
+            ok("CR-3 a symlinked project-directory alias is skipped: still 2 trees and 10 sessions")
+        else:
+            bad("CR-3 symlink alias", "rc %s err %s" % (rc, err.strip()))
+        os.remove(os.path.join(root, "projA-alias"))
+
+        # CR-4: the near-miss is not a tree (CR-1's cell set excludes it), and a fabricated
+        # slug finds no tree and is refused.
+        rc, lines, err = run("fixture-slug-fabricated", root, os.path.join(base, "out4"))
+        if rc == 2 and "zero trees" in err:
+            ok("CR-4 a fabricated slug finds zero trees and is refused (exit 2)")
+        else:
+            bad("CR-4 fabricated slug", "rc %s err %s" % (rc, err.strip()))
+
+        # CR-13: fresh-store parity — the cells from the fresh scratch store equal the cells from
+        # a store the real extractor built over the real layout, injected.
+        inj = os.path.join(base, "inj", "usage.jsonl")
+        out13 = os.path.join(base, "out13")
+        rc, lines, err = run(slug, root, out13, extra=["--store", inj])
+        r13 = load(out13, slug) if rc == 0 else None
+        if row and r13 and strip_cells(r13) == strip_cells(row) and r13["store"]["source"] == "injected" \
+                and row["store"]["source"] == "fresh":
+            ok("CR-13 fresh-store parity: the scratch store and the injected store give the same cells")
+        else:
+            bad("CR-13 parity", "rc %s err %s" % (rc, err.strip()))
+
+        # CR-5: an injected store whose record lacks incomplete_responses reads null, never 0.
+        with open(inj, encoding="utf-8") as fh:
+            lines_in = [json.loads(x) for x in fh if x.strip()]
+        for r in lines_in:
+            if r.get("record") == "session" and r.get("session_id") == "agent-s6":
+                r.pop("incomplete_responses", None)
+        inj5 = os.path.join(base, "inj5.jsonl")
+        with open(inj5, "w", encoding="utf-8") as fh:
+            for r in lines_in:
+                fh.write(json.dumps(r) + "\n")
+        out5 = os.path.join(base, "out5")
+        rc, lines, err = run(slug, root, out5, extra=["--store", inj5])
+        r5 = load(out5, slug) if rc == 0 else None
+        c5 = cellmap(r5).get((6, "spoke")) if r5 else None
+        if c5 and c5["incomplete_responses"] is None and c5["lower_bound"] is None \
+                and r5["total"]["incomplete_responses"] is None and "incomplete not-evaluated" in lines[0]:
+            ok("CR-5 an absent incomplete_responses is not evaluated (null), never 0")
+        else:
+            bad("CR-5 absent field", "rc %s cell %s" % (rc, c5))
+
+        # CR-6 / INT-1: an injected store below the minimum schema is refused (exit 2).
+        for r in lines_in:
+            if r.get("record") == "meta":
+                r["schema_version"] = "1.2.0"
+        inj6 = os.path.join(base, "inj6.jsonl")
+        with open(inj6, "w", encoding="utf-8") as fh:
+            for r in lines_in:
+                fh.write(json.dumps(r) + "\n")
+        rc, lines, err = run(slug, root, os.path.join(base, "out6"), extra=["--store", inj6])
+        if rc == 2 and "below the minimum" in err:
+            ok("CR-6 a store below the minimum schema is refused (exit 2)")
+        else:
+            bad("CR-6 minimum schema", "rc %s err %s" % (rc, err.strip()))
+
+        # CR-7 and the subset rule: a resume copy (its ids inside another hub's) is left out and
+        # the row stays fetched; a fork that continued shares an id the row cannot remove, so
+        # the row is degraded and says why.
+        sslug = "fixture-slug-two"
+        P2 = "Milestone " + sslug
+        sp = {"description": "Stage 6", "prompt": "Engineering for %s." % P2}
+        r2a = os.path.join(base, "root2a")
+        Tx("hub4").user("hub four").spawn("x1", "tA", "Agent", sp, U(5, 5, 5, 5), agent="q1").resp(
+            "x2", U(7, 7, 7, 7)).write(os.path.join(r2a, "projE", "hub4.jsonl"))
+        Tx("hub6").user("hub four").spawn("x1", "tA", "Agent", sp, U(5, 5, 5, 5), agent="q1").write(
+            os.path.join(r2a, "projE", "hub6.jsonl"))
+        rc, lines, err = run(sslug, r2a, os.path.join(base, "out2a"))
+        ra = load(os.path.join(base, "out2a"), sslug) if rc == 0 else None
+        if ra and ra["coverage"]["subset_files_excluded"] == 1 and ra["coverage"]["cross_file_shared_responses"] == 0 \
+                and ra["coverage"]["measurement_state"] == "fetched" and ra["total"]["sessions"] == 1:
+            ok("subset rule: a resume copy is left out of the count, and the row stays fetched")
+        else:
+            bad("subset rule", "rc %s err %s cov %s" % (rc, err.strip(), ra and ra["coverage"]))
+        r2b = os.path.join(base, "root2b")
+        Tx("hub4").user("hub four").spawn("x1", "tA", "Agent", sp, U(5, 5, 5, 5), agent="q1").resp(
+            "x2", U(7, 7, 7, 7)).write(os.path.join(r2b, "projE", "hub4.jsonl"))
+        Tx("hub5").user("hub four").spawn("x1", "tA", "Agent", sp, U(5, 5, 5, 5), agent="q1").resp(
+            "y2", U(9, 9, 9, 9)).write(os.path.join(r2b, "projE", "hub5.jsonl"))
+        rc, lines, err = run(sslug, r2b, os.path.join(base, "out2b"))
+        rb2 = load(os.path.join(base, "out2b"), sslug) if rc == 0 else None
+        cov = rb2["coverage"] if rb2 else {}
+        if rb2 and cov["cross_file_shared_responses"] == 1 and cov["sharing_hub_pairs"] == 1 \
+                and cov["hub_files"] == 2 and cov["measurement_state"] == "degraded" \
+                and "cross-file-shared-responses" in cov["degraded_causes"] and "state degraded" in lines[0]:
+            ok("CR-7 two hubs sharing one message id: shared 1, one sharing pair, the row degraded")
+        else:
+            bad("CR-7 shared ids", "rc %s err %s cov %s" % (rc, err.strip(), cov))
+
+        # CD-1: a conversion that cannot resolve still writes the raw totals, with the unit
+        # not run, no weekly points, the row degraded, and exit 4.
+        outu = os.path.join(base, "outu")
+        rc, lines, err = run(slug, root, outu, env=["PMO_SRC_ROOT=" + os.path.join(base, "nosrc"),
+                                                    "PMO_PLATFORM_CONFIG_ROOT=" + os.path.join(base, "emptycfg")])
+        ru = load(outu, slug) if os.path.exists(os.path.join(outu, "release-cost", slug + ".json")) else None
+        if rc == 4 and ru and ru["unit"]["state"] == "not-run" and "weekly_points" not in ru \
+                and all("weekly_points" not in c for c in ru["cells"]) and ru["total"]["tokens"] == row["total"]["tokens"] \
+                and "unit-unresolved" in ru["coverage"]["degraded_causes"] and "wp unresolved" in lines[0]:
+            ok("CD-1 an unresolved unit writes the raw totals, degraded, exit 4")
+        else:
+            bad("CD-1 unit unresolved", "rc %s err %s" % (rc, err.strip()))
+
+        # CR-9 (FM-1): the cost-unit record's rule, not its seed. The configured bracket must be
+        # well formed, and a bracket that has moved from the authoring bracket the record states
+        # must carry a dated revisit line recording a changed value — narrowing AND widening are
+        # both sanctioned when recorded (the record's Decision 8). The authoring ends are parsed
+        # from the record, never written here.
+        adrs = sorted(x for x in os.listdir(os.path.join(s.repo_root, "release/ADRs"))
+                      if x.endswith("-release-graph-cost-unit.md"))
+        with open(os.path.join(s.repo_root, "release/ADRs", adrs[-1]), encoding="utf-8") as fh:
+            adr = fh.read()
+        with open(os.path.join(s.repo_root, "core/standards/gate-efficacy-standard.md"), encoding="utf-8") as fh:
+            reg = fh.read()
+        penv = dict(os.environ)
+        penv.update(dict(e.split("=", 1) for e in conv_env))
+        penv["PATH"] = (s.jq_dir + ":" if s.jq_dir else "") + "/usr/bin:/bin"
+        pp = subprocess.run(["/bin/bash", converter, "--params"], env=penv, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, universal_newlines=True)
+        params = json.loads(pp.stdout) if pp.returncode == 0 else {}
+        lo, hi = params.get("cache_read_weight_low"), params.get("cache_read_weight_high")
+        verdict = bracket_rule(adr, reg, lo, hi) if lo is not None else "unreadable"
+        m = AUTH_RE.search(adr)
+        if verdict == "holds" and m:
+            a_lo, a_hi = float(m.group(1)), float(m.group(2))
+            moved_line = "<br>`revisit · 2099-01-01 · run · eligible pairs 3 (pooled 3) · excluded 0 () · pairs held at x · calibration sufficient · values changed`"
+            reg_moved = "\n".join((ln + moved_line) if (REG_POP in ln and REG_ROW in ln) else ln
+                                  for ln in reg.splitlines())
+            arms = [
+                (bracket_rule(adr, reg_moved, a_lo * 2, a_hi / 2), "holds", "a narrowed bracket with its revisit line"),
+                (bracket_rule(adr, reg_moved, a_lo / 2, min(1.0, a_hi * 2)), "holds", "a widened bracket with its revisit line"),
+                (bracket_rule(adr, reg, a_lo * 2, a_hi / 2), "unrecorded-move", "a moved bracket with no revisit line"),
+                (bracket_rule(adr, reg_moved, a_hi, a_lo), "malformed", "a bracket whose low end is not below its high end"),
+                (bracket_rule(AUTH_RE.sub("", adr), reg, lo, hi), "unparseable", "vacuity: a record that states no authoring bracket"),
+            ]
+            wrong = [(g, w, n) for g, w, n in arms if g != w]
+            if not wrong:
+                ok("CR-9 the configured bracket satisfies the cost-unit record's rule; its near-misses and vacuity control fire")
+            else:
+                bad("CR-9 rule arms", repr(wrong))
+        else:
+            bad("CR-9 bracket rule", "verdict %s (params rc %s %s)" % (verdict, pp.returncode, first_line(pp.stderr)))
+
+        # CR-10: the home guard — a home inside a repository where the row is not ignored is
+        # refused; the same home, ignored, is written.
+        repo = os.path.join(base, "repo")
+        subprocess.run(["git", "init", "-q", repo], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        rc_a, _l, err_a = run(slug, root, os.path.join(repo, "rows"))
+        with open(os.path.join(repo, ".gitignore"), "w") as fh:
+            fh.write("/rows/\n")
+        rc_b, _l, err_b = run(slug, root, os.path.join(repo, "rows"))
+        if rc_a == 2 and "NOT ignored" in err_a and rc_b == 0 \
+                and os.path.exists(os.path.join(repo, "rows", "release-cost", slug + ".json")):
+            ok("CR-10 the home guard refuses an unignored home in a repository and writes an ignored one")
+        else:
+            bad("CR-10 home guard", "rc %s/%s err %s %s" % (rc_a, rc_b, err_a.strip(), err_b.strip()))
+
+        # CR-11: a re-run rewrites the same file and leaves another slug's row untouched; a
+        # re-run that discovered less is refused unless forced.
+        other_row = os.path.join(out1, "release-cost", "another-slug.json")
+        with open(other_row, "w") as fh:
+            fh.write('{"record": "release-cost-row"}\n')
+        rc, lines, err = run(slug, root, out1)
+        with open(other_row) as fh:
+            untouched = fh.read() == '{"record": "release-cost-row"}\n'
+        shrunk = os.path.join(base, "root-shrunk")
+        shutil.copytree(root, shrunk, symlinks=True)
+        os.remove(os.path.join(shrunk, "projB", "hub2.jsonl"))
+        rc_s, _l, err_s = run(slug, shrunk, out1)
+        rc_f, _l, err_f = run(slug, shrunk, out1, extra=["--force"])
+        if rc == 0 and untouched and rc_s == 2 and "fewer file" in err_s and rc_f == 0:
+            ok("CR-11 a re-run rewrites its own row only; a shrinking re-run is refused unless forced")
+        else:
+            bad("CR-11 re-run", "rc %s untouched %s shrink rc %s force rc %s" % (rc, untouched, rc_s, rc_f))
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+    if fails:
+        print("cost-row self-test: FAIL (%d arm(s): %s)" % (len(fails), ", ".join(fails)))
+        return 1
+    print("cost-row self-test: PASS")
+    return 0
+
+
+AUTH_RE = re.compile(r"At authoring the bracket is \*\*([0-9.]+)\s*[–-]\s*([0-9.]+)\*\*")
+REG_POP = "cost-unit-calibration-revisits"
+REG_ROW = "| **class 3-O.**"
+
+
+def bracket_rule(adr_text, register_text, low, high):
+    m = AUTH_RE.search(adr_text)
+    if not m:
+        return "unparseable"
+    if not (isinstance(low, (int, float)) and isinstance(high, (int, float)) and 0 < low < high <= 1.0):
+        return "malformed"
+    a_lo, a_hi = float(m.group(1)), float(m.group(2))
+    if abs(low - a_lo) < 1e-12 and abs(high - a_hi) < 1e-12:
+        return "holds"
+    rows = [ln for ln in register_text.splitlines() if REG_POP in ln and REG_ROW in ln]
+    if rows and re.search(r"revisit · \d{4}-\d{2}-\d{2} · [^`]* · values changed", rows[0]):
+        return "holds"
+    return "unrecorded-move"
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
+        sys.exit(self_test(sys.argv[2:]))
+    sys.exit(main(sys.argv[1:]))
+PYEOF
 
 # Resolve gh off the pinned PATH (gh commonly lives in /opt/homebrew/bin or
 # /usr/local/bin). Empty when not installed — callers that need it fail with a
@@ -1064,7 +2342,24 @@ $_wc_agree_out"
     die "self-test 7(c) CONTROL: malformed candidate JSON produced exit 0 WITH the sentinel — the caller's crash check is vacuous"
   fi
 
+  # Test CR: the per-release cost row (--cost-row), offline over inline fixtures. The
+  # arms build transcript trees under a temp directory, run the REAL extractor over a
+  # scratch store and the REAL conversion with both of its rung seams pinned (so no
+  # operator configuration, store, home or transcript is read), and assert the row:
+  # CR-1 multi-hub, CR-2 killed-spoke, CR-3 symlink alias, CR-4 fabricated slug, CR-5
+  # absent field, CR-6 minimum schema, CR-7 shared ids and the subset rule, CR-8
+  # CIAC-3 both-bracket-ends, CR-9 the cost-unit record's bracket rule, CR-10 the home
+  # guard, CR-11 re-run containment, CR-12 the summary line, CR-13 store parity, and
+  # an unresolved unit (exit 4). jq is a dependency of both subprocesses.
+  _cr_jq="$(find_jq)"
+  [[ -n "$_cr_jq" ]] || die "self-test CR: jq not found (looked in /usr/bin, /opt/homebrew/bin, /usr/local/bin, ~/.local/bin) — the cost row's extractor and conversion need it"
+  _cr_rc=0
+  /usr/bin/python3 -c "$_RV_COST_ROW_PY" --self-test --repo-root "$REPO_ROOT" \
+    --jq-dir "$(/usr/bin/dirname "$_cr_jq")" --min-store-schema "$COST_ROW_MIN_STORE_SCHEMA" || _cr_rc=$?
+  [[ "$_cr_rc" -eq 0 ]] || die "self-test CR: the cost-row arms failed (exit $_cr_rc) — see the FAIL lines above"
+
   echo "self-test: PASS"
+  echo "  cost-row (CR-1..CR-13 + unresolved unit) validated offline: multi-hub cell set + conservation / killed-spoke lower bound with a decoy harness total / symlink alias / fabricated slug refused / absent field not evaluated / minimum schema refused / subset rule + shared-id degrade / CIAC-3 both-bracket-ends / the cost-unit record's bracket rule with near-misses and a vacuity control / home guard / re-run containment / summary leak / fresh-vs-injected store parity"
   echo "  point scale (XS/S/M/L/XL) validated; out-of-set rejection validated"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / planned-zero)"
   echo "  work-class mapping + precedence validated"
@@ -1083,6 +2378,14 @@ MILESTONE=""
 MERGE_SHA=""
 BASE_REF=""
 OUTPUT_FORMAT="human"   # human | json
+COST_ROW=0              # --cost-row: the per-release cost row instead of the field
+CR_OUT_DIR=""
+CR_STORE=""
+CR_SOURCE_ROOT=""
+CR_SINCE=""
+CR_FORCE=0
+CR_HUB_ARGS=()          # repeated --hub-session <stem>, kept as engine arguments
+CR_FLAGS_SEEN=""        # any cost-row-only flag given, for the without---cost-row refusal
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -1090,6 +2393,13 @@ while [[ $# -gt 0 ]]; do
     --merge-sha) MERGE_SHA="${2:-}"; shift 2 ;;
     --base) BASE_REF="${2:-}"; shift 2 ;;
     --json) OUTPUT_FORMAT="json"; shift ;;
+    --cost-row) COST_ROW=1; shift ;;
+    --out-dir) CR_OUT_DIR="${2:-}"; CR_FLAGS_SEEN="--out-dir"; shift 2 ;;
+    --store) CR_STORE="${2:-}"; CR_FLAGS_SEEN="--store"; shift 2 ;;
+    --source-root) CR_SOURCE_ROOT="${2:-}"; CR_FLAGS_SEEN="--source-root"; shift 2 ;;
+    --since) CR_SINCE="${2:-}"; CR_FLAGS_SEEN="--since"; shift 2 ;;
+    --hub-session) CR_HUB_ARGS+=(--hub-session "${2:-}"); CR_FLAGS_SEEN="--hub-session"; shift 2 ;;
+    --force) CR_FORCE=1; CR_FLAGS_SEEN="--force"; shift ;;
     --help|-h) usage ;;
     -*) die "Unknown flag: $1" ;;
     *)
@@ -1103,6 +2413,13 @@ done
 
 [[ -z "$VERSION" ]] && die "Required: <version> (positional)"
 [[ -z "$MILESTONE" ]] && die "Required: --milestone <N> (the bundle's GitHub milestone number)"
+if [[ "$COST_ROW" -eq 0 && -n "$CR_FLAGS_SEEN" ]]; then
+  die "$CR_FLAGS_SEEN applies only with --cost-row"
+fi
+if [[ "$COST_ROW" -eq 1 ]]; then
+  [[ "$OUTPUT_FORMAT" == "json" ]] && die "--json does not apply to --cost-row (the row itself is the JSON record)"
+  [[ -n "$CR_OUT_DIR" ]] || die "Required with --cost-row: --out-dir <dir> (the row home; the row lands at <dir>/release-cost/<slug>.json)"
+fi
 
 GH="$(find_gh)"
 [[ -n "$GH" ]] || die "gh CLI not found — required to read milestone membership labels"
@@ -1381,6 +2698,48 @@ RELEASE_CLASS="$(/usr/bin/printf '%s' "$MS_BODY" \
   | /usr/bin/awk 'BEGIN{f=0} /^## Release Class/{f=1; next} /^## /{f=0} f && NF {print; exit}' \
   | /usr/bin/grep -oE 'routine|novel|cross-cutting|hotfix' | /usr/bin/head -1 || true)"
 [[ -n "$RELEASE_CLASS" ]] || RELEASE_CLASS="unknown"
+
+# ─── --cost-row: the per-release cost row (branches here; the field path below is untouched)
+#
+# Points come from the SAME delivery predicate as the field. The field's N/A return and
+# its plausibility guard do not stop a row: an unsized membership gives null points with
+# the reason, and a planned-against-zero-delivered reading keeps its numbers with a flag.
+if [[ "$COST_ROW" -eq 1 ]]; then
+  CR_JQ="$(find_jq)"
+  [[ -n "$CR_JQ" ]] || die "jq not found (looked in /usr/bin, /opt/homebrew/bin, /usr/local/bin, ~/.local/bin) — the cost row's extractor and conversion need it"
+  CR_CREATED="$(/usr/bin/python3 -c 'import json,sys
+try: print(json.loads(sys.argv[1]).get("created_at") or "")
+except Exception: print("")' "$MS_JSON" 2>/dev/null || true)"
+  CR_SINCE="${CR_SINCE:-$CR_CREATED}"
+  [[ -n "$CR_SINCE" ]] || die "could not read milestone $MILESTONE's created_at; pass --since <ISO-8601>"
+  CR_SOURCE_ROOT="${CR_SOURCE_ROOT:-${FINOPS_SOURCE_ROOT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects}}"
+  CR_POINTS="$(/usr/bin/python3 -c 'import json,sys
+sized, planned, delivered, ratio = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+if sized == 0:
+    out = {"planned": None, "delivered": None, "ratio": None,
+           "na_reason": "no size:* labels on milestone membership", "flag": None}
+else:
+    out = {"planned": planned, "delivered": delivered, "ratio": ratio, "na_reason": None,
+           "flag": ("planned %d against delivered 0 (the field refuses this reading)" % planned)
+                   if planned > 0 and delivered == 0 else None}
+print(json.dumps(out))' "$SIZED_MEMBERS" "$PLANNED_PTS" "$DELIVERED_PTS" "$RATIO")"
+  # The scratch view and store live in one run directory, removed on every exit: a hard
+  # link left behind would keep a transcript alive past the harness's own deletion.
+  CR_RUN="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/cost-row-XXXXXX")" || die "could not create the run directory"
+  trap '/bin/rm -rf "$CR_RUN"' EXIT
+  trap 'exit 130' INT TERM HUP
+  CR_ARGS=(--slug "$MS_TITLE" --version "$VERSION" --milestone "$MILESTONE" --since "$CR_SINCE"
+           --source-root "$CR_SOURCE_ROOT" --out-dir "$CR_OUT_DIR" --points-json "$CR_POINTS"
+           --extractor "$REPO_ROOT/core/skills/finops-usage-extractor/scripts/extract-usage.sh"
+           --converter "$REPO_ROOT/core/skills/finops-usage-extractor/scripts/convert-usage.sh"
+           --jq-dir "$(/usr/bin/dirname "$CR_JQ")" --run-dir "$CR_RUN"
+           --min-store-schema "$COST_ROW_MIN_STORE_SCHEMA")
+  [[ -n "$CR_STORE" ]] && CR_ARGS+=(--store "$CR_STORE")
+  [[ "$CR_FORCE" -eq 1 ]] && CR_ARGS+=(--force)
+  CR_RC=0
+  /usr/bin/python3 -c "$_RV_COST_ROW_PY" "${CR_ARGS[@]}" ${CR_HUB_ARGS[@]+"${CR_HUB_ARGS[@]}"} || CR_RC=$?
+  exit "$CR_RC"
+fi
 
 # ─── files-changed (git diff --shortstat over the release range) ─────────────
 
