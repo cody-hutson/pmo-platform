@@ -1407,7 +1407,7 @@ L += ["", "## Routing outcomes", "",
       "Mode C returns in the last column. Every record is expected to be held below the filing threshold; a row "
       "still pending, or a verdict other than the expected one, is a failed hand-off.", "",
       "| id | expected Mode C verdict | returned verdict |", "|---|---|---|"]
-L += ["| %s | held — below the filing threshold | pending |" % p["id"] for p in chosen]
+L += ["| %s | signal recorded, held — below the filing threshold | pending |" % p["id"] for p in chosen]
 with open(os.path.join(stg, "SUMMARY.md"), "w", encoding="utf-8") as fh:
     fh.write("\n".join(L) + "\n")
 
@@ -1631,10 +1631,11 @@ EOF
      && [ "$(jq -c '[.cost.status, .coverage.cost_bound_violations.segments_over]' "$CAND")" = '["ok",0]' ]; then
     ok "bound arm (the planted segment degrades and clamps; the fixture window stays ok)"
   else bad "bound arm: got $(jq -c '[.cost.status, .coverage.cost_bound_violations]' "${fb[0]}/candidates.json")"; fi
-  # 18 — routing arm (CD-3): one Routing-outcomes row per record, each expecting the held verdict.
+  # 18 — routing arm (CD-3): one Routing-outcomes row per record, each expecting the label Mode C
+  #      returns below the filing threshold (intake-desk § The filing threshold), word for word.
   local rows ids
   sed -n '/^## Routing outcomes/,$p' "$SUM" > "$T/routing.md"
-  rows="$(grep -c -E '^\| TPL-[0-9a-f]{10} \| held — below the filing threshold \| pending \|$' "$T/routing.md")"
+  rows="$(grep -c -E '^\| TPL-[0-9a-f]{10} \| signal recorded, held — below the filing threshold \| pending \|$' "$T/routing.md")"
   ids="$(jq -r '.[].candidate_id' "$SIG" | grep -c -F -f - "$T/routing.md")"
   if [ "$rows" = "$(jq 'length' "$SIG")" ] && [ "$rows" -ge 1 ] && [ "$ids" = "$rows" ]; then ok "routing arm ($rows rows, one per record)"
   else bad "routing arm: $rows rows for $(jq 'length' "$SIG") records"; fi
