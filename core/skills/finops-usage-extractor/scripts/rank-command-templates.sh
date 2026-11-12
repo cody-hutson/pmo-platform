@@ -697,7 +697,7 @@ def render_command(text, tr, cov):
                 if r is None or r.startswith("<"):
                     tr.hit(t, "command")
                     cov["unknown_command_words"] += 1
-                    r = "<CMD>"
+                    r = "<CMD>"  # CD-1 command-word class
             out.append(r)
             seg.cw, seg.cmd = t, r
             seg.host = t in INTERPRETERS
@@ -1459,10 +1459,17 @@ FIXTURE_HUB_SECRET	heredoc	python3 <HEREDOC>	yes
 fixturecommentword	comment	git status	yes
 FIXTURE_ARR	var	echo ; git log	yes
 fixturecommitword	var	git commit	yes
+fixturecmdword	command	curl | <CMD>	yes
+fixtureurlhost	url	curl | <CMD>	yes
+fixtureglobword	glob	curl | <CMD>	yes
+fixturestrword	tool-input	Grep{pattern:<STR>}	yes
 Fixture Person	default	printf	no
 fixture-once	path	printf	no
 fixture-milestone-slug	tool-input	Agent{description:<STR>,prompt:<STR>,subagent_type:<STR>}	no'
-REQUIRED_CLASSES="path slug default code flag interpreter-flag heredoc comment var"
+# The classes the leak arm requires a ranking literal for: every class that renders a token of a
+# Bash command or a harness-tool value. Not required, so not proven by the arm: the whole-shape
+# classes (<N>, <SHA>, <UUID>, <UNPARSED>) and the tool-name, MCP and <KEY> classes.
+REQUIRED_CLASSES="path slug default code flag interpreter-flag heredoc comment var command url glob tool-input"
 
 RANK_ST_TMP=""
 self_test() {
@@ -1548,7 +1555,7 @@ EOF
   for c in $REQUIRED_CLASSES; do case "$covered" in *" $c "*) ;; *) missing_cls="$missing_cls $c" ;; esac; done
   if [ "$vac" -gt 0 ] || [ -n "$missing_cls" ]; then bad "leak arm is vacuous: $vac literal(s) absent from the input; classes without a ranking literal:${missing_cls:- none}"
   elif [ "$leaks" -gt 0 ] || [ "$trace_bad" -gt 0 ]; then bad "leak arm: $leaks literal(s) leaked; $trace_bad row(s) off their declared class or procedure"
-  else ok "leak arm ($i literals, each in the input, each consumed by its class, none written; every class has a ranking literal)"; fi
+  else ok "leak arm ($i literals, each in the input, each consumed by its class, none written; every required class has a ranking literal)"; fi
 
   # 7 — parity arm: per file, responses and calls equal the extractor's turns and tool calls.
   if STORE="$T/store" FINOPS_SOURCE_ROOT="$T/src" HOME="$T/home" bash "$SCRIPT_DIR/extract-usage.sh" --rebuild > "$T/x.out" 2>&1 \

@@ -20,8 +20,8 @@ per line. The ranker never reads that field.
 | `sessions/proj-rank-a/…00a1.jsonl.fixture` (A) | Main session; first message `executing Stage 6`. The control (a `cd` into a fabricated path, then `gh issue view … \| head`); one response written on two lines that repeat one `tool_use` block; a once-only `printf` carrying a person and an address; three `sleep && gh run list` calls; a compaction boundary; then a `python3` heredoc carrying a literal | control, near-miss (both), dedupe, leak, cost, compaction, stage, parity |
 | `sessions/proj-rank-a/…00a1/subagents/agent-…a1c3.jsonl.fixture` (C) | A spoke under A, every record a sidechain; first message `executing Stage 7`. The control (its `--jq` program carries a literal); `bash` running a tracked script; a `Write` of a `.py` file; `git status` with an unlisted flag; a `curl` | control, rung, leak, stage, cost, parity |
 | `sessions/proj-rank-b/…00b2.jsonl.fixture` (B) | Main session with no stage in its first message. The control in a second variant (its `--json` field is a literal; `--repo` last); a verbatim copy of A's `printf` record (same message id, uuid and tool_use id); `bash` running the tracked script with an unlisted flag after its script operand; a `Write`; a comment line followed by `git status` | control, copied-history, comment, rung, leak, cost, parity |
-| `sessions/proj-rank-d/…00d4.jsonl.fixture` (D) | A hub: an `Agent` spawn whose prompt names `Milestone <slug>`, while its first message names `Stage 5`. A `python3` heredoc; `echo ${#…}; git log`; a `for` loop; a `git commit` whose message is a heredoc inside `$( … )` with apostrophes in its body | stage (a hub carries no stage), heredoc, comment, canonicalizer, substitution |
-| `sessions/proj-rank-d/…00d4/subagents/workflows/agent-…d4e5.jsonl.fixture` (E) | A workflow agent under D. `echo ${#…}; git log`, a `for` loop and the commit-message idiom again, so all three rank | stage (workflow role), comment, canonicalizer, substitution |
+| `sessions/proj-rank-d/…00d4.jsonl.fixture` (D) | A hub: an `Agent` spawn whose prompt names `Milestone <slug>`, while its first message names `Stage 5`. A `python3` heredoc; `echo ${#…}; git log`; a `for` loop; a `git commit` whose message is a heredoc inside `$( … )` with apostrophes in its body; then a second request: a `curl` of a URL piped into an unlisted command word with a glob operand, and a `Grep` whose `pattern` is a literal | stage (a hub carries no stage), heredoc, comment, canonicalizer, substitution, leak (command, URL, glob, tool input) |
+| `sessions/proj-rank-d/…00d4/subagents/workflows/agent-…d4e5.jsonl.fixture` (E) | A workflow agent under D. `echo ${#…}; git log`, a `for` loop and the commit-message idiom again, so all three rank; then the same `curl` pipeline and `Grep` as D's second request, so both rank | stage (workflow role), comment, canonicalizer, substitution, leak (command, URL, glob, tool input) |
 | `bound/proj-rank-bound/…00f6.jsonl.fixture` | One segment: a call whose 3,000-character result is re-read by responses whose measured context is 11 tokens | bound (the cost status degrades and the segment is clamped); staged on its own |
 
 The five session files also feed the memory arm: the ranker reads them one at a time, and at most one
@@ -29,10 +29,11 @@ file's records may be alive at once.
 
 ## What ranks
 
-Eight procedures appear in at least two sessions: the control `cd && gh issue view | head` (A, B,
+Ten procedures appear in at least two sessions: the control `cd && gh issue view | head` (A, B,
 C), `git status` (B, C), `bash core/skills/finops-usage-extractor/scripts/report-usage.sh` (B, C),
 `Write <PATH>.py <CODE>` (B, C), `python3 <HEREDOC>` (A, D), `echo ; git log` (D, E), `for ; wc`
-(D, E) and `git commit` (D, E). The near-misses stay below the two-session floor: `printf` occurs once, because
+(D, E), `git commit` (D, E), `curl | <CMD>` (D, E) and the context pattern `Grep{pattern:<STR>}`
+(D, E). The near-misses stay below the two-session floor: `printf` occurs once, because
 B's copy of A's record is dropped as copied history, and `sleep && gh run list` occurs three times
 in one session.
 
@@ -43,7 +44,9 @@ procedure it sits in. A literal in a ranking procedure proves its class: path (`
 `otherfixture`, `agent-zz`), slug (`synthetic-owner`, `synthetic-repo`, `other-owner`), default
 (`fixtureleakfield`), code (`fixturejqfield`), flag (`fixture-codename`), interpreter flag
 (`fixture-interp-flag`), heredoc (`FIXTURE_SECRET_VALUE`, `FIXTURE_HUB_SECRET`), comment
-(`fixturecommentword`) and variable (`FIXTURE_ARR`, and `fixturecommitword` inside a substitution). Three more sit in procedures that never rank
+(`fixturecommentword`), variable (`FIXTURE_ARR`, and `fixturecommitword` inside a substitution), command
+word (`fixturecmdword`), URL (`fixtureurlhost`), glob (`fixtureglobword`) and harness-tool value
+(`fixturestrword`). Three more sit in procedures that never rank
 (the `printf` person and file, and the hub's milestone slug) and are asserted absent all the same.
 
 ## The cost oracle — hand-computed

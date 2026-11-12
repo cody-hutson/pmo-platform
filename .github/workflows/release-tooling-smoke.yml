@@ -1857,6 +1857,7 @@ jobs:
         #   P1  the closed-vocabulary default renders an unclassified word as itself  -> leak arm
         #   P1b a flag no list names renders as itself                               -> leak arm
         #   P1c a flag after an interpreter's script operand renders as itself       -> leak arm
+        #   P1d an unlisted command word renders as itself                            -> leak arm
         #   P2  the two-session floor drops to one                                    -> the runtime canary
         #       (every run replays the near-miss fixtures before it reads anything, so the canary
         #       refuses first; the self-test's near-miss arms are the same control at arm level)
@@ -1877,6 +1878,8 @@ jobs:
                "    return t  # PROBE", "FAIL: leak arm"),
               ("P1c interpreter-flag class", '        return dash + "<FLAG>"  # CD-1 interpreter-flag class',
                "        return t  # PROBE", "FAIL: leak arm"),
+              ("P1d command-word class", '                    r = "<CMD>"  # CD-1 command-word class',
+               "                    r = t  # PROBE", "FAIL: leak arm"),
               ("P2 session floor", "MIN_SESSIONS = 2  # T-REP", "MIN_SESSIONS = 1  # T-REP",
                "the runtime canary failed"),
               ("P3 re-read term", "reread = w * R  # CD-2 re-read term",
