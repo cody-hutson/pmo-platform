@@ -1573,13 +1573,63 @@ jobs:
 
           echo "Carry-forward precision probe OK — the re-introduced mis-binding correctly failed the carry-forward assertions (exit $probe_rc)."
 
-      # ── The three steps below close the gap the two probes above left open: until now
+      - name: Precision probe — the self-test actually FAILS on an any-line-null completeness test
+        # The no-final-output arm (the incomplete-response flag) holds a near-miss an
+        # any-line-null test flags: a response that writes a snapshot line and then its stop
+        # reason is COMPLETE. This step rewrites the stop-reason test of `completeness` to
+        # that form in a THROWAWAY copy — a response is complete only when every line carries
+        # a stop reason, so one snapshot line makes it incomplete — and asserts a non-zero exit
+        # VIA the no-final-output arm specifically.
+        run: |
+          # -e is ON for every setup step: a failed mktemp / cp / injection must ABORT,
+          # never fall through to a probe that silently tests nothing. It is relaxed
+          # only around the one invocation that is EXPECTED to fail.
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          cp -R core/skills/finops-usage-extractor "$probe/finops-usage-extractor"
+          target="$probe/finops-usage-extractor/scripts/extract-usage.sh"
+
+          # The anchor must match exactly once. If the implementation moves, this
+          # exits non-zero and -e aborts the job — a probe that can no longer find
+          # what it breaks reports that, rather than quietly passing.
+          python3 - "$target" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1]); s = p.read_text(encoding="utf-8")
+          old = 'if   (stop_of(.) | dim_key) != "unknown" then "complete"'
+          new = 'if   ([ $ls[] | select((stop_of(.) | dim_key) == "unknown") ] | length) == 0 then "complete"'
+          if s.count(old) != 1:
+              sys.exit("no-final-output probe anchor not found exactly once in "
+                       "extract-usage.sh (count=%d) — the probe would silently stop "
+                       "testing anything" % s.count(old))
+          p.write_text(s.replace(old, new), encoding="utf-8")
+          PY
+
+          set +e
+          bash "$target" --self-test > "$probe/probe.out" 2>&1
+          probe_rc=$?
+          set -e
+
+          if [ "$probe_rc" -eq 0 ]; then
+            echo "::error::No-final-output precision probe FAILED — extract-usage.sh --self-test returned 0 with an any-line-null completeness test planted. The incomplete-response arm is not detecting a snapshot line counted as incomplete; this gate is blind."
+            sed -n '1,60p' "$probe/probe.out"
+            exit 1
+          fi
+
+          if ! grep -q 'FAIL: no-final-output' "$probe/probe.out"; then
+            echo "::error::No-final-output precision probe returned non-zero (exit $probe_rc) but NOT via the no-final-output arm — the self-test may be failing for an unrelated reason, which would mask a real completeness regression."
+            sed -n '1,60p' "$probe/probe.out"
+            exit 1
+          fi
+
+          echo "No-final-output precision probe OK — an any-line-null completeness test correctly failed the no-final-output arm (exit $probe_rc)."
+
+      # ── The three steps below close the gap the three probes above left open: until now
       #    ONLY extract-usage.sh had a probe, while its three siblings ran --self-test
       #    with nothing proving those runs could report anything but green. Each step
       #    below breaks ONE invariant that belongs to ONE sibling, so a red arm names the
       #    script that regressed rather than reddening the job as a whole.
       #
-      #    No control arm sits INSIDE these steps, for the same reason the two probes
+      #    No control arm sits INSIDE these steps, for the same reason the three probes
       #    above carry none: the "finops script --self-tests" step earlier in this job
       #    already ran every self-test in the loop UNMUTATED and gated on their exit code, so an
       #    unmutated failure reddens the job before any probe below is reached. The

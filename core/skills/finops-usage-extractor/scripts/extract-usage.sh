@@ -805,8 +805,10 @@ self_test() {
   #     stop_reason key, no message.id, no usage block — so each is not evaluated, and
   #     deleting that clause would count it incomplete. H carries the stop_reason key only
   #     at the record's top level, the other placement stop_of reads, so it is evaluable
-  #     and incomplete. Every failure message below names this arm; no CI precision probe
-  #     reads it.
+  #     and incomplete. Every failure message below names this arm, and the release-tooling
+  #     smoke workflow's no-final-output precision probe reads that name: in a throwaway copy
+  #     it rewrites the stop-reason test to the any-line-null form and requires this arm's
+  #     FAIL line.
   local nf_got nf_tot nf_bad nf_rc
   nf_got="$(jq -s -c '[ .[] | select((.record=="session" or .record=="subagent") and .session_id=="agent-afixture-no-final-output")
                         | [.record, .incomplete_responses, .unevaluated_responses] ] | sort' "$st_store/usage.jsonl" 2>/dev/null)"
