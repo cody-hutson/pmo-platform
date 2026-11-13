@@ -125,7 +125,9 @@ CONTROL_PAIR = re.compile(r"\b(C-\d{3,})\b(?:\s*:\s*`?([a-z][a-z-]*)`?)?")
 MMD_KEYWORD_IDS = {"call", "click", "end", "style", "class", "classDef", "subgraph", "linkStyle"}
 MMD_SKIP = {"subgraph", "end", "classDef", "class", "flowchart", "graph", "style", "click", "linkStyle", "direction"}
 MMD_STATEMENT = re.compile(r"^(classDef|class|style|linkStyle|click|subgraph|flowchart|graph|direction)\b|^end$")
-MMD_EDGE = re.compile(r"-\.->|-\.-|==>|===|-->|---|--[ox]|&")
+# An edge token ends a node ID. `--!>` is no Mermaid arrow; it is listed so that a token of that
+# shape splits a line exactly as `-->` does, and the keyword check reads the node ID after it.
+MMD_EDGE = re.compile(r"-\.->|-\.-|==>|===|--!?>|---|--[ox]|&")
 
 
 class Finding:
@@ -410,10 +412,11 @@ class Checker:
         sources = self.cat.sources(page)
         files = sources["depicts"] + sources["cites"]
         seen = set()
+        shown = PC.mask_comments(["" if flags[i] else page.lines[i] for i in range(page.body_start, len(page.lines))])
         for i in range(page.body_start, len(page.lines)):
             if flags[i]:
                 continue
-            text = PC.ANY_LINK_TARGET.sub("]", PC.COMMENT.sub(" ", page.lines[i]))
+            text = PC.ANY_LINK_TARGET.sub("]", shown[i - page.body_start])
             for m in PC.NAME.finditer(text):
                 token = m.group(0)
                 if token in seen or re.match(r"^[A-Za-z]\.[A-Za-z]$", token):
@@ -493,10 +496,10 @@ class Checker:
         for index, m in PC.root_links(page):
             if PC.LABEL_LINE_TOKEN.search(PC.unspan(m.group("label"))):
                 add("ANC004", "the label of the link to `%s` carries a line token" % m.group("path"), index)
-        for index, text in page.body_lines():
-            rest = PC.CITATION.sub(" ", text)
-            rest = PC.ROOT_LINK.sub(" ", rest)
-            rest = PC.ANY_LINK_TARGET.sub("]", PC.COMMENT.sub(" ", rest))
+        body = page.body_lines()
+        rests = PC.mask_comments([PC.ROOT_LINK.sub(" ", PC.CITATION.sub(" ", text)) for _index, text in body])
+        for (index, _text), rest in zip(body, rests):
+            rest = PC.ANY_LINK_TARGET.sub("]", rest)
             if PC.PROSE_LINE_REF.search(rest):
                 add("ANC005", "a line reference stands outside a citation", index)
 
@@ -787,7 +790,7 @@ def self_test() -> int:
         seen_codes = set()
         for path in fixtures:
             nid = path.name[:-len(".md.txt")]
-            m = re.search(r"<!-- expect: ([A-Za-z0-9:, ]+) -->", path.read_text(encoding="utf-8"))
+            m = re.search(r"<!-- expect: ([A-Za-z0-9:, ]+) --!?>", path.read_text(encoding="utf-8"))
             want = [c.strip() for c in m.group(1).split(",")] if m else []
             placed = fx.fail_page(nid)
             try:
@@ -894,6 +897,40 @@ def self_test() -> int:
         arms.check("PAG003: the catalog README is expected (the near-miss)", code == 0 and "PAG003" not in codes_of(lines, "ERROR"),
                    lines[-1:])
         (fx.catalog / "README.md").unlink()
+
+        # -- comments: across lines, and both end forms --
+        named = "no-such-fixture-file.txt"
+        for label, text, want in (
+                ("a file name in running text is read (the control)", "Body names %s here.\n" % named, True),
+                ("a file name inside a comment that spans lines is not read",
+                 "Body <!-- opens\nnames %s here\ncloses --> ends.\n" % named, False),
+                ("a file name inside a comment that ends with the second end form is not read",
+                 "Body <!-- names %s here --!> ends.\n" % named, False),
+                ("a file name after a comment opener that never closes is read (the near-miss)",
+                 "Body <!-- opens\nnames %s here.\n" % named, None)):
+            path = scratch / "fixture-activity-plain-comment.md"
+            want, placed_text = (True, plain_text + "\n" + text) if want is None else \
+                (want, plain_text.replace("## Navigation", text + "\n## Navigation", 1))
+            PC.write_text(path, placed_text)
+            try:
+                _code, lines = in_process(targets=[path])
+            finally:
+                path.unlink()
+            arms.check("comments: " + label, ("SRC003" in codes_of(lines, "ERROR")) == want, codes_of(lines, "ERROR"))
+        for label, text, want in (
+                ("a line reference in running text is read (the control)", "See line 12 of the rules.\n", True),
+                ("a line reference inside a comment that spans lines is not read", "See <!-- opens\nline 12\n--> it.\n", False),
+                ("a line reference inside a comment with the second end form is not read", "See <!-- line 12 --!> it.\n", False)):
+            path = scratch / "fixture-activity-plain-comment.md"
+            PC.write_text(path, plain_text.replace("## Navigation", text + "\n## Navigation", 1))
+            try:
+                _code, lines = in_process(targets=[path])
+            finally:
+                path.unlink()
+            arms.check("comments: " + label, ("ANC005" in codes_of(lines, "WARN")) == want, codes_of(lines, "WARN"))
+        arms.check("flow: a token of the second end form splits a line as an arrow does, and no arrow is lost",
+                   mermaid_keyword_ids(["a --!> end"]) == ["end"] and mermaid_keyword_ids(["a --> end"]) == ["end"]
+                   and mermaid_keyword_ids(["a --> ending"]) == [])
 
         # -- pack parity --
         pack_file, doc_file = fx.definitions / PC.default_part("pack"), fx.definitions / fx.layout["pack_document"]

@@ -1124,9 +1124,19 @@ ANCHOR_OPEN = re.compile(r"<!--\s*source-anchor:")
 FRAGMENT = re.compile(r"\]\([^)\s#]+#L[0-9]+(?:-L[0-9]+)?\)")
 ROOT_LINK = re.compile(r"(?<!!)\[(?P<label>[^\]\n]*)\]\((?P<path>/[^)\s#]*)(?P<frag>#[^)\s]*)?\)")
 ANY_LINK_TARGET = re.compile(r"\]\([^)\n]*\)")
-COMMENT = re.compile(r"<!--.*?-->")
+COMMENT = re.compile(r"<!--.*?--!?>", re.DOTALL)      # a comment may span lines; it ends at `-->` or `--!>`
 LABEL_LINE_TOKEN = re.compile(r"\bL[0-9]+\b|\blines?\s+[0-9]+|:[0-9]+\s*$")
 PROSE_LINE_REF = re.compile(r"\bL(?:[4-9]|[0-9]{2,})\b|\blines?\s+[0-9]+\b|[A-Za-z0-9_.\-]+\.[A-Za-z]{1,5}:[0-9]+\b")
+
+
+def mask_comments(texts: list) -> list:
+    """The same lines with every comment blanked in place. The lines are read as one text, so a
+    comment that opens on one line and closes on a later one is blanked on every line it touches,
+    and a line keeps its index and its columns. A comment ends at `-->` or `--!>`. An opener with no
+    closer blanks nothing: its text stays in view of the rule that called. A caller passes a fenced
+    line as an empty string, so a comment marker inside fenced code opens nothing."""
+    blank = lambda m: re.sub(r"[^\n]", " ", m.group(0))   # noqa: E731
+    return COMMENT.sub(blank, "\n".join(texts)).split("\n")
 
 
 class Citation:
@@ -1412,7 +1422,7 @@ DISABLED_EMITTERS = set()         # a test seam: the emission-mutant arm disable
 EMITTERS = ("graph", "index", "controls-overview", "controls-cited", "controls-kind", "interfaces", "jobs",
             "data-flow", "state", "structure")
 MD_LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
-ANCHOR_COMMENT = re.compile(r"<!--\s*source-anchor:.*?-->")
+ANCHOR_COMMENT = re.compile(r"<!--\s*source-anchor:.*?--!?>", re.DOTALL)
 RUNNER_KINDS = ("ci", "hook", "script")
 VIEW_NOTES = (
     ("controls-overview", "controls by mechanism kind and enforcement class"),
@@ -2760,6 +2770,18 @@ def _self_test() -> int:
         arms.check("tables: an inline list parses and a block value does not",
                    parse_inline_list("[a, b]") == ["a", "b"] and parse_inline_list("") is None
                    and parse_inline_list("[]") == [])
+
+        # -- comments: across lines, and both end forms --
+        arms.check("comments: a comment that spans lines is blanked on each line, columns kept",
+                   mask_comments(["a <!-- b", "c.txt", "d --> e"]) == ["a       ", "     ", "      e"])
+        arms.check("comments: a comment that ends with the second end form is blanked",
+                   mask_comments(["a <!-- b.txt --!> c"]) == ["a                 c"])
+        arms.check("comments: an opener with no closer blanks nothing (the near-miss)",
+                   mask_comments(["a <!-- b.txt", "c"]) == ["a <!-- b.txt", "c"])
+        arms.check("comments: a source anchor is removed from a carried cell across a line break and with either end",
+                   carry("x<!-- source-anchor:\nline=3; fp=0123456789abcdef --> y") == "x y"
+                   and carry("x<!-- source-anchor: line=3; fp=0123456789abcdef --!> y") == "x y"
+                   and carry("x <!-- another comment --> y") == "x <!-- another comment --> y")
 
         # -- the pack: shape, and unknown keys at nine places --
         good = json.loads(fixture_text(default_part("pack")))
