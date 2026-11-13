@@ -63,7 +63,9 @@ last field and may itself contain `|`. Lines starting with `#` and blank lines a
 4,100 repetitions of `x` and `n`, `@SHORTX@` 4,000 of `x`, `@MIDX@` and `@MIDN@` 1,000 of
 `x` and `n`, `@QPAD@` 2,050 pairs of empty double quotes. Anything else — `$NOPE7019`,
 `$VAR`, `$HOME` — is plain text to the guard, because a PreToolUse hook sees argv
-unexpanded. A command that needs a newline cannot be written in this format. The
+unexpanded. `@NL@` is a newline: a row is one line, so a command that spans lines writes
+each line break as `@NL@`, and the `block-destructive` reader substitutes it before the
+row is run (a backslash-newline line continuation is `\@NL@`). The
 `block-egress` rows use two more: `@OK@`, the one `gh api` path the egress reader's
 hermetic root allowlists (`repos/v-test-owner/v-test-repo/issues`), and `@NO@`, a path
 that root does not grant (`repos/evil-org/secret/issues`).

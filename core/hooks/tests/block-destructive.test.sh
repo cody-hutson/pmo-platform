@@ -6563,6 +6563,7 @@ wc_expand() { # $1 = command template -> WC_CMDX
   c="${c//@MIDX@/$WC_MIDX}"
   c="${c//@MIDN@/$WC_MIDN}"
   c="${c//@QPAD@/$WC_QPAD}"
+  c="${c//@NL@/$'\n'}"
   WC_CMDX="$c"
 }
 
