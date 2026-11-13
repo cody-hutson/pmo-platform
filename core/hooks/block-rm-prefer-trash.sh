@@ -460,7 +460,10 @@ log_block() {
   local ts
   ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   local input_digest
-  input_digest="$("$PRINTF" '%s' "$COMMAND_RAW" | "$SHASUM" -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16)"
+  # The whole digest is read, then cut to its first 16 characters in the shell, so no reader
+  # in the pipeline stops before its writer is done.
+  input_digest="$("$PRINTF" '%s' "$COMMAND_RAW" | "$SHASUM" -a 256 | "$GREP" -oE '^[a-f0-9]+')"
+  input_digest="${input_digest:0:16}"
   # shellcheck disable=SC2016  # jq filter — single quotes intentional
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
