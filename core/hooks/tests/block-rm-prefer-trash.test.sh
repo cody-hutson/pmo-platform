@@ -258,6 +258,23 @@ test_case "AC-AP-015c: piped chain with /usr/bin/rm blocks (composes with EXT-CH
 test_case "AC-AP-015d: quoted '/usr/bin/rm' as grep pattern allows (false-positive guard)" \
   "$(bash_payload 'cat /tmp/log.txt | grep "/usr/bin/rm called"')" 0
 
+# AC-AP-016 (#8123 AC1): the keg-only Trash location the hook's own tier-2 suggestion names is a
+# Trash invocation. It sits outside the shared prefix set (which stays byte-identical across the
+# four anchor hooks), so the hook recognises it through one Trash-local constant that the
+# suggestion, the Step-3 verb test and the segment walk all read. 016c is the inside control;
+# 016d is the keg spelling with no operand, which #8122's target-less limb must also see (INT-4).
+RMT_KEG="/opt/homebrew/opt/trash/bin/trash"
+test_case "AC-AP-016: the keg-only Trash location with an outside target blocks (BLOCK-TRASH-003)" \
+  "$(bash_payload "${RMT_KEG} /tmp/rmt-keg-016")" 2 "BLOCK-TRASH-003.*deletion outside"
+test_case "AC-AP-016b: the keg-only Trash location after a separator with an outside target blocks" \
+  "$(bash_payload "ls && ${RMT_KEG} /tmp/rmt-keg-016b")" 2 "BLOCK-TRASH-003.*deletion outside"
+test_case "AC-AP-016c (control): the keg-only Trash location with an inside target allows" \
+  "$(bash_payload "${RMT_KEG} ${RMT_FIXTURE_HOME}/Claude/keg-in" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "AC-AP-016d: the keg-only Trash location with no operand is refused (target-less, INT-4)" \
+  "$(bash_payload "${RMT_KEG}")" 2 "BLOCK-TRASH-003.*does not name all its targets"
+test_case "AC-AP-016e: the keg-only Trash location behind a wrapper with an outside target blocks" \
+  "$(bash_payload "nice ${RMT_KEG} /tmp/rmt-keg-016e")" 2 "BLOCK-TRASH-003.*deletion outside"
+
 # ----- EXT-POS: command-start position coverage (#5644) -----
 #
 # The anchor recognises a command start only at line-start or after `;&|`. Every case
@@ -789,6 +806,25 @@ else
   seg_armed "EXT-SEG-INT1-C8:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C8"
   seg_armed "EXT-SEG-INT1-C11:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C11"
   case "${seg_dir##*/}" in rmt-seg.*) /bin/rm -rf "$seg_dir" ;; esac
+fi
+
+# The keg coupling shown load-bearing (#8123 FM-3). The keg-only location reaches the segment walk
+# through walk_segments(), the walk's one call site, so every mode receives it. A copy whose call
+# site drops it, shown live first (one line from the hook, and it parses), allows both sentinels:
+# the Step-3 verb test still fires, but neither the operand walk nor the target-less walk can see
+# the call.
+keg_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-keg.XXXXXX" 2>/dev/null)" || keg_dir=""
+if [ -z "$keg_dir" ]; then
+  /usr/bin/printf 'FAIL: AC-AP-MUT-KEG pairs could not create a sandbox, so they did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${keg_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${keg_dir}/lib/"
+  /usr/bin/sed -e 's/ -v keg="\$TRASH_KEG_DIR"\(.*  # M-TRASH-KEG\)$/\1/' \
+    "$HOOK" > "${keg_dir}/block-rm-prefer-trash-keg.sh"
+  ra_pair "AC-AP-MUT-KEG-016:" "${keg_dir}/block-rm-prefer-trash-keg.sh" "${RMT_KEG} /tmp/rmt-keg-016"
+  ra_pair "AC-AP-MUT-KEG-016d:" "${keg_dir}/block-rm-prefer-trash-keg.sh" "${RMT_KEG}"
+  case "${keg_dir##*/}" in rmt-keg.*) /bin/rm -rf "$keg_dir" ;; esac
 fi
 
 # ----- CWD-*: a relative target is judged from the directory the command can be in -----
