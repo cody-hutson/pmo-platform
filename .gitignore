@@ -66,8 +66,10 @@ flip-scan-needles.txt
 # resolve-time git check-ignore guard (fail-closed); these patterns are defense-in-depth.
 **/pmo-instance/finops/
 **/finops/usage.jsonl
-# The prior-unit store extract-usage.sh --rebuild keeps once at a counting-unit boundary
-# (schema v2.0.0): <store>/prior/schema-<old>/usage.jsonl — the same data class as the store.
+# The prior-unit stores extract-usage.sh --rebuild keeps at every counting-unit crossing
+# (schema v2.0.0), never overwriting one: <store>/prior/schema-<old>/usage.jsonl, or, at a
+# later crossing from the same version, <store>/prior/schema-<old>-<UTC stamp>/usage.jsonl
+# — the same data class as the store. The one rule below covers both forms.
 **/finops/prior/
 
 # Per-release cost rows — derived working state about this repository's own releases,
