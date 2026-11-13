@@ -507,3 +507,15 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 - **Cascade sweep** (the Stage-5 design's four UPDATE rows, exact-phrase counts over the hook and the fragment): pre 1 / post 0 on each of "takes the raw command, as a failed", "deliberately keep the RAW", "The extractor reads the raw command" and "Command-position model (runs first)".
 - **shellcheck:** no new finding in the hook or the suite against the base.
 - **Integration with #8122 (INT-1, INT-2):** predicted, not measured — graded on the composed head after #8122's fix commit (A6.5 FM-2).
+
+### #8122 spoke, commit 1 — CI repair
+
+- **RED:** the pull request's SIGPIPE-idiom gate, red on `core/hooks/block-rm-prefer-trash.sh:463` at `b2c4d8a7` (Repository integrity run 43512704332): the block-log digest was cut by a pipeline ending in a reader that stops early.
+- **Change:** the digest is read whole and cut with a shell substring; the value is unchanged (the same 16 characters on a sample input).
+- **Floor on that head** (sandbox hook SHA-256 prefix `16bc1f3b8421d82f`), the four suites through the suite runner under the CI layout: 297/297 · 198/198 · 45/45 · 75/75 — **615/615**.
+
+### Receiver narrowings RED — Stage 6 B1 (hub determination: #7644 A6.5 FM-3 and FM-4)
+
+- **Arms:** 24 new arms in the HDATA family. The edit-option arms (HDATA-GIT-EDIT-A to -J, two controls, and the M-HD-EDIT mutant pair) run inside the HDATA-GIT block, through the copy without the whole-line git exit while that exit exists; the zsh-table arms (HDATA-RX-ZFUNCS, -ZALIASES, -ZCOMMANDS, -ZARRAY, -ZSIBLING, the control HDATA-RX-ZCTL, and two sentinels for the existing route mutant) run on the hook.
+- **Prediction, written before the run:** 19 red (the ten edit-option arms, the four M-HD-EDIT pairs whose marked line does not exist yet, the five zsh-table arms); the five others green; the 297 existing arms unchanged.
+- **Run:** the deletion-hook suite through the suite runner under the CI layout, hook unchanged (`16bc1f3b8421d82f`): `Total: 321  PASS: 302  FAIL: 19` — exactly the predicted set.

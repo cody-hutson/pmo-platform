@@ -1672,6 +1672,25 @@ test_case "HDATA-RX-ALIAS: a listed name redefined as an alias on the line stays
   "$(bash_payload $'alias cat=bash; cat <<\'EOF\'\nrm -rf /tmp/hd-al\nEOF')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-PATHVAR: a PATH assignment on the line stays refused" \
   "$(bash_payload $'PATH=/tmp/hd-bin:$PATH; cat <<\'EOF\'\nrm -rf /tmp/hd-pv\nEOF')" 2 "BLOCK-TRASH-001"
+# zsh's definition tables. On zsh a name is redefined as a function, an alias or a command path by
+# assigning to one of its tables, with no redefinition word on the line. A word that ends in one of
+# those table names declines as the words above do, so the sibling tables (global and suffix
+# aliases, the disabled forms) decline too. The control carries each name followed by a word
+# character, which is not a table name.
+HD_RX_ZFUNCS=$'functions[cat]=bash; cat <<\'EOF\'\nrm -rf /tmp/hd-zf\nEOF'
+HD_RX_ZCOMMANDS=$'commands[cat]=/bin/sh; cat <<\'EOF\'\nrm -rf /tmp/hd-zc\nEOF'
+test_case "HDATA-RX-ZFUNCS: a listed name redefined through zsh's function table stays refused" \
+  "$(bash_payload "$HD_RX_ZFUNCS")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZALIASES: a listed name redefined through zsh's alias table stays refused" \
+  "$(bash_payload $'aliases[cat]=bash; cat <<\'EOF\'\nrm -rf /tmp/hd-za\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZCOMMANDS: a listed name re-pointed through zsh's command-path table stays refused" \
+  "$(bash_payload "$HD_RX_ZCOMMANDS")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZARRAY: zsh's alias table assigned as a whole array stays refused" \
+  "$(bash_payload $'aliases+=(cat bash); cat <<\'EOF\'\nrm -rf /tmp/hd-zr\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZSIBLING: a sibling table (global aliases) stays refused" \
+  "$(bash_payload $'galiases[EOF]=x; cat <<\'EOF\'\nrm -rf /tmp/hd-zg\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZCTL: a table name followed by a word character is not a table, so the body is data" \
+  "$(bash_payload $': aliasesx functionsx commandsx; cat <<\'EOF\'\nrm -rf /tmp/hd-zn\nEOF')" 0
 test_case "HDATA-RX-PEXP: the operator inside a parameter expansion, brace adjacent, stays refused" \
   "$(bash_payload $': ${X:-<<\'EOF\'}\nrm -rf /tmp/hd-pe\nEOF')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-PEXP2: the operator inside a double-quoted parameter expansion stays refused" \
@@ -1771,6 +1790,46 @@ else
     "$(bash_payload $'git -c core.editor=true commit -F - <<\'EOF\'\nrm -rf /tmp/hd-gd\nEOF')" 2 "BLOCK-TRASH-001"
   test_case "HDATA-GIT-E: git with two -C pairs is not a listed receiver and stays judged" \
     "$(bash_payload $'git -C /tmp/a -C /tmp/b commit -F - <<\'EOF\'\nrm -rf /tmp/hd-ge\nEOF')" 2 "BLOCK-TRASH-001"
+  # git's edit option. With it, git opens the message in an editor, and an editor named earlier on
+  # the line can be a program that runs the message file, which is the body. A git receiver whose
+  # words after its subcommand carry that option in any spelling git accepts (short, long, a unique
+  # prefix of the long form, a bundled short cluster, quoted; before or after the operator), or a
+  # word an expansion could turn into it, is not a listed receiver, and the body stays judged.
+  HD_GIT_EDIT_A=$'git commit -e -F - <<\'EOF\'\nrm -rf /tmp/hd-gea\nEOF'
+  HD_GIT_EDIT_C=$'git commit -F - <<\'EOF\' --edit\nrm -rf /tmp/hd-gec\nEOF'
+  HD_GIT_EDIT_D=$'git commit -se -F - <<\'EOF\'\nrm -rf /tmp/hd-ged\nEOF'
+  HD_GIT_EDIT_J=$'git commit -F - $(printf %s x) <<\'EOF\'\nrm -rf /tmp/hd-gej\nEOF'
+  test_case "HDATA-GIT-EDIT-A: git commit with the short edit option is not a listed receiver and stays judged" \
+    "$(bash_payload "$HD_GIT_EDIT_A")" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-B: git commit with the long edit option stays judged" \
+    "$(bash_payload $'git commit -F - --edit <<\'EOF\'\nrm -rf /tmp/hd-geb\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-C: the edit option after the operator stays judged" \
+    "$(bash_payload "$HD_GIT_EDIT_C")" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-D: the edit option in a bundled short cluster stays judged" \
+    "$(bash_payload "$HD_GIT_EDIT_D")" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-E: a unique prefix of the long edit option stays judged" \
+    "$(bash_payload $'git commit --edi -F - <<\'EOF\'\nrm -rf /tmp/hd-gee\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-F: a quoted edit option stays judged" \
+    "$(bash_payload $'git commit "-e" -F - <<\'EOF\'\nrm -rf /tmp/hd-gef\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-G: git tag with the edit option stays judged" \
+    "$(bash_payload $'git tag -a v0 -e -F - <<\'EOF\'\nrm -rf /tmp/hd-geg\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-H: git -C <dir> commit with the edit option stays judged" \
+    "$(bash_payload $'git -C /tmp/hd-repo commit -e -F - <<\'EOF\'\nrm -rf /tmp/hd-geh\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-I: a variable after the subcommand, which can expand to the edit option, stays judged" \
+    "$(bash_payload $'git commit -F - $GIT_OPTS <<\'EOF\'\nrm -rf /tmp/hd-gei\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-J: a command substitution after the subcommand stays judged" \
+    "$(bash_payload "$HD_GIT_EDIT_J")" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-NOEDIT: git commit with the option that turns editing off is data" \
+    "$(bash_payload $'git commit --no-edit -F - <<\'EOF\'\nrm -rf /tmp/hd-gne\nEOF')" 0
+  test_case "HDATA-GIT-SIGNOFF: a short option without the edit letter is data" \
+    "$(bash_payload $'git commit -s -F - <<\'EOF\'\nrm -rf /tmp/hd-gso\nEOF')" 0
+  # The edit decline shown load-bearing: a copy of the git arms' hook without it allows its sentinels.
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if (gitrx \&\& git_edit(cur\[0\])) bail = 1  # M-HD-EDIT$/\1# M-HD-EDIT (removed)/' \
+    "$hd_git_hook" > "${hd_dir}/block-rm-prefer-trash-edit.sh"
+  ra_pair "HDATA-MUT-EDIT-A:" "${hd_dir}/block-rm-prefer-trash-edit.sh" "$HD_GIT_EDIT_A"
+  ra_pair "HDATA-MUT-EDIT-C:" "${hd_dir}/block-rm-prefer-trash-edit.sh" "$HD_GIT_EDIT_C"
+  ra_pair "HDATA-MUT-EDIT-D:" "${hd_dir}/block-rm-prefer-trash-edit.sh" "$HD_GIT_EDIT_D"
+  ra_pair "HDATA-MUT-EDIT-J:" "${hd_dir}/block-rm-prefer-trash-edit.sh" "$HD_GIT_EDIT_J"
   HOOK="$hd_hook_saved"
 
   # The mutant pairs. Each copy differs from the hook by exactly its marked line of HEREDOC_DATA_AWK,
@@ -1791,6 +1850,8 @@ else
   ra_pair "HDATA-MUT-RISKY-PIPE:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_PIPE"
   ra_pair "HDATA-MUT-RISKY-FUNC:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_FUNC"
   ra_pair "HDATA-MUT-RISKY-FUNC2:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_FUNC2"
+  ra_pair "HDATA-MUT-RISKY-ZFUNCS:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_ZFUNCS"
+  ra_pair "HDATA-MUT-RISKY-ZCOMMANDS:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_ZCOMMANDS"
   ra_pair "HDATA-MUT-ENCL-A:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_A"
   ra_pair "HDATA-MUT-ENCL-B:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_B"
   ra_pair "HDATA-MUT-ENCL-C:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_C"
