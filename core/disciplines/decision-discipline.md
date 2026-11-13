@@ -334,6 +334,22 @@ A row marked Exempt in the § 3 table is exempt from **M1/M2/M3 interrogation**.
 
 **Reviewability.** The test is a positive 3-condition disjunction, so a reviewer can falsify a row (did the named condition actually hold?) *and* falsify a silence (did any condition hold that the consumer did not name?). A consumer that cannot name which condition fired has not established a merit fork and must not emit. The alternative — emit on every spawn and filter at read time — is rejected: it moves the judgment into a read-model that does not exist and buries the forks worth auditing under routine routing.
 
+### 3.2 A constraining determination is recorded where it constrains
+
+Some decision-class outputs bind more than the release that renders them. Like the emission obligation in § 3.1, the requirement below is independent of the M1/M2/M3 mechanisms: a class the § 3 table exempts still owes it when it renders a determination of this kind.
+
+**Which determinations it covers.** A determination is **constraint-bearing** when it fixes how a code path or a protocol keeps behaving — an emit contract, a mode, a placement, the home of a value, an alternative the path could take that was rejected for a stated reason — so that a later editor of that path who does not know it was decided could undo it with an ordinary edit. A reversible, local choice that binds no later edit is not constraint-bearing: a sequencing order, a wave split, a verification approach, a wording preference, or a choice the operator makes for one release only. The test is the later editor's, not the decision's size: a one-line determination a future edit could silently reverse is constraint-bearing, and a long plan whose every choice ends with its release is not.
+
+**The surface requirement.** When a consumer of this framework renders a constraint-bearing determination, the determination is recorded **at the path it constrains** — the module docstring or header of the code path, the section of the specification or standard that governs the protocol, or an ADR when the decision meets the ADR threshold in `core/standards/adr-authoring-guide.md` § When to write an ADR — in the change that carries the constrained path, before that change merges. The record states the determination and its reason in its own words, so a reader at the path learns what was decided without leaving the file.
+
+**The negative case — surfaces the next editor does not read.** A sub-task comment, a pull-request body or thread, a session transcript, a hub briefing, a pipeline-event-log row and the operator memory store are where a determination is often reached, and none of them is where the next editor of the path reads. Nor is a record of the release — its plan, release note or log row: each is tracked, and none is read by the next editor of the path. Each may carry the discussion and cite the path; none is a constraint-bearing determination's sole home. A release's own records stay the home of its release-local choices, which bind no later edit.
+
+**Reconciliation with G3 (§ 5).** A sub-task comment (`#N comment`) stays a resolvable citation under G3: it is where a decision's evidence and discussion can be cited from. It is never a constraint-bearing determination's sole home — the comment records where the determination was reached, and the record at the path is where it lives.
+
+**Worked instance.** The milestone-epic membership check reached the emit contract of its stage-title leg — on a degraded scan, emit a degraded row and withhold every count of that leg, so a withheld verdict is never read as a clean zero — in a Stage-5 discussion. The contract is recorded in the module docstring of `core/deploy/tools/check-milestone-epic-membership.py`, beside the leg it governs, where an editor of that leg reads it.
+
+**Runner: NONE — a registered named gap.** No gate, check or review step reads a determination against the path it constrains: a change that records it at the path and a change that leaves it in a Stage-5 comment leave the same comment, and only the record at the path tells them apart. The declared observable is that record — at the head of the change that carries a constraint-bearing determination, the constrained file and section state it. The gap, its observable and the population it is measured over are recorded in the gate-coverage register of `core/standards/gate-efficacy-standard.md`.
+
 ---
 
 ## Section 4 — Pattern Cache Infrastructure
@@ -486,7 +502,7 @@ Every Decision Briefing declares applicable mechanisms per the § 3 triage table
 
 **G3 — Evidence-citation requirement (extends G1)**
 
-Citations must be resolvable: file paths, issue/sub-task numbers (`#N`), sub-task comments (`#N comment`), quoted operator directives with session context, or governance sections. Vague citations ("platform context", "release history") fail G1/G3.
+Citations must be resolvable: file paths, issue/sub-task numbers (`#N`), sub-task comments (`#N comment`), quoted operator directives with session context, or governance sections. Vague citations ("platform context", "release history") fail G1/G3. A sub-task comment is a resolvable citation for a decision and never the sole home of a constraint-bearing determination (§ 3.2).
 
 **G4 — "I don't know" as honest answer**
 
