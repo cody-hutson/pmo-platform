@@ -632,6 +632,7 @@ ORIGIN_FORMS = (
     re.compile(r"^[A-Za-z0-9_-]+@(?P<host>[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+):(?P<owner>[^/\s:@]+)/(?P<name>[^/\s:@]+?)(?:\.git)?/?$"),
 )
 RUN_KEYS = ("event", "conclusion", "status", "created")
+RUNS_FILTER = "{workflow_runs: [.workflow_runs[] | {event, conclusion, status, created_at}]}"
 LOG_KEYS = ("created", "head", "log")
 EVENT_ROW = re.compile(r"^\| [0-9]{4}-")
 SLUG_KEY = re.compile(r"^[a-z0-9][a-z0-9.-]*[a-z0-9]$")
@@ -729,12 +730,14 @@ class HostLive:
             return None
         return proc.stdout.decode("utf-8", "replace") if proc.returncode == 0 else None
 
-    def api(self, path: str, pages: bool = False):
+    def api(self, path: str, pages: bool = False, keep: str = ""):
+        """One read through the host client. `keep` is a filter the client applies to each page, so
+        only the fields a measure may receive leave the client."""
         if self.origin is None:
             raise MeasureFailed("host-not-read")
         host, owner, name = self.origin
         out = self.call(["api", "--hostname", host] + (["--paginate"] if pages else [])
-                        + ["repos/%s/%s/%s" % (owner, name, path)])
+                        + (["--jq", keep] if keep else []) + ["repos/%s/%s/%s" % (owner, name, path)])
         if out is None:
             raise MeasureFailed("host-not-read")
         documents, decoder, at = [], json.JSONDecoder(), 0
@@ -762,8 +765,8 @@ class HostLive:
         while first <= end:
             last = min(first + datetime.timedelta(days=step - 1), end)
             base = "actions/workflows/%s/runs?created=%s..%s" % (workflow, first.isoformat(), last.isoformat())
-            total = self.api(base + "&per_page=1").get("total_count", 0)
-            rows = [r for page in (self.api(base + "&per_page=100", pages=True) if total else [])
+            total = self.api(base + "&per_page=1", keep="{total_count}").get("total_count", 0)
+            rows = [r for page in (self.api(base + "&per_page=100", pages=True, keep=RUNS_FILTER) if total else [])
                     for r in page.get("workflow_runs", [])]
             if len(rows) != total:
                 raise MeasureFailed("host-total-differs")
