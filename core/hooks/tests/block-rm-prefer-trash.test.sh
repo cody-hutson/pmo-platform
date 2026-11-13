@@ -1549,6 +1549,254 @@ print("-1 -1" if None in h or None in c else "%.3f %.3f" % (min(h), min(c)))'
   case "${CPV_BASE##*/}" in rmt-cpv.*) /bin/rm -rf "$CPV_BASE" ;; esac
 fi
 
+# ----- HDATA-* (#7644): a quoted here-document body read by a listed receiver is data -----
+#
+# A here-document whose delimiter is quoted ('D', "D", \D) has a body the shell neither expands nor
+# runs. At the top level of a command, when the receiver is on the data-receiver list (cat; git
+# commit|tag after at most one -C <dir>; gh issue|pr|release|api; python3 with the operand -) and
+# nothing on the command can route the body to a program that runs it, the hook removes the body
+# and its delimiter line from the text every rule reads. Every other shape keeps today's verdict.
+#   AC1   a listed receiver, top level: refused today under -001, -002 or -003, allowed now.
+#   TWIN  the same commands with their body and delimiter lines removed: allowed on both hooks. A
+#         check of the excision mechanics, not a member of the declared set.
+#   CWD   a directory change inside a data body no longer moves the working directory a later
+#         relative deletion is judged from: refused today under -001, refused now under -002.
+#   AC2 / AC3   controls: a deletion outside the body, and an unquoted body (its substitution is
+#         expanded), stay refused.
+#   RX    every receiver class that is not data, and every route to a program, stays refused.
+#   ENCL  a quoted here-document inside a command substitution, a backtick or a subshell stays
+#         judged on every shell: bash 3.2 ends such a body at an unbalanced ) inside an unquoted
+#         substitution and runs the lines after it.
+#   GIT   the git receiver, graded through a copy of the hook with the whole-line git exit
+#         removed while that exit exists (it allows every git-headed line today).
+#   PY / PIN   the declared residuals D-PyNested and D-Deferred, pinned.
+#   CAP / COST the 20 000-character scan budget and the 4096-character line cap, and the cost.
+#   MUT   each decline shown load-bearing: a copy of the hook without it allows its sentinels.
+# Payloads are built as $'...' strings: a newline is \n, a tab \t, an apostrophe \'.
+HD_AC1_A=$'cat > /tmp/hd-gen.sh <<\'EOF\'\nrm -f "$X"\nEOF'
+HD_AC1_B=$'python3 - "/tmp/hd-run" <<\'PYEOF\'\nimport sys\nprint(sys.argv[1])\nrm -f "$FCM_ADDS" "$FCM_ANY"\nPYEOF'
+HD_AC1_C=$'python3 - <<\'PYEOF\'\nrm = 1\nprint(rm)\nPYEOF'
+HD_AC1_D=$'gh issue comment 1 --body-file - <<\'EOF\'\nrm -rf /tmp/hd-old\nEOF'
+HD_AC1_F=$'cat <<-\'EOF\'\n\trm -rf /tmp/hd-f\n\tEOF'
+HD_AC1_G=$'cat <<\\EOF\nrm -rf /tmp/hd-g\nEOF'
+HD_AC1_H=$'cat <<"EOF"\nrm -rf /tmp/hd-h\nEOF'
+HD_AC1_I=$'cat <<\'EOF\'\nrm -rf /tmp/hd-i\ndon\'t\nEOF'
+HD_AC1_J=$'cat <<\'EOF\'\ntrash /etc/hd-j\nEOF'
+
+test_case "HDATA-AC1-A: cat writing a file; a body line deletes a variable operand (-001 today)" \
+  "$(bash_payload "$HD_AC1_A")" 0
+test_case "HDATA-AC1-B: a python3 - program; a body line deletes variable operands (-001 today)" \
+  "$(bash_payload "$HD_AC1_B")" 0
+test_case "HDATA-AC1-C: a python3 - program; a variable named like the verb (-002 today)" \
+  "$(bash_payload "$HD_AC1_C" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "HDATA-AC1-D: a gh body read from stdin; a body line deletes an outside path (-001 today)" \
+  "$(bash_payload "$HD_AC1_D")" 0
+test_case "HDATA-AC1-F: the tab-stripping form; a body line deletes an outside path (-001 today)" \
+  "$(bash_payload "$HD_AC1_F")" 0
+test_case "HDATA-AC1-G: the backslash-quoted delimiter; a body deletion line (-001 today)" \
+  "$(bash_payload "$HD_AC1_G")" 0
+test_case "HDATA-AC1-H: the double-quoted delimiter; a body deletion line (-001 today)" \
+  "$(bash_payload "$HD_AC1_H")" 0
+test_case "HDATA-AC1-I: a body with an unpaired apostrophe after a deletion line (-001 today)" \
+  "$(bash_payload "$HD_AC1_I")" 0
+test_case "HDATA-AC1-J: a body line is a Trash call on an outside path (-003 today)" \
+  "$(bash_payload "$HD_AC1_J")" 0
+
+test_case "HDATA-TWIN-A: AC1-A without its body and delimiter lines allows" \
+  "$(bash_payload $'cat > /tmp/hd-gen.sh <<\'EOF\'')" 0
+test_case "HDATA-TWIN-B: AC1-B without its body and delimiter lines allows" \
+  "$(bash_payload $'python3 - "/tmp/hd-run" <<\'PYEOF\'')" 0
+test_case "HDATA-TWIN-D: AC1-D without its body and delimiter lines allows" \
+  "$(bash_payload $'gh issue comment 1 --body-file - <<\'EOF\'')" 0
+test_case "HDATA-TWIN-I: AC1-I without its body and delimiter lines allows" \
+  "$(bash_payload $'cat <<\'EOF\'')" 0
+
+test_case "HDATA-CWD: a directory change inside a data body does not move the later relative deletion" \
+  "$(bash_payload $'cat <<\'EOF\'\ncd /tmp\nEOF\nrm notes.txt' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
+
+test_case "HDATA-AC2-A: an outside deletion after the delimiter line stays refused" \
+  "$(bash_payload $'cat <<\'EOF\'\nhello\nEOF\nrm -rf /tmp/hd-a2')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-AC2-B: an outside deletion before the operator stays refused" \
+  "$(bash_payload $'rm -rf /tmp/hd-b2; cat <<\'EOF\'\nhello\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-AC2-C: an outside deletion after a separator on the operator line stays refused" \
+  "$(bash_payload $'cat <<\'EOF\'; rm -rf /tmp/hd-c2\nhello\nEOF')" 2 "BLOCK-TRASH-001"
+
+HD_AC3_A=$'cat <<EOF\n$(true; rm -rf /tmp/hd-a3)\nEOF'
+HD_AC3_B=$'cat <<EOF\nrm -rf /tmp/hd-b3\nEOF'
+test_case "HDATA-AC3-A: an unquoted body whose substitution deletes after a separator stays refused" \
+  "$(bash_payload "$HD_AC3_A")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-AC3-B: an unquoted plain body with an outside deletion stays refused" \
+  "$(bash_payload "$HD_AC3_B")" 2 "BLOCK-TRASH-001"
+
+HD_RX_SHELL=$'bash <<\'EOF\'\nrm -rf /tmp/hd-sh\nEOF'
+HD_RX_PYC=$'python3 -c \'print(1)\' <<\'EOF\'\nrm -rf /tmp/hd-pyc\nEOF'
+HD_RX_PATHQ=$'/tmp/hd-bin/cat <<\'EOF\'\nrm -rf /tmp/hd-pq\nEOF'
+HD_RX_OSA=$'osascript <<\'EOF\'\ntell application "Finder" to delete POSIX file "/etc/hd-osa"\nEOF'
+HD_RX_PIPE=$'cat <<\'EOF\' | sh\nrm -rf /tmp/hd-p\nEOF'
+HD_RX_FUNC=$'cat() { bash; }; cat <<\'EOF\'\nrm -rf /tmp/hd-fn\nEOF'
+HD_RX_FUNC2=$'cat ( ) { bash; }; cat <<\'EOF\'\nrm -rf /tmp/hd-fn2\nEOF'
+HD_RX_EVAL=$'eval "$(cat <<\'EOF\'\nsay "hi\nrm -rf /tmp/hd-ev\nEOF\n)"'
+test_case "HDATA-RX-SHELL: a shell reading the body as its script stays refused" \
+  "$(bash_payload "$HD_RX_SHELL")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-SH: a shell reading its script from stdin stays refused" \
+  "$(bash_payload $'sh -s <<\'EOF\'\nrm -rf /tmp/hd-sh2\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PIPE: a listed receiver piped into a shell stays refused" \
+  "$(bash_payload "$HD_RX_PIPE")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PROCSUB: a listed receiver writing into a process substitution stays refused" \
+  "$(bash_payload $'cat <<\'EOF\' > >(sh)\nrm -rf /tmp/hd-ps\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-EVAL: a substitution consumed by an evaluator stays refused" \
+  "$(bash_payload "$HD_RX_EVAL")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ASSIGN: a substitution consumed by an assignment stays refused" \
+  "$(bash_payload $'X="$(cat <<\'EOF\'\nsay "hi\nrm -rf /tmp/hd-as\nEOF\n)"')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PYC: a python3 -c program reading the body stays refused" \
+  "$(bash_payload "$HD_RX_PYC")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PATHQ: a receiver named by a non-canonical path stays refused" \
+  "$(bash_payload "$HD_RX_PATHQ")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-WRAP: a receiver behind a wrapper stays refused (a declared over-block)" \
+  "$(bash_payload $'env cat <<\'EOF\'\nrm -rf /tmp/hd-w\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-GHEXT: a gh extension stays refused" \
+  "$(bash_payload $'gh hd-ext <<\'EOF\'\nrm -rf /tmp/hd-gx\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-OSA: osascript reading its script from the body stays refused" \
+  "$(bash_payload "$HD_RX_OSA")" 2 "BLOCK-TRASH-003"
+test_case "HDATA-RX-MIXED: one data body beside one shell-script body stays refused" \
+  "$(bash_payload $'cat <<\'EOF\'; bash <<\'EOS\'\nhello\nEOF\nrm -rf /tmp/hd-mx\nEOS')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-UNTERM: an unterminated body stays refused" \
+  "$(bash_payload $'cat <<\'EOF\'\nrm -rf /tmp/hd-ut')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ARITH: a shift inside arithmetic on the same command stays refused" \
+  "$(bash_payload $'echo $((1 << 2)); cat <<\'EOF\'\nrm -rf /tmp/hd-ar\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-FUNC: a listed name redefined as a function on the line stays refused" \
+  "$(bash_payload "$HD_RX_FUNC")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-FUNC2: a function definition with blanks between its parentheses stays refused" \
+  "$(bash_payload "$HD_RX_FUNC2")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ALIAS: a listed name redefined as an alias on the line stays refused" \
+  "$(bash_payload $'alias cat=bash; cat <<\'EOF\'\nrm -rf /tmp/hd-al\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PATHVAR: a PATH assignment on the line stays refused" \
+  "$(bash_payload $'PATH=/tmp/hd-bin:$PATH; cat <<\'EOF\'\nrm -rf /tmp/hd-pv\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PEXP: the operator inside a parameter expansion, brace adjacent, stays refused" \
+  "$(bash_payload $': ${X:-<<\'EOF\'}\nrm -rf /tmp/hd-pe\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PEXP2: the operator inside a double-quoted parameter expansion stays refused" \
+  "$(bash_payload $': "${X:-<<\'EOF\'}"\nrm -rf /tmp/hd-pe2\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PEXP3: the operator inside a parameter expansion, blank before the brace, stays refused" \
+  "$(bash_payload $': ${X:-<<\'EOF\' }\nrm -rf /tmp/hd-pe3\nEOF')" 2 "BLOCK-TRASH-001"
+
+HD_ENCL_A=$'gh pr create --title t --body "$(cat <<\'EOF\'\nsay "hi\nrm -rf /tmp/hd-ea\nEOF\n)"'
+HD_ENCL_B=$'gh pr create --title t --body $(cat <<\'EOF\'\nnote)\nrm -rf /tmp/hd-eb\nEOF\n)'
+HD_ENCL_C=$'( cat <<\'EOF\'\nrm -rf /tmp/hd-ec\nEOF\n)'
+test_case "HDATA-ENCL-A: a data body inside a double-quoted substitution stays judged" \
+  "$(bash_payload "$HD_ENCL_A")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-ENCL-B: a data body inside an unquoted substitution, a body line with an unbalanced ), stays judged" \
+  "$(bash_payload "$HD_ENCL_B")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-ENCL-C: a data body inside a subshell stays judged" \
+  "$(bash_payload "$HD_ENCL_C")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-ENCL-D: a data body inside a backtick substitution stays judged" \
+  "$(bash_payload $'X=`cat <<\'EOF\'\nrm -rf /tmp/hd-ed\nEOF\n`')" 2 "BLOCK-TRASH-001"
+
+test_case "HDATA-PY-ODD: a python3 - program handing a string to a shell, odd quote parity (declared D-PyNested)" \
+  "$(bash_payload $'python3 - <<\'PYEOF\'\nimport os\nos.system("""say "hi\nrm -rf /tmp/hd-py\n""")\nPYEOF')" 0
+test_case "HDATA-PY-EVEN: the same program with balanced quoting allows (today and now)" \
+  "$(bash_payload $'python3 - <<\'PYEOF\'\nimport os\nos.system("""say hi\nrm -rf /tmp/hd-py\n""")\nPYEOF')" 0
+test_case "HDATA-PIN-DEFERRED: cat writes a script a later segment runs (declared D-Deferred)" \
+  "$(bash_payload $'cat > /tmp/hd-run.sh <<\'EOF\'\nrm -rf /tmp/hd-dd\nEOF\nbash /tmp/hd-run.sh')" 0
+
+# The budget: 20 000 scanned characters outside bodies, and a 4096-character line. hd_pad <n> prints
+# n lines of 3800 characters each (a no-op command), so the scanned text sits under or over the cap.
+hd_pad() { /usr/bin/awk -v n="$1" 'BEGIN { s = ": "; while (length(s) < 3800) s = s "a"; for (i = 0; i < n; i++) print s }'; }
+HD_CAP_IN="$(hd_pad 5)"$'\ncat <<\'EOF\'\nrm -rf /tmp/hd-cap\nEOF'
+HD_CAP_OVER="$(hd_pad 6)"$'\ncat <<\'EOF\'\nrm -rf /tmp/hd-cap\nEOF'
+HD_CAP_LINE="$(/usr/bin/awk 'BEGIN { s = ": "; while (length(s) < 4100) s = s "a"; print s }')"$'\ncat <<\'EOF\'\nrm -rf /tmp/hd-cap\nEOF'
+test_case "HDATA-CAP-IN: a data body after 19 000 scanned characters is read as data" \
+  "$(bash_payload "$HD_CAP_IN")" 0
+test_case "HDATA-CAP-OVER: past 20 000 scanned characters the command keeps today's verdict" \
+  "$(bash_payload "$HD_CAP_OVER")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-CAP-LINE: a scanned line over 4096 characters keeps today's verdict" \
+  "$(bash_payload "$HD_CAP_LINE")" 2 "BLOCK-TRASH-001"
+
+# The cost at the cap: the hook on HDATA-CAP-IN against the same padding with no here-document,
+# the least of three interleaved runs of each; the first may cost at most HD_COST_BOUND times the
+# second.
+HD_COST_BOUND="${HD_COST_BOUND:-1.5}"
+HD_COST_PY='import os, subprocess, sys, time
+hook, a, b = sys.argv[1], sys.argv[2].encode(), sys.argv[3].encode()
+def one(pay):
+    t0 = time.time()
+    subprocess.run(["/bin/bash", hook], input=pay, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+    return time.time() - t0
+x, y = [], []
+for _ in range(3):
+    x.append(one(a)); y.append(one(b))
+print("%.3f %.3f" % (min(x), min(y)))'
+hd_cost_out="$(/usr/bin/python3 -c "$HD_COST_PY" "$HOOK" "$(bash_payload "$HD_CAP_IN")" "$(bash_payload "$(hd_pad 5)"$'\ncat /dev/null')" 2>/dev/null)" || hd_cost_out=""
+hd_cost_h="${hd_cost_out% *}"; hd_cost_c="${hd_cost_out#* }"
+if [ -n "$hd_cost_out" ] && /usr/bin/awk -v h="$hd_cost_h" -v c="$hd_cost_c" -v b="$HD_COST_BOUND" 'BEGIN { exit !(c > 0 && h <= b * c) }'; then
+  /usr/bin/printf 'PASS: %s\n' "HDATA-COST: at the cap the hook costs within ${HD_COST_BOUND} times the same command with no here-document"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "HDATA-COST: at the cap the hook costs at most ${HD_COST_BOUND} times the same command with no here-document" \
+    "measured (seconds, with / without): ${hd_cost_out:-not measured}"; FAIL=$((FAIL + 1))
+fi
+
+# The git receiver (#7644 Q5). While the whole-line git exit (M-TRASH-GITEXEMPT) exists it allows
+# every git-headed line, so these arms run through a copy of the hook whose exit line can never
+# fire, shown live first (one line from the hook, and it parses). Once that exit is gone the arms
+# run on the hook itself.
+hd_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-hd.XXXXXX" 2>/dev/null)" || hd_dir=""
+hd_git_hook="$HOOK"
+if [ -z "$hd_dir" ]; then
+  /usr/bin/printf 'FAIL: HDATA-GIT the arms could not create a sandbox, so they did not run\n'; FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${hd_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${hd_dir}/lib/"
+  if /usr/bin/grep -q '# M-TRASH-GITEXEMPT$' "$HOOK"; then
+    /usr/bin/sed -e 's/^if exit_matches \(.*# M-TRASH-GITEXEMPT\)$/if false \&\& exit_matches \1/' \
+      "$HOOK" > "${hd_dir}/block-rm-prefer-trash-nogit.sh"
+    hd_git_hook="${hd_dir}/block-rm-prefer-trash-nogit.sh"
+    if ra_live "$hd_git_hook"; then
+      /usr/bin/printf 'PASS: %s\n' "HDATA-GIT-LIVE: the copy without the whole-line git exit differs from the hook by that one line and parses"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n' "HDATA-GIT-LIVE: the copy without the whole-line git exit is not live"; FAIL=$((FAIL + 1))
+    fi
+  else
+    /usr/bin/printf 'PASS: %s\n' "HDATA-GIT-LIVE: the hook carries no whole-line git exit, so the git arms run on the hook itself"; PASS=$((PASS + 1))
+  fi
+  hd_hook_saved="$HOOK"; HOOK="$hd_git_hook"
+  test_case "HDATA-GIT-A: git commit reading its message from stdin; a body deletion line is data" \
+    "$(bash_payload $'git commit -F - <<\'EOF\'\nrm -rf /tmp/hd-ga\nEOF')" 0
+  test_case "HDATA-GIT-B: git -C <dir> commit reading its message from stdin is data" \
+    "$(bash_payload $'git -C /tmp/hd-repo commit -F - <<\'EOF\'\nrm -rf /tmp/hd-gb\nEOF')" 0
+  test_case "HDATA-GIT-C: git tag reading its message from stdin is data" \
+    "$(bash_payload $'git tag -a v0 -F - <<\'EOF\'\nrm -rf /tmp/hd-gc\nEOF')" 0
+  test_case "HDATA-GIT-D: git with a -c option is not a listed receiver and stays judged" \
+    "$(bash_payload $'git -c core.editor=true commit -F - <<\'EOF\'\nrm -rf /tmp/hd-gd\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-E: git with two -C pairs is not a listed receiver and stays judged" \
+    "$(bash_payload $'git -C /tmp/a -C /tmp/b commit -F - <<\'EOF\'\nrm -rf /tmp/hd-ge\nEOF')" 2 "BLOCK-TRASH-001"
+  HOOK="$hd_hook_saved"
+
+  # The mutant pairs. Each copy differs from the hook by exactly its marked line of HEREDOC_DATA_AWK,
+  # shown live first; each sentinel, refused through the hook, is allowed through its copy, so the
+  # decline it removes is what holds the sentinel's refusal.
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if (j > k) return 0  # M-HD-RECV$/\1return 1  # M-HD-RECV/' \
+    "$HOOK" > "${hd_dir}/block-rm-prefer-trash-recv.sh"
+  /usr/bin/sed -e 's/ || risky \(.*# M-HD-RISKY\)$/ \1/' \
+    "$HOOK" > "${hd_dir}/block-rm-prefer-trash-risky.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if (d != 0) { bail = 1; break }  # M-HD-ENCL$/\1# M-HD-ENCL (removed)/' \
+    "$HOOK" > "${hd_dir}/block-rm-prefer-trash-encl.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if (!quoted) { bail = 1; break }  # M-HD-QUOTED$/\1# M-HD-QUOTED (removed)/' \
+    "$HOOK" > "${hd_dir}/block-rm-prefer-trash-quoted.sh"
+  ra_pair "HDATA-MUT-RECV-SHELL:" "${hd_dir}/block-rm-prefer-trash-recv.sh" "$HD_RX_SHELL"
+  ra_pair "HDATA-MUT-RECV-PYC:" "${hd_dir}/block-rm-prefer-trash-recv.sh" "$HD_RX_PYC"
+  ra_pair "HDATA-MUT-RECV-PATHQ:" "${hd_dir}/block-rm-prefer-trash-recv.sh" "$HD_RX_PATHQ"
+  ra_pair "HDATA-MUT-RECV-OSA:" "${hd_dir}/block-rm-prefer-trash-recv.sh" "$HD_RX_OSA"
+  ra_pair "HDATA-MUT-RISKY-PIPE:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_PIPE"
+  ra_pair "HDATA-MUT-RISKY-FUNC:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_FUNC"
+  ra_pair "HDATA-MUT-RISKY-FUNC2:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_FUNC2"
+  ra_pair "HDATA-MUT-ENCL-A:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_A"
+  ra_pair "HDATA-MUT-ENCL-B:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_B"
+  ra_pair "HDATA-MUT-ENCL-C:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_C"
+  ra_pair "HDATA-MUT-ENCL-EVAL:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_RX_EVAL"
+  ra_pair "HDATA-MUT-QUOTED-A:" "${hd_dir}/block-rm-prefer-trash-quoted.sh" "$HD_AC3_A"
+  ra_pair "HDATA-MUT-QUOTED-B:" "${hd_dir}/block-rm-prefer-trash-quoted.sh" "$HD_AC3_B"
+  case "${hd_dir##*/}" in rmt-hd.*) /bin/rm -rf "$hd_dir" ;; esac
+fi
+
 # Summary
 echo ""
 echo "================================"
