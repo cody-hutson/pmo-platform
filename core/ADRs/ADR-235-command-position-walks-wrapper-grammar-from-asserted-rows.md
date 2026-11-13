@@ -6,6 +6,7 @@ date: 2026-11-04
 release: guards-judge-every-spelling-alike
 deciders: "Workspace owner (ratification at this release's Stage 13 close gate); mechanism chosen at Stage 5 Solutioning against a scored candidate matrix and adopted at the release's Collective Review scope-lock, which also rendered the allow-on-match exits decision as the masked exit view"
 tags: [architecture, security, hooks, command-position, canonicalizer, wrapper-grammar, reversibility-moderate]
+superseded_by: {{ADR:deletion-guard-judges-every-segment}} in-part (Decision 3)
 source_observations:
   - "The shared canonicalizer stopped at a wrapper's first flag and matched a prefix word as an exact token, and its word set omitted three transparent wrappers and the compound-command condition keywords. A guarded verb reached through a wrapper's separate-argument option, an absolute-path wrapper, a wrapper outside the set, or an if/while/until condition was therefore not resolved, and the anchored rules of the four consuming hooks reached ALLOW without their allowlists or denylists being consulted."
   - "The script-execution rule already carries a per-wrapper option grammar in getopt notation, one row per wrapper (the BLOCK-DESTRUCTIVE-022 walk). The arity of an option is a fact about a program, not about shell grammar, so the same facts drive both walks; a field-for-field copy asserted equal by a suite arm reuses the facts without adding a runtime file to four always-on hooks' load path."

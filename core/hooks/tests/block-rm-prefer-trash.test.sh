@@ -138,7 +138,8 @@ test_case "rm absolute inside Claude blocks-trash" \
 test_case "rmdir inside Claude blocks-trash" \
   "$(bash_payload 'rmdir '"$RMT_FIXTURE_HOME"'/Claude/tmp/empty' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
-# ----- Git subcommand exemption (Hub Decision 1: broad) -----
+# ----- Git subcommand exemption (Hub Decision 1: broad over git verbs; per segment, #8122) -----
+# Every git verb is exempt, but only in its own segment: EXT-SEG below judges the line's others.
 
 test_case "git rm exempt" \
   "$(bash_payload 'git rm foo.txt')" 0
@@ -345,7 +346,7 @@ test_case "EXT-APPEND-T1: an append-form assignment then rm blocks" \
 # /timeout, or a redirection to a file named timeout, was read as the timeout wrapper, whose
 # duration operand consumed the rm behind it. T1 and T2 are that deletion behind each shape;
 # the CTLs are the plain form and the same deletion behind a plain assignment, refused before
-# and after. The allow-on-match exits read the exit view, whose walk is unchanged.
+# and after.
 test_case "EXT-ORDER-T-CTL0: rm blocks (plain-form control)" \
   "$(bash_payload 'rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
@@ -403,19 +404,15 @@ test_case "EXT-FP8: echoed wrapper-and-option text allows" \
 test_case "EXT-FP9: commit message carrying a wrapped deletion allows" \
   "$(bash_payload 'git commit -m "if rm fails, sudo -u root rm -rf /tmp/x"')" 0
 
-# ----- EXT-RA (#8314): the two allow exits read the exit view -----
+# ----- EXT-RA (#8314, re-based by #8122): a git command or a target-less verb behind a face -----
 #
-# This hook has two exits that ALLOW on a match: Step 1's git exemption (a git command at a
-# command start exempts the line) and Step 2's no-target exit (a deletion verb with no
-# operand ends the evaluation). Both read the canonicalized text, so every command start
-# the canonicalizer newly resolves would ALSO widen them, turning refusals into allows. Each
-# sentinel below is refused today and must stay refused: a git command, or a target-less
-# deletion verb, newly resolved behind a face, beside a deletion the hook refuses (T1-T5);
-# and a newly resolved target-less verb that would displace the verb Step 2 judged before
-# (T6). The two exits read the canonicalizer's exit view instead, the form the walk produced
-# before the wrapper grammar, so they keep today's verdicts. Each sentinel is paired below
-# with a copy of the hook whose marked exit line reads the widened text again, which allows
-# it: the sentinel is shown able to fire.
+# Each sentinel puts a git command, or a target-less deletion verb, behind a face the
+# canonicalizer resolves (a wrapper, a condition keyword, an absolute-path env), beside a
+# deletion the hook refuses (T1-T5), or a target-less verb ahead of another verb's deletion
+# (T6). The hook keeps no exit that allows on a match, so each is refused whatever the walk
+# resolves. Each sentinel is paired below with a copy of the hook that puts one such exit back
+# — the whole-line git exit on the widened text (M-TRASH-SEGWALK), or an exit on a target-less
+# rm-family segment (M-TRASH-SEGVERB) — which allows it: the sentinel is shown able to fire.
 test_case "EXT-RA-T1: a git status behind nice does not exempt the deletion beside it" \
   "$(bash_payload 'nice git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
@@ -443,10 +440,12 @@ test_case "EXT-RES-T1: a sudo-prefixed git status no longer exempts the deletion
 test_case "EXT-RES-T2: a sudo-prefixed target-less rm no longer ends the evaluation (per-segment walk)" \
   "$(bash_payload 'sudo rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
 
-# The pairs. Each mutant is a copy of the hook with exactly one marked exit line reading the
-# widened text again (`matches` for M-TRASH-GITEXEMPT; the Step-2 verb for
-# M-TRASH-NOTARGET), shown live first: it differs from the hook by that one line, and it
-# parses. The sentinel's command through that copy must be allowed.
+# The pairs. Each mutant is a copy of the hook with exactly one marked line turned back into an
+# exit that allows on a match, shown live first: it differs from the hook by that one line, and it
+# parses. The sentinel's command through that copy must be allowed. The two sed programs are
+# shared with the EXT-SEG pairs below.
+SEG_SED_WALK='s/^:  # M-TRASH-SEGWALK$/if matches "${ANCHOR_PREFIX_BASH}"'"'"'git[[:space:]]+[^[:space:]]+'"'"'; then exit 0; fi  # M-TRASH-SEGWALK/'
+SEG_SED_VERB='s/^\([[:space:]]*\)judge_targets "\$verb"  # M-TRASH-SEGVERB$/\1judge_targets "$verb"; [ -n "$(extract_bare_segments "$verb")" ] \&\& exit 0  # M-TRASH-SEGVERB/'
 ra_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-ra.XXXXXX" 2>/dev/null)" || ra_dir=""
 ra_live() { # $1 = mutant file -> 0 when it differs from the hook by exactly one line and parses
   local n
@@ -474,36 +473,23 @@ if [ -z "$ra_dir" ]; then
 else
   /bin/mkdir -p "${ra_dir}/lib"
   /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${ra_dir}/lib/"
-  /usr/bin/sed -e 's/^if exit_matches \(.*# M-TRASH-GITEXEMPT\)$/if matches \1/' \
-    "$HOOK" > "${ra_dir}/block-rm-prefer-trash-git.sh"
-  /usr/bin/sed -e 's/exit_verb="\$(first_deletion_verb exit_matches)"\(.*# M-TRASH-NOTARGET\)$/exit_verb="$verb"\1/' \
-    "$HOOK" > "${ra_dir}/block-rm-prefer-trash-notarget.sh"
-  ra_pair "EXT-RA-T1-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" 'nice git status ; rm -rf /tmp/foo'
-  ra_pair "EXT-RA-T2-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" 'if git diff --quiet ; then rm -rf /tmp/foo ; fi'
-  ra_pair "EXT-RA-T3-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" '/usr/bin/env git log ; rm -rf /tmp/foo'
-  ra_pair "EXT-RA-T4-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; trash /etc/hosts'
-  ra_pair "EXT-RA-T5-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'sudo --list rm ; trash /etc/hosts'
-  ra_pair "EXT-RA-T6-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; sudo unlink /tmp/foo'
+  /usr/bin/sed -e "$SEG_SED_WALK" "$HOOK" > "${ra_dir}/block-rm-prefer-trash-segwalk.sh"
+  /usr/bin/sed -e "$SEG_SED_VERB" "$HOOK" > "${ra_dir}/block-rm-prefer-trash-segverb.sh"
+  ra_pair "EXT-RA-T1-PAIR:" "${ra_dir}/block-rm-prefer-trash-segwalk.sh" 'nice git status ; rm -rf /tmp/foo'
+  ra_pair "EXT-RA-T2-PAIR:" "${ra_dir}/block-rm-prefer-trash-segwalk.sh" 'if git diff --quiet ; then rm -rf /tmp/foo ; fi'
+  ra_pair "EXT-RA-T3-PAIR:" "${ra_dir}/block-rm-prefer-trash-segwalk.sh" '/usr/bin/env git log ; rm -rf /tmp/foo'
+  ra_pair "EXT-RA-T4-PAIR:" "${ra_dir}/block-rm-prefer-trash-segverb.sh" 'nice rm ; trash /etc/hosts'
+  ra_pair "EXT-RA-T5-PAIR:" "${ra_dir}/block-rm-prefer-trash-segverb.sh" 'sudo --list rm ; trash /etc/hosts'
+  ra_pair "EXT-RA-T6-PAIR:" "${ra_dir}/block-rm-prefer-trash-segverb.sh" 'nice rm ; sudo unlink /tmp/foo'
   case "${ra_dir##*/}" in rmt-ra.*) /bin/rm -rf "$ra_dir" ;; esac
 fi
 
-# ----- EXT-APPEND-X (#8314, follow-up pass): the two allow exits keep the exit view's walk -----
+# ----- EXT-APPEND-X (#8314, follow-up pass): a git command or a target-less verb behind an append form -----
 #
-# The default walk now steps over the append form of a prefix assignment (NAME+=value). The
-# exit view does not: it is frozen at the walk the two allow exits read before, so they keep
-# today's verdicts. Were its assignment test widened the same way, a git command or a
-# target-less deletion verb behind an append-form word would reach Step 1's git exemption or
-# Step 2's no-target exit, and each sentinel below — refused before this pass and after it —
-# would be allowed. Shown, not argued. X1-X4 read the shipped hook; their refusal is the same
-# on the hook before this pass, which the pass's red-before run records. Then two copies of
-# the canonicalizer are each shown live (one line from the shipped copy, and it parses): one
-# with this pass's marked line reverted, and one whose exit view also takes the append form.
-# On every sentinel the exit view is byte-identical through the shipped and the reverted copy
-# while the default view is not (XV: the exit view is unchanged by this edit, and the sentinel
-# carries the form the edit reads). The hook is not run through the reverted copy: its
-# version-skew canary refuses that copy by design (CMDPOS-SKEW-APPEND). Through the copy whose
-# exit view takes the append form, in a sandbox, the hook allows the sentinel (PAIR, the
-# sentinel shown able to fire).
+# The default walk steps over the append form of a prefix assignment (NAME+=value). Each sentinel
+# puts a git command or a target-less deletion verb behind such a word, beside a deletion or a
+# Trash call the hook refuses; each is refused before and after, now because every segment is
+# judged.
 test_case "EXT-APPEND-X1: a git status behind an append-form assignment does not exempt the deletion beside it (Step 1)" \
   "$(bash_payload 'FOO+=1 git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
@@ -516,81 +502,17 @@ test_case "EXT-APPEND-X3: a target-less rm behind an append-form assignment does
 test_case "EXT-APPEND-X4: a git log behind two append-form assignments does not exempt the deletion beside it (Step 1)" \
   "$(bash_payload 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
-apx_root="$(/usr/bin/mktemp -d)"
-apx_hooks="${apx_root}/.claude/hooks"
-/bin/mkdir -p "${apx_hooks}/lib"
-/bin/cp "${HOOK_DIR}/lib/"*.sh "${apx_hooks}/lib/" 2>/dev/null || true
-/bin/cp "$HOOK" "${apx_hooks}/block-rm-prefer-trash.sh"
-apx_ship="${HOOK_DIR}/lib/command-position.awk"
-apx_rev="${apx_root}/command-position-no-append.awk"
-apx_exit="${apx_root}/command-position-exit-append.awk"
-/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "$apx_ship" > "$apx_rev"
-/usr/bin/sed -e '/skips++; continue }   # VAR=value$/s/\*=\//*[+]?=\//' "$apx_ship" > "$apx_exit"
-apx_lines() { # $1 = copy -> the number of lines it differs from the shipped copy by, counted on both sides
-  /usr/bin/diff "$apx_ship" "$1" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true
-}
-apx_rev_live=0; apx_exit_live=0
-if [ "$(apx_lines "$apx_rev")" = 2 ] && /usr/bin/awk -f "$apx_rev" </dev/null >/dev/null 2>&1; then apx_rev_live=1; fi
-if [ "$(apx_lines "$apx_exit")" = 2 ] && /usr/bin/awk -f "$apx_exit" </dev/null >/dev/null 2>&1; then apx_exit_live=1; fi
-if [ "$apx_rev_live" = 1 ] && [ "$apx_exit_live" = 1 ]; then
-  /usr/bin/printf 'PASS: EXT-APPEND-XV-LIVE the reverted copy and the exit-append copy each differ from the shipped canonicalizer by exactly one line, and parse\n'
-  PASS=$((PASS + 1))
-else
-  /usr/bin/printf 'FAIL: EXT-APPEND-XV-LIVE a sandbox copy is not live (reverted live=%s, exit-append live=%s)\n' "$apx_rev_live" "$apx_exit_live"
-  FAIL=$((FAIL + 1))
-fi
-apx_view() { # $1 = canonicalizer copy  $2 = view (default | exit)  $3 = command -> stdout
-  if [ "$2" = exit ]; then
-    /usr/bin/awk -v CMDPOS_VIEW=exit -f "$1" <<<"$3" 2>/dev/null
-  else
-    /usr/bin/awk -f "$1" <<<"$3" 2>/dev/null
-  fi
-}
-apx_run() { # $1 = canonicalizer copy  $2 = command -> APX_RC and APX_ERR
-  /bin/cp "$1" "${apx_hooks}/lib/command-position.awk"
-  APX_RC=0
-  APX_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
-      /usr/bin/printf '%s' "$(bash_payload "$2" "$apx_root")" | /bin/bash "${apx_hooks}/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || APX_RC="$?"
-}
-apx_case() { # $1 = sentinel label  $2 = command
-  local ev_same=no dv_diff=no
-  if [ "$(apx_view "$apx_ship" exit "$2")" = "$(apx_view "$apx_rev" exit "$2")" ]; then ev_same=yes; fi
-  if [ "$(apx_view "$apx_ship" default "$2")" != "$(apx_view "$apx_rev" default "$2")" ]; then dv_diff=yes; fi
-  if [ "$apx_rev_live" = 1 ] && [ "$ev_same" = yes ] && [ "$dv_diff" = yes ]; then
-    /usr/bin/printf 'PASS: %s-XV the exit view is byte-identical with and without the append form, and the default view walks it\n' "$1"
-    PASS=$((PASS + 1))
-  else
-    /usr/bin/printf 'FAIL: %s-XV reverted copy live=%s, exit view unchanged=%s, default view differs=%s\n' \
-      "$1" "$apx_rev_live" "$ev_same" "$dv_diff"
-    FAIL=$((FAIL + 1))
-  fi
-  apx_run "$apx_exit" "$2"
-  if [ "$apx_exit_live" = 1 ] && [ "$APX_RC" = 0 ]; then
-    /usr/bin/printf 'PASS: %s-PAIR a copy whose exit view also takes the append form allows the sentinel, so it can fire\n' "$1"
-    PASS=$((PASS + 1))
-  else
-    /usr/bin/printf 'FAIL: %s-PAIR the exit-append copy did not allow the sentinel (copy live=%s, exit=%s): %s\n' "$1" "$apx_exit_live" "$APX_RC" "$APX_ERR"
-    FAIL=$((FAIL + 1))
-  fi
-}
-apx_case "EXT-APPEND-X1" 'FOO+=1 git status ; rm -rf /tmp/foo'
-apx_case "EXT-APPEND-X2" 'FOO+=1 rm ; trash /etc/hosts'
-apx_case "EXT-APPEND-X3" 'FOO+=1 rm ; sudo unlink /tmp/foo'
-apx_case "EXT-APPEND-X4" 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo'
-/bin/rm -rf "$apx_root"
 
 # ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
 #
-# This hook trusts the shared canonicalizer only after three probes: a one-line function
-# body; a wrapper carrying a separate-argument option before a benign word, whose canonical
-# form exposes the word only on the walk that reads wrapper grammar; and the same input in
-# the both view the hook reads (#8314, DT pass 7), whose exit view must keep the form the walk
-# produced before that grammar while its default output exposes the word. A stale or damaged
-# copy beside this hook passes the first probe and fails a later one, so the hook fails
-# CLOSED. Modelled by a copy whose nice row is removed (SKEW-01), a copy whose both view
-# carries the widened form in place of the exit view (SKEW-02), and a copy without the both
-# view (SKEW-BOTH, a primitive that predates it); the control is the same sandbox with the
-# shipped copy.
+# This hook trusts the shared canonicalizer only after two probes: a one-line function body, and
+# a wrapper carrying a separate-argument option before a benign word, whose canonical form exposes
+# the word only on the walk that reads wrapper grammar (opened by the append form of a prefix
+# assignment). A stale or damaged copy beside this hook passes the first probe and fails the
+# second, so the hook fails CLOSED. Modelled by a copy whose nice row is removed (SKEW-01) and a
+# copy whose walk reads the append form as the command word (SKEW-APPEND); the control is the same
+# sandbox with the shipped copy. The hook reads neither the exit view nor the both view, so a copy
+# without them is not refused here.
 cps_root="$(/usr/bin/mktemp -d)"
 cps_hooks="${cps_root}/.claude/hooks"
 /bin/mkdir -p "${cps_hooks}/lib"
@@ -615,8 +537,6 @@ cps_skew() { # $1 = arm label  $2 = sed program for the canonicalizer copy  $3 =
   fi
 }
 cps_skew "CMDPOS-SKEW-01" 's/WROW\["nice"\]=1//' "the wrapper grammar"
-cps_skew "CMDPOS-SKEW-02" 's/^  EXIT_VIEW = 1$/  EXIT_VIEW = 0/' "the exit view"
-cps_skew "CMDPOS-SKEW-BOTH" 's/CMDPOS_VIEW == "both"/CMDPOS_VIEW == "zzboth"/' "the both view"
 # (#8314, follow-up pass) The second probe puts an append-form prefix assignment ahead of its
 # wrapper, so a copy whose walk reads that word as the command word fails it too.
 cps_skew "CMDPOS-SKEW-APPEND" '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "the append form of a prefix assignment"
@@ -633,20 +553,18 @@ else
 fi
 /bin/rm -rf "$cps_root"
 
-# ----- AC-D020-NEUTRAL (#8444): transformation (e) leaves the exit view and both exits unchanged -----
+# ----- AC-D020-NEUTRAL (#8444): transformation (e) moves no verdict of this hook -----
 #
 # (e) inserts `; ` before every assignment the canonicalizer's default walk skips, so a rule
-# anchored on an assignment (BLOCK-DESTRUCTIVE-020, -023) reads it at a command start. This
-# hook's two allow-on-match exits read the EXIT VIEW, which (e) does not reach, and no exit
-# pattern can match an assignment token, so both exits must keep their verdicts. Shown, not
-# argued: a copy of the canonicalizer with (e)'s two marked lines removed is built and shown
-# live (it differs from the shipped copy by exactly those lines, and it parses). Then, on each
-# witness, the exit view is byte-identical across the two copies, the default view is not (the
-# witness really carries an (e) mark), and this hook returns the same exit code and the same
-# message through either copy. The witnesses put a marked assignment ahead of a git command at
-# Step 1's exemption, of a target-less deletion verb at Step 2's no-target exit, and of a
-# refused deletion, in plain form and behind a wrapper or a condition keyword; the control
-# shows the sandbox live.
+# anchored on an assignment (BLOCK-DESTRUCTIVE-020, -023) reads it at a command start. No rule of
+# this hook is anchored on an assignment, so (e) must move none of its verdicts. Shown, not
+# argued: a copy of the canonicalizer with (e)'s two marked lines removed is built and shown live
+# (it differs from the shipped copy by exactly those lines, and it parses). Then, on each witness,
+# the exit view is byte-identical across the two copies, the default view is not (the witness
+# really carries an (e) mark), and this hook returns the same exit code and the same message
+# through either copy. The witnesses put a marked assignment ahead of a git command, of a
+# target-less deletion verb and of a refused deletion, in plain form and behind a wrapper or a
+# condition keyword; the control shows the sandbox live.
 neu_root="$(/usr/bin/mktemp -d)"
 neu_hooks="${neu_root}/.claude/hooks"
 /bin/mkdir -p "${neu_hooks}/lib"
@@ -847,10 +765,8 @@ if [ -z "$seg_dir" ]; then
 else
   /bin/mkdir -p "${seg_dir}/lib"
   /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${seg_dir}/lib/"
-  /usr/bin/sed -e 's/^:  # M-TRASH-SEGWALK$/if matches "${ANCHOR_PREFIX_BASH}"'"'"'git[[:space:]]+[^[:space:]]+'"'"'; then exit 0; fi  # M-TRASH-SEGWALK/' \
-    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-segwalk.sh"
-  /usr/bin/sed -e 's/^\([[:space:]]*\)judge_targets "\$verb"  # M-TRASH-SEGVERB$/\1judge_targets "$verb"; [ -n "$(extract_bare_segments "$verb")" ] \&\& exit 0  # M-TRASH-SEGVERB/' \
-    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-segverb.sh"
+  /usr/bin/sed -e "$SEG_SED_WALK" "$HOOK" > "${seg_dir}/block-rm-prefer-trash-segwalk.sh"
+  /usr/bin/sed -e "$SEG_SED_VERB" "$HOOK" > "${seg_dir}/block-rm-prefer-trash-segverb.sh"
   /usr/bin/sed -e 's/^\([[:space:]]*\)if \[ -n "\$(extract_bare_segments trash)" ]; then  # M-TRASH-BARETRASH$/\1if false; then  # M-TRASH-BARETRASH/' \
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-baretrash.sh"
   /usr/bin/sed -e 's/^\([[:space:]]*\)if matches .*  # M-TRASH-BARERM$/\1if false; then  # M-TRASH-BARERM/' \
@@ -1537,40 +1453,36 @@ else
 fi
 case "${TRSC_BASE##*/}" in rmt-cph.*) /bin/rm -rf "$TRSC_BASE" ;; esac
 
-# ----- AC-CPV-T* (#8314, DT pass 7): one canonicalizer run gives the hook both of its views -----
+# ----- AC-CPV-T* (#8314, DT pass 7; re-based by #8122): one canonicalizer run per command -----
 #
-# The hook read its two views from two runs of the shared canonicalizer, the default output and then
-# the EXIT VIEW, so each command cost two full runs. It now makes one run in the canonicalizer's both
-# view, which emits the exit view and then the default output, each ended by a NUL byte, and reads them
-# with two reads. ONE reads the hook's source: one run on the command, in the both view, and none in the
-# exit view. EQ holds the verdicts: a copy of this hook with the two runs spliced back in is shown live
-# (it differs only in that block, and it parses), then both copies judge a set of commands — the two
-# allow-on-match exits and their sentinels, wrapped and quoted spellings, refused and allowed deletions
-# and Trash calls — and must return the same exit code and the same message on each. T1 to T16 run the
-# hook under a watchdog on one long command word and on a separator-dense command at 10, 20, 40 and
-# 80 KB in en_US.UTF-8 and C, each inside the budget and allowed. R-U and R-C time the hook against the
-# canonicalizer's default view alone on the 80 KB long word, the least of three interleaved runs of
-# each: the hook costs at most CPV_BOUND times the one run. CTL is the instrument's sensitivity: the
-# copy with the two runs exceeds the bound on the same command in UTF-8.
+# The hook makes one run of the shared canonicalizer on a command, in its default view, and reads
+# no other view. ONE reads the hook's source: one run on the command, none in the both view and
+# none in the exit view. EQ holds the verdicts: a copy of this hook with a second, identical
+# default-view run spliced in after the first is shown live (it differs only in that line, and it
+# parses), then both copies judge a set of commands — the lines the removed exits once allowed,
+# wrapped and quoted spellings, refused and allowed deletions and Trash calls — and must return the
+# same exit code and the same message on each. T1 to T16 run the hook under a watchdog on one long
+# command word and on a separator-dense command at 10, 20, 40 and 80 KB in en_US.UTF-8 and C, each
+# inside the budget and allowed. R-U and R-C time the hook against the canonicalizer's default
+# view alone on the 80 KB long word, the least of three interleaved runs of each: the hook costs at
+# most CPV_BOUND times the one run. CTL is the instrument's sensitivity: the copy with the second
+# run exceeds the bound on the same command in UTF-8.
 CPV_BOUND="${CPV_BOUND:-1.75}"
 CPV_LIMIT="${CPV_LIMIT_S:-60}"   # seconds a timed run may take before the watchdog stops it
 CPV_BASE="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-cpv.XXXXXX" 2>/dev/null)" || CPV_BASE=""
-CPV_ONE='{
-  IFS= read -r -d '"''"' COMMAND_CMDPOS_EXIT || COMMAND_CMDPOS_EXIT="$COMMAND"
-  IFS= read -r -d '"''"' COMMAND_CMDPOS || COMMAND_CMDPOS="$COMMAND"
-} < <("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null)
+CPV_ONE='COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
 '
 CPV_TWO='COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
-COMMAND_CMDPOS_EXIT="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
+COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
 '
 # ONE — the runs of the canonicalizer on the command, read from the hook's source.
 cpv_runs="$(/usr/bin/awk '/^[ \t]*#/ { next } index($0, "-f \"$CMDPOS_AWK\"") && index($0, "\"$COMMAND\"") { n++; if (index($0, "-v CMDPOS_VIEW=both")) b++; if (index($0, "-v CMDPOS_VIEW=exit")) x++ }
   END { printf "%d %d %d", n, b, x }' "$HOOK")"
-if [ "$cpv_runs" = "1 1 0" ]; then
-  /usr/bin/printf 'PASS: %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the both view, and never in the exit view alone"; PASS=$((PASS + 1))
+if [ "$cpv_runs" = "1 0 0" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the default view, and never in the exit or both view"; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the both view" \
-    "runs on the command / in the both view / in the exit view alone: ${cpv_runs} (want 1 1 0)"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the default view" \
+    "runs on the command / in the both view / in the exit view: ${cpv_runs} (want 1 0 0)"; FAIL=$((FAIL + 1))
 fi
 if [ -z "$CPV_BASE" ]; then
   /usr/bin/printf 'FAIL: AC-CPV the arms could not create a sandbox, so they did not run\n'; FAIL=$((FAIL + 1))
@@ -1630,7 +1542,7 @@ git rm -rf /tmp/foo
 echo '; git status' ; rm -rf /tmp/foo
 CPV_EOF
   if [ "$cpv_live" = 1 ] && [ -z "$cpv_why" ]; then
-    /usr/bin/printf 'PASS: %s\n' "AC-CPV-EQ: through one run and through the two runs spliced back in, the hook returns the same exit code and message on ${cpv_k} commands"; PASS=$((PASS + 1))
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-EQ: through one run and through a second run spliced in, the hook returns the same exit code and message on ${cpv_k} commands"; PASS=$((PASS + 1))
   else
     /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-EQ: the hook's verdicts are the same through one run as through two" \
       "two-run copy live=${cpv_live};${cpv_why}"; FAIL=$((FAIL + 1))
@@ -1704,7 +1616,7 @@ print("-1 -1" if None in h or None in c else "%.3f %.3f" % (min(h), min(c)))'
   done
   cpv_ratio "${CPV_BASE}/two/block-rm-prefer-trash.sh" en_US.UTF-8
   if [ "$cpv_live" = 1 ] && [ "$CPV_H" != -1 ] && [ "$CPV_OK" = 0 ]; then
-    /usr/bin/printf 'PASS: %s\n' "AC-CPV-CTL: the copy with two runs costs beyond ${CPV_BOUND} times one run of the canonicalizer on the 80 KB long word in UTF-8 — the instrument sees the second run"; PASS=$((PASS + 1))
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-CTL: the copy with a second run costs beyond ${CPV_BOUND} times one run of the canonicalizer on the 80 KB long word in UTF-8 — the instrument sees the second run"; PASS=$((PASS + 1))
   else
     /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-CTL: the copy with two runs exceeds the bound (BROKEN PROBE) — measured ratio ${CPV_RATIO}, bound ${CPV_BOUND}" \
       "copy live=${cpv_live}"; FAIL=$((FAIL + 1))

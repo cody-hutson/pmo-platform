@@ -7,8 +7,10 @@
 # Trash-verb is BLOCKED, with ONE admitted class: a Trash move of a single
 # auto-memory entry (see MEMORY-STORE ARM). Inside the workspace, rm/rmdir/unlink is
 # BLOCKED with a runtime-auto-detected Trash-equivalent suggestion (3-tier: trash in
-# PATH → /opt/homebrew/opt/trash/bin/trash → osascript Finder fallback). Git
-# subcommands are exempt (git history provides recoverability).
+# PATH → /opt/homebrew/opt/trash/bin/trash → osascript Finder fallback). A git
+# command exempts its own segment only (git history provides recoverability); every
+# other segment of the line is judged, and a deletion or Trash verb that does not name
+# all its targets on its line is refused under the strict policy.
 #
 # Composes with (does not replace) the existing 6 PreToolUse hooks: block-destructive,
 # block-egress, block-mcp-writes, block-credential-reads, block-shell-injection,
@@ -442,22 +444,10 @@ if [ -r "$CMDPOS_AWK" ]; then
   # The second probe opens with the append form of a prefix assignment (#8314, follow-up
   # pass), so a copy whose walk reads that word as the command word — one that predates the
   # append form — fails it too.
-  # A third probe guards the EXIT VIEW this hook uniquely reads, in the form it reads it: the
-  # both view of the same wrapped input, without that prefix (#8314, DT pass 7), must carry the
-  # exit view and then the default output, each ended by a NUL byte, and the exit view must NOT
-  # expose the verb (its walk predates the wrapper grammar) while the default output does. A copy
-  # that lacks the both view emits no NUL, and one that ignores the exit view emits the widened
-  # form twice; either fails here and the hook denies rather than letting the two allow-exits
-  # read a widened view.
-  _cp_x3=""; _cp_d3=""
   if _cp_canary="$("$PRINTF" '%s' 'q() { r; }' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
      && "$PRINTF" '%s' "$_cp_canary" | "$GREP" -q '; r' \
      && _cp_canary2="$("$PRINTF" '%s' 'Z+=0 nice -n 0 q' | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null)" \
-     && "$PRINTF" '%s' "$_cp_canary2" | "$GREP" -q '; q' \
-     && { IFS= read -r -d '' _cp_x3 && IFS= read -r -d '' _cp_d3; } \
-          < <("$PRINTF" '%s' 'nice -n 0 q' | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null) \
-     && case "$_cp_x3" in *'; q'*) false ;; *) true ;; esac \
-     && case "$_cp_d3" in *'; q'*) true ;; *) false ;; esac; then
+     && "$GREP" -q '; q' <<<"$_cp_canary2"; then
     CMDPOS_OK=1
   fi
 fi
@@ -466,24 +456,13 @@ if [ "$CMDPOS_OK" != 1 ]; then
   deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
   exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
 fi
-# The EXIT VIEW (#8314): the canonicalizer's quote-masked but UN-WIDENED output — the walk
-# as it stood before the wrapper grammar. The two exits below ALLOW on a match, so reading
-# the widened COMMAND_CMDPOS would turn a refusal into an allow every time the walk newly
-# resolved a command start (R→A-1, R→A-2). They read this view instead, so they keep the
-# verdicts they have today; closing the line-laundering those verdicts leave is #8122's.
-# Both views come from ONE run of the canonicalizer (#8314, DT pass 7): its both view emits
-# the exit view and then the default output, each ended by a NUL byte and each as a command
-# substitution would capture it, so the hook pays for one run, not two, and reads each with
-# one read. A read that meets the end of the output first takes the command as judged (after the
-# here-document pre-pass), as a failed run did; the exit view is emitted before the default walk runs, so a run that fails there
-# still leaves it.
-{
-  IFS= read -r -d '' COMMAND_CMDPOS_EXIT || COMMAND_CMDPOS_EXIT="$COMMAND"
-  IFS= read -r -d '' COMMAND_CMDPOS || COMMAND_CMDPOS="$COMMAND"
-} < <("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null)
+# One run of the canonicalizer gives the form every rule below reads. The hook keeps no exit
+# that allows on a match ({{ADR:deletion-guard-judges-every-segment}}): every segment is judged,
+# so a widening of the walk can only add command starts to judge, never turn a refusal into an
+# allow, and the canonicalizer's frozen exit view has no reader here.
+COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
 # Belt-and-braces: a non-empty command must never canonicalize to nothing.
 [ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
-[ -n "$COMMAND_CMDPOS_EXIT" ] || COMMAND_CMDPOS_EXIT="$COMMAND"
 
 # --- HELPERS ---
 log_block() {
@@ -527,23 +506,6 @@ block_cwd_unknown() {
 matches() {
   local pattern="$1"
   "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
-}
-
-# exit_matches(pattern) — the same test against the canonicalizer's EXIT VIEW, read only by
-# the two allow-on-match exits (#8314). A widening of the command walk does not reach it.
-exit_matches() {
-  local pattern="$1"
-  "$PRINTF" '%s' "$COMMAND_CMDPOS_EXIT" | "$GREP" -qE "$pattern"
-}
-
-# first_deletion_verb(matcher) — the deletion verb at a command start under the given
-# matcher (matches | exit_matches), or empty. The no-target exit uses it with exit_matches,
-# so a verb visible only under the widened walk does not grant the target-less allow.
-first_deletion_verb() {
-  local m="$1"
-  if "$m" "${ANCHOR_PREFIX_BASH}"'rm([[:space:]]+|$)'; then "$PRINTF" 'rm'; return; fi
-  if "$m" "${ANCHOR_PREFIX_BASH}"'rmdir([[:space:]]+|$)'; then "$PRINTF" 'rmdir'; return; fi
-  if "$m" "${ANCHOR_PREFIX_BASH}"'unlink([[:space:]]+|$)'; then "$PRINTF" 'unlink'; return; fi
 }
 
 # classify_path(path) — Steps 5-6 below: normalize an absolute path and prefix-match it
@@ -791,11 +753,21 @@ suggest_trash_command() {
 #   numbered across the whole command, lines included, by the SAME walk that
 #   extract_dir_events() runs, so a target and a directory change are ordered
 #   against one numbering: a third reader of the canonical form, under the
-#   same coupling. A `--` ends option parsing, so a dash-led token after it is
-#   an operand, and a redirection is not an operand at all.
+#   same coupling, and the target-less reader (mode "bare") is a fourth, under the
+#   same skip rules, so the readers cannot disagree on where a segment starts or on
+#   what counts as an operand. A `--` ends option parsing, so a dash-led token after
+#   it is an operand, and a redirection is not an operand at all. Every reader goes
+#   through walk_segments(), so an argument the walk needs reaches every mode.
 #
-# SEGMENT_WALK_AWK — the one segmentation both readers share.
+# SEGMENT_WALK_AWK — the one segmentation every reader shares.
 #   mode "targets": print `<seg><TAB><token>` for each operand of verb v.
+#   mode "bare":    print `<seg>` for each segment of verb v that does not name all its
+#                   targets on its line: it carries no operand under the targets mode's
+#                   skip rules (flags, a "--", redirections and bare shell structure are
+#                   not operands), or its line continues past it — the segment's last
+#                   token ends in an odd run of backslashes, so its operands go on to the
+#                   next line, a record of its own. A lone trailing backslash is not an
+#                   operand.
 #   mode "dirs":    print `<seg><TAB><kind><TAB><operand>` for each directory change,
 #                   kind DIR (one literal operand), HOME (bare cd) or UNKNOWN (a form
 #                   whose destination cannot be read from the line), plus a
@@ -850,10 +822,12 @@ readonly SEGMENT_WALK_AWK='
       first_token = tokens[first];
       sub(/^\/(usr\/(local\/)?|opt\/(homebrew|local)\/)?bin\//, "", first_token);
       if (first_token != v) continue;
-      endopts = 0; skipnext = 0;
+      endopts = 0; skipnext = 0; nops = 0; cont = 0;
       for (i = first + 1; i <= m; i++) {
         t = tokens[i];
         if (t == "") continue;
+        # A line continued past this segment; a lone trailing backslash is not an operand.
+        if (s == n && i == m && match(t, /\\+$/) && RLENGTH % 2 == 1) { cont = 1; if (t == "\\") continue; }
         if (skipnext) { skipnext = 0; continue; }
         if (skip_redirect(t)) continue;
         # Skip bare shell structure. A subshell leaves its closing `)` inside
@@ -863,21 +837,35 @@ readonly SEGMENT_WALK_AWK='
         # Skip flags (start with -) until a `--` ends option parsing.
         if (!endopts && t == "--") { endopts = 1; continue; }
         if (!endopts && substr(t, 1, 1) == "-") continue;
-        print seg "\t" t;
+        nops++;
+        if (mode == "targets") print seg "\t" t;
       }
+      if (mode == "bare" && (nops == 0 || cont)) print seg;
     }
   }
   END { if (mode == "dirs" && reentrant) print "0\tREENTRANT\t"; }
 '
 
+# walk_segments(mode, verb) — the one call site of SEGMENT_WALK_AWK. Every reader below goes
+# through it, so an argument the walk needs (such as a Trash location to strip from a first
+# token) is passed to every mode at once and no reader can omit it.
+walk_segments() {
+  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v mode="$1" -v v="$2" "$SEGMENT_WALK_AWK"
+}
+
 extract_target_tokens() {
-  local verb="$1"
-  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v mode="targets" -v v="$verb" "$SEGMENT_WALK_AWK"
+  walk_segments targets "$1"
 }
 
 # extract_dir_events — the directory changes on the line, in SEGMENT_WALK_AWK's "dirs" form.
 extract_dir_events() {
-  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v mode="dirs" -v v="" "$SEGMENT_WALK_AWK"
+  walk_segments dirs ""
+}
+
+# extract_bare_segments(verb) — the segments of a verb that do not name all their targets on
+# their line, in SEGMENT_WALK_AWK's "bare" form.
+extract_bare_segments() {
+  walk_segments bare "$1"
 }
 
 # --- IN-COMMAND WORKING DIRECTORY ---
@@ -1046,15 +1034,11 @@ basis_note() {
 
 # judge_targets(verb) — extract and classify every target token of a deletion verb on the
 # canonicalized command, blocking on the first one (every classification of rm/rmdir/unlink
-# blocks). Sets the caller-scoped `found_target=1` when the verb carries at least one
-# operand. Called for the detected (widened) verb; and, when the exit-view verb differs
-# (#8314), for that verb too, so a target-less verb the widening promoted ahead of today's
-# command-start verb cannot short-circuit past the real deletion that verb carries.
+# blocks). Step 2 calls it once for each rm-family verb at a command start.
 judge_targets() {
   local verb="$1" tseg token classification verdict resolved suggestion
   while IFS="$TAB" read -r tseg token; do
     [ -z "$token" ] && continue
-    found_target=1
     classification=0
     verdict="$(resolve_and_classify "$token" "$tseg")" || classification="$?"
     split_verdict "$verdict"; resolved="$RESOLVED"
@@ -1100,56 +1084,30 @@ judge_targets() {
 # Trash-verb operands the MEMORY-STORE ARM admitted; each leaves one row before the allow.
 MEMORY_ADMISSIONS=0
 
-# Step 1 — Broad git-subcommand exemption (Hub Decision 1)
-# Per requirement #6: "git rm and other git <verb> invocations are exempt"
-# Broader than the Stage 5 spoke's narrow allowlist — exempts ALL git subcommands.
-# Absolute-path-aware: also exempts /usr/bin/git, /bin/git, etc.
-if exit_matches "${ANCHOR_PREFIX_BASH}"'git[[:space:]]+[^[:space:]]+'; then  # M-TRASH-GITEXEMPT
-  exit 0
-fi
+# Step 1 — the git subcommand exemption, per segment. A segment whose command word is git
+# (bare or by absolute path) is never judged as a deletion: no step below reads a segment whose
+# command word is not its own verb. The exemption therefore covers that segment only, and every
+# other segment on the line is judged as if it were absent. There is deliberately no exit here:
+# an exit that allows on a match reads the whole line ({{ADR:deletion-guard-judges-every-segment}}).
+:  # M-TRASH-SEGWALK
 
-# Step 2 — Verb detection
-# Detect rm/rmdir/unlink at command-start position
+# Step 2 — every rm-family verb, each judged on its own segments. A segment that names no operand
+# ends nothing here: the remaining verbs, the Trash step and the Finder step are judged first, and
+# the target-less limb after Step 4 refuses it.
 # Absolute-path-aware: also detects /bin/rm, /usr/bin/rm, etc.
-if matches "${ANCHOR_PREFIX_BASH}"'(rm|rmdir|unlink)([[:space:]]+|$)'; then
-  # Determine which verb matched (for token extraction)
-  verb=""
-  if matches "${ANCHOR_PREFIX_BASH}"'rm([[:space:]]+|$)'; then verb="rm"; fi
-  if [ -z "$verb" ] && matches "${ANCHOR_PREFIX_BASH}"'rmdir([[:space:]]+|$)'; then verb="rmdir"; fi
-  if [ -z "$verb" ] && matches "${ANCHOR_PREFIX_BASH}"'unlink([[:space:]]+|$)'; then verb="unlink"; fi
-
-  if [ -n "$verb" ]; then
+for verb in rm rmdir unlink; do
+  if matches "${ANCHOR_PREFIX_BASH}${verb}"'([[:space:]]+|$)'; then
     ensure_cwd_table
-    found_target=0
-    judge_targets "$verb"
-
-    # If the verb matched but no target tokens were extracted (e.g., bare `rm` with no
-    # args), there is nothing to delete — allow. (#8314) The no-target allow is granted
-    # only on the verb the EXIT VIEW (un-widened) places at a command start: a verb the
-    # widened walk promoted ahead of today's command-start verb must not short-circuit.
-    # When the exit-view verb DIFFERS from the widened-first verb (e.g. `nice rm ; sudo
-    # unlink <path>`: widened picks a target-less `rm`, but today's start is `unlink`),
-    # its own targets are judged first, so the real deletion is not skipped. When they are
-    # the SAME verb (`sudo rm ; trash …`, `rm` at a start in both views), today's verdict
-    # is kept and the line-laundering those exits leave stays its own rule's card.
-    exit_verb="$(first_deletion_verb exit_matches)"  # M-TRASH-NOTARGET
-    if [ "$found_target" = 0 ] && [ -n "$exit_verb" ] && [ "$exit_verb" != "$verb" ]; then
-      judge_targets "$exit_verb"
-    fi
-    if [ "$found_target" = 0 ] && [ -n "$exit_verb" ]; then
-      exit 0
-    fi
+    judge_targets "$verb"  # M-TRASH-SEGVERB
   fi
-fi
+done
 
 # Step 3 — trash invocation detection
 # Absolute-path-aware: also detects /opt/homebrew/bin/trash, /usr/bin/trash, etc.
 if matches "${ANCHOR_PREFIX_BASH}"'trash([[:space:]]+|$)'; then
   ensure_cwd_table
-  found_target=0
   while IFS="$TAB" read -r tseg token; do
     [ -z "$token" ] && continue
-    found_target=1
     classification=0
     verdict="$(resolve_and_classify "$token" "$tseg")" || classification="$?"
     split_verdict "$verdict"; resolved="$RESOLVED"
@@ -1184,6 +1142,15 @@ if matches "${ANCHOR_PREFIX_BASH}"'trash([[:space:]]+|$)'; then
         ;;
     esac
   done < <(extract_target_tokens "trash")
+  # The target-less limb: a Trash segment that does not name all its targets on its line (no
+  # operand, or its line continues) is refused under the strict policy. A Trash program can act
+  # on what the line does not name (an empty-the-Trash option takes no operand). Judged after the
+  # operands, so it never masks their refusals.
+  if [ -n "$(extract_bare_segments trash)" ]; then  # M-TRASH-BARETRASH
+    block "BLOCK-TRASH-003" \
+      "a Trash invocation that does not name all its targets on its line (no target operand, or the line continues) is unresolvable under strict policy" \
+      "name each target by absolute path on the command's own line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+  fi
 fi
 
 # Step 4 — osascript Trash-verb detection
@@ -1234,6 +1201,17 @@ if matches "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)'; then
     done < <("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE 'POSIX[[:space:]]+file[[:space:]]+"[^"]*"' | "$GREP" -oE '"[^"]*"' | /usr/bin/sed 's/^"//; s/"$//')
   fi
 fi
+
+# The target-less limb for rm, rmdir and unlink: a segment that does not name all its targets on
+# its line is refused under the strict policy. Judged last, so a refusal of a real target
+# elsewhere on the line always names that target.
+for verb in rm rmdir unlink; do
+  if matches "${ANCHOR_PREFIX_BASH}${verb}"'([[:space:]]+|$)' && [ -n "$(extract_bare_segments "$verb")" ]; then  # M-TRASH-BARERM
+    block "BLOCK-TRASH-001" \
+      "a $verb invocation that does not name all its targets on its line (no target operand, or the line continues) is unresolvable under strict policy" \
+      "name each target by absolute path on the command's own line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+  fi
+done
 
 # --- MEMORY-STORE ARM: every admission leaves one row, before the call is allowed ---
 # Written here, after every operand has been judged, so a command refused as a whole leaves

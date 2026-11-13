@@ -190,8 +190,9 @@ canonicalize() {
   /usr/bin/printf '%s' "$1" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null
 }
 
-# canonicalize_exit(command) -> the canonicalizer's EXIT VIEW on stdout (#8314): the form
-# the allow-on-match exits read, which keeps the walk as it stood before the wrapper grammar.
+# canonicalize_exit(command) -> the canonicalizer's EXIT VIEW on stdout (#8314): the frozen
+# form that keeps the walk as it stood before the wrapper grammar, which no hook reads since
+# {{ADR:deletion-guard-judges-every-segment}}.
 canonicalize_exit() {
   /usr/bin/printf '%s' "$1" | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null
 }
@@ -453,8 +454,9 @@ single_source_report() { # $1 = hooks dir -> SS_01, SS_02, SS_03 problem strings
           if (index($0, "/usr/bin/awk -f \"$CMDPOS_AWK\"") == 0 && $0 !~ /COMMAND_CMDPOS="\$COMMAND"[ \t]*$/) bad = 1
         }
         END { exit bad ? 0 : 1 }' "$h"; then SS_02="${SS_02} ${b}:assignment"; fi
-    # a read into COMMAND_CMDPOS (the deletion hook's both view, #8314 DT pass 7) sits in a
-    # group whose closing line feeds it the shared file's both view
+    # a read into COMMAND_CMDPOS sits in a group whose closing line feeds it the shared file's
+    # both view (no hook reads that view since {{ADR:deletion-guard-judges-every-segment}}; the
+    # check stays so a read brought back is held to the shared file)
     if /usr/bin/awk '
         /^[ \t]*#/ { next }
         /(^|[ \t;{])read[ \t]/ && /[ \t]COMMAND_CMDPOS([ \t;&|]|$)/ { pending = 1; next }
@@ -512,16 +514,17 @@ else
   fail "CMDPOS-SINGLE-SOURCE-M3 a consumer whose matches() reads the raw command was not reported (result [${SS_02}])"
 fi
 /bin/cp "$HOOK_DIR/block-fs-boundary.sh" "${ss_sbx}/block-fs-boundary.sh"
-# (#8314, DT pass 7) the deletion hook reads both of its views with one run of the shared file;
-# a copy whose both-view read is fed another file is reported, and the read in the shipped hook
-# is shown to be the one the check sees.
-/usr/bin/sed -e '/^} < <(/s#-f "$CMDPOS_AWK"#-f "$OTHER_AWK"#' "$HOOK_DIR/block-rm-prefer-trash.sh" > "${ss_sbx}/block-rm-prefer-trash.sh"
+# (#8314, DT pass 7; re-based by #8122) the deletion hook makes one default-view run of the
+# shared file, in the assignment form the other three consumers use; a copy whose assignment
+# takes another file is reported, and the assignment in the shipped hook is shown to be the one
+# the check sees.
+/usr/bin/sed -e '/^COMMAND_CMDPOS=/s#-f "$CMDPOS_AWK"#-f "$OTHER_AWK"#' "$HOOK_DIR/block-rm-prefer-trash.sh" > "${ss_sbx}/block-rm-prefer-trash.sh"
 single_source_report "$ss_sbx"
 if [ -z "$ss_base" ] && ! /usr/bin/cmp -s "$HOOK_DIR/block-rm-prefer-trash.sh" "${ss_sbx}/block-rm-prefer-trash.sh" \
-   && [[ "$SS_02" == *"block-rm-prefer-trash.sh:read"* ]]; then
-  pass "CMDPOS-SINGLE-SOURCE-M4 a consumer whose both-view read takes another file is reported"
+   && [[ "$SS_02" == *"block-rm-prefer-trash.sh:assignment"* ]]; then
+  pass "CMDPOS-SINGLE-SOURCE-M4 a consumer whose default-view assignment takes another file is reported"
 else
-  fail "CMDPOS-SINGLE-SOURCE-M4 a consumer whose both-view read takes another file was not reported (sandbox base [${ss_base}], result [${SS_02}])"
+  fail "CMDPOS-SINGLE-SOURCE-M4 a consumer whose default-view assignment takes another file was not reported (sandbox base [${ss_base}], result [${SS_02}])"
 fi
 /bin/rm -rf "$ss_sbx"
 
