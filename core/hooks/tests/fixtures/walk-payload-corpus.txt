@@ -1818,3 +1818,34 @@ OR22|block-destructive|ord-near|-|?|a|"X=/usr/bin/timeout" PATH=x true
 # allow, as a declared precision improvement. gt is `?`. This header does not take the card-block
 # form the cross-issue criterion counts.
 QB01|block-egress|qbs-over|-|?|B|'\gh' api -X POST @NO@
+
+# --- seed 15.1: card #8317 — the quote state the -022 scanner carries past a comment, a nested quote, a backquote, an arithmetic opener and a dollar run (QC rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8317's Stage-5 design, its review's CD-1 classes, D-8317-Scope and the
+# shared `$$'` class. gt is `?` and every row records the verdict at the base (D-GroundTruth). Groups: rt-qcmt, rt-qnest,
+# rt-qhd, rt-qbq and rt-qdollar are the fail-open classes (a at base, B or W once #8317 lands); rt-qctl are the controls
+# (B at base and after); rt-qnear are must-not-flag near-misses (a at base and after); rt-qcost are the declared precision
+# costs (a at base; B once #8317 lands). @NL@ is a newline.
+QC01|block-destructive|rt-qcmt|-|?|a|echo hi # it's@NL@bash @D@/na.sh
+QC02|block-destructive|rt-qcmt|-|?|a|echo hi # x; it's@NL@bash @D@/na.sh
+QC03|block-destructive|rt-qcmt|-|?|a|echo hi # it's@NL@source @D@/na.sh
+QC04|block-destructive|rt-qcmt|-|?|a|echo hi # it's@NL@echo "$(bash @D@/na.sh)"
+QC05|block-destructive|rt-qnest|-|?|a|echo "$(printf "it's")"@NL@bash @D@/na.sh
+QC06|block-destructive|rt-qnest|-|?|a|echo "${x:-"it's"}"@NL@bash @D@/na.sh
+QC07|block-destructive|rt-qhd|-|?|a|echo hi # <<EOF@NL@bash @D@/na.sh@NL@EOF
+QC08|block-destructive|rt-qbq|-|?|a|echo `printf "it's"`@NL@bash @D@/na.sh
+QC09|block-destructive|rt-qnest|-|?|a|echo "$[ "it's" ]"@NL@bash @D@/na.sh
+QC10|block-destructive|rt-qdollar|-|?|a|echo $$'\'; bash @D@/na.sh
+QC11|block-destructive|rt-qctl|-|?|B|echo hi # its@NL@bash @D@/na.sh
+QC12|block-destructive|rt-qctl|-|?|B|echo "$(printf "its")"@NL@bash @D@/na.sh
+QC13|block-destructive|rt-qctl|-|?|B|echo hi # EOF@NL@bash @D@/na.sh
+QC14|block-destructive|rt-qctl|-|?|B|echo $$ '\'; bash @D@/na.sh
+QC15|block-destructive|rt-qnear|-|?|a|echo hi # it's fine
+QC16|block-destructive|rt-qnear|-|?|a|gh issue comment 1 --body 'see #12; run bash @D@/na.sh later'
+QC17|block-destructive|rt-qnear|-|?|a|echo foo#bar 'note; bash @D@/na.sh'
+QC18|block-destructive|rt-qnear|-|?|a|echo "${HOME}" 'x; bash @D@/na.sh'
+QC19|block-destructive|rt-qnear|-|?|a|cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+QC20|block-destructive|rt-qnear|-|?|a|echo 'x; bash @D@/na.sh'
+QC21|block-destructive|rt-qcost|-|?|a|echo hi # it's@NL@echo 'x; bash @D@/na.sh'
+QC22|block-destructive|rt-qcost|-|?|a|echo "$(printf "%s" "a b")" 'x; bash @D@/na.sh'
+QC23|block-destructive|rt-qcost|-|?|a|cat <<'EOF' # it's@NL@bash @D@/na.sh@NL@EOF
+QC24|block-destructive|rt-qcost|-|?|a|cat <<'EOF' # <<X@NL@hello@NL@EOF
