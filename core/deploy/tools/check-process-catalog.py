@@ -830,6 +830,32 @@ class Checker:
 
 
 # ----------------------------------------------------------------------------------------------
+# The words a failing or stopped run's summary block gives an author. A block prints each path as
+# its resolved, repository-root-relative value.
+# ----------------------------------------------------------------------------------------------
+NOT_RUN = "The check could not run: %s. This is not a pass, and it is not a finding about this change."
+PAGE_FIX = ("**Fix:** correct each page named above; each rule code is explained in the definitions pack. If the rule is "
+            "SRC001, a file a page depicts was moved or deleted: put the file's new path in that page's `depicts` list, "
+            "or remove the entry, then run `python3 %s build` and commit.")
+REGISTER_FIX = (
+    "A finding reported under a Register Contract rule identifier — R or G followed directly by a digit, not one of the "
+    "validator's own three-letter codes — is about a published register, not a page. If this change moved or deleted a "
+    "file a row cites, or changed a job's declared posture, this change carries the fix: correct that one cell in this "
+    "pull request, as the catalog README says under \"Correcting a row\". A finding keyed by a control ID or a run of "
+    "control IDs means no source moved. With the detail \"above the highest minted ID\", a row or a held ID lies above "
+    "the value `%s` records: one was added and the value was not raised, or the value was lowered. Raise the value in "
+    "this change, as the catalog README says under \"Minting a control ID\"; it is never lowered. With the detail "
+    "\"no row and no held range\", a number up to that value has neither: a row was removed without its ID being held, "
+    "a held range was narrowed or left out, or the value was raised with no row; the row and its record land together. "
+    "A register finding that reaches main holds the next close-out until it is corrected.")
+
+
+def cell(text) -> str:
+    """Text as one table cell."""
+    return str(text).replace("|", "\\|").replace("\n", " ")
+
+
+# ----------------------------------------------------------------------------------------------
 # The run
 # ----------------------------------------------------------------------------------------------
 def run(a, out=None) -> int:
@@ -861,7 +887,7 @@ def run(a, out=None) -> int:
             emit(line)
         state.update(register_rows=reg["register_rows"], registry_rows=reg["registry_rows"], findings=reg["findings"])
         if reg["stop"]:
-            body.append("Not evaluated: %s." % reg["stop"])
+            body.append(NOT_RUN % reg["stop"])
             return close(PC.EXIT_NOT_EVALUATED)
         parity = pack_parity(pack, roots.pack_document)
         for finding in parity:
@@ -903,11 +929,21 @@ def run(a, out=None) -> int:
         state.update(errors=errors, warns=sum(1 for x in findings if x.severity == "warn"))
         examined += ", %d pages in %d published universes" % (len(pages), len(cat.published_universes))
         body += ["%d error(s), %d warning(s)." % (errors, state["warns"])]
-        body += ["- `%s`" % x for x in findings if x.severity == "error"]
+        if errors:
+            body += ["", "| Page and line | Rule | Finding |", "|---|---|---|"]
+            for line in list(reg["lines"]) + ["%s\t%s\t%s\t%s" % finding for finding in parity]:
+                cells = line.split("\t")
+                if len(cells) == 4:
+                    body.append("| `%s` | %s | %s |" % (cell(cells[1]), cell(cells[0]), cell(" ".join(x for x in cells[2:] if x))))
+            for x in findings:
+                if x.severity == "error":
+                    where = "%s:%d" % (x.path, x.line + 1) if x.line is not None else x.path
+                    body.append("| `%s` | %s | %s |" % (cell(where), x.code, cell(x.message)))
+            body += ["", PAGE_FIX % roots.rel(HERE / PC.GENERATOR), "", REGISTER_FIX % roots.rel(roots.pack)]
         return close(PC.EXIT_FINDINGS if errors else PC.EXIT_CLEAN)
     except PC.NotEvaluated as e:
         emit("NOT-EVALUATED: %s" % e)
-        body.append("Not evaluated: %s." % e)
+        body.append(NOT_RUN % e)
         return close(PC.EXIT_NOT_EVALUATED)
 
 
@@ -1540,6 +1576,46 @@ def self_test() -> int:
         arms.check("summary file: a passing run and a not-evaluated run each append one block",
                    text.count("### Process catalog — page-validation: PASS") == 1
                    and text.count("### Process catalog — page-validation: NOT-EVALUATED") == 1, text)
+
+        # -- the page-validation gate, as the catalog workflow runs it: a subprocess with --summary-file --
+        def gate(args, name):
+            path = tmp / ("gate-block-%s.md" % name)
+            code, lines, _err = cli(list(args) + ["--summary-file", str(path)])
+            return code, lines, (path.read_text(encoding="utf-8") if path.is_file() else "")
+
+        code, lines, block = gate(["--pattern-arm", "not-run"] + empty.args + empty.register_args, "empty")
+        arms.check("G8: page validation on a catalog that holds no page is exit 3, and its block reads NOT-EVALUATED and is "
+                   "not a pass",
+                   code == 3 and "### Process catalog — page-validation: NOT-EVALUATED\n" in block
+                   and "The check could not run: no page is discovered" in block
+                   and "This is not a pass, and it is not a finding about this change." in block
+                   and ": PASS" not in block and ": FAIL" not in block, (code, block))
+        dx = PC.build_fixture_repo(tmp / "depicted")
+        dx_base = ["--pattern-arm", "not-run"] + dx.args + dx.register_args + dx.measure_args
+        unrelated = dx.repo / dx.layout["fixtures"] / "README.md"
+        unrelated.write_text(unrelated.read_text(encoding="utf-8") + "\nA line no page depicts or cites.\n", encoding="utf-8")
+        PC.commit_all(dx.repo, "a change to a file no page depicts or cites and no register row names")
+        code, lines, block = gate(dx_base, "unrelated")
+        arms.check("depicted file: a change to a file no page depicts or cites, and no register row names, is exit 0 "
+                   "(the discrimination arm: expected pass)",
+                   code == 0 and not codes_of(lines, "ERROR") and "### Process catalog — page-validation: PASS\n" in block,
+                   (code, lines[-2:]))
+        depicted = dx.layout["sources"] + "/fixture-script.sh.txt"
+        (dx.repo / depicted).unlink()
+        PC.commit_all(dx.repo, "a file one page depicts is deleted")
+        code, lines, block = gate(dx_base, "deleted")
+        spans_rel = dx.page("fixture-activity-spans").relative_to(dx.repo).as_posix()
+        arms.check("depicted file: a deleted file a page depicts is exit 1 with SRC001, naming the page",
+                   code == 1 and "SRC001" in codes_of(lines, "ERROR")
+                   and any(l.startswith(spans_rel + ":") and " SRC001 " in l and depicted in l for l in lines), lines[-6:])
+        arms.check("depicted file: the block reads FAIL, lists the finding with its page and rule, and says how a moved or "
+                   "deleted depicted file is corrected",
+                   "### Process catalog — page-validation: FAIL\n" in block
+                   and "| Page and line | Rule | Finding |" in block
+                   and any(l.startswith("| `%s` | SRC001 |" % spans_rel) for l in block.split("\n"))
+                   and "put the file's new path in that page's `depicts` list, or remove the entry" in block
+                   and "build-process-catalog.py build` and commit." in block
+                   and "is about a published register, not a page." in block, block)
 
         # -- one reader, by behaviour --
         real = (PC.read_frontmatter, PC.frontmatter_end, PC.frontmatter_lines)

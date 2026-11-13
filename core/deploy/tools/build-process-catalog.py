@@ -92,6 +92,59 @@ NEEDS_A_PERSON = ("gone", "ambiguous", "path-missing")
 NO_PAGES = "no page is discovered: the catalog holds no page of a published universe"
 RECORD_EMPTY = "Current-state pages read: none — the catalog holds no pages yet"
 
+# The words a check's summary block gives an author. A block prints each path as its resolved,
+# repository-root-relative value; the command it names is this file's own path.
+CITATION_LEAD = ("A catalog page cites a source line by its line number and a fingerprint of the cited text. This check "
+                 "fails when a committed line number is no longer where that text is. It fails on a change that only "
+                 "edits a cited source; that is intended.")
+CITATION_BASE = "A source in this table that this change does not touch was already stale on the base."
+CITATION_MOVED = ("**%d moved citation(s): one command repairs them.** The cited text is unchanged and only its line number "
+                  "is stale. The rewrite belongs in this pull request. On a release pull request the pipeline makes it: "
+                  "Stage 12 runs the command below on the release branch before the merge (Phase A.5.8) and commits the "
+                  "result here, so leave it until then — two pull requests that both rewrite early conflict on the same "
+                  "lines. On a pull request outside the release pipeline, run it from the repository root and commit the "
+                  "pages it rewrites:")
+CITATION_PERSON = "**%d citation(s) need a person, in this order:**"
+CITATION_REMEDY = {
+    "gone": "This change edited or deleted the cited text. 1. Cite the text that now states the same fact. 2. If nothing "
+            "states it any more, the page's claim may be false: leave the citation and report it to the page's owner (`%s`).",
+    "ambiguous": "The cited text now appears more than once in its file. Cite a wider span, or a neighbouring line that is unique.",
+    "path-missing": "The cited file was moved, renamed or deleted. Cite its new path.",
+}
+CITATION_FORM = "Write the citation in the form the design-artifact standard gives under Evergreen references."
+CITATION_REMOVAL = ("The standard gives two corrections for these: cite the source again, or remove the citation. Citing "
+                    "again comes first. Removing a citation, or cutting it back to a whole-file link, changes the page's "
+                    "evidence: it is the page owner's to make, and in a release whose plan does not list the page it is "
+                    "outside the File Change Matrix. Never edit a fingerprint.")
+CITATION_CONFLICT = ("If a page has a merge conflict on a citation line: take the base's side of the page, then run the "
+                     "command again. Never merge two line numbers by hand.")
+GENERATED_FIX = "**Fix — run from the repository root, then commit every file it changes:**"
+GENERATED_RULE = ("A generated file is never edited by hand. If you edited one, make the change in the page it is generated "
+                  "from, then run the command. A link that does not resolve is corrected in the page or register it comes "
+                  "from, then by the command.")
+NOT_RUN = "The check could not run: %s. This is not a pass, and it is not a finding about this change."
+
+
+def own_command(roots, *words) -> str:
+    """This tool's command line as an author types it from the repository root."""
+    return "    python3 %s %s" % (roots.rel(Path(__file__).resolve()), " ".join(words))
+
+
+def examined_line(gate: str, code: int, pairs: list) -> str:
+    """The summary block's `Examined:` line, from the census values of the run."""
+    if code == PC.EXIT_NOT_EVALUATED:
+        return "nothing"
+    v = dict(pairs)
+    if gate == "generated-output":
+        return "%s page(s) in %s published universe(s); %s generated file(s) compared" % (
+            v["pages"], v["universes"], v["generated_files"])
+    if gate == "citations":
+        head = "%s citation(s) on %s page(s)" % (v["citations"], v["pages"])
+        if v["citations"] == v["current"]:
+            return head + "; all current."
+        return head + " · " + " · ".join("%s %s" % (v[k], k) for k in ("current", "moved", "gone", "ambiguous", "other"))
+    return "see the census line"
+
 
 class Stop(Exception):
     """Leave a command with a census: (exit code, pairs, lines to print first)."""
@@ -203,12 +256,15 @@ def cmd_build(a, roots) -> tuple:
         links = link_findings(roots, [roots.catalog / rel for rel in surfaces.files if rel.endswith(".md")])
         state.update(differing=len(differing) + len(changed_pages), missing=len(missing), orphans=len(orphans),
                      link_findings=len(links))
-        body = ["%d differing, %d missing, %d orphan(s), %d link finding(s)." % (
-            state["differing"], len(missing), len(orphans), len(links))]
-        body += ["- `%s` differs" % x for x in differing] + ["- `%s` is missing" % x for x in missing]
-        body += ["- `%s` differs in a region the generator owns" % cat.published[n].rel for n in changed_pages]
-        body += ["- `%s` is an orphan" % x for x in orphans]
         bad = state["differing"] or missing or orphans or links
+        if bad:
+            body = ["| File | Finding |", "|---|---|"]
+            body += ["| `%s` | differs from the generator's output |" % x for x in differing]
+            body += ["| `%s` | missing |" % x for x in missing]
+            body += ["| `%s` | generator-owned region differs |" % cat.published[n].rel for n in changed_pages]
+            body += ["| `%s` | not produced by the generator |" % x for x in orphans]
+            body += ["| `%s` | a link in it does not resolve |" % x for x in sorted({hit["in"] for hit in links})]
+            body += ["", GENERATED_FIX, "", own_command(roots, "build"), "", GENERATED_RULE]
         return (PC.EXIT_FINDINGS if bad else PC.EXIT_CLEAN), pairs(), body
     # write: everything is computed; now write all of it
     target = Path(a.out).resolve() if a.out else roots.catalog
@@ -240,6 +296,7 @@ def link_findings(roots, paths: list) -> list:
     for path in paths:
         if path.is_file():
             for hit in scan(path, [], roots.repo):
+                hit["in"] = roots.rel(path)
                 found.append(hit)
                 out("link: %s:%d %s (%s)" % (roots.rel(path), hit["line"], hit["target"], hit["category"]))
     return found
@@ -324,7 +381,7 @@ def cmd_resolve(a, roots) -> tuple:
     pages = select_pages(cat, a.pages)
     only = set(changed_paths(roots.repo, a.sources_changed_in)) if a.sources_changed_in else None
     tally = {"current": 0, "moved": 0, "gone": 0, "ambiguous": 0, "other": 0}
-    total, rewritten, needs, cache = 0, 0, [], {}
+    total, rewritten, needs, cache, by_source = 0, 0, [], {}, {}
     for page in pages:
         lines = list(page.lines)
         endings = page.text.splitlines(keepends=True)
@@ -351,21 +408,34 @@ def cmd_resolve(a, roots) -> tuple:
                                                         "%d" % start if b is None else "%d-%d" % (start, b)))
             tally[state if state in tally else "other"] += 1
             if state != "current":
-                out("%s: %s:%d %s" % (state, page.rel, cit.line + 1,
-                                      "/%s#L%s" % (cit.path, cit.span.replace("-", "-L")) if cit.path else "a citation that does not parse"))
+                shown = "/%s#L%s" % (cit.path, cit.span.replace("-", "-L")) if cit.path else "a citation that does not parse"
+                out("%s: %s:%d %s" % (state, page.rel, cit.line + 1, shown))
+                row = by_source.setdefault(cit.path or "—", dict.fromkeys(("moved", "gone", "ambiguous", "other"), 0))
+                row[state if state in row else "other"] += 1
                 if state != "moved":
-                    needs.append((page.rel, page.get("owner") or "—", cit.path or "—", state))
+                    needs.append((page.rel, cit.line + 1, shown, state, page.get("owner") or "—"))
         if a.write and lines != page.lines:
             PC.write_text(page.path, rejoin(lines, page.lines, endings))
     pairs = [("pages", len(pages)), ("citations", total)] + list(tally.items()) + [("rewritten", rewritten)]
     if only is not None:
-        bad = any(state in NEEDS_A_PERSON for _p, _o, _c, state in needs)
+        bad = any(state in NEEDS_A_PERSON for _p, _n, _c, state, _o in needs)
     else:
         bad = total != tally["current"]
-    body = ["%d citation(s): %s; %d rewritten." % (total, ", ".join("%d %s" % (v, k) for k, v in tally.items()), rewritten)]
-    if needs:
-        body += ["", "| Page | Owner | Cited path | State |", "|---|---|---|---|"]
-        body += ["| `%s` | %s | `%s` | %s |" % row for row in needs]
+    body = []
+    if by_source:
+        body += [CITATION_LEAD, "", "| Source file | Moved | Gone | Ambiguous | Other |", "|---|---|---|---|---|"]
+        body += ["| `%s` | %d | %d | %d | %d |" % (path, n["moved"], n["gone"], n["ambiguous"], n["other"])
+                 for path, n in sorted(by_source.items())]
+        body += ["", CITATION_BASE]
+        if tally["moved"]:
+            body += ["", CITATION_MOVED % tally["moved"], "", own_command(roots, "anchors", "resolve", "--write")]
+        if needs:
+            body += ["", CITATION_PERSON % len(needs), "", "| Page and line | Citation | State | What to do |", "|---|---|---|---|"]
+            for rel, line, shown, state, owner in sorted(needs):
+                remedy = CITATION_REMEDY.get(state, CITATION_FORM)
+                body.append("| `%s:%d` | `%s` | %s | %s |" % (rel, line, shown, state, remedy % owner if "%s" in remedy else remedy))
+            body += ["", CITATION_REMOVAL]
+        body += ["", CITATION_CONFLICT]
     return (PC.EXIT_FINDINGS if bad else PC.EXIT_CLEAN), pairs, body
 
 
@@ -1185,10 +1255,10 @@ def main(argv=None) -> int:
                                         indent=2, sort_keys=True) + "\n")
             return PC.EXIT_NOT_EVALUATED
         out("NOT-EVALUATED: %s" % message)
-        code, pairs, body = PC.EXIT_NOT_EVALUATED, empty, ["Not evaluated: %s." % message]
+        code, pairs, body = PC.EXIT_NOT_EVALUATED, empty, [NOT_RUN % message]
     if pairs is None:                      # impact --json has printed its one document
         return code
-    PC.write_summary(summary, gate, PC.SUMMARY_STATUS[code], "see the census line", body)
+    PC.write_summary(summary, gate, PC.SUMMARY_STATUS[code], examined_line(gate, code, pairs), body)
     out(PC.census(gate, code, pairs))
     return code
 
@@ -1678,7 +1748,8 @@ def self_test() -> int:
                    and "[`the span`](/%s#L8-L9)%s" % (rules_src, PC.anchor_text(8, 9, PC.fingerprint("\n".join(original_lines[6:8])))) in written, written[-900:])
         arms.check("mixed --write: the gone citation is byte-identical, the run is exit 1, and the summary block lists it",
                    code == 1 and gone_line in written and c.get("gone") == "1"
-                   and "| gone |" in summary.read_text(encoding="utf-8") and "| hub |" in summary.read_text(encoding="utf-8"), lines)
+                   and "| gone |" in summary.read_text(encoding="utf-8")
+                   and "the page's owner (`hub`)" in summary.read_text(encoding="utf-8"), lines)
         arms.check("--write: no other byte changed, and the verification commit is untouched",
                    written.replace("#L4)", "#L3)").replace("line=4;", "line=3;").replace("#L8-L9)", "#L7-L8)").replace("line=8-9;", "line=7-8;") == demoted
                    and "last_verified_commit: %s" % verified in written)
@@ -1810,6 +1881,216 @@ def self_test() -> int:
         (cx.definitions / PC.default_part("pack")).write_text(saved, encoding="utf-8")
         arms.check("pack shape: an unknown key is exit 3 naming the key, in this tool as in every other",
                    code == 3 and "prose" in lines[0], lines)
+
+        # ==========================================================================================
+        # The catalog's CI gates, arm by arm (G1 to G9). Each arm runs a check the way the catalog
+        # workflow runs it — a subprocess, with --summary-file — on a repository built from the
+        # fixture tree, and reads the exit, the census and the block an author is shown.
+        # ==========================================================================================
+        gx = PC.build_fixture_repo(tmp / "gates")
+        GX = roots_of(gx)
+        call(GX + ["build"])
+        gate_built = PC.commit_all(gx.repo, "built")
+        gate_root = gx.layout["catalog"]
+        gate_rules = gx.repo / rules_src
+        gate_rules_text = gate_rules.read_text(encoding="utf-8")
+        gate_page = gx.page("fixture-activity-anchored")
+        gate_page_text = gate_page.read_text(encoding="utf-8")
+        gate_page_rel = gate_page.relative_to(gx.repo).as_posix()
+        gate_page_key = gate_page.relative_to(gx.catalog).as_posix()
+        gate_blocks = [0]
+
+        def gate(*args, roots=None):
+            """One check as the workflow runs it: exit, output lines, census, and the block it appended."""
+            gate_blocks[0] += 1
+            path = tmp / ("gate-block-%d.md" % gate_blocks[0])
+            code, lines, _err = cli((GX if roots is None else roots) + list(args) + ["--summary-file", str(path)])
+            return code, lines, census_of(lines), (path.read_text(encoding="utf-8") if path.is_file() else "")
+
+        def named(lines):
+            return [l.split(" ")[1] for l in lines if l.startswith(("differs: ", "missing: ", "orphan: "))]
+
+        build_fix = "build-process-catalog.py build\n"
+        write_fix = "build-process-catalog.py anchors resolve --write\n"
+        moved_opening = " moved citation(s): one command repairs them.**"
+        person_opening = " citation(s) need a person, in this order:**"
+
+        # G1 — a hand-edited generated file
+        view = gx.catalog / PC.VIEWS_FOLDER / "state.md"
+        saved = view.read_bytes()
+        view.write_bytes(saved + b"one appended line\n")
+        code, lines, c, block = gate("build", "--check")
+        view.write_bytes(saved)
+        arms.check("G1: one line appended to a generated view is exit 1 and names exactly that file; the block reads FAIL, "
+                   "lists the file and carries the build command",
+                   code == 1 and named(lines) == ["%s/%s/state.md" % (gate_root, PC.VIEWS_FOLDER)]
+                   and "### Process catalog — generated-output: FAIL\n" in block
+                   and "| `%s/%s/state.md` | differs from the generator's output |" % (gate_root, PC.VIEWS_FOLDER) in block
+                   and build_fix in block and "A generated file is never edited by hand." in block, (code, lines, block))
+        graph_file = gx.catalog / PC.GRAPH_NAME
+        saved = graph_file.read_bytes()
+        graph_file.write_bytes(saved.replace(b"{", b"{ ", 1))
+        code, lines, c, block = gate("build", "--check")
+        graph_file.write_bytes(saved)
+        arms.check("G1: one byte added to the graph file is exit 1 and names exactly that file",
+                   code == 1 and named(lines) == ["%s/%s" % (gate_root, PC.GRAPH_NAME)] and c.get("differing") == "1"
+                   and build_fix in block, (code, lines))
+
+        # G2 — nothing under the catalog changed
+        code, lines, c, block = gate("build", "--check")
+        code2, lines2, c2, block2 = gate("anchors", "resolve", "--check")
+        arms.check("G2: on the built corpus both checks are exit 0, and each block reads PASS with a non-zero examined count",
+                   code == 0 and code2 == 0
+                   and "### Process catalog — generated-output: PASS\n\nExamined: 8 page(s) in 1 published universe(s); "
+                       "10 generated file(s) compared\n" in block
+                   and "### Process catalog — citations: PASS\n\nExamined: 2 citation(s) on 8 page(s); all current.\n" in block2,
+                   (code, code2, block, block2))
+        unrelated = gx.repo / gx.layout["fixtures"] / "README.md"
+        unrelated.write_text(unrelated.read_text(encoding="utf-8") + "\nA line no page depicts or cites.\n", encoding="utf-8")
+        PC.commit_all(gx.repo, "a change to a file no page depicts or cites")
+        code, lines, c, _block = gate("build", "--check")
+        code2, lines2, c2, _block = gate("anchors", "resolve", "--check")
+        arms.check("G2: a committed change to a file no page depicts or cites leaves both checks at exit 0 "
+                   "(the discrimination arm: expected pass)",
+                   code == 0 and code2 == 0 and c.get("pages") == "8" and c.get("generated_files") == "10"
+                   and c2.get("citations") == "2" and c2.get("current") == "2", (lines[-1:], lines2[-1:]))
+
+        # G3, G3b — a frontmatter field the generated output carries, and one it does not
+        more_depicted = gate_page_text.replace("depicts: [%s]" % rules_src, "depicts: [%s, %s]" % (rules_src, script_src))
+        gate_page.write_text(more_depicted, encoding="utf-8")
+        code, lines, c, block = gate("build", "--check")
+        arms.check("G3: a path added to one page's depicts list and not regenerated is exit 1, naming the graph file",
+                   more_depicted != gate_page_text and code == 1 and "%s/%s" % (gate_root, PC.GRAPH_NAME) in named(lines)
+                   and build_fix in block, (code, lines))
+        restamped = gate_page_text.replace("last_verified_commit: %s" % gx.base, "last_verified_commit: %s" % gate_built)
+        gate_page.write_text(restamped, encoding="utf-8")
+        code, lines, c, _block = gate("build", "--check")
+        gate_page.write_text(gate_page_text, encoding="utf-8")
+        arms.check("G3b: with only last_verified_commit changed, build --check is exit 0 (the discrimination arm)",
+                   restamped != gate_page_text and code == 0 and c.get("differing") == "0", (code, lines))
+
+        # G4 — the cited text deleted
+        rule_lines = gate_rules_text.split("\n")
+        gate_rules.write_text("\n".join(rule_lines[:6] + rule_lines[8:]), encoding="utf-8")
+        code, lines, c, block = gate("anchors", "resolve", "--check")
+        code_w, lines_w, c_w, _block = gate("anchors", "resolve", "--write")
+        span_line = 1 + [n for n, text in enumerate(gate_page_text.split("\n")) if "[`the span`](" in text][0]
+        arms.check("G4: the cited span deleted from its source is exit 1 — one citation gone, none moved",
+                   code == 1 and (c.get("gone"), c.get("moved"), c.get("current")) == ("1", "0", "1"), lines)
+        arms.check("G4: the block lists it among the citations that need a person, with the ordered remedy naming the page's "
+                   "owner and the sentence on removing a citation, and carries no rewrite paragraph",
+                   "**1" + person_opening in block
+                   and "| `%s:%d` | `/%s#L7-L8` | gone | " % (gate_page_rel, span_line, rules_src) in block
+                   and "report it to the page's owner (`hub`)" in block
+                   and "Removing a citation, or cutting it back to a whole-file link, changes the page's evidence" in block
+                   and "Never edit a fingerprint." in block and moved_opening not in block and write_fix not in block, block)
+        arms.check("G4: the rewrite command is exit 1 on that tree and changes no byte",
+                   code_w == 1 and c_w.get("rewritten") == "0" and gate_page.read_text(encoding="utf-8") == gate_page_text, lines_w)
+        gate_rules.write_text(gate_rules_text, encoding="utf-8")
+
+        # G5, G6 — the cited text moved, then rewritten
+        gate_rules.write_text("An inserted first line.\n" + gate_rules_text, encoding="utf-8")
+        code, lines, c, block = gate("anchors", "resolve", "--check")
+        arms.check("G5: a line inserted above the cited lines is exit 1 — both citations moved, none gone",
+                   code == 1 and (c.get("moved"), c.get("gone"), c.get("current")) == ("2", "0", "0"), lines)
+        arms.check("G5: the block counts the source, says one command repairs the moved citations, names where a release "
+                   "makes the rewrite, carries the rewrite command, and has no table of citations that need a person",
+                   "### Process catalog — citations: FAIL\n" in block and "| `%s` | 2 | 0 | 0 | 0 |" % rules_src in block
+                   and "**2" + moved_opening in block and "(Phase A.5.8)" in block and write_fix in block
+                   and person_opening not in block, block)
+        code, lines, c, _block = gate("anchors", "resolve", "--write")
+        code2, lines2, c2, block2 = gate("anchors", "resolve", "--check")
+        code3, lines3, c3, _block = gate("build", "--check")
+        arms.check("G6: the rewrite is exit 0, the citation check then passes, and build --check is still exit 0 — "
+                   "the two gates never need each other's repair",
+                   code == 0 and c.get("rewritten") == "2" and code2 == 0 and c2.get("current") == "2"
+                   and "all current." in block2 and code3 == 0 and c3.get("differing") == "0", (lines, lines2, lines3))
+
+        # G7 — an uncited line of a cited file edited in place
+        moved_rules = gate_rules.read_text(encoding="utf-8")
+        gate_rules.write_text(moved_rules.replace(rule_lines[3], "A step names one actor."), encoding="utf-8")
+        code, lines, c, block = gate("anchors", "resolve", "--check")
+        arms.check("G7: the text of an uncited line changed in place is exit 0 — no finding on 2 citations examined "
+                   "(the discrimination arm: expected 0 findings)",
+                   gate_rules.read_text(encoding="utf-8") != moved_rules and code == 0
+                   and (c.get("citations"), c.get("current")) == ("2", "2") and "### Process catalog — citations: PASS\n" in block, lines)
+
+        # G8 — nothing to examine, or an input that cannot be read, is never a pass
+        for name, args in (("the generated-output check", ["build", "--check"]),
+                           ("the citation check", ["anchors", "resolve", "--check"])):
+            code, lines, c, block = gate(*args, roots=E)
+            arms.check("G8: %s on a catalog that holds no page is exit 3, and its block reads NOT-EVALUATED, examined "
+                       "nothing, and is not a pass" % name,
+                       code == 3 and c.get("status") == "not-evaluated" and ": NOT-EVALUATED\n\nExamined: nothing\n" in block
+                       and "The check could not run: no page is discovered" in block
+                       and "This is not a pass, and it is not a finding about this change." in block
+                       and ": PASS" not in block and ": FAIL" not in block, (code, lines, block))
+        gate_pack = gx.definitions / PC.default_part("pack")
+        saved = gate_pack.read_bytes()
+        gate_pack.unlink()
+        for name, args in (("the generated-output check", ["build", "--check"]),
+                           ("the citation check", ["anchors", "resolve", "--check"])):
+            code, lines, c, block = gate(*args)
+            arms.check("G8: %s without the pack is exit 3, and its block reads NOT-EVALUATED and is not a pass" % name,
+                       code == 3 and ": NOT-EVALUATED\n\nExamined: nothing\n" in block and "The check could not run: " in block
+                       and ": PASS" not in block and ": FAIL" not in block, (code, lines, block))
+        gate_pack.write_bytes(saved)
+
+        # G9 — the Stage 7 scope test for a change under the catalog root: the rewrite command run in
+        # two copies of the head, the second with the catalog first restored from the merge base.
+        scope_base = PC.commit_all(gx.repo, "the rewritten citations, committed")
+
+        def scope_test(label):
+            """The paths under the catalog root on which the two copies differ after the rewrite
+            command has run in each; its exit is ignored, as the scope test says."""
+            trees = []
+            for n in (1, 2):
+                copy = tmp / ("scope-%s-%d" % (label, n))
+                PC.git(tmp, *(PC.TEST_IDENTITY + ("clone", "-q", "file://%s" % gx.repo, str(copy))))
+                if n == 2:
+                    PC.git(copy, "checkout", scope_base, "--", gate_root)
+                cli(["--repo", str(copy), "--catalog-root", str(copy / gate_root),
+                     "--definitions", str(copy / gx.layout["definitions"]), "anchors", "resolve", "--write"])
+                trees.append(tree(copy / gate_root))
+            return sorted(k for k in set(trees[0]) | set(trees[1]) if trees[0].get(k) != trees[1].get(k))
+
+        def catalog_changed():
+            return PC.git(gx.repo, "diff", "--name-only", scope_base, "HEAD", "--", gate_root).decode("utf-8").split()
+
+        def cited():
+            return census_of(cli(GX + ["anchors", "resolve", "--check"])[1])
+
+        gate_rules.write_text("A second inserted line.\n" + gate_rules.read_text(encoding="utf-8"), encoding="utf-8")
+        PC.commit_all(gx.repo, "the cited lines move again; nothing is rewritten")
+        differing = scope_test("stale")
+        arms.check("G9: a head that moved a cited line and rewrote nothing passes the scope test, though its own "
+                   "citation check fails",
+                   differing == [] and catalog_changed() == [] and cited().get("moved") == "2", differing)
+        cli(GX + ["anchors", "resolve", "--write"])
+        rewritten_text = gate_page.read_text(encoding="utf-8")
+        PC.commit_all(gx.repo, "a digits-only rewrite")
+        differing = scope_test("digits")
+        arms.check("G9: a digits-only rewrite passes the scope test — the head changed the page, and the comparison reports nothing",
+                   catalog_changed() == [gate_page_rel] and differing == [] and cited().get("citations") == "2",
+                   (catalog_changed(), differing))
+        order_cite = r"\[the order rule\]\((/[^#)]*)#L[0-9]+\)<!-- source-anchor: line=[0-9]+; fp=[0-9a-f]{16} -->"
+        for label, name, changed in (
+                ("removed", "with one citation removed", re.sub(order_cite, "—", rewritten_text, count=1)),
+                ("cut-back", "with one line citation cut back to a whole-file link",
+                 re.sub(order_cite, lambda m: "[the order rule](%s)" % m.group(1), rewritten_text, count=1)),
+                ("fingerprint", "with one fingerprint edited",
+                 re.sub(r"(\[the order rule\]\([^)]*\)<!-- source-anchor: line=[0-9]+; fp=)[0-9a-f]{16}",
+                        lambda m: m.group(1) + "0123456789abcdef", rewritten_text, count=1))):
+            gate_page.write_text(changed, encoding="utf-8")
+            PC.commit_all(gx.repo, "the same rewrite, %s" % name)
+            differing = scope_test(label)
+            arms.check("G9: the same diff %s fails the scope test, which reports the page" % name,
+                       changed != rewritten_text and differing == [gate_page_key], differing)
+            if label == "removed":
+                arms.check("G9: with one citation removed the citation count is one lower than at the base",
+                           cited().get("citations") == "1", cited())
+        gate_page.write_text(rewritten_text, encoding="utf-8")
+        PC.commit_all(gx.repo, "the digits-only rewrite, restored")
 
 
         # ==========================================================================================
