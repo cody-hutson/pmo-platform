@@ -272,3 +272,75 @@ A step the operator performs writes `human` in its Model need cell. It counts in
 | The validator | `pack.json`; this document's marked tables; the controls register, through the name `pack.json` gives | Check each page's frontmatter, sections, tables, flow, links and vocabulary; check that this document's marked tables and the lists in `pack.json` agree; check the registers against their own rules |
 | The generator | `pack.json`; the controls register, through the same name | Build the index, the graph and the views from the pages |
 | A page author | This document; the template for the page's level, in `core/process-catalog/definitions/templates/` | Write a page the validator passes |
+
+## Rules and their owners
+
+A rule code is added or retired in the rules table and in `rule_codes` in one commit, and a harness feature in the feature table and in `harness_features` in one commit.
+
+Each row below is one rule the catalog's validator checks, with the document that states it. The validator's `--list-rules` prints each code with the condition it tests; this table names the rule and its owner and restates neither.
+
+<!-- rule-codes:begin -->
+| Code | Rule | Owner |
+|---|---|---|
+| `ANC001` | a line citation carries a source anchor | the standard, § 13.4 (Evergreen references) |
+| `ANC002` | a source anchor is well formed and follows its link | the standard, § 13.4 (Evergreen references) |
+| `ANC003` | an anchor and its link's fragment name the same lines | the standard, § 13.4 (Evergreen references) |
+| `ANC004` | a source link's label carries no line number | the standard, § 13.4 (Evergreen references) |
+| `ANC005` | no line reference outside a citation | the standard, § 13.4 (Evergreen references) |
+| `CTL001` | a Controls row names its control ID | the standard, § 13.7; decision 12 |
+| `CTL002` | a Controls row's class equals the register's | the standard, § 13.7; decision 12 |
+| `CTL003` | a cited control ID is in the register | the standard, § 13.7; decision 12 |
+| `CTL004` | a hand-run detector's class and surface | the standard, § 13.7; decision 12 |
+| `CTL005` | a Controls row's class is a listed class | the standard, § 13.7 |
+| `EVD001` | executed evidence is reproducible | decision 12 |
+| `FM001` | a readable frontmatter block | the standard, § 13.3 |
+| `FM002` | required fields are present | the standard, § 13.3; [this pack](#the-page-and-its-fields) for `actors`, `owner`, `lens_status` and `pack_version` |
+| `FM003` | enum fields hold a listed value | the standard, § 13.3; [this pack](#the-page-and-its-fields) for `actors`, `owner`, `lens_status` and `pack_version` |
+| `FM004` | fields match their pattern | the standard, § 13.3; [this pack](#the-page-and-its-fields) for `actors`, `owner`, `lens_status` and `pack_version` |
+| `FM005` | lists are inline | the standard, § 13.3; ADR-224, decision 9 |
+| `FM006` | no reserved field name | [this pack](#the-page-and-its-fields) |
+| `FM007` | the ID equals the file name | the standard, § 13.3 |
+| `FM008` | actors are of a listed kind | [this pack](#actors) |
+| `FM009` | a trigger is a node or a listed trigger kind | the standard, § 13.4 |
+| `FM010` | a superseded page names its successor | the standard, § 13.6 |
+| `FM011` | the page states its pack version | [this pack](#the-page-and-its-fields) |
+| `FM012` | an `ACTIVE` page has an assessed lens status | [this pack](#lenses-and-evidence) |
+| `LNK001` | links resolve | decision 12; the standard, § 13.4 |
+| `LNK002` | a source link starts at the repository root | decision 12; the standard, § 13.4 |
+| `MMD001` | the page draws its flow in Mermaid | the standard, § 13.8; ADR-224, decision 2 |
+| `MMD002` | the flow stays within its node limit | [this pack](#the-flow-diagram) |
+| `MMD003` | the flow is a flowchart with a direction | the process-flow diagram standards |
+| `MMD004` | no Mermaid keyword as a node ID | [this pack](#the-flow-diagram) |
+| `NAV001` | navigation markers | [this pack](#the-page-and-its-fields) |
+| `PAG001` | only pages in a universe's folder | the standard, § 13.1 |
+| `PAG002` | only registered universes under the catalog | the standard, § 13.1 |
+| `PAG003` | no stray file under the catalog | the standard, § 13.1 |
+| `PCK001` | the pack and the validator name the same rules | [this pack](#rules-and-their-owners) |
+| `PCK002` | the pack document's two marked tables match the pack's two lists | [this pack](#rules-and-their-owners) |
+| `REF001` | no issue or pull-request number | the standard, § 13.4 (Evergreen references) |
+| `REG001` | the page's ID is minted | the standard, § 13.3; ADR-224, decision 5 |
+| `REG002` | every ID a page names is minted | the standard, § 13.3; ADR-224, decision 5 |
+| `REG003` | level and universe agree with the registry | the standard, § 13.3; ADR-224, decision 5 |
+| `SEC001` | required sections | [this pack](#the-page-and-its-fields) |
+| `SRC001` | depicted paths exist | the standard, § 13.4 |
+| `SRC002` | the verification commit exists | the standard, § 13.3 |
+| `SRC003` | a file named on a page exists in the repository or in the page's sources | [this pack](#the-page-and-its-fields) |
+| `STP001` | a step's harness feature is a listed one | [this pack](#harness-feature-taxonomy) |
+| `SUM001` | summary counts are computed from the Steps table | decision 12 |
+| `TAB001` | table columns | [this pack](#the-page-and-its-fields) |
+| `TAB002` | well-formed rows | [this pack](#the-page-and-its-fields) |
+| `TAB003` | no unescaped pipe in a code span | [this pack](#the-page-and-its-fields) |
+| `TOK001` | the page is within its level's token budget | the standard, § 13.2 |
+| `TRM001` | a platform term is linked or explained | decision 12 |
+| `VOC001` | no forbidden phrase | [this pack](#vocabulary) |
+| `VOC002` | contested terms are flagged | [this pack](#vocabulary) |
+<!-- rule-codes:end -->
+
+Four rules of this pack are checked by review, and no code detects a violation. Each is stated in the section named beside it.
+
+| Rule | Owner |
+|---|---|
+| the primary actor of a decision activity is the decider | [this pack](#actors) |
+| two designed sources that contradict each other are a recorded deviation | [this pack](#lenses-and-evidence) |
+| a sub-process takes its status from its child pages only | [this pack](#lenses-and-evidence) |
+| a step the operator performs writes `human` in its Model need cell | [this pack](#model-need-taxonomy) |
