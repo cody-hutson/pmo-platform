@@ -480,6 +480,7 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 | DEV-8 | 6 (Commit 0) | The D-Deferred residual is worded by its mechanism — a body written to any file or named pipe, whatever reads it and whenever — rather than by segment order | A6.5 FM-7, folded as a Tier-1 adjustment |
 | DEV-9 | 6 (#7644 RED) | CIAC-1's named refuse→allow rows gain HDATA-CAP-IN: the budget arm that grounds the 20 000-character cap is a top-level `cat` body, the same class as HDATA-AC1-A, read at the cap | DEV-4; the budget arms |
 | DEV-10 | 6 (#7644 fix) | HDATA-ENCL-C's payload now ends its subshell on a line carrying a command. With a `)` alone on the closing line, a second decline (an empty parenthesis pair, read as a function definition — toward today's verdict) held the sentinel through the enclosure mutant, so HDATA-MUT-ENCL-C could not show the enclosure decline live. HDATA-ENCL-C stays refused on both hooks | the first GREEN run (296/297, HDATA-MUT-ENCL-C) |
+| DEV-11 | 6 (#8122 spoke, receiver narrowing) | The pre-pass declines a command carrying a word that ends in `aliases`, `functions` or `commands` — zsh's tables that define an alias, a function or a command path. The hub named the three tables; the match is a suffix, so their global, suffix and disabled siblings decline too. A decline keeps today's verdict, so the wider match moves no verdict toward allow | hub determination (#7644 A6.5 FM-4), disclosed at Stage 9 |
 
 ---
 
@@ -519,3 +520,9 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 - **Arms:** 24 new arms in the HDATA family. The edit-option arms (HDATA-GIT-EDIT-A to -J, two controls, and the M-HD-EDIT mutant pair) run inside the HDATA-GIT block, through the copy without the whole-line git exit while that exit exists; the zsh-table arms (HDATA-RX-ZFUNCS, -ZALIASES, -ZCOMMANDS, -ZARRAY, -ZSIBLING, the control HDATA-RX-ZCTL, and two sentinels for the existing route mutant) run on the hook.
 - **Prediction, written before the run:** 19 red (the ten edit-option arms, the four M-HD-EDIT pairs whose marked line does not exist yet, the five zsh-table arms); the five others green; the 297 existing arms unchanged.
 - **Run:** the deletion-hook suite through the suite runner under the CI layout, hook unchanged (`16bc1f3b8421d82f`): `Total: 321  PASS: 302  FAIL: 19` — exactly the predicted set.
+
+### Receiver narrowing fix 1 — zsh's definition tables (FM-4)
+
+- **Change:** one decline in `HEREDOC_DATA_AWK` (a word ending in one of the three table names sets the route flag, so the existing M-HD-RISKY mutant shows it load-bearing); the hook's comment block and the fragment's enumeration name it; the registry is regenerated (`build-hook-registry.py --check` → in sync). DEV-11.
+- **Prediction, written before the run:** the five table arms turn green; the fourteen edit-option arms stay red; nothing else moves.
+- **Run:** the deletion-hook suite through the suite runner under the CI layout (sandbox hook `3b2f2e3b1d2264a8`): `Total: 321  PASS: 307  FAIL: 14` — exactly the predicted set.

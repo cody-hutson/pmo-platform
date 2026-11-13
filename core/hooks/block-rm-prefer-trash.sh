@@ -244,7 +244,9 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 #   substitution at an unbalanced ")" and runs the lines after it, so only a top-level body is
 #   read as data; a pipe, process substitution, backtick or arithmetic (including $[ ]); a
 #   function definition (blanks or not between the parentheses) or the words function, alias,
-#   hash, enable, coproc, or a PATH assignment — an enumeration, not a closed class; a << inside
+#   hash, enable, coproc, or a PATH assignment, or a word ending in aliases, functions or commands
+#   (zsh's tables that define an alias, a function or a command path, their global, suffix and
+#   disabled siblings included) — an enumeration, not a closed class; a << inside
 #   a parameter expansion; an unterminated body; a continuation or open quote at a pending body;
 #   more than 8 bodies or 500 lines; a scanned line over 4096 characters, or more than 20 000
 #   scanned characters outside bodies.
@@ -289,6 +291,7 @@ readonly HEREDOC_DATA_AWK='
       line = L[i]; ln = length(line); p = 1; cont = 0
       if (ln > 4096) { bail = 1; break }
       if (line ~ /(^|[^A-Za-z0-9_])(function|alias|hash|enable|coproc)([^A-Za-z0-9_]|$)/ || line ~ /(^|[^A-Za-z0-9_])PATH[+]?=/) risky = 1
+      if (line ~ /(aliases|functions|commands)([^A-Za-z0-9_]|$)/) risky = 1
       while (p <= ln) {
         if (++work > 20000) { bail = 1; break }
         c = substr(line, p, 1)
