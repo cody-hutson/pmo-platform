@@ -1617,6 +1617,9 @@ def effective_lens(cat: Catalog) -> dict:
     return eff
 
 
+LENS_LINE = re.compile(r"^lens_status[ \t]*:")      # locates the one line build rewrites; the value is the reader's
+
+
 def nav_line(cat: Catalog, nid: str) -> str:
     """An unpublished node never appears: Up is the nearest published ancestor, Previous and Next
     skip to the nearest published sibling, and Down lists published children only."""
@@ -1659,7 +1662,7 @@ def page_regions(cat: Catalog, eff: dict) -> dict:
             parts = text.splitlines(keepends=True)
             for i in range(1, min(page.fm_end, len(parts))):
                 line = parts[i]
-                if not line[:1].isspace() and line.split(":", 1)[0].strip() == "lens_status" and ":" in line:
+                if LENS_LINE.match(line):
                     ending = line[len(line.rstrip("\r\n")):]
                     parts[i] = "lens_status: %s%s" % (eff[nid], ending)
                     break

@@ -888,6 +888,21 @@ def self_test() -> int:
         call(G + ["build"])
         arms.check("roll-up: the corpus is back to its built state", call(G + ["build", "--check"])[0] == 0)
 
+        # -- page status on the generated surfaces --
+        saved = edit("fixture-stream", "status: ACTIVE", "status: SUPERSEDED")
+        l3_saved = edit("fixture-activity-spans", "status: ACTIVE", "status: DEPRECATED")
+        call(G + ["build", "--out", str(tmp / "out-status")])
+        marked = tree(tmp / "out-status")
+        fx.page("fixture-stream").write_text(saved, encoding="utf-8")
+        fx.page("fixture-activity-spans").write_text(l3_saved, encoding="utf-8")
+        status_graph = {n["id"]: n for n in json.loads(marked["graph.json"])["nodes"]}
+        arms.check("page status: a superseded page is marked in the index, directly after its link",
+                   b"- [Fixture stream](fixture-landscape/fixture-stream.md) (superseded) " in marked["INDEX.md"])
+        arms.check("page status: a deprecated page is omitted from every view and keeps its status in the graph",
+                   not any(b"fixture-activity-spans.md" in data for name, data in marked.items() if name.endswith(".md"))
+                   and status_graph["fixture-activity-spans"]["status"] == "DEPRECATED"
+                   and b"fixture-activity-spans.md" in files["views/structure.md"])
+
         # -- determinism: two processes, and a second repository with the same tree --
         outs = []
         for n, (seed, zone) in enumerate((("1", "UTC"), ("4242", "Pacific/Auckland"))):
