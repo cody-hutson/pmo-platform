@@ -61,7 +61,7 @@ flowchart TD
 | Lens | Source | Observation | Label |
 |---|---|---|---|
 | designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the steps | [SOURCE] |
-| executed | [fixture script](/core/deploy/tools/fixtures/process-catalog/sources/fixture-script.sh.txt) | The fixture script holds both functions | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) [fixture script](/core/deploy/tools/fixtures/process-catalog/sources/fixture-script.sh.txt) | The fixture script holds both functions | [SOURCE] |
 
 ## Navigation
 

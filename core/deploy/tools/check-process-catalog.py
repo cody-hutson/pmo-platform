@@ -25,6 +25,11 @@ USAGE
     and --pattern-digest-file; `not-run` takes neither. With no TARGET every
     discovered page is checked and the catalog-level rules run; with targets
     the register and pack checks still run and the catalog-level rules do not.
+    A run that checks pages also loads the measures register and reads each
+    registered measure file's source form; a breach of either is a not-evaluated
+    exit. --registers-only loads neither. A run over every page prints one line
+    for each activity page that reads `conformant`: its step count and how many
+    of its steps its coverage clauses cover.
     --summary-file FILE appends one block; it changes no stream and no exit.
     Every root is an argument (see --help); none is read from the environment.
 
@@ -67,7 +72,13 @@ RULES = (
     ("CTL003", "error", "a cited control ID has no row in the register"),
     ("CTL004", "warn", "a Controls row on the agent-run surface carries a class other than code-warn"),
     ("CTL005", "error", "a Controls row that cites no control ID carries a class outside the enforcement classes"),
-    ("EVD001", "error", "an executed Evidence row has no root link that resolves in its Source cell"),
+    ("EVD001", "error", "an in-scope Evidence row is neither the measure form nor the marker form, or is both; or its "
+                        "measure reference differs from the register's rendering; or a working-state row lacks the "
+                        "fixed note; or a coverage clause is malformed, misplaced or unlinked"),
+    ("EVD002", "error", "a figure, or a number word, in the Source or Observation cell of an in-scope Evidence row"),
+    ("EVD003", "error", "the page's `lens_status` has no support in its Evidence rows"),
+    ("EVD004", "error", "instance-pointing wording in the Source or Observation cell of an Evidence row"),
+    ("EVD005", "warn", "outcome wording in an in-scope Evidence row"),
     ("FM001", "error", "the page has no readable frontmatter block"),
     ("FM002", "error", "a required field is missing or empty, or a list has fewer items than its minimum"),
     ("FM003", "error", "an enum field holds a value outside its enum"),
@@ -103,7 +114,8 @@ RULES = (
                         "at or under the catalog root"),
     ("SRC002", "error", "`last_verified_commit` is not the full ID of a commit in the repository"),
     ("SRC003", "error", "a file named on the page is no tracked file and is carried by no source of the page"),
-    ("STP001", "error", "a Steps row's harness feature is neither `none` nor a listed feature"),
+    ("STP001", "error", "a Steps row's harness feature is neither `none` nor a listed feature, or its step key is "
+                        "outside the step-key form"),
     ("SUM001", "error", "a summary count differs from the count computed from the Steps table, or a summary row is "
                         "missing"),
     ("TAB001", "error", "a table's header differs from the pack's"),
@@ -122,6 +134,23 @@ CODE_SHAPE = re.compile(r"(?<![A-Za-z0-9_-])([A-Z]{2,3})[0-9]{3}(?![A-Za-z0-9_-]
 COMMIT_ID = re.compile(r"^[0-9a-f]{40}$")
 WORK_ITEM_URL = re.compile(r"/(?:issues|pull)/[0-9]+")
 CONTROL_PAIR = re.compile(r"\b(C-\d{3,})\b(?:\s*:\s*`?([a-z][a-z-]*)`?)?")
+MEASURE_MENTION = re.compile(r"\bmeasure\s+`([^`]*)`")
+CLAUSE = re.compile(r"\bcovers:\s*(`[^`]*`(?:\s*,\s*`[^`]*`)*)\s*\.?\s*$")
+CLAUSE_WORD = re.compile(r"\bcovers:")
+# A number that follows a label word is a name, not a figure: `Check 63`, `Stage 12`. So is each
+# number of a list that follows one — `Checks 8, 10 and 13b`, `Checks 8 / 10` — which is the form a
+# row that names two checks takes. A list follows the plural word only: after `Check` or `Stage`
+# one number is set aside and the next is read. Each number is one to three digits with at most one lower-case
+# letter, or one bracketed lower-case letter, after it; the separators are a comma, a slash and the
+# words `and`, `or` and `to`.
+LABEL_NUMBER = r"[0-9]{1,3}(?:[a-z]\b|\([a-z]\))?"
+LABELLED_NUMBERS = re.compile(
+    r"\b(?:%s)\s+%s(?:(?:\s*,\s*(?:and\s+|or\s+)?|\s*/\s*|\s+(?:and|or|to)\s+)%s)*|\b(?:%s)\s+%s"
+    % ("|".join(w for w in PC.LABEL_WORDS if w.endswith("s")), LABEL_NUMBER, LABEL_NUMBER,
+       "|".join(w for w in PC.LABEL_WORDS if not w.endswith("s")), LABEL_NUMBER))
+LEVEL_OR_SECTION = re.compile(r"\bL[0-3]\b|§\s*[0-9]{1,2}(?:\.[0-9]{1,2})*")
+HYPHEN_IDENTIFIER = re.compile(r"(?<![\w-])[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+(?![\w-])")
+COMPARISON = re.compile(r"\bvs\b")
 MMD_KEYWORD_IDS = {"call", "click", "end", "style", "class", "classDef", "subgraph", "linkStyle"}
 MMD_SKIP = {"subgraph", "end", "classDef", "class", "flowchart", "graph", "style", "click", "linkStyle", "direction"}
 MMD_STATEMENT = re.compile(r"^(classDef|class|style|linkStyle|click|subgraph|flowchart|graph|direction)\b|^end$")
@@ -275,8 +304,15 @@ def pack_parity(pack: dict, document) -> list:
 # Page rules
 # ----------------------------------------------------------------------------------------------
 class Checker:
-    def __init__(self, cat: PC.Catalog):
+    def __init__(self, cat: PC.Catalog, measures=()):
         self.cat, self.pack, self.roots = cat, cat.pack, cat.roots
+        self.measures = {m.id: m for m in measures}
+        self.measures_prefix = "/" + self.roots.rel(self.roots.measures_dir) + "/"
+        self.workflows_prefix = "/" + PC.workflows_folder(self.roots) + "/"
+        self.number_words = PC.word_pattern(PC.NUMBER_WORDS)
+        self.instance_words = PC.word_pattern(PC.INSTANCE_WORDING)
+        self.outcome_words = PC.word_pattern(PC.OUTCOME_WORDING)
+        self.coverage, self.verdict_state = {}, {}
         self.registry = cat.registry
         self.controls = {r["control_id"]: r for r in cat.controls}
         self.held = PC.parse_ranges(self.pack["controls_register_rules"]["held_ids"])
@@ -529,6 +565,8 @@ class Checker:
         controls_col = self.col("Steps", "Controls", 4)
         harness_col, model_col = self.col("Steps", "Harness", 6), self.col("Steps", "Model need", 7)
         for i, row in steps:
+            if not PC.STEP_KEY_FORM.match(PC.unspan(row[0])):
+                add("STP001", "the step key `%s` is outside the step-key form" % PC.unspan(row[0]), i)
             if len(row) > controls_col:
                 for m in CONTROL_PAIR.finditer(row[controls_col]):
                     self._control(m.group(1), m.group(2) or "", add, i)
@@ -550,12 +588,7 @@ class Checker:
                 if not m or int(m.group(1)) != computed:
                     add("SUM001", "`%s` says %s; the Steps table has %d row(s) marked %s"
                         % (label, stated[label].strip() or "nothing", computed, want))
-        lens_col, source_col = self.col("Evidence", "Lens", 0), self.col("Evidence", "Source", 1)
-        for i, row in page.table("Evidence")[1]:
-            if len(row) > max(lens_col, source_col) and re.search(r"\bexecuted\b", PC.unspan(row[lens_col]).lower()):
-                paths = [m.group("path") for m in PC.ROOT_LINK.finditer(row[source_col])]
-                if not any((self.roots.repo / p.lstrip("/")).exists() for p in paths):
-                    add("EVD001", "the executed row's Source cell has no root link that resolves", i)
+        self._evidence(page, level, steps, add)
         prose = "\n".join(re.sub(r"`[^`]*`", "", text) for _i, text in page.body_lines())
         for term in pack["explain_on_first_use"]:
             if re.search(r"(?<![\w-])" + re.escape(term) + r"(?![\w-])", prose) and \
@@ -569,6 +602,196 @@ class Checker:
             if re.search(r"(?<![A-Za-z-])" + re.escape(entry["term"]) + r"(?![A-Za-z-])", prose):
                 add("VOC002", "`%s`: %s" % (entry["term"], entry.get("note", "a contested term")),
                     severity=entry["severity"])
+
+    # -- the executed-evidence rules --
+    def _evidence(self, page, level, steps, add) -> None:
+        """EVD001 to EVD005 over the page's Evidence table.
+
+        In scope: a row whose Lens cell names `executed`, or whose Source or Observation cell carries
+        a measure reference, a link into the measures folder or a held marker, whatever its lens.
+
+        The measure form: the Source cell contains a registered measure's reference exactly as the
+        register renders it. The marker form: the Source cell contains a held marker, no measure
+        reference and no link into the measures folder. A row is one form or the other.
+
+        A coverage clause stands only on a measure-form row every cited measure of which is
+        reproducible and at least one of which reads run history. The row links, by root link, each
+        workflow file the clause relies on; every linked workflow is a run-history input of a measure
+        the row cites; and a clause key whose Steps row names a workflow as its actor is accepted only
+        when that workflow is linked on the row. A row that cites two measures is read as one row:
+        its links are checked against the run-history inputs of all of them. A clause that draws
+        `EVD001` joins no union: `EVD003` reads only the clauses that passed.
+
+        A step that names several mechanisms is run by a workflow only when the workflow runs every
+        one of them (`MECHANISM_RULE`). That reading is the author's and the reviewer's; the clause
+        states its result, and this rule checks the clause's form and its arithmetic."""
+        lens_col, source_col = self.col("Evidence", "Lens", 0), self.col("Evidence", "Source", 1)
+        obs_col = self.col("Evidence", "Observation", 2)
+        step_keys = [PC.unspan(row[0]) for _i, row in steps]
+        actor_col = self.col("Steps", "Actor", 2)
+        actors = {PC.unspan(row[0]): (PC.unspan(row[actor_col]) if len(row) > actor_col else "") for _i, row in steps}
+        in_scope_rows, supporting_comparison, kind_b, union = 0, False, False, set()
+        for i, row in page.table("Evidence")[1]:
+            if len(row) <= max(lens_col, source_col, obs_col):
+                continue
+            lens, source, obs = PC.unspan(row[lens_col]).lower(), row[source_col], row[obs_col]
+            both = source + " \n " + obs
+            links = [m.group("path") for m in PC.ROOT_LINK.finditer(source)]
+            folder_links = [x for x in links if x.startswith(self.measures_prefix)]
+            cited = [m for m in self.measures.values() if m.reference in source]
+            mentions = MEASURE_MENTION.findall(both)
+            marker = next((k for k in PC.HELD_MARKERS if k in both), None)
+            in_scope = bool(re.search(r"\bexecuted\b", lens) or mentions or marker
+                            or any(m.group("path").startswith(self.measures_prefix) for m in PC.ROOT_LINK.finditer(obs))
+                            or folder_links)
+            stripped = PC.ANY_LINK_TARGET.sub("]", PC.COMMENT.sub(" ", both)).replace(PC.WORKING_STATE_NOTE, " ")
+            hit = self.instance_words.search(stripped)
+            if hit:
+                add("EVD004", "instance-pointing wording: `%s`" % hit.group(0), i)
+            if not in_scope:
+                if any(x.lstrip("/") in self.cat.tracked.set or self.cat.tracked.under(x.strip("/")) for x in links):
+                    supporting_comparison = supporting_comparison or bool(COMPARISON.search(lens))
+                continue
+            in_scope_rows += 1
+            form_ok = True
+
+            def bad(message, row_line=i):
+                add("EVD001", message, row_line)
+
+            unregistered = [x for x in mentions if x not in [m.id for m in cited]]
+            stray_links = [x for x in folder_links if x not in ["/" + m.script_rel for m in cited]]
+            if cited and marker:
+                bad("the row carries a measure reference and a held marker; a row is one form or the other")
+                form_ok = False
+            elif unregistered or stray_links or MEASURE_MENTION.search(obs):
+                bad("the measure reference%s differs from the register's rendering, or stands outside the Source cell; "
+                    "copy it from `overlay --list`" % (" of `%s`" % unregistered[0] if unregistered else ""))
+                form_ok = False
+            elif not cited and not (marker and marker in source):
+                bad("the row is neither the measure form nor the marker form")
+                form_ok = False
+            classes = {m.input_class for m in cited}
+            working = bool(classes - set(PC.REPRODUCIBLE_CLASSES))
+            if cited and working and not obs.rstrip().rstrip(".").rstrip().endswith(PC.WORKING_STATE_NOTE):
+                bad("a working-state measure row's Observation cell does not end with the fixed note")
+                form_ok = False
+            reproducible = bool(cited) and form_ok and not working and not marker
+            clause_keys = None
+            if CLAUSE_WORD.search(obs):
+                m = CLAUSE.search(obs)
+                keys = re.findall(r"`([^`]*)`", m.group(1)) if m else []
+                inputs = {w for x in cited for w in x.workflows()}
+                linked = [x[len(self.workflows_prefix):] for x in links if x.startswith(self.workflows_prefix)]
+                stems = {re.sub(r"\.ya?ml$", "", x) for x in linked} | set(linked)
+                problem = None
+                if not m:
+                    problem = "the coverage clause is malformed: `covers:` then step keys, each a code span, comma-separated, last in the cell"
+                elif not reproducible or not inputs:
+                    problem = "a coverage clause stands only on a measure-form row whose measures are reproducible and read run history"
+                elif [k for k in keys if not PC.STEP_KEY_FORM.match(k)]:
+                    problem = "the clause key `%s` is outside the step-key form" % [k for k in keys if not PC.STEP_KEY_FORM.match(k)][0]
+                elif [k for k in keys if k not in step_keys]:
+                    problem = "the clause key `%s` is no key of the page's Steps table" % [k for k in keys if k not in step_keys][0]
+                elif len(set(keys)) != len(keys) or keys != [k for k in step_keys if k in keys]:
+                    problem = "the clause repeats a key, or its keys are not in the order of the Steps table"
+                elif not linked:
+                    problem = "the clause row links no workflow file; it links each workflow the clause relies on"
+                elif [x for x in linked if x not in inputs]:
+                    problem = "the linked workflow `%s` is not a run-history input of a measure the row cites" \
+                        % [x for x in linked if x not in inputs][0]
+                else:
+                    unlinked = [k for k in keys if actors.get(k, "").startswith("ci:")
+                                and actors[k][3:].strip() not in stems]
+                    if unlinked:
+                        problem = "the step `%s` is its workflow's own act, and that workflow is not linked on this row" % unlinked[0]
+                if problem:
+                    bad(problem)
+                else:
+                    clause_keys = keys
+                    union |= set(keys)
+            if reproducible:
+                kind_b = True
+                supporting_comparison = supporting_comparison or bool(COMPARISON.search(lens))
+            token = self._figure(page, source, obs, cited, clause_keys)
+            if token:
+                add("EVD002", "a figure or a number word stands in the row: `%s`" % token, i)
+            hit = self.outcome_words.search(stripped) or PC.OUTCOME_NO.search(stripped)
+            if hit:
+                add("EVD005", "outcome wording: `%s`" % hit.group(0), i)
+        self.coverage[page.id] = (len(step_keys), len(union & set(step_keys)))
+        self.verdict_state[page.id] = (page, level, step_keys, in_scope_rows, supporting_comparison, kind_b, union)
+        reason = self.verdict_reason(page, level, step_keys, in_scope_rows, supporting_comparison, kind_b, union)
+        if reason:
+            add("EVD003", "%s lens_status=%s reason=%s" % (page.id, page.lens_status, reason))
+
+    def verdict_reason(self, page, level, step_keys, in_scope_rows, supporting_comparison, kind_b, union,
+                       coverage: str = PC.CONFORMANT_COVERAGE):
+        """The `reason=` text of an `EVD003` finding, or None. The page's status is not a condition:
+        a draft's verdict line is read like any other. A page that is `not-assessed` claims no
+        verdict. `coverage` is the rule in force; the self-test passes each value."""
+        levels = self.pack["enums"]["level"]
+        if level not in levels[2:] or coverage not in PC.COVERAGE_VALUES:
+            return None
+        value = page.lens_status
+        if value == "conformant":
+            if not kind_b:
+                return "no-reproducible-row"
+            if level == self.pack["summary_counts"]["level"]:
+                missing = [k for k in step_keys if k not in union]
+                short = (missing or not step_keys) if coverage == "every-step" else not (union & set(step_keys))
+                if short:
+                    return "coverage-short (uncovered: %s)" % (", ".join(missing) or "every step")
+        elif value == "deviates":
+            child = any(self.cat.level(n) == levels[3] and self.cat.pages[n].lens_status == "deviates"
+                        for n in self.cat.pages if n != page.id and self.cat.parent_of(n) == page.id) \
+                if level == levels[2] else False
+            if not supporting_comparison and not child:
+                return "no-comparison-row"
+        elif value == "unobserved" and not in_scope_rows:
+            return "no-in-scope-row"
+        return None
+
+    def _figure(self, page, source, obs, cited, clause_keys):
+        """The first figure or number word left in an in-scope row, or None. Removed first, in
+        order: each cited measure's reference; comments and link targets (a link's label stays); a
+        code span whose whole content resolves — a tracked path, a tracked file's name, a registered
+        measure, page or control ID, or a step key inside a coverage clause that passed; a number or
+        a list of numbers that follows a label word; a level token and a section number; and an
+        identifier of letters, hyphens and digits that is a registered control ID or occurs in a
+        file of the page's source set."""
+        text = source + " \n " + obs
+        for m in cited:
+            text = text.replace(m.reference, " ")
+        text = PC.ANY_LINK_TARGET.sub("]", PC.COMMENT.sub(" ", text))
+        if clause_keys is not None:
+            text = CLAUSE.sub(" ", text)
+        tracked = self.cat.tracked
+        kept, last = [], 0
+        for start, c0, c1, end in PC.code_spans(text):
+            content = text[c0:c1].strip()
+            resolves = (content in tracked.set or content.lstrip("/") in tracked.set
+                        or ("/" not in content and content in tracked.base)
+                        or content in self.measures or content in self.registry or content in self.controls)
+            kept.append(text[last:start] + (" " if resolves else " " + content + " "))
+            last = end
+        text = "".join(kept) + text[last:]
+        text = LEVEL_OR_SECTION.sub(" ", LABELLED_NUMBERS.sub(" ", text))
+        sources = self.cat.sources(page)
+        files = sources["depicts"] + sources["cites"]
+
+        def identifier(m):
+            token = m.group(0)
+            if not re.search(r"[0-9]", token):
+                return token
+            if token in self.controls or any(PC.occurs(token, self.source_text(x)) for x in files):
+                return " "
+            return token
+        text = HYPHEN_IDENTIFIER.sub(identifier, text)
+        hit = re.search(r"\S*[0-9]\S*", text)
+        if hit:
+            return hit.group(0)
+        hit = self.number_words.search(text)
+        return hit.group(0) if hit else None
 
     def _control(self, cid: str, cls: str, add, line) -> None:
         row = self.controls.get(cid)
@@ -649,7 +872,7 @@ def run(a, out=None) -> int:
             body.append("%d finding(s) in the registers and the pack parity checks." % state["findings"])
             return close(PC.EXIT_FINDINGS if state["findings"] else PC.EXIT_CLEAN)
         cat = PC.Catalog(roots, a.controls)
-        checker = Checker(cat)
+        checker = Checker(cat, PC.load_measures(roots, cat.tracked))
         if a.targets:
             pages = []
             for target in a.targets:
@@ -671,6 +894,9 @@ def run(a, out=None) -> int:
                 emit("universe %s: %d registered nodes, %d pages" % (
                     u, sum(1 for n in cat.registry if cat.universe(n) == u),
                     sum(1 for n in cat.pages if cat.universe(n) == u)))
+            for page in pages:
+                if page.lens_status == "conformant" and page.get("level") == pack["summary_counts"]["level"]:
+                    emit("conformant %s: steps=%d covered=%d" % ((page.id,) + checker.coverage.get(page.id, (0, 0))))
         for finding in findings:
             emit(str(finding))
         errors = state["findings"] + sum(1 for x in findings if x.severity == "error")
@@ -733,7 +959,7 @@ def self_test() -> int:
         PC.isolate_git(tmp)
         fx = PC.build_fixture_repo(tmp / "repo")
         reg_args = fx.register_args
-        base = ["--pattern-arm", "not-run"] + fx.args + reg_args
+        base = ["--pattern-arm", "not-run"] + fx.args + reg_args + fx.measure_args
 
         def cli(args, tool_path=tool, env=None, cwd=None):
             proc = subprocess.run([sys.executable, "-B", tool_path] + list(args), capture_output=True, text=True,
@@ -757,8 +983,8 @@ def self_test() -> int:
         # -- the rule list --
         code, lines, _err = cli(["--list-rules"])
         listed = [l.split("\t")[0] for l in lines]
-        arms.check("list-rules: 52 codes at this step, sorted, each with a severity and a condition",
-                   code == 0 and len(listed) == 52 and listed == sorted(listed)
+        arms.check("list-rules: 56 codes, sorted, each with a severity and a condition",
+                   code == 0 and len(listed) == 56 and listed == sorted(listed)
                    and all(len(l.split("\t")) == 3 for l in lines), len(listed))
         arms.check("list-rules: no census line — the command examines nothing",
                    not any(l.startswith("process-catalog ") for l in lines))
@@ -768,8 +994,8 @@ def self_test() -> int:
         # -- the pass set --
         code, lines, _err = cli(base)
         arms.check("pass fixtures: exit 0 from the command line", code == 0, lines[-3:])
-        arms.check("pass fixtures: the census is the last line and counts 7 pages in 1 universe with 0 errors",
-                   bool(lines) and re.match(r"^process-catalog page-validation status=pass exit=0 universes=1 pages=7 "
+        arms.check("pass fixtures: the census is the last line and counts 8 pages in 1 universe with 0 errors",
+                   bool(lines) and re.match(r"^process-catalog page-validation status=pass exit=0 universes=1 pages=8 "
                                             r"registry_rows=\d+ register_rows=2 pattern_arm=not-run errors=0 warns=\d+$",
                                             lines[-1]) is not None, lines[-1:])
         arms.check("pass fixtures: the three header lines and the roots line open the output",
@@ -778,15 +1004,15 @@ def self_test() -> int:
                    and lines[3] == "register roots: catalog=%s fixtures=%s probe_source=%s held=C-003..C-004"
                    % (fx.layout["catalog"], fx.layout["fixtures"], fx.layout["probe_source"]), lines[:4])
         arms.check("pass fixtures: registered nodes are printed beside pages found",
-                   any(l.startswith("universe %s: " % PC.FIXTURE_UNIVERSE) and l.endswith(" 7 pages") for l in lines))
-        arms.check("pass fixtures: no error finding on any of the seven", not codes_of(lines, "ERROR"), codes_of(lines, "ERROR"))
+                   any(l.startswith("universe %s: " % PC.FIXTURE_UNIVERSE) and l.endswith(" 8 pages") for l in lines))
+        arms.check("pass fixtures: no error finding on any of the eight", not codes_of(lines, "ERROR"), codes_of(lines, "ERROR"))
         clean_status = PC.git(fx.repo, "status", "--porcelain", "--untracked-files=all", "--ignored")
         arms.check("clean checkout: page validation wrote nothing under the repository", clean_status == b"", clean_status)
 
         # -- the fail set: every code on each fixture's expect line --
         fail_dir = PC.FIXTURE_DIR / "pages" / "fail"
         fixtures = sorted(fail_dir.glob("*.md.txt"))
-        arms.check("fail fixtures: 22 files", len(fixtures) == 22, len(fixtures))
+        arms.check("fail fixtures: 27 files", len(fixtures) == 27, len(fixtures))
         seen_codes = set()
         for path in fixtures:
             nid = path.name[:-len(".md.txt")]
@@ -931,6 +1157,126 @@ def self_test() -> int:
         arms.check("flow: a token of the second end form splits a line as an arrow does, and no arrow is lost",
                    mermaid_keyword_ids(["a --!> end"]) == ["end"] and mermaid_keyword_ids(["a --> end"]) == ["end"]
                    and mermaid_keyword_ids(["a --> ending"]) == [])
+
+        # -- the executed-evidence rules --
+        measured = fx.page("fixture-activity-measured")
+        measured_text = measured.read_text(encoding="utf-8")
+        code, lines = in_process(targets=[measured])
+        arms.check("evidence: the page in measure-and-marker form reads 0 errors",
+                   code == 0 and not codes_of(lines, "ERROR"), [l for l in lines if "ERROR" in l])
+        total = "The measure reports the line total of the rules file"
+
+        def variant(label, old, new, want, absent=(), text=None, name="fixture-activity-measured-variant.md", needle=""):
+            path = scratch / name
+            PC.write_text(path, (text or measured_text).replace(old, new, 1))
+            try:
+                _code, got_lines = in_process(targets=[path])
+            finally:
+                path.unlink()
+            got = codes_of(got_lines, "ERROR") | codes_of(got_lines, "WARN")
+            seen_codes.update(got)
+            got -= {"FM007", "REG001"}
+            arms.check("evidence: " + label, set(want) <= got and not (set(absent) & got)
+                       and (not needle or any(needle in l for l in got_lines)), sorted(got))
+            return got_lines
+
+        variant("the same page with an inline figure raises the figure rule", total, "The measure reports 41 lines", ["EVD002"])
+        variant("a number word raises the figure rule", total, "The measure reports forty lines", ["EVD002"])
+        variant("a list of numbers after the plural label word is read as names (the near-miss)", total,
+                total + " that Checks 8, 10 and 13b read", [], absent=["EVD002"])
+        variant("after the singular label word one number is a name and the next is a figure", total,
+                total + " that Check 8 and 10 lines show", ["EVD002"], needle="`10`")
+        variant("a step key in a code span outside a coverage clause is read like any span", total,
+                total + " beside `step-12`", ["EVD002"])
+        variant("a measure reference that differs in one byte of its population text is refused", "every line of the fixture rules file)",
+                "every line of the fixture rule file)", ["EVD001"])
+        variant("a working-state row without the fixed note is refused", "; " + PC.WORKING_STATE_NOTE, "", ["EVD001"])
+        variant("a row that carries a marker and a measure reference is refused", "| held local — ",
+                "| held local — %s " % next(m for m in PC.load_measures(fx.roots()) if m.input_class == "git").reference, ["EVD001"])
+        variant("an executed row with a plain root link and no measure is refused", "| held local — the store", "| the store", ["EVD001"])
+        variant("instance wording on a designed row raises the wording rule", "The rules file states the order of the steps",
+                "The rules file states the order of the steps on this machine", ["EVD004"])
+        variant("the fixed note is not instance wording, and outcome wording is a warning only", total, total + ", which has not changed",
+                ["EVD005"], absent=["EVD004", "EVD001", "EVD002"])
+        variant("a step key outside the step-key form is reported on the Steps row", "| run-probe |", "| run-0000 |", ["STP001"])
+        variant("an act step's key is refused when its workflow is not linked on the clause row", "ci:fixture-probe | record",
+                "ci:fixture-other | record", ["EVD001"], needle="its workflow's own act")
+        variant("a clause whose keys are out of the Steps table's order is refused", "`read-input`, `judge-input`, `run-probe`",
+                "`judge-input`, `read-input`, `run-probe`", ["EVD001"])
+        # the verdict pair, on the verdict fixture
+        verdict_text = fx.stamp(PC.fixture_text("pages/fail/fail-evidence-verdict.md.txt"))
+        reference = {m.id: m.reference for m in PC.load_measures(fx.roots())}
+        support = "| executed | %s [fixture probe](/%s/fixture-probe.yml) | The measure reports the runs. covers: `read-input`, " \
+                  "`judge-input` | [SOURCE] |\n" % (reference["fixture-workflow-runs"], fx.layout["workflows"])
+        marker_row = "\n\n## Navigation"
+        name = "fail-evidence-verdict.md"
+        variant("verdict: `conformant` on a working-state row alone has no support", "", "", ["EVD003"], text=verdict_text,
+                name=name, needle="reason=no-reproducible-row")
+        variant("verdict: the same page with a supporting row passes", marker_row, "\n" + support.rstrip("\n") + marker_row, [],
+                absent=["EVD003", "EVD001"], text=verdict_text, name=name)
+        variant("verdict: a draft page with an unsupported verdict is the same finding", "status: ACTIVE", "status: DRAFT",
+                ["EVD003"], text=verdict_text, name=name)
+        variant("verdict: a page that is not assessed claims no verdict", "lens_status: conformant", "lens_status: not-assessed",
+                [], absent=["EVD003"], text=verdict_text.replace("status: ACTIVE", "status: DRAFT"), name=name)
+        deviates = verdict_text.replace("lens_status: conformant", "lens_status: deviates")
+        variant("verdict: `deviates` with no comparison row has no support", "", "", ["EVD003"], text=deviates, name=name,
+                needle="reason=no-comparison-row")
+        variant("verdict: `deviates` with a comparison row over tracked sources passes", "| designed | ", "| designed vs built | ",
+                [], absent=["EVD003"], text=deviates, name=name)
+        unobserved = verdict_text.replace("lens_status: conformant", "lens_status: unobserved")
+        variant("verdict: `unobserved` with an in-scope row passes", "", "", [], absent=["EVD003"], text=unobserved, name=name)
+        variant("verdict: `unobserved` with no in-scope row has no support",
+                [l for l in unobserved.split("\n") if l.startswith("| executed")][0] + "\n", "", ["EVD003"], text=unobserved,
+                name=name, needle="reason=no-in-scope-row")
+        # coverage, under both values, through the function behind the rule
+        roots = PC.resolve_roots(build_parser().parse_args(base))
+        cat = PC.Catalog(roots)
+        ck = Checker(cat, PC.load_measures(roots, cat.tracked))
+        ck.check(PC.load_page(measured, roots))
+        want = {"fixture-activity-measured": (None, None), "fail-evidence-coverage": ("coverage-short", None),
+                "fail-evidence-coverage-none": ("coverage-short", "coverage-short")}
+        for nid in ("fail-evidence-coverage", "fail-evidence-coverage-none"):
+            placed = fx.fail_page(nid)
+            try:
+                found = ck.check(PC.load_page(placed, roots))
+            finally:
+                placed.unlink()
+            if nid == "fail-evidence-coverage":
+                problems = [x.message for x in found if x.code == "EVD001"]
+                arms.check("coverage: the coverage fixture raises each clause finding once — a clause on a row that reads "
+                           "no run history, no linked workflow, a workflow that is not an input, a key the Steps table "
+                           "lacks, an act step whose workflow is not linked", len(problems) == 5 and len(set(problems)) == 5,
+                           problems)
+                short = [x.message for x in found if x.code == "EVD003"]
+                arms.check("coverage: a clause that drew a finding joins no union — the uncovered keys are every key but "
+                           "the one the passing clause lists", len(short) == 1 and short[0].endswith(
+                               "reason=coverage-short (uncovered: judge-input, run-probe, run-other)"), short)
+        for nid, (every, some) in want.items():
+            state = ck.verdict_state[nid]
+            got = tuple((ck.verdict_reason(*state, coverage=value) or "").split(" ")[0] or None for value in PC.COVERAGE_VALUES)
+            arms.check("coverage: %s reads %s under every-step and %s under any-step" % (nid, every, some), got == (every, some), got)
+        arms.check("coverage: the rule in force is one of the two values, and the mechanism rule is stated",
+                   PC.CONFORMANT_COVERAGE in PC.COVERAGE_VALUES and PC.MECHANISM_RULE == "all")
+        _code, lines = in_process()
+        arms.check("coverage: a full run prints the step count of each activity page that reads `conformant`",
+                   "conformant fixture-activity-measured: steps=3 covered=3" in lines
+                   and "conformant fixture-activity-plain: steps=2 covered=2" in lines, [l for l in lines if l.startswith("conformant")])
+        # the measures register is a required input of a page run, and of no register-only run
+        script = fx.measures_dir / "fixture-count-rows.py"
+        saved = script.read_text(encoding="utf-8")
+        script.write_text(saved.replace("\n\ndef measure", "\nimport os\n\n\ndef measure", 1), encoding="utf-8")
+        try:
+            code, lines = in_process()
+            arms.check("measures: a measure file with a plain import stops a page run as not evaluated, naming the file, "
+                       "the line and the rule", code == 3 and any("fixture-count-rows.py line 7 breaks MS1" in l for l in lines),
+                       lines[-2:])
+            code, lines = in_process(extra=["--registers-only"])
+            arms.check("measures: a register-only run does not load the measures (the near-miss)", code == 0, lines[-2:])
+        finally:
+            script.write_text(saved, encoding="utf-8")
+        code, lines = in_process(extra=["--measures", str(tmp / "absent.tsv")])
+        arms.check("measures: an absent measures register is not evaluated", code == 3 and any("measures register" in l for l in lines),
+                   lines[-2:])
 
         # -- pack parity --
         pack_file, doc_file = fx.definitions / PC.default_part("pack"), fx.definitions / fx.layout["pack_document"]
@@ -1222,7 +1568,9 @@ def self_test() -> int:
                  "--pack-document": str(moved_repo.definitions / moved_repo.layout["pack_document"]),
                  "--registry": str(moved_repo.definitions / PC.default_part("registry")),
                  "--kinds": str(moved_repo.definitions / PC.default_part("kinds")),
-                 "--fixture-root": moved_repo.layout["fixtures"], "--probe-source": moved_repo.layout["probe_source"]}
+                 "--fixture-root": moved_repo.layout["fixtures"], "--probe-source": moved_repo.layout["probe_source"],
+                 "--measures": str(moved_repo.definitions / PC.default_part("measures")),
+                 "--measures-dir": str(moved_repo.measures_dir)}
 
         def moved(without=(), env=None):
             args = ["--pattern-arm", "not-run"]
@@ -1235,7 +1583,10 @@ def self_test() -> int:
         parts = [row[2] for row in PC.DEFAULTS if row[1] == "repo"]
         arms.check("relocation: every root passed, exit 0 and no default path in the output",
                    code == 0 and not any(p in "\n".join(first) for p in parts), first[-2:])
-        for flag in ("--definitions", "--pack", "--pack-document", "--registry", "--kinds"):
+        code, lines, _err = moved(without=("--measures-dir",))
+        arms.check("relocation: --measures-dir omitted is exit 3 naming the measures register's script column",
+                   code == 3 and any("column script" in l for l in lines), lines[-2:])
+        for flag in ("--definitions", "--pack", "--pack-document", "--registry", "--kinds", "--measures"):
             code, lines, _err = moved(without=(flag,))
             arms.check("relocation: %s omitted beneath a passed parent changes no output byte" % flag,
                        code == 0 and lines == first, lines[-2:])
@@ -1247,7 +1598,7 @@ def self_test() -> int:
             code, lines, _err = moved(without=("--repo",), env=env)
             arms.check("relocation: --repo omitted is exit 3 naming it, with %s" % label,
                        code == 3 and any("--repo" in l for l in lines), lines[-2:])
-            code, lines, _err = moved(without=("--catalog-root", "--definitions", "--pack", "--pack-document", "--registry", "--kinds"), env=env)
+            code, lines, _err = moved(without=("--catalog-root", "--definitions", "--pack", "--pack-document", "--registry", "--kinds", "--measures"), env=env)
             arms.check("relocation: --catalog-root omitted is exit 3 naming it, with %s" % label,
                        code == 3 and any("--catalog-root" in l for l in lines), lines[-2:])
 

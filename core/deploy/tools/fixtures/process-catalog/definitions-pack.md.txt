@@ -36,6 +36,10 @@ A step that uses no harness feature writes `none` in its Harness cell. `none` is
 | `CTL004` | an invented fixture rule | this fixture |
 | `CTL005` | an invented fixture rule | this fixture |
 | `EVD001` | an invented fixture rule | this fixture |
+| `EVD002` | an invented fixture rule | this fixture |
+| `EVD003` | an invented fixture rule | this fixture |
+| `EVD004` | an invented fixture rule | this fixture |
+| `EVD005` | an invented fixture rule | this fixture |
 | `FM001` | an invented fixture rule | this fixture |
 | `FM002` | an invented fixture rule | this fixture |
 | `FM003` | an invented fixture rule | this fixture |

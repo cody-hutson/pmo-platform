@@ -18,7 +18,10 @@ PURPOSE
       * the source set of a page — the single place a path becomes files;
       * the generated surfaces: the graph, the index, the page regions the
         generator owns, and the cross-cutting views;
-      * the census line every command prints last, and the summary block.
+      * the census line every command prints last, and the summary block;
+      * the evidence and measures block: the measures register's loader, the closed source form
+        of a measure file, the child interpreter a measure runs in, and the named lists the
+        executed-evidence rules read.
 
 WHERE PATHS COME FROM
     Every root is an argument. Each default is a row of DEFAULTS, and a default
@@ -41,7 +44,12 @@ EXIT CODES (every catalog command)
     3  not evaluated — an input could not be read, or nothing was examined.
        Never a pass.
 
-Python 3.9 standard library only. The tools start `git` and no other program.
+Python 3.9 standard library only. The tools start `git`. The generator also starts one child
+interpreter for each measure it runs, and `overlay --host live` starts the host client. They start
+nothing else.
+
+    python3 -B -s -S -c <entry code> <this file>   the child interpreter's start; only the
+                                                    generator uses it (see the evidence block)
 """
 from __future__ import annotations
 
@@ -85,6 +93,8 @@ DEFAULTS = (
     ("kinds", "definitions", "element-kinds.tsv", "--kinds"),
     ("fixtures", "repo", "core/deploy/tools/fixtures/process-catalog", "--fixture-root"),
     ("probe_source", "repo", ".github/workflows/operator-memory-ref.yml", "--probe-source"),
+    ("measures", "definitions", "measures.tsv", "--measures"),
+    ("measures_dir", "repo", "core/deploy/tools/process-catalog-measures", "--measures-dir"),
 )
 ROOT_HELP = {
     "repo": "the repository root (default: the fourth parent of the library file)",
@@ -96,6 +106,8 @@ ROOT_HELP = {
     "kinds": "the element-kinds table",
     "fixtures": "the fixture tree's path prefix, as the register rules read it",
     "probe_source": "the file the pattern arm reads its probe words from",
+    "measures": "the measures register",
+    "measures_dir": "the folder that holds the measure files",
 }
 TEXT_ROOTS = ("fixtures", "probe_source")
 
@@ -901,6 +913,484 @@ def check_registers(roots: Roots, pack: dict, controls_path, pattern_arm: str, p
         out["lines"].append("NOT-EVALUATED: a register has no rows")
         out["stop"] = "a register has no rows"
     return out
+
+
+# ==============================================================================================
+# THE EVIDENCE AND MEASURES BLOCK
+#
+# Every name below is the rule it names: where a rule of the evidence contract reads a list, the
+# list is one constant here and nowhere else. None is a pack key, an argument or an environment
+# variable. No entry script and no measure file defines a second copy.
+#
+#   A measure is a function of the text it is handed. A measure file defines `measure(inputs,
+#   params)` and returns its report as text. The generator resolves every input; the measure opens
+#   nothing, lists nothing, starts nothing and reads no environment variable.
+#
+#   How a measure is started. Only the generator starts one, as a child interpreter:
+#     * the child is started from command-line code (`-c`), never from a script file, with no
+#       bytecode writing, no user site folder and no site folder;
+#     * its environment holds exactly two variables, the hash seed and the zone `UTC`;
+#     * its working folder is an empty temporary folder the generator makes and removes;
+#     * its module search path holds the interpreter's own folders only: the entry code removes
+#       the working-folder entry before its first import, the library is loaded by its file path,
+#       and the folder beside the library is removed again before the measure is read. The
+#       measures folder is never on the path, so a file beside a measure that carries a library
+#       module's name cannot be loaded;
+#     * the measure's source is checked (MS1 to MS5) on the bytes about to run, then compiled, and
+#       only then is the audit hook installed. The hook lets through the one execution of the
+#       measure's own code object (EXPECTED_EVENTS) and ends the process on any other event: the
+#       event's name goes to the error stream and the process exits with a reserved status. A
+#       refusal is never an exception, so no handler in a measure runs after it;
+#     * the measure runs with a built-in table that holds MEASURE_BUILTINS only, and an import
+#       function that serves only the MEASURE_IMPORTS pairs, from modules loaded before the hook.
+#   This is a guard against a measure that reaches out by ordinary means. It is not a security
+#   boundary; measures are tracked code read in review.
+#
+#   No object address in a report. A function, a lambda, a generator and an uncalled method print
+#   their address when formatted. The source check refuses each where it could reach text (MS2,
+#   MS3 and MS4 below), and the child refuses a report that carries the address shape, which is
+#   what stops an iterator object formatted through a variable.
+# ==============================================================================================
+INPUT_CLASSES = ("git", "host-api", "repo-working-state")          # ascending order of protection
+INPUT_KINDS = (                                                    # (kind, takes an argument, class)
+    ("tracked", True, "git"),
+    ("host-workflow-runs", True, "host-api"),
+    ("host-latest-run-log", True, "host-api"),
+    ("event-log-rows", False, "repo-working-state"),
+    ("analysis-folder-summaries", False, "repo-working-state"),
+)
+INPUT_NAMES = {"event-log": "event-log-rows", "analysis-home": "analysis-folder-summaries"}   # --input NAME=PATH
+RUN_HISTORY_KIND = "host-workflow-runs"
+REPRODUCIBLE_CLASSES = ("git", "host-api")                         # the classes that may support a verdict
+MEASURES_HEADER = ["measure_id", "script", "inputs", "input_class", "params", "population"]
+MEASURE_ID_FORM = re.compile(r"^[a-z]+(?:-[a-z]+)*$")
+MEASURE_SCRIPT_FORM = re.compile(r"^[a-z]+(?:-[a-z]+)*\.py$")
+PARAM_KEY_FORM = re.compile(r"^[a-z][a-z_]*$")
+PARAM_TOKEN_FORM = re.compile(r"^[a-z][a-z_]*$")
+POPULATION_MAX = 240
+
+MEASURE_IMPORTS = {
+    "collections": ("Counter", "defaultdict"),
+    "datetime": ("date",),
+    "re": ("compile",),
+}
+MEASURE_BUILTINS = (
+    "any", "enumerate", "int", "len", "list", "max", "min", "sorted", "str", "sum", "ValueError",
+)
+MEASURE_NODES = (
+    "Module", "FunctionDef", "arguments", "arg", "Return", "Expr",
+    "Assign", "AugAssign", "For", "If", "Continue", "Try", "ExceptHandler", "ImportFrom", "alias",
+    "BoolOp", "BinOp", "UnaryOp", "Compare", "IfExp", "Call", "keyword", "Constant", "Name", "Attribute",
+    "Subscript", "List", "Tuple", "Dict", "ListComp", "GeneratorExp", "comprehension",
+    "JoinedStr", "FormattedValue", "Load", "Store",
+    "And", "Or", "Not", "Add", "Sub", "Eq", "NotEq", "Lt", "LtE", "Gt", "GtE", "In", "NotIn",
+)
+MEASURE_ATTRIBUTES = (
+    "append", "days", "endswith", "fromisoformat", "get", "group", "join", "search", "sort", "split",
+    "splitlines", "startswith", "strip", "values",
+)
+MEASURE_ENTRY = "measure"                                          # MS5: one fixed name; it holds no list
+EXPECTED_EVENTS = ("exec",)          # let through for one object only: the measure's own code object
+VERDICT_REASONS = ("no-reproducible-row", "coverage-short", "no-comparison-row", "no-in-scope-row")
+CONFORMANT_COVERAGE = "every-step"                                 # or "any-step"; the operator's ruling
+COVERAGE_VALUES = ("every-step", "any-step")
+SYNTHETIC_MARK = "invented values; not measured on any install"
+SYNTHETIC_MAX = 99
+SYNTHETIC_YEAR = 2001
+CHILD_SEEDS = ("1", "2")                                           # the overlay command uses the first
+STEP_KEY_FORM = re.compile(r"^(?![a-z0-9-]*[0-9]{4})[a-z]+(?:-[a-z0-9]+)*$")
+HELD_MARKERS = ("held local —", "no measure —")
+WORKING_STATE_NOTE = "one install's working state; supports no verdict on this page"
+LABEL_WORDS = ("Check", "Checks", "Stage", "Stages", "check", "checks", "stage", "stages")
+NUMBER_WORDS = (
+    "zero", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+    "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
+    "sixty", "seventy", "eighty", "ninety", "hundred", "hundreds", "thousand", "thousands", "million", "millions",
+    "billion", "billions", "dozen", "dozens", "half", "twice", "thrice", "double", "triple", "percent", "per cent",
+)
+INSTANCE_WORDING = (
+    "this install", "this instance", "this machine", "this workspace", "here", "live read", "live mode",
+    "live value", "mode file reads", "as observed", "observed on", "observed in", "observed at", "observed here",
+    "at this read",
+)
+OUTCOME_WORDING = ("never", "not yet", "so far", "to date", "has not", "have not")
+OUTCOME_NO = re.compile(r"\bno\b[^.;|]*?\b(?:recorded|observed|found|present|exists)\b", re.IGNORECASE)
+MECHANISM_RULE = "all"       # a step that names several mechanisms is run only when every one of them is run
+CHILD_REFUSED, CHILD_FORM, CHILD_ERROR, CHILD_REPORT = 90, 91, 92, 93     # the child's reserved exit statuses
+CHILD_LIMIT_SECONDS = 300
+ADDRESS_SHAPE = re.compile(r"\bat 0x[0-9a-fA-F]+")
+MEASURE_REASONS = ("outside-read", "source-form", "error", "bad-report", "timeout", "host-total-differs",
+                   "input-not-passed", "host-not-read", "empty-host-set")
+_DATA_ATTRIBUTES = ("days",)         # the listed attributes that are values; every other one is a method
+_EXCEPTION_NAMES = ("IndexError", "KeyError", "TypeError", "ValueError", "ZeroDivisionError")
+_GENERATOR_CONSUMERS = ("all", "any", "dict", "list", "max", "min", "sorted", "sum", "tuple", "Counter")
+_GENERATOR_METHODS = ("extend", "join", "update")
+
+
+def word_pattern(words) -> "re.Pattern":
+    """One whole-word, case-insensitive pattern for a list of words or phrases."""
+    return re.compile(r"(?<![A-Za-z])(?:%s)(?![A-Za-z])" % "|".join(
+        re.escape(w).replace(r"\ ", r"\s+") for w in sorted(words, key=len, reverse=True)), re.IGNORECASE)
+
+
+def imported_function_names() -> set:
+    """The MEASURE_IMPORTS names that are functions: a class and a flag print no address."""
+    out = set()
+    for module, names in MEASURE_IMPORTS.items():
+        loaded = importlib.import_module(module)
+        out |= {n for n in names if callable(getattr(loaded, n)) and not isinstance(getattr(loaded, n), type)}
+    return out
+
+
+def measure_source_findings(text: str) -> list:
+    """MS1 to MS5 over one measure source, read as a syntax tree; the source is never imported or
+    run. Returns (line, rule, what) triples, in line order.
+
+    MS1  an import is `from <module> import <name>, …` at the top of the file, the module and
+         every name in MEASURE_IMPORTS, with no alias.
+    MS2  a name that is read is bound in the file, imported under MS1 or in MEASURE_BUILTINS; no
+         name begins with an underscore; no built-in name is rebound; and the name of a function —
+         one the file defines or one it imports — is read only as the function of a call or as the
+         value of a `key` argument, so no function value can reach text.
+    MS3  every syntax-tree node is in MEASURE_NODES; the module level holds a docstring, MS1
+         imports and function definitions only; no function carries a decorator; an `except`
+         clause names one or more of the five listed exception names; a lambda stands only as the
+         value of a `key` argument; and a generator expression stands only as a direct argument of
+         a call that consumes it.
+    MS4  every attribute name is in MEASURE_ATTRIBUTES, and an attribute that is a method is used
+         only as the function of a call, so no bound method can reach text.
+    MS5  the file defines `measure`."""
+    import ast
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError) as e:
+        return [(getattr(e, "lineno", None) or 1, "MS3", "the source does not parse")]
+    found = []
+    add = lambda node, rule, what: found.append((getattr(node, "lineno", 1), rule, what))   # noqa: E731
+    parent = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    for i, node in enumerate(tree.body):
+        docstring = i == 0 and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) \
+            and isinstance(node.value.value, str)
+        if not docstring and not isinstance(node, (ast.ImportFrom, ast.FunctionDef)):
+            add(node, "MS3", "the module level holds something other than a docstring, an import and a function")
+    functions = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    imported, bound = set(), set(functions)
+    for node in ast.walk(tree):
+        kind = type(node).__name__
+        if kind not in MEASURE_NODES:
+            add(node if hasattr(node, "lineno") else parent.get(node, tree), "MS3", "a %s node is outside the list" % kind)
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = MEASURE_IMPORTS.get(getattr(node, "module", None))
+            if not isinstance(node, ast.ImportFrom) or parent.get(node) is not tree or node.level or names is None:
+                add(node, "MS1", "an import outside the listed form")
+            else:
+                for alias in node.names:
+                    if alias.asname or alias.name not in names:
+                        add(node, "MS1", "the import of `%s` from `%s` is outside the list" % (alias.name, node.module))
+                    else:
+                        imported.add(alias.name)
+        elif isinstance(node, ast.FunctionDef) and node.decorator_list:
+            add(node, "MS3", "a function carries a decorator")
+        elif isinstance(node, ast.ExceptHandler):
+            named = node.type.elts if isinstance(node.type, ast.Tuple) else [node.type]
+            if node.type is None or not all(isinstance(n, ast.Name) and n.id in _EXCEPTION_NAMES
+                                            and n.id in MEASURE_BUILTINS for n in named):
+                add(node, "MS3", "an `except` clause names something other than the listed exception names")
+            if node.name:
+                bound.add(node.name)
+        elif isinstance(node, ast.Attribute):
+            if node.attr not in MEASURE_ATTRIBUTES:
+                add(node, "MS4", "the attribute `%s` is outside the list" % node.attr)
+            elif node.attr not in _DATA_ATTRIBUTES and not (isinstance(parent.get(node), ast.Call)
+                                                            and parent[node].func is node):
+                add(node, "MS4", "the method `%s` is used without being called" % node.attr)
+        elif isinstance(node, ast.Lambda):
+            up = parent.get(node)
+            if not (isinstance(up, ast.keyword) and up.arg == "key"):
+                add(node, "MS3", "a lambda stands somewhere other than a `key` argument")
+        elif isinstance(node, ast.GeneratorExp):
+            up = parent.get(node)
+            target = up.func if isinstance(up, ast.Call) and node in up.args else None
+            if not ((isinstance(target, ast.Name) and target.id in _GENERATOR_CONSUMERS)
+                    or (isinstance(target, ast.Attribute) and target.attr in _GENERATOR_METHODS)):
+                add(node, "MS3", "a generator expression stands somewhere other than as the argument of a consuming call")
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            bound.add(node.id)
+        elif isinstance(node, ast.arg):
+            bound.add(node.arg)
+    function_valued = functions | (imported & imported_function_names())
+    for node in ast.walk(tree):
+        ident, binds = None, False
+        if isinstance(node, ast.Name):
+            ident, binds = node.id, isinstance(node.ctx, ast.Store)
+        elif isinstance(node, ast.arg):
+            ident, binds = node.arg, True
+        elif isinstance(node, ast.FunctionDef):
+            ident, binds = node.name, True
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            ident, binds = node.name, True
+        if ident is None:
+            continue
+        if ident.startswith("_"):
+            add(node, "MS2", "the name `%s` begins with an underscore" % ident)
+        elif binds and (ident in MEASURE_BUILTINS or ident in imported):
+            add(node, "MS2", "the built-in or imported name `%s` is rebound" % ident)
+        elif not binds and ident not in bound and ident not in imported and ident not in MEASURE_BUILTINS:
+            add(node, "MS2", "the name `%s` is read and is neither bound, imported nor a listed built-in" % ident)
+        elif not binds and ident in function_valued:
+            up = parent.get(node)
+            called = isinstance(up, ast.Call) and up.func is node
+            keyed = isinstance(up, ast.keyword) and up.arg == "key"
+            if not (called or keyed):
+                add(node, "MS2", "the function `%s` is read as a value" % ident)
+    if not any(isinstance(n, ast.FunctionDef) and n.name == MEASURE_ENTRY for n in tree.body):
+        found.append((1, "MS5", "the file does not define `%s`" % MEASURE_ENTRY))
+    return sorted(set(found))
+
+
+class Measure:
+    """One row of the measures register, loaded and checked."""
+
+    def __init__(self, row: dict, inputs: list, params: dict, folder_rel: str):
+        self.id, self.script, self.population = row["measure_id"], row["script"], row["population"]
+        self.inputs, self.input_class, self.params = inputs, row["input_class"], params
+        self.script_rel = "%s/%s" % (folder_rel, self.script)
+        self.reference = "measure `%s` — [%s](/%s) (population: %s)" % (self.id, self.script, self.script_rel,
+                                                                        self.population)
+
+    def workflows(self) -> list:
+        return [arg for kind, arg, _entry in self.inputs if kind == RUN_HISTORY_KIND]
+
+
+def workflows_folder(roots: Roots) -> str:
+    """The repository-relative folder of workflow files: the folder that holds the probe source."""
+    return Path(roots.probe_source).parent.as_posix()
+
+
+def regular_tracked(roots: Roots, paths: list, what: str) -> None:
+    """Every path is a regular file in the index and as checked out; anything else — a symbolic
+    link, a submodule entry, a missing file — is NotEvaluated naming the path."""
+    if not paths:
+        return
+    listed = git(roots.repo, "ls-files", "-s", "-z", "--", *paths).decode("utf-8", "surrogateescape")
+    modes = {}
+    for entry in listed.split("\0"):
+        if entry:
+            meta, path = entry.split("\t", 1)
+            modes[path] = meta.split(" ")[0]
+    for path in paths:
+        full = roots.repo / path
+        if modes.get(path) not in ("100644", "100755") or os.path.islink(full) or not os.path.isfile(full):
+            raise NotEvaluated("%s: %s is not a tracked regular file" % (what, path))
+
+
+def parse_params(cell: str, where: str) -> dict:
+    """MR6: empty, or `key=value` pairs separated by `;`. A value is an integer, one lower-case
+    token, or a comma list of lower-case tokens; a list is handed to the measure as a list."""
+    params = {}
+    for pair in (cell.split(";") if cell else []):
+        key, sep, value = pair.partition("=")
+        tokens = value.split(",")
+        if not sep or not PARAM_KEY_FORM.match(key) or key in params or key == "today":
+            raise NotEvaluated("%s column params: `%s` is not a `key=value` pair with a new lower-case key" % (where, pair))
+        if re.match(r"^(?:0|[1-9][0-9]*)$", value):
+            params[key] = int(value)
+        elif all(PARAM_TOKEN_FORM.match(t) for t in tokens) and len(set(tokens)) == len(tokens):
+            params[key] = tokens[0] if len(tokens) == 1 else tokens
+        else:
+            raise NotEvaluated("%s column params: the value of `%s` is neither an integer nor lower-case tokens" % (where, key))
+    return params
+
+
+def load_measures(roots: Roots, tracked: "Tracked" = None, check_sources: bool = True) -> list:
+    """The measures register, all or nothing: any breach of MR1 to MR8 is NotEvaluated naming the
+    row and the column. No column is ignored. A measure source is read as text and parsed; it is
+    never imported or run here."""
+    what = "the measures register"
+    table = read_tsv(roots.measures, what)
+    if table[0] != MEASURES_HEADER:
+        raise NotEvaluated("%s: header differs from the contract" % what)
+    if len(table) < 2:
+        raise NotEvaluated("%s: no row" % what)
+    tracked = tracked or Tracked(roots.repo)
+    folder_rel = roots.rel(roots.measures_dir)
+    flows = workflows_folder(roots)
+    kinds = {kind: (takes, cls) for kind, takes, cls in INPUT_KINDS}
+    numbers = word_pattern(NUMBER_WORDS)
+    out, previous = [], ""
+    for n, cells in enumerate(table[1:], start=2):
+        if len(cells) != len(MEASURES_HEADER):
+            raise NotEvaluated("%s: row %d does not have %d cells" % (what, n, len(MEASURES_HEADER)))
+        row = dict(zip(MEASURES_HEADER, cells))
+        where = "%s: row %s" % (what, row["measure_id"] or n)
+        if not MEASURE_ID_FORM.match(row["measure_id"]):
+            raise NotEvaluated("%s column measure_id: not lower-case letters and single hyphens" % where)
+        if row["measure_id"] <= previous:
+            raise NotEvaluated("%s column measure_id: rows do not ascend, or an ID is repeated" % where)
+        previous = row["measure_id"]
+        script_rel = "%s/%s" % (folder_rel, row["script"])
+        if not MEASURE_SCRIPT_FORM.match(row["script"]) or script_rel not in tracked.set:
+            raise NotEvaluated("%s column script: `%s` is not a tracked file directly inside the measures folder"
+                               % (where, row["script"]))
+        regular_tracked(roots, [script_rel], where + " column script")
+        inputs, classes = [], []
+        for entry in row["inputs"].split(";"):
+            kind, sep, arg = entry.partition(":")
+            if kind not in kinds or bool(sep and arg) != kinds[kind][0] or (sep and not arg) \
+                    or entry in [e for _k, _a, e in inputs]:
+                raise NotEvaluated("%s column inputs: `%s` is not an input kind with the argument its kind takes, "
+                                   "or is repeated" % (where, entry))
+            if kind == "tracked":
+                parts = arg.split("/")
+                if arg.startswith("/") or ".." in parts or "" in parts or any("*" in p for p in parts[:-1]):
+                    raise NotEvaluated("%s column inputs: the pattern `%s` is not repository-root-relative with a "
+                                       "`*` in its last segment only" % (where, arg))
+                matched = tracked_matches(tracked, arg)
+                if not matched:
+                    raise NotEvaluated("%s column inputs: the pattern `%s` matches no tracked file" % (where, arg))
+                regular_tracked(roots, matched, where + " column inputs")
+            elif kinds[kind][0]:
+                if "/" in arg or "%s/%s" % (flows, arg) not in tracked.set:
+                    raise NotEvaluated("%s column inputs: `%s` is not the name of a tracked workflow file" % (where, arg))
+                regular_tracked(roots, ["%s/%s" % (flows, arg)], where + " column inputs")
+            inputs.append((kind, arg, entry))
+            classes.append(kinds[kind][1])
+        derived = max(classes, key=INPUT_CLASSES.index)
+        if row["input_class"] != derived:
+            raise NotEvaluated("%s column input_class: `%s` is declared and the inputs derive `%s`"
+                               % (where, row["input_class"], derived))
+        params = parse_params(row["params"], where)
+        population = row["population"]
+        if not 1 <= len(population) <= POPULATION_MAX or re.search(r"[0-9|`]", population) or numbers.search(population):
+            raise NotEvaluated("%s column population: not 1 to %d characters of words with no digit, number word, "
+                               "pipe or code-span mark" % (where, POPULATION_MAX))
+        if check_sources:
+            source = read_text_strict(roots.repo / script_rel, "the measure file %s" % script_rel)
+            for line, rule, detail in measure_source_findings(source)[:1]:
+                raise NotEvaluated("the measure file %s line %d breaks %s: %s" % (script_rel, line, rule, detail))
+        out.append(Measure(row, inputs, params, folder_rel))
+    return out
+
+
+def tracked_matches(tracked: "Tracked", pattern: str) -> list:
+    """The tracked files a `tracked:` pattern names. A `*` stands in the last segment only and
+    never crosses a folder."""
+    if "*" not in pattern:
+        return [pattern] if pattern in tracked.set else []
+    folder_part, _sep, last = pattern.rpartition("/")
+    form = re.compile("^" + ".*".join(re.escape(p) for p in last.split("*")) + "$")
+    prefix = folder_part + "/" if folder_part else ""
+    return [f for f in (tracked.under(folder_part) if folder_part else tracked.files)
+            if "/" not in f[len(prefix):] and form.match(f[len(prefix):])]
+
+
+CHILD_BOOT = (
+    "import sys\n"
+    "sys.path[:] = [p for p in sys.path if p]\n"
+    "import importlib.util\n"
+    "spec = importlib.util.spec_from_file_location('_process_catalog', sys.argv[1])\n"
+    "module = importlib.util.module_from_spec(spec)\n"
+    "sys.modules['_process_catalog'] = module\n"
+    "spec.loader.exec_module(module)\n"
+    "module.child_main()\n"
+)
+
+
+def child_main() -> None:
+    """The child's entry point. Reads one JSON document on standard input — the measure's source,
+    its file name, its inputs, its parameters and the test seam's layer switches — and never
+    returns: it writes the report and exits 0, or exits with a reserved status."""
+    sys.path[:] = [p for p in sys.path if p and os.path.realpath(p) != os.path.realpath(str(HERE))]
+    payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+    layers = {"source_check": True, "hook": True, "builtins": True}
+    layers.update(payload.get("layers") or {})
+    source = payload["source"]
+    if layers["source_check"]:
+        for line, rule, detail in measure_source_findings(source)[:1]:
+            os.write(2, ("source-form: line %d %s %s\n" % (line, rule, detail)).encode("utf-8"))
+            os._exit(CHILD_FORM)
+    import builtins
+    import types
+    import unicodedata                              # noqa: F401 — a pattern that names a character loads it
+    modules = {name: importlib.import_module(name) for name in MEASURE_IMPORTS}
+
+    def serve(name, _globals=None, _locals=None, fromlist=(), level=0):
+        names = MEASURE_IMPORTS.get(name)
+        if level or names is None or not fromlist or any(n not in names for n in fromlist):
+            raise ImportError(name)
+        return types.SimpleNamespace(**{n: getattr(modules[name], n) for n in fromlist})
+
+    if layers["builtins"]:
+        table = {name: getattr(builtins, name) for name in MEASURE_BUILTINS}
+        table["__import__"] = serve
+    else:
+        table = dict(vars(builtins))
+    try:
+        code = compile(source, payload["name"], "exec")
+    except (SyntaxError, ValueError):
+        os.write(2, b"source-form: the source does not compile\n")
+        os._exit(CHILD_FORM)
+    inputs = {key: [tuple(pair) for pair in pairs] for key, pairs in payload["inputs"].items()}
+    scope = {"__builtins__": table, "__name__": MEASURE_ENTRY}
+
+    def hook(event, args):
+        if event in EXPECTED_EVENTS and args and args[0] is code:
+            return
+        os.write(2, ("refused: %s\n" % event).encode("utf-8"))
+        os._exit(CHILD_REFUSED)
+
+    if layers["hook"]:
+        sys.addaudithook(hook)
+    try:
+        exec(code, scope)                           # noqa: S102 — the checked source of one tracked measure
+        report = scope[MEASURE_ENTRY](inputs, payload["params"])
+    except BaseException as e:                      # noqa: BLE001 — any error of a measure is the same failed state
+        os.write(2, ("error: %s\n" % type(e).__name__).encode("utf-8"))
+        os._exit(CHILD_ERROR)
+    if not isinstance(report, str) or ADDRESS_SHAPE.search(report):
+        os.write(2, b"bad-report\n")
+        os._exit(CHILD_REPORT)
+    os.write(1, report.encode("utf-8"))
+    os._exit(0)
+
+
+def run_measure(source: str, name: str, inputs: dict, params: dict, seed: str = CHILD_SEEDS[0], layers=None,
+                zone: str = "UTC", workdir=None) -> tuple:
+    """Run one measure in a child interpreter. Returns (status, reason, report): status is
+    `measured` with the report text, or `failed` with a reason of MEASURE_REASONS and, after a
+    colon, the event or error name. `layers`, `zone` and `workdir` are the self-test's seam; no
+    command-line argument reaches them."""
+    payload = json.dumps({"source": source, "name": name, "inputs": inputs, "params": params,
+                          "layers": layers or {}}).encode("utf-8")
+    holder = None if workdir else tempfile.TemporaryDirectory()
+    try:
+        proc = subprocess.run([sys.executable, "-B", "-s", "-S", "-c", CHILD_BOOT, str(Path(__file__).resolve())],
+                              input=payload, capture_output=True, env={"PYTHONHASHSEED": seed, "TZ": zone},
+                              cwd=str(workdir or holder.name), timeout=CHILD_LIMIT_SECONDS)
+    except subprocess.TimeoutExpired:
+        return "failed", "timeout", None
+    except OSError as e:
+        raise NotEvaluated("the child interpreter could not be started (%s)" % type(e).__name__)
+    finally:
+        if holder is not None:
+            holder.cleanup()
+    last = (proc.stderr.decode("utf-8", "replace").strip().split("\n") or [""])[-1]
+    detail = last.split(": ", 1)[1].split(" ")[0] if ": " in last else ""
+    if proc.returncode == 0:
+        try:
+            return "measured", "", proc.stdout.decode("utf-8")
+        except UnicodeDecodeError:
+            return "failed", "bad-report", None
+    reason = {CHILD_REFUSED: "outside-read", CHILD_FORM: "source-form", CHILD_REPORT: "bad-report"}.get(
+        proc.returncode, "error")
+    if proc.returncode == CHILD_FORM:
+        detail = " ".join(last.split(" ")[1:4]) if last.startswith("source-form: line") else ""
+    return "failed", reason + (":" + detail if detail and reason != "bad-report" else ""), None
+
+
+# ==============================================================================================
+# END OF THE EVIDENCE AND MEASURES BLOCK
+# ==============================================================================================
 
 
 # ----------------------------------------------------------------------------------------------
@@ -2551,6 +3041,7 @@ def commit_all(repo, message: str) -> str:
 
 
 UNSTAMPED_COMMIT = "0" * 40
+SYNTHETIC_COMMIT = "a" * 40          # the unstamped form a fixture page under the synthetic-values rule carries
 FIXTURE_UNIVERSE = "fixture-landscape"
 
 
@@ -2561,6 +3052,8 @@ class FixtureRepo:
         self.definitions = repo / layout["definitions"]
         self.args = ["--repo", str(repo), "--catalog-root", str(self.catalog), "--definitions", str(self.definitions),
                      "--pack-document", str(self.definitions / layout["pack_document"])]
+        self.measures_dir = repo / layout["measures_dir"]
+        self.measure_args = ["--measures-dir", str(self.measures_dir)]
         self.register_args = ["--fixture-root", layout["fixtures"], "--probe-source", layout["probe_source"]]
 
     def page(self, nid: str) -> Path:
@@ -2569,7 +3062,7 @@ class FixtureRepo:
     def stamp(self, text: str) -> str:
         """A fixture page names no commit of its own: its verification commit is the temporary
         repository's first commit, written in when the page is placed."""
-        return text.replace(UNSTAMPED_COMMIT, self.base)
+        return text.replace(UNSTAMPED_COMMIT, self.base).replace(SYNTHETIC_COMMIT, self.base)
 
     def fail_page(self, nid: str) -> Path:
         """Place one failing fixture page in the fixture universe's folder and return its path."""
@@ -2585,7 +3078,7 @@ class FixtureRepo:
         a = argparse.Namespace(root_repo=str(self.repo), root_catalog=str(self.catalog),
                                root_definitions=str(self.definitions),
                                root_pack_document=str(self.definitions / self.layout["pack_document"]),
-                               root_fixtures=None, root_probe_source=None)
+                               root_fixtures=None, root_probe_source=None, root_measures_dir=str(self.measures_dir))
         roots = resolve_roots(a)
         roots.fixtures, roots.probe_source = self.layout["fixtures"], self.layout["probe_source"]
         return roots
@@ -2598,15 +3091,18 @@ def default_layout() -> dict:
     workflows = Path(default_part("probe_source")).parent.as_posix()
     return {"catalog": default_part("catalog"), "definitions": fixtures, "fixtures": fixtures,
             "sources": fixtures + "/sources", "workflows": workflows, "pack_document": "definitions-pack.md.txt",
-            "probe_source": workflows + "/probe-source.yml"}
+            "probe_source": workflows + "/probe-source.yml", "measures_dir": default_part("measures_dir")}
 
 
 def build_fixture_repo(dest: Path, layout=None, pages: bool = True, commit: bool = True) -> FixtureRepo:
     """The one function that builds a self-test's temporary repository from the fixture tree. Each
     pass page is written into its universe's folder with the `.txt` ending removed; each file under
     the fixture `workflows/` folder, and the fixture probe source, is written to the workflows folder
-    with `.txt` removed. Under another layout the fixture tree's own prefix is rewritten in every
-    text file, so the register and the pages name the sources where that layout puts them."""
+    with `.txt` removed; each fixture measure source under the fixture `measures/` folder that ends
+    `.py.txt` is written to the measures folder under its `.py` name, where the measures register's
+    script rule holds. Under another layout the fixture tree's own prefix, the measures folder and
+    the workflows folder are rewritten in every text file, so the registers and the pages name each
+    file where that layout puts it."""
     layout = dict(layout or default_layout())
     native = default_layout()
     moved = layout != native
@@ -2614,7 +3110,10 @@ def build_fixture_repo(dest: Path, layout=None, pages: bool = True, commit: bool
 
     def text_of(path: Path) -> str:
         text = path.read_text(encoding="utf-8")
-        return text.replace(native["sources"] + "/", layout["sources"] + "/") if moved else text
+        if moved:
+            for key in ("sources", "measures_dir", "workflows"):
+                text = text.replace(native[key] + "/", layout[key] + "/")
+        return text
 
     registry = {}
     for line in (FIXTURE_DIR / default_part("registry")).read_text(encoding="utf-8").split("\n")[1:]:
@@ -2622,7 +3121,8 @@ def build_fixture_repo(dest: Path, layout=None, pages: bool = True, commit: bool
         if len(cells) >= 3:
             registry[cells[0]] = cells[2]
     if moved:
-        for name in (default_part("pack"), default_part("registry"), default_part("kinds"), "controls-register.tsv"):
+        for name in (default_part("pack"), default_part("registry"), default_part("kinds"), "controls-register.tsv",
+                     default_part("measures")):
             write_text(dest / layout["definitions"] / name, text_of(FIXTURE_DIR / name))
         write_text(dest / layout["definitions"] / layout["pack_document"], text_of(FIXTURE_DIR / native["pack_document"]))
     else:
@@ -2638,6 +3138,8 @@ def build_fixture_repo(dest: Path, layout=None, pages: bool = True, commit: bool
     if extra.is_dir():
         for path in sorted(extra.glob("*.txt")):
             write_text(dest / layout["workflows"] / path.name[:-4], text_of(path))
+    for path in sorted((FIXTURE_DIR / "measures").glob("*.py.txt")):
+        write_text(dest / layout["measures_dir"] / path.name[:-4], text_of(path))
     (dest / layout["catalog"]).mkdir(parents=True, exist_ok=True)
     git(dest, *(TEST_IDENTITY + ("init", "-q")))
     fx = FixtureRepo(dest, layout)
@@ -2670,7 +3172,7 @@ def relocated_layout() -> dict:
     definitions folder's own file names, so a root derived from a passed parent can be omitted."""
     return {"catalog": "book", "definitions": "book/" + default_part("definitions"), "fixtures": "spare",
             "sources": "stuff/sources", "workflows": "flows", "pack_document": default_part("pack_document"),
-            "probe_source": "flows/probe-source.yml"}
+            "probe_source": "flows/probe-source.yml", "measures_dir": "gauges"}
 
 
 def fixture_text(relative: str) -> str:

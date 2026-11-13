@@ -7,6 +7,7 @@ fixture-activity-plain	L3	fixture-landscape	fixture-process	Fixture activity	min
 fixture-activity-spans	L3	fixture-landscape	fixture-process	Fixture activity with pipes in code spans	minted
 fixture-activity-flow	L3	fixture-landscape	fixture-process	Fixture activity with near-keyword flow nodes	minted
 fixture-activity-anchored	L3	fixture-landscape	fixture-process	Fixture activity with source anchors	minted
+fixture-activity-measured	L3	fixture-landscape	fixture-process	Fixture activity with measured evidence	minted
 fixture-far-landscape	L0	fixture-far-landscape		Fixture landscape with no page	minted
 fixture-far-stream	L1	fixture-far-landscape	fixture-far-landscape	Fixture stream with no page	minted
 fail-frontmatter-fields	L3	fixture-landscape	fixture-process	Fail fixture	minted
@@ -30,3 +31,8 @@ fail-source-name	L3	fixture-landscape	fixture-process	Fail fixture	minted
 fail-status-lens	L3	fixture-landscape	fixture-process	Fail fixture	minted
 fail-step-vocabulary	L3	fixture-landscape	fixture-process	Fail fixture	minted
 fail-control-class	L2	fixture-landscape	fixture-stream	Fail fixture	minted
+fail-evidence-inline-figure	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-verdict	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-wording	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-coverage	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-coverage-none	L3	fixture-landscape	fixture-process	Fail fixture	minted

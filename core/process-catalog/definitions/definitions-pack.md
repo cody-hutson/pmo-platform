@@ -292,7 +292,11 @@ Each row below is one rule the catalog's validator checks, with the document tha
 | `CTL003` | a cited control ID is in the register | the standard, § 13.7; decision 12 |
 | `CTL004` | a hand-run detector's class and surface | the standard, § 13.7; decision 12 |
 | `CTL005` | a Controls row's class is a listed class | the standard, § 13.7 |
-| `EVD001` | executed evidence is reproducible | decision 12 |
+| `EVD001` | an executed row names its registered measure, or says why none is published | decision 12 |
+| `EVD002` | an executed row states no figure | the standard, § 13 (Authoring rules) |
+| `EVD003` | a verdict rests on evidence any reader can reproduce | [this pack](#lenses-and-evidence) |
+| `EVD004` | evidence does not point at one install | [this pack](#lenses-and-evidence) |
+| `EVD005` | outcome wording on an executed row is flagged | [this pack](#lenses-and-evidence) |
 | `FM001` | a readable frontmatter block | the standard, § 13.3 |
 | `FM002` | required fields are present | the standard, § 13.3; [this pack](#the-page-and-its-fields) for `actors`, `owner`, `lens_status` and `pack_version` |
 | `FM003` | enum fields hold a listed value | the standard, § 13.3; [this pack](#the-page-and-its-fields) for `actors`, `owner`, `lens_status` and `pack_version` |

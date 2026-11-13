@@ -1,0 +1,35 @@
+{
+  "synthetic": "invented values; not measured on any install",
+  "params": {
+    "today": "2001-03-01"
+  },
+  "inputs": {
+    "tracked:fixture-deploy.sh": [
+      [
+        "fixture-deploy.sh",
+        "#!/bin/bash\nreadonly FIXTURE_ROLLOUT_PHASE=\"enforce\"    # a fixture comment\nreadonly FIXTURE_ROLLOUT_ARMED=\"2001-01-01\"\nreadonly FIXTURE_ROLLOUT_REVIEW_DAYS=30\nreadonly FIXTURE_ROLLOUT_ESCALATE_DAYS=60\necho \"fixture\"\n"
+      ]
+    ],
+    "tracked:fixture-hook.sh": [
+      [
+        "fixture-hook.sh",
+        "readonly FIXTURE_ALPHA_PHASE=\"warn\"\nreadonly FIXTURE_ALPHA_ARMED=\"2001-02-20\"\nreadonly FIXTURE_ALPHA_REVIEW_DAYS=30\nreadonly FIXTURE_ALPHA_ESCALATE_DAYS=60\nreadonly FIXTURE_BETA_PHASE=\"warn\"\nreadonly FIXTURE_BETA_ARMED=\"2001-01-20\"\nreadonly FIXTURE_BETA_REVIEW_DAYS=30\nreadonly FIXTURE_BETA_ESCALATE_DAYS=60\nreadonly FIXTURE_GAMMA_PHASE=\"shadow\"\nreadonly FIXTURE_GAMMA_ARMED=\"2001-01-01\"\nreadonly FIXTURE_GAMMA_REVIEW_DAYS=30\nreadonly FIXTURE_GAMMA_ESCALATE_DAYS=45\nreadonly FIXTURE_DELTA_PHASE=\"warn\"\nreadonly FIXTURE_DELTA_ARMED=\"not a date\"\n"
+      ]
+    ],
+    "tracked:fixture-*.enforce": [
+      [
+        "fixture-alpha.enforce",
+        "# a fixture comment\nenforce\n"
+      ],
+      [
+        "fixture-beta.enforce",
+        "warn\n"
+      ],
+      [
+        "fixture-gamma.enforce",
+        "enforce\n"
+      ]
+    ]
+  },
+  "expected": "rollout FIXTURE_ALPHA: phase warn; within its window, 9 days since arming\nrollout FIXTURE_BETA: phase warn; review due, 40 days since arming\nrollout FIXTURE_DELTA: phase warn; not readable\nrollout FIXTURE_GAMMA: phase shadow; escalation overdue, 59 days since arming\nrollout FIXTURE_ROLLOUT: phase enforce; graduated\nenforce sentinels: 3\n  enforce: 2\n  warn: 1\n"
+}

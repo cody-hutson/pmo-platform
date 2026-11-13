@@ -1,0 +1,265 @@
+{
+  "synthetic": "invented values; not measured on any install",
+  "refused": [
+    {
+      "name": "plain-import",
+      "rule": "MS1",
+      "source": "import os\n\n\ndef measure(inputs, params):\n    return \"x\"\n"
+    },
+    {
+      "name": "import-outside-the-list",
+      "rule": "MS1",
+      "source": "from os import getcwd\n\n\ndef measure(inputs, params):\n    return getcwd()\n"
+    },
+    {
+      "name": "import-name-outside-the-list",
+      "rule": "MS1",
+      "source": "from collections import OrderedDict\n\n\ndef measure(inputs, params):\n    return \"x\"\n"
+    },
+    {
+      "name": "import-with-an-alias",
+      "rule": "MS1",
+      "source": "from collections import Counter as tally\n\n\ndef measure(inputs, params):\n    return \"x\"\n"
+    },
+    {
+      "name": "import-inside-a-function",
+      "rule": "MS1",
+      "source": "def measure(inputs, params):\n    from collections import Counter\n    return \"x\"\n"
+    },
+    {
+      "name": "read-of-open",
+      "rule": "MS2",
+      "source": "def measure(inputs, params):\n    return open(\"fixture\").read()\n"
+    },
+    {
+      "name": "read-of-an-import-function",
+      "rule": "MS2",
+      "source": "def measure(inputs, params):\n    return __import__(\"os\").getcwd()\n"
+    },
+    {
+      "name": "read-of-eval",
+      "rule": "MS2",
+      "source": "def measure(inputs, params):\n    return eval(\"1\")\n"
+    },
+    {
+      "name": "read-of-getattr",
+      "rule": "MS2",
+      "source": "def measure(inputs, params):\n    return getattr(inputs, \"keys\")\n"
+    },
+    {
+      "name": "underscore-name",
+      "rule": "MS2",
+      "source": "def measure(inputs, params):\n    _hidden = len(inputs)\n    return str(_hidden)\n"
+    },
+    {
+      "name": "rebound-built-in",
+      "rule": "MS2",
+      "source": "def measure(inputs, params):\n    len = sorted\n    return str(len(inputs))\n"
+    },
+    {
+      "name": "function-read-as-a-value",
+      "rule": "MS2",
+      "source": "def measure(inputs, params):\n    helper = measure\n    return \"x\"\n"
+    },
+    {
+      "name": "formatted-function",
+      "rule": "MS2",
+      "source": "def helper(value):\n    return value\n\n\ndef measure(inputs, params):\n    return f\"{helper}\"\n"
+    },
+    {
+      "name": "function-as-an-argument",
+      "rule": "MS2",
+      "source": "def helper(value):\n    return value\n\n\ndef measure(inputs, params):\n    return str(helper)\n"
+    },
+    {
+      "name": "class-definition",
+      "rule": "MS3",
+      "source": "class Holder:\n    value = 1\n\n\ndef measure(inputs, params):\n    return \"x\"\n"
+    },
+    {
+      "name": "with-statement",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    with inputs as handle:\n        return \"x\"\n"
+    },
+    {
+      "name": "while-loop",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    while inputs:\n        return \"x\"\n    return \"y\"\n"
+    },
+    {
+      "name": "lambda-outside-a-key",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    helper = lambda value: value\n    return \"x\"\n"
+    },
+    {
+      "name": "bare-except",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    try:\n        total = len(inputs)\n    except:\n        total = 0\n    return str(total)\n"
+    },
+    {
+      "name": "except-outside-the-names",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    try:\n        total = len(inputs)\n    except Exception:\n        total = 0\n    return str(total)\n"
+    },
+    {
+      "name": "decorator",
+      "rule": "MS3",
+      "source": "def wrap(function):\n    return function\n\n\n@wrap\ndef measure(inputs, params):\n    return \"x\"\n"
+    },
+    {
+      "name": "module-level-assignment",
+      "rule": "MS3",
+      "source": "TOTAL = 1\n\n\ndef measure(inputs, params):\n    return str(TOTAL)\n"
+    },
+    {
+      "name": "set-display",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    return \",\".join({\"a\", \"b\"})\n"
+    },
+    {
+      "name": "set-comprehension",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    return \",\".join({str(key) for key in inputs})\n"
+    },
+    {
+      "name": "global-statement",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    global total\n    total = 1\n    return str(total)\n"
+    },
+    {
+      "name": "delete-statement",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    total = 1\n    del total\n    return \"x\"\n"
+    },
+    {
+      "name": "yield",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    yield \"x\"\n"
+    },
+    {
+      "name": "formatted-generator",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    return f\"{(key for key in inputs)}\"\n"
+    },
+    {
+      "name": "generator-as-text",
+      "rule": "MS3",
+      "source": "def measure(inputs, params):\n    return str(key for key in inputs)\n"
+    },
+    {
+      "name": "attribute-outside-the-list",
+      "rule": "MS4",
+      "source": "def measure(inputs, params):\n    return \"x\".replace(\"x\", \"y\")\n"
+    },
+    {
+      "name": "format-method",
+      "rule": "MS4",
+      "source": "def measure(inputs, params):\n    return \"{}\".format(len(inputs))\n"
+    },
+    {
+      "name": "underscore-attribute",
+      "rule": "MS4",
+      "source": "def measure(inputs, params):\n    return str(inputs.__class__)\n"
+    },
+    {
+      "name": "key-view",
+      "rule": "MS4",
+      "source": "def measure(inputs, params):\n    return \",\".join(inputs.keys())\n"
+    },
+    {
+      "name": "formatted-method",
+      "rule": "MS4",
+      "source": "def measure(inputs, params):\n    rows = []\n    return f\"{rows.append}\"\n"
+    },
+    {
+      "name": "method-held-as-a-value",
+      "rule": "MS4",
+      "source": "def measure(inputs, params):\n    rows = []\n    add = rows.append\n    return \"x\"\n"
+    },
+    {
+      "name": "no-entry-function",
+      "rule": "MS5",
+      "source": "def other(inputs, params):\n    return \"x\"\n"
+    }
+  ],
+  "runtime": [
+    {
+      "name": "open-read",
+      "kind": "reach",
+      "control": true,
+      "source": "def measure(inputs, params):\n    return open(\"{CANARY}\").read()\n"
+    },
+    {
+      "name": "path-object",
+      "kind": "reach",
+      "control": true,
+      "source": "from pathlib import Path\n\n\ndef measure(inputs, params):\n    return Path(\"{CANARY}\").read_text()\n"
+    },
+    {
+      "name": "low-level-open",
+      "kind": "reach",
+      "control": true,
+      "source": "import os\n\n\ndef measure(inputs, params):\n    return os.read(os.open(\"{CANARY}\", 0), 64).decode()\n"
+    },
+    {
+      "name": "folder-listing",
+      "kind": "reach",
+      "control": true,
+      "source": "import os\n\n\ndef measure(inputs, params):\n    return \",\".join(sorted(os.listdir(\"{FOLDER}\")))\n"
+    },
+    {
+      "name": "child-process",
+      "kind": "reach",
+      "control": true,
+      "source": "import subprocess\n\n\ndef measure(inputs, params):\n    return subprocess.run([\"cat\", \"{CANARY}\"], capture_output=True).stdout.decode()\n"
+    },
+    {
+      "name": "shell-command",
+      "kind": "reach",
+      "control": false,
+      "source": "import os\n\n\ndef measure(inputs, params):\n    return str(os.system(\"cat {CANARY}\"))\n"
+    },
+    {
+      "name": "socket",
+      "kind": "reach",
+      "control": false,
+      "source": "import socket\n\n\ndef measure(inputs, params):\n    socket.socket()\n    return \"socket made\"\n"
+    },
+    {
+      "name": "write",
+      "kind": "reach",
+      "control": false,
+      "source": "def measure(inputs, params):\n    open(\"{FOLDER}/fixture-written.txt\", \"w\").write(\"x\")\n    return \"written\"\n"
+    },
+    {
+      "name": "read-at-load-time",
+      "kind": "reach",
+      "control": true,
+      "source": "LEAK = open(\"{CANARY}\").read()\n\n\ndef measure(inputs, params):\n    return LEAK\n"
+    },
+    {
+      "name": "refused-act-inside-a-try",
+      "kind": "swallow",
+      "control": false,
+      "source": "def measure(inputs, params):\n    try:\n        open(\"{CANARY}\").read()\n    except:\n        pass\n    return \"swallowed\"\n"
+    },
+    {
+      "name": "set-joined-unsorted",
+      "kind": "order",
+      "control": false,
+      "source": "def measure(inputs, params):\n    return \",\".join({f\"member-{a}{b}\" for a in \"abcdefgh\" for b in \"abcde\"})\n"
+    },
+    {
+      "name": "conversion-through-local-time",
+      "kind": "zone",
+      "control": false,
+      "source": "from datetime import datetime\n\n\ndef measure(inputs, params):\n    return datetime.fromtimestamp(0).isoformat()\n"
+    },
+    {
+      "name": "iterator-formatted-through-a-variable",
+      "kind": "address",
+      "control": false,
+      "source": "def measure(inputs, params):\n    pairs = zip(inputs, inputs)\n    return f\"{pairs}\"\n"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "synthetic": "invented values; not measured on any install",
+  "event_log": {
+    "text": "# An invented event log\n| timestamp | version | stage | event_type | subtype | actor | subject | reversibility | outcome | payload |\n| 2001-01-01T00:00:00Z | fixture-release-alpha | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-02T00:00:00Z | fixture-foreign-release | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-03T00:00:00Z | v1.02 | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-04T00:00:00Z | v1.03 | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-05T00:00:00Z |  | 9 | gate-outcome | go | operator | milestone:fixture-number-only | CHEAP | ok | fixture payload |\n| 2001-01-06T00:00:00Z | (none) | 6 | test-run | suite | spoke:fixture | fixture-subject | CHEAP | ok | fixture payload |\n",
+    "titles": [
+      "fixture-release-alpha",
+      "fixture-release-beta"
+    ],
+    "tags": [
+      "v1.02"
+    ],
+    "kept": 2,
+    "kept_keys": [
+      "fixture-release-alpha",
+      "v1.02"
+    ]
+  },
+  "empty_tag_set": {
+    "titles": [
+      "fixture-release-alpha"
+    ],
+    "tags": []
+  },
+  "analysis_home": {
+    "folders": {
+      "fixture-health-audit-2001-01-01": {
+        "SUMMARY.md": "---\nanalysis_type: audit\ncreated: 2001-01-01\n---\n# A fixture summary\nfixture body sentinel\n",
+        "fixture-notes.md": "fixture file that must not be opened\n"
+      },
+      "fixture-drift-watch-2001-01-02": {
+        "fixture-notes.md": "fixture file that must not be opened\n"
+      },
+      "fixture-undated-folder": {
+        "SUMMARY.md": "---\nanalysis_type: audit\n---\n"
+      }
+    },
+    "labels": [
+      "fixture-drift-watch-2001-01-02",
+      "fixture-health-audit-2001-01-01"
+    ],
+    "sentinels": [
+      "fixture body sentinel",
+      "must not be opened"
+    ]
+  },
+  "host_responses": {
+    "runs": [
+      {
+        "event": "pull_request",
+        "conclusion": "success",
+        "status": "completed",
+        "created": "2001-01-02"
+      },
+      {
+        "event": "push",
+        "conclusion": "failure",
+        "status": "completed",
+        "created": "2001-01-03"
+      }
+    ],
+    "runs_extra_key": [
+      {
+        "event": "push",
+        "conclusion": "success",
+        "status": "completed",
+        "created": "2001-01-03",
+        "fixture_extra": "a key outside the reduced form"
+      }
+    ]
+  },
+  "origins": {
+    "accepted": [
+      "https://fixture-host.example/fixture-owner/fixture-repo.git",
+      "ssh://fixture@fixture-host.example/fixture-owner/fixture-repo",
+      "fixture@fixture-host.example:fixture-owner/fixture-repo.git"
+    ],
+    "refused": [
+      "/fixture/local/path",
+      "fixture/relative/path",
+      "file:///fixture/local/path",
+      "fixture-repo",
+      "https://fixture-host.example/fixture-owner/fixture-repo/fixture-extra",
+      "https://fixture-host.example/fixture-repo",
+      "https://fixturehost/fixture-owner/fixture-repo",
+      "C:\\\\fixture\\\\path",
+      "https://fixture-user@fixture-host.example/fixture-owner/fixture-repo"
+    ]
+  }
+}

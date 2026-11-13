@@ -1,0 +1,24 @@
+{
+  "synthetic": "invented values; not measured on any install",
+  "params": {
+    "window_days": 14,
+    "slice_days": 7,
+    "by_event": "yes",
+    "today": "2001-01-14"
+  },
+  "inputs": {
+    "host-workflow-runs:fixture-probe.yml": [
+      [
+        "fixture-probe.yml",
+        "pull_request\tsuccess\tcompleted\t2001-01-02\npull_request\tfailure\tcompleted\t2001-01-03\npush\tsuccess\tcompleted\t2001-01-04\nschedule\t\tin_progress\t2001-01-05\n"
+      ]
+    ],
+    "host-workflow-runs:fixture-other.yml": [
+      [
+        "fixture-other.yml",
+        "push\tsuccess\tcompleted\t2001-01-06\npush\tcancelled\tcompleted\t2001-01-07\n"
+      ]
+    ]
+  },
+  "expected": "workflow fixture-other.yml: runs 2\n  by conclusion: cancelled 1, success 1\n  event push: runs 2; cancelled 1, success 1\nworkflow fixture-probe.yml: runs 4\n  by conclusion: failure 1, in_progress 1, success 2\n  event pull_request: runs 2; failure 1, success 1\n  event push: runs 1; success 1\n  event schedule: runs 1; in_progress 1\ntotal: runs 6 across 2 workflows; trailing window of 14 days ending 2001-01-14\n"
+}

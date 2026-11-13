@@ -23,6 +23,10 @@ USAGE (every root is an argument — see --help — and none is read from the en
     build-process-catalog.py impact (--paths P... | --diff FILE|- | --range A..B) [--json] [--record]
     build-process-catalog.py coverage
     build-process-catalog.py data-flow-unmatched --to FILE
+    build-process-catalog.py overlay --overlay-root DIR [--measure ID...] [--input NAME=PATH...]
+                                     [--host live | --host-responses DIR] [--today YYYY-MM-DD]
+    build-process-catalog.py overlay --show PAGE --overlay-root DIR
+    build-process-catalog.py overlay --list
     build-process-catalog.py --self-test
 
     build            writes the page regions the generator owns (the navigation block; the derived
@@ -42,6 +46,17 @@ USAGE (every root is an argument — see --help — and none is read from the en
     stale            lists each page's sources whose content changed since its verification commit.
     impact           the pages that depict or cite the changed paths, and the controls registered on
                      them; --record prints the one-line planning record.
+
+    overlay          runs each registered measure on the inputs it is handed and writes its report to
+                     `measures/<measure-id>.txt` under the overlay root, then `figures.json`. The
+                     root has no default and must exist; it is refused inside a linked work tree,
+                     and inside a main work tree unless git reports its files ignored. An input
+                     that is not passed is not looked for: every measure that needs it reads
+                     `not-evaluated`, which is not a zero. Exit 0 every selected measure measured,
+                     1 a measure failed, 3 none failed and one was not evaluated. `--show` prints
+                     the reports behind one page's evidence rows. `--list` prints the register and
+                     the exact reference text a page carries for each measure; it needs no root,
+                     starts nothing and prints no census. No other command reads the overlay.
 
 OUTPUT
     One census line is the last line on standard output on exit 0, 1 and 3 alike. With
@@ -71,7 +86,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 import _process_catalog as PC  # noqa: E402
 
-ROOT_NAMES = ("repo", "catalog", "definitions", "pack", "registry", "kinds")
+ROOT_NAMES = ("repo", "catalog", "definitions", "pack", "registry", "kinds", "probe_source", "measures", "measures_dir")
 REFUSALS = ("repeated", "blank-edge", "out-of-range", "not-text", "path-absent")
 NEEDS_A_PERSON = ("gone", "ambiguous", "path-missing")
 NO_PAGES = "no page is discovered: the catalog holds no page of a published universe"
@@ -603,10 +618,464 @@ def cmd_unmatched(a, roots) -> tuple:
 
 
 # ----------------------------------------------------------------------------------------------
+# overlay — the per-install figures. The one command that runs a measure, and the one command that
+# can start a program other than `git`: `--host live` starts the host client. No other command of
+# this tool reads the overlay, starts a measure or reads the host.
+#
+# Nothing is resolved from the surroundings. The overlay root is an argument with no default; an
+# input that was not passed is not looked for; a host read happens only when `--host` asks for it.
+# ----------------------------------------------------------------------------------------------
+HOST_CLIENT = "gh"
+ORIGIN_FORMS = (
+    re.compile(r"^https?://(?P<host>[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/(?P<owner>[^/\s:@]+)/(?P<name>[^/\s:@]+?)(?:\.git)?/?$"),
+    re.compile(r"^ssh://[A-Za-z0-9_-]+@(?P<host>[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/(?P<owner>[^/\s:@]+)/(?P<name>[^/\s:@]+?)(?:\.git)?/?$"),
+    re.compile(r"^[A-Za-z0-9_-]+@(?P<host>[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+):(?P<owner>[^/\s:@]+)/(?P<name>[^/\s:@]+?)(?:\.git)?/?$"),
+)
+RUN_KEYS = ("event", "conclusion", "status", "created")
+LOG_KEYS = ("created", "head", "log")
+EVENT_ROW = re.compile(r"^\| [0-9]{4}-")
+SLUG_KEY = re.compile(r"^[a-z0-9][a-z0-9.-]*[a-z0-9]$")
+LEGACY_KEY = re.compile(r"^v[0-9]")
+DATED_FOLDER = re.compile(r"-[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+SUMMARY_FILE = "SUMMARY.md"
+OVERLAY_MEASURES, OVERLAY_INDEX = "measures", "figures.json"
+
+
+class MeasureFailed(Exception):
+    """A measure that cannot be run to a report: the reason is one of PC.MEASURE_REASONS."""
+
+
+def parse_origin(address: str):
+    """(host, owner, name) of an origin address in one of three forms — a web scheme, the long
+    secure-shell form, the short secure-shell form — with a host that contains a dot, exactly two
+    path segments and no credentials. Any other shape gives None."""
+    for form in ORIGIN_FORMS:
+        m = form.match(address.strip())
+        if m:
+            return m.group("host"), m.group("owner"), m.group("name")
+    return None
+
+
+def reduced_runs(records, what: str) -> list:
+    """Run records in the reduced form: a list of objects with exactly the four keys."""
+    if not isinstance(records, list) or any(not isinstance(r, dict) or sorted(r) != sorted(RUN_KEYS) for r in records):
+        raise PC.NotEvaluated("%s is not in the reduced form: a list of objects with the keys %s and no other"
+                              % (what, ", ".join(RUN_KEYS)))
+    return records
+
+
+def runs_text(records: list) -> str:
+    rows = sorted("\t".join(str(r[k] or "") for k in RUN_KEYS) for r in records)
+    return "".join(row + "\n" for row in rows)
+
+
+class HostFiles:
+    """The host as a folder of reduced-form files: `<kind>--<argument>.json`,
+    `host-milestone-titles.json` and `host-tag-names.json`. A file that is absent, holds a key
+    outside the reduced form or carries the synthetic mark is not evaluated, naming it."""
+
+    name = "responses"
+
+    def __init__(self, folder, allow_mark: bool = False):
+        self.folder, self.allow_mark = Path(folder), allow_mark
+
+    def load(self, file_name: str):
+        what = "the host response %s" % file_name
+        text = PC.read_text_strict(self.folder / file_name, what)
+        if PC.SYNTHETIC_MARK in text and not self.allow_mark:
+            raise PC.NotEvaluated("%s carries the synthetic mark; a fixture is not an input" % what)
+        try:
+            return json.loads(text)
+        except ValueError:
+            raise PC.NotEvaluated("%s is not JSON" % what)
+
+    def runs(self, workflow: str, params: dict, today: str) -> list:
+        name = "%s--%s.json" % (PC.RUN_HISTORY_KIND, workflow)
+        return reduced_runs(self.load(name), "the host response %s" % name)
+
+    def latest_log(self, workflow: str, events: list) -> dict:
+        name = "host-latest-run-log--%s.json" % workflow
+        data = self.load(name)
+        if not isinstance(data, dict) or any(not isinstance(v, dict) or sorted(v) != sorted(LOG_KEYS) for v in data.values()):
+            raise PC.NotEvaluated("the host response %s is not in the reduced form: per event, the keys %s and no other"
+                                  % (name, ", ".join(LOG_KEYS)))
+        return data
+
+    def names(self, which: str) -> list:
+        name = "host-%s.json" % which
+        data = self.load(name)
+        if not isinstance(data, list) or any(not isinstance(x, str) for x in data):
+            raise PC.NotEvaluated("the host response %s is not a list of names" % name)
+        return data
+
+
+class HostLive:
+    """The host, read through the host client. The owner and repository come from the origin
+    address by one strict grammar and are passed to the client only; they are never printed or
+    stored. `call` is the one function that starts the client; the self-test passes a stub."""
+
+    name = "live"
+
+    def __init__(self, repo, call=None):
+        self.call = call or self.client
+        code, out = PC.git_run(repo, "remote", "get-url", "origin")
+        self.origin = parse_origin(out.decode("utf-8", "replace")) if code == 0 else None
+
+    @staticmethod
+    def client(args: list):
+        try:
+            proc = subprocess.run([HOST_CLIENT] + list(args), capture_output=True)
+        except OSError:
+            return None
+        return proc.stdout.decode("utf-8", "replace") if proc.returncode == 0 else None
+
+    def api(self, path: str, pages: bool = False):
+        if self.origin is None:
+            raise MeasureFailed("host-not-read")
+        host, owner, name = self.origin
+        out = self.call(["api", "--hostname", host] + (["--paginate"] if pages else [])
+                        + ["repos/%s/%s/%s" % (owner, name, path)])
+        if out is None:
+            raise MeasureFailed("host-not-read")
+        documents, decoder, at = [], json.JSONDecoder(), 0
+        try:
+            while at < len(out.rstrip()):
+                document, at = decoder.raw_decode(out, at + len(out[at:]) - len(out[at:].lstrip()))
+                documents.append(document)
+        except ValueError:
+            raise MeasureFailed("host-not-read")
+        if pages:
+            return documents
+        if len(documents) != 1:
+            raise MeasureFailed("host-not-read")
+        return documents[0]
+
+    def runs(self, workflow: str, params: dict, today: str) -> list:
+        """The trailing window, read in slices. The host's total for a slice is read first; rows
+        that differ from it in number fail the measure."""
+        import datetime
+        window, step = int(params.get("window_days", 0)), int(params.get("slice_days", 0))
+        if window < 1 or step < 1:
+            raise MeasureFailed("error:params")
+        end = datetime.date.fromisoformat(today)
+        first, records = end - datetime.timedelta(days=window - 1), []
+        while first <= end:
+            last = min(first + datetime.timedelta(days=step - 1), end)
+            base = "actions/workflows/%s/runs?created=%s..%s" % (workflow, first.isoformat(), last.isoformat())
+            total = self.api(base + "&per_page=1").get("total_count", 0)
+            rows = [r for page in (self.api(base + "&per_page=100", pages=True) if total else [])
+                    for r in page.get("workflow_runs", [])]
+            if len(rows) != total:
+                raise MeasureFailed("host-total-differs")
+            records += [{"event": r.get("event"), "conclusion": r.get("conclusion"), "status": r.get("status"),
+                         "created": (r.get("created_at") or "")[:10]} for r in rows]
+            first = last + datetime.timedelta(days=1)
+        return records
+
+    def latest_log(self, workflow: str, events: list) -> dict:
+        out = {}
+        for event in events:
+            found = self.api("actions/workflows/%s/runs?event=%s&per_page=1" % (workflow, event)).get("workflow_runs", [])
+            if not found:
+                continue
+            host, owner, name = self.origin
+            log = self.call(["run", "view", str(found[0].get("id")), "--repo", "%s/%s/%s" % (host, owner, name), "--log"])
+            if log is None:
+                raise MeasureFailed("host-not-read")
+            out[event] = {"created": (found[0].get("created_at") or "")[:10], "head": found[0].get("head_sha") or "", "log": log}
+        return out
+
+    def names(self, which: str) -> list:
+        path, key = {"milestone-titles": ("milestones?state=all&per_page=100", "title"),
+                     "tag-names": ("tags?per_page=100", "name")}[which]
+        return [row.get(key) or "" for page in self.api(path, pages=True) for row in page]
+
+
+def kept_event_rows(text: str, titles: list, tags: list) -> str:
+    """The event-log population rule. A row is kept when its release key is this repository's by a
+    positive check: a slug key equal to a milestone title on the host, or a legacy version key equal
+    to a tag name on the host. Every other row is excluded — a foreign slug, a row keyed by a
+    milestone number only, a placeholder, an unkeyed row — and no count of them is kept. The rule
+    holds no repository name and no date."""
+    kept = []
+    for line in text.split("\n"):
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if not EVENT_ROW.match(line) or len(cells) < 10:
+            continue
+        key = cells[1]
+        if LEGACY_KEY.match(key):
+            keep = key in tags
+        else:
+            keep = bool(key) and bool(SLUG_KEY.match(key)) and key in titles
+        if keep:
+            kept.append(line.rstrip("\r"))
+    return "".join(row + "\n" for row in kept)
+
+
+def summary_block(folder: Path) -> str:
+    """The frontmatter block of a dated folder's summary file, and nothing else under the folder."""
+    path = folder / SUMMARY_FILE
+    if not path.is_file():
+        return ""
+    lines = PC.read_text_strict(path, "a summary file of the analysis home").split("\n")
+    if not lines or lines[0].strip() != "---":
+        return ""
+    block = []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            return "".join(x + "\n" for x in block)
+        block.append(line)
+    return ""
+
+
+def passed_inputs(specs) -> dict:
+    """`--input NAME=PATH` values by name. A name outside the list is a usage error; a path that
+    was passed and cannot be read, or that carries the synthetic mark, is not evaluated."""
+    given = {}
+    for spec in specs or []:
+        name, sep, value = spec.partition("=")
+        if not sep or name not in PC.INPUT_NAMES or name in given or not value:
+            raise PC.Usage("--input takes NAME=PATH once for each of: %s" % ", ".join(sorted(PC.INPUT_NAMES)))
+        path = Path(os.path.realpath(value))
+        if name == "analysis-home":
+            if not path.is_dir():
+                raise PC.NotEvaluated("the input %s is not a folder that can be read" % name)
+        else:
+            if PC.SYNTHETIC_MARK in PC.read_text_strict(path, "the input %s" % name):
+                raise PC.NotEvaluated("the input %s carries the synthetic mark; a fixture is not an input" % name)
+        given[name] = path
+    return given
+
+
+def resolve_inputs(measure, roots, tracked, given: dict, host, today: str, cache: dict) -> dict:
+    """What one measure is handed: {register entry: [(label, text)]}. Raises MeasureFailed with the
+    reason when an input is unavailable; the measure is then not started."""
+    handed = {}
+    for kind, arg, entry in measure.inputs:
+        if kind == "tracked":
+            handed[entry] = [(rel, PC.read_text_strict(roots.repo / rel, "the tracked input %s" % rel))
+                             for rel in PC.tracked_matches(tracked, arg)]
+        elif kind in (PC.RUN_HISTORY_KIND, "host-latest-run-log"):
+            if host is None:
+                raise MeasureFailed("host-not-read")
+            if entry not in cache:
+                if kind == PC.RUN_HISTORY_KIND:
+                    cache[entry] = [(arg, runs_text(reduced_runs(host.runs(arg, measure.params, today), "a host read")))]
+                else:
+                    wanted = measure.params.get("events") or []
+                    logs = host.latest_log(arg, [wanted] if isinstance(wanted, str) else list(wanted))
+                    cache[entry] = [(event, "created %s\nhead %s\n%s" % (v["created"], v["head"], v["log"]))
+                                    for event, v in sorted(logs.items())]
+            handed[entry] = cache[entry]
+        elif kind == "event-log-rows":
+            if "event-log" not in given:
+                raise MeasureFailed("input-not-passed")
+            if host is None:
+                raise MeasureFailed("host-not-read")
+            if entry not in cache:
+                titles, tags = host.names("milestone-titles"), host.names("tag-names")
+                if not titles or not tags:
+                    raise MeasureFailed("empty-host-set")
+                cache[entry] = [("event-log", kept_event_rows(
+                    PC.read_text_strict(given["event-log"], "the input event-log"), titles, tags))]
+            handed[entry] = cache[entry]
+        elif kind == "analysis-folder-summaries":
+            if "analysis-home" not in given:
+                raise MeasureFailed("input-not-passed")
+            if entry not in cache:
+                cache[entry] = [(p.name, summary_block(p)) for p in sorted(given["analysis-home"].iterdir())
+                                if p.is_dir() and DATED_FOLDER.search(p.name)]
+            handed[entry] = cache[entry]
+    return handed
+
+
+def git_folders(folder):
+    """(git folder, common folder, top level) of the work tree a folder lies in, each resolved; or
+    None when the folder lies in no work tree."""
+    code, out = PC.git_run(folder, "rev-parse", "--git-dir", "--git-common-dir", "--show-toplevel")
+    lines = out.decode("utf-8", "replace").strip().split("\n")
+    if code != 0 or len(lines) != 3:
+        return None
+    resolve = lambda x: os.path.realpath(x if os.path.isabs(x) else os.path.join(str(folder), x))   # noqa: E731
+    return resolve(lines[0]), resolve(lines[1]), resolve(lines[2])
+
+
+def overlay_root(roots, value) -> Path:
+    """The overlay root, tested before anything is written. It has no default. It is resolved
+    first, so every test below reads the folder the files would land in and not a link to it. It
+    must exist: the command creates the measures folder and the index inside it and nothing above
+    it. It is refused when it lies inside a linked work tree of any repository; when it lies inside
+    a main work tree and git does not report as ignored both the index file and a file under the
+    measures folder; or when the command runs from a linked work tree and the root lies in that
+    repository's main work tree. A root outside every work tree is accepted."""
+    if not value:
+        raise PC.Usage("overlay needs --overlay-root DIR; the root has no default")
+    root = Path(os.path.realpath(value))
+    if not root.is_dir():
+        raise PC.NotEvaluated("the overlay root does not exist: %s (the command creates no root)" % value)
+    place = git_folders(root)
+    if place is None:
+        return root
+    git_dir, common, _top = place
+    if git_dir != common:
+        raise PC.NotEvaluated("the overlay root lies inside a linked work tree: %s (name a folder outside every "
+                              "work tree)" % value)
+    own = git_folders(roots.repo)
+    if own is not None and own[0] != own[1] and own[1] == common:
+        raise PC.NotEvaluated("this run is from a linked work tree and the overlay root lies in the main work tree: "
+                              "%s (name a folder outside every work tree)" % value)
+    for probe in (root / OVERLAY_INDEX, root / OVERLAY_MEASURES / "probe.txt"):
+        if PC.git_run(root, "check-ignore", "-q", "--", str(probe))[0] != 0:
+            raise PC.NotEvaluated("the overlay root lies inside a work tree and %s under it is not ignored: %s"
+                                  % (probe.relative_to(root).as_posix(), value))
+    return root
+
+
+def write_atomic(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_bytes(data)
+    os.replace(temporary, path)
+
+
+def run_overlay(roots, root: Path, selected, given: dict, host, today: str, synthetic: bool = False,
+                layers=None) -> tuple:
+    """Run the selected measures into the root. `synthetic` and `layers` are the self-test's seam;
+    no command-line argument reaches them. Returns (exit code, census pairs, lines)."""
+    import datetime
+    import hashlib
+    tracked = PC.Tracked(roots.repo)
+    measures = PC.load_measures(roots, tracked)
+    known = {m.id: m for m in measures}
+    for wanted in selected or []:
+        if wanted not in known:
+            raise PC.Usage("--measure names no registered measure: %s" % wanted)
+    chosen = [m for m in measures if not selected or m.id in selected]
+    digest = lambda text: hashlib.sha256(text.encode("utf-8")).hexdigest()   # noqa: E731
+    cache, index, lines, counts = {}, {}, [], {"measured": 0, "not-evaluated": 0, "failed": 0}
+    for m in chosen:
+        target = root / OVERLAY_MEASURES / (m.id + ".txt")
+        entry = {"script": m.script, "input_class": m.input_class, "status": "", "reason": None, "sha256": None,
+                 "bytes": None, "inputs": []}
+        try:
+            handed = resolve_inputs(m, roots, tracked, given, host, today, cache)
+        except MeasureFailed as e:
+            reason = str(e)
+            entry["status"] = "failed" if reason.startswith(("host-total-differs", "error")) else "not-evaluated"
+            entry["reason"] = reason
+            handed = None
+        if handed is not None:
+            entry["inputs"] = [{"kind": key, "files": len(pairs), "sha256": digest("\0".join(t for _l, t in pairs))}
+                               for key, pairs in sorted(handed.items())]
+            source = PC.read_text_strict(roots.repo / m.script_rel, "the measure file %s" % m.script_rel)
+            status, reason, report = PC.run_measure(source, m.script, handed, dict(m.params, today=today), layers=layers)
+            entry["status"], entry["reason"] = status, reason or None
+            if status == "measured":
+                if synthetic:
+                    report = PC.SYNTHETIC_MARK + "\n" + report
+                write_atomic(target, report.encode("utf-8"))
+                entry["sha256"], entry["bytes"] = digest(report), len(report.encode("utf-8"))
+        if entry["status"] != "measured" and target.is_file():
+            target.unlink()
+        counts[entry["status"]] += 1
+        index[m.id] = entry
+        lines.append("%s: %s%s" % (m.id, entry["status"], " (%s)" % entry["reason"] if entry["reason"] else ""))
+    code, head = PC.git_run(roots.repo, "rev-parse", "--short", "HEAD")
+    figures = {"schema_version": 1,
+               "generated_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+               "today": today, "head": head.decode("ascii", "replace").strip() if code == 0 else None,
+               "dirty": bool(PC.git(roots.repo, "status", "--porcelain").strip()),
+               "host": host.name if host is not None else "none", "measures": index}
+    if synthetic:
+        figures["synthetic"] = True
+    write_atomic(root / OVERLAY_INDEX, (json.dumps(figures, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+    exit_code = PC.EXIT_FINDINGS if counts["failed"] else PC.EXIT_NOT_EVALUATED if counts["not-evaluated"] \
+        else PC.EXIT_CLEAN
+    if not chosen:
+        exit_code = PC.EXIT_NOT_EVALUATED
+    pairs = [("measures", len(chosen)), ("measured", counts["measured"]), ("not_evaluated", counts["not-evaluated"]),
+             ("failed", counts["failed"])]
+    return exit_code, pairs, lines
+
+
+def evidence_rows(page: PC.Page, measures: list, pack: dict) -> list:
+    """(row number, cited measures, marker line or None) for each Evidence row that cites a
+    registered measure or carries a held marker."""
+    cols = pack["tables"].get("Evidence", [])
+    source_col = cols.index("Source") if "Source" in cols else 1
+    rows = []
+    for n, cells in enumerate(page.rows("Evidence"), start=1):
+        source = cells[source_col] if len(cells) > source_col else ""
+        cited = [m for m in measures if m.reference in source]
+        marker = next((k for k in PC.HELD_MARKERS if k in source), None)
+        if cited or marker:
+            rows.append((n, cited, PC.carry(source) if marker and not cited else None))
+    return rows
+
+
+def cmd_overlay(a, roots) -> tuple:
+    if a.list:
+        try:
+            for m in PC.load_measures(roots):
+                out("%s\t%s\t%s" % (m.id, m.input_class, m.script))
+                out("  " + m.reference)
+        except PC.NotEvaluated as e:
+            out("NOT-EVALUATED: %s" % e)
+            return PC.EXIT_NOT_EVALUATED, None, []
+        return PC.EXIT_CLEAN, None, []
+    if a.host and a.host_responses:
+        raise PC.Usage("overlay takes --host live or --host-responses DIR, not both")
+    root = overlay_root(roots, a.overlay_root)
+    if a.show:
+        cat = PC.Catalog(roots, getattr(a, "controls", None))
+        page = cat.pages[a.show] if a.show in cat.pages else select_pages(cat, [a.show])[0]
+        index_path = root / OVERLAY_INDEX
+        if not index_path.is_file():
+            raise PC.NotEvaluated("the overlay root holds no index; run `overlay` into it first")
+        try:
+            index = json.loads(PC.read_text_strict(index_path, "the overlay index"))
+        except ValueError:
+            raise PC.NotEvaluated("the overlay index is not JSON")
+        if index.get("synthetic"):
+            out(PC.SYNTHETIC_MARK)
+        counts = {"measured": 0, "not-evaluated": 0, "failed": 0}
+        shown = 0
+        for n, cited, marker in evidence_rows(page, PC.load_measures(roots, cat.tracked), cat.pack):
+            if marker is not None:
+                out("row %d: %s" % (n, marker))
+                continue
+            for m in cited:
+                entry = index.get("measures", {}).get(m.id) or {"status": "not-evaluated", "reason": "not-run"}
+                status = entry.get("status") if entry.get("status") in counts else "not-evaluated"
+                counts[status] += 1
+                shown += 1
+                out("row %d: measure %s: %s%s" % (n, m.id, status, " (%s)" % entry["reason"] if entry.get("reason") else ""))
+                report = root / OVERLAY_MEASURES / (m.id + ".txt")
+                if status == "measured" and report.is_file():
+                    for line in PC.read_text_strict(report, "a report of the overlay").rstrip("\n").split("\n"):
+                        out("    " + line)
+        code = PC.EXIT_FINDINGS if counts["failed"] else PC.EXIT_NOT_EVALUATED if counts["not-evaluated"] else PC.EXIT_CLEAN
+        return code, [("measures", shown), ("measured", counts["measured"]), ("not_evaluated", counts["not-evaluated"]),
+                      ("failed", counts["failed"])], []
+    import datetime
+    today = a.today or datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    try:
+        datetime.date.fromisoformat(today)
+    except ValueError:
+        raise PC.Usage("--today takes a date as YYYY-MM-DD")
+    given = passed_inputs(a.input)
+    host = HostLive(roots.repo) if a.host == "live" else HostFiles(a.host_responses) if a.host_responses else None
+    code, pairs, lines = run_overlay(roots, root, a.measure, given, host, today)
+    for line in lines:
+        out(line)
+    return code, pairs, []
+
+
+# ----------------------------------------------------------------------------------------------
 # The entry point
 # ----------------------------------------------------------------------------------------------
 GATES = {"build": "generated-output", "convert": "conversion", "resolve": "citations", "stale": "staleness",
-         "impact": "impact", "coverage": "coverage", "data-flow-unmatched": "coverage"}
+         "impact": "impact", "coverage": "coverage", "data-flow-unmatched": "coverage", "overlay": "overlay"}
 EMPTY = {
     "generated-output": ("universes", "pages", "generated_files", "differing", "missing", "orphans", "link_findings"),
     "conversion": ("pages", "bare", "converted", "demoted", "left", "differs"),
@@ -614,19 +1083,21 @@ EMPTY = {
     "staleness": ("pages", "sources", "depicted_changed", "cited_changed", "fail_on"),
     "impact": ("paths", "unmatched", "pages", "hit_depicts", "hit_cites", "hit_controls"),
     "coverage": ("kinds", "paths", "depicted"),
+    "overlay": ("measures", "measured", "not_evaluated", "failed"),
 }
 
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Generate the process catalog's index, graph and views; convert and "
-                                             "re-resolve source anchors; answer impact and staleness queries.")
+                                             "re-resolve source anchors; answer impact and staleness queries.",
+                                 allow_abbrev=False)
     PC.add_root_arguments(ap, ROOT_NAMES)
     ap.add_argument("--controls", metavar="PATH", help="the controls register, in place of the pack's pointer")
     ap.add_argument("--self-test", action="store_true")
     sub = ap.add_subparsers(dest="command")
 
     def command(parent, name, **kw):
-        p = parent.add_parser(name, **kw)
+        p = parent.add_parser(name, allow_abbrev=False, **kw)
         for root, _parent, _part, flag in PC.DEFAULTS:
             if root in ROOT_NAMES:
                 p.add_argument(flag, dest="root_" + root, default=argparse.SUPPRESS, metavar="PATH", help=argparse.SUPPRESS)
@@ -664,6 +1135,15 @@ def build_parser() -> argparse.ArgumentParser:
     command(sub, "coverage", help="per element kind, tracked files depicted and not")
     p = command(sub, "data-flow-unmatched", help="write the unmatched data-flow items to a file outside the catalog")
     p.add_argument("--to", required=True, metavar="FILE")
+    p = command(sub, "overlay", help="run the registered measures into a per-install overlay, show it, or list the register")
+    p.add_argument("--overlay-root", metavar="DIR", help="the folder the figures are written to; it has no default")
+    p.add_argument("--measure", action="append", metavar="ID", help="run this measure only; repeatable")
+    p.add_argument("--input", action="append", metavar="NAME=PATH", help="event-log=FILE or analysis-home=DIR")
+    p.add_argument("--host", choices=["live"], help="read this repository's records from its host")
+    p.add_argument("--host-responses", metavar="DIR", help="read the host's records from reduced-form files")
+    p.add_argument("--today", metavar="YYYY-MM-DD", help="the run date handed to each measure (default: today, UTC)")
+    p.add_argument("--show", metavar="PAGE", help="print the figures behind one page's evidence rows; writes nothing")
+    p.add_argument("--list", action="store_true", help="print the register and each measure's reference text")
     return ap
 
 
@@ -684,7 +1164,8 @@ def main(argv=None) -> int:
     gate = GATES[name]
     summary = getattr(a, "summary_file", None)
     handler = {"build": cmd_build, "convert": cmd_convert, "resolve": cmd_resolve, "stale": cmd_stale,
-               "impact": cmd_impact, "coverage": cmd_coverage, "data-flow-unmatched": cmd_unmatched}[name]
+               "impact": cmd_impact, "coverage": cmd_coverage, "data-flow-unmatched": cmd_unmatched,
+               "overlay": cmd_overlay}[name]
     empty = [(k, getattr(a, "fail_on", None) if k == "fail_on" else None) for k in EMPTY[gate]]
     body = []
     try:
@@ -764,8 +1245,8 @@ def self_test() -> int:
         code, lines = call(G + ["build"])
         arms.check("build: exit 0 on the fixture corpus", code == 0, lines[-3:])
         arms.check("build: the emitted paths equal the literal expected list", generated(fx) == EXPECTED_FILES, generated(fx))
-        arms.check("build: the census is the last line, with 1 universe, 7 pages and 10 generated files",
-                   lines[-1] == "process-catalog generated-output status=pass exit=0 universes=1 pages=7 "
+        arms.check("build: the census is the last line, with 1 universe, 8 pages and 10 generated files",
+                   lines[-1] == "process-catalog generated-output status=pass exit=0 universes=1 pages=8 "
                    "generated_files=10 differing=0 missing=0 orphans=0 link_findings=0", lines[-1:])
         for emitter in PC.EMITTERS:
             target = tmp / ("mutant-" + emitter)
@@ -1014,7 +1495,7 @@ def self_test() -> int:
                    and any(l.startswith("Covering pages not cited: fixture-activity-flow (DRAFT)") for l in lines), lines)
         code, lines, c = impact("--paths", readme, "--record")
         arms.check("impact --record: the no-page form counts pages scanned and files probed",
-                   "Current-state pages read: none — no page covers the area (7 pages scanned, 1 affected files probed)" in lines, lines)
+                   "Current-state pages read: none — no page covers the area (8 pages scanned, 1 affected files probed)" in lines, lines)
 
         # -- staleness: content, not history --
         script = fx.repo / script_src
@@ -1025,7 +1506,7 @@ def self_test() -> int:
             return code, lines, census_of(lines)
 
         code, lines, c = stale()
-        arms.check("stale: nothing changed, exit 0, every page counted", code == 0 and c.get("pages") == "7" and c.get("depicted_changed") == "0", lines)
+        arms.check("stale: nothing changed, exit 0, every page counted", code == 0 and c.get("pages") == "8" and c.get("depicted_changed") == "0", lines)
         script.write_text(script_text + "# a change after verification\n", encoding="utf-8")
         code, lines, c = stale()
         arms.check("stale: the page that depicts the changed file reads stale; pages that depict only unchanged files do not",
@@ -1049,7 +1530,7 @@ def self_test() -> int:
         arms.check("stale: a depicted file that is absent now reads stale", code == 1 and c.get("depicted_changed") == "1", lines)
         code, lines = call(G + ["build", "--check"])
         arms.check("unrelated deletion: a deleted depicted source leaves build --check at exit 0 with a non-zero census",
-                   code == 0 and census_of(lines).get("pages") == "7", lines[-1:])
+                   code == 0 and census_of(lines).get("pages") == "8", lines[-1:])
         script.write_text(script_text, encoding="utf-8")
         saved = edit("fixture-activity-plain", fx.base, "1" * 40)
         code, lines, c = stale()
@@ -1269,11 +1750,11 @@ def self_test() -> int:
             arms.check("clean checkout: after %s, exit 0 and git status prints nothing" % name, code == 0 and status == b"", (code, status))
         code, lines, _err = cli(C + ["anchors", "resolve", "--check"])
         arms.check("citations: on the fixture corpus every citation is current, and the census counts them",
-                   lines[-1] == "process-catalog citations status=pass exit=0 pages=7 citations=2 current=2 moved=0 gone=0 "
+                   lines[-1] == "process-catalog citations status=pass exit=0 pages=8 citations=2 current=2 moved=0 gone=0 "
                    "ambiguous=0 other=0 rewritten=0", lines[-1:])
         code, lines, _err = cli(C + ["stale", "--fail-on", "any"])
         arms.check("staleness: the census prints pages for the published universe, drafts included",
-                   re.match(r"^process-catalog staleness status=pass exit=0 pages=7 sources=\d+ depicted_changed=0 "
+                   re.match(r"^process-catalog staleness status=pass exit=0 pages=8 sources=\d+ depicted_changed=0 "
                             r"cited_changed=0 fail_on=any$", lines[-1]) is not None, lines[-1:])
         plain = cx.page("fixture-activity-plain")
         plain.write_text(re.sub(r"(?m)^## Sources\n(.|\n)*", "## Sources\n\n- nothing linked by line\n", plain.read_text(encoding="utf-8")),
@@ -1326,6 +1807,490 @@ def self_test() -> int:
         (cx.definitions / PC.default_part("pack")).write_text(saved, encoding="utf-8")
         arms.check("pack shape: an unknown key is exit 3 naming the key, in this tool as in every other",
                    code == 3 and "prose" in lines[0], lines)
+
+
+        # ==========================================================================================
+        # overlay, the measures and their register — on the fixture tree, with no network, no host
+        # client and no file of the surrounding repository but the tool's own siblings
+        # ==========================================================================================
+        import hashlib
+        fixtures = PC.FIXTURE_DIR
+        cases_dir = fixtures / "measure-cases"
+        planted = json.loads((fixtures / "measures" / "planted-measures.json").read_text(encoding="utf-8"))
+        honest = (fixtures / "measures" / "fixture-count-rows.py.txt").read_text(encoding="utf-8")
+        own = json.loads((cases_dir / "overlay-inputs.json").read_text(encoding="utf-8"))
+
+        # -- the measure-case arm: each real measure file, found beside this tool, on its case --
+        real_dir = HERE / Path(PC.default_part("measures_dir")).name
+        real = sorted(real_dir.glob("*.py")) if real_dir.is_dir() else []
+        arms.check("measure cases: the measures folder beside the tool holds measure files", bool(real), real_dir.name)
+        for path in real:
+            case_path = cases_dir / (path.stem + ".json")
+            if not arms.check("measure case %s: the measure file has a case" % path.stem, case_path.is_file()):
+                continue
+            case = json.loads(case_path.read_text(encoding="utf-8"))
+            source = path.read_text(encoding="utf-8")
+            arms.check("measure case %s: the file is inside the source form" % path.stem,
+                       PC.measure_source_findings(source) == [], PC.measure_source_findings(source)[:1])
+            got = [PC.run_measure(source, path.name, case["inputs"], case["params"], seed=seed) for seed in PC.CHILD_SEEDS]
+            arms.check("measure case %s: both seeds give the report the case states" % path.stem,
+                       all(g == ("measured", "", case["expected"]) for g in got), [g[:2] for g in got])
+        arms.check("measure cases: every case file but the generator's own belongs to a measure file",
+                   sorted(p.stem for p in cases_dir.glob("*.json")) == sorted([p.stem for p in real] + ["overlay-inputs"]))
+
+        # -- the source-check arm --
+        arms.check("source check: the honest fixture measure is inside the form", PC.measure_source_findings(honest) == [])
+        for item in planted["refused"]:
+            rules = [rule for _line, rule, _what in PC.measure_source_findings(item["source"])]
+            arms.check("source check: the planted %s is refused naming %s" % (item["name"], item["rule"]),
+                       item["rule"] in rules, rules)
+            status, reason, _report = PC.run_measure(item["source"], "planted.py", {}, {})
+            arms.check("source check: the child refuses the planted %s on the bytes it is handed" % item["name"],
+                       status == "failed" and reason.startswith("source-form"), (status, reason))
+
+        # -- the runtime arm, through the test seam --
+        canary_dir = tmp / "canary-folder"
+        canary_dir.mkdir()
+        canary = canary_dir / "fixture-canary.txt"
+        canary.write_text("CANARY-TEXT-OF-THE-RUNTIME-ARM", encoding="utf-8")
+        no_check, nothing = {"source_check": False}, {"source_check": False, "hook": False, "builtins": False}
+        for item in planted["runtime"]:
+            source = item["source"].replace("{CANARY}", str(canary)).replace("{FOLDER}", str(canary_dir))
+            label = "runtime: the planted %s" % item["name"]
+            if item["kind"] == "reach":
+                status, reason, report = PC.run_measure(source, "planted.py", {}, {}, layers=no_check)
+                arms.check(label + " ends as failed with no canary and no report",
+                           status == "failed" and report is None, (status, reason))
+                if item["control"]:
+                    status, reason, report = PC.run_measure(source, "planted.py", {}, {}, layers=nothing)
+                    arms.check(label + " returns the canary with every layer switched off (the control)",
+                               status == "measured" and "canary" in report.lower(), (status, reason))
+            elif item["kind"] == "swallow":
+                status, reason, report = PC.run_measure(source, "planted.py", {}, {}, layers={"source_check": False, "builtins": False})
+                arms.check(label + " ends with the refusal status and no report: no handler runs after a refusal",
+                           (status, report) == ("failed", None) and reason.startswith("outside-read:"), (status, reason))
+                status, reason, report = PC.run_measure(source, "planted.py", {}, {}, layers=nothing)
+                arms.check(label + " returns its fallback with the hook switched off (the control)", report == "swallowed", (status, reason))
+            elif item["kind"] == "order":
+                both = [PC.run_measure(source, "planted.py", {}, {}, seed=seed, layers={"source_check": False, "builtins": False})[2]
+                        for seed in PC.CHILD_SEEDS]
+                arms.check(label + " gives two different reports under the two seeds — the two-seed run can see set order",
+                           None not in both and both[0] != both[1] and sorted(both[0].split(",")) == sorted(both[1].split(","))
+                           and len(both[0].split(",")) == 40, [b and b[:30] for b in both])
+                again = PC.run_measure(source, "planted.py", {}, {}, seed=PC.CHILD_SEEDS[0], layers={"source_check": False, "builtins": False})[2]
+                arms.check(label + " gives the same report twice under one seed: the seed is fixed", again == both[0])
+            elif item["kind"] == "zone":
+                layers = {"source_check": False, "builtins": False}
+                reports = []
+                for zone in ("Asia/Tokyo", "America/Chicago"):
+                    kept = os.environ.get("TZ")
+                    os.environ["TZ"] = zone
+                    try:
+                        reports.append(PC.run_measure(source, "planted.py", {}, {}, layers=layers)[2])
+                    finally:
+                        os.environ.pop("TZ", None) if kept is None else os.environ.update(TZ=kept)
+                arms.check(label + " gives one report whatever zone this process names", reports[0] is not None and reports[0] == reports[1], reports)
+                moved = PC.run_measure(source, "planted.py", {}, {}, layers=layers, zone="Asia/Tokyo")[2]
+                arms.check(label + " gives another report when the child's own zone is changed through the seam (the control)",
+                           moved is not None and moved != reports[0], moved)
+            elif item["kind"] == "address":
+                status, reason, report = PC.run_measure(source, "planted.py", {}, {}, layers={"source_check": False, "builtins": False})
+                arms.check(label + " is refused by the report check: a report carries no object address",
+                           (status, reason, report) == ("failed", "bad-report", None), (status, reason))
+        status, _reason, report = PC.run_measure(honest, "fixture.py", {"fixture-input": [["fixture-label", "a\nb\n"]]}, {})
+        arms.check("runtime: the honest fixture measure runs under every layer and raises no refused event",
+                   (status, report) == ("measured", "fixture-label: lines 2\ntotal: lines 2\n"), (status, report))
+
+        # -- the child's search path --
+        plant_dir = tmp / "planted-modules"
+        plant_dir.mkdir()
+        for module in ("json", "collections", "re", "datetime", "types"):
+            (plant_dir / (module + ".py")).write_text('raise SystemExit("PLANTED-MODULE-LOADED")\n', encoding="utf-8")
+        status, _reason, report = PC.run_measure(honest, "fixture.py", {"fixture-input": [["fixture-label", "a\n"]]}, {},
+                                                 workdir=plant_dir)
+        arms.check("search path: a file in the child's working folder that carries a library module's name is not loaded",
+                   (status, report) == ("measured", "fixture-label: lines 1\ntotal: lines 1\n"), (status, report))
+        proc = subprocess.run([sys.executable, "-B", "-S", "-c", "import json"], capture_output=True, text=True, cwd=str(plant_dir),
+                              env={"PYTHONHASHSEED": "1", "TZ": "UTC"})
+        arms.check("search path: without the entry code's first line the same start loads the planted file (the control)",
+                   "PLANTED-MODULE-LOADED" in proc.stderr, proc.stderr[-80:])
+        beside = tmp / "beside-a-measure"
+        beside.mkdir()
+        (beside / "fixture.py").write_text(honest, encoding="utf-8")
+        (beside / "collections.py").write_text('raise SystemExit("PLANTED-MODULE-LOADED")\n', encoding="utf-8")
+        status, _reason, report = PC.run_measure((beside / "fixture.py").read_text(encoding="utf-8"), "fixture.py",
+                                                 {"fixture-input": [["fixture-label", "a\n"]]}, {})
+        arms.check("search path: a file beside a measure that carries a library module's name is not loaded",
+                   status == "measured" and "PLANTED" not in report, (status, report))
+        proc = subprocess.run([sys.executable, "-B", "-S", str(beside / "fixture.py")], capture_output=True, text=True,
+                              env={"PYTHONHASHSEED": "1", "TZ": "UTC"}, cwd=str(tmp),
+                              input="")
+        (beside / "starter.py").write_text("import collections\n", encoding="utf-8")
+        proc = subprocess.run([sys.executable, "-B", "-S", str(beside / "starter.py")], capture_output=True, text=True, cwd=str(tmp))
+        arms.check("search path: a child started from a script file in that folder does load it (the control)",
+                   "PLANTED-MODULE-LOADED" in proc.stderr, proc.stderr[-80:])
+        arms.check("child start: exactly two environment variables, the seeds are the pair, and the entry code strips the "
+                   "working-folder entry before its first import",
+                   PC.CHILD_SEEDS == ("1", "2") and PC.CHILD_BOOT.split("\n")[1].startswith("sys.path[:] =")
+                   and PC.CHILD_BOOT.split("\n")[0] == "import sys")
+
+        # -- the attribute arm, on the landed list and on this interpreter --
+        def probe_generator():
+            yield 1
+
+        async def probe_coroutine():
+            return 1
+
+        coroutine = probe_coroutine()
+        try:
+            raise ValueError("probe")
+        except ValueError as e:
+            traceback_object = e.__traceback__
+        subjects = [probe_generator, probe_generator(), coroutine, sys._getframe(), probe_generator.__code__, traceback_object,
+                    os, type, [].append, len]
+        reference = {name for subject in subjects for name in dir(subject) if not name.startswith("_")}
+        coroutine.close()
+        arms.check("attributes: no listed attribute is an attribute of a function, generator, coroutine, frame, code, "
+                   "traceback, module, type, bound-method or built-in-function object",
+                   not (set(PC.MEASURE_ATTRIBUTES) & reference), sorted(set(PC.MEASURE_ATTRIBUTES) & reference))
+        arms.check("attributes: with the text replace method added the same test fails (the control)",
+                   bool((set(PC.MEASURE_ATTRIBUTES) | {"replace"}) & reference))
+        used = {"nodes": set(), "attributes": set(), "names": set()}
+        import ast
+        import builtins
+        for source in [p.read_text(encoding="utf-8") for p in real] + [honest]:
+            for node in ast.walk(ast.parse(source)):
+                used["nodes"].add(type(node).__name__)
+                if isinstance(node, ast.Attribute):
+                    used["attributes"].add(node.attr)
+                if isinstance(node, ast.Name) and hasattr(builtins, node.id):
+                    used["names"].add(node.id)
+        imported = {n for names in PC.MEASURE_IMPORTS.values() for n in names}
+        arms.check("lists: each of the four lists holds only what a landed measure or the fixture measure uses",
+                   set(PC.MEASURE_NODES) == used["nodes"] and set(PC.MEASURE_ATTRIBUTES) == used["attributes"]
+                   and set(PC.MEASURE_BUILTINS) == used["names"] - imported,
+                   [sorted(set(PC.MEASURE_NODES) ^ used["nodes"]), sorted(set(PC.MEASURE_ATTRIBUTES) ^ used["attributes"]),
+                    sorted(set(PC.MEASURE_BUILTINS) ^ (used["names"] - imported))])
+
+        # -- the synthetic-values arm: the twenty fixture files of the evidence rules --
+        twenty = sorted(cases_dir.glob("*.json")) + [fixtures / PC.default_part("measures")] \
+            + sorted((fixtures / "measures").glob("*")) + sorted((fixtures / "workflows").glob("*.txt")) \
+            + [fixtures / "pages" / "pass" / "fixture-activity-measured.md.txt"] \
+            + sorted((fixtures / "pages" / "fail").glob("fail-evidence-*.md.txt"))
+        arms.check("synthetic values: the arm reads twenty fixture files", len(twenty) == 20, len(twenty))
+        row_ids = set()
+        for name in ("controls-register.tsv", "controls-register-fail.tsv"):
+            row_ids |= {line.split("\t")[0] for line in (fixtures / name).read_text(encoding="utf-8").split("\n")[1:] if line}
+
+        def synthetic_findings(text):
+            """The digit rule, by length. Set aside first, each with its own bound: a row ID one of the
+            fixture registers holds; a section number of at most two digits a part; the fractional part
+            of a timestamp when it is zeros only; a legacy version key of one or two digits a side.
+            A failing page's expect line is the harness's own and is set aside whole when it holds
+            rule codes and nothing else."""
+            text = re.sub(r"<!-- expect: (?:(?:warn:)?[A-Z]{2,3}[0-9]{3}(?:, )?)+ -->", " ", text)
+            for row_id in sorted(row_ids, key=len, reverse=True):
+                text = text.replace(row_id, " ")
+            text = re.sub(r"§ [0-9]{1,2}(?:\.[0-9]{1,2})*(?![0-9.])", " ", text)
+            text = re.sub(r"(?<=:[0-9]{2})\.0+(?=Z)", " ", text)
+            text = re.sub(r"(?<![A-Za-z0-9.])v[0-9]{1,2}\.[0-9]{1,2}(?![0-9.])", " ", text)
+            found = [m.group(0) for m in re.finditer(r"[0-9]+", text)
+                     if len(m.group(0)) > len(str(PC.SYNTHETIC_MAX)) and m.group(0) != str(PC.SYNTHETIC_YEAR)]
+            found += [m.group(0) for m in re.finditer(r"[0-9][,.][0-9]", text)]
+            found += [m.group(0) for m in re.finditer(r"\b[0-9a-f]{40}\b", text) if not re.match(r"^[a-f]{40}$", m.group(0))]
+            return found
+
+        for path in twenty:
+            text = path.read_text(encoding="utf-8")
+            arms.check("synthetic values: %s holds no figure outside the rule" % path.name, synthetic_findings(text) == [],
+                       synthetic_findings(text)[:3])
+            if path.suffix == ".json":
+                arms.check("synthetic values: %s opens with the mark" % path.name,
+                           next(iter(json.loads(text).items())) == ("synthetic", PC.SYNTHETIC_MARK))
+        names = []
+        for path in sorted(cases_dir.glob("*.json")):
+            case = json.loads(path.read_text(encoding="utf-8"))
+            for entry in case.get("inputs", {}):
+                names += [entry.split(":", 1)[1]] if ":" in entry else []
+        names += own["event_log"]["titles"] + list(own["analysis_home"]["folders"]) \
+            + [t for t in own["event_log"]["tags"] if not re.match(r"^v[0-9]{1,2}\.[0-9]{1,2}$", t)]
+        register_rows = [line.split("\t") for line in (fixtures / PC.default_part("measures")).read_text(encoding="utf-8").split("\n")[1:] if line]
+        names += [cells[0] for cells in register_rows] + [cells[1] for cells in register_rows]
+        arms.check("synthetic values: every workflow, measure, title, folder and tracked name in the fixtures begins `fixture-`",
+                   bool(names) and all(n.startswith("fixture-") for n in names), [n for n in names if not n.startswith("fixture-")])
+        control = "a count of 4107, the year 2002, the grouped figure 12,34, the fraction 1.5 and the run 012"
+        arms.check("synthetic values: a planted copy is refused naming a four-digit count, a later year, a grouped figure, "
+                   "a decimal fraction and a three-digit run", sorted(synthetic_findings(control)) == ["012", "1.5", "2,3", "2002", "4107"],
+                   synthetic_findings(control))
+        arms.check("synthetic values: the set-aside kinds are bounded — a four-digit section number, a row ID no register "
+                   "holds, a version key with a third digit and a fraction that is not zeros are all read",
+                   len(synthetic_findings("§ 1234 and C-777 and v1.234 and 00:00:01.250Z")) >= 4,
+                   synthetic_findings("§ 1234 and C-777 and v1.234 and 00:00:01.250Z"))
+        arms.check("synthetic values: the allowed forms read clean (the near-miss)",
+                   synthetic_findings("§ 13.4, %s, 2001-01-01T00:00:01.0000000Z, v1.02, Check 63, %s"
+                                      % (sorted(row_ids)[0], "ab" * 20)) == [])
+
+        # -- the measures register: every load rule --
+        ofx = PC.build_fixture_repo(tmp / "overlay-repo")
+        O = roots_of(ofx) + ["--probe-source", ofx.layout["probe_source"], "--measures-dir", str(ofx.measures_dir)]
+        register = ofx.definitions / PC.default_part("measures")
+        register_text = register.read_text(encoding="utf-8")
+        o_roots = PC.resolve_roots(build_parser().parse_args(O + ["overlay", "--list"]))
+        arms.check("register: the fixture register loads, three rows, classes derived", [m.input_class for m in PC.load_measures(o_roots)]
+                   == ["git", "repo-working-state", "host-api"])
+        breaches = [
+            ("MR1 a header that differs", lambda t: t.replace("params", "args", 1), "header"),
+            ("MR1 a row with a missing cell", lambda t: t.replace("\tgit\t\t", "\tgit\t", 1), "cells"),
+            ("MR1 no row", lambda t: t.split("\n")[0] + "\n", "no row"),
+            ("MR2 an ID with a digit", lambda t: t.replace("fixture-git-rows", "fixture-git-rows2", 1), "measure_id"),
+            ("MR2 rows that do not ascend", lambda t: t.replace("fixture-git-rows", "fixture-zebra-rows", 1), "measure_id"),
+            ("MR3 a script that is not a tracked file of the folder", lambda t: t.replace("fixture-count-rows.py", "fixture-absent.py", 1), "script"),
+            ("MR4 an input kind outside the table", lambda t: t.replace("event-log-rows", "warn-log-rows", 1), "inputs"),
+            ("MR4 a repeated input", lambda t: t.replace("event-log-rows", "event-log-rows;event-log-rows", 1), "inputs"),
+            ("MR4 a pattern that climbs out", lambda t: t.replace("tracked:core/", "tracked:../core/", 1), "inputs"),
+            ("MR4 a pattern that matches no tracked file", lambda t: t.replace("fixture-rules.md.txt", "fixture-absent.md.txt", 1), "inputs"),
+            ("MR4 a workflow that is not tracked", lambda t: t.replace("fixture-probe.yml", "fixture-absent.yml", 1), "inputs"),
+            ("MR5 a class that the inputs do not derive", lambda t: t.replace("\trepo-working-state\t", "\tgit\t", 1), "input_class"),
+            ("MR6 a parameter that is no pair", lambda t: t.replace("window_days=14", "window_days", 1), "params"),
+            ("MR6 a value that is neither an integer nor tokens", lambda t: t.replace("window_days=14", "window_days=1.5", 1), "params"),
+            ("MR7 a digit in the population", lambda t: t.replace("every line of", "every 12 lines of", 1), "population"),
+            ("MR7 a number word in the population", lambda t: t.replace("every line of", "every dozen lines of", 1), "population"),
+        ]
+        for label, change, needle in breaches:
+            register.write_text(change(register_text), encoding="utf-8")
+            arms.raises("register: %s stops the load, naming it" % label, lambda: PC.load_measures(o_roots), needle)
+        register.write_text(register_text, encoding="utf-8")
+        script = ofx.measures_dir / "fixture-count-rows.py"
+        script.write_text(honest.replace("\n\ndef measure", "\nimport os\n\n\ndef measure", 1), encoding="utf-8")
+        arms.raises("register: MR8 a measure file outside the source form stops the load, naming the rule",
+                    lambda: PC.load_measures(o_roots), "MS1")
+        code, lines = call(O + ["overlay", "--list"])
+        arms.check("register: `overlay --list` runs the source rule too — exit 3, and no census",
+                   code == 3 and not any(l.startswith("process-catalog ") for l in lines), lines)
+        script.write_text(honest, encoding="utf-8")
+        link = ofx.repo / ofx.layout["sources"] / "fixture-link.md.txt"
+        os.symlink("fixture-rules.md.txt", link)
+        PC.commit_all(ofx.repo, "a tracked symbolic link")
+        register.write_text(register_text.replace("sources/fixture-rules.md.txt", "sources/fixture-*.md.txt", 1), encoding="utf-8")
+        arms.raises("register: a tracked symbolic link that a pattern matches stops the load, naming the path",
+                    lambda: PC.load_measures(PC.resolve_roots(build_parser().parse_args(O + ["overlay", "--list"]))), "fixture-link.md.txt")
+        PC.test_git(ofx.repo, "rm", "-q", "--", str(link.relative_to(ofx.repo)))
+        register.write_text(register_text, encoding="utf-8")
+        PC.commit_all(ofx.repo, "the link removed")
+        code, lines = call(O + ["overlay", "--list"])
+        arms.check("list: the register and each measure's exact reference text, no census, no root needed",
+                   code == 0 and len(lines) == 6 and not any(l.startswith("process-catalog ") for l in lines)
+                   and lines[1] == "  " + PC.load_measures(o_roots)[0].reference, lines)
+
+        # -- host forms, the population rule and the generator's own cases --
+        arms.check("origin: each accepted shape gives a repository and each refused shape gives none",
+                   all(parse_origin(x) for x in own["origins"]["accepted"]) and not any(parse_origin(x) for x in own["origins"]["refused"]),
+                   [x for x in own["origins"]["accepted"] if not parse_origin(x)] + [x for x in own["origins"]["refused"] if parse_origin(x)])
+        kept = kept_event_rows(own["event_log"]["text"], own["event_log"]["titles"], own["event_log"]["tags"])
+        arms.check("population: a host-keyed slug row and a tagged legacy row are kept; a foreign slug, an untagged legacy "
+                   "row, a row keyed by a milestone number only and a placeholder row are not",
+                   [l.split("|")[2].strip() for l in kept.strip().split("\n")] == own["event_log"]["kept_keys"], kept)
+        host_dir = tmp / "host-files"
+        host_dir.mkdir()
+
+        def host_file(name, value):
+            (host_dir / name).write_text(json.dumps(value), encoding="utf-8")
+
+        host_file("host-workflow-runs--fixture-probe.yml.json", own["host_responses"]["runs"])
+        host_file("host-milestone-titles.json", own["event_log"]["titles"])
+        host_file("host-tag-names.json", own["event_log"]["tags"])
+        event_log = tmp / "fixture-event-log.md"
+        event_log.write_text(own["event_log"]["text"], encoding="utf-8")
+        home = tmp / "fixture-analysis-home"
+        for folder_name, files in own["analysis_home"]["folders"].items():
+            for file_name, body in files.items():
+                PC.write_text(home / folder_name / file_name, body)
+        handed = resolve_inputs(type("M", (), {"inputs": [("analysis-folder-summaries", "", "analysis-folder-summaries")], "params": {}})(),
+                                o_roots, PC.Tracked(ofx.repo), {"analysis-home": home}, None, "2001-01-14", {})
+        pairs = handed["analysis-folder-summaries"]
+        arms.check("analysis home: each dated folder gives its name and its summary's frontmatter block; no other file "
+                   "and no undated folder is read", [label for label, _t in pairs] == own["analysis_home"]["labels"]
+                   and not any(s in text for _l, text in pairs for s in own["analysis_home"]["sentinels"])
+                   and "analysis_type: audit" in dict(pairs)["fixture-health-audit-2001-01-01"], pairs)
+
+        # -- the overlay root --
+        (ofx.repo / ".gitignore").write_text("/local-state/process-catalog/*\n", encoding="utf-8")
+        PC.commit_all(ofx.repo, "the tracked ignore rule")
+        governed = ofx.repo / "local-state" / "process-catalog"
+        governed.mkdir(parents=True)
+        outside = tmp / "outside-root"
+        outside.mkdir()
+        full = ["--input", "event-log=%s" % event_log, "--host-responses", str(host_dir), "--today", "2001-01-14"]
+        code, lines = call(O + ["overlay"] + full)
+        arms.check("root: no --overlay-root is a usage exit with no census", code == 2 and not lines, (code, lines))
+        code, lines = call(O + ["overlay", "--overlay-root", str(tmp / "no-such-root")] + full)
+        arms.check("root: a root that does not exist is refused and not created",
+                   code == 3 and not (tmp / "no-such-root").exists() and lines[-1].startswith("process-catalog overlay status=not-evaluated exit=3"), lines)
+        plain_root = ofx.repo / "plain-root"
+        plain_root.mkdir()
+        code, lines = call(O + ["overlay", "--overlay-root", str(plain_root)] + full)
+        arms.check("root: a root inside the main work tree that git does not report ignored is refused, nothing written",
+                   code == 3 and not list(plain_root.iterdir()) and any("not ignored" in l for l in lines), lines)
+        half = ofx.repo / "half-root"
+        half.mkdir()
+        (ofx.repo / ".git" / "info" / "exclude").write_text("/half-root/figures.json\n", encoding="utf-8")
+        code, lines = call(O + ["overlay", "--overlay-root", str(half)] + full)
+        arms.check("root: a root whose index file is ignored and whose measures folder is not is refused",
+                   code == 3 and any("measures/probe.txt" in l for l in lines), lines)
+        code, lines = call(O + ["overlay", "--overlay-root", str(governed)] + full)
+        arms.check("root: the governed folder of the main work tree is written, exit 0, with the census as the last line",
+                   code == 0 and lines[-1] == "process-catalog overlay status=pass exit=0 measures=3 measured=3 not_evaluated=0 failed=0", lines)
+        ignored = PC.git_run(ofx.repo, "check-ignore", "-v", "--", str(governed / "figures.json"))
+        arms.check("root: git reports a written figure file ignored, by the tracked rule",
+                   ignored[0] == 0 and b"/local-state/process-catalog/*" in ignored[1]
+                   and PC.git_run(ofx.repo, "check-ignore", "-q", "--", str(ofx.catalog / "x.md"))[0] == 1, ignored)
+        linked_tree = tmp / "linked-tree"
+        PC.test_git(ofx.repo, "worktree", "add", "-q", "--detach", str(linked_tree))
+        inside = linked_tree / "local-state" / "process-catalog"
+        inside.mkdir(parents=True)
+        code, lines = call(O + ["overlay", "--overlay-root", str(inside)] + full)
+        arms.check("root: a root inside a linked work tree is refused, though the tracked rule ignores it there too",
+                   code == 3 and not list(inside.iterdir()) and any("linked work tree" in l for l in lines), lines)
+        L = ["--repo", str(linked_tree), "--catalog-root", str(linked_tree / ofx.layout["catalog"]), "--definitions",
+             str(linked_tree / ofx.layout["definitions"]), "--probe-source", ofx.layout["probe_source"], "--measures-dir",
+             str(linked_tree / ofx.layout["measures_dir"])]
+        before = sorted(p.name for p in governed.rglob("*"))
+        code, lines = call(L + ["overlay", "--overlay-root", str(governed)] + full)
+        arms.check("root: a run from a linked work tree is refused the main work tree's folder",
+                   code == 3 and any("linked work tree" in l for l in lines) and sorted(p.name for p in governed.rglob("*")) == before, lines)
+        code, lines = call(L + ["overlay", "--overlay-root", str(outside)] + full)
+        arms.check("root: a run from a linked work tree writes a root outside every work tree", code == 0, lines)
+        link_root = tmp / "link-to-plain-root"
+        os.symlink(str(plain_root), str(link_root))
+        code, lines = call(O + ["overlay", "--overlay-root", str(link_root)] + full)
+        arms.check("root: a link is resolved before it is tested — a link to a refused folder is refused", code == 3, lines)
+
+        # -- runs: determinism, statuses, exits --
+        second = tmp / "second-root"
+        second.mkdir()
+        code, lines = call(O + ["overlay", "--overlay-root", str(second)] + full)
+        arms.check("runs: two runs over the same inputs give byte-identical report files",
+                   tree(outside / OVERLAY_MEASURES) == tree(second / OVERLAY_MEASURES) and len(tree(second / OVERLAY_MEASURES)) == 3,
+                   sorted(tree(second / OVERLAY_MEASURES)))
+        figures = json.loads((second / OVERLAY_INDEX).read_text(encoding="utf-8"))
+        arms.check("runs: the index names each measure with its status, digests and input digests, and no synthetic flag",
+                   figures["schema_version"] == 1 and figures["host"] == "responses" and "synthetic" not in figures
+                   and all(v["status"] == "measured" and len(v["sha256"]) == 64 and v["inputs"] for v in figures["measures"].values()),
+                   sorted(figures))
+        everything = b"".join(tree(second).values()) + "\n".join(lines).encode("utf-8")
+        arms.check("runs: no output byte carries the temporary folder's path, and no owner or repository name is stored",
+                   str(tmp).encode("utf-8") not in everything and tmp.name.encode("utf-8") not in everything,
+                   [l for l in everything.decode("utf-8", "replace").split("\n") if tmp.name in l][:3])
+        state_report = (second / OVERLAY_MEASURES / "fixture-state-rows.txt").read_text(encoding="utf-8")
+        arms.check("runs: the working-state measure was handed the kept rows only", state_report == "event-log: lines 2\ntotal: lines 2\n",
+                   state_report)
+        code, lines = call(O + ["overlay", "--overlay-root", str(second), "--host-responses", str(host_dir), "--today", "2001-01-14"])
+        arms.check("runs: an input that is not passed is not looked for — its measure is not evaluated, its earlier report "
+                   "is removed, the others are written, exit 3",
+                   code == 3 and "fixture-state-rows: not-evaluated (input-not-passed)" in lines
+                   and not (second / OVERLAY_MEASURES / "fixture-state-rows.txt").exists()
+                   and (second / OVERLAY_MEASURES / "fixture-git-rows.txt").is_file()
+                   and lines[-1].endswith("measures=3 measured=2 not_evaluated=1 failed=0"), lines)
+        code, lines = call(O + ["overlay", "--overlay-root", str(second), "--today", "2001-01-14", "--input", "event-log=%s" % event_log])
+        arms.check("runs: with no host named, every host input and the event log are not evaluated — never read from a default",
+                   code == 3 and lines[-1].endswith("measures=3 measured=1 not_evaluated=2 failed=0"), lines)
+        code, lines = call(O + ["overlay", "--overlay-root", str(second), "--input", "event-log=%s" % (tmp / "absent.md")] + full[2:])
+        arms.check("runs: an input that was passed and cannot be read is exit 3 naming the input",
+                   code == 3 and any("the input event-log" in l for l in lines), lines)
+        code, lines = call(O + ["overlay", "--overlay-root", str(second), "--input", "warn-log=%s" % event_log] + full[2:])
+        arms.check("runs: an input name outside the list is a usage exit", code == 2 and not lines, (code, lines))
+        case_as_input = cases_dir / "event-log-population.json"
+        code, lines = call(O + ["overlay", "--overlay-root", str(second), "--input", "event-log=%s" % case_as_input] + full[2:])
+        arms.check("runs: a case file passed as an input is refused by its mark, exit 3 naming the input",
+                   code == 3 and any("synthetic mark" in l and "event-log" in l for l in lines), lines)
+        host_file("host-workflow-runs--fixture-probe.yml.json", own["host_responses"]["runs_extra_key"])
+        code, lines = call(O + ["overlay", "--overlay-root", str(second)] + full)
+        arms.check("runs: a host response with a key outside the reduced form is exit 3 naming the file",
+                   code == 3 and any("reduced form" in l and "fixture-probe.yml" in l for l in lines), lines)
+        host_file("host-workflow-runs--fixture-probe.yml.json", own["host_responses"]["runs"])
+        host_file("host-tag-names.json", own["empty_tag_set"]["tags"])
+        code, lines = call(O + ["overlay", "--overlay-root", str(second)] + full)
+        arms.check("runs: an empty tag set makes the event-log input not evaluated — never an empty or partial count",
+                   code == 3 and "fixture-state-rows: not-evaluated (empty-host-set)" in lines, lines)
+        host_file("host-tag-names.json", own["event_log"]["tags"])
+        script.write_text('def measure(inputs, params):\n    return open("%s").read()\n' % canary, encoding="utf-8")
+        code, lines = call(O + ["overlay", "--overlay-root", str(second)] + full)
+        arms.check("runs: a registered measure outside the source form stops the whole command as not evaluated", code == 3, lines)
+        script.write_text(honest, encoding="utf-8")
+        roots_second = PC.resolve_roots(build_parser().parse_args(O + ["overlay", "--overlay-root", str(second)]))
+
+        class StubLive(HostLive):
+            def __init__(self, short):
+                self.origin, self.short = ("fixture-host.example", "fixture-owner", "fixture-repo"), short
+                self.call = self.stub
+
+            def stub(self, args):
+                path = args[-1]
+                if "per_page=1" in path and "--paginate" not in args:
+                    return json.dumps({"total_count": 2})
+                rows = [{"event": "push", "conclusion": "success", "status": "completed", "created_at": "2001-01-02T00:00:00Z"}]
+                return json.dumps({"total_count": 2, "workflow_runs": rows * (1 if self.short else 2)})
+
+        for short, want in ((True, "failed (host-total-differs)"), (False, "measured")):
+            code, _pairs, lines = run_overlay(roots_second, second, ["fixture-workflow-runs"], {}, StubLive(short), "2001-01-14")
+            arms.check("host: through a stub reader, a slice whose rows %s its total is %s"
+                       % ("differ from" if short else "equal", want.split(" ")[0]),
+                       lines == ["fixture-workflow-runs: " + want] and code == (1 if short else 0), lines)
+        arms.check("host: an origin that is no host address gives no repository, and every host input is not evaluated",
+                   HostLive(ofx.repo).origin is None
+                   and run_overlay(roots_second, second, ["fixture-workflow-runs"], {}, HostLive(ofx.repo), "2001-01-14")[2]
+                   == ["fixture-workflow-runs: not-evaluated (host-not-read)"])
+
+        # -- the synthetic seam, --show, and the decoy install --
+        seam = tmp / "seam-root"
+        seam.mkdir()
+        code, _pairs, lines = run_overlay(roots_second, seam, None, {"event-log": event_log}, HostFiles(host_dir), "2001-01-14",
+                                          synthetic=True)
+        seam_index = json.loads((seam / OVERLAY_INDEX).read_text(encoding="utf-8"))
+        arms.check("seam: an overlay built from fixtures says so — the index flag, and the mark as each report's first line",
+                   code == 0 and seam_index.get("synthetic") is True
+                   and all(p.read_text(encoding="utf-8").split("\n")[0] == PC.SYNTHETIC_MARK for p in (seam / OVERLAY_MEASURES).glob("*.txt")))
+        code, lines = call(O + ["overlay", "--show", "fixture-activity-measured", "--overlay-root", str(seam)])
+        arms.check("show: one block for each measure a row cites, a marker row as its marker line, the mark first, the "
+                   "census last, nothing written",
+                   code == 0 and lines[0] == PC.SYNTHETIC_MARK
+                   and sum(1 for l in lines if l.startswith("row ") and ": measure fixture-" in l) == 4
+                   and sum(1 for l in lines if l.startswith("row ") and ("held local —" in l or "no measure —" in l)) == 2
+                   and lines[-1].startswith("process-catalog overlay status=pass exit=0 measures=4 measured=4"), lines)
+        code, lines = call(O + ["overlay", "--show", "fixture-activity-measured", "--overlay-root", str(tmp / "canary-folder")])
+        arms.check("show: an overlay root with no index is not evaluated", code == 3, lines)
+        decoy = tmp / "decoy-install"
+        sentinel = "DECOY-SENTINEL-OF-THE-CLEAN-ROOM"
+        for rel in ("workspace/fixture-event-log.md", "workspace/fixture-warn-log.jsonl", "container/fixture-event-log.md",
+                    "container/results/fixture-event-log.md", "workspace/fixture-health-audit-2001-01-01/SUMMARY.md"):
+            PC.write_text(decoy / rel, "| 2001-01-01T00:00:00Z | fixture-release-alpha | %s |\n" % sentinel)
+        clean_room = tmp / "clean-room-root"
+        clean_room.mkdir()
+        env = dict(os.environ, HOME=str(decoy), CLAUDE_WORKSPACE_ROOT=str(decoy / "workspace"), PMO_INSTANCE_PATH=str(decoy / "container"),
+                   PMO_EVALS_RESULTS_PATH=str(decoy / "container" / "results"), XDG_DATA_HOME=str(decoy / "share"))
+        code, lines, _err = cli(O + ["overlay", "--overlay-root", str(clean_room), "--host-responses", str(host_dir), "--today", "2001-01-14"], env=env)
+        produced = b"".join(tree(clean_room).values()) + "\n".join(lines).encode("utf-8")
+        arms.check("decoy install: with a decoy home, container and logs named through the environment and no --input, the "
+                   "working-state measure is not evaluated and the sentinel is in no output byte",
+                   code == 3 and "fixture-state-rows: not-evaluated (input-not-passed)" in lines and sentinel.encode("utf-8") not in produced, lines)
+        code, lines, _err = cli(O + ["overlay", "--overlay-root", str(clean_room), "--host-responses", str(host_dir), "--today", "2001-01-14",
+                                    "--input", "event-log=%s" % (decoy / "container" / "results" / "fixture-event-log.md")], env=env)
+        arms.check("decoy install: the same log passed by name is read (the control — the arm can fail)",
+                   "fixture-state-rows: measured" in lines, lines)
+
+        # -- no other command reads the overlay --
+        bfx = PC.build_fixture_repo(tmp / "build-repo")
+        B = roots_of(bfx)
+        first_out, second_out = tmp / "build-without", tmp / "build-with"
+        call(B + ["build", "--out", str(first_out)])
+        (bfx.repo / ".gitignore").write_text("/local-state/process-catalog/*\n", encoding="utf-8")
+        populated = bfx.repo / "local-state" / "process-catalog"
+        populated.mkdir(parents=True)
+        code, lines = call(B + ["--probe-source", bfx.layout["probe_source"], "--measures-dir", str(bfx.measures_dir), "overlay",
+                                "--overlay-root", str(populated)] + full)
+        call(B + ["build", "--out", str(second_out)])
+        arms.check("build: its output is byte-identical with and without a populated overlay",
+                   code == 0 and (populated / OVERLAY_INDEX).is_file() and tree(first_out) == tree(second_out) and bool(tree(first_out)), lines)
 
         # -- relocation: the tool and its siblings outside any repository, every root an argument --
         moved_tools = PC.relocate_tools(tmp / "outside" / "a" / "b" / "c" / "tools")
