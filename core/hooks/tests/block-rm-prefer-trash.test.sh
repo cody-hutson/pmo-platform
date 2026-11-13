@@ -1681,7 +1681,10 @@ test_case "HDATA-RX-PEXP3: the operator inside a parameter expansion, blank befo
 
 HD_ENCL_A=$'gh pr create --title t --body "$(cat <<\'EOF\'\nsay "hi\nrm -rf /tmp/hd-ea\nEOF\n)"'
 HD_ENCL_B=$'gh pr create --title t --body $(cat <<\'EOF\'\nnote)\nrm -rf /tmp/hd-eb\nEOF\n)'
-HD_ENCL_C=$'( cat <<\'EOF\'\nrm -rf /tmp/hd-ec\nEOF\n)'
+# ENCL-C ends its subshell on a line that carries a command: a ")" alone on a line after the
+# subshell's text reads as an empty parenthesis pair, a second decline (toward today's verdict)
+# that would hold the sentinel through the ENCL mutant and hide whether the enclosure decline is live.
+HD_ENCL_C=$'( cat <<\'EOF\'\nrm -rf /tmp/hd-ec\nEOF\necho done)'
 test_case "HDATA-ENCL-A: a data body inside a double-quoted substitution stays judged" \
   "$(bash_payload "$HD_ENCL_A")" 2 "BLOCK-TRASH-001"
 test_case "HDATA-ENCL-B: a data body inside an unquoted substitution, a body line with an unbalanced ), stays judged" \

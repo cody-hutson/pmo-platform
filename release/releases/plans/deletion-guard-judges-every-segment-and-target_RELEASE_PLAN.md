@@ -479,6 +479,7 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 | DEV-7 | 6 (Commit 0) | The size line carries 12 raw / 14 effective; the Stage-4 plan's "#8123 stays S" is superseded | Collective Review Q4 |
 | DEV-8 | 6 (Commit 0) | The D-Deferred residual is worded by its mechanism — a body written to any file or named pipe, whatever reads it and whenever — rather than by segment order | A6.5 FM-7, folded as a Tier-1 adjustment |
 | DEV-9 | 6 (#7644 RED) | CIAC-1's named refuse→allow rows gain HDATA-CAP-IN: the budget arm that grounds the 20 000-character cap is a top-level `cat` body, the same class as HDATA-AC1-A, read at the cap | DEV-4; the budget arms |
+| DEV-10 | 6 (#7644 fix) | HDATA-ENCL-C's payload now ends its subshell on a line carrying a command. With a `)` alone on the closing line, a second decline (an empty parenthesis pair, read as a function definition — toward today's verdict) held the sentinel through the enclosure mutant, so HDATA-MUT-ENCL-C could not show the enclosure decline live. HDATA-ENCL-C stays refused on both hooks | the first GREEN run (296/297, HDATA-MUT-ENCL-C) |
 
 ---
 
@@ -497,3 +498,12 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 - **Arms:** 70 new HDATA arms in `core/hooks/tests/block-rm-prefer-trash.test.sh`, the prediction written before the run (29 red: the 9 AC1 arms, HDATA-CWD, HDATA-PY-ODD, HDATA-PIN-DEFERRED, HDATA-CAP-IN, HDATA-GIT-A to -C, and the 13 mutant pairs, whose marked lines do not exist yet).
 - **Run:** the deletion-hook suite alone through the suite runner under the CI layout, with the sandbox hook replaced by the base's (SHA-256 prefix `1336b7ae8af48ccb`): `Total: 297  PASS: 268  FAIL: 29` — exactly the predicted 29, and the 227 existing arms all pass.
 - **Rule IDs on the base hook**, read from the sandbox block log by each payload's input digest: the AC1 arms refuse under `-001` (A, B, D, F, G, H, I), `-002` (C) and `-003` (J), one or more per rule that refuses today; HDATA-CWD under `-001`; every control under its expected rule; the twins and HDATA-PY-EVEN leave no row.
+
+### #7644 fix — Stage 6 B1 / C4
+
+- **Change:** the quoted here-document pre-pass and the S1 seam in `core/hooks/block-rm-prefer-trash.sh` (the two digests read the command as submitted; three comments reconciled); the fragment paragraph; the registry regenerated (`build-hook-registry.py --check` → in sync).
+- **The four suites that read this hook, on the final text,** each alone through the suite runner under the CI layout (sandbox hook SHA-256 prefix `72623a826e551775`, equal to the committed file): `block-rm-prefer-trash.test.sh` 297/297, `command-position-fp-control.test.sh` 198/198, `ghsa-g9g6-primitive-fail-closed.test.sh` 45/45, `hook-fail-closed.test.sh` 75/75 — **615/615**, FAIL=0, against the floor 545 plus the 70 new arms.
+- **The final arms on the base hook** (the RED run repeated after the one payload change below): 30 red — the predicted 29 and HDATA-COST. The timed arm compares a refusal with an allow on the base hook, so its ratio there is not a cost of the pre-pass; it is read on the fixed head, where both commands are allowed, and it passed there in both runs.
+- **Cascade sweep** (the Stage-5 design's four UPDATE rows, exact-phrase counts over the hook and the fragment): pre 1 / post 0 on each of "takes the raw command, as a failed", "deliberately keep the RAW", "The extractor reads the raw command" and "Command-position model (runs first)".
+- **shellcheck:** no new finding in the hook or the suite against the base.
+- **Integration with #8122 (INT-1, INT-2):** predicted, not measured — graded on the composed head after #8122's fix commit (A6.5 FM-2).

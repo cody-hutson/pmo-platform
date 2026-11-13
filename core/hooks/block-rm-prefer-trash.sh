@@ -226,6 +226,172 @@ fi
 COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 [ -z "$COMMAND" ] && exit 0
 
+# --- QUOTED HERE-DOCUMENT DATA (#7644) ---
+# A here-document whose delimiter is quoted ('D', "D", \D) has a body the shell never expands
+# or runs: it is data for the command that receives it. HEREDOC_DATA_AWK removes such a body,
+# and its delimiter line, from the text every rule below reads — only when the operator sits at
+# the top level of the command, the receiver is on the data-receiver list, and nothing on the
+# command can route the body to a program that runs it. It runs before the canonicalizer and
+# before every other reader; only the two digests read COMMAND_RAW, because they identify the
+# call as submitted.
+#   Receivers (the first word of the simple command holding the operator, bare or under the
+#   canonical bin prefixes; no wrapper, no assignment, no redirection first): cat; git whose next
+#   word is commit or tag, after at most one -C <dir> pair (never -c); gh whose next word is
+#   issue, pr, release or api; python3 with zero or more single-letter flags from -[BEIOSbdqsuv]
+#   and then the operand "-".
+#   Declined (the whole command keeps its raw text): an unquoted delimiter; an operator inside a
+#   command substitution, a backtick or a subshell — bash 3.2 ends a body inside an unquoted
+#   substitution at an unbalanced ")" and runs the lines after it, so only a top-level body is
+#   read as data; a pipe, process substitution, backtick or arithmetic (including $[ ]); a
+#   function definition (blanks or not between the parentheses) or the words function, alias,
+#   hash, enable, coproc, or a PATH assignment — an enumeration, not a closed class; a << inside
+#   a parameter expansion; an unterminated body; a continuation or open quote at a pending body;
+#   more than 8 bodies or 500 lines; a scanned line over 4096 characters, or more than 20 000
+#   scanned characters outside bodies.
+#   Fail direction, in two halves. Every decline prints RAW, so the hook judges the command
+#   byte-for-byte as before. Every admission rests on the pre-pass ending a top-level body where
+#   the executing shell ends it: at the first line equal to the delimiter (after tab-stripping
+#   for <<-), the rule bash, zsh and dash share for a top-level here-document.
+# shellcheck disable=SC2016  # awk program — single quotes intentional
+readonly HEREDOC_DATA_AWK='
+  BEGIN { SQ = sprintf("%c", 39); BS = "\\" }
+  function wordch(c) { return (c ~ /^[A-Za-z0-9_.-]$/) }
+  function ap(s) { if (length(cur[d]) < 512) cur[d] = cur[d] s }
+  function recv_ok(text,   k, w, j, cw) {
+    k = split(text, w, /[ \t\n]+/)
+    j = 1; while (j <= k && w[j] == "") j++
+    if (j > k) return 0  # M-HD-RECV
+    cw = w[j]
+    if (cw ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) return 0
+    if (cw ~ /^[0-9]*[<>&]/) return 0
+    if (cw ~ /\//) {
+      if (cw !~ /^\/((usr\/(local\/)?|opt\/(homebrew|local)\/)?)bin\/[^\/]+$/) return 0
+      sub(/^.*\//, "", cw)
+    }
+    if (cw == "git") {
+      j++; if (w[j] == "-C") j += 2
+      return (j <= k && (w[j] == "commit" || w[j] == "tag"))
+    }
+    if (cw == "gh") return (w[j + 1] == "issue" || w[j + 1] == "pr" || w[j + 1] == "release" || w[j + 1] == "api")
+    if (cw == "cat") return 1
+    if (cw == "python3") {
+      j++; while (j <= k && w[j] ~ /^-[BEIOSbdqsuv]+$/) j++
+      return (j <= k && w[j] == "-")
+    }
+    return 0
+  }
+  { L[NR] = $0 }
+  END {
+    n = NR; d = 0; bd = 0; qs = 0; cur[0] = ""; nq = 0; total = 0; bail = 0; risky = 0; work = 0
+    if (n > 500) bail = 1
+    i = 1
+    while (!bail && i <= n) {
+      line = L[i]; ln = length(line); p = 1; cont = 0
+      if (ln > 4096) { bail = 1; break }
+      if (line ~ /(^|[^A-Za-z0-9_])(function|alias|hash|enable|coproc)([^A-Za-z0-9_]|$)/ || line ~ /(^|[^A-Za-z0-9_])PATH[+]?=/) risky = 1
+      while (p <= ln) {
+        if (++work > 20000) { bail = 1; break }
+        c = substr(line, p, 1)
+        if (qs == 1) { if (c == SQ) qs = 0; ap(c); p++; continue }
+        if (qs == 3) {
+          if (c == BS) { ap(substr(line, p, 2)); p += 2; continue }
+          if (c == SQ) qs = 0
+          ap(c); p++; continue
+        }
+        if (qs == 2) {
+          if (c == BS) { ap(substr(line, p, 2)); p += 2; continue }
+          if (c == "\"") { qs = 0; ap(c); p++; continue }
+          if (c == "`") risky = 1
+          if (c == "$" && substr(line, p + 1, 1) == "(") {
+            if (substr(line, p + 2, 1) == "(") risky = 1
+            d++; fk[d] = "S"; fq[d] = 2; cur[d] = ""; qs = 0; p += 2; continue
+          }
+          ap(c); p++; continue
+        }
+        if (c == BS) { if (p == ln) cont = 1; ap(substr(line, p, 2)); p += 2; continue }
+        if (c == "#" && (p == 1 || substr(line, p - 1, 1) ~ /[ \t;&|()]/)) break
+        if (c == SQ) { qs = (p > 1 && substr(line, p - 1, 1) == "$") ? 3 : 1; ap(c); p++; continue }
+        if (c == "\"") { qs = 2; ap(c); p++; continue }
+        if (c == "`") { risky = 1; ap(c); p++; continue }
+        if (c == "$" && substr(line, p + 1, 1) == "{") { bd++; ap("${"); p += 2; continue }
+        if (c == "$" && substr(line, p + 1, 1) == "[") risky = 1
+        if (bd > 0 && c == "{") { bd++; ap(c); p++; continue }
+        if (bd > 0 && c == "}") { bd--; ap(c); p++; continue }
+        if (c == "$" && substr(line, p + 1, 1) == "(") {
+          if (substr(line, p + 2, 1) == "(") risky = 1
+          d++; fk[d] = "S"; fq[d] = 0; cur[d] = ""; p += 2; continue
+        }
+        if ((c == "<" || c == ">") && substr(line, p + 1, 1) == "(") { risky = 1; ap(c); p++; continue }
+        if (c == "(") {
+          if (substr(line, p + 1, 1) == "(" || substr(line, p + 1, 1) == ")") risky = 1
+          d++; fk[d] = "P"; fq[d] = 0; cur[d] = ""; p++; continue
+        }
+        if (c == ")") { if (nq > 0) { bail = 1; break } if (d > 0) { if (fk[d] == "P" && cur[d] ~ /^[ \t]*$/) risky = 1; d--; qs = fq[d + 1]; ap("_") } p++; continue }
+        if (c == "|") {
+          if (substr(line, p + 1, 1) == "|") { cur[d] = ""; p += 2; continue }
+          risky = 1; cur[d] = ""; p++; continue
+        }
+        if (c == "&" && (substr(line, p - 1, 1) ~ /[<>]/ || substr(line, p + 1, 1) == ">")) { ap(c); p++; continue }
+        if (c == ";" || c == "&") { cur[d] = ""; p++; continue }
+        if (c == "<" && substr(line, p + 1, 1) == "<") {
+          if (substr(line, p + 2, 1) == "<") { ap("<<<"); p += 3; continue }
+          if (bd > 0) { bail = 1; break }
+          head = cur[d]; p += 2; strip = 0; quoted = 0; delim = ""
+          if (substr(line, p, 1) == "-") { strip = 1; p++ }
+          while (p <= ln && substr(line, p, 1) ~ /[ \t]/) p++
+          c = substr(line, p, 1)
+          if (c == SQ || c == "\"") {
+            quoted = 1; e = index(substr(line, p + 1), c)
+            if (e == 0) { bail = 1; break }
+            delim = substr(line, p + 1, e - 1); p += e + 1
+          } else {
+            if (c == BS) { quoted = 1; p++ }
+            while (p <= ln && wordch(substr(line, p, 1))) { delim = delim substr(line, p, 1); p++ }
+          }
+          if (delim !~ /^[A-Za-z0-9_.-]+$/) { bail = 1; break }
+          if (p <= ln && substr(line, p, 1) !~ /[ \t;&|()<>]/) { bail = 1; break }
+          if (!quoted) { bail = 1; break }  # M-HD-QUOTED
+          if (d != 0) { bail = 1; break }  # M-HD-ENCL
+          if (!recv_ok(head)) { bail = 1; break }
+          if (++total > 8) { bail = 1; break }
+          nq++; qd[nq] = delim; qt[nq] = strip
+          ap("<<D ")
+          continue
+        }
+        ap(c); p++
+      }
+      if (bail) break
+      i++
+      if (qs != 0) { if (nq > 0) { bail = 1; break } ap("\n"); continue }
+      if (cont) { if (nq > 0) { bail = 1; break } continue }
+      cur[d] = ""
+      for (k = 1; k <= nq; k++) {
+        found = 0
+        while (i <= n) {
+          t = L[i]; ex[i] = 1; i++
+          if (qt[k]) sub(/^\t+/, "", t)
+          if (t == qd[k]) { found = 1; break }
+        }
+        if (!found) { bail = 1; break }
+      }
+      nq = 0
+    }
+    if (bail || total == 0 || nq > 0 || risky || d != 0 || bd != 0 || qs != 0) { print "RAW"; exit }  # M-HD-RISKY
+    out = ""; sep = ""
+    for (j = 1; j <= n; j++) { if (j in ex) continue; out = out sep L[j]; sep = "\n" }
+    print "EXCISED"; printf "%s", out
+  }
+'
+readonly COMMAND_RAW="$COMMAND"
+case "$COMMAND" in
+  *'<<'*)
+    _hd_out="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk "$HEREDOC_DATA_AWK" 2>/dev/null)" || _hd_out=""
+    case "$_hd_out" in
+      EXCISED$'\n'?*) COMMAND="${_hd_out#EXCISED$'\n'}" ;;
+    esac
+    ;;
+esac
+
 # --- CANONICALIZE COMMAND POSITIONS (see CMDPOS_AWK above) ---
 # Verify the primitive actually WORKS before trusting its output. A present-but-empty,
 # truncated or corrupt awk would emit an empty string, and every matcher below would then
@@ -277,8 +443,8 @@ fi
 # Both views come from ONE run of the canonicalizer (#8314, DT pass 7): its both view emits
 # the exit view and then the default output, each ended by a NUL byte and each as a command
 # substitution would capture it, so the hook pays for one run, not two, and reads each with
-# one read. A read that meets the end of the output first takes the raw command, as a failed
-# run did; the exit view is emitted before the default walk runs, so a run that fails there
+# one read. A read that meets the end of the output first takes the command as judged (after the
+# here-document pre-pass), as a failed run did; the exit view is emitted before the default walk runs, so a run that fails there
 # still leaves it.
 {
   IFS= read -r -d '' COMMAND_CMDPOS_EXIT || COMMAND_CMDPOS_EXIT="$COMMAND"
@@ -294,7 +460,7 @@ log_block() {
   local ts
   ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   local input_digest
-  input_digest="$("$PRINTF" '%s' "$COMMAND" | "$SHASUM" -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16)"
+  input_digest="$("$PRINTF" '%s' "$COMMAND_RAW" | "$SHASUM" -a 256 | "$GREP" -oE '^[a-f0-9]+' | /usr/bin/head -c 16)"
   # shellcheck disable=SC2016  # jq filter — single quotes intentional
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
@@ -320,8 +486,10 @@ block_cwd_unknown() {
 
 # Pattern match against the canonicalized command. Rule patterns are unchanged; only the
 # text they read is, so a verb at any genuine command start is now anchored. Direct
-# "$COMMAND" readers below (the osascript POSIX-file extractor) deliberately keep the RAW
-# command — they parse quoted argument text, which canonicalization is not for.
+# "$COMMAND" readers below (the osascript POSIX-file extractor) deliberately read the command's
+# own quoting, not the canonical form — they parse quoted argument text, which canonicalization
+# is not for. "$COMMAND" is the command as judged: the raw text with any quoted here-document
+# data body removed (see QUOTED HERE-DOCUMENT DATA).
 matches() {
   local pattern="$1"
   "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
@@ -529,7 +697,7 @@ memory_arm_verdict() {
 record_memory_admissions() {
   local ts digest i=0
   ts="$("$DATE" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-  digest="$("$PRINTF" '%s' "$COMMAND" | "$SHASUM" -a 256 2>/dev/null)" || return 1
+  digest="$("$PRINTF" '%s' "$COMMAND_RAW" | "$SHASUM" -a 256 2>/dev/null)" || return 1
   digest="${digest%% *}"
   digest="${digest:0:16}"
   [ "${#digest}" = 16 ] || return 1
@@ -991,7 +1159,7 @@ if matches "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)'; then
   if matches 'delete[[:space:]]+POSIX[[:space:]]+file' || matches 'move[[:space:]]+.*[[:space:]]+to[[:space:]]+trash'; then
     # Extract POSIX file paths from the AppleScript source.
     # Pattern: delete POSIX file "/abs/path"
-    # The extractor reads the raw command and carries no segment number, so a relative path
+    # The extractor reads the command as judged (raw quoting, data bodies removed) and carries no segment number, so a relative path
     # is judged from every directory any change on the line can lead to.
     ensure_cwd_table
     while IFS= read -r osa_path; do
