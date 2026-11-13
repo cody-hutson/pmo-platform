@@ -1,0 +1,3 @@
+# A fixture script: the catalog self-tests read it as data and never run it.
+read_input() { cat "$1"; }
+write_output() { printf '%s\n' "$1" > "$2"; }

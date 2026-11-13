@@ -1,0 +1,80 @@
+---
+title: Fixture definitions pack
+purpose: A catalog self-test fixture; it defines nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+---
+# Fixture definitions pack
+
+Every value here is invented. The two marked tables mirror the fixture pack's two lists.
+
+## Harness features
+
+<!-- harness-features:begin -->
+| Feature | Portability class | Description |
+|---|---|---|
+| `file-tools` | portable | An invented fixture feature |
+| `shell-tools` | portable | An invented fixture feature |
+| `sub-agents` | portable | An invented fixture feature |
+<!-- harness-features:end -->
+A step that uses no harness feature writes `none` in its Harness cell. `none` is not a feature: it is not in `harness_features`, and it never stands as a row of the table above.
+
+## Rules and their owners
+
+<!-- rule-codes:begin -->
+| Code | Rule | Owner |
+|---|---|---|
+| `ANC001` | an invented fixture rule | this fixture |
+| `ANC002` | an invented fixture rule | this fixture |
+| `ANC003` | an invented fixture rule | this fixture |
+| `ANC004` | an invented fixture rule | this fixture |
+| `ANC005` | an invented fixture rule | this fixture |
+| `CTL001` | an invented fixture rule | this fixture |
+| `CTL002` | an invented fixture rule | this fixture |
+| `CTL003` | an invented fixture rule | this fixture |
+| `CTL004` | an invented fixture rule | this fixture |
+| `CTL005` | an invented fixture rule | this fixture |
+| `EVD001` | an invented fixture rule | this fixture |
+| `FM001` | an invented fixture rule | this fixture |
+| `FM002` | an invented fixture rule | this fixture |
+| `FM003` | an invented fixture rule | this fixture |
+| `FM004` | an invented fixture rule | this fixture |
+| `FM005` | an invented fixture rule | this fixture |
+| `FM006` | an invented fixture rule | this fixture |
+| `FM007` | an invented fixture rule | this fixture |
+| `FM008` | an invented fixture rule | this fixture |
+| `FM009` | an invented fixture rule | this fixture |
+| `FM010` | an invented fixture rule | this fixture |
+| `FM011` | an invented fixture rule | this fixture |
+| `FM012` | an invented fixture rule | this fixture |
+| `LNK001` | an invented fixture rule | this fixture |
+| `LNK002` | an invented fixture rule | this fixture |
+| `MMD001` | an invented fixture rule | this fixture |
+| `MMD002` | an invented fixture rule | this fixture |
+| `MMD003` | an invented fixture rule | this fixture |
+| `MMD004` | an invented fixture rule | this fixture |
+| `NAV001` | an invented fixture rule | this fixture |
+| `PAG001` | an invented fixture rule | this fixture |
+| `PAG002` | an invented fixture rule | this fixture |
+| `PAG003` | an invented fixture rule | this fixture |
+| `PCK001` | an invented fixture rule | this fixture |
+| `PCK002` | an invented fixture rule | this fixture |
+| `REF001` | an invented fixture rule | this fixture |
+| `REG001` | an invented fixture rule | this fixture |
+| `REG002` | an invented fixture rule | this fixture |
+| `REG003` | an invented fixture rule | this fixture |
+| `SEC001` | an invented fixture rule | this fixture |
+| `SRC001` | an invented fixture rule | this fixture |
+| `SRC002` | an invented fixture rule | this fixture |
+| `SRC003` | an invented fixture rule | this fixture |
+| `STP001` | an invented fixture rule | this fixture |
+| `SUM001` | an invented fixture rule | this fixture |
+| `TAB001` | an invented fixture rule | this fixture |
+| `TAB002` | an invented fixture rule | this fixture |
+| `TAB003` | an invented fixture rule | this fixture |
+| `TOK001` | an invented fixture rule | this fixture |
+| `TRM001` | an invented fixture rule | this fixture |
+| `VOC001` | an invented fixture rule | this fixture |
+| `VOC002` | an invented fixture rule | this fixture |
+<!-- rule-codes:end -->

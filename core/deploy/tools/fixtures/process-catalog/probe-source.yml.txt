@@ -1,0 +1,10 @@
+# A fixture probe source: an invented word list written in the form the pattern arm reads.
+name: Fixture probe source
+on: workflow_dispatch
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          WORDS='(^|[[:space:]])(zorblat|quindle|vexmoor)_[a-z]+_[a-z_]+'
+          echo "$WORDS" > /dev/null

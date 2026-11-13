@@ -1,0 +1,88 @@
+---
+title: Fail fixture
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: agent-process
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fail-flow-keyword
+level: L3
+universe: fixture-landscape
+parent: fixture-process
+actors: [spoke, script:fixture-script]
+owner: hub
+lens_status: conformant
+last_verified_commit: 0000000000000000000000000000000000000000
+pack_version: 2
+---
+# Fail fixture
+
+## Summary
+
+A fixture page for the catalog self-tests. It describes nothing real.
+
+## ICOM
+
+| Inputs | Controls | Outputs | Mechanisms |
+|---|---|---|---|
+| fixture input record | C-001 | fixture output record | script:fixture-script |
+
+## Flow
+
+```mermaid
+sequenceDiagram
+    a ->> b: not a flowchart
+```
+
+```mermaid
+flowchart TD
+    start[Begin] --> end[Finish]
+    n1[Node 1] --> n2[Node 2]
+    n2[Node 2] --> n3[Node 3]
+    n3[Node 3] --> n4[Node 4]
+    n4[Node 4] --> n5[Node 5]
+    n5[Node 5] --> n6[Node 6]
+    n6[Node 6] --> n7[Node 7]
+    n7[Node 7] --> n8[Node 8]
+    n8[Node 8] --> n9[Node 9]
+    n9[Node 9] --> n10[Node 10]
+    n10[Node 10] --> n11[Node 11]
+    n11[Node 11] --> n12[Node 12]
+    n12[Node 12] --> n13[Node 13]
+    n13[Node 13] --> n14[Node 14]
+    n14[Node 14] --> n15[Node 15]
+    n15[Node 15] --> n16[Node 16]
+    n16[Node 16] --> n17[Node 17]
+```
+
+## Steps
+
+| Step | Action | Actor | Inputs → outputs (shape) | Controls | Mechanism | Harness | Model need | Source |
+|---|---|---|---|---|---|---|---|---|
+| read-input | Read the input file | spoke | file path → parsed record | C-001: prose-only | script:fixture-script | file-tools | XS/none/read/scriptable/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+| judge-input | Judge whether the record is usable | spoke | parsed record → fixture verdict | — | none | none | S/medium/read/judgment/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+
+## Row tally
+
+| Field | Value |
+|---|---|
+| Deterministic steps | 1 |
+| Judgment steps | 1 |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the two steps | [SOURCE] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
+
+<!-- expect: MMD002, MMD003, MMD004 -->

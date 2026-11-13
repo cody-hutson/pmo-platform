@@ -1,0 +1,67 @@
+---
+title: Fixture stream
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: agent-process
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fixture-stream
+level: L1
+universe: fixture-landscape
+parent: fixture-landscape
+actors: [spoke, script:fixture-script]
+owner: hub
+lens_status: deviates
+last_verified_commit: 0000000000000000000000000000000000000000
+pack_version: 2
+triggered_by: [event:fixture-event, external:fixture-system]
+---
+# Fixture stream
+
+## Summary
+
+A fixture value stream. It describes nothing real.
+
+## SIPOC
+
+| Suppliers | Inputs | High-level steps | Outputs | Customers |
+|---|---|---|---|---|
+| fixture supplier | fixture input record | read, then judge | fixture output record | fixture customer |
+
+## Flow
+
+```mermaid
+flowchart TD
+    s1[Read input] --> s2[Check input]
+    s2 --> g1{Valid?}
+    g1 -->|yes| s3[/Write output/]
+    g1 -->|no| s1
+```
+
+## Sub-processes
+
+| Sub-process | Entry | Exit | Page |
+|---|---|---|---|
+| Fixture process | a fixture input arrives | a fixture verdict is written | fixture-process |
+
+## Controls
+
+| Control | Source | Enforcement class | Surface | Applies to |
+|---|---|---|---|---|
+| C-001 input before output | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | prose-only | — | fixture-process |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the steps | [SOURCE] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)

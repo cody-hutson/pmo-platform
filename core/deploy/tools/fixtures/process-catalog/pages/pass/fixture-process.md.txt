@@ -1,0 +1,74 @@
+---
+title: Fixture process
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: agent-process
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fixture-process
+level: L2
+universe: fixture-landscape
+parent: fixture-stream
+actors: [spoke, script:fixture-script]
+owner: hub
+lens_status: conformant
+last_verified_commit: 0000000000000000000000000000000000000000
+pack_version: 2
+precedes: [fixture-process-later]
+triggered_by: [schedule:fixture-daily]
+documented_by: [core/deploy/tools/fixtures/process-catalog/sources/fixture-script.sh.txt]
+---
+# Fixture process
+
+## Summary
+
+A fixture sub-process. A Quorum gate is an invented term, explained on this line as the [Quorum gate](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) of the fixture rules.
+
+## Entry and exit
+
+| Side | Criteria | Source |
+|---|---|---|
+| Entry | a fixture input record exists | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+| Exit | a fixture verdict is written | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+
+## Flow
+
+```mermaid
+flowchart TD
+    s1[Read input] --> s2[Check input]
+    s2 --> g1{Valid?}
+    g1 -->|yes| s3[/Write output/]
+    g1 -->|no| s1
+```
+
+## Activities
+
+| Activity | Primary actor | Purpose | Page |
+|---|---|---|---|
+| Fixture activity | spoke | read and judge one record | fixture-activity-plain |
+
+## Controls
+
+| Control | Source | Enforcement class | Surface | Applies to |
+|---|---|---|---|---|
+| C-001 input before output | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | prose-only | — | fixture-activity-plain |
+| C-002 no copy into the note store | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | code-enforce (a fixture note) | — | fixture-activity-plain |
+| an unregistered fixture rule | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | prose-only | — | fixture-activity-plain |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the steps | [SOURCE] |
+| executed | [fixture script](/core/deploy/tools/fixtures/process-catalog/sources/fixture-script.sh.txt) | The fixture script holds both functions | [SOURCE] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
+- [fixture script](/core/deploy/tools/fixtures/process-catalog/sources/fixture-script.sh.txt)

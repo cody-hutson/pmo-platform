@@ -1,0 +1,68 @@
+---
+title: Fixture activity with pipes in code spans
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: agent-process
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt, core/deploy/tools/fixtures/process-catalog/sources/fixture-script.sh.txt]
+id: fixture-activity-spans
+level: L3
+universe: fixture-landscape
+parent: fixture-process
+actors: [spoke, script:fixture-script]
+owner: hub
+lens_status: unobserved
+last_verified_commit: 0000000000000000000000000000000000000000
+pack_version: 2
+---
+# Fixture activity with pipes in code spans
+
+## Summary
+
+A fixture page for the catalog self-tests. It describes nothing real.
+
+## ICOM
+
+| Inputs | Controls | Outputs | Mechanisms |
+|---|---|---|---|
+| fixture input record | C-001 | fixture output record | script:fixture-script |
+
+## Flow
+
+```mermaid
+flowchart TD
+    s1[Read input] --> s2[Check input]
+    s2 --> g1{Valid?}
+    g1 -->|yes| s3[/Write output/]
+    g1 -->|no| s1
+```
+
+## Steps
+
+| Step | Action | Actor | Inputs → outputs (shape) | Controls | Mechanism | Harness | Model need | Source |
+|---|---|---|---|---|---|---|---|---|
+| read-input | Read with `cat input \| sort` | spoke | file path → parsed record; `status: ready` to `status: read` | C-001: prose-only | script:fixture-script | file-tools, shell-tools | XS/none/read/scriptable/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+| write-output | Write the ``a \| b`` table | script:fixture-script | parsed record → fixture output record | C-002: code-enforce | script:fixture-script | `shell-tools` | XS/none/write/scriptable/batch | [fixture script](/core/deploy/tools/fixtures/process-catalog/sources/fixture-script.sh.txt) |
+
+## Row tally
+
+| Field | Value |
+|---|---|
+| Deterministic steps | 2 |
+| Judgment steps | 0 |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the two steps | [SOURCE] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
