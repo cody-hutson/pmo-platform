@@ -1838,6 +1838,10 @@ def self_test() -> int:
             got = [PC.run_measure(source, path.name, case["inputs"], case["params"], seed=seed) for seed in PC.CHILD_SEEDS]
             arms.check("measure case %s: both seeds give the report the case states" % path.stem,
                        all(g == ("measured", "", case["expected"]) for g in got), [g[:2] for g in got])
+            for n, more in enumerate(case.get("also", []), start=2):
+                got = [PC.run_measure(source, path.name, case["inputs"], more["params"], seed=seed) for seed in PC.CHILD_SEEDS]
+                arms.check("measure case %s, parameter set %d: both seeds give the report the case states" % (path.stem, n),
+                           all(g == ("measured", "", more["expected"]) for g in got), [g[:2] for g in got])
         arms.check("measure cases: every case file but the generator's own belongs to a measure file",
                    sorted(p.stem for p in cases_dir.glob("*.json")) == sorted([p.stem for p in real] + ["overlay-inputs"]))
 
@@ -1864,6 +1868,9 @@ def self_test() -> int:
                 status, reason, report = PC.run_measure(source, "planted.py", {}, {}, layers=no_check)
                 arms.check(label + " ends as failed with no canary and no report",
                            status == "failed" and report is None, (status, reason))
+                status, reason, report = PC.run_measure(source, "planted.py", {}, {}, layers={"source_check": False, "builtins": False})
+                arms.check(label + " is ended by the hook alone, with the source check and the built-in table switched off",
+                           status == "failed" and report is None and reason.startswith("outside-read:"), (status, reason))
                 if item["control"]:
                     status, reason, report = PC.run_measure(source, "planted.py", {}, {}, layers=nothing)
                     arms.check(label + " returns the canary with every layer switched off (the control)",
@@ -1932,10 +1939,28 @@ def self_test() -> int:
         proc = subprocess.run([sys.executable, "-B", "-S", str(beside / "starter.py")], capture_output=True, text=True, cwd=str(tmp))
         arms.check("search path: a child started from a script file in that folder does load it (the control)",
                    "PLANTED-MODULE-LOADED" in proc.stderr, proc.stderr[-80:])
-        arms.check("child start: exactly two environment variables, the seeds are the pair, and the entry code strips the "
-                   "working-folder entry before its first import",
-                   PC.CHILD_SEEDS == ("1", "2") and PC.CHILD_BOOT.split("\n")[1].startswith("sys.path[:] =")
-                   and PC.CHILD_BOOT.split("\n")[0] == "import sys")
+        observe = ("import os\nimport sys\n\n\ndef measure(inputs, params):\n"
+                   "    here = os.path.realpath(os.getcwd())\n"
+                   "    return \"|\".join([\",\".join(sorted(os.environ)), os.environ.get(\"PYTHONHASHSEED\", \"\"), os.environ.get(\"TZ\", \"\"),\n"
+                   "                     str(len(os.listdir(\".\"))), str(\"\" in sys.path or here in [os.path.realpath(p) for p in sys.path]),\n"
+                   "                     str(%r in [os.path.realpath(p) for p in sys.path]), str(sys.flags.dont_write_bytecode),\n"
+                   "                     str(sys.flags.no_user_site), str(sys.flags.isolated)])\n" % os.path.realpath(str(HERE)))
+        os.environ["FIXTURE_PARENT_VARIABLE"] = "set in the generator's own environment"
+        try:
+            seen = [PC.run_measure(observe, "observe.py", {}, {}, seed=seed, layers=nothing)[2] for seed in PC.CHILD_SEEDS]
+        finally:
+            os.environ.pop("FIXTURE_PARENT_VARIABLE", None)
+        # The generator passes two variables. An interpreter may add its own locale variable when it
+        # starts, and one operating system adds a text-encoding variable; neither comes from the caller.
+        own_names = {"LC_CTYPE", "__CF_USER_TEXT_ENCODING"}
+        names = [set(x.split("|")[0].split(",")) for x in seen if x]
+        arms.check("child start, observed from inside the child: the two variables the generator passes and no variable of "
+                   "the generator's own environment",
+                   len(names) == 2 and all({"PYTHONHASHSEED", "TZ"} <= n <= {"PYTHONHASHSEED", "TZ"} | own_names for n in names), seen)
+        arms.check("child start, observed from inside the child: the seed it was given and the zone UTC; an empty working "
+                   "folder; neither that folder nor the tools folder on the search path; no bytecode writing, no user "
+                   "site folder, and not isolated mode",
+                   [x.split("|", 1)[1] for x in seen if x] == ["%s|UTC|0|False|False|1|1|0" % seed for seed in PC.CHILD_SEEDS], seen)
 
         # -- the attribute arm, on the landed list and on this interpreter --
         def probe_generator():
@@ -1991,7 +2016,7 @@ def self_test() -> int:
             of a timestamp when it is zeros only; a legacy version key of one or two digits a side.
             A failing page's expect line is the harness's own and is set aside whole when it holds
             rule codes and nothing else."""
-            text = re.sub(r"<!-- expect: (?:(?:warn:)?[A-Z]{2,3}[0-9]{3}(?:, )?)+ -->", " ", text)
+            text = re.sub(r"<!-- expect: (?:(?:warn:)?[A-Z]{2,3}[0-9]{3}(?:, )?)+ --!?>", " ", text)
             for row_id in sorted(row_ids, key=len, reverse=True):
                 text = text.replace(row_id, " ")
             text = re.sub(r"§ [0-9]{1,2}(?:\.[0-9]{1,2})*(?![0-9.])", " ", text)
@@ -2067,6 +2092,11 @@ def self_test() -> int:
         script.write_text(honest.replace("\n\ndef measure", "\nimport os\n\n\ndef measure", 1), encoding="utf-8")
         arms.raises("register: MR8 a measure file outside the source form stops the load, naming the rule",
                     lambda: PC.load_measures(o_roots), "MS1")
+        for rule, body in (("MS2", '    return open("fixture").read()\n'), ("MS4", '    return "x".replace("x", "y")\n')):
+            script.write_text("def measure(inputs, params):\n" + body, encoding="utf-8")
+            arms.raises("register: MR8 a measure file that breaks %s stops the load, naming the rule" % rule,
+                        lambda: PC.load_measures(o_roots), rule)
+        script.write_text(honest.replace("\n\ndef measure", "\nimport os\n\n\ndef measure", 1), encoding="utf-8")
         code, lines = call(O + ["overlay", "--list"])
         arms.check("register: `overlay --list` runs the source rule too — exit 3, and no census",
                    code == 3 and not any(l.startswith("process-catalog ") for l in lines), lines)
@@ -2136,7 +2166,7 @@ def self_test() -> int:
                    code == 3 and not list(plain_root.iterdir()) and any("not ignored" in l for l in lines), lines)
         half = ofx.repo / "half-root"
         half.mkdir()
-        (ofx.repo / ".git" / "info" / "exclude").write_text("/half-root/figures.json\n", encoding="utf-8")
+        PC.write_text(ofx.repo / ".git" / "info" / "exclude", "/half-root/figures.json\n")
         code, lines = call(O + ["overlay", "--overlay-root", str(half)] + full)
         arms.check("root: a root whose index file is ignored and whose measures folder is not is refused",
                    code == 3 and any("measures/probe.txt" in l for l in lines), lines)

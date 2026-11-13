@@ -929,7 +929,9 @@ def check_registers(roots: Roots, pack: dict, controls_path, pattern_arm: str, p
 #   How a measure is started. Only the generator starts one, as a child interpreter:
 #     * the child is started from command-line code (`-c`), never from a script file, with no
 #       bytecode writing, no user site folder and no site folder;
-#     * its environment holds exactly two variables, the hash seed and the zone `UTC`;
+#     * the generator passes it exactly two environment variables, the hash seed and the zone
+#       `UTC`, and none of its own. An interpreter may add a locale variable of its own when it
+#       starts, and one operating system adds a text-encoding variable; no measure can read either;
 #     * its working folder is an empty temporary folder the generator makes and removes;
 #     * its module search path holds the interpreter's own folders only: the entry code removes
 #       the working-folder entry before its first import, the library is loaded by its file path,
