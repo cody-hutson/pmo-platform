@@ -9477,6 +9477,107 @@ encl_mut_arm "AC-ENCL-M5b: without the escape rule, an escaped backtick opens a 
 encl_mut_arm "AC-ENCL-TEXEC6-pair: with the first view's carrier suppression off, T-EXEC-6's re-pointed payload is recorded (the arm guards that suppression)" \
   block-destructive-suppall.sh "gh issue comment 1 --body '| step | \`./tmp/x.sh\` | run it |'" W
 
+# ---- QSCAN-* (#8317): the carried quote state is trusted only where the hook's model follows it ----
+#
+# The rule's quote scanners model four quote states and nothing else. A construct they do not
+# follow — a comment, a quote nested inside a substitution or an expansion, a backquote opened
+# outside quotes, a run of dollars ahead of a quote — turns the carried state over, and every later
+# segment is then read as quoted text and suppressed behind a carrier, or removed as a
+# here-document body. Every arm here reads its command from the walk-payload corpus by row id
+# (seed 15.1, rows QC01 to QC24, and EN86), so no payload is spelled in this suite. The verdicts are
+# the shipped hook's after the change: each fail-open class is refused at a first-view position, or
+# recorded at an enclosure one; each control stays refused; each near miss stays allowed; and each
+# declared precision cost — nothing runs, and the hook refuses once it stops vouching for the
+# command — is refused.
+wc_row_cmd() { # $1 = row id -> WC_CMDX, the row's command with its placeholders expanded; 1 when absent
+  local i=0
+  WC_CMDX=""
+  while [ "$i" -lt "$wc_n" ]; do
+    if [ "${WC_ID[$i]}" = "$1" ]; then wc_expand "${WC_CMD[$i]}"; return 0; fi
+    i=$((i + 1))
+  done
+  return 1
+}
+# qscan_arm <label> <row id> <shipped> <forced> <reverse> [<arm>] — encl_arm on that row's command.
+qscan_arm() {
+  if ! wc_row_cmd "$2"; then
+    /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$1" "$2"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  encl_arm "$1 [row $2]" "$WC_CMDX" "$3" "$4" "$5" "${6:-}"
+}
+
+# --- the fail-open classes (fix-evidence) ---
+qscan_arm "QSCAN-CMT-01: a quote character in a comment on a carrier line does not suppress an unlisted script on the next line" QC01 B - -
+qscan_arm "QSCAN-CMT-03: as CMT-01, the next line running the script through source" QC03 B - -
+qscan_arm "QSCAN-CMT-04: as CMT-01, the next line running the script inside a substitution, recorded at warn and refused at enforce" QC04 W B a shell-enclosure
+qscan_arm "QSCAN-NESTQ-01: an apostrophe in a string nested inside a double-quoted substitution does not suppress the next line" QC05 B - -
+qscan_arm "QSCAN-NESTQ-02: the same nesting with the script inside the inner substitution, recorded at warn and refused at enforce" EN86 W B a shell-enclosure
+qscan_arm "QSCAN-NESTQ-03: as NESTQ-01, nested inside a double-quoted parameter expansion" QC06 B - -
+qscan_arm "QSCAN-NESTQ-04: as NESTQ-01, nested inside a double-quoted arithmetic opener" QC09 B - -
+qscan_arm "QSCAN-BQ-01: an unbalanced quote inside a backquoted substitution opened outside quotes does not suppress the next line" QC08 B - -
+qscan_arm "QSCAN-HD-01: a here-document operator inside a comment does not remove the next lines from adjudication" QC07 B - -
+qscan_arm "QSCAN-DOLLAR-01: an even run of dollars ahead of a quote opens a plain quote, not ANSI-C quoting, so the next segment is adjudicated" QC10 B - -
+
+# --- the controls: each class without its stray quote or operator, refused before and after ---
+qscan_arm "QSCAN-CMT-ctl: a comment with no quote character on a carrier line, the script on the next line" QC11 B - -
+qscan_arm "QSCAN-CMT-ctl-sep: the comment's quote character after a separator inside the comment" QC02 B - -
+qscan_arm "QSCAN-CMT-ctl-phase: a comment's quote character with a later carrier fragment that the inverted phase already exposes" QC21 B - -
+qscan_arm "QSCAN-NESTQ-ctl: the nested string with no apostrophe" QC12 B - -
+qscan_arm "QSCAN-HD-ctl: a comment holding the delimiter word but no operator" QC13 B - -
+qscan_arm "QSCAN-DOLLAR-ctl: the dollar run and the quote separated by a blank" QC14 B - -
+
+# --- the near misses: allowed before and after ---
+qscan_arm "QSCAN-CMT-near (#8317 AC2): a command whose only apostrophe sits in a comment, with nothing else naming a script" QC15 a - -
+qscan_arm "QSCAN-CMT-near-quoted: a hash inside a carrier's quoted argument that also holds a separator and script prose" QC16 a - -
+qscan_arm "QSCAN-CMT-near-midword: a hash that does not begin a word, beside a carrier's quoted fragment" QC17 a - -
+qscan_arm "QSCAN-NESTQ-near-brace: a plain parameter expansion in double quotes, beside a carrier's quoted fragment" QC18 a - -
+qscan_arm "QSCAN-HD-near: a carrier here-document with a quoted delimiter, no comment and no nesting on its operator line" QC19 a - -
+qscan_arm "QSCAN-NOQ-near: a carrier's quoted fragment in a command with no comment, nesting or backquote" QC20 a - -
+
+# --- the declared precision costs: nothing runs, and the hook refuses ---
+qscan_arm "QSCAN-NESTQ-R1 (declared cost): a nested expansion whose text is not plain, beside a carrier's quoted fragment naming an unlisted script" QC22 B - -
+qscan_arm "QSCAN-HD-R1 (declared cost): a carrier here-document whose operator line ends in a comment holding a quote, its body naming an unlisted script" QC23 B - -
+# QC24's comment names a second here-document operator for which no body follows, which the
+# pre-pass already declines today; its body names nothing, so it stays allowed before and after.
+qscan_arm "QSCAN-HD-R2: a comment naming a here-document operator on a carrier here-document's operator line, the pre-pass's declined shape" QC24 a - -
+
+# QSCAN-WS: the flag walk's word reader reads a dollar run as the shell does. The reader is lifted
+# out of the hook and run on every word of QC10 and of its control QC14: each must be read as a
+# complete word — the plain quote that follows an even run of dollars closes inside the word.
+qs_lib="$(/usr/bin/mktemp)"
+qs_why=""
+/usr/bin/awk '/^script_word_scan\(\) \{/ { f = 1; k++ } f { print; if ($0 == "}") f = 0 } END { exit k == 1 ? 0 : 1 }' "$HOOK" > "$qs_lib" \
+  || qs_why="the word reader is not a single function in the hook;"
+qs_words() { # $1 = row id -> qs_bad, the words of the row read as incomplete (empty when none)
+  local w r n=0
+  qs_bad=""
+  if ! wc_row_cmd "$1"; then qs_bad="<row $1 absent>"; return 0; fi
+  set -f
+  # shellcheck disable=SC2206
+  qs_w=( $WC_CMDX )
+  set +f
+  for w in "${qs_w[@]}"; do
+    n=$((n + 1))
+    r="$(/bin/bash -c '. "$1"; script_word_scan "$2"; printf "%s" "$script_ws_complete"' _ "$qs_lib" "$w")" || r="error"
+    if [ "$r" != 1 ]; then qs_bad="${qs_bad} word ${n} complete=${r};"; fi
+  done
+  if [ "$n" -eq 0 ]; then qs_bad="<row $1 has no words>"; fi
+}
+for qs_c in "QSCAN-WS-01:QC10:the word that opens with an even run of dollars and a quote" "QSCAN-WS-ctl:QC14:the control's words"; do
+  qs_label="${qs_c%%:*}"; qs_rest="${qs_c#*:}"; qs_row="${qs_rest%%:*}"; qs_what="${qs_rest#*:}"
+  qs_words "$qs_row"
+  if [ -z "$qs_why" ] && [ -z "$qs_bad" ]; then
+    /usr/bin/printf 'PASS: %s: the word reader reads every word of row %s complete (%s)\n' "$qs_label" "$qs_row" "$qs_what"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s: the word reader reads a word of row %s as incomplete (%s)\n  %s%s\n' "$qs_label" "$qs_row" "$qs_what" "$qs_why" "$qs_bad"
+    FAIL=$((FAIL + 1))
+  fi
+done
+/bin/rm -f "$qs_lib"
+
 /bin/rm -rf "$ENCL_ROOT"
 
 # ---- AC-022-X* (#8314, DT pass 3): the -022 separator split is a linear pass ----
