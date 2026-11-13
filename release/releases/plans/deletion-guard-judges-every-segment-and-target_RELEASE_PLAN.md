@@ -481,6 +481,7 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 | DEV-9 | 6 (#7644 RED) | CIAC-1's named refuse→allow rows gain HDATA-CAP-IN: the budget arm that grounds the 20 000-character cap is a top-level `cat` body, the same class as HDATA-AC1-A, read at the cap | DEV-4; the budget arms |
 | DEV-10 | 6 (#7644 fix) | HDATA-ENCL-C's payload now ends its subshell on a line carrying a command. With a `)` alone on the closing line, a second decline (an empty parenthesis pair, read as a function definition — toward today's verdict) held the sentinel through the enclosure mutant, so HDATA-MUT-ENCL-C could not show the enclosure decline live. HDATA-ENCL-C stays refused on both hooks | the first GREEN run (296/297, HDATA-MUT-ENCL-C) |
 | DEV-11 | 6 (#8122 spoke, receiver narrowing) | The pre-pass declines a command carrying a word that ends in `aliases`, `functions` or `commands` — zsh's tables that define an alias, a function or a command path. The hub named the three tables; the match is a suffix, so their global, suffix and disabled siblings decline too. A decline keeps today's verdict, so the wider match moves no verdict toward allow | hub determination (#7644 A6.5 FM-4), disclosed at Stage 9 |
+| DEV-12 | 6 (#8122 spoke, receiver narrowing) | A `git commit` or `git tag` receiver is declined when a word after its subcommand is git's edit option in any spelling git accepts (short, long, a unique prefix of the long form, a bundled short cluster, quoted), or a word an expansion or a closed substitution fills, or when the command text reaches the 512-character cap. The words are read to the end of the simple command, so an option written after the operator counts. Not built: requiring the message to come from `-F -`, which would also decline a commit with no message source (git then opens an editor whose standard input is the body); the hub adopted the edit-option decline only, so that case is recorded as a finding, not built | hub determination (#7644 A6.5 FM-3), disclosed at Stage 9 |
 
 ---
 
@@ -526,3 +527,9 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 - **Change:** one decline in `HEREDOC_DATA_AWK` (a word ending in one of the three table names sets the route flag, so the existing M-HD-RISKY mutant shows it load-bearing); the hook's comment block and the fragment's enumeration name it; the registry is regenerated (`build-hook-registry.py --check` → in sync). DEV-11.
 - **Prediction, written before the run:** the five table arms turn green; the fourteen edit-option arms stay red; nothing else moves.
 - **Run:** the deletion-hook suite through the suite runner under the CI layout (sandbox hook `3b2f2e3b1d2264a8`): `Total: 321  PASS: 307  FAIL: 14` — exactly the predicted set.
+
+### Receiver narrowing fix 2 — git's edit option (FM-3)
+
+- **Change:** in `HEREDOC_DATA_AWK`, an admitted git receiver is read again when its simple command ends (a separator or the end of the operator line, at the top level), and declined when `git_edit` finds the edit option or a word that can become it (marker `M-HD-EDIT`, shown load-bearing by its mutant pair); the hook's comment block and the fragment's receiver sentence name it; the registry is regenerated. DEV-12.
+- **Prediction, written before the run:** the fourteen edit-option arms turn green; the git controls stay allowed; nothing else moves.
+- **Run:** the deletion-hook suite through the suite runner under the CI layout (sandbox hook `23b9fb632bb13299`): `Total: 321  PASS: 321  FAIL: 0`.

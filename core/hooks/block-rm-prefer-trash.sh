@@ -236,7 +236,9 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 # call as submitted.
 #   Receivers (the first word of the simple command holding the operator, bare or under the
 #   canonical bin prefixes; no wrapper, no assignment, no redirection first): cat; git whose next
-#   word is commit or tag, after at most one -C <dir> pair (never -c); gh whose next word is
+#   word is commit or tag, after at most one -C <dir> pair (never -c), and whose words after that
+#   subcommand, the operator line read to its end, carry no edit option in any spelling git
+#   accepts and no word an expansion or a substitution fills; gh whose next word is
 #   issue, pr, release or api; python3 with zero or more single-letter flags from -[BEIOSbdqsuv]
 #   and then the operand "-".
 #   Declined (the whole command keeps its raw text): an unquoted delimiter; an operator inside a
@@ -272,7 +274,7 @@ readonly HEREDOC_DATA_AWK='
     }
     if (cw == "git") {
       j++; if (w[j] == "-C") j += 2
-      return (j <= k && (w[j] == "commit" || w[j] == "tag"))
+      return (j <= k && (w[j] == "commit" || w[j] == "tag")) ? 2 : 0
     }
     if (cw == "gh") return (w[j + 1] == "issue" || w[j + 1] == "pr" || w[j + 1] == "release" || w[j + 1] == "api")
     if (cw == "cat") return 1
@@ -282,9 +284,31 @@ readonly HEREDOC_DATA_AWK='
     }
     return 0
   }
+  # git_edit(text) — 1 when a word after the subcommand of a git receiver is, or can become, the
+  # edit option of git: -e or a short cluster carrying it, --e or any longer prefix of --edit,
+  # quoted or not; a word an expansion or a closed substitution fills ($, or the _ a substitution
+  # leaves); or a text cut at the 512-character cap. With that option git opens the message, which
+  # is the body, in an editor, and an editor named earlier on the line can be a program that runs it.
+  function git_edit(text,   k, w, j, i, t) {
+    if (length(text) >= 512) return 1
+    k = split(text, w, /[ \t\n]+/)
+    j = 1; while (j <= k && w[j] == "") j++
+    j++; if (w[j] == "-C") j += 2
+    for (i = j + 1; i <= k; i++) {
+      t = w[i]; gsub(/["\\]/, "", t); gsub(SQ, "", t)
+      if (t ~ /[$_]/ || t ~ /^--e/ || t ~ /^-[A-Za-z0-9]*e/) return 1
+    }
+    return 0
+  }
+  # seg_done — a simple command at the top level has ended; a git receiver admitted in it is
+  # read whole, the words after its operator included, before its body can be taken as data.
+  function seg_done() {
+    if (gitrx && git_edit(cur[0])) bail = 1  # M-HD-EDIT
+    gitrx = 0
+  }
   { L[NR] = $0 }
   END {
-    n = NR; d = 0; bd = 0; qs = 0; cur[0] = ""; nq = 0; total = 0; bail = 0; risky = 0; work = 0
+    n = NR; d = 0; bd = 0; qs = 0; cur[0] = ""; nq = 0; total = 0; bail = 0; risky = 0; work = 0; gitrx = 0
     if (n > 500) bail = 1
     i = 1
     while (!bail && i <= n) {
@@ -331,11 +355,11 @@ readonly HEREDOC_DATA_AWK='
         }
         if (c == ")") { if (nq > 0) { bail = 1; break } if (d > 0) { if (fk[d] == "P" && cur[d] ~ /^[ \t]*$/) risky = 1; d--; qs = fq[d + 1]; ap("_") } p++; continue }
         if (c == "|") {
-          if (substr(line, p + 1, 1) == "|") { cur[d] = ""; p += 2; continue }
+          if (substr(line, p + 1, 1) == "|") { if (d == 0) seg_done(); if (bail) break; cur[d] = ""; p += 2; continue }
           risky = 1; cur[d] = ""; p++; continue
         }
         if (c == "&" && (substr(line, p - 1, 1) ~ /[<>]/ || substr(line, p + 1, 1) == ">")) { ap(c); p++; continue }
-        if (c == ";" || c == "&") { cur[d] = ""; p++; continue }
+        if (c == ";" || c == "&") { if (d == 0) seg_done(); if (bail) break; cur[d] = ""; p++; continue }
         if (c == "<" && substr(line, p + 1, 1) == "<") {
           if (substr(line, p + 2, 1) == "<") { ap("<<<"); p += 3; continue }
           if (bd > 0) { bail = 1; break }
@@ -355,7 +379,9 @@ readonly HEREDOC_DATA_AWK='
           if (p <= ln && substr(line, p, 1) !~ /[ \t;&|()<>]/) { bail = 1; break }
           if (!quoted) { bail = 1; break }  # M-HD-QUOTED
           if (d != 0) { bail = 1; break }  # M-HD-ENCL
-          if (!recv_ok(head)) { bail = 1; break }
+          rv = recv_ok(head)
+          if (!rv) { bail = 1; break }
+          if (rv == 2) gitrx = 1
           if (++total > 8) { bail = 1; break }
           nq++; qd[nq] = delim; qt[nq] = strip
           ap("<<D ")
@@ -367,6 +393,8 @@ readonly HEREDOC_DATA_AWK='
       i++
       if (qs != 0) { if (nq > 0) { bail = 1; break } ap("\n"); continue }
       if (cont) { if (nq > 0) { bail = 1; break } continue }
+      if (d == 0) seg_done()
+      if (bail) break
       cur[d] = ""
       for (k = 1; k <= nq; k++) {
         found = 0
