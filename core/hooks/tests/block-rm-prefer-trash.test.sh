@@ -434,14 +434,14 @@ test_case "EXT-RA-T5: a target-less rm behind a long sudo flag does not end the 
 test_case "EXT-RA-T6: a target-less rm the widening promotes does not displace today's start-verb unlink" \
   "$(bash_payload 'nice rm ; sudo unlink /tmp/foo')" 2 "BLOCK-TRASH-001"
 
-# The neutrality pins: a line the walk resolved BEFORE the wrapper grammar keeps the
-# verdict it had, which the exit view exists to preserve. Both are allowed today and stay
-# allowed here; the per-segment closure of these lines is #8122's, which must flip them.
-test_case "EXT-RES-T1: a sudo-prefixed git status keeps today's exemption (exit view; line laundering is #8122's)" \
-  "$(bash_payload 'sudo git status ; rm -rf /tmp/foo')" 0
+# The two lines the walk resolved BEFORE the wrapper grammar, which the exit view kept allowed.
+# Every segment is judged now, so both are refused: the git segment and the target-less rm
+# each cover only themselves.
+test_case "EXT-RES-T1: a sudo-prefixed git status no longer exempts the deletion beside it (per-segment walk)" \
+  "$(bash_payload 'sudo git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
-test_case "EXT-RES-T2: a sudo-prefixed target-less rm keeps today's no-target exit (exit view; #8122's)" \
-  "$(bash_payload 'sudo rm ; trash /etc/hosts')" 0
+test_case "EXT-RES-T2: a sudo-prefixed target-less rm no longer ends the evaluation (per-segment walk)" \
+  "$(bash_payload 'sudo rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
 
 # The pairs. Each mutant is a copy of the hook with exactly one marked exit line reading the
 # widened text again (`matches` for M-TRASH-GITEXEMPT; the Step-2 verb for
@@ -711,6 +711,169 @@ neu_case "AC-D020-NEUTRAL-4: a target-less rm behind env and its assignment, bef
 neu_case "AC-D020-NEUTRAL-5: a refused deletion behind a marked assignment" 'FOO=1 BAR=2 rm -rf /tmp/foo'
 neu_case "AC-D020-NEUTRAL-6: a git condition behind a marked assignment, with a deletion in its branch" 'if FOO=1 git diff --quiet ; then rm -rf /tmp/foo ; fi'
 /bin/rm -rf "$neu_root"
+
+# ----- EXT-SEG (#8122): every segment of the line is judged -----
+#
+# The hook keeps no exit that allows on a match. A git command exempts only its own segment, and
+# a deletion verb with no operand ends nothing: every rm-family verb, the Trash step and the Finder
+# step are still judged on the line's other segments. A Trash segment that does not name all its
+# targets on its line is refused under the strict policy (BLOCK-TRASH-003), and so, judged after
+# every other step, is an rm, rmdir or unlink segment of that kind (BLOCK-TRASH-001). A trailing
+# line-continuation backslash is not an operand, and a verb segment whose line continues does not
+# show all its targets.
+#   G    a git segment, then a deletion, a Trash call or a Finder delete of an outside path (AC1)
+#   T    a target-less rm-family verb, then another verb's outside target (AC2). The arms that end
+#        in an rm-family refusal assert the outside path, so a single-verb pick, which would refuse
+#        with the no-operand message instead, is told apart. T0 is the same-verb control
+#   B    a Trash segment with no operand, or whose line continues (AC3); B6 shows that the limb
+#        never masks a refusal elsewhere on the line
+#   C    controls that stay allowed: git alone, commit messages inline and in a top-level quoted
+#        here-document read by git, also behind -C <dir> (AC4), a describe-only use of a verb, an
+#        untracking git rm
+#   P    pins: the declared allow-to-refuse moves, the declared over-blocks, a declared residual
+#   MUT  each new marker shown load-bearing: a copy of the hook without it allows its sentinels
+#   INT1 the heredoc-borne controls shown held by the here-document pre-pass: through a copy whose
+#        pre-pass never removes a body (armed red), each is refused; through the hook it is allowed
+SEG_OUT='deletion outside .*Path: (/private)?'
+SEG_FH="$RMT_FIXTURE_HOME"
+test_case "EXT-SEG-G1: a git segment, then && and a recursive rm of an outside path, is refused" \
+  "$(bash_payload 'git status && rm -rf /tmp/seg-g1')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-G2: a git segment, then ; and a recursive rm of an outside path, is refused" \
+  "$(bash_payload 'git status ; rm -rf /tmp/seg-g2')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-G3: a git segment by absolute path, then a recursive rm of an outside path, is refused" \
+  "$(bash_payload '/usr/bin/git status ; rm -rf /tmp/seg-g3')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-G4: a git line, then a recursive rm of an outside path on the next line, is refused" \
+  "$(bash_payload $'git status\nrm -rf /tmp/seg-g4')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-G5: a git segment, then a Trash call on an outside path, is refused" \
+  "$(bash_payload 'git status ; trash /tmp/seg-g5')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-G6: a git segment, then a Finder delete of an outside path, is refused" \
+  "$(bash_payload $'git status ; osascript -e \'tell application "Finder" to delete POSIX file "/tmp/seg-g6"\'')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-T0: a flags-only rm, then a recursive rm of an outside path (the same verb, refused before and after)" \
+  "$(bash_payload 'rm -f ; rm -rf /tmp/seg-t0')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t0"
+test_case "EXT-SEG-T1: a flags-only rm, then unlink of an outside path, is refused on that path" \
+  "$(bash_payload 'rm -f ; unlink /tmp/seg-t1')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t1"
+test_case "EXT-SEG-T2: a flags-only rm, then a Trash call on an outside path, is refused" \
+  "$(bash_payload 'rm -f && trash /tmp/seg-t2')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-T3: a bare rmdir, then unlink of an outside path, is refused on that path" \
+  "$(bash_payload 'rmdir ; unlink /tmp/seg-t3')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t3"
+test_case "EXT-SEG-T4: a bare rm, then a Finder delete of an outside path, is refused" \
+  "$(bash_payload $'rm ; osascript -e \'tell application "Finder" to delete POSIX file "/tmp/seg-t4"\'')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-T5: a target-less rm behind a wrapper option, then unlink of an outside path behind the same wrapper, is refused on that path" \
+  "$(bash_payload 'nice -n 5 rm ; nice -n 5 unlink /tmp/seg-t5')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t5"
+test_case "EXT-SEG-T6: a flags-only rm on one line, unlink of an outside path on the next, is refused on that path" \
+  "$(bash_payload $'rm -f\nunlink /tmp/seg-t6')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t6"
+test_case "EXT-SEG-T7: an rm whose line continues past its flags does not show its targets and is refused" \
+  "$(bash_payload $'rm -f \\\n/tmp/seg-t7')" 2 "BLOCK-TRASH-001.*does not name all its targets"
+test_case "EXT-SEG-B1: a Trash call with no operand is refused" \
+  "$(bash_payload 'trash')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-B2: a Trash call carrying only a verbose flag is refused" \
+  "$(bash_payload 'trash -v')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-B3: a Trash call carrying only its empty-the-Trash and skip-confirmation flags is refused" \
+  "$(bash_payload 'trash -e -y')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-B4: an inside Trash call, then a flags-only Trash call, is refused (per segment)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b4 ; trash -v" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B5: a flags-only Trash call behind a wrapper is refused" \
+  "$(bash_payload 'nice trash -v')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-B6: a flags-only Trash call, then a recursive rm of an outside path, is refused on that path" \
+  "$(bash_payload 'trash -v ; rm -rf /tmp/seg-b6')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-b6"
+test_case "EXT-SEG-B7: a Trash call whose line continues past its flags is refused" \
+  "$(bash_payload $'trash -v \\\n/tmp/seg-b7')" 2 "BLOCK-TRASH-003.*does not name all its targets"
+test_case "EXT-SEG-B8: an inside Trash operand, a continued line, and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b8 \\"$'\n'"/tmp/seg-b8" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+SEG_C4=$'git commit -F - <<\'EOF\'\nfix the hook\nrm -rf build\nEOF'
+SEG_C7=$'git commit -F - <<\'EOF\'\nnote: $(echo hi; rm -rf build) is text\nEOF'
+SEG_C8=$'git commit -F - <<\'EOF\'\ndon\'t\nrm -rf build\nEOF'
+SEG_C11=$'git -C /tmp/seg-repo commit -F - <<\'EOF\'\nrm -rf build\nEOF'
+test_case "EXT-SEG-C1: git status alone is allowed" \
+  "$(bash_payload 'git status')" 0
+test_case "EXT-SEG-C2: a commit message carrying deletion-verb text inline is allowed" \
+  "$(bash_payload 'git commit -m "rm stale files; unlink old"')" 0
+test_case "EXT-SEG-C3: a multi-line inline message with a line that begins with a deletion verb is allowed" \
+  "$(bash_payload $'git commit -m "first line\nrm -rf build\nlast line"')" 0
+test_case "EXT-SEG-C4: a commit message from a top-level quoted here-document, a line beginning with a deletion verb, is allowed" \
+  "$(bash_payload "$SEG_C4")" 0
+test_case "EXT-SEG-C5: a message in a double-quoted substitution, with an apostrophe and a deletion line, is allowed (quote-masked)" \
+  "$(bash_payload $'git commit -m "$(cat <<\'EOF\'\ndon\'t fix it\nrm -rf build\nEOF\n)"')" 0
+test_case "EXT-SEG-C7: a here-document message carrying a substitution-shaped string before deletion text is allowed" \
+  "$(bash_payload "$SEG_C7")" 0
+test_case "EXT-SEG-C8: a here-document message with an unpaired apostrophe is allowed" \
+  "$(bash_payload "$SEG_C8")" 0
+test_case "EXT-SEG-C9: asking where the Trash program is does not run it and is allowed" \
+  "$(bash_payload 'command -v trash')" 0
+test_case "EXT-SEG-C10: untracking a file and committing is allowed" \
+  "$(bash_payload 'git rm -r --cached foo && git commit -m "untrack foo"')" 0
+test_case "EXT-SEG-C11: git -C <dir> commit with a here-document message carrying a deletion line is allowed" \
+  "$(bash_payload "$SEG_C11")" 0
+test_case "EXT-SEG-P1: a flags-only rm alone is refused (no operand)" \
+  "$(bash_payload 'rm -f')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-P2: a flags-only rm inside a subshell group is refused (no operand)" \
+  "$(bash_payload '( rm -rf )')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-P3: a Trash help request is refused (a declared over-block)" \
+  "$(bash_payload 'trash --help')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-P4: a commit message from an unquoted here-document with a deletion line is judged (a declared move)" \
+  "$(bash_payload $'git commit -F - <<EOF\nrm -rf build\nEOF')" 2 "BLOCK-TRASH-002"
+test_case "EXT-SEG-P5: an rm help request is refused (a declared over-block)" \
+  "$(bash_payload 'rm --help')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-P6: a Trash call continued onto a second line of inside operands is refused (a declared over-block)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-p6a \\"$'\n'"${SEG_FH}/Claude/seg-p6b" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-SEG-P7: a Trash call with its empty-the-Trash flags and one inside operand is allowed (a declared residual)" \
+  "$(bash_payload "trash -e -y ${SEG_FH}/Claude/seg-p7" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-P8: a here-document commit message on a command that pipes elsewhere is judged (a declared move)" \
+  "$(bash_payload $'git commit -F - <<\'EOF\'\nrm -rf build\nEOF\ngit log --oneline | cat')" 2 "BLOCK-TRASH-002"
+test_case "EXT-SEG-C6: a message in a double-quoted substitution with an unpaired double quote is judged (the declared move, Q1)" \
+  "$(bash_payload $'git commit -m "$(cat <<\'EOF\'\nsay "hi\nrm -rf build\nEOF\n)"')" 2 "BLOCK-TRASH-002"
+
+# The mutant pairs. Each copy differs from the hook by exactly its marked line, shown live first;
+# each sentinel, refused through the hook, is allowed through its copy.
+seg_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-seg.XXXXXX" 2>/dev/null)" || seg_dir=""
+seg_armed() { # $1 = arm label  $2 = copy  $3 = command -> refused through the copy
+  local rc=0 err
+  if ! ra_live "$2"; then
+    /usr/bin/printf 'FAIL: %s the copy is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n' "$1"
+    FAIL=$((FAIL + 1)); return
+  fi
+  err="$(/usr/bin/printf '%s' "$(bash_payload "$3")" | /bin/bash "$2" 2>&1 >/dev/null)" || rc="$?"
+  if [ "$rc" = 2 ]; then
+    /usr/bin/printf 'PASS: %s through the copy without the pre-pass the control is refused, so the pre-pass holds it\n' "$1"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s the copy without the pre-pass did not refuse the control (exit=%s): %s\n' "$1" "$rc" "$err"
+    FAIL=$((FAIL + 1))
+  fi
+}
+if [ -z "$seg_dir" ]; then
+  /usr/bin/printf 'FAIL: EXT-SEG mutant pairs could not create a sandbox, so they did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${seg_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${seg_dir}/lib/"
+  /usr/bin/sed -e 's/^:  # M-TRASH-SEGWALK$/if matches "${ANCHOR_PREFIX_BASH}"'"'"'git[[:space:]]+[^[:space:]]+'"'"'; then exit 0; fi  # M-TRASH-SEGWALK/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-segwalk.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)judge_targets "\$verb"  # M-TRASH-SEGVERB$/\1judge_targets "$verb"; [ -n "$(extract_bare_segments "$verb")" ] \&\& exit 0  # M-TRASH-SEGVERB/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-segverb.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if \[ -n "\$(extract_bare_segments trash)" ]; then  # M-TRASH-BARETRASH$/\1if false; then  # M-TRASH-BARETRASH/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-baretrash.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if matches .*  # M-TRASH-BARERM$/\1if false; then  # M-TRASH-BARERM/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-barerm.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)EXCISED\$'"'"'\\n'"'"'?\*) COMMAND=.*$/\1EXCISED$'"'"'\\n'"'"'?*) : ;;/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-nohd.sh"
+  ra_pair "EXT-SEG-MUT-SEGWALK-G1:" "${seg_dir}/block-rm-prefer-trash-segwalk.sh" 'git status && rm -rf /tmp/seg-g1'
+  ra_pair "EXT-SEG-MUT-SEGWALK-G5:" "${seg_dir}/block-rm-prefer-trash-segwalk.sh" 'git status ; trash /tmp/seg-g5'
+  ra_pair "EXT-SEG-MUT-SEGVERB-T1:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" 'rm -f ; unlink /tmp/seg-t1'
+  ra_pair "EXT-SEG-MUT-SEGVERB-T2:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" 'rm -f && trash /tmp/seg-t2'
+  ra_pair "EXT-SEG-MUT-SEGVERB-T4:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" $'rm ; osascript -e \'tell application "Finder" to delete POSIX file "/tmp/seg-t4"\''
+  ra_pair "EXT-SEG-MUT-BARETRASH-B1:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" 'trash'
+  ra_pair "EXT-SEG-MUT-BARETRASH-B2:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" 'trash -v'
+  ra_pair "EXT-SEG-MUT-BARETRASH-B7:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" $'trash -v \\\n/tmp/seg-b7'
+  ra_pair "EXT-SEG-MUT-BARERM-P1:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" 'rm -f'
+  ra_pair "EXT-SEG-MUT-BARERM-P2:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" '( rm -rf )'
+  ra_pair "EXT-SEG-MUT-BARERM-T7:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" $'rm -f \\\n/tmp/seg-t7'
+  seg_armed "EXT-SEG-INT1-C4:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C4"
+  seg_armed "EXT-SEG-INT1-C7:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C7"
+  seg_armed "EXT-SEG-INT1-C8:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C8"
+  seg_armed "EXT-SEG-INT1-C11:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C11"
+  case "${seg_dir##*/}" in rmt-seg.*) /bin/rm -rf "$seg_dir" ;; esac
+fi
 
 # ----- CWD-*: a relative target is judged from the directory the command can be in -----
 #
@@ -1689,6 +1852,8 @@ test_case "HDATA-RX-ZARRAY: zsh's alias table assigned as a whole array stays re
   "$(bash_payload $'aliases+=(cat bash); cat <<\'EOF\'\nrm -rf /tmp/hd-zr\nEOF')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-ZSIBLING: a sibling table (global aliases) stays refused" \
   "$(bash_payload $'galiases[EOF]=x; cat <<\'EOF\'\nrm -rf /tmp/hd-zg\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-GITC: git with a global option defining an alias is not a listed receiver and stays refused (INT-GITC)" \
+  "$(bash_payload $'git -c alias.hd=\'!sh\' hd <<\'EOF\'\nrm -rf /tmp/hd-gitc\nEOF')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-ZCTL: a table name followed by a word character is not a table, so the body is data" \
   "$(bash_payload $': aliasesx functionsx commandsx; cat <<\'EOF\'\nrm -rf /tmp/hd-zn\nEOF')" 0
 test_case "HDATA-RX-PEXP: the operator inside a parameter expansion, brace adjacent, stays refused" \
