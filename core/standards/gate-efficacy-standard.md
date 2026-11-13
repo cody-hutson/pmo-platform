@@ -457,7 +457,7 @@ exempted: none — no exemption mechanism removes a member
 ```text
 population: every workflow, step and status variable under .github/workflows/ whose step compares a captured exit status only against 0 (shape binary-zero); binary-exact and multi-state consumers are the complement and are not members, and a step run by a shell other than bash is not read
 probe: the census resolver workflow_exit_consumers in core/deploy/tests/test_gate_efficacy_declarations.py — each workflow parsed with PyYAML, each run block's shell code read with comment lines and heredoc bodies removed, status provenance followed through $?, ${PIPESTATUS[n]} and step outputs, and the shape read from the values compared
-examined: 22 — binary-zero consumers, counted by that resolver; on every run the conformance suite asserts this count equals the rows below and the rows are exactly the live binary-zero consumers
+examined: 23 — binary-zero consumers, counted by that resolver; on every run the conformance suite asserts this count equals the rows below and the rows are exactly the live binary-zero consumers
 sensitivity: a planted step that captures a status and tests only -eq 0 is counted, and so is a planted single-value case over a captured status (anti-vacuity arms CS-1 and CS-2b)
 specificity: a planted step testing the same status against 3 before 0, a planted case over 0 and 2|3, and a planted counter tested against 0 are not counted (arms CS-2 and CS-2b, constructed); on the live tree every binary-exact and multi-state consumer, and every zero-test on a variable that carries no exit status, stays out, and the set equality asserts it
 state: fetched — every workflow file parsed
@@ -479,6 +479,7 @@ exempted: none
 | `release-tooling-smoke.yml` | `Precision probe — a deliberately broken self-test MUST fail the gate` | `probe_rc` | `probe` | `legitimately-binary` | asserts the F1 X.Y failure text and that the gate names its subject |
 | `release-tooling-smoke.yml` | `Precision probe — the self-test actually FAILS on a broken invariant` | `probe_rc` | `probe` | `legitimately-binary` | asserts the analysis-dimension invariant text |
 | `release-tooling-smoke.yml` | `Precision probe — the self-test actually FAILS on a broken incremental carry-forward` | `probe_rc` | `probe` | `legitimately-binary` | asserts the carry-forward text |
+| `release-tooling-smoke.yml` | `Precision probe — the self-test actually FAILS on an any-line-null completeness test` | `probe_rc` | `probe` | `legitimately-binary` | asserts the no-final-output failure text |
 | `release-tooling-smoke.yml` | `Precision probe — the rollup self-test actually FAILS on a broken count-once` | `probe_rc` | `probe` | `legitimately-binary` | asserts the FM-2 count-once failure text |
 | `release-tooling-smoke.yml` | `Precision probe — the rollup self-test actually FAILS on a non-sticky header bind` | `probe_rc` | `probe` | `legitimately-binary` | asserts the sticky-header-bind failure text |
 | `release-tooling-smoke.yml` | `Precision probe — the rollup self-test actually FAILS on a shadowing ladder reorder` | `probe_rc` | `probe` | `legitimately-binary` | asserts the shadowing-guard failure text |
