@@ -917,6 +917,92 @@ test_case "CWD-25 (control): cd text inside a quoted string is content, not a di
 test_case "CWD-26 (control): a relative cd that stays inside the workspace allows" \
   "$(bash_payload 'cd .. && trash victim' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 
+# ----- TILDE / NONLIT (#8123 AC3, Q4): a target word is judged as the shell will expand it -----
+#
+# Every arm runs under the fixture home (HOME-FIXTURE-01) from the fixture's worktree cwd, so each
+# home-relative operand below is INSIDE the workspace under the hook's own HOME. The must-refuse arms
+# are refused only because the shell would act on another path.
+#   TILDE    a line that names HOME as a word can change HOME before the verb runs, so no
+#            home-relative word is expanded on it: a ~/ target, or a bare cd or cd ~/... before a
+#            relative one. The word is read on the command as judged and again with its quotes and
+#            backslashes removed (FM-2). A name composed by an expansion is a declared residual
+#            (TILDE-P1). Another tilde prefix, or a zsh equals-word, is expanded where the hook does
+#            not look (R3). RM1-RM3 are the rm-family rule-ID moves this makes, -002 to -001.
+#   NONLIT   after the whole-word quote strip, a word carrying a brace, a backslash or a quote, a
+#            wholly-quoted word whose body begins with ~, and a dot-leading glob component are not
+#            literal (Q4): the shell acts on a different path from the one written. A quoted path
+#            with a space reaches the resolver as such words, because the walk splits on whitespace
+#            first. SENS is the plain spelling of NONLIT-01's destination; P1 and P2 are declared
+#            over-blocks; the Finder delete's path goes through the same resolver (P2).
+TL_OTHER="$RMT_FIXTURE_OTHER_HOME"
+TL_FH="$RMT_FIXTURE_HOME"
+test_case "TILDE-01: a home-relative Trash target after an earlier segment assigns HOME is refused" \
+  "$(bash_payload "HOME=${TL_OTHER}; trash ~/Claude/tl-01" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-02: the same after an exported HOME assignment is refused" \
+  "$(bash_payload "export HOME=${TL_OTHER}; trash ~/Claude/tl-02" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-03: the same with HOME as a prefix assignment on the Trash command is refused (declared over-approximation)" \
+  "$(bash_payload "HOME=${TL_OTHER} trash ~/Claude/tl-03" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-04: a home-relative cd after a HOME assignment leaves a relative Trash target unresolvable" \
+  "$(bash_payload "HOME=${TL_OTHER}; cd ~/Claude/sub && trash tl-04" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*working directory" "$RMT_HOME_ENV"
+test_case "TILDE-05: a declaration builtin spelling the HOME name with an embedded double-quote pair is refused (FM-2)" \
+  "$(bash_payload "export \"HO\"ME=${TL_OTHER}; trash ~/Claude/tl-05" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-06: a name-operand builtin spelling the HOME name with a backslash is refused (FM-2)" \
+  "$(bash_payload "printf -v H\\OME %s ${TL_OTHER}; trash ~/Claude/tl-06" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-07: a declaration builtin spelling the HOME name with an embedded single-quote pair is refused (FM-2)" \
+  "$(bash_payload "typeset 'H'OME=${TL_OTHER}; trash ~/Claude/tl-07" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-P1: a HOME name composed by a parameter expansion is not seen (a declared residual, allowed)" \
+  "$(bash_payload "n=HO; export \${n}ME=${TL_OTHER}; trash ~/Claude/tl-p1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-CTL1 (control): a home-relative inside Trash target on a line that does not name HOME is allowed" \
+  "$(bash_payload "trash ~/Claude/tl-c1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-CTL2 (control): names that only contain HOME do not count" \
+  "$(bash_payload "JAVA_HOME=/opt/j; HOMEBREW_NO_AUTO_UPDATE=1 trash ~/Claude/tl-c2" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-CTL3 (control): a home-relative cd into the workspace, then a relative Trash target, with no HOME on the line" \
+  "$(bash_payload "cd ~/Claude/sub && trash tl-c3" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-08: a user-name tilde prefix is refused (R3)" \
+  "$(bash_payload "trash ~root/tl-08" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*tilde prefix" "$RMT_HOME_ENV"
+test_case "TILDE-09: the previous-directory tilde prefix is refused (R3)" \
+  "$(bash_payload "trash ~-/tl-09" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*tilde prefix" "$RMT_HOME_ENV"
+test_case "TILDE-10: a zsh equals-word is refused (R3)" \
+  "$(bash_payload "trash =ls" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*equals-word" "$RMT_HOME_ENV"
+test_case "TILDE-CTL4 (control): a relative operand with a tilde past its first character is allowed" \
+  "$(bash_payload "trash tl-a~b" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-RM1: rm of a home-relative inside target on a line that names HOME is refused under -001 (moved from -002)" \
+  "$(bash_payload "HOME=${TL_OTHER}; rm ~/Claude/tl-rm1" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-RM2: rm of a user-name tilde target is refused under -001 (moved from -002)" \
+  "$(bash_payload "rm ~root/tl-rm2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*tilde prefix" "$RMT_HOME_ENV"
+test_case "TILDE-RM3: rm of a relative target after a HOME-dependent cd on a line that names HOME is refused under -001 (moved from -002)" \
+  "$(bash_payload "HOME=${TL_OTHER}; cd ~/Claude/sub && rm tl-rm3" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*working directory" "$RMT_HOME_ENV"
+test_case "NONLIT-01: a dot-dot escape spelled with an empty quote pair inside the dot-dot is refused" \
+  "$(bash_payload "trash ${TL_FH}/Claude/.''./nl-01" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-02: a dot-dot escape spelled with one dot backslash-escaped is refused" \
+  "$(bash_payload "trash ${TL_FH}/Claude/.\\./nl-02" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+# A brace word is built in an assignment first: bash 3.2 brace-expands a double-quoted string
+# inside a command substitution's argument list, which would hand the payload two words.
+NL_03="trash ${TL_FH}/Claude/{..,nl}/nl-03"
+NL_RM1="rm ${TL_FH}/Claude/{nl,rm1}"
+test_case "NONLIT-03: a brace word whose first expansion is a dot-dot escape is refused" \
+  "$(bash_payload "$NL_03" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-04: a wholly-quoted word whose body begins with a tilde is refused (R5: the shell keeps it literal)" \
+  "$(bash_payload "trash \"~/Claude/nl-04\"" "$RMT_OUTSIDE")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-05: a dot-leading glob component is refused" \
+  "$(bash_payload "trash ${TL_FH}/Claude/.*/nl-05" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-06: a quoted outside path with a space is refused (it was joined to the cwd as relative)" \
+  "$(bash_payload "trash \"${RMT_OUTSIDE}/nl six/x\"" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-SENS (sensitivity): the plain spelling of NONLIT-01's destination is refused" \
+  "$(bash_payload "trash ${TL_FH}/Claude/../nl-01" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*deletion outside" "$RMT_HOME_ENV"
+test_case "NONLIT-CTL1 (control): an unquoted glob inside the workspace stays literal and is allowed" \
+  "$(bash_payload "trash ${TL_FH}/Claude/nl-*.log" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "NONLIT-CTL2 (control): a wholly-quoted inside operand is allowed" \
+  "$(bash_payload "trash \"${TL_FH}/Claude/nl-c2\"" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "NONLIT-CTL3 (control): a dot-leading component with no glob character is allowed" \
+  "$(bash_payload "trash ${TL_FH}/Claude/.nl-hidden" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "NONLIT-P1: a quoted inside path with a space is refused (a declared over-block)" \
+  "$(bash_payload "trash \"${TL_FH}/Claude/nl p1\"" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-P2: a Finder delete of an inside path carrying a brace is refused (a declared over-block)" \
+  "$(bash_payload 'osascript -e '"'"'tell application "Finder" to delete POSIX file "'"${TL_FH}"'/Claude/{nl,p2}"'"'"'' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-RM1: rm of a brace-word inside target is refused under -001 (moved from -002)" \
+  "$(bash_payload "$NL_RM1" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*not a literal word" "$RMT_HOME_ENV"
+
 # ----- CLAUDE_HOOK_BYPASS escape hatch -----
 
 test_case "CLAUDE_HOOK_BYPASS bypass allows" \
@@ -1413,6 +1499,116 @@ else
   case "${MEM_ROOT##*/}" in
     rmt-mem.*) /bin/rm -rf "$MEM_ROOT" ;;
   esac
+fi
+
+# ----- NORM (#8123 AC2): the target and the workspace root are compared in one normalized form -----
+#
+# A root spelled other than its normalized form — through a symlink, with a trailing slash or a
+# trailing dot segment — is compared in the form realpath gives it, by the same call that normalizes
+# the target. When that call cannot run, a target is refused and never admitted as inside (R1). The
+# sandbox base is canonical; `link` is a symlink to `real`, and HOME is spelled through the link, so
+# the default root (HOME/Claude) is spelled other than its normalized form. NORM-00 proves that
+# premise before any arm depends on it. NORM-05 and -06 run through the test-only seam: a sandbox
+# copy whose pinned python3 line is rewritten (the copy must carry exactly that line once), with one
+# unusable value per failure branch (absent, fails, prints nothing) and the real one as control.
+# NORM-08 to -11 set the root explicitly: `/` and a relative root keep today's refusal (a relative
+# root is never anchored to the hook process's own directory; NORM-11-MUT shows that guard live).
+norm_raw="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-norm.XXXXXX" 2>/dev/null)" || norm_raw=""
+NB=""
+if [ -n "$norm_raw" ] && [ -d "$norm_raw" ]; then NB="$(cd "$norm_raw" && /bin/pwd -P)" || NB=""; fi
+norm_run() { # $1 = hook  $2 = command  $3 = payload cwd  [$4 = workspace root; empty = unset] -> NORM_EXIT, NORM_ERR
+  local p; p="$(bash_payload "$2" "$3")"
+  NORM_EXIT=0
+  if [ -n "${4:-}" ]; then
+    NORM_ERR="$(cd "${NB}/real" && /usr/bin/printf '%s' "$p" | /usr/bin/env -u CLAUDE_PROJECT_DIR "HOME=${NB}/link" "CLAUDE_WORKSPACE_ROOT=$4" /bin/bash "$1" 2>&1 >/dev/null)" || NORM_EXIT="$?"
+  else
+    NORM_ERR="$(cd "${NB}/real" && /usr/bin/printf '%s' "$p" | /usr/bin/env -u CLAUDE_PROJECT_DIR -u CLAUDE_WORKSPACE_ROOT "HOME=${NB}/link" /bin/bash "$1" 2>&1 >/dev/null)" || NORM_EXIT="$?"
+  fi
+}
+norm_case() { # $1 = name  $2 = hook  $3 = command  $4 = payload cwd  $5 = exit  [$6 = pattern]  [$7 = root]
+  local ok=1
+  norm_run "$2" "$3" "$4" "${7:-}"
+  [ "$NORM_EXIT" != "$5" ] && ok=0
+  if [ -n "${6:-}" ] && ! /usr/bin/grep -qE "$6" <<< "$NORM_ERR"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (exit=%s expected=%s)\n  stderr: %s\n' "$1" "$NORM_EXIT" "$5" "$NORM_ERR"; FAIL=$((FAIL + 1))
+  fi
+}
+norm_seam_copy() { # $1 = python3 path -> prints the copy's directory; fails unless it pins exactly that path
+  local sbx; sbx="$(mem_hook_copy)" || return 1
+  /usr/bin/sed -e 's#^readonly PYTHON3="/usr/bin/python3"$#readonly PYTHON3="'"$1"'"#' "$HOOK" > "${sbx}/block-rm-prefer-trash.sh"
+  if [ "$(/usr/bin/grep -c -x -F "readonly PYTHON3=\"$1\"" "${sbx}/block-rm-prefer-trash.sh")" != 1 ]; then mem_drop_copy "$sbx"; return 1; fi
+  /usr/bin/printf '%s' "$sbx"
+}
+if [ -z "$NB" ]; then
+  /usr/bin/printf 'FAIL: NORM sandbox base could not be created, so the NORM arms did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${NB}/real/Claude/.claude/worktrees/planning"
+  /bin/ln -s "${NB}/real" "${NB}/link"
+  NL_CWD="${NB}/link/Claude/.claude/worktrees/planning"
+  norm_phys="$(cd "${NB}/link/Claude" 2>/dev/null && /bin/pwd -P)" || norm_phys=""
+  if [ "$norm_phys" = "${NB}/real/Claude" ] && [ "$norm_phys" != "${NB}/link/Claude" ]; then
+    /usr/bin/printf 'PASS: %s\n' "NORM-00 the root the hook derives is spelled through a symlink (its physical form differs)"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (physical form: %s)\n' "NORM-00 the root the hook derives is spelled through a symlink (its physical form differs)" "$norm_phys"; FAIL=$((FAIL + 1))
+  fi
+  norm_case "NORM-01: an inside Trash target spelled through the symlinked root is allowed" \
+    "$HOOK" "trash ${NB}/link/Claude/n01" "$NL_CWD" 0
+  norm_case "NORM-02: an inside Trash target spelled physically under the symlinked root is allowed" \
+    "$HOOK" "trash ${NB}/real/Claude/n02" "$NL_CWD" 0
+  norm_case "NORM-03: a dot-dot escape from the root spelled through the link is refused" \
+    "$HOOK" "trash ${NB}/link/Claude/../n03" "$NL_CWD" 2 "BLOCK-TRASH-003.*deletion outside"
+  norm_case "NORM-04: rm of an inside target spelled through the link is redirected to the Trash (-002)" \
+    "$HOOK" "rm ${NB}/link/Claude/n04" "$NL_CWD" 2 "BLOCK-TRASH-002"
+  for norm_py in /nonexistent/python3 /usr/bin/false /usr/bin/true /usr/bin/python3; do
+    norm_sbx="$(norm_seam_copy "$norm_py")" || norm_sbx=""
+    if [ -z "$norm_sbx" ]; then
+      /usr/bin/printf 'FAIL: NORM-05 and NORM-06 [%s] (no seam copy pinned to that path)\n' "$norm_py"; FAIL=$((FAIL + 2)); continue
+    fi
+    if [ "$norm_py" = /usr/bin/python3 ]; then
+      n5_exit=0; n5_pat=""; n6_pat="BLOCK-TRASH-003.*deletion outside"
+    else
+      n5_exit=2; n5_pat="BLOCK-TRASH-003.*normalizer"; n6_pat="$n5_pat"
+    fi
+    norm_case "NORM-05 [${norm_py}]: an inside target under the symlinked root, refused only when the normalizer cannot run" \
+      "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/link/Claude/n05" "$NL_CWD" "$n5_exit" "$n5_pat"
+    norm_case "NORM-06 [${norm_py}]: a dot-dot escape from the symlinked root is refused in every mode" \
+      "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/link/Claude/../n06" "$NL_CWD" 2 "$n6_pat"
+    mem_drop_copy "$norm_sbx"
+  done
+  norm_sbx="$(norm_seam_copy /nonexistent/python3)" || norm_sbx=""
+  if [ -z "$norm_sbx" ]; then
+    /usr/bin/printf 'FAIL: NORM-07 (no seam copy pinned to /nonexistent/python3)\n'; FAIL=$((FAIL + 1))
+  else
+    norm_case "NORM-07: with no normalizer, rm of an inside target is refused under -001 naming the normalizer (moved from -002)" \
+      "${norm_sbx}/block-rm-prefer-trash.sh" "rm ${NB}/link/Claude/n07" "$NL_CWD" 2 "BLOCK-TRASH-001.*normalizer"
+    mem_drop_copy "$norm_sbx"
+  fi
+  norm_case "NORM-08: a root of / does not admit every target (FM-4: today's refusal kept)" \
+    "$HOOK" "trash ${NB}/real/n08" "$NL_CWD" 2 "BLOCK-TRASH-003" "/"
+  norm_case "NORM-09: a root spelled with a trailing slash admits its inside target" \
+    "$HOOK" "trash ${NB}/real/Claude/n09" "$NL_CWD" 0 "" "${NB}/real/Claude/"
+  norm_case "NORM-10: a root spelled with a trailing dot segment admits its inside target" \
+    "$HOOK" "trash ${NB}/real/Claude/n10" "$NL_CWD" 0 "" "${NB}/real/Claude/."
+  norm_case "NORM-11: a relative root is not anchored to the hook process's directory (today's refusal kept)" \
+    "$HOOK" "trash ${NB}/real/Claude/n11" "$NL_CWD" 2 "BLOCK-TRASH-003" "Claude"
+  norm_sbx="$(mem_hook_copy)" || norm_sbx=""
+  if [ -z "$norm_sbx" ]; then
+    /usr/bin/printf 'FAIL: NORM-11-MUT (no sandbox copy of the hook)\n'; FAIL=$((FAIL + 1))
+  else
+    /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-ROOTABS$/\1: # M-TRASH-ROOTABS (removed)/' "$HOOK" > "${norm_sbx}/block-rm-prefer-trash.sh"
+    if ra_live "${norm_sbx}/block-rm-prefer-trash.sh"; then
+      norm_case "NORM-11-MUT: a copy without the absolute-root guard admits NORM-11's target, so the guard holds it" \
+        "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/real/Claude/n11" "$NL_CWD" 0 "" "Claude"
+    else
+      /usr/bin/printf 'FAIL: NORM-11-MUT the copy is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n'; FAIL=$((FAIL + 1))
+    fi
+    mem_drop_copy "$norm_sbx"
+  fi
+  case "${NB##*/}" in rmt-norm.*) /bin/rm -rf "$NB" ;; esac
 fi
 
 # ----- AC-CPH-T* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget -----
