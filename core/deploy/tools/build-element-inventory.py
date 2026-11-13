@@ -95,7 +95,7 @@ def run(a) -> int:
         pairs = [("paths", len(rows)), ("kinds", len(counts)), ("other", counts.get("other", 0))]
         code = PC.EXIT_CLEAN
     except PC.NotEvaluated as e:
-        print("NOT EVALUATED: %s" % e)
+        print("NOT-EVALUATED: %s" % e)
         code = PC.EXIT_NOT_EVALUATED
     print(PC.census("inventory", code, pairs))
     return code
@@ -239,6 +239,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except PC.NotEvaluated as e:
-        print("NOT EVALUATED: %s" % e)
+        print("NOT-EVALUATED: %s" % e)
         print(PC.census("self-test", PC.EXIT_NOT_EVALUATED, [("arms", None), ("failed", None)]))
         sys.exit(PC.EXIT_NOT_EVALUATED)

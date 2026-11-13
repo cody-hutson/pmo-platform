@@ -442,7 +442,7 @@ def cmd_impact(a, roots) -> tuple:
         for line in lines:
             out(line)
         if message:
-            out("NOT EVALUATED: %s" % message)
+            out("NOT-EVALUATED: %s" % message)
         return code, pairs, []
 
     try:
@@ -700,7 +700,7 @@ def main(argv=None) -> int:
             sys.stdout.write(json.dumps({"not_evaluated": message, "census": PC.census(gate, PC.EXIT_NOT_EVALUATED, empty)},
                                         indent=2, sort_keys=True) + "\n")
             return PC.EXIT_NOT_EVALUATED
-        out("NOT EVALUATED: %s" % message)
+        out("NOT-EVALUATED: %s" % message)
         code, pairs, body = PC.EXIT_NOT_EVALUATED, empty, ["Not evaluated: %s." % message]
     if pairs is None:                      # impact --json has printed its one document
         return code
@@ -1299,7 +1299,7 @@ def self_test() -> int:
         summary = tmp / "generated.md"
         call(E + ["build", "--check", "--summary-file", str(summary)])
         arms.check("summary file: a not-evaluated run writes its block before it returns",
-                   summary.is_file() and "### Process catalog — generated-output: NOT EVALUATED" in summary.read_text(encoding="utf-8"))
+                   summary.is_file() and "### Process catalog — generated-output: NOT-EVALUATED" in summary.read_text(encoding="utf-8"))
         for name, target in (("the pack", ex.definitions / PC.default_part("pack")),
                              ("the ID registry", ex.definitions / PC.default_part("registry")),
                              ("the kinds table", ex.definitions / PC.default_part("kinds")),
@@ -1308,7 +1308,7 @@ def self_test() -> int:
             target.unlink()
             code, lines = call(roots_of(cx) + ["--definitions", str(ex.definitions), "build", "--check"])
             target.write_bytes(saved)
-            arms.check("missing input: without %s, build --check is exit 3" % name, code == 3 and "NOT EVALUATED" in lines[0], lines)
+            arms.check("missing input: without %s, build --check is exit 3" % name, code == 3 and "NOT-EVALUATED" in lines[0], lines)
         code, lines = call(["--repo", str(tmp / "no-such-repository"), "build", "--check"])
         arms.check("missing input: a repository root that is no work tree is exit 3, naming it", code == 3 and "--repo" in lines[0], lines)
         saved = (cx.definitions / PC.default_part("pack")).read_text(encoding="utf-8")
@@ -1364,6 +1364,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except PC.NotEvaluated as e:
-        print("NOT EVALUATED: %s" % e)
+        print("NOT-EVALUATED: %s" % e)
         print(PC.census("self-test", PC.EXIT_NOT_EVALUATED, [("arms", None), ("failed", None)]))
         sys.exit(PC.EXIT_NOT_EVALUATED)

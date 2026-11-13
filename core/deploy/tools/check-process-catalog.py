@@ -677,7 +677,7 @@ def run(a, out=None) -> int:
         body += ["- `%s`" % x for x in findings if x.severity == "error"]
         return close(PC.EXIT_FINDINGS if errors else PC.EXIT_CLEAN)
     except PC.NotEvaluated as e:
-        emit("NOT EVALUATED: %s" % e)
+        emit("NOT-EVALUATED: %s" % e)
         body.append("Not evaluated: %s." % e)
         return close(PC.EXIT_NOT_EVALUATED)
 
@@ -959,7 +959,7 @@ def self_test() -> int:
         for label, change in (("removed", lambda p: p.replace('  "pack_version": "2",\n', "")),
                               ("added", lambda p: p.replace('  "pack_version": "2",\n', '  "pack_version": "2",\n  "prose": "x",\n'))):
             lines = with_files([(pack_file, change(pack_text))], "pack shape: one key %s is not evaluated, naming the key" % label,
-                               lambda c, l: c == 3 and any("NOT EVALUATED" in x and ("pack_version" in x or "prose" in x) for x in l))
+                               lambda c, l: c == 3 and any("NOT-EVALUATED" in x and ("pack_version" in x or "prose" in x) for x in l))
 
         # -- the register rules: the fixture pair, the pattern arm, the gap rule --
         fail_register = str(fx.definitions / "controls-register-fail.tsv")
@@ -989,7 +989,7 @@ def self_test() -> int:
         wrong = tmp / "wrong-digest.txt"
         wrong.write_text("0" * 64 + "\n", encoding="utf-8")
         code, lines = registers(mode=run_mode[:5] + (str(wrong),))
-        arms.check("pattern arm: a digest that is not the pattern file's is not evaluated", code == 3 and "NOT EVALUATED" in lines[-2], lines)
+        arms.check("pattern arm: a digest that is not the pattern file's is not evaluated", code == 3 and "NOT-EVALUATED" in lines[-2], lines)
         for label, body in (("an unusable pattern file", "(unclosed\n"), ("a match-everything pattern", ".*\n"),
                             ("a pattern that misses a fixed probe", "^nothing-matches-this$\n")):
             bad = tmp / "bad-pattern.txt"
@@ -1078,7 +1078,7 @@ def self_test() -> int:
         register_file.write_text(register_text, encoding="utf-8")
         arms.check("register load: a header that differs prints R1 and stops as not evaluated, with the count in the census",
                    code == 3 and any(l.startswith("R1\theader") for l in lines) and lines[-1].endswith("findings=1")
-                   and "NOT EVALUATED: a register has no rows" in lines, lines)
+                   and "NOT-EVALUATED: a register has no rows" in lines, lines)
         # the register the pack points at is removed: not evaluated; with it present: clean
         register_file.unlink()
         code, lines, _err = cli(base)
@@ -1134,7 +1134,7 @@ def self_test() -> int:
         code, lines, _err = cli(base)
         unreadable.write_text(plain_text, encoding="utf-8")
         arms.check("nothing examined: a page that is not UTF-8 is exit 3, naming the file",
-                   code == 3 and any("fixture-activity-plain.md" in l and "NOT EVALUATED" in l for l in lines), lines[-2:])
+                   code == 3 and any("fixture-activity-plain.md" in l and "NOT-EVALUATED" in l for l in lines), lines[-2:])
         shallow_text = plain_text.replace(fx.base, "1" * 40)
         unreadable.write_text(shallow_text, encoding="utf-8")
         code, lines = in_process(targets=[unreadable])
@@ -1156,7 +1156,7 @@ def self_test() -> int:
         text = summary.read_text(encoding="utf-8") if summary.is_file() else ""
         arms.check("summary file: a passing run and a not-evaluated run each append one block",
                    text.count("### Process catalog — page-validation: PASS") == 1
-                   and text.count("### Process catalog — page-validation: NOT EVALUATED") == 1, text)
+                   and text.count("### Process catalog — page-validation: NOT-EVALUATED") == 1, text)
 
         # -- one reader, by behaviour --
         real = (PC.read_frontmatter, PC.frontmatter_end, PC.frontmatter_lines)
@@ -1225,6 +1225,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except PC.NotEvaluated as e:
-        print("NOT EVALUATED: %s" % e)
+        print("NOT-EVALUATED: %s" % e)
         print(PC.census("self-test", PC.EXIT_NOT_EVALUATED, [("arms", None), ("failed", None)]))
         sys.exit(PC.EXIT_NOT_EVALUATED)

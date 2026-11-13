@@ -871,8 +871,10 @@ def check_registers(roots: Roots, pack: dict, controls_path, pattern_arm: str, p
                     digest_file=None) -> dict:
     """Run the register rules over the controls register and the ID registry. Returns a dict:
     lines (what to print, in order), register_rows, registry_rows, findings, stop (a message, or
-    None). A stop raised inside the block is the module's own NOT EVALUATED line: a role and an
-    error type, never a path."""
+    None). A stop raised inside the block is the module's own stop line: a role and an error type,
+    never a path. Its token is spelled NOT-EVALUATED, the one spelling the repository's vocabulary
+    check admits; the module's entry point, which is not carried here, writes it with a space, so
+    a stop line differs from the module's by that one character."""
     out = {"lines": [], "register_rows": "NA", "registry_rows": "NA", "findings": 0, "stop": None, "held": None}
     try:
         held, minted = configure_register_rules(pack["controls_register_rules"])
@@ -884,7 +886,7 @@ def check_registers(roots: Roots, pack: dict, controls_path, pattern_arm: str, p
                               is_fixture_register(roots, controls_path), minted=minted)
         m, g = check_registry(tree, read_tsv(roots.registry, "ID registry"), pats)
     except NotEvaluated as e:
-        out["lines"] = [roots_line(roots, out["held"]), "NOT EVALUATED: %s" % e]
+        out["lines"] = [roots_line(roots, out["held"]), "NOT-EVALUATED: %s" % e]
         out["stop"] = str(e)
         return out
     out["lines"] = [
@@ -896,7 +898,7 @@ def check_registers(roots: Roots, pack: dict, controls_path, pattern_arm: str, p
     out["lines"] += ["%s\t%s\t%s\t%s" % finding for finding in f + g]
     out["register_rows"], out["registry_rows"], out["findings"] = n, m, len(f) + len(g)
     if n == 0 or m == 0:
-        out["lines"].append("NOT EVALUATED: a register has no rows")
+        out["lines"].append("NOT-EVALUATED: a register has no rows")
         out["stop"] = "a register has no rows"
     return out
 
@@ -2477,7 +2479,7 @@ def write_summary(path, gate: str, status: str, examined: str, body: list) -> No
         fh.write("\n".join(block) + "\n")
 
 
-SUMMARY_STATUS = {EXIT_CLEAN: "PASS", EXIT_FINDINGS: "FAIL", EXIT_NOT_EVALUATED: "NOT EVALUATED"}
+SUMMARY_STATUS = {EXIT_CLEAN: "PASS", EXIT_FINDINGS: "FAIL", EXIT_NOT_EVALUATED: "NOT-EVALUATED"}
 
 
 # ----------------------------------------------------------------------------------------------
@@ -2944,7 +2946,7 @@ if __name__ == "__main__":
         try:
             sys.exit(_self_test())
         except NotEvaluated as e:
-            print("NOT EVALUATED: %s" % e)
+            print("NOT-EVALUATED: %s" % e)
             print(census("self-test", EXIT_NOT_EVALUATED, [("arms", None), ("failed", None)]))
             sys.exit(EXIT_NOT_EVALUATED)
     print("usage: _process_catalog.py --self-test", file=sys.stderr)
