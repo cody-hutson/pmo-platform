@@ -1,6 +1,6 @@
 ---
 title: Duplicate-Source Discipline — Register or Remove
-purpose: "The register-or-remove discipline for content reused across files: duplicated content joins the enforced mirror set, consolidates to one canonical source, is registered as an allowed exception, or is registered as a complementary pair with machine-checkable section ownership."
+purpose: "The register-or-remove discipline for content reused across files: duplicated content joins the enforced mirror set, consolidates to one canonical source, is registered as an allowed exception, or is registered as a complementary pair with machine-checkable section ownership. It also names which side is authoritative when a document and the tree it describes or governs disagree."
 type: standard
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
@@ -11,7 +11,7 @@ consumers: deploy.sh Check 9 / Check 11 / Check 13 (mirror-set + template-sync r
 
 ## Purpose
 
-Defines the platform's discipline for content reused across multiple files: any duplicated content either (a) joins the registered mirror set and gains byte-identity enforcement, (b) is consolidated to a single canonical source with cross-references replacing former duplicate sites, (c) is registered in a per-domain exemption list with rationale, or (d) is registered as a complementary pair whose division of labour is declared as machine-checkable section ownership. Establishes the canonical home for the **register or remove** rule, consolidating three implicit anti-duplication guardrails in [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) into a single statement.
+Defines the platform's discipline for content reused across multiple files: any duplicated content either (a) joins the registered mirror set and gains byte-identity enforcement, (b) is consolidated to a single canonical source with cross-references replacing former duplicate sites, (c) is registered in a per-domain exemption list with rationale, or (d) is registered as a complementary pair whose division of labour is declared as machine-checkable section ownership. Establishes the canonical home for the **register or remove** rule, consolidating three implicit anti-duplication guardrails in [CLAUDE.md](<OPERATOR_INSTANCE_CLAUDE_MD>) into a single statement. It also states which side is authoritative when a written convention and the live practice it governs disagree (§ 1.2), a case that reaches past the content-reuse scope of § 3.
 
 This is option (a) per the originating initiative's Stage 5 — documentation-only at current platform scale. Scan-based enforcement (future Check 14) is deferred per §6 escalation triggers; the **CONFLICT** with `anthropic-skills:skill-creator` convention that scan-based enforcement would introduce is preserved here for future re-evaluation, not resolved by enforcement today.
 
@@ -25,6 +25,20 @@ Content MUST NOT exist in two or more files within `core/` / `release/` or `.cla
 4. **Registered as a complementary pair.** The two copies share a basename but are **not** copies of each other: each exclusively owns a declared set of sections, and a third declared set is shared by both. The pair is registered in `core/deploy/allowlists/complementary-reference-pairs.txt` with its division of labour stated as machine-checkable section ownership, and `deploy.sh --check` Check 13b asserts that ownership on every run — each exclusively-owned section present in its owner and **absent** from its peer, each shared section present in both, and a shared section whose content has drifted reported as a distinct finding. This is distinct from condition 1: condition 1 registers **sameness** (byte-identity, Check 13); condition 4 registers **complementarity**. A pair that should be byte-identical does not belong here, and a complementary pair does not belong in `TEMPLATE_SYNC_MAP`. Unlike condition 3, the exemption is not prose — it is asserted mechanically, so a deliberate split and an accidental fork are distinguishable to the gate surface. See [ADR-104](../ADRs/ADR-104-complementary-reference-pair-registration.md).
 
 Unregistered duplicate content is governance debt. The longer it persists, the higher the drift risk: one copy is updated, the other becomes silently stale, and downstream consumers act on the stale read. The register-or-remove rule forecloses that path.
+
+### §1.2 The convention case — a written rule and live practice disagree
+
+A **written convention** is a rule a governed document states about the tree it governs — where a file lives, what a sidecar is named, which field a record carries. **Live practice** is what the tree actually does. When the two are found to disagree, the disagreement is settled by the owning document — not by the report that surfaced it, and not by whichever side is cheaper to change — in this order.
+
+1. **Read the owning document first.** Where it states the rule for the case at hand, it already names the authoritative side, and practice is reconciled toward it: the file moves, the field is renamed, the sidecar is added. The report that surfaced the divergence — an observation, an audit finding, a review comment — is a directional input and not a second ruling. Re-deciding a case the document already decides is the defect this clause exists to stop. A convention the document names is not the stale state that `core/disciplines/reconcile-dont-annotate.md` tells an editor to reconcile to current state: the tree is the side out of date, and reconciling means moving the tree.
+2. **Where the document is silent or ambiguous on the case, name the authoritative side in the document, in the same change that reconciles the other side.** Either side may win. When practice wins, the document is amended to state what practice does; when the rule wins, practice is reconciled to it; when the two turn out to govern different things, the document is amended to say so and practice stays. In every outcome the document ends by naming the case, so the next reader applies a rule instead of re-deciding it.
+3. **Record the resolution.** The record names the divergence, the authoritative side and the section of the document that names it, what changed — practice, the document, both, or neither when the document already shows the reported divergence is not one — and why. A change that travels in a release records it on one line of that release's plan, opening with `**Adjudication record:**`; a change that travels outside a release, in a pull request no release plan covers, records it in an `Adjudication-Record:` trailer on the commit that resolves the divergence. The document holds the rule and the record holds the history, so the record never restates the rule. A resolution written only in a work-item thread, a pull-request body or a session transcript has no durable home.
+
+**What this case does not govern.** A hand-maintained enumeration — a document's copy of a population's members or of their count — describes the tree rather than prescribing it, so it resolves the opposite way: the population is the fact and the copy moves. This clause's rule never decides that case, and that case's rule never decides this one. The test between them is one question: does the passage say what the tree *is*, or what the tree *should be*?
+
+**Where this case reaches** is wider than the rest of this document, and § 3 states it.
+
+**Runner: NONE — a registered named gap.** Whether a resolver read the owning document before choosing a side is a judgment no gate observes. The gate-coverage register in [`gate-efficacy-standard.md`](gate-efficacy-standard.md) records the gap and the observable that stands in for it: the resolution's record. A divergence class whose resolved state is mechanically checkable may also carry a check of its own; that check asserts the class, never this procedure.
 
 ## §2 Registered enforcement layer
 
@@ -51,6 +65,8 @@ They assert three different invariants, and the difference is what decides which
 ## §3 Scope boundary
 
 This principle covers **content-level duplicates outside the registered mirror set** within `core/` and `release/` (governance, reference/standards/specs/schemas/disciplines, releases) and `.claude/rules/` and workspace-root governance files (CLAUDE.md, README.md).
+
+The convention case of § 1.2 reaches further than this scope: it applies wherever a governed document states a convention about the tree it governs — artifact placement, sidecar naming, template and corpus layout, `operations/templates/` included — and the content-reuse scope above does not narrow it.
 
 **Out of scope — governed elsewhere:**
 - **SKILL.md boilerplate across skills** is governed by [canonical-skill-structure.md](canonical-skill-structure.md) (the canonical home for skill-authoring discipline). Skills MAY share boilerplate text by design; this preserves compatibility with `anthropic-skills:skill-creator` convention. Any future scan-based enforcement (see §6) MUST exclude `<module>/skills/` from its scope.

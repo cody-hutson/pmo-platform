@@ -779,3 +779,7 @@ Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat 
 - **Check 63 primitive:** `python3 core/deploy/tools/check-count-structure.py --root .` before and after the edit → the same 6 FAIL rows (#7414's red) and `pairs_examined=545` both times; controls PASS. Beat 1a adds no count/structure finding.
 - **Reference durability:** the four detector expressions of `core/hooks/lib/fragile-ref-patterns.sh` (markdown link, version-cutover apparatus, raw issue/PR/milestone URL, bare issue reference) over the 11 added lines → 0 each; control, a seeded file carrying one instance of each → 1 each.
 - **Runtime suite:** none selected — the change is doc and governance text only (the runtime-suite selection map's no-match row), so the honest record is a suite skip.
+
+### Adjudication records
+
+**Adjudication record:** a version-less release's note sat flat at the `notes/` root, where the release-notes standard places every version-less note under `notes/_unversioned/` · authority: the standard — `release/references/standards/release-notes-standard.md` § File Location, Naming, Frontmatter — which named the case before the divergence was reported · changed: practice — the `governance-ci-checks` note moved under `notes/_unversioned/` and its `RELEASE_INDEX.md` row followed · why: the standard already names the case, and the note was written before that rule landed
