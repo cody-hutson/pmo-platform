@@ -133,6 +133,15 @@ JQ="$(resolve_jq)"; readonly JQ
 # 4-hook edit (see Stage 5 spec Approach 1 trade-off discussion).
 readonly ANCHOR_PREFIX_BASH='(^|[;&|])[[:space:]]*(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?'
 
+# --- TRASH-LOCAL: the keg-only location suggest_trash_command recommends (tier 2) ---
+# One constant, read by the suggestion, the Step-3 Trash-verb test and the segment walk (through
+# its one call site, walk_segments), so the hook never recommends a spelling it does not judge.
+# Trash-local by design: it is not a member of the shared prefix set above, which stays
+# byte-identical across the four anchor hooks. The path carries no ERE metacharacter, so it is
+# interpolated into the regex as written.
+readonly TRASH_KEG_DIR="/opt/homebrew/opt/trash/bin"
+readonly TRASH_VERB_RE="${ANCHOR_PREFIX_BASH}"'trash([[:space:]]+|$)|(^|[;&|])[[:space:]]*'"${TRASH_KEG_DIR}"'/trash([[:space:]]+|$)'
+
 # --- COMMAND-POSITION CANONICALIZER (shared primitive) ---
 # The anchor above recognises a command start ONLY at start-of-line or after `;`, `&`,
 # `|`. Every other position at which a shell starts a command — `{ … }`, `( … )`,
@@ -710,13 +719,13 @@ record_memory_admissions() {
 
 # suggest_trash_command(abs_path)
 #   Emit a runtime-auto-detected Trash-equivalent command suggestion.
-#   3-tier: PATH trash → keg-only path → osascript fallback.
+#   3-tier: PATH trash → keg-only path (TRASH_KEG_DIR, which Step 3 also recognises) → osascript fallback.
 suggest_trash_command() {
   local abs_path="$1"
   if command -v trash >/dev/null 2>&1; then
     "$PRINTF" "trash '%s'" "$abs_path"
-  elif [ -x "/opt/homebrew/opt/trash/bin/trash" ]; then
-    "$PRINTF" "/opt/homebrew/opt/trash/bin/trash '%s'" "$abs_path"
+  elif [ -x "${TRASH_KEG_DIR}/trash" ]; then
+    "$PRINTF" "${TRASH_KEG_DIR}/trash '%s'" "$abs_path"
   else
     "$PRINTF" "osascript -e 'tell application \"Finder\" to delete POSIX file \"%s\"'" "$abs_path"
   fi
@@ -742,7 +751,10 @@ suggest_trash_command() {
 #   file; per-segment partial revert produces silently-degraded
 #   behavior (regex triggers but awk extracts no target tokens, so the
 #   call reads as naming none and is refused by the target-less limb for
-#   the wrong reason). Land as single atomic commit.
+#   the wrong reason). Land as single atomic commit. The keg-only Trash
+#   location is the same coupling for one verb: TRASH_VERB_RE, the keg strip
+#   in the walk (its value passed by walk_segments) and suggest_trash_command
+#   all read TRASH_KEG_DIR, so none can move without the others.
 #
 #   fix F3 (#5644): reads the CANONICALIZED command, not the raw one.
 #   This is the same atomic coupling in a new place — the regex above
@@ -820,9 +832,12 @@ readonly SEGMENT_WALK_AWK='
       if (mode == "dirs") { dir_event(); continue; }
       # Strip canonical absolute-path prefix from first token before
       # verb-equality check. Matches the 5 macOS/Linux paths
-      # captured by ANCHOR_PREFIX_BASH at the regex-anchor site.
+      # captured by ANCHOR_PREFIX_BASH at the regex-anchor site, and, for
+      # the Trash verb, the keg-only location TRASH_VERB_RE also matches
+      # (keg, passed by walk_segments to every mode).
       first_token = tokens[first];
       sub(/^\/(usr\/(local\/)?|opt\/(homebrew|local)\/)?bin\//, "", first_token);
+      if (v == "trash" && keg != "" && index(first_token, keg "/") == 1) first_token = substr(first_token, length(keg) + 2);
       if (first_token != v) continue;
       endopts = 0; skipnext = 0; nops = 0; cont = 0;
       for (i = first + 1; i <= m; i++) {
@@ -849,10 +864,10 @@ readonly SEGMENT_WALK_AWK='
 '
 
 # walk_segments(mode, verb) — the one call site of SEGMENT_WALK_AWK. Every reader below goes
-# through it, so an argument the walk needs (such as a Trash location to strip from a first
-# token) is passed to every mode at once and no reader can omit it.
+# through it, so an argument the walk needs (the keg-only Trash location, TRASH_KEG_DIR, which a
+# Trash call's first token is stripped of) is passed to every mode at once and no reader can omit it.
 walk_segments() {
-  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v mode="$1" -v v="$2" "$SEGMENT_WALK_AWK"
+  "$PRINTF" '%s' "$COMMAND_CMDPOS" | /usr/bin/awk -v mode="$1" -v v="$2" -v keg="$TRASH_KEG_DIR" "$SEGMENT_WALK_AWK"  # M-TRASH-KEG
 }
 
 extract_target_tokens() {
@@ -1105,8 +1120,9 @@ for verb in rm rmdir unlink; do
 done
 
 # Step 3 — trash invocation detection
-# Absolute-path-aware: also detects /opt/homebrew/bin/trash, /usr/bin/trash, etc.
-if matches "${ANCHOR_PREFIX_BASH}"'trash([[:space:]]+|$)'; then
+# Absolute-path-aware: also detects /opt/homebrew/bin/trash, /usr/bin/trash, etc., and the
+# keg-only location the tier-2 suggestion names (TRASH_KEG_DIR, through TRASH_VERB_RE).
+if matches "$TRASH_VERB_RE"; then
   ensure_cwd_table
   while IFS="$TAB" read -r tseg token; do
     [ -z "$token" ] && continue
