@@ -1826,13 +1826,13 @@ QB01|block-egress|qbs-over|-|?|B|'\gh' api -X POST @NO@
 # (B at base and after); rt-qnear are must-not-flag near-misses (a at base and after); rt-qcost are the declared precision
 # costs (a at base; B once #8317 lands). @NL@ is a newline.
 QC01|block-destructive|rt-qcmt|-|?|a|echo hi # it's@NL@bash @D@/na.sh
-QC02|block-destructive|rt-qcmt|-|?|a|echo hi # x; it's@NL@bash @D@/na.sh
+QC02|block-destructive|rt-qctl|-|?|B|echo hi # x; it's@NL@bash @D@/na.sh
 QC03|block-destructive|rt-qcmt|-|?|a|echo hi # it's@NL@source @D@/na.sh
 QC04|block-destructive|rt-qcmt|-|?|a|echo hi # it's@NL@echo "$(bash @D@/na.sh)"
 QC05|block-destructive|rt-qnest|-|?|a|echo "$(printf "it's")"@NL@bash @D@/na.sh
 QC06|block-destructive|rt-qnest|-|?|a|echo "${x:-"it's"}"@NL@bash @D@/na.sh
 QC07|block-destructive|rt-qhd|-|?|a|echo hi # <<EOF@NL@bash @D@/na.sh@NL@EOF
-QC08|block-destructive|rt-qbq|-|?|a|echo `printf "it's"`@NL@bash @D@/na.sh
+QC08|block-destructive|rt-qbq|-|?|a|echo `echo it's`@NL@bash @D@/na.sh
 QC09|block-destructive|rt-qnest|-|?|a|echo "$[ "it's" ]"@NL@bash @D@/na.sh
 QC10|block-destructive|rt-qdollar|-|?|a|echo $$'\'; bash @D@/na.sh
 QC11|block-destructive|rt-qctl|-|?|B|echo hi # its@NL@bash @D@/na.sh
@@ -1843,9 +1843,9 @@ QC15|block-destructive|rt-qnear|-|?|a|echo hi # it's fine
 QC16|block-destructive|rt-qnear|-|?|a|gh issue comment 1 --body 'see #12; run bash @D@/na.sh later'
 QC17|block-destructive|rt-qnear|-|?|a|echo foo#bar 'note; bash @D@/na.sh'
 QC18|block-destructive|rt-qnear|-|?|a|echo "${HOME}" 'x; bash @D@/na.sh'
-QC19|block-destructive|rt-qnear|-|?|a|cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+QC19|block-destructive|rt-qnear|-|?|a|gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 QC20|block-destructive|rt-qnear|-|?|a|echo 'x; bash @D@/na.sh'
-QC21|block-destructive|rt-qcost|-|?|a|echo hi # it's@NL@echo 'x; bash @D@/na.sh'
+QC21|block-destructive|rt-qctl|-|?|B|echo hi # it's@NL@echo 'x; bash @D@/na.sh'
 QC22|block-destructive|rt-qcost|-|?|a|echo "$(printf "%s" "a b")" 'x; bash @D@/na.sh'
-QC23|block-destructive|rt-qcost|-|?|a|cat <<'EOF' # it's@NL@bash @D@/na.sh@NL@EOF
-QC24|block-destructive|rt-qcost|-|?|a|cat <<'EOF' # <<X@NL@hello@NL@EOF
+QC23|block-destructive|rt-qcost|-|?|a|gh issue comment 1 --body-file - <<'EOF' # it's@NL@bash @D@/na.sh@NL@EOF
+QC24|block-destructive|rt-qcost|-|?|a|gh issue comment 1 --body-file - <<'EOF' # <<X@NL@hello@NL@EOF
