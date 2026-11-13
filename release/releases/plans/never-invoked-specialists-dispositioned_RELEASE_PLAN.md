@@ -1,3 +1,5 @@
+<!-- repo-integrity: allow-dead-file-ref -->
+<!-- The marker above is declared because § Stage 5 carries the locked census block byte for byte, and one of its self-test lines builds a registry row holding the link-syntax literal "(x)". The dead-file-reference checker scans fenced code for links, so it reads that literal as a dead link; the block cannot change (its sha256 is locked). See § Deviation Log DEV-6. -->
 ---
 version: never-invoked-specialists-dispositioned
 date: 2026-11-13
@@ -6,7 +8,6 @@ status: ACTIVE
 issues: ["#8452"]
 reversibility-tier: CHEAP
 themes: ["cluster:skill-modes"]
-audit_class: false
 ---
 
 # Release Plan — never-invoked-specialists-dispositioned
@@ -88,7 +89,7 @@ The nine elements `stage-04-planning.md` § 6 enumerates, and where this file ca
 
 **For the Stage-5 brief:** the issue-reference gate blocks a bare issue reference outside a reference block. Inside the record, name downstream cards in prose and list their numbers under `## References`.
 
-**Events emitted (as recorded by the hub)** (stage 4; each read back as `POST == PRE + N`):
+**Events emitted** (stage 4; each read back as `POST == PRE + N`):
 - `decision/scope-lock`, operator, milestone (0 → 1)
 - `decision/outcome-statement-authored`, operator (0 → 1)
 - `decision/d-class`, operator, ×2: `issue:#8452` `card-disposition:carried`, and the milestone's D-decisions (0 → 2)
@@ -1198,6 +1199,11 @@ Departures from the transcribed text, all minor (formatting or recorded-resoluti
 | DEV-2 | § Implementation Sequence › File Change Matrix | The record row's `ADR-NNN-<record-slug>` placeholder is resolved to `core/ADRs/ADR-238-each-never-invoked-specialist-takes-one-disposition.md` (the scope-locked slug and the `--next-free` number at authoring). The `CONDITIONAL:homes-option-b` row is dropped: D-WorkProductHomes rendered (A), so the conditional resolved unfired | recorded resolutions of the Stage-4 gate and the Stage-5 lock | minor |
 | DEV-3 | § Recommendations › Verification Plan | The per-issue table carries AC-5 and AC-6 and the amended AC-1 to AC-3 text (D-Amendments (A)), and the AC-3, AC-4 and AC-6 bindings of lock amendment 2; the AC baseline reads 6 | D-Amendments (A) states the rows land in the same change as the body edit; lock amendment 2 binds the AC-4 and AC-6 reads | minor |
 | DEV-4 | § Recommendations | The D-IdentityMode, D-WorkProductHomes and D-Amendments recommendations are transcribed as the planner wrote them; the operator's renderings, which differ for D-IdentityMode (version-less), are in § Recorded decisions | the transcription keeps the planner's text; the decision record is the authority | minor |
+| DEV-5 | frontmatter | Commit 0 carried an `audit_class: false` key that no input declared; the record commit removes it, returning the file to the Stage-4 state (no declaration). The key is the fallback declaration for an audit whose analysis folder detection cannot see; whether Stage 13's filing step should read the record's follow-up tags through it is the hub's call | an unsourced addition, corrected | minor |
+| DEV-6 | this file and the record | Each carries `<!-- repo-integrity: allow-dead-file-ref -->`. The locked census block holds a self-test line that builds a registry row with the link-syntax literal `(x)`, and the dead-file-reference checker scans fenced code for links, so it reads that literal as a dead link in both files. The block cannot change; the marker is the gate's documented override. Neither file carries any other markdown link | a byte-locked block; the checker's fence handling differs from the doc-link standard's statement (§ Verification Evidence) | minor |
+| DEV-7 | the census run steps | The referencing-site pre-count ran as one `git grep -l -wF <name> <head> -- .` call per table row (14) plus an absent-name control, aggregated into the same four classes, instead of the run steps' loop over all 22 subjects. The worktree isolation guard refused the loop form | a control refused the action's form; the predicate and classes are unchanged | minor |
+| DEV-8 | the census run steps | One extra `run` of the locked block, at the same `--head` and nonce with `--until 2026-06-21T03:43:04` (one second before the earliest registration), sources the record's R2 reading: it reads the same `agent-mode` session count as the full run | the R2 reading decides every recommended value, so it is sourced rather than inferred | minor |
+| DEV-9 | the census run steps | Check 67's harness ran with its `--skills` roster text-extracted from the four `deploy.sh` skill arrays (no execution of `deploy.sh`), with `--output-json` into the run directory | the harness needs the roster the deploy check passes | minor |
 
 ## Verification Evidence
 
@@ -1214,3 +1220,57 @@ Run on this file after it was written and before it was committed, on 2026-11-13
 | Survival elements 1 and 5 | count of `domain_practice` labels; count of release-version stamp tokens | 1 label; 0 tokens |
 
 **A1 entry-contract gate: PROCEED.** The release plan, sequence, specs, matrix, strategy, risks and verification plan are present for a Solutioning-level spec (revision 2 with its lock amendments). **A2 container:** PR-body checklist — 2 planned sub-tasks (the plan, the record), doc-only, no calibration-sensitive or cross-file structural change. **A3 snapshot:** the 23 subject paths (the registry, the router and the 21 Specialist `SKILL.md` files) are unchanged since the Stage-4 baseline: `origin/main` has 0 commits after `29c60404`.
+
+### Stage 6 — the census and the record (C4 self-verification)
+
+Run on 2026-11-13 (Friday) with the record and this file staged. The census ran read-only on the operator's local transcript stores; only its printed aggregates are carried, in the record.
+
+| Check | Command | Result |
+|---|---|---|
+| Census block before running | `shasum -a 256` of the block extracted from the locked comment | `6b43236f9fce612f96b3c29db0138b66f17bb75b8ce53733cf0bef0ac6fe7a59`, equal to the lock |
+| Instrument | `census.py self-test`; `census.py mutations` | 16 PASS; 26 caught, control ok, 0 MISSED |
+| Census | `census.py run --head 29c604045def22ebd21fb4a758c3bb56be277b20 --until 2026-11-13T21:42:22 --nonce <printed>` | 22 subjects; 13 Specialists and the router at total 0; control `release-hub` 434; nonce arm 1 file, 0 subject events; amendment-6 stop not triggered (`agent-mode` 209 sessions) |
+| AC-3 control | the same run with `--since 2026-10-15T23:59:59` | 0 changed, 0 INDETERMINATE |
+| R2 source (DEV-8) | the same block with `--until 2026-06-21T03:43:04` | `agent-mode` 209 sessions, equal to the full run |
+| Activation · collisions · Check 67 | `census.py activation`; `census.py collisions --head <head>`; `run_eval_audit.py --composition-aware --output-json` | RTE `DORMANT`; 51 rows; 56 skills, 1540 pairs, 0 ESCALATE, 0 WATCH |
+| Record durability | `python3 release/tools/check-adr-durability.py --files <record> --diff-base origin/main` | `COUNT 0` · control: a copy with one unanchored count line → `R2-COUNT`, `COUNT 1` |
+| ADR numbering | `python3 release/tools/renumber-adr.py --detect` | anchor 237, next-free 238; `CLAIM ADR-238 … BINDS BRANCH-CLAIM`; 238 is also claimed on a sibling branch, so Stage 12 Phase A.5.7 rebinds it if the sibling merges first |
+| Egress | `bash core/deploy/tools/path-leak-patterns.sh --scan-file` on the record and this file | exit 0 on both · control: a planted absolute home path → exit 1 |
+| App-data directory names | a count of the class map's per-account directory names in the record and this file | 0 and 0 · control: one name planted → 1 |
+| Link gates | `check-release-links.py --roots core release --check-anchors --images --files <record> <this file>`; `check-doc-links.py --target-paths <record> --require-targets` | release-links: 2 findings, both the census block's fenced `(x)` literal, and both files carry the gate's `allow-dead-file-ref` override (DEV-6); doc-links: exit 0, no finding |
+| Skill-package freshness | the staged diff's name list on stdin to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | names no skill · control: a Specialist `SKILL.md` path → names that skill |
+| Scope | the staged diff's name list against `origin/main`, restricted to `*/skills/*/SKILL.md`, the registry and the router | 0 · control, this file's path → 1; the whole diff lists only this file and the record |
+| ADR index | — | `ADR index: N/A — this release adds no record under release/ADRs/` |
+| Runtime suite | `append-pipeline-event.sh … --event-type test-run --event-subtype suite-skip …` | appended; read back: this release's `test-run` rows 0 → 1 |
+
+**C3 (deployed-copy sync):** N/A — the release ships no skill, rule mirror or harness artifact. **Deliverable state:** both deliverables — this plan and the record — declare `deliverable_state: artifact-accepted`; each exists at its declared canonical path on the release branch, and its Artifact-Acceptance Record row is populated at Stage 13 Phase A7.5.
+
+## Change Description
+
+### Outcome
+
+The platform now has one tracked decision record that says, for every role Specialist operators never invoke and for the router, what each is for. The record re-runs the invocation census with a stated method, per-subject exposure windows and both control arms; it reads the rendered skill listing across 153 UTC days; and it gives each of 14 subjects one disposition row. The record is `Proposed`. The operator ratifies it at the Stage-9 D-Ratify gate.
+
+### Issues resolved
+
+- #8452 — the census, the disposition table, the listing finding, and the current state, future state and gap map, in `core/ADRs/ADR-238-each-never-invoked-specialist-takes-one-disposition.md`. It is marked closed at Stage 13, once the ratification is recorded.
+
+### Key decisions
+
+- **Three rows are decided by the scheme:** the release train engineer is kept dormant by design, conditioned on the operator's answer that no SAFe configuration exists today; the software engineer and the QA lead are re-triggered through their persona cards.
+- **Eleven rows go to the operator.** The scheme's write-scope and role conjuncts have no comparator the corpus can answer, so the ten rows that reach that rule tie; the router is an operator decision by design. Each carries a recommended value (eight re-trigger, three retire), the predicate behind it and an alternative.
+- **The listing finding conditions every re-trigger:** a skill not used recently renders its description in a minority of listings, so a description edit alone may not reach an operator.
+
+### Reversibility
+
+CHEAP before the merge: abandon the branch, or edit the record while it is `Proposed`. After the merge the record changes only by supersession (EXPENSIVE once ratified, because the dispositions bind follow-up cards). No tag is claimed; a revert of the release PR removes the record.
+
+### Downstream impact
+
+No skill, registry row or router changes in this release. Each re-trigger, re-home or retire row carries a `follow-up:` tag for the release's filing step. The next slice of the parent epic waits on this table, because it may move one of its cards' host.
+
+### Cross-references
+
+- The decision record: `core/ADRs/ADR-238-each-never-invoked-specialist-takes-one-disposition.md`.
+- The locked specification and its amendments: § Stage 5 and § Stage 5 lock amendments of this file.
+- The operator's gates: § Recorded decisions.
