@@ -248,9 +248,10 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 #   substitution at an unbalanced ")" and runs the lines after it, so only a top-level body is
 #   read as data; a pipe, process substitution, backtick or arithmetic (including $[ ]); a
 #   function definition (blanks or not between the parentheses) or the words function, alias,
-#   hash, enable, coproc, or a PATH assignment, or a word ending in aliases, functions or commands
-#   (zsh's tables that define an alias, a function or a command path, their global, suffix and
-#   disabled siblings included) — an enumeration, not a closed class; a << inside
+#   hash, enable, coproc, or a PATH assignment, or a subscript of or an assignment to a word
+#   ending in aliases, functions or commands (zsh's tables that define an alias, a function or a
+#   command path, their global, suffix and disabled siblings included) — an enumeration, not a
+#   closed class; a << inside
 #   a parameter expansion; an unterminated body; a continuation or open quote at a pending body;
 #   more than 8 bodies or 500 lines; a scanned line over 4096 characters, or more than 20 000
 #   scanned characters outside bodies.
@@ -317,7 +318,7 @@ readonly HEREDOC_DATA_AWK='
       line = L[i]; ln = length(line); p = 1; cont = 0
       if (ln > 4096) { bail = 1; break }
       if (line ~ /(^|[^A-Za-z0-9_])(function|alias|hash|enable|coproc)([^A-Za-z0-9_]|$)/ || line ~ /(^|[^A-Za-z0-9_])PATH[+]?=/) risky = 1
-      if (line ~ /(aliases|functions|commands)([^A-Za-z0-9_]|$)/) risky = 1
+      if (line ~ /(aliases|functions|commands)(\[|[+]?=)/) risky = 1
       while (p <= ln) {
         if (++work > 20000) { bail = 1; break }
         c = substr(line, p, 1)
@@ -739,8 +740,9 @@ suggest_trash_command() {
 #   correctly identifies the absolute-path verb. The two changes (regex
 #   anchor + awk prefix-strip) are atomically coupled within this hook
 #   file; per-segment partial revert produces silently-degraded
-#   behavior (regex triggers but awk extracts no target tokens, hook
-#   exits 0 instead of blocking). Land as single atomic commit.
+#   behavior (regex triggers but awk extracts no target tokens, so the
+#   call reads as naming none and is refused by the target-less limb for
+#   the wrong reason). Land as single atomic commit.
 #
 #   fix F3 (#5644): reads the CANONICALIZED command, not the raw one.
 #   This is the same atomic coupling in a new place — the regex above
@@ -832,7 +834,7 @@ readonly SEGMENT_WALK_AWK='
         if (skip_redirect(t)) continue;
         # Skip bare shell structure. A subshell leaves its closing `)` inside
         # the segment, and without this `( rm -rf )` would resolve `)` as a
-        # relative path and block a targetless no-op (#5644).
+        # relative path (#5644); it is refused instead as naming no operand.
         if (t ~ /^[(){}]+$/) continue;
         # Skip flags (start with -) until a `--` ends option parsing.
         if (!endopts && t == "--") { endopts = 1; continue; }
