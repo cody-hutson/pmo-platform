@@ -729,7 +729,7 @@ test_case "EXT-SEG-P2: a flags-only rm inside a subshell group is refused (no op
 test_case "EXT-SEG-P3: a Trash help request is refused (a declared over-block)" \
   "$(bash_payload 'trash --help')" 2 "BLOCK-TRASH-003"
 test_case "EXT-SEG-P4: a commit message from an unquoted here-document with a deletion line is judged (a declared move)" \
-  "$(bash_payload $'git commit -F - <<EOF\nrm -rf build\nEOF')" 2 "BLOCK-TRASH-002"
+  "$(bash_payload $'git commit -F - <<EOF\nrm -rf build\nEOF' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 test_case "EXT-SEG-P5: an rm help request is refused (a declared over-block)" \
   "$(bash_payload 'rm --help')" 2 "BLOCK-TRASH-001"
 test_case "EXT-SEG-P6: a Trash call continued onto a second line of inside operands is refused (a declared over-block)" \
@@ -737,9 +737,9 @@ test_case "EXT-SEG-P6: a Trash call continued onto a second line of inside opera
 test_case "EXT-SEG-P7: a Trash call with its empty-the-Trash flags and one inside operand is allowed (a declared residual)" \
   "$(bash_payload "trash -e -y ${SEG_FH}/Claude/seg-p7" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 test_case "EXT-SEG-P8: a here-document commit message on a command that pipes elsewhere is judged (a declared move)" \
-  "$(bash_payload $'git commit -F - <<\'EOF\'\nrm -rf build\nEOF\ngit log --oneline | cat')" 2 "BLOCK-TRASH-002"
+  "$(bash_payload $'git commit -F - <<\'EOF\'\nrm -rf build\nEOF\ngit log --oneline | cat' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 test_case "EXT-SEG-C6: a message in a double-quoted substitution with an unpaired double quote is judged (the declared move, Q1)" \
-  "$(bash_payload $'git commit -m "$(cat <<\'EOF\'\nsay "hi\nrm -rf build\nEOF\n)"')" 2 "BLOCK-TRASH-002"
+  "$(bash_payload $'git commit -m "$(cat <<\'EOF\'\nsay "hi\nrm -rf build\nEOF\n)"' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
 # The mutant pairs. Each copy differs from the hook by exactly its marked line, shown live first;
 # each sentinel, refused through the hook, is allowed through its copy.
@@ -1766,6 +1766,8 @@ test_case "HDATA-RX-ZSIBLING: a sibling table (global aliases) stays refused" \
   "$(bash_payload $'galiases[EOF]=x; cat <<\'EOF\'\nrm -rf /tmp/hd-zg\nEOF')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-GITC: git with a global option defining an alias is not a listed receiver and stays refused (INT-GITC)" \
   "$(bash_payload $'git -c alias.hd=\'!sh\' hd <<\'EOF\'\nrm -rf /tmp/hd-gitc\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZPATH: a listed receiver writing to a path that carries a table name as a directory is data" \
+  "$(bash_payload $'cat > /tmp/hd-cfg/commands/note.md <<\'EOF\'\nrm -rf /tmp/hd-zp\nEOF')" 0
 test_case "HDATA-RX-ZCTL: a table name followed by a word character is not a table, so the body is data" \
   "$(bash_payload $': aliasesx functionsx commandsx; cat <<\'EOF\'\nrm -rf /tmp/hd-zn\nEOF')" 0
 test_case "HDATA-RX-PEXP: the operator inside a parameter expansion, brace adjacent, stays refused" \
