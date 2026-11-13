@@ -1,0 +1,213 @@
+id	level	universe	parent	title	status
+platform-release	L0	platform-release		Platform release pipeline	minted
+project-delivery	L0	project-delivery		Project delivery lifecycle	minted
+engineering-harness	L0	engineering-harness		Engineering harness	minted
+admit-work-item	L1	platform-release	platform-release	Admit a work item (Stages 1–2)	minted
+deliver-platform-release	L1	platform-release	platform-release	Deliver a platform release (Stages 3–13)	minted
+onboard-project	L1	project-delivery	project-delivery	Set up a new project	minted
+process-project-evidence	L1	project-delivery	project-delivery	Process inbound project evidence	minted
+report-status	L1	project-delivery	project-delivery	Report status daily and weekly	minted
+communicate-with-stakeholders	L1	project-delivery	project-delivery	Draft, approve and send a stakeholder communication	minted
+control-delivery	L1	project-delivery	project-delivery	Control delivery from backlog to release readiness	minted
+define-and-review-solution	L1	project-delivery	project-delivery	Define requirements and review solution designs	minted
+manage-go-live-change	L1	project-delivery	project-delivery	Manage organizational change for a go-live	minted
+close-project	L1	project-delivery	project-delivery	Close and archive a project	minted
+govern-portfolio	L1	project-delivery	project-delivery	Govern the portfolio and its programs	minted
+resolve-support-issue	L1	project-delivery	project-delivery	Resolve a support issue (designed; unobserved)	minted
+install-or-update-workspace	L1	engineering-harness	engineering-harness	Install or update the platform	minted
+run-platform-health-check	L1	engineering-harness	engineering-harness	Run a platform health check	minted
+observe-platform	L1	engineering-harness	engineering-harness	Observe the platform on a schedule	minted
+run-intake	L2	platform-release	admit-work-item	Stage 1 Intake	minted
+run-triage	L2	platform-release	admit-work-item	Stage 2 Triage	minted
+run-bundle	L2	platform-release	deliver-platform-release	Stage 3 Bundle	minted
+run-planning	L2	platform-release	deliver-platform-release	Stage 4 Planning	minted
+run-solutioning	L2	platform-release	deliver-platform-release	Stage 5 Solutioning	minted
+run-engineering	L2	platform-release	deliver-platform-release	Stage 6 Engineering	minted
+run-dev-testing	L2	platform-release	deliver-platform-release	Stage 7 Dev Testing	minted
+run-qa-testing	L2	platform-release	deliver-platform-release	Stage 8 QA Testing	minted
+run-plan-review	L2	platform-release	deliver-platform-release	Stage 9 Plan Review	minted
+run-dry-run	L2	platform-release	deliver-platform-release	Stage 10 Dry Run	minted
+run-snapshot	L2	platform-release	deliver-platform-release	Stage 11 Snapshot	minted
+run-execute	L2	platform-release	deliver-platform-release	Stage 12 Execute	minted
+run-close	L2	platform-release	deliver-platform-release	Stage 13 Close	minted
+review-pr-structure	L3	platform-release	run-dev-testing	Review the PR structure (Stage 7 Phase A)	minted
+verify-acceptance-contracts	L3	platform-release	run-dev-testing	Verify the acceptance contracts (Stage 7 Phase B)	minted
+grade-content-quality	L3	platform-release	run-dev-testing	Grade content quality (Stage 7 Phase C)	minted
+assemble-quality-report	L3	platform-release	run-dev-testing	Assemble the quality report and handoff payload (Stage 7 Phase D)	minted
+dispose-and-route-findings	L3	platform-release	run-dev-testing	Dispose findings and route the verdict (Stage 7 Phase E)	minted
+install-platform	L2	engineering-harness	install-or-update-workspace	Install the platform on a workspace	minted
+update-platform	L2	engineering-harness	install-or-update-workspace	Update an installed workspace to a newer version	minted
+deploy-merged-changes	L2	engineering-harness	install-or-update-workspace	Deploy merged changes to the runtime	minted
+verify-session-setup	L2	engineering-harness	install-or-update-workspace	Verify the session setup at session start	minted
+run-check-suite	L2	engineering-harness	run-platform-health-check	Run the deploy-time check suite	minted
+run-check-probes	L2	engineering-harness	run-platform-health-check	Run a named check probe or the pre-merge subset	minted
+graduate-gate-modes	L2	engineering-harness	run-platform-health-check	Review warn logs and graduate gate modes	minted
+run-scheduled-audit	L2	engineering-harness	observe-platform	Run a scheduled platform audit	minted
+run-security-scan	L2	engineering-harness	observe-platform	Run the scheduled security scan	minted
+run-session-retro	L2	engineering-harness	observe-platform	Run a session retro at session stop	minted
+measure-platform-usage	L2	engineering-harness	observe-platform	Measure platform usage and context cost	minted
+check-deployed-skill-parity	L3	engineering-harness	run-check-suite	Check deployed skill and package parity (Checks 1, 2, 3, 5, 7, 12, 13)	minted
+check-skill-corpus-integrity	L3	engineering-harness	run-check-suite	Check skill-corpus integrity (Checks 6, 10, 13b, 35, 54, 66, 67)	minted
+check-workspace-config-surfaces	L3	engineering-harness	run-check-suite	Check workspace, config and operator-instance surfaces (Checks 4, 8, 9, 11, 30, 33, 36, 40, 70, 77, 78)	minted
+check-corpus-conventions	L3	engineering-harness	run-check-suite	Check documentation and schema conventions (Checks 14, 18, 25, 31, 34, 45, 49, 50, 63, 69, 75, 80)	minted
+check-public-surface-hygiene	L3	engineering-harness	run-check-suite	Check public-surface portability and tool hygiene (Checks 42, 43, 44, 64, 81)	minted
+check-backlog-hygiene	L3	engineering-harness	run-check-suite	Check backlog and tracker hygiene on the host (Checks 16, 17, 21, 22, 51, 52, 53, 55, 56, 72)	minted
+check-release-corpus-integrity	L3	engineering-harness	run-check-suite	Check release-corpus and release-identity integrity (Checks 20, 23, 26, 28, 32, 39, 41, 47, 48, 59, 65)	minted
+check-orchestration-surfaces	L3	engineering-harness	run-check-suite	Check hub, spoke and event-log surfaces (Checks 19, 27, 29, 46, 61, 68)	minted
+check-control-layer-registries	L3	engineering-harness	run-check-suite	Check the control layer's own registries, rollouts and gate meta-checks (Checks 37, 38, 57, 58, 60, 62, 71, 73, 74, 76, 79)	minted
+run-single-check-probe	L3	engineering-harness	run-check-probes	Run a single-check CI probe and map its verdict to an exit code	minted
+run-required-subset	L3	engineering-harness	run-check-probes	Run the pre-merge required subset (Checks 38, 73, 77, 78)	minted
+report-platform-health	L3	engineering-harness	run-check-probes	Report platform health and list the check lifecycle	minted
+review-warn-log-drains	L3	engineering-harness	graduate-gate-modes	Review the warn-log drains and rollout verdicts	minted
+reconcile-gate-posture	L3	engineering-harness	graduate-gate-modes	Reconcile declared gate posture against live branch protection	minted
+flip-gate-to-enforce	L3	engineering-harness	graduate-gate-modes	Decide and record a gate's flip from warn to enforce	minted
+trigger-session-retro	L3	engineering-harness	run-session-retro	Trigger the session retro at a Stop boundary	minted
+emit-session-learnings	L3	engineering-harness	run-session-retro	Reflect over the session and emit learnings rows	minted
+extract-token-spend	L3	engineering-harness	measure-platform-usage	Extract, attribute, report and estimate token spend	minted
+measure-context-budget	L3	engineering-harness	measure-platform-usage	Measure the per-session context budget	minted
+measure-skill-compliance	L3	engineering-harness	measure-platform-usage	Measure skill trigger-compliance	minted
+bootstrap-workspace	L3	engineering-harness	install-platform	Bootstrap the workspace (install.sh Phase 1)	minted
+validate-install	L3	engineering-harness	install-platform	Validate the install and the first task	minted
+regenerate-composition-surfaces	L3	engineering-harness	update-platform	Reconcile the operator config and regenerate composition surfaces (update.sh Phases 1–3)	minted
+refresh-hook-bundle	L3	engineering-harness	update-platform	Refresh the hook bundle and settings, then finalize the update (update.sh Phases 5b0–5d, 5b, 4)	minted
+trigger-post-merge-deploy	L3	engineering-harness	deploy-merged-changes	Trigger a deploy from a merge on main (the post-merge git hook)	minted
+select-deploy-targets	L3	engineering-harness	deploy-merged-changes	Select the deploy targets (cmd_deploy entry to the E-02 exit)	minted
+deploy-skill-artifacts	L3	engineering-harness	deploy-merged-changes	Deploy the selected skills, packages and harness artifacts and assert the result	minted
+verify-session-config	L3	engineering-harness	verify-session-setup	Verify the session's model and effort posture at launch	minted
+notify-version-skew	L3	engineering-harness	verify-session-setup	Notify the operator of version skew at launch	minted
+resolve-routine-binding	L3	engineering-harness	run-scheduled-audit	Resolve a registered routine to its firing binding	minted
+run-platform-health-audit	L3	engineering-harness	run-scheduled-audit	Run the platform health audit (pmo-qa-auditor Mode E)	minted
+run-security-jobs	L3	engineering-harness	run-security-scan	Run the security workflow's jobs on the weekly schedule	minted
+route-scan-verdicts	L3	engineering-harness	run-security-scan	Route the Monday scan verdicts	minted
+auto-log-demand-signal	L3	platform-release	run-intake	Auto-log a demand signal (Stage 1 Path A, intake-desk Mode C)	minted
+elicit-work-item	L3	platform-release	run-intake	Elicit and confirm a work item with the intake desk (Stage 1 Path B, Modes A and B)	minted
+file-issue-by-template	L3	platform-release	run-intake	File an issue through the issue form and land it in Proposed (Stage 1 Paths B and C)	minted
+screen-proposed-issue	L3	platform-release	run-triage	Screen a proposed issue for trust, readiness, duplicates and dependencies (Stage 2 A0–A3.5)	minted
+assess-fit-and-priority	L3	platform-release	run-triage	Assess fit, scope altitude, priority and size (Stage 2 A4–A5.5)	minted
+assemble-triage-summary	L3	platform-release	run-triage	Assemble the per-issue summaries, batch signals and the consolidated summary (Stage 2 A6–A6.5)	minted
+render-triage-verdict	L3	platform-release	run-triage	Render the triage verdict (Stage 2 Phase B)	minted
+resolve-triage-outcome	L3	platform-release	run-triage	Resolve the triage outcome on the tracker (Stage 2 CER Resolve)	minted
+evaluate-release-readiness	L3	platform-release	run-bundle	Evaluate release readiness at bundle entry (Stage 3 Phase A1)	minted
+compose-bundle-recommendation	L3	platform-release	run-bundle	Compose the bundle recommendation (Stage 3 Phase A2–A6, A8–A9)	minted
+commit-milestone-scope	L3	platform-release	run-bundle	Commit the milestone scope (Stage 3 Phase B)	minted
+refresh-bundle-composition	L3	platform-release	run-bundle	Refresh the bundle composition after creation (Stage 3 A7, gate G-BR)	minted
+launch-planning-spoke	L3	platform-release	run-planning	Open the Stage 4 sub-task and launch the planning spoke (hub Procedure 0)	minted
+verify-bundle-currency	L3	platform-release	run-planning	Verify the bundle's currency at planning entry (Stage 4 Phase A0, G-PL1–G-PL5)	minted
+author-release-plan	L3	platform-release	run-planning	Author the release plan (Stage 4 Phase A1–A6)	minted
+approve-release-plan	L3	platform-release	run-planning	Decide the D-Gates and approve the release plan (Stage 4 Phase B)	minted
+scaffold-stage-sub-tasks	L3	platform-release	run-planning	Scaffold the release's stage sub-tasks (hub Procedure 1)	minted
+discover-design-context	L3	platform-release	run-solutioning	Discover the design context (Stage 5 Phases 0.5, 0.7 and A1–A3)	minted
+draft-design-specification	L3	platform-release	run-solutioning	Draft the design specification (Stage 5 Phases A4–A6)	minted
+verify-spec-completeness	L3	platform-release	run-solutioning	Verify the specification's completeness (Stage 5 § 5.6, § 5.8 and the § 7.2 determinations)	minted
+conduct-adversarial-review	L3	platform-release	run-solutioning	Conduct the independent adversarial design review (Stage 5 Phase A6.5)	minted
+accept-design-output	L3	platform-release	run-solutioning	Accept the per-issue design output (Stage 5 Phase B)	minted
+lock-release-scope	L3	platform-release	run-solutioning	Hold the Collective Review and lock the release scope (Stage 5 release-level checkpoint)	minted
+decompose-release-plan	L3	platform-release	run-engineering	Validate the entry contract and decompose the release plan (Stage 6 Phase A)	minted
+implement-release-changes	L3	platform-release	run-engineering	Implement the release changes (Stage 6 Phase B)	minted
+assemble-release-pr	L3	platform-release	run-engineering	Assemble the draft release PR and self-verify (Stage 6 Phase C)	minted
+remediate-dt-findings	L3	platform-release	run-engineering	Remediate Dev Testing findings (Stage 6 Phase E)	minted
+set-up-project	L2	project-delivery	onboard-project	Set up a new project (project-initiator Mode A)	minted
+intake-project-evidence	L2	project-delivery	process-project-evidence	Take in and route project evidence (Entry and Routing stages)	minted
+triage-project-evidence	L2	project-delivery	process-project-evidence	Triage evidence and emit follow-up tags (PPM stage)	minted
+update-project-trackers	L2	project-delivery	process-project-evidence	Update the trackers through the approval gate (Core-Tracker and Stakeholder-Review stages)	minted
+dispose-follow-up-actions	L2	project-delivery	process-project-evidence	Dispose follow-up actions (Action-Triage stage)	minted
+sync-external-systems	L2	project-delivery	process-project-evidence	Sync the external work tracker and knowledge base (step 9, Path B)	minted
+post-daily-status	L2	project-delivery	report-status	Post the daily status update (AM and PM)	minted
+roll-up-weekly-status	L2	project-delivery	report-status	Roll up the weekly status and write portfolio health back	minted
+draft-stakeholder-communication	L2	project-delivery	communicate-with-stakeholders	Draft a stakeholder communication to the approval gate	minted
+send-and-log-communication	L2	project-delivery	communicate-with-stakeholders	Send a communication and log its lifecycle	minted
+refine-delivery-backlog	L2	project-delivery	control-delivery	Refine the delivery backlog to the Definition-of-Ready gate	minted
+plan-and-run-sprint	L2	project-delivery	control-delivery	Plan the sprint and control its execution	minted
+gate-delivery-readiness	L2	project-delivery	control-delivery	Gate Definition of Done and release readiness	minted
+define-requirements	L2	project-delivery	define-and-review-solution	Define requirements and document the process	minted
+review-solution-design	L2	project-delivery	define-and-review-solution	Review solution designs and their requirements	minted
+assess-change-impact	L2	project-delivery	manage-go-live-change	Assess the change impact of a go-live	minted
+prepare-users-for-go-live	L2	project-delivery	manage-go-live-change	Prepare users to the readiness go/no-go	minted
+run-hypercare	L2	project-delivery	manage-go-live-change	Run hypercare and track adoption to close	minted
+close-out-project	L2	project-delivery	close-project	Close out and archive a project (project-initiator Mode B)	minted
+steer-portfolio	L2	project-delivery	govern-portfolio	Steer the portfolio (health, risk, intake, SteerCo)	minted
+steer-program-delivery	L2	project-delivery	govern-portfolio	Steer program delivery (dependencies, posture, readiness, RAID)	minted
+resolve-tier-1-issue	L2	project-delivery	resolve-support-issue	Triage and resolve a first-line support issue	minted
+resolve-escalated-issue	L2	project-delivery	resolve-support-issue	Root-cause and resolve an escalated issue	minted
+validate-qa-entry	L3	platform-release	run-qa-testing	Validate QA entry: the handoff, the PR gate state and the criteria (Stage 8 Phase A)	minted
+review-acceptance-criteria	L3	platform-release	run-qa-testing	Review the acceptance criteria and assemble the Acceptance Report (Stage 8 Phases B and C)	minted
+settle-acceptance-verdict	L3	platform-release	run-qa-testing	Settle the acceptance verdict and route it (Stage 8 Phases D and E)	minted
+assemble-plan-review-evidence	L3	platform-release	run-plan-review	Assemble the Plan Review evidence package (Stage 9 Phase A1 to A7)	minted
+ready-release-pr	L3	platform-release	run-plan-review	Ready the release PR and record its draft state (Stage 9 Phases A8 and A9)	minted
+decide-go-no-go	L3	platform-release	run-plan-review	Brief, render and record the GO / NO-GO decision (Stage 9 Phases B to C1, hub Procedure 5)	minted
+merge-upstream-pr-early	L3	platform-release	run-execute	Merge an upstream issue's PR early to unblock a downstream issue (hub Procedure 6)	minted
+prepare-release-merge	L3	platform-release	run-execute	Prepare the release PR for merge (Stage 12 gate rows, Phase A, Phase B0)	minted
+merge-and-tag-release	L3	platform-release	run-execute	Merge the release PR and claim its version tag (Stage 12 Phase B1–B3.2)	minted
+deploy-release-targets	L3	platform-release	run-execute	Deploy the release's targets under its join key (Stage 12 Phase B4, Phase J.5)	minted
+record-deployment-evidence	L3	platform-release	run-execute	Record the DEPLOYED row through a chore PR and emit the release surface (Stage 12 Phase B5, B5.5)	minted
+verify-and-hand-off-deployment	L3	platform-release	run-execute	Verify the deployment and hand off to Stage 13 (Stage 12 Phases C and D)	minted
+roll-back-release	L3	platform-release	run-execute	Roll back a post-merge regression (operator-authorized rollback path)	minted
+land-release-record	L3	platform-release	run-close	Land the release record on main through the Stage 13 chore PR	minted
+close-release-milestone	L3	platform-release	run-close	Verify the output set and close the milestone (hub Procedures 7 and 7a)	minted
+verify-close-evidence	L3	platform-release	run-close	Re-verify the release and record the close verdicts	minted
+capture-release-learnings	L3	platform-release	run-close	Capture the release learnings and the learnings register	minted
+author-release-note	L3	platform-release	run-close	Author the user-facing release note	minted
+clean-up-release-state	L3	platform-release	run-close	Clean up release-bound branches, worktrees and delivered epics	minted
+deploy-operational-manifest	L3	platform-release	run-close	Deploy and verify the operational deployment manifest	minted
+promote-observation-to-proposal	L3	platform-release	run-triage	Promote an observation to a proposal	minted
+sweep-deferred-backlog	L3	platform-release	run-triage	Sweep the deferred backlog	minted
+scaffold-project-workspace	L3	project-delivery	set-up-project	Validate the inputs and scaffold the project workspace (project-initiator Mode A Steps 1 to 4)	minted
+register-project-in-portfolio	L3	project-delivery	set-up-project	Register the project in the portfolio and verify it routes (Mode A Steps 5, 5a, 5b)	minted
+hand-off-project-setup	L3	project-delivery	set-up-project	Hand the operator the external setup, next steps and summary (Mode A Steps 6 to 8)	minted
+dispose-open-items-at-closure	L3	project-delivery	close-out-project	Read the project state and dispose every open item (project-initiator Mode B Steps B1 to B2)	minted
+archive-closed-project	L3	project-delivery	close-out-project	Record the closure, archive the folder and de-register the project (Mode B Steps B3 to B8)	minted
+capture-knowledge-asset	L3	project-delivery	close-out-project	Capture a knowledge asset into its governed home (pmo-knowledge-manager Mode 1)	minted
+sweep-evidence-inbox	L3	project-delivery	intake-project-evidence	Sweep the evidence inbox on schedule (Path A)	minted
+route-evidence-file	L3	project-delivery	intake-project-evidence	Classify and route an arriving evidence file (file-router)	minted
+analyze-evidence-against-trackers	L3	project-delivery	triage-project-evidence	Analyze evidence against the project trackers (ppm-agent)	minted
+emit-triage-handoffs	L3	project-delivery	triage-project-evidence	Emit the triage handoffs: tags, tracker instructions and manifest (ppm-agent)	minted
+poll-external-status	L3	project-delivery	sync-external-systems	Poll external status and propose reconciliations (step 9, Path B)	minted
+consolidate-tracker-updates	L3	project-delivery	update-project-trackers	Validate and consolidate tracker update instructions into one change summary	minted
+write-approved-tracker-changes	L3	project-delivery	update-project-trackers	Gate the stakeholder-facing changes and write the approved tracker changes	minted
+stage-generated-artifact	L3	project-delivery	update-project-trackers	Produce, stage and promote a generated project artifact	minted
+dispose-surfaced-action-items	L3	project-delivery	dispose-follow-up-actions	Dispose the action items triage surfaces for the operator	minted
+close-items-through-evidence-gate	L3	project-delivery	dispose-follow-up-actions	Close a carry-forward item only on qualifying evidence	minted
+generate-daily-status-update	L3	project-delivery	post-daily-status	Generate the AM or PM status update	minted
+post-and-log-daily-update	L3	project-delivery	post-daily-status	Post the daily update and log it	minted
+synthesize-weekly-roll-up	L3	project-delivery	roll-up-weekly-status	Synthesize the weekly roll-up (Sections 1-5 and 7)	minted
+stage-portfolio-write-back	L3	project-delivery	roll-up-weekly-status	Stage the portfolio write-back (Section 6)	minted
+compose-communication-draft	L3	project-delivery	draft-stakeholder-communication	Compose an audience-calibrated draft and its readiness verdict (comms-writer)	minted
+approve-communication-draft	L3	project-delivery	draft-stakeholder-communication	Approve or return a communication draft (Document Tier 1 gate)	minted
+send-approved-communication	L3	project-delivery	send-and-log-communication	Send an approved communication and attest the send	minted
+follow-up-stalled-communication	L3	project-delivery	send-and-log-communication	Draft the follow-up for a stalled communication (2-Day Rule)	minted
+scan-backlog-health	L3	project-delivery	refine-delivery-backlog	Scan the delivery backlog and draft a remediation for every finding (delivery-engine Mode A)	minted
+analyze-work-item-similarity	L3	project-delivery	refine-delivery-backlog	Analyze a work item against the backlog: related items, duplicates, dependency chain (delivery-engine Mode B)	minted
+gate-definition-of-ready	L3	project-delivery	refine-delivery-backlog	Gate work items at the Definition of Ready and emit the admission rows (delivery-engine Mode C)	minted
+plan-sprint-scope	L3	project-delivery	plan-and-run-sprint	Plan the sprint: focus-adjusted capacity, ranged scope, options and goal (delivery-engine Mode D)	minted
+control-sprint-execution	L3	project-delivery	plan-and-run-sprint	Control the sprint in flight and report estimation calibration (delivery-engine Mode E)	minted
+gate-definition-of-done	L3	project-delivery	gate-delivery-readiness	Gate completed work at the Definition of Done and release readiness (delivery-engine Mode F)	minted
+update-raid-and-decision-records	L3	project-delivery	gate-delivery-readiness	Update the RAID, decision and milestone records (delivery-engine Mode G)	minted
+define-structured-requirements	L3	project-delivery	define-requirements	Define structured, traceable requirements from business context (pmo-process-designer Mode A)	minted
+document-process-workflow	L3	project-delivery	define-requirements	Document a process workflow, its decisions and exception paths (pmo-process-designer Mode B)	minted
+analyze-coverage-gaps	L3	project-delivery	define-requirements	Classify coverage between two artifacts and draft the gap remediations (pmo-process-designer Mode C)	minted
+build-traceability-matrix	L3	project-delivery	define-requirements	Build the traceability chain and flag its broken links (pmo-process-designer Mode D)	minted
+review-functional-design	L3	project-delivery	review-solution-design	Review and score a functional design document (pmo-technical-analyst Mode A)	minted
+review-integration-design	L3	project-delivery	review-solution-design	Review an integration specification (pmo-technical-analyst Mode B)	minted
+review-architecture-design	L3	project-delivery	review-solution-design	Review an architecture or infrastructure design (pmo-technical-analyst Mode C)	minted
+review-operational-procedure	L3	project-delivery	review-solution-design	Review an SOP or runbook for operational readiness (pmo-technical-analyst Mode D)	minted
+assess-change-against-system-model	L3	project-delivery	review-solution-design	Assess a proposed change against a system's documented model (pmo-wms-specialist Assess)	minted
+build-change-impact-assessment	L3	project-delivery	assess-change-impact	Build the change impact assessment (change-management Mode A, through Mode E when a change matrix is supplied)	minted
+plan-go-live-training	L3	project-delivery	prepare-users-for-go-live	Plan the go-live training, gated on ADKAR readiness (change-management Mode B)	minted
+check-go-live-readiness	L3	project-delivery	prepare-users-for-go-live	Build the go-live readiness checklist and verdict (change-management Mode C)	minted
+render-readiness-go-no-go	L3	project-delivery	prepare-users-for-go-live	Render the readiness go/no-go and take the operator's call (pmo-ocm-lead Mode 3)	minted
+schedule-change-communications	L3	project-delivery	prepare-users-for-go-live	Schedule the change communications against go-live (change-management Mode F)	minted
+plan-and-track-hypercare	L3	project-delivery	run-hypercare	Plan hypercare and hold it to its committed SLAs and exit gate (change-management Mode D)	minted
+track-change-adoption	L3	project-delivery	run-hypercare	Track adoption per audience to its measured horizon (change-management Mode G)	minted
+synthesize-portfolio-health	L3	project-delivery	steer-portfolio	Synthesize the portfolio health call (Portfolio Manager Mode 1)	minted
+decide-portfolio-intake-trade-off	L3	project-delivery	steer-portfolio	Decide a portfolio intake trade-off (Portfolio Manager Mode 3)	minted
+decide-steerco-readiness	L3	project-delivery	steer-portfolio	Decide SteerCo or executive readiness (Portfolio Manager Mode 4)	minted
+synthesize-program-risks-and-dependencies	L3	project-delivery	steer-program-delivery	Synthesize cross-project risks and dependencies (Program Manager Mode 1)	minted
+decide-program-release-readiness	L3	project-delivery	steer-program-delivery	Decide program release readiness (Program Manager Mode 3)	minted
+steward-program-raid-and-decisions	L3	project-delivery	steer-program-delivery	Steward the program RAID and decision log (Program Manager Mode 5)	minted
+triage-support-issue	L3	project-delivery	resolve-tier-1-issue	Triage an incoming support issue (pmo-tier-1-support Mode 1)	minted
+resolve-known-issue	L3	project-delivery	resolve-tier-1-issue	Resolve a known issue from a current runbook (pmo-tier-1-support Mode 2)	minted
+escalate-support-issue	L3	project-delivery	resolve-tier-1-issue	Escalate a novel issue with an Escalation Handoff Record (pmo-tier-1-support Mode 3)	minted
+answer-system-question	L3	project-delivery	resolve-tier-1-issue	Answer a system question from its documented corpus (pmo-wms-specialist Mode Answer)	minted
+root-cause-escalated-issue	L3	project-delivery	resolve-escalated-issue	Root-cause an escalated issue (pmo-tier-2-support Mode 1)	minted
+close-escalated-issue	L3	project-delivery	resolve-escalated-issue	Close an escalated issue with a fix (pmo-tier-2-support Mode 2)	minted
+author-support-runbook	L3	project-delivery	resolve-escalated-issue	Author or update the support runbook (pmo-tier-2-support Mode 3)	minted
