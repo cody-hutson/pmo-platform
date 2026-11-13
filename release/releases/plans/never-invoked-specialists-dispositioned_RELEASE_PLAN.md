@@ -1204,6 +1204,8 @@ Departures from the transcribed text, all minor (formatting or recorded-resoluti
 | DEV-7 | the census run steps | The referencing-site pre-count ran as one `git grep -l -wF <name> <head> -- .` call per table row (14) plus an absent-name control, aggregated into the same four classes, instead of the run steps' loop over all 22 subjects. The worktree isolation guard refused the loop form | a control refused the action's form; the predicate and classes are unchanged | minor |
 | DEV-8 | the census run steps | One extra `run` of the locked block, at the same `--head` and nonce with `--until 2026-06-21T03:43:04` (one second before the earliest registration), sources the record's R2 reading: it reads the same `agent-mode` session count as the full run | the R2 reading decides every recommended value, so it is sourced rather than inferred | minor |
 | DEV-9 | the census run steps | Check 67's harness ran with its `--skills` roster text-extracted from the four `deploy.sh` skill arrays (no execution of `deploy.sh`), with `--output-json` into the run directory | the harness needs the roster the deploy check passes | minor |
+| DEV-10 | the record, § Decision › Readings and the tie rows | A third commit corrects the tie's stated basis. The first record commit said both of R4a's write and role conjuncts were G3 against every used sibling; the write read rested on two sampled Output Contracts, and the role read holds against every used sibling for 7 of the 10 rows only. The tie now rests on the probe-backed role read: two used siblings, the OCM lead and the principal engineer, state no tier. No row's rule, value or alternative changes | a claim stated more broadly than its probe, corrected before Stage 7 | minor |
+| DEV-11 | the record, § Current State › Listing finding | The specification asks that render forms be compared only after a description change inside a window; the locked procedure has no split, so the record names the 7 changed descriptions (3 of them rows) and states that their tallies span the change | the procedure is byte-locked | minor |
 
 ## Verification Evidence
 
@@ -1238,8 +1240,9 @@ Run on 2026-11-13 (Friday) with the record and this file staged. The census ran 
 | Egress | `bash core/deploy/tools/path-leak-patterns.sh --scan-file` on the record and this file | exit 0 on both · control: a planted absolute home path → exit 1 |
 | App-data directory names | a count of the class map's per-account directory names in the record and this file | 0 and 0 · control: one name planted → 1 |
 | Link gates | `check-release-links.py --roots core release --check-anchors --images --files <record> <this file>`; `check-doc-links.py --target-paths <record> --require-targets` | release-links: 2 findings, both the census block's fenced `(x)` literal, and both files carry the gate's `allow-dead-file-ref` override (DEV-6); doc-links: exit 0, no finding |
-| Skill-package freshness | the staged diff's name list on stdin to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` | names no skill · control: a Specialist `SKILL.md` path → names that skill |
-| Scope | the staged diff's name list against `origin/main`, restricted to `*/skills/*/SKILL.md`, the registry and the router | 0 · control, this file's path → 1; the whole diff lists only this file and the record |
+| Skill-package freshness | `git diff --name-only origin/main...HEAD \| bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` (stdin; first run on the staged set as `git diff --cached --name-only origin/main`) | names no skill · control: a Specialist `SKILL.md` path → names that skill |
+| Scope | `git diff --name-only origin/main...HEAD -- '*/skills/*/SKILL.md' core/skills/registry.md core/skills/pmo-skill-router` | 0 · control, `git diff --name-only origin/main...HEAD -- <this file>` → 1; `git diff --name-only origin/main...HEAD` lists only this file and the record |
+| CI on the draft PR | `gh pr checks` | the required Dead-file-reference gate passes (the override, DEV-6); the reference-durability, ADR durability, ADR-number, issue-reference and commit-message gates pass; the advisory `Verify intra-repo links in release/` check reads red on this file's fenced `(x)` literal, because that workflow has no per-file override (DEV-6) |
 | ADR index | — | `ADR index: N/A — this release adds no record under release/ADRs/` |
 | Runtime suite | `append-pipeline-event.sh … --event-type test-run --event-subtype suite-skip …` | appended; read back: this release's `test-run` rows 0 → 1 |
 
@@ -1258,7 +1261,7 @@ The platform now has one tracked decision record that says, for every role Speci
 ### Key decisions
 
 - **Three rows are decided by the scheme:** the release train engineer is kept dormant by design, conditioned on the operator's answer that no SAFe configuration exists today; the software engineer and the QA lead are re-triggered through their persona cards.
-- **Eleven rows go to the operator.** The scheme's write-scope and role conjuncts have no comparator the corpus can answer, so the ten rows that reach that rule tie; the router is an operator decision by design. Each carries a recommended value (eight re-trigger, three retire), the predicate behind it and an alternative.
+- **Eleven rows go to the operator.** ADR-019's role conjunct cannot be read against two of the used siblings, which state no tier, so the ten rows that reach that rule tie; the router is an operator decision by design. Each carries a recommended value (eight re-trigger, three retire), the predicate behind it and an alternative.
 - **The listing finding conditions every re-trigger:** a skill not used recently renders its description in a minority of listings, so a description edit alone may not reach an operator.
 
 ### Reversibility
