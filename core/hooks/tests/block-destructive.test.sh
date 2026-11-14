@@ -8614,16 +8614,11 @@ wrap_pair "WRAPPAIR-kw-ctl-ok: the allowlist-blind mutant refuses it, so WRAPKW-
 wrap_arm "WRAPDIV-kw-prose (declared over-block, introduced here): git commit -m \"note; if bash <unlisted>.sh then\" blocks" \
   "git commit -m \"note; if bash ${WRAP_NA} then\"" B a "BLOCK-DESTRUCTIVE-022"
 
-# --- the quoted assignment value: declared here, its fix owned by its own card ------------
-# Pinned at the verdicts the walk gives today, in both directions, so a change is deliberate.
-wrap_arm "WRAPDIV-qval-sq: FOO='a b' bash <unlisted>.sh allowed (the value's second piece is read as the command word)" \
-  "FOO='a b' bash ${WRAP_NA}" a a
-wrap_pair "WRAPPAIR-qval-sq: the scan mutant reads past the value's second piece and refuses, so WRAPDIV-qval-sq can fail" block-destructive-pscan.sh B
-wrap_arm "WRAPDIV-qval-fp: MSG='run bash now' echo <unlisted>.sh blocks (the over-block twin of the same split)" \
-  "MSG='run bash now' echo ${WRAP_NA}" B B "BLOCK-DESTRUCTIVE-022"
-# The operand join is reverted with them: since #8318 the operand path joins the value's last piece,
-# which opens a quote, to what follows it and refuses what it read, a third hold on the same over-block.
-wrap_pair "WRAPPAIR-qval-fp: with the operand walk, the conservative route and the operand join reverted the walk ends on the value's last piece and allows it, so WRAPDIV-qval-fp can fail" block-destructive-pwalkroute.sh a
+# --- the quoted assignment value --------------------------------------------------------------
+# A value whose quoting or escaping spans a blank is read to the end of its word since #8319; its
+# arms are the ASGN-QVAL block at the end of this suite, which reads its rows from the corpus. Still
+# pinned here at the verdict the walk gives today: a separator inside the quoted value, which splits
+# the segment before the walk sees it — a different root cause, carried as a release follow-up.
 wrap_arm "WRAPDIV-qval-sep: FOO='a;b' bash <unlisted>.sh allowed (a separator inside the quoted value splits the segment)" \
   "FOO='a;b' bash ${WRAP_NA}" a a
 wrap_pair "WRAPPAIR-qval-sep: the scan mutant reads past the split piece and refuses, so WRAPDIV-qval-sep can fail" block-destructive-pscan.sh B

@@ -241,8 +241,8 @@ O14|block-destructive|fp|-|o|a|bash -x @D@/ok.sh --msg "it's here"
 O15|block-destructive|fp|-|o|B|bash '@D@/sp ace/ok.sh'
 O16|block-destructive|fp|-|?|a|source 'my env file'
 O17|block-destructive|fp|-|-|a|bash -n '@D@/sp ace/ok.sh'
-O18|block-destructive|fp|-|X|a|FOO='a b' bash @D@/na.sh
-O19|block-destructive|fp|-|X|a|env FOO='a b' bash @D@/na.sh
+O18|block-destructive|fp|-|X|B|FOO='a b' bash @D@/na.sh
+O19|block-destructive|fp|-|X|B|env FOO='a b' bash @D@/na.sh
 O20|block-destructive|fp|-|?|a|bash -lc "echo 'x y'"
 O21|block-destructive|fp|-|-|a|sh -c "echo 'a b'"
 O22|block-destructive|fp|-|-|a|bash --norc -c 'echo a b'
@@ -251,7 +251,7 @@ O24|block-destructive|fp|-|-|B|bash -c 'cat @D@/na.sh'
 O25|block-destructive|fp|-|?|B|bash -lc 'bash @D@/na.sh'
 O26|block-destructive|fp|-|X|B|sh -ec "sh @D@/na.sh"
 O27|block-destructive|fp|-|X|B|zsh -ec 'zsh @D@/na.sh'
-O28|block-destructive|fp|-|X|a|X='a b' Y=1 sh @D@/na.sh
+O28|block-destructive|fp|-|X|B|X='a b' Y=1 sh @D@/na.sh
 O29|block-destructive|fp|-|o|a|bash -x -e -u -o pipefail @D@/ok.sh 'arg one'
 Y01|block-destructive|nonflag|K15|w|B|bash '@D@/wr'ap @D@/na.sh
 Y02|block-destructive|nonflag|K15|w|B|bash ''@D@/wrap @D@/na.sh
@@ -731,6 +731,10 @@ ZR04|block-destructive|redir|-|-|a|bash -n @D@/na.sh > /dev/null 2>&1
 # are executions or shapes the walk does not reach, each declared in the readiness text.
 # WR150 and WR151, an abbreviated long option with a separate value, were declared here and
 # are closed by the card's iteration for its Stage 7 finding F-01 (group wrap-abbrev, below).
+# WR126 to WR131 were declared here and are closed by card #8319 (group wrap-qval, refused);
+# WR134 and WR135 are its declared precision rows (group wrap-qval-prec, allowed), re-graded with
+# ground truth `?`: for this release the operator waived the real-interpreter verification a
+# refuse-to-allow move otherwise needs (D-GroundTruth-Rev).
 WR01|block-destructive|wrap-opt|-|?|B|nice -n 10 bash @D@/na.sh
 WR02|block-destructive|wrap-opt|-|?|B|stdbuf -o0 bash @D@/na.sh
 WR03|block-destructive|wrap-opt|-|?|B|stdbuf -o 0 bash @D@/na.sh
@@ -846,16 +850,16 @@ WR122|block-destructive|wrap-qval|-|?|B|gh pr view; X='a; b=' bash @D@/na.sh
 WR123|block-destructive|wrap-qval|-|?|B|X="a; b=" bash "$D/x.sh"
 WR124|block-destructive|wrap-qval-ctl|-|?|a|X='a; b=' bash @D@/ok.sh
 WR125|block-destructive|wrap-qval-ctl|-|?|B|FOO='ab' bash @D@/na.sh
-WR126|block-destructive|wrap-declared|-|?|a|FOO='a b' bash @D@/na.sh
-WR127|block-destructive|wrap-declared|-|?|a|FOO="a b" bash @D@/na.sh
-WR128|block-destructive|wrap-declared|-|?|a|env FOO='a b' bash @D@/na.sh
-WR129|block-destructive|wrap-declared|-|?|a|X='a b' Y=1 sh @D@/na.sh
-WR130|block-destructive|wrap-declared|-|?|a|A=1; B='x y' bash @D@/na.sh
-WR131|block-destructive|wrap-declared|-|?|a|FOO=a\ b bash @D@/na.sh
+WR126|block-destructive|wrap-qval|-|?|B|FOO='a b' bash @D@/na.sh
+WR127|block-destructive|wrap-qval|-|?|B|FOO="a b" bash @D@/na.sh
+WR128|block-destructive|wrap-qval|-|?|B|env FOO='a b' bash @D@/na.sh
+WR129|block-destructive|wrap-qval|-|?|B|X='a b' Y=1 sh @D@/na.sh
+WR130|block-destructive|wrap-qval|-|?|B|A=1; B='x y' bash @D@/na.sh
+WR131|block-destructive|wrap-qval|-|?|B|FOO=a\ b bash @D@/na.sh
 WR132|block-destructive|wrap-declared|-|?|a|TS=$(date +%s) bash @D@/na.sh
 WR133|block-destructive|wrap-declared|-|?|a|VERSION="$(git describe --tags)" bash @D@/na.sh
-WR134|block-destructive|wrap-overblock|-|?|B|MSG='run bash now' echo @D@/na.sh
-WR135|block-destructive|wrap-overblock|-|?|B|NOTE="see bash @D@/na.sh" true
+WR134|block-destructive|wrap-qval-prec|-|?|a|MSG='run bash now' echo @D@/na.sh
+WR135|block-destructive|wrap-qval-prec|-|?|a|NOTE="see bash @D@/na.sh" true
 WR136|block-destructive|wrap-overblock|-|?|B|cat 'it; B=' bash @D@/na.sh
 WR140|block-destructive|wrap-declared|-|?|a|>/dev/null bash @D@/na.sh
 WR141|block-destructive|wrap-declared|-|?|a|\bash @D@/na.sh
@@ -1900,38 +1904,38 @@ OP11|block-destructive|rt-opnear|-|?|a|cat @D@/na.s'h'
 # The precision rows here (AV19-AV22, AV24, beside WR134 and WR135) move to allowed with ground truth `?`: for this
 # release the operator waived the real-interpreter verification a refuse-to-allow move otherwise needs
 # (D-GroundTruth-Rev); each move is declared in the readiness text and pinned by an arm red against the pre-fix hook.
-AV01|block-destructive|rt-asgn|-|?|a|FOO='a b' sh @D@/na.sh
-AV02|block-destructive|rt-asgn|-|?|a|FOO="a b" source @D@/na.sh
-AV03|block-destructive|rt-asgn|-|?|a|FOO='a b' . @D@/na.sh
-AV04|block-destructive|rt-asgn|-|?|a|FOO+='a b' bash @D@/na.sh
-AV05|block-destructive|rt-asgn|-|?|a|sudo FOO='a b' bash @D@/na.sh
-AV06|block-destructive|rt-asgn|-|?|a|env -i FOO='a b' bash @D@/na.sh
-AV07|block-destructive|rt-asgn|-|?|a|FOO='a b c d' bash @D@/na.sh
-AV08|block-destructive|rt-asgn|-|?|a|FOO='a b' BAR="c d" bash @D@/na.sh
-AV09|block-destructive|rt-asgn|-|?|a|echo hi; FOO='a b' bash @D@/na.sh
-AV10|block-destructive|rt-asgn|-|?|a|FOO='a b' bash @D@/na.sh@NL@cat <<'EOF'@NL@x@NL@EOF
-AV11|block-destructive|rt-asgn-rec|-|?|a|FOO='a b' @D@/na.sh
-AV12|block-destructive|rt-asgn-rec|-|?|a|FOO='a b' python3 @D@/na.py
-AV13|block-destructive|rt-asgn-rec|-|?|a|X=$(FOO='a b' bash @D@/na.sh)
+AV01|block-destructive|rt-asgn|-|?|B|FOO='a b' sh @D@/na.sh
+AV02|block-destructive|rt-asgn|-|?|B|FOO="a b" source @D@/na.sh
+AV03|block-destructive|rt-asgn|-|?|B|FOO='a b' . @D@/na.sh
+AV04|block-destructive|rt-asgn|-|?|B|FOO+='a b' bash @D@/na.sh
+AV05|block-destructive|rt-asgn|-|?|B|sudo FOO='a b' bash @D@/na.sh
+AV06|block-destructive|rt-asgn|-|?|B|env -i FOO='a b' bash @D@/na.sh
+AV07|block-destructive|rt-asgn|-|?|B|FOO='a b c d' bash @D@/na.sh
+AV08|block-destructive|rt-asgn|-|?|B|FOO='a b' BAR="c d" bash @D@/na.sh
+AV09|block-destructive|rt-asgn|-|?|B|echo hi; FOO='a b' bash @D@/na.sh
+AV10|block-destructive|rt-asgn|-|?|B|FOO='a b' bash @D@/na.sh@NL@cat <<'EOF'@NL@x@NL@EOF
+AV11|block-destructive|rt-asgn-rec|-|?|W|FOO='a b' @D@/na.sh
+AV12|block-destructive|rt-asgn-rec|-|?|W|FOO='a b' python3 @D@/na.py
+AV13|block-destructive|rt-asgn-rec|-|?|W|X=$(FOO='a b' bash @D@/na.sh)
 AV14|block-destructive|rt-asgn-ctl|-|?|a|FOO='a b' bash @D@/ok.sh
 AV15|block-destructive|rt-asgn-ctl|-|?|B|FOO=ab sh @D@/na.sh
 AV16|block-destructive|rt-asgn-ctl|-|?|B|FOO='ab' source @D@/na.sh
 AV17|block-destructive|rt-asgn-ctl|-|?|W|FOO=ab @D@/na.sh
 AV18|block-destructive|rt-asgn-ctl|-|?|W|FOO=ab python3 @D@/na.py
-AV19|block-destructive|rt-asgn-prec|-|?|B|NOTE='see sh @D@/na.sh' true
-AV20|block-destructive|rt-asgn-prec|-|?|B|NOTE="run source @D@/na.sh" true
-AV21|block-destructive|rt-asgn-prec|-|?|W|NOTE='see @D@/na.sh' true
-AV22|block-destructive|rt-asgn-prec|-|?|B|NOTE='see bash @D@/na.sh; x' true
-AV23|block-destructive|rt-asgn-decl|-|?|B|FOO='x bash' @D@/na.sh
-AV24|block-destructive|rt-asgn-decl|-|?|B|FOO='x bash' na.sh
-AV25|block-destructive|rt-asgn-over|-|?|a|nice FOO='a b' bash @D@/na.sh
+AV19|block-destructive|rt-asgn-prec|-|?|a|NOTE='see sh @D@/na.sh' true
+AV20|block-destructive|rt-asgn-prec|-|?|a|NOTE="run source @D@/na.sh" true
+AV21|block-destructive|rt-asgn-prec|-|?|a|NOTE='see @D@/na.sh' true
+AV22|block-destructive|rt-asgn-prec|-|?|a|NOTE='see bash @D@/na.sh; x' true
+AV23|block-destructive|rt-asgn-decl|-|?|W|FOO='x bash' @D@/na.sh
+AV24|block-destructive|rt-asgn-decl|-|?|a|FOO='x bash' na.sh
+AV25|block-destructive|rt-asgn-over|-|?|B|nice FOO='a b' bash @D@/na.sh
 AV26|block-destructive|rt-asgn-keep|-|?|B|NOTE='see sh @D@/na.sh' bash @D@/na.sh
 AV27|block-destructive|rt-asgn-keep|-|?|B|sudo -u 'a FOO=b' bash @D@/na.sh
 AV28|block-destructive|rt-asgn-keep|-|?|B|FOO=a\  bash @D@/na.sh
 AV29|block-destructive|rt-asgn-keep|-|?|W|X=$(bash @D@/na.sh)
 AV30|block-destructive|rt-asgn-limit|-|?|B|FOO='a b' echo "x; bash @D@/na.sh"
 AV31|block-destructive|rt-asgn-limit|-|?|a|FOO=ab echo "x; bash @D@/na.sh"
-AV32|block-destructive|rt-asgn-limit|-|?|a|FOO=@QMID@'a b' bash @D@/ok.sh; echo "x; bash @D@/na.sh"
+AV32|block-destructive|rt-asgn-limit|-|?|B|FOO=@QMID@'a b' bash @D@/ok.sh; echo "x; bash @D@/na.sh"
 AV33|block-destructive|rt-asgn-resid|-|?|a|cat <<'EOF'@NL@x@NL@EOF@NL@FOO='a b' bash @D@/na.sh
 AV34|block-destructive|rt-asgn-resid|-|?|a|FOO="a ${X}" bash @D@/na.sh
 AV35|block-destructive|rt-asgn-resid|-|?|a|echo "$(FOO='a b' bash @D@/na.sh)"

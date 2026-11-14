@@ -1687,6 +1687,7 @@ script_wrapper_options() {
           -*) break ;;
           *=*)
             script_hidx=$(( script_hidx + 1 ))
+            script_assign_value_rest "$_tok"   # M-WRAP-QVAL
             ;;
           *) break ;;
         esac
@@ -2992,6 +2993,12 @@ script_heredoc_prescan() {
 # entry may only ever cost a false positive. The price of the asymmetry is exactly
 # that price: a wrapper in front of a carrier verb keeps the pre-existing false
 # positive on a quoted argument. Pay it here rather than on the other side.
+#
+# Nor does this walk take the assignment-value step the verb walk takes
+# (script_assign_value_rest): it steps over the first piece of a quoted value that holds a
+# blank and reads the next piece as the head, so a carrier written behind such a value keeps
+# the false positive on its quoted argument that its no-blank spelling does not have — a
+# declared limit, pinned by ASGN-QVAL-limit-carrier beside ASGN-QVAL-limit-ctl.
 script_resolve_head() {
   script_head=""
   local _i
@@ -3016,6 +3023,137 @@ script_resolve_head() {
     script_head="${_tok[$_i]}"
   fi
   return 0
+}
+
+# THE ASSIGNMENT-VALUE STEP. The prefix walk splits a segment on whitespace before it reads a
+# token, so an assignment whose quoted or escaped value holds a blank reaches it as several
+# tokens: the first passes the assignment test, and a later piece of the value used to be read as
+# the command word. The command behind the value was then never adjudicated, and a value whose
+# pieces read as an invocation was refused for text the shell never runs.
+#
+# script_assign_value_rest reads the rest of the assignment word with the carried quote scanner,
+# script_qadvance (called, never edited, on saved and restored state), and moves script_hidx
+# from the token after the assignment token, h0, to the shell's next word, h. It moves it ONLY
+# when all of these hold:
+#   1. the segment is vouched to start outside any quote (script_qval_trust, set per segment);
+#   2. the tokens from the last boundary known to sit outside quotes (script_qval_from) up to the
+#      assignment token scan back to outside quotes, end on no escaping backslash, and carry no
+#      construct the scanner does not model (script_qval_opaque);
+#   3. the word ends at a token boundary outside quotes, unless that token ends on a backslash
+#      outside quotes followed by exactly one blank in the segment (script_qval_gap), or the
+#      segment ends with the quote still open;
+#   4. no token of the word carries such a construct, and every character of the value is
+#      readable (script_qval_readable) — a backslash only where it escapes exactly one blank, so
+#      a token of the value that ends on a backslash followed by any other run of blanks, or by
+#      the end of the segment, declines the step rather than ending the word there.
+# Otherwise h = h0 exactly — today's reading, byte for byte — and the carried state and taint are
+# restored on every path. Tokens [h0, h) are text inside the shell's assignment word and run
+# nothing, so every verdict today's reading drew from them is a precision move, and every verdict
+# on a token at or after h is the shell's reading.
+#
+# The step charges the shared work budget as every scan does. The step that reaches the cap
+# declines, and the cap latches script_qbail for the rest of the command: no later quoted
+# fragment is suppressed — fail-closed, and a possible false refusal.
+
+# A construct the value step never crosses: one that runs a command, or whose extent holds
+# blanks this scanner does not model.
+script_qval_opaque() {   # $1 = one token -> 0 when it carries such a construct
+  case "$1" in
+    *'$('*|*'${'*|*'$['*|*'`'*|*'<('*|*'>('*|*'=('*) return 0 ;;   # M-WRAP-QVAL-SUBST
+  esac
+  return 1
+}
+
+# The readable set. The step replaces today's reading of a value only when every character of
+# it is one the scanner reads as the shell does: the plain set (script_plain_word), the blanks
+# between its tokens, the quote characters that delimit it, and outside quotes a backslash
+# followed by exactly one blank. Asked of each token of the value just after it is scanned, so
+# the state then says whether a final backslash sits outside quotes; this test admits a backslash
+# only there, as a token's last character, and the escaped-blank rule in the step requires the one
+# blank after it. A backslash anywhere else, or a run of two, is not readable. One quote kind per
+# value: with one kind alone every quote character delimits, so a value that holds both is
+# declined rather than read for which of them is text.
+script_qval_readable() {   # $1 = a token of the value, just scanned -> 0 when every character is readable
+  local _t="$1"
+  case "$_t" in *"$script_q1"*) script_qval_sq=1 ;; esac
+  case "$_t" in *"$script_q2"*) script_qval_dq=1 ;; esac
+  [ $(( script_qval_sq + script_qval_dq )) -lt 2 ] || return 1
+  case "$_t" in
+    *"$script_bs") [ "$script_qstate" -eq 0 ] || return 1; _t="${_t%"$script_bs"}" ;;
+  esac
+  case "$_t" in
+    *[!A-Za-z0-9_=+,.:/@%\'\"-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# A token scanned to state 0 that ends on an odd backslash run: its last backslash escapes the
+# character after the token (the house idiom of the enclosure view's escape rule).
+script_qval_dangles() {   # $1 = a token just scanned to state 0
+  local _r="${1##*[!\\]}"
+  [ $(( ${#_r} % 2 )) -eq 1 ]
+}
+
+# The length of the blank run after token $1 of the segment the walk tokenized. The blanks are
+# the two the token split uses inside a segment, space and tab. The read resumes where the last
+# one stopped — one cursor per segment, each token taken off by its length — so a step that moves
+# forward walks the segment at most once; a request behind the cursor starts it again.
+script_qval_gap() {   # $1 = token index -> script_qval_gapn
+  local _b _bl=$' \t'
+  if [ "$script_qval_gapi" -lt 0 ] || [ "$script_qval_gapi" -gt $(( $1 + 1 )) ]; then
+    script_qval_gapi=0
+    script_qval_gaprest="$script_seg"
+  fi
+  while [ "$script_qval_gapi" -le "$1" ]; do
+    _b="${script_qval_gaprest%%[!${_bl}]*}"
+    script_qval_gaprest="${script_qval_gaprest:$(( ${#_b} + ${#script_tokens[$script_qval_gapi]} ))}"
+    script_qval_gapi=$(( script_qval_gapi + 1 ))
+  done
+  _b="${script_qval_gaprest%%[!${_bl}]*}"
+  script_qval_gapn="${#_b}"
+}
+
+# Step script_hidx over the rest of an assignment word whose quoting or escaping spans more than
+# one whitespace-split token. Called right after the walk's one-token step, so script_hidx is the
+# token after the assignment token. Every decline leaves script_hidx where it stood.
+script_assign_value_rest() {   # $1 = the assignment token just stepped over
+  local _qs="$script_qstate" _qt="$script_qtaint" _h="$script_hidx" _k=$(( script_hidx - 1 ))
+  local _n="${#script_tokens[@]}" _i _j _ok=1
+  case "$1" in *[\'\"\\]*) ;; *) return 0 ;; esac
+  [ "$script_qval_trust" -eq 1 ] || return 0
+  if script_qval_opaque "$1"; then return 0; fi
+  script_qstate=0; script_qtaint=0
+  script_qval_sq=0; script_qval_dq=0
+  _i="$script_qval_from"
+  while [ "$_i" -lt "$_k" ]; do   # M-WRAP-QVAL-PFX
+    if script_qval_opaque "${script_tokens[$_i]}"; then _ok=0; break; fi
+    script_qadvance "${script_tokens[$_i]}"
+    if [ "$script_qstate" -eq 0 ] && script_qval_dangles "${script_tokens[$_i]}"; then _ok=0; break; fi
+    _i=$(( _i + 1 ))
+  done
+  if [ "$_ok" -eq 1 ] && [ "$script_qstate" -eq 0 ] && [ "$script_qwork" -lt 1000 ]; then
+    script_qadvance "$1"
+    script_qval_readable "$1" || _ok=0   # M-WRAP-QVAL-READ
+    _j="$_k"
+    while [ "$_ok" -eq 1 ] && [ "$script_qwork" -lt 1000 ]; do
+      if [ "$script_qstate" -eq 0 ]; then
+        script_qval_dangles "${script_tokens[$_j]}" || break
+        script_qval_gap "$_j"
+        [ "$script_qval_gapn" -eq 1 ] || { [ "$_j" -eq "$_k" ] || _ok=0; break; }   # M-WRAP-QVAL-GAP
+      fi
+      [ "$script_hidx" -lt "$_n" ] || break
+      if script_qval_opaque "${script_tokens[$script_hidx]}"; then _ok=0; break; fi
+      script_qadvance "${script_tokens[$script_hidx]}"
+      script_qval_readable "${script_tokens[$script_hidx]}" || { _ok=0; break; }   # M-WRAP-QVAL-READ
+      _j="$script_hidx"
+      script_hidx=$(( script_hidx + 1 ))
+    done
+    if [ "$script_qwork" -ge 1000 ]; then _ok=0; fi
+  else
+    _ok=0
+  fi
+  if [ "$_ok" -eq 1 ]; then script_qval_from="$script_hidx"; else script_hidx="$_h"; fi
+  script_qstate="$_qs"; script_qtaint="$_qt"
 }
 
 # ==========================================================================
@@ -3471,6 +3609,17 @@ case "$TOOL_NAME" in
     script_wj_exact=1
     script_wj_out=""
     script_wj_raw=""
+    # The assignment-value step's state (script_assign_value_rest), per segment: whether the
+    # segment is vouched to start outside any quote, the token its prefix scan starts from, the
+    # escaped-blank read's cursor and result, and the quote kinds the value has shown.
+    # Initialised for the same reason as script_ftok above.
+    script_qval_trust=0
+    script_qval_from=0
+    script_qval_gapi=-1
+    script_qval_gaprest=""
+    script_qval_gapn=0
+    script_qval_sq=0
+    script_qval_dq=0
 
     # HERE-DOCUMENT PRE-PASS. What stood here was a blunt latch —
     # `case "$COMMAND" in *'<<'*) script_qbail=1` — which switched suppression off
@@ -3730,6 +3879,16 @@ case "$TOOL_NAME" in
       # there costs a false positive and never an admission, and widening it would
       # turn refusals into allows.
       #
+      # A QUOTED OR ESCAPED VALUE THAT HOLDS A BLANK is read to the end of its word. The split
+      # above cut such a value into several tokens, and the one-token step leaves the walk on a
+      # piece of it, which used to be read as the command word: the command behind the value
+      # went unadjudicated, and a value whose pieces read as an invocation was refused. The step
+      # called after the one-token step, here and in env's operand loop
+      # (script_assign_value_rest), moves the walk on to the shell's next word where the segment
+      # is vouched to start outside quotes and every character of the value is readable, and
+      # leaves today's reading exactly as it is everywhere else. Its conditions and its declines
+      # are stated once, above that function.
+      #
       # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION,
       # and each wrapper's own options and operands are walked from its row. `sudo
       # bash <script>`, `nice -n 10 bash <script>` and `then bash <script>` are the
@@ -3766,6 +3925,10 @@ case "$TOOL_NAME" in
       # lib/command-position.awk records for `bash -c '…'`). A recorded residual, not
       # a half-closed case. `timeout` used to stand beside it, for the duration
       # operand the walk would additionally have to consume; its row consumes it now.
+      script_qval_from=0
+      script_qval_gapi=-1
+      script_qval_trust=0
+      if { [ "$script_qbail" -eq 0 ] && [ "$script_segstart" -eq 0 ]; } || { [ "$script_pass" -eq 1 ] && [ "$script_segno" -eq 1 ]; }; then script_qval_trust=1; fi   # M-WRAP-QVAL-GATE
       script_hidx=0
       script_xargs=0
       script_wrap=""
@@ -3779,6 +3942,7 @@ case "$TOOL_NAME" in
               *+) case "${script_ptok#*=}" in '('*) break ;; esac ;;   # M-WRAP-APPEND-ARRAY
             esac
             script_hidx=$(( script_hidx + 1 ))
+            script_assign_value_rest "$script_ptok"   # M-WRAP-QVAL
             continue
             ;;
         esac
