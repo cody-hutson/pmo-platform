@@ -53,7 +53,10 @@
 #     near-miss: the same list without the repeat.
 #   - Case 21 pins the `**` limb of the malformed-glob rule: without the rule the glob is
 #     read one level deep, so it silently drops pop/b/deep/run.sh, and the list, which
-#     names both one-level members, reads CLEAN.
+#     names both one-level members, reads CLEAN. The rule's other two limbs, a leading
+#     `/` and a `..` segment, cannot be told apart by a case: such a glob matches no
+#     tracked path, so without the rule it reads `empty-population`, and this harness
+#     grades the verdict class, not the reason.
 #   - Case 22 pins table-body items: the header and separator rows are not items, so the
 #     two body rows key alpha.sh and beta.sh, and gamma.sh is missing. Counted as items,
 #     they make the item count disagree with the table's.
@@ -61,21 +64,17 @@
 #     without either strip, that link no longer names a member.
 #   - Case 24 pins code-span link masking: the item's first link sits inside a code span,
 #     so its key comes from the real link after it.
+#   - Case 25 pins the external-scheme limb of the link skip: the item's first link is
+#     `https:`, so its key comes from its code span. Without the limb that link reads as
+#     an extra path. The limb that skips a pure anchor is equivalent: the fragment strip
+#     already empties a `#...` target, which is then skipped.
 # Not pinned by any case, and named so the set does not overstate its reach:
-#   - The leading-`/` and `..` limbs of the malformed-glob rule. Such a glob matches no
-#     tracked path, so without the rule it reads `empty-population`; this harness grades
-#     the verdict class, not the reason, so no case can tell the two apart.
 #   - The `boundary-disagreement` verdict. The tool's item splitter computes the count by
 #     the same steps as structure_at, so no document makes the two disagree, and the tool
 #     with the verdict removed passes every case. It is a fail-closed assertion, reached
 #     only through a splitter fault: with the table header counted as an item, case 22
 #     reads `boundary-disagreement`.
-#   - The external-scheme limb of the link skip. No case carries an external link, so the
-#     tool with that limb removed passes every case, yet it changes a verdict: an item
-#     whose first link is `https:` reads that link as an extra path instead of keying from
-#     its code span. The limb that skips a pure anchor is equivalent: the fragment strip
-#     already empties a `#...` target, which is then skipped.
-# Cases: 7 DRIFT · 10 CLEAN · 6 UNRESOLVED · 1 SCOPE-OUT — 24 in all.
+# Cases: 7 DRIFT · 11 CLEAN · 6 UNRESOLVED · 1 SCOPE-OUT — 25 in all.
 
 --- DRIFT list seeded-mismatch
 POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
@@ -278,5 +277,14 @@ POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
 The fixture hooks:
 - `alpha.sh`
 - `[old](zzz.sh)` was its link; it is now [`beta.sh`](pop/beta.sh)
+- `gamma.sh`
+--- END
+
+--- CLEAN list external-link-skipped
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [upstream](https://example.com/pop/alpha.sh) mirrors `alpha.sh`
+- `beta.sh`
 - `gamma.sh`
 --- END
