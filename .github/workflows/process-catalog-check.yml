@@ -34,9 +34,11 @@ name: Process-catalog checks
 #                 source: that is its invariant, and the reading that precedes
 #                 registration measures what it costs. A moved citation is rewritten in
 #                 the release pull request by Stage 12 before the merge
-#                 (release/references/pipeline/stage-12-execute.md, Phase A.5.8); a red
-#                 run on a push to main is read by the merging release's Stage 12
-#                 (Phase B1.2). With no page discovered each tool exits 3 and its job
+#                 (release/references/pipeline/stage-12-execute.md, Phase A.5.8), except
+#                 where a release holds pushes of catalog text for the publication gate:
+#                 that release's Engineering session makes the rewrite and Stage 12 only
+#                 checks. A red run on a push to main is read by the merging release's
+#                 Stage 12 (Phase B1.2). With no page discovered each tool exits 3 and its job
 #                 fails as NOT-EVALUATED; no job here reads green on an empty catalog.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 #

@@ -102,8 +102,9 @@ CITATION_MOVED = ("**%d moved citation(s): one command repairs them.** The cited
                   "is stale. The rewrite belongs in this pull request. On a release pull request the pipeline makes it: "
                   "Stage 12 runs the command below on the release branch before the merge (Phase A.5.8) and commits the "
                   "result here, so leave it until then — two pull requests that both rewrite early conflict on the same "
-                  "lines. On a pull request outside the release pipeline, run it from the repository root and commit the "
-                  "pages it rewrites:")
+                  "lines. Where a release holds pushes of catalog text for the publication gate, that release's "
+                  "Engineering session makes the rewrite and Stage 12 only checks. On a pull request outside the release "
+                  "pipeline, run it from the repository root and commit the pages it rewrites:")
 CITATION_PERSON = "**%d citation(s) need a person, in this order:**"
 CITATION_REMEDY = {
     "gone": "This change edited or deleted the cited text. 1. Cite the text that now states the same fact. 2. If nothing "
@@ -2029,9 +2030,11 @@ def self_test() -> int:
         arms.check("G5: a line inserted above the cited lines is exit 1 — both citations moved, none gone",
                    code == 1 and (c.get("moved"), c.get("gone"), c.get("current")) == ("2", "0", "0"), lines)
         arms.check("G5: the block counts the source, says one command repairs the moved citations, names where a release "
-                   "makes the rewrite, carries the rewrite command, and has no table of citations that need a person",
+                   "makes the rewrite and who makes it under a publication hold, carries the rewrite command, and has no "
+                   "table of citations that need a person",
                    "### Process catalog — citations: FAIL\n" in block and "| `%s` | 2 | 0 | 0 | 0 |" % rules_src in block
                    and "**2" + moved_opening in block and "(Phase A.5.8)" in block and write_fix in block
+                   and "Engineering session makes the rewrite and Stage 12 only checks" in block
                    and person_opening not in block, block)
         code, lines, c, _block = gate("anchors", "resolve", "--write")
         code2, lines2, c2, block2 = gate("anchors", "resolve", "--check")
@@ -2077,13 +2080,14 @@ def self_test() -> int:
 
         def scope_test(label):
             """The paths under the catalog root on which the two copies differ after the rewrite
-            command has run in each; its exit is ignored, as the scope test says."""
+            command has run in each; its exit is ignored, as the scope test says. The second copy's
+            catalog is restored without overlay, so a file the base lacks is removed from it."""
             trees = []
             for n in (1, 2):
                 copy = tmp / ("scope-%s-%d" % (label, n))
                 PC.git(tmp, *(PC.TEST_IDENTITY + ("clone", "-q", "file://%s" % gx.repo, str(copy))))
                 if n == 2:
-                    PC.git(copy, "checkout", scope_base, "--", gate_root)
+                    PC.git(copy, "checkout", "--no-overlay", scope_base, "--", gate_root)
                 cli(["--repo", str(copy), "--catalog-root", str(copy / gate_root),
                      "--definitions", str(copy / gx.layout["definitions"]), "anchors", "resolve", "--write"])
                 trees.append(tree(copy / gate_root))
@@ -2126,6 +2130,14 @@ def self_test() -> int:
                            cited().get("citations") == "1", cited())
         gate_page.write_text(rewritten_text, encoding="utf-8")
         PC.commit_all(gx.repo, "the digits-only rewrite, restored")
+        added = gx.catalog / PC.FIXTURE_UNIVERSE / "added-under-the-catalog.md"
+        PC.write_text(added, "# A file the base does not hold\n")
+        PC.commit_all(gx.repo, "the same rewrite, with a file added under the catalog root")
+        differing = scope_test("added")
+        arms.check("G9: the same diff with a file added under the catalog root fails the scope test, which reports the file",
+                   differing == [added.relative_to(gx.catalog).as_posix()], differing)
+        added.unlink()
+        PC.commit_all(gx.repo, "the added file, removed")
 
 
         # ==========================================================================================

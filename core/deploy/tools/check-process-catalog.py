@@ -855,7 +855,7 @@ PAGE_FIX = ("**Fix:** correct each page named above; each rule code is explained
             "SRC001, a file a page depicts was moved or deleted: put the file's new path in that page's `depicts` list, "
             "or remove the entry, then run `python3 %s build` and commit.")
 REGISTER_FIX = (
-    "A finding reported under a Register Contract rule identifier — R or G followed directly by a digit, not one of the "
+    "A finding reported under a register rule identifier — R or G followed directly by a digit, not one of the "
     "validator's own three-letter codes — is about a published register, not a page. If this change moved or deleted a "
     "file a row cites, or changed a job's declared posture, this change carries the fix: correct that one cell in this "
     "pull request, as the catalog README says under \"Correcting a row\". A finding keyed by a control ID or a run of "
