@@ -234,11 +234,11 @@ A measurement separate from the `**Velocity:**` field, written by the same tool 
 
 ### 7a.5 Cutover
 
-The row is owed from its introducing release's own Stage 13 onward. Unlike § 10, the introducing release is **not** exempt: measuring itself is that release's purpose, and a row is a local record rather than a permanent ledger field, so the reflexive-loop reason for exempting the field does not apply.
+The row is owed from its introducing release's own Stage 13 onward. Until the Stage-13 close-out carries a step that writes it, each release's hub writes its row at Stage 13 with an explicit `--out-dir` into the install-scoped telemetry home. Unlike § 10, the introducing release is **not** exempt: measuring itself is that release's purpose, and a row is a local record rather than a permanent ledger field, so the reflexive-loop reason for exempting the field does not apply.
 
 ### 7a.6 Design artifact — the cost-row data flow
 
-<!-- design-artifact: flow-class=data-flow; name=release-cost-row; depicts=release/tools/compute-release-velocity.sh,core/skills/finops-usage-extractor/scripts/convert-usage.sh,core/skills/finops-usage-extractor/scripts/extract-usage.sh,release/tools/automated-closeout.sh -->
+<!-- design-artifact: flow-class=data-flow; name=release-cost-row; depicts=release/tools/compute-release-velocity.sh,core/skills/finops-usage-extractor/scripts/convert-usage.sh,core/skills/finops-usage-extractor/scripts/extract-usage.sh -->
 
 | Step | Producer | Artifact | Consumer |
 |---|---|---|---|
@@ -246,7 +246,7 @@ The row is owed from its introducing release's own Stage 13 onward. Unlike § 10
 | 2 count | `extract-usage.sh` (a scratch `STORE` over a hard-link view) | a scratch store at schema `2.0.0` or later | step 3 |
 | 3 classify | the velocity tool | cells (stage × role): per-type tokens, both response counts, `by_model` | step 4 |
 | 4 convert | `convert-usage.sh`, reading `[cost_unit]` | the pairs `{at_w_low, at_w_high}` per cell and total, the values used, the calibration label | step 5 |
-| 5 write | the velocity tool | `<home>/release-cost/<slug>.json` and one summary line | the Stage-13 close-out; the consumers in § 11 |
+| 5 write | the velocity tool | `<home>/release-cost/<slug>.json` and one summary line | the consumers in § 11 |
 
 ## 8. Boundary statement (release-pipeline velocity ≠ delivery-team capacity)
 
