@@ -2144,6 +2144,59 @@ case "${b022_probe_rc}:${b022_probe_err}" in
 esac
 
 # ==========================================================================
+# BLOCK-022 — a documented command the guard must keep admitting
+# ==========================================================================
+#
+# The hub-spoke bridge's release-close checklist (item 8 of its closing procedure)
+# runs a bash -c program that sources the version-grammar library. The guard reads
+# that program, so the documented form has to be one it admits: a hub running the
+# checklist must not be refused by the platform's own guard. These arms read the
+# program out of the document, so they grade what the document says rather than a
+# copy that could drift from it.
+#
+# The pair is its own control. The second arm swaps only the sourced line for the
+# earlier spelling, a library path built from a command substitution, which the guard
+# refuses once it reads each word after quote removal. A guard that allowed everything
+# fails the second arm; one that refused everything fails the first.
+P7_REL="release/references/how-to/hub-spoke-bridge.md"
+P7_DOC=""
+p7_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  IFS= read -r p7_root < "$(dirname "$0")/.source-repo-root" || true
+fi
+for p7_c in "${p7_root:+${p7_root}/${P7_REL}}" \
+  "$(cd "$(dirname "$0")/../../.." 2>/dev/null && pwd -P)/${P7_REL}"; do
+  if [ -z "$P7_DOC" ] && [ -n "$p7_c" ] && [ -f "$p7_c" ]; then P7_DOC="$p7_c"; fi
+done
+P7_PROG=""
+if [ -n "$P7_DOC" ]; then
+  P7_PROG="$(/usr/bin/awk -v q="'" '
+    /^   # 8\. \.version stamped/ { f = 1 }
+    f && /^   bash -c / { p = 1 }
+    p { print }
+    p && !/^   bash -c / && substr($0, length($0)) == q { exit }' "$P7_DOC")"
+fi
+P7_NEWLINE='. release/tools/version-grammar.sh ""'
+P7_OLDLINE='. "$(git rev-parse --show-toplevel)/release/tools/version-grammar.sh" ""'
+P7_OLD="${P7_PROG/"$P7_NEWLINE"/$P7_OLDLINE}"
+p7_ok=1; p7_why=""
+[ -n "$P7_DOC" ] || { p7_ok=0; p7_why="$p7_why document-not-found"; }
+case "$P7_PROG" in *"$P7_NEWLINE"*) ;; *) p7_ok=0; p7_why="$p7_why program-not-found-or-source-line-changed" ;; esac
+case "$P7_OLD" in *'rev-parse --show-toplevel'*) ;; *) p7_ok=0; p7_why="$p7_why control-not-built" ;; esac
+if [ "$p7_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: BLOCK-022 doc-form: the release-close .version program is read from the document and sources the library by its repository-relative path\n'
+  PASS=$((PASS + 1))
+  exec_notflag_case "BLOCK-022 doc-form: the release-close .version program, as documented, allows and writes no row" \
+    "$P7_PROG"
+  test_case "BLOCK-022 doc-form control: the same program with the library path built from a command substitution blocks" \
+    "$(bash_payload "$P7_OLD")" \
+    2 "BLOCK-DESTRUCTIVE-022"
+else
+  /usr/bin/printf 'FAIL: BLOCK-022 doc-form: the documented program could not be graded (%s); re-read the checklist line and re-verify it against the guard\n' "$p7_why"
+  FAIL=$((FAIL + 1))
+fi
+
+# ==========================================================================
 # BLOCK-022 — the append form of a prefix assignment (#8314, the walk-fix pass)
 # ==========================================================================
 #
