@@ -10,7 +10,8 @@
 # PATH → /opt/homebrew/opt/trash/bin/trash → osascript Finder fallback). A git
 # command exempts its own segment only (git history provides recoverability); every
 # other segment of the line is judged, and a deletion or Trash verb that does not name
-# all its targets on its line is refused under the strict policy.
+# all its targets on its line, or that sits on a command carrying a line continuation, is
+# refused under the strict policy.
 #
 # Composes with (does not replace) the existing 6 PreToolUse hooks: block-destructive,
 # block-egress, block-mcp-writes, block-credential-reads, block-shell-injection,
@@ -466,7 +467,8 @@ if [ "$CMDPOS_OK" != 1 ]; then
   deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
   exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
 fi
-# One run of the canonicalizer gives the form every rule below reads. The hook keeps no exit
+# One run of the canonicalizer gives the form every rule below reads; Step 5 alone canonicalizes
+# once more, only on a command that carries a line continuation, over its joined reading. The hook keeps no exit
 # that allows on a match ({{ADR:deletion-guard-judges-every-segment}}): every segment is judged,
 # so a widening of the walk can only add command starts to judge, never turn a refusal into an
 # allow, and the canonicalizer's frozen exit view has no reader here.
@@ -1420,6 +1422,89 @@ for verb in rm rmdir unlink; do
       "name each target by absolute path on the command's own line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
   fi
 done
+
+# Step 5 — a command that carries a line continuation. Outside the quoted here-document bodies the
+# pre-pass removed, a line that ends in an odd run of backslashes continues onto the next one; an even
+# run is literal backslashes and continues nothing. The shell joins the two lines before it reads a
+# word, so a continuation can split a command word or carry a wrapper option's argument or an
+# assignment's value to the next line, while a backslash that ends a comment continues nothing and the
+# next line runs as its own command. The hook does not decide which of these the shell does. On such a
+# command it takes two readings — the command as judged, each line its own, and the command with every
+# continuation joined (each odd run's last backslash and the newline after it removed, then
+# canonicalized once more) — and refuses a deletion or Trash verb found in either, in any spelling the
+# steps above recognise: BLOCK-TRASH-003 for a Trash call or a Finder delete, else BLOCK-TRASH-001.
+# This decides every continued command; the walk's per-form readings (M-TRASH-RECCONT, -RECWORD and
+# -RECBOTH) stay in place and refuse first where they fire. Judged after every other step, so a
+# refusal of a real target names that target, and before the admission rows below, so a refused
+# command leaves none. Declared over-block: every command with a continuation and a deletion or Trash
+# verb is refused, whatever the shell would join. Declared residual: a comment line that ends in a
+# backslash, followed by a command word a continuation splits, is seen by neither reading.
+#
+# CONT_JOIN_AWK prints NONE when no line but the last ends in an odd run of backslashes, else JOINED,
+# a newline, and the joined reading. Any other output is failure, and the command is then read as
+# continued with its unjoined text in both readings (fail closed).
+# shellcheck disable=SC2016  # awk program — single quotes intentional
+readonly CONT_JOIN_AWK='
+  { L[NR] = $0 }
+  END {
+    out = ""; hit = 0
+    for (i = 1; i <= NR; i++) {
+      s = L[i]
+      if (i < NR && match(s, /\\+$/) && RLENGTH % 2 == 1) { hit = 1; out = out substr(s, 1, length(s) - 1); continue }
+      out = out s
+      if (i < NR) out = out "\n"
+    }
+    if (!hit) { print "NONE"; exit }
+    print "JOINED"; printf "%s", out
+  }
+'
+readonly BS_NL=$'\\\n'
+
+# cont_verbs(reading) — print trash for a Trash call or a Finder delete, and rm for an rm, rmdir or
+#   unlink, at a command start of a reading in canonical form: the tests Steps 2 to 4 apply, read from
+#   a here-string so no reader in a pipeline stops before its writer is done.
+cont_verbs() {
+  local verb
+  if "$GREP" -qE "$TRASH_VERB_RE" <<<"$1"; then "$PRINTF" 'trash\n'; fi
+  if "$GREP" -qE "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)' <<<"$1" \
+     && { "$GREP" -qE 'delete[[:space:]]+POSIX[[:space:]]+file' <<<"$1" || "$GREP" -qE 'move[[:space:]]+.*[[:space:]]+to[[:space:]]+trash' <<<"$1"; }; then
+    "$PRINTF" 'trash\n'
+  fi
+  for verb in rm rmdir unlink; do
+    if "$GREP" -qE "${ANCHOR_PREFIX_BASH}${verb}"'([[:space:]]+|$)' <<<"$1"; then "$PRINTF" 'rm\n'; fi
+  done
+}
+
+CONT_LINE=0
+COMMAND_JOINED=""
+CONT_FOUND=""
+case "$COMMAND" in *"$BS_NL"*) CONT_LINE=1 ;; esac  # M-TRASH-CONTLINE
+if [ "$CONT_LINE" = 1 ]; then
+  _cont_out="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk "$CONT_JOIN_AWK" 2>/dev/null)" || _cont_out=""
+  case "$_cont_out" in
+    NONE) CONT_LINE=0 ;;
+    JOINED$'\n'*) COMMAND_JOINED="${_cont_out#JOINED$'\n'}" ;;
+    *) COMMAND_JOINED="$COMMAND" ;;
+  esac
+fi
+if [ "$CONT_LINE" = 1 ]; then
+  COMMAND_JOINED_CMDPOS="$("$PRINTF" '%s' "$COMMAND_JOINED" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND_JOINED")"
+  [ -n "$COMMAND_JOINED_CMDPOS" ] || COMMAND_JOINED_CMDPOS="$COMMAND_JOINED"
+  CONT_FOUND="$(cont_verbs "$COMMAND_CMDPOS")"  # M-TRASH-CONTUNJ
+  CONT_FOUND="${CONT_FOUND}$(cont_verbs "$COMMAND_JOINED_CMDPOS")"  # M-TRASH-CONTJOIN
+  case "$CONT_FOUND" in
+    *trash*)
+      block "BLOCK-TRASH-003" \
+        "a command that carries a line continuation (an odd run of backslashes before a newline) and a Trash call or a Finder delete, as written or with its continuations joined, is unresolvable under strict policy: the hook does not decide which lines the shell joins" \
+        "write the command on one line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+      ;;
+    *rm*)
+      block "BLOCK-TRASH-001" \
+        "a command that carries a line continuation (an odd run of backslashes before a newline) and an rm, rmdir or unlink invocation, as written or with its continuations joined, is unresolvable under strict policy: the hook does not decide which lines the shell joins" \
+        "write the command on one line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+      ;;
+  esac
+fi
 
 # --- MEMORY-STORE ARM: every admission leaves one row, before the call is allowed ---
 # Written here, after every operand has been judged, so a command refused as a whole leaves

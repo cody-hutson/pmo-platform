@@ -850,8 +850,9 @@ test_case "EXT-SEG-C20: an inside Trash call on a line that ends in a separator 
 #   T    a run of three backslashes: a literal backslash, then a continuation
 #   K    a backslash that ends a comment, which continues nothing; K3 is the residual neither reading sees
 #   E    an even run of backslashes, which continues nothing (controls)
-#   N    controls: a continued command with no deletion or Trash command, a quoted message, and a quoted
-#        here-document body whose lines end in a backslash
+#   N    controls: a continued command with no deletion or Trash command, and a quoted here-document body
+#        whose lines end in a backslash; N4, a continued double-quoted message, is a refusal that predates
+#        this rule
 #   EOF  a continuation backslash that ends the command, with no newline after it: nothing joins, so the
 #        per-form readings alone refuse it; these are the single-line sentinels of their mutant pairs
 #   MUT  each new marker shown load-bearing; DEC the rule shown deciding: a copy without the three
@@ -889,16 +890,19 @@ test_case "EXT-CONT-R7: an inside Trash operand, a both-streams redirection whos
   "$(bash_payload "trash ${SEG_FH}/Claude/cont-r7 &> \\"$'\n'"/tmp/cont-r7.log /tmp/cont-r7" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
 test_case "EXT-CONT-R8: an inside Trash operand, a word-form duplication whose file is on the next line, and an outside operand after it is refused" \
   "$(bash_payload "trash ${SEG_FH}/Claude/cont-r8 >& \\"$'\n'"/tmp/cont-r8.log /tmp/cont-r8" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+# X1, A1 and A2 were refused before this rule too: the canonicalizer already reads the Trash call or the
+# unlink after them as a command start, so the Trash or rm step refuses the outside path first (measured
+# at the RED commit; predicted allowed there).
 test_case "EXT-CONT-X1: a continuation between a wrapper option and its argument, before a Trash call on an outside path, is refused" \
-  "$(bash_payload $'nice -n \\\n5 trash /tmp/cont-x1')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+  "$(bash_payload $'nice -n \\\n5 trash /tmp/cont-x1')" 2 "BLOCK-TRASH-003"
 test_case "EXT-CONT-X2: a continuation after a wrapper word, before its option and a Trash call on an outside path, is refused" \
   "$(bash_payload $'nice \\\n-n 5 trash /tmp/cont-x2')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
 test_case "EXT-CONT-X3: a continuation after a keyword, before a Trash call on an outside path, is refused" \
   "$(bash_payload $'if true; then \\\ntrash /tmp/cont-x3; fi')" 2 "BLOCK-TRASH-003"
 test_case "EXT-CONT-A1: a continuation inside an assignment's value, before a Trash call on an outside path, is refused" \
-  "$(bash_payload $'CONT_A1=\\\n1 trash /tmp/cont-a1')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+  "$(bash_payload $'CONT_A1=\\\n1 trash /tmp/cont-a1')" 2 "BLOCK-TRASH-003"
 test_case "EXT-CONT-A2: a continuation inside an append-form assignment's value, before an unlink of an outside path, is refused" \
-  "$(bash_payload $'CONT_A2+=\\\n1 unlink /tmp/cont-a2')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+  "$(bash_payload $'CONT_A2+=\\\n1 unlink /tmp/cont-a2')" 2 "BLOCK-TRASH-001"
 test_case "EXT-CONT-A3: a continuation after a whole assignment, before a recursive rm of an outside path, is refused" \
   "$(bash_payload $'CONT_A3=1 \\\nrm -rf /tmp/cont-a3')" 2 "BLOCK-TRASH-001"
 test_case "EXT-CONT-T1: a run of three backslashes inside a word that is then not a Trash verb is allowed (the joined reading keeps the literal backslash)" \
@@ -923,8 +927,11 @@ test_case "EXT-CONT-N2: a continued container run whose option names a deletion 
   "$(bash_payload $'docker run \\\n--rm cont-n2')" 0
 test_case "EXT-CONT-N3: a continued untracking git rm is allowed" \
   "$(bash_payload $'git rm \\\n--cached cont-n3')" 0
-test_case "EXT-CONT-N4: a double-quoted commit message continued with a backslash onto a line of deletion-verb text is allowed" \
-  "$(bash_payload $'git commit -m "fix the hook \\\nrm -rf build"')" 0
+# N4 is refused before this rule too (measured at the RED commit; predicted allowed there): the rm step
+# judges the deletion-verb text on the continued line of the double-quoted message. A refusal this rule
+# did not add, pinned as found.
+test_case "EXT-CONT-N4: a double-quoted commit message continued with a backslash onto a line of deletion-verb text is refused by the rm step (an over-block that predates this rule)" \
+  "$(bash_payload $'git commit -m "fix the hook \\\nrm -rf build"')" 2 "BLOCK-TRASH-001"
 test_case "EXT-CONT-N5: a quoted here-document commit message whose body line ends in a backslash, then a deletion line, is allowed" \
   "$(bash_payload $'git commit -F - <<\'EOF\'\nfix the hook \\\nrm -rf build\nEOF')" 0
 test_case "EXT-CONT-EOF1: a Trash call carrying only a flag and ending the command in a continuation backslash is refused" \
@@ -1003,7 +1010,7 @@ else
   ra_pair "EXT-CONT-MUT-CONTLINE-W4:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'tr\\\nash /tmp/cont-w4'
   ra_pair "EXT-CONT-MUT-CONTLINE-W6:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'osa\\\nscript -e \'tell application "Finder" to delete POSIX file "/tmp/cont-w6"\''
   ra_pair "EXT-CONT-MUT-CONTJOIN-W1:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'r\\\nm -rf /tmp/cont-w1'
-  ra_pair "EXT-CONT-MUT-CONTJOIN-X1:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'nice -n \\\n5 trash /tmp/cont-x1'
+  ra_pair "EXT-CONT-MUT-CONTJOIN-X2:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'nice \\\n-n 5 trash /tmp/cont-x2'
   ra_pair "EXT-CONT-MUT-CONTUNJ-K2:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-k2 # note \\\ntrash cont-mut-k2'
   ra_pair "EXT-CONT-MUT-CONTUNJ-T2:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-t2 \\\\\\\ntrash cont-mut-t2'
   # DEC: through the copy without the three per-form readings (shown live: exactly three lines differ,
@@ -1969,9 +1976,11 @@ case "${TRSC_BASE##*/}" in rmt-cph.*) /bin/rm -rf "$TRSC_BASE" ;; esac
 
 # ----- AC-CPV-T* (#8314, DT pass 7; re-based by #8122): one canonicalizer run per command -----
 #
-# The hook makes one run of the shared canonicalizer on a command, in its default view, and reads
-# no other view. ONE reads the hook's source: one run on the command, none in the both view and
-# none in the exit view. EQ holds the verdicts: a copy of this hook with a second, identical
+# The hook makes one run of the shared canonicalizer on a command as judged, in its default view, and
+# reads no other view. ONE reads the hook's source: one run on the command, none in the both view and
+# none in the exit view. A command that carries a line continuation is canonicalized once more, over its
+# joined reading (EXT-CONT; Step 5): that run reads a different text, only on such a command, so ONE
+# does not count it and none of the timed commands below carries a continuation. EQ holds the verdicts: a copy of this hook with a second, identical
 # default-view run spliced in after the first is shown live (it differs only in that line, and it
 # parses), then both copies judge a set of commands — the lines the removed exits once allowed,
 # wrapped and quoted spellings, refused and allowed deletions and Trash calls — and must return the
@@ -1993,7 +2002,7 @@ COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 
 cpv_runs="$(/usr/bin/awk '/^[ \t]*#/ { next } index($0, "-f \"$CMDPOS_AWK\"") && index($0, "\"$COMMAND\"") { n++; if (index($0, "-v CMDPOS_VIEW=both")) b++; if (index($0, "-v CMDPOS_VIEW=exit")) x++ }
   END { printf "%d %d %d", n, b, x }' "$HOOK")"
 if [ "$cpv_runs" = "1 0 0" ]; then
-  /usr/bin/printf 'PASS: %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the default view, and never in the exit or both view"; PASS=$((PASS + 1))
+  /usr/bin/printf 'PASS: %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command as judged, in the default view, and never in the exit or both view"; PASS=$((PASS + 1))
 else
   /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the default view" \
     "runs on the command / in the both view / in the exit view: ${cpv_runs} (want 1 0 0)"; FAIL=$((FAIL + 1))
