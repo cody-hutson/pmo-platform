@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # check-process-catalog-publication.py
-"""Publication gate for process-catalog text (Pre-Landing Contract: PL-3, PL-4, PL-9, PL-13; Addenda PLA and PLB).
+"""Publication gate for process-catalog text: the probes, the clone preflight, the push scan and the commit gate.
 
 `probe` counts the gated classes and review lists over files on disk or over blobs of a commit, and writes the pins.
-`preflight` proves that a clone cannot push and commits under the pinned identity. `scan` is the Pack Contract's one
-scan definition (S-1 to S-10): every commit of a range, each against its parent, for the term lists and the
+`preflight` proves that a clone cannot push and commits under the pinned identity. `scan` is the one scan a push of
+catalog text runs: every commit of a range, each against its parent, for the term lists and the
 identity. `shape` says whether a commit changes line values only. `gate`
 checks one unpushed commit end to end: it reads every scanned byte from the commit's own objects, runs the catalog
 tools in a detached checkout of that commit, takes every expected number from the pins, and writes one record that
@@ -29,12 +29,16 @@ CLASS_WORDS = "code-enforce|code-warn|code-off|prose-only|host-config|not-a-cont
 DROPPED = "mode_source|observed_here|firing_evidence|minted_at|minted_by"
 LINK = re.compile(r"\[([^\]\n]*)\]\(([^)\s]+)\)")
 ANCHOR = re.compile(r"<!--\s*source-anchor:.*?--!?>", re.DOTALL)   # a comment ends at either end form; read per line
-ANCHOR_LINE = re.compile(r"(<!-- source-anchor: line=)[0-9]+(?:-[0-9]+)?(; fp=[0-9a-f]{16} -->)")   # the Tool Contract's grammar
+ANCHOR_LINE = re.compile(r"(<!-- source-anchor: line=)[0-9]+(?:-[0-9]+)?(; fp=[0-9a-f]{16} -->)")   # the grammar the catalog tools write
 FRAGMENT = re.compile(r"(\]\(/[^)#\s]+#L)[0-9]+(?:-L[0-9]+)?(\))")
 LTOK = re.compile(r"(?<![A-Za-z0-9_#/])L(\d+)(?:\s*[–\-]\s*L?(\d+))?(?![A-Za-z0-9_])")
 LWORD = re.compile(r"(?i)\blines? \d+|\.[A-Za-z]{1,8}:\d+\b")
 PATHTOK = re.compile(r"(?<![A-Za-z0-9_.\-/>}])[A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+/?")
 NAME = re.compile(r"(?<![A-Za-z0-9_.\-/])[A-Za-z0-9_\-][A-Za-z0-9_.\-]*\.[A-Za-z][A-Za-z0-9]*(?![A-Za-z0-9_/])")
+# The edges of a listing name read as a file name: a hyphen and a dot are name characters, so neither the tail of a
+# longer name (`old-notes.md`, `v1.notes.md`) nor its head (`notes.md.bak`, `notes.md-old`) is the listed name. A dot
+# or a hyphen at the right edge with no name character after it is punctuation, so a name that ends a sentence is read.
+NAME_BEFORE, NAME_AFTER = r"(?<![A-Za-z0-9_.\-])", r"(?![A-Za-z0-9_]|[.\-][A-Za-z0-9_])"
 INSTANCE = re.compile(r"(?i)\b(?:(?:on )?this install|this instance|this machine|this workspace|live read|live mode|"
                       r"live value|mode file reads|as observed|observed (?:on|in|at|here)|at (?:this|its) read|fired here)\b")
 HERE = re.compile(r"(?i)\bhere\b")
@@ -263,7 +267,7 @@ def load_inputs(a, tree, ground=None, lists_only=False):
     raw, ctx["effort"], ctx["lists"]["effort"] = terms(a.effort_terms, "the effort list")
     dig["effort"] = sha(raw)
     # `hub`: read on whole content everywhere. `added`: whole content of a file the release adds, added lines of a
-    # file that pre-dates it (the Pack Contract's S-4). `page`: gated on pages only, net of the old title (PA-10).
+    # file that pre-dates it. `page`: gated on pages only, net of the old title.
     for key, files in (("hub", a.hub_terms), ("added", getattr(a, "added_terms", None) or []), ("page", getattr(a, "page_terms", None) or [])):
         ctx[key] = []
         for i, f in enumerate(files):
@@ -298,7 +302,7 @@ def load_inputs(a, tree, ground=None, lists_only=False):
     ctx["wbases"] = {os.path.basename(f) for f in wfiles}
     # A listing name that no file tracked at the ground commit carries is read in any case: one expression per
     # lower-case form, so two listing names that differ by case alone count one mention once.
-    ctx["wnames"] = [(k, re.compile(r"(?i)(?<![A-Za-z0-9_])" + re.escape(k) + r"(?![A-Za-z0-9_])"))
+    ctx["wnames"] = [(k, re.compile(r"(?i)" + NAME_BEFORE + re.escape(k) + NAME_AFTER))
                      for k in sorted({b.lower() for b in ctx["wbases"] - set(ctx["ground"].bases)})]
     if getattr(a, "held", None):
         ctx["held"], dig["held"] = held(a.held), sha(",".join(sorted(a.held)))
@@ -373,7 +377,7 @@ def scan(text, ctx, mode="page"):
             if w in ground.bases:
                 continue
             if w not in seen:
-                exact = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(w) + r"(?![A-Za-z0-9_])")
+                exact = re.compile(NAME_BEFORE + re.escape(w) + NAME_AFTER)
                 seen[w] = "newly-tracked-name" if w in tree.bases else (            # the commit adds a file of this name
                     "grounded-name" if any(exact.search(ground.blob(f, strict=False)) for f in carriers) else "ws-name")
             n[seen[w]] += 1
@@ -672,7 +676,7 @@ def cmd_probe(a):
 
 
 def population(repo, commit, release, parent=None):
-    """What one commit publishes (S-3, S-4), read from its own objects against its first parent. Per file it adds or
+    """What one commit publishes, read from its own objects against its first parent. Per file it adds or
     changes: the whole text, and the text the added-line lists read - the whole text of a file the release adds, the
     added lines of a file that pre-dates the release, and for a merge only lines that stand in no parent. Plus the
     names of the paths it touches, and its message. Returns ({label: (whole, added)}, files listed, files read,
@@ -722,14 +726,14 @@ def term_hits(pop, ctx, count=True):
 
 
 def cmd_scan(a):
-    """The Pack Contract's scan, S-1 to S-10. The range is every commit reachable from --head and from no --base."""
+    """The scan a push of catalog text runs. The range is every commit reachable from --head and from no --base."""
     ctx, dig = load_inputs(a, None, lists_only=True)
     # The pins are required: the control commit is made from the lists in hand, and proves those lists and no others.
     check_pins(load_pins(a.pins), dig, ("listing", "held") + tuple("page-%d" % i for i in range(1, 9)))
     list_lines(ctx, print)
     release = Tree(a.repo, a.release_base)
     lists = ctx["effort"] + ctx["hub"] + ctx["added"]
-    # S-8: the control travels the read path the subject travels - a commit, read from its objects
+    # The control travels the read path the subject travels - a commit, read from its objects
     cpop, clisted, cread, _ = population(a.repo, a.control_commit, release)
     _, ctitle = term_hits(cpop, ctx)
     unmatched = sum(1 for p in lists if not ctx["matched"][p])
@@ -737,7 +741,7 @@ def cmd_scan(a):
         cread, clisted, len(lists) - unmatched, len(lists), bool(ctitle)))
     if unmatched or not ctitle or not cread or cread != clisted:
         raise NotEvaluated("the control commit does not carry every arm")
-    # S-8's second range is required too, and a zero over it counts only when it holds text to read
+    # The near-miss commit is required too, and a zero over it counts only when it holds text to read
     npop, nlisted, nread, _ = population(a.repo, a.near_miss_commit, release)
     hits, title = term_hits(npop, ctx, count=False)
     print("near-miss commit: files=%d listed=%d term_hits=%d title_hits=%d" % (nread, nlisted, hits, title))
@@ -756,7 +760,7 @@ def cmd_scan(a):
         print("commit %s files=%d listed=%d term_hits=%d title_hits=%d identity_equal=%s" % (c[:12], nr, nl, hits, title, same))
         total, files, listed = total + hits + title + (not same), files + nr, listed + nl
     texts = a.text_file or []
-    if texts:                                              # S-6: a branch name, a pull-request title, a pull-request body
+    if texts:                                              # a branch name, a pull-request title, a pull-request body
         probe = collections.Counter()
         for f in a.sensitivity_file or []:
             x = read_lines(f, "a sensitivity file")[0].decode("utf-8")
@@ -772,7 +776,7 @@ def cmd_scan(a):
             print("text %d term_hits=%d title_hits=%d" % (texts.index(f) + 1, hits, title))
             total += hits + title
     print("examined: commits=%d files=%d listed=%d texts=%d" % (len(commits), files, listed, len(texts)))
-    if files != listed:                                    # S-7: read unequal to listed is never a count
+    if files != listed:                                    # read unequal to listed is never a count
         raise NotEvaluated("read %d of the %d files the range lists" % (files, listed))
     print("publication scan status=%s findings=%d" % ("pass" if not total else "fail", total))
     return 1 if total else 0
@@ -1050,7 +1054,7 @@ def cmd_gate(a):
 def cmd_shape(a):
     """Does base..commit change line values only? A page counts as `mechanical` when it is modified and equals its old
     self once the line numbers of each root-link fragment, and the `line=` value of each source-anchor comment in the
-    Tool Contract's exact grammar, are masked. Anything else is `other`: a page that differs in any other byte -
+    exact grammar the catalog tools write, are masked. Anything else is `other`: a page that differs in any other byte -
     prose inside an anchor comment included - and every changed path that is not a page."""
     base, commit = (git(a.repo, "rev-parse", "--verify", x + "^{commit}").strip() for x in (a.base, a.commit))
     mask = lambda t: ANCHOR_LINE.sub(r"\1\2", FRAGMENT.sub(r"\1\2", t))
@@ -1075,6 +1079,8 @@ def main(argv=None):
         st.add_argument("--tmp-dir", help="make the scratch repositories under this directory")
         return self_test(st.parse_args(argv))
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--self-test", action="store_true", help="run the gate's own arms in scratch repositories built "
+                    "from synthetic text, and read no input of the caller's; with --tmp-dir DIR they are made under DIR")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("probe", "gate", "scan"):
         p = sub.add_parser(name)
@@ -1563,8 +1569,8 @@ def self_test(opts):
                 check("term list: %s stops the run" % label, "line" in str(e) or "literal" in str(e), e)
 
         # ---- probe: parse states, and the name class beside a tracked name that differs by case alone
-        def probe_one(body, cls):
-            code, text = _st_run(*(["probe", lab.f("one/page.md", body)] + common + ["--listing", listing, "--rev", head, "--expect-files", 1, "--held", ST_HELD]))
+        def probe_one(body, cls, rev=None):
+            code, text = _st_run(*(["probe", lab.f("one/page.md", body)] + common + ["--listing", listing, "--rev", rev or head, "--expect-files", 1, "--held", ST_HELD]))
             m = re.search(r"(?m)^(?:gated|review)\s+%s\s+([0-9]+) on" % re.escape(cls), text)
             return int(m.group(1)) if m else -1
         check("probe: a page with an unpaired fence is unparsed", probe_one(page(1) + FENCE + "\n", "unparsed") == 1)
@@ -1573,6 +1579,19 @@ def self_test(opts):
         check("probe: a mention spelled as a tracked file's own name is counted on no line, though a listing name differs by case alone",
               probe_one(page(1), "ws-name") == 0 and probe_one(page(1), "newly-tracked-name") == 0 and "README.md" in ST_BODY and "stage/Readme.md" in ST_LISTING)
         check("probe: the same name spelled as the listing spells it is counted", probe_one(page(1) + "\nSee Readme.md.\n", "ws-name") == 1)
+        # A listing name is a file name: a hyphen and a dot join it to a longer name, on either edge.
+        check("probe: the tail of a longer name, after a hyphen or a dot, is not the listed name",
+              probe_one(page(1) + "\nSee old-draft-notes.md and v1.draft-notes.md here.\n", "ws-name") == 0)
+        check("probe: the head of a longer name, before a dot or a hyphen, is not the listed name",
+              probe_one(page(1) + "\nSee draft-notes.md.bak and draft-notes.md-old here.\n", "ws-name") == 0)
+        longer = lab.commit(head, {"src/alpha.txt": "alpha writes handoff-report.md, old-draft-notes.md and draft-notes.md.bak\n"})
+        check("probe: a source that carries only longer names holding a listed name does not ground it",
+              probe_one(page(1) + "\nSee draft-notes.md.\n", "ws-name", longer) == 1
+              and probe_one(page(1) + "\nSee draft-notes.md.\n", "grounded-name", longer) == 1)
+        as_itself = lab.commit(head, {"src/alpha.txt": "alpha writes handoff-report.md and draft-notes.md\n"})
+        check("probe: a listed name the page's source carries as itself is grounded, on the review line",
+              probe_one(page(1) + "\nSee draft-notes.md.\n", "ws-name", as_itself) == 0
+              and probe_one(page(1) + "\nSee draft-notes.md.\n", "grounded-name", as_itself) == 2)
 
         # ---- shape
         cite = "\n[alpha](/src/alpha.txt#L%d)<!-- source-anchor: line=%d; fp=0123456789abcdef%s -->\n"
