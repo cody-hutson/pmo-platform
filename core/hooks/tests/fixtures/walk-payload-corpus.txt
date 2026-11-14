@@ -1860,3 +1860,23 @@ QC26|block-destructive|rt-qcmt2|-|?|B|gh issue comment 1 --body-file - <<'EOF' #
 QC27|block-destructive|rt-qcase|-|?|B|echo "$(case x in x) echo it's;; esac)"@NL@bash @D@/na.sh
 QC28|block-destructive|rt-qdollar-prec|-|?|a|echo $$'\'<<EOF@NL@bash @D@/na.sh@NL@EOF
 QC29|block-destructive|rt-qdollar-prec|-|?|a|echo $$'\' 'y; bash @D@/na.sh'
+
+# --- seed 15.2: card #8318 — the operand read after quote removal, in the F-09 slots and across a whitespace-bearing quoted path (OP rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8318's Stage-5 design and its Amendment 1; recorded at the release
+# head after #8317 (3893e3ae). gt is `?`. The plain-operand quoted-suffix and split-suffix classes are already rows
+# (group `concat`). rt-opsplit: a quote that splits the operand in the slot behind `--` and in an option's argument
+# slot, under an interpreter and under `source` (a at base; B once #8318 lands). rt-opws: a whitespace-bearing quoted
+# path (a at base; B once #8318 lands). rt-opok: the same shapes naming the listed script (a before and after).
+# rt-opcmode: the `-c` loop keeps every per-token verdict (Amendment 1) — an in-domain token in a program string stays
+# B, and a separator in a program string stays a. rt-opnear: a split-suffix path handed to a command that runs nothing.
+OP01|block-destructive|rt-opsplit|-|?|a|bash -- @D@/na.s'h'
+OP02|block-destructive|rt-opsplit|-|?|a|source -- @D@/na.s'h'
+OP03|block-destructive|rt-opsplit|-|?|a|bash --rcfile @D@/na.s'h' -i
+OP04|block-destructive|rt-opsplit|-|?|a|bash -- '@D@/na.s'h
+OP05|block-destructive|rt-opws|-|?|a|bash '@D@/n a.sh'
+OP06|block-destructive|rt-opws|-|?|a|source '@D@/n a.sh'
+OP07|block-destructive|rt-opok|-|?|a|bash @D@/ok.s'h'
+OP08|block-destructive|rt-opok|-|?|a|bash -- @D@/ok.s'h'
+OP09|block-destructive|rt-opcmode|-|?|B|bash -c 'echo hi; bash @D@/na.sh'
+OP10|block-destructive|rt-opcmode|-|?|a|bash -c 'echo a; echo b'
+OP11|block-destructive|rt-opnear|-|?|a|cat @D@/na.s'h'
