@@ -527,7 +527,7 @@ def cmd_impact(a, roots) -> tuple:
         for line in lines:
             out(line)
         if message:
-            out("NOT-EVALUATED: %s" % message)
+            out(PC.not_evaluated(message))
         return code, pairs, []
 
     try:
@@ -713,7 +713,10 @@ OVERLAY_MEASURES, OVERLAY_INDEX = "measures", "figures.json"
 
 
 class MeasureFailed(Exception):
-    """A measure that cannot be run to a report: the reason is one of PC.MEASURE_REASONS."""
+    """A measure that cannot be run to a report: the reason is one of PC.MEASURE_REASONS, held to that list here."""
+
+    def __init__(self, reason: str):
+        super().__init__(PC.listed(reason, PC.MEASURE_REASONS, "the measure reason"))
 
 
 def parse_origin(address: str):
@@ -869,17 +872,15 @@ def kept_event_rows(text: str, titles: list, tags: list) -> str:
     positive check: a slug key equal to a milestone title on the host, or a legacy version key equal
     to a tag name on the host. Every other row is excluded — a foreign slug, a row keyed by a
     milestone number only, a placeholder, an unkeyed row — and no count of them is kept. The rule
-    holds no repository name and no date."""
+    holds no repository name and no date. Each limb is tested whatever the key's first characters:
+    a slug key that opens like a version key is kept when it is a milestone title."""
     kept = []
     for line in text.split("\n"):
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if not EVENT_ROW.match(line) or len(cells) < 10:
             continue
         key = cells[1]
-        if LEGACY_KEY.match(key):
-            keep = key in tags
-        else:
-            keep = bool(key) and bool(SLUG_KEY.match(key)) and key in titles
+        keep = bool(key) and ((bool(SLUG_KEY.match(key)) and key in titles) or (bool(LEGACY_KEY.match(key)) and key in tags))
         if keep:
             kept.append(line.rstrip("\r"))
     return "".join(row + "\n" for row in kept)
@@ -1093,7 +1094,7 @@ def cmd_overlay(a, roots) -> tuple:
                 out("%s\t%s\t%s" % (m.id, m.input_class, m.script))
                 out("  " + m.reference)
         except PC.NotEvaluated as e:
-            out("NOT-EVALUATED: %s" % e)
+            out(PC.not_evaluated(e))
             return PC.EXIT_NOT_EVALUATED, None, []
         return PC.EXIT_CLEAN, None, []
     if a.host and a.host_responses:
@@ -1254,7 +1255,7 @@ def main(argv=None) -> int:
             sys.stdout.write(json.dumps({"not_evaluated": message, "census": PC.census(gate, PC.EXIT_NOT_EVALUATED, empty)},
                                         indent=2, sort_keys=True) + "\n")
             return PC.EXIT_NOT_EVALUATED
-        out("NOT-EVALUATED: %s" % message)
+        out(PC.not_evaluated(message))
         code, pairs, body = PC.EXIT_NOT_EVALUATED, empty, [NOT_RUN % message]
     if pairs is None:                      # impact --json has printed its one document
         return code
@@ -1846,6 +1847,9 @@ def self_test() -> int:
             code, lines = call(E + args)
             arms.check("nothing examined: %s on an empty catalog is exit 3, census status=not-evaluated" % name,
                        code == 3 and " status=not-evaluated exit=3 " in lines[-1] and lines[-1].startswith("process-catalog "), lines)
+        code, lines = call(E + ["build", "--check"])
+        arms.check("nothing examined: the not-evaluated line names its reason and says it is not a clean result",
+                   code == 3 and any(l.startswith("NOT-EVALUATED: ") and l.endswith("; " + PC.NOT_CLEAN) for l in lines), lines)
         PC.write_text(ex.catalog / PC.INDEX_NAME, PC.generated_header("Stray", "stray") + "# stray\n")
         arms.check("nothing examined: a stray generated file does not turn an empty catalog into a pass",
                    call(E + ["build", "--check"])[0] == 3 and not list(ex.catalog.glob("views/*")))
@@ -2281,12 +2285,12 @@ def self_test() -> int:
                    [sorted(set(PC.MEASURE_NODES) ^ used["nodes"]), sorted(set(PC.MEASURE_ATTRIBUTES) ^ used["attributes"]),
                     sorted(set(PC.MEASURE_BUILTINS) ^ (used["names"] - imported))])
 
-        # -- the synthetic-values arm: the twenty fixture files of the evidence rules --
+        # -- the synthetic-values arm: the twenty-one fixture files of the evidence rules --
         twenty = sorted(cases_dir.glob("*.json")) + [fixtures / PC.default_part("measures")] \
             + sorted((fixtures / "measures").glob("*")) + sorted((fixtures / "workflows").glob("*.txt")) \
             + [fixtures / "pages" / "pass" / "fixture-activity-measured.md.txt"] \
             + sorted((fixtures / "pages" / "fail").glob("fail-evidence-*.md.txt"))
-        arms.check("synthetic values: the arm reads twenty fixture files", len(twenty) == 20, len(twenty))
+        arms.check("synthetic values: the arm reads twenty-one fixture files", len(twenty) == 21, len(twenty))
         row_ids = set()
         for name in ("controls-register.tsv", "controls-register-fail.tsv"):
             row_ids |= {line.split("\t")[0] for line in (fixtures / name).read_text(encoding="utf-8").split("\n")[1:] if line}
@@ -2321,7 +2325,10 @@ def self_test() -> int:
             case = json.loads(path.read_text(encoding="utf-8"))
             for entry in case.get("inputs", {}):
                 names += [entry.split(":", 1)[1]] if ":" in entry else []
-        names += own["event_log"]["titles"] + list(own["analysis_home"]["folders"]) \
+        # A title that opens with a version token, which the population rule must read as a title, carries the
+        # fixture prefix straight after that token.
+        names += [re.sub(r"^v[0-9]{1,2}-(?=fixture-)", "", t) for t in own["event_log"]["titles"]] \
+            + list(own["analysis_home"]["folders"]) \
             + [t for t in own["event_log"]["tags"] if not re.match(r"^v[0-9]{1,2}\.[0-9]{1,2}$", t)]
         register_rows = [line.split("\t") for line in (fixtures / PC.default_part("measures")).read_text(encoding="utf-8").split("\n")[1:] if line]
         names += [cells[0] for cells in register_rows] + [cells[1] for cells in register_rows]
@@ -2401,8 +2408,9 @@ def self_test() -> int:
                    all(parse_origin(x) for x in own["origins"]["accepted"]) and not any(parse_origin(x) for x in own["origins"]["refused"]),
                    [x for x in own["origins"]["accepted"] if not parse_origin(x)] + [x for x in own["origins"]["refused"] if parse_origin(x)])
         kept = kept_event_rows(own["event_log"]["text"], own["event_log"]["titles"], own["event_log"]["tags"])
-        arms.check("population: a host-keyed slug row and a tagged legacy row are kept; a foreign slug, an untagged legacy "
-                   "row, a row keyed by a milestone number only and a placeholder row are not",
+        arms.check("population: a host-keyed slug row, a host-keyed slug row whose key opens like a version key and a "
+                   "tagged legacy row are kept; a foreign slug, an untagged legacy row, a row keyed by a milestone number "
+                   "only and a placeholder row are not",
                    [l.split("|")[2].strip() for l in kept.strip().split("\n")] == own["event_log"]["kept_keys"], kept)
         host_dir = tmp / "host-files"
         host_dir.mkdir()
@@ -2496,7 +2504,7 @@ def self_test() -> int:
                    str(tmp).encode("utf-8") not in everything and tmp.name.encode("utf-8") not in everything,
                    [l for l in everything.decode("utf-8", "replace").split("\n") if tmp.name in l][:3])
         state_report = (second / OVERLAY_MEASURES / "fixture-state-rows.txt").read_text(encoding="utf-8")
-        arms.check("runs: the working-state measure was handed the kept rows only", state_report == "event-log: lines 2\ntotal: lines 2\n",
+        arms.check("runs: the working-state measure was handed the kept rows only", state_report == "event-log: lines 3\ntotal: lines 3\n",
                    state_report)
         code, lines = call(O + ["overlay", "--overlay-root", str(second), "--host-responses", str(host_dir), "--today", "2001-01-14"])
         arms.check("runs: an input that is not passed is not looked for — its measure is not evaluated, its earlier report "
@@ -2651,6 +2659,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except PC.NotEvaluated as e:
-        print("NOT-EVALUATED: %s" % e)
+        print(PC.not_evaluated(e))
         print(PC.census("self-test", PC.EXIT_NOT_EVALUATED, [("arms", None), ("failed", None)]))
         sys.exit(PC.EXIT_NOT_EVALUATED)

@@ -1029,6 +1029,15 @@ _GENERATOR_CONSUMERS = ("all", "any", "dict", "list", "max", "min", "sorted", "s
 _GENERATOR_METHODS = ("extend", "join", "update")
 
 
+def listed(reason: str, members, what: str) -> str:
+    """`reason` when its first token — the text before a colon or a space — is a member of `members`, the list its
+    rule declares; otherwise the run stops as not evaluated. The emitters of VERDICT_REASONS and MEASURE_REASONS pass
+    every reason through here, so neither can emit a token its list does not hold."""
+    if re.split(r"[: ]", reason, 1)[0] not in members:
+        raise NotEvaluated("%s `%s` is not in the list its rule declares" % (what, reason))
+    return reason
+
+
 def word_pattern(words) -> "re.Pattern":
     """One whole-word, case-insensitive pattern for a list of words or phrases."""
     return re.compile(r"(?<![A-Za-z])(?:%s)(?![A-Za-z])" % "|".join(
@@ -1370,7 +1379,7 @@ def run_measure(source: str, name: str, inputs: dict, params: dict, seed: str = 
                               input=payload, capture_output=True, env={"PYTHONHASHSEED": seed, "TZ": zone},
                               cwd=str(workdir or holder.name), timeout=CHILD_LIMIT_SECONDS)
     except subprocess.TimeoutExpired:
-        return "failed", "timeout", None
+        return "failed", listed("timeout", MEASURE_REASONS, "the measure reason"), None
     except OSError as e:
         raise NotEvaluated("the child interpreter could not be started (%s)" % type(e).__name__)
     finally:
@@ -1382,12 +1391,13 @@ def run_measure(source: str, name: str, inputs: dict, params: dict, seed: str = 
         try:
             return "measured", "", proc.stdout.decode("utf-8")
         except UnicodeDecodeError:
-            return "failed", "bad-report", None
+            return "failed", listed("bad-report", MEASURE_REASONS, "the measure reason"), None
     reason = {CHILD_REFUSED: "outside-read", CHILD_FORM: "source-form", CHILD_REPORT: "bad-report"}.get(
         proc.returncode, "error")
     if proc.returncode == CHILD_FORM:
         detail = " ".join(last.split(" ")[1:4]) if last.startswith("source-form: line") else ""
-    return "failed", reason + (":" + detail if detail and reason != "bad-report" else ""), None
+    return "failed", listed(reason + (":" + detail if detail and reason != "bad-report" else ""), MEASURE_REASONS,
+                            "the measure reason"), None
 
 
 # ==============================================================================================
@@ -1629,6 +1639,43 @@ def mask_comments(texts: list) -> list:
     line as an empty string, so a comment marker inside fenced code opens nothing."""
     blank = lambda m: re.sub(r"[^\n]", " ", m.group(0))   # noqa: E731
     return COMMENT.sub(blank, "\n".join(texts)).split("\n")
+
+
+# The two comment forms a page carries: the source anchor that follows a line citation, whole and in the citation
+# grammar, and the two navigation markers the pack holds. Every other comment is page text to a rule that reads it.
+ANCHOR_FORM = re.compile(r"<!-- source-anchor: line=[0-9]+(?:-[0-9]+)?; fp=[0-9a-f]{16} -->")
+COMMENT_CLOSE = re.compile(r"--!?>")
+
+
+def drop_page_comments(text: str, markers) -> str:
+    """The text with the two comment forms a page carries removed: each source anchor in the citation grammar, and
+    each navigation marker exactly as the pack writes it. Every other comment stays, its delimiters and its words."""
+    text = ANCHOR_FORM.sub(" ", text)
+    for marker in markers:
+        text = text.replace(marker, " ")
+    return text
+
+
+def comment_findings(texts: list, markers) -> list:
+    """(index into `texts`, `unclosed` or `other`) for each comment a page may not carry. The lines are read as one
+    text, as mask_comments reads them, and a caller passes a fenced line as an empty string. An opener whose first
+    closer comes after a later opener, or that has no closer at all, has no closer of its own and is `unclosed`. A
+    closed comment that is neither a source anchor in the citation grammar nor a navigation marker is `other`. A
+    comment that opens as a source anchor is left to the anchor rule, which reports one that does not parse."""
+    joined = "\n".join(texts)
+    starts = [m.start() for m in re.finditer(r"<!--", joined)]
+    found = []
+    for n, start in enumerate(starts):
+        close = COMMENT_CLOSE.search(joined, start + 4)
+        later = starts[n + 1] if n + 1 < len(starts) else None
+        line = joined.count("\n", 0, start)
+        if close is None or (later is not None and later < close.start()):
+            found.append((line, "unclosed"))
+            continue
+        whole = joined[start:close.end()]
+        if not (ANCHOR_FORM.fullmatch(whole) or whole in markers or ANCHOR_OPEN.match(joined, start)):
+            found.append((line, "other"))
+    return found
 
 
 class Citation:
@@ -2971,6 +3018,14 @@ def census(gate: str, code: int, pairs: list) -> str:
         gate, STATUS_WORD[code], code, " ".join("%s=%s" % (k, "NA" if v is None else v) for k, v in pairs))
 
 
+NOT_CLEAN = "this is not a clean result"      # the clause the review discipline puts on every not-evaluated emit
+
+
+def not_evaluated(reason) -> str:
+    """The line a catalog command prints when it stops as not evaluated: the token, the reason and the clause."""
+    return "NOT-EVALUATED: %s; %s" % (reason, NOT_CLEAN)
+
+
 def write_summary(path, gate: str, status: str, examined: str, body: list) -> None:
     """Append one block to a summary file; do nothing when no path was given. The option changes
     no output stream and no exit."""
@@ -3067,8 +3122,10 @@ class FixtureRepo:
         return text.replace(UNSTAMPED_COMMIT, self.base).replace(SYNTHETIC_COMMIT, self.base)
 
     def fail_page(self, nid: str) -> Path:
-        """Place one failing fixture page in the fixture universe's folder and return its path."""
-        text = fixture_text("pages/fail/%s.md.txt" % nid)
+        """Place one failing fixture page in the fixture universe's folder and return its path. The fixture's last
+        line, which names the rule codes the page must raise, is the harness's and not page text: it is blanked, so
+        the placed page keeps its line count and carries no comment a page may not carry."""
+        text = re.sub(r"<!-- expect: [A-Za-z0-9:, ]+ --!?>", "", fixture_text("pages/fail/%s.md.txt" % nid))
         if self.layout != default_layout():
             text = text.replace(default_layout()["sources"] + "/", self.layout["sources"] + "/")
         path = self.catalog / FIXTURE_UNIVERSE / (nid + ".md")
@@ -3286,6 +3343,35 @@ def _self_test() -> int:
                    carry("x<!-- source-anchor:\nline=3; fp=0123456789abcdef --> y") == "x y"
                    and carry("x<!-- source-anchor: line=3; fp=0123456789abcdef --!> y") == "x y"
                    and carry("x <!-- another comment --> y") == "x <!-- another comment --> y")
+        markers = ("<!-- nav:begin -->", "<!-- nav:end -->")
+        anchor = "<!-- source-anchor: line=3; fp=0123456789abcdef -->"
+        arms.check("page comments: a source anchor and the two markers are set aside; any other comment keeps its words",
+                   drop_page_comments("a%s b %s c <!-- 4 notes here --> d" % (anchor, markers[0]), markers).split()
+                   == ["a", "b", "c", "<!--", "4", "notes", "here", "-->", "d"])
+        arms.check("page comments: an opener with no closer, and one whose first closer follows a later opener, are each "
+                   "unclosed; a closed comment of another form is other",
+                   comment_findings(["a <!-- b", "c"], markers) == [(0, "unclosed")]
+                   and comment_findings(["a <!-- b", markers[0]], markers) == [(0, "unclosed")]
+                   and comment_findings(["x <!-- note --!> y"], markers) == [(0, "other")])
+        arms.check("page comments: anchors, the two markers and an anchor that does not parse read nothing (the near-miss)",
+                   comment_findings(["[a](/x.txt#L3)" + anchor, markers[0], markers[1], "<!-- source-anchor: line=3 -->"],
+                                    markers) == [])
+
+        def stops(call) -> bool:
+            try:
+                call()
+            except NotEvaluated:
+                return True
+            return False
+
+        arms.check("declared lists: each verdict reason is accepted, with a detail after it; a reason outside the list "
+                   "stops the run", all(listed(r, VERDICT_REASONS, "x") == r for r in VERDICT_REASONS)
+                   and listed("coverage-short (uncovered: a)", VERDICT_REASONS, "x") == "coverage-short (uncovered: a)"
+                   and stops(lambda: listed("no-such-reason", VERDICT_REASONS, "x")))
+        arms.check("declared lists: each measure reason is accepted, with an event after it; a reason outside the list "
+                   "stops the run", all(listed(r, MEASURE_REASONS, "x") == r for r in MEASURE_REASONS)
+                   and listed("outside-read:open", MEASURE_REASONS, "x") == "outside-read:open"
+                   and stops(lambda: listed("no-such-reason:open", MEASURE_REASONS, "x")))
 
         # -- the pack: shape, and unknown keys at nine places --
         good = json.loads(fixture_text(default_part("pack")))

@@ -67,6 +67,8 @@ RULES = (
     ("ANC003", "error", "an anchor's `line` names different lines from its link's fragment"),
     ("ANC004", "error", "the label of a source link carries a line token"),
     ("ANC005", "warn", "a line reference stands in prose or a table cell outside a citation"),
+    ("CMT001", "error", "a comment opener has no closer of its own, or a closed comment is neither a source anchor nor "
+                        "a navigation marker"),
     ("CTL001", "warn", "a Controls row names no control ID for its class"),
     ("CTL002", "error", "a cited control's class on the page differs from the register's"),
     ("CTL003", "error", "a cited control ID has no row in the register"),
@@ -427,6 +429,7 @@ class Checker:
         self._sources(page, add)
         self._structure(page, lvl, level, add)
         self._links_and_citations(page, add)
+        self._comments(page, add)
         self._content(page, level, add)
         return f
 
@@ -539,6 +542,15 @@ class Checker:
             if PC.PROSE_LINE_REF.search(rest):
                 add("ANC005", "a line reference stands outside a citation", index)
 
+    def _comments(self, page, add) -> None:
+        """CMT001: a page carries two comment forms, the source anchor and the navigation marker. An opener with no
+        closer of its own, and a comment of any other form, are each a finding."""
+        flags = PC.fence_flags(page.lines)
+        texts = ["" if flags[i] else page.lines[i] for i in range(page.body_start, len(page.lines))]
+        for offset, what in PC.comment_findings(texts, (self.cat.begin, self.cat.end)):
+            add("CMT001", "a comment opener has no closer of its own" if what == "unclosed"
+                else "a comment that is neither a source anchor nor a navigation marker", page.body_start + offset)
+
     def _content(self, page, level, add) -> None:
         pack, enums = self.pack, self.pack["enums"]
         flags = PC.fence_flags(page.lines)
@@ -644,7 +656,8 @@ class Checker:
             in_scope = bool(re.search(r"\bexecuted\b", lens) or mentions or marker
                             or any(m.group("path").startswith(self.measures_prefix) for m in PC.ROOT_LINK.finditer(obs))
                             or folder_links)
-            stripped = PC.ANY_LINK_TARGET.sub("]", PC.COMMENT.sub(" ", both)).replace(PC.WORKING_STATE_NOTE, " ")
+            stripped = PC.ANY_LINK_TARGET.sub("]", PC.drop_page_comments(both, (self.cat.begin, self.cat.end))) \
+                .replace(PC.WORKING_STATE_NOTE, " ")
             hit = self.instance_words.search(stripped)
             if hit:
                 add("EVD004", "instance-pointing wording: `%s`" % hit.group(0), i)
@@ -728,32 +741,35 @@ class Checker:
                        coverage: str = PC.CONFORMANT_COVERAGE):
         """The `reason=` text of an `EVD003` finding, or None. The page's status is not a condition:
         a draft's verdict line is read like any other. A page that is `not-assessed` claims no
-        verdict. `coverage` is the rule in force; the self-test passes each value."""
+        verdict. `coverage` is the rule in force; the self-test passes each value. Every reason is
+        held to VERDICT_REASONS before it is returned."""
         levels = self.pack["enums"]["level"]
         if level not in levels[2:] or coverage not in PC.COVERAGE_VALUES:
             return None
+        reason = None
         value = page.lens_status
         if value == "conformant":
             if not kind_b:
-                return "no-reproducible-row"
-            if level == self.pack["summary_counts"]["level"]:
+                reason = "no-reproducible-row"
+            elif level == self.pack["summary_counts"]["level"]:
                 missing = [k for k in step_keys if k not in union]
                 short = (missing or not step_keys) if coverage == "every-step" else not (union & set(step_keys))
                 if short:
-                    return "coverage-short (uncovered: %s)" % (", ".join(missing) or "every step")
+                    reason = "coverage-short (uncovered: %s)" % (", ".join(missing) or "every step")
         elif value == "deviates":
             child = any(self.cat.level(n) == levels[3] and self.cat.pages[n].lens_status == "deviates"
                         for n in self.cat.pages if n != page.id and self.cat.parent_of(n) == page.id) \
                 if level == levels[2] else False
             if not supporting_comparison and not child:
-                return "no-comparison-row"
+                reason = "no-comparison-row"
         elif value == "unobserved" and not in_scope_rows:
-            return "no-in-scope-row"
-        return None
+            reason = "no-in-scope-row"
+        return PC.listed(reason, PC.VERDICT_REASONS, "the verdict reason") if reason else None
 
     def _figure(self, page, source, obs, cited, clause_keys):
         """The first figure or number word left in an in-scope row, or None. Removed first, in
-        order: each cited measure's reference; comments and link targets (a link's label stays); a
+        order: each cited measure's reference; source anchors, navigation markers and link targets (a
+        link's label stays; any other comment is read, its words included); a
         code span whose whole content resolves — a tracked path, a tracked file's name, a registered
         measure, page or control ID, or a step key inside a coverage clause that passed; a number or
         a list of numbers that follows a label word; a level token and a section number; and an
@@ -762,7 +778,7 @@ class Checker:
         text = source + " \n " + obs
         for m in cited:
             text = text.replace(m.reference, " ")
-        text = PC.ANY_LINK_TARGET.sub("]", PC.COMMENT.sub(" ", text))
+        text = PC.ANY_LINK_TARGET.sub("]", PC.drop_page_comments(text, (self.cat.begin, self.cat.end)))
         if clause_keys is not None:
             text = CLAUSE.sub(" ", text)
         tracked = self.cat.tracked
@@ -942,7 +958,7 @@ def run(a, out=None) -> int:
             body += ["", PAGE_FIX % roots.rel(HERE / PC.GENERATOR), "", REGISTER_FIX % roots.rel(roots.pack)]
         return close(PC.EXIT_FINDINGS if errors else PC.EXIT_CLEAN)
     except PC.NotEvaluated as e:
-        emit("NOT-EVALUATED: %s" % e)
+        emit(PC.not_evaluated(e))
         body.append(NOT_RUN % e)
         return close(PC.EXIT_NOT_EVALUATED)
 
@@ -1019,8 +1035,8 @@ def self_test() -> int:
         # -- the rule list --
         code, lines, _err = cli(["--list-rules"])
         listed = [l.split("\t")[0] for l in lines]
-        arms.check("list-rules: 56 codes, sorted, each with a severity and a condition",
-                   code == 0 and len(listed) == 56 and listed == sorted(listed)
+        arms.check("list-rules: 57 codes, sorted, each with a severity and a condition",
+                   code == 0 and len(listed) == 57 and listed == sorted(listed)
                    and all(len(l.split("\t")) == 3 for l in lines), len(listed))
         arms.check("list-rules: no census line — the command examines nothing",
                    not any(l.startswith("process-catalog ") for l in lines))
@@ -1048,7 +1064,7 @@ def self_test() -> int:
         # -- the fail set: every code on each fixture's expect line --
         fail_dir = PC.FIXTURE_DIR / "pages" / "fail"
         fixtures = sorted(fail_dir.glob("*.md.txt"))
-        arms.check("fail fixtures: 27 files", len(fixtures) == 27, len(fixtures))
+        arms.check("fail fixtures: 29 files", len(fixtures) == 29, len(fixtures))
         seen_codes = set()
         for path in fixtures:
             nid = path.name[:-len(".md.txt")]
@@ -1190,6 +1206,18 @@ def self_test() -> int:
             finally:
                 path.unlink()
             arms.check("comments: " + label, ("ANC005" in codes_of(lines, "WARN")) == want, codes_of(lines, "WARN"))
+        # CMT001: a page carries source anchors and navigation markers, and no other comment
+        arms.check("CMT001: a page whose comments are source anchors and navigation markers reads no finding (the near-miss)",
+                   "CMT001" not in codes_of(in_process(targets=[fx.page("fixture-activity-anchored")])[1], "ERROR"))
+        with_page("fixture-activity-plain-comment.md", plain_text.replace(
+            "## Navigation", "A note <!-- of another form --!> ends.\n\n## Navigation", 1),
+                  ["CMT001"], "CMT001: a closed comment of another form is a finding, with either end form")
+        anchor_only = plain_text.replace("## Navigation", "See [the rules](/%s)<!-- source-anchor: line=3 -->.\n\n## Navigation"
+                                         % (fx.layout["sources"] + "/fixture-rules.md.txt"), 1)
+        got = codes_of(with_page("fixture-activity-plain-comment.md", anchor_only, ["ANC002"],
+                                 "ANC002: a comment that opens as a source anchor and does not parse is the anchor rule's"), "ERROR")
+        arms.check("CMT001: the anchor that does not parse is not read again as a comment of another form", "CMT001" not in got,
+                   sorted(got))
         arms.check("flow: a token of the second end form splits a line as an arrow does, and no arrow is lost",
                    mermaid_keyword_ids(["a --!> end"]) == ["end"] and mermaid_keyword_ids(["a --> end"]) == ["end"]
                    and mermaid_keyword_ids(["a --> ending"]) == [])
@@ -1590,6 +1618,9 @@ def self_test() -> int:
                    and "The check could not run: no page is discovered" in block
                    and "This is not a pass, and it is not a finding about this change." in block
                    and ": PASS" not in block and ": FAIL" not in block, (code, block))
+        arms.check("not evaluated: the line names its reason and says it is not a clean result",
+                   code == 3 and any(l.startswith("NOT-EVALUATED: no page is discovered") and l.endswith("; " + PC.NOT_CLEAN)
+                                     for l in lines), lines)
         dx = PC.build_fixture_repo(tmp / "depicted")
         dx_base = ["--pattern-arm", "not-run"] + dx.args + dx.register_args + dx.measure_args
         unrelated = dx.repo / dx.layout["fixtures"] / "README.md"
@@ -1689,6 +1720,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except PC.NotEvaluated as e:
-        print("NOT-EVALUATED: %s" % e)
+        print(PC.not_evaluated(e))
         print(PC.census("self-test", PC.EXIT_NOT_EVALUATED, [("arms", None), ("failed", None)]))
         sys.exit(PC.EXIT_NOT_EVALUATED)

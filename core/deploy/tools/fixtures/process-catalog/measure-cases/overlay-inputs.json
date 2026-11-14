@@ -1,18 +1,20 @@
 {
   "synthetic": "invented values; not measured on any install",
   "event_log": {
-    "text": "# An invented event log\n| timestamp | version | stage | event_type | subtype | actor | subject | reversibility | outcome | payload |\n| 2001-01-01T00:00:00Z | fixture-release-alpha | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-02T00:00:00Z | fixture-foreign-release | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-03T00:00:00Z | v1.02 | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-04T00:00:00Z | v1.03 | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-05T00:00:00Z |  | 9 | gate-outcome | go | operator | milestone:fixture-number-only | CHEAP | ok | fixture payload |\n| 2001-01-06T00:00:00Z | (none) | 6 | test-run | suite | spoke:fixture | fixture-subject | CHEAP | ok | fixture payload |\n",
+    "text": "# An invented event log\n| timestamp | version | stage | event_type | subtype | actor | subject | reversibility | outcome | payload |\n| 2001-01-01T00:00:00Z | fixture-release-alpha | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-02T00:00:00Z | fixture-foreign-release | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-03T00:00:00Z | v1.02 | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-04T00:00:00Z | v1.03 | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-05T00:00:00Z |  | 9 | gate-outcome | go | operator | milestone:fixture-number-only | CHEAP | ok | fixture payload |\n| 2001-01-06T00:00:00Z | (none) | 6 | test-run | suite | spoke:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-07T00:00:00Z | v9-fixture-release | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n",
     "titles": [
       "fixture-release-alpha",
-      "fixture-release-beta"
+      "fixture-release-beta",
+      "v9-fixture-release"
     ],
     "tags": [
       "v1.02"
     ],
-    "kept": 2,
+    "kept": 3,
     "kept_keys": [
       "fixture-release-alpha",
-      "v1.02"
+      "v1.02",
+      "v9-fixture-release"
     ]
   },
   "empty_tag_set": {

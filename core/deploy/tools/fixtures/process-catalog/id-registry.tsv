@@ -36,3 +36,5 @@ fail-evidence-verdict	L3	fixture-landscape	fixture-process	Fail fixture	minted
 fail-evidence-wording	L3	fixture-landscape	fixture-process	Fail fixture	minted
 fail-evidence-coverage	L3	fixture-landscape	fixture-process	Fail fixture	minted
 fail-evidence-coverage-none	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-comment	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-comment-unclosed	L3	fixture-landscape	fixture-process	Fail fixture	minted

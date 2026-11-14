@@ -59,6 +59,8 @@ One Markdown page per node, at the path the standard gives (§ 13.1). The standa
 
 **Navigation and sources.** Every page ends with a Navigation section and then a Sources section. The navigation links sit between the two markers `pack.json` holds.
 
+**Comments.** A page carries two kinds of comment and no other: the source anchor that follows a line citation, and the two navigation markers. Every comment opener has a closer of its own.
+
 **A step is a row.** Each row of an activity page's Steps table is one step. Its first cell is the step key, which names the step everywhere else on the page. A step key is lower-case letters, digits and single hyphens; its first segment is letters only; and no run of digits in it is longer than three characters. Each row names its inputs and outputs with their shape (for example "issue body → triage comment with its six sections"), so a test case can be written from the row alone.
 
 **A tool call is a mechanism.** A tool call is written in the Mechanism cell of the step that makes it. It is never an activity of its own.
@@ -287,6 +289,7 @@ Each row below is one rule the catalog's validator checks, with the document tha
 | `ANC003` | an anchor and its link's fragment name the same lines | the standard, § 13.4 (Evergreen references) |
 | `ANC004` | a source link's label carries no line number | the standard, § 13.4 (Evergreen references) |
 | `ANC005` | no line reference outside a citation | the standard, § 13.4 (Evergreen references) |
+| `CMT001` | a page carries only source anchors and navigation markers as comments | [this pack](#the-page-and-its-fields) |
 | `CTL001` | a Controls row names its control ID | the standard, § 13.7; decision 12 |
 | `CTL002` | a Controls row's class equals the register's | the standard, § 13.7; decision 12 |
 | `CTL003` | a cited control ID is in the register | the standard, § 13.7; decision 12 |
