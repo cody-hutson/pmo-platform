@@ -439,9 +439,13 @@ pass_rate_floor = 1.00
 #
 # ONE CONVERSION, FAIL-CLOSED. Every figure-producing tool gets weekly points from the
 # FinOps measurement layer's single conversion, which reads this section. A consumer
-# that cannot resolve a value here must yield an UNRESOLVED figure, never zero and
-# never a built-in constant: a zero K divides by zero, and a zero weight erases a
-# token type from every figure.
+# that cannot resolve one of the section's seven numeric values -- both ends'
+# cache-read weight and K, and the three price-relative weights -- must yield an
+# UNRESOLVED figure, never zero and never a built-in constant: a zero K divides by
+# zero, and a zero weight erases a token type from every figure. The calibration
+# model and the per-model axis are optional by design: absent reads as
+# "none named" / "none probed", which is their documented meaning, not a
+# substituted value.
 #
 # RESOLVES ON 2 RUNGS, NOT 5 -- the global default (this file) and the individual rung
 # (the XDG platform-config.toml). The calibration is per plan and per account, not per
