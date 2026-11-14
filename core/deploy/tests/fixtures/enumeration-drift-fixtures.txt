@@ -46,7 +46,10 @@
 #   - Cases 17 and 18 pin link resolution from the document's own directory, a leading
 #     `/` from the root, and an off-glob link reading as extra rather than vanishing.
 #   - Case 19 pins the code-span key of a glob with two wildcard segments.
-# Cases: 5 DRIFT · 8 CLEAN · 5 UNRESOLVED · 1 SCOPE-OUT — 19 in all.
+#   - Case 20 pins the `dup` rule: every member is listed once and one is listed again,
+#     so `missing` and `extra` are empty and only the repeat can drift. Case 3 is its
+#     near-miss: the same list without the repeat.
+# Cases: 6 DRIFT · 8 CLEAN · 5 UNRESOLVED · 1 SCOPE-OUT — 20 in all.
 
 --- DRIFT list seeded-mismatch
 POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
@@ -203,4 +206,14 @@ POPULATION: mods/a/x.md mods/b/y.md
 <!-- enumerates: mods/*/*.md list -->
 The fixture modules:
 - `a/x.md`
+--- END
+
+--- DRIFT list duplicate-item
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+- `alpha.sh`
 --- END
