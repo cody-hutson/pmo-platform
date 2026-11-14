@@ -1,6 +1,6 @@
 ---
 title: Release Velocity Tracking
-purpose: K1 codified-knowledge standard defining how release velocity (planned-vs-delivered story points, files-changed, and the realized feature/debt/slack allocation mix) is measured, formatted, surfaced in RELEASE_LOG.md, and baselined for the PMO platform
+purpose: K1 codified-knowledge standard defining how release velocity (planned-vs-delivered story points, files-changed, and the realized feature/debt/slack allocation mix) is measured, formatted, surfaced in RELEASE_LOG.md, and baselined for the PMO platform, and the schema and method of the per-release cost row the same tool writes
 type: standard
 parallel_to: deployment-cycle-time.md (the sibling visible-H4 measurement field; cycle-time measures GO-to-deploy latency, velocity measures release-bundle throughput — disjoint signals, co-resident block), decision-outcome-tracking.md (the additive-H4-field placement precedent this follows), bundle-composition-doctrine.md (owns the point scale + the round-half-up mode + the release-class capacity weights this instrument feeds), gate-evaluation-spec.md (the Layer 3 calibration surface providing the N=3 trigger)
 reversibility: CHEAP (forward-only additive H4 field; pre-cutover releases lack the field and consumers treat as absent; the whole instrument reverts with one commit — no master-table schema change)
@@ -156,6 +156,7 @@ Reference implementation: `release/tools/compute-release-velocity.sh`.
 ```bash
 ./compute-release-velocity.sh <version> --milestone <N> --merge-sha <SHA>   # the **Velocity:** field value
 ./compute-release-velocity.sh <version> --milestone <N> --json             # JSON of all signals
+./compute-release-velocity.sh <version> --milestone <N> --cost-row --out-dir <dir>   # the per-release cost row (§ 7a)
 ./compute-release-velocity.sh --self-test                                  # validate logic, no network
 ```
 
@@ -167,6 +168,85 @@ Reference implementation: `release/tools/compute-release-velocity.sh`.
 **Consumer obligation on exit 2.** A caller must NOT fold exit 2 into its "tool unavailable" degrade. Exit 1 means *we could not measure* and correctly degrades to the explicit `N/A` field; exit 2 means *we measured and the result is not fit to record*, and must surface as a failure. Recording a refusal as an `N/A` converts a loud stop into a clean-parsing permanent row — the same class of trade this instrument's own defect history is made of. `automated-closeout.sh` phase 6.6 implements the split, non-blocking under `--dry-run` and fatal at `--apply`.
 
 **Manual-fill fallback:** if the tool cannot run at capture time (e.g. `gh` unavailable in the close worktree), the Stage 13 spoke MAY compute the three numbers by hand from the membership and embed them in the field — exactly as the cycle-time field degraded gracefully to manual `N/A` during its own instrumentation gap. The field and the convention bind either way.
+
+## 7a. Per-release cost row
+
+A measurement separate from the `**Velocity:**` field, written by the same tool in its `--cost-row` mode: **one JSON row per release** recording what the release cost — per-response token totals by stage × role × token type, the planned and delivered points of § 2's delivery predicate, and weekly points at both ends of the cost unit's bracket. It is not a sub-signal of the field (§ 2's anatomy is unchanged), and it never enters `RELEASE_LOG.md`.
+
+- **Unit.** Weekly points of one account, as {{ADR:release-graph-cost-unit}} defines them. This standard restates none of the unit's values. Every weekly-point figure in the row comes from the FinOps measurement layer's single conversion, `core/skills/finops-usage-extractor/scripts/convert-usage.sh`, which reads the `[cost_unit]` numeric home. The row stores the values the conversion used, and its raw per-type totals re-express under any later calibration.
+- **Producer and home.** `compute-release-velocity.sh <version> --milestone <N> --cost-row --out-dir <dir>` writes `<dir>/release-cost/<slug>.json`, rewritten atomically; a re-run replaces only that slug's row. The row is local operator data and is never committed: the producer refuses (exit 2) a home that sits inside a git repository and is not ignored there.
+- **Compact output.** Stdout is exactly two lines: one summary line, which is derived-only (no session id, no per-cell figure, no `.md` path), and the row path. Only derived figures can cross to a public surface.
+
+### 7a.1 Row schema — `record: "release-cost-row"`, `schema_version: "1.0.0"`
+
+| Field | Meaning |
+|---|---|
+| `slug`, `version`, `milestone` | The milestone title (the row's key), the claimed version (`null` for a version-less release), and the milestone number |
+| `measured_utc`, `since_utc` | When the row was measured, and the start of the discovery window (the milestone's creation unless overridden) |
+| `hub_trees[]` | `{id, via, counted}` per hub file. `via` is `predicate` or `explicit`; `counted` is false for a resume copy the subset rule left out (§ 7a.2 step 3) |
+| `points` | `{planned, delivered, ratio, na_reason, flag}` from § 2's predicate. An unsized membership gives `null` points with `na_reason`; a non-zero planned against zero delivered keeps its numbers and carries `flag` (the field refuses that reading; the row records it) |
+| `store` | `{source, schema_version, generator_version}`; `source` is `fresh` (the default), `fallback-full-root` or `injected` |
+| `cells[]` | One per stage × role: `{stage, role, sessions, responses, incomplete_responses, unevaluated_responses, lower_bound, tokens, by_model, weekly_points, per_model}` |
+| `total` | The same shape over every counted session, without stage and role |
+| `weekly_points` | The release total's pair — absent when the unit is unresolved |
+| `unit` | `{state: "fetched", params, label, label_source}` verbatim from the conversion, or `{state: "not-run", cause}` |
+| `coverage` | The measurement's honesty fields, § 7a.3 |
+
+- **`stage`** is an integer 1–13 or `null`. **`role`** is one of `hub` · `chip` · `spoke` · `reviewer` · `workflow-agent` · `subagent-other`.
+- **`tokens`** has the usage store's shape — `input`, `output` (thinking included; there is no separate thinking type), `cache_creation {total, ephemeral_1h, ephemeral_5m}` and `cache_read` — summed over the cell's sessions, each counted once per API response within one transcript file. **`responses`** sums the store's `turns`.
+- **`by_model`** is the store's exact per-model split, summed. It keeps a row re-expressible when a model gains its own calibration.
+- **`weekly_points`** is a pair keyed by bracket end: `{at_w_low, at_w_high}`. Each end uses its own cache-read weight and its own `K`. The two are two estimates, not a range: which is larger depends on the cell's mix, so a consumer must not sort them or read either as a lower bound.
+- **`incomplete_responses` and `unevaluated_responses`** sum the store's two counts. A contributing record that lacks either makes that sum `null` — not evaluated, never `0`. **`lower_bound`** is `true` when either sum is above zero, `null` when either is not evaluated and neither is above zero, and `false` otherwise; the store schema's § Incomplete responses owns what the bound covers. A killed spoke contributes at most one incomplete final response.
+
+### 7a.2 Method
+
+1. **Discover.** A main session is a **hub** when a spawn it made — an `Agent`, `Task` or `spawn_task` tool call — carries `Milestone <slug>`, token-bounded, in its prompt or description; that phrase is the first line of the hub-spoke spoke template. Everything under the hub's `<stem>/subagents/` belongs to its tree by path. A **chip** is a main session whose whitespace-normalized first message equals the prompt of a tree hub's `spawn_task` call (the call returns no session id, so the join is by content); an orphan chip is one whose first message carries the predicate phrase. `--hub-session <stem>` adds a tree the predicate cannot see. The walk covers the project directories one level under the transcript root, skips symlinked directories and duplicate inodes, and reads no main file older than the window's start.
+2. **Count.** Through the FinOps usage extractor over a **fresh scratch store**: a hard-link view of exactly the counted files, one directory per file so each store record joins on its file path rather than its stem, inside a run directory removed on exit. It never reads or writes the operator's live store. A file with an assistant line that yields no record is retried once, then counted as unextracted. `--store` injects a store instead, joined on its real layout (parent directory and file stem); a key two files share joins neither, and is counted. A store below schema `2.0.0` — one that counted per transcript line — is refused.
+3. **Leave out resume copies.** A tree file whose message-id set is contained in another tree file's is a resume or fork copy and is not counted; its `subagents/` stay, by path. Of two files with equal sets, the first path is kept.
+4. **Classify** each session; the first rule that hits wins.
+   - **Stage:** `executing Stage N` in its first message; else `Stage N` in the linked spawn's description; else `Stage N` in the first 2,000 characters of its first message; else its chip root's stage; else `null`.
+   - **Role:** a tree root is `hub` or `chip`. A nested file under `workflows/` is `workflow-agent`. One whose linked spawn description or first message carries the review persona header (an adversarial design review) is `reviewer`; the agent type is only a secondary signal, because reviews are spawned as general-purpose agents. One with a stage is `spoke`, and the rest is `subagent-other`.
+   - **Hub cells carry no stage**: partitioning a hub's turns by stage needs a per-turn classifier the row does not have. `stage_basis` and `role_basis` count the sessions each rule classified, so content classification is never presented as exact.
+5. **Convert** every cell and the total through the one conversion, in one call.
+6. **Write** the row, then the two-line summary.
+
+### 7a.3 Coverage — what a row can and cannot claim
+
+| Field | Meaning |
+|---|---|
+| `measurement_state` | `fetched`, or `degraded` when any cause below holds. A consumer branches on it before reading any counter (review-discipline § 8, PV-7) |
+| `degraded_causes[]` | `cross-file-shared-responses` · `unextracted-files` · `ambiguous-store-key` · `fallback-source` · `malformed-store-record` · `unit-unresolved` |
+| `counting_scope` | `once per API response within one transcript file` |
+| `cross_file_shared_responses`, `hub_files`, `sharing_hub_pairs`, `subset_files_excluded` | The row's own cross-file exposure, measured by message-id identity with no token arithmetic |
+| `advisor_iterations` | `not counted`: usage carried only in advisor or fallback sub-call iterations is outside the store |
+| `stage_basis`, `role_basis`, `chips {spawn_task_calls, joined, unjoined, orphan}` | How each session was classified, and the chip joins. An unjoined spawn is counted, never dropped |
+| `symlink_aliases_skipped`, `unextracted_files`, `ambiguous_store_keys`, `malformed_store_records` | What discovery and the join skipped |
+| `measurement_boundary` | Spend written after `measured_utc` — the rest of the close-out, the running hub — is outside the row, so a row measured at a release's own Stage 13 is a lower bound |
+| `discovery` | The predicate phrase, the counts of files scanned and found, and digests of the discovered files' paths. No path is stored |
+
+**The cross-file residual is bimodal, not an average.** Count-once holds within a transcript file: a response that a resumed or forked session copies into a second file is counted in each. On a single-hub tree the residual is **0**; on trees whose hub was resumed or forked it was measured at up to **28 %** of the tree's per-file mass (2026-11-05). The subset rule removes pure copies, and ids still shared after it make the row `degraded` with their count, so no reader applies a population average to one release.
+
+**A re-run never shrinks a row.** A re-run whose discovered file set does not contain the stored row's is refused (exit 2) unless `--force` is passed. The transcripts a row is computed from age out locally, so a smaller later row cannot be rebuilt into the larger one.
+
+### 7a.4 Exit codes (cost-row mode)
+
+`0` written, `fetched` or `degraded` · `1` invalid args, a missing dependency (`gh`, `jq`, `python3`), or no `--out-dir` · `2` refused: a store below the minimum schema, a home inside a repository and not ignored there, zero trees discovered, or a shrinking re-run · `3` the extractor or the write failed, and no row was written · `4` written with the unit **unresolved**: the raw totals kept, `unit.state: "not-run"`, no weekly points, the row `degraded`.
+
+### 7a.5 Cutover
+
+The row is owed from its introducing release's own Stage 13 onward. Unlike § 10, the introducing release is **not** exempt: measuring itself is that release's purpose, and a row is a local record rather than a permanent ledger field, so the reflexive-loop reason for exempting the field does not apply.
+
+### 7a.6 Design artifact — the cost-row data flow
+
+<!-- design-artifact: flow-class=data-flow; name=release-cost-row; depicts=release/tools/compute-release-velocity.sh,core/skills/finops-usage-extractor/scripts/convert-usage.sh,core/skills/finops-usage-extractor/scripts/extract-usage.sh,release/tools/automated-closeout.sh -->
+
+| Step | Producer | Artifact | Consumer |
+|---|---|---|---|
+| 1 discover | the velocity tool, `--cost-row` | the tree set: hub stems, nested files, joined chips, `via` | step 2 |
+| 2 count | `extract-usage.sh` (a scratch `STORE` over a hard-link view) | a scratch store at schema `2.0.0` or later | step 3 |
+| 3 classify | the velocity tool | cells (stage × role): per-type tokens, both response counts, `by_model` | step 4 |
+| 4 convert | `convert-usage.sh`, reading `[cost_unit]` | the pairs `{at_w_low, at_w_high}` per cell and total, the values used, the calibration label | step 5 |
+| 5 write | the velocity tool | `<home>/release-cost/<slug>.json` and one summary line | the Stage-13 close-out; the consumers in § 11 |
 
 ## 8. Boundary statement (release-pipeline velocity ≠ delivery-team capacity)
 
@@ -205,6 +285,10 @@ This matches how the two sibling visible-H4 fields grandfathered (the cycle-time
 | `bundle-composition-doctrine.md § 3 Step 5` release-class capacity weights | The heuristic half — consumes the per-class delivered-vs-planned ratio + allocation actuals after N=3 (§ 9) |
 | `release-planner` Mode B (durable release plan authoring) | Reads velocity data for capacity calibration once the population establishes |
 | `automated-closeout.sh` (RELEASE_LOG row-parser) | Invariant against this field — its row-parsers anchor on master-table rows (`^| v<X.Y>`); the `**Velocity:**` H4 field line is structurally invisible to them (no master-table change; see § 12) |
+| The token-efficiency outcome check's baseline | Reads per-release cost rows (§ 7a) as its measured baseline — shares at each bracket end, after branching on `measurement_state` |
+| The weekly-allowance axis of the quota budget | Reads a row's weekly points as measured draw per release, in the cost unit |
+| Release-class capacity calibration and bundle planning | Reads measured cost per planned point (the row's weekly points over its raw planned points) in place of an estimate |
+| The model-use policy record | Reads the rows' per-model split (`by_model`) as cost evidence for a model choice |
 
 ## 12. Parser-safety invariant
 
@@ -222,6 +306,9 @@ Per `core/standards/failure-mode-standard.md`, every K1 standard documents ≥ 3
 | FM4 | **OUT** | Committing the velocity field direct-to-main, or at Stage 12 | When adding the `**Velocity:**` field, do NOT commit the visible-H4 edit directly to main, and do NOT emit it at Stage 12 — it lands via the Stage 13 chore PR | Direct-to-main is prohibited regardless of edit size (the git-workflow "What NOT To Do" rule does not exempt metadata edits). The field is a Stage-13 field because that is where the *disposition* is final: Phase A2 applies the terminal `status:` labels the delivery predicate reads, so a Stage-12 emit would measure a bundle nobody had dispositioned yet | § 3.3 + § 11 land the field at the Stage 13 chore PR (same commit as the `DEPLOYED → VERIFIED` transition and the outcome field); the Stage-12 emit template stays cycle-time-only with a forward-note | Principal: appends the field in the Stage 13 chore PR, after Phase A2 has dispositioned the membership. Junior: emits velocity at Stage 12, before any deferred member has been marked → records a ratio against an undispositioned bundle that the recalibration then reads as real |
 | FM5 | **PROC** | Waiting for member closure before measuring `delivered` | Do NOT try to make `delivered` authoritative by moving the measurement after member close, and do NOT gate it on close state — the field lands in the Stage-13 chore PR, which the sequencing invariant requires to merge BEFORE milestone close, so "after the members close" is a point this field can never be written from | The reading is intuitive and wrong: "delivered means shipped, shipped means closed, so wait for the closes." Three constraints make it unsatisfiable together — the field lands in the chore PR (§ 3.3 / § 11), the chore PR lands before milestone close (`stage-13-close.md` § Phase C sequencing), and member close is at or after that. The historical fix attempts went the other way and produced the seven zero-delivered rows | § 2 defines `delivered` on a LABEL predicate that is invariant across the close, so the measurement is valid at any point after Phase A2 and identical under `--no-merge`, `--dry-run` and `--apply` | Principal: picks evidence that does not move across the close, then measures whenever it is convenient. Junior: chases the ordering — moves the dispatch point, or adds a retry — and ships a field whose value depends on whether GitHub's auto-close happened to fire |
 | FM6 | **PROC** | Mapping a work-class signal to a token that is not a declared pack row | When adding or retaining a token in the § 4 T1 tier, do NOT keep an arm naming a label that does not exist in the selected pack set — confirm the token is a declared `[[labels]]` row first, and retire it if it is not | The map is hand-maintained while the label set is pack-declared, so the two drift independently. A retired or never-existing label leaves a **dead arm that reads as coverage**: the map looks like it handles the case, the arm can never fire, and the issues it was supposed to catch fall silently to the default. The failure has no signal of its own — a dead arm produces no error, only a quieter bucket — which is why three phantom tokens survived here across the full pre-`v4.x` ledger | § 4 states the declared-row property as checkable rather than conventional; the producing tool's self-test asserts **every** surviving T1 token against the corpus pack set, with a firing control on a known-retired token, so a phantom arm is a pre-merge failure rather than a silent drift. T2 sidesteps the class entirely by deriving from the pack source at run time instead of enumerating | Principal: removes the dead arm and adds the assertion that keeps it dead, then checks whether the *value* changed (a phantom whose issues still reach the same class via the default is a cleanup; one whose issues change class is a measurement correction that must be stated). Junior: reads the dead arm as evidence the label exists, adds the missing label beside it, and grows the enumeration — converting a documentation defect into a live taxonomy defect |
+| FM7 | **INPUT** | A symlink alias double-counts a release's tree | When walking the transcript root for a release's cost row, do NOT follow a symlinked project directory or count a file whose inode was already seen — the alias reaches the same files under a second path | A real install's transcript root carries a symlinked project directory aliasing hundreds of files; a walk that followed it counted one release's hub twice, every response shared and one inode behind both paths. Nothing in the counts looks wrong: the release simply reads at twice its cost | § 7a.2 step 1: the walk skips symlinked directories and deduplicates by device and inode — the usage extractor's own walk semantics — and the row records what it skipped; a self-test arm plants an alias and asserts the tree count is unchanged | Principal: walks the way the extractor walks and counts the aliases it skipped. Junior: uses a recursive walk that follows links and reports the release at double its cost |
+| FM8 | **OUT** | A resumed or forked hub's figures read as exact | When a cost row's hub files share message ids, do NOT quote its hub cells or total as exact — a response a resumed or forked session copied into a second file is counted once per file | Count-once holds within a transcript file only. The residual is 0 on a single-hub tree and was measured at up to 28 % on resumed trees, so a population average describes no single row, and a reader holding the average cannot tell which case a row is | § 7a.2 step 3 removes pure copies; ids still shared mark the row `degraded` with their count and the sharing pairs (§ 7a.3); a consumer branches on `measurement_state` before reading a counter | Principal: reads `measurement_state` and the shared count before quoting a figure, and states the residual for that row. Junior: quotes the total and cites the population average as its error bar |
+| FM9 | **INPUT** | Per-line or harness totals enter a cost row | When computing a release's cost, do NOT sum usage per transcript line, read a store below schema `2.0.0`, or read a harness per-spawn token total — the first two inflate the figures, and the third is final context, not consumption | Three unit errors the cost unit's record names, each large enough to reverse a conclusion. The harness total sits in the very tool result the row reads to link a spawn to its transcript, so it is one field away from being read | § 7a.2: tokens come only from the extractor's per-response records; a store below the minimum schema is refused; the spawn link reads the agent id and nothing else; a self-test arm plants a decoy harness total and asserts it is unused | Principal: reads usage from one per-response reducer and refuses anything older. Junior: adds up the per-spawn totals the harness already reports — two orders of magnitude off |
 
 ## 14. Cross-references
 

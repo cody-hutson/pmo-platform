@@ -3,8 +3,10 @@
 # operations-workspace root, the localized-context needle file, the people-roster
 # file, the evals-results directory (home of the pipeline event log), the
 # three ambient-intake member directories (inbox drop-zone, Path-A intake-sweep
-# run-log dir, Path-B external-sync dir), the skill-editor exemption list, and the
-# set of instance-tier files a deployed security hook reads.
+# run-log dir, Path-B external-sync dir), the skill-editor exemption list, the
+# set of instance-tier files a deployed security hook reads, the main
+# checkout's working-state telemetry folder (home of the per-release cost rows),
+# and the main checkout's analysis workspace (home of read-once analysis reports).
 #
 # Design rationale (applies existing ADRs — NO standalone ADR):
 #   - The default base CANONICALIZES on the ADR-032 idiom
@@ -49,6 +51,14 @@
 #                              claude_workspace_root, else $HOME/Claude
 #                              (3 tiers — deliberately NOT expressible as one
 #                              ${VAR:-default} expansion like the three above)
+#   pmo_telemetry_path_for() → the operator.toml key
+#                              operator_instance_working_state_telemetry_path, else
+#                              <workspace-root>/pmo-platform/local-state/telemetry
+#                              (2 tiers — no env tier; see the function)
+#   pmo_analysis_path_for()  → the operator.toml key
+#                              operator_instance_analysis_path, else
+#                              <workspace-root>/pmo-platform/analysis
+#                              (2 tiers — no env tier; see the function)
 #
 # Honored-tier contract, per function — stated because "which variables and which
 # operator.toml keys does this function honor, and which does it deliberately
@@ -85,6 +95,15 @@
 #                                    $(pmo_instance_path_for <root>)/external-sync
 #                              (2 declared tiers each — see the block above them
 #                              for why there is no env tier)
+#   pmo_telemetry_path_for()  env: none
+#                             toml: operator_instance_working_state_telemetry_path
+#                             NOT honored: PMO_INSTANCE_PATH (the folder is not under
+#                             the instance container) or CLAUDE_WORKSPACE_ROOT (the
+#                             workspace root is the argument)
+#   pmo_analysis_path_for()   env: none
+#                             toml: operator_instance_analysis_path
+#                             NOT honored: PMO_INSTANCE_PATH or CLAUDE_WORKSPACE_ROOT,
+#                             for the telemetry resolver's two reasons
 #
 # Exemption-surface resolution contract. The skill-editor exemption list is the escape
 # half of the Gate 2 skill-edit hook. The composition manifest registers it at the
@@ -355,8 +374,10 @@ pmo_evals_results_path() {
 # Usage: pmo_<member>_path_for <workspace-root>
 
 # Private. Read one key from the canonical operator.toml, else empty. This is THE
-# operator.toml reader for this file — the three ambient resolvers below and
-# pmo_evals_results_path() above all call it, so there is one canonical XDG
+# operator.toml reader for this file — the three ambient resolvers, the
+# telemetry resolver and the analysis resolver below, and pmo_evals_results_path()
+# above, all call it, so
+# there is one canonical XDG
 # location, one `|| true` tolerance for an absent key under `set -euo pipefail`,
 # and one first-match-wins rule rather than a copy per consumer. A fourth ambient
 # member costs one more one-line public function and no new logic.
@@ -429,4 +450,70 @@ pmo_external_sync_path_for() {
   fi
   if [[ -n "$_val" ]]; then printf '%s\n' "$(dirname "$_val")"; return 0; fi
   printf '%s\n' "$(pmo_instance_path_for "${_root}")/external-sync"
+}
+
+# --- Working-state telemetry folder (in-repo, main checkout) ----------------
+#
+# Echo the folder (no trailing slash) that holds the platform repository's derived
+# working-state telemetry — <OPERATOR_INSTANCE_WORKING_STATE_TELEMETRY_PATH>. Its one
+# record today is the per-release cost row, release-cost/<slug>.json, which the
+# release-velocity tool's cost-row mode writes.
+#
+# WHY AN IN-REPO HOME AND NOT THE INSTANCE CONTAINER. The instance-data placement
+# standard (core/standards/instance-data-placement-standard.md) homes a repository's
+# working state in its main checkout's /local-state/, and its admission test admits a
+# row derived from install-scoped usage data when the row concerns only that
+# repository's own releases. The usage store the rows are computed from is
+# install-scoped and stays outside every repository; only the derived rows live here.
+#
+# WHY THE WORKSPACE ROOT'S CHECKOUT AND NOT THE CALLER'S. A caller in a session
+# worktree must not resolve to that worktree: an ignored row there is lost when the
+# worktree is removed, or it keeps the worktree in use for good. The default therefore
+# anchors on <workspace-root>/pmo-platform, the main checkout, as the analysis and
+# roadmaps homes do.
+#
+# NO WRITER DEFAULTS TO IT. The placement standard admits no session write into the
+# main checkout's /local-state/ until /local-state/ joins the main-checkout carve-out
+# hook's static set, so the cost-row mode keeps its folder an explicit --out-dir and
+# does not call this function. A default wired before that change would make the
+# prohibited write the default.
+#
+# TWO declared tiers and no env tier: the operator.toml override key the token
+# declares, else the in-repo default. ADR-032 § "invent no new variable" forbids
+# minting a variable for it. PMO_INSTANCE_PATH does not relocate it, because the
+# folder is not under the instance container, and CLAUDE_WORKSPACE_ROOT does not
+# displace the argument.
+#
+# A pure function: it creates nothing. A home is provisioned by the installer, never
+# by its first writer.
+# Usage: pmo_telemetry_path_for <workspace-root>
+pmo_telemetry_path_for() {
+  local _root="$1" _val
+  _val="$(_pmo_instance_toml_key "operator_instance_working_state_telemetry_path")"
+  printf '%s\n' "${_val:-${_root}/pmo-platform/local-state/telemetry}"
+}
+
+# --- Analysis workspace (in-repo, main checkout) -----------------------------
+#
+# Echo the analysis workspace (no trailing slash) — <OPERATOR_INSTANCE_ANALYSIS_PATH>,
+# the home of read-once analysis reports, each in its own dated subfolder
+# (core/standards/analysis-workspace-standard.md). Its first writer is the FinOps
+# skill's command-template ranker, which writes one report folder per run.
+#
+# IN THE REPOSITORY BY DESIGN. The folder and its README are tracked and every
+# report under it is git-ignored, so a report never reaches a commit while the home
+# stays discoverable. It anchors on <workspace-root>/pmo-platform, the main checkout,
+# for the reason the telemetry folder above does: a report written into a session
+# worktree dies with that worktree. Unlike /local-state/, a session may write a
+# subfolder here — the main-checkout carve-out admits /analysis/<sub>/ today.
+#
+# TWO declared tiers and no env tier: the operator.toml override key the token
+# declares, else the in-repo default. PMO_INSTANCE_PATH does not relocate it and
+# CLAUDE_WORKSPACE_ROOT does not displace the argument. A pure function: it creates
+# nothing.
+# Usage: pmo_analysis_path_for <workspace-root>
+pmo_analysis_path_for() {
+  local _root="$1" _val
+  _val="$(_pmo_instance_toml_key "operator_instance_analysis_path")"
+  printf '%s\n' "${_val:-${_root}/pmo-platform/analysis}"
 }
