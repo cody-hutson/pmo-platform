@@ -9,7 +9,7 @@ reversibility: CHEAP / Confidence HIGH
 
 This pack is what a page author reads before writing and what the catalog's validator checks against. It adds only what the platform does not already define: where [the design-artifact standard](/core/standards/design-artifact-standard.md) (its section on the generated process catalog) or decision 12 of [ADR-224](/core/ADRs/ADR-224-system-documentation-is-a-generated-process-catalog.md) owns a rule, the pack names the owner and does not restate the rule.
 
-**Machine source.** Every value list here is held in [`pack.json`](pack.json), which the tools read. If the two disagree, `pack.json` wins and this page is corrected in the same change.
+**Machine source.** The value lists the tools read from [`pack.json`](pack.json) are held there. If this page and `pack.json` disagree on one of them, `pack.json` wins and this page is corrected in the same change.
 
 Below, "the standard" is the design-artifact standard's section on the generated process catalog, cited by subsection, and "decision 12" is that decision of ADR-224.
 
@@ -36,7 +36,7 @@ Each concept below is defined elsewhere. A page uses it as defined there; this t
 
 ## Levels
 
-The levels, the test that places a node at each one, the tie-breaks and the token budgets are the standard's (§ 13.2), with decision 12 for the sub-process budget. The pack restates none of them. It adds one sentence: a hook is a mechanism or a control and never a value stream, and one hook rule family may be an activity.
+The levels, the test that places a node at each one, the tie-breaks and the token budgets are the standard's (§ 13.2), with decision 12 for the sub-process budget. Where the control layer sits is the standard's too (§ 13.5), with decision 11 of ADR-224. The pack restates none of them. It adds one sentence: one hook rule family may be an activity.
 
 ## The page and its fields
 
@@ -61,7 +61,7 @@ One Markdown page per node, at the path the standard gives (§ 13.1). The standa
 
 **Comments.** A page carries two kinds of comment and no other: the source anchor that follows a line citation, and the two navigation markers. Every comment opener has a closer of its own.
 
-**A step is a row.** Each row of an activity page's Steps table is one step. Its first cell is the step key, which names the step everywhere else on the page. A step key is lower-case letters, digits and single hyphens; its first segment is letters only; and no run of digits in it is longer than three characters. Each row names its inputs and outputs with their shape (for example "issue body → triage comment with its six sections"), so a test case can be written from the row alone.
+**A step is a row.** Each row of an activity page's Steps table is one step. Its first cell is the step key, which names the step everywhere else on the page; the step key is the standard's step slug (§ 13.4). A step key is lower-case letters, digits and single hyphens; its first segment is letters only; and no run of digits in it is longer than three characters. Each row names its inputs and outputs with their shape (for example "issue body → triage comment with its six sections"), so a test case can be written from the row alone.
 
 **A tool call is a mechanism.** A tool call is written in the Mechanism cell of the step that makes it. It is never an activity of its own.
 
@@ -88,11 +88,10 @@ A value of `actors` or `owner` is one of the bare roles `operator`, `hub` and `s
 
 ## Controls and the registers
 
-The six enforcement classes, the surfaces, and the rule that a Controls row takes its class from the register are the standard's (§ 13.7) and decision 12's. The pack adds the following.
+The six enforcement classes, the surfaces, and the rule that a Controls row takes its class from the register are the standard's (§ 13.7) and decision 12's. The register-only value `not-a-control`, and when a Controls row may carry it, are the standard's (§ 13.7). The pack adds the following.
 
 - **Class qualifiers.** A class may carry one qualifier in parentheses. Three are in common use: `mixed-mode` (the arms of one check carry different classes), `dormant` (enforcing code whose population is empty, so it cannot fire) and `tacit-duplicate` (an unwritten rule that restates a written one).
 - **The controls register.** The register is the file `pack.json` names in `controls_register`, beside this file. The mechanism kinds a row may carry and the values its class cell may hold are listed in `controls_register_rules`.
-- **A register-only value.** `not-a-control` is a value of the register's class cell: it marks an inventoried item that asserts nothing. It is not an enforcement class. A Controls row carries it only by citing a register row that has it.
 - **A rule with no register row.** A Controls row for such a rule cites no control ID and carries the class of the standard (§ 13.7) that describes how the rule is enforced: `prose-only` when a governed document states it and nothing detects a violation. `not-a-control` is never written on a row that cites no ID.
 - **Held IDs.** A control ID that is absent from the register lies in a held range listed in `pack.json`. A row that leaves the register adds its ID to `held_ids` in the same change, as a single `C-NNN` or by widening a range.
 - **The highest minted ID.** `highest_minted_id` records the highest control ID ever minted, and it only rises. The rule that reads it and the rule for minting a new ID are stated in the register section of the catalog's README.
@@ -115,6 +114,12 @@ The six enforcement classes, the surfaces, and the rule that a Controls row take
 
 Every Evidence row carries an evidence label from the workspace charter.
 
+**A comparison row.** A row that compares two lenses names both in its Lens cell, joined by the word `vs`: `designed vs built`. A row is read as a comparison only in that form.
+
+**An in-scope row.** An Evidence row is in scope for the executed-evidence rules when its Lens cell names `executed`, or when its Source or Observation cell carries a measure reference, a link into the measures folder or one of the two markers below, whatever its lens.
+
+**Outcome wording.** An in-scope row that reports an outcome over time — that a step never ran, has not run, or that no run is recorded so far — is flagged for the reader as a warning: such wording tells what one install showed, which a page does not state.
+
 ### The verdict
 
 `lens_status` is the page's verdict, one of four words.
@@ -127,7 +132,7 @@ Every Evidence row carries an evidence label from the workspace charter.
 | `not-assessed` | Not yet checked |
 
 - **The coverage clause.** A clause row is an executed Evidence row that cites a run-history measure. Its Source cell carries, beside the measure reference, a root link to each workflow file the clause relies on. The clause is the last thing in its Observation cell: the word `covers:` followed by one or more step keys, each a code span, separated by a comma, in the order of the Steps table, none repeated. Every linked workflow is a run-history input of a measure the row cites, and every measure the row cites is one any reader can reproduce. A step that is its workflow's own act is listed only on a row that links that workflow. A clause that breaks one of these rules counts toward no verdict. The activity template shows the form.
-- **Runs a step.** A workflow runs a step by one of two limbs, and the step's own Actor cell says which applies. *The Actor cell does not name the workflow:* a job of the workflow executes the mechanism the step's row names, and that job can return the step's own verdict from what a checkout of the repository holds and what the host supplies to the run. A job that runs only a sub-arm or a self-test of the mechanism does not run the step; nor does a job whose verdict input no checkout holds, so that every run can only report skipped or not evaluated. *The Actor cell names the workflow:* the step is the workflow's own act — its trigger, one of its own steps, its gate decision — and it is run on each run that reaches it. A call whose job can only report not-evaluated credits nothing. A step whose row names several mechanisms is run only when the workflow runs every one of them. A step whose actor is the operator or a hook is run by no workflow.
+- **Runs a step.** A workflow runs a step by one of two limbs, and the step's own Actor cell says which applies. *The Actor cell does not name the workflow:* a job of the workflow executes the mechanism the step's row names, and that job can return the step's own verdict from what a checkout of the repository holds and what the host supplies to the run. A job that runs only a sub-arm or a self-test of the mechanism does not run the step; nor does a job whose verdict input no checkout holds, so that every run can only report skipped or not evaluated. *The Actor cell names the workflow:* the step is the workflow's own act — its trigger, one of its own steps, its gate decision — and it is run on each run that reaches it. A call whose job can only report not-evaluated credits nothing. A step whose row names several mechanisms is run only when the workflow runs every one of them. A step whose actor is the operator, a hook, or a session actor — the hub, a spoke, a skill or a sub-agent — is run by no workflow.
 - **What supports no verdict.** A held row and a working-state measure support no verdict. A page whose only executed support is one install's working state reads `unobserved`, keeps those rows, and says nothing of what that install showed.
 - **A sub-process takes its status from its child pages only.** Its `lens_status` is the worse of its own lenses and those of the activity pages whose `parent` it is. An Activities row that points to an activity under another sub-process passes nothing on, and an activity never inherits. This rule is checked by review: no code detects a violation.
 - The verdict of a universe page and of a value-stream page is derived by the generator, as decision 12 states.
@@ -274,6 +279,7 @@ A step the operator performs writes `human` in its Model need cell. It counts in
 | The validator | `pack.json`; this document's marked tables; the controls register, through the name `pack.json` gives | Check each page's frontmatter, sections, tables, flow, links and vocabulary; check that this document's marked tables and the lists in `pack.json` agree; check the registers against their own rules |
 | The generator | `pack.json`; the controls register, through the same name | Build the index, the graph and the views from the pages |
 | A page author | This document; the template for the page's level, in `core/process-catalog/definitions/templates/` | Write a page the validator passes |
+| The publication gate tool | `pack.json` | — |
 
 ## Rules and their owners
 
@@ -311,7 +317,7 @@ Each row below is one rule the catalog's validator checks, with the document tha
 | `FM009` | a trigger is a node or a listed trigger kind | the standard, § 13.4 |
 | `FM010` | a superseded page names its successor | the standard, § 13.6 |
 | `FM011` | the page states its pack version | [this pack](#the-page-and-its-fields) |
-| `FM012` | an `ACTIVE` page has an assessed lens status | [this pack](#lenses-and-evidence) |
+| `FM012` | an `ACTIVE` page has an assessed lens status | [this pack](#page-lifecycle) |
 | `LNK001` | links resolve | decision 12; the standard, § 13.4 |
 | `LNK002` | a source link starts at the repository root | decision 12; the standard, § 13.4 |
 | `MMD001` | the page draws its flow in Mermaid | the standard, § 13.8; ADR-224, decision 2 |
@@ -332,7 +338,7 @@ Each row below is one rule the catalog's validator checks, with the document tha
 | `SRC001` | depicted paths exist | the standard, § 13.4 |
 | `SRC002` | the verification commit exists | the standard, § 13.3 |
 | `SRC003` | a file named on a page exists in the repository or in the page's sources | [this pack](#the-page-and-its-fields) |
-| `STP001` | a step's harness feature is a listed one | [this pack](#harness-feature-taxonomy) |
+| `STP001` | a step's harness feature is a listed one, and its step key has the step-key form | [this pack](#harness-feature-taxonomy); [this pack](#the-page-and-its-fields) |
 | `SUM001` | summary counts are computed from the Steps table | decision 12 |
 | `TAB001` | table columns | [this pack](#the-page-and-its-fields) |
 | `TAB002` | well-formed rows | [this pack](#the-page-and-its-fields) |

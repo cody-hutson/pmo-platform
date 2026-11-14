@@ -47,7 +47,7 @@ flowchart TD
 
 | Step | Action | Actor | Inputs → outputs (shape) | Controls | Mechanism | Harness | Model need | Source |
 |---|---|---|---|---|---|---|---|---|
-| <step-slug> | <verb + object> | <actor> | <input shape> → <output shape> | <rule: class> | <skill / tool> | <feature relied on> | <model need, per the pack> | `<path>` |
+| <step-key> | <verb + object> | <actor> | <input shape> → <output shape> | <rule: class> | <skill / tool> | <feature relied on> | <model need, per the pack> | `<path>` |
 
 ## Step profile
 
