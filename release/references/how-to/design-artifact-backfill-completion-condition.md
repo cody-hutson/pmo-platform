@@ -53,7 +53,7 @@ The verification is the enumeration harness canonical in [`design-artifact-stand
 
 ```bash
 # Dedicated artifacts (depicts: frontmatter — § 9)
-grep -rl '^depicts:' core operations release docs
+grep -rl --include='*.md' '^depicts:' core operations release docs
 
 # Embedded artifacts (section-level marker — § 9; enum-anchored + field-order-tolerant so the
 # § 9 grammar line and the bracketed <flow-class> examples do not self-match — the `>` in [^>] excludes them)
