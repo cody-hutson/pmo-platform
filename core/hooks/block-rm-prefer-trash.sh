@@ -630,7 +630,7 @@ resolve_and_classify() {
   # over-block); a
   # wholly-quoted word whose body begins with ~ is refused because Step 3 would expand a tilde the
   # shell keeps. A brace inside a whole-word quote never reaches this test: the canonicalizer
-  # removes it from the quoted span first, so the word is judged without it. An unquoted glob
+  # masks it in the quoted span first, so the word is judged without it. An unquoted glob
   # otherwise stays literal. Judged after Step 2, so a dynamic token keeps its own reason.
   case "$token" in
     *[{}\\\'\"]*) "$PRINTF" 'word'; return 4;;

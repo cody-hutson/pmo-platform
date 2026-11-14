@@ -1191,7 +1191,7 @@ test_case "CWD-26 (control): a relative cd that stays inside the workspace allow
 #            first. SENS is the plain spelling of NONLIT-01's destination; P1 to P5 are declared
 #            over-blocks; the Finder delete's path goes through the same resolver (P2). Inside a
 #            whole-word quote the shell keeps a backslash or a quote of the other kind, and the word
-#            is refused all the same (P3 to P5); a brace there is removed by the canonicalizer before
+#            is refused all the same (P3 to P5); a brace there is masked by the canonicalizer before
 #            the rule reads the word (CTL4).
 TL_OTHER="$RMT_FIXTURE_OTHER_HOME"
 TL_FH="$RMT_FIXTURE_HOME"
