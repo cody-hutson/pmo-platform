@@ -10740,6 +10740,62 @@ sv_arm "SPLITV-RESID-02 (S4): a separator inside a quoted options-only value" SV
 sv_arm "SPLITV-RESID-03 (S4): env's own quoting inside the decoded value, hiding an option's need for the following token" SV23 a
 sv_arm "SPLITV-RESID-04 (J0): a later piece whose stray quote hides an option's need for the following token" SV25 a
 
+# --- SPLITV-TWIN: the canonicalizer's twin (core/hooks/lib/command-position.awk, T1 with T1b) ---
+# The default view marks each command start with an inserted `;`. For every row below the twin
+# must put that mark on the token env runs, in en_US.UTF-8 and in C: the first token after a
+# split value that carries no command of its own (after any argument its last option takes from
+# the following tokens), or the split token itself when the value carries a command word. The
+# twin's tokens hold a quoted span whole, so it reads such a value entire where -022's J0 reads
+# its first piece (SV25 closes in the twin). Excluded as declared divergences: D-1, a separator
+# inside the value (SV22), since the two segmentation layers differ; D-2, a value neither can
+# read (SV12, SV17), which -022 walks on from and the twin keeps stopped (T1b); D-3, a dash-led
+# quoted span that carries a command of its own (SV16), which -022 walks piece by piece and the
+# twin holds whole.
+SV_CANON="${HOOK%/*}/lib/command-position.awk"
+SV_CANON_M1="$(/usr/bin/mktemp)"
+/usr/bin/sed '/# M-CP-SPLITREAD$/d' "$SV_CANON" > "$SV_CANON_M1"
+sv_tw_rows=(SV01 SV02 SV03 SV04 SV05 SV06 SV07 SV08 SV09 SV10 SV11 SV13 SV14 SV15 SV18 SV19 SV20 SV24 SV25 SV26 \
+  SV21 WR68 WR69 GL80 SN01 SN02 SN03 SN04 SN05 SN06 SN07 SN08 SN09 SN10)
+sv_tw_want=(bash bash bash bash bash bash bash bash bash bash bash bash bash bash bash bash cat bash bash bash \
+  "-S'bash" "-Sbash" "-S\"bash" "--s=bash" bash bash bash bash bash bash bash bash "@D@/na.sh" bash)
+sv_twin_rows() {   # $1 = canonicalizer file  $2 = locale -> sv_twin_bad, the rows whose mark is elsewhere
+  local k=0 want out
+  sv_twin_bad=""
+  while [ "$k" -lt "${#sv_tw_rows[@]}" ]; do
+    want="${sv_tw_want[$k]//@D@/$WC_D}"
+    if ! wc_row_cmd "${sv_tw_rows[$k]}"; then
+      sv_twin_bad="${sv_twin_bad} ${sv_tw_rows[$k]}(missing)"
+    else
+      out="$(LC_ALL="$2" /usr/bin/awk -f "$1" <<<"$WC_CMDX" 2>/dev/null)"
+      case "$out" in
+        *"; ${want}"*) ;;
+        *) sv_twin_bad="${sv_twin_bad} ${sv_tw_rows[$k]}" ;;
+      esac
+    fi
+    k=$(( k + 1 ))
+  done
+}
+for sv_loc in C en_US.UTF-8; do
+  sv_twin_rows "$SV_CANON" "$sv_loc"
+  if [ -z "$sv_twin_bad" ]; then
+    /usr/bin/printf 'PASS: SPLITV-TWIN-01 [%s] the twin marks the command env runs on all %d rows\n' "$sv_loc" "${#sv_tw_rows[@]}"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: SPLITV-TWIN-01 [%s] the twin marks a different token on:%s\n' "$sv_loc" "$sv_twin_bad"
+    FAIL=$((FAIL + 1))
+  fi
+done
+sv_tw_removed="$(/usr/bin/diff "$SV_CANON" "$SV_CANON_M1" | /usr/bin/awk 'index($0, "<") == 1 { r++ } END { print r + 0 }')"
+sv_twin_rows "$SV_CANON_M1" C
+if [ "$sv_tw_removed" -ge 1 ] && [ -n "$sv_twin_bad" ]; then
+  /usr/bin/printf 'PASS: SPLITV-TWIN-M1 the twin without its %d M-CP-SPLITREAD lines marks a different token on:%s\n' "$sv_tw_removed" "$sv_twin_bad"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: SPLITV-TWIN-M1 wanted a copy that loses at least one marked line and is reported on at least one row; lines removed %s, rows reported:%s\n' "$sv_tw_removed" "${sv_twin_bad:- none}"
+  FAIL=$((FAIL + 1))
+fi
+/bin/rm -f "$SV_CANON_M1"
+
 /bin/rm -rf "$AQ_ROOT"
 
 # --- Summary ---
