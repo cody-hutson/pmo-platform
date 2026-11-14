@@ -32,7 +32,7 @@ reversibility: MODERATE / Confidence HIGH — one revert of the release merge re
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): the Bump-Class Selection Guide row "Protocol text addition or modification", validated against the File Change Matrix. The Stage-4 provisional display was `v5.08`; the rule-computed next-free re-verified at Engineering Commit 0 is `v5.08` (§ Commit-0 Version Re-Verify Record). Four in-flight sibling releases are also `minor` and compute the same slot, so the slot is settled by merge order and the compare-and-swap. The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-13 (Friday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering, beat 1: Engineering Commit 0 (this file), then beat 1a (#6227's agent limbs). The operator's `release/governance/RELEASE_PROTOCOL.md` commit and beat 1b follow it (C2 (A)); beats 2 to 4 do not wait for it |
+| **Status** | Executing — Stage 6 Engineering, after beat 1b. On the branch, in this order: Engineering Commit 0 (this file) and beat 1a (#6227's agent limbs); beat 2 (#6226); beat 3 (#6225), during which the operator's `release/governance/RELEASE_PROTOCOL.md` commit landed; and beat 1b (#6227's second agent limb), which followed that commit under C2 (A). Beat 4 (#7842) is not yet on the branch |
 | **Branch** | `release/obligation-runners-declared` |
 | **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `obligation-runners-declared` |
@@ -733,7 +733,7 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 
 ## Deviation Log
 
-Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat order (#6227, #6226, #6225, #7842) and each citing its source comment; the rows after them are this spoke's own Commit-0 entries. No transcribed plan text is reworded to absorb a correction (N18).
+Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat order (#6227, #6226, #6225, #7842) and each citing its source comment. DEV-11 to DEV-13 are the Commit-0 spoke's own entries, and every row after them was added by the beat its Stage cell names. No transcribed plan text is reworded to absorb a correction (N18).
 
 | ID | Stage | Deviation | Basis |
 |---|---|---|---|
@@ -754,6 +754,7 @@ Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat 
 | DEV-15 | 6 (beat 3) | The A2 container predicate, read for beat 3 alone, selects the GitHub sub-issue container: six logical units (Commits A to F), multi-file and structure-changing (a new check, its primitive and its self-test group). The release keeps the PR-body checklist container beat 1 opened, and no sub-issue was created, because the beat-3 brief bounds this spoke's GitHub writes to its one output comment on #8923. The rows are rendered in that comment for C2's body, and the container question is routed to the hub | `release/references/pipeline/stage-06-engineering.md` § Process, A2; the hub's beat-3 brief; #8923 Stage-6 output, Decisions & Recommendations |
 | DEV-16 | 6 (beat 3) | Five implementation determinations the Stage-5 specification does not name, each made inline and recorded at the path: (a) "when `--root` is a git work tree" is read as the top level of one — `git rev-parse --show-toplevel` equal to the root — so the live worktree (whose `.git` is a file) takes `git ls-files`, while a `mktemp` sandbox under a symlinked temporary directory, and a subdirectory of a work tree, take `os.walk`; (b) a glob with no wildcard segment keys by its whole path; (c) a link inside a code span is not a link; (d) the fixture file is parsed strictly — a non-comment line outside a case block, an unterminated block or a case with no `POPULATION:` line is an input failure (exit 3), so a mistyped header cannot silently drop a case; (e) `--fixtures` and `--self-test` are mutually exclusive (argparse usage error, exit 2), and the `INPUT-FAILURE:` line goes to stderr, as in Check 63's primitive. None changes a verdict the specification states; (a) and (b) are recorded in the tool's module docstring | #6225 Stage-5 revision 1, Output for Stage 6, Commit A (`#8919 comment 6866289061`); `core/deploy/tools/check-enumeration-drift.py` module docstring |
 | DEV-17 | 6 (beat 3) | The merge-order pairs are re-measured at beat 3 rather than copied. #8983 (ms#437) at `e584b4d3`, 99 files, overlaps **four** of beat 3's paths — the three the Stage-5 design named (`script-execution-allowlist.txt`, `selftest-coverage-manifest.txt`, `core/deploy/tools/README.md`) and `core/standards/gate-efficacy-standard.md`, a shared path. #8821 (ms#429) at `8974f500`, 47 files, overlaps three: `docs/module-apis.md`, `gate-efficacy-standard.md` and `script-execution-allowlist.txt`. #8992, #8993 and #8994 overlap none. No open release branch claims a `Check 83` header (control: each of the five carries Check 82's, 5 of 5) | the hub's beat-3 brief; each pull request's file list, paginated, at beat 3 |
+| DEV-18 | 6 (beat 1b) | Two sentences of this file are corrected in place. (a) The Header **Status** cell still read "Executing — Stage 6 Engineering, beat 1", although beats 2 and 3 and the operator's `release/governance/RELEASE_PROTOCOL.md` commit had landed; it now states the Stage-6 position after beat 1b. (b) The Deviation Log's opening sentence called every row after the tenth "this spoke's own Commit-0 entries", but DEV-14 was added at beat 2 and DEV-15 to DEV-17 at beat 3; it now names DEV-11 to DEV-13 as the Commit-0 entries and dates each later row by its Stage cell. Neither sentence is transcribed Stage-4 text, so N18 is not engaged | Beat 2's Stage-6 output (`#8922 comment 6867973393`, Decisions & Recommendations item 3) and beat 3's (`#8923 comment 6870137196`, item 8), each of which routed both corrections to the hub; the hub's beat-1b dispatch on #8921 |
 
 ---
 
@@ -888,6 +889,50 @@ Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat 
   - `FCM-COVERAGE` PASS (`declared=47 interpreted=47 obligations=6 excluded=16 conditional=0 uninterpreted=0 pathless=0`).
   - `PROV-DELTA` is not cited: the BSD-awk defect recorded at Commit 0 reproduces, with the same stderr.
 - **CIAC lint:** `--ciac-lint` on this file → `declared=5 parsed=5 clean=0 declared-deferral=5 flagged=0`, rc 0.
+
+### Beat 1b — #6227's second agent limb (Stage 6 B1/C4)
+
+- **Entry — the operator's commit:** `642345e5`, signed, is on the branch and touches only `release/governance/RELEASE_PROTOCOL.md`. numstat against `origin/main` → `22 0`; the file's blob is `009d7f04`, sha256 prefix `7164cc1c76a85fc6`, the post-image the Form 1 patch states. The five read-backs of #6227's Change 3 → 1 · 1 · 1 · 1 · 0 (the rule's heading, the `· when-to-version: WV-` segment, the behavioral-correction `patch` row, `Release Planning mode (Mode B)`, and the dropped "how chosen in practice" clause). This beat neither writes nor stages that file.
+- **Commit 1 (`b873e554`, signed):** Change 4 and Change 5, each block taken by script from #6227's revision-1 Output for Stage 6 (`#8917 comment 6865291333`), every anchor asserted to occur once. numstat: `2 0` for `stage-03-bundle.md` and `2 1` for the standard, the counts the design specifies.
+  - The citation paragraph sits after the `version-less` bullet and before the paragraph opening "The mode is **orthogonal to bundle size**".
+  - Row B sits directly after row A, so it now stands between row A and #6226's R-1. The order of the register rows stays by beat.
+  - #6227's Version History row is replaced in place with its two-row form. It is no longer the table's last row, and #6226's and #6225's rows stay after it.
+- **Commit 2 (`cff3c35e`, signed):** record line 2, taken verbatim from #6226's Change E (`#8918 comment 6865473339`), directly under line 1, with one blank line between them so that each renders as its own paragraph.
+  - `changed: the document` and `why:` keep their specified values. The operator's commit changes only `RELEASE_PROTOCOL.md` and re-classifies no live release.
+  - Its rule names the case in § Versioning, which is what `duplicate-source-discipline.md` § 1.2 step 2 describes.
+- **AC-3 Stage-7 probes, read early:** `grep -c -F "when-to-version" release/references/pipeline/stage-03-bundle.md` → 1 (0 before commit 1). `grep -c -F "release-identity-rule-citations" core/standards/gate-efficacy-standard.md` → 1 (0 before; control, row A's name in the same file → 1).
+- **AC-1 probes, re-read:** 1 · 1 · 1 · 1.
+- **Row B grammar:** a read-only import of `core/deploy/tools/check-doc-gates.py`.
+  - `register_rows` reads 96 data rows (95 before). Row B is at row A's index plus one, and R-1 at plus two.
+  - `row_cells` reads 5 and `surface_word` reads `prose`. `parse_population` accepts the row as `release-identity-rule-citations`, threshold 100.
+  - Controls: copies with a 0% threshold, or with a hyphen in place of the dash after `census`, are refused. All 14 population rows parse clean.
+  - `deploy.sh --check-doc-gates --gate g-cl10 --pr <N> --list` is not run: no release pull request exists yet.
+- **Check 62 pointers:** the check's own `runner-def:` and `runner-src:` pointer greps over the standard → 55 and 8, before and after commit 1. #6227's delta is +0 (N8). Control: Check 82's register row → 2.
+- **Record-line count:** the bounded count over `### Adjudication records` → 2 (1 before commit 2). The unbounded anchored grep → 2, so there is no copied line.
+  - Specificity: a run-directory copy of this file, seeded with a fenced column-0 copy under another heading and a mid-line label. Bounded 2, anchored 3, unanchored 4.
+- **Population A instrument, at D5-2's path:** `when-to-version` in `RELEASE_PROTOCOL.md` → 0 at the pin and 3 lines at the head (control, `release-identity mode` case-insensitive at the pin → 3). Non-conforming at the pin and conforming at the head, as the design predicts; the census itself is Stage 13's.
+- **Population B instrument:** this spoke's reading of row B's hand-census definition, applied to seven fixture pairs kept in the run directory, untracked. It is a reading, not a runner.
+  - Red: the label-form line with no segment → examined 1, conforming 0.
+  - Green: the same line with `· when-to-version: WV-1` → 1 of 1.
+  - Must flag: the heading form with the segment; `version-less` with `WV-1` and no override; and a prose mention of the rule off the mode line → each examined and non-conforming.
+  - Must conform: an override with its reason, and a re-declared mode change carrying the matching row.
+  - Near-miss: ms#400 and ms#445, each read twice unchanged and declared before this release merges → not examined. They come from a paginated read of all 333 milestones (50 open and 283 closed, each cross-checked against the API's pagination links). 0 of the 62 label-form lines carry a `when-to-version:` segment yet.
+- **Check 63 primitive:** `python3 core/deploy/tools/check-count-structure.py --root .` before and after commit 1 → `FAIL=6 KNOWN=71 STALE=0`, `pairs_examined=544`, controls PASS. The row sets are identical (#7414's six FAIL rows), so the "one row" to "two rows" Version History change adds no count/structure finding. This file is outside the primitive's scope: `--path` on it resolves 0 files and the primitive refuses with an input failure rather than reporting a zero.
+- **Reference durability:** the four detector expressions of `core/hooks/lib/fragile-ref-patterns.sh`, read as text and run through python3 `re` over commit 1's three added lines → link, cutover, raw URL and issue reference 0 each. Control: a seeded file with one instance of each → 1 · 1 · 1 · 1. This file's added lines are not examined by `reference-durability.yml`, whose path allowlist exempts `release/releases/plans/`.
+- **Links:** `check-doc-links.py --require-targets` over `stage-03-bundle.md`, the standard, `decision-discipline.md` and this file → 0 broken, exit 0 (control: its `--self-test`, 12 fixtures passed). The markdown link opener occurs 0 times in this file.
+- **Skill packages:** `build-skill-packages.sh --skills-for-paths` over beat 1b's three paths, on stdin → 0 skills. Its rule (b) covers injected canonicals. Control: `release/skills/release-hub/SKILL.md` → `release-hub`. No package is rebuilt.
+- **Plan checks on this file:**
+  - `claim-version.sh --verify-stamp obligation-runners-declared` → exit 0, a plan-only manifest.
+  - `--ciac-lint` → `declared=5 parsed=5 clean=0 declared-deferral=5 flagged=0`, rc 0.
+  - `lint_release_corpus.py --check plan-identity` → exit 0, and no finding names this file.
+  - The literal release-version placeholder → exactly 1.
+  - The handle, a home path, a scratch path and a GitHub host string → 0 each (control: a seeded run-directory file → 1 each).
+- **Plan verifier (C4):** `bash release/tools/verify-release-plan.sh --format=json --stage4-comment <the Stage-4 part-1 body>` → 11 PASS · 2 FAIL · 17 SKIP · 5 UNRUNNABLE · 0 ERROR over 35 records, exit 3. The roll-up is the same at `8a414501`, at `cff3c35e`, and on this file once this subsection was written.
+  - #6225 AC-4's scope limb now reads 3 over 21 changed paths, where it read 20: `stage-03-bundle.md` is the new path.
+  - The two FAILs are beat 4's two quality-share fixture ADDs.
+  - `FCM-COVERAGE` PASS (`declared=47 interpreted=47 obligations=6 excluded=16 conditional=0 uninterpreted=0 pathless=0`).
+  - `PROV-DELTA` is not cited, because the BSD-awk defect reproduces.
+- **Runtime suite:** none selected. The change is doc and governance text only (the selection map's no-match row), so the honest record is a suite skip.
 
 ### Adjudication records
 
