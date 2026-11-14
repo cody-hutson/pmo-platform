@@ -8,6 +8,14 @@ name: Install tests
 #                  install-regression job fails.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
 
+# Which suites run, and where that is recorded. The step lists below name what
+# each job invokes; they are not the suite population, so a suite this file
+# never names may still run. The install-regression job runs every suite
+# enrolled in REGRESSION_MEMBERS in core/deploy/tests/run-install-regression.sh.
+# Which step or runner executes each tracked suite is defined, and re-derived on
+# every pull request, in core/standards/gate-efficacy-standard.md § Exit-consumer
+# and executor census, which lists any suite that nothing executes.
+#
 # Four jobs:
 #
 # shell-tests — runs the full deploy-test harness under core/deploy/tests/
