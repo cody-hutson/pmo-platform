@@ -30,7 +30,8 @@ USAGE
     exit. --registers-only loads neither. A run over every page prints one line
     for each activity page that reads `conformant`: its step count and how many
     of its steps its coverage clauses cover.
-    --summary-file FILE appends one block; it changes no stream and no exit.
+    --summary-file FILE appends one block; it changes no stream and no exit. A FILE that
+    cannot be opened for appending is a usage exit, before anything is examined.
     Every root is an argument (see --help); none is read from the environment.
 
 OUTPUT
@@ -996,6 +997,10 @@ def main(argv=None) -> int:
         ap.error("--pattern-arm not-run takes neither --private-pattern-file nor --pattern-digest-file")
     if a.registers_only and a.targets:
         ap.error("--registers-only takes no target")
+    try:
+        PC.open_summary(a.summary_file)
+    except PC.Usage as e:
+        ap.error(str(e))
     return run(a)
 
 
@@ -1604,6 +1609,9 @@ def self_test() -> int:
         arms.check("summary file: a passing run and a not-evaluated run each append one block",
                    text.count("### Process catalog — page-validation: PASS") == 1
                    and text.count("### Process catalog — page-validation: NOT-EVALUATED") == 1, text)
+        code, lines, err = cli(base + ["--summary-file", str(tmp / "no-such-folder" / "summary.md")])
+        arms.check("summary file: a path that cannot be opened is a usage exit before anything is examined, with no census",
+                   code == 2 and not lines and "summary-file" in err, (code, lines, err[-200:]))
 
         # -- the page-validation gate, as the catalog workflow runs it: a subprocess with --summary-file --
         def gate(args, name):

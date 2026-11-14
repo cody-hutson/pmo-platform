@@ -198,6 +198,8 @@ def working_lines(repo, path: str):
 
 
 def changed_paths(repo, spec: str) -> list:
+    if (spec or "").startswith("-"):
+        raise PC.NotEvaluated("the range %s begins with a dash, which git would read as an option" % spec)
     if not re.match(r"^[^\s.][^\s]*\.\.[^\s.][^\s]*$", spec or ""):
         raise PC.NotEvaluated("the range %s is not of the form A..B" % spec)
     code, data = PC.git_run(repo, "diff", "--name-only", "-z", "--no-renames", spec)
@@ -311,12 +313,16 @@ def cmd_convert(a, roots) -> tuple:
     counts = {"pages": len(pages), "bare": 0, "converted": 0, "demoted": 0, "left": 0, "differs": 0}
     worklist = ["page\tpage_line\tpath\told_line\treason\tlabel\tcheckout"]
     write = not (a.dry_run or a.list)
+    # The verification commit of every page that has a bare citation is read before any page is written, so a run
+    # that stops as not evaluated has changed no page.
+    work = []
     for page in pages:
         cites = [c for c in PC.find_citations(page.body_lines()) if c.state == "bare"]
-        if not cites:
-            continue
+        if cites:
+            commit_must_exist(roots.repo, page.get("last_verified_commit"), "the page %s" % page.rel)
+            work.append((page, cites))
+    for page, cites in work:
         sha = page.get("last_verified_commit")
-        commit_must_exist(roots.repo, sha, "the page %s" % page.rel)
         lines = list(page.lines)
         endings = page.text.splitlines(keepends=True)
         for cit in sorted(cites, key=lambda c: (c.line, c.start), reverse=True):
@@ -1243,6 +1249,7 @@ def main(argv=None) -> int:
     empty = [(k, getattr(a, "fail_on", None) if k == "fail_on" else None) for k in EMPTY[gate]]
     body = []
     try:
+        PC.open_summary(summary)
         code, pairs, body = handler(a, PC.resolve_roots(a))
     except PC.Usage as e:
         print("usage error: %s" % e, file=sys.stderr)
@@ -1727,6 +1734,22 @@ def self_test() -> int:
         arms.check("demote: a second run converts nothing, changes no byte and is exit 0 — no bare fragment remains",
                    code == 0 and c.get("bare") == "0" and subject.read_text(encoding="utf-8") == demoted
                    and not [x for x in PC.find_citations(PC.load_page(subject, ax.roots()).body_lines()) if x.state != "anchored"], lines)
+        # every page's verification commit is read before the first page is written
+        plain_text = ax.stamp(PC.fixture_text("pages/pass/fixture-activity-plain.md.txt")).replace(ax.base, verified)
+        pair = [(ax.catalog / PC.FIXTURE_UNIVERSE / ("%s.md" % nid), plain_text.replace("id: fixture-activity-plain", "id: " + nid)
+                 + "- %s\n" % cites["order"]) for nid in ("fail-anchor-label", "fail-source-name")]
+        for pair_path, pair_text in pair:
+            pair_path.write_text(pair_text, encoding="utf-8")
+        pair[1][0].write_text(pair[1][1].replace(verified, "b" * 40), encoding="utf-8")
+        code, lines = call(A + ["anchors", "convert", str(pair[0][0]), str(pair[1][0])])
+        arms.check("convert: a later page whose verification commit cannot be read stops the run before any page is written",
+                   code == 3 and pair[0][0].read_text(encoding="utf-8") == pair[0][1], lines[-2:])
+        pair[1][0].write_text(pair[1][1], encoding="utf-8")
+        code, lines = call(A + ["anchors", "convert", str(pair[0][0]), str(pair[1][0])])
+        arms.check("convert: with both commits readable both pages convert (the control)",
+                   code == 0 and (census_of(lines).get("pages"), census_of(lines).get("converted")) == ("2", "2"), lines[-1:])
+        for pair_path, _text in pair:
+            pair_path.unlink()
 
         def resolve(*args, pages=(subject,)):
             code, lines = call(A + ["anchors", "resolve"] + [str(p) for p in pages] + list(args))
@@ -1770,6 +1793,11 @@ def self_test() -> int:
                    code == 3 and c.get("status") == "not-evaluated" and any("changes no path" in l for l in lines), lines)
         arms.check("--sources-changed-in: a range that does not resolve is exit 3",
                    resolve("--check", "--sources-changed-in", "no-such-ref..HEAD")[0] == 3)
+        code, lines, c = resolve("--check", "--sources-changed-in=-p..HEAD")
+        code_i, lines_i = call(A + ["impact", "--range=-p..HEAD"])
+        arms.check("ranges: a range that begins with a dash is refused before git reads it, in both commands that take one",
+                   code == 3 and any("begins with a dash" in l for l in lines)
+                   and code_i == 3 and any("begins with a dash" in l for l in lines_i), (lines[-2:], lines_i[-2:]))
         rules.write_text(rules.read_text(encoding="utf-8") + original_lines[2] + "\n", encoding="utf-8")
         code, lines, c = resolve("--write")
         arms.check("ambiguous: the cited text now stands twice, the recorded line among the places; no byte changes; exit 1",
@@ -1867,6 +1895,9 @@ def self_test() -> int:
         call(E + ["build", "--check", "--summary-file", str(summary)])
         arms.check("summary file: a not-evaluated run writes its block before it returns",
                    summary.is_file() and "### Process catalog — generated-output: NOT-EVALUATED" in summary.read_text(encoding="utf-8"))
+        code, lines = call(C + ["build", "--check", "--summary-file", str(tmp / "no-such-folder" / "generated.md")])
+        arms.check("summary file: a path that cannot be opened is a usage exit before anything is examined, with no census",
+                   code == 2 and not lines, (code, lines))
         for name, target in (("the pack", ex.definitions / PC.default_part("pack")),
                              ("the ID registry", ex.definitions / PC.default_part("registry")),
                              ("the kinds table", ex.definitions / PC.default_part("kinds")),

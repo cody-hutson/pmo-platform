@@ -1150,7 +1150,7 @@ core/deploy/tests/test_deploy_path_literals.sh
 # blocks graduation, and its remedy is a sanctioned form for that logic, not a row.
 # The `.pl`, `.pm`, `.rb`, `.js`, `.mjs` and `.cjs` domains hold no row yet.
 #
-# THREE GROUPS SINCE, NOT READ FROM THE DRAIN. release/tools/check-dark-branch.py was
+# EIGHT GROUPS SINCE, NOT READ FROM THE DRAIN. release/tools/check-dark-branch.py was
 # rowed when this section first met a mainline that added it: a pipeline
 # specification mandates that tool, and with this section holding `.py` rows Arm F
 # of release/tools/check-selftest-coverage.py grades an unrowed mandated tool as
@@ -1159,8 +1159,15 @@ core/deploy/tests/test_deploy_path_literals.sh
 # first is the chain-head view, a command its release's verification runs and an
 # operator runs by hand, and the second is the child-set module it loads, whose
 # self-test the same verification runs. Rowing them at birth keeps both runnable
-# once this arm reads `enforce`. These three are the groups below that did not come
-# from the drain.
+# once this arm reads `enforce`. core/deploy/tools/build-process-catalog.py,
+# core/deploy/tools/check-process-catalog.py,
+# core/deploy/tools/build-element-inventory.py, core/deploy/tools/_process_catalog.py
+# and core/deploy/tools/check-process-catalog-publication.py were rowed by the
+# release that added them: the process catalog's generator, its validator and its
+# element inventory, the library those three load, and the publication gate run
+# before a push of catalog text. Rowing them at birth keeps all five runnable once
+# this arm reads `enforce`. These eight are the groups below that did not come from
+# the drain.
 #
 # WHAT A ROW CHANGES. A row stops the drain recording that tool, so the next reading
 # measures what remains. It also opens one shape the walk does not see past: with no

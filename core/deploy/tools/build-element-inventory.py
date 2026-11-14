@@ -55,6 +55,8 @@ def escape(path: str) -> str:
 def tracked_paths(repo, rev=None) -> list:
     if rev is None:
         data = PC.git(repo, "ls-files", "-z")
+    elif rev.startswith("-"):
+        raise PC.NotEvaluated("the commit --rev names begins with a dash, which git would read as an option")
     else:
         code, data = PC.git_run(repo, "ls-tree", "-r", "-z", "--name-only", rev)
         if code != 0:
@@ -185,6 +187,9 @@ def self_test() -> int:
                    PC.git(fx.repo, "status", "--porcelain", "--untracked-files=all", "--ignored") == b"")
         code, lines_bad, _err = cli(base + ["--rev", "no-such-commit"])
         arms.check("nothing examined: a commit that cannot be read is exit 3", code == 3 and "status=not-evaluated" in lines_bad[-1], lines_bad)
+        code, lines_bad, _err = cli(base + ["--rev=--all"])
+        arms.check("nothing examined: a revision that begins with a dash is refused before git reads it, exit 3",
+                   code == 3 and "begins with a dash" in lines_bad[0] and "status=not-evaluated" in lines_bad[-1], lines_bad)
         code, lines_bad, _err = cli(base + ["--kinds", str(tmp / "absent.tsv")])
         arms.check("nothing examined: a missing kinds table is exit 3, every census value unread",
                    code == 3 and lines_bad[-1] == "process-catalog inventory status=not-evaluated exit=3 paths=NA kinds=NA other=NA", lines_bad)

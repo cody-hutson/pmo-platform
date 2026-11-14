@@ -321,6 +321,8 @@ PACK_ENUMS = ("doc_type", "status", "flow_class", "level", "lens_status", "actor
 PACK_ENUMS_OPTIONAL = ("agent_state",)
 PACK_SUMMARY_KEYS = ("level", "section", "rows")
 PACK_REGISTER_KEYS = ("held_ids", "highest_minted_id", "kinds", "classes")
+FIELD_TYPES = ("actor", "actor_list", "commit", "enum", "id", "id_list", "id_ref", "path_list", "pattern", "string",
+               "trigger_list")          # the field types the tools implement; a field of any other type would be unchecked
 HELD_FORM = re.compile(r"^C-\d{3,}(?:\.\.C-\d{3,})?$")
 MINTED_FORM = re.compile(r"^C-\d{3,}$")
 POINTER_FORM = re.compile(r"^[^/~\\][^\\]*$")
@@ -345,6 +347,20 @@ def _strings(value, where: str, allow_empty: bool = False) -> None:
         raise NotEvaluated("pack key %s holds an entry that is not a string, or one that repeats" % where)
 
 
+def _pattern(value, where: str) -> None:
+    """A pack value a rule matches against: a string that compiles as a regular expression."""
+    try:
+        re.compile(value)
+    except (re.error, TypeError):
+        raise NotEvaluated("pack key %s is not a pattern that compiles" % where)
+
+
+def _limit(value, where: str) -> None:
+    """A pack value a rule counts against: an integer, and not a truth value."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise NotEvaluated("pack key %s is not an integer" % where)
+
+
 def check_pointer(value, key: str) -> str:
     """T-2: a POSIX relative path with no leading `/` or `~`, no `..` segment and no backslash."""
     if not isinstance(value, str) or not value or not POINTER_FORM.match(value) or ".." in value.split("/"):
@@ -359,6 +375,8 @@ def load_pack(path) -> dict:
         raise NotEvaluated("the definitions pack is not valid JSON")
     _keys(pack, "the pack", PACK_KEYS, PACK_OPTIONAL)
     _keys(pack["id"], "id", PACK_ID_KEYS)
+    _pattern(pack["id"]["pattern"], "id.pattern")
+    _limit(pack["id"]["max_length"], "id.max_length")
     _keys(pack["enums"], "enums", PACK_ENUMS, PACK_ENUMS_OPTIONAL)
     for name, values in pack["enums"].items():
         _strings(values, "enums." + name)
@@ -367,12 +385,20 @@ def load_pack(path) -> dict:
         _keys(level, "levels." + name, PACK_LEVEL_KEYS)
         _strings(level["flow_class"], "levels.%s.flow_class" % name)
         _strings(level["required_sections"], "levels.%s.required_sections" % name)
+        for key in ("mermaid_node_limit", "token_budget"):
+            _limit(level[key], "levels.%s.%s" % (name, key))
     for key in ("fields", "reserved_field_names", "tables"):
         if not isinstance(pack[key], dict):
             raise NotEvaluated("pack key %s is not an object" % key)
     for name, spec in pack["fields"].items():
         if not isinstance(spec, dict) or not isinstance(spec.get("type"), str):
             raise NotEvaluated("pack key fields.%s names no type" % name)
+        if spec["type"] not in FIELD_TYPES:
+            raise NotEvaluated("pack key fields.%s.type `%s` is not a field type the tools implement" % (name, spec["type"]))
+        if spec["type"] == "pattern" or "pattern" in spec:
+            _pattern(spec.get("pattern"), "fields.%s.pattern" % name)
+        if "min_items" in spec:
+            _limit(spec["min_items"], "fields.%s.min_items" % name)
     for name, columns in pack["tables"].items():
         _strings(columns, "tables." + name)
     _strings(pack["navigation_markers"], "navigation_markers")
@@ -3026,9 +3052,20 @@ def not_evaluated(reason) -> str:
     return "NOT-EVALUATED: %s; %s" % (reason, NOT_CLEAN)
 
 
+def open_summary(path) -> None:
+    """Open a summary file for appending before anything is examined, and write nothing to it. A path that cannot be
+    opened is a usage error, so the option never turns a run that has examined something into an error after it."""
+    if path:
+        try:
+            with open(path, "a", encoding="utf-8", newline="\n"):
+                pass
+        except OSError as e:
+            raise Usage("--summary-file %s cannot be opened for appending (%s)" % (path, type(e).__name__))
+
+
 def write_summary(path, gate: str, status: str, examined: str, body: list) -> None:
     """Append one block to a summary file; do nothing when no path was given. The option changes
-    no output stream and no exit."""
+    no output stream and no exit; open_summary has already refused a path that cannot be opened."""
     if not path:
         return
     block = ["### Process catalog — %s: %s" % (gate, status), "", "Examined: %s" % examined, ""] + list(body) + [""]
@@ -3412,6 +3449,21 @@ def _self_test() -> int:
                     pack_with(lambda p: p["harness_features"].append(p["harness_features"][0])), "harness_features")
         arms.raises("pack: a summary section that is not a required section stops the load",
                     pack_with(lambda p: p["summary_counts"].update(section="No such section")), "summary_counts")
+        level3 = good["enums"]["level"][-1]
+        pattern_field = next(n for n, s in good["fields"].items() if "pattern" in s)
+        list_field = next(n for n, s in good["fields"].items() if "min_items" in s)
+        values = {
+            "id.pattern": lambda p: p["id"].update(pattern="(unclosed"),
+            "fields.%s.pattern" % pattern_field: lambda p: p["fields"][pattern_field].update(pattern="[unclosed"),
+            "id.max_length": lambda p: p["id"].update(max_length="60"),
+            "levels.%s.token_budget" % level3: lambda p: p["levels"][level3].update(token_budget=2.5),
+            "levels.%s.mermaid_node_limit" % level3: lambda p: p["levels"][level3].update(mermaid_node_limit=True),
+            "fields.%s.min_items" % list_field: lambda p: p["fields"][list_field].update(min_items="1"),
+            "fields.%s.type" % pattern_field: lambda p: p["fields"][pattern_field].update(type="colour"),
+        }
+        for where, change in values.items():
+            arms.raises("pack values: %s that a rule cannot use stops the load, naming the key" % where,
+                        pack_with(change), where)
         pack_path.write_text("{not json", encoding="utf-8")
         arms.raises("pack: text that is not JSON stops the load", lambda: load_pack(pack_path), "JSON")
         pack_path.write_bytes(b"\xff\xfe")
