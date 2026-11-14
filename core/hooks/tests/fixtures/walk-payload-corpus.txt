@@ -1892,7 +1892,8 @@ OP11|block-destructive|rt-opnear|-|?|a|cat @D@/na.s'h'
 # ending on an interpreter word before a real script, which takes the plain form's verdict (D-8319-RefRec A).
 # rt-asgn-over: M5, an assignment behind a wrapper that takes none (a declared over-block once #8319 lands).
 # rt-asgn-keep: shapes the step must decline, at their base verdicts before and after. rt-asgn-limit: the carrier
-# head limit beside its no-space control, and the work-budget side effect (`@QMID@`). rt-asgn-resid: the declared
+# head limit beside its no-space control, and the work-budget side effect (`@QMID@`); each carries a separator inside
+# the carrier's quoted argument, which is what lands its tail in a segment of its own. rt-asgn-resid: the declared
 # residuals, allowed before and after: a later line after a declined here-document, a braced expansion, an enclosure
 # opened inside double quotes, a redirection glued to the value, a separator inside the value, and the two values
 # CD-1 leaves to today's reading (ANSI-C quoting and a parameter expansion).
@@ -1925,9 +1926,9 @@ AV26|block-destructive|rt-asgn-keep|-|?|B|NOTE='see sh @D@/na.sh' bash @D@/na.sh
 AV27|block-destructive|rt-asgn-keep|-|?|B|sudo -u 'a FOO=b' bash @D@/na.sh
 AV28|block-destructive|rt-asgn-keep|-|?|B|FOO=a\  bash @D@/na.sh
 AV29|block-destructive|rt-asgn-keep|-|?|W|X=$(bash @D@/na.sh)
-AV30|block-destructive|rt-asgn-limit|-|?|B|FOO='a b' echo "bash @D@/na.sh"
-AV31|block-destructive|rt-asgn-limit|-|?|a|FOO=ab echo "bash @D@/na.sh"
-AV32|block-destructive|rt-asgn-limit|-|?|a|FOO=@QMID@'a b' bash @D@/ok.sh; echo "bash @D@/na.sh"
+AV30|block-destructive|rt-asgn-limit|-|?|B|FOO='a b' echo "x; bash @D@/na.sh"
+AV31|block-destructive|rt-asgn-limit|-|?|a|FOO=ab echo "x; bash @D@/na.sh"
+AV32|block-destructive|rt-asgn-limit|-|?|a|FOO=@QMID@'a b' bash @D@/ok.sh; echo "x; bash @D@/na.sh"
 AV33|block-destructive|rt-asgn-resid|-|?|a|cat <<'EOF'@NL@x@NL@EOF@NL@FOO='a b' bash @D@/na.sh
 AV34|block-destructive|rt-asgn-resid|-|?|a|FOO="a ${X}" bash @D@/na.sh
 AV35|block-destructive|rt-asgn-resid|-|?|a|echo "$(FOO='a b' bash @D@/na.sh)"
