@@ -6,7 +6,7 @@ status: ACTIVE
 release: versioned (bump-class minor; provisional display v5.02; the concrete number binds at the Stage-12 atomic claim)
 milestone: release-usage-measured-right
 release_class: novel
-reversibility: MODERATE / Confidence MEDIUM — the FinOps store's counting unit changes under a MAJOR schema bump, two decision records are added, and the Stage-13 close-out gains a cost-row phase. Reverting the release merge and rebuilding the store restores the prior counting (the store is a derived cache, and the pre-fix store is preserved once); a merged ADR is superseded, never deleted; a claimed version tag is retained and recorded, never deleted.
+reversibility: MODERATE / Confidence MEDIUM — the FinOps store's counting unit changes under a MAJOR schema bump, one decision record is added, and the Stage-13 close-out gains a cost-row phase. Reverting the release merge and rebuilding the store restores the prior counting (the store is a derived cache, and the pre-fix store is preserved once); a merged ADR is superseded, never deleted; a claimed version tag is retained and recorded, never deleted.
 ---
 # Release Plan — `release-usage-measured-right`
 
@@ -20,7 +20,7 @@ reversibility: MODERATE / Confidence MEDIUM — the FinOps store's counting unit
 
 **Release class:** `novel`, with a recorded override of cross-cutting trigger (c) (PA-002); the Collective Review accepted the bundle over band (PA-007). Stage 9 review depth **Deep** (§ Release Class declaration).
 
-**Date:** no external deadline. The release PR waits for #7935's probe window after the weekly reset of Thursday 2026-11-12 (PA-003), and #8041 is authored after the probes it is graded on.
+**Date:** no external deadline. The release PR waited for #7935's probe window after the weekly reset of Thursday 2026-11-12 (PA-003); window W ran 2026-11-13 to 14, and #8041 is not authored in this release (DEV-63).
 
 > **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #8662 (comment 6662846825) and is amended by three records, in order: the Stage-4 plan-gate Decision Recorded on #8662 (comment 6663038872; "Approve all", PA-001 to PA-006), the eight Stage-5 designs with their eight Phase A6.5 reviews, and the Collective Review scope-lock Decision Recorded on #8662 (comment 6670127013; "Keep all 8", PA-007 to PA-016, with the hub's adjustment ledger applied at this commit). Where the Stage-4 plan and a later record differ, the later record wins, and each such change is recorded in § Deviation Log. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
 
@@ -34,7 +34,7 @@ reversibility: MODERATE / Confidence MEDIUM — the FinOps store's counting unit
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): new decision records and new scripts, per the Bump-Class Selection Guide. Provisional display `v5.02`, re-verified free at Engineering Commit 0 (§ Commit-0 Version Re-Verify Record); the concrete number binds at the Stage-12 atomic claim (ADR-092). Five of the six in-flight sibling releases also compute `v5.02`, so the claim will likely resolve higher; the atomic claim absorbs the race (R6) |
 | **Date Created** | 2026-11-05 (Thursday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | In progress — Stage 6 Engineering; Engineering Commit 0, beat 1 (#7940), beat 2 (#7937), beat 3 (#7938), beat 4 (#7939) and beat 5a (#7943) landed; beat 5b's registration rows (#7943) landed under the operator's D-5b = B (DEV-36), and its default home, close-out phase and stage text stay held (DEV-35); beat 6 (#7945) landed, the command-template ranker with the Collective Review's counter-designs (DEV-41 to DEV-48); beat 7 landed, the single final package rebuild and the skill's provisional `version:` stamp `v5.08` (DEV-49, DEV-50); Stage 7 pass 1 reviewed `fcb5ae26`, and DT fix pass 1 landed the eleven findings the operator disposed fix-now at Phase E (PA-023 to PA-026) on #7937, #7938, #7943 and #7945, with the package's fourth and fifth rebuilds (DEV-51 to DEV-60); Stage 7 pass 2 reviewed `ff56e6f4`, and DT fix pass 2 landed the two findings the operator disposed fix-now at the second Phase E (PA-028, PA-029) on #7938 and #7937, with no package rebuild (DEV-61, DEV-62); beat 1R (#7940) landed, the cost unit's first calibration revisit over window W: no eligible clean pair, so every seeded value stands, and Decisions 1 and 3 re-confirmed; beat 8 does not run, because the operator's scope-lock override carried #8041 and #7935 to the successor milestone (PA-043, PA-044; DEV-63) |
+| **Status** | In progress — every Engineering beat has landed, and the release proceeds to Stage 7 and then Stage 8 for #7940, then Stage 9. Stage 6: Engineering Commit 0, beat 1 (#7940), beat 2 (#7937), beat 3 (#7938), beat 4 (#7939) and beat 5a (#7943) landed; beat 5b's registration rows (#7943) landed under the operator's D-5b = B (DEV-36), and its default home, close-out phase and stage text stay held (DEV-35); beat 6 (#7945) landed, the command-template ranker with the Collective Review's counter-designs (DEV-41 to DEV-48); beat 7 landed, the single final package rebuild and the skill's provisional `version:` stamp `v5.08` (DEV-49, DEV-50); Stage 7 pass 1 reviewed `fcb5ae26`, and DT fix pass 1 landed the eleven findings the operator disposed fix-now at Phase E (PA-023 to PA-026) on #7937, #7938, #7943 and #7945, with the package's fourth and fifth rebuilds (DEV-51 to DEV-60); Stage 7 pass 2 reviewed `ff56e6f4`, and DT fix pass 2 landed the two findings the operator disposed fix-now at the second Phase E (PA-028, PA-029) on #7938 and #7937, with no package rebuild (DEV-61, DEV-62); beat 1R (#7940) landed, the cost unit's first calibration revisit over window W: no eligible clean pair, so every seeded value stands, and Decisions 1 and 3 re-confirmed; beat 8 does not run, because the operator's scope-lock override carried #8041 and #7935 to the successor milestone (PA-043, PA-044; DEV-63); the Phase C close-out reconciled this file to DEV-63 and added § Change Description (DEV-64, DEV-65) |
 | **Branch** | `release/release-usage-measured-right` |
 | **PR** | opened in **draft** at Stage 6 Phase C2 after beat 1; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `release-usage-measured-right` |
@@ -125,13 +125,15 @@ Every element determined at Stage 4 that a named downstream consumer reads **fro
 | #7939 | P2 | report-usage.sh rejects every real store: its started_utc check forbids fractional seconds | carried; design on #8715, review on #8800 (PASS, aggregate Minor); AC-4 added at the Stage-4 gate |
 | #7943 | P2 | Stage 13 records each release's cost: a usage row by stage, role and token type | carried; design on #8717, review on #8810 (CONDITIONAL, aggregate Major); D-Thinking and D-HomeAnchor rendered; AC-1 amended (thinking counted inside output) |
 | #7945 | P3 | Rank retyped command templates by cost to feed the agent-to-script promotion ladder | carried; design on #8718, review on #8819 (CONDITIONAL, aggregate Major); D-Threshold rendered |
-| #7935 | P2 | Seven cheap probes that decide which token levers are real | carried; design on #8712, review on #8812 (CONDITIONAL, aggregate Major); D-WindowBudget rendered; its Stage 6 is hub-run (spokes cannot spawn sessions) |
-| #8041 | P2 | Model-use policy for release runs: which model and effort each role runs on, and where the advisor is consulted | carried; design on #8719, review on #8813 (CONDITIONAL, aggregate Major); D-Status, D-Coverage, D-Flagship, D-Margin and D-Beat8 rendered; AC-4's method narrowed (PA-012) |
+
+Six cards. #7935 and #8041 left at the operator's 2026-11-14 scope change and carry to the successor milestone (§ Exclusions; DEV-63).
 
 ### Exclusions
 
 | Item | Why it is out of scope | Routed to |
 |---|---|---|
+| #7935 (P2) — Seven cheap probes that decide which token levers are real | left at the 2026-11-14 scope change: window W left probes 3 and 4b DEGRADED (confounded: background activity) and probe 5 NOT-EVALUATED, so AC-1 to AC-3 stay open for a quiet re-run of probes 3, 4b and 5. Beats P and W ran in this release (hub-run, no commit). Design on #8712, review on #8812; D-WindowBudget rendered | the successor milestone #8051 composes; the card carries open and is referenced, not closed (DEV-63; PA-044) |
+| #8041 (P2) — Model-use policy for release runs | left at the same scope change: probe 3 fails the card's admissibility rule F2, options 3a, 3c and 3+adv hold at NOT-EVALUATED, and D-Beat8 (A) blocks authoring, so beat 8 does not run. Design on #8719, review on #8813; D-Status, D-Coverage, D-Flagship, D-Margin and D-Beat8 rendered; AC-4's method narrowed (PA-012) | the successor milestone, with the model-use ADR (DEV-63; PA-043) |
 | The cross-file `message.id` residual (copies across resumed or forked sessions; 2.52 % of per-response mass overall, 7.39 % of main-session mass) | needs a cross-file index, a new abstraction; the per-file unit is disclosed in the schema and the cost-unit ADR instead | a follow-up, re-sized on main-session figures (#8801 PR-1) |
 | Advisor and fallback sub-call usage the store cannot read | measured by #7935 probes 3–4 first | a follow-up after the probes (#8713) |
 | The lower-bound label on report, contract and estimate figures for incomplete responses | a user-visible feature beyond #7938's flag | a follow-up (#8714 R4) |
@@ -198,6 +200,8 @@ soft planning edges (A -> B means B consumes A's output):
   #7935 window W -> #7940 beat 1R  the probe readings the first calibration revisit pools
   placement-rules-and-adr -> #7943 beat 5b (D-DataHome A)
 cross-milestone: see § Cross-PR Overlap Audit
+after DEV-63 (2026-11-14): #7935 and #8041 left the bundle, taking #7935 ──► #8041 and the
+  soft edge #7940 -> #8041 with them; #7935 window W -> #7940 beat 1R was consumed when beat 1R landed
 ```
 
 Circular chains: **0** — the graph is acyclic; a topological order exists (the Implementation Sequence below).
@@ -222,7 +226,7 @@ Single branch `release/release-usage-measured-right`, posture **P0 (fully serial
 | P | probes 1, 2, 6 and 7, and the beat-P dry run | #7935 | hub-run; produces no commit | after plan approval |
 | W | probes 3–5 with control readings | #7935 | hub-run; D-ProbeWindow (A), D-WindowBudget | after the 2026-11-12 reset, other hubs paused |
 | 1R | first calibration revisit; re-ground the cost-unit ADR | #7940 | pool only **eligible** clean pairs (FM-1); append the dated revisit line to the register row; edit `[cost_unit]` only if a value moves under the ADR's sufficiency rule; while the ADR is still Proposed, add the probe 3 and 4 results that bear on the unit to its `source_observations:` and re-confirm or amend Decision 1 (which window) and Decision 3 (per-model draw) against them (PR-1) | window W recorded on #7935 |
-| 8 | model-use ADR | #8041 | per #8719, after D-Beat8's entry rule passes; the next branch-local ADR number after beat 1's | probes 3, 4 and 6 recorded on #7935 |
+| 8 | model-use ADR | #8041 | **does not run:** D-Beat8's entry rule did not pass (probes 3 and 4b DEGRADED, probe 5 NOT-EVALUATED), and #8041 carried to the successor milestone with this beat (DEV-63) | probes 3, 4 and 6 recorded on #7935 |
 
 Cross-release merge order: this release merges before the slot `finops-estimator-correctness` is composed.
 
@@ -236,8 +240,8 @@ Each card's change specification is its Stage-5 design comment as amended by its
 - **#7939 (beat 4)** — design #8715; review #8800: REC-1 (the contract and the fixture README in the write set), REC-3 (the validator widening and the filter change in one commit), F1/F2 text edits inside the write set; Stage 7 executes the bash control flow of Changes 1c–1f, which no spoke ran.
 - **#7943 (beats 5a, 5b)** — design #8717; review #8810: PR-2, CD-1, FM-1, FM-3, FM-4, CD-2 and FM-2's text inside the write set; the TOML reader lifted verbatim from the master-enable reader; join on file path, not stem; scratch store under a run temp directory with a cleanup trap; the placement-rules relays (the XDG state telemetry decision, the `/local-state/` main-checkout carve-out and the register-to-hook parity check) in the beat-5 brief.
 - **#7945 (beat 6)** — design #8718; review #8819: CD-1 to CD-4 (privacy controls first) before engineering (PA-016); Mode C holds candidates.
-- **#7935 (beats P, W)** — design #8712; review #8812: hub-run; the per-site decision rules bound to the G1 rubric, the window's control and attribution under D-WindowBudget, the R-6 calibration block for beat 1R.
-- **#8041 (beat 8)** — design #8719; review #8813: the F1–F6 frame, the option × probe table, the four-part pass rule, the admissibility, evidence and cost-leg decisions under PA-015, and the AC-4 section compare (PA-012).
+- **#7935 (beats P, W)** — design #8712; review #8812: hub-run; the per-site decision rules bound to the G1 rubric, the window's control and attribution under D-WindowBudget, the R-6 calibration block for beat 1R. Both beats ran; the card then carried to the successor milestone for a quiet re-run of probes 3, 4b and 5 (DEV-63).
+- **#8041 (beat 8)** — design #8719; review #8813: the F1–F6 frame, the option × probe table, the four-part pass rule, the admissibility, evidence and cost-leg decisions under PA-015, and the AC-4 section compare (PA-012). Carried to the successor milestone with the card; beat 8 does not run (DEV-63).
 
 ### Tier-A activated design artifacts
 
@@ -251,16 +255,16 @@ Each card's change specification is its Stage-5 design comment as amended by its
 
 | Card | S5 | S6 | S7 | S8 | S9–S13 |
 |---|---|---|---|---|---|
-| #7935 | APPLY (ran): probe protocol | APPLY (hub-run): run probes, post results (no commit) | SKIP: no tracked change | APPLY | release-scoped |
+| #7935 | APPLY (ran): probe protocol | APPLY (hub-run, ran): beats P and W, results posted (no commit) | SKIP: no tracked change | carried to the successor milestone (DEV-63) | carried: referenced, not closed (DEV-63) |
 | #7937 | APPLY (ran) | APPLY | APPLY | APPLY | release-scoped |
 | #7938 | APPLY (ran) | APPLY | APPLY | APPLY | release-scoped |
 | #7939 | APPLY (ran) | APPLY | APPLY | APPLY | release-scoped |
 | #7940 | APPLY (ran): ADR authoring | APPLY | **APPLY** — D-Home (A) puts the `[cost_unit]` section, its schema rows and its catalog section in this card's slice, so its Stage-7 SKIP no longer holds (Check 33 parse, the configuration surface's readers, the ADR lints) | APPLY | release-scoped |
 | #7943 | APPLY (ran) | APPLY | APPLY | APPLY | release-scoped |
 | #7945 | APPLY (ran) | APPLY | APPLY | APPLY | release-scoped |
-| #8041 | APPLY (ran) | APPLY | SKIP: no functional impact (ADR lints run at S6 C4 and in CI) | APPLY | release-scoped |
+| #8041 | APPLY (ran) | carried to the successor milestone (DEV-63): beat 8 does not run | SKIP: no functional impact (ADR lints run at S6 C4 and in CI) | carried to the successor milestone (DEV-63) | carried: referenced, not closed (DEV-63) |
 
-Parallel-eligible: S5 8 (ran) · S7 6 · S8 8.
+Parallel-eligible: S5 8 (ran) · S7 6 · S8 6 — the six cards in this release; #7935's and #8041's Stage-8 cells carried with them (DEV-63).
 
 ---
 
@@ -313,6 +317,7 @@ core/skills/finops-usage-extractor/scripts/rank-command-templates.sh  ADD
 core/skills/finops-usage-extractor/test-fixtures/rank/  ADD
 core/standards/agent-script-promotion-framework.md  EDIT
 # ── #8041 (beat 8) ──
+# (beat 8 does not run: carried to the successor milestone per DEV-63; the ADD below is recorded in DEV-64)
 release/ADRs/ADR-NNN-model-use-policy-for-release-runs.md  ADD
 # ── package-rebuild beat (beat 7) ──
 packages/finops-usage-extractor.skill  EDIT
@@ -371,7 +376,7 @@ The `[spoke_runtime]` section of `core/config/platform-config.toml.template` is 
 - #7939: `report-usage.sh`, the report fixture, the report fixture README, the reporting contract's §§ 1, 6 and 8.
 - #7943: `convert-usage.sh`, the allowlist, the smoke workflow, SKILL.md, `core/README.md`, `docs/module-apis.md`, the velocity standard, the velocity tool, and at beat 5b `.gitignore`, `lib-instance-path.sh`, `operator.toml.template`, `operator-toml-schema.json`, `depersonalization-spec.md`, the placement standard's surface register (DEV-37), the close-out pair and `test_lib_instance_path.sh`.
 - #7945: the ranker, its `rank/` fixtures, the fixture README, SKILL.md, the allowlist, the smoke workflow, `lib-instance-path.sh`, `test_lib_instance_path.sh`, the promotion framework.
-- #8041: the model-use ADR and `release/ADRs/README.md`; conditionally `core/ADRs/README.md`.
+- #8041: none in this release. Its planned set (the model-use ADR, its share of the `release/ADRs/README.md` regeneration and of the conditional `core/ADRs/README.md` row) carried to the successor milestone with the card (DEV-63, DEV-64); both index rows stay owed by #7940.
 - Package-rebuild beat: the package and its sidecar.
 - #7935: none.
 
@@ -387,7 +392,7 @@ Transcribed from the Stage-4 derivation (controls read at `ac96b3ea`) and re-app
 | #7938 · #7939 | extractor or report scripts, fixtures, schema, contract | ∅ | the contract: conjunct 2 false | `unconstrained` | ordinary Engineering spoke |
 | #7943 | the conversion, allowlist, workflow, READMEs, standards, config template and schema, the lib and its test, the velocity tool, the close-out pair | ∅ | SKILL.md: conjunct 2 false | `unconstrained` | ordinary Engineering spoke |
 | #7945 | the ranker, fixtures, allowlist, workflow, lib, test, SKILL.md, framework | ∅ | SKILL.md: conjunct 2 false | `unconstrained` | ordinary Engineering spoke |
-| #8041 | the ADR and the index | ∅ | ∅ | `unconstrained` | ordinary Engineering spoke |
+| #8041 | the ADR and the index | ∅ | ∅ | `unconstrained` | ordinary Engineering spoke — not run: carried to the successor milestone (DEV-63) |
 | beat 7 | the package and sidecar | ∅ | n/a: build output takes its source's class | — | ordinary Engineering spoke |
 | #7935 | none tracked | — | — | `unconstrained` | hub-run probes; probe 7 needs an isolated hook layout, because the deployed `.claude/hooks/` arm is floored |
 
@@ -410,8 +415,8 @@ Transcribed from the Stage-4 derivation (controls read at `ac96b3ea`) and re-app
 | `script-execution-allowlist.txt` · `release-tooling-smoke.yml` | #7943, #7945 | append-pattern (the ranker's block after the conversion's; one loop) | serialize beat 5a → 6 |
 | `lib-instance-path.sh` · `test_lib_instance_path.sh` | #7945 (beat 6), #7943 (beat 5b) | append-pattern (distinct functions and cases) | serialize; beat 5b landed first (DEV-36), so beat 6 appends after its resolver and its test case |
 | `.gitignore` | #7937 (one stem), #7943 (beat 5b block) | append-pattern | serialize |
-| `release/ADRs/README.md` | #7940, #8041 | append-pattern (generated index rows) | beats 1 and 8; regenerated, never hand-edited |
-| `core/ADRs/README.md` | #7940, #8041 (conditional) | renumber log, written by the tool only | Stage 12 |
+| `release/ADRs/README.md` | #7940 (#8041's beat 8 does not run, DEV-63) | append-pattern (generated index rows) | beat 1; regenerated, never hand-edited |
+| `core/ADRs/README.md` | #7940 (conditional; #8041's share carried, DEV-63) | renumber log, written by the tool only | Stage 12 |
 | `platform-config.toml.template` | #7940 (`[cost_unit]`); #8041 AC-4 reads `[spoke_runtime]` | disjoint sections | AC-4's section compare (PA-012) |
 | package and sidecar | beat 7 | single writer by construction | one rebuild after the last slice |
 | velocity tool; close-out pair | #7943 | single-pr | rebase on the base at beat 5 |
@@ -423,7 +428,7 @@ Transcribed from the Stage-4 derivation (controls read at `ac96b3ea`) and re-app
 | `core/schemas/platform-config-schema.md` · `docs/platform-config-reference.md` | beat 1 appends the `[cost_unit]` rows and section | placement-rules-and-adr (#8817) edits both | both append; the later merge rebases over the earlier one's rows |
 | `core/standards/gate-efficacy-standard.md` | beat 1 appends one register row | #8817 and framing-altitude-and-slip-model (#8816) edit it | append-pattern on the register's last row; the later merge rebases |
 | `core/config/operator.toml.template` · `operator-toml-schema.json` · `depersonalization-spec.md` | beat 5b | #8817 edits all three | the D-DataHome (A) edge already orders beat 5b after #8817 |
-| `release/ADRs/README.md` and the ADR number space | beats 1 and 8 | sequencing-layer-foundation (#8811) adds `ADR-230` under `release/ADRs/` and edits the index; guards-judge-every-spelling-alike (#8651) holds core `ADR-230`/`231` | numbers bind at merge (`renumber-adr.py --detect` / `--stamp`); the index is regenerated at Stage 12 (R7) |
+| `release/ADRs/README.md` and the ADR number space | beat 1 (beat 8 does not run, DEV-63) | sequencing-layer-foundation (#8811) adds `ADR-230` under `release/ADRs/` and edits the index; guards-judge-every-spelling-alike (#8651) holds core `ADR-230`/`231` | numbers bind at merge (`renumber-adr.py --detect` / `--stamp`); the index is regenerated at Stage 12 (R7) |
 | `script-execution-allowlist.txt` · `release-tooling-smoke.yml` | beats 5a and 6 | #8811 edits both | append-pattern; the later merge rebases |
 | `core/ADRs/README.md` | conditional | #8651 and #8817 edit it | the renumber log is appended only on a move |
 
@@ -460,8 +465,8 @@ No file is renamed, moved or deleted, so the mover set is empty. `SURFACE(R)` is
 
 | ID | Risk | Sev | Owner | Mitigation |
 |---|---|---|---|---|
-| R1 | Probes 3–5 read concurrent spend as this release's (≥5 live hubs; the meter is account-level) | HIGH | operator | D-ProbeWindow (A) with the other hubs paused; a no-activity control of equal length (PA-014). Fallback: label the readings confounded and never record them as results |
-| R2 | #8041 sits on the critical path through the window and holds the single release PR | MED | operator | accepted at the scope-lock (PA-007): the PR waits for the window |
+| R1 | Probes 3–5 read concurrent spend as this release's (≥5 live hubs; the meter is account-level) | — | — | **Materialized:** window W read probes 3 and 4b DEGRADED (confounded: background activity) and left probe 5 NOT-EVALUATED. The fallback held: the readings are labelled confounded and recorded as no result, and the probes carry with #7935 to the successor milestone (DEV-63). The mitigation as planned was D-ProbeWindow (A) with the other hubs paused and a no-activity control of equal length (PA-014) |
+| R2 | #8041 sits on the critical path through the window and holds the single release PR | — | — | **Resolved:** #8041 left this release at the 2026-11-14 scope change, so the PR no longer waits on it (DEV-63) |
 | R3 | Schema-bump class for the changed meaning of `session.tokens` | — | — | **Resolved:** MAJOR `2.0.0`, the exemption not claimed (PA-008); the pre-fix store preserved once (PA-009) |
 | R4 | Downstream figures drop about 2–3× after the fix: estimate-usage medians, the quota-budget § 5.2 FinOps substrate, comparables | MED | Stage-6 spoke (#7937) | name the consumers in the schema note; route the quota-budget impact to #7536's owner (out of scope) |
 | R5 | Several slices share extractor files, fixtures, SKILL.md, the allowlist, the smoke workflow and one package | MED | hub | P0; a fixture subdirectory per card; one rebuild at beat 7; the pre-merge freshness gate |
@@ -486,7 +491,7 @@ No file is renamed, moved or deleted, so the mover set is empty. `SURFACE(R)` is
 - [ ] **CIAC-1 (#7937 × #7938 on `core/skills/finops-usage-extractor/scripts/extract-usage.sh`):** one per-response aggregation carries both behaviours: a response spanning several transcript lines is counted once, and the same record is flagged incomplete when no line carries its final output count. *Method:* `grep -c -F "CIAC-1 per-response-incomplete" core/skills/finops-usage-extractor/scripts/extract-usage.sh` at least 1. *Graded at Stage 9 QC3.5 on the merged PR.* The arm's behaviour is graded by the finops-selftest CI job.
 - [ ] **CIAC-2 (#7937 × #7938 × #7939 on `packages/finops-usage-extractor.skill`):** the package is rebuilt once, after the last extractor slice, and its content hash matches a rebuild of the final source. *Method:* declared, verification deferred to .github/workflows/skill-package-freshness.yml (the pre-merge content-freshness job). *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-3 (#7940 × #7943 on `release/tools/compute-release-velocity.sh`):** the cost row reports weekly points at both ends of the cache-read-weight bracket recorded in the cost-unit ADR, computed from per-response totals. *Method:* `grep -c -F "CIAC-3 both-bracket-ends" release/tools/compute-release-velocity.sh` at least 1. *Graded at Stage 9 QC3.5 on the merged PR.* The arm's behaviour is graded by the release-tools self-test discovery job.
-- [ ] **CIAC-4 (#7935 × #8041 on the model-use ADR):** every option the ADR rejects as infeasible cites a probe result recorded on #7935, and no option is assessed against an unrecorded or confounded reading. *Method:* declared, verification deferred to #8041 AC-2 and #7935 AC-1. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-4 (#7935 × #8041 on the model-use ADR) — carried to the successor milestone with both cards (DEV-63):** every option the ADR rejects as infeasible cites a probe result recorded on #7935, and no option is assessed against an unrecorded or confounded reading. *Method:* declared, verification deferred to #8041 AC-2 and #7935 AC-1, which carry with their cards. *Graded where the model-use ADR is authored, in the successor milestone; this release's Stage 9 has no ADR to grade it on.*
 - [ ] **CIAC-5 (#7940 × #7945 on the ranking report):** the ranker states cost in the cost-unit ADR's unit (weekly points at both bracket ends), not in a parallel unit. *Method:* declared, verification deferred to #7945 AC-1 and #7940 AC-1. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-6 (#7943 × #7945 on the non-tracked data homes):** both new local outputs resolve through a registered operator-instance token to an in-repo git-ignored path, and neither lands under the legacy instance tree. *Method:* declared, verification deferred to #7943 AC-3 and #7945 AC-3. *Graded at Stage 9 QC3.5 on the merged PR.*
 
@@ -496,16 +501,16 @@ The CIAC lint on the Stage-4 draft read `declared=6 parsed=6 clean=2 declared-de
 
 ## Verification Plan
 
-**AC baseline:** #7935 = **4**, #7937 = **4**, #7938 = **2**, #7939 = **4**, #7940 = **3**, #7943 = **4**, #7945 = **4**, #8041 = **4** — **29** criteria, read at `b1042eec` on 2026-11-05. The Stage-4 baseline read 28 at `ac96b3ea`; #7939 gained AC-4 (the boundary-second fixture) at the Stage-4 gate, so this baseline moves to 29 (DEV-4). #7943's AC-1 was amended in place at the scope-lock (thinking counted inside output) without changing its count.
+**AC baseline:** #7937 = **4**, #7938 = **2**, #7939 = **4**, #7940 = **3**, #7943 = **4**, #7945 = **4** — **21** criteria over the six cards in this release, read at `b1042eec` on 2026-11-05. #7935 (**4**) and #8041 (**4**) carry with their cards to the successor milestone (DEV-63); their rows stay in the table below, each marked carried, so the binder's ordinal sets still close, and the machine line names them as carried (29 with them). The Stage-4 baseline read 28 at `ac96b3ea`; #7939 gained AC-4 (the boundary-second fixture) at the Stage-4 gate, so the eight-card baseline moved to 29 (DEV-4). #7943's AC-1 was amended in place at the scope-lock (thinking counted inside output) without changing its count.
 
 ### Per-Issue Verification
 
 | Issue | AC | Verification Method | Expected Result |
 |---|---|---|---|
-| #7935 | AC-1 | declared, verification deferred to Stage 8 (reads the probe-result comments on #7935) | seven probes, each with method, observed result, and the lever it confirms or retires |
-| #7935 | AC-2 | declared, verification deferred to Stage 8 (probe 3 and 4 comments) | a no-activity control reading over an equal interval, inside the D-ProbeWindow window |
-| #7935 | AC-3 | declared, verification deferred to Stage 8 | windows moved per model and per advisor call; availability for hub, Agent-tool spoke, chip and Workflow agent |
-| #7935 | AC-4 | declared, verification deferred to Stage 8 (reads #7942, #8041 and #7936) | each target carries the cross-link |
+| #7935 | AC-1 | [DEFERRED — carried to the successor milestone per DEV-63; its Stage 8 runs there] (reads the probe-result comments on #7935) | seven probes, each with method, observed result, and the lever it confirms or retires |
+| #7935 | AC-2 | [DEFERRED — carried to the successor milestone per DEV-63; its Stage 8 runs there] (probe 3 and 4 comments) | a no-activity control reading over an equal interval, inside the D-ProbeWindow window |
+| #7935 | AC-3 | [DEFERRED — carried to the successor milestone per DEV-63; its Stage 8 runs there] | windows moved per model and per advisor call; availability for hub, Agent-tool spoke, chip and Workflow agent |
+| #7935 | AC-4 | [DEFERRED — carried to the successor milestone per DEV-63; its Stage 8 runs there] (reads #7942, #8041 and #7936) | each target carries the cross-link |
 | #7937 | AC-1 | declared, verification deferred to the finops-selftest job and a Stage-7 re-run of the Phase-A0 G-PL4 repro | store equals the per-response sum on 4/4 fields (baseline: equals the per-line sum, ratio 2.50–2.91) |
 | #7937 | AC-2 | `grep -c -F "three-block" core/skills/finops-usage-extractor/scripts/extract-usage.sh` at least 1 | self-test arm present; finops-selftest grades the behaviour |
 | #7937 | AC-3 | `grep -c -F "partial-output" core/skills/finops-usage-extractor/scripts/extract-usage.sh` at least 1 | arm present |
@@ -527,12 +532,12 @@ The CIAC lint on the Stage-4 draft read `declared=6 parsed=6 clean=2 declared-de
 | #7945 | AC-2 | declared, verification deferred to the ranker self-test (finops-selftest job) and Stage 8 | occurrences, stages, cost and AS rung for each candidate |
 | #7945 | AC-3 | declared, verification deferred to Stage 8 (one live run: its report folder resolves under the analysis token and `git check-ignore` reads 0; its `## Routing outcomes` table holds one row per Mode C record, each carrying the verdict Mode C returned; the self-test's leak and signals arms, run by the finops-selftest job) | derived figures only; every record routed through Mode C and held below the filing threshold, so a pending row, a missing row or another verdict fails; the operator promotes (AC-3 as amended, DEV-41) |
 | #7945 | AC-4 | `grep -c -F "near-miss" core/skills/finops-usage-extractor/scripts/rank-command-templates.sh` at least 1 | control and near-miss arms present |
-| #8041 | AC-1 | declared, verification deferred to Stage 8 (reads the model-use ADR against the probes recorded on #7935) | each option assessed against probes 3, 4 and 6 |
-| #8041 | AC-2 | declared, verification deferred to Stage 8 | every ruled-out option cites its probe |
-| #8041 | AC-3 | declared, verification deferred to Stage 8 | roles, parity arms, milestone and pass rule for each surviving change |
-| #8041 | AC-4 | `git diff --name-only origin/main...HEAD -- core/config/allowlists/agents-model-overrides.txt` expect 0 [READER-GRADED — the spoke_runtime section of core/config/platform-config.toml.template, extracted at the merge-base and at HEAD by the section compare #8719 specifies, reads identical; the template itself changes in this release, because beat 1 appends the cost_unit section] | 0 changed paths on the overrides allowlist and an identical section · control: the same scope instrument with pathspec release/releases/plans → ≥1 once Commit 0 lands |
+| #8041 | AC-1 | [DEFERRED — carried to the successor milestone per DEV-63; its Stage 8 runs there] (reads the model-use ADR against the probes recorded on #7935) | each option assessed against probes 3, 4 and 6 |
+| #8041 | AC-2 | [DEFERRED — carried to the successor milestone per DEV-63; its Stage 8 runs there] | every ruled-out option cites its probe |
+| #8041 | AC-3 | [DEFERRED — carried to the successor milestone per DEV-63; its Stage 8 runs there] | roles, parity arms, milestone and pass rule for each surviving change |
+| #8041 | AC-4 | `git diff --name-only origin/main...HEAD -- core/config/allowlists/agents-model-overrides.txt` expect 0 [READER-GRADED — the spoke_runtime section of core/config/platform-config.toml.template, extracted at the merge-base and at HEAD by the section compare #8719 specifies, reads identical; the template itself changes in this release, because beat 1 appends the cost_unit section] | 0 changed paths on the overrides allowlist and an identical section · control: the same scope instrument with pathspec release/releases/plans → ≥1 once Commit 0 lands. The criterion carries with #8041 (DEV-63); the method still runs on this release's diff, as its check that § Exclusions' `[spoke_runtime]` row holds |
 
-`ac_baseline: { #7935: 4, #7937: 4, #7938: 2, #7939: 4, #7940: 3, #7943: 4, #7945: 4, #8041: 4, total: 29, read_at: b1042eec }`
+`ac_baseline: { #7937: 4, #7938: 2, #7939: 4, #7940: 3, #7943: 4, #7945: 4, in_release: 21, carried #7935: 4, carried #8041: 4, total_with_carried: 29, read_at: b1042eec }`
 
 **Null and threshold rows carry a same-target control** (AC-Binding Limb 2): #7938 AC-1 names its same-file control; #8041 AC-4's scope assertion names the plan-path control on the same instrument, and its section compare carries the sensitivity and specificity arms #8719 specifies (a changed `chip_model` value makes the compare differ; a new section placed after `[spoke_runtime]` leaves it identical).
 
@@ -548,8 +553,8 @@ These checks use tools or shapes outside the plan verifier's runnable set, so ea
 
 | Check | Verification Method | Expected |
 |---|---|---|
-| ADR index freshness | [DEFERRED — generate-adr-index.py with --write then --verify at Stage 6 C4 on beats 1 and 8, and at Stage 12 after the stamp] | COUNT 0 |
-| ADR number integrity and durability | [DEFERRED — check-adr-numbers.py and check-adr-durability.py at Stage 6 C4 on beats 1 and 8; the CI jobs on the PR] | pass; warn-mode durability findings read |
+| ADR index freshness | [DEFERRED — generate-adr-index.py with --write then --verify at Stage 6 C4 on beat 1 (beat 8 does not run, DEV-63), and at Stage 12 after the stamp] | COUNT 0 |
+| ADR number integrity and durability | [DEFERRED — check-adr-numbers.py and check-adr-durability.py at Stage 6 C4 on beat 1 (beat 8 does not run, DEV-63); the CI jobs on the PR] | pass; warn-mode durability findings read |
 | Configuration surface | [DEFERRED — deploy.sh Check 33 parse rule and the section-aware reader over the template at Stage 6 C4 on beat 1] | parse-clean; the cost_unit keys resolve |
 | FinOps self-tests | [DEFERRED — extract-usage, rollup-attribution, report-usage, convert-usage and the ranker self-tests at Stage 6 C4 per beat; the finops-selftest job] | pass |
 | Velocity tool and close-out self-tests | [DEFERRED — compute-release-velocity.sh and automated-closeout.sh self-tests at Stage 6 C4 on beats 5a and 5b] | pass |
@@ -568,10 +573,10 @@ These checks use tools or shapes outside the plan verifier's runnable set, so ea
 | Commit strategy | Commit 0 (this plan), then one or more commits per beat, each pushed on landing (Write-Early); messages carry the `release-usage-measured-right:` or `release(release-usage-measured-right):` prefix and a reference-only trailing issue number |
 | Review approach | Single release PR, draft until the Stage-9 Phase A8 transition |
 | Package | Rebuilt once, at beat 7, in the release PR; the pre-merge `skill-package-freshness` gate asserts it |
-| Stage 12 | Atomic version claim (minor); `python3 release/tools/renumber-adr.py --detect`, then `--stamp`, for the two ADRs; `deploy.sh --deploy` for the FinOps skill |
+| Stage 12 | Atomic version claim (minor); `python3 release/tools/renumber-adr.py --detect`, then `--stamp`, for the cost-unit ADR (the model-use ADR carried with #8041, DEV-63); `deploy.sh --deploy` for the FinOps skill |
 | Stage 13 | This release's own close-out writes its cost row (the Success Indicator) |
 | Close precondition (Procedure 7) | The milestone stays open until #8051 has created MS-1 or recorded its deferral |
-| Card closure | Each card is marked as closed at Stage 13 through the release PR's Issue References block |
+| Card closure | Each of the six cards is marked as closed at Stage 13 through the release PR's Issue References block; #7935 and #8041 carry to the successor milestone and are referenced there, not closed (DEV-63) |
 
 The PR body is parser-clean: each card is named in the dedicated Issue References block; no close-family verb precedes an issue number anywhere else.
 
@@ -594,10 +599,10 @@ Rollback infeasibility: none; every step is a commit, a store rebuild or a local
 ## Quota Budget
 
 **Verdict:** WARN, on basis `UNSTATED` (conservative default, per `quota-budget-protocol.md` Checkpoint A), transcribed from Stage 4 [ASSUMPTION – CONFIRM].
-**Parallel-eligible spokes per parallel stage (from the Stage Applicability Matrix):** Stage 5: 8 (ran) · Stage 7: 6 · Stage 8: 8 (Stage 6 is serial).
+**Parallel-eligible spokes per parallel stage (from the Stage Applicability Matrix):** Stage 5: 8 (ran) · Stage 7: 6 · Stage 8: 6, the six cards in this release (8 at planning; #7935 and #8041 carried, DEV-63) (Stage 6 is serial).
 **Per-spoke cost estimate:** size-bucket ordinal band (heuristic). Telemetry medians are not used, because the FinOps substrate over-counts 2–3× until #7937 lands.
 **Assumed/stated remaining usage-window envelope:** UNSTATED; several hubs draw on the account.
-**Estimated cumulative draw % (worst parallel batch):** not synthesized (§ 6.1). The worst batch is Stage 8, at 8 spokes.
+**Estimated cumulative draw % (worst parallel batch):** not synthesized (§ 6.1). The worst batch was Stage 8, at 8 spokes at planning; after DEV-63 Stage 7 and Stage 8 are each eligible for 6.
 **Routing:** WARN → window-aware launch timing plus a split batch; Stage 8 runs in two waves.
 **Note:** Checkpoint B re-validates at every `Agent`-tool launch — wave or singleton, every stage (runtime, load-bearing) — with PROCEED/SERIALIZE/DEFER/REDUCE-scope for a wave and PROCEED/DEFER for a singleton; STAGGER is a secondary rate-limit-only defense, not a usage-window mitigation. Checkpoint B also gates on the host-API axis, combined DEFER-dominant (§ 4.3b); Checkpoint A stays usage-window-only (§ 3.1). The bands, the cumulative-draw budget and the host-API floor are `[CALIBRATE-AFTER-3]` MEDIUM.
 
@@ -605,7 +610,7 @@ Rollback infeasibility: none; every step is a commit, a store rebuild or a local
 
 ## Release Class declaration
 
-**`novel`**, with a recorded override of cross-cutting trigger (c) (PA-002). **Triggers that fire:** novel (a) — #7945 adds a script, #7943 adds the conversion script, and two ADRs are new decision records; novel (b) — this plan carries D-class decisions; novel (c) — two Stage-5 ADRs; **cross-cutting (c)** — three in-bundle compositional edges (#7937 → #7938, #7937 → #7943, #7935 → #8041). **Triggers that do not fire:** cross-cutting (a), because one `pipeline/stage-*.md` file changes (`stage-13-close.md`); cross-cutting (b), because none of the six rule-defining surfaces change; hotfix, because no deployed-release defect is repaired. **Size:** ≈ 42 raw / ≈ 48 effective points against the 25 ceiling, accepted over band at the scope-lock (PA-007). **Posture:** engagement density **Standard** · Stage 9 review depth **Deep** · Stage 5 activation bias **ALL** · Stage 13 outcome window **30-day**.
+**`novel`**, with a recorded override of cross-cutting trigger (c) (PA-002). **Triggers that fire:** novel (a) — #7945 adds a script, #7943 adds the conversion script, and the cost-unit ADR is a new decision record (the second ADR, the model-use ADR, carried with #8041, DEV-63); novel (b) — this plan carries D-class decisions; novel (c) — one Stage-5 ADR in this release (two at planning); **cross-cutting (c)** — three in-bundle compositional edges at planning (#7937 → #7938, #7937 → #7943, #7935 → #8041), of which the third left with #7935 and #8041 (DEV-63), so two remain. The class stands as PA-002 rendered it. **Triggers that do not fire:** cross-cutting (a), because one `pipeline/stage-*.md` file changes (`stage-13-close.md`); cross-cutting (b), because none of the six rule-defining surfaces change; hotfix, because no deployed-release defect is repaired. **Size:** ≈ 42 raw / ≈ 48 effective points against the 25 ceiling, accepted over band at the scope-lock (PA-007); after DEV-63, ≈ 36 raw / ≈ 41 effective on the same projections, since #7935 (S, 2) and #8041 (M, 4) left (the XS=1 / S=2 / M=4 / L=8 scale; novel × 1.15, round-half-up). **Posture:** engagement density **Standard** · Stage 9 review depth **Deep** · Stage 5 activation bias **ALL** · Stage 13 outcome window **30-day**.
 
 ---
 
@@ -623,6 +628,8 @@ Transcribed verbatim from the milestone description at Engineering Commit 0.
 
 **Limb owners:** per-release cost row at close-out → #7943 · usage counted once per API response, incomplete responses flagged → #7937, #7938 · one calibrated unit at both bracket ends → #7940 · usage report runs over real stores → #7939 · seven harness and meter behaviours measured and recorded → #7935 · cost-unit and model-use ADRs grounded on the results → #7940, #8041 · retyped commands ranked as promotion candidates → #7945
 
+**Carried at the 2026-11-14 scope change (DEV-63).** The paragraphs above stay as transcribed. Two limbs and their Success Indicator clauses move to the successor milestone with their cards: the probe limb (seven harness and meter behaviours measured and recorded → #7935; "#7935 carries seven recorded probe results"), and the model-use half of the ADR limb (#8041; the #8041 half of "#7940 and #8041 are authored on `main`", and "with #8041 assessing each option against the probes"). The cost-unit half of that limb (#7940) and every other limb stay in this release. The milestone's [SCOPE CHANGE] note under § Scope records both cards' move and names the model-use limb; the probe limb moves because #7935 carries open with everything recorded so far (PA-044).
+
 ---
 
 ## Operational Deployment Manifest
@@ -631,7 +638,7 @@ Transcribed verbatim from the milestone description at Engineering Commit 0.
 |---|---|---|
 | `core/skills/finops-usage-extractor/` (scripts, fixtures, references, SKILL.md) | the installed skill copy | `deploy.sh --deploy finops-usage-extractor` at Stage 12 (S-2 copy), after the beat-7 package rebuild |
 | `packages/finops-usage-extractor.skill` and its sidecar | the distribution artifact | committed in the release PR (beat 7) |
-| The two ADRs, the release ADR index, the standards, the schemas, the stage spec, the docs | repository-only | none required |
+| The cost-unit ADR (the model-use ADR carried with #8041, DEV-63), the release ADR index, the standards, the schemas, the stage spec, the docs | repository-only | none required |
 | `core/config/platform-config.toml.template` | read in place from the clone (no installed copy) | none required; an operator's own calibration is a Track-B individual-rung value |
 | The velocity tool, the close-out pair | run from the repository at check and close time | none required |
 | `core/config/allowlists/script-execution-allowlist.txt` (the conversion's and the ranker's four invocation forms each) | the deployed hook-tier allowlist, a composition surface the installer lays down and the updater regenerates (managed section) | **(a) propagate**: a full `./update.sh` regenerates the managed section. Until it runs, the script-execution hook refuses both new scripts in any local session, so only CI executes them (DEV-34, DEV-42). That includes the Stage-7 and Stage-8 spokes and the AC-3 live run |
@@ -999,6 +1006,7 @@ Run by the Stage-6 spoke on #8724 over the beat-1R commit `fe6ad60b` (the cost-u
 | **DEV-61** | **The gate-efficacy census records the no-final-output precision probe (#7938 F-05).** DEV-56's probe step compares its captured `probe_rc` only against 0, so the census resolver counts it as a binary-zero workflow consumer. The census had no row for it, so the conformance ratchet, which runs inside the required check "Shell harness (macOS)", failed on that one member at `ff56e6f4`. The record for workflow binary exit consumers in `core/standards/gate-efficacy-standard.md` gains one row, directly after its carry-forward sibling and in that sibling's classification and reason form (`legitimately-binary`, asserting the no-final-output failure text), and its `examined:` count moves from 22 to 23. The reason states only what the step asserts: a Stage-7 reviewer showed the same text also prints when a rewrite breaks the extractor's build (#7938 F-06), and the operator sent that limit to a Stage-13 follow-up, not to this pass. The workflow step is not changed. The standard is a File Change Matrix EDIT under beat 1, and the Contention Map's append-pattern holds: sibling releases append to it, and a later merge rebases over the row | Phase E 2, PA-028 (the census row only); #7938 Stage-7 pass 2, F-05 | **APPLIED** — DT fix pass 2 |
 | **DEV-62** | **The store schema's 2.0.0 row and the ignore comment follow the code at every crossing (#7937 F-04).** DEV-54 corrected the schema's write-discipline bullet and the extractor's own text; its sweep did not reach two lines of #7937's beat-2 text that still described a single kept store at the unstamped path. The Version History 2.0.0 row's `--rebuild` clause now matches § Store write-discipline: a store of another unit is kept at every crossing and never overwritten, at `prior/schema-<old>/usage.jsonl` or, at a later crossing from the same version, at the time-stamped `prior/schema-<old>-<UTC stamp>/usage.jsonl`. Version 2.0.0 is this release's own unshipped version, so its row is this release's text to correct, and only that clause changed. The `.gitignore` comment above `**/finops/prior/` says "at every counting-unit crossing" and names the stamped form beside the unstamped one; the rule itself is unchanged and already covers both. Neither file is a member of the package, so it was not rebuilt. Out of scope and not edited: the placement standard's S-38 row, `main`'s text | Phase E 2, PA-029 (fix now); #7937 Stage-7 pass 2, F-04; PA-030 | **APPLIED** — DT fix pass 2 |
 | **DEV-63** | **Tier-2 [SCOPE CHANGE] at beat-8 entry: #8041 (the model-use ADR, beat 8) and #7935 (the probe card) leave this release and carry to the successor milestone that #8051 composes.** A scope-lock override the operator decided on 2026-11-14 ("Move both to MS-1"; "Carry it open to MS-1"). Window W left probes 3 and 4b DEGRADED (confounded: background activity) and probe 5 NOT-EVALUATED. Probe 3 fails #8041's admissibility rule F2 at (c) and (d), so options 3a, 3c and 3+adv hold at NOT-EVALUATED, and under the Collective Review's D-Beat8 (A) (PA-015) a held option blocks authoring and routes this change. #7935's AC1–AC3 stay open for a quiet re-run of probes 3, 4b and 5 in the successor. Composition delta: 2 of 8 cards (25 %), an amend, so the theme is kept. Beat 8 does not run; beat 1R is unaffected and landed. The File Change Matrix's beat-8 rows are not applicable and are kept, not deleted: the ADD of #8041's ADR, and #8041's share of the `release/ADRs/README.md` EDIT and of the conditional `core/ADRs/README.md` row. The plan verifier therefore keeps reading FCM-7 as its one FAIL, with no beat left to clear it. Where § Scope, § Implementation Sequence, § Stage Applicability Matrix, § Verification Plan, § Cross-Issue Acceptance Criteria (CIAC-4), § Release Outcome Statement and § Issue References still treat the two cards as in this release, this row is the later record and wins (§ Provenance and precedence). The release PR's Issue References lines for both cards read as plain references | Decision Recorded comment on #8662 (2026-11-14; comment 6870698722), PA-043 and PA-044 | **RECORDED** — the Status cell; the beat-8 File Change Matrix rows kept, not applicable |
+| **DEV-64** | **The beat-8 ADR ADD is recorded NOT DELIVERED, so the plan verifier reads FCM-7 as a recorded deviation; this supersedes DEV-63's sentence that FCM-7 keeps reading FAIL.** The File Change Matrix row `release/ADRs/ADR-NNN-model-use-policy-for-release-runs.md  ADD` stays as written, with an in-fence note above it. This row is the Deviation-Log entry the declared-vs-delivered contract asks for when a declared file legitimately does not ship: NOT DELIVERED, because #8041 carried to the successor milestone with this ADR (DEV-63). The `fcm-delivery` family reads the entry and grades FCM-7 PASS (`deviation-recorded`), and G-PR11 counts the row as recorded. Two other forms were measured on this file first and not used. A bracket-tagged deferral on the fenced row left FCM-7 at FAIL, because the verifier reads that tag only on Verification Plan methods. A `CONDITIONAL:` token gave a WARN-tier SKIP, but rule 5 of the authoring contract treats a row made conditional after its condition has resolved as buying exemption from the check for one token. #8041's share of the two index rows is carried in prose (§ Per-card write sets): both rows stay owed by #7940, `release/ADRs/README.md` regenerated at beat 1 and `core/ADRs/README.md` conditional on a renumber at the claim | the declared-vs-delivered contract (`release/references/pipeline/stage-04-planning.md`, rules 4 and 5, and the verifier's Deviation-Log reader); G-PR11; DEV-63 | **APPLIED** — Phase C close-out; § File Change Matrix, § Per-card write sets |
 
 ---
 
@@ -1010,8 +1018,8 @@ Run by the Stage-6 spoke on #8724 over the beat-1R commit `fe6ad60b` (the cost-u
 - **#7939** — the usage report accepts fractional-second timestamps and buckets boundary seconds correctly. Mark as closed at Stage 13.
 - **#7943** — the per-release cost row at Stage-13 close-out. Mark as closed at Stage 13.
 - **#7945** — the command-template cost ranking. Mark as closed at Stage 13.
-- **#7935** — the seven harness and meter probes. Mark as closed at Stage 13.
-- **#8041** — the model-use policy decision record. Mark as closed at Stage 13.
+- **#7935** — the seven harness and meter probes. Carries open to the successor milestone #8051 composes, with everything recorded so far, for a quiet re-run of probes 3, 4b and 5 (DEV-63; PA-044); referenced by the release PR, not closed.
+- **#8041** — the model-use policy decision record. Carries to the successor milestone with its ADR (DEV-63; PA-043); referenced by the release PR, not closed.
 - **#8662** — the Stage-4 planning sub-task (plan, plan gate, scope-lock). **#8712–#8719** — the Stage-5 sub-tasks. **#8799 · #8800 · #8801 · #8809 · #8810 · #8812 · #8813 · #8819** — the Phase A6.5 adversarial reviews. **#8724** — the Stage-6 sub-task for #7940 (this commit). **#8721** — the Stage-6 sub-task for #7937 (beat 2). **#8722** — the Stage-6 sub-task for #7938 (beat 3). **#8723** — the Stage-6 sub-task for #7939 (beat 4). **#8725** — the Stage-6 sub-task for #7943 (beats 5a and 5b). **#8726** — the Stage-6 sub-task for #7945 (beat 6).
 - **#8019 · #8022** — the worktree-sessions slice (the main-checkout carve-out hook) and the `/local-state/` home with its ignore rule and commit guard: the merged preconditions beat 5b waits on (DEV-35). The `/local-state/` home card should absorb beat 5b's narrower ignore rule (DEV-36). **#8020** — the resolver slice (one resolver per class), which should fold in `pmo_telemetry_path_for` (DEV-38).
 - **#7934** — the token-efficiency thrust (epic). **#8051** — the successor card that composes MS-1. **#7854** — the outcome check whose criteria use the unit. **#7536** — the weekly-allowance axis that adopts the unit. **#7942 · #7936 · #7950 · #1494 · #8049** — downstream and related cards named in the graph and the specifications.
