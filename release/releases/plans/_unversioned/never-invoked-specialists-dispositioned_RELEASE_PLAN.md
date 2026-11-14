@@ -11,7 +11,7 @@ audit_class: true
 
 # Release Plan — never-invoked-specialists-dispositioned
 
-> **Status:** Stage 6 Engineering. This file is Engineering Commit 0 on the release branch.
+> **Status:** Stage 13 Close, in progress. The release merged at `240d3c2e` (#8994) and its Stage-12 chore merged at `ebc217d8` (#8996). ADR-238 is `Accepted` on `main`, ratified at the D-Ratify gate, and #8452 is marked closed. The close-out chore pull request carries the INDEX row, the DIGEST entry, the release note and the Stage-13 entries below. The RELEASE_LOG row stays `DEPLOYED` until two owed inputs land, the Phase B4 deploy and the learnings triple (§ Verification Evidence › Stage 13).
 > **Identity: VERSION-LESS** (D-IdentityMode, operator, 2026-11-13). The release identity is the capability slug `never-invoked-specialists-dispositioned`. No version key is claimed at any stage, no release-version stamp token is authored, and the Stage-12 rename never fires. At Commit 0, steps 1–3 (version re-verify) are N/A and step 3b (`claim-version.sh --verify-stamp`) reads `TOKEN-LESS PLAN`, which is the correct version-less state and not a HALT. **Do not add the release-version stamp token to make it pass.** The plan sits under `plans/_unversioned/`, the permanent home of a version-less plan, from Stage 6 on (DEV-12).
 > **Topology:** D-C SINGLE — one release branch, one pull request, one merge. **Concurrency:** P0, fully serial.
 > **Release Class:** `novel` · **Milestone:** `never-invoked-specialists-dispositioned`.
@@ -25,9 +25,9 @@ audit_class: true
 | **Bump Class** | N/A — version-less release; no number binds at Stage 12 (D-IdentityMode rendered version-less by the operator on 2026-11-13) |
 | **Date Created** | 2026-11-13 (Friday) |
 | **Release Manager** | Agent-assisted (release hub + stage spokes) |
-| **Status** | Executing — Stage 6 Engineering |
+| **Status** | Stage 13 Close — in progress |
 | **Branch** | `release/never-invoked-specialists-dispositioned` |
-| **PR** | the draft release PR opened at Stage 6 Phase C2 |
+| **PR** | #8994, merged at `240d3c2ed44e2330d3882de56fbdbd21bc8b4418` |
 | **Milestone** | never-invoked-specialists-dispositioned |
 
 ### Baseline pin
@@ -108,7 +108,9 @@ Rendered at the hub's Stage-5 gate. Collective Review does not fire for this rel
 | D-OQ1-SAFe | The operator's answer: "I don't have config in toml for safe currently. that may change." So the release train engineer's row reads **keep (dormant by design)**, conditioned on that configuration: if a SAFe configuration appears, the ADR-033 activation gate turns the Specialist on without a record change. | CHEAP · HIGH |
 | D-RoundOneScrub | **Scrub.** The first Stage-5 comment named per-account app-data directories, so it was deleted. A line-preserving redaction was re-posted as comment 6865348481, so line citations into the original still match. | IRREVERSIBLE · HIGH |
 
-### D-Ratify (Stage 9) — pending
+### D-Ratify (Stage 9) — ratified with row amendments, 2026-11-14
+
+Rendered at the re-presented gate after the Stage-6 redirect: the D-Ratify record, comment 6869027593 on #8941. The planned gate it rendered:
 
 After Stages 7 and 8 verify the record, the operator renders every disposition in one gate: ratify, ratify with row amendments, or redirect. A redirect sets `iterate:stage-6`. On ratification a Tier 1 commit writes the operator's value into every G4 row and flips the record's `status:` from `Proposed` to `Accepted` before the merge. EXPENSIVE / HIGH.
 
@@ -917,6 +919,60 @@ Run on 2026-11-13 (Friday) with the record and this file staged. The census ran 
 | Runtime suite | `append-pipeline-event.sh … --event-type test-run --event-subtype suite-skip …` | appended; read back: this release's `test-run` rows 0 → 1 |
 
 **C3 (deployed-copy sync):** N/A — the release ships no skill, rule mirror or harness artifact. **Deliverable state:** both deliverables — this plan and the record — declare `deliverable_state: artifact-accepted`; each exists at its declared canonical path on the release branch, and its Artifact-Acceptance Record row is populated at Stage 13 Phase A7.5.
+
+### Stage 13 — the version-less close (Phase-B chore PR)
+
+`automated-closeout.sh` rejects a version-less release at its identity check, so the output set is produced by the Phase-B chore pull request, the expected path for this identity mode (`stage-13-close.md` Phase A8, trigger ii). Read on 2026-11-14 (Saturday) against `main` at `ebc217d8`, the merge of the Stage-12 chore #8996. Steps this run did not perform are named as not run, with what holds them.
+
+- **A1 issue closure:** the release PR references #8452 rather than closing it, so it was open at the audit. Its AC-6 grades MET: `status: Accepted` on `main` (the record's lines 5 and 22), the D-Ratify record (comment 6869027593 on #8941, posted by the repository owner's account), and 13 of 13 non-keep rows tagged `follow-up: user-visible`, with the keep tagged `follow-up: none`. #8452 was then marked closed as completed, with a closing comment (6879274028).
+- **A2 deferred items:** 0. The milestone holds one card and its stage sub-tasks.
+- **A3 evidence:** the Stage-12 merge, its verification and Phase B5 are PASS (#8952). One owed step is open: Phase B4 has not run (see B4 below).
+- **A4 QC4-05:** N/A — this plan declares no AV-N assertion (0 rows).
+- **A4.5 native dependencies:** #8452 carries 0 blocked-by and 0 blocking edges, so there is no drift.
+- **A5 G-CL6:** `core/deploy/deploy.sh --check-doc-gates --gate g-cl6 --pr 8994 --plan <this file>` → exit 3, N/A: no in-scope subject. Recorded as N/A, not as a pass.
+- **A6 cycle-time baseline:** not run. This release's cycle time is N/A: no `deployment-status` row exists under its slug.
+- **A7 learnings:** **not run — a missing input.** The event log holds 0 `release-synthesis` rows under the slug (59 rows in all). Control: the same tool returns 144 `deployment-status` rows across releases. Stage 13 treats a missing triple as a missing input, never as a fallback trigger, so no Release Learnings block is written by hand. The triple is owed, and the block is rendered from it.
+- **A7.1 recommendation versus choice:** `query-pipeline-event.sh --event-subtype recommendation-choice-delta --release never-invoked-specialists-dispositioned` → 24 rows: 18 aligned, 3 partial and 3 diverged. The diverged rows:
+  - the identity mode, where versioned was recommended and version-less chosen, on the starting brief and the precedent;
+  - the Stage-9 verdict, where ratifying was recommended and the redirect chosen, so that a per-row test replaced R5 before ratification;
+  - the two re-homes, where the record's re-home was recommended and keeping both Specialists separate was chosen, on the single-project tier and the decision-versus-execution boundary.
+- **A7.2 learnings register:** not run — the producer seeds from the triple, which is not captured.
+- **A7.5 close class:** `Close class: DEPLOYABLE (fall-through) — resolved via rung 1; declared value: governance.` The value is not `task-artifact`, so the deployable branch applies. Both deliverables declare `deliverable_state: artifact-accepted`, so the Artifact-Acceptance Record below is **ADDITIVE**.
+
+  | deliverable | canonical_path | landing_commit | acceptance_verdict | acceptor |
+  |---|---|---|---|---|
+  | #8452 — the decision record, ADR-238 | `core/ADRs/ADR-238-each-never-invoked-specialist-takes-one-disposition.md` | `10ab6e5a` | ACCEPTED | the operator, at the D-Ratify gate (comment 6869027593 on #8941) |
+  | #8452 — this release plan | `release/releases/plans/_unversioned/never-invoked-specialists-dispositioned_RELEASE_PLAN.md` | `10ab6e5a` | ACCEPTED | the operator, at the Stage 9 GO gate (comment 6868370817 on #8941) |
+
+  Both paths resolve with `git show origin/main:<path>`, and `10ab6e5a` is an ancestor of the merge `240d3c2e`.
+- **A8 output set:** this chore pull request carries the RELEASE_INDEX row and the RELEASE_DIGEST entry, both emitted by `generate_release_index.py --emit`, the note at `notes/_unversioned/`, and these entries.
+  - **Held, not written:** the RELEASE_LOG row's `DEPLOYED → VERIFIED` transition, with its Velocity, Outcome and Close-Class-Telemetry fields, the Release Learnings block and the Not-produced markers.
+  - **What holds them:** two owed inputs. Phase B4, the release-stamped rules-mirror deploy, has not run: 0 `deployment-status` rows exist under the slug, and the Deployment Log on `main` reads `Result: PARTIAL`. The learnings triple is not captured (A7).
+  - **Before the milestone closes,** once both land, the transition and its fields are written and this list is completed.
+- **A8.1 note-content lint:** `lint_release_corpus.py --check note-content` → exit 0, with 0 lines naming this release's note. Sensitivity arm: a banned term planted in the note's Section 6a reads `NOTE-BANNED-JARGON` with exit 1. The note was then restored byte-identical (sha256 prefix `971b62da`).
+- **A8.2 decision emission:** `deploy.sh --check-decision-emission` → exit 2, ADVISORY: INCOMPLETE for 18 of 100 other releases. The gate reads `VERIFIED` rows only, so it does not cover this release yet. Read directly, this release carries all three asserted classes: `decision/scope-lock` 1, `decision/d-class` 16 and `gate-outcome/plan-review-go` 1.
+- **A8.3 plan identity:** N/A — version-less. There is no Version cell for a filename to disagree with.
+- **INDEX verify:** `generate_release_index.py --verify` → exit 1, on one pre-existing finding this change does not touch: the v4.17 row sits above the v4.18 row on `main`, out of chronological order. Before this change, the same verify on `main` reported this release's row as absent from the INDEX; this change adds it.
+- **A10 QC4-06, goal attainment: ATTAINED.**
+  - The Outcome Statement's AFTER state holds on `main`. Every role Specialist the census read at zero, and the router, has one ratified disposition with its reason, tier and confidence, in one tracked record. The census states its denominator, each subject's exposure window and both control arms, and the listing finding is read across days.
+  - The Success Indicator holds: the record reads `status: Accepted`, every subject has one row, and each non-keep row carries a follow-up tag that this step filed (A10.5).
+  - Evidence: `git show origin/main:core/ADRs/ADR-238-each-never-invoked-specialist-takes-one-disposition.md` (frontmatter `status: Accepted`; § Disposition table, 14 rows).
+- **A10.5 follow-up sweep:** `**Phase A10.5 net-work-ledger (close):** resolved=0 · proposed=7 (sweep=2 · bug=4 · feature=1 · target=0 · platform=7) · net=-7 → EXCESS 7 · below-threshold=8 · declared=0 · folded=2 · cut=12 · reclassified=6 · sources: s7=0 s8=0 dr=8 hub=5 modec=0 audit=13 late=3 · read 2026-11-14T14:59Z`.
+  - **The addendum has 3 rows, and none passes the threshold,** so nothing was added for the operator to confirm. Each is untagged at its source, so each counts as reclassified.
+    - **Stage 8 QA-11** (comment 6869272172 on #8938), Informational. The two retires' live routing references are folded into the dispositions card as its reference cascade.
+    - **The Stage-12 A.5.7 event** (comment 6869504047 on #8952), the hub's instruction to yield ADR-238, which would have left a gap at 238. It is below the threshold, failing the class limb. It is hub conduct, and the shipped corpus carries no instruction to yield an ADR number. The shipped control (`renumber-adr.py` R1) refused the move at dry-run, before any mutation, so no user was blocked or misled. Informational.
+    - **The two open drafts that also claim ADR-238** (comment 6874874654 on #8952). Below the threshold, failing the class limb: each reconciles at its own Stage-12 A.5.7, which is the path ADR-115 designs. Informational.
+  - **Filed:** the consolidated dispositions card #8997 (` · feature`); the bugs #8998, #8999, #9000 and #9001 (` · bug`); and the sweep #9002, holding 2 items. Ledger row 8 is folded into #7658 (comment 6879173535).
+  - Rows 2 to 7 stay below the threshold, and rows 14 to 26 are cut into #8997, as dispositioned at GO. Ledger row 3 stays below the threshold: the ratified readings keep the record's R2 reading.
+- **A11 G-CL8:** `--gate g-cl8 --pr 8994 --plan <this file>` → exit 2, FINDINGS 1, advisory (warn). #8452's Documentation Impact still names the placeholder path `core/ADRs/ADR-NNN-<record-slug>.md`, and the record shipped as ADR-238. The other 11 subjects are sub-tasks, out of scope. Not repaired in this run: the card-body edit is outside its brief. The remedy is one pointer edit.
+- **A12 audit badges:** not run — an operator-local maintenance step, non-blocking.
+- **A13 ADR ratification:** no record this release added reads `Proposed`. ADR-238's frontmatter `status:` and its `## Status` restatement both read `Accepted` on `main`. **Disposition, recorded:** the operator rendered the ratification for this one record at the re-presented D-Ratify gate (comment 6869027593 on #8941), and it was applied before the merge (`3785ef80`).
+- **A14 G-CL10:** `--gate g-cl10 --pr 8994 --plan <this file>` → exit 0, CLEAN 4. Every Outcome limb is owned by #8452.
+- **Action-item gate (7a):** 3 of 3 hub action items are `done`; 0 are open.
+- **B-OPS:** N/A — the Operational Deployment Manifest is empty. B-OPS4.5 is N/A because no hook source changed, and B-OPS5 is N/A because there is no memory-eviction row.
+- **B4 release-stamped deploy:** **not run — owed by the hub.** The Stage-12 spoke handed it back (#8952). Command: `bash core/deploy/deploy.sh --deploy --release never-invoked-specialists-dispositioned --no-targets`, run once from a worktree whose HEAD contains `240d3c2e`.
+- **B5.9 skill packages:** none — no skill source changed.
+- **C4 orphan cleanup:** `cleanup-orphan-state.sh --release-close never-invoked-specialists-dispositioned --dry-run --markdown` → exit 0. It would remove 0 branches and 0 worktrees. 3 local branches and 2 worktrees are excluded as active (HEAD moved within 24 hours), and 1 worktree is protected as the script's own. It would prune 2 stale remote-tracking refs. `--apply` is the operator's gate and was not run.
 
 ## Change Description
 
