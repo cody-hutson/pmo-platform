@@ -1965,7 +1965,8 @@ AV47|block-destructive|rt-asgn-resid|-|?|a|X=@QPAD@@NL@FOO='a b' bash @D@/na.sh
 # here-document's receiver is resolved by the same carrier-head reader, so a carrier word inside a space-bearing
 # value ahead of an interpreter fed a here-document can mark the body as a carrier's (beside its control with no
 # carrier word); and a quote-dense value of one quote kind whose re-scan crosses the shared work budget leaves the
-# carrier answer standing. Recorded at abac5856's verdicts.
-AV48|block-destructive|rt-asgn-head|-|?|a|FOO='a echo b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+# carrier answer standing. Recorded at abac5856's verdicts; #8319's third pass closes both (AV48 and AV50 refused,
+# AV49 refused before and after).
+AV48|block-destructive|rt-asgn-head|-|?|B|FOO='a echo b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 AV49|block-destructive|rt-asgn-head|-|?|B|FOO='a b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-AV50|block-destructive|rt-asgn-head|-|?|a|FOO=@QMID@"a echo b" bash -c "x; bash @D@/na.sh"
+AV50|block-destructive|rt-asgn-head|-|?|B|FOO=@QMID@"a echo b" bash -c "x; bash @D@/na.sh"

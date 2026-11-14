@@ -2929,6 +2929,12 @@ script_heredoc_prescan() {
           fi
           ;;
       esac
+      # A carrier word the head walk read from inside a value that holds a blank is not the
+      # receiver: the walk reached it by stepping over an assignment token whose quote is still
+      # open, and the shell feeds the body to a later word (the review's PR-2, at this site). The
+      # excision is withdrawn and the body is adjudicated. Withdraw-only: a value whose quotes
+      # balance, ahead of a real carrier, keeps its excision.
+      if [ "$_ex" -eq 1 ] && [ "$script_head_open" -eq 1 ]; then _ex=0; fi   # M-WRAP-QVAL-HDHEAD
 
       # >>> ENCL-HDHEAD-BEGIN — core/hooks/tests/block-destructive.test.sh
       # A body is excised only when the receiver read from the line head AND the one
@@ -3003,10 +3009,18 @@ script_heredoc_prescan() {
 # the shell runs. It is closed at the caller, not here: a carrier answer of this walk is checked
 # against the step (script_qval_head_carrier) and withdrawn when the shell's head word is not a
 # carrier (ASGN-QVAL-head). Taking the step in this walk instead would also turn the limit's
-# refusal into an allow, the direction this walk must not move.
+# refusal into an allow, the direction this walk must not move. The here-document receiver test
+# reads the same walk and had the same impersonation; it is closed there by script_head_open, which
+# this walk sets and the receiver test reads to withdraw an excision (ASGN-QVAL-hdhead).
 script_resolve_head() {
   script_head=""
-  local _i
+  # script_head_open: 1 when the walk stepped over an assignment token whose single or double
+  # quotes are odd in number, so the quote the token opens is still open at the token's end and
+  # the head the walk returns is a piece of that value rather than the shell's command word. The
+  # here-document receiver test reads it (M-WRAP-QVAL-HDHEAD). Counting ignores escapes, so a
+  # miscount can only mark a token open, which withdraws an excision: the fail-closed direction.
+  script_head_open=0
+  local _i _hsq _hdq _sq="'" _dq='"'
   local -a _tok
   set -f
   # shellcheck disable=SC2206
@@ -3019,6 +3033,9 @@ script_resolve_head() {
         case "${_tok[$_i]%%=*}" in
           *[!A-Za-z0-9_]*) break ;;
         esac
+        _hsq="${_tok[$_i]//[!$_sq]/}"
+        _hdq="${_tok[$_i]//[!$_dq]/}"
+        if [ $(( ${#_hsq} % 2 )) -eq 1 ] || [ $(( ${#_hdq} % 2 )) -eq 1 ]; then script_head_open=1; fi
         _i=$(( _i + 1 ))
         ;;
       *) break ;;
@@ -3172,8 +3189,9 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
 # command, which may execute them. This helper is asked only when the resolver's answer is a
 # carrier. It repeats that walk, with the same NAME=value test, and takes the assignment-value step
 # after each assignment token, under the step's own gate, prefix scan, readable set, construct
-# guard and restore on decline. A value the step declines, one whose rescan reaches the shared work
-# cap among them, leaves the resolver's answer as it was. It returns 0 only when the word the walk
+# guard and restore on decline. A value the step declines leaves the resolver's answer as it was;
+# one whose rescan reaches the shared work cap latches the bail, and the caller then withdraws the
+# answer as well (M-WRAP-QVAL-HEADCAP). It returns 0 only when the word the walk
 # ends on is a carrier, and the caller withdraws the suppression otherwise. The answer can only be
 # withdrawn, never granted, which is why the limit documented at script_resolve_head stands. Its
 # carrier list repeats the caller's: a word missing here withdraws a suppression, the fail-closed
@@ -3182,8 +3200,8 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
 # The walk's state is declared local, so the step reads and writes these copies and the segment's
 # own walk below starts from its own reset. The shared work budget is not local: the step charges
 # it here as it does everywhere, which is the check's cost. A quote-dense carrier command spends
-# the budget sooner, and the bail the cap latches leaves no later command a carrier, so some of
-# those commands are now refused — the safe direction.
+# the budget sooner, and the bail the cap latches leaves neither this command's carrier answer nor
+# any later one standing, so some of those commands are now refused — the safe direction.
 script_qval_head_carrier() {   # reads script_seg -> 0 when the shell's head word is a carrier
   local -a script_tokens
   local script_hidx=0 script_qval_trust=0 script_qval_from=0 script_qval_gapi=-1
@@ -3843,6 +3861,11 @@ case "$TOOL_NAME" in
         # word the shell runs behind a value holding a blank is not a carrier. It is only ever
         # withdrawn here: a non-carrier answer is never asked (script_qval_head_carrier).
         if [ "$script_carrier" -eq 1 ] && ! script_qval_head_carrier; then script_carrier=0; fi   # M-WRAP-QVAL-HEAD
+        # The check's own rescan can reach the shared work cap. The step then declines and the
+        # resolver's answer stood by default, so a value padded to that density kept the carrier
+        # answer the check exists to test. A cap reached here latches the bail, and a carrier answer
+        # standing beside a latched bail is withdrawn too: still only ever withdrawn, never granted.
+        if [ "$script_carrier" -eq 1 ] && [ "$script_qbail" -eq 1 ]; then script_carrier=0; fi   # M-WRAP-QVAL-HEADCAP
       elif [ "$script_carrier" -eq 1 ]; then
         # Interior to a quoted argument of a command that cannot evaluate it —
         # condition (1). Condition (2) is the construct test: `'…'` (state 1) and
