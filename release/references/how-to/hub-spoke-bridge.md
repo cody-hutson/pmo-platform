@@ -2519,8 +2519,10 @@ This mandate is consistent with — and bounded by — the **operator-agency car
    #    UNLIKE items 6 and 6b, this item EMITS ON SUCCESS as well as on failure: the
    #    verdict is three-valued, so silence could not distinguish PASS from UNVERIFIED.
    #    That emit-convention change is deliberate and scoped to this item.
+   #    Run it from the repository root: the script guard admits the library by its
+   #    repository-relative path, and refuses a path built from a command substitution.
    bash -c '
-     . "$(git rev-parse --show-toplevel)/release/tools/version-grammar.sh" ""
+     . release/tools/version-grammar.sh ""
      cur="$(git show origin/main:.version 2>/dev/null | head -1 | tr -d "[:space:]")"
      printf "%s — .version on main is %s (target v<X.Y>)\n" \
        "$(version_stamp_state "$cur" "v<X.Y>")" "${cur:-<empty>}"'

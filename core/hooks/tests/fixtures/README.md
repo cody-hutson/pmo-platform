@@ -61,9 +61,13 @@ last field and may itself contain `|`. Lines starting with `#` and blank lines a
 **Placeholders.** `@D@` is the fixture directory; the reader allowlists exactly
 `@D@/ok.sh` and `@D@/ok.py` in a hermetic root of its own. `@LONGX@` and `@LONGN@` are
 4,100 repetitions of `x` and `n`, `@SHORTX@` 4,000 of `x`, `@MIDX@` and `@MIDN@` 1,000 of
-`x` and `n`, `@QPAD@` 2,050 pairs of empty double quotes. Anything else — `$NOPE7019`,
+`x` and `n`, `@QPAD@` 2,050 pairs of empty double quotes, `@QMID@` 400 pairs of empty
+double quotes (dense enough that one scan of it stays under the quote tracker's shared
+1,000-step budget and two scans cross it). Anything else — `$NOPE7019`,
 `$VAR`, `$HOME` — is plain text to the guard, because a PreToolUse hook sees argv
-unexpanded. A command that needs a newline cannot be written in this format. The
+unexpanded. `@NL@` is a newline: a row is one line, so a command that spans lines writes
+each line break as `@NL@`, and the `block-destructive` reader substitutes it before the
+row is run (a backslash-newline line continuation is `\@NL@`). The
 `block-egress` rows use two more: `@OK@`, the one `gh api` path the egress reader's
 hermetic root allowlists (`repos/v-test-owner/v-test-repo/issues`), and `@NO@`, a path
 that root does not grant (`repos/evil-org/secret/issues`).
