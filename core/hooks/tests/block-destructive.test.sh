@@ -10634,6 +10634,112 @@ aq_arm "ASGN-QVAL-resid-hash: a # inside a quoted value" AV45 a a pqvalread B
 aq_arm "ASGN-QVAL-resid-pfxsubst: a construct the scanner does not model in a prefix token ahead of the quoted assignment" AV46 a a pqvalsubst B
 aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense part spent the shared work budget" AV47 a a
 
+# ==========================================================================
+# BLOCK-022 — env's split-string value read as env reads it (SPLITV-*)
+# ==========================================================================
+#
+# env's split-string value (`-S<value>`, `--split-string=<value>` and its prefixes) is env's
+# own argv. script_split_read reads it after the shell removes its quotes, word by word, in
+# env's own order, under Rule M: the stop set may only shrink, and where the reading finds a
+# command word of the value's own, or cannot read the value, today's classifier decides. The
+# one exception, toward adjudication: a value it cannot read whose split token carries no slash
+# walks on (PC-SV1, the declared cost). Under J0 a value whose quote spans whitespace is read
+# from its first piece only, and later pieces walk as ordinary tokens. Every arm reads its
+# command from seed 15.4 by row id, in this block's hermetic root.
+#
+# Copies, each shown to differ by its marked lines:
+#   svread  the reading is never asked (the M-WRAP-SPLITREAD line removed): the walk before
+#   svstop  Rule M's cell inverted: a value the reading cannot read, or reads as carrying its
+#           own command, stops the walk on the split token even where today's walk walks on
+/usr/bin/sed '/# M-WRAP-SPLITREAD$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-svread.sh"
+/usr/bin/sed '/# M-WRAP-SPLITMONO$/s/script_sv=old; return 0/script_wsplit_cmd=1; script_sv=cmd; return 0/' "$HOOK" > "${AQ_HOOKS}/block-destructive-svstop.sh"
+/bin/chmod +x "${AQ_HOOKS}/block-destructive-svread.sh" "${AQ_HOOKS}/block-destructive-svstop.sh"
+
+# sv_arm <label> <row id> <hook verdict> [<copy> <its verdict>] — the shipped copy on that
+# row's command, then the copy's limb when one is named. A wanted B must name
+# BLOCK-DESTRUCTIVE-022, and a limb that expects the arm's own verdict fails, since it could
+# not show the arm failing.
+sv_arm() {
+  local name="$1" row="$2" want="$3" pmut="${4:-}" pwant="${5:-}" got gotp="" ok=1 why=""
+  if ! wc_row_cmd "$row"; then
+    /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$name" "$row"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  aq_run block-destructive.sh "$WC_CMDX"
+  got="$AQ_V"
+  if [ "$got" != "$want" ]; then ok=0; why="hook=${got}"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$AQ_ERR"; then
+    ok=0; why="the refusal does not name BLOCK-DESTRUCTIVE-022"
+  fi
+  if [ -n "$pmut" ]; then
+    if [ "$pwant" = "$want" ]; then ok=0; why="${why} the ${pmut} limb expects the arm's own verdict"; fi
+    aq_run "block-destructive-${pmut}.sh" "$WC_CMDX"
+    gotp="$AQ_V"
+    if [ "$gotp" != "$pwant" ]; then ok=0; why="${why} ${pmut}=${gotp}"; fi
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s [row %s] (hook %s%s)\n' "$name" "$row" "$got" "${pmut:+, ${pmut} ${gotp}}"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s [row %s]\n  wanted hook=%s%s; observed %s\n  stderr: %s\n' "$name" "$row" "$want" "${pmut:+ ${pmut}=${pwant}}" "${why# }" "$AQ_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+aq_shape_arm "SPLITV-M1: the reading mutant removes its one call line" block-destructive-svread.sh "1/0"
+aq_shape_arm "SPLITV-M2: the Rule M mutant rewrites its one line" block-destructive-svstop.sh "1/1"
+
+# SPLITV-STRUCT-01: inside script_split_read nothing assigns script_wsplit_cmd=1 (the reading
+# can only let the walk go on, never stop it), and its call line sits directly after the
+# M-WRAP-SPLITCMD line, so it runs before the unchanged body and after its reset.
+sv_struct="$(/usr/bin/awk '
+  /^script_split_read\(\) *\{/ { inf = 1; seen = 1 }
+  inf && /script_wsplit_cmd=1/ { bad++ }
+  inf && /^}/ { inf = 0 }
+  /# M-WRAP-SPLITCMD$/ { cmd = NR }
+  /# M-WRAP-SPLITREAD$/ { rd = NR }
+  END { printf "%d %d %d", seen, bad + 0, (rd == cmd + 1 && cmd > 0) }' "$HOOK")"
+if [ "$sv_struct" = "1 0 1" ]; then
+  /usr/bin/printf 'PASS: SPLITV-STRUCT-01 the reading never stops the walk, and runs right after the reset\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: SPLITV-STRUCT-01 wanted "1 0 1" (function present, no stop assignment, call line after the reset); observed "%s"\n' "$sv_struct"
+  FAIL=$((FAIL + 1))
+fi
+
+# --- the closures: refused; the walk before allows ---
+sv_arm "SPLITV-QUOTED-01: a quote-led value of options only, short spelling" SV01 B svread a
+sv_arm "SPLITV-QUOTED-02: the same value under the long spelling" SV02 B svread a
+sv_arm "SPLITV-QUOTED-02b: the same value under a unique prefix of the long spelling" SV03 B svread a
+sv_arm "SPLITV-QUOTED-03: a quote-led empty value" SV04 B svread a
+sv_arm "SPLITV-QUOTED-04: a quote-led value holding one assignment" SV05 B svread a
+sv_arm "SPLITV-QUOTED-05: a dash-led value whose inner quote leaves an option needing the following token" SV06 B svread a
+sv_arm "SPLITV-QUOTED-06: a quote-led value whose quoted span holds a blank, options and assignments only, reached under J0" SV24 B svread a
+sv_arm "SPLITV-SLASH-01: an option in the value whose attached argument holds a path" SV07 B svread a
+sv_arm "SPLITV-SLASH-02: the same, long spelling" SV08 B svread a
+sv_arm "SPLITV-SLASH-03: an assignment in the value whose value holds a path" SV09 B svread a
+sv_arm "SPLITV-DISC-01: a long option in the value needing the following token" SV10 B svread a
+sv_arm "SPLITV-DISC-02: an assignment in the value whose name is not a shell name" SV11 B svread a
+sv_arm "SPLITV-DISC-03: a value the reading cannot read, whose split token carries no slash" SV12 B svread a
+sv_arm "SPLITV-COST-01 (PC-SV1, declared): an unreadable value carrying its own command, ahead of an unlisted script argument nothing runs" SV17 B svread a
+
+# --- the controls: refused before and after ---
+sv_arm "SPLITV-ctl-01: the unquoted, slash-free twin of QUOTED-01" SV13 B
+sv_arm "SPLITV-ctl-02: the unquoted twin of QUOTED-04" SV14 B
+sv_arm "SPLITV-ctl-03: the slash-free twin of SLASH-01's option class" SV15 B
+sv_arm "SPLITV-MONO-01: Rule M's control, a dash-led value the reading cannot read, which the walk walks on from today" SV26 B svstop a
+sv_arm "SPLITV-MONO-02: a dash-led value whose quoted span carries a command of its own still reaches it" SV16 B
+
+# --- the near-misses and the declared residuals: allowed before and after ---
+sv_arm "SPLITV-near-01: QUOTED-01's class ahead of the listed script" SV18 a pallow B
+sv_arm "SPLITV-near-02: SLASH-01's class ahead of the listed script" SV19 a pallow B
+sv_arm "SPLITV-near-03: QUOTED-01's class ahead of a command that runs no script" SV20 a
+sv_arm "SPLITV-RESID-01 (S2): a quoted value carrying its own command word and an unlisted script" SV21 a
+sv_arm "SPLITV-RESID-02 (S4): a separator inside a quoted options-only value" SV22 a
+sv_arm "SPLITV-RESID-03 (S4): env's own quoting inside the decoded value, hiding an option's need for the following token" SV23 a
+sv_arm "SPLITV-RESID-04 (J0): a later piece whose stray quote hides an option's need for the following token" SV25 a
+
 /bin/rm -rf "$AQ_ROOT"
 
 # --- Summary ---
