@@ -1849,4 +1849,14 @@ QC20|block-destructive|rt-qnear|-|?|a|echo 'x; bash @D@/na.sh'
 QC21|block-destructive|rt-qctl|-|?|B|echo hi # it's@NL@echo 'x; bash @D@/na.sh'
 QC22|block-destructive|rt-qcost|-|?|B|echo "$(printf "%s" "a b")" 'x; bash @D@/na.sh'
 QC23|block-destructive|rt-qcost|-|?|B|gh issue comment 1 --body-file - <<'EOF' # it's@NL@bash @D@/na.sh@NL@EOF
-QC24|block-destructive|rt-qcost|-|?|a|gh issue comment 1 --body-file - <<'EOF' # <<X@NL@hello@NL@EOF
+QC24|block-destructive|rt-qcost|-|?|B|gh issue comment 1 --body-file - <<'EOF' # <<X@NL@bash @D@/na.sh@NL@EOF
+# Addendum to the #8317 rows, authored hub-direct after #8317's GREEN commit (D-PayloadRoute) for the clauses that block
+# left without a row; recorded at that GREEN head. rt-qspan: a queuing line whose quoted string runs past its end (the
+# pre-pass now declines it). rt-qcmt2: a comment holding a parenthesis on a carrier here-document's operator line.
+# rt-qcase: a `case` inside a nested expansion. rt-qdollar-prec: the dollar fix's precision direction, in the pre-pass
+# (QC28) and in the scanner (QC29) — an even-length run before a quote is a plain quote, so nothing is refused.
+QC25|block-destructive|rt-qspan|-|?|B|gh issue comment 1 --body-file - <<'EOF' 'a@NL@b'; bash @D@/na.sh@NL@body@NL@EOF
+QC26|block-destructive|rt-qcmt2|-|?|B|gh issue comment 1 --body-file - <<'EOF' # see (x)@NL@bash @D@/na.sh@NL@EOF
+QC27|block-destructive|rt-qcase|-|?|B|echo "$(case x in x) echo it's;; esac)"@NL@bash @D@/na.sh
+QC28|block-destructive|rt-qdollar-prec|-|?|a|echo $$'\'<<EOF@NL@bash @D@/na.sh@NL@EOF
+QC29|block-destructive|rt-qdollar-prec|-|?|a|echo $$'\' 'y; bash @D@/na.sh'
