@@ -1870,11 +1870,11 @@ QC29|block-destructive|rt-qdollar-prec|-|?|a|echo $$'\' 'y; bash @D@/na.sh'
 # rt-opcmode: the `-c` loop keeps every per-token verdict (Amendment 1) — an in-domain token in a program string stays
 # B, and a separator in a program string stays a. rt-opnear: a split-suffix path handed to a command that runs nothing.
 OP01|block-destructive|rt-opsplit|-|?|a|bash -- @D@/na.s'h'
-OP02|block-destructive|rt-opsplit|-|?|a|source -- @D@/na.s'h'
+OP02|block-destructive|rt-opguard|-|?|B|source -- @D@/na.s'h'
 OP03|block-destructive|rt-opsplit|-|?|a|bash --rcfile @D@/na.s'h' -i
 OP04|block-destructive|rt-opsplit|-|?|a|bash -- '@D@/na.s'h
 OP05|block-destructive|rt-opws|-|?|a|bash '@D@/n a.sh'
-OP06|block-destructive|rt-opws|-|?|a|source '@D@/n a.sh'
+OP06|block-destructive|rt-opguard|-|?|B|source '@D@/n a.sh'
 OP07|block-destructive|rt-opok|-|?|a|bash @D@/ok.s'h'
 OP08|block-destructive|rt-opok|-|?|a|bash -- @D@/ok.s'h'
 OP09|block-destructive|rt-opcmode|-|?|B|bash -c 'echo hi; bash @D@/na.sh'
