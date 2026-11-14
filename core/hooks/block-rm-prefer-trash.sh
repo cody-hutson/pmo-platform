@@ -468,7 +468,8 @@ if [ "$CMDPOS_OK" != 1 ]; then
   exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
 fi
 # One run of the canonicalizer gives the form every rule below reads; Step 5 alone canonicalizes
-# once more, only on a command that carries a line continuation, over its joined reading. The hook keeps no exit
+# again, only on a command that carries a line continuation, over its joined reading and over each of
+# its comment-aware readings. The hook keeps no exit
 # that allows on a match ({{ADR:deletion-guard-judges-every-segment}}): every segment is judged,
 # so a widening of the walk can only add command starts to judge, never turn a refusal into an
 # allow, and the canonicalizer's frozen exit view has no reader here.
@@ -1429,37 +1430,51 @@ done
 # word, so a continuation can split a command word or carry a wrapper option's argument or an
 # assignment's value to the next line, while a backslash that ends a comment continues nothing and the
 # next line runs as its own command. The hook does not decide which of these the shell does. On such a
-# command it takes two readings — the command as judged, each line its own, and the command with every
-# continuation joined (each odd run's last backslash and the newline after it removed, then
-# canonicalized once more) — and refuses a deletion or Trash verb found in either, in any spelling the
-# steps above recognise: BLOCK-TRASH-003 for a Trash call or a Finder delete, else BLOCK-TRASH-001.
+# command it reads the command as judged, each line its own; the command with every continuation
+# joined (each odd run's last backslash and the newline after it removed, then canonicalized once
+# more); and, after each continued line that carries a `#` anywhere, the lines after it with every
+# continuation among them joined, canonicalized on their own — what the shell runs when that line's
+# backslash ends a comment. A comment that ends in a backslash needs a `#` on its own line, so these
+# comment-aware readings cover every such comment, and more. It refuses a deletion or Trash verb found
+# in any reading, in any spelling the steps above recognise: BLOCK-TRASH-003 for a Trash call or a
+# Finder delete, else BLOCK-TRASH-001. The comment-aware readings are bounded: past CONT_HASH_CAP such
+# lines, or when a reading cannot be made, a command that names a deletion or Trash verb once its
+# backslash-newline pairs are removed is refused unread, and one that names none is not read, because
+# every reading is cut from that text and none of it can then hold a verb.
 # This decides every continued command; the walk's per-form readings (M-TRASH-RECCONT, -RECWORD and
 # -RECBOTH) stay in place and refuse first where they fire. Judged after every other step, so a
 # refusal of a real target names that target, and before the admission rows below, so a refused
-# command leaves none. Declared over-block: every command with a continuation and a deletion or Trash
-# verb is refused, whatever the shell would join. Declared residual: the joined reading reads the line
-# after a comment that ends in a backslash as part of that comment, so a verb on it that only joining
-# would reveal (a command word a continuation splits, a wrapper and its option spread over continued
-# lines) is seen by neither reading.
+# command leaves none. Declared over-blocks: every command with a continuation and a deletion or Trash
+# verb in any reading is refused, whatever the shell would join; a `#` that opens no comment (inside a
+# quoted span, or not at a word's start) is read as if it ended one.
 #
 # CONT_JOIN_AWK prints NONE when no line but the last ends in an odd run of backslashes, else JOINED,
 # a newline, and the joined reading. Any other output is failure, and the command is then read as
-# continued with its unjoined text in both readings (fail closed).
+# continued with its unjoined text in both readings (fail closed). With from set to a line number, it
+# reads from that line on and always prints JOINED and that reading: a comment-aware reading.
 # shellcheck disable=SC2016  # awk program — single quotes intentional
 readonly CONT_JOIN_AWK='
   { L[NR] = $0 }
   END {
     out = ""; hit = 0
-    for (i = 1; i <= NR; i++) {
+    for (i = (from > 0 ? from : 1); i <= NR; i++) {
       s = L[i]
       if (i < NR && match(s, /\\+$/) && RLENGTH % 2 == 1) { hit = 1; out = out substr(s, 1, length(s) - 1); continue }
       out = out s
       if (i < NR) out = out "\n"
     }
-    if (!hit) { print "NONE"; exit }
+    if (!hit && !(from > 0)) { print "NONE"; exit }
     print "JOINED"; printf "%s", out
   }
 '
+# CONT_HASH_AWK prints the number of every line but the last that ends in an odd run of backslashes
+# and carries a `#` anywhere, one per line: each line a comment that ends in a backslash can sit on.
+# shellcheck disable=SC2016  # awk program — single quotes intentional
+readonly CONT_HASH_AWK='
+  { L[NR] = $0 }
+  END { for (i = 1; i < NR; i++) if (index(L[i], "#") && match(L[i], /\\+$/) && RLENGTH % 2 == 1) print i }
+'
+readonly CONT_HASH_CAP=8
 readonly BS_NL=$'\\\n'
 
 # cont_verbs(reading) — print trash for a Trash call or a Finder delete, and rm for an rm, rmdir or
@@ -1475,6 +1490,35 @@ cont_verbs() {
   for verb in rm rmdir unlink; do
     if "$GREP" -qE "${ANCHOR_PREFIX_BASH}${verb}"'([[:space:]]+|$)' <<<"$1"; then "$PRINTF" 'rm\n'; fi
   done
+}
+
+# cont_comment_readings — the comment-aware readings of a continued command: for each line
+#   CONT_HASH_AWK names, the lines after it joined (CONT_JOIN_AWK from the next line), canonicalized on
+#   their own and read by cont_verbs. Prints what cont_verbs prints, or cap when the readings cannot all
+#   be made — more than CONT_HASH_CAP lines, or a reading that fails — and the command names a deletion
+#   or Trash verb once its backslash-newline pairs are removed. A command that names none is not read:
+#   every reading is cut from that text, so none can hold a verb.
+cont_comment_readings() {
+  local lines n=0 i rem rem_cmdpos
+  "$GREP" -qE 'rm|unlink|trash|osascript' <<<"${COMMAND//"$BS_NL"/}" || return 0
+  if ! lines="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk "$CONT_HASH_AWK" 2>/dev/null)"; then
+    "$PRINTF" 'cap\n'; return 0
+  fi
+  [ -n "$lines" ] || return 0
+  while IFS= read -r i; do n=$((n + 1)); done <<<"$lines"
+  if [ "$n" -gt "$CONT_HASH_CAP" ]; then "$PRINTF" 'cap\n'; return 0; fi
+  while IFS= read -r i; do
+    case "$i" in ''|*[!0-9]*) "$PRINTF" 'cap\n'; return 0 ;; esac
+    rem="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -v from="$((i + 1))" "$CONT_JOIN_AWK" 2>/dev/null)" || rem=""
+    case "$rem" in
+      JOINED) rem="" ;;
+      JOINED$'\n'*) rem="${rem#JOINED$'\n'}" ;;
+      *) "$PRINTF" 'cap\n'; return 0 ;;
+    esac
+    rem_cmdpos="$("$PRINTF" '%s' "$rem" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$rem")"
+    [ -n "$rem_cmdpos" ] || rem_cmdpos="$rem"
+    cont_verbs "$rem_cmdpos"
+  done <<<"$lines"
 }
 
 CONT_LINE=0
@@ -1494,15 +1538,26 @@ if [ "$CONT_LINE" = 1 ]; then
   [ -n "$COMMAND_JOINED_CMDPOS" ] || COMMAND_JOINED_CMDPOS="$COMMAND_JOINED"
   CONT_FOUND="$(cont_verbs "$COMMAND_CMDPOS")"  # M-TRASH-CONTUNJ
   CONT_FOUND="${CONT_FOUND}$(cont_verbs "$COMMAND_JOINED_CMDPOS")"  # M-TRASH-CONTJOIN
+  CONT_FOUND="${CONT_FOUND}$(cont_comment_readings)"  # M-TRASH-CONTCOMM
   case "$CONT_FOUND" in
     *trash*)
       block "BLOCK-TRASH-003" \
-        "a command that carries a line continuation (an odd run of backslashes before a newline) and a Trash call or a Finder delete, as written or with its continuations joined, is unresolvable under strict policy: the hook does not decide which lines the shell joins" \
+        "a command that carries a line continuation (an odd run of backslashes before a newline) and a Trash call or a Finder delete, as written, with its continuations joined, or read after a continued line that carries a #, is unresolvable under strict policy: the hook does not decide which lines the shell joins" \
         "write the command on one line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
       ;;
     *rm*)
       block "BLOCK-TRASH-001" \
-        "a command that carries a line continuation (an odd run of backslashes before a newline) and an rm, rmdir or unlink invocation, as written or with its continuations joined, is unresolvable under strict policy: the hook does not decide which lines the shell joins" \
+        "a command that carries a line continuation (an odd run of backslashes before a newline) and an rm, rmdir or unlink invocation, as written, with its continuations joined, or read after a continued line that carries a #, is unresolvable under strict policy: the hook does not decide which lines the shell joins" \
+        "write the command on one line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+      ;;
+    *cap*)
+      if "$GREP" -qE 'trash|osascript' <<<"${COMMAND//"$BS_NL"/}"; then
+        block "BLOCK-TRASH-003" \
+          "a command that carries a line continuation (an odd run of backslashes before a newline), names a Trash call or the Finder, and has more than ${CONT_HASH_CAP} continued lines that carry a # (or one the hook could not read after) is unresolvable under strict policy: the hook reads after at most ${CONT_HASH_CAP} of them" \
+          "write the command on one line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+      fi
+      block "BLOCK-TRASH-001" \
+        "a command that carries a line continuation (an odd run of backslashes before a newline), names a deletion verb, and has more than ${CONT_HASH_CAP} continued lines that carry a # (or one the hook could not read after) is unresolvable under strict policy: the hook reads after at most ${CONT_HASH_CAP} of them" \
         "write the command on one line, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
       ;;
   esac
