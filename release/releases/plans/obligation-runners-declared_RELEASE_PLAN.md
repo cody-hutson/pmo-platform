@@ -908,7 +908,7 @@ Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat 
   - Controls: copies with a 0% threshold, or with a hyphen in place of the dash after `census`, are refused. All 14 population rows parse clean.
   - `deploy.sh --check-doc-gates --gate g-cl10 --pr <N> --list` is not run: no release pull request exists yet.
 - **Check 62 pointers:** the check's own `runner-def:` and `runner-src:` pointer greps over the standard → 55 and 8, before and after commit 1. #6227's delta is +0 (N8). Control: Check 82's register row → 2.
-- **Record-line count:** the bounded count over `### Adjudication records` → 2 (1 before commit 2). The unbounded anchored grep → 2, so there is no copied line.
+- **Record-line count:** the bounded count over `### Adjudication records` → 2; the same count over this file at `b873e554`, before commit 2 → 1. The unbounded anchored grep → 2, so there is no copied line.
   - Specificity: a run-directory copy of this file, seeded with a fenced column-0 copy under another heading and a mid-line label. Bounded 2, anchored 3, unanchored 4.
 - **Population A instrument, at D5-2's path:** `when-to-version` in `RELEASE_PROTOCOL.md` → 0 at the pin and 3 lines at the head (control, `release-identity mode` case-insensitive at the pin → 3). Non-conforming at the pin and conforming at the head, as the design predicts; the census itself is Stage 13's.
 - **Population B instrument:** this spoke's reading of row B's hand-census definition, applied to seven fixture pairs kept in the run directory, untracked. It is a reading, not a runner.
@@ -916,7 +916,8 @@ Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat 
   - Green: the same line with `· when-to-version: WV-1` → 1 of 1.
   - Must flag: the heading form with the segment; `version-less` with `WV-1` and no override; and a prose mention of the rule off the mode line → each examined and non-conforming.
   - Must conform: an override with its reason, and a re-declared mode change carrying the matching row.
-  - Near-miss: ms#400 and ms#445, each read twice unchanged and declared before this release merges → not examined. They come from a paginated read of all 333 milestones (50 open and 283 closed, each cross-checked against the API's pagination links). 0 of the 62 label-form lines carry a `when-to-version:` segment yet.
+  - Near-miss: ms#400 and ms#445, both declared before this release merges, with one live read of each supplied as both the merge read and the census read → not examined. That exercises the instrument's unchanged arm; it does not show the two milestones held still over time. The live read is one paginated read of all 333 milestones (50 open and 283 closed, each cross-checked against the API's pagination links).
+  - Of the 62 label-form lines in that read, 0 carry a `when-to-version:` segment yet. Control: the same count over a run-directory copy in which ms#400's line is given the segment → 1.
 - **Check 63 primitive:** `python3 core/deploy/tools/check-count-structure.py --root .` before and after commit 1 → `FAIL=6 KNOWN=71 STALE=0`, `pairs_examined=544`, controls PASS. The row sets are identical (#7414's six FAIL rows), so the "one row" to "two rows" Version History change adds no count/structure finding. This file is outside the primitive's scope: `--path` on it resolves 0 files and the primitive refuses with an input failure rather than reporting a zero.
 - **Reference durability:** the four detector expressions of `core/hooks/lib/fragile-ref-patterns.sh`, read as text and run through python3 `re` over commit 1's three added lines → link, cutover, raw URL and issue reference 0 each. Control: a seeded file with one instance of each → 1 · 1 · 1 · 1. This file's added lines are not examined by `reference-durability.yml`, whose path allowlist exempts `release/releases/plans/`.
 - **Links:** `check-doc-links.py --require-targets` over `stage-03-bundle.md`, the standard, `decision-discipline.md` and this file → 0 broken, exit 0 (control: its `--self-test`, 12 fixtures passed). The markdown link opener occurs 0 times in this file.
@@ -926,7 +927,7 @@ Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat 
   - `--ciac-lint` → `declared=5 parsed=5 clean=0 declared-deferral=5 flagged=0`, rc 0.
   - `lint_release_corpus.py --check plan-identity` → exit 0, and no finding names this file.
   - The literal release-version placeholder → exactly 1.
-  - The handle, a home path, a scratch path and a GitHub host string → 0 each (control: a seeded run-directory file → 1 each).
+  - The handle, a home path, a scratch path and a GitHub host string → 0 each. Controls, each from the run directory: the handle → 1 in the saved milestone read; the home path and the scratch path → 1 each in a seeded file; the host string → 1 in the seeded file of the reference-durability control.
 - **Plan verifier (C4):** `bash release/tools/verify-release-plan.sh --format=json --stage4-comment <the Stage-4 part-1 body>` → 11 PASS · 2 FAIL · 17 SKIP · 5 UNRUNNABLE · 0 ERROR over 35 records, exit 3. The roll-up is the same at `8a414501`, at `cff3c35e`, and on this file once this subsection was written.
   - #6225 AC-4's scope limb now reads 3 over 21 changed paths, where it read 20: `stage-03-bundle.md` is the new path.
   - The two FAILs are beat 4's two quality-share fixture ADDs.
