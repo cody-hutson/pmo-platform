@@ -868,9 +868,15 @@ suggest_trash_command() {
 #                   targets mode's skip rules (flags, a "--", redirections and bare shell
 #                   structure are not operands), or its record continues — the record's last
 #                   word ends in an odd run of backslashes, so operands go on to the next line,
-#                   a record of its own. Read once per record, so a cut that lands inside the
-#                   verb's own words cannot hide it, and every verb segment of a continued
-#                   record is reported. A lone trailing backslash is not an operand.
+#                   a record of its own. Where the cut at a redirection's ampersand or pipe makes
+#                   the continuation backslash a new command word, the canonicalizer drops it
+#                   (a single leading backslash, from a command word), and what it leaves at the
+#                   record's end continues the record too: a redirection operator left without
+#                   its word, or a both-streams redirection then only the separator and blank the
+#                   canonicalizer inserted. A backslash after a separator the line itself carries
+#                   begins the next line's command and continues nothing. Read once per record,
+#                   whichever redirection precedes the backslash, and every verb segment of a
+#                   continued record is reported. A lone trailing backslash is not an operand.
 #   mode "dirs":    print `<seg><TAB><kind><TAB><operand>` for each directory change,
 #                   kind DIR (one literal operand), HOME (bare cd) or UNKNOWN (a form
 #                   whose destination cannot be read from the line), for the segment on its
@@ -951,6 +957,12 @@ readonly SEGMENT_WALK_AWK='
     # on to the next line, a record of its own. Read once per record, wherever the cut fell.
     lastword();
     rc = (lastk > 0 && match(lastt, /\\+$/) && RLENGTH % 2 == 1);  # M-TRASH-RECCONT
+    # A cut at the ampersand or pipe of a redirection can make the continuation backslash a command
+    # word, which the canonicalizer drops, so read what it leaves at the end of the record the same
+    # way: a redirection operator left without its word (the word is on the next line, or the line
+    # is a syntax error), or a both-streams redirection then only the inserted separator and blank.
+    if (lastk > 0 && lastt ~ /^[0-9]*(>>|>|<|<>)$/) rc = 1;  # M-TRASH-RECWORD
+    if (n >= 3 && segments[n] == " " && seps[n - 1] == ";" && segments[n - 1] ~ /^>/ && seps[n - 2] ~ /(^|[^&])&$/) rc = 1;  # M-TRASH-RECBOTH
     for (s = 1; s <= n; s++) {
       seg++;
       widen(s);
@@ -1262,8 +1274,10 @@ MEMORY_ADMISSIONS=0
 # Step 1 — the git subcommand exemption, per segment. A segment whose command word is git
 # (bare or by absolute path) is never judged as a deletion: no step below reads a segment whose
 # command word is not its own verb. The exemption therefore covers that segment only, and every
-# other segment on the line is judged as if it were absent. There is deliberately no exit here:
-# an exit that allows on a match reads the whole line ({{ADR:deletion-guard-judges-every-segment}}).
+# other segment on the line is judged as if it were absent, except that the Finder step (Step 4)
+# reads every quoted Finder path on the line, the git segment's own text included. There is
+# deliberately no exit here: an exit that allows on a match reads the whole line
+# ({{ADR:deletion-guard-judges-every-segment}}).
 :  # M-TRASH-SEGWALK
 
 # Step 2 — every rm-family verb, each judged on its own segments. A segment that names no operand
