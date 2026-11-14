@@ -216,7 +216,7 @@ The calibrated values of the release cost unit — weekly points of one account'
 
 **Where you can set these: 2 rungs, not 5.** The calibration is per plan and per account, so the values resolve from the global template (a governed Track A change) or from your individual `~/.config/pmo-platform/platform-config.toml` (Track B) — the place to put your own calibration if your plan differs. The portfolio, program and project rungs do not apply.
 
-**Unresolvable means UNRESOLVED.** A consumer that cannot resolve a value here yields an unresolved figure that names the field — never zero and never a built-in constant, because a zero `K` divides by zero and a zero weight erases a token type from every figure.
+**Unresolvable means UNRESOLVED.** A consumer that cannot resolve one of the seven numeric values here (both ends' cache-read weight and `K`, and the three price-relative weights) yields an unresolved figure that names the field — never zero and never a built-in constant, because a zero `K` divides by zero and a zero weight erases a token type from every figure. The calibration model and the per-model axis are optional by design: absent reads as "none named" / "none probed", which is their documented meaning, not a substituted value.
 
 ## 5. Consumer examples (how the platform reads these)
 
