@@ -23,7 +23,7 @@ Accepted — operator-ratified at the never-invoked-specialists-dispositioned St
 
 Authored at Stage 6 Engineering for the `never-invoked-specialists-dispositioned` release. At the Stage-9 gate the operator redirected D-Ratify once: R5 became a per-row test, two rows took the operator's own decision and both persona seams were ratified. At the re-presented D-Ratify gate on 2026-11-14 the operator ratified the record with row amendments: the per-row test's two readings (the role held elsewhere, and the direction read per row by exposure), and the router, scrum-master, WMS and first-line support rows. Once Accepted the record is immutable; a change takes a record that supersedes this one.
 
-**Numbering provenance.** This record was authored at the next-free number computed from the mainline anchor at authoring. An ADR number is allocated at authorship but claimed at merge; should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations of this record elsewhere use its slug token, `{{ADR:each-never-invoked-specialist-takes-one-disposition}}`.
+**Numbering provenance.** This record was authored at the next-free number computed from the mainline anchor at authoring. An ADR number is allocated at authorship but claimed at merge; should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations of this record elsewhere use its slug token, `ADR-238`.
 
 ## Context
 

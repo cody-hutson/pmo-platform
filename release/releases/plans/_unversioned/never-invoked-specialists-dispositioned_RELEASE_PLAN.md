@@ -786,7 +786,7 @@ Only printed aggregates enter the record. A description that changed inside a wi
 
 ### 4. Record outline. Slug for the scope lock: `each-never-invoked-specialist-takes-one-disposition`
 
-**Path:** `core/ADRs/ADR-NNN-each-never-invoked-specialist-takes-one-disposition.md`. NNN comes from `renumber-adr.py --next-free` at authoring (238 today, branch-claimed by #8821), and the number binds at Stage 12. Cite it elsewhere as `{{ADR:each-never-invoked-specialist-takes-one-disposition}}`, in prose only.
+**Path:** `core/ADRs/ADR-NNN-each-never-invoked-specialist-takes-one-disposition.md`. NNN comes from `renumber-adr.py --next-free` at authoring (238 today, branch-claimed by #8821), and the number binds at Stage 12. Cite it elsewhere as `ADR-238`, in prose only.
 
 **Frontmatter and section order** follow the Change 1 scaffold. `## Status` opens with the token line, and D-Ratify edits both statements (lint R7). The sections:
 - `## Context`: the three signals, ending "Its current state, future state and gap map follow `## Related ADRs`."
