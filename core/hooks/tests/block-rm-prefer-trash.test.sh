@@ -973,8 +973,11 @@ test_case "CWD-26 (control): a relative cd that stays inside the workspace allow
 #            wholly-quoted word whose body begins with ~, and a dot-leading glob component are not
 #            literal (Q4): the shell acts on a different path from the one written. A quoted path
 #            with a space reaches the resolver as such words, because the walk splits on whitespace
-#            first. SENS is the plain spelling of NONLIT-01's destination; P1 and P2 are declared
-#            over-blocks; the Finder delete's path goes through the same resolver (P2).
+#            first. SENS is the plain spelling of NONLIT-01's destination; P1 to P5 are declared
+#            over-blocks; the Finder delete's path goes through the same resolver (P2). Inside a
+#            whole-word quote the shell keeps a backslash or a quote of the other kind, and the word
+#            is refused all the same (P3 to P5); a brace there is removed by the canonicalizer before
+#            the rule reads the word (CTL4).
 TL_OTHER="$RMT_FIXTURE_OTHER_HOME"
 TL_FH="$RMT_FIXTURE_HOME"
 test_case "TILDE-01: a home-relative Trash target after an earlier segment assigns HOME is refused" \
@@ -1041,6 +1044,15 @@ test_case "NONLIT-P1: a quoted inside path with a space is refused (a declared o
   "$(bash_payload "trash \"${TL_FH}/Claude/nl p1\"" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
 test_case "NONLIT-P2: a Finder delete of an inside path carrying a brace is refused (a declared over-block)" \
   "$(bash_payload 'osascript -e '"'"'tell application "Finder" to delete POSIX file "'"${TL_FH}"'/Claude/{nl,p2}"'"'"'' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+NL_CTL4="trash '${TL_FH}/Claude/nl{c4}'"
+test_case "NONLIT-P3: a wholly single-quoted inside target carrying a backslash is refused (a declared over-block)" \
+  "$(bash_payload "trash '${TL_FH}/Claude/nl\\p3'" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-P4: a wholly single-quoted inside target carrying a double quote is refused (a declared over-block)" \
+  "$(bash_payload "trash '${TL_FH}/Claude/nl\"p4'" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-P5: a wholly double-quoted inside target carrying an apostrophe is refused (a declared over-block)" \
+  "$(bash_payload "trash \"${TL_FH}/Claude/nl'p5\"" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-CTL4 (control): a brace inside a wholly-quoted inside target never reaches the rule and is allowed" \
+  "$(bash_payload "$NL_CTL4" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 test_case "NONLIT-RM1: rm of a brace-word inside target is refused under -001 (moved from -002)" \
   "$(bash_payload "$NL_RM1" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*not a literal word" "$RMT_HOME_ENV"
 
@@ -2022,6 +2034,10 @@ test_case "HDATA-RX-ASSIGN: a substitution consumed by an assignment stays refus
   "$(bash_payload $'X="$(cat <<\'EOF\'\nsay "hi\nrm -rf /tmp/hd-as\nEOF\n)"')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-PYC: a python3 -c program reading the body stays refused" \
   "$(bash_payload "$HD_RX_PYC")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PYM: a python3 -m module reading the body stays refused" \
+  "$(bash_payload $'python3 -m json.tool <<\'EOF\'\nrm -rf /tmp/hd-pym\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PYSCRIPT: a python3 script operand reading the body stays refused" \
+  "$(bash_payload $'python3 /tmp/hd-script.py <<\'EOF\'\nrm -rf /tmp/hd-pys\nEOF')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-PATHQ: a receiver named by a non-canonical path stays refused" \
   "$(bash_payload "$HD_RX_PATHQ")" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-WRAP: a receiver behind a wrapper stays refused (a declared over-block)" \

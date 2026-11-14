@@ -515,7 +515,7 @@ block_word_unknown() {
   case "$3" in
     home)  why="home-relative target '$2' is on a line that names HOME, which can change the directory the shell expands it from before the command runs" ;;
     tilde) why="target '$2' begins with a tilde prefix other than ~/ or with a zsh equals-word, which the shell expands to a path the hook does not read" ;;
-    *)     why="target '$2' is not a literal word (it carries a brace, a backslash or a quote inside the word, as each piece of a quoted path with a space does, or a quoted leading tilde, or a dot-leading glob component), so the shell acts on a different path from the one written" ;;
+    *)     why="target '$2' is not a literal word: outside a whole-word quote it carries a brace, a backslash or a quote (as each piece of a quoted path with a space does) or a dot-leading glob component, which the shell expands or removes, so it acts on a different path from the one written; a whole-word quote whose body begins with a tilde or carries a backslash, a quote of the other kind or a dot-leading glob component is refused as well, although the shell keeps it as written" ;;
   esac
   block "$1" "path is unresolvable under strict policy: $why" \
     "name the target by a plain absolute path (a path with spaces through the Finder delete, whose POSIX file string the hook reads whole), or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
@@ -619,13 +619,17 @@ resolve_and_classify() {
   esac
 
   # Step 2b: the target-literal rule. After Step 1, a word that still carries a brace, a backslash
-  # or a quote is not literal: the shell removes quotes, expands braces and unescapes before the
-  # command runs, so the path written is not the path acted on (a quoted path with a space arrives
-  # here as such words, because the walk splits on whitespace first). So is a wholly-quoted word
-  # whose body begins with ~ (the shell keeps that tilde; Step 3 would expand it), and a component
-  # that begins with . and carries a glob character (a shell before bash 5.2 can match .. with
-  # it). An unquoted glob otherwise stays literal. Judged after Step 2, so a dynamic token keeps
-  # its own reason.
+  # or a quote is not literal: outside a whole-word quote the shell removes quotes, expands braces
+  # and unescapes before the command runs, so the path written is not the path acted on (a quoted
+  # path with a space arrives here as such words, because the walk splits on whitespace first). So
+  # is a component that begins with . and carries a glob character (a shell before bash 5.2 can
+  # match .. with it). Inside a whole-word quote the shell keeps a backslash, a quote of the other
+  # kind and such a component as written, and the word is refused all the same (a declared
+  # over-block); a
+  # wholly-quoted word whose body begins with ~ is refused because Step 3 would expand a tilde the
+  # shell keeps. A brace inside a whole-word quote never reaches this test: the canonicalizer
+  # removes it from the quoted span first, so the word is judged without it. An unquoted glob
+  # otherwise stays literal. Judged after Step 2, so a dynamic token keeps its own reason.
   case "$token" in
     *[{}\\\'\"]*) "$PRINTF" 'word'; return 4;;
   esac
