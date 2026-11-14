@@ -857,7 +857,9 @@ suggest_trash_command() {
 #   an operator left without its word (`2>&1`, `>&2`, `<&3`, `2>&-`, `>|file`: the cut fell on
 #   the operator itself) takes the next fragment's first word as its word, and a both-streams
 #   redirection (`&>file`, `&>>file`: a redirection in bash and zsh, a separator in dash) is
-#   followed by the words the canonicalizer then read as a new command. Each fragment is still a
+#   followed by the words the canonicalizer then read as a new command — but not past a separator
+#   the line itself carries before a compound keyword or a command-prefix word, which the
+#   canonicalizer marks with a separator after the word rather than before it. Each fragment is still a
 #   segment of its own; the targets reader and the dirs reader also read a verb's segment on
 #   through those fragments (widen), so the readings only add operands and directories.
 #   mode "targets": print `<seg><TAB><token>` for each operand of verb v, the widened reading.
@@ -882,11 +884,18 @@ readonly SEGMENT_WALK_AWK='
     if (t ~ /^[0-9]*(>>|>|<)/) { if (t ~ /(>>|>|<)$/) skipnext = 1; return 1; }
     return 0;
   }
+  # keyword(str) — the first word of str is one the canonicalizer marks with a separator after it,
+  # not before: a compound-command keyword or a command-prefix word. A ";" before such a word is
+  # one the line itself carries, so no reading crosses it.
+  function keyword(str,   w) {
+    w = str; sub(/^[[:space:]]+/, "", w); sub(/[[:space:]].*$/, "", w); sub(/^\\/, "", w); sub(/.*\//, "", w);
+    return (w ~ /^(if|while|until|in|then|do|else|elif|!|[{]|sudo|env|nice|nohup|command|builtin|exec|xargs|stdbuf|timeout|time)$/);
+  }
   # widen(s) — the words of segment s (jt[1..jbase]), then the words a redirection carries past a
   # cut (jt[jbase+1..jm]). An operator left without its word takes the next fragment with it; a
   # both-streams redirection takes its own fragment and, through the one ";" the canonicalizer
-  # puts before the word it then reads as a command, the fragment after it. jend[i] marks the last
-  # word of the record.
+  # puts before the word it then reads as a command, the fragment after it, unless that word is a
+  # keyword (above). jend[i] marks the last word of the record.
   function widen(s,   k, i, mm, tk, amp) {
     jm = 0; jbase = 0; amp = 0; k = s;
     for (;;) {
@@ -896,7 +905,7 @@ readonly SEGMENT_WALK_AWK='
       if (k >= n) return;
       if (jm > 0 && jt[jm] ~ /^[0-9]*(>>|>|<|<>)$/) { amp = 0; k++; continue; }  # M-TRASH-REDIRAMP
       if (seps[k] ~ /(^|[^&])&$/ && segments[k + 1] ~ /^>/) { amp = 1; k++; continue; }  # M-TRASH-BOTHREDIR
-      if (amp && seps[k] == ";" && segments[k + 1] ~ /[^[:space:]]/) { amp = 0; k++; continue; }
+      if (amp && seps[k] == ";" && segments[k + 1] ~ /[^[:space:]]/ && !keyword(segments[k + 1])) { amp = 0; k++; continue; }
       return;
     }
   }
