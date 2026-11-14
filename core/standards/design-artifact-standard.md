@@ -519,7 +519,7 @@ Before a change is sized, the planning stage reads the current-state pages for t
 - **The record.** One line in the stage's output, in exactly one of three forms:
   - `Current-state pages read: <page-id> @ <sha>[ STALE], …` — at least one page covers the area.
   - `Current-state pages read: none — no page covers the area (<N> pages scanned, <M> affected files probed)` — the catalog holds pages, and none depicts an affected file.
-  - `Current-state pages read: none — the catalog holds no pages yet` — `core/process-catalog/` holds no page beside its README. This is the expected answer until pages are published. It is a different claim from the second form: an empty catalog could not have covered the area, so its "none" is not evidence that the area is undocumented.
+  - `Current-state pages read: none — the catalog holds no pages yet` — `core/process-catalog/` holds no page beside its README. This is the answer only while the catalog holds no page. It is a different claim from the second form: an empty catalog could not have covered the area, so its "none" is not evidence that the area is undocumented.
 - **What the read changes.** It informs sizing and blast radius. It never authorizes an edit to a page: a stale or contradicted page is a finding for the stage's output, and its refresh belongs to the page's own change.
 
 ## Related References
