@@ -10375,18 +10375,23 @@ fi
 # the rest of the assignment word with the hook's own quote scanner and go on at the shell's next
 # word — where the segment is vouched to start outside any quote, the tokens before the
 # assignment scan back to outside quotes, the word ends at a token boundary, and every character
-# of the value is readable. Any other value keeps today's reading. Every arm here reads its
-# command from the walk-payload corpus by row id (seed 15.3, rows AV01 to AV39; the seed-6 rows
-# of the quoted value; O18, O19, O28; EN06), so no payload is spelled in this suite. They run in a
-# hermetic root of their own whose allowlist names exactly the corpus's two listed scripts.
+# of the value is readable. Any other value keeps today's reading. A carrier answer of the head
+# resolver the quoted-fragment suppression reads is checked against the same step, which may only
+# withdraw it: when the shell's head word behind such a value is not a carrier, the quoted segment
+# the value's carrier-word piece seemed to open is adjudicated. Every arm here reads its command
+# from the walk-payload corpus by row id (seed 15.3, rows AV01 to AV39, and its addendum, AV40 to
+# AV47; the seed-6 rows of the quoted value; O18, O19, O28; EN06), so no payload is spelled in this
+# suite. They run in a hermetic root of their own whose allowlist names exactly the corpus's two
+# listed scripts.
 #
 # EACH ARM READS TWO COPIES: the shipped hook and the reverse mutant pqval, which is the walk
 # before this change (its two call lines removed). A fix arm differs across them, and that is its
 # red-before evidence. A control, a pin or a declared residual reads the same on both, so where
 # one condition of the step is what holds it, a third limb runs the copy with that condition
-# removed and must read a verdict the arm forbids. The precision arms — refused or recorded
-# before, allowed after — are each red against the hook before the change; the corpus does not
-# take real-interpreter ground truth for those rows.
+# removed and must read a verdict the arm forbids. The carrier-head check sits outside the walk, so
+# pqval keeps it; its own copy, pqvalhead, is its red-before evidence. The precision arms — refused
+# or recorded before, allowed after — are each red against the hook before the change; the corpus
+# does not take real-interpreter ground truth for those rows.
 AQ_ROOT="$(/usr/bin/mktemp -d)"
 AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 /bin/mkdir -p "${AQ_HOOKS}/lib"
@@ -10400,9 +10405,12 @@ AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 #   pqvalgate    the gate vouches for every segment
 #   pqvalpfx     the prefix scan never runs
 #   pqvalgap     the escaped-blank rule does not read the blank run after the backslash
+#   pqvalgap2    a later piece of the value that ends on an escaped blank followed by more blanks
+#                declines instead of ending the word after the escaped blank
 #   pqvalsubst   the guard on a construct the scanner does not model never fires
 #   pqvalread    the readable-set test is not asked (its two lines removed)
 #   pqvalguards  pqvalsubst and pqvalread together: nothing in the value's text declines
+#   pqvalhead    the carrier-head check never withdraws a carrier answer (its one line removed)
 #   pallow       the allowlist never matches (the wrapper block's allowlist-blind mutant)
 /usr/bin/sed '/# M-WRAP-QVAL$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqval.sh"
 /usr/bin/sed 's/^\( *\)if .*# M-WRAP-QVAL-GATE$/\1script_qval_trust=1   # M-WRAP-QVAL-GATE/' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalgate.sh"
@@ -10411,8 +10419,10 @@ AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 /usr/bin/sed '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalsubst.sh"
 /usr/bin/sed '/# M-WRAP-QVAL-READ$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalread.sh"
 /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalguards.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-GAP2$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalgap2.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-HEAD$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalhead.sh"
 /usr/bin/sed 's@^  \[ -f "\$SCRIPT_ALLOWLIST" \] || return 1$@  return 1@' "$HOOK" > "${AQ_HOOKS}/block-destructive-pallow.sh"
-for aq_c in pqval pqvalgate pqvalpfx pqvalgap pqvalsubst pqvalread pqvalguards pallow; do
+for aq_c in pqval pqvalgate pqvalpfx pqvalgap pqvalgap2 pqvalsubst pqvalread pqvalguards pqvalhead pallow; do
   /bin/chmod +x "${AQ_HOOKS}/block-destructive-${aq_c}.sh"
 done
 /bin/chmod +x "${AQ_HOOKS}/block-destructive.sh"
@@ -10534,6 +10544,8 @@ aq_shape_arm "ASGN-QVAL-M4: the construct-guard mutant rewrites its pattern line
 aq_shape_arm "ASGN-QVAL-M5: the readable-set mutant removes its two lines" block-destructive-pqvalread.sh "2/0"
 aq_shape_arm "ASGN-QVAL-M6: the both-guards mutant is M4 and M5 together" block-destructive-pqvalguards.sh "3/1"
 aq_shape_arm "ASGN-QVAL-M7: the allowlist-blind mutant rewrites one line" block-destructive-pallow.sh "1/1"
+aq_shape_arm "ASGN-QVAL-M8: the carrier-head mutant removes the withdrawal line" block-destructive-pqvalhead.sh "1/0"
+aq_shape_arm "ASGN-QVAL-M9: the second escaped-blank mutant removes its clause line" block-destructive-pqvalgap2.sh "1/0"
 
 # --- the closures (fix-evidence): refused, or recorded at the arm's own phase; the walk before allows ---
 aq_arm "ASGN-QVAL-sq: a single-quoted value holding a blank, before an interpreter and an unlisted script" WR126 B a
@@ -10541,6 +10553,7 @@ aq_arm "ASGN-QVAL-sq-seed1: as sq, the seed-1 row of the same shape" O18 B a
 aq_arm "ASGN-QVAL-dq: as sq, in double quotes" WR127 B a
 aq_arm "ASGN-QVAL-sh: as sq, before a different interpreter" AV01 B a
 aq_arm "ASGN-QVAL-esc: one escaped blank outside quotes" WR131 B a
+aq_arm "ASGN-QVAL-esc-two: a later piece ending on an escaped blank followed by a second blank ends the word after the escaped blank" AV42 B a pqvalgap2 a
 aq_arm "ASGN-QVAL-wide: a value of four pieces" AV07 B a
 aq_arm "ASGN-QVAL-two: two quoted values, each holding a blank" AV08 B a
 aq_arm "ASGN-QVAL-mixed: a quoted value, then a plain one" WR129 B a
@@ -10594,6 +10607,8 @@ aq_arm "ASGN-QVAL-keep-subst-unquoted (pin): an unquoted substitution value, whi
 aq_arm "ASGN-QVAL-cap: the step's scan crosses the shared work cap, which latches the bail, so a later carrier fragment is no longer suppressed" AV32 B a
 aq_arm "ASGN-QVAL-limit-carrier (declared limit): a carrier behind a value holding a blank keeps its quoted-fragment false positive" AV30 B B
 aq_arm "ASGN-QVAL-limit-ctl: the same carrier behind a value with no blank is suppressed" AV31 a a
+aq_arm "ASGN-QVAL-head (PR-2): a carrier word inside a value holding a blank is not the command the shell runs, so the quoted segment it seemed to open is adjudicated" AV40 B B pqvalhead a
+aq_arm "ASGN-QVAL-head-ctl: the same command with no carrier word in the value" AV41 B B
 aq_arm "ASGN-QVAL-over-wrap (declared over-block): an assignment behind a wrapper that takes none" AV25 B a
 
 # --- the declared residuals: allowed before and after ---
@@ -10604,6 +10619,11 @@ aq_arm "ASGN-QVAL-resid-redir: a redirection operator glued to the value's end" 
 aq_arm "ASGN-QVAL-resid-sep: a separator inside the value" AV37 a a
 aq_arm "ASGN-QVAL-resid-ansi: a value in ANSI-C quoting" AV38 a a pqvalread B
 aq_arm "ASGN-QVAL-resid-param: a value holding a parameter expansion" AV39 a a pqvalread B
+aq_arm "ASGN-QVAL-resid-twoq: a value whose single and double quotes both delimit" AV43 a a pqvalread B
+aq_arm "ASGN-QVAL-resid-envpiece (FM-3): an env operand whose = sits in a later piece" AV44 a a
+aq_arm "ASGN-QVAL-resid-hash: a # inside a quoted value" AV45 a a pqvalread B
+aq_arm "ASGN-QVAL-resid-pfxsubst: a construct the scanner does not model in a prefix token ahead of the quoted assignment" AV46 a a pqvalsubst B
+aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense part spent the shared work budget" AV47 a a
 
 /bin/rm -rf "$AQ_ROOT"
 
