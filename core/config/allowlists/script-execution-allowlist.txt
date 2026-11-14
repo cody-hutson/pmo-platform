@@ -1216,6 +1216,10 @@ core/deploy/tools/check-doc-frontmatter.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-doc-links.py
 ./core/deploy/tools/check-doc-links.py
 core/deploy/tools/check-doc-links.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-enumeration-drift.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-enumeration-drift.py
+./core/deploy/tools/check-enumeration-drift.py
+core/deploy/tools/check-enumeration-drift.py
 [PMO_PLATFORM_ROOT]/core/deploy/tools/check-label-parity.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-label-parity.py
 ./core/deploy/tools/check-label-parity.py

@@ -1,0 +1,206 @@
+# enumeration-drift-fixtures.txt — labelled expected-verdict set for the enumeration-drift check
+#
+# PROVENANCE. These cases are the labelled fixture set of the enumeration <-> population
+# drift check (core/deploy/tools/check-enumeration-drift.py, deploy.sh Check 83), written
+# with the check by its introducing release. Case 1 is the seeded mismatch the check must
+# flag, and case 2 its near-miss — the same document as a true `subset-of` — which it must
+# not flag; together they are the control arm the check's acceptance criteria require.
+# The remaining cases pin each binding, key and relation rule the tool's module docstring
+# states, one rule per case, so a regression names the rule it broke.
+#
+# FORMAT (case-block, because a marked enumeration is irreducibly multi-line):
+#   --- <EXPECT> <RELATION> <label>
+#   POPULATION: <repo-relative path> ...      (required; may be empty)
+#   DOCUMENT: <repo-relative path>            (optional; default fixture.md; sets the
+#                                              directory a relative link resolves from)
+#   <document lines>
+#   --- END
+# where
+#   <EXPECT> = DRIFT       at least 1 DRIFT row and 0 UNRESOLVED rows
+#            | CLEAN       at least 1 marker examined and 0 rows
+#            | UNRESOLVED  at least 1 UNRESOLVED row and 0 DRIFT rows
+#            | SCOPE-OUT   0 markers examined
+#   <RELATION> = count | list | subset-of — the relation the case exercises (a label; a
+#                malformed case cannot carry a parseable relation in its marker)
+# POPULATION stands in for the tracked-file list, so a case runs with no git and no
+# filesystem; the glob is matched against it exactly as against `git ls-files`.
+#
+# WHY EACH ARM IS LOAD-BEARING — read before tuning the tool against it.
+# A CLEAN case that examines zero markers is a FAILURE, not a pass: "not flagged" and
+# "not examined" are different verdicts, which is why SCOPE-OUT exists as its own
+# expectation (the Check 63 fixture set's rule, reused). A DRIFT case that comes back
+# UNRESOLVED is a FAILURE too: an unreadable marker is a finding, but it is not the drift
+# the case seeds, and a tool that cannot bind the seeded list would pass a looser test.
+#   - Cases 1 and 2 are the same items: only the relation differs. A tool that flags both
+#     cannot tell `subset-of` from `list`; a tool that flags neither cannot see drift.
+#   - Cases 3 to 6 pin each relation in both directions: an exact list, an extra member
+#     under `subset-of`, an understated count, and a number word that reconciles.
+#   - Case 7 pins segment-equal matching: a `*` that crossed `/` would make the nested
+#     file a member and case 7 would drift.
+#   - Cases 8 and 9 bound the preamble allowance at exactly one prose line.
+#   - Cases 10 to 13 each seed one UNRESOLVED reason, so a marker the tool cannot read is
+#     reported, never skipped as clean.
+#   - Case 14 pins the fence rule: a marker quoted inside a fence is not a marker.
+#   - Cases 15 and 16 pin wildcard-segment keys: every member is named SKILL.md, so a
+#     basename key could neither key the list nor stay silent on the count.
+#   - Cases 17 and 18 pin link resolution from the document's own directory, a leading
+#     `/` from the root, and an off-glob link reading as extra rather than vanishing.
+#   - Case 19 pins the code-span key of a glob with two wildcard segments.
+# Cases: 5 DRIFT · 8 CLEAN · 5 UNRESOLVED · 1 SCOPE-OUT — 19 in all.
+
+--- DRIFT list seeded-mismatch
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+--- END
+
+--- CLEAN subset-of near-miss-true-subset
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh subset-of -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+--- END
+
+--- CLEAN list exact
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- DRIFT subset-of extra-member
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh subset-of -->
+Some of the fixture hooks:
+- `alpha.sh`
+- `delta.sh`
+--- END
+
+--- DRIFT count understated
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+Read by 2 hooks.
+--- END
+
+--- CLEAN count number-word
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+Read by three hooks.
+--- END
+
+--- CLEAN list glob-is-one-level
+POPULATION: pop/alpha.sh pop/beta.sh pop/sub/epsilon.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+--- END
+
+--- CLEAN list preamble-between
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks, in the order they run:
+
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED list unbound
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks run in a fixed order.
+That order is the order below.
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED list unkeyed-item
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- the beta hook
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED count two-cardinals
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+2 of 3 hooks.
+--- END
+
+--- UNRESOLVED list empty-population
+POPULATION:
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED list malformed
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh equals -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- SCOPE-OUT list marker-in-fence
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+```text
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+```
+--- END
+
+--- CLEAN list directory-keyed
+POPULATION: sk/alpha/SKILL.md sk/beta/SKILL.md
+<!-- enumerates: sk/*/SKILL.md list -->
+The fixture skills:
+- `alpha`
+- `beta`
+--- END
+
+--- CLEAN count colliding-basenames
+POPULATION: sk/alpha/SKILL.md sk/beta/SKILL.md
+<!-- enumerates: sk/*/SKILL.md count -->
+Two skills.
+--- END
+
+--- CLEAN list link-resolves-from-document
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+DOCUMENT: docs/f.md
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [`alpha.sh`](../pop/alpha.sh)
+- [`beta.sh`](/pop/beta.sh)
+- [`gamma.sh`](../pop/gamma.sh)
+--- END
+
+--- DRIFT list off-glob-link
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+DOCUMENT: docs/f.md
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [`alpha.sh`](../pop/alpha.sh)
+- [`beta.sh`](/pop/beta.sh)
+- [`gamma.sh`](../pop/gamma.sh)
+- [`other.sh`](../lib/other.sh)
+--- END
+
+--- DRIFT list multi-wildcard-code-span
+POPULATION: mods/a/x.md mods/b/y.md
+<!-- enumerates: mods/*/*.md list -->
+The fixture modules:
+- `a/x.md`
+--- END
