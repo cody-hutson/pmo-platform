@@ -797,6 +797,34 @@ test_case "EXT-SEG-C18: an inside Trash call with both streams to the null devic
   "$(bash_payload "if trash ${SEG_FH}/Claude/seg-c18 &>/dev/null; then echo ok; fi" "$RMT_FIXTURE_OTHER_HOME")" 0 "" "$RMT_HOME_ENV"
 test_case "EXT-SEG-C19: a directory change with both streams to the null device as an if condition, then a relative inside Trash target, is allowed" \
   "$(bash_payload "if cd ${SEG_FH}/Claude/sub &>/dev/null; then trash seg-c19; fi" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+# A continued line whose backslash follows a redirection that carries an ampersand or a pipe (Stage 7
+# re-verify, #8122 R-01). Where the walk cuts such a redirection, the backslash after it can become a
+# new command word to the canonicalizer, which drops a single leading backslash from one, so the
+# record's last word is no longer the backslash. B13 to B15 keep the backslash as a word; in B16 to
+# B20 it is dropped, and what the canonicalizer leaves at the line's end — a redirection left without
+# its word, or a both-streams redirection and then the separator it inserted — reads as a continued
+# line too. Every one is refused. P10 is the declared over-block of that reading; C20 is a separator
+# before the backslash, which begins the next line's command and stays allowed.
+test_case "EXT-SEG-B13: an inside Trash operand, an output duplication onto the error stream, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b13 >&2 \\"$'\n'"/tmp/seg-b13" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B14: an inside Trash operand, a descriptor duplication spelled with a blank before its word, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b14 2>& 1 \\"$'\n'"/tmp/seg-b14" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B15: an inside Trash operand, a closed error stream, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b15 2>&- \\"$'\n'"/tmp/seg-b15" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B16: an inside Trash operand, both streams truncated to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b16 &>/dev/null \\"$'\n'"/tmp/seg-b16" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B17: an inside Trash operand, both streams appended to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b17 &>>/dev/null \\"$'\n'"/tmp/seg-b17" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B18: an inside Trash operand, both streams redirected with a blank before the file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b18 &> /dev/null \\"$'\n'"/tmp/seg-b18" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B19: an inside Trash operand, a descriptor duplication whose word is on the next line, and an outside operand after that word is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b19 2>& \\"$'\n'"1 /tmp/seg-b19" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B20: an inside Trash operand, a clobbering output redirection whose file is on the next line, and an outside operand after that file is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b20 >| \\"$'\n'"seg-b20-log /tmp/seg-b20" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-P10: an inside Trash call whose line ends in a both-streams redirection, a separator and one blank is refused (a declared over-block)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-p10 &>/dev/null ; " "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C20: an inside Trash call on a line that ends in a separator and a continuation backslash, then a plain command, is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c20 && \\"$'\n'"echo done" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 
 # The mutant pairs. Each copy differs from the hook by exactly its marked line, shown live first;
 # each sentinel, refused through the hook, is allowed through its copy.
@@ -830,7 +858,7 @@ else
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-barerm.sh"
   /usr/bin/sed -e 's/^\([[:space:]]*\)EXCISED\$'"'"'\\n'"'"'?\*) COMMAND=.*$/\1EXCISED$'"'"'\\n'"'"'?*) : ;;/' \
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-nohd.sh"
-  for seg_mk in RECCONT REDIRAMP BOTHREDIR; do
+  for seg_mk in RECCONT RECWORD RECBOTH REDIRAMP BOTHREDIR; do
     /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-'"$seg_mk"'$/\1# M-TRASH-'"$seg_mk"' (removed)/' \
       "$HOOK" > "${seg_dir}/block-rm-prefer-trash-${seg_mk}.sh"
   done
@@ -847,6 +875,8 @@ else
   ra_pair "EXT-SEG-MUT-BARERM-T7:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" $'rm -f \\\n/tmp/seg-t7'
   ra_pair "EXT-SEG-MUT-RECCONT-B8:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" $'trash seg-mut-b8 \\\n/tmp/seg-b8'
   ra_pair "EXT-SEG-MUT-RECCONT-B9:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" $'trash seg-mut-b9 2>&1 \\\n/tmp/seg-b9'
+  ra_pair "EXT-SEG-MUT-RECWORD-B19:" "${seg_dir}/block-rm-prefer-trash-RECWORD.sh" $'trash seg-mut-b19 2>& \\\n1 /tmp/seg-b19'
+  ra_pair "EXT-SEG-MUT-RECBOTH-B16:" "${seg_dir}/block-rm-prefer-trash-RECBOTH.sh" $'trash seg-mut-b16 &>/dev/null \\\n/tmp/seg-b16'
   ra_pair "EXT-SEG-MUT-REDIRAMP-B10:" "${seg_dir}/block-rm-prefer-trash-REDIRAMP.sh" 'trash seg-mut-b10 2>&1 /tmp/seg-b10'
   ra_pair "EXT-SEG-MUT-BOTHREDIR-B11:" "${seg_dir}/block-rm-prefer-trash-BOTHREDIR.sh" 'trash seg-mut-b11 &>/dev/null /tmp/seg-b11'
   seg_armed "EXT-SEG-INT1-C4:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C4"
