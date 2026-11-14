@@ -1512,6 +1512,7 @@ fi
 # unusable value per failure branch (absent, fails, prints nothing) and the real one as control.
 # NORM-08 to -11 set the root explicitly: `/` and a relative root keep today's refusal (a relative
 # root is never anchored to the hook process's own directory; NORM-11-MUT shows that guard live).
+# NORM-12 and -13 give the normalizer a target whose normalized form spans two lines.
 norm_raw="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-norm.XXXXXX" 2>/dev/null)" || norm_raw=""
 NB=""
 if [ -n "$norm_raw" ] && [ -d "$norm_raw" ]; then NB="$(cd "$norm_raw" && /bin/pwd -P)" || NB=""; fi
@@ -1604,6 +1605,30 @@ else
         "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/real/Claude/n11" "$NL_CWD" 0 "" "Claude"
     else
       /usr/bin/printf 'FAIL: NORM-11-MUT the copy is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n'; FAIL=$((FAIL + 1))
+    fi
+    mem_drop_copy "$norm_sbx"
+  fi
+  # NORM-12 and -13: an outside target reached through a link whose destination ends in a line break
+  # normalizes to a path that spans two lines. The compare reads the normalizer's output only when it
+  # is exactly the two paths and the sentinel, one line each, so such a target is refused as one the
+  # hook cannot bring into one form, and it is never compared with a piece of itself (NORM-12-MUT shows
+  # that check live). Both are refused on the pre-fix hooks too, so each pattern names the rule alone.
+  /bin/mkdir -p "${NB}/out"
+  /bin/ln -s "${NB}/out/n12"$'\n' "${NB}/out/n12-brk"
+  norm_case "NORM-12: a Trash target through a link whose destination ends in a line break is refused" \
+    "$HOOK" "trash ${NB}/out/n12-brk" "$NL_CWD" 2 "BLOCK-TRASH-003"
+  norm_case "NORM-13: rm of a target through the same link is refused under -001, not read as inside" \
+    "$HOOK" "rm ${NB}/out/n12-brk" "$NL_CWD" 2 "BLOCK-TRASH-001"
+  norm_sbx="$(mem_hook_copy)" || norm_sbx=""
+  if [ -z "$norm_sbx" ]; then
+    /usr/bin/printf 'FAIL: NORM-12-MUT (no sandbox copy of the hook)\n'; FAIL=$((FAIL + 1))
+  else
+    /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-NORMLINES$/\1: # M-TRASH-NORMLINES (removed)/' "$HOOK" > "${norm_sbx}/block-rm-prefer-trash.sh"
+    if ra_live "${norm_sbx}/block-rm-prefer-trash.sh"; then
+      norm_case "NORM-12-MUT: a copy without the three-line check admits NORM-12's target, so the check holds it" \
+        "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/out/n12-brk" "$NL_CWD" 0
+    else
+      /usr/bin/printf 'FAIL: NORM-12-MUT the copy is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n'; FAIL=$((FAIL + 1))
     fi
     mem_drop_copy "$norm_sbx"
   fi
