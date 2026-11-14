@@ -136,7 +136,7 @@ It edits no `SKILL.md`, no registry row and no router. Each disposition other th
 ## Consequences
 
 - **Positive:** every never-invoked Specialist and the router has one row, with its evidence, its rule and its follow-up tag; the census is re-runnable at pinned bounds, with both arms; the per-row test decides on each row's own demand evidence, and the operator decides the rows it cannot, with a recommended value and an alternative in front of them; every re-trigger carries an exit test, so a re-trigger that still reads 0 at the sunset re-run converts to retire; the listing finding keeps a re-trigger from being decided on a rendering defect alone.
-- **Negative:** the per-row test reads demand from composed-skill use, which is demand for the function rather than proof that the Specialist's role layer is the right reach, and under the substitution reading every test-decided re-trigger would read retire; the test returns one decided value on this population; ADR-019's write and role conjuncts stay unreadable at R4a (§ Readings); the census reads one machine's stores, so off-machine use is a named residual; an Accepted record cannot carry a later census, so a sunset re-run records its results elsewhere.
+- **Negative:** the per-row test reads demand from composed-skill use, which is demand for the function rather than proof that the Specialist's role layer is the right reach, and its direction rests on the 10% exposure threshold the operator ratified, under which it decides 6 re-trigger and 1 retire on this population; ADR-019's write and role conjuncts stay unreadable at R4a (§ Readings); the census reads one machine's stores, so off-machine use is a named residual; an Accepted record cannot carry a later census, so a sunset re-run records its results elsewhere.
 
 ## Reversibility
 
@@ -728,12 +728,12 @@ Once the dispositions are ratified and their follow-ups land, a goal-shaped ask 
 |---|---|
 | "Get this approved plan built and opened as a PR." | the Stage-6 engineering Specialist, invoked from the Stage-6 persona card rather than by a general-purpose persona |
 | "Is this release's testing good enough to gate on?" | the QA-leadership Specialist from the Stage-7 card, composing the QA auditor |
-| "Which of our projects should get the next dollar?" | a portfolio-level call, from the portfolio Specialist or from the skills it composes, whichever D-Ratify keeps |
-| "Make sure today's status and the trackers agree." | the coordination Specialist, or the tracker and status skills directly, as ratified |
+| "Which of our projects should get the next dollar?" | a portfolio-level call, from the portfolio Specialist, re-triggered at ratification and composing the roll-up and triage skills it already uses |
+| "Make sure today's status and the trackers agree." | the coordination Specialist, re-triggered at ratification and composing the tracker and status skills |
 | "Are we ready to go live?" | one readiness rule, not two: the collision named in the readiness case resolved by the follow-up |
 | "Why did this break, and how do we stop it happening again?" | the escalation support Specialist, reached by its own trigger lines rather than by the first-line Specialist's comparison table |
 | "Is this load right, and can we replay it safely?" | the data-engineering Specialist |
-| "Run the deploy now that we are a go." | one owner for deploy execution, with the decision-versus-execution boundary either kept with distinct triggers or folded into the release manager |
+| "Run the deploy now that we are a go." | one owner for deploy execution: the devops Specialist, re-triggered with its colliding phrase narrowed, keeping the decision-versus-execution boundary with the release manager |
 | "I don't know which skill does this — help me ask." | `ppm-agent`, which `core/governance/OPERATIONS.md` gives strategic routing; the router is retired |
 | "Help us run PI planning." | the release train engineer, once a SAFe configuration activates it; until then, nothing |
 
@@ -742,7 +742,7 @@ Once the dispositions are ratified and their follow-ups land, a goal-shaped ask 
 | # | Gap | Current | Future | Rows | Where closed |
 |---|---|---|---|---|---|
 | G1 | Goal-shaped triggers | role-vocabulary triggers; a re-trigger follow-up per row | goal-shaped trigger phrases, collisions named and resolved | every re-trigger row, 11 at authoring | each row's follow-up, through `pmo-skill-editor`, gated by Check 67 |
-| G2 | Listing exposure | a skill not used in the prior 14 days renders described in a small minority of listings, a recently used one in most | descriptions render whether or not a skill was used recently, or the re-trigger plan accounts for it | every re-trigger row (recommended values included) | a listing follow-up; until then each re-trigger row carries the note |
+| G2 | Listing exposure | a skill not used in the prior 14 days renders described in a small minority of listings, a recently used one in most | descriptions render whether or not a skill was used recently, or the re-trigger plan accounts for it | every re-trigger row, 11 at authoring | a listing follow-up; until then each re-trigger row carries the note |
 | G3 | Persona-card seam | the Stage-6, Stage-7 and Stage-8 cards name a reference workflow and auditor modes; no card invokes a Specialist | each card a Specialist covers names it as its skill invocation reference: the Stage-6 card the software engineer, both QA Lead cards the QA lead (ratified at the Stage-9 gate) | the software-engineer and QA-lead rows | the persona-card follow-up |
 | G4 | Write-scope and role comparators | a stated tier or altitude on 12 of the 21 Specialist rows at authoring, and no emission artifact read | a stated emission artifact and a role tier on every Specialist row, so R4a decides | every tie row | a registry follow-up; it would let a later census decide these rows mechanically |
 | G5 | Goal-to-role routing | a router whose self-counts lag the registry and that is never invoked | the router retired through `lifecycle-state`; goal-to-role routing runs through `ppm-agent`, which owns strategic routing | the router row | the router row's follow-up |
