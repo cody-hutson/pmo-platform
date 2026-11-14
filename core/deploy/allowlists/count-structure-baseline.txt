@@ -99,7 +99,6 @@ core/standards/public-repo-vs-operator-instance-taxonomy.md	06abf19525b96601	pre
 core/standards/universal-vs-localized-context.md	c1c0fdb6517aff87	pre-existing:table
 core/standards/version-field-semantics.md	52efd36df877e1f7	pre-existing:table
 docs/GETTING_STARTED.md	6b03b4f001bdbd97	pre-existing:table
-docs/module-apis.md	965df7a5030020ed	known:#4039
 operations/skills/delivery-engine/references/estimation-standards.md	43494f38ff14e6ad	pre-existing:table
 operations/skills/delivery-engine/references/estimation-standards.md	c723cf20d46c6f87	pre-existing:table
 operations/skills/pmo-portfolio-manager/SKILL.md	ccdaa7403554ded9	pre-existing:table

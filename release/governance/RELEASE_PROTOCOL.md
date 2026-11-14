@@ -149,6 +149,25 @@ The mode is **orthogonal to bundle size** — all four combinations (`versioned`
 
 **Cutover discipline:** applies to releases entering Bundle strictly AFTER this sub-block's introducing-release merge SHA recorded in the release log; pre-cutover releases grandfathered; the introducing release itself exempt (reflexive-pipeline-loop discipline).
 
+### When-to-version rule — selecting the release-identity mode
+
+The mode a release declares is selected by this rule. It is applied at Bundle, where the mode is declared, to the change set the bundle's cards declare — their Affected Files and Proposed Change read together, because a card can name a file as the subject of a decision without editing it. It is applied again at Stage 4, to the release plan's File Change Matrix, when the bump-class is validated; again whenever that matrix gains a row after Stage 4, from a CONDITIONAL row that fires or from a scope change; and once at Stage 9, against the release pull request's file list. A CONDITIONAL row is not part of the change set until it fires, and counts once it does. Exactly one row matches.
+
+| Row | The release's change set, read across every card | Mode |
+|---|---|---|
+| **WV-1** | Carries at least one **material edit**: an edit that changes what a skill, hook, check, test, tool, workflow, template, configuration default or installer does, or that adds or changes a rule or procedure an agent, operator, reviewer or gate follows, in the surface that states it. A gate-coverage register row that declares an obligation is such a rule. A decision record that decides a rule for a later release to state is not. | `versioned` — the bump-class is chosen with the Bump-Class Selection Guide below |
+| **WV-2** | Carries no material edit. It changes only records — the release's own plan, release note and ledger rows; a decision record, such as an ADR or a disposition table, whose implementation ships in a later release; an index of those records — or it makes only non-material edits: a typo, formatting or comment fix, a wording change that alters no rule, or a frontmatter edit no router reads. | `version-less` |
+
+**Why the line falls between the two rows.** A version is the identifier that the signed tag, the published release, an installed copy's `.version` file and every skill's `version:` field share. A release that makes a material edit changes behavior that all four then describe; shipped `version-less`, it would leave all four naming the release before it while the behavior moved on. A release that makes no material edit changes nothing those four describe, so a number would name nothing new. The rule therefore keeps `versioned` the default for every release that changes behavior, and reserves `version-less` for a release whose only product is a record. A release whose only product is a decision record ships `version-less`: the decision changes no behavior until the release that implements it, and that release claims the version. A decision release that also registers an obligation in the gate-coverage register is `versioned`, and because such a row often enters after Bundle, the later applications above are what catch it. The line is not whether a tracked file changes: a record-only release changes tracked files, and a typo fix changes one, so that test would claim a version for the trivial change this rule guards against.
+
+**Agreement with the skill `version:` field.** The material-edit test is the one `core/standards/version-field-semantics.md` § Bump Rules applies to a skill's `version:` field, applied here to every surface, so a release the rule makes `version-less` carries no edit that would bump a skill's `version:`. A `version-less` release stamps no version anywhere — no tag, no plan rename, no change to `.version` — and a release slug is never written as a `version:` value. Where the operator overrides the rule and ships a material skill edit `version-less`, how that skill's `version:` is carried is owned by that standard, not by this rule.
+
+**Do not claim a version for a trivial change.** A change set made only of non-material edits does not earn a release of its own: it rides the next release that touches the same surface, the folding of a small slice that `release/references/standards/bundle-composition-doctrine.md` § 3 Step 5 describes. When it cannot wait, it ships `version-less` under WV-2. Neither a new minor nor a `patch` is claimed for it unless the operator overrides WV-2 to ship the correction alone as a hotfix of the release it corrects.
+
+**When the rule is applied, and what may override it.** The bundle session applies the rule and cites the row it applied on the milestone's `Release-identity mode:` line, in one segment placed after the mode: `· when-to-version: WV-1` or `· when-to-version: WV-2`. When a later application returns a row whose mode differs from the declared mode, the difference is surfaced to the operator, and the mode is re-declared only on the operator's decision, never silently. The operator may select the other mode for a stated reason; the line then names the row the rule returned and records the override with its reason. A version-slot collision is never such a reason: a release does not ship `version-less` to avoid one (`release/references/standards/bundle-composition-doctrine.md` § 9.1). A bump mapping restated elsewhere — the version step of the `release-planner` skill's Release Planning mode (Mode B) among them — is read only once the mode resolves to `versioned`, by WV-1 or by an operator override of WV-2, so under WV-2 with no override no version is determined.
+
+**Runner: NONE — a registered named gap.** Gate 3 criterion G3-19 asserts that the declared mode is a valid member of the enum, never that this rule selected it, and nothing else reads the selection. The declared observable is the `when-to-version:` segment on the `Release-identity mode:` line. The gap, its observable and the population it is measured over are recorded in the gate-coverage register of `core/standards/gate-efficacy-standard.md`.
+
 ### Phase 1 — Plan time: declare the bump-class + provisional-display version (the FLOOR)
 
 The release plan declares a **bump-class** — one of `major`, `minor`, `patch` — and a **provisional-display version** for human readability. This is *intent to bump*: it binds **no concrete `vX.Y`**. It sets the **floor** the eventually-claimed number must satisfy. The bump-class is the operator's semantic signal, chosen by the change's nature; the **Bump-Class Selection Guide** below maps change types to bump-classes. The provisional-display version is a label, not a reservation — the concrete number is not known until Phase 2.
@@ -217,6 +236,8 @@ The mechanism is **host-agnostic** — it composes the adapter operations define
 
 The bump-class declared at Phase 1 is chosen by the change's nature. This guide maps change types to bump-classes — it is **advisory input** to the allocation rule: it declares the **floor**, it does **not** decide the concrete number (Phase 2 does, at claim time).
 
+The guide is read once the release-identity mode resolves to `versioned`, either because the when-to-version rule above returned WV-1 or because the operator overrode WV-2 for a stated reason. Its `patch` row for a behavioral correction applies when the operator directs that correction to ship alone as a hotfix of the shipped release it corrects. Its two `patch` rows for a typo or formatting correction and for a wording clarification are reached only through an override of WV-2; without one, the rule's trivial-change guard governs, and the correction rides the next release.
+
 | Change Type | Bump-Class | Rationale |
 |-------------|-----------|-----------|
 | New skill added to the suite | **major** | New capability changes what the platform can do |
@@ -229,6 +250,7 @@ The bump-class declared at Phase 1 is chosen by the change's nature. This guide 
 | Reference document addition or update | **minor** | Supporting material, not core behavior |
 | Typo / formatting correction to a shipped release | **patch** | No behavioral or structural impact; corrects a shipped base in place |
 | Documentation wording clarification to a shipped release (no rule change) | **patch** | Improves clarity without changing meaning |
+| Behavioral correction to a shipped release, shipped alone as a hotfix of it | **patch** | Changes behavior the shipped release got wrong; corrects that shipped base in place |
 
 ### References
 

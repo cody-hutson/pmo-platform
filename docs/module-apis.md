@@ -162,19 +162,33 @@ Canary (not part of Public API, source-only): [`pmo-skill-refiner-selftest-canar
 - [`core/CLAUDE.md.template`](../core/CLAUDE.md.template) — depersonalized workspace-root template.
 - [`core/config/`](../core/config/) — settings templates + allowlist configuration.
 
-**Security hooks** ([`core/hooks/`](../core/hooks/), 10 PreToolUse hooks + 3 SessionStart hooks):
+<!-- enumerates: core/hooks/block-*.sh list -->
+**Security hooks** — the `block-*.sh` hooks in [`core/hooks/`](../core/hooks/):
 
+- [`block-autonomy-ceiling.sh`](../core/hooks/block-autonomy-ceiling.sh) — enforce the autonomy-level ceiling on tool calls.
 - [`block-credential-reads.sh`](../core/hooks/block-credential-reads.sh) — block Read-tool access to credential files.
 - [`block-destructive.sh`](../core/hooks/block-destructive.sh) — block destructive git / rm operations.
+- [`block-draft-files.sh`](../core/hooks/block-draft-files.sh) — keep draft, scratch and proposal content out of the tracked corpus.
 - [`block-egress.sh`](../core/hooks/block-egress.sh) — block credential egress + network upload.
+- [`block-external-seam-shape.sh`](../core/hooks/block-external-seam-shape.sh) — refuse register-shaped agent content on an external-seam comment write.
+- [`block-fragile-refs.sh`](../core/hooks/block-fragile-refs.sh) — flag fragile references in content written to durable-corpus files.
 - [`block-fs-boundary.sh`](../core/hooks/block-fs-boundary.sh) — block file ops outside the workspace boundary.
+- [`block-gh-path-leak.sh`](../core/hooks/block-gh-path-leak.sh) — catch operator-local path leaks in gh issue and pull-request bodies.
 - [`block-mcp-writes.sh`](../core/hooks/block-mcp-writes.sh) — block MCP write tools without allowlist entry.
 - [`block-rm-prefer-trash.sh`](../core/hooks/block-rm-prefer-trash.sh) — redirect workspace deletions to Trash.
+- [`block-scope-segregation.sh`](../core/hooks/block-scope-segregation.sh) — refuse private-marked content filed to a public work-tracker destination.
 - [`block-shell-injection.sh`](../core/hooks/block-shell-injection.sh) — block shell-injection patterns in slash-command arguments.
 - [`block-skill-direct-edit.sh`](../core/hooks/block-skill-direct-edit.sh) — gate skill-edit invocations through `pmo-skill-editor`.
+
+<!-- enumerates: core/hooks/*.sh subset-of -->
+**Session hooks and helper scripts** — the SessionStart and Stop hooks registered in [`core/settings.json.template`](../core/settings.json.template), then helpers that no hook event registers; this list is a subset of `core/hooks/*.sh` and does not assert completeness:
+
+- [`notify-version-skew.sh`](../core/hooks/notify-version-skew.sh) — SessionStart notice when local `.version` lags the latest published release.
+- [`prime-autonomy-ceiling-cache.sh`](../core/hooks/prime-autonomy-ceiling-cache.sh) — SessionStart: resolve the automation-level dial once per session and cache its ceiling.
+- [`verify-session-config.sh`](../core/hooks/verify-session-config.sh) — SessionStart: a non-blocking check of the session's resolved model and effort against the workspace directive.
+- [`session-retro-trigger.sh`](../core/hooks/session-retro-trigger.sh) — Stop: when activated, ask the agent to run `session-retro` before the session stops.
 - [`allowlist-add.sh`](../core/hooks/allowlist-add.sh) — atomic allowlist append helper.
 - [`audit-mcp-usage.sh`](../core/hooks/audit-mcp-usage.sh) — one-shot seeder for the MCP write-tool allowlist (not a tool-call-time hook).
-- [`notify-version-skew.sh`](../core/hooks/notify-version-skew.sh) — SessionStart notice when local `.version` lags the latest published release.
 
 **Disciplines** ([`core/disciplines/`](../core/disciplines/)):
 

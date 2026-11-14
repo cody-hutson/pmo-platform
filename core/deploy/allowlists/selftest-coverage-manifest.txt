@@ -65,6 +65,7 @@ core/deploy/tools/check-count-structure.py
 core/deploy/tools/check-doc-frontmatter.py
 core/deploy/tools/check-doc-gates.py
 core/deploy/tools/check-doc-links.py
+core/deploy/tools/check-enumeration-drift.py
 core/deploy/tools/check-extraction-contract.py
 core/deploy/tools/check-host-binding.py
 core/deploy/tools/check-identity-conformance.py

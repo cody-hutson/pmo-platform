@@ -242,7 +242,7 @@ done
   || report "A6 every sampled C0 code point round-trips, not only TAB" 0 \
        "${c0_bad} of ${c0_total} failed: ${c0_failed}"
 
-# ── A7 — COMPLETENESS: one definition, eleven call sites, zero surviving pairs ──
+# ── A7 — COMPLETENESS: one definition, twelve call sites, zero surviving pairs ──
 # The name- and keyword-agnostic completeness matcher. It keys on neither the
 # `local` keyword nor any variable name, because the surface carries a
 # differently-named variable (`_frf_esc`) and a `local`-less assignment
@@ -276,9 +276,9 @@ PYEOF
 read -r n_idiom n_defs n_calls n_outside < <(python3 "$COMPLETENESS_PY" "$DEPLOY_SH")
 a7_ok=1; a7_missing=""
 [[ "$n_defs" -eq 1 ]]    || { a7_ok=0; a7_missing="definitions=${n_defs}, want 1"; }
-[[ "$n_calls" -eq 11 ]]  || { a7_ok=0; a7_missing="${a7_missing:+$a7_missing; }call sites=${n_calls}, want 11"; }
+[[ "$n_calls" -eq 12 ]]  || { a7_ok=0; a7_missing="${a7_missing:+$a7_missing; }call sites=${n_calls}, want 12"; }
 [[ "$n_outside" -eq 0 ]] || { a7_ok=0; a7_missing="${a7_missing:+$a7_missing; }surviving inline escape pairs outside the definition=${n_outside}, want 0"; }
-report "A7 exactly one definition, eleven call sites, zero surviving inline escape pairs outside it (reads ${n_idiom} ${n_defs} ${n_calls} ${n_outside})" \
+report "A7 exactly one definition, twelve call sites, zero surviving inline escape pairs outside it (reads ${n_idiom} ${n_defs} ${n_calls} ${n_outside})" \
   "$a7_ok" "$a7_missing"
 note "the first term is 1 by construction: the surviving definition necessarily contains the idiom it replaced. The fourth term excludes the definition's own body and is the one that asserts completeness."
 
@@ -292,10 +292,12 @@ note "the first term is 1 by construction: the surviving definition necessarily 
 # instead of assigning it first. The house-shape pattern cannot see that site, so a
 # second pattern reverses it: the inline pair is rebuilt under the house pre-fix
 # name `local _detail_escaped`, and the `printf` line reads that variable. The
-# reconstruction therefore reads 11, and the retired instrument A9 runs stays blind
-# to exactly the same two sites it was blind to before.
+# twelfth (_ed_report, Check 83's verdict tail) has the same printf-direct shape and
+# is reversed by the same second pattern. The reconstruction therefore reads 12, and
+# the retired instrument A9 runs stays blind to exactly the same two sites it was
+# blind to before.
 # Reconstructs the pre-fix shape by reversing the conversion on a COPY, then runs
-# the identical instrument. Without this arm A7's `1 1 11 0` is a reading with no
+# the identical instrument. Without this arm A7's `1 1 12 0` is a reading with no
 # demonstration that the instrument can register anything else.
 PREFIX_COPY="${TMP}/deploy-prefix.sh"
 python3 - "$DEPLOY_SH" "$PREFIX_COPY" <<'PYEOF'
@@ -337,22 +339,22 @@ PYEOF
 
 read -r p_idiom p_defs p_calls p_outside < <(python3 "$COMPLETENESS_PY" "$PREFIX_COPY")
 a8_ok=1; a8_missing=""
-[[ "$p_idiom" -eq 11 ]] || { a8_ok=0; a8_missing="pre-fix idiom count=${p_idiom}, want 11"; }
+[[ "$p_idiom" -eq 12 ]] || { a8_ok=0; a8_missing="pre-fix idiom count=${p_idiom}, want 12"; }
 [[ "$p_defs" -eq 0 ]]   || { a8_ok=0; a8_missing="${a8_missing:+$a8_missing; }pre-fix definitions=${p_defs}, want 0"; }
 [[ "$p_calls" -eq 0 ]]  || { a8_ok=0; a8_missing="${a8_missing:+$a8_missing; }pre-fix call sites=${p_calls}, want 0"; }
-report "A8 the same matcher over the reconstructed pre-fix source reads the 11 / 0 / 0 baseline null-arm (reads ${p_idiom} ${p_defs} ${p_calls})" \
+report "A8 the same matcher over the reconstructed pre-fix source reads the 12 / 0 / 0 baseline null-arm (reads ${p_idiom} ${p_defs} ${p_calls})" \
   "$a8_ok" "$a8_missing"
 
-# ── A9 — CONTROL (blindness): the retired instrument reads 9, not 11 ────────
-# Pins WHY the matcher above is name- and keyword-agnostic. If this ever reads 11,
+# ── A9 — CONTROL (blindness): the retired instrument reads 10, not 12 ──────
+# Pins WHY the matcher above is name- and keyword-agnostic. If this ever reads 12,
 # the two odd sites have been renamed into the common shape and A7's fourth term
 # is no longer guarding anything a simpler instrument would miss.
 old_reads="$(python3 -c "import re,sys; print(len(re.findall(r'local _detail_escaped=', open(sys.argv[1], encoding='utf-8').read())))" "$PREFIX_COPY")"
-if [[ "$old_reads" -eq 9 ]]; then
-  report "A9 the retired \`local _detail_escaped=\` instrument reads 9 of the 11 reconstructed sites (blind to _frf_esc and _c56_m4_esc)" 1
+if [[ "$old_reads" -eq 10 ]]; then
+  report "A9 the retired \`local _detail_escaped=\` instrument reads 10 of the 12 reconstructed sites (blind to _frf_esc and _c56_m4_esc)" 1
   note "under that instrument a post-fix reading of 1 would have graded PASS with two sites unconverted"
 else
-  report "A9 the retired \`local _detail_escaped=\` instrument reads 9 of the 11 reconstructed sites" 0 \
+  report "A9 the retired \`local _detail_escaped=\` instrument reads 10 of the 12 reconstructed sites" 0 \
     "reads ${old_reads} — the blindness this file pins has changed shape; re-derive before trusting A7"
 fi
 
