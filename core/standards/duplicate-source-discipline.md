@@ -4,7 +4,7 @@ purpose: "The register-or-remove discipline for content reused across files: dup
 type: standard
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-consumers: deploy.sh Check 9 / Check 11 / Check 13 (mirror-set + template-sync registries), Check 13b (complementary-pair ownership registry), and Check 68 (hub-state enum-parity registry); authors of any content reused across files; CLAUDE.md §Prefer durable structures
+consumers: deploy.sh Check 9 / Check 11 / Check 13 (mirror-set + template-sync registries), Check 13b (complementary-pair ownership registry), Check 68 (hub-state enum-parity registry), and Check 83 (enumeration ↔ population markers, § 1.1); authors of any content reused across files; CLAUDE.md §Prefer durable structures
 ---
 <!-- reference-durability: allow-link -->
 # Duplicate-Source Discipline — Register or Remove
@@ -26,6 +26,36 @@ Content MUST NOT exist in two or more files within `core/` / `release/` or `.cla
 
 Unregistered duplicate content is governance debt. The longer it persists, the higher the drift risk: one copy is updated, the other becomes silently stale, and downstream consumers act on the stale read. The register-or-remove rule forecloses that path.
 
+### §1.1 The enumeration case — a document lists or counts a population that changes
+
+A **hand-maintained enumeration** is a document's copy of a population's membership: a list of the files a directory holds, or a stated count of them. When the population changes and the copy does not, the copy keeps reading as authoritative while it is wrong. It is reconciled toward the population — **the population is the fact, and the enumeration moves**. That is the opposite default to § 1.2, *The convention case — a written rule and live practice disagree*, and neither case's rule decides the other's.
+
+An enumeration of a population that changes is remedied as the table below orders it, the most preferred first:
+
+| Remedy | When it applies | Register-or-remove condition |
+|---|---|---|
+| **Cite** the population's home instead of copying it | The default. A reader can follow a reference to the directory, registry or record that holds the members | Condition 2 — one canonical source, a reference at the former copy |
+| **Derive** the copy with a projector, declared by a `derived-surface:` header | The copy must exist inline, and generating it is proportionate | Condition 2 — one canonical source, and a copy no one edits by hand |
+| **Mark** the copy with an enumeration marker | A reader needs the members inline, and a generator would be disproportionate for hand-written prose | Condition 1 — a registered copy whose drift is asserted mechanically |
+
+A **closed set** — one that changes only by a governed decision, such as the autonomy tiers — needs none of these. An enumeration whose population is already bound by a re-derived census record is **cited, not marked**: the census is its binding, and a marker would put a second copy of the census's resolver beside it. The suite steps of `.github/workflows/install-tests.yml` are the worked instance: the workflow cites the install-regression runner's member array and the gate-efficacy standard's § Exit-consumer and executor census rather than carrying a marker.
+
+**The marker.** It is a single line, directly above the enumeration's preamble, or directly above the enumeration when it has none:
+
+```text
+<!-- enumerates: <glob> <relation> -->
+<!-- enumerates: core/hooks/block-*.sh list -->
+```
+
+- **Glob.** Repository-relative, with no leading `/`, no `..` segment and no `**`. A wildcard (`*`, `?` or `[…]`) matches within one path segment and never across a `/`, and the glob is matched against the tracked files.
+- **Relation.** `count` — the line beneath the marker states one cardinal, and it must equal the number of files the glob matches. `list` — the items must name exactly those files. `subset-of` — every item must name one of them; a file the list leaves out is not drift, so `subset-of` never asserts completeness.
+- **Binding.** Under `list` and `subset-of`, at most one line of prose (the preamble) may sit between the marker and the list or table it binds.
+- **Keys.** A file the glob matches is keyed by the path segments its wildcards match: the basename for `core/hooks/block-*.sh`, the directory name for `operations/skills/*/SKILL.md`. An item is keyed by its first link target, resolved against the document's own directory (a leading `/` resolves from the repository root), read at the same segments. An item whose link points outside the glob's literal segments names no member, so it reads as extra. An item with no link is keyed by its first code span, written as the same segments joined by `/`.
+
+**What the check does not detect.** An enumeration with no marker; one in an exempt tree (the frozen release corpus, the deliberate-defect fixture trees, `packages/` and `.github/`); a population no glob expresses; a relation that filters rows; an inline comma-separated list under `list` or `subset-of`; an enumeration outside markdown; whether an item's description is still true; and completeness under `subset-of`.
+
+**Runner: NONE — a registered named gap.** Whether an enumeration of a changing population was cited, derived or marked when it was written is a judgment no gate observes: an unmarked enumeration is invisible to every check. The gate-coverage register in [`gate-efficacy-standard.md`](gate-efficacy-standard.md) records the gap and the observable that stands in for it — a diff that adds such an enumeration with neither a citation nor a marker. A marked enumeration is read by `deploy.sh --check`'s enumeration-drift check, deploy-time only, whose `--self-test` also runs in CI through the selftest-discovery job; that check asserts each marker, never this procedure.
+
 ### §1.2 The convention case — a written rule and live practice disagree
 
 A **written convention** is a rule a governed document states about the tree it governs — where a file lives, what a sidecar is named, which field a record carries. **Live practice** is what the tree actually does. When the two are found to disagree, the disagreement is settled by the owning document — not by the report that surfaced it, and not by whichever side is cheaper to change — in this order.
@@ -34,7 +64,7 @@ A **written convention** is a rule a governed document states about the tree it 
 2. **Where the document is silent or ambiguous on the case, name the authoritative side in the document, in the same change that reconciles the other side.** Either side may win. When practice wins, the document is amended to state what practice does; when the rule wins, practice is reconciled to it; when the two turn out to govern different things, the document is amended to say so and practice stays. In every outcome the document ends by naming the case, so the next reader applies a rule instead of re-deciding it.
 3. **Record the resolution.** The record names the divergence, the authoritative side and the section of the document that names it, what changed — practice, the document, both, or neither when the document already shows the reported divergence is not one — and why. A change that travels in a release records it on one line of that release's plan, opening with `**Adjudication record:**`; a change that travels outside a release, in a pull request no release plan covers, records it in an `Adjudication-Record:` trailer on the commit that resolves the divergence. The document holds the rule and the record holds the history, so the record never restates the rule. A resolution written only in a work-item thread, a pull-request body or a session transcript has no durable home.
 
-**What this case does not govern.** A hand-maintained enumeration — a document's copy of a population's members or of their count — describes the tree rather than prescribing it, so it resolves the opposite way: the population is the fact and the copy moves. This clause's rule never decides that case, and that case's rule never decides this one. The test between them is one question: does the passage say what the tree *is*, or what the tree *should be*?
+**What this case does not govern.** A hand-maintained enumeration — a document's copy of a population's members or of their count — describes the tree rather than prescribing it, so it resolves the opposite way: the population is the fact and the copy moves (§ 1.1). This clause's rule never decides that case, and that case's rule never decides this one. The test between them is one question: does the passage say what the tree *is*, or what the tree *should be*?
 
 **Where this case reaches** is wider than the rest of this document, and § 3 states it.
 
@@ -42,7 +72,7 @@ A **written convention** is a rule a governed document states about the tree it 
 
 ## §2 Registered enforcement layer
 
-Five registered `deploy.sh --check` checks make up the enforcement layer today:
+Six registered `deploy.sh --check` checks make up the enforcement layer today:
 
 | Check | Surface | Enforcement | Source |
 |---|---|---|---|
@@ -51,8 +81,9 @@ Five registered `deploy.sh --check` checks make up the enforcement layer today:
 | **Check 13** — Template-sync drift detection | `TEMPLATE_SYNC_MAP` byte-identity-enforced template pairs | Byte-identity required; matches Check 1 / Check 11 zero-FP posture [SOURCE: `deploy.sh:1929`] | — |
 | **Check 13b** — Complementary-pair ownership | registered pairs in `core/deploy/allowlists/complementary-reference-pairs.txt` | Section-ownership assertion, **not** byte-identity: each exclusively-owned section present in its owner and absent from its peer; each shared section present in both, with content divergence reported as a distinct finding. An unregistered cross-tree same-basename pair is surfaced as a possible accidental fork. Warn-mode (shared cohort) | Condition 4 |
 | **Check 68** — Hub-state enum parity | registered `(derived surface, field)` pairs in `core/deploy/allowlists/hub-state-enum-parity-map.txt` | **Value-set equality**, not byte-identity: the derived surface's `<field> enum:` declaration and the standard section that owns the enum must enumerate the identical set, and a `(N values)` cardinality on the owning heading must match the set beneath it. Two renderings of one enum are never byte-equal by construction — a slash-delimited list versus a markdown definitions table — so `TEMPLATE_SYNC_MAP` (Check 13) is structurally inapplicable and this is the registry that can hold the pair. The derived side is named in every finding, because "mismatch" alone leaves undecided which file moves. Warn-mode initial | Condition 1 |
+| **Check 83** — Enumeration ↔ population | `<!-- enumerates: -->` markers in tracked markdown (§ 1.1), each binding an enumeration to the tracked files its glob matches | **Population correspondence**, not byte-identity: under `count` the stated cardinal equals the number of matching files, under `list` the items name exactly those files, and under `subset-of` every item names one of them. Warn-mode initial, on the check's own committed dial | Condition 1 (§ 1.1) |
 
-They assert three different invariants, and the difference is what decides which registry a duplicate belongs in. Checks 9, 11 and 13 assert **byte-identity** on registered mirror surfaces — the condition-1 case where two copies are meant to be the same bytes. Check 13b asserts **section ownership**, the condition-4 case where two files share a basename and deliberately divide the content between them. Check 68 asserts **value-set equality**, a condition-1 case that byte-identity structurally cannot hold: two renderings of one enum — a slash-delimited list and a markdown definitions table — are never byte-equal by design, so a pair that must agree on *meaning* rather than *bytes* needs its own registry.
+They assert four different invariants, and the difference is what decides which registry a duplicate belongs in. Checks 9, 11 and 13 assert **byte-identity** on registered mirror surfaces — the condition-1 case where two copies are meant to be the same bytes. Check 13b asserts **section ownership**, the condition-4 case where two files share a basename and deliberately divide the content between them. Check 68 asserts **value-set equality**, a condition-1 case that byte-identity structurally cannot hold: two renderings of one enum — a slash-delimited list and a markdown definitions table — are never byte-equal by design, so a pair that must agree on *meaning* rather than *bytes* needs its own registry. Check 83 asserts **population correspondence**, a condition-1 case neither form can hold: its two sides are a document and a population of files, so there is no second document whose bytes or values could be compared, and the enumeration is graded against the files themselves.
 
 **Why Check 68's surfaces restate rather than consolidate.** Condition 2 (*consolidate to a canonical source*) is the normal preference and is **wrong for this pair class**, on a property specific to it: the derived surfaces are **deployed and their contract is not**. The hub-state templates are copied wholesale into operator-instance runtime ledgers that are read without the repo open, and `release/skills/release-hub/references/orchestration-playbook.md` ships inside `packages/release-hub.skill` and is read from the deployed skill tree — while `core/standards/**` appears in no package and is not deployed at all. Replacing either restatement with a cross-reference would point a runtime reader at a file absent from their machine, trading a drift risk (which registration closes mechanically) for a resolvability failure (which nothing closes at read time). The general rule this instantiates: **restate when the derived surface is deployed and its contract is not; cite when the contract is at least as reachable as the surface restating it** — and a restatement is only ever a valid answer as *restate + register + mechanize*, never restate alone.
 
