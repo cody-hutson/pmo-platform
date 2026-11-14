@@ -5,8 +5,10 @@
 # with the check by its introducing release. Case 1 is the seeded mismatch the check must
 # flag, and case 2 its near-miss — the same document as a true `subset-of` — which it must
 # not flag; together they are the control arm the check's acceptance criteria require.
-# The remaining cases pin each binding, key and relation rule the tool's module docstring
-# states, one rule per case, so a regression names the rule it broke.
+# Each remaining case pins one rule the tool's module docstring states, so a regression
+# names the rule it broke. The list below names the rule each case pins. It is not a sweep
+# of the docstring: a rule it does not name is not pinned by this set, and the rules known
+# to be unpinned are named at its end.
 #
 # FORMAT (case-block, because a marked enumeration is irreducibly multi-line):
 #   --- <EXPECT> <RELATION> <label>
@@ -49,7 +51,26 @@
 #   - Case 20 pins the `dup` rule: every member is listed once and one is listed again,
 #     so `missing` and `extra` are empty and only the repeat can drift. Case 3 is its
 #     near-miss: the same list without the repeat.
-# Cases: 6 DRIFT · 8 CLEAN · 5 UNRESOLVED · 1 SCOPE-OUT — 20 in all.
+#   - Case 21 pins the `**` limb of the malformed-glob rule: without the rule the glob is
+#     read one level deep, so it silently drops pop/b/deep/run.sh, and the list, which
+#     names both one-level members, reads CLEAN.
+#   - Case 22 pins table-body items: the header and separator rows are not items, so the
+#     two body rows key alpha.sh and beta.sh, and gamma.sh is missing. Counted as items,
+#     they make the item count disagree with the table's.
+#   - Case 23 pins the strip of a `#...` fragment and of a `?...` query from a link target:
+#     without either strip, that link no longer names a member.
+#   - Case 24 pins code-span link masking: the item's first link sits inside a code span,
+#     so its key comes from the real link after it.
+# Not pinned by any case, and named so the set does not overstate its reach:
+#   - The leading-`/` and `..` limbs of the malformed-glob rule. Such a glob matches no
+#     tracked path, so without the rule it reads `empty-population`; this harness grades
+#     the verdict class, not the reason, so no case can tell the two apart.
+#   - The `boundary-disagreement` verdict. The tool's item splitter computes the count by
+#     the same steps as structure_at, so no document makes the two disagree, and the tool
+#     with the verdict removed passes every case. It is a fail-closed assertion, reached
+#     only through a splitter fault: with the table header counted as an item, case 22
+#     reads `boundary-disagreement`.
+# Cases: 7 DRIFT · 10 CLEAN · 6 UNRESOLVED · 1 SCOPE-OUT — 24 in all.
 
 --- DRIFT list seeded-mismatch
 POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
@@ -216,4 +237,41 @@ The fixture hooks:
 - `beta.sh`
 - `gamma.sh`
 - `alpha.sh`
+--- END
+
+--- UNRESOLVED list malformed-glob-recursive
+POPULATION: pop/a/run.sh pop/b/run.sh pop/b/deep/run.sh
+<!-- enumerates: pop/**/run.sh list -->
+The fixture runners:
+- `a`
+- `b`
+--- END
+
+--- DRIFT list table-body-rows
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+| Hook | Runs |
+|---|---|
+| `alpha.sh` | first |
+| `beta.sh` | second |
+--- END
+
+--- CLEAN list link-fragment-and-query
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+DOCUMENT: docs/f.md
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [`alpha.sh`](../pop/alpha.sh#L3)
+- [`beta.sh`](../pop/beta.sh?plain=1)
+- [`gamma.sh`](../pop/gamma.sh)
+--- END
+
+--- CLEAN list link-in-code-span
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `[old](zzz.sh)` was its link; it is now [`beta.sh`](pop/beta.sh)
+- `gamma.sh`
 --- END
