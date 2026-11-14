@@ -16583,7 +16583,7 @@ print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromiso
           log "  FAIL:  enumeration-drift-fixtures — self-test exit ${ed_ctl_rc}, fixtures exit ${ed_fx_rc}: $(/usr/bin/tail -1 <<<"$ed_fx_out") (hard-fail on every mode)"
           ISSUES=$((ISSUES + 1))
         else
-          log "  OK:    enumeration-drift-fixtures — self-test: $(/usr/bin/tail -1 <<<"$ed_ctl_out"); $(/usr/bin/tail -1 <<<"$ed_fx_out")"
+          log "  OK:    enumeration-drift-fixtures — $(/usr/bin/tail -1 <<<"$ed_ctl_out"); $(/usr/bin/tail -1 <<<"$ed_fx_out")"
           local -a ed_roots=("core" "release" "operations" "docs" "README.md" "CHANGELOG.md" "SECURITY.md" "CONTRIBUTING.md")
           local ed_list ed_out ed_rc=0 ed_read ed_exempted ed_pairs
           _population_resolve '*.md' -- "${ed_roots[@]}"
