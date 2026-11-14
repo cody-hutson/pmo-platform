@@ -937,6 +937,27 @@ Run by the Stage-6 spoke on #8724 over the beat-1R commit `fe6ad60b` (the cost-u
 | Post-push mergeability | `gh pr view` after the push | recorded on #8724 |
 | ADR index | — | N/A — this beat adds no record under `release/ADRs/`; the index verifies unchanged |
 
+### Phase C close-out — Stage 6 C1 and the DEV-63 reconciliation
+
+Run by the Phase C Stage-6 spoke, which has no sub-task and reports on the release PR #8821, from the release head `d71aaf90` with no commit after it. Commits: `e0c60255` (the reconciliation to DEV-63, with DEV-64), then the commit carrying this record, § Change Description and DEV-65. Only this file changes.
+
+| Check | Command | Observed |
+|---|---|---|
+| Plan verifier | `bash release/tools/verify-release-plan.sh --format=json <this file>`, before the pass and on its final content | Before: 23 PASS / 1 FAIL / 30 SKIP / 2 UNRUNNABLE / 0 ERROR over 56 records, the FAIL being FCM-7. After: 24 PASS / 0 FAIL / 30 SKIP / 2 UNRUNNABLE / 0 ERROR over 56, exit 0. FCM-7 is the only verdict that moved, FAIL → PASS (`deviation-recorded`, DEV-64). The carried rows read SKIP before and after, and the two UNRUNNABLE rows are unchanged (#7937 AC-4 and #8041 AC-4, each a reader-graded limb beside a passing grep or scope limb). `FCM-COVERAGE` PASS, `declared=53 interpreted=53 obligations=7` |
+| FCM-7's disposition, three forms measured | each form swapped into this file in turn, the verifier run, then the file restored byte-identical from a saved copy | a bracket-tagged deferral on the fenced row: FCM-7 FAIL, because the verifier reads that tag only on Verification Plan methods; a `CONDITIONAL:` token: FCM-7 SKIP (`conditional-unrecorded`, WARN tier), 23 / 0 / 31 / 2 / 0; the Deviation-Log entry: FCM-7 PASS, the form chosen (DEV-64) |
+| CIAC authoring lint | `bash release/tools/verify-release-plan.sh --ciac-lint <this file>` | `declared=6 parsed=6 clean=2 declared-deferral=4 flagged=0`, before and after; CIAC-4 still reads DECLARED |
+| AC binding | `python3 release/tools/check-ac-binding.py --fetch <this file>`, before and after | identical: 26 BOUND and 3 UNBOUND (#7938 AC-1 and AC-2, #7939 AC-2, the set DEV-58 recorded), no ordinal gap and no baseline drift; all eight baseline entries parse, with `read_at b1042eec` |
+| Stamp manifest | `bash release/tools/claim-version.sh --verify-stamp release-usage-measured-right` | exit 0, OK; the file carries exactly 1 double-brace placeholder (python count), in the Header `**Version**` cell |
+| Cardinality sweep | a python count of each old value over this file, before and after, with one constructed control line carrying each pattern once (every pattern fires) | "beats 1 and 8" 4 → 0. "Mark as closed at Stage 13" 8 → 6, the six cards. "two ADRs / two decision records" 8 → 3: the three left sit in the Domain Practice label, transcribed unchanged from Stage 4, and in the Outcome Statement's verbatim Actor(s) line. "S8 8 / Stage 8: 8 / at 8 spokes" 3 → 1, and the one left says "at planning". "21 pts" and "24 effective" 0 → 0: those figures live in the milestone description, not here. The AC total reads 21 in this release and 29 with the carried cards. The remaining hits for "8 cards", "all 8", "eight", "three in-bundle" and "42 raw / 48 effective" sit in § Decision Record, the provenance note, the DEV rows, the dated graph snapshot and the evidence blocks. Each records what was true when written, so all are kept |
+| Change Description | a python read of the section | 62 lines from its heading; six sub-sections in the protocol's order (Outcome, Issues resolved, Key decisions, Reversibility, Downstream impact, Cross-references); the last H2 in the file |
+| Content probes on added lines | eleven classes (operator handle, name, email, home path, raw URL, link sequence, a close-family verb before an issue number, double-brace token, strikethrough, placeholder, scratch path) over the pass's added lines, with one planted control line | 0 in every class over 134 added lines; each control fires. Specificity of the close-keyword class: 9 added lines carry "closed" with no issue number after it, and read 0. The whole file still carries 0 link sequences |
+| Doc links, release links, roster totals | `check-doc-links.py --target-paths <this file> --require-targets`; `check-release-links.py --files <this file> --check-anchors --plan-depth-lint`; `check-skill-count-imp.py --files <this file> --mode both` | exit 0 each, no finding. With 0 link sequences in the file, the two link checks are N/A for its content rather than a measured clean |
+| Reference durability | the CI workflow's declared population | N/A: its path allowlist exempts every release plan, because a plan carries release-scope issue references by construction |
+| Runtime suite | the one changed path against `runtime-suite-selection-map.md` | no row matches (a release plan); this pass emits no `test-run` event, because the brief bounds its writes to this file |
+| Close-family keywords | `check-commit-close-keywords.py --base origin/main --head HEAD` before the push | recorded on the release PR |
+| Post-push mergeability | `gh pr view` after the push | recorded on the release PR |
+| ADR index | — | N/A — this pass adds no record under `release/ADRs/` |
+
 ---
 
 ## Deviation Log
@@ -1007,6 +1028,7 @@ Run by the Stage-6 spoke on #8724 over the beat-1R commit `fe6ad60b` (the cost-u
 | **DEV-62** | **The store schema's 2.0.0 row and the ignore comment follow the code at every crossing (#7937 F-04).** DEV-54 corrected the schema's write-discipline bullet and the extractor's own text; its sweep did not reach two lines of #7937's beat-2 text that still described a single kept store at the unstamped path. The Version History 2.0.0 row's `--rebuild` clause now matches § Store write-discipline: a store of another unit is kept at every crossing and never overwritten, at `prior/schema-<old>/usage.jsonl` or, at a later crossing from the same version, at the time-stamped `prior/schema-<old>-<UTC stamp>/usage.jsonl`. Version 2.0.0 is this release's own unshipped version, so its row is this release's text to correct, and only that clause changed. The `.gitignore` comment above `**/finops/prior/` says "at every counting-unit crossing" and names the stamped form beside the unstamped one; the rule itself is unchanged and already covers both. Neither file is a member of the package, so it was not rebuilt. Out of scope and not edited: the placement standard's S-38 row, `main`'s text | Phase E 2, PA-029 (fix now); #7937 Stage-7 pass 2, F-04; PA-030 | **APPLIED** — DT fix pass 2 |
 | **DEV-63** | **Tier-2 [SCOPE CHANGE] at beat-8 entry: #8041 (the model-use ADR, beat 8) and #7935 (the probe card) leave this release and carry to the successor milestone that #8051 composes.** A scope-lock override the operator decided on 2026-11-14 ("Move both to MS-1"; "Carry it open to MS-1"). Window W left probes 3 and 4b DEGRADED (confounded: background activity) and probe 5 NOT-EVALUATED. Probe 3 fails #8041's admissibility rule F2 at (c) and (d), so options 3a, 3c and 3+adv hold at NOT-EVALUATED, and under the Collective Review's D-Beat8 (A) (PA-015) a held option blocks authoring and routes this change. #7935's AC1–AC3 stay open for a quiet re-run of probes 3, 4b and 5 in the successor. Composition delta: 2 of 8 cards (25 %), an amend, so the theme is kept. Beat 8 does not run; beat 1R is unaffected and landed. The File Change Matrix's beat-8 rows are not applicable and are kept, not deleted: the ADD of #8041's ADR, and #8041's share of the `release/ADRs/README.md` EDIT and of the conditional `core/ADRs/README.md` row. The plan verifier therefore keeps reading FCM-7 as its one FAIL, with no beat left to clear it. Where § Scope, § Implementation Sequence, § Stage Applicability Matrix, § Verification Plan, § Cross-Issue Acceptance Criteria (CIAC-4), § Release Outcome Statement and § Issue References still treat the two cards as in this release, this row is the later record and wins (§ Provenance and precedence). The release PR's Issue References lines for both cards read as plain references | Decision Recorded comment on #8662 (2026-11-14; comment 6870698722), PA-043 and PA-044 | **RECORDED** — the Status cell; the beat-8 File Change Matrix rows kept, not applicable |
 | **DEV-64** | **The beat-8 ADR ADD is recorded NOT DELIVERED, so the plan verifier reads FCM-7 as a recorded deviation; this supersedes DEV-63's sentence that FCM-7 keeps reading FAIL.** The File Change Matrix row `release/ADRs/ADR-NNN-model-use-policy-for-release-runs.md  ADD` stays as written, with an in-fence note above it. This row is the Deviation-Log entry the declared-vs-delivered contract asks for when a declared file legitimately does not ship: NOT DELIVERED, because #8041 carried to the successor milestone with this ADR (DEV-63). The `fcm-delivery` family reads the entry and grades FCM-7 PASS (`deviation-recorded`), and G-PR11 counts the row as recorded. Two other forms were measured on this file first and not used. A bracket-tagged deferral on the fenced row left FCM-7 at FAIL, because the verifier reads that tag only on Verification Plan methods. A `CONDITIONAL:` token gave a WARN-tier SKIP, but rule 5 of the authoring contract treats a row made conditional after its condition has resolved as buying exemption from the check for one token. #8041's share of the two index rows is carried in prose (§ Per-card write sets): both rows stay owed by #7940, `release/ADRs/README.md` regenerated at beat 1 and `core/ADRs/README.md` conditional on a renumber at the claim | the declared-vs-delivered contract (`release/references/pipeline/stage-04-planning.md`, rules 4 and 5, and the verifier's Deviation-Log reader); G-PR11; DEV-63 | **APPLIED** — Phase C close-out; § File Change Matrix, § Per-card write sets |
+| **DEV-65** | **The Change Description names the milestone by slug and number, and the release-note path as plain text.** The Change Description Protocol asks for the milestone's GitHub URL. That URL carries the repository owner's handle, which the required depersonalization gate refuses in a changed file under `release/`, and a raw milestone URL is a fragile reference under the reference-durability standard; the v5.03, v5.04 and v5.05 plans name the milestone by slug in the same place. The release-note path is written as text, not as a link, because the note does not exist until Stage 13 and the dead-file-reference gate reads a link to an absent file as broken. This file keeps 0 markdown link sequences, as Commit 0 recorded | `core/rules/git-workflow.md` § Repository-Integrity Gates (depersonalization; dead file reference); the reference-durability standard | **APPLIED** — § Change Description |
 
 ---
 
@@ -1023,3 +1045,68 @@ Run by the Stage-6 spoke on #8724 over the beat-1R commit `fe6ad60b` (the cost-u
 - **#8662** — the Stage-4 planning sub-task (plan, plan gate, scope-lock). **#8712–#8719** — the Stage-5 sub-tasks. **#8799 · #8800 · #8801 · #8809 · #8810 · #8812 · #8813 · #8819** — the Phase A6.5 adversarial reviews. **#8724** — the Stage-6 sub-task for #7940 (this commit). **#8721** — the Stage-6 sub-task for #7937 (beat 2). **#8722** — the Stage-6 sub-task for #7938 (beat 3). **#8723** — the Stage-6 sub-task for #7939 (beat 4). **#8725** — the Stage-6 sub-task for #7943 (beats 5a and 5b). **#8726** — the Stage-6 sub-task for #7945 (beat 6).
 - **#8019 · #8022** — the worktree-sessions slice (the main-checkout carve-out hook) and the `/local-state/` home with its ignore rule and commit guard: the merged preconditions beat 5b waits on (DEV-35). The `/local-state/` home card should absorb beat 5b's narrower ignore rule (DEV-36). **#8020** — the resolver slice (one resolver per class), which should fold in `pmo_telemetry_path_for` (DEV-38).
 - **#7934** — the token-efficiency thrust (epic). **#8051** — the successor card that composes MS-1. **#7854** — the outcome check whose criteria use the unit. **#7536** — the weekly-allowance axis that adopts the unit. **#7942 · #7936 · #7950 · #1494 · #8049** — downstream and related cards named in the graph and the specifications.
+
+---
+
+## Change Description
+
+Authored by the Stage 6 Phase C close-out spoke after every Engineering beat landed, per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol. Operator-facing and pre-merge; distinct from the user-facing release note authored at Stage 13 Close.
+
+### Outcome
+
+The FinOps usage store counts each API response once within a transcript file (store schema `2.0.0`), flags a response whose final output count never reached the transcript, and the usage report now runs over real stores with fractional-second timestamps. A cost-unit ADR fixes one calibrated unit, weekly points of one account at both ends of the cache-read-weight bracket, with its numeric home in `[cost_unit]`; the velocity tool computes a per-release cost row by stage, role and token type through one conversion, and a ranker lists retyped command templates by repetition and cost as promotion candidates. The probe card and the model-use ADR left this release on 2026-11-14 and carry to the successor milestone (DEV-63).
+
+### Issues resolved
+
+Status reads Engineering delivery. This file holds no Stage-8 result for any card.
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7940 | The cost-unit ADR (slug `release-graph-cost-unit`, number bound at the claim) with the `[cost_unit]` section, its per-model axis seeded empty, its schema rows, catalog section and a class-3-O register row; the first calibration revisit (beat 1R) found 0 of 22 window-W endpoint pairs clean, pooled 0 against a sufficiency of 3, moved no value and re-confirmed Decisions 1 and 3 | DONE (built) — its Stage 7 and Stage 8 are still owed |
+| #7937 | `extract-usage.sh` counts once per API response; store schema `1.2.0` → `2.0.0` (MAJOR); a store of another counting unit is kept under `prior/` at every crossing, never overwritten; 43 of 43 sampled real-shape records equal an independent parser on all four token fields | DONE |
+| #7938 | Each response is classed complete, incomplete or unevaluated, and every record carries the incomplete and unevaluated counts; a non-zero incomplete count makes all four token figures lower bounds; a standing CI precision probe guards the no-final-output arm | DONE |
+| #7939 | `report-usage.sh` accepts fractional-second `started_utc` and windows on the instant; the boundary-second arm (SM-6b) is added and the report oracle is unchanged | DONE |
+| #7943 | `convert-usage.sh` (the one conversion over `[cost_unit]`) and the velocity tool's `--cost-row` mode with 18 self-test arms; beat 5b landed only the telemetry home's registration rows under D-5b = B, so `--out-dir` stays required (DEV-35, DEV-36) | PARTIAL — AC-1 pending an Operator Override Record at Stage 9 (PA-021) |
+| #7945 | `rank-command-templates.sh` ranks normalised Bash commands and tool inputs by repetition across sessions and by cost in weekly points, one transcript file at a time; privacy controls first, each shown failing by a CI probe; Mode C holds every candidate below the filing threshold | DONE — AC-3's live run is graded at Stage 8, and runs locally only after the allowlist rows deploy (DEV-42) |
+
+### Key decisions
+
+- **PA-002 D-ReleaseClass:** `novel`, with a recorded override of cross-cutting trigger (c).
+- **PA-003 D-ProbeWindow (A):** the window after the 2026-11-12 reset with the other hubs paused; window W ran 2026-11-13 to 14.
+- **PA-004 D-DataHome (A):** the ranking report under the analysis token, the cost row under `/local-state/telemetry/`.
+- **PA-005 D-RankerHome (A):** the ranker is a new script in the FinOps skill.
+- **PA-006:** P0 fully serial on one branch (SINGLE).
+- **D-Version (recorded):** minor; the number binds at the Stage-12 atomic claim.
+- **PA-007 D-Scope (B):** all eight cards kept over band, ≈ 42 raw / ≈ 48 effective points against the 25 ceiling.
+- **PA-008 and PA-009, #7937 D-1 and D-3:** store schema MAJOR `2.0.0`, the prior store kept in a `prior/` directory.
+- **PA-010, #7940 D-Home (A):** the `[cost_unit]` numeric home in the platform configuration, in #7940's slice, with a per-model axis.
+- **PA-011, #7940 D-Revisit (A):** the first calibration revisit runs in this release over eligible pairs only; it ran at beat 1R.
+- **PA-012:** #8041 AC-4's method narrowed to a section compare of `[spoke_runtime]`.
+- **PA-013, #7943 D-Thinking and D-HomeAnchor:** thinking counted inside output; the row's home in `/local-state/telemetry/`.
+- **PA-014, #7935 D-WindowBudget:** about 8 weekly points and an equal no-activity control.
+- **PA-015, #8041 D-Status to D-Beat8:** the ADR authored only after the probes; D-Beat8 (A) blocked authoring at beat-8 entry.
+- **PA-016, #7945 D-Threshold:** Mode C holds candidates; privacy controls land first.
+- **PA-043 and PA-044 (2026-11-14 scope change):** #8041 and #7935 carry to the successor milestone; #7935 stays open and is referenced, not closed.
+
+### Reversibility
+
+**MODERATE — MEDIUM confidence.** Reverting the release-PR merge and running `extract-usage.sh --rebuild` restores per-line counting (the store is a derived cache, and the prior store stays under `prior/`), the cost-unit ADR is superseded rather than deleted (a revert after `--stamp` reverts the stamp commit too), a calibrated value is a one-line `[cost_unit]` edit, and the version tag is retained, never deleted.
+
+### Downstream impact
+
+- #8041 and #7935 carry to the successor milestone #8051 composes: the model-use ADR, whose options 3a, 3c and 3+adv hold at NOT-EVALUATED, and a quiet re-run of probes 3, 4b and 5. CIAC-4 and both cards' plan rows go with them, and the release PR references both cards without closing either.
+- Owed before the Stage-9 verdict: #7940's Stage 7 and Stage 8, #7943's AC-1 Operator Override Record (PA-021), and the D-5b residual decision on #7943's two held rows (DEV-36).
+- Figures read from the FinOps store drop about 2–3× once per-response counting lands (R4): estimate-usage medians, comparables, and the quota-budget § 5.2 substrate, which is routed to #7536's owner.
+- The calibration is insufficient, so every seeded `[cost_unit]` value stands and the next quiet instrumented run owes the next revisit.
+- #7536's weekly axis adopts the unit, and #7854's outcome criteria use it.
+- Stage 12 renumbers one ADR (`renumber-adr.py --detect`, then `--stamp`) and deploys the FinOps skill; the SKILL.md `version:` stamp and the `[paths]` declaration's `since` are provisional and re-read against the claimed version (DEV-39, DEV-49).
+- Until a full `./update.sh` runs, the script-execution hook refuses `convert-usage.sh` and `rank-command-templates.sh` locally (CI runs both), and deploy Check 79 reads the hook-tier copy of `lib-instance-path.sh` as stale (DEV-34, DEV-40, DEV-42).
+- Outside this release: the cross-file `message.id` residual, advisor and fallback sub-call usage, and the lower-bound label (§ Exclusions).
+
+### Cross-references
+
+- Release plan: this file, top section; the scope change is DEV-63 to DEV-65 in § Deviation Log.
+- Milestone: `release-usage-measured-right` (milestone 429), whose [SCOPE CHANGE] note under § Scope records the 2026-11-14 amendment.
+- The scope-change record: the Decision Recorded comment on the planning sub-task #8662, 2026-11-14 (PA-043, PA-044).
+- The cost-unit decision record: `release/ADRs/`, slug `release-graph-cost-unit`.
+- User-facing release note: authored at Stage 13 Close as `release/releases/notes/vX.Y_RELEASE_NOTES.md`, named for the version the Stage-12 claim binds, per `release/references/standards/release-notes-standard.md`.
