@@ -2000,7 +2000,7 @@ SV13|block-destructive|rt-svctl|-|?|B|env -S-v bash @D@/na.sh
 SV14|block-destructive|rt-svctl|-|?|B|env -SBAR=2 bash @D@/na.sh
 SV15|block-destructive|rt-svctl|-|?|B|env -S-Cx bash @D@/na.sh
 SV16|block-destructive|rt-svctl|-|?|B|env -S-i' bash @D@/na.sh'
-SV17|block-destructive|rt-svcost|-|?|a|env -S'echo $X' bash @D@/na.sh
+SV17|block-destructive|rt-svcost|-|?|a|env -S'echo$X' bash @D@/na.sh
 SV18|block-destructive|rt-svnear|-|?|a|env -S'-v' bash @D@/ok.sh
 SV19|block-destructive|rt-svnear|-|?|a|env -S-C@D@/x bash @D@/ok.sh
 SV20|block-destructive|rt-svnear|-|?|a|env -S'-v' cat @D@/na.sh
@@ -2009,3 +2009,7 @@ SV22|block-destructive|rt-svres|-|?|a|env -S'-i;' bash @D@/na.sh
 SV23|block-destructive|rt-svres|-|?|a|env -S"'-u'" FOO bash @D@/na.sh
 SV24|block-destructive|rt-svres|-|?|a|env -S'-i FOO=1' bash @D@/na.sh
 SV25|block-destructive|rt-svres|-|?|a|env -S-i' -u' FOO bash @D@/na.sh
+# seed 15.4 addendum (the hub's trace of the design under J0): SV17 is re-authored as one token, since under J0 a
+# value spread over two tokens is read from its first piece only and never reaches PC-SV1's cell; SV26 is Rule M's
+# control under J0, a dash-led value the reading cannot read, which the walk walks on from today (B before and after).
+SV26|block-destructive|rt-svctl|-|?|B|env -S-i$X bash @D@/na.sh
