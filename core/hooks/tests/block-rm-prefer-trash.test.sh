@@ -661,7 +661,8 @@ neu_case "AC-D020-NEUTRAL-6: a git condition behind a marked assignment, with a 
 #        in an rm-family refusal assert the outside path, so a single-verb pick, which would refuse
 #        with the no-operand message instead, is told apart. T0 is the same-verb control
 #   B    a Trash segment with no operand, or whose line continues (AC3); B6 shows that the limb
-#        never masks a refusal elsewhere on the line
+#        never masks a refusal elsewhere on the line; B9 to B12 carry a redirection with an ampersand
+#   D    a directory change whose operand follows a redirection with an ampersand
 #   C    controls that stay allowed: git alone, commit messages inline and in a top-level quoted
 #        here-document read by git, also behind -C <dir> (AC4), a describe-only use of a verb, an
 #        untracking git rm
@@ -758,6 +759,38 @@ test_case "EXT-SEG-P8: a here-document commit message on a command that pipes el
 test_case "EXT-SEG-C6: a message in a double-quoted substitution with an unpaired double quote is judged (the declared move, Q1)" \
   "$(bash_payload $'git commit -m "$(cat <<\'EOF\'\nsay "hi\nrm -rf build\nEOF\n)"' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
+# A redirection that carries an ampersand (Stage 7, #8122 F-03 and F-04). The walk cuts the line on every
+# ampersand, and the canonicalizer reads one in a redirection as a separator too, so a Trash call with
+# such a redirection lost the operands after it (B10 to B12, the dirs reader in D1) and the continuation
+# test never saw its line continue (B9). The line's continuation is now read once per record (P9: the
+# declared over-block that reading brings), and the operand reading goes on past the ampersand of an
+# operator left without its word and past a both-streams redirection. C12 to C17 are the common shapes
+# that stay allowed.
+test_case "EXT-SEG-B9: an inside Trash operand, a descriptor duplication, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b9 2>&1 \\"$'\n'"/tmp/seg-b9" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B10: an outside Trash operand after a descriptor duplication on the same line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b10 2>&1 /tmp/seg-b10" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${SEG_OUT}/tmp/seg-b10" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B11: an outside Trash operand after a both-streams redirection on the same line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b11 &>/dev/null /tmp/seg-b11" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${SEG_OUT}/tmp/seg-b11" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B12: an outside Trash operand after a descriptor duplication spelled with a blank before its word is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b12 2>& 1 /tmp/seg-b12" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${SEG_OUT}/tmp/seg-b12" "$RMT_HOME_ENV"
+test_case "EXT-SEG-D1: a directory change whose operand follows a descriptor duplication moves a later relative Trash operand" \
+  "$(bash_payload 'cd 2>&1 /tmp/seg-d1 && trash seg-d1-rel')" 2 "BLOCK-TRASH-003.*${SEG_OUT}/tmp/seg-d1/seg-d1-rel" "CLAUDE_WORKSPACE_ROOT=${HOME}"
+test_case "EXT-SEG-P9: an inside Trash call on a line that continues past a later command is refused (a declared over-block)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-p9 && echo done \\"$'\n'"more" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C12: an inside Trash call with its error stream duplicated is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c12 2>&1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C13: an inside Trash call with output to the null device and its error stream duplicated is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c13 >/dev/null 2>&1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C14: an inside Trash call with both streams to the null device is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c14 &>/dev/null" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C15: an inside Trash call that closes its error stream is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c15 2>&-" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C16: two inside Trash operands either side of a descriptor duplication are allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c16a 2>&1 ${SEG_FH}/Claude/seg-c16b" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C17: an inside Trash call with its error stream duplicated into a pipe is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c17 2>&1 | tail -3" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+
 # The mutant pairs. Each copy differs from the hook by exactly its marked line, shown live first;
 # each sentinel, refused through the hook, is allowed through its copy.
 seg_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-seg.XXXXXX" 2>/dev/null)" || seg_dir=""
@@ -790,6 +823,10 @@ else
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-barerm.sh"
   /usr/bin/sed -e 's/^\([[:space:]]*\)EXCISED\$'"'"'\\n'"'"'?\*) COMMAND=.*$/\1EXCISED$'"'"'\\n'"'"'?*) : ;;/' \
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-nohd.sh"
+  for seg_mk in RECCONT REDIRAMP BOTHREDIR; do
+    /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-'"$seg_mk"'$/\1# M-TRASH-'"$seg_mk"' (removed)/' \
+      "$HOOK" > "${seg_dir}/block-rm-prefer-trash-${seg_mk}.sh"
+  done
   ra_pair "EXT-SEG-MUT-SEGWALK-G1:" "${seg_dir}/block-rm-prefer-trash-segwalk.sh" 'git status && rm -rf /tmp/seg-g1'
   ra_pair "EXT-SEG-MUT-SEGWALK-G5:" "${seg_dir}/block-rm-prefer-trash-segwalk.sh" 'git status ; trash /tmp/seg-g5'
   ra_pair "EXT-SEG-MUT-SEGVERB-T1:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" 'rm -f ; unlink /tmp/seg-t1'
@@ -801,6 +838,10 @@ else
   ra_pair "EXT-SEG-MUT-BARERM-P1:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" 'rm -f'
   ra_pair "EXT-SEG-MUT-BARERM-P2:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" '( rm -rf )'
   ra_pair "EXT-SEG-MUT-BARERM-T7:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" $'rm -f \\\n/tmp/seg-t7'
+  ra_pair "EXT-SEG-MUT-RECCONT-B8:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" $'trash seg-mut-b8 \\\n/tmp/seg-b8'
+  ra_pair "EXT-SEG-MUT-RECCONT-B9:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" $'trash seg-mut-b9 2>&1 \\\n/tmp/seg-b9'
+  ra_pair "EXT-SEG-MUT-REDIRAMP-B10:" "${seg_dir}/block-rm-prefer-trash-REDIRAMP.sh" 'trash seg-mut-b10 2>&1 /tmp/seg-b10'
+  ra_pair "EXT-SEG-MUT-BOTHREDIR-B11:" "${seg_dir}/block-rm-prefer-trash-BOTHREDIR.sh" 'trash seg-mut-b11 &>/dev/null /tmp/seg-b11'
   seg_armed "EXT-SEG-INT1-C4:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C4"
   seg_armed "EXT-SEG-INT1-C7:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C7"
   seg_armed "EXT-SEG-INT1-C8:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C8"
