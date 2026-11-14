@@ -848,20 +848,29 @@ suggest_trash_command() {
 #   through walk_segments(), so an argument the walk needs reaches every mode.
 #
 # SEGMENT_WALK_AWK — the one segmentation every reader shares.
-#   mode "targets": print `<seg><TAB><token>` for each operand of verb v.
+#   The line is cut on every `;`, `&` and `|`, and the canonicalizer reads an ampersand in a
+#   redirection as a separator too, so a redirection can carry a command's words past a cut:
+#   an operator left without its word (`2>&1`, `>&2`, `<&3`, `2>&-`, `>|file`: the cut fell on
+#   the operator itself) takes the next fragment's first word as its word, and a both-streams
+#   redirection (`&>file`, `&>>file`: a redirection in bash and zsh, a separator in dash) is
+#   followed by the words the canonicalizer then read as a new command. Each fragment is still a
+#   segment of its own; the targets reader and the dirs reader also read a verb's segment on
+#   through those fragments (widen), so the readings only add operands and directories.
+#   mode "targets": print `<seg><TAB><token>` for each operand of verb v, the widened reading.
 #   mode "bare":    print `<seg>` for each segment of verb v that does not name all its
-#                   targets on its line: it carries no operand under the targets mode's
-#                   skip rules (flags, a "--", redirections and bare shell structure are
-#                   not operands), or its line continues past it — the segment's last
-#                   token ends in an odd run of backslashes, so its operands go on to the
-#                   next line, a record of its own. A lone trailing backslash is not an
-#                   operand.
+#                   targets on its line: the segment on its own carries no operand under the
+#                   targets mode's skip rules (flags, a "--", redirections and bare shell
+#                   structure are not operands), or its record continues — the record's last
+#                   word ends in an odd run of backslashes, so operands go on to the next line,
+#                   a record of its own. Read once per record, so a cut that lands inside the
+#                   verb's own words cannot hide it, and every verb segment of a continued
+#                   record is reported. A lone trailing backslash is not an operand.
 #   mode "dirs":    print `<seg><TAB><kind><TAB><operand>` for each directory change,
 #                   kind DIR (one literal operand), HOME (bare cd) or UNKNOWN (a form
-#                   whose destination cannot be read from the line), plus a
-#                   `0<TAB>REENTRANT` line when a loop or function definition can run a
-#                   segment again after a later one (so order on the line is not order
-#                   of execution).
+#                   whose destination cannot be read from the line), for the segment on its
+#                   own and again for its widened reading, plus a `0<TAB>REENTRANT` line
+#                   when a loop or function definition can run a segment again after a
+#                   later one (so order on the line is not order of execution).
 # shellcheck disable=SC2016  # awk program — single quotes intentional
 readonly SEGMENT_WALK_AWK='
   function skip_redirect(t) {
@@ -869,16 +878,43 @@ readonly SEGMENT_WALK_AWK='
     if (t ~ /^[0-9]*(>>|>|<)/) { if (t ~ /(>>|>|<)$/) skipnext = 1; return 1; }
     return 0;
   }
-  function dir_event(   w, i, t, nops, op, bad, endopts, flags) {
-    w = tokens[first];
+  # widen(s) — the words of segment s (jt[1..jbase]), then the words a redirection carries past a
+  # cut (jt[jbase+1..jm]). An operator left without its word takes the next fragment with it; a
+  # both-streams redirection takes its own fragment and, through the one ";" the canonicalizer
+  # puts before the word it then reads as a command, the fragment after it. jend[i] marks the last
+  # word of the record.
+  function widen(s,   k, i, mm, tk, amp) {
+    jm = 0; jbase = 0; amp = 0; k = s;
+    for (;;) {
+      mm = split(segments[k], tk, /[[:space:]]+/);
+      for (i = 1; i <= mm; i++) if (tk[i] != "") { jt[++jm] = tk[i]; jend[jm] = (k == lastk && i == lasti); }
+      if (k == s) jbase = jm;
+      if (k >= n) return;
+      if (jm > 0 && jt[jm] ~ /^[0-9]*(>>|>|<|<>)$/) { amp = 0; k++; continue; }  # M-TRASH-REDIRAMP
+      if (seps[k] ~ /(^|[^&])&$/ && segments[k + 1] ~ /^>/) { amp = 1; k++; continue; }  # M-TRASH-BOTHREDIR
+      if (amp && seps[k] == ";" && segments[k + 1] ~ /[^[:space:]]/) { amp = 0; k++; continue; }
+      return;
+    }
+  }
+  # lastword() — the last word of the record, and where it sits (lastk, lasti).
+  function lastword(   k, mm, i, tk) {
+    lastk = 0; lasti = 0; lastt = "";
+    for (k = n; k >= 1; k--) {
+      mm = split(segments[k], tk, /[[:space:]]+/);
+      for (i = mm; i >= 1; i--) if (tk[i] != "") { lastk = k; lasti = i; lastt = tk[i]; return; }
+    }
+  }
+  # dir_event(hi) — the directory change jt[1] makes, reading its words jt[2..hi].
+  function dir_event(hi,   w, i, t, nops, op, bad, endopts, flags) {
+    w = jt[1];
     if (w ~ /^(for|while|until|select|repeat|foreach|function)$/ || segments[s] ~ /\(\)/) reentrant = 1;
     if (w != "cd" && w != "chdir" && w != "pushd" && w != "popd") return;
     # popd returns to a directory-stack entry, which can predate this command.
     if (w == "popd") { print seg "\tUNKNOWN\t"; return; }
     flags = (w == "pushd") ? "^-[LPqs]+$" : "^-[LPeqs@]+$";
     nops = 0; bad = 0; endopts = 0; skipnext = 0; op = "";
-    for (i = first + 1; i <= m; i++) {
-      t = tokens[i];
+    for (i = 2; i <= hi; i++) {
+      t = jt[i];
       if (t == "") continue;
       if (skipnext) { skipnext = 0; continue; }
       if (skip_redirect(t)) continue;
@@ -893,32 +929,34 @@ readonly SEGMENT_WALK_AWK='
     else print seg "\tDIR\t" op;
   }
   {
-    # Split on command separators first; each segment is separator-free.
+    # Split on command separators first; each segment is separator-free. seps[k] is the separator
+    # run that ends segment k (the pieces between the runs of other characters).
     n = split($0, segments, /[;&|]+/);
+    split($0, runs, /[^;&|]+/); off = ($0 ~ /^[;&|]/) ? 0 : 1;
+    for (k = 1; k <= n; k++) seps[k] = runs[k + off];
+    # The record continues when its last word ends in an odd run of backslashes: the operands go
+    # on to the next line, a record of its own. Read once per record, wherever the cut fell.
+    lastword();
+    rc = (lastk > 0 && match(lastt, /\\+$/) && RLENGTH % 2 == 1);  # M-TRASH-RECCONT
     for (s = 1; s <= n; s++) {
       seg++;
-      m = split(segments[s], tokens, /[[:space:]]+/);
-      first = 0;
-      for (i = 1; i <= m; i++) {
-        if (tokens[i] != "") { first = i; break; }
-      }
-      if (first == 0) continue;
-      if (mode == "dirs") { dir_event(); continue; }
+      widen(s);
+      if (jbase == 0) continue;
+      if (mode == "dirs") { dir_event(jbase); if (jm > jbase) dir_event(jm); continue; }
       # Strip canonical absolute-path prefix from first token before
       # verb-equality check. Matches the 5 macOS/Linux paths
       # captured by ANCHOR_PREFIX_BASH at the regex-anchor site, and, for
       # the Trash verb, the keg-only location TRASH_VERB_RE also matches
       # (keg, passed by walk_segments to every mode).
-      first_token = tokens[first];
+      first_token = jt[1];
       sub(/^\/(usr\/(local\/)?|opt\/(homebrew|local)\/)?bin\//, "", first_token);
       if (v == "trash" && keg != "" && index(first_token, keg "/") == 1) first_token = substr(first_token, length(keg) + 2);
       if (first_token != v) continue;
-      endopts = 0; skipnext = 0; nops = 0; cont = 0;
-      for (i = first + 1; i <= m; i++) {
-        t = tokens[i];
-        if (t == "") continue;
-        # A line continued past this segment; a lone trailing backslash is not an operand.
-        if (s == n && i == m && match(t, /\\+$/) && RLENGTH % 2 == 1) { cont = 1; if (t == "\\") continue; }
+      endopts = 0; skipnext = 0; nops = 0;
+      for (i = 2; i <= jm; i++) {
+        t = jt[i];
+        # A lone trailing backslash continues the record; it is not an operand.
+        if (jend[i] && t == "\\") continue;
         if (skipnext) { skipnext = 0; continue; }
         if (skip_redirect(t)) continue;
         # Skip bare shell structure. A subshell leaves its closing `)` inside
@@ -928,10 +966,11 @@ readonly SEGMENT_WALK_AWK='
         # Skip flags (start with -) until a `--` ends option parsing.
         if (!endopts && t == "--") { endopts = 1; continue; }
         if (!endopts && substr(t, 1, 1) == "-") continue;
-        nops++;
+        # The bare reading counts the segment on its own, so a widened word never clears it.
+        if (i <= jbase) nops++;
         if (mode == "targets") print seg "\t" t;
       }
-      if (mode == "bare" && (nops == 0 || cont)) print seg;
+      if (mode == "bare" && (nops == 0 || rc)) print seg;
     }
   }
   END { if (mode == "dirs" && reentrant) print "0\tREENTRANT\t"; }
