@@ -1943,3 +1943,19 @@ AV36|block-destructive|rt-asgn-resid|-|?|a|FOO='a b'> @D@/out bash @D@/na.sh
 AV37|block-destructive|rt-asgn-resid|-|?|a|FOO='x; y' bash @D@/na.sh
 AV38|block-destructive|rt-asgn-resid|-|?|a|FOO=$'a b' bash @D@/na.sh
 AV39|block-destructive|rt-asgn-resid|-|?|a|FOO="a $X" bash @D@/na.sh
+# seed 15.3 addendum, after #8319's slice (8e44cf61): the classes its Stage-6 output named as built but unpinned.
+# rt-asgn-head: the carrier-head resolver steps over only the first piece of a space-bearing value, so a carrier
+# word inside the value can be taken as the head and suppress a later quoted segment that executes (the review's
+# PR-2), beside its control with no carrier word in the value. rt-asgn-resid gains: a second escaped piece
+# followed by two blanks; a value whose single and double quotes both delimit; an env operand whose `=` sits in a
+# later piece (the review's FM-3); a `#` inside a quoted value; an unmodelled construct in a prefix token ahead of a
+# quoted assignment; and an earlier quote-dense part of the command that spends the shared work budget ahead of a
+# later line of the M1 shape. Recorded at 8e44cf61's verdicts.
+AV40|block-destructive|rt-asgn-head|-|?|a|FOO='a echo b' bash -c "x; bash @D@/na.sh"
+AV41|block-destructive|rt-asgn-head|-|?|B|FOO='a b' bash -c "x; bash @D@/na.sh"
+AV42|block-destructive|rt-asgn-resid|-|?|a|FOO=a\ b\  bash @D@/na.sh
+AV43|block-destructive|rt-asgn-resid|-|?|a|FOO='a b'"c d" bash @D@/na.sh
+AV44|block-destructive|rt-asgn-resid|-|?|a|env 'A B=c' bash @D@/na.sh
+AV45|block-destructive|rt-asgn-resid|-|?|a|FOO='a #b' bash @D@/na.sh
+AV46|block-destructive|rt-asgn-resid|-|?|a|X=$(true) FOO='a b' bash @D@/na.sh
+AV47|block-destructive|rt-asgn-resid|-|?|a|X=@QPAD@@NL@FOO='a b' bash @D@/na.sh
