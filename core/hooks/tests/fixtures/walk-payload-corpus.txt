@@ -1897,6 +1897,9 @@ OP11|block-destructive|rt-opnear|-|?|a|cat @D@/na.s'h'
 # residuals, allowed before and after: a later line after a declined here-document, a braced expansion, an enclosure
 # opened inside double quotes, a redirection glued to the value, a separator inside the value, and the two values
 # CD-1 leaves to today's reading (ANSI-C quoting and a parameter expansion).
+# The precision rows here (AV19-AV22, AV24, beside WR134 and WR135) move to allowed with ground truth `?`: for this
+# release the operator waived the real-interpreter verification a refuse-to-allow move otherwise needs
+# (D-GroundTruth-Rev); each move is declared in the readiness text and pinned by an arm red against the pre-fix hook.
 AV01|block-destructive|rt-asgn|-|?|a|FOO='a b' sh @D@/na.sh
 AV02|block-destructive|rt-asgn|-|?|a|FOO="a b" source @D@/na.sh
 AV03|block-destructive|rt-asgn|-|?|a|FOO='a b' . @D@/na.sh
