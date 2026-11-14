@@ -7,8 +7,8 @@
 # not flag; together they are the control arm the check's acceptance criteria require.
 # Each remaining case pins one rule the tool's module docstring states, so a regression
 # names the rule it broke. The list below names the rule each case pins. It is not a sweep
-# of the docstring: a rule it does not name is not pinned by this set, and the rules known
-# to be unpinned are named at its end.
+# of the docstring: a rule it does not name is not pinned by this set, and the rules found
+# unpinned so far are named at its end.
 #
 # FORMAT (case-block, because a marked enumeration is irreducibly multi-line):
 #   --- <EXPECT> <RELATION> <label>
@@ -70,6 +70,11 @@
 #     with the verdict removed passes every case. It is a fail-closed assertion, reached
 #     only through a splitter fault: with the table header counted as an item, case 22
 #     reads `boundary-disagreement`.
+#   - The external-scheme limb of the link skip. No case carries an external link, so the
+#     tool with that limb removed passes every case, yet it changes a verdict: an item
+#     whose first link is `https:` reads that link as an extra path instead of keying from
+#     its code span. The limb that skips a pure anchor is equivalent: the fragment strip
+#     already empties a `#...` target, which is then skipped.
 # Cases: 7 DRIFT · 10 CLEAN · 6 UNRESOLVED · 1 SCOPE-OUT — 24 in all.
 
 --- DRIFT list seeded-mismatch
