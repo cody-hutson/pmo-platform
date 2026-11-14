@@ -1961,3 +1961,11 @@ AV44|block-destructive|rt-asgn-resid|-|?|a|env 'A B=c' bash @D@/na.sh
 AV45|block-destructive|rt-asgn-resid|-|?|a|FOO='a #b' bash @D@/na.sh
 AV46|block-destructive|rt-asgn-resid|-|?|a|X=$(true) FOO='a b' bash @D@/na.sh
 AV47|block-destructive|rt-asgn-resid|-|?|a|X=@QPAD@@NL@FOO='a b' bash @D@/na.sh
+# seed 15.3 addendum 2, after #8319's second pass (abac5856): the two carrier-head shapes its output named. A
+# here-document's receiver is resolved by the same carrier-head reader, so a carrier word inside a space-bearing
+# value ahead of an interpreter fed a here-document can mark the body as a carrier's (beside its control with no
+# carrier word); and a quote-dense value of one quote kind whose re-scan crosses the shared work budget leaves the
+# carrier answer standing. Recorded at abac5856's verdicts.
+AV48|block-destructive|rt-asgn-head|-|?|a|FOO='a echo b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV49|block-destructive|rt-asgn-head|-|?|B|FOO='a b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV50|block-destructive|rt-asgn-head|-|?|a|FOO=@QMID@"a echo b" bash -c "x; bash @D@/na.sh"
