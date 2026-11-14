@@ -1253,7 +1253,7 @@ class _Lab:
                 with open(path, "wb") as fh:
                     fh.write(text if isinstance(text, bytes) else text.encode("utf-8"))
                 if rel.endswith(".sh"):
-                    os.chmod(path, 0o755)
+                    os.chmod(path, 0o700)
             self.g("add", "--", rel)
 
     def commit(self, parent, files, message="lab: a scratch commit\n", who=None):
@@ -1303,9 +1303,14 @@ def self_test(opts):
         rows, `includes` rows that must be among them."""
         bad = {k for k, v in _st_rows(text).items() if v != "PASS"}
         named = (exact is None or bad == set(exact)) and all(any(k.startswith(i) for k in bad) for i in includes)
+        return tally(label, code == want_code and named, "exit=%s; rows not passing: %s" % (code, "; ".join(sorted(bad)) or "none read"))
+
+    def tally(label, ok, detail):
+        """One attack, one printed line: what was tried, the exit, and the rows it did not pass."""
         attacks[0] += 1
-        attacks[1] += bool(code == want_code and named)
-        return check("attack: " + label, code == want_code and named, "exit=%s rows not passing=%s" % (code, sorted(bad)))
+        attacks[1] += bool(ok)
+        print("attack %2d %s | %s | %s" % (attacks[0], "fails as named" if ok else "DOES NOT FAIL AS NAMED", label, detail))
+        return check("attack: " + label, ok, detail)
 
     try:
         os.environ.update({"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
@@ -1390,8 +1395,7 @@ def self_test(opts):
             lab.f("clean-pages/lab-page-%d.md" % i, page(i))
         code, text = _st_run(*(["probe", os.path.join(root, "in", "clean-pages")] + common + [
             "--listing", listing, "--rev", rb, "--expect-files", 2, "--held", ST_HELD, "--write-pins", os.path.join(root, "in", "empty-pins.json")]))
-        attacks[0] += 1
-        attacks[1] += check("attack: pins written over clean pages are refused", code == 3 and "pinned at 0" in text, text[-300:])
+        tally("pins written over clean pages are refused", code == 3 and "pinned at 0" in text, "exit=%s; no pins are written" % code)
         code, text = _st_run(*(pin_args[:-2] + ["--write-pins", os.path.join(root, "in", "unbounded.json")]))
         check("pins: a manifest path outside the catalog with no bound is refused", code == 3 and "have no bound" in text, text[-300:])
 
@@ -1518,8 +1522,8 @@ def self_test(opts):
             "--listing", listing, "--commit", good, "--base", head, "--verified", head, "--release-base", rb, "--universe", ST_UNIVERSE, "--manifest", manifest,
             "--message-file", msg, "--pins", pins, "--drafted", drafted, "--drafted-rev", rb, "--drafted-held", ST_HELD, "--repository", "owner/name",
             "--record-out", os.path.join(root, "in", "forged-record.txt"), "--pattern-arm", "not-run"], capture_output=True, text=True)
-        attacks[0] += 1
-        attacks[1] += check("attack: a changed copy of this tool run as itself is exit 3", r.returncode == 3 and "inputs differ from the pins: tool" in r.stdout, r.stdout[-200:])
+        tally("a changed copy of this tool run as itself", r.returncode == 3 and "inputs differ from the pins: tool" in r.stdout,
+              "exit=%s; the pins do not name the copy" % r.returncode)
 
         # ---- a re-pin says what moved; a pin run with no earlier pins named, at a head that tracks pages, says that
         moved = lab.commit(good, {BUILD: ST_TOOL + "# a later fix\n"})
@@ -1652,7 +1656,7 @@ def self_test(opts):
         os.makedirs(hooks, exist_ok=True)
         refuse, permit, hook = "#!/bin/sh\necho refused\nexit 1\n", "#!/bin/sh\nexit 0\n", os.path.join(hooks, "pre-push")
 
-        def install(where, text, mode=0o755):
+        def install(where, text, mode=0o700):
             with open(where, "w", encoding="utf-8") as fh:
                 fh.write(text)
             os.chmod(where, mode)
@@ -1670,7 +1674,7 @@ def self_test(opts):
         install(hook, permit)
         code, text = flight()
         check("preflight: a hook that refuses nothing is exit 3, with HEAD on a commit", code == 3 and "hook_refuses=False" in text and "refs_received=1" in text, text)
-        install(hook, refuse, 0o644)
+        install(hook, refuse, 0o600)
         code, text = flight()
         check("preflight: a hook that is not executable is exit 3, and the push arrives", code == 3 and "refs_received=1" in text and "missed=2" in text, text)
         # a push that fails for a reason of its own, under a hook that refuses nothing, is not a refusal
@@ -1736,7 +1740,11 @@ def as_built(check, folder):
     spec = importlib.util.spec_from_file_location("catalog_library_under_test", os.path.join(tools, "_process_catalog.py"))
     lib = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = lib
-    spec.loader.exec_module(lib)
+    keep, sys.dont_write_bytecode = sys.dont_write_bytecode, True     # the import leaves no file beside the tools
+    try:
+        spec.loader.exec_module(lib)
+    finally:
+        sys.dont_write_bytecode = keep
     from pathlib import Path
     os.makedirs(folder)
     fx = lib.build_fixture_repo(Path(folder) / "repo")
