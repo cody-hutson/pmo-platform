@@ -2296,6 +2296,16 @@ test_case "HDATA-RX-ZSIBLING: a sibling table (global aliases) stays refused" \
   "$(bash_payload $'galiases[EOF]=x; cat <<\'EOF\'\nrm -rf /tmp/hd-zg\nEOF')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-GITC: git with a global option defining an alias is not a listed receiver and stays refused (INT-GITC)" \
   "$(bash_payload $'git -c alias.hd=\'!sh\' hd <<\'EOF\'\nrm -rf /tmp/hd-gitc\nEOF')" 2 "BLOCK-TRASH-001"
+# F-S8-01 (#7644): a `<<` the shell does not read as a here-document opener opens no body,
+# so the lines after it run as commands and must stay judged.
+test_case "HDATA-NONOP-COMMENT: a quoted opener inside a # comment opens no body, so the next line is a command" \
+  "$(bash_payload $'cat /dev/null # <<\'EOF\'\nrm -rf /tmp/hd-nonop-c\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-NONOP-ANSIC: an opener inside ANSI-C quoting opens no body, so the next line is a command" \
+  "$(bash_payload $'echo $\'<<\\\'EOF\\\'\'\nrm -rf /tmp/hd-nonop-a\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-NONOP-HERESTR: a here-string opens no body, so the next line is a command" \
+  "$(bash_payload $'cat <<<\'EOF\'\nrm -rf /tmp/hd-nonop-h\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-NONOP-ARITH: an arithmetic shift opens no body, so the next line is a command" \
+  "$(bash_payload $'echo $((1<<2))\nrm -rf /tmp/hd-nonop-s\nEOF')" 2 "BLOCK-TRASH-001"
 test_case "HDATA-RX-ZPATH: a listed receiver writing to a path that carries a table name as a directory is data" \
   "$(bash_payload $'cat > /tmp/hd-cfg/commands/note.md <<\'EOF\'\nrm -rf /tmp/hd-zp\nEOF')" 0
 test_case "HDATA-RX-ZCTL: a table name followed by a word character is not a table, so the body is data" \
