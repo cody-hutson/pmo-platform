@@ -1240,6 +1240,10 @@ core/deploy/tools/check-milestone-epic-membership.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-mirror-pair-parity.py
 ./core/deploy/tools/check-mirror-pair-parity.py
 core/deploy/tools/check-mirror-pair-parity.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-process-catalog-publication.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-process-catalog-publication.py
+./core/deploy/tools/check-process-catalog-publication.py
+core/deploy/tools/check-process-catalog-publication.py
 [PMO_PLATFORM_ROOT]/core/deploy/tools/check-process-catalog.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-process-catalog.py
 ./core/deploy/tools/check-process-catalog.py
