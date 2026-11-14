@@ -652,6 +652,15 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 | DEV-7 | 6 (Commit 0) | The two re-review instrumentation rows this plan owes (the Stage-4 re-review row; #8555's Phase 0.5 row: 6 rows, 4 C1, 2 C2, 0 C3) are not written by this commit. The re-review standard names an operator-instance file for them, outside the tracked tree, which an Engineering session does not write. The rows are returned to the hub | `release/references/standards/triage-design-rereview.md` § 8 |
 | DEV-8 | 6 (Commit 0) | #8561's limb a carries one EDIT the Stage-4 plan did not list: one surface-register row in the placement standard, for the private-source pattern and its digest | sub-task #8874, Revision 4; CR2-4 |
 | DEV-9 | 6 (Commit 0) | This file was committed with the plan verifier exiting 3, where the Stage-6 brief asked for exit 0. Exit 0 is not reachable at Commit 0 for a release whose files land in later commits: the verifier grades the matrix's ADDs, one live per-issue row and two live cross-issue rows against a tree that does not yet hold their subjects. The two Commit-0 rungs the bridge defines both pass (the version half and the stamp manifest), and so does the stage-06 A1 lint. The commit stays local and unpushed; whether the gate before the push is the two rungs or the full verifier is returned to the hub | § Verification Evidence; `release/references/how-to/hub-spoke-bridge.md` Procedure 0, steps 1 to 3b |
+| DEV-10 | 6 (step 7a) | The publication gate evaluates 37 rows on a commit that evaluates in full, where the posted design had 35. The first row also requires the commit's base to be the publication head the pins were written at. Two rows are added: the commit's signature state equals the pinned head's, and each changed path outside the catalog adds exactly the number of lines the pins record for it. The sentence signed before a page push was restated to 37 rows before the first gate run. The tool landed as two commits where the pack scan treats the step as one; the one-commit rule binds a push that changes page text, and this step changed none | sub-task #8867, the step-7a output and the hub's note that consumed it; CR2-0 |
+| DEV-11 | 6 (steps 7b–8) | The gate pins were written twice. The second set differs from the first only in the acknowledged count of grounded names, the generation number and the lineage line, and the release head did not move between the two. The pins did not change again | sub-task #8871, the hub's Stage 6 record |
+| DEV-12 | 6 (steps 7b–8) | The page pass took three repair rounds, where the signature rule describes one scan and one fresh read before a signature. Three fresh readers read every line of the first build. After each of the first two rounds a fresh reader re-read the lines that round changed. The third round was limited to the exact lines a reader had shown a tracked source to contradict, and a verifier then read every line it changed against its cited source. That is six reader reports, each reporting every item the hub had seeded for it | sub-task #8867, the three repair-round outputs and the hub's closing note; sub-task #8871, the hub's record |
+| DEV-13 | 6 (step 8) | The landing step ran to its end four times: on the first pre-flip commit, and again, whole, after each repair round. A first attempt stopped at its identity read and created nothing; from the next run on, that read was made against the identity git resolves in the checkout, and the hub compared against its own file. Every superseded pre-flip commit and landing commit stays on a renamed local ref in the clone. None is on a remote ref and none was pushed | sub-task #8871, the landing outputs and the hub's record |
+| DEV-14 | 6 (step 7c) | The catalog README changed once more after its parts were set in their final order: one sentence was added and one table cell reconciled, on the hub's ruling, after the publication probe reported a finding on the file | sub-task #8867, the two outputs of the final pass session |
+| DEV-15 | 6 (steps 7c–8) | Two pages' verdicts moved in the first repair round; none moved in the second or the third. As pushed, the 48 pages read 2 `conformant`, 25 `deviates` and 21 `unobserved` | sub-task #8871, the landing output after the first repair round and the hub's final entry |
+| DEV-16 | 6 (step 9) | The default branch was merged after the page push, not before it. No merge commit sits among the 31 commits from the release base to the pushed commit. The default branch's two new commits are dated after the gate tool's last commit, one before the pushed commit was made and one after it. Its tip `ebc217d8` was merged in this step as one merge commit, `35228185`. The merge brings in three files: one decision record, the release log and another release's plan file. This release changes none of them, no page depicts or cites any of them, and the impact query from the pushed commit to the merge commit returns no page | § Verification Evidence, Stage 6 — steps 7a to 9 |
+| DEV-17 | 6 (steps 7b–9) | Four things are carried to Stage 7 and not repaired in Stage 6: one sentence on one page that a verifier showed a tracked source to contradict, on a line outside the third round's bound; the readers' note-level findings; one defect in the publication gate tool's file-name rule; and the vocabulary gate's one finding, the spelling of a status token on one line of the catalog README. A repair that changes a page, a generated file or the README is pushed as its own commit under its own signature (§ Implementation Sequence, the signature rule) | sub-task #8867, the hub's closing note; § Verification Evidence, Stage 6 — steps 7a to 9 |
+| DEV-18 | 6 (step 9) | The step-9 session may change no page, generated file, tool or source, so its controls plant nothing in the tree. The zeros of the citation, staleness and page-validation checks are controlled on a copy of one published page, kept outside the repository, with one planted change each. The generated-output check is controlled by comparing two fresh builds with the committed files, and by the generator's own self-test. The plan verifier was run as at Commit 0, with the release-level table out of the file for the length of the run; this session did not run the corpus check. The depersonalization and name scans over this file are the hub's to run | § Verification Evidence, Stage 6 — steps 7a to 9; DEV-9 |
 
 ---
 
@@ -671,3 +680,185 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
   - the Release-Level corpus check was not part of that run; it is run once, directly, on the step-2 head, and its result is in the Stage-6 output comment on sub-task #8851.
   Every non-pass above traces to a file that a later commit of this release delivers, or to the recogniser limit named. No row was rewritten to make the exit 0.
 - **ADR index:** N/A — this release adds no decision record.
+
+### Stage 6 — steps 7a to 9
+
+**What was pushed**, as the hub records it on sub-tasks #8867 and #8871.
+
+- **Step 7a, the gate tool.** Commits `9b09dc61` and `7fae3757`; the second is the publication head the pins were written at. The tool's self-test: 119 arms, 0 failed; 31 of 31 attacks fail on the row named for them; a clean commit passes 37 of 37 rows.
+- **Steps 7b to 8, the pages.** One commit, `c95c7864ab94201c9f09b66e4d68013e025ee2fd`, tree `9ec083f7aec77891d1a1856881499fc63ab93d27`, parent `7fae37579a54714fa6c56f469ab067b389219ad6`. It changes 67 paths: 48 pages and 15 generated files added, the catalog README changed, and three files outside the catalog, which add 3 lines between them.
+- **The gate record for that commit.** Verdict PASS on 37 rows, none failed, none not evaluated; one commit on the remote release head; identity and signature state as required. Record digest: `b9c24308a83316866016bff33ff8afc4557df579b41f15d452f2a1695bb41c25`.
+- **The readers.** Six fresh readers: three on the first build, one after each of the first two repair rounds, and a line verifier after the third. Each reported every item the hub had seeded for it.
+- **Page verdicts as pushed.** 2 `conformant`, 25 `deviates`, 21 `unobserved`.
+- **The push.** The operator signed for the commit; the hub pushed it by commit ID and read the branch back equal.
+
+**Step 9, at the merge commit.** The default branch's tip `ebc217d8` was merged into the pushed commit as `35228185` (tree `87a3562c`): a signed merge commit, three files in, no conflict (DEV-16). The commands below ran from the repository root at that commit, each Python tool as `python3 -B <path>`. The work tree read clean, ignored files included, before the first and after the last.
+
+| Command | Exit | Closing line |
+|---|---|---|
+| `core/deploy/tools/check-process-catalog-publication.py preflight --repo . --identity-file <identity file> --pins <gate pins>`, before the merge | 0 | `publication preflight status=pass checks=8 missed=0` |
+| `core/deploy/tools/build-process-catalog.py build --check` | 0 | `process-catalog generated-output status=pass exit=0 universes=1 pages=48 generated_files=15 differing=0 missing=0 orphans=0 link_findings=0` |
+| `core/deploy/tools/build-process-catalog.py anchors resolve --check` | 0 | `process-catalog citations status=pass exit=0 pages=48 citations=487 current=487 moved=0 gone=0 ambiguous=0 other=0 rewritten=0` |
+| `core/deploy/tools/build-process-catalog.py stale --fail-on any` | 0 | `process-catalog staleness status=pass exit=0 pages=48 sources=432 depicted_changed=0 cited_changed=0 fail_on=any` |
+| `core/deploy/tools/build-process-catalog.py impact --range c95c7864..35228185` | 0 | `process-catalog impact status=pass exit=0 paths=3 unmatched=0 pages=0 hit_depicts=0 hit_cites=0 hit_controls=0` |
+| `core/deploy/tools/check-process-catalog.py --pattern-arm not-run` | 0 | `process-catalog page-validation status=pass exit=0 universes=1 pages=48 registry_rows=212 register_rows=373 pattern_arm=not-run errors=0 warns=7` |
+| `--self-test` of `build-process-catalog.py`, `check-process-catalog.py`, `build-element-inventory.py` and `_process_catalog.py` | 0, four times | 435, 178, 28 and 116 arms; 0 failed in each |
+| `core/deploy/tools/check-process-catalog-publication.py --self-test` | 0 | `publication self-test status=pass arms=119 failed=0`; 31 of 31 attacks fail on the named row; the clean commit passes 37 rows |
+| `release/tools/check-adr-numbers.py` | 0 | `ADR-number integrity check: PASS (238 ADRs, contiguous 001..238, no duplicates)` |
+| `bash core/deploy/tools/check-pv7-vocabulary.sh`, after its `--self-test`, as the job named "PV-7 vocabulary gate" runs it | 1 | one finding, at `core/process-catalog/README.md:113`; 2,351 tracked files enumerated, 816 sanctioned occurrences counted as the control. Not repaired in this step (DEV-17) |
+
+No command above says that a page, a generated file or a source must change. The vocabulary gate's finding is in the catalog README and waits for a signed push.
+
+**Probe records for the zeros above** (`core/disciplines/review-discipline-principles.md` § 8, PV-0 to PV-5). No control changed a file of the repository: every planted input is a copy kept outside it.
+
+```
+P-1  Probe: build-process-catalog.py impact --range c95c7864..35228185
+     Denominator: 3 changed paths (the tool's paths= field), read against 48 pages
+     Control - sensitivity: the same command over 29c60404..35228185 -> paths=169 pages=38;
+            impact --paths core/deploy/tools/check-doc-links.py -> pages=1
+     Control - specificity: impact --paths core/process-catalog/README.md -> pages=0
+     Extraction: the closing line of each run
+     Result: pages=0
+     Verdict: CLEAN
+P-2  Probe: build-process-catalog.py stale --fail-on any
+     Denominator: 48 pages, 432 sources
+     Control - sensitivity: the same command on a copy of one published page whose verification
+            commit is set back to the release base -> cited_changed=2, exit 1
+     Control - specificity: the same copy unchanged -> depicted_changed=0 cited_changed=0, exit 0
+     Extraction: the closing line of each run; the copy is 117 lines and reads 15 sources
+     Result: depicted_changed=0 cited_changed=0
+     Verdict: CLEAN
+P-3  Probe: build-process-catalog.py anchors resolve --check
+     Denominator: 487 citations on 48 pages
+     Control - sensitivity: the same command on a copy of one page with one cited line number
+            moved by three lines -> citations=12 current=11 other=1, exit 1
+     Control - specificity: the same copy unchanged -> citations=12 current=12, exit 0
+     Extraction: the closing line of each run
+     Result: current=487 of 487
+     Verdict: CLEAN
+P-4  Probe: check-process-catalog.py --pattern-arm not-run
+     Denominator: 48 pages; 373 and 212 register rows
+     Control - sensitivity: the same command on a copy of one page with its verdict line removed
+            -> rules FM002 and FM012, once each; and the register check on the tracked failing
+            fixture register, passed by --controls -> 2 rows read, 5 findings, exit 1
+     Control - specificity: the same copy unchanged -> FM002 0, FM012 0. A copy read from outside
+            the catalog folder carries 7 errors of its own in both arms: its file name and its
+            relative links
+     Extraction: every finding line of each run, tallied by rule code
+     Result: errors=0; 0 register findings
+     Verdict: CLEAN for the planted class; the pattern arm was declared not run
+P-5  Probe: build-process-catalog.py build --check; and two runs of build --out <folder> under two
+            hash seeds, compared file by file with each other and with the committed files as the
+            merge commit's objects hold them
+     Denominator: 15 generated files, 372,008 bytes
+     Control - sensitivity: one byte appended to one file of a copy of the second build -> 1 file
+            differs. For build --check read alone the arm is in fixture form: the generator's
+            self-test, 435 arms, 0 failed; it was not shown failing on a change to this tree
+     Control - specificity: the two unchanged builds -> 0 files differ
+     Extraction: every byte of the 15 files, each arm
+     Result: differing=0 missing=0 orphans=0; 0 files differ
+     Verdict: CLEAN for the file comparison; INDETERMINATE (PV-2a) for build --check read alone
+```
+
+**Re-read against the default branch before the commit** (scope-lock condition 10). The placement standard's surface register holds 44 rows on the default branch's tip, as at the release base, and 46 at the merge commit: this release's two rows are still the next two IDs. The four files a sibling release also edits are unchanged on the default branch since the release base.
+
+**Checks on this file, before its commit.**
+
+- **Plan verifier: exit 0** (it was 3 at Commit 0; DEV-9). `release/tools/verify-release-plan.sh` on this file, with the Stage-4 comment supplied for the provenance delta, the release range given as `ebc217d8..35228185`, and the release-level table out of the file for the length of the run (DEV-18). The file was restored afterwards, equal by digest. 113 records, read by record class:
+  - provenance-survival: 4 of 4 PASS. The run printed three awk warnings about a newline in a string while it read the supplied comment, so the label was also compared by a line scan: its three elements are the same in the comment and in this file.
+  - declared deferrals: 55 per-issue rows and 3 cross-issue criteria read SKIP, as declared.
+  - per-issue: 1 UNRUNNABLE, #8556 AC-7. Its command reads 0, as expected (1 at the release base); its reader-graded limb is not the verifier's to grade.
+  - integration: 2 PASS, CIAC-2 and CIAC-5, each reading 1 against "at least 1".
+  - fcm-delivery: 47 PASS, one for each unconditional ADD of the matrix. The coverage record reads SKIP with `declared=65 interpreted=64 obligations=47 uninterpreted=1 pathless=0`; the uninterpreted row is still `EDIT .gitignore`.
+  - No FAIL and no ERROR. No row was rewritten. The release-level corpus check was not part of the run and was not run in this step.
+- **CIAC authoring lint:** `release/tools/verify-release-plan.sh --ciac-lint` → exit 0, `CIAC-LINT-SUMMARY declared=5 parsed=5 clean=2 declared-deferral=3 flagged=0`.
+- **Stamp manifest:** `release/tools/claim-version.sh --verify-stamp engineering-harness-pages-published` → exit 0, "verify-stamp OK". This file still carries one release-version placeholder, in the Header.
+- **Links.** `core/deploy/tools/check-doc-links.py` over this file → exit 0, no finding. The lines this step adds hold no Markdown link, by a line scan of every added line; a dead link planted in a scratch tree makes the same checker report 1. The dead-file-reference gate's checker, `release/tools/check-release-links.py`, run over the whole of this file → exit 0, "0 broken links"; it prints no count of what it read. The gate itself reads only the lines a pushed head adds.
+- **Reference durability and issue references.** Neither gate reads this file: the reference-durability gate's path allowlist exempts the plans folder, and the issue-reference gate exempts the release-tracking surface. By the same line scan the added lines hold no host URL.
+- **Operator-memory references.** The gate's expression, read from `.github/workflows/operator-memory-ref.yml`, over every added line → 0. A planted reference is flagged and a near-miss is not.
+- **Path-leak scan.** `bash core/deploy/tools/path-leak-patterns.sh --scan-file` over this file, and over its added lines alone → exit 0 and no row, both times. The same command on a file with one planted home-directory path prints that row and exits 1.
+
+### Pull-request-head GO evidence (#8561 limb b)
+
+This is the block the Register Contract calls "GO evidence — pull-request head" (sub-task #8874: Change 5 of the first design, which the later revisions leave standing). Every row was read at the merge commit `35228185`. The pull-request head is one commit above it, and that commit changes this file and nothing else. Stage 7 moves the head and reads the rows again there. The re-run on the merge into `main` goes in this file's Deployment Execution Log at close-out (#8562).
+
+| Check | Command | Head | Result | Control |
+|---|---|---|---|---|
+| Validator over the catalog | `python3 core/deploy/tools/check-process-catalog.py --pattern-arm not-run` | `35228185` | PASS: 48 pages, 0 errors, 7 warnings | a copy of one page with its verdict line removed → 2 errors of the planted class (P-4) |
+| Generator self-test | `python3 core/deploy/tools/build-process-catalog.py --self-test` | `35228185` | PASS: 435 arms, 0 failed | the self-test's own failing arms; no changed copy of the tool was run in this step |
+| Regeneration, two runs | `python3 core/deploy/tools/build-process-catalog.py build --out <folder>`, twice, then `build --check` | `35228185` | identical to each other and to the committed output: yes, 15 files | one byte appended to one file of a copy → 1 file differs (P-5) |
+| Link check over the catalog | `python3 core/deploy/tools/check-doc-links.py --target-paths "core/process-catalog/" --allowlist core/deploy/allowlists/skip-doc-link-check-ci.txt --require-targets` | `35228185` | 0 findings over 68 Markdown files | a dead link planted in a scratch tree, same command → 1 |
+| Controls register admission | `python3 core/deploy/tools/check-process-catalog.py --registers-only --pattern-arm not-run` | `35228185` | 373 rows, 0 findings | the tracked failing fixture register, passed by `--controls` → 5 findings. The pattern arm is its holder's and was not run |
+| Pages against the ID registry | page file stems against the registry's rows for the same universe | `35228185` | 0 unregistered of 48 | a planted stem → 1 |
+| ID registry cell screen | the same `--registers-only` run | `35228185` | 212 rows, 1,272 cells, 0 findings | fixture form: the validator's self-test, 178 arms, 0 failed |
+| Depersonalization scan over this file and both registers | the pull request's depersonalization job | `c95c7864` | both registers: the job passes. This file: not read, because the job leaves release-tracking files out of its scope | not run in this step |
+| Name scan over this file and both registers | term supplied by the hub; not recorded | — | not run in this step; it is the hub's scan before the push | — |
+
+Both register files carry the checksums the Register Contract posts for 373 and 212 rows. The 373 rows and the two held ranges in `pack.json` together reach the highest minted ID the pack records.
+
+**Measured cost.** What is measured is the token spend attributed to this release's milestone: the usage extractor's per-release row (§ Delivery Strategy). The extractor's scripts are under `core/skills/finops-usage-extractor/scripts/`. By their header comments, `extract-usage.sh` builds the store and `rollup-attribution.sh` rolls it up by work item; close-out confirms which it cites. The figure is kept in local run state and is read at close-out; none is written here.
+
+**What stays deferred.**
+
+- **Stage 7 and Stage 8, on the pull-request head.** Every per-issue row of § Verification Plan marked deferred, #8561's three among them: the manifest comment is read on the card once the hub has posted it (12 rows); the registry comparison and the two scans over this file are run again. The scans over this file need the identity and term files the hub holds. The corpus check of § Release-Level Verification was not run in this step.
+- **Stage 7.** The four items of DEV-17.
+- **Stage 9.** The five cross-issue criteria, graded on the merged pull request.
+- **Stage 12, then Stage 13.** #8562's seven checks on the merge commit, recorded in the Deployment Execution Log; before each Stage 12 launch the head is brought up to the default branch again and the impact query is run from the publication head.
+
+---
+
+## Change Description
+
+Written at Stage 6, plan step 9, for the Stage 9 plan review. It describes the release as the branch stands after the page push and the merge of the default branch. Stage 7 and Stage 8 may change what lands; this section is then revised in a later commit. It is not the user-facing release note, which is written at Stage 13.
+
+### Outcome
+
+The process catalog at `core/process-catalog/` holds its first universe: 48 pages for the engineering harness, with an index, a graph and 13 views generated from them. The generator and validator that produce and check the catalog, the definitions and registers they read, and a CI check that fails when generated output is stale or a cited line has moved, land in the same pull request. A page states what is measured and which script measures it; the figures are generated per install into a git-ignored folder and are never committed.
+
+### Issues resolved
+
+DONE means landed on the release branch at Stage 6. Every criterion is still graded at Stages 7 and 8.
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8554 | The catalog's tools live beside the deploy tools; the decision record is a comment on the card | DONE |
+| #8555 | The definitions pack, `pack.json` and four page templates are tracked under `core/process-catalog/definitions/` | DONE |
+| #8556 | The generator, the validator, the element inventory and their shared library are tracked, with fixtures and self-tests | DONE |
+| #8557 | The overlay command, eight measure files, the measures register and the executed-evidence rules are tracked | DONE |
+| #8558 | A workflow runs three catalog checks on every pull request and on push to `main`; the stage specifications name who reads them | DONE |
+| #8559 | The drafted pages were converted, re-verified and passed through the publication gate; the gate tool is tracked | DONE |
+| #8560 | 48 pages at `status: ACTIVE`, with the generated index, graph and views | DONE |
+| #8561 | Both registers are tracked; the GO evidence is in § Verification Evidence; the retire manifest is a comment on the card | PARTIAL: the manifest is drafted, and the hub posts it after its scan |
+| #8562 | The exit checks on the merge commit | DEFERRED: rehearsed at Stages 7 and 8, run at Stage 12, recorded at Stage 13 |
+
+### Key decisions
+
+Each is a row of § Decision Record.
+
+- **D-2:** the tools live beside the deploy tools, with this repository's paths as argument defaults. No ADR.
+- **D-4:** the published controls register carries only rows sourced to a tracked file; the ID registry is published whole.
+- **D-5:** the GO evidence lives in this file, and measured cost is recorded as measure and script.
+- **D-8 and CR-2:** the CI check fails from first ship and is not a required check; Stage 12 or Stage 13 reads the run on `main`.
+- **CR-4 and CR2-2:** the operator signs every push that changes a page, a generated file or the catalog README.
+- **CR2-1:** a page reads `conformant` only when every step runs.
+- **CR2-4:** the private-source pattern stays untracked, with a digest its holder compares.
+
+### Reversibility
+
+**MODERATE — MEDIUM confidence.** Reverting the merge commit restores the prior tree; page text and register rows that reached the public remote stay in its history, which is why each such push was signed first, and a claimed version tag is retained and recorded, never deleted.
+
+### Downstream impact
+
+- Stage 2 Triage and Stage 5 Solutioning now find pages to read for a harness change: their current-state page read no longer answers that the catalog holds no pages.
+- A pull request that moves a line a page cites, or changes generated output without regenerating it, fails a catalog check. The catalog README names the one command that repairs each. The checks do not block a merge.
+- The second and third universes reuse the tools, the pack and both registers. The retire manifest names the working-set assets still to promote, no later than the second pages milestone.
+- After the merge the operator runs the installer's hook-tier provisioning, so the 20 script-execution allowlist lines reach the workspace (§ Operational Deployment Manifest).
+- Carried to Stage 7: the four items of DEV-17. A repair that changes a page, a generated file or the catalog README needs its own signed push.
+- A later merge of `main` into this branch re-runs the generator and the impact query, and re-verifies only the pages the query returns (§ Implementation Sequence).
+
+### Cross-references
+
+- Release plan: this file, top section
+- Milestone: `engineering-harness-pages-published` (milestone 437)
+- Pull request: the release's one pull request, in draft until the Stage 9 gate
+- User-facing release notes: written at Stage 13 under `release/releases/notes/`, named for the version the Stage 12 claim binds, per `release/references/standards/release-notes-standard.md`
