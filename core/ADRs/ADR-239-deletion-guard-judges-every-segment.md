@@ -1,5 +1,5 @@
 ---
-title: ADR-238 — The deletion guard judges every segment of a command line, keeps no exit that allows on a match, and refuses a deletion or Trash call that does not name all its targets on its line
+title: ADR-239 — The deletion guard judges every segment of a command line, keeps no exit that allows on a match, and refuses a deletion or Trash call that does not name all its targets on its line
 status: Proposed
 date: 2026-11-13
 release: deletion-guard-judges-every-segment-and-target
@@ -14,7 +14,7 @@ source_observations:
   - "At the Stage-6 build, through the suite runner under the CI layout, the change moved the suite's two named neutrality pins from allow to refuse and moved no existing payload arm from refuse to allow; 21 apparatus arms bound to the removed exits and views were retired or re-based."
 ---
 
-# ADR-238 — The deletion guard judges every segment of a command line, keeps no exit that allows on a match, and refuses a deletion or Trash call that does not name all its targets on its line
+# ADR-239 — The deletion guard judges every segment of a command line, keeps no exit that allows on a match, and refuses a deletion or Trash call that does not name all its targets on its line
 
 ## Status
 
@@ -23,6 +23,8 @@ source_observations:
 **Numbering provenance.** Claimed as **238** against an anchor of **237** on `origin/main`, read from `release/tools/renumber-adr.py --detect` at this record's authoring commit. A branch claim is detection-only and never binds; a sibling release in flight may claim the same slot, and should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations from other branch-authored artifacts use the slug token `{{ADR:deletion-guard-judges-every-segment}}`, which carries no number shape and resolves at the claim.
 
 **Supersedes ADR-235 in part — decision 3 only.** ADR-235 decided that the deletion hook's two exits that allow on a match read a frozen, un-widened view of the canonicalizer, so that widening command-start detection could not turn a refusal at those exits into an allow. This record removes both exits, so the view they read loses its only consumer. ADR-235's decisions 1, 2 and 4 stand unchanged, and so does the principle its decision 3 protected: an exit that allows on a match must never read a widened view.
+
+**Numbering provenance — `238 → 239`.** Held **ADR-238** branch-local; renumbered to **ADR-239** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 238. In-release citations that read "ADR-238" denote this record.
 
 ## Context
 
