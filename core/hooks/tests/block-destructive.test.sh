@@ -10411,7 +10411,9 @@ AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 #   pqvalread    the readable-set test is not asked (its two lines removed)
 #   pqvalguards  pqvalsubst and pqvalread together: nothing in the value's text declines
 #   pqvalhead    the carrier-head check never withdraws a carrier answer (its one line removed)
-#   pallow       the allowlist never matches (the wrapper block's allowlist-blind mutant)
+#   pqvalheadcap a carrier answer stands when the check's own re-scan spends the work budget
+#   pqvalhdhead  a here-document's receiver keeps a carrier word read from inside a value
+#   pallow      the allowlist never matches (the wrapper block's allowlist-blind mutant)
 /usr/bin/sed '/# M-WRAP-QVAL$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqval.sh"
 /usr/bin/sed 's/^\( *\)if .*# M-WRAP-QVAL-GATE$/\1script_qval_trust=1   # M-WRAP-QVAL-GATE/' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalgate.sh"
 /usr/bin/sed '/# M-WRAP-QVAL-PFX$/s/while \[ "\$_i" -lt "\$_k" \]; do/while false; do/' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalpfx.sh"
@@ -10421,8 +10423,10 @@ AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalguards.sh"
 /usr/bin/sed '/# M-WRAP-QVAL-GAP2$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalgap2.sh"
 /usr/bin/sed '/# M-WRAP-QVAL-HEAD$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalhead.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-HEADCAP$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalheadcap.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-HDHEAD$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalhdhead.sh"
 /usr/bin/sed 's@^  \[ -f "\$SCRIPT_ALLOWLIST" \] || return 1$@  return 1@' "$HOOK" > "${AQ_HOOKS}/block-destructive-pallow.sh"
-for aq_c in pqval pqvalgate pqvalpfx pqvalgap pqvalgap2 pqvalsubst pqvalread pqvalguards pqvalhead pallow; do
+for aq_c in pqval pqvalgate pqvalpfx pqvalgap pqvalgap2 pqvalsubst pqvalread pqvalguards pqvalhead pqvalheadcap pqvalhdhead pallow; do
   /bin/chmod +x "${AQ_HOOKS}/block-destructive-${aq_c}.sh"
 done
 /bin/chmod +x "${AQ_HOOKS}/block-destructive.sh"
@@ -10546,6 +10550,8 @@ aq_shape_arm "ASGN-QVAL-M6: the both-guards mutant is M4 and M5 together" block-
 aq_shape_arm "ASGN-QVAL-M7: the allowlist-blind mutant rewrites one line" block-destructive-pallow.sh "1/1"
 aq_shape_arm "ASGN-QVAL-M8: the carrier-head mutant removes the withdrawal line" block-destructive-pqvalhead.sh "1/0"
 aq_shape_arm "ASGN-QVAL-M9: the second escaped-blank mutant removes its clause line" block-destructive-pqvalgap2.sh "1/0"
+aq_shape_arm "ASGN-QVAL-M10: the carrier-head budget mutant removes its withdrawal line" block-destructive-pqvalheadcap.sh "1/0"
+aq_shape_arm "ASGN-QVAL-M11: the here-document receiver mutant removes its withdrawal line" block-destructive-pqvalhdhead.sh "1/0"
 
 # --- the closures (fix-evidence): refused, or recorded at the arm's own phase; the walk before allows ---
 aq_arm "ASGN-QVAL-sq: a single-quoted value holding a blank, before an interpreter and an unlisted script" WR126 B a
@@ -10609,6 +10615,9 @@ aq_arm "ASGN-QVAL-limit-carrier (declared limit): a carrier behind a value holdi
 aq_arm "ASGN-QVAL-limit-ctl: the same carrier behind a value with no blank is suppressed" AV31 a a
 aq_arm "ASGN-QVAL-head (PR-2): a carrier word inside a value holding a blank is not the command the shell runs, so the quoted segment it seemed to open is adjudicated" AV40 B B pqvalhead a
 aq_arm "ASGN-QVAL-head-ctl: the same command with no carrier word in the value" AV41 B B
+aq_arm "ASGN-QVAL-headcap: a value dense enough that the carrier-head check spends the shared work budget does not leave the carrier answer standing" AV50 B B pqvalheadcap a
+aq_arm "ASGN-QVAL-hdhead: a carrier word inside a value holding a blank is not the receiver of the here-document, so its body is adjudicated" AV48 B B pqvalhdhead a
+aq_arm "ASGN-QVAL-hdhead-ctl: the same here-document with no carrier word in the value" AV49 B B
 aq_arm "ASGN-QVAL-over-wrap (declared over-block): an assignment behind a wrapper that takes none" AV25 B a
 
 # --- the declared residuals: allowed before and after ---
