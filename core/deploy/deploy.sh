@@ -21933,9 +21933,9 @@ print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(da
   # the REAL primitive (core/deploy/tools/check-enumeration-drift.py, over a non-git sandbox
   # root, so its candidates are an os.walk of that root) and the REAL hoisted _ed_report /
   # _ed_deadline — the bodies Check 83 runs. The primitive's own grammar arms are its
-  # --self-test's and its fixtures', run in CI by the selftest-discovery job and first inside
-  # Check 83; this group owns the EMIT path: the finding row, the warn-log row, the mode, the
-  # fail-closed readings and W2.
+  # --self-test's and its fixtures'. The selftest-discovery job runs the --self-test in CI and
+  # no CI job runs the fixtures; Check 83 runs both, first. This group owns the EMIT path:
+  # the finding row, the warn-log row, the mode, the fail-closed readings and W2.
   #
   # ED-1 is the sensitivity arm (a list marker naming 2 of 3 members); ED-2 the specificity
   # arm (the same items under subset-of, a true subset, with the omitted member shown present
