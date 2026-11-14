@@ -9540,9 +9540,11 @@ qscan_arm "QSCAN-NOQ-near: a carrier's quoted fragment in a command with no comm
 # --- the declared precision costs: nothing runs, and the hook refuses ---
 qscan_arm "QSCAN-NESTQ-R1 (declared cost): a nested expansion whose text is not plain, beside a carrier's quoted fragment naming an unlisted script" QC22 B - -
 qscan_arm "QSCAN-HD-R1 (declared cost): a carrier here-document whose operator line ends in a comment holding a quote, its body naming an unlisted script" QC23 B - -
-# QC24's comment names a second here-document operator for which no body follows, which the
-# pre-pass already declines today; its body names nothing, so it stays allowed before and after.
-qscan_arm "QSCAN-HD-R2: a comment naming a here-document operator on a carrier here-document's operator line, the pre-pass's declined shape" QC24 a - -
+# QC24 (re-authored after #8317's GREEN commit so it exercises PC-4): a comment naming a second
+# here-document operator on a carrier here-document's operator line, with a body that names an
+# unlisted script. The comment clause latches, the body is not excised, and the body line is refused
+# although the shell runs nothing there — the declared precision cost PC-4.
+qscan_arm "QSCAN-HD-R2 (declared cost): a comment naming a here-document operator on a carrier here-document's operator line, its body naming an unlisted script" QC24 B - -
 
 # QSCAN-WS: the flag walk's word reader reads a dollar run as the shell does. The reader is lifted
 # out of the hook and run on every word of QC10 and of its control QC14: each must be read as a
