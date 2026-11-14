@@ -665,9 +665,11 @@ neu_case "AC-D020-NEUTRAL-6: a git condition behind a marked assignment, with a 
 #   D    a directory change whose operand follows a redirection with an ampersand
 #   C    controls that stay allowed: git alone, commit messages inline and in a top-level quoted
 #        here-document read by git, also behind -C <dir> (AC4), a describe-only use of a verb, an
-#        untracking git rm
+#        untracking git rm. C20 is re-based: the continuation rule (EXT-CONT) refuses it now
 #   P    pins: the declared allow-to-refuse moves, the declared over-blocks, a declared residual
-#   MUT  each new marker shown load-bearing: a copy of the hook without it allows its sentinels
+#   MUT  each new marker shown load-bearing: a copy of the hook without it allows its sentinels. A
+#        sentinel that continues onto a second line is refused by the continuation rule whatever the
+#        marker, so the per-form markers' sentinels are single-line (EXT-CONT-EOF)
 #   INT1 the heredoc-borne controls shown held by the here-document pre-pass: through a copy whose
 #        pre-pass never removes a body (armed red), each is refused; through the hook it is allowed
 SEG_OUT='deletion outside .*Path: (/private)?'
@@ -803,8 +805,9 @@ test_case "EXT-SEG-C19: a directory change with both streams to the null device 
 # record's last word is no longer the backslash. B13 to B15 keep the backslash as a word; in B16 to
 # B20 it is dropped, and what the canonicalizer leaves at the line's end — a redirection left without
 # its word, or a both-streams redirection and then the separator it inserted — reads as a continued
-# line too. Every one is refused. P10 is the declared over-block of that reading; C20 is a separator
-# before the backslash, which begins the next line's command and stays allowed.
+# line too. Every one is refused. P10 is the declared over-block of that reading. C20 is a separator
+# before the backslash, which begins the next line's command, so these readings allow it; the
+# continuation rule (EXT-CONT) refuses it, a declared over-block.
 test_case "EXT-SEG-B13: an inside Trash operand, an output duplication onto the error stream, a continued line and an outside operand on the next line is refused" \
   "$(bash_payload "trash ${SEG_FH}/Claude/seg-b13 >&2 \\"$'\n'"/tmp/seg-b13" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
 test_case "EXT-SEG-B14: an inside Trash operand, a descriptor duplication spelled with a blank before its word, a continued line and an outside operand on the next line is refused" \
@@ -823,8 +826,117 @@ test_case "EXT-SEG-B20: an inside Trash operand, a clobbering output redirection
   "$(bash_payload "trash ${SEG_FH}/Claude/seg-b20 >| \\"$'\n'"seg-b20-log /tmp/seg-b20" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
 test_case "EXT-SEG-P10: an inside Trash call whose line ends in a both-streams redirection, a separator and one blank is refused (a declared over-block)" \
   "$(bash_payload "trash ${SEG_FH}/Claude/seg-p10 &>/dev/null ; " "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
-test_case "EXT-SEG-C20: an inside Trash call on a line that ends in a separator and a continuation backslash, then a plain command, is allowed" \
-  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c20 && \\"$'\n'"echo done" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C20: an inside Trash call on a line that ends in a separator and a continuation backslash, then a plain command, is refused (re-based: a declared over-block of the continuation rule)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c20 && \\"$'\n'"echo done" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*line continuation" "$RMT_HOME_ENV"
+
+# ----- EXT-CONT (#8122, operator decision): a command that carries a line continuation -----
+#
+# Outside the quoted here-document bodies the pre-pass removes, a line that ends in an odd run of
+# backslashes continues onto the next line, and the shell joins the two before it reads a word: a
+# continuation can split a command word, or carry a wrapper option's argument or an assignment's value
+# to the next line. An even run is literal backslashes and continues nothing, and a backslash that ends
+# a comment continues nothing either, so the next line runs as its own command. On a command that
+# carries such a run, the hook reads it twice — as judged, each line its own, and with every
+# continuation joined — and refuses a deletion or Trash verb found in either reading, judged after every
+# other step: BLOCK-TRASH-003 for a Trash call or a Finder delete, else BLOCK-TRASH-001. That rule
+# decides every continued command; the per-form readings of EXT-SEG stay in place and still refuse
+# first where they fire. Declared over-block: every command with a continuation and a deletion or Trash
+# verb is refused, whatever the shell would join.
+#   W    a continuation inside the command word: the shell runs the joined word
+#   R    a continuation after each redirection form, complete or with its word on the next line (the
+#        descriptor duplication, closing and both-streams forms are EXT-SEG-B9 and B13 to B20)
+#   X    a continuation after a wrapper word, between a wrapper option and its argument, or after a keyword
+#   A    a continuation after an assignment-shaped word, plain or append form
+#   T    a run of three backslashes: a literal backslash, then a continuation
+#   K    a backslash that ends a comment, which continues nothing; K3 is the residual neither reading sees
+#   E    an even run of backslashes, which continues nothing (controls)
+#   N    controls: a continued command with no deletion or Trash command, a quoted message, and a quoted
+#        here-document body whose lines end in a backslash
+#   EOF  a continuation backslash that ends the command, with no newline after it: nothing joins, so the
+#        per-form readings alone refuse it; these are the single-line sentinels of their mutant pairs
+#   MUT  each new marker shown load-bearing; DEC the rule shown deciding: a copy without the three
+#        per-form readings refuses every continued EXT-SEG and R arm by this rule alone
+CONT_RE='line continuation'
+test_case "EXT-CONT-W1: an rm whose command word a continuation splits, of an outside path, is refused" \
+  "$(bash_payload $'r\\\nm -rf /tmp/cont-w1')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-W2: an rmdir whose command word a continuation splits, of an outside path, is refused" \
+  "$(bash_payload $'rmd\\\nir /tmp/cont-w2')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-W3: an unlink whose command word a continuation splits, of an outside path, is refused" \
+  "$(bash_payload $'un\\\nlink /tmp/cont-w3')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-W4: a Trash call whose command word a continuation splits, on an outside path, is refused" \
+  "$(bash_payload $'tr\\\nash /tmp/cont-w4')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-W5: a Trash call at the keg-only location whose command word a continuation splits is refused" \
+  "$(bash_payload "${RMT_KEG%ash}\\"$'\n'"ash /tmp/cont-w5")" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-W6: a Finder delete whose command word a continuation splits, of an outside path, is refused" \
+  "$(bash_payload $'osa\\\nscript -e \'tell application "Finder" to delete POSIX file "/tmp/cont-w6"\'')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-W7: an rm by absolute path whose command word a continuation splits is refused" \
+  "$(bash_payload $'/bin/r\\\nm -rf /tmp/cont-w7')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-W8: an unlink whose command word two continuations split is refused" \
+  "$(bash_payload $'un\\\nli\\\nnk /tmp/cont-w8')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-R1: an inside Trash operand, output truncated to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r1 >/dev/null \\"$'\n'"/tmp/cont-r1" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R2: an inside Trash operand, output appended to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r2 >>/dev/null \\"$'\n'"/tmp/cont-r2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R3: an inside Trash operand, a clobbering output redirection, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r3 >|/dev/null \\"$'\n'"/tmp/cont-r3" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R4: an inside Trash operand, a word-form duplication to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r4 >&/dev/null \\"$'\n'"/tmp/cont-r4" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R5: an inside Trash operand, a truncating redirection whose file is on the next line, and an outside operand after it is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r5 > \\"$'\n'"/tmp/cont-r5.log /tmp/cont-r5" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R6: an inside Trash operand, an appending redirection whose file is on the next line, and an outside operand after it is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r6 >> \\"$'\n'"/tmp/cont-r6.log /tmp/cont-r6" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R7: an inside Trash operand, a both-streams redirection whose file is on the next line, and an outside operand after it is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r7 &> \\"$'\n'"/tmp/cont-r7.log /tmp/cont-r7" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R8: an inside Trash operand, a word-form duplication whose file is on the next line, and an outside operand after it is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r8 >& \\"$'\n'"/tmp/cont-r8.log /tmp/cont-r8" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-X1: a continuation between a wrapper option and its argument, before a Trash call on an outside path, is refused" \
+  "$(bash_payload $'nice -n \\\n5 trash /tmp/cont-x1')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-X2: a continuation after a wrapper word, before its option and a Trash call on an outside path, is refused" \
+  "$(bash_payload $'nice \\\n-n 5 trash /tmp/cont-x2')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-X3: a continuation after a keyword, before a Trash call on an outside path, is refused" \
+  "$(bash_payload $'if true; then \\\ntrash /tmp/cont-x3; fi')" 2 "BLOCK-TRASH-003"
+test_case "EXT-CONT-A1: a continuation inside an assignment's value, before a Trash call on an outside path, is refused" \
+  "$(bash_payload $'CONT_A1=\\\n1 trash /tmp/cont-a1')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-A2: a continuation inside an append-form assignment's value, before an unlink of an outside path, is refused" \
+  "$(bash_payload $'CONT_A2+=\\\n1 unlink /tmp/cont-a2')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-A3: a continuation after a whole assignment, before a recursive rm of an outside path, is refused" \
+  "$(bash_payload $'CONT_A3=1 \\\nrm -rf /tmp/cont-a3')" 2 "BLOCK-TRASH-001"
+test_case "EXT-CONT-T1: a run of three backslashes inside a word that is then not a Trash verb is allowed (the joined reading keeps the literal backslash)" \
+  "$(bash_payload $'tr\\\\\\\nash /tmp/cont-t1')" 0
+test_case "EXT-CONT-T2: a run of three backslashes after an echo word, then an inside Trash call at the next line's start, is refused (a declared over-block)" \
+  "$(bash_payload "echo cont-t2 \\\\\\"$'\n'"trash ${SEG_FH}/Claude/cont-t2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${CONT_RE}" "$RMT_HOME_ENV"
+test_case "EXT-CONT-T3: a Trash call carrying a flag and a run of three backslashes before a newline is refused" \
+  "$(bash_payload $'trash -v \\\\\\\n/tmp/cont-t3')" 2 "BLOCK-TRASH-003"
+test_case "EXT-CONT-K1: a comment that ends in a backslash continues nothing: a Trash call on an outside path on the next line is refused" \
+  "$(bash_payload $'echo cont-k1 # note \\\ntrash /tmp/cont-k1')" 2 "BLOCK-TRASH-003"
+test_case "EXT-CONT-K2: a comment that ends in a backslash, then an inside Trash call on the next line, is refused (a declared over-block)" \
+  "$(bash_payload "echo cont-k2 # note \\"$'\n'"trash ${SEG_FH}/Claude/cont-k2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${CONT_RE}" "$RMT_HOME_ENV"
+test_case "EXT-CONT-K3: a comment that ends in a backslash, then an rm whose command word a continuation splits, is allowed (a declared residual: neither reading sees it)" \
+  "$(bash_payload $'echo cont-k3 # note \\\nr\\\nm -rf /tmp/cont-k3')" 0
+test_case "EXT-CONT-E1: an even run of backslashes continues nothing: an inside Trash call on the next line is allowed" \
+  "$(bash_payload "echo cont-e1 \\\\"$'\n'"trash ${SEG_FH}/Claude/cont-e1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-CONT-E2: an even run of backslashes inside a word continues nothing, so no deletion verb is formed, and is allowed" \
+  "$(bash_payload $'r\\\\\nm -rf /tmp/cont-e2')" 0
+test_case "EXT-CONT-N1: a continued echo with no deletion or Trash command is allowed" \
+  "$(bash_payload $'echo cont-n1 \\\nmore')" 0
+test_case "EXT-CONT-N2: a continued container run whose option names a deletion verb is allowed" \
+  "$(bash_payload $'docker run \\\n--rm cont-n2')" 0
+test_case "EXT-CONT-N3: a continued untracking git rm is allowed" \
+  "$(bash_payload $'git rm \\\n--cached cont-n3')" 0
+test_case "EXT-CONT-N4: a double-quoted commit message continued with a backslash onto a line of deletion-verb text is allowed" \
+  "$(bash_payload $'git commit -m "fix the hook \\\nrm -rf build"')" 0
+test_case "EXT-CONT-N5: a quoted here-document commit message whose body line ends in a backslash, then a deletion line, is allowed" \
+  "$(bash_payload $'git commit -F - <<\'EOF\'\nfix the hook \\\nrm -rf build\nEOF')" 0
+test_case "EXT-CONT-EOF1: a Trash call carrying only a flag and ending the command in a continuation backslash is refused" \
+  "$(bash_payload 'trash -v \')" 2 "BLOCK-TRASH-003.*does not name all its targets"
+test_case "EXT-CONT-EOF2: an rm carrying only a flag and ending the command in a continuation backslash is refused" \
+  "$(bash_payload 'rm -f \')" 2 "BLOCK-TRASH-001.*does not name all its targets"
+test_case "EXT-CONT-EOF3: an inside Trash operand and a continuation backslash ending the command is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-eof3 \\" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-CONT-EOF4: an inside Trash operand, a descriptor duplication and a continuation backslash ending the command is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-eof4 2>&1 \\" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-CONT-EOF5: an inside Trash operand and a descriptor duplication left without its word at the command's end is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-eof5 2>&" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
 
 # The mutant pairs. Each copy differs from the hook by exactly its marked line, shown live first;
 # each sentinel, refused through the hook, is allowed through its copy.
@@ -858,10 +970,15 @@ else
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-barerm.sh"
   /usr/bin/sed -e 's/^\([[:space:]]*\)EXCISED\$'"'"'\\n'"'"'?\*) COMMAND=.*$/\1EXCISED$'"'"'\\n'"'"'?*) : ;;/' \
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-nohd.sh"
-  for seg_mk in RECCONT RECWORD RECBOTH REDIRAMP BOTHREDIR; do
+  for seg_mk in RECCONT RECWORD RECBOTH REDIRAMP BOTHREDIR CONTLINE CONTUNJ CONTJOIN; do
     /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-'"$seg_mk"'$/\1# M-TRASH-'"$seg_mk"' (removed)/' \
       "$HOOK" > "${seg_dir}/block-rm-prefer-trash-${seg_mk}.sh"
   done
+  # DEC — the three per-form readings removed together, so only the continuation rule can refuse.
+  /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-RECCONT$/\1# M-TRASH-RECCONT (removed)/' \
+    -e 's/^\([[:space:]]*\).*  # M-TRASH-RECWORD$/\1# M-TRASH-RECWORD (removed)/' \
+    -e 's/^\([[:space:]]*\).*  # M-TRASH-RECBOTH$/\1# M-TRASH-RECBOTH (removed)/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-noperform.sh"
   ra_pair "EXT-SEG-MUT-SEGWALK-G1:" "${seg_dir}/block-rm-prefer-trash-segwalk.sh" 'git status && rm -rf /tmp/seg-g1'
   ra_pair "EXT-SEG-MUT-SEGWALK-G5:" "${seg_dir}/block-rm-prefer-trash-segwalk.sh" 'git status ; trash /tmp/seg-g5'
   ra_pair "EXT-SEG-MUT-SEGVERB-T1:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" 'rm -f ; unlink /tmp/seg-t1'
@@ -869,14 +986,65 @@ else
   ra_pair "EXT-SEG-MUT-SEGVERB-T4:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" $'rm ; osascript -e \'tell application "Finder" to delete POSIX file "/tmp/seg-t4"\''
   ra_pair "EXT-SEG-MUT-BARETRASH-B1:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" 'trash'
   ra_pair "EXT-SEG-MUT-BARETRASH-B2:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" 'trash -v'
-  ra_pair "EXT-SEG-MUT-BARETRASH-B7:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" $'trash -v \\\n/tmp/seg-b7'
+  # The six sentinels below are single-line (re-based for the continuation rule, EXT-CONT): one that
+  # continued onto a second line is refused by that rule through every one of these copies. Their
+  # refusal through the hook is EXT-CONT-EOF1 to EOF5 and EXT-SEG-P10.
+  ra_pair "EXT-SEG-MUT-BARETRASH-B7:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" 'trash -v \'
   ra_pair "EXT-SEG-MUT-BARERM-P1:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" 'rm -f'
   ra_pair "EXT-SEG-MUT-BARERM-P2:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" '( rm -rf )'
-  ra_pair "EXT-SEG-MUT-BARERM-T7:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" $'rm -f \\\n/tmp/seg-t7'
-  ra_pair "EXT-SEG-MUT-RECCONT-B8:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" $'trash seg-mut-b8 \\\n/tmp/seg-b8'
-  ra_pair "EXT-SEG-MUT-RECCONT-B9:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" $'trash seg-mut-b9 2>&1 \\\n/tmp/seg-b9'
-  ra_pair "EXT-SEG-MUT-RECWORD-B19:" "${seg_dir}/block-rm-prefer-trash-RECWORD.sh" $'trash seg-mut-b19 2>& \\\n1 /tmp/seg-b19'
-  ra_pair "EXT-SEG-MUT-RECBOTH-B16:" "${seg_dir}/block-rm-prefer-trash-RECBOTH.sh" $'trash seg-mut-b16 &>/dev/null \\\n/tmp/seg-b16'
+  ra_pair "EXT-SEG-MUT-BARERM-T7:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" 'rm -f \'
+  ra_pair "EXT-SEG-MUT-RECCONT-B8:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" 'trash seg-mut-b8 \'
+  ra_pair "EXT-SEG-MUT-RECCONT-B9:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" 'trash seg-mut-b9 2>&1 \'
+  ra_pair "EXT-SEG-MUT-RECWORD-B19:" "${seg_dir}/block-rm-prefer-trash-RECWORD.sh" 'trash seg-mut-b19 2>&'
+  ra_pair "EXT-SEG-MUT-RECBOTH-B16:" "${seg_dir}/block-rm-prefer-trash-RECBOTH.sh" 'trash seg-mut-b16 &>/dev/null ; '
+  # EXT-CONT: the continuation rule's three markers — the rule itself (CONTLINE), its reading of the
+  # command as judged (CONTUNJ) and its joined reading (CONTJOIN).
+  ra_pair "EXT-CONT-MUT-CONTLINE-W1:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'r\\\nm -rf /tmp/cont-w1'
+  ra_pair "EXT-CONT-MUT-CONTLINE-W4:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'tr\\\nash /tmp/cont-w4'
+  ra_pair "EXT-CONT-MUT-CONTLINE-W6:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'osa\\\nscript -e \'tell application "Finder" to delete POSIX file "/tmp/cont-w6"\''
+  ra_pair "EXT-CONT-MUT-CONTJOIN-W1:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'r\\\nm -rf /tmp/cont-w1'
+  ra_pair "EXT-CONT-MUT-CONTJOIN-X1:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'nice -n \\\n5 trash /tmp/cont-x1'
+  ra_pair "EXT-CONT-MUT-CONTUNJ-K2:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-k2 # note \\\ntrash cont-mut-k2'
+  ra_pair "EXT-CONT-MUT-CONTUNJ-T2:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-t2 \\\\\\\ntrash cont-mut-t2'
+  # DEC: through the copy without the three per-form readings (shown live: exactly three lines differ,
+  # and it parses), each continued arm is refused by the continuation rule alone.
+  cont_decides() { # $1 = arm label  $2 = command (fixture home and working directory)
+    local rc=0 err n
+    n="$(/usr/bin/diff "$HOOK" "${seg_dir}/block-rm-prefer-trash-noperform.sh" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+    if [ "$n" != 6 ] || ! /bin/bash -n "${seg_dir}/block-rm-prefer-trash-noperform.sh" 2>/dev/null; then
+      /usr/bin/printf 'FAIL: %s the copy without the per-form readings is not live (%s differing lines, expected 6, or it does not parse)\n' "$1" "${n:-none}"
+      FAIL=$((FAIL + 1)); return
+    fi
+    err="$(/usr/bin/printf '%s' "$(bash_payload "$2" "$RMT_FIXTURE_CWD")" | /usr/bin/env "$RMT_HOME_ENV" /bin/bash "${seg_dir}/block-rm-prefer-trash-noperform.sh" 2>&1 >/dev/null)" || rc="$?"
+    if [ "$rc" = 2 ] && /usr/bin/grep -qE "BLOCK-TRASH-003.*${CONT_RE}" <<<"$err"; then
+      /usr/bin/printf 'PASS: %s without the per-form readings the continuation rule refuses it\n' "$1"
+      PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s without the per-form readings it was not refused by the continuation rule (exit=%s): %s\n' "$1" "$rc" "$err"
+      FAIL=$((FAIL + 1))
+    fi
+  }
+  cont_nl=$'\n'
+  cont_decides "EXT-CONT-DEC-B8:" "trash ${SEG_FH}/Claude/seg-b8 \\${cont_nl}/tmp/seg-b8"
+  cont_decides "EXT-CONT-DEC-B9:" "trash ${SEG_FH}/Claude/seg-b9 2>&1 \\${cont_nl}/tmp/seg-b9"
+  cont_decides "EXT-CONT-DEC-B13:" "trash ${SEG_FH}/Claude/seg-b13 >&2 \\${cont_nl}/tmp/seg-b13"
+  cont_decides "EXT-CONT-DEC-B14:" "trash ${SEG_FH}/Claude/seg-b14 2>& 1 \\${cont_nl}/tmp/seg-b14"
+  cont_decides "EXT-CONT-DEC-B15:" "trash ${SEG_FH}/Claude/seg-b15 2>&- \\${cont_nl}/tmp/seg-b15"
+  cont_decides "EXT-CONT-DEC-B16:" "trash ${SEG_FH}/Claude/seg-b16 &>/dev/null \\${cont_nl}/tmp/seg-b16"
+  cont_decides "EXT-CONT-DEC-B17:" "trash ${SEG_FH}/Claude/seg-b17 &>>/dev/null \\${cont_nl}/tmp/seg-b17"
+  cont_decides "EXT-CONT-DEC-B18:" "trash ${SEG_FH}/Claude/seg-b18 &> /dev/null \\${cont_nl}/tmp/seg-b18"
+  cont_decides "EXT-CONT-DEC-B19:" "trash ${SEG_FH}/Claude/seg-b19 2>& \\${cont_nl}1 /tmp/seg-b19"
+  cont_decides "EXT-CONT-DEC-B20:" "trash ${SEG_FH}/Claude/seg-b20 >| \\${cont_nl}seg-b20-log /tmp/seg-b20"
+  cont_decides "EXT-CONT-DEC-P6:" "trash ${SEG_FH}/Claude/seg-p6a \\${cont_nl}${SEG_FH}/Claude/seg-p6b"
+  cont_decides "EXT-CONT-DEC-P9:" "trash ${SEG_FH}/Claude/seg-p9 && echo done \\${cont_nl}more"
+  cont_decides "EXT-CONT-DEC-R1:" "trash ${SEG_FH}/Claude/cont-r1 >/dev/null \\${cont_nl}/tmp/cont-r1"
+  cont_decides "EXT-CONT-DEC-R2:" "trash ${SEG_FH}/Claude/cont-r2 >>/dev/null \\${cont_nl}/tmp/cont-r2"
+  cont_decides "EXT-CONT-DEC-R3:" "trash ${SEG_FH}/Claude/cont-r3 >|/dev/null \\${cont_nl}/tmp/cont-r3"
+  cont_decides "EXT-CONT-DEC-R4:" "trash ${SEG_FH}/Claude/cont-r4 >&/dev/null \\${cont_nl}/tmp/cont-r4"
+  cont_decides "EXT-CONT-DEC-R5:" "trash ${SEG_FH}/Claude/cont-r5 > \\${cont_nl}/tmp/cont-r5.log /tmp/cont-r5"
+  cont_decides "EXT-CONT-DEC-R6:" "trash ${SEG_FH}/Claude/cont-r6 >> \\${cont_nl}/tmp/cont-r6.log /tmp/cont-r6"
+  cont_decides "EXT-CONT-DEC-R7:" "trash ${SEG_FH}/Claude/cont-r7 &> \\${cont_nl}/tmp/cont-r7.log /tmp/cont-r7"
+  cont_decides "EXT-CONT-DEC-R8:" "trash ${SEG_FH}/Claude/cont-r8 >& \\${cont_nl}/tmp/cont-r8.log /tmp/cont-r8"
   ra_pair "EXT-SEG-MUT-REDIRAMP-B10:" "${seg_dir}/block-rm-prefer-trash-REDIRAMP.sh" 'trash seg-mut-b10 2>&1 /tmp/seg-b10'
   ra_pair "EXT-SEG-MUT-BOTHREDIR-B11:" "${seg_dir}/block-rm-prefer-trash-BOTHREDIR.sh" 'trash seg-mut-b11 &>/dev/null /tmp/seg-b11'
   seg_armed "EXT-SEG-INT1-C4:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C4"
