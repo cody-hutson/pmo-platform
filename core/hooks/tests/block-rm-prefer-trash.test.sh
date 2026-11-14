@@ -790,6 +790,13 @@ test_case "EXT-SEG-C16: two inside Trash operands either side of a descriptor du
   "$(bash_payload "trash ${SEG_FH}/Claude/seg-c16a 2>&1 ${SEG_FH}/Claude/seg-c16b" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 test_case "EXT-SEG-C17: an inside Trash call with its error stream duplicated into a pipe is allowed" \
   "$(bash_payload "trash ${SEG_FH}/Claude/seg-c17 2>&1 | tail -3" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+# A separator the line itself carries before a compound keyword or a command-prefix word ends the
+# reading past a both-streams redirection: the canonicalizer marks such a word with a separator after
+# it, not before, so the word is not an operand (C18 from a cwd outside the workspace, C19 a cd).
+test_case "EXT-SEG-C18: an inside Trash call with both streams to the null device as an if condition is allowed" \
+  "$(bash_payload "if trash ${SEG_FH}/Claude/seg-c18 &>/dev/null; then echo ok; fi" "$RMT_FIXTURE_OTHER_HOME")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C19: a directory change with both streams to the null device as an if condition, then a relative inside Trash target, is allowed" \
+  "$(bash_payload "if cd ${SEG_FH}/Claude/sub &>/dev/null; then trash seg-c19; fi" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 
 # The mutant pairs. Each copy differs from the hook by exactly its marked line, shown live first;
 # each sentinel, refused through the hook, is allowed through its copy.
