@@ -525,8 +525,8 @@ block_word_unknown() {
 #   into one normalized form with the workspace root (class 5). It is never admitted as inside.
 block_unnormalized() {
   block "$1" \
-    "path is unresolvable under strict policy: the hook could not bring target '$2' and the workspace root into one normalized form (its path normalizer could not run, or the root is not an absolute path), so the target is not admitted as inside the workspace" \
-    "restore ${PYTHON3}, or set the workspace root to an absolute path, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+    "path is unresolvable under strict policy: the hook could not bring target '$2' and the workspace root into one normalized form (its path normalizer could not run or gave a form it cannot read, such as a path that carries a line break, or the root is not an absolute path), so the target is not admitted as inside the workspace" \
+    "restore ${PYTHON3}, or name the target by a path whose resolved form is one line, or set the workspace root to an absolute path, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
 }
 
 # block_unclassified(rule_id, token, class) — the refusal for a class no arm names. Every
@@ -549,8 +549,10 @@ matches() {
 }
 
 # CLASSIFY_PY — normalize the target AND the workspace root with the same function, then print
-# END. Output without END is failure (the CWD_TABLE_PY convention), so a normalizer that cannot
-# run, or does not finish, never yields a raw comparison. os.path.realpath collapses ../ and ./,
+# END. Output that is not exactly those three lines is failure (the CWD_TABLE_PY convention, made
+# exact), so a normalizer that cannot run or does not finish, and a normalized path that carries a
+# line break, never yield a comparison: read by line position, such a target would put a piece of
+# itself where the root belongs. os.path.realpath collapses ../ and ./,
 # does not require existence, and follows symlinks (intentional for strict-boundary enforcement);
 # GNU realpath -m is absent on macOS, so Python 3 is the portable equivalent.
 readonly CLASSIFY_PY='
@@ -564,17 +566,19 @@ print("END")
 #   then prefix-match the one against the other, so a root spelled through a symlink, with a
 #   trailing slash or a dot segment is compared in its targets' form. Prints the normalized path
 #   (on class 5, the path as given). Returns 0 inside, 1 outside, 5 when the two cannot be brought
-#   into one form: the normalizer could not run, or the configured root is not absolute (a relative
-#   root is never anchored to this process's own directory). Class 5 is never inside. A normalized
-#   root of / admits no target but / itself, exactly as the as-spelled compare did.
+#   into one form: the normalizer could not run, its output is not exactly the two normalized paths
+#   and END (a normalized path that carries a line break, through a link whose destination holds
+#   one), or the configured root is not absolute (a relative root is never anchored to this
+#   process's own directory). Class 5 is never inside. A normalized root of / admits no target but
+#   / itself, exactly as the as-spelled compare did.
 classify_path() {
   local target="$1" out="" t r
   case "$WORKSPACE_ROOT" in /*) ;; *) "$PRINTF" '%s' "$target"; return 5 ;; esac  # M-TRASH-ROOTABS
   if [ -x "$PYTHON3" ]; then
     out="$("$PYTHON3" -c "$CLASSIFY_PY" "$target" "$WORKSPACE_ROOT" 2>/dev/null)" || out=""
   fi
-  if [ "${out##*"$NL"}" != "END" ]; then "$PRINTF" '%s' "$target"; return 5; fi
   t="${out%%"$NL"*}"; r="${out#*"$NL"}"; r="${r%%"$NL"*}"
+  if [ "$out" != "$t$NL$r${NL}END" ]; then "$PRINTF" '%s' "$target"; return 5; fi  # M-TRASH-NORMLINES
   "$PRINTF" '%s' "$t"
   case "$t" in
     "$r"|"$r/"*) return 0 ;;
