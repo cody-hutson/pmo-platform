@@ -1,8 +1,9 @@
 #!/bin/bash
 # tests/block-rm-prefer-trash.test.sh — synthetic Bash-tool payload tests
 # for block-rm-prefer-trash.sh. Covers BLOCK-TRASH-001..003 ACs, the
-# auto-memory Trash arm (MEM-*), the in-command working directory (CWD-*),
-# CLAUDE_HOOK_BYPASS bypass + edge/regression cases.
+# auto-memory Trash arm (MEM-*), the in-command working directory (CWD-*), the
+# one-form target/root comparison (NORM-*), home-relative and non-literal target
+# words (TILDE-*, NONLIT-*), CLAUDE_HOOK_BYPASS bypass + edge/regression cases.
 #
 # Coverage map: grouped below by rule and case family; the Summary block prints the
 # live total (a hardcoded count here drifted before — do not reintroduce one).
@@ -55,14 +56,13 @@ echo "================================"
 #
 # The arms that pass "$RMT_HOME_ENV" assert INSIDE-workspace behaviour: an rm-family verb
 # on a workspace target is redirected to the Trash (BLOCK-TRASH-002), and a Trash verb on
-# one is allowed. The hook spells its default workspace root from HOME as written and
-# canonicalizes the target, so the premise holds only while HOME is itself a canonical
-# path. A caller that points HOME at a `mktemp -d` directory, as the install regression's
-# HOME-override step does, hands the hook a HOME under the per-user temp area, which
-# macOS reaches through the /var -> /private/var symlink: the target resolves to the
-# /private form, the root keeps the form HOME spelled, and every inside target reads as
-# outside. The arm then fails on a property of the caller, not of the rule it tests. The
-# hook's comparison is its own behaviour and is not changed here.
+# one is allowed. The hook derives its default workspace root from HOME and normalizes it
+# and the target in one call (NORM-* below), so a caller's HOME reached through a symlink —
+# a `mktemp -d` directory under macOS's /var -> /private/var link, as the install
+# regression's HOME-override step uses — no longer reads an inside target as outside. The
+# fixture stays as isolation: each pinned arm's verdict depends on the workspace the hook
+# derives, so it must not depend on the caller's HOME or on what the caller's own
+# workspace holds.
 #
 # The lever is the fixture pattern block-fs-boundary.test.sh uses: a per-invocation env
 # prefix on only the command that reads the HOME-derived input, here the hook, pointed at
@@ -138,7 +138,8 @@ test_case "rm absolute inside Claude blocks-trash" \
 test_case "rmdir inside Claude blocks-trash" \
   "$(bash_payload 'rmdir '"$RMT_FIXTURE_HOME"'/Claude/tmp/empty' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
 
-# ----- Git subcommand exemption (Hub Decision 1: broad) -----
+# ----- Git subcommand exemption (Hub Decision 1: broad over git verbs; per segment, #8122) -----
+# Every git verb is exempt, but only in its own segment: EXT-SEG below judges the line's others.
 
 test_case "git rm exempt" \
   "$(bash_payload 'git rm foo.txt')" 0
@@ -257,6 +258,23 @@ test_case "AC-AP-015c: piped chain with /usr/bin/rm blocks (composes with EXT-CH
 test_case "AC-AP-015d: quoted '/usr/bin/rm' as grep pattern allows (false-positive guard)" \
   "$(bash_payload 'cat /tmp/log.txt | grep "/usr/bin/rm called"')" 0
 
+# AC-AP-016 (#8123 AC1): the keg-only Trash location the hook's own tier-2 suggestion names is a
+# Trash invocation. It sits outside the shared prefix set (which stays byte-identical across the
+# four anchor hooks), so the hook recognises it through one Trash-local constant that the
+# suggestion, the Step-3 verb test and the segment walk all read. 016c is the inside control;
+# 016d is the keg spelling with no operand, which #8122's target-less limb must also see (INT-4).
+RMT_KEG="/opt/homebrew/opt/trash/bin/trash"
+test_case "AC-AP-016: the keg-only Trash location with an outside target blocks (BLOCK-TRASH-003)" \
+  "$(bash_payload "${RMT_KEG} /tmp/rmt-keg-016")" 2 "BLOCK-TRASH-003.*deletion outside"
+test_case "AC-AP-016b: the keg-only Trash location after a separator with an outside target blocks" \
+  "$(bash_payload "ls && ${RMT_KEG} /tmp/rmt-keg-016b")" 2 "BLOCK-TRASH-003.*deletion outside"
+test_case "AC-AP-016c (control): the keg-only Trash location with an inside target allows" \
+  "$(bash_payload "${RMT_KEG} ${RMT_FIXTURE_HOME}/Claude/keg-in" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "AC-AP-016d: the keg-only Trash location with no operand is refused (target-less, INT-4)" \
+  "$(bash_payload "${RMT_KEG}")" 2 "BLOCK-TRASH-003.*does not name all its targets"
+test_case "AC-AP-016e: the keg-only Trash location behind a wrapper with an outside target blocks" \
+  "$(bash_payload "nice ${RMT_KEG} /tmp/rmt-keg-016e")" 2 "BLOCK-TRASH-003.*deletion outside"
+
 # ----- EXT-POS: command-start position coverage (#5644) -----
 #
 # The anchor recognises a command start only at line-start or after `;&|`. Every case
@@ -345,7 +363,7 @@ test_case "EXT-APPEND-T1: an append-form assignment then rm blocks" \
 # /timeout, or a redirection to a file named timeout, was read as the timeout wrapper, whose
 # duration operand consumed the rm behind it. T1 and T2 are that deletion behind each shape;
 # the CTLs are the plain form and the same deletion behind a plain assignment, refused before
-# and after. The allow-on-match exits read the exit view, whose walk is unchanged.
+# and after.
 test_case "EXT-ORDER-T-CTL0: rm blocks (plain-form control)" \
   "$(bash_payload 'rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
@@ -403,19 +421,15 @@ test_case "EXT-FP8: echoed wrapper-and-option text allows" \
 test_case "EXT-FP9: commit message carrying a wrapped deletion allows" \
   "$(bash_payload 'git commit -m "if rm fails, sudo -u root rm -rf /tmp/x"')" 0
 
-# ----- EXT-RA (#8314): the two allow exits read the exit view -----
+# ----- EXT-RA (#8314, re-based by #8122): a git command or a target-less verb behind a face -----
 #
-# This hook has two exits that ALLOW on a match: Step 1's git exemption (a git command at a
-# command start exempts the line) and Step 2's no-target exit (a deletion verb with no
-# operand ends the evaluation). Both read the canonicalized text, so every command start
-# the canonicalizer newly resolves would ALSO widen them, turning refusals into allows. Each
-# sentinel below is refused today and must stay refused: a git command, or a target-less
-# deletion verb, newly resolved behind a face, beside a deletion the hook refuses (T1-T5);
-# and a newly resolved target-less verb that would displace the verb Step 2 judged before
-# (T6). The two exits read the canonicalizer's exit view instead, the form the walk produced
-# before the wrapper grammar, so they keep today's verdicts. Each sentinel is paired below
-# with a copy of the hook whose marked exit line reads the widened text again, which allows
-# it: the sentinel is shown able to fire.
+# Each sentinel puts a git command, or a target-less deletion verb, behind a face the
+# canonicalizer resolves (a wrapper, a condition keyword, an absolute-path env), beside a
+# deletion the hook refuses (T1-T5), or a target-less verb ahead of another verb's deletion
+# (T6). The hook keeps no exit that allows on a match, so each is refused whatever the walk
+# resolves. Each sentinel is paired below with a copy of the hook that puts one such exit back
+# — the whole-line git exit on the widened text (M-TRASH-SEGWALK), or an exit on a target-less
+# rm-family segment (M-TRASH-SEGVERB) — which allows it: the sentinel is shown able to fire.
 test_case "EXT-RA-T1: a git status behind nice does not exempt the deletion beside it" \
   "$(bash_payload 'nice git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
@@ -434,19 +448,21 @@ test_case "EXT-RA-T5: a target-less rm behind a long sudo flag does not end the 
 test_case "EXT-RA-T6: a target-less rm the widening promotes does not displace today's start-verb unlink" \
   "$(bash_payload 'nice rm ; sudo unlink /tmp/foo')" 2 "BLOCK-TRASH-001"
 
-# The neutrality pins: a line the walk resolved BEFORE the wrapper grammar keeps the
-# verdict it had, which the exit view exists to preserve. Both are allowed today and stay
-# allowed here; the per-segment closure of these lines is #8122's, which must flip them.
-test_case "EXT-RES-T1: a sudo-prefixed git status keeps today's exemption (exit view; line laundering is #8122's)" \
-  "$(bash_payload 'sudo git status ; rm -rf /tmp/foo')" 0
+# The two lines the walk resolved BEFORE the wrapper grammar, which the exit view kept allowed.
+# Every segment is judged now, so both are refused: the git segment and the target-less rm
+# each cover only themselves.
+test_case "EXT-RES-T1: a sudo-prefixed git status no longer exempts the deletion beside it (per-segment walk)" \
+  "$(bash_payload 'sudo git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
-test_case "EXT-RES-T2: a sudo-prefixed target-less rm keeps today's no-target exit (exit view; #8122's)" \
-  "$(bash_payload 'sudo rm ; trash /etc/hosts')" 0
+test_case "EXT-RES-T2: a sudo-prefixed target-less rm no longer ends the evaluation (per-segment walk)" \
+  "$(bash_payload 'sudo rm ; trash /etc/hosts')" 2 "BLOCK-TRASH-003"
 
-# The pairs. Each mutant is a copy of the hook with exactly one marked exit line reading the
-# widened text again (`matches` for M-TRASH-GITEXEMPT; the Step-2 verb for
-# M-TRASH-NOTARGET), shown live first: it differs from the hook by that one line, and it
-# parses. The sentinel's command through that copy must be allowed.
+# The pairs. Each mutant is a copy of the hook with exactly one marked line turned back into an
+# exit that allows on a match, shown live first: it differs from the hook by that one line, and it
+# parses. The sentinel's command through that copy must be allowed. The two sed programs are
+# shared with the EXT-SEG pairs below.
+SEG_SED_WALK='s/^:  # M-TRASH-SEGWALK$/if matches "${ANCHOR_PREFIX_BASH}"'"'"'git[[:space:]]+[^[:space:]]+'"'"'; then exit 0; fi  # M-TRASH-SEGWALK/'
+SEG_SED_VERB='s/^\([[:space:]]*\)judge_targets "\$verb"  # M-TRASH-SEGVERB$/\1judge_targets "$verb"; [ -n "$(extract_bare_segments "$verb")" ] \&\& exit 0  # M-TRASH-SEGVERB/'
 ra_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-ra.XXXXXX" 2>/dev/null)" || ra_dir=""
 ra_live() { # $1 = mutant file -> 0 when it differs from the hook by exactly one line and parses
   local n
@@ -474,36 +490,23 @@ if [ -z "$ra_dir" ]; then
 else
   /bin/mkdir -p "${ra_dir}/lib"
   /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${ra_dir}/lib/"
-  /usr/bin/sed -e 's/^if exit_matches \(.*# M-TRASH-GITEXEMPT\)$/if matches \1/' \
-    "$HOOK" > "${ra_dir}/block-rm-prefer-trash-git.sh"
-  /usr/bin/sed -e 's/exit_verb="\$(first_deletion_verb exit_matches)"\(.*# M-TRASH-NOTARGET\)$/exit_verb="$verb"\1/' \
-    "$HOOK" > "${ra_dir}/block-rm-prefer-trash-notarget.sh"
-  ra_pair "EXT-RA-T1-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" 'nice git status ; rm -rf /tmp/foo'
-  ra_pair "EXT-RA-T2-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" 'if git diff --quiet ; then rm -rf /tmp/foo ; fi'
-  ra_pair "EXT-RA-T3-PAIR:" "${ra_dir}/block-rm-prefer-trash-git.sh" '/usr/bin/env git log ; rm -rf /tmp/foo'
-  ra_pair "EXT-RA-T4-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; trash /etc/hosts'
-  ra_pair "EXT-RA-T5-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'sudo --list rm ; trash /etc/hosts'
-  ra_pair "EXT-RA-T6-PAIR:" "${ra_dir}/block-rm-prefer-trash-notarget.sh" 'nice rm ; sudo unlink /tmp/foo'
+  /usr/bin/sed -e "$SEG_SED_WALK" "$HOOK" > "${ra_dir}/block-rm-prefer-trash-segwalk.sh"
+  /usr/bin/sed -e "$SEG_SED_VERB" "$HOOK" > "${ra_dir}/block-rm-prefer-trash-segverb.sh"
+  ra_pair "EXT-RA-T1-PAIR:" "${ra_dir}/block-rm-prefer-trash-segwalk.sh" 'nice git status ; rm -rf /tmp/foo'
+  ra_pair "EXT-RA-T2-PAIR:" "${ra_dir}/block-rm-prefer-trash-segwalk.sh" 'if git diff --quiet ; then rm -rf /tmp/foo ; fi'
+  ra_pair "EXT-RA-T3-PAIR:" "${ra_dir}/block-rm-prefer-trash-segwalk.sh" '/usr/bin/env git log ; rm -rf /tmp/foo'
+  ra_pair "EXT-RA-T4-PAIR:" "${ra_dir}/block-rm-prefer-trash-segverb.sh" 'nice rm ; trash /etc/hosts'
+  ra_pair "EXT-RA-T5-PAIR:" "${ra_dir}/block-rm-prefer-trash-segverb.sh" 'sudo --list rm ; trash /etc/hosts'
+  ra_pair "EXT-RA-T6-PAIR:" "${ra_dir}/block-rm-prefer-trash-segverb.sh" 'nice rm ; sudo unlink /tmp/foo'
   case "${ra_dir##*/}" in rmt-ra.*) /bin/rm -rf "$ra_dir" ;; esac
 fi
 
-# ----- EXT-APPEND-X (#8314, follow-up pass): the two allow exits keep the exit view's walk -----
+# ----- EXT-APPEND-X (#8314, follow-up pass): a git command or a target-less verb behind an append form -----
 #
-# The default walk now steps over the append form of a prefix assignment (NAME+=value). The
-# exit view does not: it is frozen at the walk the two allow exits read before, so they keep
-# today's verdicts. Were its assignment test widened the same way, a git command or a
-# target-less deletion verb behind an append-form word would reach Step 1's git exemption or
-# Step 2's no-target exit, and each sentinel below — refused before this pass and after it —
-# would be allowed. Shown, not argued. X1-X4 read the shipped hook; their refusal is the same
-# on the hook before this pass, which the pass's red-before run records. Then two copies of
-# the canonicalizer are each shown live (one line from the shipped copy, and it parses): one
-# with this pass's marked line reverted, and one whose exit view also takes the append form.
-# On every sentinel the exit view is byte-identical through the shipped and the reverted copy
-# while the default view is not (XV: the exit view is unchanged by this edit, and the sentinel
-# carries the form the edit reads). The hook is not run through the reverted copy: its
-# version-skew canary refuses that copy by design (CMDPOS-SKEW-APPEND). Through the copy whose
-# exit view takes the append form, in a sandbox, the hook allows the sentinel (PAIR, the
-# sentinel shown able to fire).
+# The default walk steps over the append form of a prefix assignment (NAME+=value). Each sentinel
+# puts a git command or a target-less deletion verb behind such a word, beside a deletion or a
+# Trash call the hook refuses; each is refused before and after, now because every segment is
+# judged.
 test_case "EXT-APPEND-X1: a git status behind an append-form assignment does not exempt the deletion beside it (Step 1)" \
   "$(bash_payload 'FOO+=1 git status ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
@@ -516,81 +519,17 @@ test_case "EXT-APPEND-X3: a target-less rm behind an append-form assignment does
 test_case "EXT-APPEND-X4: a git log behind two append-form assignments does not exempt the deletion beside it (Step 1)" \
   "$(bash_payload 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo')" 2 "BLOCK-TRASH-001"
 
-apx_root="$(/usr/bin/mktemp -d)"
-apx_hooks="${apx_root}/.claude/hooks"
-/bin/mkdir -p "${apx_hooks}/lib"
-/bin/cp "${HOOK_DIR}/lib/"*.sh "${apx_hooks}/lib/" 2>/dev/null || true
-/bin/cp "$HOOK" "${apx_hooks}/block-rm-prefer-trash.sh"
-apx_ship="${HOOK_DIR}/lib/command-position.awk"
-apx_rev="${apx_root}/command-position-no-append.awk"
-apx_exit="${apx_root}/command-position-exit-append.awk"
-/usr/bin/sed -e '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "$apx_ship" > "$apx_rev"
-/usr/bin/sed -e '/skips++; continue }   # VAR=value$/s/\*=\//*[+]?=\//' "$apx_ship" > "$apx_exit"
-apx_lines() { # $1 = copy -> the number of lines it differs from the shipped copy by, counted on both sides
-  /usr/bin/diff "$apx_ship" "$1" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true
-}
-apx_rev_live=0; apx_exit_live=0
-if [ "$(apx_lines "$apx_rev")" = 2 ] && /usr/bin/awk -f "$apx_rev" </dev/null >/dev/null 2>&1; then apx_rev_live=1; fi
-if [ "$(apx_lines "$apx_exit")" = 2 ] && /usr/bin/awk -f "$apx_exit" </dev/null >/dev/null 2>&1; then apx_exit_live=1; fi
-if [ "$apx_rev_live" = 1 ] && [ "$apx_exit_live" = 1 ]; then
-  /usr/bin/printf 'PASS: EXT-APPEND-XV-LIVE the reverted copy and the exit-append copy each differ from the shipped canonicalizer by exactly one line, and parse\n'
-  PASS=$((PASS + 1))
-else
-  /usr/bin/printf 'FAIL: EXT-APPEND-XV-LIVE a sandbox copy is not live (reverted live=%s, exit-append live=%s)\n' "$apx_rev_live" "$apx_exit_live"
-  FAIL=$((FAIL + 1))
-fi
-apx_view() { # $1 = canonicalizer copy  $2 = view (default | exit)  $3 = command -> stdout
-  if [ "$2" = exit ]; then
-    /usr/bin/awk -v CMDPOS_VIEW=exit -f "$1" <<<"$3" 2>/dev/null
-  else
-    /usr/bin/awk -f "$1" <<<"$3" 2>/dev/null
-  fi
-}
-apx_run() { # $1 = canonicalizer copy  $2 = command -> APX_RC and APX_ERR
-  /bin/cp "$1" "${apx_hooks}/lib/command-position.awk"
-  APX_RC=0
-  APX_ERR="$( ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
-      /usr/bin/printf '%s' "$(bash_payload "$2" "$apx_root")" | /bin/bash "${apx_hooks}/block-rm-prefer-trash.sh" 2>&1 >/dev/null ) )" || APX_RC="$?"
-}
-apx_case() { # $1 = sentinel label  $2 = command
-  local ev_same=no dv_diff=no
-  if [ "$(apx_view "$apx_ship" exit "$2")" = "$(apx_view "$apx_rev" exit "$2")" ]; then ev_same=yes; fi
-  if [ "$(apx_view "$apx_ship" default "$2")" != "$(apx_view "$apx_rev" default "$2")" ]; then dv_diff=yes; fi
-  if [ "$apx_rev_live" = 1 ] && [ "$ev_same" = yes ] && [ "$dv_diff" = yes ]; then
-    /usr/bin/printf 'PASS: %s-XV the exit view is byte-identical with and without the append form, and the default view walks it\n' "$1"
-    PASS=$((PASS + 1))
-  else
-    /usr/bin/printf 'FAIL: %s-XV reverted copy live=%s, exit view unchanged=%s, default view differs=%s\n' \
-      "$1" "$apx_rev_live" "$ev_same" "$dv_diff"
-    FAIL=$((FAIL + 1))
-  fi
-  apx_run "$apx_exit" "$2"
-  if [ "$apx_exit_live" = 1 ] && [ "$APX_RC" = 0 ]; then
-    /usr/bin/printf 'PASS: %s-PAIR a copy whose exit view also takes the append form allows the sentinel, so it can fire\n' "$1"
-    PASS=$((PASS + 1))
-  else
-    /usr/bin/printf 'FAIL: %s-PAIR the exit-append copy did not allow the sentinel (copy live=%s, exit=%s): %s\n' "$1" "$apx_exit_live" "$APX_RC" "$APX_ERR"
-    FAIL=$((FAIL + 1))
-  fi
-}
-apx_case "EXT-APPEND-X1" 'FOO+=1 git status ; rm -rf /tmp/foo'
-apx_case "EXT-APPEND-X2" 'FOO+=1 rm ; trash /etc/hosts'
-apx_case "EXT-APPEND-X3" 'FOO+=1 rm ; sudo unlink /tmp/foo'
-apx_case "EXT-APPEND-X4" 'FOO+=1 BAR+=2 git log ; rm -rf /tmp/foo'
-/bin/rm -rf "$apx_root"
 
 # ----- CMDPOS-SKEW (#8314): the canonicalizer's version-skew canary -----
 #
-# This hook trusts the shared canonicalizer only after three probes: a one-line function
-# body; a wrapper carrying a separate-argument option before a benign word, whose canonical
-# form exposes the word only on the walk that reads wrapper grammar; and the same input in
-# the both view the hook reads (#8314, DT pass 7), whose exit view must keep the form the walk
-# produced before that grammar while its default output exposes the word. A stale or damaged
-# copy beside this hook passes the first probe and fails a later one, so the hook fails
-# CLOSED. Modelled by a copy whose nice row is removed (SKEW-01), a copy whose both view
-# carries the widened form in place of the exit view (SKEW-02), and a copy without the both
-# view (SKEW-BOTH, a primitive that predates it); the control is the same sandbox with the
-# shipped copy.
+# This hook trusts the shared canonicalizer only after two probes: a one-line function body, and
+# a wrapper carrying a separate-argument option before a benign word, whose canonical form exposes
+# the word only on the walk that reads wrapper grammar (opened by the append form of a prefix
+# assignment). A stale or damaged copy beside this hook passes the first probe and fails the
+# second, so the hook fails CLOSED. Modelled by a copy whose nice row is removed (SKEW-01) and a
+# copy whose walk reads the append form as the command word (SKEW-APPEND); the control is the same
+# sandbox with the shipped copy. The hook reads neither the exit view nor the both view, so a copy
+# without them is not refused here.
 cps_root="$(/usr/bin/mktemp -d)"
 cps_hooks="${cps_root}/.claude/hooks"
 /bin/mkdir -p "${cps_hooks}/lib"
@@ -615,8 +554,6 @@ cps_skew() { # $1 = arm label  $2 = sed program for the canonicalizer copy  $3 =
   fi
 }
 cps_skew "CMDPOS-SKEW-01" 's/WROW\["nice"\]=1//' "the wrapper grammar"
-cps_skew "CMDPOS-SKEW-02" 's/^  EXIT_VIEW = 1$/  EXIT_VIEW = 0/' "the exit view"
-cps_skew "CMDPOS-SKEW-BOTH" 's/CMDPOS_VIEW == "both"/CMDPOS_VIEW == "zzboth"/' "the both view"
 # (#8314, follow-up pass) The second probe puts an append-form prefix assignment ahead of its
 # wrapper, so a copy whose walk reads that word as the command word fails it too.
 cps_skew "CMDPOS-SKEW-APPEND" '/CMDPOS-APPEND/s/[[]+[]]?=/=/' "the append form of a prefix assignment"
@@ -633,20 +570,18 @@ else
 fi
 /bin/rm -rf "$cps_root"
 
-# ----- AC-D020-NEUTRAL (#8444): transformation (e) leaves the exit view and both exits unchanged -----
+# ----- AC-D020-NEUTRAL (#8444): transformation (e) moves no verdict of this hook -----
 #
 # (e) inserts `; ` before every assignment the canonicalizer's default walk skips, so a rule
-# anchored on an assignment (BLOCK-DESTRUCTIVE-020, -023) reads it at a command start. This
-# hook's two allow-on-match exits read the EXIT VIEW, which (e) does not reach, and no exit
-# pattern can match an assignment token, so both exits must keep their verdicts. Shown, not
-# argued: a copy of the canonicalizer with (e)'s two marked lines removed is built and shown
-# live (it differs from the shipped copy by exactly those lines, and it parses). Then, on each
-# witness, the exit view is byte-identical across the two copies, the default view is not (the
-# witness really carries an (e) mark), and this hook returns the same exit code and the same
-# message through either copy. The witnesses put a marked assignment ahead of a git command at
-# Step 1's exemption, of a target-less deletion verb at Step 2's no-target exit, and of a
-# refused deletion, in plain form and behind a wrapper or a condition keyword; the control
-# shows the sandbox live.
+# anchored on an assignment (BLOCK-DESTRUCTIVE-020, -023) reads it at a command start. No rule of
+# this hook is anchored on an assignment, so (e) must move none of its verdicts. Shown, not
+# argued: a copy of the canonicalizer with (e)'s two marked lines removed is built and shown live
+# (it differs from the shipped copy by exactly those lines, and it parses). Then, on each witness,
+# the exit view is byte-identical across the two copies, the default view is not (the witness
+# really carries an (e) mark), and this hook returns the same exit code and the same message
+# through either copy. The witnesses put a marked assignment ahead of a git command, of a
+# target-less deletion verb and of a refused deletion, in plain form and behind a wrapper or a
+# condition keyword; the control shows the sandbox live.
 neu_root="$(/usr/bin/mktemp -d)"
 neu_hooks="${neu_root}/.claude/hooks"
 /bin/mkdir -p "${neu_hooks}/lib"
@@ -711,6 +646,442 @@ neu_case "AC-D020-NEUTRAL-4: a target-less rm behind env and its assignment, bef
 neu_case "AC-D020-NEUTRAL-5: a refused deletion behind a marked assignment" 'FOO=1 BAR=2 rm -rf /tmp/foo'
 neu_case "AC-D020-NEUTRAL-6: a git condition behind a marked assignment, with a deletion in its branch" 'if FOO=1 git diff --quiet ; then rm -rf /tmp/foo ; fi'
 /bin/rm -rf "$neu_root"
+
+# ----- EXT-SEG (#8122): every segment of the line is judged -----
+#
+# The hook keeps no exit that allows on a match. A git command exempts only its own segment, and
+# a deletion verb with no operand ends nothing: every rm-family verb, the Trash step and the Finder
+# step are still judged on the line's other segments. A Trash segment that does not name all its
+# targets on its line is refused under the strict policy (BLOCK-TRASH-003), and so, judged after
+# every other step, is an rm, rmdir or unlink segment of that kind (BLOCK-TRASH-001). A trailing
+# line-continuation backslash is not an operand, and a verb segment whose line continues does not
+# show all its targets.
+#   G    a git segment, then a deletion, a Trash call or a Finder delete of an outside path (AC1)
+#   T    a target-less rm-family verb, then another verb's outside target (AC2). The arms that end
+#        in an rm-family refusal assert the outside path, so a single-verb pick, which would refuse
+#        with the no-operand message instead, is told apart. T0 is the same-verb control
+#   B    a Trash segment with no operand, or whose line continues (AC3); B6 shows that the limb
+#        never masks a refusal elsewhere on the line; B9 to B12 carry a redirection with an ampersand
+#   D    a directory change whose operand follows a redirection with an ampersand
+#   C    controls that stay allowed: git alone, commit messages inline and in a top-level quoted
+#        here-document read by git, also behind -C <dir> (AC4), a describe-only use of a verb, an
+#        untracking git rm. C20 is re-based: the continuation rule (EXT-CONT) refuses it now
+#   P    pins: the declared allow-to-refuse moves, the declared over-blocks, a declared residual
+#   MUT  each new marker shown load-bearing: a copy of the hook without it allows its sentinels. A
+#        sentinel that continues onto a second line is refused by the continuation rule whatever the
+#        marker, so the per-form markers' sentinels are single-line (EXT-CONT-EOF)
+#   INT1 the heredoc-borne controls shown held by the here-document pre-pass: through a copy whose
+#        pre-pass never removes a body (armed red), each is refused; through the hook it is allowed
+SEG_OUT='deletion outside .*Path: (/private)?'
+SEG_FH="$RMT_FIXTURE_HOME"
+test_case "EXT-SEG-G1: a git segment, then && and a recursive rm of an outside path, is refused" \
+  "$(bash_payload 'git status && rm -rf /tmp/seg-g1')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-G2: a git segment, then ; and a recursive rm of an outside path, is refused" \
+  "$(bash_payload 'git status ; rm -rf /tmp/seg-g2')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-G3: a git segment by absolute path, then a recursive rm of an outside path, is refused" \
+  "$(bash_payload '/usr/bin/git status ; rm -rf /tmp/seg-g3')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-G4: a git line, then a recursive rm of an outside path on the next line, is refused" \
+  "$(bash_payload $'git status\nrm -rf /tmp/seg-g4')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-G5: a git segment, then a Trash call on an outside path, is refused" \
+  "$(bash_payload 'git status ; trash /tmp/seg-g5')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-G6: a git segment, then a Finder delete of an outside path, is refused" \
+  "$(bash_payload $'git status ; osascript -e \'tell application "Finder" to delete POSIX file "/tmp/seg-g6"\'')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-T0: a flags-only rm, then a recursive rm of an outside path (the same verb, refused before and after)" \
+  "$(bash_payload 'rm -f ; rm -rf /tmp/seg-t0')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t0"
+test_case "EXT-SEG-T1: a flags-only rm, then unlink of an outside path, is refused on that path" \
+  "$(bash_payload 'rm -f ; unlink /tmp/seg-t1')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t1"
+test_case "EXT-SEG-T2: a flags-only rm, then a Trash call on an outside path, is refused" \
+  "$(bash_payload 'rm -f && trash /tmp/seg-t2')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-T3: a bare rmdir, then unlink of an outside path, is refused on that path" \
+  "$(bash_payload 'rmdir ; unlink /tmp/seg-t3')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t3"
+test_case "EXT-SEG-T4: a bare rm, then a Finder delete of an outside path, is refused" \
+  "$(bash_payload $'rm ; osascript -e \'tell application "Finder" to delete POSIX file "/tmp/seg-t4"\'')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-T5: a target-less rm behind a wrapper option, then unlink of an outside path behind the same wrapper, is refused on that path" \
+  "$(bash_payload 'nice -n 5 rm ; nice -n 5 unlink /tmp/seg-t5')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t5"
+test_case "EXT-SEG-T6: a flags-only rm on one line, unlink of an outside path on the next, is refused on that path" \
+  "$(bash_payload $'rm -f\nunlink /tmp/seg-t6')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-t6"
+test_case "EXT-SEG-T7: an rm whose line continues past its flags does not show its targets and is refused" \
+  "$(bash_payload $'rm -f \\\n/tmp/seg-t7')" 2 "BLOCK-TRASH-001.*does not name all its targets"
+test_case "EXT-SEG-B1: a Trash call with no operand is refused" \
+  "$(bash_payload 'trash')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-B2: a Trash call carrying only a verbose flag is refused" \
+  "$(bash_payload 'trash -v')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-B3: a Trash call carrying only its empty-the-Trash and skip-confirmation flags is refused" \
+  "$(bash_payload 'trash -e -y')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-B4: an inside Trash call, then a flags-only Trash call, is refused (per segment)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b4 ; trash -v" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B5: a flags-only Trash call behind a wrapper is refused" \
+  "$(bash_payload 'nice trash -v')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-B6: a flags-only Trash call, then a recursive rm of an outside path, is refused on that path" \
+  "$(bash_payload 'trash -v ; rm -rf /tmp/seg-b6')" 2 "BLOCK-TRASH-001.*${SEG_OUT}/tmp/seg-b6"
+test_case "EXT-SEG-B7: a Trash call whose line continues past its flags is refused" \
+  "$(bash_payload $'trash -v \\\n/tmp/seg-b7')" 2 "BLOCK-TRASH-003.*does not name all its targets"
+test_case "EXT-SEG-B8: an inside Trash operand, a continued line, and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b8 \\"$'\n'"/tmp/seg-b8" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+SEG_C4=$'git commit -F - <<\'EOF\'\nfix the hook\nrm -rf build\nEOF'
+SEG_C7=$'git commit -F - <<\'EOF\'\nnote: $(echo hi; rm -rf build) is text\nEOF'
+SEG_C8=$'git commit -F - <<\'EOF\'\ndon\'t\nrm -rf build\nEOF'
+SEG_C11=$'git -C /tmp/seg-repo commit -F - <<\'EOF\'\nrm -rf build\nEOF'
+test_case "EXT-SEG-C1: git status alone is allowed" \
+  "$(bash_payload 'git status')" 0
+test_case "EXT-SEG-C2: a commit message carrying deletion-verb text inline is allowed" \
+  "$(bash_payload 'git commit -m "rm stale files; unlink old"')" 0
+test_case "EXT-SEG-C3: a multi-line inline message with a line that begins with a deletion verb is allowed" \
+  "$(bash_payload $'git commit -m "first line\nrm -rf build\nlast line"')" 0
+test_case "EXT-SEG-C4: a commit message from a top-level quoted here-document, a line beginning with a deletion verb, is allowed" \
+  "$(bash_payload "$SEG_C4")" 0
+test_case "EXT-SEG-C5: a message in a double-quoted substitution, with an apostrophe and a deletion line, is allowed (quote-masked)" \
+  "$(bash_payload $'git commit -m "$(cat <<\'EOF\'\ndon\'t fix it\nrm -rf build\nEOF\n)"')" 0
+test_case "EXT-SEG-C7: a here-document message carrying a substitution-shaped string before deletion text is allowed" \
+  "$(bash_payload "$SEG_C7")" 0
+test_case "EXT-SEG-C8: a here-document message with an unpaired apostrophe is allowed" \
+  "$(bash_payload "$SEG_C8")" 0
+test_case "EXT-SEG-C9: asking where the Trash program is does not run it and is allowed" \
+  "$(bash_payload 'command -v trash')" 0
+test_case "EXT-SEG-C10: untracking a file and committing is allowed" \
+  "$(bash_payload 'git rm -r --cached foo && git commit -m "untrack foo"')" 0
+test_case "EXT-SEG-C11: git -C <dir> commit with a here-document message carrying a deletion line is allowed" \
+  "$(bash_payload "$SEG_C11")" 0
+test_case "EXT-SEG-P1: a flags-only rm alone is refused (no operand)" \
+  "$(bash_payload 'rm -f')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-P2: a flags-only rm inside a subshell group is refused (no operand)" \
+  "$(bash_payload '( rm -rf )')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-P3: a Trash help request is refused (a declared over-block)" \
+  "$(bash_payload 'trash --help')" 2 "BLOCK-TRASH-003"
+test_case "EXT-SEG-P4: a commit message from an unquoted here-document with a deletion line is judged (a declared move)" \
+  "$(bash_payload $'git commit -F - <<EOF\nrm -rf build\nEOF' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
+test_case "EXT-SEG-P5: an rm help request is refused (a declared over-block)" \
+  "$(bash_payload 'rm --help')" 2 "BLOCK-TRASH-001"
+test_case "EXT-SEG-P6: a Trash call continued onto a second line of inside operands is refused (a declared over-block)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-p6a \\"$'\n'"${SEG_FH}/Claude/seg-p6b" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-SEG-P7: a Trash call with its empty-the-Trash flags and one inside operand is allowed (a declared residual)" \
+  "$(bash_payload "trash -e -y ${SEG_FH}/Claude/seg-p7" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-P8: a here-document commit message on a command that pipes elsewhere is judged (a declared move)" \
+  "$(bash_payload $'git commit -F - <<\'EOF\'\nrm -rf build\nEOF\ngit log --oneline | cat' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C6: a message in a double-quoted substitution with an unpaired double quote is judged (the declared move, Q1)" \
+  "$(bash_payload $'git commit -m "$(cat <<\'EOF\'\nsay "hi\nrm -rf build\nEOF\n)"' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
+
+# A redirection that carries an ampersand (Stage 7, #8122 F-03 and F-04). The walk cuts the line on every
+# ampersand, and the canonicalizer reads one in a redirection as a separator too, so a Trash call with
+# such a redirection lost the operands after it (B10 to B12, the dirs reader in D1) and the continuation
+# test never saw its line continue (B9). The line's continuation is now read once per record (P9: the
+# declared over-block that reading brings), and the operand reading goes on past the ampersand of an
+# operator left without its word and past a both-streams redirection. C12 to C17 are the common shapes
+# that stay allowed.
+test_case "EXT-SEG-B9: an inside Trash operand, a descriptor duplication, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b9 2>&1 \\"$'\n'"/tmp/seg-b9" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B10: an outside Trash operand after a descriptor duplication on the same line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b10 2>&1 /tmp/seg-b10" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${SEG_OUT}/tmp/seg-b10" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B11: an outside Trash operand after a both-streams redirection on the same line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b11 &>/dev/null /tmp/seg-b11" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${SEG_OUT}/tmp/seg-b11" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B12: an outside Trash operand after a descriptor duplication spelled with a blank before its word is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b12 2>& 1 /tmp/seg-b12" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${SEG_OUT}/tmp/seg-b12" "$RMT_HOME_ENV"
+test_case "EXT-SEG-D1: a directory change whose operand follows a descriptor duplication moves a later relative Trash operand" \
+  "$(bash_payload 'cd 2>&1 /tmp/seg-d1 && trash seg-d1-rel')" 2 "BLOCK-TRASH-003.*${SEG_OUT}/tmp/seg-d1/seg-d1-rel" "CLAUDE_WORKSPACE_ROOT=${HOME}"
+test_case "EXT-SEG-P9: an inside Trash call on a line that continues past a later command is refused (a declared over-block)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-p9 && echo done \\"$'\n'"more" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C12: an inside Trash call with its error stream duplicated is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c12 2>&1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C13: an inside Trash call with output to the null device and its error stream duplicated is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c13 >/dev/null 2>&1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C14: an inside Trash call with both streams to the null device is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c14 &>/dev/null" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C15: an inside Trash call that closes its error stream is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c15 2>&-" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C16: two inside Trash operands either side of a descriptor duplication are allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c16a 2>&1 ${SEG_FH}/Claude/seg-c16b" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C17: an inside Trash call with its error stream duplicated into a pipe is allowed" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c17 2>&1 | tail -3" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+# A separator the line itself carries before a compound keyword or a command-prefix word ends the
+# reading past a both-streams redirection: the canonicalizer marks such a word with a separator after
+# it, not before, so the word is not an operand (C18 from a cwd outside the workspace, C19 a cd).
+test_case "EXT-SEG-C18: an inside Trash call with both streams to the null device as an if condition is allowed" \
+  "$(bash_payload "if trash ${SEG_FH}/Claude/seg-c18 &>/dev/null; then echo ok; fi" "$RMT_FIXTURE_OTHER_HOME")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C19: a directory change with both streams to the null device as an if condition, then a relative inside Trash target, is allowed" \
+  "$(bash_payload "if cd ${SEG_FH}/Claude/sub &>/dev/null; then trash seg-c19; fi" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+# A continued line whose backslash follows a redirection that carries an ampersand or a pipe (Stage 7
+# re-verify, #8122 R-01). Where the walk cuts such a redirection, the backslash after it can become a
+# new command word to the canonicalizer, which drops a single leading backslash from one, so the
+# record's last word is no longer the backslash. B13 to B15 keep the backslash as a word; in B16 to
+# B20 it is dropped, and what the canonicalizer leaves at the line's end — a redirection left without
+# its word, or a both-streams redirection and then the separator it inserted — reads as a continued
+# line too. Every one is refused. P10 is the declared over-block of that reading. C20 is a separator
+# before the backslash, which begins the next line's command, so these readings allow it; the
+# continuation rule (EXT-CONT) refuses it, a declared over-block.
+test_case "EXT-SEG-B13: an inside Trash operand, an output duplication onto the error stream, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b13 >&2 \\"$'\n'"/tmp/seg-b13" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B14: an inside Trash operand, a descriptor duplication spelled with a blank before its word, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b14 2>& 1 \\"$'\n'"/tmp/seg-b14" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B15: an inside Trash operand, a closed error stream, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b15 2>&- \\"$'\n'"/tmp/seg-b15" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B16: an inside Trash operand, both streams truncated to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b16 &>/dev/null \\"$'\n'"/tmp/seg-b16" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B17: an inside Trash operand, both streams appended to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b17 &>>/dev/null \\"$'\n'"/tmp/seg-b17" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B18: an inside Trash operand, both streams redirected with a blank before the file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b18 &> /dev/null \\"$'\n'"/tmp/seg-b18" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B19: an inside Trash operand, a descriptor duplication whose word is on the next line, and an outside operand after that word is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b19 2>& \\"$'\n'"1 /tmp/seg-b19" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-B20: an inside Trash operand, a clobbering output redirection whose file is on the next line, and an outside operand after that file is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-b20 >| \\"$'\n'"seg-b20-log /tmp/seg-b20" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-P10: an inside Trash call whose line ends in a both-streams redirection, a separator and one blank is refused (a declared over-block)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-p10 &>/dev/null ; " "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-SEG-C20: an inside Trash call on a line that ends in a separator and a continuation backslash, then a plain command, is refused (re-based: a declared over-block of the continuation rule)" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/seg-c20 && \\"$'\n'"echo done" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*line continuation" "$RMT_HOME_ENV"
+
+# ----- EXT-CONT (#8122, operator decision): a command that carries a line continuation -----
+#
+# Outside the quoted here-document bodies the pre-pass removes, a line that ends in an odd run of
+# backslashes continues onto the next line, and the shell joins the two before it reads a word: a
+# continuation can split a command word, or carry a wrapper option's argument or an assignment's value
+# to the next line. An even run is literal backslashes and continues nothing, and a backslash that ends
+# a comment continues nothing either, so the next line runs as its own command. On a command that
+# carries such a run, the hook reads it twice — as judged, each line its own, and with every
+# continuation joined — and refuses a deletion or Trash verb found in either reading, judged after every
+# other step: BLOCK-TRASH-003 for a Trash call or a Finder delete, else BLOCK-TRASH-001. That rule
+# decides every continued command; the per-form readings of EXT-SEG stay in place and still refuse
+# first where they fire. Declared over-block: every command with a continuation and a deletion or Trash
+# verb is refused, whatever the shell would join.
+#   W    a continuation inside the command word: the shell runs the joined word
+#   R    a continuation after each redirection form, complete or with its word on the next line (the
+#        descriptor duplication, closing and both-streams forms are EXT-SEG-B9 and B13 to B20)
+#   X    a continuation after a wrapper word, between a wrapper option and its argument, or after a keyword
+#   A    a continuation after an assignment-shaped word, plain or append form
+#   T    a run of three backslashes: a literal backslash, then a continuation
+#   K    a backslash that ends a comment, which continues nothing; K3 and K4 are the residual neither
+#        reading sees (the joined reading reads the next line as part of the comment)
+#   E    an even run of backslashes, which continues nothing (controls)
+#   N    controls: a continued command with no deletion or Trash command, and a quoted here-document body
+#        whose lines end in a backslash; N4, a continued double-quoted message, is a refusal that predates
+#        this rule
+#   EOF  a continuation backslash that ends the command, with no newline after it: nothing joins, so the
+#        per-form readings alone refuse it; these are the single-line sentinels of their mutant pairs
+#   MUT  each new marker shown load-bearing; DEC the rule shown deciding: a copy without the three
+#        per-form readings refuses every continued EXT-SEG and R arm by this rule alone
+CONT_RE='line continuation'
+test_case "EXT-CONT-W1: an rm whose command word a continuation splits, of an outside path, is refused" \
+  "$(bash_payload $'r\\\nm -rf /tmp/cont-w1')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-W2: an rmdir whose command word a continuation splits, of an outside path, is refused" \
+  "$(bash_payload $'rmd\\\nir /tmp/cont-w2')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-W3: an unlink whose command word a continuation splits, of an outside path, is refused" \
+  "$(bash_payload $'un\\\nlink /tmp/cont-w3')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-W4: a Trash call whose command word a continuation splits, on an outside path, is refused" \
+  "$(bash_payload $'tr\\\nash /tmp/cont-w4')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-W5: a Trash call at the keg-only location whose command word a continuation splits is refused" \
+  "$(bash_payload "${RMT_KEG%ash}\\"$'\n'"ash /tmp/cont-w5")" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-W6: a Finder delete whose command word a continuation splits, of an outside path, is refused" \
+  "$(bash_payload $'osa\\\nscript -e \'tell application "Finder" to delete POSIX file "/tmp/cont-w6"\'')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-W7: an rm by absolute path whose command word a continuation splits is refused" \
+  "$(bash_payload $'/bin/r\\\nm -rf /tmp/cont-w7')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-W8: an unlink whose command word two continuations split is refused" \
+  "$(bash_payload $'un\\\nli\\\nnk /tmp/cont-w8')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-R1: an inside Trash operand, output truncated to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r1 >/dev/null \\"$'\n'"/tmp/cont-r1" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R2: an inside Trash operand, output appended to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r2 >>/dev/null \\"$'\n'"/tmp/cont-r2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R3: an inside Trash operand, a clobbering output redirection, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r3 >|/dev/null \\"$'\n'"/tmp/cont-r3" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R4: an inside Trash operand, a word-form duplication to a file, a continued line and an outside operand on the next line is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r4 >&/dev/null \\"$'\n'"/tmp/cont-r4" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R5: an inside Trash operand, a truncating redirection whose file is on the next line, and an outside operand after it is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r5 > \\"$'\n'"/tmp/cont-r5.log /tmp/cont-r5" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R6: an inside Trash operand, an appending redirection whose file is on the next line, and an outside operand after it is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r6 >> \\"$'\n'"/tmp/cont-r6.log /tmp/cont-r6" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R7: an inside Trash operand, a both-streams redirection whose file is on the next line, and an outside operand after it is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r7 &> \\"$'\n'"/tmp/cont-r7.log /tmp/cont-r7" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+test_case "EXT-CONT-R8: an inside Trash operand, a word-form duplication whose file is on the next line, and an outside operand after it is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-r8 >& \\"$'\n'"/tmp/cont-r8.log /tmp/cont-r8" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003" "$RMT_HOME_ENV"
+# X1, A1 and A2 were refused before this rule too: the canonicalizer already reads the Trash call or the
+# unlink after them as a command start, so the Trash or rm step refuses the outside path first (measured
+# at the RED commit; predicted allowed there).
+test_case "EXT-CONT-X1: a continuation between a wrapper option and its argument, before a Trash call on an outside path, is refused" \
+  "$(bash_payload $'nice -n \\\n5 trash /tmp/cont-x1')" 2 "BLOCK-TRASH-003"
+test_case "EXT-CONT-X2: a continuation after a wrapper word, before its option and a Trash call on an outside path, is refused" \
+  "$(bash_payload $'nice \\\n-n 5 trash /tmp/cont-x2')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-X3: a continuation after a keyword, before a Trash call on an outside path, is refused" \
+  "$(bash_payload $'if true; then \\\ntrash /tmp/cont-x3; fi')" 2 "BLOCK-TRASH-003"
+test_case "EXT-CONT-A1: a continuation inside an assignment's value, before a Trash call on an outside path, is refused" \
+  "$(bash_payload $'CONT_A1=\\\n1 trash /tmp/cont-a1')" 2 "BLOCK-TRASH-003"
+test_case "EXT-CONT-A2: a continuation inside an append-form assignment's value, before an unlink of an outside path, is refused" \
+  "$(bash_payload $'CONT_A2+=\\\n1 unlink /tmp/cont-a2')" 2 "BLOCK-TRASH-001"
+test_case "EXT-CONT-A3: a continuation after a whole assignment, before a recursive rm of an outside path, is refused" \
+  "$(bash_payload $'CONT_A3=1 \\\nrm -rf /tmp/cont-a3')" 2 "BLOCK-TRASH-001"
+test_case "EXT-CONT-T1: a run of three backslashes inside a word that is then not a Trash verb is allowed (the joined reading keeps the literal backslash)" \
+  "$(bash_payload $'tr\\\\\\\nash /tmp/cont-t1')" 0
+test_case "EXT-CONT-T2: a run of three backslashes after an echo word, then an inside Trash call at the next line's start, is refused (a declared over-block)" \
+  "$(bash_payload "echo cont-t2 \\\\\\"$'\n'"trash ${SEG_FH}/Claude/cont-t2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${CONT_RE}" "$RMT_HOME_ENV"
+test_case "EXT-CONT-T3: a Trash call carrying a flag and a run of three backslashes before a newline is refused" \
+  "$(bash_payload $'trash -v \\\\\\\n/tmp/cont-t3')" 2 "BLOCK-TRASH-003"
+test_case "EXT-CONT-K1: a comment that ends in a backslash continues nothing: a Trash call on an outside path on the next line is refused" \
+  "$(bash_payload $'echo cont-k1 # note \\\ntrash /tmp/cont-k1')" 2 "BLOCK-TRASH-003"
+test_case "EXT-CONT-K2: a comment that ends in a backslash, then an inside Trash call on the next line, is refused (a declared over-block)" \
+  "$(bash_payload "echo cont-k2 # note \\"$'\n'"trash ${SEG_FH}/Claude/cont-k2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${CONT_RE}" "$RMT_HOME_ENV"
+test_case "EXT-CONT-K3: a comment that ends in a backslash, then an rm whose command word a continuation splits, is allowed (a declared residual: neither reading sees it)" \
+  "$(bash_payload $'echo cont-k3 # note \\\nr\\\nm -rf /tmp/cont-k3')" 0
+test_case "EXT-CONT-K4: a comment that ends in a backslash, then a wrapper and its option spread over continued lines before a Trash call, is allowed (the same declared residual)" \
+  "$(bash_payload $'echo cont-k4 # note \\\nnice \\\n-n 5 trash /tmp/cont-k4')" 0
+test_case "EXT-CONT-E1: an even run of backslashes continues nothing: an inside Trash call on the next line is allowed" \
+  "$(bash_payload "echo cont-e1 \\\\"$'\n'"trash ${SEG_FH}/Claude/cont-e1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "EXT-CONT-E2: an even run of backslashes inside a word continues nothing, so no deletion verb is formed, and is allowed" \
+  "$(bash_payload $'r\\\\\nm -rf /tmp/cont-e2')" 0
+test_case "EXT-CONT-N1: a continued echo with no deletion or Trash command is allowed" \
+  "$(bash_payload $'echo cont-n1 \\\nmore')" 0
+test_case "EXT-CONT-N2: a continued container run whose option names a deletion verb is allowed" \
+  "$(bash_payload $'docker run \\\n--rm cont-n2')" 0
+test_case "EXT-CONT-N3: a continued untracking git rm is allowed" \
+  "$(bash_payload $'git rm \\\n--cached cont-n3')" 0
+# N4 is refused before this rule too (measured at the RED commit; predicted allowed there): the rm step
+# judges the deletion-verb text on the continued line of the double-quoted message. A refusal this rule
+# did not add, pinned as found.
+test_case "EXT-CONT-N4: a double-quoted commit message continued with a backslash onto a line of deletion-verb text is refused by the rm step (an over-block that predates this rule)" \
+  "$(bash_payload $'git commit -m "fix the hook \\\nrm -rf build"')" 2 "BLOCK-TRASH-001"
+test_case "EXT-CONT-N5: a quoted here-document commit message whose body line ends in a backslash, then a deletion line, is allowed" \
+  "$(bash_payload $'git commit -F - <<\'EOF\'\nfix the hook \\\nrm -rf build\nEOF')" 0
+test_case "EXT-CONT-EOF1: a Trash call carrying only a flag and ending the command in a continuation backslash is refused" \
+  "$(bash_payload 'trash -v \')" 2 "BLOCK-TRASH-003.*does not name all its targets"
+test_case "EXT-CONT-EOF2: an rm carrying only a flag and ending the command in a continuation backslash is refused" \
+  "$(bash_payload 'rm -f \')" 2 "BLOCK-TRASH-001.*does not name all its targets"
+test_case "EXT-CONT-EOF3: an inside Trash operand and a continuation backslash ending the command is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-eof3 \\" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-CONT-EOF4: an inside Trash operand, a descriptor duplication and a continuation backslash ending the command is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-eof4 2>&1 \\" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+test_case "EXT-CONT-EOF5: an inside Trash operand and a descriptor duplication left without its word at the command's end is refused" \
+  "$(bash_payload "trash ${SEG_FH}/Claude/cont-eof5 2>&" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*does not name all its targets" "$RMT_HOME_ENV"
+
+# The mutant pairs. Each copy differs from the hook by exactly its marked line, shown live first;
+# each sentinel, refused through the hook, is allowed through its copy.
+seg_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-seg.XXXXXX" 2>/dev/null)" || seg_dir=""
+seg_armed() { # $1 = arm label  $2 = copy  $3 = command -> refused through the copy
+  local rc=0 err
+  if ! ra_live "$2"; then
+    /usr/bin/printf 'FAIL: %s the copy is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n' "$1"
+    FAIL=$((FAIL + 1)); return
+  fi
+  err="$(/usr/bin/printf '%s' "$(bash_payload "$3")" | /bin/bash "$2" 2>&1 >/dev/null)" || rc="$?"
+  if [ "$rc" = 2 ]; then
+    /usr/bin/printf 'PASS: %s through the copy without the pre-pass the control is refused, so the pre-pass holds it\n' "$1"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s the copy without the pre-pass did not refuse the control (exit=%s): %s\n' "$1" "$rc" "$err"
+    FAIL=$((FAIL + 1))
+  fi
+}
+if [ -z "$seg_dir" ]; then
+  /usr/bin/printf 'FAIL: EXT-SEG mutant pairs could not create a sandbox, so they did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${seg_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${seg_dir}/lib/"
+  /usr/bin/sed -e "$SEG_SED_WALK" "$HOOK" > "${seg_dir}/block-rm-prefer-trash-segwalk.sh"
+  /usr/bin/sed -e "$SEG_SED_VERB" "$HOOK" > "${seg_dir}/block-rm-prefer-trash-segverb.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if \[ -n "\$(extract_bare_segments trash)" ]; then  # M-TRASH-BARETRASH$/\1if false; then  # M-TRASH-BARETRASH/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-baretrash.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if matches .*  # M-TRASH-BARERM$/\1if false; then  # M-TRASH-BARERM/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-barerm.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)EXCISED\$'"'"'\\n'"'"'?\*) COMMAND=.*$/\1EXCISED$'"'"'\\n'"'"'?*) : ;;/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-nohd.sh"
+  for seg_mk in RECCONT RECWORD RECBOTH REDIRAMP BOTHREDIR CONTLINE CONTUNJ CONTJOIN; do
+    /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-'"$seg_mk"'$/\1# M-TRASH-'"$seg_mk"' (removed)/' \
+      "$HOOK" > "${seg_dir}/block-rm-prefer-trash-${seg_mk}.sh"
+  done
+  # DEC — the three per-form readings removed together, so only the continuation rule can refuse.
+  /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-RECCONT$/\1# M-TRASH-RECCONT (removed)/' \
+    -e 's/^\([[:space:]]*\).*  # M-TRASH-RECWORD$/\1# M-TRASH-RECWORD (removed)/' \
+    -e 's/^\([[:space:]]*\).*  # M-TRASH-RECBOTH$/\1# M-TRASH-RECBOTH (removed)/' \
+    "$HOOK" > "${seg_dir}/block-rm-prefer-trash-noperform.sh"
+  ra_pair "EXT-SEG-MUT-SEGWALK-G1:" "${seg_dir}/block-rm-prefer-trash-segwalk.sh" 'git status && rm -rf /tmp/seg-g1'
+  ra_pair "EXT-SEG-MUT-SEGWALK-G5:" "${seg_dir}/block-rm-prefer-trash-segwalk.sh" 'git status ; trash /tmp/seg-g5'
+  ra_pair "EXT-SEG-MUT-SEGVERB-T1:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" 'rm -f ; unlink /tmp/seg-t1'
+  ra_pair "EXT-SEG-MUT-SEGVERB-T2:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" 'rm -f && trash /tmp/seg-t2'
+  ra_pair "EXT-SEG-MUT-SEGVERB-T4:" "${seg_dir}/block-rm-prefer-trash-segverb.sh" $'rm ; osascript -e \'tell application "Finder" to delete POSIX file "/tmp/seg-t4"\''
+  ra_pair "EXT-SEG-MUT-BARETRASH-B1:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" 'trash'
+  ra_pair "EXT-SEG-MUT-BARETRASH-B2:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" 'trash -v'
+  # The six sentinels below are single-line (re-based for the continuation rule, EXT-CONT): one that
+  # continued onto a second line is refused by that rule through every one of these copies. Their
+  # refusal through the hook is EXT-CONT-EOF1 to EOF5 and EXT-SEG-P10.
+  ra_pair "EXT-SEG-MUT-BARETRASH-B7:" "${seg_dir}/block-rm-prefer-trash-baretrash.sh" 'trash -v \'
+  ra_pair "EXT-SEG-MUT-BARERM-P1:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" 'rm -f'
+  ra_pair "EXT-SEG-MUT-BARERM-P2:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" '( rm -rf )'
+  ra_pair "EXT-SEG-MUT-BARERM-T7:" "${seg_dir}/block-rm-prefer-trash-barerm.sh" 'rm -f \'
+  ra_pair "EXT-SEG-MUT-RECCONT-B8:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" 'trash seg-mut-b8 \'
+  ra_pair "EXT-SEG-MUT-RECCONT-B9:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" 'trash seg-mut-b9 2>&1 \'
+  ra_pair "EXT-SEG-MUT-RECWORD-B19:" "${seg_dir}/block-rm-prefer-trash-RECWORD.sh" 'trash seg-mut-b19 2>&'
+  ra_pair "EXT-SEG-MUT-RECBOTH-B16:" "${seg_dir}/block-rm-prefer-trash-RECBOTH.sh" 'trash seg-mut-b16 &>/dev/null ; '
+  # EXT-CONT: the continuation rule's three markers — the rule itself (CONTLINE), its reading of the
+  # command as judged (CONTUNJ) and its joined reading (CONTJOIN).
+  ra_pair "EXT-CONT-MUT-CONTLINE-W1:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'r\\\nm -rf /tmp/cont-w1'
+  ra_pair "EXT-CONT-MUT-CONTLINE-W4:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'tr\\\nash /tmp/cont-w4'
+  ra_pair "EXT-CONT-MUT-CONTLINE-W6:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'osa\\\nscript -e \'tell application "Finder" to delete POSIX file "/tmp/cont-w6"\''
+  ra_pair "EXT-CONT-MUT-CONTJOIN-W1:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'r\\\nm -rf /tmp/cont-w1'
+  ra_pair "EXT-CONT-MUT-CONTJOIN-X2:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'nice \\\n-n 5 trash /tmp/cont-x2'
+  ra_pair "EXT-CONT-MUT-CONTUNJ-K2:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-k2 # note \\\ntrash cont-mut-k2'
+  ra_pair "EXT-CONT-MUT-CONTUNJ-T2:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-t2 \\\\\\\ntrash cont-mut-t2'
+  # DEC: through the copy without the three per-form readings (shown live: exactly three lines differ,
+  # and it parses), each continued arm is refused by the continuation rule alone.
+  cont_decides() { # $1 = arm label  $2 = command (fixture home and working directory)
+    local rc=0 err n
+    n="$(/usr/bin/diff "$HOOK" "${seg_dir}/block-rm-prefer-trash-noperform.sh" 2>/dev/null | /usr/bin/grep -c '^[<>]' || true)"
+    if [ "$n" != 6 ] || ! /bin/bash -n "${seg_dir}/block-rm-prefer-trash-noperform.sh" 2>/dev/null; then
+      /usr/bin/printf 'FAIL: %s the copy without the per-form readings is not live (%s differing lines, expected 6, or it does not parse)\n' "$1" "${n:-none}"
+      FAIL=$((FAIL + 1)); return
+    fi
+    err="$(/usr/bin/printf '%s' "$(bash_payload "$2" "$RMT_FIXTURE_CWD")" | /usr/bin/env "$RMT_HOME_ENV" /bin/bash "${seg_dir}/block-rm-prefer-trash-noperform.sh" 2>&1 >/dev/null)" || rc="$?"
+    if [ "$rc" = 2 ] && /usr/bin/grep -qE "BLOCK-TRASH-003.*${CONT_RE}" <<<"$err"; then
+      /usr/bin/printf 'PASS: %s without the per-form readings the continuation rule refuses it\n' "$1"
+      PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s without the per-form readings it was not refused by the continuation rule (exit=%s): %s\n' "$1" "$rc" "$err"
+      FAIL=$((FAIL + 1))
+    fi
+  }
+  cont_nl=$'\n'
+  cont_decides "EXT-CONT-DEC-B8:" "trash ${SEG_FH}/Claude/seg-b8 \\${cont_nl}/tmp/seg-b8"
+  cont_decides "EXT-CONT-DEC-B9:" "trash ${SEG_FH}/Claude/seg-b9 2>&1 \\${cont_nl}/tmp/seg-b9"
+  cont_decides "EXT-CONT-DEC-B13:" "trash ${SEG_FH}/Claude/seg-b13 >&2 \\${cont_nl}/tmp/seg-b13"
+  cont_decides "EXT-CONT-DEC-B14:" "trash ${SEG_FH}/Claude/seg-b14 2>& 1 \\${cont_nl}/tmp/seg-b14"
+  cont_decides "EXT-CONT-DEC-B15:" "trash ${SEG_FH}/Claude/seg-b15 2>&- \\${cont_nl}/tmp/seg-b15"
+  cont_decides "EXT-CONT-DEC-B16:" "trash ${SEG_FH}/Claude/seg-b16 &>/dev/null \\${cont_nl}/tmp/seg-b16"
+  cont_decides "EXT-CONT-DEC-B17:" "trash ${SEG_FH}/Claude/seg-b17 &>>/dev/null \\${cont_nl}/tmp/seg-b17"
+  cont_decides "EXT-CONT-DEC-B18:" "trash ${SEG_FH}/Claude/seg-b18 &> /dev/null \\${cont_nl}/tmp/seg-b18"
+  cont_decides "EXT-CONT-DEC-B19:" "trash ${SEG_FH}/Claude/seg-b19 2>& \\${cont_nl}1 /tmp/seg-b19"
+  cont_decides "EXT-CONT-DEC-B20:" "trash ${SEG_FH}/Claude/seg-b20 >| \\${cont_nl}seg-b20-log /tmp/seg-b20"
+  cont_decides "EXT-CONT-DEC-P6:" "trash ${SEG_FH}/Claude/seg-p6a \\${cont_nl}${SEG_FH}/Claude/seg-p6b"
+  cont_decides "EXT-CONT-DEC-P9:" "trash ${SEG_FH}/Claude/seg-p9 && echo done \\${cont_nl}more"
+  cont_decides "EXT-CONT-DEC-R1:" "trash ${SEG_FH}/Claude/cont-r1 >/dev/null \\${cont_nl}/tmp/cont-r1"
+  cont_decides "EXT-CONT-DEC-R2:" "trash ${SEG_FH}/Claude/cont-r2 >>/dev/null \\${cont_nl}/tmp/cont-r2"
+  cont_decides "EXT-CONT-DEC-R3:" "trash ${SEG_FH}/Claude/cont-r3 >|/dev/null \\${cont_nl}/tmp/cont-r3"
+  cont_decides "EXT-CONT-DEC-R4:" "trash ${SEG_FH}/Claude/cont-r4 >&/dev/null \\${cont_nl}/tmp/cont-r4"
+  cont_decides "EXT-CONT-DEC-R5:" "trash ${SEG_FH}/Claude/cont-r5 > \\${cont_nl}/tmp/cont-r5.log /tmp/cont-r5"
+  cont_decides "EXT-CONT-DEC-R6:" "trash ${SEG_FH}/Claude/cont-r6 >> \\${cont_nl}/tmp/cont-r6.log /tmp/cont-r6"
+  cont_decides "EXT-CONT-DEC-R7:" "trash ${SEG_FH}/Claude/cont-r7 &> \\${cont_nl}/tmp/cont-r7.log /tmp/cont-r7"
+  cont_decides "EXT-CONT-DEC-R8:" "trash ${SEG_FH}/Claude/cont-r8 >& \\${cont_nl}/tmp/cont-r8.log /tmp/cont-r8"
+  ra_pair "EXT-SEG-MUT-REDIRAMP-B10:" "${seg_dir}/block-rm-prefer-trash-REDIRAMP.sh" 'trash seg-mut-b10 2>&1 /tmp/seg-b10'
+  ra_pair "EXT-SEG-MUT-BOTHREDIR-B11:" "${seg_dir}/block-rm-prefer-trash-BOTHREDIR.sh" 'trash seg-mut-b11 &>/dev/null /tmp/seg-b11'
+  seg_armed "EXT-SEG-INT1-C4:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C4"
+  seg_armed "EXT-SEG-INT1-C7:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C7"
+  seg_armed "EXT-SEG-INT1-C8:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C8"
+  seg_armed "EXT-SEG-INT1-C11:" "${seg_dir}/block-rm-prefer-trash-nohd.sh" "$SEG_C11"
+  case "${seg_dir##*/}" in rmt-seg.*) /bin/rm -rf "$seg_dir" ;; esac
+fi
+
+# The keg coupling shown load-bearing (#8123 FM-3). The keg-only location reaches the segment walk
+# through walk_segments(), the walk's one call site, so every mode receives it. A copy whose call
+# site drops it, shown live first (one line from the hook, and it parses), allows both sentinels:
+# the Step-3 verb test still fires, but neither the operand walk nor the target-less walk can see
+# the call.
+keg_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-keg.XXXXXX" 2>/dev/null)" || keg_dir=""
+if [ -z "$keg_dir" ]; then
+  /usr/bin/printf 'FAIL: AC-AP-MUT-KEG pairs could not create a sandbox, so they did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${keg_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${keg_dir}/lib/"
+  /usr/bin/sed -e 's/ -v keg="\$TRASH_KEG_DIR"\(.*  # M-TRASH-KEG\)$/\1/' \
+    "$HOOK" > "${keg_dir}/block-rm-prefer-trash-keg.sh"
+  ra_pair "AC-AP-MUT-KEG-016:" "${keg_dir}/block-rm-prefer-trash-keg.sh" "${RMT_KEG} /tmp/rmt-keg-016"
+  ra_pair "AC-AP-MUT-KEG-016d:" "${keg_dir}/block-rm-prefer-trash-keg.sh" "${RMT_KEG}"
+  case "${keg_dir##*/}" in rmt-keg.*) /bin/rm -rf "$keg_dir" ;; esac
+fi
 
 # ----- CWD-*: a relative target is judged from the directory the command can be in -----
 #
@@ -802,6 +1173,104 @@ test_case "CWD-25 (control): cd text inside a quoted string is content, not a di
 test_case "CWD-26 (control): a relative cd that stays inside the workspace allows" \
   "$(bash_payload 'cd .. && trash victim' "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 
+# ----- TILDE / NONLIT (#8123 AC3, Q4): a target word is judged as the shell will expand it -----
+#
+# Every arm runs under the fixture home (HOME-FIXTURE-01) from the fixture's worktree cwd, so each
+# home-relative operand below is INSIDE the workspace under the hook's own HOME. The must-refuse arms
+# are refused only because the shell would act on another path.
+#   TILDE    a line that names HOME as a word can change HOME before the verb runs, so no
+#            home-relative word is expanded on it: a ~/ target, or a bare cd or cd ~/... before a
+#            relative one. The word is read on the command as judged and again with its quotes and
+#            backslashes removed (FM-2). A name composed by an expansion is a declared residual
+#            (TILDE-P1). Another tilde prefix, or a zsh equals-word, is expanded where the hook does
+#            not look (R3). RM1-RM3 are the rm-family rule-ID moves this makes, -002 to -001.
+#   NONLIT   after the whole-word quote strip, a word carrying a brace, a backslash or a quote, a
+#            wholly-quoted word whose body begins with ~, and a dot-leading glob component are not
+#            literal (Q4): the shell acts on a different path from the one written. A quoted path
+#            with a space reaches the resolver as such words, because the walk splits on whitespace
+#            first. SENS is the plain spelling of NONLIT-01's destination; P1 to P5 are declared
+#            over-blocks; the Finder delete's path goes through the same resolver (P2). Inside a
+#            whole-word quote the shell keeps a backslash or a quote of the other kind, and the word
+#            is refused all the same (P3 to P5); a brace there is masked by the canonicalizer before
+#            the rule reads the word (CTL4).
+TL_OTHER="$RMT_FIXTURE_OTHER_HOME"
+TL_FH="$RMT_FIXTURE_HOME"
+test_case "TILDE-01: a home-relative Trash target after an earlier segment assigns HOME is refused" \
+  "$(bash_payload "HOME=${TL_OTHER}; trash ~/Claude/tl-01" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-02: the same after an exported HOME assignment is refused" \
+  "$(bash_payload "export HOME=${TL_OTHER}; trash ~/Claude/tl-02" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-03: the same with HOME as a prefix assignment on the Trash command is refused (declared over-approximation)" \
+  "$(bash_payload "HOME=${TL_OTHER} trash ~/Claude/tl-03" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-04: a home-relative cd after a HOME assignment leaves a relative Trash target unresolvable" \
+  "$(bash_payload "HOME=${TL_OTHER}; cd ~/Claude/sub && trash tl-04" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*working directory" "$RMT_HOME_ENV"
+test_case "TILDE-05: a declaration builtin spelling the HOME name with an embedded double-quote pair is refused (FM-2)" \
+  "$(bash_payload "export \"HO\"ME=${TL_OTHER}; trash ~/Claude/tl-05" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-06: a name-operand builtin spelling the HOME name with a backslash is refused (FM-2)" \
+  "$(bash_payload "printf -v H\\OME %s ${TL_OTHER}; trash ~/Claude/tl-06" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-07: a declaration builtin spelling the HOME name with an embedded single-quote pair is refused (FM-2)" \
+  "$(bash_payload "typeset 'H'OME=${TL_OTHER}; trash ~/Claude/tl-07" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-P1: a HOME name composed by a parameter expansion is not seen (a declared residual, allowed)" \
+  "$(bash_payload "n=HO; export \${n}ME=${TL_OTHER}; trash ~/Claude/tl-p1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-CTL1 (control): a home-relative inside Trash target on a line that does not name HOME is allowed" \
+  "$(bash_payload "trash ~/Claude/tl-c1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-CTL2 (control): names that only contain HOME do not count" \
+  "$(bash_payload "JAVA_HOME=/opt/j; HOMEBREW_NO_AUTO_UPDATE=1 trash ~/Claude/tl-c2" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-CTL3 (control): a home-relative cd into the workspace, then a relative Trash target, with no HOME on the line" \
+  "$(bash_payload "cd ~/Claude/sub && trash tl-c3" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-08: a user-name tilde prefix is refused (R3)" \
+  "$(bash_payload "trash ~root/tl-08" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*tilde prefix" "$RMT_HOME_ENV"
+test_case "TILDE-09: the previous-directory tilde prefix is refused (R3)" \
+  "$(bash_payload "trash ~-/tl-09" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*tilde prefix" "$RMT_HOME_ENV"
+test_case "TILDE-10: a zsh equals-word is refused (R3)" \
+  "$(bash_payload "trash =ls" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*equals-word" "$RMT_HOME_ENV"
+test_case "TILDE-CTL4 (control): a relative operand with a tilde past its first character is allowed" \
+  "$(bash_payload "trash tl-a~b" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "TILDE-RM1: rm of a home-relative inside target on a line that names HOME is refused under -001 (moved from -002)" \
+  "$(bash_payload "HOME=${TL_OTHER}; rm ~/Claude/tl-rm1" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*names HOME" "$RMT_HOME_ENV"
+test_case "TILDE-RM2: rm of a user-name tilde target is refused under -001 (moved from -002)" \
+  "$(bash_payload "rm ~root/tl-rm2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*tilde prefix" "$RMT_HOME_ENV"
+test_case "TILDE-RM3: rm of a relative target after a HOME-dependent cd on a line that names HOME is refused under -001 (moved from -002)" \
+  "$(bash_payload "HOME=${TL_OTHER}; cd ~/Claude/sub && rm tl-rm3" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*working directory" "$RMT_HOME_ENV"
+test_case "NONLIT-01: a dot-dot escape spelled with an empty quote pair inside the dot-dot is refused" \
+  "$(bash_payload "trash ${TL_FH}/Claude/.''./nl-01" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-02: a dot-dot escape spelled with one dot backslash-escaped is refused" \
+  "$(bash_payload "trash ${TL_FH}/Claude/.\\./nl-02" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+# A brace word is built in an assignment first: bash 3.2 brace-expands a double-quoted string
+# inside a command substitution's argument list, which would hand the payload two words.
+NL_03="trash ${TL_FH}/Claude/{..,nl}/nl-03"
+NL_RM1="rm ${TL_FH}/Claude/{nl,rm1}"
+test_case "NONLIT-03: a brace word whose first expansion is a dot-dot escape is refused" \
+  "$(bash_payload "$NL_03" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-04: a wholly-quoted word whose body begins with a tilde is refused (R5: the shell keeps it literal)" \
+  "$(bash_payload "trash \"~/Claude/nl-04\"" "$RMT_OUTSIDE")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-05: a dot-leading glob component is refused" \
+  "$(bash_payload "trash ${TL_FH}/Claude/.*/nl-05" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-06: a quoted outside path with a space is refused (it was joined to the cwd as relative)" \
+  "$(bash_payload "trash \"${RMT_OUTSIDE}/nl six/x\"" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-SENS (sensitivity): the plain spelling of NONLIT-01's destination is refused" \
+  "$(bash_payload "trash ${TL_FH}/Claude/../nl-01" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*deletion outside" "$RMT_HOME_ENV"
+test_case "NONLIT-CTL1 (control): an unquoted glob inside the workspace stays literal and is allowed" \
+  "$(bash_payload "trash ${TL_FH}/Claude/nl-*.log" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "NONLIT-CTL2 (control): a wholly-quoted inside operand is allowed" \
+  "$(bash_payload "trash \"${TL_FH}/Claude/nl-c2\"" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "NONLIT-CTL3 (control): a dot-leading component with no glob character is allowed" \
+  "$(bash_payload "trash ${TL_FH}/Claude/.nl-hidden" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "NONLIT-P1: a quoted inside path with a space is refused (a declared over-block)" \
+  "$(bash_payload "trash \"${TL_FH}/Claude/nl p1\"" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-P2: a Finder delete of an inside path carrying a brace is refused (a declared over-block)" \
+  "$(bash_payload 'osascript -e '"'"'tell application "Finder" to delete POSIX file "'"${TL_FH}"'/Claude/{nl,p2}"'"'"'' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+NL_CTL4="trash '${TL_FH}/Claude/nl{c4}'"
+test_case "NONLIT-P3: a wholly single-quoted inside target carrying a backslash is refused (a declared over-block)" \
+  "$(bash_payload "trash '${TL_FH}/Claude/nl\\p3'" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-P4: a wholly single-quoted inside target carrying a double quote is refused (a declared over-block)" \
+  "$(bash_payload "trash '${TL_FH}/Claude/nl\"p4'" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-P5: a wholly double-quoted inside target carrying an apostrophe is refused (a declared over-block)" \
+  "$(bash_payload "trash \"${TL_FH}/Claude/nl'p5\"" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*not a literal word" "$RMT_HOME_ENV"
+test_case "NONLIT-CTL4 (control): a brace inside a wholly-quoted inside target never reaches the rule and is allowed" \
+  "$(bash_payload "$NL_CTL4" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "NONLIT-RM1: rm of a brace-word inside target is refused under -001 (moved from -002)" \
+  "$(bash_payload "$NL_RM1" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-001.*not a literal word" "$RMT_HOME_ENV"
+
 # ----- CLAUDE_HOOK_BYPASS escape hatch -----
 
 test_case "CLAUDE_HOOK_BYPASS bypass allows" \
@@ -857,9 +1326,8 @@ dep_gate_case "missing jq fails CLOSED (enforce, exit 2)" \
 # block-autonomy-ceiling.test.sh idiom) and CLAUDE_PROJECT_DIR cleared, unless a case sets
 # it, so neither the operator's real settings and store nor a caller's project is read.
 # Fixture names avoid the operator-memory-reference gate's patterns. MEM_ROOT is
-# canonicalized at creation: the hook compares a canonicalized target with a root spelled
-# from HOME as written (see HOME-FIXTURE-01), so a sandbox reached through a symlink would
-# misread in-workspace targets, and MEM-23 would test that instead of the arm.
+# canonicalized at creation, so every path an arm writes is already the form the hook's
+# normalizer gives back, and a message pattern can name it as typed.
 MEM_ROOT=""
 mem_root_raw="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-mem.XXXXXX" 2>/dev/null)" || mem_root_raw=""
 if [ -n "$mem_root_raw" ] && [ -d "$mem_root_raw" ]; then
@@ -1300,6 +1768,141 @@ else
   esac
 fi
 
+# ----- NORM (#8123 AC2): the target and the workspace root are compared in one normalized form -----
+#
+# A root spelled other than its normalized form — through a symlink, with a trailing slash or a
+# trailing dot segment — is compared in the form realpath gives it, by the same call that normalizes
+# the target. When that call cannot run, a target is refused and never admitted as inside (R1). The
+# sandbox base is canonical; `link` is a symlink to `real`, and HOME is spelled through the link, so
+# the default root (HOME/Claude) is spelled other than its normalized form. NORM-00 proves that
+# premise before any arm depends on it. NORM-05 and -06 run through the test-only seam: a sandbox
+# copy whose pinned python3 line is rewritten (the copy must carry exactly that line once), with one
+# unusable value per failure branch (absent, fails, prints nothing) and the real one as control.
+# NORM-08 to -11 set the root explicitly: `/` and a relative root keep today's refusal (a relative
+# root is never anchored to the hook process's own directory; NORM-11-MUT shows that guard live).
+# NORM-12 and -13 give the normalizer a target whose normalized form spans two lines.
+norm_raw="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-norm.XXXXXX" 2>/dev/null)" || norm_raw=""
+NB=""
+if [ -n "$norm_raw" ] && [ -d "$norm_raw" ]; then NB="$(cd "$norm_raw" && /bin/pwd -P)" || NB=""; fi
+norm_run() { # $1 = hook  $2 = command  $3 = payload cwd  [$4 = workspace root; empty = unset] -> NORM_EXIT, NORM_ERR
+  local p; p="$(bash_payload "$2" "$3")"
+  NORM_EXIT=0
+  if [ -n "${4:-}" ]; then
+    NORM_ERR="$(cd "${NB}/real" && /usr/bin/printf '%s' "$p" | /usr/bin/env -u CLAUDE_PROJECT_DIR "HOME=${NB}/link" "CLAUDE_WORKSPACE_ROOT=$4" /bin/bash "$1" 2>&1 >/dev/null)" || NORM_EXIT="$?"
+  else
+    NORM_ERR="$(cd "${NB}/real" && /usr/bin/printf '%s' "$p" | /usr/bin/env -u CLAUDE_PROJECT_DIR -u CLAUDE_WORKSPACE_ROOT "HOME=${NB}/link" /bin/bash "$1" 2>&1 >/dev/null)" || NORM_EXIT="$?"
+  fi
+}
+norm_case() { # $1 = name  $2 = hook  $3 = command  $4 = payload cwd  $5 = exit  [$6 = pattern]  [$7 = root]
+  local ok=1
+  norm_run "$2" "$3" "$4" "${7:-}"
+  [ "$NORM_EXIT" != "$5" ] && ok=0
+  if [ -n "${6:-}" ] && ! /usr/bin/grep -qE "$6" <<< "$NORM_ERR"; then ok=0; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (exit=%s expected=%s)\n  stderr: %s\n' "$1" "$NORM_EXIT" "$5" "$NORM_ERR"; FAIL=$((FAIL + 1))
+  fi
+}
+norm_seam_copy() { # $1 = python3 path -> prints the copy's directory; fails unless it pins exactly that path
+  local sbx; sbx="$(mem_hook_copy)" || return 1
+  /usr/bin/sed -e 's#^readonly PYTHON3="/usr/bin/python3"$#readonly PYTHON3="'"$1"'"#' "$HOOK" > "${sbx}/block-rm-prefer-trash.sh"
+  if [ "$(/usr/bin/grep -c -x -F "readonly PYTHON3=\"$1\"" "${sbx}/block-rm-prefer-trash.sh")" != 1 ]; then mem_drop_copy "$sbx"; return 1; fi
+  /usr/bin/printf '%s' "$sbx"
+}
+if [ -z "$NB" ]; then
+  /usr/bin/printf 'FAIL: NORM sandbox base could not be created, so the NORM arms did not run\n'
+  FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${NB}/real/Claude/.claude/worktrees/planning"
+  /bin/ln -s "${NB}/real" "${NB}/link"
+  NL_CWD="${NB}/link/Claude/.claude/worktrees/planning"
+  norm_phys="$(cd "${NB}/link/Claude" 2>/dev/null && /bin/pwd -P)" || norm_phys=""
+  if [ "$norm_phys" = "${NB}/real/Claude" ] && [ "$norm_phys" != "${NB}/link/Claude" ]; then
+    /usr/bin/printf 'PASS: %s\n' "NORM-00 the root the hook derives is spelled through a symlink (its physical form differs)"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s (physical form: %s)\n' "NORM-00 the root the hook derives is spelled through a symlink (its physical form differs)" "$norm_phys"; FAIL=$((FAIL + 1))
+  fi
+  norm_case "NORM-01: an inside Trash target spelled through the symlinked root is allowed" \
+    "$HOOK" "trash ${NB}/link/Claude/n01" "$NL_CWD" 0
+  norm_case "NORM-02: an inside Trash target spelled physically under the symlinked root is allowed" \
+    "$HOOK" "trash ${NB}/real/Claude/n02" "$NL_CWD" 0
+  norm_case "NORM-03: a dot-dot escape from the root spelled through the link is refused" \
+    "$HOOK" "trash ${NB}/link/Claude/../n03" "$NL_CWD" 2 "BLOCK-TRASH-003.*deletion outside"
+  norm_case "NORM-04: rm of an inside target spelled through the link is redirected to the Trash (-002)" \
+    "$HOOK" "rm ${NB}/link/Claude/n04" "$NL_CWD" 2 "BLOCK-TRASH-002"
+  for norm_py in /nonexistent/python3 /usr/bin/false /usr/bin/true /usr/bin/python3; do
+    norm_sbx="$(norm_seam_copy "$norm_py")" || norm_sbx=""
+    if [ -z "$norm_sbx" ]; then
+      /usr/bin/printf 'FAIL: NORM-05 and NORM-06 [%s] (no seam copy pinned to that path)\n' "$norm_py"; FAIL=$((FAIL + 2)); continue
+    fi
+    if [ "$norm_py" = /usr/bin/python3 ]; then
+      n5_exit=0; n5_pat=""; n6_pat="BLOCK-TRASH-003.*deletion outside"
+    else
+      n5_exit=2; n5_pat="BLOCK-TRASH-003.*normalizer"; n6_pat="$n5_pat"
+    fi
+    norm_case "NORM-05 [${norm_py}]: an inside target under the symlinked root, refused only when the normalizer cannot run" \
+      "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/link/Claude/n05" "$NL_CWD" "$n5_exit" "$n5_pat"
+    norm_case "NORM-06 [${norm_py}]: a dot-dot escape from the symlinked root is refused in every mode" \
+      "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/link/Claude/../n06" "$NL_CWD" 2 "$n6_pat"
+    mem_drop_copy "$norm_sbx"
+  done
+  norm_sbx="$(norm_seam_copy /nonexistent/python3)" || norm_sbx=""
+  if [ -z "$norm_sbx" ]; then
+    /usr/bin/printf 'FAIL: NORM-07 (no seam copy pinned to /nonexistent/python3)\n'; FAIL=$((FAIL + 1))
+  else
+    norm_case "NORM-07: with no normalizer, rm of an inside target is refused under -001 naming the normalizer (moved from -002)" \
+      "${norm_sbx}/block-rm-prefer-trash.sh" "rm ${NB}/link/Claude/n07" "$NL_CWD" 2 "BLOCK-TRASH-001.*normalizer"
+    mem_drop_copy "$norm_sbx"
+  fi
+  norm_case "NORM-08: a root of / does not admit every target (FM-4: today's refusal kept)" \
+    "$HOOK" "trash ${NB}/real/n08" "$NL_CWD" 2 "BLOCK-TRASH-003" "/"
+  norm_case "NORM-09: a root spelled with a trailing slash admits its inside target" \
+    "$HOOK" "trash ${NB}/real/Claude/n09" "$NL_CWD" 0 "" "${NB}/real/Claude/"
+  norm_case "NORM-10: a root spelled with a trailing dot segment admits its inside target" \
+    "$HOOK" "trash ${NB}/real/Claude/n10" "$NL_CWD" 0 "" "${NB}/real/Claude/."
+  norm_case "NORM-11: a relative root is not anchored to the hook process's directory (today's refusal kept)" \
+    "$HOOK" "trash ${NB}/real/Claude/n11" "$NL_CWD" 2 "BLOCK-TRASH-003" "Claude"
+  norm_sbx="$(mem_hook_copy)" || norm_sbx=""
+  if [ -z "$norm_sbx" ]; then
+    /usr/bin/printf 'FAIL: NORM-11-MUT (no sandbox copy of the hook)\n'; FAIL=$((FAIL + 1))
+  else
+    /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-ROOTABS$/\1: # M-TRASH-ROOTABS (removed)/' "$HOOK" > "${norm_sbx}/block-rm-prefer-trash.sh"
+    if ra_live "${norm_sbx}/block-rm-prefer-trash.sh"; then
+      norm_case "NORM-11-MUT: a copy without the absolute-root guard admits NORM-11's target, so the guard holds it" \
+        "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/real/Claude/n11" "$NL_CWD" 0 "" "Claude"
+    else
+      /usr/bin/printf 'FAIL: NORM-11-MUT the copy is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n'; FAIL=$((FAIL + 1))
+    fi
+    mem_drop_copy "$norm_sbx"
+  fi
+  # NORM-12 and -13: an outside target reached through a link whose destination ends in a line break
+  # normalizes to a path that spans two lines. The compare reads the normalizer's output only when it
+  # is exactly the two paths and the sentinel, one line each, so such a target is refused as one the
+  # hook cannot bring into one form, and it is never compared with a piece of itself (NORM-12-MUT shows
+  # that check live). Both are refused on the pre-fix hooks too, so each pattern names the rule alone.
+  /bin/mkdir -p "${NB}/out"
+  /bin/ln -s "${NB}/out/n12"$'\n' "${NB}/out/n12-brk"
+  norm_case "NORM-12: a Trash target through a link whose destination ends in a line break is refused" \
+    "$HOOK" "trash ${NB}/out/n12-brk" "$NL_CWD" 2 "BLOCK-TRASH-003"
+  norm_case "NORM-13: rm of a target through the same link is refused under -001, not read as inside" \
+    "$HOOK" "rm ${NB}/out/n12-brk" "$NL_CWD" 2 "BLOCK-TRASH-001"
+  norm_sbx="$(mem_hook_copy)" || norm_sbx=""
+  if [ -z "$norm_sbx" ]; then
+    /usr/bin/printf 'FAIL: NORM-12-MUT (no sandbox copy of the hook)\n'; FAIL=$((FAIL + 1))
+  else
+    /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-NORMLINES$/\1: # M-TRASH-NORMLINES (removed)/' "$HOOK" > "${norm_sbx}/block-rm-prefer-trash.sh"
+    if ra_live "${norm_sbx}/block-rm-prefer-trash.sh"; then
+      norm_case "NORM-12-MUT: a copy without the three-line check admits NORM-12's target, so the check holds it" \
+        "${norm_sbx}/block-rm-prefer-trash.sh" "trash ${NB}/out/n12-brk" "$NL_CWD" 0
+    else
+      /usr/bin/printf 'FAIL: NORM-12-MUT the copy is not live (it does not differ from the hook by exactly its one marked line, or does not parse)\n'; FAIL=$((FAIL + 1))
+    fi
+    mem_drop_copy "$norm_sbx"
+  fi
+  case "${NB##*/}" in rmt-norm.*) /bin/rm -rf "$NB" ;; esac
+fi
+
 # ----- AC-CPH-T* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget -----
 #
 # The shared canonicalizer's three changed sites — the basename step of a prefix word, the option-cluster
@@ -1374,40 +1977,38 @@ else
 fi
 case "${TRSC_BASE##*/}" in rmt-cph.*) /bin/rm -rf "$TRSC_BASE" ;; esac
 
-# ----- AC-CPV-T* (#8314, DT pass 7): one canonicalizer run gives the hook both of its views -----
+# ----- AC-CPV-T* (#8314, DT pass 7; re-based by #8122): one canonicalizer run per command -----
 #
-# The hook read its two views from two runs of the shared canonicalizer, the default output and then
-# the EXIT VIEW, so each command cost two full runs. It now makes one run in the canonicalizer's both
-# view, which emits the exit view and then the default output, each ended by a NUL byte, and reads them
-# with two reads. ONE reads the hook's source: one run on the command, in the both view, and none in the
-# exit view. EQ holds the verdicts: a copy of this hook with the two runs spliced back in is shown live
-# (it differs only in that block, and it parses), then both copies judge a set of commands — the two
-# allow-on-match exits and their sentinels, wrapped and quoted spellings, refused and allowed deletions
-# and Trash calls — and must return the same exit code and the same message on each. T1 to T16 run the
-# hook under a watchdog on one long command word and on a separator-dense command at 10, 20, 40 and
-# 80 KB in en_US.UTF-8 and C, each inside the budget and allowed. R-U and R-C time the hook against the
-# canonicalizer's default view alone on the 80 KB long word, the least of three interleaved runs of
-# each: the hook costs at most CPV_BOUND times the one run. CTL is the instrument's sensitivity: the
-# copy with the two runs exceeds the bound on the same command in UTF-8.
+# The hook makes one run of the shared canonicalizer on a command as judged, in its default view, and
+# reads no other view. ONE reads the hook's source: one run on the command, none in the both view and
+# none in the exit view. A command that carries a line continuation is canonicalized once more, over its
+# joined reading (EXT-CONT; Step 5): that run reads a different text, only on such a command, so ONE
+# does not count it and none of the timed commands below carries a continuation. EQ holds the verdicts: a copy of this hook with a second, identical
+# default-view run spliced in after the first is shown live (it differs only in that line, and it
+# parses), then both copies judge a set of commands — the lines the removed exits once allowed,
+# wrapped and quoted spellings, refused and allowed deletions and Trash calls — and must return the
+# same exit code and the same message on each. T1 to T16 run the hook under a watchdog on one long
+# command word and on a separator-dense command at 10, 20, 40 and 80 KB in en_US.UTF-8 and C, each
+# inside the budget and allowed. R-U and R-C time the hook against the canonicalizer's default
+# view alone on the 80 KB long word, the least of three interleaved runs of each: the hook costs at
+# most CPV_BOUND times the one run. CTL is the instrument's sensitivity: the copy with the second
+# run exceeds the bound on the same command in UTF-8.
 CPV_BOUND="${CPV_BOUND:-1.75}"
 CPV_LIMIT="${CPV_LIMIT_S:-60}"   # seconds a timed run may take before the watchdog stops it
 CPV_BASE="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-cpv.XXXXXX" 2>/dev/null)" || CPV_BASE=""
-CPV_ONE='{
-  IFS= read -r -d '"''"' COMMAND_CMDPOS_EXIT || COMMAND_CMDPOS_EXIT="$COMMAND"
-  IFS= read -r -d '"''"' COMMAND_CMDPOS || COMMAND_CMDPOS="$COMMAND"
-} < <("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=both -f "$CMDPOS_AWK" 2>/dev/null)
+CPV_ONE='COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
 '
 CPV_TWO='COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
-COMMAND_CMDPOS_EXIT="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
+COMMAND_CMDPOS="$("$PRINTF" '"'%s'"' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '"'%s'"' "$COMMAND")"
 '
 # ONE — the runs of the canonicalizer on the command, read from the hook's source.
 cpv_runs="$(/usr/bin/awk '/^[ \t]*#/ { next } index($0, "-f \"$CMDPOS_AWK\"") && index($0, "\"$COMMAND\"") { n++; if (index($0, "-v CMDPOS_VIEW=both")) b++; if (index($0, "-v CMDPOS_VIEW=exit")) x++ }
   END { printf "%d %d %d", n, b, x }' "$HOOK")"
-if [ "$cpv_runs" = "1 1 0" ]; then
-  /usr/bin/printf 'PASS: %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the both view, and never in the exit view alone"; PASS=$((PASS + 1))
+if [ "$cpv_runs" = "1 0 0" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command as judged, in the default view, and never in the exit or both view"; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the both view" \
-    "runs on the command / in the both view / in the exit view alone: ${cpv_runs} (want 1 1 0)"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-ONE: the hook runs the canonicalizer once on a command, in the default view" \
+    "runs on the command / in the both view / in the exit view: ${cpv_runs} (want 1 0 0)"; FAIL=$((FAIL + 1))
 fi
 if [ -z "$CPV_BASE" ]; then
   /usr/bin/printf 'FAIL: AC-CPV the arms could not create a sandbox, so they did not run\n'; FAIL=$((FAIL + 1))
@@ -1467,7 +2068,7 @@ git rm -rf /tmp/foo
 echo '; git status' ; rm -rf /tmp/foo
 CPV_EOF
   if [ "$cpv_live" = 1 ] && [ -z "$cpv_why" ]; then
-    /usr/bin/printf 'PASS: %s\n' "AC-CPV-EQ: through one run and through the two runs spliced back in, the hook returns the same exit code and message on ${cpv_k} commands"; PASS=$((PASS + 1))
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-EQ: through one run and through a second run spliced in, the hook returns the same exit code and message on ${cpv_k} commands"; PASS=$((PASS + 1))
   else
     /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-EQ: the hook's verdicts are the same through one run as through two" \
       "two-run copy live=${cpv_live};${cpv_why}"; FAIL=$((FAIL + 1))
@@ -1541,12 +2142,342 @@ print("-1 -1" if None in h or None in c else "%.3f %.3f" % (min(h), min(c)))'
   done
   cpv_ratio "${CPV_BASE}/two/block-rm-prefer-trash.sh" en_US.UTF-8
   if [ "$cpv_live" = 1 ] && [ "$CPV_H" != -1 ] && [ "$CPV_OK" = 0 ]; then
-    /usr/bin/printf 'PASS: %s\n' "AC-CPV-CTL: the copy with two runs costs beyond ${CPV_BOUND} times one run of the canonicalizer on the 80 KB long word in UTF-8 — the instrument sees the second run"; PASS=$((PASS + 1))
+    /usr/bin/printf 'PASS: %s\n' "AC-CPV-CTL: the copy with a second run costs beyond ${CPV_BOUND} times one run of the canonicalizer on the 80 KB long word in UTF-8 — the instrument sees the second run"; PASS=$((PASS + 1))
   else
     /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-CPV-CTL: the copy with two runs exceeds the bound (BROKEN PROBE) — measured ratio ${CPV_RATIO}, bound ${CPV_BOUND}" \
       "copy live=${cpv_live}"; FAIL=$((FAIL + 1))
   fi
   case "${CPV_BASE##*/}" in rmt-cpv.*) /bin/rm -rf "$CPV_BASE" ;; esac
+fi
+
+# ----- HDATA-* (#7644): a quoted here-document body read by a listed receiver is data -----
+#
+# A here-document whose delimiter is quoted ('D', "D", \D) has a body the shell neither expands nor
+# runs. At the top level of a command, when the receiver is on the data-receiver list (cat; git
+# commit|tag after at most one -C <dir>; gh issue|pr|release|api; python3 with the operand -) and
+# nothing on the command can route the body to a program that runs it, the hook removes the body
+# and its delimiter line from the text every rule reads. Every other shape keeps today's verdict.
+#   AC1   a listed receiver, top level: refused today under -001, -002 or -003, allowed now.
+#   TWIN  the same commands with their body and delimiter lines removed: allowed on both hooks. A
+#         check of the excision mechanics, not a member of the declared set.
+#   CWD   a directory change inside a data body no longer moves the working directory a later
+#         relative deletion is judged from: refused today under -001, refused now under -002.
+#   AC2 / AC3   controls: a deletion outside the body, and an unquoted body (its substitution is
+#         expanded), stay refused.
+#   RX    every receiver class that is not data, and every route to a program, stays refused.
+#   ENCL  a quoted here-document inside a command substitution, a backtick or a subshell stays
+#         judged on every shell: bash 3.2 ends such a body at an unbalanced ) inside an unquoted
+#         substitution and runs the lines after it.
+#   GIT   the git receiver, graded through a copy of the hook with the whole-line git exit
+#         removed while that exit exists (it allows every git-headed line today).
+#   PY / PIN   the declared residuals D-PyNested and D-Deferred, pinned.
+#   CAP / COST the 20 000-character scan budget and the 4096-character line cap, and the cost.
+#   MUT   each decline shown load-bearing: a copy of the hook without it allows its sentinels.
+# Payloads are built as $'...' strings: a newline is \n, a tab \t, an apostrophe \'.
+HD_AC1_A=$'cat > /tmp/hd-gen.sh <<\'EOF\'\nrm -f "$X"\nEOF'
+HD_AC1_B=$'python3 - "/tmp/hd-run" <<\'PYEOF\'\nimport sys\nprint(sys.argv[1])\nrm -f "$FCM_ADDS" "$FCM_ANY"\nPYEOF'
+HD_AC1_C=$'python3 - <<\'PYEOF\'\nrm = 1\nprint(rm)\nPYEOF'
+HD_AC1_D=$'gh issue comment 1 --body-file - <<\'EOF\'\nrm -rf /tmp/hd-old\nEOF'
+HD_AC1_F=$'cat <<-\'EOF\'\n\trm -rf /tmp/hd-f\n\tEOF'
+HD_AC1_G=$'cat <<\\EOF\nrm -rf /tmp/hd-g\nEOF'
+HD_AC1_H=$'cat <<"EOF"\nrm -rf /tmp/hd-h\nEOF'
+HD_AC1_I=$'cat <<\'EOF\'\nrm -rf /tmp/hd-i\ndon\'t\nEOF'
+HD_AC1_J=$'cat <<\'EOF\'\ntrash /etc/hd-j\nEOF'
+
+test_case "HDATA-AC1-A: cat writing a file; a body line deletes a variable operand (-001 today)" \
+  "$(bash_payload "$HD_AC1_A")" 0
+test_case "HDATA-AC1-B: a python3 - program; a body line deletes variable operands (-001 today)" \
+  "$(bash_payload "$HD_AC1_B")" 0
+test_case "HDATA-AC1-C: a python3 - program; a variable named like the verb (-002 today)" \
+  "$(bash_payload "$HD_AC1_C" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
+test_case "HDATA-AC1-D: a gh body read from stdin; a body line deletes an outside path (-001 today)" \
+  "$(bash_payload "$HD_AC1_D")" 0
+test_case "HDATA-AC1-F: the tab-stripping form; a body line deletes an outside path (-001 today)" \
+  "$(bash_payload "$HD_AC1_F")" 0
+test_case "HDATA-AC1-G: the backslash-quoted delimiter; a body deletion line (-001 today)" \
+  "$(bash_payload "$HD_AC1_G")" 0
+test_case "HDATA-AC1-H: the double-quoted delimiter; a body deletion line (-001 today)" \
+  "$(bash_payload "$HD_AC1_H")" 0
+test_case "HDATA-AC1-I: a body with an unpaired apostrophe after a deletion line (-001 today)" \
+  "$(bash_payload "$HD_AC1_I")" 0
+test_case "HDATA-AC1-J: a body line is a Trash call on an outside path (-003 today)" \
+  "$(bash_payload "$HD_AC1_J")" 0
+
+test_case "HDATA-TWIN-A: AC1-A without its body and delimiter lines allows" \
+  "$(bash_payload $'cat > /tmp/hd-gen.sh <<\'EOF\'')" 0
+test_case "HDATA-TWIN-B: AC1-B without its body and delimiter lines allows" \
+  "$(bash_payload $'python3 - "/tmp/hd-run" <<\'PYEOF\'')" 0
+test_case "HDATA-TWIN-D: AC1-D without its body and delimiter lines allows" \
+  "$(bash_payload $'gh issue comment 1 --body-file - <<\'EOF\'')" 0
+test_case "HDATA-TWIN-I: AC1-I without its body and delimiter lines allows" \
+  "$(bash_payload $'cat <<\'EOF\'')" 0
+
+test_case "HDATA-CWD: a directory change inside a data body does not move the later relative deletion" \
+  "$(bash_payload $'cat <<\'EOF\'\ncd /tmp\nEOF\nrm notes.txt' "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-002" "$RMT_HOME_ENV"
+
+test_case "HDATA-AC2-A: an outside deletion after the delimiter line stays refused" \
+  "$(bash_payload $'cat <<\'EOF\'\nhello\nEOF\nrm -rf /tmp/hd-a2')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-AC2-B: an outside deletion before the operator stays refused" \
+  "$(bash_payload $'rm -rf /tmp/hd-b2; cat <<\'EOF\'\nhello\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-AC2-C: an outside deletion after a separator on the operator line stays refused" \
+  "$(bash_payload $'cat <<\'EOF\'; rm -rf /tmp/hd-c2\nhello\nEOF')" 2 "BLOCK-TRASH-001"
+
+HD_AC3_A=$'cat <<EOF\n$(true; rm -rf /tmp/hd-a3)\nEOF'
+HD_AC3_B=$'cat <<EOF\nrm -rf /tmp/hd-b3\nEOF'
+test_case "HDATA-AC3-A: an unquoted body whose substitution deletes after a separator stays refused" \
+  "$(bash_payload "$HD_AC3_A")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-AC3-B: an unquoted plain body with an outside deletion stays refused" \
+  "$(bash_payload "$HD_AC3_B")" 2 "BLOCK-TRASH-001"
+
+HD_RX_SHELL=$'bash <<\'EOF\'\nrm -rf /tmp/hd-sh\nEOF'
+HD_RX_PYC=$'python3 -c \'print(1)\' <<\'EOF\'\nrm -rf /tmp/hd-pyc\nEOF'
+HD_RX_PATHQ=$'/tmp/hd-bin/cat <<\'EOF\'\nrm -rf /tmp/hd-pq\nEOF'
+HD_RX_OSA=$'osascript <<\'EOF\'\ntell application "Finder" to delete POSIX file "/etc/hd-osa"\nEOF'
+HD_RX_PIPE=$'cat <<\'EOF\' | sh\nrm -rf /tmp/hd-p\nEOF'
+HD_RX_FUNC=$'cat() { bash; }; cat <<\'EOF\'\nrm -rf /tmp/hd-fn\nEOF'
+HD_RX_FUNC2=$'cat ( ) { bash; }; cat <<\'EOF\'\nrm -rf /tmp/hd-fn2\nEOF'
+HD_RX_EVAL=$'eval "$(cat <<\'EOF\'\nsay "hi\nrm -rf /tmp/hd-ev\nEOF\n)"'
+test_case "HDATA-RX-SHELL: a shell reading the body as its script stays refused" \
+  "$(bash_payload "$HD_RX_SHELL")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-SH: a shell reading its script from stdin stays refused" \
+  "$(bash_payload $'sh -s <<\'EOF\'\nrm -rf /tmp/hd-sh2\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PIPE: a listed receiver piped into a shell stays refused" \
+  "$(bash_payload "$HD_RX_PIPE")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PROCSUB: a listed receiver writing into a process substitution stays refused" \
+  "$(bash_payload $'cat <<\'EOF\' > >(sh)\nrm -rf /tmp/hd-ps\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-EVAL: a substitution consumed by an evaluator stays refused" \
+  "$(bash_payload "$HD_RX_EVAL")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ASSIGN: a substitution consumed by an assignment stays refused" \
+  "$(bash_payload $'X="$(cat <<\'EOF\'\nsay "hi\nrm -rf /tmp/hd-as\nEOF\n)"')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PYC: a python3 -c program reading the body stays refused" \
+  "$(bash_payload "$HD_RX_PYC")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PYM: a python3 -m module reading the body stays refused" \
+  "$(bash_payload $'python3 -m json.tool <<\'EOF\'\nrm -rf /tmp/hd-pym\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PYSCRIPT: a python3 script operand reading the body stays refused" \
+  "$(bash_payload $'python3 /tmp/hd-script.py <<\'EOF\'\nrm -rf /tmp/hd-pys\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PATHQ: a receiver named by a non-canonical path stays refused" \
+  "$(bash_payload "$HD_RX_PATHQ")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-WRAP: a receiver behind a wrapper stays refused (a declared over-block)" \
+  "$(bash_payload $'env cat <<\'EOF\'\nrm -rf /tmp/hd-w\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-GHEXT: a gh extension stays refused" \
+  "$(bash_payload $'gh hd-ext <<\'EOF\'\nrm -rf /tmp/hd-gx\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-OSA: osascript reading its script from the body stays refused" \
+  "$(bash_payload "$HD_RX_OSA")" 2 "BLOCK-TRASH-003"
+test_case "HDATA-RX-MIXED: one data body beside one shell-script body stays refused" \
+  "$(bash_payload $'cat <<\'EOF\'; bash <<\'EOS\'\nhello\nEOF\nrm -rf /tmp/hd-mx\nEOS')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-UNTERM: an unterminated body stays refused" \
+  "$(bash_payload $'cat <<\'EOF\'\nrm -rf /tmp/hd-ut')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ARITH: a shift inside arithmetic on the same command stays refused" \
+  "$(bash_payload $'echo $((1 << 2)); cat <<\'EOF\'\nrm -rf /tmp/hd-ar\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-FUNC: a listed name redefined as a function on the line stays refused" \
+  "$(bash_payload "$HD_RX_FUNC")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-FUNC2: a function definition with blanks between its parentheses stays refused" \
+  "$(bash_payload "$HD_RX_FUNC2")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ALIAS: a listed name redefined as an alias on the line stays refused" \
+  "$(bash_payload $'alias cat=bash; cat <<\'EOF\'\nrm -rf /tmp/hd-al\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PATHVAR: a PATH assignment on the line stays refused" \
+  "$(bash_payload $'PATH=/tmp/hd-bin:$PATH; cat <<\'EOF\'\nrm -rf /tmp/hd-pv\nEOF')" 2 "BLOCK-TRASH-001"
+# zsh's definition tables. On zsh a name is redefined as a function, an alias or a command path by
+# assigning to one of its tables, with no redefinition word on the line. A word that ends in one of
+# those table names declines as the words above do, so the sibling tables (global and suffix
+# aliases, the disabled forms) decline too. The control carries each name followed by a word
+# character, which is not a table name.
+HD_RX_ZFUNCS=$'functions[cat]=bash; cat <<\'EOF\'\nrm -rf /tmp/hd-zf\nEOF'
+HD_RX_ZCOMMANDS=$'commands[cat]=/bin/sh; cat <<\'EOF\'\nrm -rf /tmp/hd-zc\nEOF'
+test_case "HDATA-RX-ZFUNCS: a listed name redefined through zsh's function table stays refused" \
+  "$(bash_payload "$HD_RX_ZFUNCS")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZALIASES: a listed name redefined through zsh's alias table stays refused" \
+  "$(bash_payload $'aliases[cat]=bash; cat <<\'EOF\'\nrm -rf /tmp/hd-za\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZCOMMANDS: a listed name re-pointed through zsh's command-path table stays refused" \
+  "$(bash_payload "$HD_RX_ZCOMMANDS")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZARRAY: zsh's alias table assigned as a whole array stays refused" \
+  "$(bash_payload $'aliases+=(cat bash); cat <<\'EOF\'\nrm -rf /tmp/hd-zr\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZSIBLING: a sibling table (global aliases) stays refused" \
+  "$(bash_payload $'galiases[EOF]=x; cat <<\'EOF\'\nrm -rf /tmp/hd-zg\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-GITC: git with a global option defining an alias is not a listed receiver and stays refused (INT-GITC)" \
+  "$(bash_payload $'git -c alias.hd=\'!sh\' hd <<\'EOF\'\nrm -rf /tmp/hd-gitc\nEOF')" 2 "BLOCK-TRASH-001"
+# F-S8-01 (#7644): a `<<` the shell does not read as a here-document opener opens no body,
+# so the lines after it run as commands and must stay judged.
+test_case "HDATA-NONOP-COMMENT: a quoted opener inside a # comment opens no body, so the next line is a command" \
+  "$(bash_payload $'cat /dev/null # <<\'EOF\'\nrm -rf /tmp/hd-nonop-c\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-NONOP-ANSIC: an opener inside ANSI-C quoting opens no body, so the next line is a command" \
+  "$(bash_payload $'echo $\'<<\\\'EOF\\\'\'\nrm -rf /tmp/hd-nonop-a\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-NONOP-HERESTR: a here-string opens no body, so the next line is a command" \
+  "$(bash_payload $'cat <<<\'EOF\'\nrm -rf /tmp/hd-nonop-h\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-NONOP-ARITH: an arithmetic shift opens no body, so the next line is a command" \
+  "$(bash_payload $'echo $((1<<2))\nrm -rf /tmp/hd-nonop-s\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-ZPATH: a listed receiver writing to a path that carries a table name as a directory is data" \
+  "$(bash_payload $'cat > /tmp/hd-cfg/commands/note.md <<\'EOF\'\nrm -rf /tmp/hd-zp\nEOF')" 0
+test_case "HDATA-RX-ZCTL: a table name followed by a word character is not a table, so the body is data" \
+  "$(bash_payload $': aliasesx functionsx commandsx; cat <<\'EOF\'\nrm -rf /tmp/hd-zn\nEOF')" 0
+test_case "HDATA-RX-PEXP: the operator inside a parameter expansion, brace adjacent, stays refused" \
+  "$(bash_payload $': ${X:-<<\'EOF\'}\nrm -rf /tmp/hd-pe\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PEXP2: the operator inside a double-quoted parameter expansion stays refused" \
+  "$(bash_payload $': "${X:-<<\'EOF\'}"\nrm -rf /tmp/hd-pe2\nEOF')" 2 "BLOCK-TRASH-001"
+test_case "HDATA-RX-PEXP3: the operator inside a parameter expansion, blank before the brace, stays refused" \
+  "$(bash_payload $': ${X:-<<\'EOF\' }\nrm -rf /tmp/hd-pe3\nEOF')" 2 "BLOCK-TRASH-001"
+
+HD_ENCL_A=$'gh pr create --title t --body "$(cat <<\'EOF\'\nsay "hi\nrm -rf /tmp/hd-ea\nEOF\n)"'
+HD_ENCL_B=$'gh pr create --title t --body $(cat <<\'EOF\'\nnote)\nrm -rf /tmp/hd-eb\nEOF\n)'
+# ENCL-C ends its subshell on a line that carries a command: a ")" alone on a line after the
+# subshell's text reads as an empty parenthesis pair, a second decline (toward today's verdict)
+# that would hold the sentinel through the ENCL mutant and hide whether the enclosure decline is live.
+HD_ENCL_C=$'( cat <<\'EOF\'\nrm -rf /tmp/hd-ec\nEOF\necho done)'
+test_case "HDATA-ENCL-A: a data body inside a double-quoted substitution stays judged" \
+  "$(bash_payload "$HD_ENCL_A")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-ENCL-B: a data body inside an unquoted substitution, a body line with an unbalanced ), stays judged" \
+  "$(bash_payload "$HD_ENCL_B")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-ENCL-C: a data body inside a subshell stays judged" \
+  "$(bash_payload "$HD_ENCL_C")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-ENCL-D: a data body inside a backtick substitution stays judged" \
+  "$(bash_payload $'X=`cat <<\'EOF\'\nrm -rf /tmp/hd-ed\nEOF\n`')" 2 "BLOCK-TRASH-001"
+
+test_case "HDATA-PY-ODD: a python3 - program handing a string to a shell, odd quote parity (declared D-PyNested)" \
+  "$(bash_payload $'python3 - <<\'PYEOF\'\nimport os\nos.system("""say "hi\nrm -rf /tmp/hd-py\n""")\nPYEOF')" 0
+test_case "HDATA-PY-EVEN: the same program with balanced quoting allows (today and now)" \
+  "$(bash_payload $'python3 - <<\'PYEOF\'\nimport os\nos.system("""say hi\nrm -rf /tmp/hd-py\n""")\nPYEOF')" 0
+test_case "HDATA-PIN-DEFERRED: cat writes a script a later segment runs (declared D-Deferred)" \
+  "$(bash_payload $'cat > /tmp/hd-run.sh <<\'EOF\'\nrm -rf /tmp/hd-dd\nEOF\nbash /tmp/hd-run.sh')" 0
+
+# The budget: 20 000 scanned characters outside bodies, and a 4096-character line. hd_pad <n> prints
+# n lines of 3800 characters each (a no-op command), so the scanned text sits under or over the cap.
+hd_pad() { /usr/bin/awk -v n="$1" 'BEGIN { s = ": "; while (length(s) < 3800) s = s "a"; for (i = 0; i < n; i++) print s }'; }
+HD_CAP_IN="$(hd_pad 5)"$'\ncat <<\'EOF\'\nrm -rf /tmp/hd-cap\nEOF'
+HD_CAP_OVER="$(hd_pad 6)"$'\ncat <<\'EOF\'\nrm -rf /tmp/hd-cap\nEOF'
+HD_CAP_LINE="$(/usr/bin/awk 'BEGIN { s = ": "; while (length(s) < 4100) s = s "a"; print s }')"$'\ncat <<\'EOF\'\nrm -rf /tmp/hd-cap\nEOF'
+test_case "HDATA-CAP-IN: a data body after 19 000 scanned characters is read as data" \
+  "$(bash_payload "$HD_CAP_IN")" 0
+test_case "HDATA-CAP-OVER: past 20 000 scanned characters the command keeps today's verdict" \
+  "$(bash_payload "$HD_CAP_OVER")" 2 "BLOCK-TRASH-001"
+test_case "HDATA-CAP-LINE: a scanned line over 4096 characters keeps today's verdict" \
+  "$(bash_payload "$HD_CAP_LINE")" 2 "BLOCK-TRASH-001"
+
+# The cost at the cap: the hook on HDATA-CAP-IN against the same padding with no here-document,
+# the least of three interleaved runs of each; the first may cost at most HD_COST_BOUND times the
+# second.
+HD_COST_BOUND="${HD_COST_BOUND:-1.5}"
+HD_COST_PY='import os, subprocess, sys, time
+hook, a, b = sys.argv[1], sys.argv[2].encode(), sys.argv[3].encode()
+def one(pay):
+    t0 = time.time()
+    subprocess.run(["/bin/bash", hook], input=pay, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+    return time.time() - t0
+x, y = [], []
+for _ in range(3):
+    x.append(one(a)); y.append(one(b))
+print("%.3f %.3f" % (min(x), min(y)))'
+hd_cost_out="$(/usr/bin/python3 -c "$HD_COST_PY" "$HOOK" "$(bash_payload "$HD_CAP_IN")" "$(bash_payload "$(hd_pad 5)"$'\ncat /dev/null')" 2>/dev/null)" || hd_cost_out=""
+hd_cost_h="${hd_cost_out% *}"; hd_cost_c="${hd_cost_out#* }"
+if [ -n "$hd_cost_out" ] && /usr/bin/awk -v h="$hd_cost_h" -v c="$hd_cost_c" -v b="$HD_COST_BOUND" 'BEGIN { exit !(c > 0 && h <= b * c) }'; then
+  /usr/bin/printf 'PASS: %s\n' "HDATA-COST: at the cap the hook costs within ${HD_COST_BOUND} times the same command with no here-document"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "HDATA-COST: at the cap the hook costs at most ${HD_COST_BOUND} times the same command with no here-document" \
+    "measured (seconds, with / without): ${hd_cost_out:-not measured}"; FAIL=$((FAIL + 1))
+fi
+
+# The git receiver (#7644 Q5). While the whole-line git exit (M-TRASH-GITEXEMPT) exists it allows
+# every git-headed line, so these arms run through a copy of the hook whose exit line can never
+# fire, shown live first (one line from the hook, and it parses). Once that exit is gone the arms
+# run on the hook itself.
+hd_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-hd.XXXXXX" 2>/dev/null)" || hd_dir=""
+hd_git_hook="$HOOK"
+if [ -z "$hd_dir" ]; then
+  /usr/bin/printf 'FAIL: HDATA-GIT the arms could not create a sandbox, so they did not run\n'; FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${hd_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${hd_dir}/lib/"
+  if /usr/bin/grep -q '# M-TRASH-GITEXEMPT$' "$HOOK"; then
+    /usr/bin/sed -e 's/^if exit_matches \(.*# M-TRASH-GITEXEMPT\)$/if false \&\& exit_matches \1/' \
+      "$HOOK" > "${hd_dir}/block-rm-prefer-trash-nogit.sh"
+    hd_git_hook="${hd_dir}/block-rm-prefer-trash-nogit.sh"
+    if ra_live "$hd_git_hook"; then
+      /usr/bin/printf 'PASS: %s\n' "HDATA-GIT-LIVE: the copy without the whole-line git exit differs from the hook by that one line and parses"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n' "HDATA-GIT-LIVE: the copy without the whole-line git exit is not live"; FAIL=$((FAIL + 1))
+    fi
+  else
+    /usr/bin/printf 'PASS: %s\n' "HDATA-GIT-LIVE: the hook carries no whole-line git exit, so the git arms run on the hook itself"; PASS=$((PASS + 1))
+  fi
+  hd_hook_saved="$HOOK"; HOOK="$hd_git_hook"
+  test_case "HDATA-GIT-A: git commit reading its message from stdin; a body deletion line is data" \
+    "$(bash_payload $'git commit -F - <<\'EOF\'\nrm -rf /tmp/hd-ga\nEOF')" 0
+  test_case "HDATA-GIT-B: git -C <dir> commit reading its message from stdin is data" \
+    "$(bash_payload $'git -C /tmp/hd-repo commit -F - <<\'EOF\'\nrm -rf /tmp/hd-gb\nEOF')" 0
+  test_case "HDATA-GIT-C: git tag reading its message from stdin is data" \
+    "$(bash_payload $'git tag -a v0 -F - <<\'EOF\'\nrm -rf /tmp/hd-gc\nEOF')" 0
+  test_case "HDATA-GIT-D: git with a -c option is not a listed receiver and stays judged" \
+    "$(bash_payload $'git -c core.editor=true commit -F - <<\'EOF\'\nrm -rf /tmp/hd-gd\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-E: git with two -C pairs is not a listed receiver and stays judged" \
+    "$(bash_payload $'git -C /tmp/a -C /tmp/b commit -F - <<\'EOF\'\nrm -rf /tmp/hd-ge\nEOF')" 2 "BLOCK-TRASH-001"
+  # git's edit option. With it, git opens the message in an editor, and an editor named earlier on
+  # the line can be a program that runs the message file, which is the body. A git receiver whose
+  # words after its subcommand carry that option in any spelling git accepts (short, long, a unique
+  # prefix of the long form, a bundled short cluster, quoted; before or after the operator), or a
+  # word an expansion could turn into it, is not a listed receiver, and the body stays judged.
+  HD_GIT_EDIT_A=$'git commit -e -F - <<\'EOF\'\nrm -rf /tmp/hd-gea\nEOF'
+  HD_GIT_EDIT_C=$'git commit -F - <<\'EOF\' --edit\nrm -rf /tmp/hd-gec\nEOF'
+  HD_GIT_EDIT_D=$'git commit -se -F - <<\'EOF\'\nrm -rf /tmp/hd-ged\nEOF'
+  HD_GIT_EDIT_J=$'git commit -F - $(printf %s x) <<\'EOF\'\nrm -rf /tmp/hd-gej\nEOF'
+  test_case "HDATA-GIT-EDIT-A: git commit with the short edit option is not a listed receiver and stays judged" \
+    "$(bash_payload "$HD_GIT_EDIT_A")" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-B: git commit with the long edit option stays judged" \
+    "$(bash_payload $'git commit -F - --edit <<\'EOF\'\nrm -rf /tmp/hd-geb\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-C: the edit option after the operator stays judged" \
+    "$(bash_payload "$HD_GIT_EDIT_C")" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-D: the edit option in a bundled short cluster stays judged" \
+    "$(bash_payload "$HD_GIT_EDIT_D")" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-E: a unique prefix of the long edit option stays judged" \
+    "$(bash_payload $'git commit --edi -F - <<\'EOF\'\nrm -rf /tmp/hd-gee\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-F: a quoted edit option stays judged" \
+    "$(bash_payload $'git commit "-e" -F - <<\'EOF\'\nrm -rf /tmp/hd-gef\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-G: git tag with the edit option stays judged" \
+    "$(bash_payload $'git tag -a v0 -e -F - <<\'EOF\'\nrm -rf /tmp/hd-geg\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-H: git -C <dir> commit with the edit option stays judged" \
+    "$(bash_payload $'git -C /tmp/hd-repo commit -e -F - <<\'EOF\'\nrm -rf /tmp/hd-geh\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-I: a variable after the subcommand, which can expand to the edit option, stays judged" \
+    "$(bash_payload $'git commit -F - $GIT_OPTS <<\'EOF\'\nrm -rf /tmp/hd-gei\nEOF')" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-EDIT-J: a command substitution after the subcommand stays judged" \
+    "$(bash_payload "$HD_GIT_EDIT_J")" 2 "BLOCK-TRASH-001"
+  test_case "HDATA-GIT-NOEDIT: git commit with the option that turns editing off is data" \
+    "$(bash_payload $'git commit --no-edit -F - <<\'EOF\'\nrm -rf /tmp/hd-gne\nEOF')" 0
+  test_case "HDATA-GIT-SIGNOFF: a short option without the edit letter is data" \
+    "$(bash_payload $'git commit -s -F - <<\'EOF\'\nrm -rf /tmp/hd-gso\nEOF')" 0
+  # The edit decline shown load-bearing: a copy of the git arms' hook without it allows its sentinels.
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if (gitrx \&\& git_edit(cur\[0\])) bail = 1  # M-HD-EDIT$/\1# M-HD-EDIT (removed)/' \
+    "$hd_git_hook" > "${hd_dir}/block-rm-prefer-trash-edit.sh"
+  ra_pair "HDATA-MUT-EDIT-A:" "${hd_dir}/block-rm-prefer-trash-edit.sh" "$HD_GIT_EDIT_A"
+  ra_pair "HDATA-MUT-EDIT-C:" "${hd_dir}/block-rm-prefer-trash-edit.sh" "$HD_GIT_EDIT_C"
+  ra_pair "HDATA-MUT-EDIT-D:" "${hd_dir}/block-rm-prefer-trash-edit.sh" "$HD_GIT_EDIT_D"
+  ra_pair "HDATA-MUT-EDIT-J:" "${hd_dir}/block-rm-prefer-trash-edit.sh" "$HD_GIT_EDIT_J"
+  HOOK="$hd_hook_saved"
+
+  # The mutant pairs. Each copy differs from the hook by exactly its marked line of HEREDOC_DATA_AWK,
+  # shown live first; each sentinel, refused through the hook, is allowed through its copy, so the
+  # decline it removes is what holds the sentinel's refusal.
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if (j > k) return 0  # M-HD-RECV$/\1return 1  # M-HD-RECV/' \
+    "$HOOK" > "${hd_dir}/block-rm-prefer-trash-recv.sh"
+  /usr/bin/sed -e 's/ || risky \(.*# M-HD-RISKY\)$/ \1/' \
+    "$HOOK" > "${hd_dir}/block-rm-prefer-trash-risky.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if (d != 0) { bail = 1; break }  # M-HD-ENCL$/\1# M-HD-ENCL (removed)/' \
+    "$HOOK" > "${hd_dir}/block-rm-prefer-trash-encl.sh"
+  /usr/bin/sed -e 's/^\([[:space:]]*\)if (!quoted) { bail = 1; break }  # M-HD-QUOTED$/\1# M-HD-QUOTED (removed)/' \
+    "$HOOK" > "${hd_dir}/block-rm-prefer-trash-quoted.sh"
+  ra_pair "HDATA-MUT-RECV-SHELL:" "${hd_dir}/block-rm-prefer-trash-recv.sh" "$HD_RX_SHELL"
+  ra_pair "HDATA-MUT-RECV-PYC:" "${hd_dir}/block-rm-prefer-trash-recv.sh" "$HD_RX_PYC"
+  ra_pair "HDATA-MUT-RECV-PATHQ:" "${hd_dir}/block-rm-prefer-trash-recv.sh" "$HD_RX_PATHQ"
+  ra_pair "HDATA-MUT-RECV-OSA:" "${hd_dir}/block-rm-prefer-trash-recv.sh" "$HD_RX_OSA"
+  ra_pair "HDATA-MUT-RISKY-PIPE:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_PIPE"
+  ra_pair "HDATA-MUT-RISKY-FUNC:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_FUNC"
+  ra_pair "HDATA-MUT-RISKY-FUNC2:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_FUNC2"
+  ra_pair "HDATA-MUT-RISKY-ZFUNCS:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_ZFUNCS"
+  ra_pair "HDATA-MUT-RISKY-ZCOMMANDS:" "${hd_dir}/block-rm-prefer-trash-risky.sh" "$HD_RX_ZCOMMANDS"
+  ra_pair "HDATA-MUT-ENCL-A:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_A"
+  ra_pair "HDATA-MUT-ENCL-B:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_B"
+  ra_pair "HDATA-MUT-ENCL-C:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_ENCL_C"
+  ra_pair "HDATA-MUT-ENCL-EVAL:" "${hd_dir}/block-rm-prefer-trash-encl.sh" "$HD_RX_EVAL"
+  ra_pair "HDATA-MUT-QUOTED-A:" "${hd_dir}/block-rm-prefer-trash-quoted.sh" "$HD_AC3_A"
+  ra_pair "HDATA-MUT-QUOTED-B:" "${hd_dir}/block-rm-prefer-trash-quoted.sh" "$HD_AC3_B"
+  case "${hd_dir##*/}" in rmt-hd.*) /bin/rm -rf "$hd_dir" ;; esac
 fi
 
 # Summary

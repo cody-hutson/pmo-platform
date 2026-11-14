@@ -38,7 +38,8 @@
 #      and its subcommand: `sudo -u git push --force` runs `push` as the user git and
 #      never runs git, so that move is a declared precision improvement. And an exit that
 #      ALLOWS on a match must never read this output: every widening here widens such an
-#      exit too, turning a refusal into an allow. Such an exit reads the EXIT VIEW below.
+#      exit too, turning a refusal into an allow. Such an exit must read the EXIT VIEW
+#      below; no consumer has one since {{ADR:deletion-guard-judges-every-segment}}.
 #   2. QUOTE-NEUTRALISED command-start detection. Structural characters inside a quoted
 #      span cannot open a segment, so shell text carried AS CONTENT — `echo "cleanup() {
 #      rm -rf /tmp/x; }" > s.sh`, `sed 's/(rm foo)/X/'`, `grep -E '(rm |mv)' f` — is not a
@@ -86,10 +87,10 @@
 # the same command-start insertions ((a) to (c)) as the default output — never (e)'s —
 # made by the prefix walk as it stood before the wrapper grammar joined it: the fourteen
 # original words, matched as exact tokens, each stepped as one token, and the `NAME=value`
-# assignment alone — never its append form. It is read only by
-# exits that ALLOW on a match (the deletion hook's git exemption and its no-target exit),
-# so those exits keep the verdicts they had while the default output widens. The exit
-# view is frozen: a transformation added to the default walk does not reach it.
+# assignment alone — never its append form. It was read only by the deletion hook's two
+# exits that ALLOW on a match (its git exemption and its no-target exit), which
+# {{ADR:deletion-guard-judges-every-segment}} removed; it has no consumer and stays frozen
+# until it is retired: a transformation added to the default walk does not reach it.
 #
 # BOTH VIEWS FROM ONE RUN
 # -----------------------
@@ -97,7 +98,7 @@
 # each ended by a NUL byte, from one quote mask: the exit view's walk and then the default
 # walk run over the same segments, and each view is the one its own mode emits, without its
 # trailing newlines, as a command substitution captures it. A consumer that reads both views
-# (the deletion hook) pays for one run of this file, not two. When the two walks record the
+# pays for one run of this file, not two (none does now). When the two walks record the
 # same edits the two views are the same text, built once. No input can hold a NUL byte, so
 # the two records cannot be confused; a copy without this mode emits no NUL at all.
 #
