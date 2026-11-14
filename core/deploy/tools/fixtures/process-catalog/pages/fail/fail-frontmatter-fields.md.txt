@@ -1,0 +1,71 @@
+---
+domain: fixture
+title: Fail fixture
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: SUPERSEDED
+reversibility: cheap
+flow_class: no-such-class
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fail-frontmatter-fields
+level: L3
+universe: fixture-landscape
+parent: fixture-process
+actors: [spoke, robot:unknown-kind]
+lens_status: conformant
+last_verified_commit: 0000000000000000000000000000000000000000
+pack_version: 2
+triggered_by: [neither-a-node-nor-a-kind]
+---
+# Fail fixture
+
+## Summary
+
+A fixture page for the catalog self-tests. It describes nothing real.
+
+## ICOM
+
+| Inputs | Controls | Outputs | Mechanisms |
+|---|---|---|---|
+| fixture input record | C-001 | fixture output record | script:fixture-script |
+
+## Flow
+
+```mermaid
+flowchart TD
+    s1[Read input] --> s2[Check input]
+    s2 --> g1{Valid?}
+    g1 -->|yes| s3[/Write output/]
+    g1 -->|no| s1
+```
+
+## Steps
+
+| Step | Action | Actor | Inputs → outputs (shape) | Controls | Mechanism | Harness | Model need | Source |
+|---|---|---|---|---|---|---|---|---|
+| read-input | Read the input file | spoke | file path → parsed record | C-001: prose-only | script:fixture-script | file-tools | XS/none/read/scriptable/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+| judge-input | Judge whether the record is usable | spoke | parsed record → fixture verdict | — | none | none | S/medium/read/judgment/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+
+## Row tally
+
+| Field | Value |
+|---|---|
+| Deterministic steps | 1 |
+| Judgment steps | 1 |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the two steps | [SOURCE] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
+
+<!-- expect: FM002, FM003, FM004, FM006, FM008, FM009, FM010 -->

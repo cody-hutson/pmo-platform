@@ -267,7 +267,7 @@ Every design artifact carries bidirectional links between itself and the source 
 
 **Process-page exception (rule 3).** Rule 3 does not apply to a catalog page (§ 13). A page's depicted sources are not edited to link back to it: the generated graph's inbound index (§ 13.5), which lists for each source the pages that depict it, replaces that link. Most depicted sources are durable-corpus files, where a link sequence is banned, so a hand-kept reciprocal link would also be impossible there.
 
-**Canonical dedicated-artifact query:** `grep -rl '^depicts:' core operations release docs` → the dedicated artifact set (location-independent, so it also catches skill `diagrams/` artifacts). See [§ 12 Artifact Identification & Detection](#-12-artifact-identification--detection) for the combined dedicated + embedded enumeration harness and the per-flow-type detection criteria.
+**Canonical dedicated-artifact query:** `grep -rl --include='*.md' '^depicts:' core operations release docs` → the dedicated artifact set (location-independent, so it also catches skill `diagrams/` artifacts). See [§ 12 Artifact Identification & Detection](#-12-artifact-identification--detection) for the combined dedicated + embedded enumeration harness and the per-flow-type detection criteria.
 
 ## § 10. Agent Read/Write + Ownership
 
@@ -343,7 +343,7 @@ Discovery is declaration-based (immune to table-invisibility). The rule below is
 
 ```bash
 # Dedicated artifacts (depicts: frontmatter — § 9)
-grep -rl '^depicts:' core operations release docs
+grep -rl --include='*.md' '^depicts:' core operations release docs
 
 # Embedded artifacts (section-level marker — § 9; enum-anchored + field-order-tolerant so the
 # § 9 grammar line and the bracketed <flow-class> examples do not self-match — the `>` in [^>] excludes them)
@@ -394,6 +394,7 @@ The process catalog is the platform's system documentation: one page per process
 | Path | What it holds | Written or generated |
 |---|---|---|
 | `core/process-catalog/README.md` | Orientation for the folder. It never lists pages. | Written |
+| `core/process-catalog/definitions/` | The definitions pack, its templates, the registers and the tables the tools read. Not pages. | Written |
 | `core/process-catalog/<universe-id>/<node-id>.md` | One page per L0–L3 node of that universe; the L0 page is `<universe-id>/<universe-id>.md` | Written, or seeded and corrected (§ 13.2) |
 | `core/process-catalog/INDEX.md` | The entry point: L0 and L1 nodes with their paths | Generated |
 | `core/process-catalog/graph.json` | Every node and link, including the inbound index (§ 13.5) | Generated |
@@ -435,7 +436,7 @@ A node that passes two tests takes the higher, less detailed level, and a sub-pr
 
 Each page also carries the link fields of § 13.4 that apply to it. Page templates may add fields; they never redefine the fields above.
 
-**Authoring rules.** The rules the catalog's validator enforces on page content are recorded in decision 12 of ADR-224 and are not restated here: an executed number cites a saved query, a Controls row takes its class from the register, a summary count is computed from the page's own Steps table, a source link starts at the repository root, and a platform term is linked or explained on first use. How a page cites a line of a source, and which identifiers it may carry, is stated under Evergreen references in § 13.4.
+**Authoring rules.** The rules the catalog's validator enforces on page content are recorded in decision 12 of ADR-224 and are not restated here: an executed number cites a saved query, a Controls row takes its class from the register, a summary count is computed from the page's own Steps table, a source link starts at the repository root, and a platform term is linked or explained on first use. The catalog adds one rule of its own: a page names the registered measure behind an executed row and never states its figure. The figures are generated per install and are not committed. How a page cites a line of a source, and which identifiers it may carry, is stated under Evergreen references in § 13.4.
 
 ### § 13.4 Link types
 
@@ -471,7 +472,7 @@ A page must not go stale because of how it refers to things, so it refers to sou
 - **Where re-resolution runs, and who writes the result.** Re-resolution runs in CI on every pull request, under the same contract as the generated output (§ 13.5): the CI step re-resolves every citation on the written pages and fails when a committed citation differs from its re-resolution, so a moved citation fails as well as a gone, ambiguous or malformed one. The fix for a moved citation is to run the generator, which rewrites the fragment and `line` of every moved citation, and to commit the rewritten citations in the same pull request; CI never pushes a rewrite of its own. A cited line that moves is therefore updated by tooling, never by hand, and the committed line number is always the current one. This holds for a pull request that changes only a source: if it moves or removes text a page cites, that pull request fails until its citations are regenerated or re-cited. A gone or ambiguous citation is corrected by citing the source again or by removing the citation, never by editing the fingerprint to match. Rewriting a citation records where the cited text now is, not that the page is still right about it, so it does not move `last_verified_commit`.
 - **No issue or pull-request numbers.** A page carries no issue or pull-request number, bare or linked, and no issue or pull-request URL. Where a page needs to mention a work item, it describes it in words.
 - **Node IDs only.** A page names a node only by its ID (§ 13.3): in a link field, in a link to the node's page, or, for a step, as the text `<activity-id>#<step-slug>`, never as a link fragment; never by its position or by a number. Node IDs and step slugs begin with a letter, because the issue-reference gate reads a number sign followed by a digit as an issue number.
-- **The tooling, and the forms used until it ships.** The re-resolution step and the generator that rewrites citations ship with the catalog generator, in a later milestone than these rules. Until they ship, a page is still written in these forms, with each fingerprint computed when the citation is written: both link checkers already check every fragment against its file's length, and the anchors are a record that nothing re-resolves yet. The first run rewrites every citation that moved and fails every one that is gone, ambiguous or malformed. A page drafted with bare line fragments is converted before it enters the catalog: each anchor is computed from the lines its fragment names, read at the page's `last_verified_commit`, so the conversion reads no source by hand.
+- **The tooling.** The catalog generator, `core/deploy/tools/build-process-catalog.py`, carries both commands. Its `anchors resolve` command re-resolves every citation on the written pages against the checked-out tree: with `--check` it writes nothing and fails on a citation that is moved, gone, ambiguous or malformed, and with `--write` it rewrites the fragment and `line` of every moved citation and still fails on the rest. Its `anchors convert` command converts a page drafted with bare line fragments before the page enters the catalog: each anchor is computed from the lines its fragment names, read at the page's `last_verified_commit`, so the conversion reads no source by hand. It lists, for each citation, whether the cited lines differ between that commit and the checked-out file. It refuses a fragment whose text repeats in its file, whose span starts or ends on a blank line, whose file is not text, or whose lines the file does not have at that commit; on request it rewrites a refused citation as a whole-file citation and lists it for the author. Its `stale` command lists each page whose depicted file changed since the page's `last_verified_commit`; a changed file that a page cites without depicting is listed and does not fail the run. The generator does not seed pages: an L3 page is written by hand.
 
 ### § 13.5 Generated surfaces
 
@@ -498,11 +499,13 @@ A page's Controls rows record the rules its node follows. A row names its contro
 | `tacit` | lives only in operator memory, corrections or habit, not in the corpus |
 | `host-config` | is enforced by repository-host settings, such as branch protection or rulesets, where an operator configured them |
 
-The **enforcement surface** says where a control acts: `hook`, `deploy-run`, `ci-run`, `merge-gate`, `host` or `agent-run`. A detector an agent runs by hand is `code-warn` on `agent-run`. The enforcement class describes a control as a page records it; it is distinct from the `posture` and `enforcement` annotations that the gate-efficacy standard reads from workflows, which record how a gate is wired.
+The controls register may class an inventoried item `not-a-control` when it asserts nothing. That is a register value, not an enforcement class; a page's Controls row carries it only by citing that row.
+
+The **enforcement surface** says where a control acts: `hook`, `runtime-permission`, `deploy-run`, `ci-run`, `merge-gate`, `host` or `agent-run`. A detector an agent runs by hand is `code-warn` on `agent-run`. The enforcement class describes a control as a page records it; it is distinct from the `posture` and `enforcement` annotations that the gate-efficacy standard reads from workflows, which record how a gate is wired.
 
 ### § 13.8 How the catalog composes with §§ 2–12
 
-- **Enumeration.** A catalog page is a dedicated artifact for enumeration: it carries `flow_class` and `depicts`, so the § 12.2 harness finds it, and § 9 validation rules 1 and 2 apply to it. Rule 3 does not (the process-page exception in § 9).
+- **Enumeration.** A catalog page is a dedicated artifact for enumeration: it carries `flow_class` and `depicts`, so the § 12.2 harness finds it, and § 9 validation rules 1 and 2 apply to it. Rule 3 does not (the process-page exception in § 9). A file under `definitions/` or `views/` is not a page.
 - **Production.** § 7 activation and the § 10 creation rule do not govern pages. Pages are published and regenerated under this section, not produced by a Stage 5 Tier-A activation, and § 8's refresh gate does not read them: a page's freshness is its `last_verified_commit`, checked by the drift check.
 - **Rendering.** Mermaid syntax, shapes and colours on a page's flow follow `process-flow-diagram-standards.md`, as for every process-flow artifact. § 6 tool selection and § 12.1 conformance do not govern a page's flow; decision 2 of ADR-224 does — the flow is a Mermaid block, whatever the page's `flow_class`, so an L0 page declared `concept-model` still draws its flow in Mermaid.
 
@@ -511,7 +514,7 @@ The **enforcement surface** says where a control acts: `hook`, `deploy-run`, `ci
 Before a change is sized, the planning stage reads the current-state pages for the areas the change touches, so blast radius is judged against how the system works today. Stage 2 Triage runs the read at its step A4.1 and Stage 5 Solutioning at its step A1.7; each stage spec states when the read runs, and this subsection states how.
 
 - **The area.** The change's affected files: the card's `### Affected Files` at Stage 2, and the File Change Matrix after canonical-surface enumeration at Stage 5.
-- **Finding the pages.** A page covers an affected file when the file is in the page's `depicts` list. Read the generated inbound index in `graph.json` (§ 13.5) where it exists; until the generator ships, read the pages' frontmatter directly. Open each covering page, and its parent page when the change crosses activities.
+- **Finding the pages.** A page covers an affected file when the file is in the page's `depicts` list. Run the generator's impact query, `core/deploy/tools/build-process-catalog.py impact`, over the affected files or the change's diff: it returns the covering pages, each one's parent and downstream nodes, and the controls registered on the changed paths with the pages that cite them. It also lists, marked `cites`, each page that links an affected file without depicting it; read those where the change touches what they cite. The generated inbound index in `graph.json` (§ 13.5) answers the same question by a plain file read. Open each covering page, and its parent page when the change crosses activities.
 - **Citing a page.** `<page-id> @ <last_verified_commit>` — the page's ID (its filename stem, § 13.3) and the commit it was last verified against. A page is stale when a file in its `depicts` list changed after that commit; cite it with `STALE` and read the changed source for the difference. For a `SUPERSEDED` page, read and cite the successor its `superseded_by` names.
 - **The record.** One line in the stage's output, in exactly one of three forms:
   - `Current-state pages read: <page-id> @ <sha>[ STALE], …` — at least one page covers the area.

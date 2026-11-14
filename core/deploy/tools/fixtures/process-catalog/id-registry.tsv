@@ -1,0 +1,38 @@
+id	level	universe	parent	title	status
+fixture-landscape	L0	fixture-landscape		Fixture landscape	minted
+fixture-stream	L1	fixture-landscape	fixture-landscape	Fixture stream	minted
+fixture-process	L2	fixture-landscape	fixture-stream	Fixture process	minted
+fixture-process-later	L2	fixture-landscape	fixture-stream	Fixture process with no page	minted
+fixture-activity-plain	L3	fixture-landscape	fixture-process	Fixture activity	minted
+fixture-activity-spans	L3	fixture-landscape	fixture-process	Fixture activity with pipes in code spans	minted
+fixture-activity-flow	L3	fixture-landscape	fixture-process	Fixture activity with near-keyword flow nodes	minted
+fixture-activity-anchored	L3	fixture-landscape	fixture-process	Fixture activity with source anchors	minted
+fixture-activity-measured	L3	fixture-landscape	fixture-process	Fixture activity with measured evidence	minted
+fixture-far-landscape	L0	fixture-far-landscape		Fixture landscape with no page	minted
+fixture-far-stream	L1	fixture-far-landscape	fixture-far-landscape	Fixture stream with no page	minted
+fail-frontmatter-fields	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-frontmatter-list	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-registry-refs	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-sections	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-table-shape	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-table-pipe	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-flow-keyword	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-sub-process-rules	L2	fixture-landscape	fixture-stream	Fail fixture	minted
+fail-summary-count	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-control-unknown	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-control-steps	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-anchor-bare	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-anchor-malformed	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-source-link-relative	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-work-item-ref	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-control-surface	L2	fixture-landscape	fixture-stream	Fail fixture	minted
+fail-anchor-label	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-source-name	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-status-lens	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-step-vocabulary	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-control-class	L2	fixture-landscape	fixture-stream	Fail fixture	minted
+fail-evidence-inline-figure	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-verdict	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-wording	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-coverage	L3	fixture-landscape	fixture-process	Fail fixture	minted
+fail-evidence-coverage-none	L3	fixture-landscape	fixture-process	Fail fixture	minted

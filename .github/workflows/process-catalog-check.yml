@@ -1,0 +1,127 @@
+name: Process-catalog checks
+
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Process-catalog generated-output gate" (no warn-mode — a finding turns the check RED; not a required context)  always-reports=yes
+#   invariant: the committed INDEX.md, graph.json and views/ under core/process-catalog/,
+#              and the generator-owned regions of every page, are byte-equal to what the
+#              generator produces from the committed pages, definitions pack, registers and
+#              element-kinds table, and every link in the generated Markdown resolves —
+#              asserted by regenerating in memory, comparing, and link-checking the result.
+#   falsification: append one character to a committed generated file, or change a page's
+#                  `depicts` list without regenerating -> this check is RED and names the file.
+#   population: roots=core/process-catalog  filter=*.md|graph.json  exempts=file — the files under definitions/ are generator inputs and README.md is written orientation; none of them is a page or a generated file
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Process-catalog citation gate" (no warn-mode — a finding turns the check RED; not a required context)  always-reports=yes
+#   invariant: every source citation on a catalog page carries a well-formed source anchor
+#              whose recorded line is the one place in the cited file, as checked out, where
+#              text with the recorded fingerprint sits — asserted by re-resolving each
+#              citation against the checked-out tree.
+#   falsification: insert a line above a cited line of a cited source without rewriting the
+#                  citation (moved), or delete the cited line (gone) -> this check is RED.
+#   population: roots=core/process-catalog  filter=*.md  exempts=file — only the pages of a registered universe folder carry citations; README.md and the files under definitions/ and views/ are not pages
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Process-catalog page-validation gate" (no warn-mode — an error-severity finding turns the check RED; not a required context)  always-reports=yes
+#   invariant: every published catalog page satisfies the definitions pack's page rules and
+#              the controls-register rules at error severity, the private-source pattern arm
+#              excepted: it is declared not run in CI and is run before a push that changes a
+#              register — asserted by running the catalog validator over every discovered page.
+#   falsification: delete a file a page's `depicts` list names, or cite a control ID the
+#                  register has no row for -> this check is RED and names the page and rule.
+#   population: roots=core/process-catalog  filter=*.md  exempts=file — only the pages of a registered universe folder are validated; README.md and the files under definitions/ and views/ are not pages
+#   posture note: `advisory` is what the surface delivers for every job here. Each exits
+#                 non-zero on a finding from first ship, and none of these contexts is
+#                 in main's live required_status_checks.contexts, which no pull request
+#                 can change. The registration decision and what ends the hold are recorded
+#                 in core/standards/gate-efficacy-standard.md § Declared-required contexts.
+#                 The citation gate fires on a pull request that changes only a cited
+#                 source: that is its invariant, and the reading that precedes
+#                 registration measures what it costs. A moved citation is rewritten in
+#                 the release pull request by Stage 12 before the merge
+#                 (release/references/pipeline/stage-12-execute.md, Phase A.5.8); a red
+#                 run on a push to main is read by the merging release's Stage 12
+#                 (Phase B1.2). With no page discovered each tool exits 3 and its job
+#                 fails as NOT-EVALUATED; no job here reads green on an empty catalog.
+# (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+#
+# Each verdict step is the tool as its last command, so the tool's exit is the step's:
+# 0 passes the job; 1 (findings), 2 (usage) and 3 (NOT-EVALUATED) fail it, and the summary
+# block and the census line — the last line the tool prints — say which. No step captures
+# a status, branches on one, or continues past an error. Each tool's --self-test runs
+# first as a hard step, so a zero means "nothing found", never "nothing detected".
+#
+# SECURITY NOTE: no job consumes workflow-event input. There is no expression
+# interpolation into any `run:` block; every value is a literal or a runner variable.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  generated-output:
+    name: Process-catalog generated-output gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Detector precision probe (generator self-test)
+        run: |
+          set -euo pipefail
+          python3 core/deploy/tools/build-process-catalog.py --self-test
+
+      - name: Regenerate in memory and compare with the committed output
+        run: |
+          set -uo pipefail
+          python3 core/deploy/tools/build-process-catalog.py build --check \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+
+  citations:
+    name: Process-catalog citation gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Detector precision probe (generator self-test)
+        run: |
+          set -euo pipefail
+          python3 core/deploy/tools/build-process-catalog.py --self-test
+
+      - name: Re-resolve every citation against the checked-out tree
+        run: |
+          set -uo pipefail
+          python3 core/deploy/tools/build-process-catalog.py anchors resolve --check \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+
+  page-validation:
+    name: Process-catalog page-validation gate
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the validator reads each page's verification commit, and stops as
+      # NOT-EVALUATED on a shallow checkout.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Detector precision probe (validator self-test)
+        run: |
+          set -euo pipefail
+          python3 core/deploy/tools/check-process-catalog.py --self-test
+
+      - name: Validate every published page
+        run: |
+          set -uo pipefail
+          python3 core/deploy/tools/check-process-catalog.py --pattern-arm not-run \
+            --summary-file "$GITHUB_STEP_SUMMARY"

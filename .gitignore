@@ -167,3 +167,10 @@ _validation/
 core/hooks/*.jsonl
 core/hooks/*.log
 core/hooks/.mode
+
+# Process-catalog figures — what the catalog's registered measures report on this
+# install, written by the catalog generator's overlay command. Working state about
+# this repository only. Written only when a run names this folder as its overlay root;
+# the command has no default. This narrower rule precedes the /local-state/ home's own
+# ignore-rule pair, which covers this folder too once it lands and can absorb this line.
+/local-state/process-catalog/*

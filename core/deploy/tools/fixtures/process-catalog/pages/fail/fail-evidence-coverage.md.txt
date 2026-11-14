@@ -1,0 +1,78 @@
+---
+title: Fail fixture
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: agent-process
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fail-evidence-coverage
+level: L3
+universe: fixture-landscape
+parent: fixture-process
+actors: [spoke, script:fixture-script]
+owner: hub
+lens_status: conformant
+last_verified_commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pack_version: 2
+---
+# Fail fixture
+
+## Summary
+
+A fixture page for the catalog self-tests. It describes nothing real.
+
+## ICOM
+
+| Inputs | Controls | Outputs | Mechanisms |
+|---|---|---|---|
+| fixture input record | C-001 | fixture output record | script:fixture-script |
+
+## Flow
+
+```mermaid
+flowchart TD
+    s1[Read input] --> s2[Check input]
+    s2 --> g1{Valid?}
+    g1 -->|yes| s3[/Write output/]
+    g1 -->|no| s1
+```
+
+## Steps
+
+| Step | Action | Actor | Inputs → outputs (shape) | Controls | Mechanism | Harness | Model need | Source |
+|---|---|---|---|---|---|---|---|---|
+| read-input | Read the input file | spoke | file path → parsed record | C-001: prose-only | script:fixture-script | file-tools | XS/none/read/scriptable/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+| judge-input | Judge whether the record is usable | spoke | parsed record → fixture verdict | — | none | none | S/medium/read/judgment/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+| run-probe | Run the fixture probe | ci:fixture-probe | record → record | — | ci:fixture-probe | none | XS/none/read/scriptable/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+| run-other | Run the other fixture workflow | ci:fixture-other | record → record | — | ci:fixture-other | none | XS/none/read/scriptable/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+
+## Row tally
+
+| Field | Value |
+|---|---|
+| Deterministic steps | 3 |
+| Judgment steps | 1 |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the steps | [SOURCE] |
+| executed | measure `fixture-workflow-runs` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every invented run of the fixture probe workflow in the trailing window) measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) [fixture probe](/.github/workflows/fixture-probe.yml) | The measures report the runs and the rules file. covers: `read-input` | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | The measure reports the line total. covers: `judge-input` | [SOURCE] |
+| executed | measure `fixture-workflow-runs` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every invented run of the fixture probe workflow in the trailing window) | The measure reports the runs. covers: `judge-input` | [SOURCE] |
+| executed | measure `fixture-workflow-runs` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every invented run of the fixture probe workflow in the trailing window) [fixture probe](/.github/workflows/fixture-probe.yml) [fixture other](/.github/workflows/fixture-other.yml) | The measure reports the runs. covers: `judge-input` | [SOURCE] |
+| executed | measure `fixture-workflow-runs` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every invented run of the fixture probe workflow in the trailing window) [fixture probe](/.github/workflows/fixture-probe.yml) | The measure reports the runs. covers: `judge-input`, `absent-step` | [SOURCE] |
+| executed | measure `fixture-workflow-runs` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every invented run of the fixture probe workflow in the trailing window) [fixture probe](/.github/workflows/fixture-probe.yml) | The measure reports the runs. covers: `run-other` | [SOURCE] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
+
+<!-- expect: EVD001, EVD003 -->

@@ -37,7 +37,7 @@ Contextual: `core/rules/`, `principal-standard-checklist.md`, `regression-checks
 Set at Stage 7: quality review scores (1-5 per dimension), finding list with severity, escape rate, overall verdict (PASS/CONDITIONAL PASS/FAIL).
 
 ## 5. Process
-**Phase A — Structural Review (Tier 1 Auto):** Deterministic checks, always-on unless the entry is marked **conditional** — PR completeness (Blocker), layer boundary (Blocker), deployed copy sync (Blocker), sub-task completion (Warning), regression check (Warning), **deprecated-path scan for new-file deliverables (Blocker, conditional)**, **domain-practice provenance verification (Warning, conditional — per § Domain-Practice Provenance Verification Step below)**, **A8 runtime-suite gate (Blocker, conditional — per § A8 Runtime-Suite Gate below)**.
+**Phase A — Structural Review (Tier 1 Auto):** Deterministic checks, always-on unless the entry is marked **conditional** — PR completeness (Blocker), layer boundary (Blocker), deployed copy sync (Blocker), sub-task completion (Warning), regression check (Warning), **deprecated-path scan for new-file deliverables (Blocker, conditional)**, **domain-practice provenance verification (Warning, conditional — per § Domain-Practice Provenance Verification Step below)**, **A8 runtime-suite gate (Blocker, conditional — per § A8 Runtime-Suite Gate below)**, **catalog citation read (Warning, conditional — per § Catalog Citation Read below)**.
 
 **Deprecated-path scan for new-file deliverables (Source: deprecated-path scan spec):** For each new file in the PR scope, execute a deterministic grep scan against the release's `Files Removed` list. The list is sourced from the release plan's explicit `Files Removed` section when present; otherwise derive via `git diff main..release/<milestone> --diff-filter=D --name-only --no-renames`. For each match, classify as Tier 1 (Engineering re-author via `fix(dt):` commit per [DT↔Engineering Iteration Loop Protocol](#dtengineering-iteration-loop-protocol)) by default. **Exception:** matches where the PR body explicitly documents the reference as "intentional documentary reference to deprecated path with paired new-path fallback" are downgraded to Note severity (no routing). Tier escalation to Tier 2 (Scope Change) when re-author requires design revision; Tier 3 (Plan Rejection) when the removed path was load-bearing on the new file's premise.
 
@@ -174,6 +174,22 @@ The conflicting row is grounded rather than hypothetical: every context in the r
 
 **Cutover discipline:** Applies to all releases going forward.
 
+**Catalog Citation Read (Warning, conditional):** A release that edits or deletes text a catalog page cites breaks that page's evidence, and no command repairs it: the citation has to be written again by someone who knows what the text became, and that is this release's Engineering. The process-catalog citation check reports such a citation on the release pull request, but its context is not required and the required-gate read above does not classify it, so Phase A reads it here. **Conditional:** when the checkout does not carry `core/deploy/tools/build-process-catalog.py`, record `NOT-APPLICABLE — the catalog tool is not in this checkout`. Otherwise run, from the worktree root at the pull-request head, with `$DT_DIR` the reviewer's run directory:
+
+```bash
+python3 core/deploy/tools/build-process-catalog.py anchors resolve --check --sources-changed-in "$(git merge-base origin/main HEAD)..HEAD" --summary-file "$DT_DIR/citation-read.md"; echo "exit=$?"
+```
+
+The option restricts the report and the exit to citations whose cited path this release changed, and the command exits 1 only when one of them is gone, ambiguous or path-missing. Verdicts, by the command's exit:
+
+| Exit | Verdict | Severity and routing |
+|---|---|---|
+| 2 or 3 | `NOT-EVALUATED — <the tool's reason>` | Warning. Never recorded as a pass. A range that changes no path, or that does not resolve, exits 3: it is a wrong invocation, as an empty range is in the deprecated-path scan above |
+| 0 | `CLEAN`, with the command's last output line quoted | None. A check that is red only on moved citations lands here: [`stage-12-execute.md`](stage-12-execute.md) Phase A.5.8 rewrites those before the merge |
+| 1 | `FINDINGS (<n>)`, one for each row of the table of citations that need a person in the summary the command wrote | Each row is one finding, a **Warning** by the **catalog-citation-read**, fixable within scope: Tier 1. Engineering cites the text that now states the same fact, in a `fix(dt):` commit, and the re-cite is graded by the second row of *Catalog citation changes — scope status* under § Finding Classification. Where nothing states the fact any more, the finding names the page's owner and is Tier 2 |
+
+**Runner:** the Stage 7 Dev Testing spoke at Phase A; no CI job executes this read — the citation job reports the same states on the pull request, unfiltered and not required. **Cutover discipline:** Applies to all releases going forward, including the introducing release.
+
 **Phase B — Contract Review (Tier 1/2):** 3 checks — AC verification per issue (LLM-graded, Blocker), stage input consumption (LLM-graded, Warning), stage output completeness (Deterministic, Warning). The AC map names, per row, the list DT graded (its criterion namespace, per the Stage-8 spec's § Criterion namespace). A plan row's issue ordinal is confirmed with `release/tools/check-ac-binding.py` (`ns:plan>issue`), and a design mapping with the same tool on a design snapshot (`--design-file`, `ns:design>issue`), rather than re-derived by reading; a `design` row quotes that check's MAP row in its Evidence cell.
 
 **Phase C — Content Quality Review (Tier 2 Recommend):** 5 always-on scored dimensions + 1 conditional (domain-practice conformance). The 5 always-on dimensions — clarity (1-5, threshold 3), accuracy (1-5, threshold 3), internal consistency (1-5, threshold 4, Blocker), convention depth (1-5, threshold 3), escape detection (count) — score on every release. The conditional 6th dimension (domain-practice conformance, below) scores only when a domain guide applies for the deliverable's domain.
@@ -276,6 +292,16 @@ DT classifies each finding by severity (Blocker/Warning/Note per Phase D) AND by
 | Note | Logged | — | No action required; tracked for calibration |
 
 **Classification rule:** "Fixable within scope" = the fix does not change acceptance criteria, does not require new files outside the change matrix, and does not alter the design approach. When uncertain, classify as Tier 2 (over-escalate per the inter-stage feedback protocol escalation rule).
+
+**Catalog citation changes — scope status.** The process-catalog citation check fails a pull request whose change moved a line a catalog page cites, and its repair touches pages the release's plan does not list. Whether such a change is outside the change matrix is decided by a test, not by judgment. Three cases:
+
+| A change under `core/process-catalog/` | Test | Scope status |
+|---|---|---|
+| **Anchor-only rewrite** — what `python3 core/deploy/tools/build-process-catalog.py anchors resolve --write` writes | Run the command in two scratch checkouts of the pull-request head, the second with the catalog first restored from the merge base (`git checkout "$(git merge-base origin/main HEAD)" -- core/process-catalog/`); the command's exit is ignored, and `diff -r` of the two `core/process-catalog/` folders reports nothing — the head's pages and the base's pages normalise to the same bytes, so they differ only in numbers the command owns | **Inside the change matrix of every release**, whether or not the plan lists the pages. No scope finding. This is the change Stage 12 Phase A.5.8 commits on every release branch that moved a cited line. Permitted earlier, never required earlier: a release that rewrites before Stage 12 can conflict with another that does the same |
+| **Re-cite** — a citation this release's own change made gone, ambiguous or path-missing now cites the text that states the same fact | The citation command's `citations=` count at the head is not lower than at the merge base; every changed line under `core/process-catalog/` differs only inside a source link and the source-anchor comment that follows it; and no re-cited line is in the list § Catalog Citation Read produces at the head | **Fixable within scope — Tier 1.** Dev Testing reads each re-cited line as content: the newly cited text must state what the page's sentence claims |
+| **Anything else** — a removed citation, a line citation cut back to a whole-file link, an edited fingerprint, a change to page prose, frontmatter or a generated file | neither test passes | **Outside the change matrix unless the plan lists the page**, and classified by the rule above. Removing a citation is one of the standard's two corrections; on a page the release's plan does not list it is a scope change, not a Tier 1 fix |
+
+The three contexts are not required, and the required-gate read above does not classify them. A red citation check whose every finding is moved is not a Stage 7 finding. A citation the check lists as needing a person — gone, ambiguous or path-missing — on a source this release changed is one, read and routed by § Catalog Citation Read in Phase A. **Cutover discipline:** applies to releases entering Stage 7 after this rule's introducing-release merge; the introducing release lists the catalog pages in its own matrix.
 
 ### Finding Disposition Decision Framework
 

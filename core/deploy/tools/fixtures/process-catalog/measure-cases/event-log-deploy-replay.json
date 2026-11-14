@@ -1,0 +1,15 @@
+{
+  "synthetic": "invented values; not measured on any install",
+  "params": {
+    "today": "2001-01-14"
+  },
+  "inputs": {
+    "event-log-rows": [
+      [
+        "event-log",
+        "| 2001-01-01T00:00:00Z | fixture-release-alpha | 12 | deployment-status | deploy-rules-mirror | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-01T01:00:00Z | fixture-release-alpha | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-01T02:00:00Z | fixture-release-alpha | 12 | deployment-status | deploy-package | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-02T00:00:00Z | fixture-release-beta | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-02T01:00:00Z | fixture-release-beta | 12 | deployment-status | deploy-rules-mirror | hub:fixture | fixture-subject | CHEAP | failed | fixture payload |\n| 2001-01-03T00:00:00Z | fixture-release-gamma | 13 | deployment-status | deploy-skill | spoke:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-04T00:00:00Z | v1.02 | 12 | deployment-status | deploy-skill | hub:fixture | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-05T00:00:00Z | fixture-release-alpha | 9 | gate-outcome | go | operator | fixture-subject | CHEAP | ok | fixture payload |\n| 2001-01-06T00:00:00Z | v1.02 | 7 | test-run | suite | spoke:fixture | fixture-subject | CHEAP | ok | fixture payload |\n"
+      ]
+    ]
+  },
+  "expected": "stamped-deploy cases: 4\n  fit the order test: 3\n  fit the stage and actor test: 3\n  inside the mirror-presence test: 4; of which with a mirror row: 2\n  fit every test: 1\nrows with a subtype outside the designed order: 0\n"
+}

@@ -1,0 +1,17 @@
+"""fixture-count-rows — a fixture measure for the catalog self-tests. It measures nothing real.
+
+Inputs: whatever its fixture register row lists. Population: every line of every input handed
+over. Report: per input label, its line total; then one total line.
+"""
+
+
+def measure(inputs, params):
+    lines = []
+    total = 0
+    for entry in sorted(inputs):
+        for label, text in inputs[entry]:
+            rows = [line for line in text.splitlines() if line.strip()]
+            total += len(rows)
+            lines.append(f"{label}: lines {len(rows)}")
+    lines.append(f"total: lines {total}")
+    return "\n".join(lines) + "\n"

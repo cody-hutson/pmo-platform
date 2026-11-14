@@ -1,0 +1,510 @@
+{
+  "pack_version": "2",
+  "id": {
+    "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+    "max_length": 60
+  },
+  "levels": {
+    "L0": {
+      "flow_class": [
+        "concept-model"
+      ],
+      "mermaid_required": true,
+      "mermaid_node_limit": 12,
+      "token_budget": 2000,
+      "required_sections": [
+        "Summary",
+        "Landscape",
+        "Value streams",
+        "Navigation",
+        "Sources"
+      ]
+    },
+    "L1": {
+      "flow_class": [
+        "agent-process",
+        "human-process",
+        "skill-flow",
+        "decision-tree"
+      ],
+      "mermaid_required": true,
+      "mermaid_node_limit": 12,
+      "token_budget": 2000,
+      "required_sections": [
+        "Summary",
+        "SIPOC",
+        "Flow",
+        "Sub-processes",
+        "Controls",
+        "Evidence",
+        "Navigation",
+        "Sources"
+      ]
+    },
+    "L2": {
+      "flow_class": [
+        "agent-process",
+        "human-process",
+        "skill-flow",
+        "decision-tree"
+      ],
+      "mermaid_required": true,
+      "mermaid_node_limit": 15,
+      "token_budget": 2500,
+      "required_sections": [
+        "Summary",
+        "Entry and exit",
+        "Flow",
+        "Activities",
+        "Controls",
+        "Evidence",
+        "Navigation",
+        "Sources"
+      ]
+    },
+    "L3": {
+      "flow_class": [
+        "agent-process",
+        "human-process",
+        "skill-flow",
+        "decision-tree"
+      ],
+      "mermaid_required": true,
+      "mermaid_node_limit": 15,
+      "token_budget": 3000,
+      "required_sections": [
+        "Summary",
+        "ICOM",
+        "Flow",
+        "Steps",
+        "Row tally",
+        "Evidence",
+        "Navigation",
+        "Sources"
+      ]
+    }
+  },
+  "fields": {
+    "title": {
+      "type": "string",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "purpose": {
+      "type": "string",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "type": {
+      "type": "enum",
+      "enum": "doc_type",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "status": {
+      "type": "enum",
+      "enum": "status",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "reversibility": {
+      "type": "pattern",
+      "pattern": "^(CHEAP|MODERATE|EXPENSIVE|IRREVERSIBLE) / Confidence (HIGH|MEDIUM|LOW)$",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "flow_class": {
+      "type": "enum",
+      "enum": "flow_class",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "depicts": {
+      "type": "path_list",
+      "min_items": 1,
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "documented_by": {
+      "type": "path_list",
+      "optional": true
+    },
+    "id": {
+      "type": "id",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "level": {
+      "type": "enum",
+      "enum": "level",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "universe": {
+      "type": "id_ref",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "parent": {
+      "type": "id_ref",
+      "levels": [
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "precedes": {
+      "type": "id_list",
+      "optional": true
+    },
+    "triggered_by": {
+      "type": "trigger_list",
+      "optional": true
+    },
+    "depends_on": {
+      "type": "id_list",
+      "optional": true
+    },
+    "actors": {
+      "type": "actor_list",
+      "min_items": 1,
+      "levels": [
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "owner": {
+      "type": "actor",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "lens_status": {
+      "type": "enum",
+      "enum": "lens_status",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "last_verified_commit": {
+      "type": "commit",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "pack_version": {
+      "type": "string",
+      "levels": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "supersedes": {
+      "type": "id_list",
+      "optional": true
+    },
+    "superseded_by": {
+      "type": "id_list",
+      "optional": true
+    }
+  },
+  "reserved_field_names": {
+    "domain": "a fixture reserved name",
+    "children": "derived from parent"
+  },
+  "enums": {
+    "doc_type": [
+      "reference"
+    ],
+    "status": [
+      "ACTIVE",
+      "DRAFT",
+      "SUPERSEDED",
+      "DEPRECATED"
+    ],
+    "flow_class": [
+      "architecture",
+      "data-flow",
+      "agent-process",
+      "human-process",
+      "concept-model",
+      "skill-flow",
+      "decision-tree"
+    ],
+    "level": [
+      "L0",
+      "L1",
+      "L2",
+      "L3"
+    ],
+    "lens_status": [
+      "conformant",
+      "deviates",
+      "unobserved",
+      "not-assessed"
+    ],
+    "actor_kinds": [
+      "operator",
+      "hub",
+      "spoke",
+      "skill:",
+      "sub-agent:",
+      "hook:",
+      "ci:",
+      "script:",
+      "external:"
+    ],
+    "trigger_kinds": [
+      "event:",
+      "schedule:",
+      "external:"
+    ],
+    "enforcement_class": [
+      "code-enforce",
+      "code-warn",
+      "code-off",
+      "prose-only",
+      "tacit",
+      "host-config"
+    ]
+  },
+  "tables": {
+    "Value streams": [
+      "Value stream",
+      "Trigger",
+      "Outcome",
+      "Page"
+    ],
+    "SIPOC": [
+      "Suppliers",
+      "Inputs",
+      "High-level steps",
+      "Outputs",
+      "Customers"
+    ],
+    "Sub-processes": [
+      "Sub-process",
+      "Entry",
+      "Exit",
+      "Page"
+    ],
+    "Entry and exit": [
+      "Side",
+      "Criteria",
+      "Source"
+    ],
+    "Activities": [
+      "Activity",
+      "Primary actor",
+      "Purpose",
+      "Page"
+    ],
+    "Controls": [
+      "Control",
+      "Source",
+      "Enforcement class",
+      "Surface",
+      "Applies to"
+    ],
+    "Evidence": [
+      "Lens",
+      "Source",
+      "Observation",
+      "Label"
+    ],
+    "ICOM": [
+      "Inputs",
+      "Controls",
+      "Outputs",
+      "Mechanisms"
+    ],
+    "Steps": [
+      "Step",
+      "Action",
+      "Actor",
+      "Inputs → outputs (shape)",
+      "Controls",
+      "Mechanism",
+      "Harness",
+      "Model need",
+      "Source"
+    ],
+    "Row tally": [
+      "Field",
+      "Value"
+    ]
+  },
+  "navigation_markers": [
+    "<!-- nav:begin -->",
+    "<!-- nav:end -->"
+  ],
+  "forbidden_phrases": [
+    {
+      "phrase": "Stage 99",
+      "use": "the stage's real name",
+      "severity": "error",
+      "why": "the fixture pipeline has no such stage"
+    }
+  ],
+  "contested_terms": [
+    {
+      "term": "Widget",
+      "severity": "warn",
+      "note": "a fixture contested term"
+    }
+  ],
+  "explain_on_first_use": [
+    "Quorum gate"
+  ],
+  "controls_register": "controls-register.tsv",
+  "controls_register_rules": {
+    "held_ids": [
+      "C-003..C-004"
+    ],
+    "highest_minted_id": "C-004",
+    "kinds": [
+      "hook-rule",
+      "hook-registration",
+      "settings-permission",
+      "deploy-check",
+      "ci-job",
+      "prose-rule"
+    ],
+    "classes": [
+      "code-enforce",
+      "code-warn",
+      "code-off",
+      "prose-only",
+      "host-config",
+      "not-a-control"
+    ]
+  },
+  "summary_counts": {
+    "level": "L3",
+    "section": "Row tally",
+    "rows": {
+      "Deterministic steps": "scriptable",
+      "Judgment steps": "judgment"
+    }
+  },
+  "harness_features": [
+    "file-tools",
+    "shell-tools",
+    "sub-agents"
+  ],
+  "rule_codes": [
+    "ANC001",
+    "ANC002",
+    "ANC003",
+    "ANC004",
+    "ANC005",
+    "CTL001",
+    "CTL002",
+    "CTL003",
+    "CTL004",
+    "CTL005",
+    "EVD001",
+    "EVD002",
+    "EVD003",
+    "EVD004",
+    "EVD005",
+    "FM001",
+    "FM002",
+    "FM003",
+    "FM004",
+    "FM005",
+    "FM006",
+    "FM007",
+    "FM008",
+    "FM009",
+    "FM010",
+    "FM011",
+    "FM012",
+    "LNK001",
+    "LNK002",
+    "MMD001",
+    "MMD002",
+    "MMD003",
+    "MMD004",
+    "NAV001",
+    "PAG001",
+    "PAG002",
+    "PAG003",
+    "PCK001",
+    "PCK002",
+    "REF001",
+    "REG001",
+    "REG002",
+    "REG003",
+    "SEC001",
+    "SRC001",
+    "SRC002",
+    "SRC003",
+    "STP001",
+    "SUM001",
+    "TAB001",
+    "TAB002",
+    "TAB003",
+    "TOK001",
+    "TRM001",
+    "VOC001",
+    "VOC002"
+  ],
+  "views": {
+    "state": {
+      "stage_stream": "fixture-stream"
+    }
+  }
+}

@@ -1,0 +1,69 @@
+---
+title: Fail fixture
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: agent-process
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fail-sub-process-rules
+level: L2
+universe: fixture-landscape
+parent: fixture-stream
+actors: [spoke, script:fixture-script]
+owner: hub
+lens_status: conformant
+last_verified_commit: 0000000000000000000000000000000000000000
+pack_version: 2
+---
+# Fail fixture
+
+## Summary
+
+A fixture sub-process for one failing rule. It names Stage 99, a Widget and a Quorum gate with no explanation.
+
+## Entry and exit
+
+| Side | Criteria | Source |
+|---|---|---|
+| Entry | a fixture input record exists | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+
+## Flow
+
+```mermaid
+flowchart TD
+    s1[Read input] --> s2[Check input]
+    s2 --> g1{Valid?}
+    g1 -->|yes| s3[/Write output/]
+    g1 -->|no| s1
+```
+
+## Activities
+
+| Activity | Primary actor | Purpose | Page |
+|---|---|---|---|
+| Fixture activity | spoke | read and judge one record | fixture-activity-plain |
+
+## Controls
+
+| Control | Source | Enforcement class | Surface | Applies to |
+|---|---|---|---|---|
+| C-001 input before output | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | code-enforce | — | fixture-activity-plain |
+| a rule with no control ID | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | code-warn | — | fixture-activity-plain |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| executed | a count somebody remembers | The steps ran in order | [INFERRED] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
+
+<!-- expect: CTL002, EVD001, VOC001, warn:VOC002, warn:TRM001, warn:CTL001 -->

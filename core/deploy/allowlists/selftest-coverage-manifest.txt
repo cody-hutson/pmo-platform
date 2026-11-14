@@ -55,9 +55,12 @@ release/tools/renumber-adr.py
 release/tools/sweep-release-corpus.py
 # scope: core/deploy/tools/*.py
 core/deploy/tools/_frontmatter.py
+core/deploy/tools/_process_catalog.py
 core/deploy/tools/backfill-relationship-edges.py
 core/deploy/tools/build-doc-index.py
+core/deploy/tools/build-element-inventory.py
 core/deploy/tools/build-hook-registry.py
+core/deploy/tools/build-process-catalog.py
 core/deploy/tools/check-adr-flip.py
 core/deploy/tools/check-approved-queue-depth.py
 core/deploy/tools/check-commit-close-keywords.py
@@ -73,6 +76,8 @@ core/deploy/tools/check-milestone-epic-membership.py
 core/deploy/tools/check-mirror-pair-parity.py
 core/deploy/tools/check-mode-declaration-residual.py
 core/deploy/tools/check-ownership-collision.py
+core/deploy/tools/check-process-catalog-publication.py
+core/deploy/tools/check-process-catalog.py
 core/deploy/tools/check-rules-budget.py
 core/deploy/tools/check-skill-count-imp.py
 core/deploy/tools/check-tool-exec-mode.py

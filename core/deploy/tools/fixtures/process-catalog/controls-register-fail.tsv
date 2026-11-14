@@ -1,0 +1,3 @@
+control_id	statement	mechanism_kind	mechanism_ref	source_path	enforcement_class_default	enforcement_surface	applies_to
+C-001	A step reads its input before it writes its output	prose-rule	unshaped-name.cfg	core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt	prose-only		fixture steps
+C-002	A fixture rule is never copied into the operator note store	prose-rule	zorblat_alpha_beta.md	core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt	code-enforce		fixture steps

@@ -1,0 +1,44 @@
+---
+title: Fixture landscape
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: concept-model
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fixture-landscape
+level: L0
+universe: fixture-landscape
+owner: hub
+lens_status: deviates
+last_verified_commit: 0000000000000000000000000000000000000000
+pack_version: 2
+---
+# Fixture landscape
+
+## Summary
+
+A fixture universe for the catalog self-tests. It describes nothing real.
+
+## Landscape
+
+```mermaid
+flowchart LR
+    a[Fixture trigger] --> b[Fixture stream]
+    b --> c[Fixture outcome]
+```
+
+## Value streams
+
+| Value stream | Trigger | Outcome | Page |
+|---|---|---|---|
+| Fixture stream | a fixture event | a fixture outcome | fixture-stream |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
