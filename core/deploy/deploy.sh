@@ -232,6 +232,13 @@ readonly LIMB_OWNERS_REQUIRED_FROM="2026-10-29"
 # and delete the deadline arm in the same commit; record the flip declined in its
 # flip-decision row; or re-date this constant with the reason.
 readonly CLOSEOUT_ANCHOR_ROLLOUT_ARMED="2026-10-29"
+# Check 83 (enumeration-drift)'s warn-mode shakedown (W2). Its deadline arm (_ed_deadline)
+# reads this against the GATE_ROLLOUT_* windows and today's date. Turn a GRADUATION-OVERDUE
+# finding green by recording a decision in the repository: flip the check's committed
+# default to resolve_check_mode "enumeration-drift" "enforce" and delete the deadline arm in
+# the same commit; record the flip declined in its flip-decision row; or re-date this
+# constant with the reason.
+readonly ENUMERATION_DRIFT_ROLLOUT_ARMED="2026-11-13"
 # Basename of the whole warn-log family — the hot file and every segment share
 # it. Stated once so a consumer pattern cannot drift from the writer's spelling.
 readonly WARN_LOG_BASENAME="deploy-check-warn-log"
@@ -7950,6 +7957,132 @@ print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromiso
     log "  WARN:  closeout-anchor-consistency shakedown — GRADUATION-DUE: ${_days} days since arming (review at ${GATE_ROLLOUT_REVIEW_DAYS}d; a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). Read the closeout-anchor-consistency rows across warn_log_segment_set(), then decide."
   else
     log "  OK:    closeout-anchor-consistency shakedown — within the review window (${_days}d of ${GATE_ROLLOUT_REVIEW_DAYS}d)"
+  fi
+  return 0
+}
+
+# ─── _ed_report / _ed_deadline — Check 83's verdict tail and deadline arm (TOP-LEVEL) ──────
+#
+# HOISTED TO TOP LEVEL for flag_not_evaluated's reason: a definition inside cmd_check() is
+# registered only when execution reaches it, and --self-test group ED drives THESE bodies,
+# never a copy. Check 83 is `enumeration-drift`. Its primitive is
+# core/deploy/tools/check-enumeration-drift.py --output-format tsv, whose stdout carries five
+# row classes and nothing else: one SCOPE record, one DENOM record, one CONTROL row (the
+# primitive's control arms, run on every corpus invocation), then a DRIFT or UNRESOLVED row
+# per finding.
+#
+# _ed_report <mode> <rc> <out>
+#   <mode>  enforce | warn, as a LITERAL. Check 83 dispatches it from its own dial with a
+#           `case`, so the dial variable is never passed as an argument — that keeps every
+#           reference to the dial inside the closed vocabulary WE-K grades
+#           (core/deploy/tests/test_advisory_emitter_contract.sh).
+#   <rc>    the primitive's exit: 0 clean · 1 a finding or a failed control arm · 3 an input
+#           failure. Any other exit is outside its contract.
+#   <out>   the primitive's stdout and stderr, captured together.
+# A DRIFT or an UNRESOLVED row is a finding: under enforce a FAIL line and one issue per row;
+# under warn a WARN line and one row per finding appended to the shared warn log under the
+# check id (W1), never an issue. Every reading this tail cannot vouch for fails closed on
+# every mode, and the OK line is withheld: no SCOPE or DENOM record, a row of an
+# unrecognised class, DENOM counts that disagree with the rows printed, a CONTROL row that is
+# missing or did not pass, exit 1 naming nothing, exit 0 beside a finding, exit 3, an exit
+# outside 0/1/3, and a mode it does not know. Zero markers is a withheld verdict
+# (NOT-EVALUATED), never a clean one; a degraded scope annotates the OK line.
+_ed_report() {
+  local _m="$1" _rc="$2" _out="$3"
+  local _denom _ctl_v _ctl _state _resid _markers _dd _du _nd _nu _hits=0 _readable=1 _detail _degr=""
+  local _cls _f2 _f3 _f4 _f5 _f6 _f7 _f8 _f9 _f10
+  if [[ "$_m" != "enforce" && "$_m" != "warn" ]]; then
+    log "  FAIL:  enumeration-drift — the verdict tail was handed mode '${_m}', which it does not know; findings cannot be routed, so the check fails closed"
+    ISSUES=$((ISSUES + 1))
+    return 0
+  fi
+  case "$_rc" in
+    0|1)
+      _denom="$(/usr/bin/awk -F'\t' '$1=="DENOM"{for(i=2;i<=NF;i++) printf "%s%s", $i, (i<NF ? " " : "\n")}' <<<"$_out")"
+      _markers="$(/usr/bin/awk -F'\t' '$1=="DENOM"{for(i=2;i<=NF;i++) if($i ~ /^markers=/){sub(/^markers=/,"",$i); print $i}}' <<<"$_out")"
+      _dd="$(/usr/bin/awk -F'\t' '$1=="DENOM"{for(i=2;i<=NF;i++) if($i ~ /^drift=/){sub(/^drift=/,"",$i); print $i}}' <<<"$_out")"
+      _du="$(/usr/bin/awk -F'\t' '$1=="DENOM"{for(i=2;i<=NF;i++) if($i ~ /^unresolved=/){sub(/^unresolved=/,"",$i); print $i}}' <<<"$_out")"
+      _state="$(/usr/bin/awk -F'\t' '$1=="SCOPE"{for(i=2;i<=NF;i++) if($i ~ /^state=/){sub(/^state=/,"",$i); print $i}}' <<<"$_out")"
+      _ctl_v="$(/usr/bin/awk -F'\t' '$1=="CONTROL"{print $2}' <<<"$_out")"
+      _ctl="$(/usr/bin/awk -F'\t' '$1=="CONTROL"{print $3}' <<<"$_out")"
+      _nd="$(/usr/bin/awk -F'\t' '$1=="DRIFT"{n++} END{print n+0}' <<<"$_out")"
+      _nu="$(/usr/bin/awk -F'\t' '$1=="UNRESOLVED"{n++} END{print n+0}' <<<"$_out")"
+      _resid="$(/usr/bin/awk -F'\t' '/^[[:space:]]*$/ { next } $1 !~ /^(SCOPE|DENOM|CONTROL|DRIFT|UNRESOLVED)$/ { printf "%s%s", (n++ ? "; " : ""), $0 }' <<<"$_out")"
+      log "  CTRL:  enumeration-drift — ${_ctl_v:-UNREPORTED}: ${_ctl:-unreported}"
+      if [[ -z "$_denom" || -z "$_state" || -n "$_resid" || ! "$_markers" =~ ^[0-9]+$ || "$_dd" != "$_nd" || "$_du" != "$_nu" ]]; then
+        log "  FAIL:  enumeration-drift — the primitive's output is unreadable (no SCOPE or DENOM record, a row outside SCOPE/DENOM/CONTROL/DRIFT/UNRESOLVED, or DENOM counts that disagree with the rows printed: ${_resid:-none}); an unread row is never an absence"
+        ISSUES=$((ISSUES + 1))
+        _readable=0
+      fi
+      if [[ "$_ctl_v" != "PASS" ]]; then
+        log "  FAIL:  enumeration-drift — the corpus run's control arms did not pass (${_ctl_v:-no CONTROL row}); the result is INDETERMINATE, not clean"
+        ISSUES=$((ISSUES + 1))
+        _readable=0
+      fi
+      if [[ "$_state" == "DEGRADED" ]]; then
+        flag_not_evaluated "enumeration-drift" "status=degraded — some files in scope could not be read; this is not a clean result"
+        _degr=" [DEGRADED — some files in scope were not read (see NOT-EVAL); this is not a clean result]"
+      fi
+      while IFS=$'\t' read -r _cls _f2 _f3 _f4 _f5 _f6 _f7 _f8 _f9 _f10; do
+        case "$_cls" in
+          DRIFT) _detail="${_f2}:${_f3}: ${_f4} ${_f5} — ${_f6} ${_f7}; ${_f8}; ${_f9}; ${_f10}" ;;
+          UNRESOLVED) _detail="${_f2}:${_f3}: unresolved marker — ${_f4}" ;;
+          *) continue ;;
+        esac
+        _hits=$((_hits + 1))
+        if [[ "$_m" == "enforce" ]]; then
+          log "  FAIL:  enumeration-drift — ${_detail}"
+          ISSUES=$((ISSUES + 1))
+        else
+          log "  WARN:  enumeration-drift — ${_detail} (warn-mode; the flip is an operator decision recorded in core/standards/gate-efficacy-standard.md § Flip-decision status)"
+          json_escape_detail "$_detail"
+          printf '{"ts":"%s","check":"%s","detail":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "enumeration-drift" "$JSON_ESCAPED" >> "${WARN_LOG:-$(warn_log_path)}" 2>/dev/null || true
+        fi
+      done <<<"$_out"
+      if [[ "$_rc" -eq 1 && $_hits -eq 0 && "$_ctl_v" == "PASS" ]]; then
+        log "  FAIL:  enumeration-drift — the primitive exited 1 and named no finding; a findings verdict that names nothing is unreadable, not a finding"
+        ISSUES=$((ISSUES + 1))
+      elif [[ "$_rc" -eq 0 && $_hits -gt 0 ]]; then
+        log "  FAIL:  enumeration-drift — the primitive exited 0 beside ${_hits} finding row(s); its exit contract is broken, so the verdict is unreadable"
+        ISSUES=$((ISSUES + 1))
+      elif [[ "$_rc" -eq 0 && $_readable -eq 1 && "$_markers" -eq 0 ]]; then
+        flag_not_evaluated "enumeration-drift" "zero markers in scope — nothing was compared; this is not a clean result"
+      elif [[ "$_rc" -eq 0 && $_readable -eq 1 ]]; then
+        log "  OK:    enumeration-drift — 0 drift over ${_markers} marker(s)${_degr}${POP_MARKER:-}"
+      fi
+      ;;
+    3)
+      log "  FAIL:  enumeration-drift — input failure (exit 3): $(/usr/bin/sed -n 1p <<<"$_out"). A broken invocation or dependency is never a clean zero"
+      ISSUES=$((ISSUES + 1))
+      ;;
+    *)
+      log "  FAIL:  enumeration-drift — the primitive exited ${_rc}, outside its 0/1/3 contract, so the verdict is unreadable: $(/usr/bin/tail -1 <<<"$_out")"
+      ISSUES=$((ISSUES + 1))
+      ;;
+  esac
+  return 0
+}
+
+# _ed_deadline <armed-date>
+#   W2, the repo-derivable ending condition of Check 83's warn-mode shakedown: the armed
+#   date (ENUMERATION_DRIFT_ROLLOUT_ARMED on the live path) against the GATE_ROLLOUT_* windows
+#   and today's UTC date — the Check 28 arm-3 shape, and _c82_deadline's. A date it cannot
+#   evaluate is a FAIL, never a silent pass; GRADUATION-OVERDUE is an issue; GRADUATION-DUE
+#   only warns.
+_ed_deadline() {
+  local _armed="$1" _days
+  _days="$(/usr/bin/python3 -c 'import datetime,sys
+print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromisoformat(sys.argv[1])).days)' "$_armed" 2>/dev/null || printf '')"
+  if [[ -z "$_days" ]]; then
+    log "  FAIL:  enumeration-drift shakedown — the deadline cannot be evaluated (the armed date '${_armed}' is not an ISO date, or /usr/bin/python3 could not compute it)"
+    ISSUES=$((ISSUES + 1))
+  elif [[ "$_days" -ge "$GATE_ROLLOUT_ESCALATE_DAYS" ]]; then
+    log "  FAIL:  enumeration-drift shakedown — GRADUATION-OVERDUE: ${_days} days at warn (escalation ${GATE_ROLLOUT_ESCALATE_DAYS}d). Record a decision in the repository: flip the committed default to enforce, decline in the flip-decision row, or re-date ENUMERATION_DRIFT_ROLLOUT_ARMED."
+    ISSUES=$((ISSUES + 1))
+  elif [[ "$_days" -ge "$GATE_ROLLOUT_REVIEW_DAYS" ]]; then
+    log "  WARN:  enumeration-drift shakedown — GRADUATION-DUE: ${_days} days since arming (review at ${GATE_ROLLOUT_REVIEW_DAYS}d; a finding at ${GATE_ROLLOUT_ESCALATE_DAYS}d). Read the enumeration-drift rows across warn_log_segment_set(), then decide."
+  else
+    log "  OK:    enumeration-drift shakedown — within the review window (${_days}d of ${GATE_ROLLOUT_REVIEW_DAYS}d)"
   fi
   return 0
 }
@@ -16364,6 +16497,118 @@ print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.date.fromiso
   fi
 
 
+  # Check 83 — enumeration ↔ population drift (advisory; deploy-time-only — warn-mode initial) [#6225]
+  # gate-efficacy: posture=advisory  enforcement-surface=deploy-time-only
+  #   invariant: every `<!-- enumerates: <glob> <relation> -->` marker in the scanned markdown
+  #              binds an enumeration that agrees with the tracked files its glob matches —
+  #              count: the stated cardinal equals their number; list: the items name exactly
+  #              those files; subset-of: every item names one of them
+  #   falsification: delete one item from docs/module-apis.md's block-hook list (or add a
+  #                  core/hooks/block-*.sh without listing it) -> a DRIFT row naming the
+  #                  basename, a WARN line and one warn-log row (deploy.sh --self-test group ED-1)
+  #   population: roots=@ed_roots  filter=*.md  exempts=file — the frozen release corpus, the deliberate-defect fixture trees, packages/ and .github/ are exempt whole-file, because a marker there describes a corpus as it was or is a defect on purpose; the prefixes are Check 63's tuple, imported by the primitive rather than restated
+  #
+  # WHAT IT ASSERTS. An enumeration marker binds the hand-maintained enumeration beneath it to
+  # the tracked files its glob matches — the convention the enumeration case of
+  # core/standards/duplicate-source-discipline.md states. Under `count` the stated cardinal
+  # must equal their number, under `list` the items must name exactly those files, and under
+  # `subset-of` every item must name one of them; `subset-of` never asserts completeness. The
+  # check reads only declared markers and infers nothing, so an enumeration with no marker is
+  # invisible to it. A malformed, unbound or unkeyable marker is an UNRESOLVED finding, never
+  # a silent skip.
+  #
+  # WHY NOT AN ARM OF CHECK 63. An arm is feasible: Check 63 already runs a committed-warn arm
+  # (its stale-baseline ratchet), and a lettered sub-check could hold the header. This is a
+  # sibling for three reasons. One primitive per exit contract — the verdict tail reads this
+  # primitive's exit status against its rows, and a shared invocation would make exit 1
+  # ambiguous whenever Check 63 itself has a finding. Different evidence — Check 63 infers
+  # count/structure pairs within one file and declares cross-file claims outside its
+  # boundary; this tool reads only declared markers and compares a document with a
+  # population of files. One dial per predicate, so each graduates on its own decision.
+  # Check 63's structure predicate and exemption tuple are imported, so "what is a list item"
+  # has one implementation.
+  #
+  # POSTURE. Its own committed dial, resolve_check_mode "enumeration-drift" "warn", tested
+  # with `case`, so a shared-cohort flip does not arm it. W1: _ed_report appends one warn-log
+  # row per finding. W2: ENUMERATION_DRIFT_ROLLOUT_ARMED, read by _ed_deadline. The flip is
+  # the committed default resolve_check_mode "enumeration-drift" "enforce", never a mode
+  # file, with the deadline arm deleted in the same commit
+  # (core/standards/gate-efficacy-standard.md § Flip-decision status).
+  #
+  # THE CONTROL ARM RUNS FIRST AND BLOCKS ON EVERY MODE. The primitive's --self-test, its
+  # labelled fixtures (core/deploy/tests/fixtures/enumeration-drift-fixtures.txt, whose case 1
+  # is the seeded mismatch and case 2 its subset-of near-miss) and the corpus run's own
+  # CONTROL row each raise an issue on every mode when they fail: a probe that cannot be
+  # shown to detect and to discriminate proves nothing by returning zero.
+  #
+  # COVERAGE BOUNDARY. Deploy-time only: the primitive's --self-test also runs in CI through
+  # the selftest-discovery job, but nothing in CI runs the live scan, so Requirement (b′) bars
+  # `required`. The precondition for `required` is a CI caller running the live scan on the
+  # pull request, not a step this check takes. Not detected: an enumeration with no marker;
+  # one in an exempt tree (the frozen release corpus, the deliberate-defect fixture trees,
+  # packages/ and .github/); a population no glob expresses; a relation that filters rows; an
+  # inline comma-separated list under `list` or `subset-of`; an enumeration outside markdown;
+  # whether an item's description is still true; and completeness under `subset-of`.
+  #
+  # NOT ON THE REQUIRED-SUBSET ROSTER. As with Check 63, this check is absent from
+  # --check-required-subset; joining that roster is a separate, later, evidence-gated
+  # decision.
+  #
+  # PLACEMENT. A population declaration's region runs from its check header to the next one
+  # (the gate-efficacy conformance suite's binding rule), so this block sits after Check 63's,
+  # whose structure predicate it imports, and before Check 64's header. As the last check in
+  # the file its region would reach the self-test's population calls.
+  #
+  # Primitive: core/deploy/tools/check-enumeration-drift.py (carries --self-test and
+  # --fixtures). Verdict tail and deadline arm: _ed_report and _ed_deadline at top level,
+  # driven by --self-test group ED.
+  if [[ "$DEPLOY_CHECK_MODE" != "off" ]]; then
+    local ed_mode
+    ed_mode="$(resolve_check_mode "enumeration-drift" "warn")"
+    if [[ "$ed_mode" != "off" ]]; then
+      log "Check 83: Enumeration ↔ population drift (every enumeration marker agrees with the tracked files its glob matches; ${ed_mode})"
+      local ed_script="core/deploy/tools/check-enumeration-drift.py"
+      local ed_fx="core/deploy/tests/fixtures/enumeration-drift-fixtures.txt"
+      if [[ ! -f "$ed_script" ]]; then
+        log "  FAIL:  enumeration-drift — primitive missing: $ed_script (a repo defect, not a benign absence)"
+        ISSUES=$((ISSUES + 1))
+      elif [[ ! -x "/usr/bin/python3" ]]; then
+        log "  FAIL:  enumeration-drift — /usr/bin/python3 not executable, so the enumeration markers are NOT-EVALUATED — this is not a clean result"
+        ISSUES=$((ISSUES + 1))
+      else
+        local ed_ctl_out ed_ctl_rc=0 ed_fx_out ed_fx_rc=0
+        ed_ctl_out=$(/usr/bin/python3 "$ed_script" --self-test 2>&1) || ed_ctl_rc=$?
+        ed_fx_out=$(/usr/bin/python3 "$ed_script" --fixtures "$ed_fx" 2>&1) || ed_fx_rc=$?
+        if [[ $ed_ctl_rc -ne 0 || $ed_fx_rc -ne 0 ]]; then
+          log "  FAIL:  enumeration-drift-fixtures — self-test exit ${ed_ctl_rc}, fixtures exit ${ed_fx_rc}: $(/usr/bin/tail -1 <<<"$ed_fx_out") (hard-fail on every mode)"
+          ISSUES=$((ISSUES + 1))
+        else
+          log "  OK:    enumeration-drift-fixtures — self-test: $(/usr/bin/tail -1 <<<"$ed_ctl_out"); $(/usr/bin/tail -1 <<<"$ed_fx_out")"
+          local -a ed_roots=("core" "release" "operations" "docs" "README.md" "CHANGELOG.md" "SECURITY.md" "CONTRIBUTING.md")
+          local ed_list ed_out ed_rc=0 ed_read ed_exempted ed_pairs
+          _population_resolve '*.md' -- "${ed_roots[@]}"
+          ed_list="$(/usr/bin/mktemp -t enumeration-drift.XXXXXX)"
+          if [[ ${#POP_FILES[@]} -gt 0 ]]; then printf '%s\n' "${POP_FILES[@]}" > "$ed_list"; fi
+          ed_out=$(/usr/bin/python3 "$ed_script" --root . --paths-from "$ed_list" --output-format tsv 2>&1) || ed_rc=$?
+          /bin/rm -f "$ed_list"
+          ed_read="$(/usr/bin/awk -F'\t' '$1=="SCOPE"{for(i=2;i<=NF;i++) if($i ~ /^read=/){sub(/^read=/,"",$i); print $i}}' <<<"$ed_out")"
+          ed_exempted="$(/usr/bin/awk -F'\t' '$1=="SCOPE"{for(i=2;i<=NF;i++) if($i ~ /^exempted=/){sub(/^exempted=/,"",$i); print $i}}' <<<"$ed_out")"
+          ed_pairs="$(/usr/bin/awk -F'\t' '$1=="DENOM"{for(i=3;i<=NF;i++){split($i,kv,"="); k=(kv[1]=="markers"||kv[1]=="drift") ? kv[1] : kv[1]".markers"; printf "%s%s=%s", (n++ ? " " : ""), k, kv[2]}}' <<<"$ed_out")"
+          if _population_report enumeration-drift "${ed_read:-0}" "${ed_exempted:-0}" "$ed_pairs"; then
+            case "$ed_mode" in
+              enforce) _ed_report enforce "$ed_rc" "$ed_out" ;;
+              *) _ed_report warn "$ed_rc" "$ed_out" ;;
+            esac
+          elif [[ $ed_rc -ne 0 ]]; then
+            log "  FAIL:  enumeration-drift — the primitive exited ${ed_rc} over a population that examined nothing: $(/usr/bin/tail -1 <<<"$ed_out")"
+            ISSUES=$((ISSUES + 1))
+          fi
+        fi
+      fi
+      _ed_deadline "$ENUMERATION_DRIFT_ROLLOUT_ARMED"
+    fi
+  fi
+
   # Check 64 — theme-token undeclared-consumer lint, TH-3 (ENFORCING) [#4197]
   #
   # WHAT IT ASSERTS. Every CSS custom property CONSUMED by a themed document — after
@@ -21682,6 +21927,167 @@ print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(da
     /bin/rm -rf "$_cot"
   fi
 
+  # ─── Assertion group ED — enumeration ↔ population drift (Check 83) ───────────
+  #
+  # Offline and sandbox-only: a scratch corpus, a scratch WARN_LOG, no gh, no network. Drives
+  # the REAL primitive (core/deploy/tools/check-enumeration-drift.py, over a non-git sandbox
+  # root, so its candidates are an os.walk of that root) and the REAL hoisted _ed_report /
+  # _ed_deadline — the bodies Check 83 runs. The primitive's own grammar arms are its
+  # --self-test's and its fixtures', run in CI by the selftest-discovery job and first inside
+  # Check 83; this group owns the EMIT path: the finding row, the warn-log row, the mode, the
+  # fail-closed readings and W2.
+  #
+  # ED-1 is the sensitivity arm (a list marker naming 2 of 3 members); ED-2 the specificity
+  # arm (the same items under subset-of, a true subset, with the omitted member shown present
+  # in the population); ED-3 the enforce dial; ED-4 an UNRESOLVED marker; ED-5 and ED-6 the
+  # two readings a findings verdict cannot rest on; ED-7 the other unreadable readings; ED-8
+  # the corpus run's CONTROL row; ED-9 the withheld and the degraded readings; ED-10 the
+  # deadline.
+  #
+  # WHAT THIS GROUP CANNOT SEE: Check 83's inline lines in cmd_check — its dial read, its
+  # primitive-missing and python-missing branches, its control-arm calls and its population
+  # pair — reached only by a --check run, which records them.
+  echo "self-test: starting assertion group ED (enumeration ↔ population drift, Check 83)" >&2
+  if ! declare -F _ed_report >/dev/null || ! declare -F _ed_deadline >/dev/null; then
+    _dp_fail "ED-0 the hoisted _ed_report / _ed_deadline are not both defined — every ED arm drives them"
+  else
+    local _edt; _edt="$(/usr/bin/mktemp -d -t enumerationdrift-selftest.XXXXXX)"
+    local _edp; _edp="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tools/check-enumeration-drift.py"
+    local WARN_LOG="$_edt/warn.jsonl"
+    local ISSUES=0
+    local POP_MARKER=""
+    local _ed_out _ed_rc _ed_i0 _ed_w0 _ed_l _ed_case _ed_n
+    /bin/mkdir -p "$_edt/pop"
+    : > "$_edt/pop/alpha.sh"; : > "$_edt/pop/beta.sh"; : > "$_edt/pop/gamma.sh"
+    printf '<!-- enumerates: pop/*.sh list -->\nThe fixture hooks:\n\n- `alpha.sh`\n- `beta.sh`\n' > "$_edt/ed1.md"
+    printf '<!-- enumerates: pop/*.sh subset-of -->\nThe fixture hooks:\n\n- `alpha.sh`\n- `beta.sh`\n' > "$_edt/ed2.md"
+    printf '<!-- enumerates: pop/*.sh list -->\nOne line of prose.\nA second line of prose.\n\n- `alpha.sh`\n' > "$_edt/ed4.md"
+
+    # _ed_run <doc>: the real primitive over the sandbox; sets _ed_out / _ed_rc.
+    _ed_run() {
+      _ed_rc=0
+      _ed_out="$(/usr/bin/python3 "$_edp" --root "$_edt" --path "$1" --output-format tsv 2>&1)" || _ed_rc=$?
+    }
+    # _ed_ago <days>: today's UTC date minus <days>, ISO.
+    _ed_ago() {
+      /usr/bin/python3 -c 'import datetime,sys
+print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(days=int(sys.argv[1]))).isoformat())' "$1"
+    }
+
+    # ED-1 — SENSITIVITY (W1 observed): a list marker over pop/*.sh naming alpha and beta.
+    # Exit 1 with one DRIFT row; under warn exactly ONE WARN line naming missing=gamma.sh and
+    # ONE warn-log row under the check id; no FAIL line, no OK line, no issue.
+    _ed_run ed1.md
+    printf '%s\n' "$_ed_out" > "$_edt/ed1.tsv"
+    if [[ "$_ed_rc" -ne 1 || "$(_dp_count "$_edt/ed1.tsv" $'DRIFT\ted1.md')" != "1" ]]; then _dp_fail "ED-1 a list naming 2 of 3 members must exit 1 with exactly one DRIFT row (rc $_ed_rc): $_ed_out"; fi
+    _ed_i0="$ISSUES"; _ed_w0="$(_dp_count "$WARN_LOG" '"check":"enumeration-drift"')"
+    _ed_report warn "$_ed_rc" "$_ed_out" > "$_edt/ed1.out" 2>&1
+    _ed_l="$(_dp_line "$_edt/ed1.out" 'WARN:  enumeration-drift')"
+    if [[ "$(_dp_count "$_edt/ed1.out" 'WARN:  enumeration-drift')" != "1" || "$_ed_l" != *"missing=gamma.sh"* ]]; then _dp_fail "ED-1 exactly one WARN line must name missing=gamma.sh: $_ed_l"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"enumeration-drift"')" != "$((_ed_w0 + 1))" || "$(_dp_line "$WARN_LOG" '"check":"enumeration-drift"')" != *'missing=gamma.sh'* ]]; then _dp_fail "ED-1 the finding must write exactly one warn-log row naming missing=gamma.sh (W1)"; fi
+    if [[ "$ISSUES" -ne "$_ed_i0" || "$(_dp_count "$_edt/ed1.out" 'FAIL:')" != "0" || "$(_dp_count "$_edt/ed1.out" 'OK:')" != "0" ]]; then _dp_fail "ED-1 a warn-mode finding must raise no issue, print no FAIL line and withhold the OK line"; fi
+
+    # ED-2 — SPECIFICITY: the same two items under subset-of, a true subset. The omitted member
+    # is in the input — shown present — so the silence is the relation working, not an empty
+    # population. Exit 0; the clean OK line; no WARN line; no warn-log row; no issue.
+    if [[ ! -f "$_edt/pop/gamma.sh" || "$(_dp_count "$_edt/ed2.md" 'gamma')" != "0" || "$(_dp_count "$_edt/ed2.md" '- `')" != "2" ]]; then _dp_fail "ED-2 the specificity input must list 2 of the 3 members, with the omitted member present in the population"; fi
+    _ed_run ed2.md
+    _ed_i0="$ISSUES"; _ed_w0="$(_dp_count "$WARN_LOG" '"check":"enumeration-drift"')"
+    _ed_report warn "$_ed_rc" "$_ed_out" > "$_edt/ed2.out" 2>&1
+    if [[ "$_ed_rc" -ne 0 || "$(_dp_count "$_edt/ed2.out" 'WARN:')" != "0" || "$(_dp_count "$_edt/ed2.out" 'OK:    enumeration-drift — 0 drift over 1 marker(s)')" != "1" ]]; then _dp_fail "ED-2 a true subset-of list must exit 0 and print the clean OK line and no WARN line (rc $_ed_rc): $_ed_out"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"enumeration-drift"')" != "$_ed_w0" || "$ISSUES" -ne "$_ed_i0" ]]; then _dp_fail "ED-2 a true subset-of list must write no warn-log row and raise no issue"; fi
+
+    # ED-3 — the ENFORCE dial: ED-1's input; ONE FAIL line naming the marker, ISSUES +1, and no
+    # warn-log row.
+    _ed_run ed1.md
+    _ed_i0="$ISSUES"; _ed_w0="$(_dp_count "$WARN_LOG" '"check":"enumeration-drift"')"
+    _ed_report enforce "$_ed_rc" "$_ed_out" > "$_edt/ed3.out" 2>&1
+    if [[ "$(_dp_count "$_edt/ed3.out" 'FAIL:  enumeration-drift — ed1.md:1: list pop/*.sh')" != "1" || "$((ISSUES - _ed_i0))" -ne 1 ]]; then _dp_fail "ED-3 under enforce the finding must print one FAIL line naming the marker and raise exactly one issue (got +$((ISSUES - _ed_i0)))"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"enumeration-drift"')" != "$_ed_w0" ]]; then _dp_fail "ED-3 under enforce no warn-log row is written"; fi
+
+    # ED-4 — UNRESOLVED IS A FINDING: a marker with two prose lines before its list is unbound.
+    # Exit 1; one UNRESOLVED row; under warn one WARN line naming `unbound`; one warn-log row.
+    _ed_run ed4.md
+    printf '%s\n' "$_ed_out" > "$_edt/ed4.tsv"
+    _ed_i0="$ISSUES"; _ed_w0="$(_dp_count "$WARN_LOG" '"check":"enumeration-drift"')"
+    _ed_report warn "$_ed_rc" "$_ed_out" > "$_edt/ed4.out" 2>&1
+    if [[ "$_ed_rc" -ne 1 || "$(_dp_count "$_edt/ed4.tsv" $'UNRESOLVED\ted4.md')" != "1" || "$(_dp_count "$_edt/ed4.out" 'unresolved marker — unbound')" != "1" ]]; then _dp_fail "ED-4 an unbound marker must exit 1 with one UNRESOLVED row and one WARN line naming unbound (rc $_ed_rc): $_ed_out"; fi
+    if [[ "$(_dp_count "$WARN_LOG" '"check":"enumeration-drift"')" != "$((_ed_w0 + 1))" || "$ISSUES" -ne "$_ed_i0" ]]; then _dp_fail "ED-4 an UNRESOLVED row under warn must write one warn-log row and raise no issue"; fi
+
+    # Synthetic readings for ED-5..ED-9: records the primitive could print, assembled so that
+    # each case carries exactly one reading the tail must not vouch for.
+    local _ed_sc=$'SCOPE\tstatus=fetched\tstate=-\tfiles=1\tread=1\tunreadable=0\texempted=0'
+    local _ed_sd=$'SCOPE\tstatus=degraded\tstate=DEGRADED\tfiles=2\tread=1\tunreadable=1\texempted=0'
+    local _ed_d0=$'DENOM\tfiles=1\tmarkers=1\tresolved=1\tunresolved=0\tdrift=0'
+    local _ed_d1=$'DENOM\tfiles=1\tmarkers=1\tresolved=1\tunresolved=0\tdrift=1'
+    local _ed_dz=$'DENOM\tfiles=1\tmarkers=0\tresolved=0\tunresolved=0\tdrift=0'
+    local _ed_cp=$'CONTROL\tPASS\tcount sens=1/1 spec=0/1'
+    local _ed_cf=$'CONTROL\tFAIL\tcount sens=0/1 spec=0/1'
+    local _ed_dr=$'DRIFT\tx.md\t1\tlist\tpop/*.sh\tlisted=2\tpopulation=3\tmissing=gamma.sh\textra=-\tdup=-'
+
+    # ED-5 — exit 1 naming nothing: a readable SCOPE, DENOM and CONTROL PASS at rc 1 with no
+    # finding row. One issue; no OK line.
+    _ed_i0="$ISSUES"
+    _ed_report warn 1 "${_ed_sc}"$'\n'"${_ed_d0}"$'\n'"${_ed_cp}" > "$_edt/ed5.out" 2>&1
+    if [[ "$((ISSUES - _ed_i0))" -ne 1 || "$(_dp_count "$_edt/ed5.out" 'named no finding')" != "1" || "$(_dp_count "$_edt/ed5.out" 'OK:')" != "0" ]]; then _dp_fail "ED-5 exit 1 naming no finding must fail closed with one issue and no OK line (got +$((ISSUES - _ed_i0)))"; fi
+
+    # ED-6 — no DENOM record: SCOPE and CONTROL PASS at rc 0. One issue; no OK line.
+    _ed_i0="$ISSUES"
+    _ed_report warn 0 "${_ed_sc}"$'\n'"${_ed_cp}" > "$_edt/ed6.out" 2>&1
+    if [[ "$((ISSUES - _ed_i0))" -ne 1 || "$(_dp_count "$_edt/ed6.out" 'unreadable')" != "1" || "$(_dp_count "$_edt/ed6.out" 'OK:')" != "0" ]]; then _dp_fail "ED-6 output with no DENOM record must fail closed with one issue and no OK line (got +$((ISSUES - _ed_i0)))"; fi
+
+    # ED-7 — the other unreadable readings, under warn: exit 0 beside a DRIFT row; a row of an
+    # unknown class; a DENOM drift count with no DRIFT row; an exit outside 0/1/3; exit 3; and a
+    # mode the tail does not know. Each raises exactly one issue and prints no OK line.
+    _ed_n=0
+    for _ed_case in "0|${_ed_sc}"$'\n'"${_ed_d1}"$'\n'"${_ed_cp}"$'\n'"${_ed_dr}" \
+                    "0|${_ed_sc}"$'\n'"${_ed_d0}"$'\n'"${_ed_cp}"$'\n'$'BOGUS\tx' \
+                    "0|${_ed_sc}"$'\n'"${_ed_d1}"$'\n'"${_ed_cp}" \
+                    "7|boom" \
+                    "3|INPUT-FAILURE: synthetic"; do
+      _ed_n=$((_ed_n + 1))
+      _ed_i0="$ISSUES"
+      _ed_report warn "${_ed_case%%|*}" "${_ed_case#*|}" > "$_edt/ed7-$_ed_n.out" 2>&1
+      if [[ "$((ISSUES - _ed_i0))" -ne 1 || "$(_dp_count "$_edt/ed7-$_ed_n.out" 'OK:')" != "0" ]]; then _dp_fail "ED-7 case $_ed_n (exit ${_ed_case%%|*}) must fail closed with exactly one issue and no OK line (got +$((ISSUES - _ed_i0)))"; fi
+    done
+    _ed_i0="$ISSUES"
+    _ed_report off 0 "${_ed_sc}"$'\n'"${_ed_d0}"$'\n'"${_ed_cp}" > "$_edt/ed7-mode.out" 2>&1
+    if [[ "$((ISSUES - _ed_i0))" -ne 1 || "$(_dp_count "$_edt/ed7-mode.out" 'does not know')" != "1" || "$(_dp_count "$_edt/ed7-mode.out" 'OK:')" != "0" ]]; then _dp_fail "ED-7 a mode the tail does not know must fail closed with one issue and no OK line"; fi
+
+    # ED-8 — the corpus run's CONTROL row: absent at rc 0, and FAIL at rc 1 with no finding
+    # row. Each raises exactly one issue with no OK line, and "exit 1 named nothing" does not
+    # also fire beside a failed control arm.
+    _ed_i0="$ISSUES"
+    _ed_report warn 0 "${_ed_sc}"$'\n'"${_ed_d0}" > "$_edt/ed8a.out" 2>&1
+    if [[ "$((ISSUES - _ed_i0))" -ne 1 || "$(_dp_count "$_edt/ed8a.out" 'control arms did not pass')" != "1" || "$(_dp_count "$_edt/ed8a.out" 'OK:')" != "0" ]]; then _dp_fail "ED-8 an absent CONTROL row must fail closed with one issue and no OK line (got +$((ISSUES - _ed_i0)))"; fi
+    _ed_i0="$ISSUES"
+    _ed_report warn 1 "${_ed_sc}"$'\n'"${_ed_d0}"$'\n'"${_ed_cf}" > "$_edt/ed8b.out" 2>&1
+    if [[ "$((ISSUES - _ed_i0))" -ne 1 || "$(_dp_count "$_edt/ed8b.out" 'control arms did not pass')" != "1" || "$(_dp_count "$_edt/ed8b.out" 'named no finding')" != "0" || "$(_dp_count "$_edt/ed8b.out" 'OK:')" != "0" ]]; then _dp_fail "ED-8 a failed CONTROL row must fail closed exactly once, never also as exit 1 naming nothing (got +$((ISSUES - _ed_i0)))"; fi
+
+    # ED-9 — zero markers at rc 0 with CONTROL PASS: one NOT-EVAL line, no issue and no OK
+    # line. A degraded scope at rc 0 with one marker and CONTROL PASS: one NOT-EVAL line, the OK
+    # line carrying the DEGRADED annotation, and no issue.
+    _ed_i0="$ISSUES"
+    _ed_report warn 0 "${_ed_sc}"$'\n'"${_ed_dz}"$'\n'"${_ed_cp}" > "$_edt/ed9a.out" 2>&1
+    if [[ "$ISSUES" -ne "$_ed_i0" || "$(_dp_count "$_edt/ed9a.out" 'NOT-EVAL: enumeration-drift')" != "1" || "$(_dp_count "$_edt/ed9a.out" 'OK:')" != "0" ]]; then _dp_fail "ED-9 zero markers must read NOT-EVALUATED with no issue and no OK line"; fi
+    _ed_i0="$ISSUES"
+    _ed_report warn 0 "${_ed_sd}"$'\n'"${_ed_d0}"$'\n'"${_ed_cp}" > "$_edt/ed9b.out" 2>&1
+    if [[ "$ISSUES" -ne "$_ed_i0" || "$(_dp_count "$_edt/ed9b.out" 'NOT-EVAL: enumeration-drift')" != "1" || "$(_dp_count "$_edt/ed9b.out" 'OK:    enumeration-drift — 0 drift over 1 marker(s) [DEGRADED')" != "1" ]]; then _dp_fail "ED-9 a degraded scope must print one NOT-EVAL line and the DEGRADED OK line, with no issue"; fi
+
+    # ED-10 — W2: armed today is within the window; 61 days back is GRADUATION-DUE (a warning,
+    # no issue); 91 days back is GRADUATION-OVERDUE (one issue); a non-date cannot be evaluated
+    # (one issue).
+    _ed_i0="$ISSUES"
+    _ed_deadline "$(_ed_ago 0)" > "$_edt/ed10a.out" 2>&1
+    _ed_deadline "$(_ed_ago 61)" > "$_edt/ed10b.out" 2>&1
+    if [[ "$(_dp_count "$_edt/ed10a.out" 'within the review window')" != "1" || "$(_dp_count "$_edt/ed10b.out" 'GRADUATION-DUE')" != "1" || "$ISSUES" -ne "$_ed_i0" ]]; then _dp_fail "ED-10 armed today must read within the window and 61 days back GRADUATION-DUE, neither raising an issue"; fi
+    _ed_deadline "$(_ed_ago 91)" > "$_edt/ed10c.out" 2>&1
+    _ed_deadline "not-a-date" > "$_edt/ed10d.out" 2>&1
+    if [[ "$(_dp_count "$_edt/ed10c.out" 'GRADUATION-OVERDUE')" != "1" || "$(_dp_count "$_edt/ed10d.out" 'cannot be evaluated')" != "1" || "$((ISSUES - _ed_i0))" -ne 2 ]]; then _dp_fail "ED-10 91 days back must read GRADUATION-OVERDUE and a non-date cannot be evaluated, one issue each (got +$((ISSUES - _ed_i0)))"; fi
+
+    /bin/rm -rf "$_edt"
+  fi
+
   if [[ "$failures" -gt 0 ]]; then
     echo "self-test: FAIL ($failures failure(s))" >&2
     return 1
@@ -21689,6 +22095,7 @@ print((datetime.datetime.now(datetime.timezone.utc).date()-datetime.timedelta(da
   echo "self-test: PASS" >&2
   echo "  release-context close gates validated (group DG): DG-1 one unrefreshed Tier-A artifact + one unresolved declaration write exactly two warn-log rows, one under each gate id / DG-2 the refreshed control writes none and verdicts CLEAN / DG-3 enforce writes no row / DG-4 an empty population is NA and an engine failure NOT-EVALUATED, never CLEAN / DG-5 exit 0 has exactly two producers, both CLEAN / DG-6 no arm moves ISSUES / DG-7 a failed population read, a PR with no milestone, an unresolved repository and an unreconciled count each withhold G-CL8 as NOT-EVALUATED, and the reconciled control returns the milestone less status: deferred plus the keyword closes / DG-8 a graded count short of the population withholds the gate even beside a finding / DG-9 a declared obligation at 0% conformance with no owner writes exactly one g-cl10 row naming it / DG-10 the identical record naming an open non-member owner that names the population writes none and verdicts CLEAN / DG-11 a g-cl10 subject missing from the grade withholds the gate / DG-12 a plan renamed after <head> is found by its milestone: frontmatter, and a slug no plan declares withholds the obligation / DG-13 an unowned Outcome limb writes one row whose detail opens limbs:" >&2
   echo "  close-out anchor consistency validated (group CO, Check 82): CO-1 a seeded post-declaration divergence writes one WARN line naming the version and the split, and one warn-log row / CO-2 the seed removed, with a pre-declaration divergence still in the input, prints the clean OK line and writes none / CO-3 enforce prints one FAIL line and raises one issue / CO-4 a surface not compared is one NOT-EVAL line and a DEGRADED OK / CO-5 an unresolved scope reads status=not-run / CO-6 every unreadable verdict fails closed with one issue and no OK line / CO-7 the deadline warns at review and fails at escalation / CO-8 the mode is exclusive" >&2
+  echo "  enumeration ↔ population drift validated (group ED, Check 83): ED-0 the hoisted _ed_report / _ed_deadline are defined / ED-1 a list naming 2 of 3 members writes one WARN line naming the missing member and one warn-log row / ED-2 the same items under subset-of print the clean OK line and write none / ED-3 enforce prints one FAIL line and raises one issue / ED-4 an unbound marker is a finding: one WARN line and one warn-log row / ED-5 exit 1 naming nothing fails closed / ED-6 no DENOM record fails closed / ED-7 exit 0 beside a finding, an unknown row class, a DENOM count its rows contradict, an exit outside 0/1/3, exit 3 and an unknown mode each fail closed with one issue and no OK line / ED-8 a missing or failing CONTROL row fails closed once / ED-9 zero markers withholds the OK line and a degraded scope annotates it / ED-10 the deadline warns at review and fails at escalation" >&2
   echo "  version-freeness claimed-set column pinning validated (#3724 AC-N, group VF):" >&2
   echo "    VF-1 DEPLOYED row extracted / VF-2 VERIFIED row excluded / VF-3 State is NOT the Tag column / VF-4 column-order shift survived (name-pinned, not ordinal) / VF-5 malformed header reported on stderr / VF-6 malformed header returns non-zero + VF-6b well-formed returns 0 (control) / VF-7 the CALLER fails closed to UNDECIDABLE(partial-by-failure) + VF-7b FREE control + VF-7c gate surface (DT-2: loud failure is observable, not merely emitted)" >&2
   echo "  close-completeness invariant validated (#1290 AC5; mis-arm group #4176):" >&2
