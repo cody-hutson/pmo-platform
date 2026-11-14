@@ -848,7 +848,8 @@ test_case "EXT-SEG-C20: an inside Trash call on a line that ends in a separator 
 #   X    a continuation after a wrapper word, between a wrapper option and its argument, or after a keyword
 #   A    a continuation after an assignment-shaped word, plain or append form
 #   T    a run of three backslashes: a literal backslash, then a continuation
-#   K    a backslash that ends a comment, which continues nothing; K3 is the residual neither reading sees
+#   K    a backslash that ends a comment, which continues nothing; K3 and K4 are the residual neither
+#        reading sees (the joined reading reads the next line as part of the comment)
 #   E    an even run of backslashes, which continues nothing (controls)
 #   N    controls: a continued command with no deletion or Trash command, and a quoted here-document body
 #        whose lines end in a backslash; N4, a continued double-quoted message, is a refusal that predates
@@ -917,6 +918,8 @@ test_case "EXT-CONT-K2: a comment that ends in a backslash, then an inside Trash
   "$(bash_payload "echo cont-k2 # note \\"$'\n'"trash ${SEG_FH}/Claude/cont-k2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${CONT_RE}" "$RMT_HOME_ENV"
 test_case "EXT-CONT-K3: a comment that ends in a backslash, then an rm whose command word a continuation splits, is allowed (a declared residual: neither reading sees it)" \
   "$(bash_payload $'echo cont-k3 # note \\\nr\\\nm -rf /tmp/cont-k3')" 0
+test_case "EXT-CONT-K4: a comment that ends in a backslash, then a wrapper and its option spread over continued lines before a Trash call, is allowed (the same declared residual)" \
+  "$(bash_payload $'echo cont-k4 # note \\\nnice \\\n-n 5 trash /tmp/cont-k4')" 0
 test_case "EXT-CONT-E1: an even run of backslashes continues nothing: an inside Trash call on the next line is allowed" \
   "$(bash_payload "echo cont-e1 \\\\"$'\n'"trash ${SEG_FH}/Claude/cont-e1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 test_case "EXT-CONT-E2: an even run of backslashes inside a word continues nothing, so no deletion verb is formed, and is allowed" \

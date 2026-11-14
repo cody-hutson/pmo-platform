@@ -1437,8 +1437,10 @@ done
 # -RECBOTH) stay in place and refuse first where they fire. Judged after every other step, so a
 # refusal of a real target names that target, and before the admission rows below, so a refused
 # command leaves none. Declared over-block: every command with a continuation and a deletion or Trash
-# verb is refused, whatever the shell would join. Declared residual: a comment line that ends in a
-# backslash, followed by a command word a continuation splits, is seen by neither reading.
+# verb is refused, whatever the shell would join. Declared residual: the joined reading reads the line
+# after a comment that ends in a backslash as part of that comment, so a verb on it that only joining
+# would reveal (a command word a continuation splits, a wrapper and its option spread over continued
+# lines) is seen by neither reading.
 #
 # CONT_JOIN_AWK prints NONE when no line but the last ends in an odd run of backslashes, else JOINED,
 # a newline, and the joined reading. Any other output is failure, and the command is then read as
