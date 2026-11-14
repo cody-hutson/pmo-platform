@@ -507,6 +507,36 @@ block_cwd_unknown() {
     "name the target by absolute path, or make the directory change a literal path, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
 }
 
+# block_word_unknown(rule_id, token, cause) — the strict-policy refusal for a target word the shell
+#   would expand or unquote in a way the hook does not reproduce on this line (class 4). cause is
+#   the word resolve_and_classify printed: home, tilde or word.
+block_word_unknown() {
+  local why
+  case "$3" in
+    home)  why="home-relative target '$2' is on a line that names HOME, which can change the directory the shell expands it from before the command runs" ;;
+    tilde) why="target '$2' begins with a tilde prefix other than ~/ or with a zsh equals-word, which the shell expands to a path the hook does not read" ;;
+    *)     why="target '$2' is not a literal word (it carries a brace, a backslash or a quote inside the word, as each piece of a quoted path with a space does, or a quoted leading tilde, or a dot-leading glob component), so the shell acts on a different path from the one written" ;;
+  esac
+  block "$1" "path is unresolvable under strict policy: $why" \
+    "name the target by a plain absolute path (a path with spaces through the Finder delete, whose POSIX file string the hook reads whole), or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+}
+
+# block_unnormalized(rule_id, token) — the strict-policy refusal for a target the hook cannot bring
+#   into one normalized form with the workspace root (class 5). It is never admitted as inside.
+block_unnormalized() {
+  block "$1" \
+    "path is unresolvable under strict policy: the hook could not bring target '$2' and the workspace root into one normalized form (its path normalizer could not run, or the root is not an absolute path), so the target is not admitted as inside the workspace" \
+    "restore ${PYTHON3}, or set the workspace root to an absolute path, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+}
+
+# block_unclassified(rule_id, token, class) — the refusal for a class no arm names. Every
+#   dispatcher ends with it, so a class added later can never fall through to an allow.
+block_unclassified() {
+  block "$1" \
+    "target '$2' could not be classified (class $3) and is refused under strict policy" \
+    "use explicit absolute paths instead of variables/subshells, or set CLAUDE_HOOK_BYPASS=1 only if absolutely intentional"
+}
+
 # Pattern match against the canonicalized command. Rule patterns are unchanged; only the
 # text they read is, so a verb at any genuine command start is now anchored. Direct
 # "$COMMAND" readers below (the osascript POSIX-file extractor) deliberately read the command's
@@ -518,21 +548,36 @@ matches() {
   "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
 }
 
-# classify_path(path) — Steps 5-6 below: normalize an absolute path and prefix-match it
-#   against WORKSPACE_ROOT. Prints the normalized path; returns 0 inside, 1 outside.
+# CLASSIFY_PY — normalize the target AND the workspace root with the same function, then print
+# END. Output without END is failure (the CWD_TABLE_PY convention), so a normalizer that cannot
+# run, or does not finish, never yields a raw comparison. os.path.realpath collapses ../ and ./,
+# does not require existence, and follows symlinks (intentional for strict-boundary enforcement);
+# GNU realpath -m is absent on macOS, so Python 3 is the portable equivalent.
+readonly CLASSIFY_PY='
+import os, sys
+print(os.path.realpath(sys.argv[1]))
+print(os.path.realpath(sys.argv[2]))
+print("END")
+'
+
+# classify_path(path) — Steps 5-6 below: normalize an absolute path and WORKSPACE_ROOT in one call,
+#   then prefix-match the one against the other, so a root spelled through a symlink, with a
+#   trailing slash or a dot segment is compared in its targets' form. Prints the normalized path
+#   (on class 5, the path as given). Returns 0 inside, 1 outside, 5 when the two cannot be brought
+#   into one form: the normalizer could not run, or the configured root is not absolute (a relative
+#   root is never anchored to this process's own directory). Class 5 is never inside. A normalized
+#   root of / admits no target but / itself, exactly as the as-spelled compare did.
 classify_path() {
-  local resolved="$1"
-  # Normalize via Python os.path.realpath — collapses ../ and ./,
-  # does not require existence, follows symlinks (intentional for strict-
-  # boundary enforcement). Python 3.9+ is system-default on macOS 12+.
-  # Stage 5 spec referenced /usr/bin/realpath -m (GNU); macOS ships BSD
-  # realpath without -m, so Python 3 is the portable equivalent.
+  local target="$1" out="" t r
+  case "$WORKSPACE_ROOT" in /*) ;; *) "$PRINTF" '%s' "$target"; return 5 ;; esac  # M-TRASH-ROOTABS
   if [ -x "$PYTHON3" ]; then
-    resolved="$("$PYTHON3" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$resolved" 2>/dev/null || echo "$resolved")"
+    out="$("$PYTHON3" -c "$CLASSIFY_PY" "$target" "$WORKSPACE_ROOT" 2>/dev/null)" || out=""
   fi
-  "$PRINTF" '%s' "$resolved"
-  case "$resolved" in
-    "${WORKSPACE_ROOT}"|"${WORKSPACE_ROOT}/"*) return 0 ;;
+  if [ "${out##*"$NL"}" != "END" ]; then "$PRINTF" '%s' "$target"; return 5; fi
+  t="${out%%"$NL"*}"; r="${out#*"$NL"}"; r="${r%%"$NL"*}"
+  "$PRINTF" '%s' "$t"
+  case "$t" in
+    "$r"|"$r/"*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -540,20 +585,24 @@ classify_path() {
 # resolve_and_classify(token, [seg])
 #   Resolve a path token and classify against workspace boundary.
 #   Returns: 0 = inside workspace, 1 = outside workspace, 2 = unresolvable (strict),
-#            3 = relative operand whose working directory cannot be determined (strict)
+#            3 = relative operand whose working directory cannot be determined (strict),
+#            4 = a word the shell would expand or unquote in a way the hook does not reproduce
+#                on this line (strict); stdout carries which: home, tilde or word,
+#            5 = the target and the workspace root cannot be brought into one normalized form
+#                (strict; see classify_path)
 #   Outputs the resolved absolute path on stdout (when return is 0 or 1). For a relative
 #   operand, a newline and the directory it was judged from follow (see split_verdict).
 #   seg is the operand's segment number (SEGMENT_WALK_AWK); empty means "after every
-#   segment". ensure_cwd_table must have run in the hook's own shell first.
+#   segment". ensure_cwd_table must have run in the hook's own shell first (it sets JUDGE_HOME).
 resolve_and_classify() {
   local token="$1"
   local seg="${2:-}"
-  local resolved=""
+  local resolved="" quoted=0
 
   # Step 1: strip surrounding single/double quotes
   case "$token" in
-    \"*\") token="${token#\"}"; token="${token%\"}";;
-    \'*\') token="${token#\'}"; token="${token%\'}";;
+    \"*\") token="${token#\"}"; token="${token%\"}"; quoted=1;;
+    \'*\') token="${token#\'}"; token="${token%\'}"; quoted=1;;
   esac
 
   # Step 2: detect unresolvable patterns (variables, command substitution, backticks).
@@ -565,13 +614,33 @@ resolve_and_classify() {
     *\$*)   return 2;;
   esac
 
-  # Step 3: tilde expansion (~ or ~/...). Per-character checks avoid the
-  # SC2088 false positive on the literal "~/" prefix string.
-  if [ "$token" = "~" ]; then
-    token="${HOME}"
-  elif [ "${token:0:1}" = "~" ] && [ "${token:1:1}" = "/" ]; then
-    token="${HOME}/${token:2}"
+  # Step 2b: the target-literal rule. After Step 1, a word that still carries a brace, a backslash
+  # or a quote is not literal: the shell removes quotes, expands braces and unescapes before the
+  # command runs, so the path written is not the path acted on (a quoted path with a space arrives
+  # here as such words, because the walk splits on whitespace first). So is a wholly-quoted word
+  # whose body begins with ~ (the shell keeps that tilde; Step 3 would expand it), and a component
+  # that begins with . and carries a glob character (a shell before bash 5.2 can match .. with
+  # it). An unquoted glob otherwise stays literal. Judged after Step 2, so a dynamic token keeps
+  # its own reason.
+  case "$token" in
+    *[{}\\\'\"]*) "$PRINTF" 'word'; return 4;;
+  esac
+  if [ "$quoted" = 1 ] && [ "${token:0:1}" = "~" ]; then "$PRINTF" 'word'; return 4; fi
+  if [[ "/$token" =~ $DOTGLOB_RE ]]; then "$PRINTF" 'word'; return 4; fi
+
+  # Step 3: tilde expansion (~ or ~/...) from JUDGE_HOME, the HOME the shell expands it from on
+  # this line. On a line that names HOME, JUDGE_HOME is empty (ensure_cwd_table) and the word is
+  # refused rather than expanded from a HOME the command may change first. Per-character checks
+  # avoid the SC2088 false positive on the literal "~/" prefix string.
+  if [ "$token" = "~" ] || { [ "${token:0:1}" = "~" ] && [ "${token:1:1}" = "/" ]; }; then
+    case "$JUDGE_HOME" in /*) ;; *) "$PRINTF" 'home'; return 4;; esac
+    token="${JUDGE_HOME}${token:1}"
   fi
+  # Step 3b: any other tilde prefix (~user, ~+, ~-, a directory-stack index, a zsh named
+  # directory) or a zsh equals-word (=cmd) expands to a path the hook does not read.
+  case "$token" in
+    "~"*|"="*) "$PRINTF" 'tilde'; return 4;;
+  esac
 
   # Step 4: absolute vs cwd-relative
   case "$token" in
@@ -614,10 +683,11 @@ resolve_and_classify() {
 # (core/disciplines/knowledge-architecture.md § Memory↔corpus boundary), re-scoped out of
 # Tier 0 by core/specs/autonomy-tiers.md § Irreducible Human Tasks item 8a. ONE python3
 # program with ONE admitting token: python3 unusable, settings absent or malformed, or any
-# exception prints nothing, and the caller falls through to its existing refusal. It never
-# consumes resolve_and_classify's raw-path fallback — an allow path must not open when the
-# normalizer is missing. The operand is judged first, so a command whose operand cannot be
-# an entry never opens a settings file. Admits (ELIGIBLE) only when ALL hold:
+# exception prints nothing, and the caller falls through to its existing refusal. The resolver
+# has no raw-path fallback: a target it cannot normalize is class 5 and refused before this arm
+# is consulted, and this arm's own program fails closed the same way. The operand is judged
+# first, so a command whose operand cannot be an entry never opens a settings file. Admits
+# (ELIGIBLE) only when ALL hold:
 #   operand - written only in characters the shell passes through unchanged, absolute
 #             (bare or wholly quoted; a ~/-led operand is not admitted), with no ".."
 #             component; its leaf ends ".md", has no leading dot and is not MEMORY.md
@@ -903,6 +973,8 @@ extract_bare_segments() {
 #   - the operand is relative and cannot be anchored: the payload cwd is unknown, a loop or
 #     function can repeat the change, or the line names CDPATH (a bare name is then searched
 #     for along it);
+#   - the destination depends on HOME (a bare cd, a ~/ operand) and the line names HOME:
+#     ensure_cwd_table then passes no home, so the program has none to expand from;
 #   - the set would pass LIMIT directories.
 # Each destination is recorded in BOTH readings: the lexical one (`cd` is logical by
 # default, so `..` climbs the path as typed) and the resolved one (`cd -P`, and what the
@@ -973,6 +1045,11 @@ except Exception:
 
 readonly TAB=$'\t'
 readonly NL=$'\n'
+# HOME_WORD_RE — HOME as a whole word (JAVA_HOME and HOMEBREW_* do not count). DOTGLOB_RE — a path
+# component that begins with . and carries a glob character, matched against "/<token>".
+readonly HOME_WORD_RE='(^|[^A-Za-z0-9_])HOME([^A-Za-z0-9_]|$)'
+readonly DOTGLOB_RE='/\.[^/]*[*?[]'
+JUDGE_HOME=""         # the HOME a ~/ word expands from; set by ensure_cwd_table; empty = refuse
 CWD_TABLE_READY=0
 CWD_EVT_SEG=()        # segment of each directory a change can lead to
 CWD_EVT_DIR=()        # ... and the directory
@@ -983,15 +1060,29 @@ CWD_REENTRANT=0       # 1 when a loop or function can re-run a segment
 # hook's own shell (never inside $( )), before the first relative target is judged. A
 # command with no directory change builds nothing and judges exactly as before.
 ensure_cwd_table() {
-  local events="" table="" cdpath=0 eseg ekind edir
+  local events="" table="" cdpath=0 eseg ekind edir stripped sq="'" bs="\\"
   if [ "$CWD_TABLE_READY" = 1 ]; then return 0; fi
   CWD_TABLE_READY=1
+  # A line that names HOME as a word can change HOME before the verb runs, so no home-relative
+  # word is expanded on it: a ~/ target is refused (class 4), and a bare cd or a cd ~/... is left
+  # unfollowed (class 3 for a relative target after it). Read on the command as judged, and again
+  # with every quote and backslash removed, because a shell assigns by the processed word (a
+  # declaration or name-operand builtin can spell the name with an embedded quote or a backslash).
+  # A name that only contains HOME does not count. Not seen: a name composed by an expansion (the
+  # indirect-spelling class), and a change the line does not spell at all (a nested shell's
+  # program, a sourced file, a function or alias from the environment: the nested-shell residual).
+  stripped="${COMMAND//\"/}"; stripped="${stripped//$sq/}"; stripped="${stripped//"$bs"/}"
+  if [[ "$COMMAND" =~ $HOME_WORD_RE ]] || [[ "$stripped" =~ $HOME_WORD_RE ]]; then
+    JUDGE_HOME=""
+  else
+    JUDGE_HOME="${HOME:-}"
+  fi
   events="$(extract_dir_events)" || events="0${TAB}UNKNOWN${TAB}"
   case "$events" in *"${TAB}REENTRANT${TAB}"*) CWD_REENTRANT=1 ;; esac
   case "$events" in *"${TAB}DIR${TAB}"*|*"${TAB}HOME${TAB}"*|*"${TAB}UNKNOWN${TAB}"*) ;; *) return 0 ;; esac
   case "$COMMAND" in *CDPATH*) cdpath=1 ;; esac
   if [ -x "$PYTHON3" ]; then
-    table="$("$PRINTF" '%s\n' "$events" | "$PYTHON3" -c "$CWD_TABLE_PY" "$CWD" "${HOME:-}" "$CWD_REENTRANT" "$cdpath" 2>/dev/null)" || table=""
+    table="$("$PRINTF" '%s\n' "$events" | "$PYTHON3" -c "$CWD_TABLE_PY" "$CWD" "$JUDGE_HOME" "$CWD_REENTRANT" "$cdpath" 2>/dev/null)" || table=""
   fi
   if [ "${table##*"$NL"}" != "-${TAB}END" ]; then
     # The normalizer could not run, or did not finish: no change on this line is followed.
@@ -1090,6 +1181,17 @@ judge_targets() {
         # Relative operand after a directory change the hook cannot follow
         block_cwd_unknown "BLOCK-TRASH-001" "$token"
         ;;
+      4)
+        # A word the shell would expand or unquote otherwise than the hook reads it
+        block_word_unknown "BLOCK-TRASH-001" "$token" "$resolved"
+        ;;
+      5)
+        # Target and root cannot be brought into one normalized form
+        block_unnormalized "BLOCK-TRASH-001" "$token"
+        ;;
+      *)
+        block_unclassified "BLOCK-TRASH-001" "$token" "$classification"
+        ;;
     esac
   done < <(extract_target_tokens "$verb")
 }
@@ -1158,6 +1260,15 @@ if matches "$TRASH_VERB_RE"; then
       3)
         block_cwd_unknown "BLOCK-TRASH-003" "$token"
         ;;
+      4)
+        block_word_unknown "BLOCK-TRASH-003" "$token" "$resolved"
+        ;;
+      5)
+        block_unnormalized "BLOCK-TRASH-003" "$token"
+        ;;
+      *)
+        block_unclassified "BLOCK-TRASH-003" "$token" "$classification"
+        ;;
     esac
   done < <(extract_target_tokens "trash")
   # The target-less limb: a Trash segment that does not name all its targets on its line (no
@@ -1214,6 +1325,15 @@ if matches "${ANCHOR_PREFIX_BASH}"'osascript([[:space:]]+|$)'; then
           ;;
         3)
           block_cwd_unknown "BLOCK-TRASH-003" "$osa_path"
+          ;;
+        4)
+          block_word_unknown "BLOCK-TRASH-003" "$osa_path" "$resolved"
+          ;;
+        5)
+          block_unnormalized "BLOCK-TRASH-003" "$osa_path"
+          ;;
+        *)
+          block_unclassified "BLOCK-TRASH-003" "$osa_path" "$classification"
           ;;
       esac
     done < <("$PRINTF" '%s' "$COMMAND" | "$GREP" -oE 'POSIX[[:space:]]+file[[:space:]]+"[^"]*"' | "$GREP" -oE '"[^"]*"' | /usr/bin/sed 's/^"//; s/"$//')

@@ -1,8 +1,9 @@
 #!/bin/bash
 # tests/block-rm-prefer-trash.test.sh — synthetic Bash-tool payload tests
 # for block-rm-prefer-trash.sh. Covers BLOCK-TRASH-001..003 ACs, the
-# auto-memory Trash arm (MEM-*), the in-command working directory (CWD-*),
-# CLAUDE_HOOK_BYPASS bypass + edge/regression cases.
+# auto-memory Trash arm (MEM-*), the in-command working directory (CWD-*), the
+# one-form target/root comparison (NORM-*), home-relative and non-literal target
+# words (TILDE-*, NONLIT-*), CLAUDE_HOOK_BYPASS bypass + edge/regression cases.
 #
 # Coverage map: grouped below by rule and case family; the Summary block prints the
 # live total (a hardcoded count here drifted before — do not reintroduce one).
@@ -55,14 +56,13 @@ echo "================================"
 #
 # The arms that pass "$RMT_HOME_ENV" assert INSIDE-workspace behaviour: an rm-family verb
 # on a workspace target is redirected to the Trash (BLOCK-TRASH-002), and a Trash verb on
-# one is allowed. The hook spells its default workspace root from HOME as written and
-# canonicalizes the target, so the premise holds only while HOME is itself a canonical
-# path. A caller that points HOME at a `mktemp -d` directory, as the install regression's
-# HOME-override step does, hands the hook a HOME under the per-user temp area, which
-# macOS reaches through the /var -> /private/var symlink: the target resolves to the
-# /private form, the root keeps the form HOME spelled, and every inside target reads as
-# outside. The arm then fails on a property of the caller, not of the rule it tests. The
-# hook's comparison is its own behaviour and is not changed here.
+# one is allowed. The hook derives its default workspace root from HOME and normalizes it
+# and the target in one call (NORM-* below), so a caller's HOME reached through a symlink —
+# a `mktemp -d` directory under macOS's /var -> /private/var link, as the install
+# regression's HOME-override step uses — no longer reads an inside target as outside. The
+# fixture stays as isolation: each pinned arm's verdict depends on the workspace the hook
+# derives, so it must not depend on the caller's HOME or on what the caller's own
+# workspace holds.
 #
 # The lever is the fixture pattern block-fs-boundary.test.sh uses: a per-invocation env
 # prefix on only the command that reads the HOME-derived input, here the hook, pointed at
@@ -1058,9 +1058,8 @@ dep_gate_case "missing jq fails CLOSED (enforce, exit 2)" \
 # block-autonomy-ceiling.test.sh idiom) and CLAUDE_PROJECT_DIR cleared, unless a case sets
 # it, so neither the operator's real settings and store nor a caller's project is read.
 # Fixture names avoid the operator-memory-reference gate's patterns. MEM_ROOT is
-# canonicalized at creation: the hook compares a canonicalized target with a root spelled
-# from HOME as written (see HOME-FIXTURE-01), so a sandbox reached through a symlink would
-# misread in-workspace targets, and MEM-23 would test that instead of the arm.
+# canonicalized at creation, so every path an arm writes is already the form the hook's
+# normalizer gives back, and a message pattern can name it as typed.
 MEM_ROOT=""
 mem_root_raw="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-mem.XXXXXX" 2>/dev/null)" || mem_root_raw=""
 if [ -n "$mem_root_raw" ] && [ -d "$mem_root_raw" ]; then
