@@ -1984,32 +1984,34 @@ AV50|block-destructive|rt-asgn-head|-|?|B|FOO=@QMID@"a echo b" bash -c "x; bash 
 # ahead of the listed script, or of a command that runs no script (a before and after). rt-svres: the declared
 # residuals — a value carrying its own command, a separator inside the value, env's own quoting inside the decoded
 # value, and the two whitespace-bearing quoted values J0 leaves to today's reading (a before and after).
-SV01|block-destructive|rt-svq|-|?|a|env -S'-v' bash @D@/na.sh
-SV02|block-destructive|rt-svq|-|?|a|env --split-string='-v' bash @D@/na.sh
-SV03|block-destructive|rt-svq|-|?|a|env --sp='-v' bash @D@/na.sh
-SV04|block-destructive|rt-svq|-|?|a|env -S'' bash @D@/na.sh
-SV05|block-destructive|rt-svq|-|?|a|env -S'BAR=2' bash @D@/na.sh
-SV06|block-destructive|rt-svq|-|?|a|env -S-'u' FOO bash @D@/na.sh
-SV07|block-destructive|rt-svs|-|?|a|env -S-C@D@/x bash @D@/na.sh
-SV08|block-destructive|rt-svs|-|?|a|env --split-string=--chdir=@D@/x bash @D@/na.sh
-SV09|block-destructive|rt-svs|-|?|a|env -SBAR=@D@/x bash @D@/na.sh
-SV10|block-destructive|rt-svx|-|?|a|env -S--unset FOO bash @D@/na.sh
-SV11|block-destructive|rt-svx|-|?|a|env -Sa-b=1 bash @D@/na.sh
-SV12|block-destructive|rt-svx|-|?|a|env -S"$X" bash @D@/na.sh
+SV01|block-destructive|rt-svq|-|?|B|env -S'-v' bash @D@/na.sh
+SV02|block-destructive|rt-svq|-|?|B|env --split-string='-v' bash @D@/na.sh
+SV03|block-destructive|rt-svq|-|?|B|env --sp='-v' bash @D@/na.sh
+SV04|block-destructive|rt-svq|-|?|B|env -S'' bash @D@/na.sh
+SV05|block-destructive|rt-svq|-|?|B|env -S'BAR=2' bash @D@/na.sh
+SV06|block-destructive|rt-svq|-|?|B|env -S-'u' FOO bash @D@/na.sh
+SV07|block-destructive|rt-svs|-|?|B|env -S-C@D@/x bash @D@/na.sh
+SV08|block-destructive|rt-svs|-|?|B|env --split-string=--chdir=@D@/x bash @D@/na.sh
+SV09|block-destructive|rt-svs|-|?|B|env -SBAR=@D@/x bash @D@/na.sh
+SV10|block-destructive|rt-svx|-|?|B|env -S--unset FOO bash @D@/na.sh
+SV11|block-destructive|rt-svx|-|?|B|env -Sa-b=1 bash @D@/na.sh
+SV12|block-destructive|rt-svx|-|?|B|env -S"$X" bash @D@/na.sh
 SV13|block-destructive|rt-svctl|-|?|B|env -S-v bash @D@/na.sh
 SV14|block-destructive|rt-svctl|-|?|B|env -SBAR=2 bash @D@/na.sh
 SV15|block-destructive|rt-svctl|-|?|B|env -S-Cx bash @D@/na.sh
 SV16|block-destructive|rt-svctl|-|?|B|env -S-i' bash @D@/na.sh'
-SV17|block-destructive|rt-svcost|-|?|a|env -S'echo$X' bash @D@/na.sh
+SV17|block-destructive|rt-svcost|-|?|B|env -S'echo$X' bash @D@/na.sh
 SV18|block-destructive|rt-svnear|-|?|a|env -S'-v' bash @D@/ok.sh
 SV19|block-destructive|rt-svnear|-|?|a|env -S-C@D@/x bash @D@/ok.sh
 SV20|block-destructive|rt-svnear|-|?|a|env -S'-v' cat @D@/na.sh
 SV21|block-destructive|rt-svres|-|?|a|env -S'bash @D@/na.sh'
 SV22|block-destructive|rt-svres|-|?|a|env -S'-i;' bash @D@/na.sh
 SV23|block-destructive|rt-svres|-|?|a|env -S"'-u'" FOO bash @D@/na.sh
-SV24|block-destructive|rt-svres|-|?|a|env -S'-i FOO=1' bash @D@/na.sh
+SV24|block-destructive|rt-svq|-|?|B|env -S'-i FOO=1' bash @D@/na.sh
 SV25|block-destructive|rt-svres|-|?|a|env -S-i' -u' FOO bash @D@/na.sh
 # seed 15.4 addendum (the hub's trace of the design under J0): SV17 is re-authored as one token, since under J0 a
 # value spread over two tokens is read from its first piece only and never reaches PC-SV1's cell; SV26 is Rule M's
 # control under J0, a dash-led value the reading cannot read, which the walk walks on from today (B before and after).
 SV26|block-destructive|rt-svctl|-|?|B|env -S-i$X bash @D@/na.sh
+# #8491 (GREEN): SV01-SV12 and SV17 move a -> B as the block's legend says. SV24 also closes (B, regrouped from
+# rt-svres to rt-svq): its later piece is an assignment, so the walk reaches the interpreter even under J0.

@@ -1580,12 +1580,13 @@ script_wrapper_longname() {   # $1 = a token that begins with `--`
 # value is an option run, consume any following argv token an arg-taking option takes
 # as its separate argument, reading the row's own arity (script_wopt) the way the
 # cluster loop does, so `env --s=-u <ok> <na>` adjudicates <na> and not <ok>. The hook
-# tokenizes on whitespace, so the value is one word. A value holding a `/` is read as a
-# command word: a path is the command, and an option carrying a path keeps the verdict
-# it had before this helper (a declared residual, readiness item 2).
+# tokenizes on whitespace, so the value is one word. This body is today's reading of the value
+# AS WRITTEN; script_split_read runs first (M-WRAP-SPLITREAD) and reads the value as env
+# receives it, and this body decides only where that reading defers to it under Rule M.
 script_split_scan() {   # $1 = the attached split value
   local _v="$1" _c2="" _n="${#script_tokens[@]}"
   script_wsplit_cmd=0   # M-WRAP-SPLITCMD
+  script_split_read "$_v" "${2:-}"; case "$script_sv" in go|walk|cmd) return 0 ;; esac   # M-WRAP-SPLITREAD
   case "$_v" in
     "")   return 0 ;;
     */*)  script_wsplit_cmd=1; return 0 ;;
@@ -1604,6 +1605,151 @@ script_split_scan() {   # $1 = the attached split value
         _v="" ;;
     esac
   done
+  return 0
+}
+
+# ENV'S SPLIT-STRING VALUE, READ AS ENV READS IT (Rule M). script_split_scan decides on the
+# value AS WRITTEN: a value holding a `/` stops the walk before any other test, a quote-led value
+# falls to the final arm and is read as a command word, and a dash-led value is walked letter by
+# letter, so a quote inside it reads as a flag letter and can hide an option's need for the
+# following token. This reading runs first and decides on the value env receives:
+#   1. Prefix guard: the split token's own text before the value carrying a quote or a backslash
+#      gives "unread" (a quoted option name is the quoted-wrapper class, not this one).
+#   2. Decode, only when the value carries a quoting character, `$` or a backtick: the word reader
+#      gives the value after quote removal. A value that leaves a quote open is read, under J0,
+#      from this one piece with its open quote closed, and the later pieces walk as ordinary
+#      tokens. Inexact (an expansion, or the read limit) gives "unread".
+#   3. Plain check: every decoded word must be in script_plain_word's set, or "unread".
+#   4. Classify in env's order: options first (`--` and a lone `-` end them; a long name by the
+#      row's own table, taking the next word or, when the value is exhausted, the following
+#      token; a cluster letter by letter against script_wopt; a nested split option, or a
+#      describe-only letter, gives "unread"), then assignments by env's grammar (any word holding
+#      `=`), and the first other word is the value's own command word: "stop". Words run out: go.
+# RULE M — THE STOP SET MAY ONLY SHRINK. OLD is today's answer, computed here as a pure predicate.
+#   go                          the walk goes on past the split token, consuming what the
+#                               options took from the following tokens
+#   stop or unread, OLD walks   today decides (M-WRAP-SPLITMONO)
+#   unread, OLD stops, no slash the walk goes on, consuming nothing (toward adjudication; the
+#                               declared cost PC-SV1: an unreadable value that carries a command
+#                               of its own has that command's arguments read as the next words)
+#   anything else               today decides
+# It never assigns script_wsplit_cmd=1, so it can only let the walk go on (SPLITV-STRUCT-01).
+script_split_read() {   # $1 = the attached split value  $2 = the split token -> script_sv
+  local _v="$1" _tok="${2:-}" _pre="" _d="" _w="" _old="" _r="go" _j=0 _ph="opt" _c="" _rest=""
+  local _i=0 _nw=0 _n="${#script_tokens[@]}"
+  local -a _words
+  script_sv="old"
+  # A value with no quoting character, no `$`, no backtick, no slash, no `=`, and not led by
+  # `--` reads the same both ways; the timing shapes take this path.
+  case "$_v" in
+    *"'"*|*'"'*|*\\*|*'$'*|*'`'*|*/*|*=*|--*) : ;;
+    *) return 0 ;;
+  esac
+  case "$_v" in
+    "")   _old="walk" ;;
+    */*)  _old="slash" ;;
+    -*)   _old="walk" ;;
+    *=*)  case "${_v%%=*}" in ''|*[!A-Za-z0-9_]*) _old="stop" ;; *) _old="walk" ;; esac ;;
+    *)    _old="stop" ;;
+  esac
+  _pre="${_tok%"$_v"}"
+  case "$_pre" in
+    *"'"*|*'"'*|*\\*) _r="unread" ;;
+  esac
+  if [ "$_r" = "go" ]; then
+    case "$_v" in
+      *"'"*|*'"'*|*\\*|*'$'*|*'`'*)
+        script_word_scan "$_v"
+        if [ "$script_ws_complete" -eq 0 ]; then
+          script_word_scan "${_v}'"
+          if [ "$script_ws_complete" -eq 0 ]; then script_word_scan "${_v}\""; fi
+        fi
+        if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_exact" -eq 1 ]; then
+          _d="$script_ws_out"
+        else
+          _r="unread"
+        fi
+        ;;
+      *) _d="$_v" ;;
+    esac
+  fi
+  if [ "$_r" = "go" ]; then
+    set -f
+    # shellcheck disable=SC2206
+    _words=( $_d )
+    set +f
+    _nw="${#_words[@]}"
+    while [ "$_i" -lt "$_nw" ]; do
+      if ! script_plain_word "${_words[$_i]}"; then _r="unread"; break; fi
+      _i=$(( _i + 1 ))
+    done
+  fi
+  if [ "$_r" = "go" ]; then
+    _i=0
+    while [ "$_i" -lt "$_nw" ]; do
+      _w="${_words[$_i]}"
+      _i=$(( _i + 1 ))
+      if [ "$_ph" = "opt" ]; then
+        case "$_w" in
+          --|-)
+            _ph="arg"
+            continue
+            ;;
+          --*)
+            script_wrapper_longname "$_w"
+            case "$script_wlsplit" in
+              *" $script_wlname "*) _r="unread"; break ;;
+            esac
+            case "$_w" in
+              *=*) : ;;
+              *)
+                case "$script_wlarg" in
+                  *" $script_wlname "*)
+                    if [ "$_i" -lt "$_nw" ]; then _i=$(( _i + 1 )); else _j=$(( _j + 1 )); fi
+                    ;;
+                esac
+                ;;
+            esac
+            continue
+            ;;
+          -?*)
+            _rest="${_w#-}"
+            while [ -n "$_rest" ]; do
+              _c="${_rest:0:1}"
+              _rest="${_rest:1}"
+              case "$script_wsplit" in *"$_c"*) _r="unread"; break 2 ;; esac
+              case "$script_wnox" in *"$_c"*) _r="unread"; break 2 ;; esac
+              case "$script_wopt" in
+                *"${_c}::"*) _rest="" ;;
+                *"${_c}:"*)
+                  if [ -z "$_rest" ]; then
+                    if [ "$_i" -lt "$_nw" ]; then _i=$(( _i + 1 )); else _j=$(( _j + 1 )); fi
+                  fi
+                  _rest=""
+                  ;;
+              esac
+            done
+            continue
+            ;;
+        esac
+        _ph="arg"
+      fi
+      case "$_w" in
+        *=*) : ;;
+        *) _r="stop"; break ;;
+      esac
+    done
+  fi
+  if [ "$_r" = "go" ]; then
+    while [ "$_j" -gt 0 ] && [ "$script_hidx" -lt "$_n" ]; do
+      script_hidx=$(( script_hidx + 1 ))
+      _j=$(( _j - 1 ))
+    done
+    script_sv="go"
+    return 0
+  fi
+  if [ "$_old" = "walk" ]; then script_sv=old; return 0; fi   # M-WRAP-SPLITMONO
+  if [ "$_r" = "unread" ] && [ "$_old" = "stop" ]; then script_sv="walk"; fi
   return 0
 }
 
@@ -1627,7 +1773,7 @@ script_wrapper_options() {
         script_wrapper_longname "$_tok"
         case "$script_wlsplit" in
           *" $script_wlname "*)
-            script_split_scan "${_tok#*=}"
+            script_split_scan "${_tok#*=}" "$_tok"
             if [ "$script_wsplit_cmd" -eq 1 ]; then return 0; fi
             ;;
         esac
@@ -1655,7 +1801,7 @@ script_wrapper_options() {
           case "$script_wsplit" in
             *"$_c"*)
               if [ -n "$_rest" ]; then
-                script_split_scan "$_rest"
+                script_split_scan "$_rest" "$_tok"
                 if [ "$script_wsplit_cmd" -eq 1 ]; then script_hidx=$(( script_hidx - 1 )); return 0; fi
                 _rest=""
               fi
