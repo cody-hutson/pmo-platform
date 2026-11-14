@@ -6606,6 +6606,7 @@ WC_SHORTX="$(/usr/bin/printf '%*s' 4000 '' | /usr/bin/tr ' ' 'x')"
 WC_MIDX="$(/usr/bin/printf '%*s' 1000 '' | /usr/bin/tr ' ' 'x')"
 WC_MIDN="$(/usr/bin/printf '%*s' 1000 '' | /usr/bin/tr ' ' 'n')"
 WC_QPAD="$(/usr/bin/printf '%*s' 2050 '' | /usr/bin/sed 's/ /""/g')"
+WC_QMID="$(/usr/bin/printf '%*s' 400 '' | /usr/bin/sed 's/ /""/g')"
 
 wc_drain_rows() {
   if [ -f "$WC_DRAIN" ]; then
@@ -6625,6 +6626,7 @@ wc_expand() { # $1 = command template -> WC_CMDX
   c="${c//@MIDX@/$WC_MIDX}"
   c="${c//@MIDN@/$WC_MIDN}"
   c="${c//@QPAD@/$WC_QPAD}"
+  c="${c//@QMID@/$WC_QMID}"
   c="${c//@NL@/$'\n'}"
   WC_CMDX="$c"
 }

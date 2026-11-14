@@ -1880,3 +1880,58 @@ OP08|block-destructive|rt-opok|-|?|a|bash -- @D@/ok.s'h'
 OP09|block-destructive|rt-opcmode|-|?|B|bash -c 'echo hi; bash @D@/na.sh'
 OP10|block-destructive|rt-opcmode|-|?|a|bash -c 'echo a; echo b'
 OP11|block-destructive|rt-opnear|-|?|a|cat @D@/na.s'h'
+# --- seed 15.3: card #8319 — the prefix walk steps over a space-bearing quoted assignment value (AV rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8319's Stage-5 design (movement classes M1-M5), its review's CD-1
+# readable-set restriction and D-8319-RefRec (A); recorded at the release head after #8318. gt is `?`. The declared
+# rows WR125-WR136, O18, O19 and O28 already carry the plain shapes; these extend them across forms and positions.
+# rt-asgn: M1, a space-bearing quoted value before an interpreter or `source` and an unlisted script (a at base; B
+# once #8319 lands). rt-asgn-rec: M1', the same before a direct execution, a non-shell interpreter or at an unquoted
+# enclosure position (a at base; recorded at that arm's phase once #8319 lands). rt-asgn-ctl: the listed script and
+# the no-whitespace forms (unchanged). rt-asgn-prec: M2, M3 and M3', a value whose pieces read as an execution before
+# a command that runs none (refused or recorded at base; the precision moves AC2 declares). rt-asgn-decl: M4, a value
+# ending on an interpreter word before a real script, which takes the plain form's verdict (D-8319-RefRec A).
+# rt-asgn-over: M5, an assignment behind a wrapper that takes none (a declared over-block once #8319 lands).
+# rt-asgn-keep: shapes the step must decline, at their base verdicts before and after. rt-asgn-limit: the carrier
+# head limit beside its no-space control, and the work-budget side effect (`@QMID@`). rt-asgn-resid: the declared
+# residuals, allowed before and after: a later line after a declined here-document, a braced expansion, an enclosure
+# opened inside double quotes, a redirection glued to the value, a separator inside the value, and the two values
+# CD-1 leaves to today's reading (ANSI-C quoting and a parameter expansion).
+AV01|block-destructive|rt-asgn|-|?|a|FOO='a b' sh @D@/na.sh
+AV02|block-destructive|rt-asgn|-|?|a|FOO="a b" source @D@/na.sh
+AV03|block-destructive|rt-asgn|-|?|a|FOO='a b' . @D@/na.sh
+AV04|block-destructive|rt-asgn|-|?|a|FOO+='a b' bash @D@/na.sh
+AV05|block-destructive|rt-asgn|-|?|a|sudo FOO='a b' bash @D@/na.sh
+AV06|block-destructive|rt-asgn|-|?|a|env -i FOO='a b' bash @D@/na.sh
+AV07|block-destructive|rt-asgn|-|?|a|FOO='a b c d' bash @D@/na.sh
+AV08|block-destructive|rt-asgn|-|?|a|FOO='a b' BAR="c d" bash @D@/na.sh
+AV09|block-destructive|rt-asgn|-|?|a|echo hi; FOO='a b' bash @D@/na.sh
+AV10|block-destructive|rt-asgn|-|?|a|FOO='a b' bash @D@/na.sh@NL@cat <<'EOF'@NL@x@NL@EOF
+AV11|block-destructive|rt-asgn-rec|-|?|a|FOO='a b' @D@/na.sh
+AV12|block-destructive|rt-asgn-rec|-|?|a|FOO='a b' python3 @D@/na.py
+AV13|block-destructive|rt-asgn-rec|-|?|a|X=$(FOO='a b' bash @D@/na.sh)
+AV14|block-destructive|rt-asgn-ctl|-|?|a|FOO='a b' bash @D@/ok.sh
+AV15|block-destructive|rt-asgn-ctl|-|?|B|FOO=ab sh @D@/na.sh
+AV16|block-destructive|rt-asgn-ctl|-|?|B|FOO='ab' source @D@/na.sh
+AV17|block-destructive|rt-asgn-ctl|-|?|W|FOO=ab @D@/na.sh
+AV18|block-destructive|rt-asgn-ctl|-|?|W|FOO=ab python3 @D@/na.py
+AV19|block-destructive|rt-asgn-prec|-|?|B|NOTE='see sh @D@/na.sh' true
+AV20|block-destructive|rt-asgn-prec|-|?|B|NOTE="run source @D@/na.sh" true
+AV21|block-destructive|rt-asgn-prec|-|?|W|NOTE='see @D@/na.sh' true
+AV22|block-destructive|rt-asgn-prec|-|?|B|NOTE='see bash @D@/na.sh; x' true
+AV23|block-destructive|rt-asgn-decl|-|?|B|FOO='x bash' @D@/na.sh
+AV24|block-destructive|rt-asgn-decl|-|?|B|FOO='x bash' na.sh
+AV25|block-destructive|rt-asgn-over|-|?|a|nice FOO='a b' bash @D@/na.sh
+AV26|block-destructive|rt-asgn-keep|-|?|B|NOTE='see sh @D@/na.sh' bash @D@/na.sh
+AV27|block-destructive|rt-asgn-keep|-|?|B|sudo -u 'a FOO=b' bash @D@/na.sh
+AV28|block-destructive|rt-asgn-keep|-|?|B|FOO=a\  bash @D@/na.sh
+AV29|block-destructive|rt-asgn-keep|-|?|W|X=$(bash @D@/na.sh)
+AV30|block-destructive|rt-asgn-limit|-|?|B|FOO='a b' echo "bash @D@/na.sh"
+AV31|block-destructive|rt-asgn-limit|-|?|a|FOO=ab echo "bash @D@/na.sh"
+AV32|block-destructive|rt-asgn-limit|-|?|a|FOO=@QMID@'a b' bash @D@/ok.sh; echo "bash @D@/na.sh"
+AV33|block-destructive|rt-asgn-resid|-|?|a|cat <<'EOF'@NL@x@NL@EOF@NL@FOO='a b' bash @D@/na.sh
+AV34|block-destructive|rt-asgn-resid|-|?|a|FOO="a ${X}" bash @D@/na.sh
+AV35|block-destructive|rt-asgn-resid|-|?|a|echo "$(FOO='a b' bash @D@/na.sh)"
+AV36|block-destructive|rt-asgn-resid|-|?|a|FOO='a b'> @D@/out bash @D@/na.sh
+AV37|block-destructive|rt-asgn-resid|-|?|a|FOO='x; y' bash @D@/na.sh
+AV38|block-destructive|rt-asgn-resid|-|?|a|FOO=$'a b' bash @D@/na.sh
+AV39|block-destructive|rt-asgn-resid|-|?|a|FOO="a $X" bash @D@/na.sh
