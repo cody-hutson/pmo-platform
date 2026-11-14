@@ -592,7 +592,9 @@ script_word_scan() {
 #   advanced past, for the reason that was measured: the first piece of a quoted
 #   path that contains a space cannot be shown NOT to be the operand, and
 #   stepping off it adjudicates a later piece — the wrong subject. Arm
-#   F1-QTOK-RESIDUAL-space pins that.
+#   FWALK-QWORD-ctl-fragment-noexec pins that (mutant OPND-M5b). At the
+#   operand after the walk a fragment is joined to the word it is a piece of
+#   (script_word_join); it is still never stepped over.
 #   A TOKEN ANY VIEW PLACES IN THE ARM'S OPERAND DOMAIN keeps script_norm_ok=0 as
 #   well, so it reaches the operand branch exactly as it did. The probe and raw
 #   views are asked FIRST, and that order is what keeps this change monotone:
@@ -744,6 +746,254 @@ script_operand_domain_hit() {   # $1 = domain  $2 = subject
     exec)   case "$2" in *.sh|*.bash|*.py|*.pl|*.pm|*.rb|*.js|*.mjs|*.cjs) return 0 ;; esac ;;
   esac
   return 1
+}
+# THE OPERAND SUBJECT AFTER QUOTE REMOVAL — a third view, asked where the first two
+# claim nothing.
+#
+# WHAT THE FIRST TWO VIEWS MISS. script_operand_implicated asks the normalizer's
+# reading and the raw argv token. Neither is the word the shell passes when a quote
+# or a backslash sits INSIDE the token rather than around it. The normalizer reads a
+# token that does not open with a quote as carrying none, so `<dir>/x.s'h'` keeps its
+# inner quote after the trailing strip and is reported resolved, and its suffix
+# question is asked of a string the shell never passes. A token that opens a quote
+# and closes it inside the suffix, `'<dir>/x.s'h`, is declined, and its probe and its
+# raw spelling both miss the suffix. The shell reads both as `<dir>/x.sh`, and
+# script_word_scan already computes that word for the flag walk.
+#
+# THE ORDER IS THE INVARIANT TO CHECK ANY EDIT AGAINST. The first two views are asked
+# first and unchanged. When either places the token in the domain, their subject and
+# their resolved flag stand and the word is never read: a token they refuse as
+# unresolvable stays refused even when its word is an allowlisted script, so no
+# refused operand moves to allow. The word is read only where the first two claim
+# nothing, which is where nothing was adjudicated before — so it can only ADD an
+# adjudication. It is read when the normalizer declined the token, or when the token
+# carries a quote or a backslash anywhere past its first character; a token with
+# neither is read by the first two views exactly as the shell reads it, and pays
+# nothing new.
+#
+# WHAT THE WORD ANSWERS.
+#   a whole word with an exact value  its value is the subject, resolved, when it
+#                                     lands in the domain;
+#   a whole word of unknown value     its literal text is asked the domain, and a hit
+#                                     is unresolvable: refused inside the domain;
+#   a fragment                        no claim, except where the caller passes an
+#                                     index to join from (the post-walk operand only).
+# No dash-word step is taken here. Behind `--` and in an option's argument slot a word
+# whose value begins with `-` is the operand, not a flag; the flag walk alone reads
+# such a word as a flag.
+#
+# OUTPUT — GLOBALS, for the reason normalize_script_token gives. script_subj_out and
+# script_subj_ok are read by the caller's verdict router exactly as it read
+# script_norm_out and script_norm_ok. Reads the globals normalize_script_token set, so
+# it is asked directly after that call on the same token.
+script_operand_resolve() {   # $1 = domain  $2 = the token's index in script_tokens to join from, or empty
+  script_subj_out="$script_norm_out"
+  script_subj_ok="$script_norm_ok"
+  if script_operand_implicated "$1"; then return 0; fi   # M-OPND-FIRST (mutation target; pinned by OPND-M3b)
+  if [ "$script_norm_ok" -eq 1 ]; then
+    case "${script_norm_raw:1}" in
+      *[\'\"\\]*) ;;
+      *) return 1 ;;
+    esac
+  fi
+  script_word_scan "$script_norm_raw"
+  if [ "$script_ws_complete" -eq 1 ]; then
+    if script_word_subject "$1" "$script_ws_exact" "$script_ws_out" "$script_norm_raw"; then return 0; fi   # M-OPND-WORD (mutation target; pinned by OPND-M1b)
+    return 1
+  fi
+  if [ -z "$2" ]; then return 1; fi
+  script_word_join "$2"   # M-OPND-JOIN (mutation target; pinned by OPND-M2b)
+  if [ "$script_wj_complete" -eq 1 ]; then
+    if script_word_subject "$1" "$script_wj_exact" "$script_wj_out" "$script_wj_raw"; then return 0; fi
+    return 1
+  fi
+  # The join found no whole word inside the segment or inside the read limit. What it
+  # did read is asked the domain, and a hit is unresolvable: refused, never stepped past.
+  if script_operand_domain_hit "$1" "$script_wj_out"; then
+    script_subj_out="$script_wj_raw"
+    script_subj_ok=0
+    return 0
+  fi
+  return 1
+}
+
+# One read of a word against one domain, for script_operand_resolve and
+# script_word_stepover. Sets the subject only on a hit.
+script_word_subject() {   # $1 = domain  $2 = exact (1|0)  $3 = the word's text  $4 = the raw text it was read from
+  if ! script_operand_domain_hit "$1" "$3"; then return 1; fi
+  if [ "$2" -eq 1 ]; then
+    script_subj_out="$3"
+    script_subj_ok=1
+  else
+    script_subj_out="$4"
+    script_subj_ok=0
+  fi
+  return 0
+}
+
+# THE FRAGMENT JOIN — the whitespace-bearing quoted path, at the post-walk operand only.
+#
+# WHY. The segment is split on whitespace before any token exists, so a quoted path
+# holding a space reaches the operand site as its first piece, `'<dir>/a`, which leaves
+# its quote open: a FRAGMENT. Nothing claimed it, and nothing was adjudicated. The join
+# reads the pieces after it, each behind one space, until the word the shell passes is
+# whole. It does not step over the fragment — this file's rule that a fragment is never
+# advanced past stands — it reconstructs the word the fragment is a piece of.
+#
+# WHERE, AND WHY ONLY THERE. At the post-walk operand a fragment ended adjudication with
+# nothing adjudicated, so a join there can only add a subject; and once that one operand
+# is adjudicated the segment is done, so the tokens the join read are consumed by nothing
+# else. In the `-c` loop every token keeps its own test — those tokens are words of a
+# program string, and a join there would replace their verdicts with one test of the
+# joined word — and at an option's argument the walk's index must move exactly as before.
+# Neither site joins.
+#
+# INCREMENTAL, AND BOUNDED BY THE READ LIMIT. The pieces are scanned once each, carrying
+# the quote state across them: re-reading the joined text from its start for every piece
+# appended would be superlinear in the joined length on this shell. The joined text is
+# bounded by script_word_scan's own 1,024-character limit; past it the join stops, reports
+# no whole word, and the caller refuses what it read inside the domain.
+#
+# THE STATE MACHINE IS script_word_scan's, RULE FOR RULE: the same four quote states, the
+# same escapes, the same dollar-run rule and the same state-0 exactness test. It is
+# written out here rather than called, because that function starts every read in state 0
+# and keeps its state local, and it is lifted out of this file whole by the suite; changing
+# its signature would change what that lift reads. One difference is the join's own: a
+# backslash at the end of a piece escapes the space the join puts after it, as the shell's
+# does, so it is carried into the next piece instead of ending the read. Arm
+# OPND-JOIN-PARITY reads every fragment in the walk-payload corpus both ways and fails on a
+# difference.
+#
+# DECLARED PRECISION LIMIT. Each piece is joined behind ONE space, because the split has
+# already discarded the run it cut: a quoted path holding two spaces, or a tab, is rejoined
+# to a name that differs from the real one. That subject still lands in the domain when its
+# suffix does, and it fails the allowlist, so it is refused — the safe direction.
+#
+# OUTPUT — GLOBALS: script_wj_complete (1 when the joined text is one whole word),
+# script_wj_exact, script_wj_out (the word, or what was read), script_wj_raw (the joined
+# argv text).
+script_word_join() {   # $1 = index in script_tokens of a token script_word_scan read as a fragment
+  local i="$1" n="${#script_tokens[@]}" t="" c="" out="" st=0 raw="" piece=""
+  local sq="'" dq='"' bs='\' ds='$' bt='`'
+  script_wj_complete=0
+  script_wj_exact=1
+  script_wj_out=""
+  script_wj_raw=""
+  while [ "$i" -lt "$n" ]; do
+    piece="${script_tokens[$i]}"
+    if [ -n "$raw" ]; then piece=" ${piece}"; fi
+    raw="${raw}${piece}"
+    if [ "${#raw}" -gt 1024 ]; then
+      script_wj_exact=0
+      script_wj_out="$out"
+      script_wj_raw="$raw"
+      return 0
+    fi
+    t="${t}${piece}"
+    while [ -n "$t" ]; do
+      c="${t:0:1}"
+      case "$st" in
+        0)
+          case "$c" in
+            "$sq") st=1; t="${t:1}" ;;
+            "$dq") st=2; t="${t:1}" ;;
+            "$bs")
+              if [ "${#t}" -lt 2 ]; then break; fi
+              out="${out}${t:1:1}"; t="${t:2}"
+              ;;
+            "$ds")
+              script_wj_exact=0
+              case "${t:1:1}" in
+                "$ds") t="${t:2}" ;;
+                "$sq") st=3; t="${t:2}" ;;
+                "$dq") st=2; t="${t:2}" ;;
+                *) t="${t:1}" ;;
+              esac
+              ;;
+            "$bt") script_wj_exact=0; t="${t:1}" ;;
+            '{'|'*'|'?'|'['|'~') script_wj_exact=0; out="${out}${c}"; t="${t:1}" ;;
+            *) out="${out}${c}"; t="${t:1}" ;;
+          esac
+          ;;
+        1)
+          case "$c" in
+            "$sq") st=0 ;;
+            *) out="${out}${c}" ;;
+          esac
+          t="${t:1}"
+          ;;
+        2)
+          case "$c" in
+            "$dq") st=0; t="${t:1}" ;;
+            "$bs")
+              if [ "${#t}" -lt 2 ]; then break; fi
+              case "${t:1:1}" in
+                "$ds"|"$bt"|"$dq"|"$bs") out="${out}${t:1:1}" ;;
+                *) out="${out}${bs}${t:1:1}" ;;
+              esac
+              t="${t:2}"
+              ;;
+            "$ds"|"$bt") script_wj_exact=0; t="${t:1}" ;;
+            *) out="${out}${c}"; t="${t:1}" ;;
+          esac
+          ;;
+        3)
+          case "$c" in
+            "$sq") st=0; t="${t:1}" ;;
+            "$bs")
+              if [ "${#t}" -lt 2 ]; then break; fi
+              t="${t:2}"
+              ;;
+            *) t="${t:1}" ;;
+          esac
+          ;;
+      esac
+    done
+    if [ "$st" -eq 0 ] && [ -z "$t" ]; then
+      script_wj_complete=1
+      script_wj_out="$out"
+      script_wj_raw="$raw"
+      return 0
+    fi
+    i=$(( i + 1 ))
+  done
+  script_wj_out="$out"
+  script_wj_raw="$raw"
+}
+
+# A TOKEN THE FLAG WALK STEPS OVER IS STILL ADJUDICATED WHEN ITS WORD IS AN OPERAND.
+#
+# Two places in the walk step over a token without adjudicating it: the conservative
+# route, which hands a token the walk cannot read to the `-c` label (and that label steps
+# over it), and the advance-past arm, which steps over a token no view places in the
+# domain. Each asked the first two views only. A token whose quote or backslash sits
+# inside it — `<dir>/x.'sh'`, `<dir>/x.s\h` — is not plain, so under an interpreter it
+# takes the route and is stepped over; under `source`, which has no route, the
+# advance-past arm steps over it. Either way the script the shell runs was never read.
+#
+# THE FIX ADJUDICATES THE TOKEN AND MOVES NOTHING, the way script_adjudicate_optarg
+# adjudicates a consumed argument. The walk still routes and still advances exactly as
+# before, so every token adjudicated before is adjudicated still, no parse-only grant
+# changes, and the token is adjudicated as well. Monotone ALLOW -> BLOCK by construction.
+# Read here: a whole word whose value does not begin with `-` (a word that begins with `-`
+# spells a flag, as its unquoted twin does). A fragment is not read here; the post-walk
+# operand is the one place a fragment is joined.
+script_word_stepover() {   # $1 = the raw argv token the walk is stepping over
+  local tok="$1"
+  case "${tok:1}" in
+    *[\'\"\\]*) ;;
+    *) return 0 ;;
+  esac
+  script_word_scan "$tok"
+  if [ "$script_ws_complete" -eq 0 ]; then return 0; fi
+  case "$script_ws_out" in -*) return 0 ;; esac
+  if ! script_word_subject "$script_interp_domain" "$script_ws_exact" "$script_ws_out" "$tok"; then return 0; fi
+  if [ "$script_interp_domain" = "interp" ] || [ "$script_interp_domain" = "source" ]; then
+    script_shell_verdict "$script_subj_out" "$script_subj_ok"
+  else
+    destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
+  fi
+  return 0
 }
 
 # THE EXEC ARM'S SYSTEM-BIN EXEMPTION SET. One definition, asked twice below —
@@ -923,8 +1173,8 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # reading to a token whose quote it could not resolve. Such a token is not an
 # option word, so the option run ends on it; and it carries no character outside
 # the set, so it is not handed to the conservative route — it ends the walk in
-# the arm that has always ended on it, and arm F1-QTOK-RESIDUAL-space keeps
-# pinning that. A quoted empty argument (`--rcfile ""`) is one word whose text
+# the arm that has always ended on it, and arm FWALK-QWORD-ctl-fragment-noexec
+# keeps pinning that. A quoted empty argument (`--rcfile ""`) is one word whose text
 # this hook holds, and reads as exact for the same reason.
 #
 # `~` IS OUTSIDE THE SET ALTHOUGH A LEADING TILDE IS ALWAYS ONE WORD. The set is
@@ -1108,6 +1358,9 @@ script_interp_optarg_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # token it cannot read. Two definitions of one rewrite are two places to get the
 # domain-claim guard wrong.
 script_take_cmode_route() {   # reads script_ftok and the last read's globals; sets script_ftok
+  # The token the route is about to step over is read as a word first, and adjudicated
+  # if that word is an operand (script_word_stepover); the route itself is unchanged.
+  case "$script_ftok" in -*) ;; *) if ! script_operand_implicated "$script_interp_domain"; then script_word_stepover "$script_ftok"; fi ;; esac   # M-OPND-ROUTE (mutation target; pinned by OPND-M4b)
   case "$script_ftok" in
     -*) script_ftok="-c" ;;
     *) if ! script_operand_implicated "$script_interp_domain"; then script_ftok="-c"; fi ;;
@@ -1903,11 +2156,13 @@ script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argum
   # and no parse-only exemption applies. Both call sites of this function sit
   # behind the walk's interpreter test, so it is never reached under `source`.
   if ! script_arg_exact; then script_cmode=1; fi   # M-OPAQUE-ARG (mutation target; pinned by FWALK-OPAQUE-M3a)
-  if script_operand_implicated "$script_interp_domain"; then
+  # The argument is also read as the word the shell passes where the first two views
+  # claim nothing — no join, so the walk's index moves exactly as before.
+  if script_operand_resolve "$script_interp_domain" ""; then
     if [ "$script_interp_domain" = "interp" ]; then
-      script_shell_verdict "$script_norm_out" "$script_norm_ok"
+      script_shell_verdict "$script_subj_out" "$script_subj_ok"
     else
-      destructive_022_interp_verdict "$script_norm_out" "$script_norm_ok"
+      destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
     fi
   fi
 }
@@ -3208,6 +3463,14 @@ case "$TOOL_NAME" in
     script_norm_out=""
     script_norm_raw=""
     script_norm_ok=1
+    # The operand subject (script_operand_resolve) and the fragment join's outputs
+    # (script_word_join). Initialised for the same reason as the three above.
+    script_subj_out=""
+    script_subj_ok=1
+    script_wj_complete=0
+    script_wj_exact=1
+    script_wj_out=""
+    script_wj_raw=""
 
     # HERE-DOCUMENT PRE-PASS. What stood here was a blunt latch —
     # `case "$COMMAND" in *'<<'*) script_qbail=1` — which switched suppression off
@@ -4045,8 +4308,11 @@ case "$TOOL_NAME" in
         # determined from argv cannot be shown not to be the operand either. Without the
         # clause the walk advances off `'/tmp/pmo` (whitespace splitting hands it the
         # first fragment of a space-bearing quoted path) onto a LATER fragment and
-        # adjudicates the wrong subject; arm F1-QTOK-RESIDUAL-space is that control and
-        # it turns red, which is how the clause was found. The clause is about
+        # adjudicates the wrong subject; arm F1-QTOK-RESIDUAL-space turned red, which is
+        # how the clause was found. That arm now pins the fragment join at the operand,
+        # under which stepping off the fragment refuses as well, so the clause's control
+        # is FWALK-QWORD-ctl-fragment-noexec: stepping off revokes the parse-only grant
+        # the fragment keeps (mutant OPND-M5b). The clause is about
         # fragments. A whole word that opens with a quote is decided by
         # script_walk_view before this arm sees it.
         #
@@ -4318,9 +4584,16 @@ case "$TOOL_NAME" in
             # be inert. The right reading of this ordering is a declared trade — the
             # card's value in exchange for a residual the OPERAND path owns — and not a
             # claim that the predicate cannot fail open.
+            #
+            # A TOKEN STEPPED OVER HERE IS STILL ADJUDICATED when its word after quote
+            # removal is an operand (script_word_stepover, the line after both breaks):
+            # under `source`, which has no conservative route, a quote or backslash inside
+            # the token's suffix is otherwise stepped over unread. The walk advances
+            # exactly as before, and the call sits below both breaks and above the revoke.
             script_walk_view "${script_tokens[$script_idx]}"   # M-FWALK-BODY
             if [ "$script_norm_ok" -eq 0 ]; then break; fi
             if script_operand_implicated "$script_interp_domain"; then break; fi
+            script_word_stepover "${script_tokens[$script_idx]}"
             if [ "$script_verb" = "interp" ]; then
               script_noexec=0   # M-NOEXEC-REVOKE (mutation target; pinned by NOEXEC-M1)
             fi
@@ -4374,17 +4647,18 @@ case "$TOOL_NAME" in
       if [ "$script_cmode" -eq 1 ]; then
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
           normalize_script_token "${script_tokens[$script_idx]}"
-          script_cand="$script_norm_out"
           # This loop is the reason the domain gate exists at all: under `-c` the
           # tokens are WORDS OF A PROGRAM STRING, not declared operands, and
           # segment splitting routinely hands it fragments like `'echo`. The gate
           # keeps those inert (arm F1-FP-cmode) while a fragment whose real name
-          # ends `.sh` is still adjudicated.
-          if script_operand_implicated "$script_interp_domain"; then
+          # ends `.sh` is still adjudicated. Each token is also read as the word
+          # the shell passes where the first two views claim nothing, with NO join
+          # and nothing consumed: every token keeps its own test (script_operand_resolve).
+          if script_operand_resolve "$script_interp_domain" ""; then
             if [ "$script_interp_domain" = "interp" ]; then
-              script_shell_verdict "$script_cand" "$script_norm_ok"
+              script_shell_verdict "$script_subj_out" "$script_subj_ok"
             else
-              destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
+              destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
             fi
           fi
           script_idx=$(( script_idx + 1 ))
@@ -4399,9 +4673,10 @@ case "$TOOL_NAME" in
         # a PREFIX and the interpreter arm's domain is a SUFFIX test. Asking the
         # prefix alone is what let `bash '/tmp/'evil.sh` through: probe `/tmp/`,
         # no `.sh`, arm skipped, deny never reached. See THE SUBJECT RULE on
-        # script_operand_implicated.
+        # script_operand_implicated. Where neither of those views claims the token,
+        # the word after quote removal is read, and a fragment is joined to the word
+        # it is a piece of — here, and at no other site (script_operand_resolve).
         normalize_script_token "${script_tokens[$script_idx]}"
-        script_cand="$script_norm_out"
         if [ "$script_verb" = "source" ]; then
           # `source`/`.` take ANY file, not only a script suffix. Its domain is
           # preserved verbatim from the mechanism it replaces — it lives in
@@ -4409,8 +4684,8 @@ case "$TOOL_NAME" in
           # unify it with the interpreter arm's `*.sh`: narrowing silently drops
           # `/*`, `~/*` and `*.bash` coverage, and widening the interpreter arm to
           # `/*` opens a false-positive surface with no defect behind it.
-          if script_operand_implicated source; then
-            script_shell_verdict "$script_cand" "$script_norm_ok"
+          if script_operand_resolve source "$script_idx"; then
+            script_shell_verdict "$script_subj_out" "$script_subj_ok"
           fi
         else
           # THE SHELL TRIO'S PATH STAYS OFF THE NON-SHELL ROUTER, AND THE BRANCH IS
@@ -4421,11 +4696,11 @@ case "$TOOL_NAME" in
           # opened does that view's rollout phase apply. Only a newly-admitted
           # interpreter reaches the phase-gated non-shell router, so admitting
           # python cannot soften the arm that was always-enforce before it.
-          if script_operand_implicated "$script_interp_domain"; then
+          if script_operand_resolve "$script_interp_domain" "$script_idx"; then
             if [ "$script_interp_domain" = "interp" ]; then
-              script_shell_verdict "$script_cand" "$script_norm_ok"
+              script_shell_verdict "$script_subj_out" "$script_subj_ok"
             else
-              destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
+              destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
             fi
           fi
         fi

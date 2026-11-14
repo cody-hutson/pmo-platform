@@ -3098,24 +3098,26 @@ F2_M_REMOVED=$(( $(/usr/bin/wc -l < "${F2_HOOKS}/block-destructive.sh") - $(/usr
 F2_M_ARMS_SHIP="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive.sh" || true)"
 F2_M_ARMS_MUT="$(/usr/bin/grep -cE '^[[:space:]]*\*\) break ;;[[:space:]]*$' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
 F2_M_MARKERS_MUT="$(/usr/bin/grep -c 'M-FWALK' "${F2_HOOKS}/block-destructive-mut.sh" || true)"
-# THE EXPECTED DELTA IS 20. IT WAS 5, THEN 17 — the tripwire above has now done
-# exactly its job at two successive reconciles, which is the argument for keeping it
-# a hard number. 5 -> 17 when the advance-past arm took on the arity question (see
-# FWALK-PLUS-* below). 17 -> 20 when it took on the NOEXEC REVOCATION (see
-# NOEXEC-* below): the arm now also clears the parse-only flag for any token it steps
-# over, three more lines inside the same `# M-FWALK-BODY` .. `;;` range. All three
-# concerns — the domain test, the arity overlay and the revocation — are what the
-# mutant must revert, so the count is UPDATED rather than the assertion loosened.
+# THE EXPECTED DELTA IS 21. IT WAS 5, THEN 17, THEN 20 — the tripwire above has now
+# done exactly its job at three successive reconciles, which is the argument for
+# keeping it a hard number. 5 -> 17 when the advance-past arm took on the arity
+# question (see FWALK-PLUS-* below). 17 -> 20 when it took on the NOEXEC REVOCATION
+# (see NOEXEC-* below): the arm now also clears the parse-only flag for any token it
+# steps over, three more lines inside the same `# M-FWALK-BODY` .. `;;` range. 20 -> 21
+# when it took on the word read of a token it steps over (#8318, OPND-*): one call
+# below both breaks. All four concerns — the domain test, the arity overlay, the
+# revocation and the word read — are what the mutant must revert, so the count is
+# UPDATED rather than the assertion loosened.
 # Loosening it to a range or a `-gt` would retire the only thing that catches a
 # reshaped arm.
-if [ "$F2_M_REMOVED" = 20 ] \
+if [ "$F2_M_REMOVED" = 21 ] \
   && [ "$F2_M_ARMS_MUT" = "$(( F2_M_ARMS_SHIP + 1 ))" ] \
   && [ "$F2_M_MARKERS_MUT" = 0 ]; then
-  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 20 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
+  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 21 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
     "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT"
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 20), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
+  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 21), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
     "$F2_M_REMOVED" "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT" "$F2_M_MARKERS_MUT"; FAIL=$((FAIL + 1))
 fi
 
@@ -5197,10 +5199,14 @@ esac
 /bin/rm -f "$QWORD_TOKFILE"
 
 # WHY NO SYMMETRIC CLEAR IS SHIPPED, pinned so the proposal is not re-made. Dev testing
-# built the obvious remedy — revoke on the unresolvable break too — and measured it INERT.
-# This mutant IS that remedy, and QSPLIT-M1b shows that a FRAGMENT behind a grant is still
-# ALLOWED under it, because the allow originates in operand adjudication. Shipping it
-# would add a fourth enumeration and close nothing. (The quote-closes-early family itself
+# built the obvious remedy — revoke on the unresolvable break too — and measured it INERT:
+# a FRAGMENT behind a grant was still allowed under it, because the operand path read
+# nothing of a fragment. Since #8318 the operand path joins a fragment to the word it is a
+# piece of, so the clear is no longer inert — and what it adds is an over-block: under it
+# `bash -n '<space-bearing path>.sh'`, which parses and runs nothing, is refused. This
+# mutant IS that remedy, and QSPLIT-M1b now pins that refusal; the shipped grant is pinned
+# by FWALK-QWORD-ctl-fragment-noexec. Shipping it would add a fourth enumeration and
+# refuse a command that runs nothing. (The quote-closes-early family itself
 # no longer reaches that break: the walk reads a whole quote-led word through
 # script_walk_view, so M1b and M2b carry a fragment, the token that still does.)
 QSPLIT_MUTANT="$(dirname "$HOOK")/block-destructive.QSPLIT-mutant.sh"
@@ -5215,8 +5221,8 @@ else
   PASS=$((PASS + 1))
 fi
 
-sandbox_case "NOEXEC-QSPLIT-M1b: symmetric-clear mutant STILL ALLOWS a fragment behind a grant (the clear is inert for what still reaches that break)" \
-  "$QSPLIT_MUTANT" "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 0
+sandbox_case "NOEXEC-QSPLIT-M1b: the symmetric-clear mutant REFUSES a fragment behind a grant (since #8318 the clear is not inert: it would refuse a parse-only invocation that runs nothing)" \
+  "$QSPLIT_MUTANT" "$(bash_payload "bash -n '/tmp/pmo qtok probe na.sh'")" 2 "BLOCK-DESTRUCTIVE-022"
 
 /bin/rm -f "$QSPLIT_MUTANT"
 
@@ -7136,11 +7142,11 @@ STDIN_WALK="$(dirname "$HOOK")/block-destructive.STDIN-walk.sh"
 STDIN_WALK_GONE=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "$STDIN_WALK") ))
 STDIN_WALK_MARKS="$(/usr/bin/grep -c -e 'M-FWALK' -e '# M-OPAQUE (mutation' "$STDIN_WALK")"
 
-if [ "$STDIN_WALK_GONE" = 21 ] && [ "$STDIN_WALK_MARKS" = 0 ] && /bin/bash -n "$STDIN_WALK" 2>/dev/null; then
-  /usr/bin/printf 'PASS: STDIN-M4a walk-and-route revert mutation is live (the 20 body lines and the route line are gone, no marker of either remains, and the copy parses)\n'
+if [ "$STDIN_WALK_GONE" = 22 ] && [ "$STDIN_WALK_MARKS" = 0 ] && /bin/bash -n "$STDIN_WALK" 2>/dev/null; then
+  /usr/bin/printf 'PASS: STDIN-M4a walk-and-route revert mutation is live (the 21 body lines and the route line are gone, no marker of either remains, and the copy parses)\n'
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: STDIN-M4a walk-and-route revert mutation removed %s lines (expected 21) with %s markers left (expected 0), or the copy does not parse — M4b is unusable\n' "$STDIN_WALK_GONE" "$STDIN_WALK_MARKS"
+  /usr/bin/printf 'FAIL: STDIN-M4a walk-and-route revert mutation removed %s lines (expected 22) with %s markers left (expected 0), or the copy does not parse — M4b is unusable\n' "$STDIN_WALK_GONE" "$STDIN_WALK_MARKS"
   FAIL=$((FAIL + 1))
 fi
 
@@ -7208,14 +7214,18 @@ test_case "FWALK-CLUSTER-R1 (declared over-block): bash -ec 'cat <unlisted>.sh' 
 # RED-BEFORE, AS AN ARM. Deleting the one line that hands a cluster to the label
 # restores the pre-fix walk for this class. M1d is not red-before evidence: it reads the
 # declared over-block FWALK-CLUSTER-R1, which the same line refuses, so that pin can fail.
+# The operand join is deleted with it: once the cluster is stepped over as a flag, the
+# program string's first piece ends the walk as the operand, and since #8318 the operand
+# path joins that piece to the rest of the string and refuses the joined word when it
+# ends in the domain's suffix — a second hold, which would hide the line under test.
 CLUSTER_REVERT="$(dirname "$HOOK")/block-destructive.CLUSTER-revert.sh"
-/usr/bin/sed '/# M-CLUSTER/d' "$HOOK" > "$CLUSTER_REVERT"
+/usr/bin/sed -e '/# M-CLUSTER/d' -e '/# M-OPND-JOIN (mutation/d' "$HOOK" > "$CLUSTER_REVERT"
 
-if [ "$(/usr/bin/diff "$HOOK" "$CLUSTER_REVERT" | /usr/bin/grep -c '^<')" = "1" ]; then
-  /usr/bin/printf 'PASS: FWALK-CLUSTER-M1a revert mutation is live (exactly one line is gone)\n'
+if [ "$(/usr/bin/diff "$HOOK" "$CLUSTER_REVERT" | /usr/bin/grep -c '^<')" = "2" ]; then
+  /usr/bin/printf 'PASS: FWALK-CLUSTER-M1a revert mutation is live (exactly two lines are gone: the cluster line and the operand join)\n'
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: FWALK-CLUSTER-M1a revert mutation did not remove exactly one line — the M1 arms below are unusable\n'
+  /usr/bin/printf 'FAIL: FWALK-CLUSTER-M1a revert mutation did not remove exactly the cluster line and the operand join — the M1 arms below are unusable\n'
   FAIL=$((FAIL + 1))
 fi
 
@@ -8210,6 +8220,7 @@ fi
   -e '/# M-FWALK-BODY/,/^[[:space:]]*;;$/d' \
   -e 's|^\([[:space:]]*\)\*) # M-FWALK-ADVANCE.*|\1*) break ;;|' \
   -e '/# M-OPAQUE (mutation/d' \
+  -e '/# M-OPND-JOIN (mutation/d' \
   "$HOOK" > "${WRAP_HOOKS}/block-destructive-pwalkroute.sh"
 /usr/bin/sed '/# M-WRAP-ABBREV$/s/"\$_lk" -eq 1/"$_lk" -ge 1/' \
   "$HOOK" > "${WRAP_HOOKS}/block-destructive-pambig.sh"
@@ -8241,7 +8252,7 @@ wrap_mut_live "WRAPPAIR-M-stdin: the stdin deny (STDIN-M1's mutation)" block-des
 wrap_mut_live "WRAPPAIR-M-xoff: the xargs-deny-off mutant" block-destructive-pxoff.sh 1 1
 wrap_mut_live "WRAPPAIR-M-xall: the every-xargs-interpreter deny mutant" block-destructive-pxall.sh 1 1
 wrap_mut_live "WRAPPAIR-M-nosplit: the no-split-stop mutant" block-destructive-pnosplit.sh 2 0
-wrap_mut_live "WRAPPAIR-M-walkroute: the operand-walk and conservative-route revert (STDIN-M4's mutation)" block-destructive-pwalkroute.sh 22 1
+wrap_mut_live "WRAPPAIR-M-walkroute: the operand-walk and conservative-route revert (STDIN-M4's mutation), with the operand join removed" block-destructive-pwalkroute.sh 24 1
 wrap_mut_live "WRAPPAIR-M-ambig: the ambiguity-blind mutant" block-destructive-pambig.sh 1 1
 wrap_mut_live "WRAPPAIR-M-splitcmd: the always-a-command split-scan mutant (Stage 7 F-08 reverse)" block-destructive-splitcmd.sh 1 1
 
@@ -8555,7 +8566,9 @@ wrap_arm "WRAPDIV-qval-sq: FOO='a b' bash <unlisted>.sh allowed (the value's sec
 wrap_pair "WRAPPAIR-qval-sq: the scan mutant reads past the value's second piece and refuses, so WRAPDIV-qval-sq can fail" block-destructive-pscan.sh B
 wrap_arm "WRAPDIV-qval-fp: MSG='run bash now' echo <unlisted>.sh blocks (the over-block twin of the same split)" \
   "MSG='run bash now' echo ${WRAP_NA}" B B "BLOCK-DESTRUCTIVE-022"
-wrap_pair "WRAPPAIR-qval-fp: with the operand walk and the conservative route both reverted the walk ends on the value's last piece and allows it, so WRAPDIV-qval-fp can fail" block-destructive-pwalkroute.sh a
+# The operand join is reverted with them: since #8318 the operand path joins the value's last piece,
+# which opens a quote, to what follows it and refuses what it read, a third hold on the same over-block.
+wrap_pair "WRAPPAIR-qval-fp: with the operand walk, the conservative route and the operand join reverted the walk ends on the value's last piece and allows it, so WRAPDIV-qval-fp can fail" block-destructive-pwalkroute.sh a
 wrap_arm "WRAPDIV-qval-sep: FOO='a;b' bash <unlisted>.sh allowed (a separator inside the quoted value splits the segment)" \
   "FOO='a;b' bash ${WRAP_NA}" a a
 wrap_pair "WRAPPAIR-qval-sep: the scan mutant reads past the split piece and refuses, so WRAPDIV-qval-sep can fail" block-destructive-pscan.sh B
@@ -8630,8 +8643,13 @@ echo "---"
 #
 # THE REVERSE MUTANT deletes the one marked line (M-QDASH) and nothing else, which is the walk
 # as it was before this change; FWALK-QDASH-M0 pins that difference. Every pair arm runs the
-# hook AND the reverse mutant, so the mutant limb of a must-refuse arm is its red-before
-# evidence in the same run.
+# hook AND the reverse mutant. Until #8318 the mutant limb of a must-refuse arm was its
+# red-before evidence in the same run: the word ended the walk and the operand path read
+# nothing. Since #8318 the operand path reads the word after quote removal, so under the
+# reverse mutant the word itself is adjudicated as the operand — the wrong subject — and is
+# refused (shell arms) or recorded (non-shell arms). The limb now reads that verdict, and the
+# line's own difference shows on the near misses: the reverse mutant refuses or records the
+# allowlisted script's invocation that the hook allows.
 #
 # ARM CLASSES, so the red-before obligation can be read off the label. FWALK-QDASH-01 to -14
 # are the fourteen spellings the finding measured, must-refuse on the shell arms and must-flag
@@ -8800,41 +8818,41 @@ qdash_shape_arm "FWALK-QDASH-M0: the reverse mutant differs from the hook by the
 
 # --- MUST REFUSE: the always-enforce shell arms ---------------------------------------------
 qdash_arm "FWALK-QDASH-01: bash '-x.s'h <unlisted>.sh blocks (the word is -x.sh, a flag; the script behind it is adjudicated)" \
-  "bash '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+  "bash '-x.s'h ${QDASH_NA}.sh" B B "BLOCK-DESTRUCTIVE-022"
 qdash_arm "FWALK-QDASH-02: bash -n '-x.s'h <unlisted>.sh blocks (stepping over the word revokes the grant)" \
   "bash -n '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
 qdash_arm "FWALK-QDASH-03: bash '--rcfile=x.s'h <unlisted>.sh blocks" \
-  "bash '--rcfile=x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+  "bash '--rcfile=x.s'h ${QDASH_NA}.sh" B B "BLOCK-DESTRUCTIVE-022"
 qdash_arm "FWALK-QDASH-04: zsh '-oxtrace.s'h <unlisted>.sh blocks (the word is a cluster carrying c, as unquoted)" \
-  "zsh '-oxtrace.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+  "zsh '-oxtrace.s'h ${QDASH_NA}.sh" B B "BLOCK-DESTRUCTIVE-022"
 qdash_arm "FWALK-QDASH-05: zsh '--emulate=sh.s'h <unlisted>.sh blocks" \
-  "zsh '--emulate=sh.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+  "zsh '--emulate=sh.s'h ${QDASH_NA}.sh" B B "BLOCK-DESTRUCTIVE-022"
 qdash_arm "FWALK-QDASH-06: source '-x.s'h <unlisted>.sh blocks (the source arm walks the same loop)" \
-  "source '-x.s'h ${QDASH_NA}.sh" B a "BLOCK-DESTRUCTIVE-022"
+  "source '-x.s'h ${QDASH_NA}.sh" B B "BLOCK-DESTRUCTIVE-022"
 
 # --- MUST FLAG: the phase-gated non-shell arm, at its rollout phase --------------------------
 qdash_arm "FWALK-QDASH-07: python3 '-Wx.p'y <unlisted>.py is adjudicated (the word is -Wx.py)" \
-  "python3 '-Wx.p'y ${QDASH_NA}.py" W a interp-nonshell
+  "python3 '-Wx.p'y ${QDASH_NA}.py" W W interp-nonshell
 qdash_arm "FWALK-QDASH-08: python3 '-Xfoo.p'y <unlisted>.py is adjudicated" \
-  "python3 '-Xfoo.p'y ${QDASH_NA}.py" W a interp-nonshell
+  "python3 '-Xfoo.p'y ${QDASH_NA}.py" W W interp-nonshell
 qdash_arm "FWALK-QDASH-09: python3 '-Wignore::x.p'y <unlisted>.py is adjudicated" \
-  "python3 '-Wignore::x.p'y ${QDASH_NA}.py" W a interp-nonshell
+  "python3 '-Wignore::x.p'y ${QDASH_NA}.py" W W interp-nonshell
 qdash_arm "FWALK-QDASH-10: perl '-Ifoo.p'm <unlisted>.pl is adjudicated" \
-  "perl '-Ifoo.p'm ${QDASH_NA}.pl" W a interp-nonshell
+  "perl '-Ifoo.p'm ${QDASH_NA}.pl" W W interp-nonshell
 qdash_arm "FWALK-QDASH-11: perl '-Ifoo.p'l <unlisted>.pl is adjudicated" \
-  "perl '-Ifoo.p'l ${QDASH_NA}.pl" W a interp-nonshell
+  "perl '-Ifoo.p'l ${QDASH_NA}.pl" W W interp-nonshell
 qdash_arm "FWALK-QDASH-12: ruby '-Ifoo.r'b <unlisted>.rb is adjudicated" \
-  "ruby '-Ifoo.r'b ${QDASH_NA}.rb" W a interp-nonshell
+  "ruby '-Ifoo.r'b ${QDASH_NA}.rb" W W interp-nonshell
 qdash_arm "FWALK-QDASH-13: node '--title=x.j's <unlisted>.js is adjudicated" \
-  "node '--title=x.j's ${QDASH_NA}.js" W a interp-nonshell
+  "node '--title=x.j's ${QDASH_NA}.js" W W interp-nonshell
 qdash_arm "FWALK-QDASH-14: perl '-Mstrict.p'm <unlisted>.pl is adjudicated" \
-  "perl '-Mstrict.p'm ${QDASH_NA}.pl" W a interp-nonshell
+  "perl '-Mstrict.p'm ${QDASH_NA}.pl" W W interp-nonshell
 
 # --- MUST STAY ALLOWED: the allowlist still governs the script behind the word --------------
 qdash_arm "FWALK-QDASH-ctl-near: bash '-x.s'h <allowlisted>.sh allowed (the near miss)" \
-  "bash '-x.s'h ${QDASH_OK}" a a
+  "bash '-x.s'h ${QDASH_OK}" a B
 qdash_arm "FWALK-QDASH-ctl-near-py: python3 '-Wx.p'y <allowlisted>.py allowed (the near miss the finding named)" \
-  "python3 '-Wx.p'y ${QDASH_OKPY}" a a
+  "python3 '-Wx.p'y ${QDASH_OKPY}" a W
 qdash_arm "FWALK-QDASH-ctl-near-n: bash -n '-x.s'h <allowlisted>.sh allowed (revoked, and the allowlist still governs)" \
   "bash -n '-x.s'h ${QDASH_OK}" a a
 
@@ -10137,6 +10155,163 @@ opnd_arm "OPND-cmode-02 (Amendment 1): a separator inside a program string stays
 # --- not this change's: the direct-execution arm's quoted-suffix rows keep their allow ---
 opnd_arm "OPND-EXEC-pin-01 (pin, not fix-evidence): a quoted suffix at the command word (the exec arm reads two views; not edited here)" X21 a
 opnd_arm "OPND-EXEC-pin-02 (pin, not fix-evidence): as EXEC-pin-01, with an argument after it" X23 a
+
+# --- EACH SITE IS LOAD-BEARING: one-line mutants of the change ---------------------------------
+# Each mutant removes one line the change adds, and the row it holds moves back to allow. The
+# shape arm shows the mutant differs from the hook by exactly that line, so an anchor that stops
+# matching is caught rather than read as a pass.
+/usr/bin/sed '/# M-OPND-WORD (mutation/d' "$HOOK" > "${OPND_HOOKS}/block-destructive-noword.sh"
+/usr/bin/sed '/# M-OPND-JOIN (mutation/d' "$HOOK" > "${OPND_HOOKS}/block-destructive-nojoin.sh"
+/usr/bin/sed '/# M-OPND-FIRST (mutation/d' "$HOOK" > "${OPND_HOOKS}/block-destructive-nofirst.sh"
+/usr/bin/sed '/# M-OPND-ROUTE (mutation/d' "$HOOK" > "${OPND_HOOKS}/block-destructive-noroute.sh"
+# The clause that a fragment is never advanced past, the line after the walk-body marker. Its
+# control used to be F1-QTOK-RESIDUAL-space; with the join that arm refuses whichever piece the walk
+# reads, so the clause is now shown by the parse-only grant a fragment keeps (row O17).
+/usr/bin/sed '/# M-FWALK-BODY/{n;/script_norm_ok" -eq 0 \]; then break; fi$/d;}' "$HOOK" > "${OPND_HOOKS}/block-destructive-noclause.sh"
+/bin/chmod +x "${OPND_HOOKS}/block-destructive-noword.sh" "${OPND_HOOKS}/block-destructive-nojoin.sh" \
+  "${OPND_HOOKS}/block-destructive-nofirst.sh" "${OPND_HOOKS}/block-destructive-noroute.sh" \
+  "${OPND_HOOKS}/block-destructive-noclause.sh"
+
+# The difference between the shipped copy and one mutant, as "<lines removed>/<lines added>".
+opnd_shape() { # $1 = mutant file in the hermetic hooks dir
+  /usr/bin/diff "${OPND_HOOKS}/block-destructive.sh" "${OPND_HOOKS}/$1" \
+    | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }'
+}
+opnd_shape_arm() { # $1 label  $2 mutant file  $3 the shape it must have
+  local got
+  got="$(opnd_shape "$2")"
+  if [ "$got" = "$3" ] && /bin/bash -n "${OPND_HOOKS}/$2" 2>/dev/null; then
+    /usr/bin/printf 'PASS: %s (shape %s, parses)\n' "$1" "$got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted shape %s and a copy that parses; observed shape %s\n' "$1" "$3" "$got"
+    FAIL=$((FAIL + 1))
+  fi
+}
+opnd_mut_arm() { # $1 label  $2 mutant file  $3 row id  $4 verdict wanted from the mutant
+  if ! wc_row_cmd "$3"; then
+    /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$1" "$3"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  opnd_run "$2" "$WC_CMDX"
+  if [ "$OPND_V" = "$4" ]; then
+    /usr/bin/printf 'PASS: %s [row %s] (mutant %s)\n' "$1" "$3" "$OPND_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s [row %s]\n  wanted mutant=%s; observed %s\n  stderr: %s\n' "$1" "$3" "$4" "$OPND_V" "$OPND_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+opnd_shape_arm "OPND-M1a: the word-view mutant differs from the hook by one line, removed" block-destructive-noword.sh "1/0"
+opnd_mut_arm "OPND-M1b: without the word view, the split suffix behind the end-of-options marker is allowed again" block-destructive-noword.sh OP01 a
+opnd_mut_arm "OPND-M1c: without the word view, the split suffix in an option's argument slot is allowed again" block-destructive-noword.sh OP03 a
+opnd_shape_arm "OPND-M2a: the join mutant differs from the hook by one line, removed" block-destructive-nojoin.sh "1/0"
+opnd_mut_arm "OPND-M2b: without the join, the whitespace-bearing quoted operand is allowed again" block-destructive-nojoin.sh OP05 a
+opnd_shape_arm "OPND-M3a: the first-views mutant differs from the hook by one line, removed" block-destructive-nofirst.sh "1/0"
+opnd_mut_arm "OPND-M3b: with the word asked first, the listed script that the first two views refuse is allowed (the order is what keeps it refused)" block-destructive-nofirst.sh X04 a
+opnd_shape_arm "OPND-M4a: the route mutant differs from the hook by one line, removed" block-destructive-noroute.sh "1/0"
+opnd_mut_arm "OPND-M4b: without the word read on the conservative route, a quote inside the operand's suffix is allowed again" block-destructive-noroute.sh X12 a
+opnd_arm "OPND-M5-ctl: a parse-only grant ahead of a whitespace-bearing quoted path stands at its first piece" O17 a
+opnd_shape_arm "OPND-M5a: the no-clause mutant differs from the hook by one line, removed" block-destructive-noclause.sh "1/0"
+opnd_mut_arm "OPND-M5b: without the clause that a fragment is never advanced past, the walk steps off that piece, revokes the grant, and refuses" block-destructive-noclause.sh O17 B
+
+# --- THE JOIN READS EVERY FRAGMENT AS THE WORD READER READS ITS JOIN --------------------------
+# OPND-JOIN-PARITY lifts the word reader and the join out of the hook. Over every block-destructive
+# row of the corpus, with its placeholders expanded and split on whitespace as the hook splits a
+# segment (globbing off), each token the reader calls a fragment is joined, and the join's verdict
+# and value must equal the reader's on the same pieces joined by one space: a whole word with the
+# same exactness and value, or, where the join runs out of pieces, no whole word. The number of
+# fragments compared is reported, and must be non-zero. OPND-JOIN-PARITY-ctl is the control: the
+# same comparison over a join whose single-quote close is broken must name a disagreement, or the
+# agreement proves nothing.
+opnd_join_lib="$(/usr/bin/mktemp)"
+opnd_join_why=""
+/usr/bin/awk '/^script_word_scan\(\) \{/ || /^script_word_join\(\) \{/ { f = 1; k++ } f { print; if ($0 == "}") f = 0 } END { exit k == 2 ? 0 : 1 }' "$HOOK" > "$opnd_join_lib" \
+  || opnd_join_why="the reader and the join are not two single functions in the hook;"
+opnd_join_compare() { # $1 = library file; prints one verdict line
+  (
+    . "$1"
+    n_frag=0
+    i=0
+    while [ "$i" -lt "$wc_n" ]; do
+      wc_expand "${WC_CMD[$i]}"
+      set -f
+      # shellcheck disable=SC2206
+      script_tokens=( $WC_CMDX )
+      set +f
+      j=0
+      while [ "$j" -lt "${#script_tokens[@]}" ]; do
+        script_word_scan "${script_tokens[$j]}"
+        if [ "$script_ws_complete" -eq 0 ]; then
+          n_frag=$((n_frag + 1))
+          script_word_join "$j"
+          k="$j"; ref=""
+          while [ "$k" -lt "${#script_tokens[@]}" ]; do
+            if [ -n "$ref" ]; then ref="${ref} "; fi
+            ref="${ref}${script_tokens[$k]}"
+            if [ "${#ref}" -gt 1024 ]; then break; fi
+            script_word_scan "$ref"
+            if [ "$script_ws_complete" -eq 1 ]; then break; fi
+            k=$((k + 1))
+          done
+          if [ "${#ref}" -gt 1024 ]; then
+            if [ "$script_wj_complete" -ne 0 ]; then /usr/bin/printf 'DISAGREE limit %s' "${WC_ID[$i]}"; exit 0; fi
+          elif [ "$script_ws_complete" -eq 1 ]; then
+            if [ "$script_wj_complete" -ne 1 ] || [ "$script_wj_exact" != "$script_ws_exact" ] || [ "$script_wj_out" != "$script_ws_out" ] || [ "$script_wj_raw" != "$ref" ]; then
+              /usr/bin/printf 'DISAGREE word %s' "${WC_ID[$i]}"; exit 0
+            fi
+          elif [ "$script_wj_complete" -ne 0 ]; then
+            /usr/bin/printf 'DISAGREE fragment %s' "${WC_ID[$i]}"; exit 0
+          fi
+        fi
+        j=$((j + 1))
+      done
+      i=$((i + 1))
+    done
+    /usr/bin/printf 'agree fragments=%s' "$n_frag"
+  )
+}
+if [ -n "$opnd_join_why" ]; then
+  /usr/bin/printf 'FAIL: OPND-JOIN-PARITY %s\n' "$opnd_join_why"; FAIL=$((FAIL + 1))
+else
+  opnd_join_v="$(opnd_join_compare "$opnd_join_lib")"
+  case "$opnd_join_v" in
+    "agree fragments=0"|"") /usr/bin/printf 'FAIL: OPND-JOIN-PARITY compared no fragment — got: %s\n' "$opnd_join_v"; FAIL=$((FAIL + 1)) ;;
+    "agree fragments="*) /usr/bin/printf 'PASS: OPND-JOIN-PARITY the join agrees with the word reader on every fragment of the corpus (%s)\n' "$opnd_join_v"; PASS=$((PASS + 1)) ;;
+    *) /usr/bin/printf 'FAIL: OPND-JOIN-PARITY the join and the word reader differ — got: %s\n' "$opnd_join_v"; FAIL=$((FAIL + 1)) ;;
+  esac
+  opnd_join_broken="$(/usr/bin/mktemp)"
+  /usr/bin/awk 'BEGIN { inj = 0 } /^script_word_join\(\) \{/ { inj = 1 } inj && index($0, "\"$sq\") st=0 ;;") && !done { sub(/st=0/, "st=1"); done = 1 } { print } inj && $0 == "}" { inj = 0 }' "$opnd_join_lib" > "$opnd_join_broken"
+  opnd_join_v="$(opnd_join_compare "$opnd_join_broken")"
+  case "$opnd_join_v" in
+    "DISAGREE "*) /usr/bin/printf 'PASS: OPND-JOIN-PARITY-ctl a join with its single-quote close broken is caught (%s)\n' "$opnd_join_v"; PASS=$((PASS + 1)) ;;
+    *) /usr/bin/printf 'FAIL: OPND-JOIN-PARITY-ctl a broken join was NOT caught — the parity arm cannot discriminate — got: %s\n' "$opnd_join_v"; FAIL=$((FAIL + 1)) ;;
+  esac
+  /bin/rm -f "$opnd_join_broken"
+fi
+/bin/rm -f "$opnd_join_lib"
+
+# OPND-JOIN-BOUND: the join stops at the read limit. A fragment followed by more one-letter pieces
+# than fit in 1,024 characters reports no whole word, and what it read ends at the limit.
+if [ -z "$opnd_join_why" ]; then
+  opnd_bound_lib="$(/usr/bin/mktemp)"
+  /usr/bin/awk '/^script_word_join\(\) \{/ { f = 1 } f { print; if ($0 == "}") f = 0 }' "$HOOK" > "$opnd_bound_lib"
+  opnd_bound_v="$(
+    . "$opnd_bound_lib"
+    script_tokens=("'a")
+    while [ "${#script_tokens[@]}" -lt 600 ]; do script_tokens+=("b"); done
+    script_word_join 0
+    /usr/bin/printf '%s %s' "$script_wj_complete" "${#script_wj_raw}"
+  )"
+  case "$opnd_bound_v" in
+    "0 1025"|"0 1026")
+      /usr/bin/printf 'PASS: OPND-JOIN-BOUND the join stops past the 1,024-character read limit with no whole word (complete, read length: %s)\n' "$opnd_bound_v"; PASS=$((PASS + 1)) ;;
+    *)
+      /usr/bin/printf 'FAIL: OPND-JOIN-BOUND the join did not stop at the read limit — got (complete, read length): %s\n' "$opnd_bound_v"; FAIL=$((FAIL + 1)) ;;
+  esac
+  /bin/rm -f "$opnd_bound_lib"
+fi
 
 /bin/rm -rf "$OPND_ROOT"
 
