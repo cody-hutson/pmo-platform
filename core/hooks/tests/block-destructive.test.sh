@@ -2701,8 +2701,9 @@ exec_notflag_case "F1-EXEC-ctl-inner-dotdot must-not-flag: a traversal that RESO
 # this change: a fix that turns it red has swapped the subject rather than added
 # a view, which is the failure mode three prior remediations of this rule share.
 #
-# THE RESIDUAL THIS BLOCK DOES NOT CLOSE is pinned at the bottom
-# (F1-QTOK-RESIDUAL-space) rather than left to be discovered.
+# THE SPACE-BEARING PATH THIS BLOCK DID NOT CLOSE is pinned at the bottom
+# (F1-QTOK-RESIDUAL-space). It was a pin of the allow; #8318's fragment join
+# closes it at the operand, and the arm is now must-refuse.
 
 echo ""
 echo "BLOCK-022 F1 QTOK (quoted flag / quoted verb reach their arms)"
@@ -2797,20 +2798,22 @@ test_case "F1-QVERB-ctl-fp: a quoted verb named inside a suppressed quoted argum
   "$(bash_payload "gh issue comment 1 --body 'run \"bash\" ${QTOK_NA} now'")" \
   0
 
-# --- DECLARED RESIDUAL (pin, NOT fix-evidence) ------------------------------
+# --- THE SPACE-BEARING QUOTED PATH (re-pointed: pin -> must-refuse) ---------
 # A SPACE-BEARING quoted path is a different root cause from either family above
-# and is NOT closed by this change. Tokenization splits raw argv on whitespace
+# and is not closed by THIS block. Tokenization splits raw argv on whitespace
 # BEFORE any normalization runs, so the operand token is `'/tmp/pmo` — the real
-# filename's first fragment. Neither the probe nor the raw token ends `.sh`, so
-# no arm's operand domain is implicated and nothing is adjudicated. Closing it
-# requires QUOTE-AWARE TOKENIZATION, which is a change to the primitive every arm
-# traverses; it is declared in
-# core/rules/bypass-mode-readiness/block-destructive.md rather than half-closed
-# here. This arm asserts the CURRENT verdict so that widening it later is a
-# deliberate act rather than a drift — the same convention as F1-INTERP-RESIDUAL.
-test_case "F1-QTOK-RESIDUAL-space (pin, not fix-evidence): a space-bearing quoted operand is split before normalization and is NOT adjudicated" \
+# filename's first fragment — and neither the probe nor the raw token ends `.sh`.
+# This arm used to pin that allow. #8318 closes it without a new tokenizer: at
+# the operand after the flag walk, a fragment is joined to the word the shell
+# passes (script_word_join), and that word is adjudicated. The join's boundary —
+# the positions it does not reach — is declared in
+# core/rules/bypass-mode-readiness/block-destructive.md, limit 3. The arm's old
+# second role, the control of the rule that a fragment is never advanced past,
+# moved to FWALK-QWORD-ctl-fragment-noexec: with the join, a walk that stepped
+# off the fragment would refuse here too.
+test_case "F1-QTOK-RESIDUAL-space (re-pointed, now must-refuse): a space-bearing quoted operand is joined at the operand and refused" \
   "$(bash_payload "bash '/tmp/pmo qtok probe na.sh'")" \
-  0
+  2 "BLOCK-DESTRUCTIVE-022"
 
 # ==========================================================================
 # BLOCK-022 F2 FWALK — the operand walk must stop where the arm ADJUDICATES
@@ -8837,8 +8840,11 @@ qdash_arm "FWALK-QDASH-ctl-near-n: bash -n '-x.s'h <allowlisted>.sh allowed (rev
 
 # --- PINS: a claim made before the word is read still ends the walk -------------------------
 # A token the normalizer resolves, or one the probe or the raw token places in the operand
-# domain, is the operand and is adjudicated as before: stricter than its unquoted twin, never
-# looser. A word that does not begin with `-` keeps the claim-order verdict.
+# domain, is the operand and is adjudicated as before: stricter than its unquoted twin, with the
+# two exceptions the readiness fragment names — behind a parse-only grant, which a token that ends
+# the walk keeps while its unquoted twin is stepped over and revokes it, and where the allowlist
+# admits the token's own value. In both the shell rejects the option and runs nothing. A word that
+# does not begin with `-` keeps the claim-order verdict.
 qdash_arm "FWALK-QDASH-pin-resolved (pin, not fix-evidence): bash '-x.sh' <allowlisted>.sh still blocks (the normalizer resolves the token; a domain claim beats a flag shape)" \
   "bash '-x.sh' ${QDASH_OK}" B B "BLOCK-DESTRUCTIVE-022"
 qdash_arm "FWALK-QDASH-pin-raw (pin, not fix-evidence): bash \"-\"x.sh <allowlisted>.sh still blocks (the raw token claims it)" \
@@ -8855,11 +8861,12 @@ qdash_arm "FWALK-QDASH-pin-raw-js (pin, not fix-evidence): node \"\"--title=x.js
   "node \"\"--title=x.js" W W interp-nonshell
 qdash_arm "FWALK-QDASH-pin-claimed (pin, not fix-evidence): bash '<unlisted>.sh'y still blocks (the claim-order example; the word does not begin with -)" \
   "bash '${QDASH_NA}.sh'y" B B "BLOCK-DESTRUCTIVE-022"
-# The declared residual, pinned at today's verdict so a later change to it is deliberate. A
-# word whose own value lands in the domain without beginning with `-` is the operand, as its
-# unquoted spelling is, and the operand path reads only the probe and the raw token.
-qdash_arm "FWALK-QDASH-pin-plus (declared residual — pin, not fix-evidence): bash '+x.s'h <unlisted>.sh allowed (the word +x.sh is the operand; nothing adjudicates a split suffix)" \
-  "bash '+x.s'h ${QDASH_NA}.sh" a a
+# Re-pointed by #8318 from the declared residual's allow. A word whose own value lands in the
+# domain without beginning with `-` is the operand, as its unquoted spelling is, and the operand
+# path now reads the word after quote removal where the probe and the raw token claim nothing, so
+# it takes that spelling's refusal (corpus row DS71, arm OPND-SPLIT-04).
+qdash_arm "FWALK-QDASH-pin-plus (re-pointed: the split suffix is read at the operand): bash '+x.s'h <unlisted>.sh refused (the word +x.sh is the operand, adjudicated as its unquoted twin is)" \
+  "bash '+x.s'h ${QDASH_NA}.sh" B B "BLOCK-DESTRUCTIVE-022"
 
 # --- EACH CONTROL AND PIN, SHOWN ABLE TO FAIL -------------------------------------------------
 qdash_shape_arm "FWALK-QDASH-M1a: the deny mutant differs from the hook by one line, rewritten" \
@@ -8870,7 +8877,7 @@ qdash_mut_arm "FWALK-QDASH-M1c: the deny mutant REFUSES python3 '-Wx.p'y <allowl
   block-destructive-deny.sh "python3 '-Wx.p'y ${QDASH_OKPY}" B "QDASH deny mutant"
 qdash_mut_arm "FWALK-QDASH-M1d: the deny mutant REFUSES bash -n '-x.s'h <allowlisted>.sh" \
   block-destructive-deny.sh "bash -n '-x.s'h ${QDASH_OK}" B "QDASH deny mutant"
-qdash_mut_arm "FWALK-QDASH-M1e: the deny mutant REFUSES the declared residual bash '+x.s'h <unlisted>.sh" \
+qdash_mut_arm "FWALK-QDASH-M1e: the deny mutant REFUSES bash '+x.s'h <unlisted>.sh (the shipped hook refuses it too since #8318)" \
   block-destructive-deny.sh "bash '+x.s'h ${QDASH_NA}.sh" B "QDASH deny mutant"
 qdash_shape_arm "FWALK-QDASH-M2a: the claim-blind mutant differs from the hook by one line, removed" \
   block-destructive-blind.sh "1/0"
@@ -10016,6 +10023,122 @@ for lin_cell in word:10:en_US.UTF-8 word:20:en_US.UTF-8 word:40:en_US.UTF-8 word
   fi
 done
 /bin/rm -rf "$LIN_ROOT"
+
+# ---- OPND-* (#8318): an operand is read as the word the shell passes, in every operand slot ----
+#
+# SUBJECT. The operand sites asked two views of a token, the filename normalizer's reading and the
+# raw argv token, and never the word after quote removal. A quote or a backslash INSIDE the path
+# rather than around it, or a quote that closes inside the suffix, left the token in no arm's
+# operand domain, so nothing was adjudicated: at the operand after the flag walk, behind an
+# end-of-options `--`, in an option's argument slot, and where the walk stepped over the token.
+# Whitespace inside a quoted path split it before any operand token existed, so its first piece
+# claimed nothing either. Every arm here reads its command from the walk-payload corpus by row id
+# (seed 15.2, rows OP01 to OP11; group `concat`; DS71 and DS73; O15), so no payload is spelled in
+# this suite. They run in a hermetic root of their own whose allowlist names exactly the corpus's
+# two listed scripts, which the enclosure block's root does not.
+#
+# WHAT THE ARMS HOLD. Each fail-open class is refused. Each listed script spelled the same way is
+# still allowed. A token the first two views already place in the domain keeps their verdict: the
+# rows whose quoted spelling of a listed script is refused before the change stay refused, because
+# the word is read only where the first two views claim nothing (no refused row moves to allow).
+# The `-c` loop keeps every per-token verdict. The direct-execution arm is not this change's: its
+# two quoted-suffix rows are pinned at their allow.
+OPND_ROOT="$(/usr/bin/mktemp -d)"
+OPND_HOOKS="${OPND_ROOT}/.claude/hooks"
+/bin/mkdir -p "${OPND_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${OPND_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${OPND_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" > "${OPND_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${OPND_HOOKS}/.mode"
+/bin/cp "$HOOK" "${OPND_HOOKS}/block-destructive.sh"
+/bin/chmod +x "${OPND_HOOKS}/block-destructive.sh"
+OPND_DRAIN="${OPND_HOOKS}/destructive-warn-log.jsonl"
+
+opnd_drain_rows() {
+  if [ -f "$OPND_DRAIN" ]; then
+    /usr/bin/wc -l < "$OPND_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+OPND_V=""
+OPND_ERR=""
+# Run one command through one copy in the hermetic root -> OPND_V (a|B|W|E<rc>) and OPND_ERR.
+opnd_run() { # $1 = copy in the hermetic hooks dir  $2 = command
+  local rc=0 before after tmp
+  tmp="$(/usr/bin/mktemp)"
+  before="$(opnd_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$OPND_ROOT")" \
+      | /bin/bash "${OPND_HOOKS}/$1" 2>"$tmp" >/dev/null ) || rc="$?"
+  after="$(opnd_drain_rows)"
+  OPND_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  case "$rc" in
+    2) OPND_V="B" ;;
+    0) if [ "$after" -gt "$before" ]; then OPND_V="W"; else OPND_V="a"; fi ;;
+    *) OPND_V="E${rc}" ;;
+  esac
+}
+
+# opnd_arm <label> <row id> <verdict wanted> — the shipped copy on that row's command. A wanted B
+# must name BLOCK-DESTRUCTIVE-022.
+opnd_arm() {
+  if ! wc_row_cmd "$2"; then
+    /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$1" "$2"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  opnd_run block-destructive.sh "$WC_CMDX"
+  if [ "$OPND_V" = "$3" ] && { [ "$3" != "B" ] || /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$OPND_ERR"; }; then
+    /usr/bin/printf 'PASS: %s [row %s] (hook %s)\n' "$1" "$2" "$OPND_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s [row %s]\n  wanted hook=%s; observed %s\n  stderr: %s\n' "$1" "$2" "$3" "$OPND_V" "$OPND_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- the fail-open classes (fix-evidence): each is refused ---
+opnd_arm "OPND-QSFX-01: a quote that closes inside the operand's suffix, the token opening with it" X06 B
+opnd_arm "OPND-QSFX-02: as QSFX-01, the quote closing one character later" X07 B
+opnd_arm "OPND-QSFX-03: as QSFX-02, in double quotes" X08 B
+opnd_arm "OPND-QSFX-04: a quote inside the operand's suffix, the token not opening with a quote" X12 B
+opnd_arm "OPND-QSFX-05: as QSFX-04, the quote running to the end of the token" X13 B
+opnd_arm "OPND-QSFX-06: a backslash inside the operand's suffix" X15 B
+opnd_arm "OPND-QSFX-07: as QSFX-05, in double quotes" X17 B
+opnd_arm "OPND-SPLIT-01: a split suffix in the operand slot behind an end-of-options marker" OP01 B
+opnd_arm "OPND-SPLIT-02: a split suffix in an option's argument slot" OP03 B
+opnd_arm "OPND-SPLIT-03: a split suffix behind the end-of-options marker, the token opening with the quote" OP04 B
+opnd_arm "OPND-SPLIT-04 (re-grade, twin DS72): a quote-split word of plus-form flag shape in the operand position" DS71 B
+opnd_arm "OPND-SPLIT-05 (re-grade, twin DS74): a quote-split word in an option's argument slot" DS73 B
+opnd_arm "OPND-WS-01: a whitespace-bearing quoted operand path" OP05 B
+opnd_arm "OPND-WS-02 (re-grade): a whitespace-bearing quoted operand path to an unlisted copy of the listed name" O15 B
+
+# --- the controls: refused before and after ---
+opnd_arm "OPND-SPLIT-ctl-source: the split suffix behind the end-of-options marker under source" OP02 B
+opnd_arm "OPND-WS-ctl-source: the whitespace-bearing quoted path under source" OP06 B
+opnd_arm "OPND-ORDER-01: a listed script spelled with a quote the first two views already refuse stays refused" X04 B
+opnd_arm "OPND-ORDER-02: as ORDER-01, an empty quoted prefix" X05 B
+opnd_arm "OPND-ORDER-03: a quoted suffix the normalizer already places in the domain" X14 B
+opnd_arm "OPND-ORDER-04: an empty quoted pair inside the path" X18 B
+opnd_arm "OPND-ORDER-05: a whole word the probe claims, its word past the suffix" CT05 B
+opnd_arm "OPND-cmode-01 (Amendment 1): an in-domain token inside a program string keeps its refusal" OP09 B
+
+# --- the near misses: allowed before and after ---
+opnd_arm "OPND-ok-01: the listed script with a quote inside its suffix" OP07 a
+opnd_arm "OPND-ok-02: as ok-01, behind the end-of-options marker" OP08 a
+opnd_arm "OPND-ok-03: the listed script with a quote closing inside its suffix, the token opening with it" X11 a
+opnd_arm "OPND-ok-04: the listed script with a quote running to the end of the token" X16 a
+opnd_arm "OPND-near-01: a split-suffix path handed to a command that runs nothing" OP11 a
+opnd_arm "OPND-cmode-02 (Amendment 1): a separator inside a program string stays allowed" OP10 a
+
+# --- not this change's: the direct-execution arm's quoted-suffix rows keep their allow ---
+opnd_arm "OPND-EXEC-pin-01 (pin, not fix-evidence): a quoted suffix at the command word (the exec arm reads two views; not edited here)" X21 a
+opnd_arm "OPND-EXEC-pin-02 (pin, not fix-evidence): as EXEC-pin-01, with an argument after it" X23 a
+
+/bin/rm -rf "$OPND_ROOT"
 
 # --- Summary ---
 echo ""
