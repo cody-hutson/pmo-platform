@@ -836,20 +836,22 @@ test_case "EXT-SEG-C20: an inside Trash call on a line that ends in a separator 
 # continuation can split a command word, or carry a wrapper option's argument or an assignment's value
 # to the next line. An even run is literal backslashes and continues nothing, and a backslash that ends
 # a comment continues nothing either, so the next line runs as its own command. On a command that
-# carries such a run, the hook reads it twice — as judged, each line its own, and with every
-# continuation joined — and refuses a deletion or Trash verb found in either reading, judged after every
-# other step: BLOCK-TRASH-003 for a Trash call or a Finder delete, else BLOCK-TRASH-001. That rule
-# decides every continued command; the per-form readings of EXT-SEG stay in place and still refuse
-# first where they fire. Declared over-block: every command with a continuation and a deletion or Trash
-# verb is refused, whatever the shell would join.
+# carries such a run, the hook reads it as judged, each line its own; with every continuation joined;
+# and once after each continued line that carries a `#` (where a comment may end), from the next line
+# on with every continuation joined — at most 8 such readings — and refuses a deletion or Trash verb
+# found in any reading, judged after every other step: BLOCK-TRASH-003 for a Trash call or a Finder
+# delete, else BLOCK-TRASH-001. That rule decides every continued command; the per-form readings of
+# EXT-SEG stay in place and still refuse first where they fire. Declared over-block: every command with
+# a continuation and a deletion or Trash verb in any reading is refused, whatever the shell would join.
 #   W    a continuation inside the command word: the shell runs the joined word
 #   R    a continuation after each redirection form, complete or with its word on the next line (the
 #        descriptor duplication, closing and both-streams forms are EXT-SEG-B9 and B13 to B20)
 #   X    a continuation after a wrapper word, between a wrapper option and its argument, or after a keyword
 #   A    a continuation after an assignment-shaped word, plain or append form
 #   T    a run of three backslashes: a literal backslash, then a continuation
-#   K    a backslash that ends a comment, which continues nothing; K3 and K4 are the residual neither
-#        reading sees (the joined reading reads the next line as part of the comment)
+#   K    a backslash that ends a comment, which continues nothing; K3 to K11 are verbs the joined
+#        reading glues into the comment and the comment-aware readings see; KP over-blocks (a `#` that
+#        opens no comment is read as if it did); KC a control; CAP the bound of 8 such readings
 #   E    an even run of backslashes, which continues nothing (controls)
 #   N    controls: a continued command with no deletion or Trash command, and a quoted here-document body
 #        whose lines end in a backslash; N4, a continued double-quoted message, is a refusal that predates
@@ -916,10 +918,45 @@ test_case "EXT-CONT-K1: a comment that ends in a backslash continues nothing: a 
   "$(bash_payload $'echo cont-k1 # note \\\ntrash /tmp/cont-k1')" 2 "BLOCK-TRASH-003"
 test_case "EXT-CONT-K2: a comment that ends in a backslash, then an inside Trash call on the next line, is refused (a declared over-block)" \
   "$(bash_payload "echo cont-k2 # note \\"$'\n'"trash ${SEG_FH}/Claude/cont-k2" "$RMT_FIXTURE_CWD")" 2 "BLOCK-TRASH-003.*${CONT_RE}" "$RMT_HOME_ENV"
-test_case "EXT-CONT-K3: a comment that ends in a backslash, then an rm whose command word a continuation splits, is allowed (a declared residual: neither reading sees it)" \
-  "$(bash_payload $'echo cont-k3 # note \\\nr\\\nm -rf /tmp/cont-k3')" 0
-test_case "EXT-CONT-K4: a comment that ends in a backslash, then a wrapper and its option spread over continued lines before a Trash call, is allowed (the same declared residual)" \
-  "$(bash_payload $'echo cont-k4 # note \\\nnice \\\n-n 5 trash /tmp/cont-k4')" 0
+test_case "EXT-CONT-K3: a comment that ends in a backslash, then an rm whose command word a continuation splits, is refused (the comment-aware reading)" \
+  "$(bash_payload $'echo cont-k3 # note \\\nr\\\nm -rf /tmp/cont-k3')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-K4: a comment that ends in a backslash, then a wrapper and its option spread over continued lines before a Trash call, is refused (the comment-aware reading)" \
+  "$(bash_payload $'echo cont-k4 # note \\\nnice \\\n-n 5 trash /tmp/cont-k4')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-K5: a comment reached through a continuation, ending in a backslash, then a split rm command word, is refused" \
+  "$(bash_payload $'echo cont-k5 \\\n# note \\\nr\\\nm -rf /tmp/cont-k5')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-K6: two comments that end in a backslash, then a split rm command word after the second, is refused" \
+  "$(bash_payload $'echo cont-k6 # one \\\necho more # two \\\nr\\\nm -rf /tmp/cont-k6')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-K7: a comment that ends in a backslash, then a line whose quoted word-start hash precedes an assignment prefix and a split rm command word, is refused" \
+  "$(bash_payload $'echo cont-k7 # note \\\nCONT_K7=" #" r\\\nm -rf /tmp/cont-k7')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-K8: a comment carrying an apostrophe and ending in a backslash, then a split rm command word, is refused" \
+  "$(bash_payload $'echo cont-k8 # don\'t \\\nr\\\nm -rf /tmp/cont-k8')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+# K9 is refused before this change too (predicted at the RED commit): the apostrophe in the comment does
+# not mask the next line, so the rm step refuses the outside path first.
+test_case "EXT-CONT-K9: a comment carrying an apostrophe and ending in a backslash, then an rm of an outside path on the next line, is refused" \
+  "$(bash_payload $'echo cont-k9 # don\'t \\\nrm -rf /tmp/cont-k9')" 2 "BLOCK-TRASH-001"
+test_case "EXT-CONT-K10: a comment that ends in a backslash, then a Trash call whose command word a continuation splits, is refused" \
+  "$(bash_payload $'echo cont-k10 # note \\\ntr\\\nash /tmp/cont-k10')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-K11: a comment that ends in a backslash, then a Finder delete whose command word a continuation splits, is refused" \
+  "$(bash_payload $'echo cont-k11 # note \\\nosa\\\nscript -e \'tell application "Finder" to delete POSIX file "/tmp/cont-k11"\'')" 2 "BLOCK-TRASH-003.*${CONT_RE}"
+test_case "EXT-CONT-KP1: a continued line whose hash sits inside a quoted span, then a split rm command word the shell reads as an argument, is refused (a declared over-block)" \
+  "$(bash_payload $'echo "cont-kp1 #" \\\nr\\\nm -rf /tmp/cont-kp1')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-KP2: a continued line whose hash opens no word, then a split rm command word the shell reads as an argument, is refused (a declared over-block)" \
+  "$(bash_payload $'echo cont-kp2 $# \\\nr\\\nm -rf /tmp/cont-kp2')" 2 "BLOCK-TRASH-001.*${CONT_RE}"
+test_case "EXT-CONT-KC1: a comment that names a deletion verb and ends in a backslash, then a split command word that is no deletion verb, is allowed" \
+  "$(bash_payload $'echo cont-kc1 # rm note \\\nec\\\nho cont-kc1')" 0
+cont_cap_lines() { # $1 = count -> that many continued lines that carry a hash, newline-joined, no trailing newline
+  local k=1 out='echo cont-cap # n \'
+  while [ "$k" -lt "$1" ]; do out="${out}"$'\n''echo cont-cap # n \'; k=$((k + 1)); done
+  /usr/bin/printf '%s' "$out"
+}
+test_case "EXT-CONT-CAP1: nine continued lines that carry a hash, then a split rm command word, is refused at the bound of 8 readings" \
+  "$(bash_payload "$(cont_cap_lines 9)"$'\nr\\\nm -rf /tmp/cont-cap1')" 2 "BLOCK-TRASH-001.*more than 8 continued lines"
+test_case "EXT-CONT-CAP2: nine continued lines that carry a hash and no deletion or Trash verb name is allowed" \
+  "$(bash_payload "$(cont_cap_lines 9)"$'\necho cont-cap2')" 0
+test_case "EXT-CONT-CAP3: eight continued lines that carry a hash, then a split rm command word, is refused by the eighth reading" \
+  "$(bash_payload "$(cont_cap_lines 8)"$'\nr\\\nm -rf /tmp/cont-cap3')" 2 "BLOCK-TRASH-001.*rm, rmdir or unlink invocation"
+test_case "EXT-CONT-CAP4: nine continued lines that carry a hash, then a split Trash command word, is refused at the bound of 8 readings" \
+  "$(bash_payload "$(cont_cap_lines 9)"$'\ntr\\\nash /tmp/cont-cap4')" 2 "BLOCK-TRASH-003.*more than 8 continued lines"
 test_case "EXT-CONT-E1: an even run of backslashes continues nothing: an inside Trash call on the next line is allowed" \
   "$(bash_payload "echo cont-e1 \\\\"$'\n'"trash ${SEG_FH}/Claude/cont-e1" "$RMT_FIXTURE_CWD")" 0 "" "$RMT_HOME_ENV"
 test_case "EXT-CONT-E2: an even run of backslashes inside a word continues nothing, so no deletion verb is formed, and is allowed" \
@@ -980,7 +1017,7 @@ else
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-barerm.sh"
   /usr/bin/sed -e 's/^\([[:space:]]*\)EXCISED\$'"'"'\\n'"'"'?\*) COMMAND=.*$/\1EXCISED$'"'"'\\n'"'"'?*) : ;;/' \
     "$HOOK" > "${seg_dir}/block-rm-prefer-trash-nohd.sh"
-  for seg_mk in RECCONT RECWORD RECBOTH REDIRAMP BOTHREDIR CONTLINE CONTUNJ CONTJOIN; do
+  for seg_mk in RECCONT RECWORD RECBOTH REDIRAMP BOTHREDIR CONTLINE CONTUNJ CONTJOIN CONTCOMM; do
     /usr/bin/sed -e 's/^\([[:space:]]*\).*  # M-TRASH-'"$seg_mk"'$/\1# M-TRASH-'"$seg_mk"' (removed)/' \
       "$HOOK" > "${seg_dir}/block-rm-prefer-trash-${seg_mk}.sh"
   done
@@ -1007,15 +1044,19 @@ else
   ra_pair "EXT-SEG-MUT-RECCONT-B9:" "${seg_dir}/block-rm-prefer-trash-RECCONT.sh" 'trash seg-mut-b9 2>&1 \'
   ra_pair "EXT-SEG-MUT-RECWORD-B19:" "${seg_dir}/block-rm-prefer-trash-RECWORD.sh" 'trash seg-mut-b19 2>&'
   ra_pair "EXT-SEG-MUT-RECBOTH-B16:" "${seg_dir}/block-rm-prefer-trash-RECBOTH.sh" 'trash seg-mut-b16 &>/dev/null ; '
-  # EXT-CONT: the continuation rule's three markers — the rule itself (CONTLINE), its reading of the
-  # command as judged (CONTUNJ) and its joined reading (CONTJOIN).
+  # EXT-CONT: the continuation rule's four markers — the rule itself (CONTLINE), its reading of the
+  # command as judged (CONTUNJ), its joined reading (CONTJOIN) and its comment-aware readings
+  # (CONTCOMM). The CONTUNJ pair's sentinel carries no comment: a comment-aware reading also sees a
+  # verb on the line after a comment, so a sentinel with one no longer isolates the reading as judged.
   ra_pair "EXT-CONT-MUT-CONTLINE-W1:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'r\\\nm -rf /tmp/cont-w1'
   ra_pair "EXT-CONT-MUT-CONTLINE-W4:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'tr\\\nash /tmp/cont-w4'
   ra_pair "EXT-CONT-MUT-CONTLINE-W6:" "${seg_dir}/block-rm-prefer-trash-CONTLINE.sh" $'osa\\\nscript -e \'tell application "Finder" to delete POSIX file "/tmp/cont-w6"\''
   ra_pair "EXT-CONT-MUT-CONTJOIN-W1:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'r\\\nm -rf /tmp/cont-w1'
   ra_pair "EXT-CONT-MUT-CONTJOIN-X2:" "${seg_dir}/block-rm-prefer-trash-CONTJOIN.sh" $'nice \\\n-n 5 trash /tmp/cont-x2'
-  ra_pair "EXT-CONT-MUT-CONTUNJ-K2:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-k2 # note \\\ntrash cont-mut-k2'
+  ra_pair "EXT-CONT-MUT-CONTUNJ-J1:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-j1 \\\ntrash cont-mut-j1'
   ra_pair "EXT-CONT-MUT-CONTUNJ-T2:" "${seg_dir}/block-rm-prefer-trash-CONTUNJ.sh" $'echo cont-mut-t2 \\\\\\\ntrash cont-mut-t2'
+  ra_pair "EXT-CONT-MUT-CONTCOMM-K3:" "${seg_dir}/block-rm-prefer-trash-CONTCOMM.sh" $'echo cont-mut-k3 # note \\\nr\\\nm -rf /tmp/cont-k3'
+  ra_pair "EXT-CONT-MUT-CONTCOMM-K4:" "${seg_dir}/block-rm-prefer-trash-CONTCOMM.sh" $'echo cont-mut-k4 # note \\\nnice \\\n-n 5 trash /tmp/cont-k4'
   # DEC: through the copy without the three per-form readings (shown live: exactly three lines differ,
   # and it parses), each continued arm is refused by the continuation rule alone.
   cont_decides() { # $1 = arm label  $2 = command (fixture home and working directory)
@@ -1981,9 +2022,10 @@ case "${TRSC_BASE##*/}" in rmt-cph.*) /bin/rm -rf "$TRSC_BASE" ;; esac
 #
 # The hook makes one run of the shared canonicalizer on a command as judged, in its default view, and
 # reads no other view. ONE reads the hook's source: one run on the command, none in the both view and
-# none in the exit view. A command that carries a line continuation is canonicalized once more, over its
-# joined reading (EXT-CONT; Step 5): that run reads a different text, only on such a command, so ONE
-# does not count it and none of the timed commands below carries a continuation. EQ holds the verdicts: a copy of this hook with a second, identical
+# none in the exit view. A command that carries a line continuation is canonicalized again, over its
+# joined reading and over each of its comment-aware readings (EXT-CONT; Step 5): those runs read a
+# different text, only on such a command, so ONE does not count them and none of the timed commands
+# below carries a continuation. EQ holds the verdicts: a copy of this hook with a second, identical
 # default-view run spliced in after the first is shown live (it differs only in that line, and it
 # parses), then both copies judge a set of commands — the lines the removed exits once allowed,
 # wrapped and quoted spellings, refused and allowed deletions and Trash calls — and must return the
