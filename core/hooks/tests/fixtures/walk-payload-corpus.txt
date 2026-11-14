@@ -1970,3 +1970,42 @@ AV47|block-destructive|rt-asgn-resid|-|?|a|X=@QPAD@@NL@FOO='a b' bash @D@/na.sh
 AV48|block-destructive|rt-asgn-head|-|?|B|FOO='a echo b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 AV49|block-destructive|rt-asgn-head|-|?|B|FOO='a b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 AV50|block-destructive|rt-asgn-head|-|?|B|FOO=@QMID@"a echo b" bash -c "x; bash @D@/na.sh"
+# --- seed 15.4: card #8491 — env's split-string value read as env reads it, after the shell removes its quotes (SV rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8491's Stage-5 design (Rule M; J0, no second join site; T1 with
+# T1b; S3 carried to #8316), recorded at the release head after #8319 (0b7adfb2). gt is `?` and twins are `-` (the design's
+# no-ground-truth branch, kept by D-GroundTruth-Rev); so no rt-svprec row is authored, and the precision classes P-1
+# and P-2 rest on env's documented grammar. rt-svq: a quote-led or quote-bearing value of options and assignments
+# only, ahead of an interpreter and an unlisted script (a at base; B once #8491 lands). rt-svs: a path inside an
+# option's argument or an assignment's value in the split value (a at base; B once #8491 lands). rt-svx: a long
+# option needing the following token, an assignment whose name is not a shell name, and a value the hook cannot read
+# (a at base; B once #8491 lands). rt-svctl: the unquoted, slash-free twins, and Rule M's control (B before and
+# after). rt-svcost: PC-SV1, an unreadable value carrying its own command ahead of an unlisted script-suffixed
+# argument nothing runs (a at base; B once #8491 lands, a declared precision cost). rt-svnear: the same classes
+# ahead of the listed script, or of a command that runs no script (a before and after). rt-svres: the declared
+# residuals — a value carrying its own command, a separator inside the value, env's own quoting inside the decoded
+# value, and the two whitespace-bearing quoted values J0 leaves to today's reading (a before and after).
+SV01|block-destructive|rt-svq|-|?|a|env -S'-v' bash @D@/na.sh
+SV02|block-destructive|rt-svq|-|?|a|env --split-string='-v' bash @D@/na.sh
+SV03|block-destructive|rt-svq|-|?|a|env --sp='-v' bash @D@/na.sh
+SV04|block-destructive|rt-svq|-|?|a|env -S'' bash @D@/na.sh
+SV05|block-destructive|rt-svq|-|?|a|env -S'BAR=2' bash @D@/na.sh
+SV06|block-destructive|rt-svq|-|?|a|env -S-'u' FOO bash @D@/na.sh
+SV07|block-destructive|rt-svs|-|?|a|env -S-C@D@/x bash @D@/na.sh
+SV08|block-destructive|rt-svs|-|?|a|env --split-string=--chdir=@D@/x bash @D@/na.sh
+SV09|block-destructive|rt-svs|-|?|a|env -SBAR=@D@/x bash @D@/na.sh
+SV10|block-destructive|rt-svx|-|?|a|env -S--unset FOO bash @D@/na.sh
+SV11|block-destructive|rt-svx|-|?|a|env -Sa-b=1 bash @D@/na.sh
+SV12|block-destructive|rt-svx|-|?|a|env -S"$X" bash @D@/na.sh
+SV13|block-destructive|rt-svctl|-|?|B|env -S-v bash @D@/na.sh
+SV14|block-destructive|rt-svctl|-|?|B|env -SBAR=2 bash @D@/na.sh
+SV15|block-destructive|rt-svctl|-|?|B|env -S-Cx bash @D@/na.sh
+SV16|block-destructive|rt-svctl|-|?|B|env -S-i' bash @D@/na.sh'
+SV17|block-destructive|rt-svcost|-|?|a|env -S'echo $X' bash @D@/na.sh
+SV18|block-destructive|rt-svnear|-|?|a|env -S'-v' bash @D@/ok.sh
+SV19|block-destructive|rt-svnear|-|?|a|env -S-C@D@/x bash @D@/ok.sh
+SV20|block-destructive|rt-svnear|-|?|a|env -S'-v' cat @D@/na.sh
+SV21|block-destructive|rt-svres|-|?|a|env -S'bash @D@/na.sh'
+SV22|block-destructive|rt-svres|-|?|a|env -S'-i;' bash @D@/na.sh
+SV23|block-destructive|rt-svres|-|?|a|env -S"'-u'" FOO bash @D@/na.sh
+SV24|block-destructive|rt-svres|-|?|a|env -S'-i FOO=1' bash @D@/na.sh
+SV25|block-destructive|rt-svres|-|?|a|env -S-i' -u' FOO bash @D@/na.sh
