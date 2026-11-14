@@ -2998,7 +2998,12 @@ script_heredoc_prescan() {
 # (script_assign_value_rest): it steps over the first piece of a quoted value that holds a
 # blank and reads the next piece as the head, so a carrier written behind such a value keeps
 # the false positive on its quoted argument that its no-blank spelling does not have — a
-# declared limit, pinned by ASGN-QVAL-limit-carrier beside ASGN-QVAL-limit-ctl.
+# declared limit, pinned by ASGN-QVAL-limit-carrier beside ASGN-QVAL-limit-ctl. The opposite
+# reading, a carrier WORD inside such a value taken for the head, suppressed a quoted segment
+# the shell runs. It is closed at the caller, not here: a carrier answer of this walk is checked
+# against the step (script_qval_head_carrier) and withdrawn when the shell's head word is not a
+# carrier (ASGN-QVAL-head). Taking the step in this walk instead would also turn the limit's
+# refusal into an allow, the direction this walk must not move.
 script_resolve_head() {
   script_head=""
   local _i
@@ -3040,12 +3045,14 @@ script_resolve_head() {
 #      assignment token scan back to outside quotes, end on no escaping backslash, and carry no
 #      construct the scanner does not model (script_qval_opaque);
 #   3. the word ends at a token boundary outside quotes, unless that token ends on a backslash
-#      outside quotes followed by exactly one blank in the segment (script_qval_gap), or the
-#      segment ends with the quote still open;
+#      outside quotes followed by exactly one blank in the segment (script_qval_gap), which
+#      carries the word on to the next token, or the segment ends with the quote still open; a
+#      token that ends on a backslash outside quotes followed by two or more blanks ends the word
+#      after its escaped blank, as the shell ends it;
 #   4. no token of the word carries such a construct, and every character of the value is
-#      readable (script_qval_readable) — a backslash only where it escapes exactly one blank, so
-#      a token of the value that ends on a backslash followed by any other run of blanks, or by
-#      the end of the segment, declines the step rather than ending the word there.
+#      readable (script_qval_readable) — a backslash only where it escapes a blank, so a later
+#      token of the value that ends on a backslash at the end of the segment declines the step
+#      rather than ending the word there.
 # Otherwise h = h0 exactly — today's reading, byte for byte — and the carried state and taint are
 # restored on every path. Tokens [h0, h) are text inside the shell's assignment word and run
 # nothing, so every verdict today's reading drew from them is a precision move, and every verdict
@@ -3067,10 +3074,11 @@ script_qval_opaque() {   # $1 = one token -> 0 when it carries such a construct
 # The readable set. The step replaces today's reading of a value only when every character of
 # it is one the scanner reads as the shell does: the plain set (script_plain_word), the blanks
 # between its tokens, the quote characters that delimit it, and outside quotes a backslash
-# followed by exactly one blank. Asked of each token of the value just after it is scanned, so
-# the state then says whether a final backslash sits outside quotes; this test admits a backslash
-# only there, as a token's last character, and the escaped-blank rule in the step requires the one
-# blank after it. A backslash anywhere else, or a run of two, is not readable. One quote kind per
+# that escapes a blank. Asked of each token of the value just after it is scanned, so the
+# state then says whether a final backslash sits outside quotes; this test admits a backslash
+# only there, as a token's last character, and the escaped-blank rule in the step requires a
+# blank after it: exactly one carries the word on, two or more end it after the escaped blank.
+# A backslash anywhere else, or a run of two, is not readable. One quote kind per
 # value: with one kind alone every quote character delimits, so a value that holds both is
 # declined rather than read for which of them is text.
 script_qval_readable() {   # $1 = a token of the value, just scanned -> 0 when every character is readable
@@ -3139,6 +3147,7 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
       if [ "$script_qstate" -eq 0 ]; then
         script_qval_dangles "${script_tokens[$_j]}" || break
         script_qval_gap "$_j"
+        if [ "$script_qval_gapn" -ge 2 ] && [ "$_j" -gt "$_k" ]; then break; fi   # M-WRAP-QVAL-GAP2
         [ "$script_qval_gapn" -eq 1 ] || { [ "$_j" -eq "$_k" ] || _ok=0; break; }   # M-WRAP-QVAL-GAP
       fi
       [ "$script_hidx" -lt "$_n" ] || break
@@ -3154,6 +3163,54 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
   fi
   if [ "$_ok" -eq 1 ]; then script_qval_from="$script_hidx"; else script_hidx="$_h"; fi
   script_qstate="$_qs"; script_qtaint="$_qt"
+}
+
+# THE CARRIER HEAD, READ THROUGH THE STEP (the review's PR-2). script_resolve_head walks the
+# assignment run one whitespace-split token at a time, so behind a value that holds a blank it can
+# take a piece of the value for the command word. When that piece is a carrier word, the segments
+# interior to the quote it seems to open were suppressed, although the shell runs a different
+# command, which may execute them. This helper is asked only when the resolver's answer is a
+# carrier. It repeats that walk, with the same NAME=value test, and takes the assignment-value step
+# after each assignment token, under the step's own gate, prefix scan, readable set, construct
+# guard and restore on decline. A value the step declines, one whose rescan reaches the shared work
+# cap among them, leaves the resolver's answer as it was. It returns 0 only when the word the walk
+# ends on is a carrier, and the caller withdraws the suppression otherwise. The answer can only be
+# withdrawn, never granted, which is why the limit documented at script_resolve_head stands. Its
+# carrier list repeats the caller's: a word missing here withdraws a suppression, the fail-closed
+# direction.
+#
+# The walk's state is declared local, so the step reads and writes these copies and the segment's
+# own walk below starts from its own reset. The shared work budget is not local: the step charges
+# it here as it does everywhere, which is the check's cost. A quote-dense carrier command spends
+# the budget sooner, and the bail the cap latches leaves no later command a carrier, so some of
+# those commands are now refused — the safe direction.
+script_qval_head_carrier() {   # reads script_seg -> 0 when the shell's head word is a carrier
+  local -a script_tokens
+  local script_hidx=0 script_qval_trust=0 script_qval_from=0 script_qval_gapi=-1
+  local script_qval_gaprest="" script_qval_gapn=0 script_qval_sq=0 script_qval_dq=0 _t
+  set -f
+  # shellcheck disable=SC2206
+  script_tokens=( $script_seg )
+  set +f
+  if { [ "$script_qbail" -eq 0 ] && [ "$script_segstart" -eq 0 ]; } || { [ "$script_pass" -eq 1 ] && [ "$script_segno" -eq 1 ]; }; then script_qval_trust=1; fi
+  while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
+    _t="${script_tokens[$script_hidx]}"
+    case "$_t" in
+      [A-Za-z_]*=*)
+        case "${_t%%=*}" in
+          *[!A-Za-z0-9_]*) break ;;
+        esac
+        script_hidx=$(( script_hidx + 1 ))
+        script_assign_value_rest "$_t"
+        ;;
+      *) break ;;
+    esac
+  done
+  [ "$script_hidx" -lt "${#script_tokens[@]}" ] || return 1
+  case "${script_tokens[$script_hidx]##*/}" in
+    gh|printf|echo|jq) return 0 ;;
+  esac
+  return 1
 }
 
 # ==========================================================================
@@ -3782,6 +3839,10 @@ case "$TOOL_NAME" in
             gh|printf|echo|jq) script_carrier=1 ;;
           esac
         fi
+        # A carrier answer is checked against the assignment-value step, and withdrawn when the
+        # word the shell runs behind a value holding a blank is not a carrier. It is only ever
+        # withdrawn here: a non-carrier answer is never asked (script_qval_head_carrier).
+        if [ "$script_carrier" -eq 1 ] && ! script_qval_head_carrier; then script_carrier=0; fi   # M-WRAP-QVAL-HEAD
       elif [ "$script_carrier" -eq 1 ]; then
         # Interior to a quoted argument of a command that cannot evaluate it —
         # condition (1). Condition (2) is the construct test: `'…'` (state 1) and

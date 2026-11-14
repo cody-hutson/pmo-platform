@@ -1951,9 +1951,11 @@ AV39|block-destructive|rt-asgn-resid|-|?|a|FOO="a $X" bash @D@/na.sh
 # later piece (the review's FM-3); a `#` inside a quoted value; an unmodelled construct in a prefix token ahead of a
 # quoted assignment; and an earlier quote-dense part of the command that spends the shared work budget ahead of a
 # later line of the M1 shape. Recorded at 8e44cf61's verdicts.
-AV40|block-destructive|rt-asgn-head|-|?|a|FOO='a echo b' bash -c "x; bash @D@/na.sh"
+# #8319's second pass re-grades two of them to refused: AV40, whose carrier answer the head check now withdraws,
+# and AV42, now in rt-asgn, whose second escaped piece ends the word after its escaped blank.
+AV40|block-destructive|rt-asgn-head|-|?|B|FOO='a echo b' bash -c "x; bash @D@/na.sh"
 AV41|block-destructive|rt-asgn-head|-|?|B|FOO='a b' bash -c "x; bash @D@/na.sh"
-AV42|block-destructive|rt-asgn-resid|-|?|a|FOO=a\ b\  bash @D@/na.sh
+AV42|block-destructive|rt-asgn|-|?|B|FOO=a\ b\  bash @D@/na.sh
 AV43|block-destructive|rt-asgn-resid|-|?|a|FOO='a b'"c d" bash @D@/na.sh
 AV44|block-destructive|rt-asgn-resid|-|?|a|env 'A B=c' bash @D@/na.sh
 AV45|block-destructive|rt-asgn-resid|-|?|a|FOO='a #b' bash @D@/na.sh
