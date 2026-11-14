@@ -10370,6 +10370,248 @@ fi
 
 /bin/rm -rf "$OPND_ROOT"
 
+# ---- ASGN-QVAL-* (#8319): the prefix walk steps over a space-bearing quoted assignment value ----
+#
+# SUBJECT. The prefix walk splits a segment on whitespace before it reads a token, so an
+# assignment whose quoted or escaped value holds a blank reached it as several tokens: the first
+# passed the assignment test and a later piece of the value was read as the command word. The
+# command behind the value was never adjudicated, and a value whose pieces read as an invocation
+# was refused for text the shell never runs. The walk, and env's operand loop with it, now read
+# the rest of the assignment word with the hook's own quote scanner and go on at the shell's next
+# word — where the segment is vouched to start outside any quote, the tokens before the
+# assignment scan back to outside quotes, the word ends at a token boundary, and every character
+# of the value is readable. Any other value keeps today's reading. Every arm here reads its
+# command from the walk-payload corpus by row id (seed 15.3, rows AV01 to AV39; the seed-6 rows
+# of the quoted value; O18, O19, O28; EN06), so no payload is spelled in this suite. They run in a
+# hermetic root of their own whose allowlist names exactly the corpus's two listed scripts.
+#
+# EACH ARM READS TWO COPIES: the shipped hook and the reverse mutant pqval, which is the walk
+# before this change (its two call lines removed). A fix arm differs across them, and that is its
+# red-before evidence. A control, a pin or a declared residual reads the same on both, so where
+# one condition of the step is what holds it, a third limb runs the copy with that condition
+# removed and must read a verdict the arm forbids. The precision arms — refused or recorded
+# before, allowed after — are each red against the hook before the change; the corpus does not
+# take real-interpreter ground truth for those rows.
+AQ_ROOT="$(/usr/bin/mktemp -d)"
+AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
+/bin/mkdir -p "${AQ_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${AQ_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${AQ_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" > "${AQ_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${AQ_HOOKS}/.mode"
+/bin/cp "$HOOK" "${AQ_HOOKS}/block-destructive.sh"
+# The copies, each the hook with one condition of the step removed by sed on its marked lines:
+#   pqval        the two call lines removed: the walk before this change (the reverse mutant)
+#   pqvalgate    the gate vouches for every segment
+#   pqvalpfx     the prefix scan never runs
+#   pqvalgap     the escaped-blank rule does not read the blank run after the backslash
+#   pqvalsubst   the guard on a construct the scanner does not model never fires
+#   pqvalread    the readable-set test is not asked (its two lines removed)
+#   pqvalguards  pqvalsubst and pqvalread together: nothing in the value's text declines
+#   pallow       the allowlist never matches (the wrapper block's allowlist-blind mutant)
+/usr/bin/sed '/# M-WRAP-QVAL$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqval.sh"
+/usr/bin/sed 's/^\( *\)if .*# M-WRAP-QVAL-GATE$/\1script_qval_trust=1   # M-WRAP-QVAL-GATE/' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalgate.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-PFX$/s/while \[ "\$_i" -lt "\$_k" \]; do/while false; do/' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalpfx.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-GAP$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalgap.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalsubst.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-READ$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalread.sh"
+/usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalguards.sh"
+/usr/bin/sed 's@^  \[ -f "\$SCRIPT_ALLOWLIST" \] || return 1$@  return 1@' "$HOOK" > "${AQ_HOOKS}/block-destructive-pallow.sh"
+for aq_c in pqval pqvalgate pqvalpfx pqvalgap pqvalsubst pqvalread pqvalguards pallow; do
+  /bin/chmod +x "${AQ_HOOKS}/block-destructive-${aq_c}.sh"
+done
+/bin/chmod +x "${AQ_HOOKS}/block-destructive.sh"
+AQ_DRAIN="${AQ_HOOKS}/destructive-warn-log.jsonl"
+
+aq_drain_rows() {
+  if [ -f "$AQ_DRAIN" ]; then
+    /usr/bin/wc -l < "$AQ_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+AQ_V=""
+AQ_ERR=""
+# Run one command through one copy in the hermetic root -> AQ_V, the verdict as one word: a, B, or
+# W:<arm>[+<arm>…], naming the arm field of every would-fire row the call added, in the order
+# written, so a verdict that records twice is told from one that records once. AQ_ERR is stderr.
+aq_run() { # $1 = copy in the hermetic hooks dir  $2 = command
+  local rc=0 before after tmp n
+  tmp="$(/usr/bin/mktemp)"
+  before="$(aq_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$AQ_ROOT")" \
+      | /bin/bash "${AQ_HOOKS}/$1" 2>"$tmp" >/dev/null ) || rc="$?"
+  after="$(aq_drain_rows)"
+  AQ_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  n=$(( after - before ))
+  case "$rc" in
+    2) AQ_V="B" ;;
+    0)
+      if [ "$n" -gt 0 ]; then
+        AQ_V="W:$(/usr/bin/awk -v from="$(( before + 1 ))" 'NR >= from { if (match($0, /"arm":"[^"]*"/)) { a = substr($0, RSTART + 7, RLENGTH - 8) } else { a = "?" } printf "%s%s", (k++ ? "+" : ""), a }' "$AQ_DRAIN")"
+      else
+        AQ_V="a"
+      fi
+      ;;
+    *) AQ_V="E${rc}" ;;
+  esac
+}
+
+# aq_arm <label> <row id> <hook verdict> <pqval verdict> [<copy> <its verdict>] — the shipped copy
+# and the reverse mutant on that row's command, then the third limb when a copy is named. A wanted
+# B must name BLOCK-DESTRUCTIVE-022. A third limb that expects the arm's own verdict fails: it
+# could not show the arm failing.
+aq_arm() {
+  local name="$1" row="$2" want="$3" wantm="$4" pmut="${5:-}" pwant="${6:-}" got gotm gotp="" herr ok=1 why=""
+  if ! wc_row_cmd "$row"; then
+    /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$name" "$row"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  aq_run block-destructive.sh "$WC_CMDX"
+  got="$AQ_V"
+  herr="$AQ_ERR"
+  if [ "$got" != "$want" ]; then ok=0; why="hook=${got}"; fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$herr"; then
+    ok=0; why="the refusal does not name BLOCK-DESTRUCTIVE-022"
+  fi
+  aq_run block-destructive-pqval.sh "$WC_CMDX"
+  gotm="$AQ_V"
+  if [ "$gotm" != "$wantm" ]; then ok=0; why="${why} pqval=${gotm}"; fi
+  if [ -n "$pmut" ]; then
+    if [ "$pwant" = "$want" ]; then ok=0; why="${why} the ${pmut} limb expects the arm's own verdict"; fi
+    aq_run "block-destructive-${pmut}.sh" "$WC_CMDX"
+    gotp="$AQ_V"
+    if [ "$gotp" != "$pwant" ]; then ok=0; why="${why} ${pmut}=${gotp}"; fi
+  fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s [row %s] (hook %s, pqval %s%s)\n' "$name" "$row" "$got" "$gotm" "${pmut:+, ${pmut} ${gotp}}"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s [row %s]\n  wanted hook=%s pqval=%s%s; observed %s\n  stderr: %s\n' "$name" "$row" "$want" "$wantm" "${pmut:+ ${pmut}=${pwant}}" "${why# }" "$herr"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# aq_mut_arm <label> <copy> <row id> <verdict> — one copy alone on that row's command.
+aq_mut_arm() {
+  if ! wc_row_cmd "$3"; then
+    /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$1" "$3"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  aq_run "block-destructive-${2}.sh" "$WC_CMDX"
+  if [ "$AQ_V" = "$4" ]; then
+    /usr/bin/printf 'PASS: %s [row %s] (%s %s)\n' "$1" "$3" "$2" "$AQ_V"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s [row %s]\n  wanted %s=%s; observed %s\n  stderr: %s\n' "$1" "$3" "$2" "$4" "$AQ_V" "$AQ_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# The difference between the shipped copy and one mutant, as "<lines removed>/<lines added>".
+aq_shape() { # $1 = mutant file in the hermetic hooks dir
+  /usr/bin/diff "${AQ_HOOKS}/block-destructive.sh" "${AQ_HOOKS}/$1" \
+    | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }'
+}
+aq_shape_arm() { # $1 label  $2 mutant file  $3 the shape it must have
+  local got
+  got="$(aq_shape "$2")"
+  if [ "$got" = "$3" ] && /bin/bash -n "${AQ_HOOKS}/$2" 2>/dev/null; then
+    /usr/bin/printf 'PASS: %s (shape %s, parses)\n' "$1" "$got"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted shape %s and a copy that parses; observed shape %s\n' "$1" "$3" "$got"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- each copy differs from the hook by exactly its marked lines, and parses ---
+aq_shape_arm "ASGN-QVAL-M0: the reverse mutant removes the two call lines" block-destructive-pqval.sh "2/0"
+aq_shape_arm "ASGN-QVAL-M1: the gate mutant rewrites the gate line" block-destructive-pqvalgate.sh "1/1"
+aq_shape_arm "ASGN-QVAL-M2: the prefix-scan mutant rewrites its loop line" block-destructive-pqvalpfx.sh "1/1"
+aq_shape_arm "ASGN-QVAL-M3: the escaped-blank mutant removes the blank-run line" block-destructive-pqvalgap.sh "1/0"
+aq_shape_arm "ASGN-QVAL-M4: the construct-guard mutant rewrites its pattern line" block-destructive-pqvalsubst.sh "1/1"
+aq_shape_arm "ASGN-QVAL-M5: the readable-set mutant removes its two lines" block-destructive-pqvalread.sh "2/0"
+aq_shape_arm "ASGN-QVAL-M6: the both-guards mutant is M4 and M5 together" block-destructive-pqvalguards.sh "3/1"
+aq_shape_arm "ASGN-QVAL-M7: the allowlist-blind mutant rewrites one line" block-destructive-pallow.sh "1/1"
+
+# --- the closures (fix-evidence): refused, or recorded at the arm's own phase; the walk before allows ---
+aq_arm "ASGN-QVAL-sq: a single-quoted value holding a blank, before an interpreter and an unlisted script" WR126 B a
+aq_arm "ASGN-QVAL-sq-seed1: as sq, the seed-1 row of the same shape" O18 B a
+aq_arm "ASGN-QVAL-dq: as sq, in double quotes" WR127 B a
+aq_arm "ASGN-QVAL-sh: as sq, before a different interpreter" AV01 B a
+aq_arm "ASGN-QVAL-esc: one escaped blank outside quotes" WR131 B a
+aq_arm "ASGN-QVAL-wide: a value of four pieces" AV07 B a
+aq_arm "ASGN-QVAL-two: two quoted values, each holding a blank" AV08 B a
+aq_arm "ASGN-QVAL-mixed: a quoted value, then a plain one" WR129 B a
+aq_arm "ASGN-QVAL-mixed-seed1: as mixed, the seed-1 row" O28 B a
+aq_arm "ASGN-QVAL-later: the value opening a later segment" WR130 B a
+aq_arm "ASGN-QVAL-later-carrier: the value opening the segment after a carrier's" AV09 B a
+aq_arm "ASGN-QVAL-append: the append form" AV04 B a
+aq_arm "ASGN-QVAL-source: before source" AV02 B a
+aq_arm "ASGN-QVAL-dot: before the dot" AV03 B a
+aq_arm "ASGN-QVAL-sudo: behind sudo" AV05 B a
+aq_arm "ASGN-QVAL-env: as an env operand" WR128 B a
+aq_arm "ASGN-QVAL-env-seed1: as env, the seed-1 row" O19 B a
+aq_arm "ASGN-QVAL-env-opt: as an env operand behind an option" AV06 B a
+aq_arm "ASGN-QVAL-bail1: in the first segment of a command whose bail latches" AV10 B a
+aq_arm "ASGN-QVAL-exec: before a direct execution, recorded at that arm's phase" AV11 W:exec a
+aq_arm "ASGN-QVAL-nonshell: before a non-shell interpreter, recorded at that arm's phase" AV12 W:interp-nonshell a
+aq_arm "ASGN-QVAL-encl: at an unquoted enclosure position, recorded at that view's phase" AV13 W:shell-enclosure a
+
+# --- the controls: the listed script, and values with no blank ---
+aq_arm "ASGN-QVAL-ctl-ok: the listed script behind a value holding a blank" AV14 a a pallow B
+aq_arm "ASGN-QVAL-ctl-nows (the AC1 control): a quoted value with no blank, an unlisted script" WR125 B B
+aq_arm "ASGN-QVAL-ctl-nows-plain: as ctl-nows, unquoted" AV15 B B
+aq_arm "ASGN-QVAL-ctl-nows-source: as ctl-nows, before source" AV16 B B
+aq_arm "ASGN-QVAL-ctl-nows-exec: an unquoted value before a direct execution" AV17 W:exec W:exec
+aq_arm "ASGN-QVAL-ctl-nows-nonshell: an unquoted value before a non-shell interpreter" AV18 W:interp-nonshell W:interp-nonshell
+
+# --- the declared precision rows: refused or recorded before, allowed after ---
+aq_arm "ASGN-QVAL-near-sq (AC2, declared precision): a value whose pieces read as an interpreter invocation, before a command that runs nothing" WR134 a B
+aq_arm "ASGN-QVAL-near-dq (AC2, declared precision): as near-sq, in double quotes" WR135 a B
+aq_arm "ASGN-QVAL-near-sh (declared precision): a value whose pieces read as an interpreter and a script path" AV19 a B
+aq_arm "ASGN-QVAL-near-source (declared precision): a value whose pieces read as source and a script path" AV20 a B
+aq_arm "ASGN-QVAL-near-exec (declared precision): a value whose first piece read as the command word is a slash-bearing path" AV21 a W:exec
+aq_arm "ASGN-QVAL-near-run (declared precision): a value running past a separator, its first segment holding an invocation" AV22 a B
+aq_arm "ASGN-QVAL-prec-interp (declared precision): a value ending on an interpreter word, before a slash-bearing script, takes its plain form's verdict" AV23 W:exec B
+aq_arm "ASGN-QVAL-prec-path (declared precision): as prec-interp, before a PATH-resolved word, which the rule does not adjudicate in plain form" AV24 a B
+
+# --- the shapes the step declines: their verdicts before and after ---
+aq_arm "ASGN-QVAL-keep-sep-sq: a segment that starts inside a single-quoted value" WR100 B B pqvalgate a
+aq_arm "ASGN-QVAL-keep-sep-dq: a segment that starts inside a double-quoted value" WR101 B B pqvalgate a
+aq_arm "ASGN-QVAL-keep-sep-exec: as keep-sep-dq, before a direct execution" WR115 W:exec W:exec pqvalgate a
+aq_arm "ASGN-QVAL-keep-pfx: a wrapper option's argument leaves a quote open ahead of the assignment" AV27 B B pqvalpfx a
+aq_arm "ASGN-QVAL-keep-gap: an escaped blank followed by a second blank ends the word" AV28 B B pqvalgap W:exec
+aq_arm "ASGN-QVAL-keep-note: a value whose pieces read as an invocation, before a real one" AV26 B B
+aq_arm "ASGN-QVAL-keep-subst: a value holding a command substitution keeps today's reading" WR133 a a pqvalguards B
+aq_mut_arm "ASGN-QVAL-keep-subst-guard: with the readable-set test off, the construct guard alone still declines it" pqvalread WR133 a
+aq_arm "ASGN-QVAL-keep-subst-row: a value holding a substitution that runs a slash-bearing script keeps both records" EN06 W:exec+shell-enclosure W:exec+shell-enclosure pqvalguards W:shell-enclosure
+aq_mut_arm "ASGN-QVAL-keep-subst-row-guard: with the readable-set test off, the construct guard alone keeps both records" pqvalread EN06 W:exec+shell-enclosure
+aq_arm "ASGN-QVAL-keep-subst-unquoted (pin): an unquoted substitution value, which never enters the step" AV29 W:exec+shell-enclosure W:exec+shell-enclosure
+
+# --- the work budget, the carrier head, and the declared over-block ---
+aq_arm "ASGN-QVAL-cap: the step's scan crosses the shared work cap, which latches the bail, so a later carrier fragment is no longer suppressed" AV32 B a
+aq_arm "ASGN-QVAL-limit-carrier (declared limit): a carrier behind a value holding a blank keeps its quoted-fragment false positive" AV30 B B
+aq_arm "ASGN-QVAL-limit-ctl: the same carrier behind a value with no blank is suppressed" AV31 a a
+aq_arm "ASGN-QVAL-over-wrap (declared over-block): an assignment behind a wrapper that takes none" AV25 B a
+
+# --- the declared residuals: allowed before and after ---
+aq_arm "ASGN-QVAL-resid-bail: a later line of a command whose bail latched" AV33 a a pqvalgate B
+aq_arm "ASGN-QVAL-resid-braced: a value holding a braced expansion" AV34 a a pqvalguards B
+aq_arm "ASGN-QVAL-resid-dqencl: a value at an enclosure position opened inside double quotes" AV35 a a pqvalgate W:shell-enclosure
+aq_arm "ASGN-QVAL-resid-redir: a redirection operator glued to the value's end" AV36 a a
+aq_arm "ASGN-QVAL-resid-sep: a separator inside the value" AV37 a a
+aq_arm "ASGN-QVAL-resid-ansi: a value in ANSI-C quoting" AV38 a a pqvalread B
+aq_arm "ASGN-QVAL-resid-param: a value holding a parameter expansion" AV39 a a pqvalread B
+
+/bin/rm -rf "$AQ_ROOT"
+
 # --- Summary ---
 echo ""
 echo "================================"
