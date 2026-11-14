@@ -517,8 +517,11 @@ script_word_scan() {
             out="${out}${t:1:1}"; t="${t:2}"
             ;;
           "$ds")
+            # `$$` is the parameter of that name, so a pair is consumed whole: only the LAST
+            # dollar of an odd-length run can open `$'...'` or `$"..."`.
             script_ws_exact=0
             case "${t:1:1}" in
+              "$ds") t="${t:2}" ;;
               "$sq") st=3; t="${t:2}" ;;
               "$dq") st=2; t="${t:2}" ;;
               *) t="${t:1}" ;;
@@ -1950,6 +1953,11 @@ script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argum
 # searched in the same pass and wins by position, so it consumes the character
 # after it before the taint test is ever reached. '...' and $'...' perform no
 # expansion at all, so neither can be tainted.
+#
+# The carried state is trusted only where these four states follow the text. A
+# comment, or a quote nested inside a substitution or an expansion, is a construct
+# they do not follow; the trust boundary below (SCRIPT_QMODEL_AWK) latches the bail
+# for a command that holds one, so no fragment of it is suppressed.
 # --------------------------------------------------------------------------
 
 # Index of the earliest occurrence in $script_qt of any character in "$@".
@@ -1993,7 +2001,7 @@ script_qnext() {
 # work count and bail; a shorter one, or one whose pass fails, by the loop below.
 script_qadvance() {
   script_qt="$1"
-  local _pre
+  local _pre _nd
   if [ "${#1}" -ge "$SCRIPT_LINEAR_MIN" ] && script_qadvance_linear "$1"; then return 0; fi
   while [ -n "$script_qt" ]; do
     if [ "$script_qwork" -ge 1000 ]; then
@@ -2043,11 +2051,22 @@ script_qadvance() {
         script_qt="${script_qt:1}"
       elif [ "$script_qc" = "$script_q1" ]; then
         # A `'` directly preceded by `$` opens ANSI-C quoting, not a plain single
-        # quote. `\$'` cannot reach here: the backslash is earlier in the same
-        # search and consumes the `$` first.
+        # quote — but only when the run of `$` ahead of it has odd length: `$$` is the
+        # parameter of that name, so `$$'` is that parameter and then a plain quote.
+        # `\$'` cannot reach here: the backslash is earlier in the same search and
+        # consumes the `$` first, so an escaped dollar is never counted in the run.
         script_qstate=1
         case "$_pre" in
-          *"$script_qd") script_qstate=3 ;;
+          *"$script_qd")
+            _nd=0
+            while :; do
+              case "$_pre" in
+                *"$script_qd") _pre="${_pre%"$script_qd"}"; _nd=$(( _nd + 1 )) ;;
+                *) break ;;
+              esac
+            done
+            if [ $(( _nd % 2 )) -eq 1 ]; then script_qstate=3; fi   # M-QDOLLAR
+            ;;
         esac
       else
         script_qstate=2
@@ -2071,8 +2090,9 @@ script_qadvance() {
 # The program: tok[1], tok[3], … are runs of text (possibly empty) and tok[2],
 # tok[4], … one searched character each; i is the run the scan is in, p the next
 # byte it has not read. clen is the length of the character a run opens with, in
-# bytes. A `'` opens $'…' when a `$` ahead of it, with nothing between, is still
-# unread — the test the loop makes of the text before the quote.
+# bytes. A `'` opens $'…' when the run of `$` ahead of it — each still unread, with
+# nothing between them or before the quote — has odd length, the count the loop makes of
+# the text before the quote.
 readonly SCRIPT_QADVANCE_AWK='
     function clen(t,   b, n, j, c) {
       b = ord[substr(t, 1, 1)]
@@ -2109,7 +2129,7 @@ readonly SCRIPT_QADVANCE_AWK='
           else if (i + 1 <= m) { p += 1; i += 2 }
         } else if (st == 1 || st == 3) st = 0
         else if (st == 2) { if (c == "\"") { st = 0; ta = 0 } else ta = 1 }
-        else if (c == "\047") { st = 1; if (k - 1 > i0 && tok[k - 1] == "" && tok[k - 2] == "$") st = 3 }
+        else if (c == "\047") { st = 1; nd = 0; for (j = k - 2; j > i0 && tok[j] == "$" && tok[j + 1] == ""; j -= 2) nd++; if (nd % 2 == 1) st = 3 }
         else { st = 2; ta = 0 }
       }
       printf "%d %d %d %d\n", st, ta, wk, bail
@@ -2128,6 +2148,109 @@ script_qadvance_linear() {   # $1 = the segment
   script_qstate="$_st"; script_qtaint="$_ta"; script_qwork="$_wk"
   if [ "$_b" -eq 1 ]; then script_qbail=1; fi
   return 0
+}
+
+# --------------------------------------------------------------------------
+# THE TRUST BOUNDARY OF THE CARRIED QUOTE STATE.
+#
+# The scanners above, and the here-document pre-pass's own walk, model four quote
+# states and nothing else. A command can hold a construct they do not follow, and there
+# the carried state is wrong in the fail-OPEN direction: a later segment is read as
+# quoted text and suppressed behind a carrier, or later lines are removed as a
+# here-document body, while the shell runs them. So the carried state is trusted only
+# where the model follows the text. The program below reads the command's operator lines
+# — a here-document body is not command text and is never passed to it — and prints 1,
+# which latches the pre-pass's existing bail (script_hdbail, whose meaning is "vouch for
+# nothing"), when it meets one of two named constructs:
+#
+#   A COMMENT (M-QMODEL-CMT, M-QMODEL-HD): a `#` at quote state 0 that begins a word —
+#   no byte before it on its line, or a blank, a backquote, or one of ; & | ( ) < > —
+#   running to the end of its line. It latches when the comment holds a quote character,
+#   which every scanner would carry past the line. In full mode (the command carries
+#   `<<`) it also latches when the comment holds `<`, a backquote or a parenthesis, the
+#   other bytes the pre-pass carries past a line: a here-document operator, its backquote
+#   parity and its enclosure stack.
+#
+#   A NESTED EXPANSION (M-QMODEL-NEST): `$(`, `${`, `$[` or a backquote inside "...",
+#   where the scanners close the run at an inner `"` the shell reads as nested; or a
+#   backquote outside quotes, inside which the shell does not track a quote that begins
+#   and does not end there (POSIX 2.6.3), while the scanners carry it. At quote state 0
+#   the shell reads `$(`, `${` and `$[` as a fresh quoting context that the scanners
+#   follow, and the enclosure positions they open belong to the second view, so those
+#   three are not untrusted there. The expansion's text, up to the first closer of the
+#   opener's own kind on the same line, must be plain: the characters script_plain_word
+#   allows, plus blank and tab, with no `case`
+#   word at either end of the text or between blanks — a case pattern's `)` is the one
+#   closer that set admits which does not close. No closer on the line, any other byte, or
+#   a `case` word latches. A plain expansion is stepped over, and the scan resumes after
+#   its closer in the state it opened in.
+#
+# The quote states are script_qadvance's, the dollar run's parity included. The latch
+# only ever REMOVES a suppression or an excision, so on the first view it moves a verdict
+# toward refusal and never away from it — whether or not the running shell reads `#` as a
+# comment — and it adds no state to the scanners. The two constructs are an enumeration
+# over shell grammar, not a closed class: a construct outside them keeps today's reading.
+# Output other than exactly `0`, or a program that does not run, latches too.
+readonly SCRIPT_QMODEL_AWK='
+    BEGIN {
+      full = ENVIRON["QM_FULL"] + 0; st = 0; lat = 0
+      PL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_=+,.:/@%- \t"
+      CS = " \t\n`;&|()<>"
+    }
+    {
+      s = $0; n = length(s); i = 1; nd = 0; pv = "\n"
+      while (i <= n) {
+        c = substr(s, i, 1)
+        if (st == 1) { if (c == "\047") { st = 0; pv = c }; i++; continue }
+        if (st == 3) { if (c == "\\") { i += 2; continue }; if (c == "\047") { st = 0; pv = c }; i++; continue }
+        if (c == "\\") { i += 2; nd = 0; pv = "x"; continue }
+        if (st == 2 && c == "\"") { st = 0; pv = c; i++; continue }
+        o = ""; b = 0
+        if (c == "`") { o = c; b = i + 1 }
+        else if (st == 2 && c == "$") { e = substr(s, i + 1, 1); if (e == "(") o = ")"; else if (e == "{") o = "}"; else if (e == "[") o = "]"; b = i + 2 }
+        if (o != "") {
+          bad = 0
+          for (j = b; j <= n; j++) { e = substr(s, j, 1); if (e == o) break; if (!index(PL, e)) { bad = 1; break } }
+          if (j > n) bad = 1
+          if (!bad) { t = " " substr(s, b, j - b) " "; gsub(/\t/, " ", t); if (index(t, " case ")) bad = 1 }
+          if (bad) lat = 1   # M-QMODEL-NEST
+          if (lat) exit
+          i = j + 1; nd = 0; pv = o; continue
+        }
+        if (st == 2) { i++; continue }
+        if (c == "\047") { st = (nd % 2 == 1) ? 3 : 1; nd = 0; i++; continue }
+        if (c == "\"") { st = 2; nd = 0; i++; continue }
+        if (c == "#" && index(CS, pv)) {
+          m = substr(s, i + 1)
+          if (m ~ /["\047]/) lat = 1   # M-QMODEL-CMT
+          if (full && m ~ /[<`()]/) lat = 1   # M-QMODEL-HD
+          if (lat) exit
+          break
+        }
+        if (c == "$") nd++; else nd = 0
+        pv = c; i++
+      }
+    }
+    END { print (lat ? 1 : 0) }'
+# 0 when the trust check must run: the text holds a quote character together with a `#`,
+# a nested opener or a backquote, or — in full mode — any `#`. Single-literal tests only,
+# each one pass over the text; a command it declines makes no fork and keeps today's path.
+script_qmodel_needed() {   # $1 = text  $2 = 1 in full mode
+  case "$1" in
+    *"$script_q1"*|*"$script_q2"*)
+      case "$1" in *'#'*|*'$('*|*'${'*|*'$['*|*"$script_qbt"*) return 0 ;; esac
+      ;;
+  esac
+  if [ "$2" -eq 1 ]; then
+    case "$1" in *'#'*) return 0 ;; esac
+  fi
+  return 1
+}
+# 0 only when the program ran and vouched for the text.
+script_qmodel_ok() {   # $1 = text  $2 = 1 in full mode
+  local _r
+  _r="$(LC_ALL=C QM_FULL="$2" /usr/bin/awk "$SCRIPT_QMODEL_AWK" <<< "$1")" || return 1  # qmodel: awk
+  [ "$_r" = 0 ]   # M-QMODEL-OK
 }
 
 # The text of a second-view position ends where its own enclosure closes: for a
@@ -2278,10 +2401,17 @@ script_heredoc_prescan() {
   # FAST PATH. No `<<` anywhere means no here-document and no here-string, so the
   # adjudicated text is $COMMAND byte-for-byte and nothing below can perturb it.
   # This is what keeps every command that carries no such operator — the
-  # overwhelming majority — on exactly its pre-change code path.
+  # overwhelming majority — on exactly its pre-change code path. The one thing still
+  # asked of it is the trust boundary of the carried quote state (script_qmodel_ok),
+  # over the whole command, since no body is there to skip; a command whose quote
+  # state the model cannot follow latches the bail, and one the prefilter declines
+  # makes no fork.
   case "$COMMAND" in
     *'<<'*) : ;;
-    *) return 0 ;;
+    *)
+      if script_qmodel_needed "$COMMAND" 0 && ! script_qmodel_ok "$COMMAND" 0; then script_hdbail=1; fi   # M-QMODEL-FAST
+      return 0
+      ;;
   esac
 
   local _lt='<' _sc=';' _amp='&' _bar='|' _lp='(' _rp=')'
@@ -2289,7 +2419,7 @@ script_heredoc_prescan() {
   local _tmp="" _opline="" _cmp="" _pre="" _ch=""
   local _delim="" _delimline="" _body="" _bodyraw="" _headtxt=""
   local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0 _od=0 _bt=-1 _h2=0 _c2=0 _j=0 _rh2=""
-  local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out=""
+  local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out="" _ops="" _cont=0 _nd=0
 
   # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
   # unit this pass reasons in.
@@ -2309,6 +2439,7 @@ script_heredoc_prescan() {
     _qn=0
     _pos=0
     _lastsep=0
+    _cont=0
     # an enclosure still open from an earlier line opens this line at its start
     _j=0
     while [ "$_j" -lt "$_od" ]; do _ostk[$_j]=0; _j=$(( _j + 1 )); done
@@ -2353,14 +2484,28 @@ script_heredoc_prescan() {
         _abs=$(( _pos + script_qi ))
         _pos=$(( _abs + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
         if [ "$_ch" = "$script_bs" ]; then
+          # a backslash that ends the line is a continuation (read by the span check below)
+          if [ -z "$script_qt" ]; then _cont=1; fi
           _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
         elif [ "$_ch" = "$script_q1" ]; then
-          # A `'` directly preceded by `$` opens ANSI-C quoting, exactly as in
-          # script_qadvance. Reading it as a plain single quote would end one
-          # quote out of phase and report *inside* where bash is *outside*.
+          # A `'` directly preceded by an odd-length run of `$` opens ANSI-C quoting,
+          # exactly as in script_qadvance (`$$` is a parameter, so `$$'` opens a plain
+          # quote). Reading it as a plain single quote would end one quote out of phase
+          # and report *inside* where bash is *outside*. The run is counted to a bound;
+          # a longer run is a shape this pass declines.
           _qs=1
           case "$_pre" in
-            *"$script_qd") _qs=3 ;;
+            *"$script_qd")
+              _nd=0
+              while [ "$_nd" -lt 64 ]; do
+                case "$_pre" in
+                  *"$script_qd") _pre="${_pre%"$script_qd"}"; _nd=$(( _nd + 1 )) ;;
+                  *) break ;;
+                esac
+              done
+              if [ "$_nd" -ge 64 ]; then script_hdbail=1; return 0; fi
+              if [ $(( _nd % 2 )) -eq 1 ]; then _qs=3; fi
+              ;;
           esac
         elif [ "$_ch" = "$script_q2" ]; then
           _qs=2
@@ -2466,7 +2611,14 @@ script_heredoc_prescan() {
       fi
     done
 
+    # A line that queued a body while a quoted string, or a line continuation, runs past
+    # its end. The shell begins a body only after the next unquoted newline (POSIX 2.3),
+    # and this pass, which takes the physical line as its unit, would start it on the
+    # next physical line — removing command text the shell runs. It vouches for nothing.
+    if [ "$_qn" -gt 0 ] && { [ "$_qs" -ne 0 ] || [ "$_cont" -eq 1 ]; }; then script_hdbail=1; return 0; fi   # M-QMODEL-SPAN
+
     _out="${_out}${_opline}"$'\n'
+    _ops="${_ops}${_opline}"$'\n'
 
     # ---- consume the queued bodies, in operator order ----
     _k=0
@@ -2553,6 +2705,11 @@ script_heredoc_prescan() {
       _k=$(( _k + 1 ))
     done
   done
+
+  # The trust boundary of the carried quote state, over the operator lines alone (a body
+  # is not command text). It runs before the three exits below, so a command whose only
+  # `<<` sat inside a quote is still asked, and a declined command keeps every body.
+  if script_qmodel_needed "$_ops" 1 && ! script_qmodel_ok "$_ops" 1; then script_hdbail=1; return 0; fi   # M-QMODEL-FULL
 
   # No here-document operator at quote-state 0 — every `<<` in this command was a
   # here-string or quoted text. Nothing to excise, and nothing to decline.
@@ -3066,7 +3223,10 @@ case "$TOOL_NAME" in
     # The pass below replaces the latch with a model of the construct and KEEPS the
     # latch for everything the model declines, so the fail-closed posture is
     # preserved for every shape it does not cover. script_qbail is reused because
-    # its meaning is already "stop vouching for anything".
+    # its meaning is already "stop vouching for anything". The pass also latches it,
+    # in both of its modes, for a command whose carried quote state the trust
+    # boundary (SCRIPT_QMODEL_AWK) cannot follow — then no fragment is suppressed
+    # and no body is excised.
     script_hdstripped="$COMMAND"
     script_hdbail=0
     script_heredoc_prescan

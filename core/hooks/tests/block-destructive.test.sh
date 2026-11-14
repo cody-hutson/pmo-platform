@@ -9324,8 +9324,9 @@ encl_mut_arm "AC-ENCL-RESIDUAL-ansic-pair: the gate-deny mutant REFUSES it" bloc
 encl_arm "AC-ENCL-RESIDUAL-paramexp (pin, not fix-evidence): a ) inside a parameter expansion ends the position's text early" \
   "echo \$(X=\${Y:-)} bash ${ENCL_NA})" a - a
 encl_mut_arm "AC-ENCL-RESIDUAL-paramexp-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(X=\${Y:-)} bash ${ENCL_NA})" B "ENCL gate deny mutant"
-encl_arm "AC-ENCL-RESIDUAL-nested-apostrophe (pin, not fix-evidence): an apostrophe in a nested double-quoted string turns the carried quote state over" \
-  "echo \"\$(printf \"it's\" \$(bash ${ENCL_NA}))\"" a - a
+# The nested-apostrophe pin that stood here is retired: the trust boundary of the carried quote
+# state latches on that nesting, and QSCAN-NESTQ-02 (row EN86) records the class at warn and
+# refuses it at enforce. Its pairing arm below still reads the no-suppression copy.
 encl_mut_arm "AC-ENCL-RESIDUAL-nested-apostrophe-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\$(printf \"it's\" \$(bash ${ENCL_NA}))\"" W
 encl_arm "AC-ENCL-RESIDUAL-carrier-head (pin, not fix-evidence): a carrier at the head of an unquoted substitution lends its exemption to a later program string" \
   "bash -c \$(echo -n) 'true; (bash ${ENCL_NA})'" a - a
@@ -9578,6 +9579,54 @@ for qs_c in "QSCAN-WS-01:QC10:the word that opens with an even run of dollars an
 done
 /bin/rm -f "$qs_lib"
 
+# --- each clause is load-bearing: one-line copies of the hook ---
+#   qmcmt    the comment clause off          qmnest   the nested-expansion clause off
+#   qmhd     the full-mode comment bytes off  qdollar  the dollar run read as before (any run opens ANSI-C)
+#   qmfb     the program's awk missing       qmall    the program never vouches (every checked command latches)
+/usr/bin/sed '/# M-QMODEL-CMT/s/lat = 1/lat = lat/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-qmcmt.sh"
+/usr/bin/sed '/# M-QMODEL-NEST/s/lat = 1/lat = lat/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-qmnest.sh"
+/usr/bin/sed '/# M-QMODEL-HD/s/lat = 1/lat = lat/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-qmhd.sh"
+/usr/bin/sed '/# M-QDOLLAR/s/\$(( _nd % 2 )) -eq 1/"$_nd" -ge 1/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-qdollar.sh"
+/usr/bin/sed '/# qmodel: awk$/s#/usr/bin/awk#/nonexistent/awk#' "$HOOK" > "${ENCL_HOOKS}/block-destructive-qmfb.sh"
+/usr/bin/sed '/# M-QMODEL-OK/s/\[ "\$_r" = 0 \]/false/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-qmall.sh"
+for qs_c in qmcmt qmnest qmhd qdollar qmfb qmall; do
+  /bin/chmod +x "${ENCL_HOOKS}/block-destructive-${qs_c}.sh"
+  encl_shape_arm "QSCAN-COPY-${qs_c}: the copy differs from the hook by one line, rewritten" "block-destructive-${qs_c}.sh" "1/1"
+done
+# qscan_mut <label> <copy> <row id> <verdict>
+qscan_mut() {
+  if ! wc_row_cmd "$3"; then
+    /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$1" "$3"
+    FAIL=$((FAIL + 1))
+    return 0
+  fi
+  encl_mut_arm "$1 [row $3]" "$2" "$WC_CMDX" "$4"
+}
+qscan_mut "QSCAN-MUT-cmt: without the comment clause, CMT-01's class is allowed again" block-destructive-qmcmt.sh QC01 a
+qscan_mut "QSCAN-MUT-nest: without the nested-expansion clause, NESTQ-01's class is allowed again" block-destructive-qmnest.sh QC05 a
+qscan_mut "QSCAN-MUT-nest-bq: without the nested-expansion clause, BQ-01's class is allowed again" block-destructive-qmnest.sh QC08 a
+qscan_mut "QSCAN-MUT-hd: without the full-mode comment bytes, HD-01's class is allowed again" block-destructive-qmhd.sh QC07 a
+qscan_mut "QSCAN-MUT-dollar: with any dollar run opening ANSI-C quoting, DOLLAR-01's class is allowed again" block-destructive-qdollar.sh QC10 a
+# The fallback: with the program's awk missing nothing is vouched for — a checked command latches
+# (CMT-01's class is still refused, and EN63, which the program vouches for, is refused: the
+# declared fail-closed cost), while a command the prefilter declines keeps today's verdict — and
+# the hook raises no error.
+for qs_c in "QC01:B" "EN63:B" "QC20:a"; do
+  qs_row="${qs_c%%:*}"; qs_want="${qs_c#*:}"
+  qscan_mut "QSCAN-FB-${qs_row}: with the program's awk missing, the row reads ${qs_want}" block-destructive-qmfb.sh "$qs_row" "$qs_want"
+  case "$ENCL_ERR" in
+    *HOOK-ERROR*) /usr/bin/printf 'FAIL: QSCAN-FB-%s-noerror: the copy without the awk raised a hook error\n  %s\n' "$qs_row" "$ENCL_ERR"; FAIL=$((FAIL + 1)) ;;
+    *) /usr/bin/printf 'PASS: QSCAN-FB-%s-noerror: the copy without the awk raised no hook error\n' "$qs_row"; PASS=$((PASS + 1)) ;;
+  esac
+done
+# The prefilter: on a copy whose program never vouches, a command the prefilter declines keeps
+# today's path and verdict (QSCAN-PRE), while two near misses the program vouches for are refused —
+# so what holds them allowed in the shipped hook is the program's reading, not the arm's luck.
+qscan_mut "QSCAN-PRE: a command with no comment, nesting or backquote never reaches the program" block-destructive-qmall.sh QC20 a
+qscan_mut "QSCAN-PRE-hd: a carrier here-document whose operator line has no comment and no nesting never reaches the program" block-destructive-qmall.sh QC19 a
+qscan_mut "QSCAN-CMT-near-midword-pair: latched, the mid-word hash's command is refused" block-destructive-qmall.sh QC17 B
+qscan_mut "QSCAN-NESTQ-near-brace-pair: latched, the plain expansion's command is refused" block-destructive-qmall.sh QC18 B
+
 /bin/rm -rf "$ENCL_ROOT"
 
 # ---- AC-022-X* (#8314, DT pass 3): the -022 separator split is a linear pass ----
@@ -9823,7 +9872,7 @@ lin_y_eval() {
 }
 lin_why=""
 lin_y_lift "$HOOK" "${LIN_Y}/lib" || lin_why="${lin_why} the scan, its pass or the pass's program is missing from the hook;"
-F='if (k - 1 > i0 && tok[k - 1] == "" && tok[k - 2] == "$") st = 3' T='if (0) st = 3' /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+F='if (nd % 2 == 1) st = 3' T='if (0) st = 3' /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
   !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
   { print }
   END { exit d ? 0 : 1 }' "${LIN_Y}/lib" > "${LIN_Y}/near" || lin_why="${lin_why} the near-miss edit did not apply;"
@@ -9893,6 +9942,38 @@ if [ -z "$lin_why" ]; then
 else
   /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Y-FB: with the pass's awk missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
 fi
+
+# ---- QSCAN-LIN-* (#8317): the trust boundary of the carried quote state is one linear pass ----
+# The program reads every byte of a command the prefilter admits and that it vouches for, so its
+# longest walk is a long command dense with plain nested expansions in double quotes. That command is
+# built from row EN50 of the walk-payload corpus (a plain substitution in double quotes, no
+# interpreter), repeated one per line to 10, 20 and 40 KB, and run in both locales: each must clear
+# the hook inside the budget and be allowed. A latched command's cost is the one a declined
+# here-document body already pays — every line through the segment loop — which X1 to X24 time.
+lin_why=""
+if wc_row_cmd EN50; then
+  lin_q_unit="${WC_CMDX}"$'\n'
+  for lin_kb in 10 20 40; do lin_fill $(( lin_kb * 1024 )) '' "$lin_q_unit" '' > "${LIN_ROOT}/qscan-${lin_kb}.cmd"; done
+else
+  lin_why="row EN50 is not a block-destructive row of the corpus;"
+fi
+lin_n=0
+for lin_loc in en_US.UTF-8 C; do
+  for lin_kb in 10 20 40; do
+    lin_n=$(( lin_n + 1 ))
+    if [ -n "$lin_why" ]; then
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "QSCAN-LIN-${lin_n}: the long plain-expansion command" "$lin_why"; FAIL=$((FAIL + 1))
+      continue
+    fi
+    lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/qscan-${lin_kb}.cmd" "$LIN_LIMIT"
+    if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
+      /usr/bin/printf 'PASS: %s\n' "QSCAN-LIN-${lin_n}: a command dense with plain nested expansions in double quotes (row EN50 repeated) at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "QSCAN-LIN-${lin_n}: the long plain-expansion command (row EN50 repeated) in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+        "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+    fi
+  done
+done
 
 # ---- AC-CPH-D* (#8314, DT pass 7): the hook clears the canonicalizer's long shapes inside the budget ----
 #
