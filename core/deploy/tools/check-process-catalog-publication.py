@@ -35,10 +35,12 @@ LTOK = re.compile(r"(?<![A-Za-z0-9_#/])L(\d+)(?:\s*[–\-]\s*L?(\d+))?(?![A-Za-z
 LWORD = re.compile(r"(?i)\blines? \d+|\.[A-Za-z]{1,8}:\d+\b")
 PATHTOK = re.compile(r"(?<![A-Za-z0-9_.\-/>}])[A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+/?")
 NAME = re.compile(r"(?<![A-Za-z0-9_.\-/])[A-Za-z0-9_\-][A-Za-z0-9_.\-]*\.[A-Za-z][A-Za-z0-9]*(?![A-Za-z0-9_/])")
-# The edges of a listing name read as a file name: a hyphen and a dot are name characters, so neither the tail of a
-# longer name (`old-notes.md`, `v1.notes.md`) nor its head (`notes.md.bak`, `notes.md-old`) is the listed name. A dot
-# or a hyphen at the right edge with no name character after it is punctuation, so a name that ends a sentence is read.
-NAME_BEFORE, NAME_AFTER = r"(?<![A-Za-z0-9_.\-])", r"(?![A-Za-z0-9_]|[.\-][A-Za-z0-9_])"
+# The edges of a listing name read as a file name. A dot or a hyphen at either edge joins the listed name to a longer
+# name only when a name character stands on its far side - before it on the left edge, after it on the right - so
+# neither the tail of a longer name (`old-notes.md`, `v1.notes.md`) nor its head (`notes.md.bak`, `notes.md-old`) is
+# the listed name. A dot or a hyphen with no name character on its far side is punctuation, so a name that ends a
+# sentence is read. Both look-behinds are fixed-width.
+NAME_BEFORE, NAME_AFTER = r"(?<![A-Za-z0-9_])(?<![A-Za-z0-9_][.\-])", r"(?![A-Za-z0-9_]|[.\-][A-Za-z0-9_])"
 INSTANCE = re.compile(r"(?i)\b(?:(?:on )?this install|this instance|this machine|this workspace|live read|live mode|"
                       r"live value|mode file reads|as observed|observed (?:on|in|at|here)|at (?:this|its) read|fired here)\b")
 HERE = re.compile(r"(?i)\bhere\b")
@@ -1579,11 +1581,16 @@ def self_test(opts):
         check("probe: a mention spelled as a tracked file's own name is counted on no line, though a listing name differs by case alone",
               probe_one(page(1), "ws-name") == 0 and probe_one(page(1), "newly-tracked-name") == 0 and "README.md" in ST_BODY and "stage/Readme.md" in ST_LISTING)
         check("probe: the same name spelled as the listing spells it is counted", probe_one(page(1) + "\nSee Readme.md.\n", "ws-name") == 1)
-        # A listing name is a file name: a hyphen and a dot join it to a longer name, on either edge.
+        # A listing name is a file name: a hyphen or a dot joins it to a longer name, on either edge, when a name
+        # character stands on its far side.
         check("probe: the tail of a longer name, after a hyphen or a dot, is not the listed name",
               probe_one(page(1) + "\nSee old-draft-notes.md and v1.draft-notes.md here.\n", "ws-name") == 0)
         check("probe: the head of a longer name, before a dot or a hyphen, is not the listed name",
               probe_one(page(1) + "\nSee draft-notes.md.bak and draft-notes.md-old here.\n", "ws-name") == 0)
+        check("probe: a listed name right after a run of dots is counted",
+              probe_one(page(1) + "\nSee ...draft-notes.md here.\n", "ws-name") == 1)
+        check("probe: a listed name right after a double hyphen is counted",
+              probe_one(page(1) + "\nSee --draft-notes.md here.\n", "ws-name") == 1)
         longer = lab.commit(head, {"src/alpha.txt": "alpha writes handoff-report.md, old-draft-notes.md and draft-notes.md.bak\n"})
         check("probe: a source that carries only longer names holding a listed name does not ground it",
               probe_one(page(1) + "\nSee draft-notes.md.\n", "ws-name", longer) == 1

@@ -97,7 +97,7 @@ def run(a) -> int:
         pairs = [("paths", len(rows)), ("kinds", len(counts)), ("other", counts.get("other", 0))]
         code = PC.EXIT_CLEAN
     except PC.NotEvaluated as e:
-        print("NOT-EVALUATED: %s" % e)
+        print(PC.not_evaluated(e))
         code = PC.EXIT_NOT_EVALUATED
     print(PC.census("inventory", code, pairs))
     return code
@@ -188,8 +188,10 @@ def self_test() -> int:
         code, lines_bad, _err = cli(base + ["--rev", "no-such-commit"])
         arms.check("nothing examined: a commit that cannot be read is exit 3", code == 3 and "status=not-evaluated" in lines_bad[-1], lines_bad)
         code, lines_bad, _err = cli(base + ["--rev=--all"])
-        arms.check("nothing examined: a revision that begins with a dash is refused before git reads it, exit 3",
-                   code == 3 and "begins with a dash" in lines_bad[0] and "status=not-evaluated" in lines_bad[-1], lines_bad)
+        arms.check("nothing examined: a revision that begins with a dash is refused before git reads it, exit 3, and its "
+                   "line says it is not a clean result",
+                   code == 3 and lines_bad[0].startswith("NOT-EVALUATED: ") and "begins with a dash" in lines_bad[0]
+                   and lines_bad[0].endswith("; " + PC.NOT_CLEAN) and "status=not-evaluated" in lines_bad[-1], lines_bad)
         code, lines_bad, _err = cli(base + ["--kinds", str(tmp / "absent.tsv")])
         arms.check("nothing examined: a missing kinds table is exit 3, every census value unread",
                    code == 3 and lines_bad[-1] == "process-catalog inventory status=not-evaluated exit=3 paths=NA kinds=NA other=NA", lines_bad)
@@ -244,6 +246,6 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except PC.NotEvaluated as e:
-        print("NOT-EVALUATED: %s" % e)
+        print(PC.not_evaluated(e))
         print(PC.census("self-test", PC.EXIT_NOT_EVALUATED, [("arms", None), ("failed", None)]))
         sys.exit(PC.EXIT_NOT_EVALUATED)

@@ -118,7 +118,7 @@ Every Evidence row carries an evidence label from the workspace charter.
 
 **An in-scope row.** An Evidence row is in scope for the executed-evidence rules when its Lens cell names `executed`, or when its Source or Observation cell carries a measure reference, a link into the measures folder or one of the two markers below, whatever its lens.
 
-**Outcome wording.** An in-scope row that reports an outcome over time — that a step never ran, has not run, or that no run is recorded so far — is flagged for the reader as a warning: such wording tells what one install showed, which a page does not state.
+**Outcome wording.** An in-scope row that carries outcome wording — never, not yet, so far, to date, has not, have not, or "no … recorded, observed, found, present or exists" — is flagged for the reader as a warning: such wording can tell what one install showed, which a page does not state.
 
 ### The verdict
 
