@@ -2043,3 +2043,86 @@ LC12|block-destructive|rt-cont-hold|-|?|a|echo 'bash \@NL@@D@/na.sh'
 LC13|block-destructive|rt-cont-hold|-|?|a|echo $'bash \@NL@@D@/na.sh'
 LC14|block-destructive|rt-cont-near|-|?|a|bash \@NL@@D@/ok.sh
 LC15|block-destructive|rt-cont-hold|-|?|W|cat \@NL@@D@/na.sh
+# --- seed 15.6: card #8316 — the command positions the walk did not reach (CP rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8316's Stage-5 design (R0: a token is newly stepped only where
+# today's walk ends on it and adjudicates nothing) with its review's CD-1 (a redirection classified by direction; an
+# input word ahead of an interpreter routed as a program), CD-2 (the redirection step inside the wrapper grammar) and
+# FM-2's inert gate; recorded at the release head after #8320 (3ab2ccf8). gt is `?` and twins are `-`. rt-redir, rt-redir-cut and
+# rt-redir-stdin: a leading redirection, attached or alone, a descriptor or `{name}` form, between assignments, after a
+# reserved word, inside a wrapper's grammar, cut by the separator split, and an input redirection feeding an
+# interpreter (allowed at base; refused, or recorded at the arm's phase, once #8316 lands). rt-esc: an escaped or
+# partly quoted verb. rt-qwrap: a quoted wrapper word or option. rt-case: a `case` arm's command. rt-coproc and
+# rt-brace: a `coproc` and a brace group. rt-zpre: the zsh precommand words. rt-reach-near: shapes that must not move
+# (today's verdict before and after), and one declared precision move, PM-1. rt-reach-cost: the declared costs PC-1
+# and PC-2 (allowed at base; refused once #8316 lands). rt-reach-resid: a redirection between a wrapper's option and
+# its value (the review's FM-1, declared). rt-reach-ctl: each class with the listed script (allowed before and after).
+CP01|block-destructive|rt-redir|-|?|a|2>/dev/null bash @D@/na.sh
+CP02|block-destructive|rt-redir|-|?|a|> /dev/null bash @D@/na.sh
+CP03|block-destructive|rt-redir|-|?|a|{fd}>/dev/null bash @D@/na.sh
+CP04|block-destructive|rt-redir|-|?|a|FOO=1 >/dev/null BAR=2 bash @D@/na.sh
+CP05|block-destructive|rt-redir|-|?|a|if true; then >/dev/null bash @D@/na.sh; fi
+CP06|block-destructive|rt-redir|-|?|a|sudo >/dev/null bash @D@/na.sh
+CP07|block-destructive|rt-redir|-|?|a|sudo >/dev/null -u x bash @D@/na.sh
+CP08|block-destructive|rt-redir|-|?|a|timeout >/dev/null 5 bash @D@/na.sh
+CP09|block-destructive|rt-redir|-|?|a|echo $(>/dev/null bash @D@/na.sh)
+CP10|block-destructive|rt-redir-cut|-|?|a|>&2 bash @D@/na.sh
+CP11|block-destructive|rt-redir-cut|-|?|a|2>&- bash @D@/na.sh
+CP12|block-destructive|rt-redir-cut|-|?|a|>|/dev/null bash @D@/na.sh
+CP13|block-destructive|rt-redir-stdin|-|?|a|<@D@/na.sh bash
+CP14|block-destructive|rt-redir-stdin|-|?|a|0<@D@/na.sh bash
+CP15|block-destructive|rt-redir-stdin|-|?|a|<@D@/na.py python3
+CP16|block-destructive|rt-redir-stdin|-|?|a|<<<'bash @D@/na.sh' bash
+CP17|block-destructive|rt-reach-near|-|?|W|>@D@/x.sh true
+CP18|block-destructive|rt-reach-near|-|?|a|<(true) cat @D@/na.sh
+CP19|block-destructive|rt-reach-near|-|?|W|>/tmp/bash @D@/na.sh
+CP20|block-destructive|rt-reach-cost|-|?|a|<@D@/na.sh bash @D@/ok.sh
+CP21|block-destructive|rt-reach-cost|-|?|a|<@D@/na.sh bash -n
+CP22|block-destructive|rt-reach-resid|-|?|a|sudo -u >/dev/null x bash @D@/na.sh
+CP23|block-destructive|rt-esc|-|?|a|ba\sh @D@/na.sh
+CP24|block-destructive|rt-esc|-|?|a|$'bash' @D@/na.sh
+CP25|block-destructive|rt-esc|-|?|a|\source @D@/na.sh
+CP26|block-destructive|rt-esc|-|?|a|\/bin/bash @D@/na.sh
+CP27|block-destructive|rt-reach-near|-|?|a|'ba' @D@/na.sh
+CP28|block-destructive|rt-reach-near|-|?|a|$'ba\x73h' @D@/na.sh
+CP29|block-destructive|rt-qwrap|-|?|a|'sudo' bash @D@/na.sh
+CP30|block-destructive|rt-qwrap|-|?|a|\sudo bash @D@/na.sh
+CP31|block-destructive|rt-qwrap|-|?|a|su"do" bash @D@/na.sh
+CP32|block-destructive|rt-qwrap|-|?|a|sudo "-u" x bash @D@/na.sh
+CP33|block-destructive|rt-qwrap|-|?|a|echo @D@/na.sh | "xargs" bash
+CP34|block-destructive|rt-qwrap|-|?|a|sudo "-D@D@/x" bash @D@/na.sh
+CP35|block-destructive|rt-reach-near|-|?|a|"if" bash @D@/na.sh
+CP36|block-destructive|rt-reach-near|-|?|a|command "-v" bash @D@/na.sh
+CP37|block-destructive|rt-reach-near|-|?|B|"/usr/bin"/sudo bash @D@/na.sh
+CP38|block-destructive|rt-reach-near|-|?|a|timeout "-s" KILL 5 bash @D@/na.sh
+CP39|block-destructive|rt-case|-|?|a|case x in y) true ;; x) bash @D@/na.sh ;; esac
+CP40|block-destructive|rt-case|-|?|a|case x in y|x) bash @D@/na.sh ;; esac
+CP41|block-destructive|rt-case|-|?|a|case x in (x) bash @D@/na.sh ;; esac
+CP42|block-destructive|rt-case|-|?|a|case x in ( x ) bash @D@/na.sh ;; esac
+CP43|block-destructive|rt-case|-|?|a|case x in 'a b' ) bash @D@/na.sh ;; esac
+CP44|block-destructive|rt-case|-|?|a|echo $(case x in y) true;; x) bash @D@/na.sh;; esac)
+CP45|block-destructive|rt-case|-|?|a|case x in y) true ;; /x/y) bash @D@/na.sh ;; esac
+CP46|block-destructive|rt-reach-near|-|?|a|case x in x) TS=$(date) bash @D@/na.sh ;; esac
+CP47|block-destructive|rt-reach-near|-|?|a|case x in bash) true ;; esac
+CP48|block-destructive|rt-reach-near|-|?|a|case @D@/na.sh in x) true ;; esac
+CP49|block-destructive|rt-reach-near|-|?|a|grep 'a@NL@x) bash @D@/na.sh' f
+CP50|block-destructive|rt-reach-cost|-|?|a|grep 'case in@NL@x) bash @D@/na.sh' f
+CP51|block-destructive|rt-coproc|-|?|a|coproc NAME { bash @D@/na.sh; }
+CP52|block-destructive|rt-reach-near|-|?|a|mycmd { bash @D@/na.sh; }
+CP53|block-destructive|rt-brace|-|?|a|true && { bash @D@/na.sh; }
+CP54|block-destructive|rt-brace|-|?|a|if true; then { bash @D@/na.sh; }; fi
+CP55|block-destructive|rt-brace|-|?|a|echo $({ bash @D@/na.sh; })
+CP56|block-destructive|rt-reach-near|-|?|a|{bash,x} @D@/na.sh
+CP57|block-destructive|rt-reach-near|-|?|a|"{" bash @D@/na.sh
+CP58|block-destructive|rt-reach-near|-|?|W|( bash @D@/na.sh )
+CP59|block-destructive|rt-zpre|-|?|a|noglob bash @D@/na.sh
+CP60|block-destructive|rt-zpre|-|?|a|nocorrect bash @D@/na.sh
+CP61|block-destructive|rt-zpre|-|?|a|- bash @D@/na.sh
+CP62|block-destructive|rt-zpre|-|?|a|nocorrect noglob bash @D@/na.sh
+CP63|block-destructive|rt-reach-near|-|?|a|echo noglob nocorrect - bash @D@/na.sh
+CP64|block-destructive|rt-reach-ctl|-|?|a|>/dev/null bash @D@/ok.sh
+CP65|block-destructive|rt-reach-ctl|-|?|a|\bash @D@/ok.sh
+CP66|block-destructive|rt-reach-ctl|-|?|a|"sudo" bash @D@/ok.sh
+CP67|block-destructive|rt-reach-ctl|-|?|a|case x in x) bash @D@/ok.sh ;; esac
+CP68|block-destructive|rt-reach-ctl|-|?|a|coproc bash @D@/ok.sh
+CP69|block-destructive|rt-reach-ctl|-|?|a|{ bash @D@/ok.sh; }
+CP70|block-destructive|rt-reach-ctl|-|?|a|noglob bash @D@/ok.sh
