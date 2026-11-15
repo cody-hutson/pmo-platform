@@ -10814,10 +10814,10 @@ aq_shape_arm "CONT-M1: the joined-walk mutant removes its one line" block-destru
 aq_shape_arm "CONT-M2: the receiver-conjunction mutant removes its one line" block-destructive-contrecv.sh "1/0"
 
 # --- the closures ---
-sv_arm "CONT-INTERP-01: an interpreter and an unlisted script split by a continuation" LC01 B contwalk W
-sv_arm "CONT-INTERP-02: the same under source" LC02 B contwalk W
-sv_arm "CONT-INTERP-03: the same with an option before the continuation" LC03 B contwalk W
-sv_arm "CONT-INTERP-04: the same with the operand line indented" LC04 B contwalk W
+sv_arm "CONT-INTERP-01: an interpreter and an unlisted script split by a continuation" LC01 B contwalk W:exec
+sv_arm "CONT-INTERP-02: the same under source" LC02 B contwalk W:exec
+sv_arm "CONT-INTERP-03: the same with an option before the continuation" LC03 B contwalk W:exec
+sv_arm "CONT-INTERP-04: the same with the operand line indented" LC04 B contwalk W:exec
 sv_arm "CONT-DQ-01: a continuation inside double quotes, which the shell also removes, splitting the operand" LC05 B contwalk a
 sv_arm "CONT-HD-01: a physical receiver line naming a carrier, whose logical command is a shell reading its input" LC06 B contrecv a
 
@@ -10830,7 +10830,7 @@ sv_arm "CONT-CMT-PHASE-01: a comment holding a quote does not hide the next line
 sv_arm "CONT-SQ-01: a backslash-newline inside single quotes is kept" LC12 a
 sv_arm "CONT-ANSI-01: a backslash-newline inside ANSI-C quotes is kept" LC13 a
 sv_arm "CONT-near-01: the listed script across a continuation" LC14 a
-sv_arm "CONT-ARG-01: a continued argument line of a command that runs no script stays its own segment" LC15 W
+sv_arm "CONT-ARG-01: a continued argument line of a command that runs no script stays its own segment" LC15 W:exec
 
 /bin/rm -rf "$AQ_ROOT"
 
