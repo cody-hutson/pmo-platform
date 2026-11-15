@@ -155,6 +155,13 @@ Canary (not part of Public API, source-only): [`pmo-skill-refiner-selftest-canar
 | [`eval-writer`](../core/skills/eval-writer/) | invocation | Authors rigorous eval suites for AI agents, skills, LLM systems. |
 | [`pmo-skill-router`](../core/skills/pmo-skill-router/) | invocation | Capstone suite router — classifies a role-shaped request against [`core/skills/registry.md`](../core/skills/registry.md) and routes it to the correct role-Specialist. |
 
+### Scripts (2 cross-module CLIs)
+
+| Script | Contract | Consumer |
+|---|---|---|
+| [`extract-usage.sh`](../core/skills/finops-usage-extractor/scripts/extract-usage.sh) | CLI: env `STORE` (the store directory) and `FINOPS_SOURCE_ROOT` (the transcript root), `--rebuild`; writes `$STORE/usage.jsonl` per the usage-store schema. | The release module's per-release cost row (`compute-release-velocity.sh --cost-row`), over a scratch store it owns. |
+| [`convert-usage.sh`](../core/skills/finops-usage-extractor/scripts/convert-usage.sh) | CLI: `--convert` reads a JSON array of store `tokens` objects on stdin and writes weekly-point pairs as JSON on stdout; `--params` prints the resolved `[cost_unit]` values; exit 3 = an unresolved value. | The per-release cost row and the command-template ranking — the release cost unit's one conversion. |
+
 ### Public references
 
 **Templates:**

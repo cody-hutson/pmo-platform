@@ -8,6 +8,10 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v5.08 (2026-11-15) — The deletion guard judges every part of a command and the path it acts on
+
+### never-invoked-specialists-dispositioned (2026-11-14, version-less) — Every never-invoked role Specialist now has one ratified decision
+
 ### v5.07 (2026-11-10) — The filesystem guard refuses paths it cannot know in advance
 
 ### v5.06 (2026-11-08) — Every initiative in one live view, and dependencies read the right way round

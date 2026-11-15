@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.08] - 2026-11-15
+
+The deletion guard now judges every part of a command on the path it acts on, and no longer refuses text a command only carries.
+
+[Full notes](release/releases/notes/v5.08_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.08)
+
 ## [v5.07] - 2026-11-10
 
 The filesystem guard now refuses a file path that only a shell transformation would produce, instead of letting it through.
