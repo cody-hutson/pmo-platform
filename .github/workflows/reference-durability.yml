@@ -34,6 +34,15 @@ on:
 permissions:
   contents: read
 
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   reference-durability:
     name: Durable-corpus fragile-reference delta
