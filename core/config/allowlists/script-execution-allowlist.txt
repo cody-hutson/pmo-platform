@@ -1232,6 +1232,10 @@ core/deploy/tools/check-mirror-pair-parity.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-work-hierarchy.py
 ./core/deploy/tools/check-work-hierarchy.py
 core/deploy/tools/check-work-hierarchy.py
+[PMO_PLATFORM_ROOT]/core/deploy/tools/check-workflow-concurrency.py
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/check-workflow-concurrency.py
+./core/deploy/tools/check-workflow-concurrency.py
+core/deploy/tools/check-workflow-concurrency.py
 [PMO_PLATFORM_ROOT]/core/deploy/tools/compose-portfolio.py
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/deploy/tools/compose-portfolio.py
 ./core/deploy/tools/compose-portfolio.py

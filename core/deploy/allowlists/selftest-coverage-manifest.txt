@@ -78,6 +78,7 @@ core/deploy/tools/check-skill-count-imp.py
 core/deploy/tools/check-tool-exec-mode.py
 core/deploy/tools/check-version-anchors.py
 core/deploy/tools/check-work-hierarchy.py
+core/deploy/tools/check-workflow-concurrency.py
 core/deploy/tools/compose-portfolio.py
 core/deploy/tools/cross_module_audit_helper.py
 core/deploy/tools/generate_release_index.py
