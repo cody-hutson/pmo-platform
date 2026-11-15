@@ -947,13 +947,14 @@ script_word_join() {   # $1 = index in script_tokens of a token script_word_scan
           esac
           ;;
         3)
+          # as script_word_scan: a $'...' run's bytes are kept (the word stays inexact)
           case "$c" in
             "$sq") st=0; t="${t:1}" ;;
             "$bs")
               if [ "${#t}" -lt 2 ]; then break; fi
               t="${t:2}"
               ;;
-            *) t="${t:1}" ;;
+            *) out="${out}${c}"; t="${t:1}" ;;
           esac
           ;;
       esac
@@ -1792,7 +1793,7 @@ script_reach_inert() {   # $1 = token -> 0 when stepping it removes no adjudicat
   if script_reach_verbish "$1"; then return 1; fi
   normalize_script_token "$1"
   case "$script_norm_out" in
-    */*) if script_operand_implicated exec; then return 1; fi ;;
+    */*) if script_operand_implicated "exec"; then return 1; fi ;;
   esac
   return 0
 }
