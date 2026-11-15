@@ -26,7 +26,7 @@ The stream starts when the operator runs `./deploy.sh --check` — or a pull req
 its probes — and ends with a verdict per check: a console line and an exit code on the operator's machine, a row in
 the operator-instance warn log for every warn-mode finding, and a check-run conclusion on the host for every probe.
 Eighty-one live check blocks run in the suite, numbered to Check 82; further flags run a slice of it pre-merge, as
-Stage 13 evidence, or as the hermetic self-test. Because every new gate ships in warn mode, the stream has a third sub-process that closes the
+Stage 13 evidence, or as the hermetic self-test. Because a warn-mode gate stays in that mode until a decision moves it, the stream has a third sub-process that closes the
 loop: the drains are read, declared posture is reconciled against the host, and a gate graduates to enforce by one
 committed change or has its deferral recorded. The release pipeline is both a supplier (the merges and deploys that
 change what is checked) and a customer (Stage 6 self-verification, the merge gate, Stage 13 evidence). The

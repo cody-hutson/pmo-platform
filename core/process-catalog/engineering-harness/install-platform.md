@@ -81,7 +81,7 @@ flowchart TD
 | The operator config matches its declared schema and template | `core/deploy/deploy.sh` Check 70 (C-190) | code-enforce (parity arms) / code-warn (schema arm) | deploy-run | bootstrap-workspace |
 | The platform-config surfaces are structurally sound | `core/deploy/deploy.sh` Check 33 (C-155) | code-warn | deploy-run | bootstrap-workspace |
 | Deployed canonical-session-path artifacts are fresh against their source | `core/deploy/deploy.sh` Check 8 (C-127) | code-warn | deploy-run | select-deploy-targets |
-| Darwin only; a non-Darwin platform exits 78 before any write | [`docs/scripts/setup-workspace.sh`](/docs/scripts/setup-workspace.sh), `check_platform` | code-enforce | — | bootstrap-workspace |
+| Darwin only by default: a non-Darwin platform exits 78 before any write | [`docs/scripts/setup-workspace.sh`](/docs/scripts/setup-workspace.sh), `check_platform` | code-enforce | — | bootstrap-workspace |
 
 ## Evidence
 

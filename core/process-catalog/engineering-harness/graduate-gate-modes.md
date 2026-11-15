@@ -21,7 +21,7 @@ pack_version: 2
 
 ## Summary
 
-Every new gate ships in warn mode and records findings instead of failing runs; this sub-process is how a gate
+A gate that ships in warn mode records findings instead of failing runs; this sub-process is how such a gate
 leaves that state. The operator reads the drains — the deploy-check warn log per check id across its segments and
 each hook's drain per rule — classifies a sample, and records the reading in the gate's flip-decision row; Check 71
 and Check 74 put a rollout decision on a committed deadline, and HSR-1 makes the hook-layer reading a Stage 13

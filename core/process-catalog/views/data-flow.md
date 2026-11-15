@@ -9,11 +9,11 @@ generated_by: build-process-catalog.py
 
 # Data flow
 
-Artifacts and records named in the ICOM tables and the Steps rows of the activity pages, with the pages and steps that produce and consume each. Matching is conservative: two items match when their names are equal after link markup, parentheticals, code-span marks, outer punctuation and a leading article are dropped and the name has two or more words, or when they name the same code span or file. A match needs a producer and a consumer at different places.
+Artifacts and records named in the ICOM tables and the Steps rows of the activity pages, with the pages and steps that produce and consume each. Matching is conservative: two items match when their names are equal after link markup, parentheticals, code-span marks, outer punctuation and a leading article are dropped and the name has two or more words, or when they name the same code span or file. A match needs a producer and a consumer at different places. A "Produced by" place is a step or an ICOM table whose text names the item as an output; it may read, check or run the item rather than produce it.
 
 | Universe | Items | Records matched | Artifacts matched | Items matched | Items unmatched |
 |---|---|---|---|---|---|
-| Engineering harness | 1636 | 34 | 3 | 103 | 1533 |
+| Engineering harness | 1637 | 34 | 3 | 103 | 1534 |
 
 ## Engineering harness
 
