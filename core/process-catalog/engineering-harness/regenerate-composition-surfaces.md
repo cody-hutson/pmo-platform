@@ -15,7 +15,7 @@ triggered_by: [notify-version-skew, external:newer-release]
 actors: [operator, script:update.sh, script:setup-workspace.sh, script:compose.py]
 owner: operator
 lens_status: unobserved
-last_verified_commit: 7fae37579a54714fa6c56f469ab067b389219ad6
+last_verified_commit: daac96d17acefcb80afec5d71eb1b041d388d8d4
 pack_version: 2
 ---
 # Reconcile the operator config and regenerate composition surfaces (update.sh Phases 1–3)

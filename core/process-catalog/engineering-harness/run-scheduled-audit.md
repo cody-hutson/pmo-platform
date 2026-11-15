@@ -15,7 +15,7 @@ triggered_by: [schedule:registered-routine, event:operator-ask]
 actors: [external:scheduler, script:resolve-automation-binding.sh, skill:pmo-qa-auditor, operator, ci:automation-registry-check]
 owner: operator
 lens_status: deviates
-last_verified_commit: 7fae37579a54714fa6c56f469ab067b389219ad6
+last_verified_commit: daac96d17acefcb80afec5d71eb1b041d388d8d4
 pack_version: 2
 ---
 # Run a scheduled platform audit
@@ -91,7 +91,7 @@ flowchart TD
 | designed | § 6 of the four cadence protocols ([process fitness](/release/references/protocols/process-fitness-cadence.md), [structural audit](/release/references/protocols/structural-audit-cadence.md), [architecture conformance](/release/references/protocols/architecture-conformance-cadence.md), [decision audit](/release/references/protocols/decision-audit-cadence.md)) and § 2 of [the audit framework](/release/references/protocols/platform-health-audit-framework.md) | each axis is a hybrid of manual event triggers and a time-driven staleness sentinel whose registration the instance owns; the structural axis routes to the manual audit framework, not a skill mode | [SOURCE] |
 | executed | measure `scheduled-audit-folders` — [scheduled-audit-folders.py](/core/deploy/tools/process-catalog-measures/scheduled-audit-folders.py) (population: every dated folder directly inside the analysis home, by audit family; folder names and the frontmatter of each summary file only) | the measure reports the dated folders inside the analysis home by audit family, read from folder names and each summary file's frontmatter; one install's working state; supports no verdict on this page | [SOURCE] |
 | executed | held local — what would show how often the auditor skill is invoked, and in which mode, is the record of sessions across an install. | Nothing from that store is published | [SOURCE] |
-| designed vs built | Rule 1's quarterly row in [OPERATIONS.md](/core/governance/OPERATIONS.md#L732)<!-- source-anchor: line=732; fp=11d11a5257eff303 --> against the scheduler selector's shipped default in [operator.toml.template](/core/config/operator.toml.template#L280)<!-- source-anchor: line=280; fp=19dd7662bbd8e15e --> and [the adapter](/core/deploy/tools/resolve-automation-binding.sh) | Rule 1 states the quarterly task spawns a session; the shipped selector is `none`, so no task exists until the operator registers it, and the adapter reports `MANUAL` — the rule describes a registered instance, not the shipped default | [SOURCE] |
+| designed vs built | Rule 1's quarterly row in [OPERATIONS.md](/core/governance/OPERATIONS.md#L732)<!-- source-anchor: line=732; fp=11d11a5257eff303 --> against the scheduler selector's shipped default in [operator.toml.template](/core/config/operator.toml.template#L293)<!-- source-anchor: line=293; fp=19dd7662bbd8e15e --> and [the adapter](/core/deploy/tools/resolve-automation-binding.sh) | Rule 1 states the quarterly task spawns a session; the shipped selector is `none`, so no task exists until the operator registers it, and the adapter reports `MANUAL` — the rule describes a registered instance, not the shipped default | [SOURCE] |
 
 ## Navigation
 

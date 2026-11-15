@@ -14,7 +14,7 @@ triggered_by: [run-check-suite]
 actors: [script:deploy.sh, operator]
 owner: operator
 lens_status: deviates
-last_verified_commit: 4c6bfa8eae91e4c5eb54ca22efb7ecdb83fedcda
+last_verified_commit: daac96d17acefcb80afec5d71eb1b041d388d8d4
 pack_version: 2
 ---
 # Check the control layer's own registries, rollouts and gate meta-checks (Checks 37, 38, 57, 58, 60, 62, 71, 73, 74, 76, 79)

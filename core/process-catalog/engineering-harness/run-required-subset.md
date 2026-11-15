@@ -15,7 +15,7 @@ triggered_by: [event:pull-request, event:push-to-main]
 actors: [ci:deploy-check-ci, script:deploy.sh]
 owner: operator
 lens_status: conformant
-last_verified_commit: 7fae37579a54714fa6c56f469ab067b389219ad6
+last_verified_commit: daac96d17acefcb80afec5d71eb1b041d388d8d4
 pack_version: 2
 ---
 # Run the pre-merge required subset (Checks 38, 73, 77, 78)

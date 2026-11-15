@@ -14,7 +14,7 @@ triggered_by: [schedule:registered-routine, event:session-stop, event:operator-a
 actors: [external:scheduler, external:repo-host, skill:pmo-qa-auditor, skill:session-retro, skill:finops-usage-extractor, skill:context-budget-auditor, skill:skill-compliance-auditor, ci:security, hook:session-retro-trigger, script:resolve-automation-binding.sh, operator]
 owner: operator
 lens_status: deviates
-last_verified_commit: 7fae37579a54714fa6c56f469ab067b389219ad6
+last_verified_commit: daac96d17acefcb80afec5d71eb1b041d388d8d4
 pack_version: 2
 ---
 # Observe the platform on a schedule

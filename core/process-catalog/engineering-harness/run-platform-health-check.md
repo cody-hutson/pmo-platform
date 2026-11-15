@@ -15,7 +15,7 @@ triggered_by: [event:operator-runs-check, event:pull-request, event:push-to-main
 actors: [operator, script:deploy.sh, spoke, ci:deploy-check-ci, ci:skill-package-freshness, ci:gate-posture-reconciliation, external:repo-host, external:work-tracker]
 owner: operator
 lens_status: deviates
-last_verified_commit: 4c6bfa8eae91e4c5eb54ca22efb7ecdb83fedcda
+last_verified_commit: daac96d17acefcb80afec5d71eb1b041d388d8d4
 pack_version: 2
 ---
 # Run a platform health check

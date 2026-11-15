@@ -14,7 +14,7 @@ triggered_by: [event:operator-asks-for-usage]
 actors: [operator, skill:finops-usage-extractor, skill:context-budget-auditor, skill:skill-compliance-auditor, script:extract-usage.sh, script:measure-context-budget.sh, script:measure-skill-compliance.sh, ci:release-tooling-smoke]
 owner: operator
 lens_status: deviates
-last_verified_commit: 7fae37579a54714fa6c56f469ab067b389219ad6
+last_verified_commit: daac96d17acefcb80afec5d71eb1b041d388d8d4
 pack_version: 2
 ---
 # Measure platform usage and context cost
@@ -36,7 +36,7 @@ report delivery metrics rather than usage or cost, and are not an activity of th
 | Side | Criteria | Source |
 |---|---|---|
 | Entry | The operator asks a spend, budget or compliance question by name, or, for the two auditors, a scheduled run on the schedule seam (none of the registry's Routines rows names either); the compliance auditor additionally requires `--run` to spend | [finops SKILL.md](/core/skills/finops-usage-extractor/SKILL.md#L39)<!-- source-anchor: line=39; fp=6acd5424dab7b92c -->; [context-budget SKILL.md](/core/skills/context-budget-auditor/SKILL.md#L35)<!-- source-anchor: line=35; fp=c41205b8a2a1b500 -->; [compliance SKILL.md](/core/skills/skill-compliance-auditor/SKILL.md#L85)<!-- source-anchor: line=85; fp=55abed1498ce0b28 --> |
-| Exit | A report printed to stdout or written to the project's generated-artifact folder with its method and provenance; for the extractor, the store rewritten or upserted and the roll-up records appended; for the compliance auditor, one `trigger-rate` row appended to the calibration surface; no skill, component or corpus file changed | [finops SKILL.md](/core/skills/finops-usage-extractor/SKILL.md#L98)<!-- source-anchor: line=98; fp=793dcc5ad3084507 -->; [context-budget SKILL.md](/core/skills/context-budget-auditor/SKILL.md#L79)<!-- source-anchor: line=79; fp=025d05083c5a5446 -->; [compliance SKILL.md](/core/skills/skill-compliance-auditor/SKILL.md#L91)<!-- source-anchor: line=91; fp=025d05083c5a5446 --> |
+| Exit | A report printed to stdout or written to the project's generated-artifact folder with its method and provenance; for the extractor, the store rewritten or upserted and the roll-up records appended; for the compliance auditor, one `trigger-rate` row appended to the calibration surface; no skill, component or corpus file changed | [finops SKILL.md](/core/skills/finops-usage-extractor/SKILL.md#L168)<!-- source-anchor: line=168; fp=793dcc5ad3084507 -->; [context-budget SKILL.md](/core/skills/context-budget-auditor/SKILL.md#L79)<!-- source-anchor: line=79; fp=025d05083c5a5446 -->; [compliance SKILL.md](/core/skills/skill-compliance-auditor/SKILL.md#L91)<!-- source-anchor: line=91; fp=025d05083c5a5446 --> |
 
 ## Flow
 
@@ -81,7 +81,7 @@ flowchart TD
 
 | Control | Source | Enforcement class | Surface | Applies to |
 |---|---|---|---|---|
-| The usage extractor's four self-tests pass on every pull request | [`.github/workflows/release-tooling-smoke.yml`](/.github/workflows/release-tooling-smoke.yml) finops-selftest job (C-228) | code-enforce | ci-run | extract-token-spend |
+| The self-tests of the six extractor scripts in the job's loop pass on every pull request | [`.github/workflows/release-tooling-smoke.yml`](/.github/workflows/release-tooling-smoke.yml) finops-selftest job (C-228) | code-enforce | ci-run | extract-token-spend |
 | The usage store is written only to a path that is git-ignored inside any repository it sits in | [`core/skills/finops-usage-extractor/SKILL.md`](/core/skills/finops-usage-extractor/SKILL.md) § Read-only posture and § Exit codes (exit 4) | code-enforce | — | extract-token-spend |
 | Each skill measures and reports and never edits, trims, moves or removes a component, a skill description or a store record other than its own additive rows | the usage extractor's § Read-only posture; the two auditors' § Autonomy Tier and § What This Skill Does NOT Do | prose-only | — | every activity |
 | The compliance auditor never runs its scenario matrix from a bare trigger: operator-gated, capped at a stated default, dry-run first | [`core/skills/skill-compliance-auditor/SKILL.md`](/core/skills/skill-compliance-auditor/SKILL.md) § Cost Governor | prose-only | — | measure-skill-compliance |
@@ -93,7 +93,7 @@ flowchart TD
 | Lens | Source | Observation | Label |
 |---|---|---|---|
 | designed | the three skill definitions, root-linked above; [`core/automations/registry.md`](/core/automations/registry.md) § Routines | three measurement skills, each invoked by name and read-only on what it measures; the two auditors operate at Autonomy Tier 0, and each names a scheduled run on the schedule seam as a trigger, yet none of the registry's Routines rows names either | [SOURCE] |
-| built | [`.github/workflows/release-tooling-smoke.yml`](/.github/workflows/release-tooling-smoke.yml), the `finops-selftest` job (C-228); [`selftest-coverage-exclusions.txt`](/core/deploy/allowlists/selftest-coverage-exclusions.txt) | the workflow's job runs the usage extractor's four self-tests; the exclusion list of the self-test discovery gate records the two auditors' scripts, and the extractor's connector, as skill-owned scripts with no CI executor | [SOURCE] |
+| built | [`.github/workflows/release-tooling-smoke.yml`](/.github/workflows/release-tooling-smoke.yml), the `finops-selftest` job (C-228); [`selftest-coverage-exclusions.txt`](/core/deploy/allowlists/selftest-coverage-exclusions.txt) | the workflow's job runs the self-tests of the six extractor scripts in its loop; the exclusion list of the self-test discovery gate records the two auditors' scripts, and the extractor's connector, as skill-owned scripts with no CI executor | [SOURCE] |
 | executed | held local — what would show which phases of the usage lane have run is the usage store itself: a git-ignored store of session records across an install. | Nothing from that store is published | [SOURCE] |
 | executed | held local — what would show how often each of these skills is invoked is the record of sessions across an install. | Nothing from that store is published | [SOURCE] |
 | designed vs built | the scheduled-run rows of the two auditors' Triggers tables ([context-budget SKILL.md](/core/skills/context-budget-auditor/SKILL.md#L40)<!-- source-anchor: line=40; fp=6950feb09783edce -->, [compliance SKILL.md](/core/skills/skill-compliance-auditor/SKILL.md#L43)<!-- source-anchor: line=43; fp=8ec89c7e3c025533 -->) against [`core/automations/registry.md`](/core/automations/registry.md) § Routines | each auditor's definition names a scheduled run registered against the schedule seam; the registry states that an automation is admitted only if it has a row there, and none of its Routines rows names either skill | [SOURCE] |
