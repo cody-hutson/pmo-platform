@@ -332,7 +332,7 @@
           "default": "",
           "required": false,
           "description": "Override for the working-state telemetry folder that holds the per-release cost rows. Empty resolves to the canonical default ${claude_workspace_root}/pmo-platform/local-state/telemetry (in-repo and git-ignored, in the main checkout), through core/deploy/lib-instance-path.sh pmo_telemetry_path_for(). A subfolder of an in-repo home rather than of pmo-instance/ — a stem exception per depersonalization-spec.md §4.",
-          "since": "5.08"
+          "since": "5.09"
         }
       ]
     },
