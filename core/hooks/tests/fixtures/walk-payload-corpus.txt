@@ -2015,3 +2015,29 @@ SV25|block-destructive|rt-svres|-|?|a|env -S-i' -u' FOO bash @D@/na.sh
 SV26|block-destructive|rt-svctl|-|?|B|env -S-i$X bash @D@/na.sh
 # #8491 (GREEN): SV01-SV12 and SV17 move a -> B as the block's legend says. SV24 also closes (B, regrouped from
 # rt-svres to rt-svq): its later piece is an assignment, so the walk reaches the interpreter even under J0.
+# --- seed 15.5: card #8320 — an interpreter and its operand read across a line continuation as one command (LC rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8320's Amendment 1 (the second walk of the joined logical line,
+# and the here-document receiver read from the physical and the logical line, excised only when both name a
+# carrier; nothing replaced), recorded at the release head after #8491 (89156a4f). gt is `?`. A line continuation is `\@NL@`.
+# rt-cont: an interpreter or `source` and an unlisted script split across a continuation the shell removes (recorded
+# or allowed at base, read as its physical lines; refused once #8320 lands). rt-cont-hd: a here-document whose
+# physical receiver line names a carrier while the logical command is a shell reading its standard input (allowed
+# at base; refused once #8320 lands). rt-cont-hold: the shapes the amendment must not move — a here-document
+# receiver read before a continuation, a later line equal to the delimiter, a continuation inside an enclosure, a
+# backslash ending a comment (with and without a quote in it), and a backslash-newline inside `'…'` or `$'…'` (each
+# at its base verdict before and after). rt-cont-near: the listed script, and a command that runs no script.
+LC01|block-destructive|rt-cont|-|?|W|bash \@NL@@D@/na.sh
+LC02|block-destructive|rt-cont|-|?|W|source \@NL@@D@/na.sh
+LC03|block-destructive|rt-cont|-|?|W|bash -x \@NL@@D@/na.sh
+LC04|block-destructive|rt-cont|-|?|W|bash \@NL@    @D@/na.sh
+LC05|block-destructive|rt-cont|-|?|a|bash "@D@/na\@NL@.sh"
+LC06|block-destructive|rt-cont-hd|-|?|a|bash -s -- \@NL@echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+LC07|block-destructive|rt-cont-hold|-|?|B|gh issue comment 1 --body-file - \@NL@<<'EOF'@NL@bash @D@/na.sh@NL@EOF
+LC08|block-destructive|rt-cont-hold|-|?|B|gh issue comment 1 --body-file - <<'EOF'@NL@x \@NL@EOF@NL@bash @D@/na.sh@NL@cat <<'EOF'@NL@y@NL@EOF
+LC09|block-destructive|rt-cont-hold|-|?|B|bash @D@/na.sh $(echo \@NL@x)
+LC10|block-destructive|rt-cont-hold|-|?|B|echo hi # note \@NL@bash @D@/na.sh
+LC11|block-destructive|rt-cont-hold|-|?|B|echo hi # it's \@NL@bash @D@/na.sh
+LC12|block-destructive|rt-cont-hold|-|?|a|echo 'bash \@NL@@D@/na.sh'
+LC13|block-destructive|rt-cont-hold|-|?|a|echo $'bash \@NL@@D@/na.sh'
+LC14|block-destructive|rt-cont-near|-|?|a|bash \@NL@@D@/ok.sh
+LC15|block-destructive|rt-cont-near|-|?|a|cat \@NL@@D@/na.sh
