@@ -10832,6 +10832,79 @@ sv_arm "CONT-ANSI-01: a backslash-newline inside ANSI-C quotes is kept" LC13 a
 sv_arm "CONT-near-01: the listed script across a continuation" LC14 a
 sv_arm "CONT-ARG-01: a continued argument line of a command that runs no script stays its own segment" LC15 W:exec
 
+# ==========================================================================
+# BLOCK-022 — the command positions the walk did not reach (REACH-*), slice A: the words
+# ==========================================================================
+#
+# R0, today's reading first and unchanged: the walk newly steps past a token only where today's
+# walk ends on that token and adjudicates nothing. Slice A reads a command word, a wrapper word
+# and a wrapper's option after quote removal (script_ws_lit marks a complete reading the shell
+# would take literally, a backslash-free `$'…'` included), and walks the zsh precommand words.
+# Rows from seed 15.6 and the seed-6 / seed-1 rows the design names, by id.
+#   rmverb    the escaped or quoted verb is never resolved (the M-REACH-VERB block removed)
+#   rmlookup  the prefix walk dispatches on the raw token (the M-REACH-LOOKUP line removed)
+#   rmkw      the zsh precommand words leave the keyword and wrapper lines
+/usr/bin/sed '/# >>> M-REACH-VERB$/,/# <<< M-REACH-VERB$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-rmverb.sh"
+/usr/bin/sed '/# M-REACH-LOOKUP$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-rmlookup.sh"
+/usr/bin/sed -e '/# M-WRAP-KEYWORDS/s/|nocorrect)/)/' -e '/# M-WRAP-WORDS/s/|noglob|-|/|/' "$HOOK" > "${AQ_HOOKS}/block-destructive-rmkw.sh"
+/bin/chmod +x "${AQ_HOOKS}/block-destructive-rmverb.sh" "${AQ_HOOKS}/block-destructive-rmlookup.sh" "${AQ_HOOKS}/block-destructive-rmkw.sh"
+aq_shape_arm "REACH-M1: the verb mutant removes its marked block" block-destructive-rmverb.sh "17/0"
+aq_shape_arm "REACH-M2: the lookup mutant removes its one line" block-destructive-rmlookup.sh "1/0"
+aq_shape_arm "REACH-M3: the zsh-word mutant rewrites the keyword and wrapper lines" block-destructive-rmkw.sh "2/2"
+
+# REACH-VERB-LISTS: every hook line that begins with the interpreter alternation carries the
+# identical set, and there are four of them (the raw view, the normalized view, the word view and
+# script_reach_verbish), so a new view cannot carry a narrower set.
+reach_vl="$(/usr/bin/awk '
+  /^[ \t]*bash\|sh\|zsh\|python\|python3\|perl\|ruby\|node\)/ {
+    l = $0; sub(/^[ \t]*/, "", l); sub(/\).*/, "", l); n++; if (s == "") s = l; else if (l != s) bad++
+  }
+  END { printf "%d %d", n, bad + 0 }' "$HOOK")"
+if [ "$reach_vl" = "4 0" ]; then
+  /usr/bin/printf 'PASS: REACH-VERB-LISTS four interpreter-alternation lines, one identical set\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: REACH-VERB-LISTS wanted "4 0" (four lines, no differing set); observed "%s"\n' "$reach_vl"
+  FAIL=$((FAIL + 1))
+fi
+
+# --- the escaped or quoted verb ---
+sv_arm "REACH-ESC-01: a backslash-escaped verb" WR141 B rmverb a
+sv_arm "REACH-ESC-02: a backslash inside the verb" CP23 B rmverb a
+sv_arm "REACH-ESC-03: a partly quoted verb" V01 B rmverb a
+sv_arm "REACH-ESC-04: an empty-quote prefix on the verb" V02 B rmverb a
+sv_arm "REACH-ESC-05: a backslash-free ANSI-C quoted verb" CP24 B rmverb a
+sv_arm "REACH-ESC-06: an escaped source" CP25 B rmverb a
+sv_arm "REACH-ESC-ctl: an escaped verb with the listed script" V03 a
+sv_arm "REACH-ESC-near-1: a quoted strict prefix of a verb" CP27 a
+sv_arm "REACH-ESC-near-2: an ANSI-C run holding a backslash escape (R-6, declared)" CP28 a
+sv_arm "REACH-ESC-near-3: an escaped absolute interpreter, already resolved by the normalized view" CP26 B
+
+# --- the quoted wrapper word and option ---
+sv_arm "REACH-QWRAP-01: a double-quoted wrapper" WR142 B rmlookup a
+sv_arm "REACH-QWRAP-02: a single-quoted wrapper" CP29 B rmlookup a
+sv_arm "REACH-QWRAP-02b: an escaped wrapper" CP30 B rmlookup a
+sv_arm "REACH-QWRAP-02c: a partly quoted wrapper" CP31 B rmlookup a
+sv_arm "REACH-QWRAP-03: a quoted option taking a separate value" CP32 B
+sv_arm "REACH-QWRAP-04: a quoted xargs with no operand (the stdin deny)" CP33 B rmlookup a
+sv_arm "REACH-QWRAP-05: a quoted option whose attached value holds a path (the review's FM-2)" CP34 B
+sv_arm "REACH-QWRAP-near-1: a quoted reserved word stays unreserved" CP35 a
+sv_arm "REACH-QWRAP-near-2: a quoted describe-only option" CP36 a
+sv_arm "REACH-QWRAP-near-3: quoting before the last slash of a wrapper token keeps today's dispatch" CP37 B
+sv_arm "REACH-QWRAP-near-4: a quoted option-shaped token under timeout's positional (declared)" CP38 a
+
+# --- the zsh precommand words ---
+sv_arm "REACH-ZPRE-01: noglob" CP59 B rmkw a
+sv_arm "REACH-ZPRE-02: nocorrect" CP60 B rmkw a
+sv_arm "REACH-ZPRE-03: a lone dash" CP61 B rmkw a
+sv_arm "REACH-ZPRE-04: nocorrect then noglob" CP62 B rmkw a
+sv_arm "REACH-ZPRE-near: the three words as arguments" CP63 a
+
+# --- each class with the listed script ---
+sv_arm "REACH-ctl-esc: an escaped verb with the listed script" CP65 a
+sv_arm "REACH-ctl-qwrap: a quoted wrapper with the listed script" CP66 a
+sv_arm "REACH-ctl-zpre: a zsh precommand word with the listed script" CP70 a
+
 /bin/rm -rf "$AQ_ROOT"
 
 # --- Summary ---
