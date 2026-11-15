@@ -773,17 +773,17 @@ WR39|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 node
 WR40|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 perl
 WR41|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 ruby
 WR42|block-destructive|wrap-xargs|-|?|B|git ls-files '*.py' | xargs -n1 python3
-WR43|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -x
-WR44|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -e
-WR45|block-destructive|wrap-declared|-|?|a|printf x | xargs bash --
-WR46|block-destructive|wrap-declared|-|?|a|printf x | xargs bash --norc
-WR47|block-destructive|wrap-declared|-|?|a|printf x | xargs bash +x
-WR48|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -o errexit
-WR49|block-destructive|wrap-declared|-|?|a|printf x | xargs sh -e
-WR50|block-destructive|wrap-declared|-|?|a|printf x | xargs zsh -f
-WR51|block-destructive|wrap-declared|-|?|a|printf x | xargs -n 1 bash -e
-WR52|block-destructive|wrap-declared|-|?|a|printf x | xargs -n 1 bash -x
-WR53|block-destructive|wrap-declared|-|?|a|printf x | xargs -0 sh -x
+WR43|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -x
+WR44|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -e
+WR45|block-destructive|rt-xflag|-|?|B|printf x | xargs bash --
+WR46|block-destructive|rt-xflag|-|?|B|printf x | xargs bash --norc
+WR47|block-destructive|rt-xflag|-|?|B|printf x | xargs bash +x
+WR48|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -o errexit
+WR49|block-destructive|rt-xflag|-|?|B|printf x | xargs sh -e
+WR50|block-destructive|rt-xflag|-|?|B|printf x | xargs zsh -f
+WR51|block-destructive|rt-xflag|-|?|B|printf x | xargs -n 1 bash -e
+WR52|block-destructive|rt-xflag|-|?|B|printf x | xargs -n 1 bash -x
+WR53|block-destructive|rt-xflag|-|?|B|printf x | xargs -0 sh -x
 WR54|block-destructive|wrap-xargs-ctl|-|?|a|printf x | xargs bash -n
 WR55|block-destructive|wrap-xargs-ctl|-|?|a|find @D@ -print0 | xargs -0 bash -n
 WR56|block-destructive|wrap-xargs-ctl|-|?|a|printf x | xargs -n 1 bash -c 'echo hi'
@@ -2145,11 +2145,11 @@ CP70|block-destructive|rt-reach-ctl|-|?|a|noglob bash @D@/ok.sh
 # recorded at the enclosure's phase). rt-xnear: a parse-only check, an inline program, a non-shell module that only
 # compiles (a before and after). rt-xpos: an extensionless script named on argv behind the flags (Amendment 1: today's
 # verdict kept). rt-xres: a non-shell interpreter with only its flags (N1, declared). rt-xctl: the listed script.
-XF01|block-destructive|rt-xflag|-|?|a|printf x | xargs bash -x -e
-XF02|block-destructive|rt-xflag|-|?|a|printf x | sudo xargs bash -x
-XF03|block-destructive|rt-xcmode|-|?|a|printf x | xargs bash -c
-XF04|block-destructive|rt-xencl|-|?|a|echo $(printf x | xargs bash -x )
-XF05|block-destructive|rt-xencl|-|?|a|echo "$(printf x | xargs bash -x)" done
+XF01|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -x -e
+XF02|block-destructive|rt-xflag|-|?|B|printf x | sudo xargs bash -x
+XF03|block-destructive|rt-xcmode|-|?|B|printf x | xargs bash -c
+XF04|block-destructive|rt-xencl|-|?|W|echo $(printf x | xargs bash -x )
+XF05|block-destructive|rt-xencl|-|?|W|echo "$(printf x | xargs bash -x)" done
 XF06|block-destructive|rt-xnear|-|?|a|printf x | xargs bash -n
 XF07|block-destructive|rt-xnear|-|?|a|printf x | xargs bash -c 'echo hi'
 XF08|block-destructive|rt-xnear|-|?|a|printf x | xargs python3 -m py_compile

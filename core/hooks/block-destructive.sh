@@ -4833,6 +4833,28 @@ case "$TOOL_NAME" in
         continue
       fi
 
+      # THE XARGS-FED SHELL'S OWN TOKENS (Amendment 1). script_xpos records a positional token the
+      # walk stepped over: the shell then runs that word from argv, and the post-walk deny below
+      # leaves today's verdict. At an enclosure position the enclosure's closer is not the
+      # shell's: a token holding it ends the shell's list (the token itself counts when it opens
+      # with the shell's own text), and every later word is the enclosing command's.
+      script_xpos=0
+      script_xend="${#script_tokens[@]}"
+      if [ "$script_pass" -eq 2 ]; then
+        script_xk=$(( script_hidx + 1 ))
+        while [ "$script_xk" -lt "${#script_tokens[@]}" ]; do
+          case "${script_tokens[$script_xk]}" in
+            *')'*|*'`'*)
+              case "${script_tokens[$script_xk]}" in
+                ')'*|'`'*|'"'*|"'"*) script_xend="$script_xk" ;;
+                *) script_xend=$(( script_xk + 1 )) ;;
+              esac
+              break
+              ;;
+          esac
+          script_xk=$(( script_xk + 1 ))
+        done
+      fi
       # walk past flags to the first operand. `-c` takes a program STRING rather
       # than a path, so every .sh-bearing token after it is a candidate instead of
       # just one — and `-c` is meaningless for `source`, so cmode is gated on the
@@ -5347,6 +5369,7 @@ case "$TOOL_NAME" in
             # table and fall to the fail-OPEN side. Captured before the consumption
             # below re-normalizes into the same globals.
             script_fadv="$script_norm_out"
+            if [ "$script_idx" -lt "$script_xend" ]; then case "$script_fadv" in [-+]*) : ;; *) script_xpos=1 ;; esac; fi   # M-XF-POS
             script_idx=$(( script_idx + 1 ))
             if [ "$script_verb" = "interp" ] \
                && [ "$script_idx" -lt "${#script_tokens[@]}" ] \
@@ -5357,6 +5380,23 @@ case "$TOOL_NAME" in
             ;;
         esac
       done
+      # THE POST-WALK HALF OF THE XARGS STDIN DENY. The pre-walk half sees only "no token"; an
+      # xargs-fed shell with flags of its own and no operand, no inline program and no
+      # parse-only grant also reads its script from standard input. Every row this arm changes
+      # left through the line below with nothing adjudicated, so it only adds a refusal.
+      # >>> M-XF-WALK
+      if [ "$script_idx" -ge "$script_xend" ] && [ "$script_verb" = "interp" ] && [ "$script_interp_domain" = "interp" ] && [ "$script_noexec" -eq 0 ] && [ "$script_xpos" -eq 0 ]; then
+        if [ "$script_xargs" -eq 1 ]; then
+          if [ "$script_pass" -eq 2 ] && [ "$DESTRUCTIVE_022_ENCL_PHASE" != "enforce" ]; then
+            script_shell_verdict '$XARGS-STDIN' 1
+          else
+            block "BLOCK-DESTRUCTIVE-022" \
+              "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' its script on stdin after the interpreter's own flags, so no argv path exists for this hook to adjudicate." \
+              "pass the script path on the command line (xargs <interpreter> <flags> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
+          fi
+        fi
+      fi
+      # <<< M-XF-WALK
       [ "$script_idx" -lt "${#script_tokens[@]}" ] || continue
 
       # PARSE-ONLY EXEMPTION, AND WHAT script_noexec MEANS AT THIS GATE: the FINAL

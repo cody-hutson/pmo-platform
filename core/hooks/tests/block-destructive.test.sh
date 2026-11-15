@@ -8588,11 +8588,9 @@ wrap_arm "WRAPOPT-xargs-stdin-py (declared: no record-only stage): printf x | xa
   "printf x | xargs -n 1 python3" B a "unresolvable script target"
 wrap_arm "WRAPDIV-xargs-stdin-py-bare: printf x | xargs python3 blocks, as it did before this change" "printf x | xargs python3" B B "unresolvable script target"
 wrap_pair "WRAPPAIR-xargs-stdin-py-bare: the xargs-deny-off mutant allows it, so WRAPDIV-xargs-stdin-py-bare can fail" block-destructive-pxoff.sh a
-wrap_arm "WRAPDIV-xargs-interp-flag (declared: the deny is narrowed, not closed): printf x | xargs -n 1 bash -x allowed — the flag is a token" \
-  "printf x | xargs -n 1 bash -x" a a
-wrap_pair "WRAPPAIR-xargs-interp-flag: the stdin deny, whose predicate is no operand on argv, refuses it, so WRAPDIV-xargs-interp-flag can fail" block-destructive-pstdin.sh B
-wrap_arm "WRAPDIV-xargs-interp-flag-bare: printf x | xargs bash -x allowed, as before" "printf x | xargs bash -x" a a
-wrap_pair "WRAPPAIR-xargs-interp-flag-bare: the stdin deny refuses it, so WRAPDIV-xargs-interp-flag-bare can fail" block-destructive-pstdin.sh B
+wrap_arm "WRAPDIV-xargs-interp-flag (closed: the post-walk half of the stdin deny refuses it; its red-before limb is XARGS-IFLAG-WR52): printf x | xargs -n 1 bash -x refused" \
+  "printf x | xargs -n 1 bash -x" B -
+wrap_arm "WRAPDIV-xargs-interp-flag-bare (closed; its red-before limb is XARGS-IFLAG-WR43): printf x | xargs bash -x refused" "printf x | xargs bash -x" B -
 wrap_arm "WRAPOPT-xargs-ctl-c: ls | xargs -n1 bash -c 'echo hi' allowed" "ls | xargs -n1 bash -c 'echo hi'" a a
 wrap_pair "WRAPPAIR-xargs-ctl-c: the every-xargs-interpreter deny refuses it, so WRAPOPT-xargs-ctl-c can fail" block-destructive-pxall.sh B
 wrap_arm "WRAPOPT-xargs-ctl-grep: git ls-files | xargs -n1 grep -l bash allowed" "git ls-files | xargs -n1 grep -l bash" a a
