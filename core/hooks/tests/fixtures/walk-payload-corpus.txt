@@ -2068,20 +2068,20 @@ CP09|block-destructive|rt-redir|-|?|a|echo $(>/dev/null bash @D@/na.sh)
 CP10|block-destructive|rt-redir-cut|-|?|a|>&2 bash @D@/na.sh
 CP11|block-destructive|rt-redir-cut|-|?|a|2>&- bash @D@/na.sh
 CP12|block-destructive|rt-redir-cut|-|?|a|>|/dev/null bash @D@/na.sh
-CP13|block-destructive|rt-redir-stdin|-|?|a|<@D@/na.sh bash
-CP14|block-destructive|rt-redir-stdin|-|?|a|0<@D@/na.sh bash
-CP15|block-destructive|rt-redir-stdin|-|?|a|<@D@/na.py python3
+CP13|block-destructive|rt-redir-stdin|-|?|W|<@D@/na.sh bash
+CP14|block-destructive|rt-redir-stdin|-|?|W|0<@D@/na.sh bash
+CP15|block-destructive|rt-redir-stdin|-|?|W|<@D@/na.py python3
 CP16|block-destructive|rt-redir-stdin|-|?|a|<<<'bash @D@/na.sh' bash
 CP17|block-destructive|rt-reach-near|-|?|W|>@D@/x.sh true
 CP18|block-destructive|rt-reach-near|-|?|a|<(true) cat @D@/na.sh
-CP19|block-destructive|rt-reach-near|-|?|W|>/tmp/bash @D@/na.sh
-CP20|block-destructive|rt-reach-cost|-|?|a|<@D@/na.sh bash @D@/ok.sh
-CP21|block-destructive|rt-reach-cost|-|?|a|<@D@/na.sh bash -n
+CP19|block-destructive|rt-reach-near|-|?|B|>/tmp/bash @D@/na.sh
+CP20|block-destructive|rt-reach-cost|-|?|W|<@D@/na.sh bash @D@/ok.sh
+CP21|block-destructive|rt-reach-cost|-|?|W|<@D@/na.sh bash -n
 CP22|block-destructive|rt-reach-resid|-|?|a|sudo -u >/dev/null x bash @D@/na.sh
 CP23|block-destructive|rt-esc|-|?|a|ba\sh @D@/na.sh
 CP24|block-destructive|rt-esc|-|?|a|$'bash' @D@/na.sh
 CP25|block-destructive|rt-esc|-|?|a|\source @D@/na.sh
-CP26|block-destructive|rt-esc|-|?|a|\/bin/bash @D@/na.sh
+CP26|block-destructive|rt-reach-near|-|?|B|\/bin/bash @D@/na.sh
 CP27|block-destructive|rt-reach-near|-|?|a|'ba' @D@/na.sh
 CP28|block-destructive|rt-reach-near|-|?|a|$'ba\x73h' @D@/na.sh
 CP29|block-destructive|rt-qwrap|-|?|a|'sudo' bash @D@/na.sh
@@ -2126,3 +2126,8 @@ CP67|block-destructive|rt-reach-ctl|-|?|a|case x in x) bash @D@/ok.sh ;; esac
 CP68|block-destructive|rt-reach-ctl|-|?|a|coproc bash @D@/ok.sh
 CP69|block-destructive|rt-reach-ctl|-|?|a|{ bash @D@/ok.sh; }
 CP70|block-destructive|rt-reach-ctl|-|?|a|noglob bash @D@/ok.sh
+# seed 15.6, as measured at b740d865 (63 of 70 as predicted): CP13-CP15, CP20 and CP21 are recorded at W, because
+# today's walk reads a leading input-redirection word as the command word and the exec arm records it (the misread
+# PM-1 and the review's CD-1 describe); CP19 is refused today, its redirection word's basename read as the
+# interpreter (R-2, unchanged); CP26 is refused today, the normalized view already stripping the leading backslash
+# of an escaped absolute interpreter, so it moves to rt-reach-near.
