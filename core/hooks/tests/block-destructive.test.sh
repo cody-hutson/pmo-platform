@@ -10944,6 +10944,49 @@ sv_arm "REACH-REDIR-R2 (PC-2, declared): a stdin word under parse-only" CP21 B
 sv_arm "REACH-REDIR-resid (FM-1, declared): a redirection between a wrapper's option and its value" CP22 a
 sv_arm "REACH-ctl-redir: a leading redirection with the listed script" CP64 a
 
+# --- slice C: the compound positions ---
+# A brace group, `coproc` (with a `coproc NAME {` name), and a `case` arm: the first arm through
+# a lead-in that steps the subject, `in`, an optional `(` and the first pattern's closer; a later
+# arm through a segment-start closer step, gated on the command having opened a `case` and on the
+# closer being inert (the review's FM-2). Inside an enclosure the cut reads past a case pattern's
+# closer (M-REACH-CUT).
+#   rmcase  the lead-in and the coproc name are never stepped (the M-REACH-CASE line removed)
+#   rmkw2   `{`, `case` and `coproc` leave the keyword line
+#   rmcut   the enclosure cut stops at a case pattern's closer (the M-REACH-CUT line removed)
+/usr/bin/sed '/# M-REACH-CASE$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-rmcase.sh"
+/usr/bin/sed "/# M-WRAP-KEYWORDS/s/|'{'|case|coproc|/|/" "$HOOK" > "${AQ_HOOKS}/block-destructive-rmkw2.sh"
+/usr/bin/sed '/# M-REACH-CUT$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-rmcut.sh"
+/bin/chmod +x "${AQ_HOOKS}/block-destructive-rmcase.sh" "${AQ_HOOKS}/block-destructive-rmkw2.sh" "${AQ_HOOKS}/block-destructive-rmcut.sh"
+aq_shape_arm "REACH-M7: the case mutant removes its one line" block-destructive-rmcase.sh "1/0"
+aq_shape_arm "REACH-M8: the compound-keyword mutant rewrites the keyword line" block-destructive-rmkw2.sh "1/1"
+aq_shape_arm "REACH-M9: the cut mutant removes its one line" block-destructive-rmcut.sh "1/0"
+sv_arm "REACH-CASE-01: the first arm" EN80 B rmcase a
+sv_arm "REACH-CASE-02: a later arm" CP39 B
+sv_arm "REACH-CASE-03: an alternation the separator split cuts" CP40 B
+sv_arm "REACH-CASE-04: a leading ( joined to the pattern" CP41 B rmcase a
+sv_arm "REACH-CASE-04b: a leading ( spaced" CP42 B rmcase a
+sv_arm "REACH-CASE-05: a spaced closer behind a quoted pattern holding whitespace" CP43 B rmcase a
+sv_arm "REACH-CASE-06: the first arm inside an enclosure, at the enclosure's phase" EN81 W:shell-enclosure rmcut a
+sv_arm "REACH-CASE-07: a later arm inside an enclosure, a first-view segment" CP44 B
+sv_arm "REACH-CASE-08: a later arm whose pattern holds a slash but no exec-domain suffix (the review's FM-2)" CP45 B
+sv_arm "REACH-CASE-near-2: a pattern named after an interpreter keeps today's reading (R-2)" CP47 a
+sv_arm "REACH-CASE-near-3: a script-named subject, the arm running nothing" CP48 a
+sv_arm "REACH-CASE-near-4: a list marker opening a line of a non-carrier's quoted text, no case named" CP49 a
+sv_arm "REACH-CASE-R1 (PC-1, declared): the same list marker where the prose names case and then in" CP50 B
+sv_arm "REACH-COPROC-01: coproc" EN84 B rmkw2 a
+sv_arm "REACH-COPROC-02: coproc NAME and a brace group" CP51 B rmcase a
+sv_arm "REACH-COPROC-near: a simple command whose first word is a name" CP52 a
+sv_arm "REACH-BRACE-01: a brace group" EN83 B rmkw2 a
+sv_arm "REACH-BRACE-02: a brace group after &&" CP53 B rmkw2 a
+sv_arm "REACH-BRACE-02b: a brace group after then" CP54 B rmkw2 a
+sv_arm "REACH-BRACE-03: a brace group inside an enclosure, at the enclosure's phase" CP55 W:shell-enclosure
+sv_arm "REACH-BRACE-near-1: brace expansion at command position (R-9)" CP56 a
+sv_arm "REACH-BRACE-near-2: a quoted brace" CP57 a
+sv_arm "REACH-BRACE-near-paren: the parenthesized group keeps its enclosure record" CP58 W:shell-enclosure
+sv_arm "REACH-ctl-case: a case arm with the listed script" CP67 a
+sv_arm "REACH-ctl-coproc: coproc with the listed script" CP68 a
+sv_arm "REACH-ctl-brace: a brace group with the listed script" CP69 a
+
 /bin/rm -rf "$AQ_ROOT"
 
 # --- Summary ---
