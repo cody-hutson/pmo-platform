@@ -380,6 +380,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** CHEAP at ship (additive — revert the release PR; every addition ships a default and no existing field/row/enum is mutated), trending MODERATE once a downstream size-bound enforcement gate + `release-planner` wire into `effective_pts` and the weights are recalibrated.
 **File:** [ADR-027-release-bundle-risk-weight-keys-on-release-class.md](ADR-027-release-bundle-risk-weight-keys-on-release-class.md)
 
+### ADR-240 — Superseded pull-request runs are cancelled by one canonical workflow-level concurrency block, and a pull-request-time gate keeps it on every pull-request-triggered workflow
+
+**Status:** recorded in the record's own `status:` field, which is the authority (authored at Stage 6 for the `superseded-pr-runs-cancelled` release; ratified at its Stage 13 close).
+**Decision:** Every workflow a pull request triggers carries one concurrency block at workflow level, keyed on the workflow and the pull request's number with the run id as the fallback, so a newer pull-request run cancels the older one and frees its CI runner, while a run on a push, a tag, a schedule or a dispatch has a group of its own and is never cancelled. The `Workflow concurrency gate` job in `repo-integrity.yml` keeps it true by textual equality over the whole workflows directory. The block's text lives in the gate's checker and the gate's contract in the gate-coverage register; this record cites both.
+**Reversibility:** CHEAP (revert the gate's commits, then the configuration's; a cancelled run leaves no partial state).
+**File:** [ADR-240-superseded-run-cancellation-convention.md](ADR-240-superseded-run-cancellation-convention.md)
+
 ## Terminology / vocabulary ADRs
 
 ### ADR-049 — Canonical initiative / roadmap / milestone vocabulary + initiative→epic/project label mapping
