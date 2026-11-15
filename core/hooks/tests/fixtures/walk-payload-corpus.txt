@@ -2028,12 +2028,12 @@ SV26|block-destructive|rt-svctl|-|?|B|env -S-i$X bash @D@/na.sh
 # at its base verdict before and after). rt-cont-near: the listed script. LC15, a continued argument line of a
 # command that runs no script, is recorded at W in rt-cont-hold: the physical line is walked as its own segment, a
 # direct execution at the exec arm's phase, and the amendment keeps every physical reading (declared, as today).
-LC01|block-destructive|rt-cont|-|?|W|bash \@NL@@D@/na.sh
-LC02|block-destructive|rt-cont|-|?|W|source \@NL@@D@/na.sh
-LC03|block-destructive|rt-cont|-|?|W|bash -x \@NL@@D@/na.sh
-LC04|block-destructive|rt-cont|-|?|W|bash \@NL@    @D@/na.sh
-LC05|block-destructive|rt-cont|-|?|a|bash "@D@/na\@NL@.sh"
-LC06|block-destructive|rt-cont-hd|-|?|a|bash -s -- \@NL@echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+LC01|block-destructive|rt-cont|-|?|B|bash \@NL@@D@/na.sh
+LC02|block-destructive|rt-cont|-|?|B|source \@NL@@D@/na.sh
+LC03|block-destructive|rt-cont|-|?|B|bash -x \@NL@@D@/na.sh
+LC04|block-destructive|rt-cont|-|?|B|bash \@NL@    @D@/na.sh
+LC05|block-destructive|rt-cont|-|?|B|bash "@D@/na\@NL@.sh"
+LC06|block-destructive|rt-cont-hd|-|?|B|bash -s -- \@NL@echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 LC07|block-destructive|rt-cont-hold|-|?|B|gh issue comment 1 --body-file - \@NL@<<'EOF'@NL@bash @D@/na.sh@NL@EOF
 LC08|block-destructive|rt-cont-hold|-|?|B|gh issue comment 1 --body-file - <<'EOF'@NL@x \@NL@EOF@NL@bash @D@/na.sh@NL@cat <<'EOF'@NL@y@NL@EOF
 LC09|block-destructive|rt-cont-hold|-|?|B|bash @D@/na.sh $(echo \@NL@x)

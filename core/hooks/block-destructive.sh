@@ -2817,11 +2817,12 @@ script_heredoc_prescan() {
   esac
 
   local _lt='<' _sc=';' _amp='&' _bar='|' _lp='(' _rp=')'
-  local -a _lines _qdelim _qquoted _qstrip _qhead _qhead2 _ostk
+  local -a _lines _qdelim _qquoted _qstrip _qhead _qhead2 _qlhead _ostk
   local _tmp="" _opline="" _cmp="" _pre="" _ch=""
   local _delim="" _delimline="" _body="" _bodyraw="" _headtxt=""
   local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0 _od=0 _bt=-1 _h2=0 _c2=0 _j=0 _rh2=""
   local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out="" _ops="" _cont=0 _nd=0
+  local _lcar="" _lprev=""
 
   # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
   # unit this pass reasons in.
@@ -2838,6 +2839,9 @@ script_heredoc_prescan() {
   while [ "$_i" -lt "$_n" ]; do
     _opline="${_lines[$_i]}"
     _i=$(( _i + 1 ))
+    # the text of the earlier lines this one continues, kept while each ended in a continuation
+    if [ "$_cont" -eq 1 ]; then _lcar="${_lcar}${_lprev%"$script_bs"}"; else _lcar=""; fi
+    _lprev="$_opline"
     _qn=0
     _pos=0
     _lastsep=0
@@ -2996,6 +3000,10 @@ script_heredoc_prescan() {
               _qquoted[$_qn]="$_quoted"
               _qstrip[$_qn]="$_strip"
               _qhead[$_qn]="${_opline:$_lastsep:$(( _abs - _lastsep ))}"
+              # the receiver read from the LOGICAL line: when no separator precedes the operator on
+              # this line, the earlier lines it continues are part of the receiver's command
+              _qlhead[$_qn]=""
+              if [ "$_lastsep" -eq 0 ] && [ -n "$_lcar" ]; then _qlhead[$_qn]="${_lcar##*[;&|]}${_qhead[$_qn]}"; fi
               # second view of the receiver: the text after the innermost enclosure
               # still OPEN at the operator, when that lies after the last separator
               _h2="$_lastsep"
@@ -3081,6 +3089,10 @@ script_heredoc_prescan() {
       # excision is withdrawn and the body is adjudicated. Withdraw-only: a value whose quotes
       # balance, ahead of a real carrier, keeps its excision.
       if [ "$_ex" -eq 1 ] && [ "$script_head_open" -eq 1 ]; then _ex=0; fi   # M-WRAP-QVAL-HDHEAD
+      # The receiver is read from the physical line and from the logical line, and the body is
+      # excised only when both name a carrier: a continuation can make a carrier's physical line
+      # the tail of a shell's command, which reads the body. Withdraw-only.
+      if [ "$_ex" -eq 1 ] && [ -n "${_qlhead[$_k]}" ] && ! script_head_is_carrier "${_qlhead[$_k]}"; then _ex=0; fi   # M-CONT-RECV
 
       # >>> ENCL-HDHEAD-BEGIN — core/hooks/tests/block-destructive.test.sh
       # A body is excised only when the receiver read from the line head AND the one
@@ -3191,6 +3203,67 @@ script_resolve_head() {
     script_head="${_tok[$_i]}"
   fi
   return 0
+}
+
+# THE JOINED LOGICAL LINE. The shell removes a backslash-newline outside quotes and inside "…"
+# before it splits words, so an interpreter on one physical line and its operand on the next are
+# one command, which the physical segmentation reads as two. One linear awk pass in the C locale
+# follows the quote states the scanners model (outside, '…', "…", and $'…' opened by an odd run of
+# `$`), a `#` that opens a comment at the start of a word outside quotes, and the escaping
+# backslash, and prints each logical line that holds at least one removed continuation and starts
+# outside any quote and outside a comment. A backslash-newline inside '…' or $'…', or ending a
+# comment, is not removed by the shell and is not joined here. The lines are ADDED to the first
+# view for one more walk (M-CONT-WALK): every physical reading stays, so nothing adjudicated
+# before stops being adjudicated, and a body excision is never widened.
+script_cont_joined() {   # $1 = the command text -> stdout, one joined logical line per line
+  /usr/bin/printf '%s' "$1" | LC_ALL=C /usr/bin/awk '
+    { t = t (NR > 1 ? "\n" : "") $0 }
+    END {
+      n = length(t); st = 0; cmt = 0; line = ""; joined = 0; ok = 1; prev = ""; dr = 0
+      for (i = 1; i <= n; i++) {
+        c = substr(t, i, 1)
+        if (c == "\\" && (st == 0 || st == 2) && !cmt && i < n && substr(t, i + 1, 1) == "\n") { i++; joined = 1; continue }
+        if (c == "\n") {
+          if (joined && ok) print line
+          line = ""; joined = 0; cmt = 0; ok = (st == 0); prev = ""; dr = 0
+          continue
+        }
+        line = line c
+        if (cmt) continue
+        if (st == 1) { if (c == "\047") st = 0; continue }
+        if (st == 3 || st == 2) {
+          if (c == "\\") { i++; if (i <= n) line = line substr(t, i, 1); continue }
+          if ((st == 3 && c == "\047") || (st == 2 && c == "\"")) st = 0
+          continue
+        }
+        if (c == "\\") { i++; if (i <= n) line = line substr(t, i, 1); prev = "x"; dr = 0; continue }
+        if (c == "#" && (prev == "" || prev ~ /[ \t;&|()]/)) { cmt = 1; continue }
+        if (c == "\047") st = (dr % 2 == 1) ? 3 : 1
+        else if (c == "\"") st = 2
+        dr = (c == "$") ? dr + 1 : 0
+        prev = c
+      }
+      if (joined && ok) print line
+    }'
+}
+
+script_cont_add() {   # appends the joined logical lines of script_hdstripped to script_segments
+  local _j=""
+  _j="$(script_cont_joined "$script_hdstripped")" || _j=""
+  if [ -z "$_j" ]; then return 0; fi
+  _j="${_j//;/$'\n'}"
+  _j="${_j//&/$'\n'}"
+  _j="${_j//|/$'\n'}"
+  script_segments="${script_segments}"$'\n'"${_j}"
+  return 0
+}
+
+script_head_is_carrier() {   # $1 = text -> 0 when the head it resolves to is one of the four carriers
+  script_resolve_head "$1"
+  case "${script_head##*/}" in
+    gh|printf|echo|jq) return 0 ;;
+  esac
+  return 1
 }
 
 # THE ASSIGNMENT-VALUE STEP. The prefix walk splits a segment on whitespace before it reads a
@@ -3886,6 +3959,7 @@ case "$TOOL_NAME" in
     script_segments="${script_segments//;/$'\n'}"
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
+    case "$script_hdstripped" in *$'\\\n'*) script_cont_add ;; esac   # M-CONT-WALK
 
     # >>> ENCLOSURE-VIEW-BEGIN — core/hooks/tests/block-destructive.test.sh
     # SECOND VIEW. The loop below runs twice over one text. Its first pass is the
