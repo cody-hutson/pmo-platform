@@ -256,8 +256,8 @@ O29|block-destructive|fp|-|o|a|bash -x -e -u -o pipefail @D@/ok.sh 'arg one'
 Y01|block-destructive|nonflag|K15|w|B|bash '@D@/wr'ap @D@/na.sh
 Y02|block-destructive|nonflag|K15|w|B|bash ''@D@/wrap @D@/na.sh
 Y03|block-destructive|nonflag|T48|w|a|bash '@D@/wr'ap @D@/ok.sh
-V01|block-destructive|verb|-|X|a|'ba'sh @D@/na.sh
-V02|block-destructive|verb|-|X|a|""bash @D@/na.sh
+V01|block-destructive|verb|-|X|B|'ba'sh @D@/na.sh
+V02|block-destructive|verb|-|X|B|""bash @D@/na.sh
 V03|block-destructive|verb|-|o|a|'ba'sh @D@/ok.sh
 V04|block-destructive|verb|-|X|W|''@D@/na.sh
 U01|block-destructive|unq|-|X|B|bash $NOPE7019-x @D@/na.sh
@@ -862,8 +862,8 @@ WR134|block-destructive|wrap-qval-prec|-|?|a|MSG='run bash now' echo @D@/na.sh
 WR135|block-destructive|wrap-qval-prec|-|?|a|NOTE="see bash @D@/na.sh" true
 WR136|block-destructive|wrap-overblock|-|?|B|cat 'it; B=' bash @D@/na.sh
 WR140|block-destructive|wrap-declared|-|?|a|>/dev/null bash @D@/na.sh
-WR141|block-destructive|wrap-declared|-|?|a|\bash @D@/na.sh
-WR142|block-destructive|wrap-declared|-|?|a|"sudo" bash @D@/na.sh
+WR141|block-destructive|rt-esc|-|?|B|\bash @D@/na.sh
+WR142|block-destructive|rt-qwrap|-|?|B|"sudo" bash @D@/na.sh
 WR143|block-destructive|wrap-declared|-|?|a|sudo --zz-unlisted VALUE bash @D@/na.sh
 WR144|block-destructive|wrap-declared|-|?|a|doas bash @D@/na.sh
 WR145|block-destructive|wrap-declared|-|?|a|setsid bash @D@/na.sh
@@ -2078,18 +2078,18 @@ CP19|block-destructive|rt-reach-near|-|?|B|>/tmp/bash @D@/na.sh
 CP20|block-destructive|rt-reach-cost|-|?|W|<@D@/na.sh bash @D@/ok.sh
 CP21|block-destructive|rt-reach-cost|-|?|W|<@D@/na.sh bash -n
 CP22|block-destructive|rt-reach-resid|-|?|a|sudo -u >/dev/null x bash @D@/na.sh
-CP23|block-destructive|rt-esc|-|?|a|ba\sh @D@/na.sh
-CP24|block-destructive|rt-esc|-|?|a|$'bash' @D@/na.sh
-CP25|block-destructive|rt-esc|-|?|a|\source @D@/na.sh
+CP23|block-destructive|rt-esc|-|?|B|ba\sh @D@/na.sh
+CP24|block-destructive|rt-esc|-|?|B|$'bash' @D@/na.sh
+CP25|block-destructive|rt-esc|-|?|B|\source @D@/na.sh
 CP26|block-destructive|rt-reach-near|-|?|B|\/bin/bash @D@/na.sh
 CP27|block-destructive|rt-reach-near|-|?|a|'ba' @D@/na.sh
 CP28|block-destructive|rt-reach-near|-|?|a|$'ba\x73h' @D@/na.sh
-CP29|block-destructive|rt-qwrap|-|?|a|'sudo' bash @D@/na.sh
-CP30|block-destructive|rt-qwrap|-|?|a|\sudo bash @D@/na.sh
-CP31|block-destructive|rt-qwrap|-|?|a|su"do" bash @D@/na.sh
-CP32|block-destructive|rt-qwrap|-|?|a|sudo "-u" x bash @D@/na.sh
-CP33|block-destructive|rt-qwrap|-|?|a|echo @D@/na.sh | "xargs" bash
-CP34|block-destructive|rt-qwrap|-|?|a|sudo "-D@D@/x" bash @D@/na.sh
+CP29|block-destructive|rt-qwrap|-|?|B|'sudo' bash @D@/na.sh
+CP30|block-destructive|rt-qwrap|-|?|B|\sudo bash @D@/na.sh
+CP31|block-destructive|rt-qwrap|-|?|B|su"do" bash @D@/na.sh
+CP32|block-destructive|rt-qwrap|-|?|B|sudo "-u" x bash @D@/na.sh
+CP33|block-destructive|rt-qwrap|-|?|B|echo @D@/na.sh | "xargs" bash
+CP34|block-destructive|rt-qwrap|-|?|B|sudo "-D@D@/x" bash @D@/na.sh
 CP35|block-destructive|rt-reach-near|-|?|a|"if" bash @D@/na.sh
 CP36|block-destructive|rt-reach-near|-|?|a|command "-v" bash @D@/na.sh
 CP37|block-destructive|rt-reach-near|-|?|B|"/usr/bin"/sudo bash @D@/na.sh
@@ -2114,10 +2114,10 @@ CP55|block-destructive|rt-brace|-|?|a|echo $({ bash @D@/na.sh; })
 CP56|block-destructive|rt-reach-near|-|?|a|{bash,x} @D@/na.sh
 CP57|block-destructive|rt-reach-near|-|?|a|"{" bash @D@/na.sh
 CP58|block-destructive|rt-reach-near|-|?|W|( bash @D@/na.sh )
-CP59|block-destructive|rt-zpre|-|?|a|noglob bash @D@/na.sh
-CP60|block-destructive|rt-zpre|-|?|a|nocorrect bash @D@/na.sh
-CP61|block-destructive|rt-zpre|-|?|a|- bash @D@/na.sh
-CP62|block-destructive|rt-zpre|-|?|a|nocorrect noglob bash @D@/na.sh
+CP59|block-destructive|rt-zpre|-|?|B|noglob bash @D@/na.sh
+CP60|block-destructive|rt-zpre|-|?|B|nocorrect bash @D@/na.sh
+CP61|block-destructive|rt-zpre|-|?|B|- bash @D@/na.sh
+CP62|block-destructive|rt-zpre|-|?|B|nocorrect noglob bash @D@/na.sh
 CP63|block-destructive|rt-reach-near|-|?|a|echo noglob nocorrect - bash @D@/na.sh
 CP64|block-destructive|rt-reach-ctl|-|?|a|>/dev/null bash @D@/ok.sh
 CP65|block-destructive|rt-reach-ctl|-|?|a|\bash @D@/ok.sh

@@ -7771,7 +7771,7 @@ fi
 # so a declaration cannot outlive the divergence it excuses. They compare WORDS: the walks
 # also differ in grammar (match form, a leading redirection, an escaped verb, dash-led
 # tokens), and the readiness text states that per list.
-WRAP_KW=" then do else elif in ! if while until { } {} "
+WRAP_KW=" then do else elif in ! if while until { } {} nocorrect "
 WRAP_DECL='egress|keyword|in|missing|no shell construct puts a command word directly after in; this walk and the canonicalizer over-reach harmlessly, and dropping it would narrow an enforced set
 egress|keyword|{|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
 egress|keyword|}|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
@@ -7780,6 +7780,14 @@ lint|wrapper|doas|extra|a launcher outside this rule set, declared in the readin
 lint|wrapper|setsid|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|ionice|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|chrt|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
+egress|keyword|nocorrect|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
+canon|keyword|nocorrect|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
+egress|wrapper|noglob|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
+canon|wrapper|noglob|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
+lint|wrapper|noglob|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
+egress|wrapper|-|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
+canon|wrapper|-|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
+lint|wrapper|-|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
 lint|wrapper|xargs|missing|the lint excludes xargs for its own documented reason: the child stdin is not the pipe'
 
 wrap_words_hook() { # $1 = a copy of this hook -> one word per line, or EXTRACTION-FAILED
@@ -8335,12 +8343,6 @@ wrap_pair() {
 wrap_arm "WRAPDIV-redirect: >/dev/null bash <unlisted>.sh allowed (a leading redirection is not walked)" \
   ">/dev/null bash ${WRAP_NA}" a a
 wrap_pair "WRAPPAIR-redirect: the scan mutant reads past the redirection and refuses, so WRAPDIV-redirect can fail" block-destructive-pscan.sh B
-wrap_arm "WRAPDIV-escaped: \\bash <unlisted>.sh allowed (an escaped verb is not resolved)" \
-  "\\bash ${WRAP_NA}" a a
-wrap_pair "WRAPPAIR-escaped: the scan mutant reads on to the script and records it, so WRAPDIV-escaped can fail" block-destructive-pscan.sh W
-wrap_arm "WRAPDIV-quoted-word: \"sudo\" bash <unlisted>.sh allowed (the walk reads the raw wrapper token)" \
-  "\"sudo\" bash ${WRAP_NA}" a a
-wrap_pair "WRAPPAIR-quoted-word: the scan mutant reads past the quoted word and refuses, so WRAPDIV-quoted-word can fail" block-destructive-pscan.sh B
 
 # --- nice and stdbuf, with their options (AC-2) --------------------------------------------
 wrap_arm "WRAPOPT-AC2-nice: nice -n 10 bash <unlisted>.sh blocks" "nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"

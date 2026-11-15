@@ -457,6 +457,9 @@ normalize_script_token() {
 #                                   relied on.
 #   complete=1, script_ws_exact=1   A whole word with no expansion in it.
 #                                   script_ws_out IS the word after quote removal.
+#   script_ws_lit=1 (beside complete=1) The word is literal: exact, or exact but for a
+#                                   backslash-free `$'...'` run, whose bytes script_ws_out
+#                                   then holds. A verb or wrapper word is read on it.
 #   complete=1, script_ws_exact=0   A whole word whose VALUE argv does not
 #                                   determine: it carries `$` or a backtick where
 #                                   the shell expands them, an unquoted brace,
@@ -499,10 +502,12 @@ script_word_scan() {
   local sq="'" dq='"' bs='\' ds='$' bt='`'
   script_ws_complete=0
   script_ws_exact=1
+  script_ws_lit=1
   script_ws_out=""
   if [ "${#t}" -gt 1024 ]; then
     script_ws_complete=1
     script_ws_exact=0
+    script_ws_lit=0
     return 0
   fi
   while [ -n "$t" ]; do
@@ -521,14 +526,14 @@ script_word_scan() {
             # dollar of an odd-length run can open `$'...'` or `$"..."`.
             script_ws_exact=0
             case "${t:1:1}" in
-              "$ds") t="${t:2}" ;;
+              "$ds") script_ws_lit=0; t="${t:2}" ;;
               "$sq") st=3; t="${t:2}" ;;
-              "$dq") st=2; t="${t:2}" ;;
-              *) t="${t:1}" ;;
+              "$dq") script_ws_lit=0; st=2; t="${t:2}" ;;
+              *) script_ws_lit=0; t="${t:1}" ;;
             esac
             ;;
-          "$bt") script_ws_exact=0; t="${t:1}" ;;
-          '{'|'*'|'?'|'['|'~') script_ws_exact=0; out="${out}${c}"; t="${t:1}" ;;
+          "$bt") script_ws_exact=0; script_ws_lit=0; t="${t:1}" ;;
+          '{'|'*'|'?'|'['|'~') script_ws_exact=0; script_ws_lit=0; out="${out}${c}"; t="${t:1}" ;;
           *) out="${out}${c}"; t="${t:1}" ;;
         esac
         ;;
@@ -550,18 +555,22 @@ script_word_scan() {
             esac
             t="${t:2}"
             ;;
-          "$ds"|"$bt") script_ws_exact=0; t="${t:1}" ;;
+          "$ds"|"$bt") script_ws_exact=0; script_ws_lit=0; t="${t:1}" ;;
           *) out="${out}${c}"; t="${t:1}" ;;
         esac
         ;;
       3)
+        # $'...' is not decoded: script_ws_exact stays 0 for it. A run holding no backslash
+        # is literal text, so its bytes are kept and script_ws_lit stays 1; a backslash
+        # escape is not decoded, so it clears script_ws_lit.
         case "$c" in
           "$sq") st=0; t="${t:1}" ;;
           "$bs")
             if [ "${#t}" -lt 2 ]; then return 0; fi
+            script_ws_lit=0
             t="${t:2}"
             ;;
-          *) t="${t:1}" ;;
+          *) out="${out}${c}"; t="${t:1}" ;;
         esac
         ;;
     esac
@@ -1753,6 +1762,41 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
   return 0
 }
 
+# R0 — TODAY'S READING FIRST AND UNCHANGED. A token the walk newly steps past, or newly reads by
+# its value after quote removal, is one today's walk ends on and adjudicates nothing. These two
+# helpers are that test. A token is verbish when any reading of it names an interpreter or
+# `source`: its raw basename, its normalized basename when that resolves, or its literal word's
+# basename. It is inert when it is not verbish and stepping it could not pre-empt the exec arm:
+# not an exec candidate (a slash-bearing normalized text) whose operand domain the exec arm
+# implicates (the review's FM-2 gate, exactly the condition under which that arm records).
+script_reach_verbish() {   # $1 = token -> 0 when any reading of it names a verb
+  local _b="" _c="${1##*/}"
+  normalize_script_token "$1"
+  if [ "$script_norm_ok" -eq 1 ]; then _c="${_c}"$'\n'"${script_norm_out##*/}"; fi
+  case "$1" in
+    *"'"*|*'"'*|*\\*)
+      script_word_scan "$1"
+      if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_lit" -eq 1 ]; then _c="${_c}"$'\n'"${script_ws_out##*/}"; fi
+      ;;
+  esac
+  while IFS= read -r _b; do
+    case "$_b" in
+      bash|sh|zsh|python|python3|perl|ruby|node) return 0 ;;
+      source|.) return 0 ;;
+    esac
+  done <<< "$_c"
+  return 1
+}
+
+script_reach_inert() {   # $1 = token -> 0 when stepping it removes no adjudication
+  if script_reach_verbish "$1"; then return 1; fi
+  normalize_script_token "$1"
+  case "$script_norm_out" in
+    */*) if script_operand_implicated exec; then return 1; fi ;;
+  esac
+  return 0
+}
+
 # Step script_hidx over ONE wrapper's own option run and positional operands.
 # Entered with script_hidx on the token after the wrapper word and script_wrap
 # holding the wrapper's basename; leaves script_hidx on the first token that is
@@ -1760,10 +1804,29 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
 # option was seen. It steps and never adjudicates: see FAILURE DIRECTION above.
 script_wrapper_options() {
   local _tok="" _rest="" _c="" _n="${#script_tokens[@]}"
+  local _wq=0
   script_wrapper_row "$script_wrap"
   if [ "$script_wrow" -eq 0 ]; then return 0; fi
   while [ "$script_hidx" -lt "$_n" ]; do
     _tok="${script_tokens[$script_hidx]}"
+    # A quoted option is read by its value (R0): only a token not led by `-` that holds a quote
+    # or a backslash, under a row whose operands are none, or assignments with no `=` here, and
+    # only when it is inert and its literal value is led by `-`. The cluster and long-option
+    # arms below then move script_hidx exactly as for the unquoted spelling.
+    case "$_tok" in
+      -*) : ;;
+      *"'"*|*'"'*|*\\*)
+        _wq=0
+        case "$script_wpos" in
+          none) _wq=1 ;;
+          assign) case "$_tok" in *=*) : ;; *) _wq=1 ;; esac ;;
+        esac
+        if [ "$_wq" -eq 1 ] && script_reach_inert "$_tok"; then
+          script_word_scan "$_tok"
+          if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_lit" -eq 1 ] && [ "${script_ws_out:0:1}" = "-" ]; then _tok="$script_ws_out"; fi
+        fi
+        ;;
+    esac   # M-REACH-WOPT
     case "$_tok" in
       --)
         script_hidx=$(( script_hidx + 1 ))
@@ -4250,12 +4313,25 @@ case "$TOOL_NAME" in
             continue
             ;;
         esac
-        case "${script_ptok##*/}" in
-          then|do|else|elif|if|while|until|'in'|'!')   # M-WRAP-KEYWORDS
+        # The token's word after quote removal names a keyword or a wrapper the raw token hides
+        # (`"sudo"`, `\sudo`, `su"do"`). Read only on a complete, literal reading whose basename
+        # differs from the raw one, so a token that matched before dispatches as before (R0).
+        script_plook="${script_ptok##*/}"
+        script_pqv=0
+        case "$script_ptok" in
+          *"'"*|*'"'*|*\\*)
+            script_word_scan "$script_ptok"
+            if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_lit" -eq 1 ] && [ "${script_ws_out##*/}" != "${script_ptok##*/}" ]; then script_plook="${script_ws_out##*/}"; script_pqv=1; fi   # M-REACH-LOOKUP
+            ;;
+        esac
+        case "$script_plook" in
+          then|do|else|elif|if|while|until|'in'|'!'|nocorrect)   # M-WRAP-KEYWORDS
+            # a quoted reserved word is not reserved, in bash or zsh: it is the command word
+            [ "$script_pqv" -eq 0 ] || break
             script_hidx=$(( script_hidx + 1 ))
             ;;
-          sudo|env|command|builtin|exec|nohup|time|xargs|nice|stdbuf|timeout)   # M-WRAP-WORDS
-            script_wrap="${script_ptok##*/}"
+          sudo|env|command|builtin|exec|noglob|-|nohup|time|xargs|nice|stdbuf|timeout)   # M-WRAP-WORDS
+            script_wrap="$script_plook"
             if [ "$script_wrap" = "xargs" ]; then script_xargs=1; fi
             script_hidx=$(( script_hidx + 1 ))
             script_wrapper_options   # M-WRAP-OPTIONS
@@ -4392,6 +4468,28 @@ case "$TOOL_NAME" in
           esac
         fi
       fi
+      # THE WORD VIEW. A verb the shell reads after quote removal — an escaped or partly quoted
+      # command word (a backslash before or inside it, quotes around part of it, an empty-quote
+      # prefix, a backslash-free `$'…'`) — names the interpreter both views above missed. Asked
+      # only when neither found a verb and the raw token holds a quote or a backslash, and only
+      # on a complete, literal reading, so every token resolved before resolves as it did (R0).
+      # >>> M-REACH-VERB
+      if [ -z "$script_verb" ]; then
+        case "${script_tokens[$script_hidx]}" in
+          *"'"*|*'"'*|*\\*)
+            script_word_scan "${script_tokens[$script_hidx]}"
+            if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_lit" -eq 1 ]; then
+              case "${script_ws_out##*/}" in
+                bash|sh|zsh|python|python3|perl|ruby|node)
+                             script_verb="interp"; script_interp_base="${script_ws_out##*/}"
+                             script_set_interp_domain "$script_interp_base" ;;
+                source|.)    script_verb="source"; script_interp_domain="source" ;;
+              esac
+            fi
+            ;;
+        esac
+      fi
+      # <<< M-REACH-VERB
       # EXEC ARM (the former `*)` branch of the verb `case`). Its body is carried
       # over at its ORIGINAL indentation deliberately: re-indenting it would rewrite
       # ~60 unchanged lines and bury this change's three real edits in the diff.
