@@ -2025,7 +2025,9 @@ SV26|block-destructive|rt-svctl|-|?|B|env -S-i$X bash @D@/na.sh
 # at base; refused once #8320 lands). rt-cont-hold: the shapes the amendment must not move — a here-document
 # receiver read before a continuation, a later line equal to the delimiter, a continuation inside an enclosure, a
 # backslash ending a comment (with and without a quote in it), and a backslash-newline inside `'…'` or `$'…'` (each
-# at its base verdict before and after). rt-cont-near: the listed script, and a command that runs no script.
+# at its base verdict before and after). rt-cont-near: the listed script. LC15, a continued argument line of a
+# command that runs no script, is recorded at W in rt-cont-hold: the physical line is walked as its own segment, a
+# direct execution at the exec arm's phase, and the amendment keeps every physical reading (declared, as today).
 LC01|block-destructive|rt-cont|-|?|W|bash \@NL@@D@/na.sh
 LC02|block-destructive|rt-cont|-|?|W|source \@NL@@D@/na.sh
 LC03|block-destructive|rt-cont|-|?|W|bash -x \@NL@@D@/na.sh
@@ -2040,4 +2042,4 @@ LC11|block-destructive|rt-cont-hold|-|?|B|echo hi # it's \@NL@bash @D@/na.sh
 LC12|block-destructive|rt-cont-hold|-|?|a|echo 'bash \@NL@@D@/na.sh'
 LC13|block-destructive|rt-cont-hold|-|?|a|echo $'bash \@NL@@D@/na.sh'
 LC14|block-destructive|rt-cont-near|-|?|a|bash \@NL@@D@/ok.sh
-LC15|block-destructive|rt-cont-near|-|?|a|cat \@NL@@D@/na.sh
+LC15|block-destructive|rt-cont-hold|-|?|W|cat \@NL@@D@/na.sh
