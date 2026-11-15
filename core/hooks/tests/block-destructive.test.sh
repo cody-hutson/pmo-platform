@@ -10985,6 +10985,32 @@ sv_arm "REACH-ctl-case: a case arm with the listed script" CP67 a
 sv_arm "REACH-ctl-coproc: coproc with the listed script" CP68 a
 sv_arm "REACH-ctl-brace: a brace group with the listed script" CP69 a
 
+# ==========================================================================
+# BLOCK-022 — an xargs-fed shell whose flag walk ends with no operand (XARGS-*)
+# ==========================================================================
+# The pre-walk half of the xargs stdin deny sees only "no token follows the interpreter". The
+# post-walk half (M-XF-WALK) refuses an xargs-fed shell whose own flags leave no operand, no
+# inline program and no parse-only grant, where every stepped token was option-shaped or an
+# option's argument (Amendment 1); at an enclosure position the enclosure's closer and later
+# words are not the shell's. A non-shell interpreter stays out (D-8492-NonShell N1, declared).
+#   pxwalk  the post-walk half removed (its marked block)
+/usr/bin/sed '/# >>> M-XF-WALK$/,/# <<< M-XF-WALK$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pxwalk.sh"
+/bin/chmod +x "${AQ_HOOKS}/block-destructive-pxwalk.sh"
+xf_n="$(/usr/bin/awk '/# >>> M-XF-WALK$/{s=NR} /# <<< M-XF-WALK$/{if (s) print NR - s + 1}' "$HOOK")"
+aq_shape_arm "XARGS-M1: the post-walk mutant removes its marked block" block-destructive-pxwalk.sh "${xf_n:-MISSING}/0"
+for xf_r in WR43 WR44 WR45 WR46 WR47 WR48 WR49 WR50 WR51 WR52 WR53 XF01 XF02; do
+  sv_arm "XARGS-IFLAG-${xf_r}: an xargs-fed shell with flags of its own and no operand" "$xf_r" B pxwalk a
+done
+sv_arm "XARGS-CMODE-01: -c with no program string on argv" XF03 B pxwalk a
+sv_arm "XARGS-ENCL-01: a spaced enclosure closer is not the shell's operand" XF04 W:shell-enclosure pxwalk a
+sv_arm "XARGS-ENCL-02: an attached closer, and the enclosing command's later word, are not the shell's operand" XF05 W:shell-enclosure pxwalk a
+sv_arm "XARGS-near-01: a parse-only check" XF06 a
+sv_arm "XARGS-near-02: an inline program string" XF07 a
+sv_arm "XARGS-near-03: a non-shell module that only compiles" XF08 a
+sv_arm "XARGS-POS-01: an extensionless script named on argv keeps today's verdict (Amendment 1)" XF09 a
+sv_arm "XARGS-res-01: a non-shell interpreter with only its flags (N1, declared)" XF10 a
+sv_arm "XARGS-ctl-01: the listed script on argv" XF11 a
+
 /bin/rm -rf "$AQ_ROOT"
 
 # --- Summary ---
