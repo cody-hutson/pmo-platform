@@ -1059,7 +1059,7 @@ def listed(reason: str, members, what: str) -> str:
     """`reason` when its first token — the text before a colon or a space — is a member of `members`, the list its
     rule declares; otherwise the run stops as not evaluated. The emitters of VERDICT_REASONS and MEASURE_REASONS pass
     every reason through here, so neither can emit a token its list does not hold."""
-    if re.split(r"[: ]", reason, 1)[0] not in members:
+    if re.split(r"[: ]", reason, maxsplit=1)[0] not in members:
         raise NotEvaluated("%s `%s` is not in the list its rule declares" % (what, reason))
     return reason
 

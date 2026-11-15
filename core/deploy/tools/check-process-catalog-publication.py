@@ -41,6 +41,10 @@ NAME = re.compile(r"(?<![A-Za-z0-9_.\-/])[A-Za-z0-9_\-][A-Za-z0-9_.\-]*\.[A-Za-z
 # the listed name. A dot or a hyphen with no name character on its far side is punctuation, so a name that ends a
 # sentence is read. Both look-behinds are fixed-width.
 NAME_BEFORE, NAME_AFTER = r"(?<![A-Za-z0-9_])(?<![A-Za-z0-9_][.\-])", r"(?![A-Za-z0-9_]|[.\-][A-Za-z0-9_])"
+# Two left edges, one for each job. NAME_BEFORE, above, counts a mention of a listing name. GROUND_BEFORE grounds a
+# mention in a source, and keeps the strict edge: a dot or a hyphen directly before the name always makes it part of a
+# longer name, so a source that carries the name only behind a dot or a hyphen does not ground a mention of it.
+GROUND_BEFORE = r"(?<![A-Za-z0-9_.\-])"
 INSTANCE = re.compile(r"(?i)\b(?:(?:on )?this install|this instance|this machine|this workspace|live read|live mode|"
                       r"live value|mode file reads|as observed|observed (?:on|in|at|here)|at (?:this|its) read|fired here)\b")
 HERE = re.compile(r"(?i)\bhere\b")
@@ -379,7 +383,7 @@ def scan(text, ctx, mode="page"):
             if w in ground.bases:
                 continue
             if w not in seen:
-                exact = re.compile(NAME_BEFORE + re.escape(w) + NAME_AFTER)
+                exact = re.compile(GROUND_BEFORE + re.escape(w) + NAME_AFTER)
                 seen[w] = "newly-tracked-name" if w in tree.bases else (            # the commit adds a file of this name
                     "grounded-name" if any(exact.search(ground.blob(f, strict=False)) for f in carriers) else "ws-name")
             n[seen[w]] += 1
@@ -1595,6 +1599,11 @@ def self_test(opts):
         check("probe: a source that carries only longer names holding a listed name does not ground it",
               probe_one(page(1) + "\nSee draft-notes.md.\n", "ws-name", longer) == 1
               and probe_one(page(1) + "\nSee draft-notes.md.\n", "grounded-name", longer) == 1)
+        # Grounding keeps the strict left edge: a dot right before the name, as in a dotfile, makes it a longer name.
+        dotfile = lab.commit(head, {"src/alpha.txt": "alpha writes handoff-report.md and src/.draft-notes.md\n"})
+        check("probe: a source that carries a listed name only as a dotfile, behind a leading dot, does not ground a clean mention",
+              probe_one(page(1) + "\nSee draft-notes.md.\n", "ws-name", dotfile) == 1
+              and probe_one(page(1) + "\nSee draft-notes.md.\n", "grounded-name", dotfile) == 1)
         as_itself = lab.commit(head, {"src/alpha.txt": "alpha writes handoff-report.md and draft-notes.md\n"})
         check("probe: a listed name the page's source carries as itself is grounded, on the review line",
               probe_one(page(1) + "\nSee draft-notes.md.\n", "ws-name", as_itself) == 0
