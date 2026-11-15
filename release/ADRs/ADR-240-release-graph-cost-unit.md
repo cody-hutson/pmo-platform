@@ -1,5 +1,5 @@
 ---
-title: "ADR-239 — Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket"
+title: "ADR-240 — Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket"
 status: Proposed — authored at Stage 6 Engineering for the release-usage-measured-right release; re-grounded while Proposed at the release's first calibration revisit (2026-11-14), against its harness-and-meter probe results, which re-confirmed Decisions 1 and 3 and moved no calibrated value; ratification is the operator's at the Stage 13 close gate and is recorded in this field.
 date: 2026-11-05
 release: release-usage-measured-right
@@ -18,7 +18,7 @@ source_observations:
   - "Read from the meter, and DEGRADED (confounded: background activity): the per-model weights could not be separated from the background. The Fable model's own arm moved 'Weekly · Fable' two points while it was about half or more of that model's draw (48–91%, depending on whether one background advisor call is priced at the direct rate), so that model draws its own window; whether it also draws the shared window is not attributable. The advisor is not charged to 'Weekly · Fable' at the direct rate (about 30M advisor input tokens moved it two points, within what background use explains, and about 11M moved it none), and its share of the shared window is not attributable. Under the probe protocol a degraded arm yields no verdict, so none of these moves a decision or a calibrated value."
 ---
 
-# ADR-239 — Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket
+# ADR-240 — Release cost is stated in weekly points of one account, counted once per API response, attributed to the release run graph's four elements, and reported at both ends of the cache-read-weight bracket
 
 ## Status
 
@@ -33,6 +33,8 @@ source_observations:
 **Numbering provenance — `236 → 238`.** Held **ADR-236** branch-local; renumbered to **ADR-238** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 236. In-release citations that read "ADR-236" denote this record.
 
 **Numbering provenance — `238 → 239`.** Held **ADR-238** branch-local; renumbered to **ADR-239** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 238. In-release citations that read "ADR-238" denote this record.
+
+**Numbering provenance — `239 → 240`.** Held **ADR-239** branch-local; renumbered to **ADR-240** at merge time by `release/tools/renumber-adr.py`, because the mainline already claimed 239. In-release citations that read "ADR-239" denote this record.
 
 ## Context
 
