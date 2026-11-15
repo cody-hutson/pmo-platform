@@ -10796,6 +10796,42 @@ else
 fi
 /bin/rm -f "$SV_CANON_M1"
 
+# ==========================================================================
+# BLOCK-022 — an interpreter and its operand read across a line continuation (CONT-*)
+# ==========================================================================
+#
+# The shell removes a backslash-newline outside quotes and inside "…", so an interpreter and its
+# operand split across one are one command. Every physical reading stays as it was; the joined
+# logical line is ADDED for one more first-view walk (M-CONT-WALK), and a here-document's
+# receiver is read from the physical and from the logical line, the body excised only when both
+# name a carrier (M-CONT-RECV). Rows from seed 15.5, by id.
+#   contwalk  the joined line is never walked (its one line removed)
+#   contrecv  the receiver is read from the physical line only (its one line removed)
+/usr/bin/sed '/# M-CONT-WALK$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-contwalk.sh"
+/usr/bin/sed '/# M-CONT-RECV$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-contrecv.sh"
+/bin/chmod +x "${AQ_HOOKS}/block-destructive-contwalk.sh" "${AQ_HOOKS}/block-destructive-contrecv.sh"
+aq_shape_arm "CONT-M1: the joined-walk mutant removes its one line" block-destructive-contwalk.sh "1/0"
+aq_shape_arm "CONT-M2: the receiver-conjunction mutant removes its one line" block-destructive-contrecv.sh "1/0"
+
+# --- the closures ---
+sv_arm "CONT-INTERP-01: an interpreter and an unlisted script split by a continuation" LC01 B contwalk W
+sv_arm "CONT-INTERP-02: the same under source" LC02 B contwalk W
+sv_arm "CONT-INTERP-03: the same with an option before the continuation" LC03 B contwalk W
+sv_arm "CONT-INTERP-04: the same with the operand line indented" LC04 B contwalk W
+sv_arm "CONT-DQ-01: a continuation inside double quotes, which the shell also removes, splitting the operand" LC05 B contwalk a
+sv_arm "CONT-HD-01: a physical receiver line naming a carrier, whose logical command is a shell reading its input" LC06 B contrecv a
+
+# --- what must not move ---
+sv_arm "CONT-HD-02: a receiver read before a continuation keeps today's verdict" LC07 B
+sv_arm "CONT-HD-DUP-01: a later line equal to the delimiter excises nothing between" LC08 B
+sv_arm "CONT-ENCL-01: a continuation inside an enclosure keeps the first-view refusal" LC09 B
+sv_arm "CONT-CMT-01: a backslash ending a comment is not joined" LC10 B
+sv_arm "CONT-CMT-PHASE-01: a comment holding a quote does not hide the next line" LC11 B
+sv_arm "CONT-SQ-01: a backslash-newline inside single quotes is kept" LC12 a
+sv_arm "CONT-ANSI-01: a backslash-newline inside ANSI-C quotes is kept" LC13 a
+sv_arm "CONT-near-01: the listed script across a continuation" LC14 a
+sv_arm "CONT-ARG-01: a continued argument line of a command that runs no script stays its own segment" LC15 W
+
 /bin/rm -rf "$AQ_ROOT"
 
 # --- Summary ---
