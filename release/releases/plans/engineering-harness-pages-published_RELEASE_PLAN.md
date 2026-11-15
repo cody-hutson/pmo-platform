@@ -34,7 +34,7 @@ reversibility: MODERATE / Confidence MEDIUM — one branch, one pull request and
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a new capability — tools, a CI check and a document tree. The rule-computed next-free re-verified at Engineering Commit 0 is `v5.08` (§ Commit-0 Version Re-Verify Record). The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-13 (Friday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 7 Dev Testing: Pass 1 reviewed, fix pass 1 committed (§ Verification Evidence, Stage 7 — fix pass 1) |
+| **Status** | Executing — Stage 7 Dev Testing: fix passes 1 and 2 on the release branch, the signed repair commit pushed, the Pass 2 re-review and Stage 8 next (§ Verification Evidence, Stage 7 — fix pass 1 and Stage 7 — fix pass 2) |
 | **Branch** | `release/engineering-harness-pages-published` |
 | **PR** | opened in **draft** by the hub after its scan of the first commits; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `engineering-harness-pages-published` |
@@ -677,6 +677,10 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 | DEV-32 | 7 (Phase E) | #8560 F-02 is deferred: the validator's seven `CTL001` warnings stand until the controls register gains rows and a kind for those controls, which is decided before the next pages milestone. `follow-up: none` | #8560's Stage 7 report, sub-task #8872; the operator's Phase E ruling |
 | DEV-33 | 7 (Phase E) | #8561 F-04 is deferred: the plan verifier's provenance-delta limb can read PASS without comparing, because the comparison does not run under this platform's awk. Until the limb is repaired and a self-test arm added, every run of the verifier with the Stage-4 comment on this platform reads that row as not measured, the runs this file records at Commit 0 and at step 9 included. `follow-up: none · bug` | #8561's Stage 7 report, sub-task #8876; the operator's Phase E ruling |
 | DEV-34 | 7 (Phase E) | #8561 F-07 is deferred: no row of the runtime-suite selection map selects a suite for the catalog's data inputs. The repair adds a row that selects the catalog validator and the generated-output check. `follow-up: none` | #8561's Stage 7 report, sub-task #8876; the operator's Phase E ruling |
+| DEV-35 | 7 (fix pass 2) | The data-flow view's caveat (#8560 F-01) went out as an ordinary tool-only commit, `b66463db`, before the signed repair commit `2a576893`, not inside it, so that the signed repair commit changes catalog text only and sits directly on the remote release head, as the publication route requires. The operator chose this route over deferring the caveat, accepting one interim red run of the generated-output check on the head `b66463db` and one extra CI cycle | #8560's Stage 7 report and the hub's note that records the operator's decisions, sub-task #8872; the commits `b66463db` and `2a576893` |
+| DEV-36 | 7 (fix pass 2) | The catalog README's merge sentence (#8558 F-09) states the checks' posture as the gate-efficacy standard records it, attributed to that standard rather than stated as a property of the repository host (the hub's ruling) | #8558's Stage 7 report and the hub's note there, sub-task #8864; the commit `2a576893` |
+| DEV-37 | 7 (fix pass 2) | After the publication gate tool changed in fix pass 1, the gate's pins were written afresh at the new release head, `f3e7dc53`, and again at `b66463db`. The repair commit was gated against the pins written at `b66463db` | the hub's Stage 7 record; § Verification Evidence, Stage 7 — fix pass 2 |
+| DEV-38 | 7 (fix pass 2) | The plan's own matching sentence, in § Change Description under Downstream impact, is corrected in this commit: it states the checks' posture as the gate-efficacy standard records it (#8558 F-09, the plan's half) | #8558's Stage 7 report, sub-task #8864, F-09, which names this file's sentence beside the README's |
 
 ---
 
@@ -915,6 +919,73 @@ P-14 Probe: check-commit-close-keywords.py --base ebc217d8 --head HEAD
 
 The commit-message check and the impact query above read the branch before this file's commit. No page cites this file (`impact --paths` on it reads `pages=0`), so its commit leaves the impact result as it is.
 
+### Stage 7 — fix pass 2
+
+The repairs from the Phase E fix-now findings that change catalog text, which fix pass 1 left for one signed commit (DEV-23), with the tool commit that had to come before it (DEV-35), and this file's record of them. The Header Status row was brought up to date in this commit.
+
+| Commit | What it changes |
+|---|---|
+| `b66463db` | the data-flow view writer's caveat sentence and one library self-test arm; the library's self-test reads 129 arms, one more than before. No catalog file changed. It went out as an ordinary tool-only commit |
+| `2a576893` | five pages, the catalog README's lines 25, 85 and 113, and the regenerated data-flow view. Pushed under the operator's signature |
+| the commit that adds this entry | this file: the merge sentence under § Change Description (DEV-38), and DEV-35 to DEV-38 |
+
+- **The publication gate on `2a576893`**, as the hub records it: PASS on 37 rows, none failed and none not evaluated; one commit on `b66463db`.
+- **The reader**, as the hub records it: a fresh line-exact reader read the eleven changed lines, reported every item seeded for it, and found every changed line true of its source.
+- **On the head `2a576893`** the vocabulary gate and the three catalog checks pass.
+
+**The commands**, run from the repository root before this file's commit, with `2a576893` checked out and this file's edits in the work tree; each Python tool as `python3 -B <path>`. The work tree read clean, ignored files included, before the first edit.
+
+| Command | Exit | Closing line |
+|---|---|---|
+| `release/tools/verify-release-plan.sh --ciac-lint` on this file | 0 | `CIAC-LINT-SUMMARY declared=5 parsed=5 clean=2 declared-deferral=3 flagged=0` |
+| `release/tools/verify-release-plan.sh` on this file, with the Stage-4 comment supplied, the release range given as `ebc217d8..2a576893`, and the release-level table out of the file for the length of the run; the file was restored equal by digest | 0 | 113 records: provenance-survival 4 PASS as printed, the delta among them, which this platform cannot measure (DEV-33); 55 per-issue rows and 3 cross-issue criteria SKIP as declared; #8556 AC-7 UNRUNNABLE, its command reading 0 as expected; CIAC-2 and CIAC-5 PASS; fcm-delivery 47 PASS, with the coverage record SKIP at `declared=65 interpreted=64 obligations=47 uninterpreted=1 pathless=0`. No FAIL and no ERROR |
+| `core/deploy/tools/check-commit-close-keywords.py --base ebc217d8 --head HEAD`, with `2a576893` as `HEAD` | 0 | `commits examined: 42`, `findings: 0`, `verdict: CLEAN` |
+| `bash core/deploy/tools/path-leak-patterns.sh --scan-file` over this file | 0 | no row |
+| `bash core/deploy/tools/check-pv7-vocabulary.sh`, after its `--self-test` (5 of 5 cases) | 0 | no finding; 2,353 tracked files enumerated, 814 sanctioned occurrences counted as the control |
+| `core/deploy/tools/build-process-catalog.py impact --paths release/releases/plans/engineering-harness-pages-published_RELEASE_PLAN.md` | 0 | `process-catalog impact status=pass exit=0 paths=1 unmatched=0 pages=0 hit_depicts=0 hit_cites=0 hit_controls=0` |
+| `git diff --cached --name-only 2a576893`, with this file staged | 0 | this file's path, and no other |
+
+Three commands read this file's commit itself, so they ran after it and are not recorded here: the commit-message check from `ebc217d8` to the new head, the impact query over `2a576893..HEAD`, and `git diff --name-only 2a576893 HEAD`. Their exits and closing lines are returned with the commit. No command above says that a page, a generated file or a source must change.
+
+**Probe records for the zeros above** (`core/disciplines/review-discipline-principles.md` § 8, PV-0 to PV-7). Every planted input is a copy kept outside the repository.
+
+```
+P-15 Probe: verify-release-plan.sh --ciac-lint, and the full verifier as run above
+     Denominator: 5 cross-issue criteria; 113 records
+     Control - sensitivity: a copy of this file whose CIAC-2 method names no input file -> the lint
+            flags CIAC-2, flagged=1, exit 3; the full verifier on the same copy, its release-level
+            table also out -> CIAC-2 ERROR, exit 3
+     Control - specificity: CIAC-5 in the same two runs, a method that names its input file ->
+            CLEAN in the lint and PASS in the verifier
+     Result: flagged=0; 0 FAIL, 0 ERROR          Verdict: CLEAN
+P-16 Probe: check-commit-close-keywords.py --base ebc217d8 --head HEAD, with 2a576893 as HEAD
+     Denominator: 42 commits
+     Control - sensitivity: the tool's self-test -> 14 of 14 must-flag fixtures fire; exit 1 on its
+            flagged range
+     Control - specificity: the same self-test -> 20 of 20 must-not-flag fixtures silent
+     Result: 0 findings          Verdict: CLEAN
+P-17 Probe: path-leak-patterns.sh --scan-file over this file
+     Denominator: this file, 1061 lines
+     Control - sensitivity: a file with one planted home-directory path -> exit 1, that row
+     Control - specificity: a file of repository-relative paths only -> exit 0
+     Result: no row          Verdict: CLEAN
+P-18 Probe: check-pv7-vocabulary.sh
+     Denominator: 2,353 tracked files
+     Control - sensitivity: the gate's --self-test, 2 of 2 must-flag cases caught; 814 sanctioned
+            occurrences counted in the same run
+     Control - specificity: the same self-test, 2 of 2 must-not-flag cases clean
+     Result: 0 unsanctioned          Verdict: CLEAN
+P-19 Probe: build-process-catalog.py impact --paths <this file>
+     Denominator: 1 path
+     Control - sensitivity: impact --paths core/deploy/tools/check-doc-links.py -> pages=1
+     Control - specificity: impact --paths core/process-catalog/README.md -> pages=0
+     Result: pages=0          Verdict: CLEAN
+P-20 Probe: git diff --cached --name-only 2a576893, with this file staged
+     Control - sensitivity: git diff --name-only b66463db 2a576893 -> 7 paths
+     Control - specificity: NOT TRIGGERED — an exact path listing has no near-miss class
+     Result: 1 path, this file          Verdict: CLEAN
+```
+
 ---
 
 ## Deployment Execution Log
@@ -976,7 +1047,7 @@ Each is a row of § Decision Record.
 ### Downstream impact
 
 - Stage 2 Triage and Stage 5 Solutioning now find pages to read for a harness change: their current-state page read no longer answers that the catalog holds no pages.
-- A pull request that moves a line a page cites, or changes generated output without regenerating it, fails a catalog check. The catalog README names the one command that repairs each. The checks do not block a merge.
+- A pull request that moves a line a page cites, or changes generated output without regenerating it, fails a catalog check. The catalog README names the one command that repairs each. The gate-efficacy standard records the checks' posture: none of the three is a required context, and a red run holds the close-out tool's merge of a chore pull request but not a release pull request's merge.
 - The second and third universes reuse the tools, the pack and both registers. The retire manifest names the working-set assets still to promote, no later than the second pages milestone.
 - After the merge the operator runs the installer's hook-tier provisioning, so the 20 script-execution allowlist lines reach the workspace (§ Operational Deployment Manifest).
 - Carried to Stage 7: the four items of DEV-17. A repair that changes a page, a generated file or the catalog README needs its own signed push.
