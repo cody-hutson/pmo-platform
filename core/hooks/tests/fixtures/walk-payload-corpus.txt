@@ -2013,6 +2013,10 @@ SV25|block-destructive|rt-svres|-|?|a|env -S-i' -u' FOO bash @D@/na.sh
 # value spread over two tokens is read from its first piece only and never reaches PC-SV1's cell; SV26 is Rule M's
 # control under J0, a dash-led value the reading cannot read, which the walk walks on from today (B before and after).
 SV26|block-destructive|rt-svctl|-|?|B|env -S-i$X bash @D@/na.sh
+# #8316 (GREEN, slice C): CP46's substitution-valued assignment behind the first pattern is one token, so the walk
+# reaches the interpreter: an execution, moved to rt-case at B. CP50 is re-authored with `case` led by a blank, the
+# shape the case tracker reads, so it pins the declared cost PC-1 (the earlier spelling put `case` behind a quote,
+# which the tracker does not read, and the cost never fired).
 # #8491 (GREEN): SV01-SV12 and SV17 move a -> B as the block's legend says. SV24 also closes (B, regrouped from
 # rt-svres to rt-svq): its later piece is an assignment, so the walk reaches the interpreter even under J0.
 # --- seed 15.5: card #8320 — an interpreter and its operand read across a line continuation as one command (LC rows) ---
@@ -2101,11 +2105,11 @@ CP42|block-destructive|rt-case|-|?|B|case x in ( x ) bash @D@/na.sh ;; esac
 CP43|block-destructive|rt-case|-|?|B|case x in 'a b' ) bash @D@/na.sh ;; esac
 CP44|block-destructive|rt-case|-|?|B|echo $(case x in y) true;; x) bash @D@/na.sh;; esac)
 CP45|block-destructive|rt-case|-|?|B|case x in y) true ;; /x/y) bash @D@/na.sh ;; esac
-CP46|block-destructive|rt-reach-near|-|?|a|case x in x) TS=$(date) bash @D@/na.sh ;; esac
+CP46|block-destructive|rt-case|-|?|B|case x in x) TS=$(date) bash @D@/na.sh ;; esac
 CP47|block-destructive|rt-reach-near|-|?|a|case x in bash) true ;; esac
 CP48|block-destructive|rt-reach-near|-|?|a|case @D@/na.sh in x) true ;; esac
 CP49|block-destructive|rt-reach-near|-|?|a|grep 'a@NL@x) bash @D@/na.sh' f
-CP50|block-destructive|rt-reach-cost|-|?|B|grep 'case in@NL@x) bash @D@/na.sh' f
+CP50|block-destructive|rt-reach-cost|-|?|B|grep 'x case y in@NL@x) bash @D@/na.sh' f
 CP51|block-destructive|rt-coproc|-|?|B|coproc NAME { bash @D@/na.sh; }
 CP52|block-destructive|rt-reach-near|-|?|a|mycmd { bash @D@/na.sh; }
 CP53|block-destructive|rt-brace|-|?|B|true && { bash @D@/na.sh; }
