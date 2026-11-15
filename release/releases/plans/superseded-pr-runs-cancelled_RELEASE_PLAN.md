@@ -1,0 +1,665 @@
+---
+title: Release Plan — superseded-pr-runs-cancelled (superseded pull-request runs are cancelled, and a pull-request-time gate keeps every pull-request-triggered workflow cancelling them safely)
+type: release-plan
+plan_type: release
+status: ACTIVE
+release: versioned (bump-class minor; the rule-computed next-free at Engineering Commit 0 is v5.09, after the Stage-4 provisional v5.08 was claimed by a sibling merge and D-Version was re-rendered; the concrete number binds at the Stage-12 atomic claim)
+milestone: superseded-pr-runs-cancelled
+release_class: novel
+reversibility: CHEAP / Confidence HIGH — CI configuration, one prose sentence and one advisory gate on one branch, one pull request and one merge; each card reverts by its own commits (the gate first, then the configuration), and every workflow token is read-only, so a cancelled run leaves no partial state. A claimed version tag is retained and recorded, never deleted.
+---
+# Release Plan — `superseded-pr-runs-cancelled`
+
+**Milestone:** `superseded-pr-runs-cancelled` (milestone 446). Two cards in one native chain: **#8440** (superseded pull-request runs are cancelled) and **#9007** (a pull-request-time gate keeps that property true). The Stage-4 planning sub-task **#9009** carries the approved plan (`#9009 comment 6890921891`, part 1/2, and `#9009 comment 6890923144`, part 2/2) and the Stage-4 gate's Decision Recorded (`#9009 comment 6891094637`). The Stage-5 designs are on **#9010** (#8440: `#9010 comment 6891529696` and `#9010 comment 6891530810`) and **#9011** (#9007: `#9011 comment 6892548840` to `#9011 comment 6892549578`, parts 1/4 to 4/4); their independent Phase A6.5 adversarial reviews are on **#9023** (#8440, `#9023 comment 6891875981`) and **#9025** (#9007, `#9025 comment 6892828859`). The Collective Review scope lock's Decision Recorded is `#9010 comment 6892918087`. The Stage-6 Engineering sub-tasks are **#9012** (#8440) and the #9007 sub-task the hub routes next; this file is Engineering Commit 0, authored by the spoke on **#9012**, which also builds #8440's four commits. The D-Version re-render at this commit's first re-verify is `#9012 comment 6893150680`.
+
+**Version identity:** **versioned** — bump-class **`minor`**. The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-primary while in flight, and the Header `**Version**` cell carries the double-brace release-version placeholder, which this file reproduces in that cell only. The rule-computed next-free at Engineering Commit 0 is **`v5.09`**, equal to the D-Version determination as re-rendered at this commit (§ Commit-0 Version Re-Verify Record).
+
+**Topology:** D-C **SINGLE** — one release branch, `release/superseded-pr-runs-cancelled`, cut from `origin/main` at `4e70b20f`; one pull request opened in **draft** at Stage 6 Phase C2; one merge into `main`.
+
+**Concurrency posture:** **P0 fully serial** — one Engineering spoke at a time: Commit 0 and #8440 first, then #9007. Force-push, `--force-with-lease` included, is not used on the shared branch.
+
+**Release class:** `novel`; Stage 9 review depth **Deep** (§ Release Class declaration).
+
+> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #9009 and is amended, in order, by: the Stage-4 gate's Decision Recorded on #9009 (plan approved as recommended; D-ReleaseClass `novel`; D-C SINGLE; D-Concurrency P0; D-Version minor as a recorded determination; the A7 amendments), then the two Stage-5 designs and their adversarial reviews as the Collective Review adopted them, then the Collective Review scope-lock Decision Recorded on #9010 (the #8440 and #9007 rulings, the size override, the Commit-0 carry list), then the Stage-6 D-Version re-render on #9012. Where the plan and a later record differ, the later record wins, and each such change is recorded in § Deviation Log with the decision that caused it. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
+
+---
+
+## Header
+
+| Field | Value |
+|-------|-------|
+| **Version** | {{RELEASE_VERSION}} |
+| **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate, re-rendered at Engineering Commit 0): a new pull-request-time gate rule plus CI configuration, with no skill behaviour change, per the Bump-Class Selection Guide's row "Protocol text addition or modification". The rule-computed next-free re-verified at Engineering Commit 0 is `v5.09` (§ Commit-0 Version Re-Verify Record). The concrete number binds at the Stage-12 atomic claim (ADR-092) |
+| **Date Created** | 2026-11-15 (Sunday, UTC) |
+| **Release Manager** | Agent-assisted (release-hub) |
+| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file), #8440's four commits, then #9007's commits |
+| **Branch** | `release/superseded-pr-runs-cancelled` |
+| **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
+| **Milestone** | `superseded-pr-runs-cancelled` |
+
+`domain_practice: { source: https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency, date: 2026-11-15, name: GitHub Actions workflow and job concurrency groups, domain: software }`
+
+#### Domain Practice Provenance
+
+**Form A** (externally sourced). The design of #8440 rests on GitHub's documented workflow-concurrency semantics: at most one running and one pending run per group, a newer arrival replacing a pending run, `cancel-in-progress` also ending the running one, case-insensitive group names that must be unique across workflows, and the `run_id` fallback form. That body of practice governed the key, so the Stage-4 Form X label (pipeline-internal, sourcing-exempt) is upgraded to Form A at this commit, per #8440's Stage-5 recommendation R5 (§ Deviation Log, DEV-8). Dominant domain **`software`** (CI workflow configuration and a checker with fixtures); secondary domain governance (one register row, one rules sentence, one pointer decision record).
+
+---
+
+## Commit-0 Version Re-Verify Record
+
+Run at Engineering Commit 0, both halves, per `release/references/how-to/hub-spoke-bridge.md` Procedure 0 § Canonical location (single-branch topology, steps 1 to 3b). The version half ran twice: the first run HALTed, and the second ran against the operator's re-rendered value.
+
+### Version half (steps 1–3, pre-write)
+
+**First run — HALT.**
+
+| Step | Action | Observed |
+|---|---|---|
+| **1** | `git fetch --tags origin`, then `git fetch origin main` | both exit 0; `origin/main` = `4e70b20f` (`4e70b20faf6115ed47259b1f0520494fb1f0c88d`), one merge ahead of the Stage-4 pin `c2c55a74` |
+| **2** | `bash release/tools/claim-version.sh --sha 4e70b20faf6115ed47259b1f0520494fb1f0c88d --bump minor --dry-run` | **`v5.09`** (exit 0; "would claim v5.09 (no tag pushed)") |
+| **3** | PROCEED only if the planned version is absent from the claimed set AND equals the recomputed next-free | the planned `v5.08` is **claimed** — its tag points at `4e70b20f`, the merge of #8992, the `deletion-guard-judges-every-segment-and-target` release — and it does not equal `v5.09` → **HALT** |
+
+The tag arm bound; the corroborating arms were silent, as step 3's precedence clause predicts for the interval between a sibling's merge and its Stage-12 chore pull request: `gh release view v5.08` read "release not found", and the ledger read at `origin/main` carried 0 `v5.08` rows (control: `v5.07` → 6 rows). Nothing was written. The HALT was posted as a Tier 2 `[SCOPE CHANGE]` on #9012 (`#9012 comment 6893105178`).
+
+**D-Version re-render.** The operator re-rendered D-Version through the hub: bump class **minor** unchanged, provisional-display **v5.09** (`#9012 comment 6893150680`). § Deviation Log, DEV-1.
+
+**Second run — PROCEED.**
+
+| Step | Action | Observed |
+|---|---|---|
+| **1** | `git fetch --tags origin`, then `git fetch origin main` | both exit 0; `origin/main` = `4e70b20f`, unchanged since the first run. The release branch was cut from it before this file was written |
+| **2** | `bash release/tools/claim-version.sh --sha 4e70b20faf6115ed47259b1f0520494fb1f0c88d --bump minor --dry-run` | **`v5.09`** (exit 0; "would claim v5.09 (no tag pushed)") — equal to the re-rendered determination |
+| **3** | HALT unless the planned version is absent from the claimed set AND equals the recomputed next-free. The tag arm binds; the published-Release and ledger arms corroborate | **absent on every arm, equal to next-free → PROCEED** |
+
+**Probe record for the step-3 zero** (per `core/disciplines/review-discipline-principles.md` § 8, elements PV-0 to PV-7):
+
+```
+Probe:       git ls-remote --tags origin, saved to a file and read by one python3 regex
+             over refs/tags/v<major>.<minor>[.<patch>] with an optional peel suffix (tag arm,
+             binds); gh release view v5.09 (Release arm); git show
+             origin/main:release/releases/RELEASE_LOG.md scanned for v5.09 (ledger arm)
+Denominator: 470 ls-remote lines (236 distinct versions, the highest v5.08)
+Control - sensitivity: the same scan on the v5.08 slot -> 2 lines; on the v5.07 slot -> 2 lines.
+             A claimed slot reads non-zero, so a zero on the v5.09 slot is a real negative
+Control - specificity: NOT TRIGGERED - a slot-occupancy question over one exact version tuple
+             has no near-miss class the probe must reject (the comparator is tuple equality)
+Extraction:  every line of the saved listing; the ledger read from origin/main, never the
+             worktree copy
+Result:      0 occupants of the (5,9) slot on the tag arm; "release not found"; 0 ledger rows
+Verdict:     CLEAN - v5.09 is free and equals the recomputed next-free; no HALT
+```
+
+**In-flight state at Commit 0:** four sibling releases are in flight (§ Cross-PR Overlap Audit → In-Flight Release Roster); three declared `minor` at Stage 4 and recompute the same `v5.09` slot. That is a serialization point resolved by merge order and the atomic claim, not a HALT at this rung.
+
+### Manifest half (step 3b, post-write and pre-commit)
+
+`release/tools/claim-version.sh --verify-stamp superseded-pr-runs-cancelled`, run after this file was written and before it was committed; exit 0 is required. The result is recorded in § Verification Evidence.
+
+This file carries **exactly one** literal double-brace release-version placeholder — the Header `**Version**` cell. Every other mention names the placeholder rather than reproducing it, because the claim resolves the token by substitution across the whole file.
+
+### Commit-0 Survival Set
+
+Every element determined at Stage 4 that a named downstream consumer reads **from this file** (`release/references/pipeline/stage-04-planning.md` § 6). Dropping one is a spec violation, not an oversight.
+
+| # | Survival element | Carried at |
+|---|---|---|
+| 1 | `domain_practice` label (`source` · `date` · `name` · in-label `domain`; Form A, upgraded from Stage 4's Form X) | § Header |
+| 2 | File Change Matrix (machine-readable, fence-delimited, at an H3 heading) | § Scope → File Change Matrix |
+| 3 | Cross-Issue Acceptance Criteria — CIAC-1 and CIAC-2 | § Cross-Issue Acceptance Criteria |
+| 4 | Verification Plan, with the AC baseline | § Verification Plan |
+| 5 | Release-version stamp manifest (the double-brace placeholder in the Header `**Version**` cell; bump class in the `**Bump Class**` row) | § Header |
+| 6 | Stage Applicability Matrix | § Stage Applicability Matrix |
+| 7 | Release Class declaration | § Release Class declaration |
+| 8 | Implementation Sequence | § Implementation Sequence |
+| 9 | Baseline pin (the Stage-4 `origin/main` SHA) and the Commit-0 base | § Cross-PR Overlap Audit → Baseline SHA |
+
+---
+
+## Scope
+
+### Issues Included
+
+| Issue | Priority | Size | Title | Disposition |
+|---|---|---|---|---|
+| #8440 | P2 | XL | Stop superseded pull-request runs from holding the macOS runner queue | carried; Stage-5 design on #9010 as locked (D-1 A, D-2 B, D-3 A, D-4 A; CD-1's verification rows) |
+| #9007 | P2 | L | A pull-request-time gate fails any pull-request-triggered workflow that cannot cancel superseded runs safely | carried; Stage-5 design on #9011 as locked (the eight Ds, with D-RedArmRecord A and a pointer ADR; #9025's CD-2, CD-3 (D) and FM-1) |
+
+**Size:** 24 raw points (#8440 XL 16, #9007 L 8), **28 effective** under `novel` — over the 25 ceiling. The operator kept it as one release at the Collective Review scope lock: it is one capability, the superseded-run property and the gate that keeps it true, and a split would leave #8440 on `main` ungated. Recorded for G3-15. At the Stage-4 plan gate the figures were 12 raw / 14 effective.
+
+### Exclusions
+
+| Item | Why it is out of scope | Routed to |
+|---|---|---|
+| #9008, the release-hub half of #9005 | It edits the same CI-wait surface as #7946 and stays approved for bundling beside it | its own milestone |
+| Removing `ready_for_review` from the 17 workflows that re-run on it (#8440 R9) | A trigger change outside #8440's criteria; under cancel-in-progress its cost is re-priced by the Stage-7 OQ-1 read (#9023 FM-4) | held release follow-up candidate |
+| The `always()` summary step in `decision-emission.yml` (D-4 option C) | A seconds-long Linux echo; consistency only | not taken |
+| A concurrency key on a workflow the gate exempts (#9007 F-ExemptGroups) | Outside #9007's criteria; a stated limit in its register row | held release follow-up candidate |
+
+### File Change Matrix
+
+Machine-readable form. Verbs are `add | edit | delete`. A `CONDITIONAL:<TOKEN>` row is planned but not yet bound; its condition is in the legend below. Conditional rows whose condition resolved at or before this commit were promoted in it (§ Deviation Log, DEV-4 to DEV-11).
+
+```
+# ── Commit 0 ──
+release/releases/plans/superseded-pr-runs-cancelled_RELEASE_PLAN.md  add
+
+# ── #8440 Change 1, commit 1: the 7 workflows that run a macOS job ──
+.github/workflows/close-completeness.yml  edit
+.github/workflows/deploy-check-ci.yml  edit
+.github/workflows/install-tests.yml  edit
+.github/workflows/release-corpus-completeness.yml  edit
+.github/workflows/release-tooling-smoke.yml  edit
+.github/workflows/skill-package-freshness.yml  edit
+.github/workflows/version-freeness.yml  edit
+
+# ── #8440 Change 1, commit 2: the 19 Linux-only pull-request-triggered workflows (UBUNTU-SCOPE fired) ──
+.github/workflows/automation-registry-check.yml  edit
+.github/workflows/behavioral-regression.yml  edit
+.github/workflows/commit-message-depersonalization.yml  edit
+.github/workflows/commit-signature-check.yml  edit
+.github/workflows/decision-emission.yml  edit
+.github/workflows/eval-viewer-tests.yml  edit
+.github/workflows/gate-posture-reconciliation.yml  edit
+.github/workflows/link-check.yml  edit
+.github/workflows/operator-memory-ref.yml  edit
+.github/workflows/pr-body-parser-clean.yml  edit
+.github/workflows/pr-title-convention.yml  edit
+.github/workflows/reference-durability.yml  edit
+.github/workflows/release-link-check.yml  edit
+.github/workflows/repo-integrity.yml  edit
+.github/workflows/security.yml  edit
+.github/workflows/skill-canonical-structure-check.yml  edit
+.github/workflows/skill-count-imp-check.yml  edit
+.github/workflows/skill-license-check.yml  edit
+.github/workflows/skill-registry-currency-check.yml  edit
+
+# ── #8440 Change 2, commit 3: release-tooling-smoke.yml again (listed above) ──
+# ── #8440 Change 3, commit 4: the RED-arm sentence (REDARM-STAGE-TEXT narrowed to the map) ──
+release/references/standards/runtime-suite-selection-map.md  edit
+
+# ── #8440 — CONDITIONAL:SIBLING-WORKFLOW ──
+.github/workflows/process-catalog-check.yml  edit  CONDITIONAL:SIBLING-WORKFLOW
+
+# ── #9007 (the second Engineering spoke); repo-integrity.yml's second hunk set is listed above ──
+core/deploy/tools/check-workflow-concurrency.py  add
+core/deploy/tools/fixtures/workflow-concurrency/cases.yml  add
+core/deploy/tools/README.md  edit
+core/deploy/allowlists/selftest-coverage-manifest.txt  edit
+core/config/allowlists/script-execution-allowlist.txt  edit
+core/standards/gate-efficacy-standard.md  edit
+core/rules/git-workflow.md  edit
+core/ADRs/ADR-*-superseded-run-cancellation-convention.md  add
+```
+
+| Path | Intent | Card | Change specification |
+|---|---|---|---|
+| `release/releases/plans/superseded-pr-runs-cancelled_RELEASE_PLAN.md` | add | release | Engineering Commit 0 |
+| `.github/workflows/*.yml` (the 26 pull-request-triggered workflows the fence lists; not `sibling-merge-dark-branch.yml`) | edit | #8440 | Change 1: the canonical block immediately above the top-level `jobs:` line (§ Implementation Sequence) — the 7 macOS workflows in commit 1, the 19 Linux-only workflows in commit 2. `commit-message-depersonalization.yml` and `commit-signature-check.yml` also gain the blank line before `jobs:` that they lack |
+| `.github/workflows/release-tooling-smoke.yml` | edit, two hunk sets | #8440 | Change 1 (commit 1), then Change 2 (commit 3): five step conditions `if: always()` become `if: ${{ !cancelled() }}` in the `closeout-smoke` job, and the two comment lines naming `always()` are rewritten |
+| `.github/workflows/repo-integrity.yml` | edit, two hunk sets | #8440, #9007 | #8440's block (commit 2), then #9007's second `# gate-efficacy:` block and its `workflow-concurrency` job, in a separate #9007 commit |
+| `release/references/standards/runtime-suite-selection-map.md` | edit | #8440 | Change 3: one descriptive paragraph appended to § 3's locus-1 item; no heading, no row renumbering |
+| `.github/workflows/process-catalog-check.yml` | edit, CONDITIONAL:SIBLING-WORKFLOW | #8440 | the canonical block, if the workflow reaches this branch from `main` |
+| `core/deploy/tools/check-workflow-concurrency.py` | add | #9007 | the checker, tracked mode `100755`, from the locked scaffold with CD-2, CD-3 (D) and FM-1 folded in |
+| `core/deploy/tools/fixtures/workflow-concurrency/cases.yml` | add | #9007 | the fixture cases, one YAML document per case, each opening with its declared verdict |
+| `core/deploy/tools/README.md` | edit | #9007 | one appended inventory row (Arm E) |
+| `core/deploy/allowlists/selftest-coverage-manifest.txt` | edit | #9007 | regenerated with `release/tools/check-selftest-coverage.py --emit-manifest`, never hand-edited (Arm B(ii)) |
+| `core/config/allowlists/script-execution-allowlist.txt` | edit | #9007 | the four invocation-form rows for the checker |
+| `core/standards/gate-efficacy-standard.md` | edit | #9007 | one gate-coverage register row and one Version History row |
+| `core/rules/git-workflow.md` | edit | #9007 | one sentence in § Repository-Integrity Gates → Non-blocking integrity jobs; its deployed mirror is laid down at Stage 12 |
+| `core/ADRs/ADR-*-superseded-run-cancellation-convention.md` | add | #9007 | the pointer decision record (D-ConcurrencyADR): it cites the checker and the register row, and holds no second copy of the convention. Its number is taken against the global sequence at #9007's commit; if that spoke settles a different basename, it updates this row in the same commit |
+
+**Condition legend.**
+
+| Token | Fires when | Owner | What the fired row carries |
+|---|---|---|---|
+| `SIBLING-WORKFLOW` | a pull-request-triggered workflow reaches this branch from `main` before Stage 12 — today `process-catalog-check.yml`, from #8983, if that release merges first | #8440 | the Change 1 block on that workflow, committed with the merge of `origin/main` that brings it; any further such workflow is added as a row in the same change; the #8440 AC-1 and AC-2b comparators are re-set to the new count |
+
+#### Read-only inputs
+
+```
+core/hooks/block-autonomy-ceiling.sh  READ
+core/hooks/block-skill-direct-edit.sh  READ
+release/tools/check-selftest-coverage.py  READ
+core/deploy/tests/test_gate_efficacy_declarations.py  READ
+```
+
+The two hooks are the Agent-Editability Read's controls. The two tools are run as checks on the workflow tree, not edited by this card.
+
+#### Release-wide explicit non-scope
+
+```
+.github/workflows/sibling-merge-dark-branch.yml  NOT EDITED
+release/references/pipeline/stage-06-engineering.md  NOT EDITED
+release/references/pipeline/stage-07-dev-testing.md  NOT EDITED
+release/ADRs/README.md  NOT EDITED
+```
+
+- `sibling-merge-dark-branch.yml` has no pull-request trigger (a push to `main` and a manual dispatch only), so neither card's population includes it.
+- The two stage-text files were `CONDITIONAL:REDARM-STAGE-TEXT` rows; D-3 (A) puts the RED-arm sentence in the selection map instead, and neither file carries the practice (DEV-5).
+- The pointer decision record is cross-cutting and platform-wide, so it lands under `core/ADRs/` (the ADR guide's placement rule); the release-module ADR index is not touched. `core/ADRs/README.md` is a curated document with no projected index; the #9007 spoke adds a row here if the record earns a line there.
+- Dropped Stage-4 conditional rows: `CHECKER-IN-RELEASE-TOOLS` (the checker lands under `core/deploy/tools/`) and `GATE-HOST-NEW-WORKFLOW` (the gate is a job in `repo-integrity.yml`) — DEV-10.
+
+**Mirror pairs:** `core/rules/git-workflow.md` is a mirror-pair member; its deployed copy is laid down by `./deploy.sh --deploy` at Stage 12 and confirmed by Check 9. No other matrix path is in the mirrored set.
+
+**New-executable companion obligation:** the checker is a `*.py` invoked as `python3 <path>`; the script-execution allowlist adjudicates that form as it does `bash <path>.sh`, so the allowlist row ships in the same release (#9007 Change 4). CI wiring: the `workflow-concurrency` job in `repo-integrity.yml`, plus `selftest-discovery` in `release-tooling-smoke.yml` by manifest discovery.
+
+**Deliverable state:** every row is a corpus file with no Layer-2 propagation target except `core/rules/git-workflow.md`, which reaches `deployed-copy-synced` at Stage 12. This file is the release's own record.
+
+---
+
+## Operator Decisions (D-Gate Block)
+
+No `## Gate-Class Framing Directives` block is present in the milestone description, so no gate carried a directive-injected option or a `pre_decided_default`.
+
+### Stage 4 plan gate (operator, 2026-11-15)
+
+| Decision | Options | Ruling | Reversibility / Confidence |
+|---|---|---|---|
+| **D-ReleaseClass** — which release class? | (A) routine · (B) novel · (C) cross-cutting · (D) hotfix | **(B) novel.** Trigger (b): the release carries Stage-5 D-class decisions. `routine` fails triggers (c) and (d); `cross-cutting` does not fire (at most two stage files, none of the six rule-defining surfaces, one DAG edge); `hotfix` is disqualified (no defect against a deployed release, and a new gate). Posture: engagement Standard · Stage 9 Deep · Stage 5 ALL · Stage 13 outcome window 30 days | CHEAP / HIGH |
+| **D-Version** — what version? | recorded determination (A); valves (B) version-less, (C) operator override when a concurrent release is known to claim the slot | **(A):** bump-class minor, provisional-display v5.08 from the allocator dry-run at `c2c55a74`. Four in-flight minor siblings computed the same slot, recorded and not escalated: the first to merge takes it | CHEAP / HIGH |
+| **D-C Branch Topology** | (A) SINGLE · (B) OPTION-A | **(A) SINGLE** — one branch, one pull request, this file as Engineering Commit 0, one merge, one revert unit | CHEAP / HIGH |
+| **D-Concurrency Posture** | (A) P0 · (B) P1 · (C) P2 · (D) P3 | **(A) P0 fully serial** — a two-card chain with heavy overlap gains nothing from parallel writers | CHEAP / HIGH |
+| **Plan and Release Outcome Statement** (scope lock) | approve; amend; hold | **approved**, Outcome Statement unchanged; Stage 5 serial, #8440 then #9007 | — |
+| **Stage-4 corrections** (A7 amend path) | apply; hold | **applied** (DEV-3) | CHEAP / HIGH |
+
+### Stage 5 Collective Review scope lock (operator, 2026-11-15)
+
+**#8440** — the design on #9010, with its A6.5 review on #9023:
+
+| Decision | Options | Ruling |
+|---|---|---|
+| **D-1 · D-SupersededRunKey** | (A) workflow-level `${{ github.workflow }}-${{ github.event.pull_request.number \|\| github.run_id }}` with `cancel-in-progress: true` · (B) a `github.ref` key with an event-gated cancel · (C) job-level groups on the 10 macOS jobs | **(A).** B fails "a push to `main` is never cancelled" (all pushes to `main` share one group); C misses the Linux jobs and gives the gate no uniform form |
+| **D-2 · D-PopulationScope** | (A) the 7 macOS workflows · (B) all 26 pull-request-triggered workflows · (C) 14 | **(B).** #9007's gate makes no macOS exception, so CIAC-1 holds only with (B). #8440 becomes XL; G3-09 / G3-12 routing rendered **kept-as-one** (one identical mechanical block per file) |
+| **D-3 · D-RedArmEvidence** | (A) a descriptive paragraph in the selection map's § 3 · (B) a normative sentence plus a named-gap register row · (C) a label that turns cancellation off · (D) dispatch on a RED ref | **(A).** `CONDITIONAL:REDARM-STAGE-TEXT` fires for the map row only |
+| **D-4 · D-AlwaysStepTail** | (A) the five `if: always()` steps in `closeout-smoke` become `${{ !cancelled() }}` · (B) accept a tail of up to about 5 minutes · (C) (A) plus `decision-emission.yml` | **(A)** |
+| **Verification rows** | the design's AC-1 / AC-2 grep rows · #9023 CD-1's property-grading rows | **CD-1** (DEV-9); Interface clause I6 is dropped |
+
+**#9007** — the design on #9011, with its A6.5 review on #9025:
+
+| Decision | Ruling |
+|---|---|
+| **D-SafePredicate** | **(A)** — the CD-2 interface of #9023 (I1′, I2′, I5′; I6 dropped), with textual equality on the raw source line located by a PyYAML compose parse, plus a parsed-value cross-check |
+| **D-CalledWorkflow** | **(D)** of #9025 CD-3 — a trigger set holding a pull-request trigger and `workflow_call` is a finding; the remedy is to split the file into a caller that carries the block and a called workflow with no pull-request trigger and no key |
+| **D-GateHost** | **(A)** — a `workflow-concurrency` job (`Workflow concurrency gate`) in `repo-integrity.yml`, plus one `core/rules/git-workflow.md` sentence |
+| **D-GatePosture** | **(A)** — `posture=advisory  enforcement=ci-enforce:"Workflow concurrency gate"`, no warn-mode: a finding turns the check red, and the unregistered context does not block a merge |
+| **D-ScanScope** | **(A)** — the whole tree of `.github/workflows/` |
+| **D-IdentityInvariant** | **(A)** — the workflow identities the key embeds are distinct after case-folding, a nameless file identified by its path |
+| **D-RedArmRecord** | **(A)** — a local Stage-6 C4 `test-run` record of the checker on a `git archive` of the base tree and of its `--self-test`, with the plan's commit order unchanged. The hub diverged from the designing spoke's (C): Stage 6 opens the release pull request only at Phase C2, and `repo-integrity.yml` runs on `pull_request` alone, so (C) would produce no CI RED |
+| **D-ConcurrencyADR** | **a short pointer ADR** — one record citing the checker and the register row. The hub diverged from the designing spoke's (A): the ADR guide's T-ADR-1 trigger fires on this decision |
+| **#9025 review fixes** | **CD-2** — a self-test arm that requires exit 1 with at least one finding line, plus a reverse guard in the job (exit 0 while a finding line is printed is an error); **CD-3 (D)** as above; **FM-1** — a finding code for a trigger set that adds a review event (`pull_request_review`, `pull_request_review_comment`) to a pull-request trigger, whose runs would share the pull request's group |
+| **Size** | 28 effective over the 25 ceiling: **kept as one release**, with the override recorded for G3-15 |
+
+### Stage 6 (operator, 2026-11-15)
+
+| Decision | Ruling |
+|---|---|
+| **D-Version re-render** at the Commit-0 HALT | bump-class **minor** unchanged; provisional-display **v5.09**; the number still binds at the Stage-12 atomic claim (`#9012 comment 6893150680`; DEV-1) |
+| **Two Engineering readings, confirmed by the hub** | (a) the locked design's five comment lines stay above the three canonical lines of the block; (b) the RED-arm paragraph is the design's Change 3 text verbatim, without #9023's FM-3 clauses (DEV-17) |
+
+---
+
+## Dependency Graph
+
+| Position | Issue | Priority | Status | Dependencies (in-release) | Edge Type |
+|---|---|---|---|---|---|
+| 1 | #8440 | P2 | bundled | (none — root) | — |
+| 2 | #9007 | P2 | bundled | #8440 | BLOCKS |
+
+One native edge (`#9007` blocked-by `#8440`), acyclic. G3-07: `PASS — 1 dependency edge checked, 0 cross-milestone violations`. Neither card has an out-of-milestone blocker. Artifact relationships: `#8440 BLOCKS #9007` (native); `#9007 GENERATES` the checker and its fixtures; `#9007 DEPENDS_ON` the workflow configuration #8440 writes. The edge direction matches the gate's premise: the gate fails on `main` until every pull-request-triggered workflow carries the block.
+
+---
+
+## Implementation Sequence
+
+Order: Commit 0, then #8440's four commits, then #9007's commits. One Engineering writer at a time (P0). The Phase A checkpoint ("present A1–A2 before B1") is discharged by the operator's Collective Review scope lock, which authorized Stage 6 on the locked designs, and is recorded here rather than opened as a fresh gate.
+
+**A2 container determination:** each card's decomposition is multi-file, so the threshold predicate selects the **GitHub sub-issue container**; the per-card Stage-6 sub-tasks the hub scaffolded (#9012 for #8440, and #9007's) are that container, and each slice's change units are listed below.
+
+**Push discipline.** Once commit 1's block is on the branch, every later push to an open release pull request cancels the earlier head's in-progress runs, so per-commit CI evidence cannot be shown. No workflow runs on a push to a `release/*` branch (every `push` trigger is filtered to `main` or to a `v*.00` tag), and no `pull_request` run exists before the pull request does. Stage 6 therefore pushes before opening the draft pull request, and opens it only once #8440's commits and this file's Phase C sections are on the branch. Each commit cites a local actionlint run on its own tree; the required `Workflow SAST (actionlint)` context grades the head.
+
+### Issue #8440: Stop superseded pull-request runs from holding the macOS runner queue
+
+**Change Specification:**
+- **Files modified:** the 26 pull-request-triggered workflows; `.github/workflows/release-tooling-smoke.yml` a second time; `release/references/standards/runtime-suite-selection-map.md`.
+- **Change 1 — the canonical block.** Inserted immediately above the top-level `jobs:` line of each workflow, with one blank line above the comment and one between `cancel-in-progress` and `jobs:`:
+
+```yaml
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+```
+
+  On a pull request the group is per workflow and per pull request, so a newer run cancels the older one, whether it comes from a new push or from a re-run on the same head. Every other event keys on its own run id, so such a run never shares a group, is never cancelled by a later push and never waits as a pending run. All 27 workflow names are distinct, and distinct after case-folding, so no group is shared across workflows.
+- **Change 2 — D-AlwaysStepTail (A).** In `release-tooling-smoke.yml`'s `closeout-smoke` job, the five step conditions `if: always()` become `if: ${{ !cancelled() }}`, and the comment that names `always()` is rewritten to name `!cancelled()` and say that a cancelled run gives its runner back. The steps still run after an earlier step fails. Afterwards the file carries no `always()`.
+- **Change 3 — D-RedArmEvidence (A).** One descriptive paragraph appended to § 3's locus-1 item of the selection map: a job cancelled because a newer commit reached the pull request has no result for its commit; a cancel acts only on jobs still running, so a job that had already finished keeps its conclusion; and for a commit superseded within minutes the record of its result is a job that concluded before the next push, or the `test-run` event of its suite run locally at that commit. No MUST, no verdict token, no link, no issue reference.
+- **Commit shape:** commit 1 — the 7 macOS workflows; commit 2 — the 19 Linux workflows; commit 3 — Change 2; commit 4 — Change 3. Subjects read `release(superseded-pr-runs-cancelled): <summary> (#8440)`, a reference-only trailer.
+- **Acceptance criteria:** the card's three criteria, AC-1 to AC-3 (§ Verification Plan).
+- **Estimated complexity:** Low per file; Medium in aggregate.
+- **Dependencies:** none.
+
+### Issue #9007: A pull-request-time gate fails any pull-request-triggered workflow that cannot cancel superseded runs safely
+
+**Change Specification:**
+- **Files modified:** the checker and its fixture file (new); the tools README, the self-test manifest and the script-execution allowlist; `repo-integrity.yml` (a header block and a job); the gate-efficacy standard (a register row and a Version History row); `core/rules/git-workflow.md` (one sentence); one pointer decision record (new).
+- **Change description:** a new job, `Workflow concurrency gate`, in `repo-integrity.yml` runs `core/deploy/tools/check-workflow-concurrency.py` over the whole of `.github/workflows/`. Every workflow a pull request triggers (a `pull_request` or `pull_request_target` trigger) carries #8440's three canonical lines exactly, at workflow level, and no job of it carries a concurrency key; a trigger set holding a pull-request trigger and `workflow_call` is a finding (CD-3 (D)); a trigger set adding a review event to a pull-request trigger is a finding (FM-1); and the workflow identities the key embeds are distinct after case-folding. The checker's `--self-test` grades every fixture case against its declared verdict, requires exit 1 with a finding on a failing case (CD-2), and hard-fails ahead of the scan. The job adds no `concurrency`, `group: `, `cancel-in-progress: true`, `push` or `paths` text to its host.
+- **Commit shape (D-RedArmRecord (A)):** the checker, fixtures, README row, manifest, allowlist, host header and job together, with the local RED record; then the register row, the Version History row, the rules sentence and the pointer record. Subjects read `release(superseded-pr-runs-cancelled): <summary> (#9007)`.
+- **RED arm:** the Stage-6 C4 `test-run` record of the checker on a `git archive` of the base tree (expected exit 1, 26 `MISSING-GROUP` findings) and of its `--self-test`. **GREEN:** the gate job on the release head.
+- **Acceptance criteria:** the card's six criteria, AC-1 to AC-6, and five host obligations, OBL-1 to OBL-5 (§ Verification Plan).
+- **Estimated complexity:** Medium.
+- **Dependencies:** #8440 (native blocked-by).
+
+### Agent-Editability Read
+
+**Derivation** — controls read at commit `c2c55a74` (Stage 4), re-checked for the rows this commit adds:
+- Tier-0 floor: `core/hooks/block-autonomy-ceiling.sh` — every `case` block whose arms invoke `always_block "BLOCK-AUTONOMY-001"`: 2 blocks. After the tracked-index test (0 tracked files under `.claude/`), the surviving repo-relative union is `CLAUDE.md`, `*/CLAUDE.md`, `OPERATIONS.md`, `*/OPERATIONS.md`, `RELEASE_PROTOCOL.md`, `*/RELEASE_PROTOCOL.md`. No write-set path below matches it.
+- Sanctioned-session gate: `core/hooks/block-skill-direct-edit.sh` — `SKILL_SCOPE_RE` = `(^|/)(operations|release|core|pmo-platform)/skills/[^/]+/(SKILL\.md|references?/.+\.md)$`. No write-set path below sits under a skill directory, so conjunct 1 is false for every row.
+
+| Card | Write-set path | Tier-0 ∩ | Skill-gate ∩ | Path class | Card class | Execution path |
+|------|----------------|----------|--------------|-----------|-----------|----------------|
+| — | `release/releases/plans/superseded-pr-runs-cancelled_RELEASE_PLAN.md` | no | no | unconstrained | — | ordinary Engineering spoke (Commit 0) |
+| #8440 | `.github/workflows/*.yml` (26) | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8440 | `release/references/standards/runtime-suite-selection-map.md` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #9007 | `core/deploy/tools/check-workflow-concurrency.py`, `core/deploy/tools/fixtures/workflow-concurrency/cases.yml` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #9007 | `core/deploy/tools/README.md`, `core/deploy/allowlists/selftest-coverage-manifest.txt`, `core/config/allowlists/script-execution-allowlist.txt` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #9007 | `.github/workflows/repo-integrity.yml` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #9007 | `core/standards/gate-efficacy-standard.md`, `core/rules/git-workflow.md` | no (the deployed rules mirror is an arm, and Stage 12's `./deploy.sh --deploy` writes it as a script, not as a `Write`/`Edit` payload) | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #9007 | `core/ADRs/ADR-*-superseded-run-cancellation-convention.md` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+
+Both cards are `unconstrained`. The self-test manifest and the pointer-record rows are additions at this commit (late adds, re-derived over the same two controls). An `unconstrained` row means no control refuses the write; it does not make the change ungoverned.
+
+---
+
+## Stage Applicability Matrix
+
+| Issue | 5 Solutioning | 6 Engineering | 7 Dev Testing | 8 QA Testing | 9 Plan Review | 10 Dry Run | 11 Snapshot | 12 Execute | 13 Close |
+|---|---|---|---|---|---|---|---|---|---|
+| #8440 | APPLY — done (#9010) | APPLY | APPLY | APPLY (AC-1, AC-2; AC-3 is post-merge) | release gate | compressed into 9 (the pull-request diff is the dry run) | compressed (git history) | release | release |
+| #9007 | APPLY — done (#9011) | APPLY | APPLY | APPLY (AC-1 to AC-5; AC-6 is post-merge) | release gate | compressed into 9 | compressed | release | release |
+
+Stage 5 applied to both (`novel`, activation ALL). Stages 7 and 8 apply to both: both change CI behaviour. Stage 6 is write-serialized (P0); Stages 7 and 8 are parallel-safe across the two cards.
+
+---
+
+## Contention Map
+
+**Within the release** (one branch, one pull request → resolved by sequence):
+
+| File | Issues | Intent Mix | Severity | Resolution |
+|---|---|---|---|---|
+| `.github/workflows/` (the 26 pull-request-triggered files) | #8440, #9007 | edit (#8440) · read (#9007's gate subject) | BINARY | #8440's commits land first; #9007's gate is authored against the configuration they leave |
+| `.github/workflows/repo-integrity.yml` | #8440, #9007 | edit ×2 | BINARY | separate commits, #8440 first; the hunks are disjoint |
+
+**Parse-quality:** 2 issues parsed cleanly · 0 deferred · 0 parse-failed.
+
+---
+
+## Cross-PR Overlap Audit
+
+### Baseline SHA
+
+Stage-4 baseline: `c2c55a74086626d821e78561a312d9033d22fd47` (audit start 2026-11-15T06:44Z). Commit-0 base: `4e70b20faf6115ed47259b1f0520494fb1f0c88d`, one merge ahead (#8992). That merge changed 11 files and none of this release's matrix paths: `git diff --name-only c2c55a74 4e70b20f` restricted to the matrix paths gives 0 (control: the unrestricted diff gives 11). No planned file diverged since planning (Phase A3).
+
+### In-Flight Release Roster
+
+**Measured at:** `c2c55a74` · `2026-11-15T07:12:57Z` · **Population:** n=5 siblings (the pinned Stage-4 measurement; Stage 9 Phase A6.6 re-measures it)
+
+| Slug | PR | Head SHA | Bump-class | Carried label | Recomputed next-free | EDITSET ∩ FCM |
+|---|---|---|---|---|---|---|
+| `obligation-runners-declared` | `#8995` (draft) | `8f9497ea` | minor | provisional v5.08 | v5.08 | `install-tests.yml` (header comment); `gate-efficacy-standard.md` (register and Version History tails); `script-execution-allowlist.txt`; `core/deploy/tools/README.md` |
+| `script-guard-reads-every-token-as-the-shell-does` | `#8993` (draft) | `d81ae9f5` | minor | — | v5.08 | — |
+| `deletion-guard-judges-every-segment-and-target` | `#8992` | `1c54e878` | minor | — | v5.08 | — |
+| `engineering-harness-pages-published` | `#8983` (draft) | `4cf0dcfc` | UNRESOLVABLE | — | UNRESOLVABLE | `gate-efficacy-standard.md` (6 hunks); `stage-07-dev-testing.md` (3 hunks); `script-execution-allowlist.txt`; `core/deploy/tools/README.md`; `core/deploy/allowlists/selftest-coverage-manifest.txt`; adds `process-catalog-check.yml` (gate population) |
+| `release-usage-measured-right` | `#8821` | `2eb66a0f` | minor | provisional v5.02 (stale) | v5.08 | `release-tooling-smoke.yml` (5 hunks, disjoint from lines 250–262 and 886–1003); `gate-efficacy-standard.md`; `script-execution-allowlist.txt` |
+
+**Commit-0 note (not a re-measurement):** #8992 merged at `4e70b20f` and claimed v5.08; the remaining four siblings were open at 2026-11-15 ~10:40Z — #8821 ready for review, #8995, #8993 and #8983 in draft. Each minor sibling now recomputes `v5.09`. The roster carries no verdict.
+
+**Shared tails:** #8995, #8821 and #8983 edit the Version History tail of `gate-efficacy-standard.md`; #8995 and #8821 its register tail; all three the script-execution allowlist; #8995 and #8983 the tools README and the self-test manifest. Whichever merges second rebases: append conflicts keep both rows, and the manifest is regenerated with `--emit-manifest`, never hand-merged.
+
+---
+
+## Risk Register
+
+| # | Risk | Likelihood | Impact | Mitigation | Owner |
+|---|------|-----------|--------|-----------|-------|
+| 1 | Once #8440's block is on the branch, the release pull request cancels its own superseded runs, so a RED-arm CI run can be cancelled minutes later | High | Medium | D-RedArmRecord (A): #9007's RED arm is a local C4 `test-run` record; D-3 (A) states where a superseded commit's result is recorded | Stage 6 (#9007) |
+| 2 | A group that collides across pushes to `main` cancels an earlier merge's run | Low (designed out) | High | the `run_id` fallback; #9007's `ref-key` near-miss fixture; Stage 7 reads each file; CIAC-2 | Stage 7 |
+| 3 | A group shared by two workflows cancels one workflow's run in favour of another's | Low | High | the group carries the workflow name; all 27 names are distinct after case-folding; #9007's identity clause keeps it so | #9007 |
+| 4 | When this release merges, the gate reads red on any pull request whose tree carries a pull-request-triggered workflow without the block — today #8983's `process-catalog-check.yml` | High | Medium, cross-release | AI-001: the hub reads #8983's state before the Stage-12 merge and tells the operator and #8983's hub; `CONDITIONAL:SIBLING-WORKFLOW` if #8983 merges first | Hub |
+| 5 | A same-head re-run (`ready_for_review`, or `edited` on two files) cancels an in-progress run on the same head | Low | Medium | the newer run completes and reports; Stage 7 observes one same-head pair (OQ-1) | Stage 7 |
+| 6 | Three macOS workflows run on a pull request only when it touches their paths | High (as written) | Low | AC-3's throwaway pull request edits `core/deploy/deploy.sh`, in all three filters, and is opened ready for review | Hub |
+| 7 | An edited workflow fails `Workflow SAST (actionlint)`, a required context | Low | Medium | a local actionlint run on each commit's tree (CI's `-ignore` flag); CI's pinned 1.7.1 grades the head | Stage 6 |
+| 8 | The gate's header declares a posture that does not match branch protection | Low | Low | D-GatePosture (A): `advisory`, off the registration track; any later registration is operator-executed | #9007 |
+| 9 | Text contention on `gate-efficacy-standard.md`, the allowlist, the tools README and the manifest with three sibling pull requests | High | Low | whichever merges second rebases; keep both rows; regenerate the manifest | Stage 12 |
+| 10 | In-flight minor siblings recompute the same provisional slot (it moved v5.08 → v5.09 at Commit 0) | High | Low | defer-to-merge: the atomic claim at the Stage-12 merge binds the number; this file carries only the placeholder | Stage 12 |
+| 11 | Editing the three path-filtered macOS workflows triggers them on the release pull request | High | Low | expected; one push per slice, before the pull request opens | Stage 6 |
+| 12 | Reverting #8440 alone while #9007 stays leaves the gate failing on `main` | Low | Medium | revert order: #9007 first (§ Rollback Strategy) | Operator |
+| N1 | GitHub does not guarantee the order runs in one group are processed, so near-simultaneous pushes can leave the head's run cancelled | Low | Medium | fail-closed: a cancelled required row on the head blocks the merge; re-run the head's run; AC-3 pushes a minute apart | Stage 7 / 12 |
+| N2 | [INFERRED] Re-running a superseded head's run joins the pull request's group and cancels the current head's in-progress run | Low | Medium | re-run on the head only; Stage 7 / 12 record it if it happens (OQ-2) | Hub |
+| N3 | #9007's RED-arm run is cancelled | — | — | none once D-3 (A) and D-RedArmRecord (A) are ruled | — |
+| N4 | A later commit that removes every filtered path from a pull request's diff creates no new run, so the older head's path-filtered run is not cancelled | Low | Low | harmless: it runs to completion as today | accepted |
+| N5 | A sibling's new workflow reaches the branch without the block | Medium | Low | `CONDITIONAL:SIBLING-WORKFLOW`; AI-001 | Hub |
+| S1 | A violating workflow reaches `main`: every pull request reads red on the gate, and the close-out tool's chore-PR merge stalls (it merges only from a `CLEAN` merge state) | Medium | Medium | AI-001, sharpened at the scope lock; the gate's teach text names the main-carries-it case | Hub |
+| S2 | The RED arm is not observed in CI | — | Low | D-RedArmRecord (A) records it locally; Stage 7 reads the gate job on the head | Stage 6 / 7 |
+| S3 | A manifest merge conflict is hand-resolved | Low | Low | regenerate; `--reconcile` fails on a hand merge | Stage 12 |
+| S4 | An exempt workflow carries an unsafe group (for example a push-only workflow keyed on `github.ref`) | Low | Low | outside #9007's criteria; a stated limit in the register row | accepted |
+
+---
+
+## Cross-Issue Acceptance Criteria
+
+**Cross-Issue Acceptance Criteria**
+- [ ] **CIAC-1 (#8440 × #9007 on `.github/workflows/`):** every workflow #9007's gate requires to carry superseded-run cancellation carries it on the merged release head, so the gate reports green on that head. *Method:* declared, verification deferred to #8440 AC-1 and #9007 AC-4. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-2 (#8440 × #9007 on push-to-`main` safety):** no workflow this release adds or edits, including the gate's own host, can cancel a run triggered by a push to `main`, and the form #9007's near-miss fixture rejects is absent from every file #8440 edits. *Method:* declared, verification deferred to #8440 AC-2 and #9007 AC-5. *Graded at Stage 9 QC3.5 on the merged PR.*
+
+The lint's summary line on this file is recorded in § Verification Evidence (Stage 6 A1).
+
+---
+
+## Verification Plan
+
+### Per-Issue Verification
+
+**AC baseline:** #8440 has 3 criteria and #9007 has 6 (AC-1 to AC-3 and AC-1 to AC-6, in body order), read at Engineering Commit 0 against the bodies as amended at the Stage-4 gate and the Stage-5 scope lock; Stage 4 read the same counts at `c2c55a74`.
+
+`ac_baseline: { #8440: 3, #9007: 6, read_at: 4e70b20faf6115ed47259b1f0520494fb1f0c88d }`
+
+| Issue | AC | Verification Method | Expected Result |
+|-------|----|-------------------|----------------|
+| #8440 | AC-1 | `grep -rlF 'group: ${{ github.workflow }}-${{ github.event.pull_request.number \|\| github.run_id }}' .github/workflows` expect 26 | every workflow running a macOS job (7), and every other pull-request-triggered workflow (19), carries the canonical group line, so a newer commit pushed to the same pull request ends the superseded pull-request run. 26 is the count of pull-request-triggered workflows at `4e70b20f`; the comparator is re-set at any merge of `main` that adds one · structural grade: #9007's checker on the same head |
+| #8440 | AC-1b | `grep -rc 'cancel-in-progress: true' .github/workflows` expect 26 | the same workflows end an in-progress superseded pull-request run when a newer commit is pushed, not only a pending one · a copy with `cancel-in-progress: false` in one file reads 25 |
+| #8440 | AC-2 | `grep -rcE '^[[:space:]]+concurrency:' .github/workflows` expect 0 | no job-level concurrency group exists, so no group can hold two jobs of runs triggered by a push to `main`, and no run triggered by a push to `main` is cancelled by a later push · control: `grep -rcE '^[[:space:]]+cancel-in-progress:' .github/workflows` → 26 on the same tree |
+| #8440 | AC-2b | `grep -rc '^concurrency:' .github/workflows` expect 26 | with AC-1, every workflow-level concurrency block is the canonical one, whose key off a pull request is the run id, so a run triggered by a push to `main` has a group of its own and is never cancelled by a later push |
+| #8440 | AC-3 | [DEFERRED — post-merge predicate; runner: the release hub after the Stage-12 merge, on the throwaway pull request of action item AI-004, recorded in the Stage 13 close; NOT-OBSERVED is recorded as such, never as passed] | two commits pushed a minute apart to one throwaway pull request leave the first commit's macOS runs cancelled and the second commit's macOS runs completed, with every required context reported on the second commit |
+| #9007 | AC-1 | `grep -c -E '^# case: (canonical  expect=0  codes=-  kind=other\|no-group  expect=1  codes=MISSING-GROUP  kind=near-miss)$' core/deploy/tools/fixtures/workflow-concurrency/cases.yml` expect 2 | the failing fixture (no concurrency group) is declared to fail the gate, and the passing fixture (the same file with the canonical group, which cancels superseded runs of the same pull request) to pass it; the gate's observed verdict on each is graded by the self-test, which the OBL-1 row wires into every pull request, and Stage 7 reads each verdict with `--case no-group` and `--case canonical` |
+| #9007 | AC-2 | `grep -c -E '^# case: ref-key  expect=1  codes=NONCANONICAL-GROUP  kind=near-miss$' core/deploy/tools/fixtures/workflow-concurrency/cases.yml` expect 1 | the near-miss — a pull request plus push-to-`main` workflow whose group is keyed on `github.ref`, so it could hold two push-to-`main` runs — is declared to fail, and the self-test asserts it differs from the passing fixture in that one property |
+| #9007 | AC-3 | `grep -c -E '^# case: exempt-(push-main\|tag\|schedule\|dispatch)  expect=0  codes=-  kind=other$' core/deploy/tools/fixtures/workflow-concurrency/cases.yml` expect 4 | one fixture per exempt trigger kind — push to `main` only, tag only, schedule only, manual dispatch only — each declared to pass without a concurrency group; the tag-only and schedule-only fixtures are synthetic |
+| #9007 | AC-4 | `grep -c -F 'runner-def: core/deploy/tools/check-workflow-concurrency.py::CANONICAL_GROUP' core/standards/gate-efficacy-standard.md` expect 1 | the gate-coverage register row exists; that the gate reports a status on every pull request is held by the OBL-2 and OBL-3 rows and by the required header ratchet, and one run on a pull request that changes no workflow file is read post-merge on AC-3's throwaway pull request |
+| #9007 | AC-5 | `grep -c -E '^  push:' .github/workflows/repo-integrity.yml` expect 0 | the gate's host has no push trigger, so nothing the card adds can cancel a run triggered by a push to `main`; OBL-4 and OBL-5 hold the host's own concurrency configuration · control: `grep -c -E '^  pull_request:' .github/workflows/repo-integrity.yml` → 1 on the same file |
+| #9007 | AC-6 | [DEFERRED — post-merge predicate; runner: the release hub after the Stage-12 merge, on AC-3's throwaway pull request, recorded in the Stage 13 close; NOT-OBSERVED is recorded as such, never as passed] | a throwaway pull request that adds a pull-request-triggered workflow without the group fails the gate, and pushing the group turns the check green |
+| #9007 | OBL-1 | `grep -c -F 'python3 core/deploy/tools/check-workflow-concurrency.py --self-test' .github/workflows/repo-integrity.yml` expect 1 | Change Specification: the self-test that grades every fixture case runs in the gate job on every pull request |
+| #9007 | OBL-2 | `grep -c -F 'enforcement=ci-enforce:"Workflow concurrency gate"' .github/workflows/repo-integrity.yml` expect 1 | Change Specification: the host header declares the gate's posture and always-reports |
+| #9007 | OBL-3 | `grep -c -E '^    paths(-ignore)?:' .github/workflows/repo-integrity.yml` expect 0 | Change Specification: the host carries no paths filter · control: `grep -c -E '^  pull_request:' .github/workflows/repo-integrity.yml` → 1 on the same file |
+| #9007 | OBL-4 | `grep -c -F '  group: ${{ github.workflow }}-${{ github.event.pull_request.number \|\| github.run_id }}' .github/workflows/repo-integrity.yml` expect 1 | Change Specification: the host carries #8440's canonical block, and nothing else of this card's carries `group: ` |
+| #9007 | OBL-5 | `grep -c -E '^    concurrency:' .github/workflows/repo-integrity.yml` expect 0 | Change Specification: the gate job adds no job-level concurrency key · control: `grep -c -E '^    runs-on:' .github/workflows/repo-integrity.yml` → non-zero on the same file |
+
+Stage 6 records each #8440 row's verdict at the base (RED) and at its own head (GREEN). The #9007 rows read RED until #9007's spoke lands: its three fixture rows read ERROR (no fixture file) and AC-4, OBL-1 and OBL-2 read FAIL on #8440's head, which is the expected state; AC-5, OBL-3, OBL-4 and OBL-5 read PASS from #8440's commit 2 onward. Stage 7 runs `--case no-group`, `--case ref-key`, `--case canonical` and the four `--case exempt-*` reads as the behaviour half of #9007's AC-1 to AC-3.
+
+**Required-context map** (input to #8440 risk-2, measured at `c2c55a74`): 24 of 24 required contexts map to a job in 11 pull-request-triggered workflows — `security.yml` 5, `install-tests.yml` 6, `repo-integrity.yml` 4, `eval-viewer-tests.yml` 2, and one each in `commit-message-depersonalization.yml`, `reference-durability.yml`, `operator-memory-ref.yml`, `skill-package-freshness.yml`, `release-tooling-smoke.yml`, `deploy-check-ci.yml`, `skill-count-imp-check.yml`. None sits in a path-filtered workflow, and none is a `needs:`-dependent job, so a cancelled required row on the head reads as cancelled, never as skipped (the fail-closed claim holds while no required context is a dependent job; #9023 FM-5).
+
+### Release-Level Verification
+
+- [ ] File Integrity
+- [ ] Content Correctness
+- [ ] Cross-Reference Validity
+- [ ] Skill Invocation — N/A: no skill is edited
+- [ ] Output Contract Compliance
+
+---
+
+## Integration Acceptance Criteria
+
+- **INT-1 (#9007 × #8440 on `.github/workflows/`):** on the release head, the gate's whole-tree scan exits 0 — every workflow #8440 configures satisfies the predicate, and no in-scope workflow is left unconfigured. *Method:* read the `Workflow concurrency gate` job's conclusion and its `SCOPE:` and `VERDICT:` lines on the head, by job URL, at Stage 8.
+- **INT-2 (#9007 × #8440 on `.github/workflows/repo-integrity.yml`):** the host carries exactly one canonical block (#8440's) and one gate job (#9007's); the job adds no `concurrency` key, `push` trigger or `group: ` text. *Method:* the #9007 AC-5, OBL-4 and OBL-5 rows, plus `grep -c 'group: ' .github/workflows/repo-integrity.yml` expect 1.
+
+---
+
+## Post-Merge Probe (AI-004: the runner for #8440 AC-3 and #9007 AC-6)
+
+**Runner:** the release hub, after the Stage-12 merge and before the Stage 13 close. Each verdict is recorded in the close; a probe that could not run is recorded NOT-OBSERVED, never as passed. The Stage-9 GO authorizes the probe's public branch and pull-request writes.
+
+1. From `origin/main`, branch `chore/superseded-runs-ac3-probe`. Commit a comment-only edit to `core/deploy/deploy.sh` (it is in the `pull_request` path filter of all three path-filtered macOS workflows; `commit-signature-check` requires signed commits, so check the signing key first). Push, then open the pull request ready for review, with a parser-clean probe body.
+2. About 60 s later, push a second comment-only commit.
+3. Read `gh run list --commit <first sha> --json name,status,conclusion,event`: every macOS workflow run still in progress at the second push reads `cancelled`.
+4. Read `gh run list --commit <second sha> …`: 7 of 7 macOS runs reach `completed`, with any conclusion other than `cancelled` (AC-3 grades completion, not success).
+5. Read `gh pr checks <PR> --required --json name,state,bucket` once the roster settles: every required context reports on the second head, with no row missing and no `pending` or `cancel` bucket; a red row is recorded beside the verdict. Read that head's `Workflow concurrency gate` check-run as #9007 AC-4's post-merge observation (a pull request that changes no workflow file).
+6. **#9007 AC-6.** Push a third signed commit adding `.github/workflows/concurrency-probe.yml`: a pull-request-triggered workflow named `Concurrency probe`, with a `# gate-efficacy:` header declaring `posture=advisory  enforcement=ci-enforce  always-reports=yes`, `contents: read` permissions and one job echoing a word, and **no** concurrency block (the literal is in `#9011 comment 6892549337`, AC-6 runner step 2). Wait for the gate job on that head to conclude: it fails, naming the file `MISSING-GROUP`.
+7. Push a fourth commit inserting #8440's canonical block above the probe's `jobs:` line; the gate job on that head concludes `success`.
+8. Close the pull request unmerged and delete the branch. Cost: about two full CI sets, including the macOS jobs of the second head.
+
+**Pre-merge observations for Stage 7** (informational; they never grade AC-3):
+- the release pull request's own runs for two heads around a push: the earlier head's in-progress runs read `cancelled`, and the later head's complete;
+- if a same-head pair arises (a body edit re-running `pr-body-parser-clean.yml`, or the Stage-12 `gh pr ready`), which row `gh pr checks` shows (OQ-1);
+- the jobs of one self-cancelled run: a job that finished before the cancel keeps its conclusion, and a kept `failure`, if one occurs, closes the inferred half of D-3's premise.
+- The key was already observed live on the prototype pull request #9006: 7 of 7 macOS-bearing runs on its superseded head were cancelled 1–17 s after the next head's runs were created (#9023 V9). That informs AC-3 and does not grade it.
+
+---
+
+## Delivery Strategy
+
+| Aspect | Decision |
+|--------|---------|
+| **Implementation approach** | Sequential (dependency-ordered): Commit 0, #8440, #9007 |
+| **Commit strategy** | Grouped per slice: #8440 in four commits (macOS 7; Linux 19; D-4; D-3); #9007 in its locked commit shape under D-RedArmRecord (A) |
+| **Review approach** | Single PR for the entire release (D-C SINGLE) |
+| **Deployment mechanism** | Git merge at Stage 12 with the atomic version claim; `./deploy.sh --deploy` lays down the rules mirror for `core/rules/git-workflow.md`; no skill package is touched, so no package rebuild |
+| **Stacked-base cleanup posture** | N/A — no stacked-base waves; single branch |
+| **Concurrency posture** | P0 fully serial (D-Concurrency Posture) |
+
+---
+
+## Rollback Strategy
+
+### Per-Issue Rollback
+
+| Issue | Rollback Method | Rollback Complexity |
+|-------|----------------|-------------------|
+| #9007 | `git revert` of its commits | Low |
+| #8440 | `git revert` of its commits, after #9007's revert (the gate fails on `main` without them) | Low — configuration only; every workflow token is read-only, so a cancelled run leaves no partial state; any subset of files carrying the block is safe for `main` |
+
+### Whole-Release Rollback
+
+| Strategy | Trigger | Procedure |
+|----------|---------|-----------|
+| **Partial Revert** | the gate misfires but cancellation works | revert #9007's commits only |
+| **Full Restore** | cancellation removes evidence on `main` or leaves a required context unreported | revert the merge commit; the version tag is retained and the rollback recorded (Tag Retention) |
+| **Forward Fix** | one workflow's configuration is wrong | fix branch for that file |
+
+Reversibility: **CHEAP** — HIGH confidence.
+
+---
+
+## Quota Budget
+
+**Verdict:** PASS — basis **UNSTATED**, conservative default `[ASSUMPTION – CONFIRM]` (per `quota-budget-protocol.md` Checkpoint A)
+**Parallel-eligible spokes per parallel stage (from the Stage Applicability Matrix):** Stage 5: 2 (run serially, #8440 then #9007) · Stage 7: 2 · Stage 8: 2
+**Per-spoke cost estimate:** size-bucket band (heuristic): #8440 `size:XL` highest; #9007 `size:L` moderate–high
+**Assumed/stated remaining usage-window envelope:** UNSTATED; the conservative default applies
+**Estimated cumulative draw % (worst parallel batch):** not synthesized; the worst batch is 2 spokes, equal to the UNSTATED wave width of 2, so no split is projected
+**Routing:** PASS: proceed
+**Note:** Checkpoint B re-validates at every `Agent`-tool launch — wave or singleton, every stage (runtime, load-bearing) — with PROCEED/SERIALIZE/DEFER/REDUCE-scope for a wave and PROCEED/DEFER for a singleton; it also gates on the host-API axis, which Checkpoint A deliberately omits. The bands are `[CALIBRATE-AFTER-3]` MEDIUM. This resume of Stage 6 read host-API PROCEED at Checkpoint B.
+
+---
+
+## Release Class declaration
+
+**Class:** `novel`. Trigger (b) fires: the release carried D-class decisions Stage 5 owned (the superseded-run group design and its non-pull-request behaviour, the workflow population, the RED-arm substitute, the `always()` tail; the gate's predicate, host, posture, scan scope, identity clause, RED arm and decision record), plus the recurring D-Gate set. `routine` fails trigger (c) (new files: the checker, its fixtures, a decision record) and (d). `hotfix` is disqualified: no defect is raised against a deployed release, and the release adds a gate. `cross-cutting` does not fire: no `pipeline/stage-*.md` file is touched, none of the six rule-defining governance surfaces is edited, and the in-bundle DAG has one edge.
+
+**Differentiation posture:** engagement density Standard · Stage 9 review depth **Deep** · Stage 5 activation ALL (both cards) · Stage 13 outcome window 30 days.
+
+---
+
+## Release Outcome Statement
+
+**AFTER** — When a newer commit is pushed to a pull request, CI ends the superseded commit's runs within seconds, so the hosted macOS runners serve only current heads. Runs on `main`, and every required check on the current head, still run to completion. A pull request that adds or edits a pull-request-triggered workflow without safe superseded-run cancellation fails a pull-request-time gate, so the property stays true as workflows are added.
+
+**BEFORE** — None of the 27 workflows declares a concurrency group, so runs for superseded commits hold the macOS runners for hours. On 2026-11-15 (Sunday) at 05:52Z, both in-progress macOS runs were ~110-minute install-suite runs for superseded heads, while 17 runs waited, 4 of them the required deploy-check subset. Release hubs cancel such runs by hand, and nothing stops a new workflow bringing the queue back.
+
+**Limb owners:** AFTER limb 1 (superseded runs cancelled; `main` and the current head unaffected) → #8440 · AFTER limb 2 (the pull-request-time gate) → #9007
+
+**Success Indicator:** two commits pushed a minute apart to one throwaway pull request leave the first commit's macOS runs cancelled and the second's completed, with every required context reported (#8440). The gate's failing fixtures fail, including a cancelling group that could cancel a run triggered by a push to `main`, and its passing fixture passes (#9007).
+
+---
+
+## Operational Deployment Manifest
+
+| # | Source (Layer 1) | Target (Layer 2) | Mechanism | Verification |
+|---|-----------------|-----------------|-----------|-------------|
+| 1 | `core/rules/git-workflow.md` | the workspace rules mirror | `./deploy.sh --deploy` at Stage 12 | `./deploy.sh --check` Check 9 reads the mirror in sync |
+
+The Stage-4 row for a branch-protection registration does not fire: D-GatePosture (A) declares the gate advisory, off the registration track.
+
+### Schema Migrations
+
+N/A — enumerated over {data-schema change, frontmatter-schema change, tracker-schema change, config-template change}; none present in this release.
+
+### Memory Evictions
+
+N/A — enumerated over {skill copy, rules mirror, harness artifact, schema migration, memory eviction, memory re-point}; no codification card ties an auto-memory entry, so nothing is evicted.
+
+---
+
+## Action Items
+
+| ID | Opened | Action | Owner | When |
+|---|---|---|---|---|
+| AI-001 | Stage 4; sharpened at the scope lock | read #8983's state and tell the operator and #8983's hub the cross-release cost: a pull-request-triggered workflow without the block on `main` turns every pull request's gate red and stalls automated close-outs. Ask #8983 to re-run its checks after this merge and add the block to `process-catalog-check.yml` before merging | Hub | at Stage 12, before the merge |
+| AI-003 | scope lock | carry the Stage-4 and Stage-5 deltas into this file's Deviation Log | Engineering Commit 0 | discharged by this commit (DEV-1 to DEV-18) |
+| AI-004 | scope lock | run the throwaway-pull-request probe that grades #8440 AC-3 and #9007 AC-6 (§ Post-Merge Probe) | Hub | after the Stage-12 merge, before the Stage-13 close |
+
+**Held release follow-up candidates** (for the Stage 9 / 13 filing step; none filed): FC-1, the oversize-predicate file-count regex that reads 0 on cards naming `core/`, `release/` or `.github/` paths; #8440 R9, the `ready_for_review` green-head re-runs (re-priced by the Stage-7 OQ-1 read, #9023 FM-4); #9007's F-NonBlockingList, F-RepoIntegrityComment, F-TemplateADR and F-ExemptGroups.
+
+---
+
+## Deviation Log
+
+| ID | Stage | Deviation | Basis |
+|---|---|---|---|
+| DEV-1 | 6 (Commit 0) | **[SCOPE CHANGE]** D-Version re-rendered: the provisional-display version is `v5.09`, not the Stage-4 `v5.08`. The first Commit-0 re-verify HALTed because #8992's merge (`4e70b20f`) claimed `v5.08`; the operator kept bump-class minor and took the rule-computed next-free. The number still binds at the Stage-12 claim; this file carries only the placeholder | `#9012 comment 6893105178` (HALT); `#9012 comment 6893150680` (re-render) |
+| DEV-2 | 6 (Commit 0) | **[ADJUST]** The File Change Matrix sits at an H3 heading; the Stage-4 comment carried it at H4, which Gate 4 criterion G4-02 does not read | the Stage-4 gate's hub review (G4-02) |
+| DEV-3 | 6 (Commit 0) | The Stage-4 A7 amendments are carried: the macOS population of record is 7, not 8; the Parallelization Map's `engineering-harness-pages-published` row reads file contention plus gate population, with a shared-tails line; #8440 AC-3 reworded (the throwaway pull request edits `core/deploy/deploy.sh` and opens ready for review; the criterion count stays 3). Not applied: the plan's R-1(b) Evidence refresh and R-2(c) G3-12 line | `#9009 comment 6891094637` |
+| DEV-4 | 6 (Commit 0) | `CONDITIONAL:UBUNTU-SCOPE` fired: the 19 Linux-only pull-request-triggered workflow rows are promoted to the unconditional set | D-PopulationScope (B) at the scope lock |
+| DEV-5 | 6 (Commit 0) | `CONDITIONAL:REDARM-STAGE-TEXT` fired for the selection-map row only and is promoted; `stage-06-engineering.md` and `stage-07-dev-testing.md` are dropped to non-scope (neither carries the practice; #8983 also edits the second) | D-RedArmEvidence (A) |
+| DEV-6 | 6 (Commit 0) | `CONDITIONAL:SIBLING-WORKFLOW` is added for a pull-request-triggered workflow that reaches this branch from `main` | #8440 Stage-5 R8 |
+| DEV-7 | 6 (Commit 0) | `release-tooling-smoke.yml` carries a second hunk set (five step conditions and the comment lines naming `always()`) | D-AlwaysStepTail (A) |
+| DEV-8 | 6 (Commit 0) | The `domain_practice` label is upgraded from Form X to Form A, sourced to GitHub's workflow-concurrency documentation | #8440 Stage-5 R5 |
+| DEV-9 | 6 (Commit 0) | #8440's Stage-4 verification rows (three declared-deferred) are rebound to #9023 CD-1's property-grading rows: AC-1 (the canonical group line), AC-1b (`cancel-in-progress: true`), AC-2 (no indented `concurrency:`) and AC-2b (the top-level count); AC-3 stays deferred with its runner named. Interface clause I6 and the Change-1 instruction that the comment carry no `group: ` text lapse; the comment carries none anyway | CD-1, adopted at the scope lock |
+| DEV-10 | 6 (Commit 0) | #9007's rows are bound: `CHECKER-PATH` and `CHECKER-IN-DEPLOY-TOOLS` resolve to `core/deploy/tools/` and are promoted (checker, fixture file, README row, allowlist rows); `GATE-HOST-REPO-INTEGRITY` fired and is promoted (`repo-integrity.yml` already listed; `core/rules/git-workflow.md`); `CHECKER-IN-RELEASE-TOOLS` and `GATE-HOST-NEW-WORKFLOW` are dropped | #9007 Stage-5 R-Matrix; D-GateHost (A) |
+| DEV-11 | 6 (Commit 0) | Two rows the Stage-4 matrix did not carry are added: `core/deploy/allowlists/selftest-coverage-manifest.txt` (Arm B(ii) fails without it) and the pointer decision record under `core/ADRs/` | #9007 Stage-5 R-Matrix; D-ConcurrencyADR (pointer ADR) |
+| DEV-12 | 6 (Commit 0) | #9007's RED arm is the local C4 record, and the commit order is unchanged (all of #8440 first). The designing spoke's interleave was not taken | D-RedArmRecord (A); #9025 PRF-1 |
+| DEV-13 | 6 (Commit 0) | #9007's six declared-deferred rows are rebound to the design's AC-1 to AC-6 rows plus five host obligations OBL-1 to OBL-5; INT-1 and INT-2 are added. Null rows AC-5, OBL-3 and OBL-5 carry same-file control arms | #9007 Stage-5 R-Rebind, R-INT |
+| DEV-14 | 6 (Commit 0) | Sizes: #8440 L → XL, #9007 M → L; 24 raw / 28 effective, over the 25 ceiling, kept as one release by operator override (G3-15); #8440's G3-09 / G3-12 routing rendered kept-as-one | the scope lock |
+| DEV-15 | 6 (Commit 0) | The Stage-4 Risk Register is extended by #8440's N1–N5 and #9007's S1–S4, and Risk 1's mitigation is the two rulings that settled it | the two Stage-5 designs |
+| DEV-16 | 6 (Commit 0) | #9007's checker folds in #9025's CD-2 (an exit-1 self-test arm and a reverse guard in the job), CD-3 (D) (a pull-request trigger beside `workflow_call` is a finding, so the `called-*` fixture verdicts change from the scaffold) and FM-1 (a finding code for a review event beside a pull-request trigger). The #9007 spoke records the exact codes and cases it builds | the scope lock |
+| DEV-17 | 6 (Commit 0) | The canonical block is written with the design's five comment lines above its three canonical lines; the RED-arm paragraph is the design's Change 3 text verbatim, and #9023's FM-3 clauses (job-granularity citation, the re-run caution) are not added | hub confirmation on the resume (`#9012 comment 6893150680`) |
+| DEV-18 | 6 (Commit 0) | The AC baseline is re-read at `4e70b20f`; the counts are unchanged (#8440 3, #9007 6) | Commit-0 re-read |
+
+---
+
+## Verification Evidence
+
+### Engineering Commit 0 — Stage 6 A1
+
+- **Version re-verify:** first run HALT (v5.08 claimed); second run PROCEED at `v5.09` (§ Commit-0 Version Re-Verify Record).
+- **Stamp manifest (step 3b):** `release/tools/claim-version.sh --verify-stamp superseded-pr-runs-cancelled` → exit 0, "carries a resolvable stamp manifest; plan-only manifest (0 --stamp-file target(s))". The file carries one literal double-brace release-version placeholder (`grep -c -F` → 1).
+- **CIAC lint (A1, G4-06):** `bash release/tools/verify-release-plan.sh --ciac-lint` on this file → `CIAC-LINT-SUMMARY declared=2 parsed=2 clean=0 declared-deferral=2 flagged=0`, exit 0 — both declared in the verification-deferred form, none flagged.
+- **Plan verifier at the base** (`bash release/tools/verify-release-plan.sh --format=json --stage4-comment <the two Stage-4 parts>` on this file over the `4e70b20f` tree, before any #8440 commit): 16 per-issue rows indexed, equal to the 16 authored. #8440 is RED: AC-1, AC-1b and AC-2b FAIL at count 0; AC-2 PASS at 0, the null row whose control is read at #8440's head; AC-3 SKIP (declared deferral). #9007's rows read as § Verification Plan states. `FCM-COVERAGE` PASS (59 declared, 59 interpreted, 0 uninterpreted, 0 pathless); the declared ADDs read not-delivered on an empty range, as expected before any commit. `PROV-PRESENCE`, `PROV-GRAMMAR` (form A) and `PROV-DELTA` (no survival element lost against the Stage-4 comment: 5 of 5 present) PASS.
+- **AC binding:** `python3 release/tools/check-ac-binding.py --fetch` on this file → `VERDICT BOUND`; coverage #8440 1–3 and #9007 1–6; the five OBL rows DISPLACED (excluded from the AC set, by design).
+- **Path-leak scan:** `bash core/deploy/tools/path-leak-patterns.sh --scan-file` on this file → exit 0.
+- **Census at the base** (a PyYAML compose over `.github/workflows/*.yml` at `4e70b20f`): 27 files; 26 pull-request-triggered; 7 macOS; 0 workflow-level and 0 job-level `concurrency` keys; 27 names distinct after case-folding; 2 files with a non-blank line before `jobs:`. Every `push` trigger is filtered to `main` or to a `v*.00` tag, so a push to this branch dispatches no workflow.
+- **actionlint at the base:** local actionlint 1.7.12 with CI's `-ignore 'shellcheck reported issue in this script: SC2016:.+'` flag over `.github/workflows/*.yml` → exit 0, 0 findings (CI pins 1.7.1).
+- **ADR index:** N/A — no record under `release/ADRs/`; #9007's pointer record lands under `core/ADRs/`, whose README is not a projected index.
