@@ -671,6 +671,22 @@ core/skills/finops-usage-extractor/scripts/report-usage.sh
 ./core/skills/finops-usage-extractor/scripts/estimate-usage.sh
 core/skills/finops-usage-extractor/scripts/estimate-usage.sh
 
+# finops-usage-extractor cost-unit conversion CLI (the release cost unit's single
+# conversion, called by the per-release cost row and the command-template ranking) —
+# new in-tree bash CLI. All four invocation forms.
+[PMO_PLATFORM_ROOT]/core/skills/finops-usage-extractor/scripts/convert-usage.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/finops-usage-extractor/scripts/convert-usage.sh
+./core/skills/finops-usage-extractor/scripts/convert-usage.sh
+core/skills/finops-usage-extractor/scripts/convert-usage.sh
+
+# finops-usage-extractor command-template ranking CLI (the promotion-candidate detector
+# the agent-to-script promotion framework's §1 names) — new in-tree bash CLI. All four
+# invocation forms.
+[PMO_PLATFORM_ROOT]/core/skills/finops-usage-extractor/scripts/rank-command-templates.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/core/skills/finops-usage-extractor/scripts/rank-command-templates.sh
+./core/skills/finops-usage-extractor/scripts/rank-command-templates.sh
+core/skills/finops-usage-extractor/scripts/rank-command-templates.sh
+
 # package-freshness exit-code contract regression (test_package_freshness_exit_codes.sh)
 # — new in-tree bash CLI. Asserts the --check-package-freshness verdict -> exit
 # mapping in a subprocess (FRESH=0, STALE+warn=2, STALE+enforce=1, unexpected=1).

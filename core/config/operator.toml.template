@@ -222,6 +222,19 @@ operator_instance_projects_config_path = ""
 # SIBLING of results/ — the two keys are distinct paths, not variants of one.
 operator_instance_evals_path = ""
 
+# Resolves <OPERATOR_INSTANCE_WORKING_STATE_TELEMETRY_PATH>.
+# Default: ${claude_workspace_root}/pmo-platform/local-state/telemetry  (an in-repo,
+# git-ignored working-state folder in the main checkout; per
+# core/standards/instance-data-placement-standard.md, derived rows about this
+# repository's own releases may live there, while the usage store they are computed
+# from stays install-scoped, outside every repository).
+# Consumer: core/deploy/lib-instance-path.sh pmo_telemetry_path_for(), the single
+# resolution site. The record kept there is the per-release cost row
+# (release-cost/<slug>.json, from release/tools/compute-release-velocity.sh
+# --cost-row), which still takes its folder from an explicit --out-dir.
+# Leave empty to use the default; set a path to repoint (plug-and-play storage).
+operator_instance_working_state_telemetry_path = ""
+
 [adapters]
 # Adapter selectors — install-level choices of which implementation backs a
 # platform seam (ADR-017 §S2 names operator.toml as the home for "identity,
