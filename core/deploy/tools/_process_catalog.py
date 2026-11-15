@@ -2851,7 +2851,9 @@ def data_flow_view(s: Surfaces) -> dict:
              "pages and steps that produce and consume each. Matching is conservative: two items match when their "
              "names are equal after link markup, parentheticals, code-span marks, outer punctuation and a leading "
              "article are dropped and the name has two or more words, or when they name the same code span or file. "
-             "A match needs a producer and a consumer at different places.", "",
+             "A match needs a producer and a consumer at different places. "
+             'A "Produced by" place is a step or an ICOM table whose text names the item as an output; it may '
+             "read, check or run the item rather than produce it.", "",
              "| Universe | Items | Records matched | Artifacts matched | Items matched | Items unmatched |",
              "|---|---|---|---|---|---|"]
     intro += ["| %s | %d | %d | %d | %d | %d |" % (carry(s.cat.title(u)), n, k, a, n - per_u[u], per_u[u])
@@ -3602,6 +3604,13 @@ def _self_test() -> int:
                    fx.base in stamped and UNSTAMPED_COMMIT not in stamped and len(fx.base) == 40)
         arms.check("fixture repository: its checkout is clean",
                    git(fx.repo, "status", "--porcelain", "--untracked-files=all", "--ignored") == b"")
+
+        # -- the data-flow view, rendered from the fixture catalog --
+        flow = Surfaces(Catalog(fx.roots())).files.get("%s/data-flow.md" % VIEWS_FOLDER, "")
+        opening = next((l for l in flow.split("\n") if l.startswith("Artifacts and records named in")), "")
+        arms.check("views: the data-flow view's opening paragraph says a producer place may read, check or run the item",
+                   'A "Produced by" place is a step or an ICOM table whose text names the item as an output; it may '
+                   "read, check or run the item rather than produce it." in opening, opening[-120:])
     return arms.finish()
 
 
