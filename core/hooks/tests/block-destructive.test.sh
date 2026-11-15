@@ -7771,10 +7771,9 @@ fi
 # so a declaration cannot outlive the divergence it excuses. They compare WORDS: the walks
 # also differ in grammar (match form, a leading redirection, an escaped verb, dash-led
 # tokens), and the readiness text states that per list.
-WRAP_KW=" then do else elif in ! if while until { } {} nocorrect "
+WRAP_KW=" then do else elif in ! if while until { } {} nocorrect case coproc "
 WRAP_DECL='egress|keyword|in|missing|no shell construct puts a command word directly after in; this walk and the canonicalizer over-reach harmlessly, and dropping it would narrow an enforced set
-egress|keyword|{|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
-egress|keyword|}|extra|grouping is a segmentation-layer residual for this rule, not a prefix one
+egress|keyword|}|extra|a closing brace opens no command position; the egress walk lists it and this walk needs no entry for it
 egress|keyword|{}|extra|the egress walk resolves an xargs replacement token with it; this rule declares the replacement operand open
 lint|wrapper|doas|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|setsid|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
@@ -7788,6 +7787,11 @@ lint|wrapper|noglob|missing|a position this walk reaches; the other list owns it
 egress|wrapper|-|missing|a position this walk reaches; the other list owns its own reach (ledger row)
 canon|wrapper|-|missing|a position this walk reaches; the other list owns its own reach (ledger row)
 lint|wrapper|-|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+canon|keyword|{|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+egress|keyword|case|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+canon|keyword|case|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+egress|keyword|coproc|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+canon|keyword|coproc|missing|a position this walk reaches; the other list owns its own reach (ledger row)
 lint|wrapper|xargs|missing|the lint excludes xargs for its own documented reason: the child stdin is not the pipe'
 
 wrap_words_hook() { # $1 = a copy of this hook -> one word per line, or EXTRACTION-FAILED
@@ -9383,12 +9387,6 @@ EOF
 )" W B a shell-enclosure
 
 # --- DECLARED UNDER-MATCH, pinned: what the view does not reach ------------------------------
-encl_arm "AC-ENCL-RESIDUAL-case (pin, not fix-evidence): a case arm inside an enclosure — a pattern's ) ends the position's text" \
-  "echo \$(case x in x) bash ${ENCL_NA};; esac)" a - a
-encl_mut_arm "AC-ENCL-RESIDUAL-case-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh "echo \$(case x in x) bash ${ENCL_NA};; esac)" B "ENCL gate deny mutant"
-encl_arm "AC-ENCL-RESIDUAL-case-arm (pin, not fix-evidence): a case arm at top level — its command position follows a pattern's )" \
-  "case x in x) bash ${ENCL_NA} ;; esac" a - a
-encl_mut_arm "AC-ENCL-RESIDUAL-case-arm-pair: the paren-separator mutant REFUSES it" block-destructive-split.sh "case x in x) bash ${ENCL_NA} ;; esac" B "BLOCK-DESTRUCTIVE-022"
 encl_arm "AC-ENCL-RESIDUAL-nested-escaped (pin, not fix-evidence): backticks nested through escaped backticks" \
   "echo \`echo \\\`bash ${ENCL_NA}\\\` \`" a - a
 encl_mut_arm "AC-ENCL-RESIDUAL-nested-escaped-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "echo \`echo \\\`bash ${ENCL_NA}\\\` \`" B "ENCL gate deny mutant"

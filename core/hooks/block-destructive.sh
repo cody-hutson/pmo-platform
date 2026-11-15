@@ -1798,6 +1798,40 @@ script_reach_inert() {   # $1 = token -> 0 when stepping it removes no adjudicat
   return 0
 }
 
+# THE CASE LEAD-IN AND THE COPROC NAME. After `case`, the subject, `in`, an optional `(` and the
+# first pattern up to its closing `)` are not command words: the first arm's command follows the
+# closer. Stepping them stops at the segment's end, so a pattern the separator split cut is left
+# to the later-arm closer step. After `coproc`, a shell name directly followed by `{` names the
+# coprocess and is not its command.
+script_case_leadin() {
+  local _n="${#script_tokens[@]}" _t=""
+  while [ "$script_hidx" -lt "$_n" ]; do
+    _t="${script_tokens[$script_hidx]}"
+    script_hidx=$(( script_hidx + 1 ))
+    if [ "$_t" = "in" ]; then break; fi
+  done
+  if [ "$script_hidx" -lt "$_n" ] && [ "${script_tokens[$script_hidx]}" = "(" ]; then script_hidx=$(( script_hidx + 1 )); fi
+  while [ "$script_hidx" -lt "$_n" ]; do
+    _t="${script_tokens[$script_hidx]}"
+    script_hidx=$(( script_hidx + 1 ))
+    case "$_t" in
+      *'\)') : ;;
+      *')') break ;;
+    esac
+  done
+  return 0
+}
+
+script_coproc_name() {
+  local _n="${#script_tokens[@]}"
+  if [ $(( script_hidx + 1 )) -lt "$_n" ] && [ "${script_tokens[$(( script_hidx + 1 ))]}" = "{" ]; then
+    case "${script_tokens[$script_hidx]}" in
+      [A-Za-z_]*) case "${script_tokens[$script_hidx]}" in *[!A-Za-z0-9_]*) : ;; *) script_hidx=$(( script_hidx + 1 )) ;; esac ;;
+    esac
+  fi
+  return 0
+}
+
 # A REDIRECTION TOKEN (C1): an output or input operator, a leading descriptor or `{name}`
 # allowed, attached to its word or alone. A here-document operator and a process
 # substitution are not this step's: the pre-pass owns the first, and the second opens a
@@ -1828,6 +1862,14 @@ script_reach_step() {   # -> 0 when it stepped at least one token at script_hidx
   _tok="${script_tokens[$script_hidx]}"
   if [ "$script_hidx" -eq 0 ] && [ "${script_rdr_carry:-0}" -eq 1 ] && [ "$script_pass" -eq 1 ] && [ "$script_segstart" -eq 0 ] && ! script_reach_verbish "$_tok"; then script_rdr_carry=0; script_hidx=1; return 0; fi   # M-REACH-CARRY
   script_rdr_carry=0
+  # a later case arm: at the segment's start, in a command that opened a case, a pattern's closer
+  # that stepping removes no adjudication from (the review's FM-2 gate)
+  if [ "$script_hidx" -eq 0 ] && [ "${script_incase_cur:-0}" -eq 1 ]; then
+    case "$_tok" in
+      *'\)') : ;;
+      *')') if script_reach_inert "$_tok"; then script_hidx=1; return 0; fi ;;
+    esac
+  fi
   if ! script_reach_c1 "$_tok"; then return 1; fi
   if script_reach_verbish "$_tok"; then return 1; fi
   _t="$_tok"
@@ -2812,6 +2854,10 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
   script_cut_out="$1"
   script_qt="$1"
   local _used=0 _q=0 _d=0 _n=0 _lp='(' _rp=')'
+  local _case=0
+  # an enclosure that opens a case: its first pattern's `)` is not the enclosure's close, so the
+  # cut reads past it; a cut it cannot place still degrades to the text left whole
+  if [ "$2" -eq 1 ]; then case "${1#"${1%%[! 	]*}"}" in 'case '*|'case	'*) _case=1 ;; esac; fi   # M-REACH-CUT
   while [ -n "$script_qt" ]; do
     _n=$(( _n + 1 ))
     if [ "$_n" -gt 200 ]; then return 0; fi
@@ -2838,6 +2884,8 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
       "$_rp")
         if [ "$_d" -gt 0 ]; then
           _d=$(( _d - 1 ))
+        elif [ "$_q" -eq 0 ] && [ "$_case" -eq 1 ]; then
+          _case=0
         elif [ "$_q" -eq 0 ]; then
           script_cut_out="${1:0:$(( _used - 1 ))}"
           return 0
@@ -4174,6 +4222,13 @@ case "$TOOL_NAME" in
     while IFS= read -r script_seg; do
       script_segno=$(( script_segno + 1 ))
       script_rdr_carry="${script_rdr_owed:-0}"; script_rdr_owed=0
+      # the case state: a later arm's closer is stepped only in a command that opened a case (pass 1)
+      script_incase_cur=0
+      if [ "$script_pass" -eq 1 ]; then
+        script_incase_cur="${script_incase:-0}"
+        case "${script_seg#"${script_seg%%[! 	]*}"}" in 'esac'|'esac '*|'esac)'*) script_incase=0 ;; esac
+        case " $script_seg " in *[\ \(\`]case\ *\ in\ *|*[\ \(\`]case\ *\ in) script_incase=1 ;; esac
+      fi
       if [ "$script_pass" -eq 1 ] && [ "$script_p1n" -gt 0 ] && [ "$script_segno" -gt "$script_p1n" ]; then
         # the second view starts from the same clean state the first view started from
         script_pass=2
@@ -4416,10 +4471,11 @@ case "$TOOL_NAME" in
             ;;
         esac
         case "$script_plook" in
-          then|do|else|elif|if|while|until|'in'|'!'|nocorrect)   # M-WRAP-KEYWORDS
+          then|do|else|elif|if|while|until|'in'|'!'|'{'|case|coproc|nocorrect)   # M-WRAP-KEYWORDS
             # a quoted reserved word is not reserved, in bash or zsh: it is the command word
             [ "$script_pqv" -eq 0 ] || break
             script_hidx=$(( script_hidx + 1 ))
+            case "$script_plook" in case) script_case_leadin ;; coproc) script_coproc_name ;; esac   # M-REACH-CASE
             ;;
           sudo|env|command|builtin|exec|noglob|-|nohup|time|xargs|nice|stdbuf|timeout)   # M-WRAP-WORDS
             script_wrap="$script_plook"

@@ -1117,11 +1117,11 @@ EN74|block-destructive|encl-overmatch|-|-|W|cmd=(bash @D@/na.sh arg)
 EN75|block-destructive|encl-overmatch|-|-|W|git commit -m "explain \$(bash @D@/na.sh) literally"
 EN76|block-destructive|encl-overmatch|-|-|W|grep -n '(bash @D@/na.sh)' f
 EN77|block-destructive|encl-overmatch|-|-|W|git commit -m 'see `x`. Then @D@/y'
-EN80|block-destructive|open-encl|-|X|a|case x in x) bash @D@/na.sh ;; esac
-EN81|block-destructive|open-encl|-|X|a|echo $(case x in x) bash @D@/na.sh;; esac)
+EN80|block-destructive|rt-case|-|X|B|case x in x) bash @D@/na.sh ;; esac
+EN81|block-destructive|encl|-|X|W|echo $(case x in x) bash @D@/na.sh;; esac)
 EN82|block-destructive|open-encl|-|X|a|echo `echo \`bash @D@/na.sh\` `
-EN83|block-destructive|open-encl|-|X|a|{ bash @D@/na.sh; }
-EN84|block-destructive|open-encl|-|X|a|coproc bash @D@/na.sh
+EN83|block-destructive|rt-brace|-|X|B|{ bash @D@/na.sh; }
+EN84|block-destructive|rt-coproc|-|X|B|coproc bash @D@/na.sh
 EN85|block-destructive|open-encl|-|X|a|echo $(X=$'\')' bash @D@/na.sh)
 EN86|block-destructive|encl|-|X|W|echo "$(printf "it's" $(bash @D@/na.sh))"
 EN87|block-destructive|open-encl|-|X|a|bash -c $(echo -n) 'true; (bash @D@/na.sh)'
@@ -2094,23 +2094,23 @@ CP35|block-destructive|rt-reach-near|-|?|a|"if" bash @D@/na.sh
 CP36|block-destructive|rt-reach-near|-|?|a|command "-v" bash @D@/na.sh
 CP37|block-destructive|rt-reach-near|-|?|B|"/usr/bin"/sudo bash @D@/na.sh
 CP38|block-destructive|rt-reach-near|-|?|a|timeout "-s" KILL 5 bash @D@/na.sh
-CP39|block-destructive|rt-case|-|?|a|case x in y) true ;; x) bash @D@/na.sh ;; esac
-CP40|block-destructive|rt-case|-|?|a|case x in y|x) bash @D@/na.sh ;; esac
-CP41|block-destructive|rt-case|-|?|a|case x in (x) bash @D@/na.sh ;; esac
-CP42|block-destructive|rt-case|-|?|a|case x in ( x ) bash @D@/na.sh ;; esac
-CP43|block-destructive|rt-case|-|?|a|case x in 'a b' ) bash @D@/na.sh ;; esac
-CP44|block-destructive|rt-case|-|?|a|echo $(case x in y) true;; x) bash @D@/na.sh;; esac)
-CP45|block-destructive|rt-case|-|?|a|case x in y) true ;; /x/y) bash @D@/na.sh ;; esac
+CP39|block-destructive|rt-case|-|?|B|case x in y) true ;; x) bash @D@/na.sh ;; esac
+CP40|block-destructive|rt-case|-|?|B|case x in y|x) bash @D@/na.sh ;; esac
+CP41|block-destructive|rt-case|-|?|B|case x in (x) bash @D@/na.sh ;; esac
+CP42|block-destructive|rt-case|-|?|B|case x in ( x ) bash @D@/na.sh ;; esac
+CP43|block-destructive|rt-case|-|?|B|case x in 'a b' ) bash @D@/na.sh ;; esac
+CP44|block-destructive|rt-case|-|?|B|echo $(case x in y) true;; x) bash @D@/na.sh;; esac)
+CP45|block-destructive|rt-case|-|?|B|case x in y) true ;; /x/y) bash @D@/na.sh ;; esac
 CP46|block-destructive|rt-reach-near|-|?|a|case x in x) TS=$(date) bash @D@/na.sh ;; esac
 CP47|block-destructive|rt-reach-near|-|?|a|case x in bash) true ;; esac
 CP48|block-destructive|rt-reach-near|-|?|a|case @D@/na.sh in x) true ;; esac
 CP49|block-destructive|rt-reach-near|-|?|a|grep 'a@NL@x) bash @D@/na.sh' f
-CP50|block-destructive|rt-reach-cost|-|?|a|grep 'case in@NL@x) bash @D@/na.sh' f
-CP51|block-destructive|rt-coproc|-|?|a|coproc NAME { bash @D@/na.sh; }
+CP50|block-destructive|rt-reach-cost|-|?|B|grep 'case in@NL@x) bash @D@/na.sh' f
+CP51|block-destructive|rt-coproc|-|?|B|coproc NAME { bash @D@/na.sh; }
 CP52|block-destructive|rt-reach-near|-|?|a|mycmd { bash @D@/na.sh; }
-CP53|block-destructive|rt-brace|-|?|a|true && { bash @D@/na.sh; }
-CP54|block-destructive|rt-brace|-|?|a|if true; then { bash @D@/na.sh; }; fi
-CP55|block-destructive|rt-brace|-|?|a|echo $({ bash @D@/na.sh; })
+CP53|block-destructive|rt-brace|-|?|B|true && { bash @D@/na.sh; }
+CP54|block-destructive|rt-brace|-|?|B|if true; then { bash @D@/na.sh; }; fi
+CP55|block-destructive|rt-brace|-|?|W|echo $({ bash @D@/na.sh; })
 CP56|block-destructive|rt-reach-near|-|?|a|{bash,x} @D@/na.sh
 CP57|block-destructive|rt-reach-near|-|?|a|"{" bash @D@/na.sh
 CP58|block-destructive|rt-reach-near|-|?|W|( bash @D@/na.sh )
