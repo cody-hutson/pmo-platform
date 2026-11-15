@@ -1798,6 +1798,88 @@ script_reach_inert() {   # $1 = token -> 0 when stepping it removes no adjudicat
   return 0
 }
 
+# A REDIRECTION TOKEN (C1): an output or input operator, a leading descriptor or `{name}`
+# allowed, attached to its word or alone. A here-document operator and a process
+# substitution are not this step's: the pre-pass owns the first, and the second opens a
+# command the enclosure view reads.
+script_reach_c1() {   # $1 = token -> 0 when it is a redirection the reach step may step
+  local _t="$1"
+  case "$_t" in
+    '{'[A-Za-z_]*'}'*) _t="${_t#*\}}" ;;
+    [0-9]*) _t="${_t#"${_t%%[!0-9]*}"}" ;;
+  esac
+  case "$_t" in
+    '<<<'*) return 0 ;;
+    '<<'*|'<('*|'>('*) return 1 ;;
+    '>'*|'<'*|'&>'*) return 0 ;;
+  esac
+  return 1
+}
+
+# THE REACH STEP (R0). Asked where the prefix walk ends, on the token it ended on, and inside
+# a wrapper's own grammar (the review's CD-2). It steps a token only where today's walk would
+# end on it and adjudicate nothing: a redirection that is not verbish, with its word, or the
+# word an operator the separator split cut owes this segment (the one-segment carry). An input
+# word ahead of an interpreter is kept: it is that interpreter's program (the review's CD-1),
+# adjudicated by the M-REACH-STDIN block as the -c loop adjudicates a program string.
+script_reach_step() {   # -> 0 when it stepped at least one token at script_hidx
+  local _tok="" _t="" _op="" _w="" _k=0
+  if [ "$script_hidx" -ge "${#script_tokens[@]}" ]; then return 1; fi
+  _tok="${script_tokens[$script_hidx]}"
+  if [ "$script_hidx" -eq 0 ] && [ "${script_rdr_carry:-0}" -eq 1 ] && [ "$script_pass" -eq 1 ] && [ "$script_segstart" -eq 0 ] && ! script_reach_verbish "$_tok"; then script_rdr_carry=0; script_hidx=1; return 0; fi   # M-REACH-CARRY
+  script_rdr_carry=0
+  if ! script_reach_c1 "$_tok"; then return 1; fi
+  if script_reach_verbish "$_tok"; then return 1; fi
+  _t="$_tok"
+  case "$_t" in
+    '{'[A-Za-z_]*'}'*) _t="${_t#*\}}" ;;
+    [0-9]*) _t="${_t#"${_t%%[!0-9]*}"}" ;;
+  esac
+  case "$_t" in
+    '<<<'*) _op='<<<' ;;
+    '<>'*)  _op='<>' ;;
+    '&>>'*) _op='&>>' ;;
+    '&>'*)  _op='&>' ;;
+    '>>'*)  _op='>>' ;;
+    '>|'*)  _op='>|' ;;
+    '>&'*)  _op='>&' ;;
+    '<&'*)  _op='<&' ;;
+    '>'*)   _op='>' ;;
+    *)      _op='<' ;;
+  esac
+  _w="${_t#"$_op"}"
+  script_hidx=$(( script_hidx + 1 ))
+  if [ -z "$_w" ]; then
+    if [ "$script_hidx" -lt "${#script_tokens[@]}" ]; then
+      _w="${script_tokens[$script_hidx]}"
+      script_hidx=$(( script_hidx + 1 ))
+    elif [ "$script_pass" -eq 1 ]; then
+      script_rdr_owed=1
+    fi
+  fi
+  # a word whose quote spans whitespace is read to its close, bounded, so the walk resumes
+  # at the shell's next word
+  if [ -n "$_w" ]; then
+    script_word_scan "$_w"
+    while [ "$script_ws_complete" -eq 0 ] && [ "$script_hidx" -lt "${#script_tokens[@]}" ] && [ "$_k" -lt 64 ]; do
+      _w="${_w} ${script_tokens[$script_hidx]}"
+      script_hidx=$(( script_hidx + 1 ))
+      _k=$(( _k + 1 ))
+      script_word_scan "$_w"
+    done
+  fi
+  case "$_tok" in
+    [1-9]*|'{'*) : ;;
+    *)
+      case "$_op" in
+        '<'|'<>') script_rdr_in="$_w"; script_rdr_hs=0 ;;
+        '<<<')    script_rdr_in="$_w"; script_rdr_hs=1 ;;
+      esac
+      ;;
+  esac
+  return 0
+}
+
 # Step script_hidx over ONE wrapper's own option run and positional operands.
 # Entered with script_hidx on the token after the wrapper word and script_wrap
 # holding the wrapper's basename; leaves script_hidx on the first token that is
@@ -1828,6 +1910,7 @@ script_wrapper_options() {
         fi
         ;;
     esac   # M-REACH-WOPT
+    if script_reach_c1 "$_tok" && ! script_reach_verbish "$_tok"; then script_reach_step || :; continue; fi   # M-REACH-WOPT-RDR
     case "$_tok" in
       --)
         script_hidx=$(( script_hidx + 1 ))
@@ -4090,6 +4173,7 @@ case "$TOOL_NAME" in
 
     while IFS= read -r script_seg; do
       script_segno=$(( script_segno + 1 ))
+      script_rdr_carry="${script_rdr_owed:-0}"; script_rdr_owed=0
       if [ "$script_pass" -eq 1 ] && [ "$script_p1n" -gt 0 ] && [ "$script_segno" -gt "$script_p1n" ]; then
         # the second view starts from the same clean state the first view started from
         script_pass=2
@@ -4301,6 +4385,12 @@ case "$TOOL_NAME" in
       script_xargs=0
       script_wrap=""
       script_winert=0
+      script_rdr_in=""
+      script_rdr_hs=0
+      # R0 at the loop: the outer loop re-runs the walk only after the reach step stepped a
+      # token today's walk ended on. The inner loop is not re-indented, because the suite's
+      # mutants key on its lines' text and indentation.
+      while :; do   # M-REACH-LOOP
       while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
         script_ptok="${script_tokens[$script_hidx]}"
         case "$script_ptok" in
@@ -4340,6 +4430,9 @@ case "$TOOL_NAME" in
             ;;
           *) break ;;
         esac
+      done
+        if [ "$script_winert" -eq 1 ]; then break; fi
+        script_reach_step || break   # M-REACH
       done
       # A describe-only wrapper option was seen: the wrapper executes nothing, so
       # this segment is not an execution of whatever follows it.
@@ -4613,6 +4706,34 @@ case "$TOOL_NAME" in
         fi
         continue
       fi
+
+      # THE INTERPRETER'S STANDARD INPUT (the review's CD-1). An input redirection ahead of an
+      # interpreter feeds it its program: a file word is that program's file, and a here-string
+      # is the program text itself. Each is adjudicated as the -c loop adjudicates a program
+      # string, by the interpreter's own domain. An input word ahead of a command that runs no
+      # script is not read (PM-1, any direction).
+      # >>> M-REACH-STDIN
+      if [ "$script_verb" = "interp" ] && [ -n "${script_rdr_in:-}" ]; then
+        if [ "${script_rdr_hs:-0}" -eq 1 ]; then
+          script_word_scan "$script_rdr_in"
+          if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_exact" -eq 1 ]; then script_rdr_prog="$script_ws_out"; else script_rdr_prog="$script_rdr_in"; fi
+        else
+          script_rdr_prog="$script_rdr_in"
+        fi
+        set -f
+        for script_rdr_w in $script_rdr_prog; do
+          normalize_script_token "$script_rdr_w"
+          if script_operand_resolve "$script_interp_domain" ""; then
+            if [ "$script_interp_domain" = "interp" ]; then
+              script_shell_verdict "$script_subj_out" "$script_subj_ok"
+            else
+              destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
+            fi
+          fi
+        done
+        set +f
+      fi
+      # <<< M-REACH-STDIN
 
       # PER-ARM ARITY. The interpreter and source arms take a script as an
       # OPERAND, so they need a token after the verb; the exec arm, handled above,

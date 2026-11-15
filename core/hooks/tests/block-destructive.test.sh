@@ -8340,9 +8340,6 @@ wrap_pair() {
 }
 
 # --- positions this walk does not reach: pins, routed to their own card -------------------
-wrap_arm "WRAPDIV-redirect: >/dev/null bash <unlisted>.sh allowed (a leading redirection is not walked)" \
-  ">/dev/null bash ${WRAP_NA}" a a
-wrap_pair "WRAPPAIR-redirect: the scan mutant reads past the redirection and refuses, so WRAPDIV-redirect can fail" block-destructive-pscan.sh B
 
 # --- nice and stdbuf, with their options (AC-2) --------------------------------------------
 wrap_arm "WRAPOPT-AC2-nice: nice -n 10 bash <unlisted>.sh blocks" "nice -n 10 bash ${WRAP_NA}" B a "BLOCK-DESTRUCTIVE-022"

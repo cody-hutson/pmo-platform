@@ -861,7 +861,7 @@ WR133|block-destructive|wrap-declared|-|?|a|VERSION="$(git describe --tags)" bas
 WR134|block-destructive|wrap-qval-prec|-|?|a|MSG='run bash now' echo @D@/na.sh
 WR135|block-destructive|wrap-qval-prec|-|?|a|NOTE="see bash @D@/na.sh" true
 WR136|block-destructive|wrap-overblock|-|?|B|cat 'it; B=' bash @D@/na.sh
-WR140|block-destructive|wrap-declared|-|?|a|>/dev/null bash @D@/na.sh
+WR140|block-destructive|rt-redir|-|?|B|>/dev/null bash @D@/na.sh
 WR141|block-destructive|rt-esc|-|?|B|\bash @D@/na.sh
 WR142|block-destructive|rt-qwrap|-|?|B|"sudo" bash @D@/na.sh
 WR143|block-destructive|wrap-declared|-|?|a|sudo --zz-unlisted VALUE bash @D@/na.sh
@@ -2056,27 +2056,27 @@ LC15|block-destructive|rt-cont-hold|-|?|W|cat \@NL@@D@/na.sh
 # (today's verdict before and after), and one declared precision move, PM-1. rt-reach-cost: the declared costs PC-1
 # and PC-2 (allowed at base; refused once #8316 lands). rt-reach-resid: a redirection between a wrapper's option and
 # its value (the review's FM-1, declared). rt-reach-ctl: each class with the listed script (allowed before and after).
-CP01|block-destructive|rt-redir|-|?|a|2>/dev/null bash @D@/na.sh
-CP02|block-destructive|rt-redir|-|?|a|> /dev/null bash @D@/na.sh
-CP03|block-destructive|rt-redir|-|?|a|{fd}>/dev/null bash @D@/na.sh
-CP04|block-destructive|rt-redir|-|?|a|FOO=1 >/dev/null BAR=2 bash @D@/na.sh
-CP05|block-destructive|rt-redir|-|?|a|if true; then >/dev/null bash @D@/na.sh; fi
-CP06|block-destructive|rt-redir|-|?|a|sudo >/dev/null bash @D@/na.sh
-CP07|block-destructive|rt-redir|-|?|a|sudo >/dev/null -u x bash @D@/na.sh
-CP08|block-destructive|rt-redir|-|?|a|timeout >/dev/null 5 bash @D@/na.sh
-CP09|block-destructive|rt-redir|-|?|a|echo $(>/dev/null bash @D@/na.sh)
-CP10|block-destructive|rt-redir-cut|-|?|a|>&2 bash @D@/na.sh
+CP01|block-destructive|rt-redir|-|?|B|2>/dev/null bash @D@/na.sh
+CP02|block-destructive|rt-redir|-|?|B|> /dev/null bash @D@/na.sh
+CP03|block-destructive|rt-redir|-|?|B|{fd}>/dev/null bash @D@/na.sh
+CP04|block-destructive|rt-redir|-|?|B|FOO=1 >/dev/null BAR=2 bash @D@/na.sh
+CP05|block-destructive|rt-redir|-|?|B|if true; then >/dev/null bash @D@/na.sh; fi
+CP06|block-destructive|rt-redir|-|?|B|sudo >/dev/null bash @D@/na.sh
+CP07|block-destructive|rt-redir|-|?|B|sudo >/dev/null -u x bash @D@/na.sh
+CP08|block-destructive|rt-redir|-|?|B|timeout >/dev/null 5 bash @D@/na.sh
+CP09|block-destructive|rt-redir|-|?|W|echo $(>/dev/null bash @D@/na.sh)
+CP10|block-destructive|rt-redir-cut|-|?|B|>&2 bash @D@/na.sh
 CP11|block-destructive|rt-redir-cut|-|?|B|2>&- bash @D@/na.sh
-CP12|block-destructive|rt-redir-cut|-|?|a|>|/dev/null bash @D@/na.sh
-CP13|block-destructive|rt-redir-stdin|-|?|W|<@D@/na.sh bash
-CP14|block-destructive|rt-redir-stdin|-|?|W|0<@D@/na.sh bash
+CP12|block-destructive|rt-redir-cut|-|?|B|>|/dev/null bash @D@/na.sh
+CP13|block-destructive|rt-redir-stdin|-|?|B|<@D@/na.sh bash
+CP14|block-destructive|rt-redir-stdin|-|?|B|0<@D@/na.sh bash
 CP15|block-destructive|rt-redir-stdin|-|?|W|<@D@/na.py python3
-CP16|block-destructive|rt-redir-stdin|-|?|a|<<<'bash @D@/na.sh' bash
-CP17|block-destructive|rt-reach-near|-|?|W|>@D@/x.sh true
+CP16|block-destructive|rt-redir-stdin|-|?|B|<<<'bash @D@/na.sh' bash
+CP17|block-destructive|rt-reach-near|-|?|a|>@D@/x.sh true
 CP18|block-destructive|rt-reach-near|-|?|a|<(true) cat @D@/na.sh
 CP19|block-destructive|rt-reach-near|-|?|B|>/tmp/bash @D@/na.sh
-CP20|block-destructive|rt-reach-cost|-|?|W|<@D@/na.sh bash @D@/ok.sh
-CP21|block-destructive|rt-reach-cost|-|?|W|<@D@/na.sh bash -n
+CP20|block-destructive|rt-reach-cost|-|?|B|<@D@/na.sh bash @D@/ok.sh
+CP21|block-destructive|rt-reach-cost|-|?|B|<@D@/na.sh bash -n
 CP22|block-destructive|rt-reach-resid|-|?|a|sudo -u >/dev/null x bash @D@/na.sh
 CP23|block-destructive|rt-esc|-|?|B|ba\sh @D@/na.sh
 CP24|block-destructive|rt-esc|-|?|B|$'bash' @D@/na.sh
