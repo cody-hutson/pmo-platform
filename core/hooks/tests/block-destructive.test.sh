@@ -7780,14 +7780,14 @@ lint|wrapper|doas|extra|a launcher outside this rule set, declared in the readin
 lint|wrapper|setsid|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|ionice|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
 lint|wrapper|chrt|extra|a launcher outside this rule set, declared in the readiness item; the lint asks which words may stand between a pipe and a reader
-egress|keyword|nocorrect|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
-canon|keyword|nocorrect|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
-egress|wrapper|noglob|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
-canon|wrapper|noglob|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
-lint|wrapper|noglob|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
-egress|wrapper|-|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
-canon|wrapper|-|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
-lint|wrapper|-|missing|a position this rule's walk reaches; the other list's rule owns its own reach (ledger row)
+egress|keyword|nocorrect|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+canon|keyword|nocorrect|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+egress|wrapper|noglob|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+canon|wrapper|noglob|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+lint|wrapper|noglob|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+egress|wrapper|-|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+canon|wrapper|-|missing|a position this walk reaches; the other list owns its own reach (ledger row)
+lint|wrapper|-|missing|a position this walk reaches; the other list owns its own reach (ledger row)
 lint|wrapper|xargs|missing|the lint excludes xargs for its own documented reason: the child stdin is not the pipe'
 
 wrap_words_hook() { # $1 = a copy of this hook -> one word per line, or EXTRACTION-FAILED

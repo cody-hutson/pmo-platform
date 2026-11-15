@@ -2066,7 +2066,7 @@ CP07|block-destructive|rt-redir|-|?|a|sudo >/dev/null -u x bash @D@/na.sh
 CP08|block-destructive|rt-redir|-|?|a|timeout >/dev/null 5 bash @D@/na.sh
 CP09|block-destructive|rt-redir|-|?|a|echo $(>/dev/null bash @D@/na.sh)
 CP10|block-destructive|rt-redir-cut|-|?|a|>&2 bash @D@/na.sh
-CP11|block-destructive|rt-redir-cut|-|?|a|2>&- bash @D@/na.sh
+CP11|block-destructive|rt-redir-cut|-|?|B|2>&- bash @D@/na.sh
 CP12|block-destructive|rt-redir-cut|-|?|a|>|/dev/null bash @D@/na.sh
 CP13|block-destructive|rt-redir-stdin|-|?|W|<@D@/na.sh bash
 CP14|block-destructive|rt-redir-stdin|-|?|W|0<@D@/na.sh bash
