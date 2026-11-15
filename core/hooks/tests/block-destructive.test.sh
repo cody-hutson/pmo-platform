@@ -10907,6 +10907,46 @@ sv_arm "REACH-ctl-esc: an escaped verb with the listed script" CP65 a
 sv_arm "REACH-ctl-qwrap: a quoted wrapper with the listed script" CP66 a
 sv_arm "REACH-ctl-zpre: a zsh precommand word with the listed script" CP70 a
 
+# --- slice B: the leading redirection ---
+# A redirection is stepped where today's walk ends on it (R0), at the prefix walk's end and
+# inside a wrapper's own grammar (the review's CD-2); an operator the separator split cut is
+# carried for one segment; an input word ahead of an interpreter is that interpreter's program
+# (the review's CD-1), adjudicated as the -c loop adjudicates a program string.
+#   rmloop   the reach step never steps (`script_reach_step || break` -> `break`)
+#   rmcarry  the one-segment carry is never set (its one line removed)
+#   rmstdin  the stdin program is never adjudicated (its marked block removed)
+/usr/bin/sed 's/script_reach_step || break   # M-REACH$/break   # M-REACH/' "$HOOK" > "${AQ_HOOKS}/block-destructive-rmloop.sh"
+/usr/bin/sed '/# M-REACH-CARRY$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-rmcarry.sh"
+/usr/bin/sed '/# >>> M-REACH-STDIN$/,/# <<< M-REACH-STDIN$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-rmstdin.sh"
+/bin/chmod +x "${AQ_HOOKS}/block-destructive-rmloop.sh" "${AQ_HOOKS}/block-destructive-rmcarry.sh" "${AQ_HOOKS}/block-destructive-rmstdin.sh"
+aq_shape_arm "REACH-M4: the reach-loop mutant rewrites its one line" block-destructive-rmloop.sh "1/1"
+aq_shape_arm "REACH-M5: the carry mutant removes its one line" block-destructive-rmcarry.sh "1/0"
+sv_rm_n="$(/usr/bin/awk '/# >>> M-REACH-STDIN$/{s=NR} /# <<< M-REACH-STDIN$/{if (s) print NR - s + 1}' "$HOOK")"
+aq_shape_arm "REACH-M6: the stdin mutant removes its marked block" block-destructive-rmstdin.sh "${sv_rm_n:-MISSING}/0"
+sv_arm "REACH-REDIR-01: an attached output redirection ahead of an interpreter" WR140 B rmloop a
+sv_arm "REACH-REDIR-02: the operator alone, its word the next token" CP02 B rmloop a
+sv_arm "REACH-REDIR-03: a descriptor form" CP01 B rmloop a
+sv_arm "REACH-REDIR-03b: a {name} form" CP03 B rmloop a
+sv_arm "REACH-REDIR-04: between assignments" CP04 B rmloop a
+sv_arm "REACH-REDIR-04b: after a reserved word" CP05 B rmloop a
+sv_arm "REACH-REDIR-04c: between a wrapper and its command" CP06 B rmloop a
+sv_arm "REACH-REDIR-04d: between a wrapper and its first option (the review's CD-2)" CP07 B
+sv_arm "REACH-REDIR-04e: ahead of timeout's duration (the review's CD-2)" CP08 B
+sv_arm "REACH-REDIR-05: a duplication cut by the separator split" CP10 B rmcarry a
+sv_arm "REACH-REDIR-05b: a clobber cut by the separator split" CP12 B rmcarry a
+sv_arm "REACH-REDIR-06: an unlisted script fed on a shell's standard input" CP13 B rmstdin W:exec
+sv_arm "REACH-REDIR-06b: the same through descriptor 0" CP14 B rmstdin W:exec
+sv_arm "REACH-REDIR-06c: a here-string program ahead of a shell (the review's CD-1)" CP16 B rmstdin a
+sv_arm "REACH-REDIR-07: an unlisted .py fed to python3, at the non-shell arm's phase" CP15 W:interp-nonshell rmstdin W:exec
+sv_arm "REACH-REDIR-08: a leading redirection inside an enclosure, at the enclosure's phase" CP09 W:shell-enclosure
+sv_arm "REACH-REDIR-P1 (PM-1, declared): an output redirection word is not an execution" CP17 a
+sv_arm "REACH-REDIR-near-1: a process substitution is not a redirection" CP18 a
+sv_arm "REACH-REDIR-near-2: a redirection word with an interpreter basename keeps today's reading (R-2)" CP19 B
+sv_arm "REACH-REDIR-R1 (PC-2, declared): a stdin word beside a listed script argument" CP20 B
+sv_arm "REACH-REDIR-R2 (PC-2, declared): a stdin word under parse-only" CP21 B
+sv_arm "REACH-REDIR-resid (FM-1, declared): a redirection between a wrapper's option and its value" CP22 a
+sv_arm "REACH-ctl-redir: a leading redirection with the listed script" CP64 a
+
 /bin/rm -rf "$AQ_ROOT"
 
 # --- Summary ---
