@@ -11,7 +11,7 @@ consumers: "finops-usage-extractor rollup-attribution.sh (producer); the agent-f
 
 # FinOps Usage Attribution Convention
 
-> Defines HOW a usage `session` record maps to its owning work item, and how subagent spend chains to its agent and session. The `rollup` and `coverage` RECORD SHAPES live in [`finops-usage-store-schema.md`](../schemas/finops-usage-store-schema.md) (v1.2.0); THIS doc owns the mapping ALGORITHM. The two concerns are split on purpose — the schema doc is the shape; this standard is the resolution.
+> Defines HOW a usage `session` record maps to its owning work item, and how subagent spend chains to its agent and session. The `rollup` and `coverage` RECORD SHAPES live in [`finops-usage-store-schema.md`](../schemas/finops-usage-store-schema.md); THIS doc owns the mapping ALGORITHM. The two concerns are split on purpose — the schema doc is the shape; this standard is the resolution.
 
 ## Purpose + Scope
 
@@ -101,7 +101,7 @@ The skill's `SKILL.md` carries the full domain-specific failure-mode entries (5-
 
 | Reference | Relationship |
 |---|---|
-| [`finops-usage-store-schema.md`](../schemas/finops-usage-store-schema.md) | the `rollup` + `coverage` record SHAPES (v1.2.0); this doc owns the mapping ALGORITHM |
+| [`finops-usage-store-schema.md`](../schemas/finops-usage-store-schema.md) | the `rollup` + `coverage` record SHAPES; this doc owns the mapping ALGORITHM |
 | [`hub-session-continuity.md`](hub-session-continuity.md) | the session-lineage substrate reused by T1 (Surface-B payload composite) and T3 (Surface-C `worktree` join); the composite `<worktree>__<iso>__<sha>` format |
 | [`pipeline-event-log-schema.md`](../../release/references/standards/pipeline-event-log-schema.md) | the subject/version/actor identifier convention that the work-item-key format conforms to |
 | [`git-workflow.md`](../rules/git-workflow.md) | the branch-naming convention the branch tiers parse (`release/vX.Y-*`, `chore/vX.Y-*`, `fix/*`, `feat/*`, harness `claude/*` / `agent-*`) |
@@ -110,6 +110,7 @@ The skill's `SKILL.md` carries the full domain-specific failure-mode entries (5-
 
 | Version | Date | Change |
 |---|---|---|
+| 1.2.1 | 2026-11-05 | Store-schema version parentheticals removed from the two citations of the store schema — the convention reads the `rollup` / `coverage` record shapes, which store schema v2.0.0 left unchanged, so a version beside the citation would only go stale. |
 | 1.2.0 | 2026-09-02 | Run-key recognition made slug-primary on both axes (ADR-092 conformance). **T3** recognises a run directory **structurally** — by a well-formed Surface-C table, not by a `vX.Y` name shape — so both key forms pass without a legacy limb that could itself rot; the prior name-shaped predicate admitted none of the live slug-keyed directories, leaving the tier resolving nothing. **T2s** added for slug-primary `release/<slug>` branches, ordered strictly BELOW T3 so a branch-name heuristic cannot override an authored hub-state key; `chore/<slug>-<suffix>` deliberately excluded as unparseable and recorded as an accepted residual. **Work-item key format** widened from `milestone:vX.Y` to `milestone:<release-key>`, which is what makes this document's own asserted conformance to the event-log identifier convention true again. Ordering rationale corrected to describe the ladder as *partly* precision-ordered — T2 is a branch parse sitting above the authored T3, a pre-existing breach now recorded rather than left implicit. |
 | 1.1.0 | 2026-07-27 | T1/T3 rule text restated against `session.worktree` (store schema v1.2.0 replaced `session.cwd` with its basename — a data-minimization control); join semantics unchanged. The restatement is a strict simplification: the join key is now literally the same token on both sides (`session.worktree` ↔ the hub-state Surface-C `worktree` column), which is what `basename()` was approximating. The resolved join set is identical. |
 | 1.0.0 | 2026-07-25 | Initial — the ordered LOCAL-ONLY resolver (issue-event key → branch-milestone → hub-state lineage → unattributed) with an opt-in network PR-resolve; work-item-key format; roll-up formula with the count-once precondition; multi-branch guard; ground-truth-fixture correctness contract (conservation secondary); coverage health threshold; milestone-grain-reliable / issue-grain-best-effort / deferred posture. |
