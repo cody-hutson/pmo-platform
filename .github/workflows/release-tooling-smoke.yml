@@ -896,10 +896,12 @@ jobs:
         # — three regression suites report "skipped", which reads as "nothing to say"
         # rather than "never executed".
         #
-        # always() rather than moving the corpus gate to the end of the list:
+        # !cancelled() rather than moving the corpus gate to the end of the list:
         # relocation only unmasks these three from THAT ONE step, and re-masks them the
-        # moment any other step above fails. always() makes the job report the UNION
-        # of its failures rather than the first, whichever step is the first to go red.
+        # moment any other step above fails. !cancelled() makes the job report the UNION
+        # of its failures rather than the first, whichever step is the first to go red,
+        # and, unlike an unconditional step, it does not run these suites on a cancelled
+        # run, so a superseded run gives its runner back instead of holding it.
         #
         # Safe on this step and the four below because all five are hermetic and
         # independent — each states so in its own comment (mktemp fixtures or frozen
@@ -914,7 +916,7 @@ jobs:
         # steps' semantics and is deliberately not made here.
         #
         # Static expression only — no workflow-context interpolation reaches any shell.
-        if: always()
+        if: ${{ !cancelled() }}
         # Invokes release/tools/tests/test_verify_release_plan.sh (26 assertions,
         # groups G1..G5).
         #
@@ -939,7 +941,7 @@ jobs:
       - name: av-verify region-scoped fixture regression
         # UNMASKED — see the rationale on the verify-release-plan step above. This
         # suite is frozen-fixture and offline, so it owes nothing to any step before it.
-        if: always()
+        if: ${{ !cancelled() }}
         # Invokes release/tools/tests/test_av_verify.py (10 frozen cases).
         # Python, not shell: the suite is stdlib-only with sys.exit(main()) at module
         # foot, so plain `python3 <path>` gates correctly on its exit code — the same
@@ -962,7 +964,7 @@ jobs:
       - name: native-dep-mirror frozen-fixture regression
         # UNMASKED — see the rationale on the verify-release-plan step above. This
         # suite is frozen-fixture and offline, so it owes nothing to any step before it.
-        if: always()
+        if: ${{ !cancelled() }}
         # Invokes release/tools/tests/test_native_dep_mirror.py (20 frozen cases, of
         # which 6 also assert unattributed-reference reporting). Same bare-invocation
         # Python shape and same discovery-scope reasoning as the step above.
@@ -985,7 +987,7 @@ jobs:
       - name: Chain-head rollup regression suite
         # UNMASKED — see the rationale on the verify-release-plan step above. This
         # suite is offline with inline fixtures, so it owes nothing to any step before it.
-        if: always()
+        if: ${{ !cancelled() }}
         # Invokes release/tools/tests/test_compute_chain_head_rollup.py, the arms that
         # grade compute-chain-head-rollup.py: the head set derived from labels, the
         # standing initiative shown with no percentage and the guard that stops a run
@@ -1009,7 +1011,7 @@ jobs:
         # UNMASKED — see the rationale on the verify-release-plan step above. This
         # suite is hermetic (mktemp fixtures only) and owes nothing to any step before
         # it.
-        if: always()
+        if: ${{ !cancelled() }}
         # Invokes release/tools/tests/test_plan_status_terminal_transition.sh
         # (23 assertions across three groups).
         #
