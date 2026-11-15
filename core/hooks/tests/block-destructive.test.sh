@@ -10926,15 +10926,15 @@ sv_arm "REACH-REDIR-03: a descriptor form" CP01 B rmloop a
 sv_arm "REACH-REDIR-03b: a {name} form" CP03 B rmloop a
 sv_arm "REACH-REDIR-04: between assignments" CP04 B rmloop a
 sv_arm "REACH-REDIR-04b: after a reserved word" CP05 B rmloop a
-sv_arm "REACH-REDIR-04c: between a wrapper and its command" CP06 B rmloop a
+sv_arm "REACH-REDIR-04c: between a wrapper and its command" CP06 B
 sv_arm "REACH-REDIR-04d: between a wrapper and its first option (the review's CD-2)" CP07 B
 sv_arm "REACH-REDIR-04e: ahead of timeout's duration (the review's CD-2)" CP08 B
 sv_arm "REACH-REDIR-05: a duplication cut by the separator split" CP10 B rmcarry a
 sv_arm "REACH-REDIR-05b: a clobber cut by the separator split" CP12 B rmcarry a
-sv_arm "REACH-REDIR-06: an unlisted script fed on a shell's standard input" CP13 B rmstdin W:exec
-sv_arm "REACH-REDIR-06b: the same through descriptor 0" CP14 B rmstdin W:exec
+sv_arm "REACH-REDIR-06: an unlisted script fed on a shell's standard input" CP13 B rmstdin a
+sv_arm "REACH-REDIR-06b: the same through descriptor 0" CP14 B rmstdin a
 sv_arm "REACH-REDIR-06c: a here-string program ahead of a shell (the review's CD-1)" CP16 B rmstdin a
-sv_arm "REACH-REDIR-07: an unlisted .py fed to python3, at the non-shell arm's phase" CP15 W:interp-nonshell rmstdin W:exec
+sv_arm "REACH-REDIR-07: an unlisted .py fed to python3, at the non-shell arm's phase" CP15 W:interp-nonshell rmstdin a
 sv_arm "REACH-REDIR-08: a leading redirection inside an enclosure, at the enclosure's phase" CP09 W:shell-enclosure
 sv_arm "REACH-REDIR-P1 (PM-1, declared): an output redirection word is not an execution" CP17 a
 sv_arm "REACH-REDIR-near-1: a process substitution is not a redirection" CP18 a
