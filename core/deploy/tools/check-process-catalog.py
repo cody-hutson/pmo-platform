@@ -60,7 +60,59 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
-import _process_catalog as PC  # noqa: E402
+
+# Each run's census keys, and the sentence a stopped run's summary block carries. They stand ahead of the library
+# import because the start-up stop below prints them when the library itself is what cannot be imported.
+CENSUS_KEYS = {
+    "page-validation": ("universes", "pages", "registry_rows", "register_rows", "pattern_arm", "errors", "warns"),
+    "registers": ("register_rows", "registry_rows", "pattern_arm", "findings"),
+}
+NOT_RUN = "The check could not run: %s. This is not a pass, and it is not a finding about this change."
+
+
+def startup_stop(error: Exception, argv: list) -> int:
+    """The stop for a sibling module that cannot be imported at start-up, or that imports but is incomplete (error
+    None): not evaluated, exit 3 (T-6). It cannot live in the library it reports on, so it uses nothing from it: the
+    line, the summary block and the census are written here in the library's forms, and the self-test holds them to
+    those forms. Every option is found where the parser would find it, since no value this tool takes begins with a
+    dash. No census value is read: each one prints NA. The stop never raises: a summary file it cannot append to is
+    named on standard error, and no block is written."""
+    name = error.name if isinstance(error, ImportError) and error.name else "_process_catalog"
+    reason = ("the sibling module %s.py was imported but is incomplete" % name if error is None else
+              "the sibling module %s.py could not be imported (%s)" % (name, type(error.__cause__ or error).__name__))
+    print("NOT-EVALUATED: %s; this is not a clean result" % reason)
+    if "--self-test" in argv:
+        print("process-catalog self-test status=not-evaluated exit=3 arms=NA failed=NA")
+        return 3
+    if "--list-rules" in argv:
+        return 3                                         # the rule list prints no census
+    gate = "registers" if "--registers-only" in argv else "page-validation"
+    summary = None
+    for i, word in enumerate(argv):
+        if word == "--summary-file" and i + 1 < len(argv):
+            summary = argv[i + 1]
+        elif word.startswith("--summary-file="):
+            summary = word[len("--summary-file="):]
+    if summary:
+        block = ["### Process catalog — %s: NOT-EVALUATED" % gate, "", "Examined: nothing", "", NOT_RUN % reason, ""]
+        try:
+            with open(summary, "a", encoding="utf-8", newline="\n") as fh:
+                fh.write("\n".join(block) + "\n")
+        except (OSError, ValueError) as e:
+            print("the summary file could not be appended to (%s); no block was written" % type(e).__name__,
+                  file=sys.stderr)
+    print("process-catalog %s status=not-evaluated exit=3 %s" % (gate, " ".join("%s=NA" % k for k in CENSUS_KEYS[gate])))
+    return 3
+
+
+try:
+    import _process_catalog as PC  # noqa: E402
+except Exception as e:                  # noqa: BLE001 — any failure to import the library is one stop (T-6)
+    if __name__ != "__main__":
+        raise
+    sys.exit(startup_stop(e, sys.argv[1:]))
+if __name__ == "__main__" and not (hasattr(PC, "not_evaluated") and hasattr(PC, "census")):
+    sys.exit(startup_stop(None, sys.argv[1:]))      # imported but incomplete, as an empty library is (T-6)
 
 RULES = (
     ("ANC001", "error", "a source link has a line fragment and no source anchor"),
@@ -848,9 +900,9 @@ class Checker:
 
 # ----------------------------------------------------------------------------------------------
 # The words a failing or stopped run's summary block gives an author. A block prints each path as
-# its resolved, repository-root-relative value.
+# its resolved, repository-root-relative value. The sentence a stopped run's block carries, NOT_RUN, stands above the
+# library import.
 # ----------------------------------------------------------------------------------------------
-NOT_RUN = "The check could not run: %s. This is not a pass, and it is not a finding about this change."
 PAGE_FIX = ("**Fix:** correct each page named above; each rule code is explained in the definitions pack. If the rule is "
             "SRC001, a file a page depicts was moved or deleted: put the file's new path in that page's `depicts` list, "
             "or remove the entry, then run `python3 %s build` and commit.")
@@ -883,13 +935,7 @@ def run(a, out=None) -> int:
     body, examined = [], "nothing"
 
     def close(code: int) -> int:
-        if a.registers_only:
-            pairs = [("register_rows", state["register_rows"]), ("registry_rows", state["registry_rows"]),
-                     ("pattern_arm", a.pattern_arm), ("findings", state["findings"])]
-        else:
-            pairs = [("universes", state["universes"]), ("pages", state["pages"]),
-                     ("registry_rows", state["registry_rows"]), ("register_rows", state["register_rows"]),
-                     ("pattern_arm", a.pattern_arm), ("errors", state["errors"]), ("warns", state["warns"])]
+        pairs = [(k, a.pattern_arm if k == "pattern_arm" else state[k]) for k in CENSUS_KEYS[gate]]
         PC.write_summary(a.summary_file, gate, PC.SUMMARY_STATUS[code], examined, body)
         emit(PC.census(gate, code, pairs))
         return code
@@ -1629,6 +1675,99 @@ def self_test() -> int:
         arms.check("not evaluated: the line names its reason and says it is not a clean result",
                    code == 3 and any(l.startswith("NOT-EVALUATED: no page is discovered") and l.endswith("; " + PC.NOT_CLEAN)
                                      for l in lines), lines)
+
+        # -- a start-up module made unimportable in this process's import system — the library, missing, malformed (a
+        #    source that does not parse) or empty (imported, providing nothing), or the shared reader the library
+        #    imports — with no file removed or copied --
+        import contextlib
+        import importlib.util
+        import io
+        import runpy
+        import types
+
+        class Malformed:                    # finds one module and hands the import system a source that does not parse
+            def __init__(self, wanted):
+                self.wanted = wanted
+
+            def find_spec(self, name, path=None, target=None):
+                return importlib.util.spec_from_loader(name, self) if name == self.wanted else None
+
+            def create_module(self, spec):
+                return None
+
+            def exec_module(self, module):
+                exec(compile("def (", module.__name__, "exec"), module.__dict__)
+
+        def startup(args, module="_process_catalog", plant="missing"):
+            names = ("_process_catalog", "_frontmatter")
+            kept = {name: sys.modules.get(name) for name in names}
+            out, err, argv, nobyte = io.StringIO(), io.StringIO(), sys.argv, sys.dont_write_bytecode
+            code, escaped, finder = None, None, Malformed(module)
+            sys.modules.pop("_process_catalog", None)           # so a blocked reader is met by a fresh library import
+            if plant == "malformed":
+                sys.modules.pop(module, None)
+                sys.meta_path.insert(0, finder)
+            else:
+                sys.modules[module] = types.ModuleType(module) if plant == "empty" else None
+            sys.argv, sys.dont_write_bytecode = [tool] + list(args), True
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    runpy.run_path(tool, run_name="__main__")
+            except SystemExit as e:
+                code = e.code
+            except Exception as e:      # noqa: BLE001 — an unguarded import escapes here, and the arm scores it
+                escaped = "%s: %s" % (type(e).__name__, e)
+            finally:
+                if finder in sys.meta_path:
+                    sys.meta_path.remove(finder)
+                for name in names:
+                    if kept[name] is None:
+                        sys.modules.pop(name, None)
+                    else:
+                        sys.modules[name] = kept[name]
+                sys.argv, sys.dont_write_bytecode = argv, nobyte
+            return code, out.getvalue().rstrip("\n").split("\n"), err.getvalue(), escaped
+
+        def blocked(module, kind="ModuleNotFoundError"):
+            return "the sibling module %s.py could not be imported (%s)" % (module, kind)
+
+        def na(gate):
+            return PC.census(gate, PC.EXIT_NOT_EVALUATED, [(k, None) for k in CENSUS_KEYS.get(gate, ("arms", "failed"))])
+
+        def startup_block(name, why):
+            ref = tmp / ("startup-%s-ref.md" % name)
+            PC.write_summary(ref, "page-validation", PC.SUMMARY_STATUS[PC.EXIT_NOT_EVALUATED], "nothing", [NOT_RUN % why])
+            return tmp / ("startup-%s.md" % name), ref.read_text(encoding="utf-8")
+
+        incomplete = "the sibling module _process_catalog.py was imported but is incomplete"
+        startup_files = {"missing": startup_block("missing", blocked("_process_catalog")),
+                         "malformed": startup_block("malformed", blocked("_process_catalog", "SyntaxError")),
+                         "empty": startup_block("empty", incomplete)}
+        unopenable = tmp / "no-such-folder" / "s.md"
+        line = PC.not_evaluated(blocked("_process_catalog"))
+        runs = [(startup(["--pattern-arm", "not-run", "--summary-file", str(startup_files["missing"][0])]),
+                 [line, na("page-validation")]),
+                (startup(["--registers-only", "--pattern-arm", "not-run"]), [line, na("registers")]),
+                (startup(["--list-rules"]), [line]),
+                (startup(["--self-test"]), [line, na("self-test")]),
+                (startup(["--pattern-arm", "not-run"], "_frontmatter"),
+                 [PC.not_evaluated(blocked("_frontmatter")), na("page-validation")]),
+                (startup(["--pattern-arm", "not-run", "--summary-file", str(startup_files["malformed"][0])],
+                         plant="malformed"),
+                 [PC.not_evaluated(blocked("_process_catalog", "SyntaxError")), na("page-validation")]),
+                (startup(["--pattern-arm", "not-run", "--summary-file", str(startup_files["empty"][0])], plant="empty"),
+                 [PC.not_evaluated(incomplete), na("page-validation")]),
+                (startup(["--pattern-arm", "not-run", "--summary-file=" + str(unopenable)]), [line, na("page-validation")])]
+        written = {name: path.read_text(encoding="utf-8") if path.is_file() else None
+                   for name, (path, _ref) in startup_files.items()}
+        arms.check("start-up: with the library missing, malformed or empty, or the shared reader it imports missing, each "
+                   "run is exit 3 with the not-evaluated line naming the module, its own census or none, the summary "
+                   "block when one is asked for, a skipped block named on standard error when the file cannot be "
+                   "appended to, and no traceback",
+                   all(r[0] == 3 and r[3] is None and "Traceback" not in r[2] and r[1] == want for r, want in runs)
+                   and all(written[name] == ref for name, (_path, ref) in startup_files.items())
+                   and "no block was written" in runs[-1][0][2] and not unopenable.parent.exists(),
+                   ([(r[0], r[1], r[3]) for r, _want in runs], written, runs[-1][0][2]))
         dx = PC.build_fixture_repo(tmp / "depicted")
         dx_base = ["--pattern-arm", "not-run"] + dx.args + dx.register_args + dx.measure_args
         unrelated = dx.repo / dx.layout["fixtures"] / "README.md"

@@ -84,7 +84,83 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
-import _process_catalog as PC  # noqa: E402
+
+# Each command's census gate and keys, and the sentence a stopped check's summary block carries. They stand ahead of
+# the library import because the start-up stop below prints them when the library itself is what cannot be imported.
+GATES = {"build": "generated-output", "convert": "conversion", "resolve": "citations", "stale": "staleness",
+         "impact": "impact", "coverage": "coverage", "data-flow-unmatched": "coverage", "overlay": "overlay"}
+EMPTY = {
+    "generated-output": ("universes", "pages", "generated_files", "differing", "missing", "orphans", "link_findings"),
+    "conversion": ("pages", "bare", "converted", "demoted", "left", "differs"),
+    "citations": ("pages", "citations", "current", "moved", "gone", "ambiguous", "other", "rewritten"),
+    "staleness": ("pages", "sources", "depicted_changed", "cited_changed", "fail_on"),
+    "impact": ("paths", "unmatched", "pages", "hit_depicts", "hit_cites", "hit_controls"),
+    "coverage": ("kinds", "paths", "depicted"),
+    "overlay": ("measures", "measured", "not_evaluated", "failed"),
+}
+NOT_RUN = "The check could not run: %s. This is not a pass, and it is not a finding about this change."
+
+
+def startup_stop(error: Exception, argv: list) -> int:
+    """The stop for a sibling module that cannot be imported at start-up, or that imports but is incomplete (error
+    None): not evaluated, exit 3 (T-6). It cannot live in the library it reports on, so it uses nothing from it: the
+    line, the summary block and the census are written here in the library's forms, and the self-test holds them to
+    those forms. The arguments are read without the library's root table, so before the command every option is
+    taken to carry a value except --self-test and --help. No census value is read: each one prints NA. `overlay
+    --list` prints no census, and `impact --json` prints its one document. The stop never raises: a summary file it
+    cannot append to is named on standard error, and no block is written."""
+    name = error.name if isinstance(error, ImportError) and error.name else "_process_catalog"
+    reason = ("the sibling module %s.py was imported but is incomplete" % name if error is None else
+              "the sibling module %s.py could not be imported (%s)" % (name, type(error.__cause__ or error).__name__))
+    words, command, self_test, at = list(argv), None, False, 0
+    while at < len(words) and command is None:
+        word = words[at]
+        if word in ("--self-test", "-h", "--help"):
+            self_test = self_test or word == "--self-test"
+        elif word.startswith("-"):
+            if "=" not in word:
+                at += 1                                  # the option's value
+        else:
+            command = word
+        at += 1
+    rest = words[at:]
+    if command == "anchors":
+        command, rest = (rest[0], rest[1:]) if rest else (None, [])
+    gate = "self-test" if self_test else GATES.get(command)
+    keys = ("arms", "failed") if self_test else EMPTY.get(gate, ())
+    census = "process-catalog %s status=not-evaluated exit=3 %s" % (gate, " ".join("%s=NA" % k for k in keys))
+    if gate == "impact" and "--json" in rest:
+        sys.stdout.write(json.dumps({"census": census, "not_evaluated": reason}, indent=2, sort_keys=True) + "\n")
+        return 3
+    print("NOT-EVALUATED: %s; this is not a clean result" % reason)
+    if gate is None or (gate == "overlay" and "--list" in rest):
+        return 3                                         # no command, or one that prints no census
+    summary = None
+    for i, word in enumerate(rest):
+        if word == "--summary-file" and i + 1 < len(rest):
+            summary = rest[i + 1]
+        elif word.startswith("--summary-file="):
+            summary = word[len("--summary-file="):]
+    if summary and gate != "self-test":
+        block = ["### Process catalog — %s: NOT-EVALUATED" % gate, "", "Examined: nothing", "", NOT_RUN % reason, ""]
+        try:
+            with open(summary, "a", encoding="utf-8", newline="\n") as fh:
+                fh.write("\n".join(block) + "\n")
+        except (OSError, ValueError) as e:
+            print("the summary file could not be appended to (%s); no block was written" % type(e).__name__,
+                  file=sys.stderr)
+    print(census)
+    return 3
+
+
+try:
+    import _process_catalog as PC  # noqa: E402
+except Exception as e:                  # noqa: BLE001 — any failure to import the library is one stop (T-6)
+    if __name__ != "__main__":
+        raise
+    sys.exit(startup_stop(e, sys.argv[1:]))
+if __name__ == "__main__" and not (hasattr(PC, "not_evaluated") and hasattr(PC, "census")):
+    sys.exit(startup_stop(None, sys.argv[1:]))      # imported but incomplete, as an empty library is (T-6)
 
 ROOT_NAMES = ("repo", "catalog", "definitions", "pack", "registry", "kinds", "probe_source", "measures", "measures_dir")
 REFUSALS = ("repeated", "blank-edge", "out-of-range", "not-text", "path-absent")
@@ -123,7 +199,6 @@ GENERATED_FIX = "**Fix — run from the repository root, then commit every file 
 GENERATED_RULE = ("A generated file is never edited by hand. If you edited one, make the change in the page it is generated "
                   "from, then run the command. A link that does not resolve is corrected in the page or register it comes "
                   "from, then by the command.")
-NOT_RUN = "The check could not run: %s. This is not a pass, and it is not a finding about this change."
 
 
 def own_command(roots, *words) -> str:
@@ -1153,21 +1228,8 @@ def cmd_overlay(a, roots) -> tuple:
 
 
 # ----------------------------------------------------------------------------------------------
-# The entry point
+# The entry point. Each command's census, GATES and EMPTY, stands above the library import.
 # ----------------------------------------------------------------------------------------------
-GATES = {"build": "generated-output", "convert": "conversion", "resolve": "citations", "stale": "staleness",
-         "impact": "impact", "coverage": "coverage", "data-flow-unmatched": "coverage", "overlay": "overlay"}
-EMPTY = {
-    "generated-output": ("universes", "pages", "generated_files", "differing", "missing", "orphans", "link_findings"),
-    "conversion": ("pages", "bare", "converted", "demoted", "left", "differs"),
-    "citations": ("pages", "citations", "current", "moved", "gone", "ambiguous", "other", "rewritten"),
-    "staleness": ("pages", "sources", "depicted_changed", "cited_changed", "fail_on"),
-    "impact": ("paths", "unmatched", "pages", "hit_depicts", "hit_cites", "hit_controls"),
-    "coverage": ("kinds", "paths", "depicted"),
-    "overlay": ("measures", "measured", "not_evaluated", "failed"),
-}
-
-
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="Generate the process catalog's index, graph and views; convert and "
                                              "re-resolve source anchors; answer impact and staleness queries.",
@@ -1910,6 +1972,89 @@ def self_test() -> int:
             arms.check("missing input: without %s, build --check is exit 3" % name, code == 3 and "NOT-EVALUATED" in lines[0], lines)
         code, lines = call(["--repo", str(tmp / "no-such-repository"), "build", "--check"])
         arms.check("missing input: a repository root that is no work tree is exit 3, naming it", code == 3 and "--repo" in lines[0], lines)
+
+        # -- the library made unimportable in this process's import system, with no file removed or copied — missing,
+        #    malformed (a source that does not parse) or empty (imported, providing nothing): each command shape the
+        #    start-up stop tells apart --
+        import importlib.util
+        import runpy
+        import types
+
+        class Malformed:                    # finds the library and hands the import system a source that does not parse
+            def find_spec(self, name, path=None, target=None):
+                return importlib.util.spec_from_loader(name, self) if name == "_process_catalog" else None
+
+            def create_module(self, spec):
+                return None
+
+            def exec_module(self, module):
+                exec(compile("def (", module.__name__, "exec"), module.__dict__)
+
+        def startup(args, plant="missing"):
+            out, err, kept, argv, nobyte = io.StringIO(), io.StringIO(), sys.modules["_process_catalog"], sys.argv, \
+                sys.dont_write_bytecode
+            code, escaped, finder = None, None, Malformed()
+            if plant == "malformed":
+                del sys.modules["_process_catalog"]
+                sys.meta_path.insert(0, finder)
+            else:
+                sys.modules["_process_catalog"] = types.ModuleType("_process_catalog") if plant == "empty" else None
+            sys.argv, sys.dont_write_bytecode = [tool] + list(args), True
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    runpy.run_path(tool, run_name="__main__")
+            except SystemExit as e:
+                code = e.code
+            except Exception as e:      # noqa: BLE001 — an unguarded import escapes here, and the arm scores it
+                escaped = "%s: %s" % (type(e).__name__, e)
+            finally:
+                if finder in sys.meta_path:
+                    sys.meta_path.remove(finder)
+                sys.modules["_process_catalog"], sys.argv, sys.dont_write_bytecode = kept, argv, nobyte
+            return code, out.getvalue().rstrip("\n").split("\n"), err.getvalue(), escaped
+
+        def na(gate):
+            return PC.census(gate, PC.EXIT_NOT_EVALUATED, [(k, None) for k in EMPTY.get(gate, ("arms", "failed"))])
+
+        def startup_block(name, gate, why):
+            ref = tmp / ("startup-%s-ref.md" % name)
+            PC.write_summary(ref, gate, PC.SUMMARY_STATUS[PC.EXIT_NOT_EVALUATED], "nothing", [NOT_RUN % why])
+            return tmp / ("startup-%s.md" % name), ref.read_text(encoding="utf-8")
+
+        reason = "the sibling module _process_catalog.py could not be imported (ModuleNotFoundError)"
+        malformed = "the sibling module _process_catalog.py could not be imported (SyntaxError)"
+        incomplete = "the sibling module _process_catalog.py was imported but is incomplete"
+        line = PC.not_evaluated(reason)
+        startup_files = {"build": startup_block("build", "generated-output", reason),
+                         "resolve": startup_block("resolve", "citations", reason),
+                         "malformed": startup_block("malformed", "generated-output", malformed),
+                         "empty": startup_block("empty", "generated-output", incomplete)}
+        unopenable = tmp / "no-such-folder" / "startup.md"
+        runs = [(startup(["build", "--check", "--summary-file", str(startup_files["build"][0])]), [line, na("generated-output")]),
+                (startup(["--catalog-root", "stale", "anchors", "resolve", "--check",
+                          "--summary-file=" + str(startup_files["resolve"][0])]), [line, na("citations")]),
+                (startup(["overlay", "--list"]), [line]),
+                (startup(["--self-test"]), [line, na("self-test")]),
+                (startup(["build", "--check", "--summary-file", str(startup_files["malformed"][0])], "malformed"),
+                 [PC.not_evaluated(malformed), na("generated-output")]),
+                (startup(["build", "--check", "--summary-file", str(startup_files["empty"][0])], "empty"),
+                 [PC.not_evaluated(incomplete), na("generated-output")]),
+                (startup(["build", "--check", "--summary-file", str(unopenable)]), [line, na("generated-output")])]
+        code, lines, err, escaped = startup(["impact", "--paths", rules_src, "--json"])
+        try:
+            doc = json.loads("\n".join(lines))
+        except ValueError:
+            doc = None
+        written = {name: path.read_text(encoding="utf-8") if path.is_file() else None
+                   for name, (path, _ref) in startup_files.items()}
+        arms.check("start-up: with the library missing, malformed or empty, each command is exit 3 with the not-evaluated "
+                   "line naming the module, its own census or none, its summary block, a skipped block named on standard "
+                   "error when the file cannot be appended to, impact --json as one document, and no traceback",
+                   all(r[0] == 3 and r[3] is None and "Traceback" not in r[2] and r[1] == want for r, want in runs)
+                   and all(written[name] == ref for name, (_path, ref) in startup_files.items())
+                   and "no block was written" in runs[-1][0][2] and not unopenable.parent.exists()
+                   and code == 3 and escaped is None and doc == {"census": na("impact"), "not_evaluated": reason},
+                   ([(r[0], r[1], r[3]) for r, _want in runs], written, code, lines[:3], escaped))
         saved = (cx.definitions / PC.default_part("pack")).read_text(encoding="utf-8")
         (cx.definitions / PC.default_part("pack")).write_text(saved.replace('  "pack_version": "2",\n', '  "pack_version": "2",\n  "prose": "x",\n'),
                                                               encoding="utf-8")

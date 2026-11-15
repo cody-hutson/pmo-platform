@@ -70,7 +70,16 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
-from _frontmatter import frontmatter_end, frontmatter_lines, read_frontmatter  # noqa: E402
+try:
+    from _frontmatter import frontmatter_end, frontmatter_lines, read_frontmatter  # noqa: E402
+except Exception as e:                  # noqa: BLE001 — any failure to import the shared reader is one stop (T-6)
+    _reason = "the sibling module _frontmatter.py could not be imported (%s)" % type(e).__name__
+    if __name__ != "__main__":
+        raise ImportError(_reason, name="_frontmatter") from e    # the importing tool stops with its own census
+    print("NOT-EVALUATED: %s; this is not a clean result" % _reason)    # the forms of not_evaluated() and census()
+    if sys.argv[1:] == ["--self-test"]:
+        print("process-catalog self-test status=not-evaluated exit=3 arms=NA failed=NA")
+    sys.exit(3)
 
 EXIT_CLEAN, EXIT_FINDINGS, EXIT_USAGE, EXIT_NOT_EVALUATED = 0, 1, 2, 3
 STATUS_WORD = {EXIT_CLEAN: "pass", EXIT_FINDINGS: "fail", EXIT_NOT_EVALUATED: "not-evaluated"}
@@ -3592,6 +3601,69 @@ def _self_test() -> int:
         write_summary(summary, "citations", "PASS", "2 pages", [])
         arms.check("summary: a block is appended, and no path writes nothing",
                    summary.read_text(encoding="utf-8").count("### Process catalog — citations") == 2)
+
+        # -- the shared reader made unimportable in this process's import system — missing, malformed (a source that
+        #    does not parse) or empty (none of the three names; the named import refuses it) — with no file removed or
+        #    copied: run as the program, this library stops as not evaluated; imported, it names the reader --
+        import contextlib
+        import io
+        import runpy
+        import types
+        me = str(Path(__file__).resolve())
+
+        class Malformed:                    # finds the reader and hands the import system a source that does not parse
+            def find_spec(self, name, path=None, target=None):
+                return importlib.util.spec_from_loader(name, self) if name == "_frontmatter" else None
+
+            def create_module(self, spec):
+                return None
+
+            def exec_module(self, module):
+                exec(compile("def (", module.__name__, "exec"), module.__dict__)
+
+        def planted(plant):
+            kept, argv, nobyte, finder = sys.modules.get("_frontmatter"), sys.argv, sys.dont_write_bytecode, Malformed()
+            out, err, code, escaped, imported = io.StringIO(), io.StringIO(), None, None, None
+            if plant == "malformed":
+                sys.modules.pop("_frontmatter", None)
+                sys.meta_path.insert(0, finder)
+            else:
+                sys.modules["_frontmatter"] = types.ModuleType("_frontmatter") if plant == "empty" else None
+            sys.argv, sys.dont_write_bytecode = [me, "--self-test"], True
+            try:
+                try:
+                    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        runpy.run_path(me, run_name="__main__")
+                except SystemExit as e:
+                    code = e.code
+                except Exception as e:      # noqa: BLE001 — an unguarded import escapes here, and the arm scores it
+                    escaped = "%s: %s" % (type(e).__name__, e)
+                try:
+                    runpy.run_path(me, run_name="_process_catalog_imported")
+                except ImportError as e:
+                    imported = (e.name, type(e.__cause__).__name__)
+                except Exception as e:      # noqa: BLE001
+                    imported = (type(e).__name__, None)
+            finally:
+                if finder in sys.meta_path:
+                    sys.meta_path.remove(finder)
+                if kept is None:
+                    sys.modules.pop("_frontmatter", None)
+                else:
+                    sys.modules["_frontmatter"] = kept
+                sys.argv, sys.dont_write_bytecode = argv, nobyte
+            return code, escaped, out.getvalue().rstrip("\n").split("\n"), err.getvalue(), imported
+
+        stopped = census("self-test", EXIT_NOT_EVALUATED, [("arms", None), ("failed", None)])
+        cases = {plant: (planted(plant), kind) for plant, kind in
+                 (("missing", "ModuleNotFoundError"), ("malformed", "SyntaxError"), ("empty", "ImportError"))}
+        arms.check("start-up: with the shared reader missing, malformed or empty, the library run as a program is exit 3 "
+                   "with the not-evaluated line naming the reader and its error's type, the self-test census and no "
+                   "traceback; imported, it raises naming the reader, with the reader's own error as the cause",
+                   all(r[0] == 3 and r[1] is None and "Traceback" not in r[3] and r[4] == ("_frontmatter", kind)
+                       and r[2] == [not_evaluated("the sibling module _frontmatter.py could not be imported (%s)" % kind),
+                                    stopped] for r, kind in cases.values()),
+                   {plant: (r[0], r[1], r[2], r[4]) for plant, (r, _kind) in cases.items()})
 
         # -- the fixture builder --
         fx = build_fixture_repo(tmp / "fx")

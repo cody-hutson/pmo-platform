@@ -42,7 +42,32 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
-import _process_catalog as PC  # noqa: E402
+
+CENSUS_KEYS = ("paths", "kinds", "other")      # the inventory's census keys, ahead of the import for the stop below
+
+
+def startup_stop(error: Exception, argv: list) -> int:
+    """The stop for a sibling module that cannot be imported at start-up, or that imports but is incomplete (error
+    None): not evaluated, exit 3 (T-6). It cannot live in the library it reports on, so it uses nothing from it: the
+    line and the census are written here in the library's forms, and the self-test holds them to those forms. No
+    census value is read: each one prints NA."""
+    name = error.name if isinstance(error, ImportError) and error.name else "_process_catalog"
+    reason = ("the sibling module %s.py was imported but is incomplete" % name if error is None else
+              "the sibling module %s.py could not be imported (%s)" % (name, type(error.__cause__ or error).__name__))
+    print("NOT-EVALUATED: %s; this is not a clean result" % reason)
+    gate, keys = ("self-test", ("arms", "failed")) if "--self-test" in argv else ("inventory", CENSUS_KEYS)
+    print("process-catalog %s status=not-evaluated exit=3 %s" % (gate, " ".join("%s=NA" % k for k in keys)))
+    return 3
+
+
+try:
+    import _process_catalog as PC  # noqa: E402
+except Exception as e:                  # noqa: BLE001 — any failure to import the library is one stop (T-6)
+    if __name__ != "__main__":
+        raise
+    sys.exit(startup_stop(e, sys.argv[1:]))
+if __name__ == "__main__" and not (hasattr(PC, "not_evaluated") and hasattr(PC, "census")):
+    sys.exit(startup_stop(None, sys.argv[1:]))      # imported but incomplete, as an empty library is (T-6)
 
 ROOT_NAMES = ("repo", "catalog", "definitions", "kinds")
 HEADER = "element_id\tkind\tpath\tname"
@@ -76,7 +101,7 @@ def inventory(paths: list, kinds: list) -> list:
 
 
 def run(a) -> int:
-    pairs = [("paths", None), ("kinds", None), ("other", None)]
+    pairs = [(k, None) for k in CENSUS_KEYS]
     try:
         roots = PC.resolve_roots(a)
         kinds = PC.load_kinds(roots.kinds)
@@ -203,6 +228,62 @@ def self_test() -> int:
         arms.check("nothing examined: a repository that tracks no path is exit 3", code == 3, lines_bad)
         code, _lines, err = cli(base + ["--no-such-option"])
         arms.check("usage: an unknown option is exit 2 with no census", code == 2 and "usage" in err and not _lines)
+
+        # -- the library made unimportable in this process's import system, with no file removed or copied — missing,
+        #    malformed (a source that does not parse) or empty (imported, providing nothing) --
+        import contextlib
+        import importlib.util
+        import io
+        import runpy
+        import types
+
+        class Malformed:                    # finds the library and hands the import system a source that does not parse
+            def find_spec(self, name, path=None, target=None):
+                return importlib.util.spec_from_loader(name, self) if name == "_process_catalog" else None
+
+            def create_module(self, spec):
+                return None
+
+            def exec_module(self, module):
+                exec(compile("def (", module.__name__, "exec"), module.__dict__)
+
+        def startup(args, plant="missing"):
+            out, err, kept, argv, nobyte = io.StringIO(), io.StringIO(), sys.modules["_process_catalog"], sys.argv, \
+                sys.dont_write_bytecode
+            code, escaped, finder = None, None, Malformed()
+            if plant == "malformed":
+                del sys.modules["_process_catalog"]
+                sys.meta_path.insert(0, finder)
+            else:
+                sys.modules["_process_catalog"] = types.ModuleType("_process_catalog") if plant == "empty" else None
+            sys.argv, sys.dont_write_bytecode = [tool] + list(args), True
+            try:
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    runpy.run_path(tool, run_name="__main__")
+            except SystemExit as e:
+                code = e.code
+            except Exception as e:      # noqa: BLE001 — an unguarded import escapes here, and the arm scores it
+                escaped = "%s: %s" % (type(e).__name__, e)
+            finally:
+                if finder in sys.meta_path:
+                    sys.meta_path.remove(finder)
+                sys.modules["_process_catalog"], sys.argv, sys.dont_write_bytecode = kept, argv, nobyte
+            return code, out.getvalue().rstrip("\n").split("\n"), err.getvalue(), escaped
+
+        inventory_na = PC.census("inventory", PC.EXIT_NOT_EVALUATED, [(k, None) for k in CENSUS_KEYS])
+        stem = "the sibling module _process_catalog.py "
+        line = PC.not_evaluated(stem + "could not be imported (ModuleNotFoundError)")
+        runs = {"inventory": (startup(base), [line, inventory_na]),
+                "self-test": (startup(["--self-test"]), [line, PC.census("self-test", PC.EXIT_NOT_EVALUATED,
+                                                                          [("arms", None), ("failed", None)])]),
+                "malformed": (startup(base, "malformed"),
+                              [PC.not_evaluated(stem + "could not be imported (SyntaxError)"), inventory_na]),
+                "empty": (startup(base, "empty"), [PC.not_evaluated(stem + "was imported but is incomplete"), inventory_na])}
+        arms.check("start-up: with the library missing, malformed or empty, an inventory run, and the self-test with the "
+                   "library missing, are each exit 3 with the not-evaluated line naming the module, their own census and "
+                   "no traceback",
+                   all(r[0] == 3 and r[3] is None and "Traceback" not in r[2] and r[1] == want for r, want in runs.values()),
+                   {k: (r[0], r[1], r[3]) for k, (r, _want) in runs.items()})
         decoy = tmp / "decoy"
         PC.write_text(decoy / "unrelated.txt", "x\n")
         PC.git(decoy, *(PC.TEST_IDENTITY + ("init", "-q")))
