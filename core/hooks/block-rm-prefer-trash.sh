@@ -470,7 +470,7 @@ fi
 # One run of the canonicalizer gives the form every rule below reads; Step 5 alone canonicalizes
 # again, only on a command that carries a line continuation, over its joined reading and over each of
 # its comment-aware readings. The hook keeps no exit
-# that allows on a match ({{ADR:deletion-guard-judges-every-segment}}): every segment is judged,
+# that allows on a match (ADR-239): every segment is judged,
 # so a widening of the walk can only add command starts to judge, never turn a refusal into an
 # allow, and the canonicalizer's frozen exit view has no reader here.
 COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
@@ -1280,7 +1280,7 @@ MEMORY_ADMISSIONS=0
 # other segment on the line is judged as if it were absent, except that the Finder step (Step 4)
 # reads every quoted Finder path on the line, the git segment's own text included. There is
 # deliberately no exit here: an exit that allows on a match reads the whole line
-# ({{ADR:deletion-guard-judges-every-segment}}).
+# (ADR-239).
 :  # M-TRASH-SEGWALK
 
 # Step 2 — every rm-family verb, each judged on its own segments. A segment that names no operand

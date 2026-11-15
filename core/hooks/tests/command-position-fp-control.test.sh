@@ -192,7 +192,7 @@ canonicalize() {
 
 # canonicalize_exit(command) -> the canonicalizer's EXIT VIEW on stdout (#8314): the frozen
 # form that keeps the walk as it stood before the wrapper grammar, which no hook reads since
-# {{ADR:deletion-guard-judges-every-segment}}.
+# ADR-239.
 canonicalize_exit() {
   /usr/bin/printf '%s' "$1" | /usr/bin/awk -v CMDPOS_VIEW=exit -f "$CMDPOS_AWK" 2>/dev/null
 }
@@ -455,7 +455,7 @@ single_source_report() { # $1 = hooks dir -> SS_01, SS_02, SS_03 problem strings
         }
         END { exit bad ? 0 : 1 }' "$h"; then SS_02="${SS_02} ${b}:assignment"; fi
     # a read into COMMAND_CMDPOS sits in a group whose closing line feeds it the shared file's
-    # both view (no hook reads that view since {{ADR:deletion-guard-judges-every-segment}}; the
+    # both view (no hook reads that view since ADR-239; the
     # check stays so a read brought back is held to the shared file)
     if /usr/bin/awk '
         /^[ \t]*#/ { next }

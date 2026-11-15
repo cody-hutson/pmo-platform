@@ -39,7 +39,7 @@
 #      never runs git, so that move is a declared precision improvement. And an exit that
 #      ALLOWS on a match must never read this output: every widening here widens such an
 #      exit too, turning a refusal into an allow. Such an exit must read the EXIT VIEW
-#      below; no consumer has one since {{ADR:deletion-guard-judges-every-segment}}.
+#      below; no consumer has one since ADR-239.
 #   2. QUOTE-NEUTRALISED command-start detection. Structural characters inside a quoted
 #      span cannot open a segment, so shell text carried AS CONTENT — `echo "cleanup() {
 #      rm -rf /tmp/x; }" > s.sh`, `sed 's/(rm foo)/X/'`, `grep -E '(rm |mv)' f` — is not a
@@ -89,7 +89,7 @@
 # original words, matched as exact tokens, each stepped as one token, and the `NAME=value`
 # assignment alone — never its append form. It was read only by the deletion hook's two
 # exits that ALLOW on a match (its git exemption and its no-target exit), which
-# {{ADR:deletion-guard-judges-every-segment}} removed; it has no consumer and stays frozen
+# ADR-239 removed; it has no consumer and stays frozen
 # until it is retired: a transformation added to the default walk does not reach it.
 #
 # BOTH VIEWS FROM ONE RUN
