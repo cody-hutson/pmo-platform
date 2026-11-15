@@ -1,0 +1,410 @@
+# Fixture cases for core/deploy/tools/check-workflow-concurrency.py --self-test and --case.
+# Not a workflow: the host reads only files directly under .github/workflows/.
+# One YAML document per fixture, separated by `---`. Each opens with
+#   # case: <id>  expect=<exit>  codes=<finding codes, or ->  kind=<near-miss|other>
+# The documents of one id are evaluated together as one population. A `near-miss`
+# document is the `canonical` document with exactly ONE property changed, which the
+# self-test asserts (one diff hunk). The tag-only, schedule-only, workflow_call and
+# review-event cases are synthetic: no such workflow exists in the tree.
+---
+# case: canonical  expect=0  codes=-  kind=other
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: no-group  expect=1  codes=MISSING-GROUP  kind=near-miss
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: ref-key  expect=1  codes=NONCANONICAL-GROUP  kind=near-miss
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: cancel-false  expect=1  codes=NONCANONICAL-CANCEL  kind=near-miss
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: quoted-group  expect=1  codes=NONCANONICAL-GROUP  kind=near-miss
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: '${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}'
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: job-shorthand  expect=1  codes=JOB-CONCURRENCY  kind=near-miss
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    concurrency: fixture-shared
+    steps:
+      - run: echo fixture
+---
+# case: review-event  expect=1  codes=REVIEW-WITH-PR-TRIGGER  kind=near-miss
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  pull_request_review:
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: called-with-group  expect=1  codes=CALLED-CARRIES-GROUP,CALLED-WITH-PR-TRIGGER  kind=near-miss
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: called-without-group  expect=1  codes=CALLED-WITH-PR-TRIGGER  kind=other
+name: Fixture canonical
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: called-only  expect=0  codes=-  kind=other
+name: Fixture called-only
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: called-only-with-group  expect=1  codes=CALLED-CARRIES-GROUP  kind=other
+name: Fixture called-only-with-group
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: exempt-push-main  expect=0  codes=-  kind=other
+name: Fixture exempt-push-main
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: exempt-tag  expect=0  codes=-  kind=other
+name: Fixture exempt-tag
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: exempt-schedule  expect=0  codes=-  kind=other
+name: Fixture exempt-schedule
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: exempt-dispatch  expect=0  codes=-  kind=other
+name: Fixture exempt-dispatch
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: name-collision  expect=1  codes=NAME-COLLISION  kind=other
+name: Fixture Collision
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
+---
+# case: name-collision  expect=1  codes=NAME-COLLISION  kind=other
+name: fixture collision
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Fixture check
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo fixture
