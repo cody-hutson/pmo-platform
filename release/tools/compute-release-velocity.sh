@@ -98,6 +98,10 @@
 #        [--hub-session <stem>]... [--store <usage.jsonl>] [--source-root <dir>]
 #        [--since <ISO-8601>] [--force]
 #                                               # the per-release cost row (below)
+#   ./compute-release-velocity.sh <version> --milestone <N> --quality-share [--json]
+#                                               # the quality-share reading (below)
+#   ./compute-release-velocity.sh <version> --quality-share --window-json <file> [--json]
+#                                               # the same reading over a fixture window
 #   ./compute-release-velocity.sh --self-test   # validate logic against synthetic input
 #   ./compute-release-velocity.sh --help        # this help text
 #
@@ -154,6 +158,32 @@
 #   written · 4 written with the unit UNRESOLVED (the conversion could not resolve a
 #   value): raw totals kept, no weekly points, the row degraded.
 #
+# THE QUALITY-SHARE READING (--quality-share) — a separate mode, not a sixth sub-signal.
+# It reads the standing quality initiative's share of the items a window of closed
+# releases shipped and judges it against the band in the platform-config template's
+# [quality_share_band] section, the single home of the band's values and its counting
+# rule; this tool states none of them. The method, the record form and the exit codes
+# are normative in release-velocity-tracking.md section 7b. In outline:
+#   window    the closing release (--milestone) and the releases merged before it that
+#             carry a row in release/releases/RELEASE_LOG.md, ordered by first-parent
+#             ancestry from the closing merge; a release merge on that history with no
+#             row makes the reading NOT-EVALUATED, never a shifted window
+#   per item  examined unless it carries the scaffolding label; shipped by the SAME
+#             delivery predicate as the field (_STATUS_NOT_DELIVERED); counted when it
+#             carries the counted label; unlabelled and bug-typed-elsewhere reported
+#             beside the share, with unlabelled kept in the denominator
+#   judge     the aggregate judged_on names, in exact fractions; an edge is inside the
+#             band; the other aggregate is printed beside it and judged on nothing
+#   record    a "#### Quality-share record" block, which Stage 13 Phase A14.2 writes
+#             into the release plan's Verification Evidence
+# WHY HERE: the share must use this tool's label-based delivery predicate, because at
+# Stage 13 the milestone's members are not reliably closed yet, and the mode split
+# leaves the **Velocity:** field path byte-identical. WHY THE LOG, NOT THE INDEX: index
+# rows land at each release's Stage 13, after later releases may already have merged; log
+# rows carry the merge SHA, so merge ancestry orders the window by construction.
+# Quality-share exit codes: 0 a reading, inside the band or not · 1 invalid arguments ·
+#   3 NOT-EVALUATED — the record is still printed and names the reason.
+#
 # Cutover of the **Velocity:** field: it applies to releases entering Stage 13
 # strictly AFTER the field's introducing-release merge SHA, and the field's
 # introducing release itself is exempt. This script does not gate by version — the
@@ -209,6 +239,17 @@ _RV_INSTANCE_LIB="$REPO_ROOT/core/deploy/lib-instance-path.sh"
 if [[ -r "$_RV_INSTANCE_LIB" ]]; then
   # shellcheck source=/dev/null
   source "$_RV_INSTANCE_LIB" "" || true
+fi
+
+# The platform-config rung reader the quality-share reading (--quality-share) resolves
+# its band through: the section-aware reader of release/tools/lib/platform-toggle.sh,
+# sourced rather than re-derived. That file defines functions and never exits. Guarded
+# like the resolver above and non-fatal: without it the quality-share reading is
+# NOT-EVALUATED, naming the library, and no other mode is touched.
+_RV_TOGGLE_LIB="$SCRIPT_DIR/lib/platform-toggle.sh"
+if [[ -r "$_RV_TOGGLE_LIB" ]]; then
+  # shellcheck source=/dev/null
+  source "$_RV_TOGGLE_LIB"
 fi
 
 # Anchor-resolution predicate — ONE implementation, called by BOTH self-test
@@ -1853,6 +1894,420 @@ if not mdiffs:
 PYX
 }
 
+# ─── The quality-share reading (--quality-share) ─────────────────────────────
+#
+# Seven pure functions, defined here ABOVE the --self-test gate for the reason recorded
+# at _rv_select_candidates: below the gate no arm can reach them. Every function except
+# _rv_qs_params, which reads the two configuration rungs, takes its inputs on argv; none
+# touches gh, git or the network. Each prints its result and then a line OK; a failure
+# prints `NE <reason>` and then OK. A missing OK means the pass crashed, and the caller
+# reads that as NOT-EVALUATED, never as an empty result. The band's values and its
+# counting rule are read from the [quality_share_band] section of the platform-config
+# template; nothing here states them. Method: release-velocity-tracking.md section 7b.
+#
+# THE LOG MAY ARRIVE ON STDIN. _rv_qs_closing and _rv_qs_window take the release log's
+# text as $1, and read it from stdin instead when $1 is `-`. The live log is about a
+# megabyte, near the platform's argument-size limit, so the live caller redirects the
+# file; the self-test passes its inline logs on argv. The first-parent list stays on
+# argv: about a tenth of that limit today.
+#
+# THE RELEASE TABLE. The log's rows are read from the table whose header line's first
+# cell is `Version`: that line pins the Milestone, Release PR and Merge SHA columns by
+# name, and the rows are the table lines of eight or more cells that follow it without
+# a break, so a later table elsewhere in the file is not read as release rows.
+read -r -d '' _RV_QS_PY <<'PYEOF' || true
+import json, re, sys
+from fractions import Fraction
+
+SHA_RE = re.compile(r"\b[0-9a-f]{40}\b")
+PR_RE = re.compile(r"#(\d+)")
+MERGE_RE = re.compile(r"^Merge pull request #(\d+) from [^/\s]+/(release/\S+)")
+KEYS = ["counted_label", "scaffolding_label", "bug_type_label", "share_floor",
+        "share_ceiling", "window_releases", "judged_on", "values_set_at"]
+FRACTION_RE = re.compile(r"^(0(\.[0-9]+)?|1(\.0+)?)$")
+RESETS = 3   # CALIBRATE-AFTER-3: the measured-release count the re-set waits for
+
+
+class NotEvaluated(Exception):
+    pass
+
+
+def done(text):
+    if text:
+        print(text)
+    print("OK")
+
+
+def text_arg(v):
+    return sys.stdin.read() if v == "-" else v
+
+
+def cells(line):
+    s = line.strip()
+    if not s.startswith("|"):
+        return None
+    s = s[1:-1] if s.endswith("|") else s[1:]
+    return [c.strip() for c in re.split(r"(?<!\\)\|", s)]
+
+
+def log_rows(text):
+    hdr, rows, open_table = None, [], False
+    for line in text.splitlines():
+        c = cells(line)
+        if c is None:
+            if hdr is not None:
+                open_table = False
+            continue
+        if c and c[0] == "Version" and len(c) >= 8 and hdr is None:
+            for name in ("Milestone", "Release PR", "Merge SHA"):
+                if name not in c:
+                    raise NotEvaluated("the release-log header lacks %s" % name)
+            hdr = {n: c.index(n) for n in ("Milestone", "Release PR", "Merge SHA")}
+            open_table = True
+            continue
+        if hdr is None or not open_table or len(c) < 8:
+            continue
+        if all(re.match(r"^:?-+:?$", x) for x in c if x):
+            continue
+        rows.append({"milestone": c[hdr["Milestone"]],
+                     "prs": {int(n) for n in PR_RE.findall(c[hdr["Release PR"]])},
+                     "shas": SHA_RE.findall(c[hdr["Merge SHA"]])})
+    if hdr is None:
+        raise NotEvaluated("the release log has no table whose header begins with Version")
+    return rows
+
+
+def closing_row(rows, title):
+    hits = [r for r in rows if r["milestone"] == title]
+    if not hits:
+        raise NotEvaluated("the release log has no row for %s (its Stage 12 row has not landed)" % title)
+    if len(hits) > 1:
+        raise NotEvaluated("%d release-log rows name %s" % (len(hits), title))
+    if len(hits[0]["shas"]) != 1:
+        raise NotEvaluated("the release-log row for %s carries %d merge SHAs; the window anchor is ambiguous"
+                           % (title, len(hits[0]["shas"])))
+    return hits[0]
+
+
+def cmd_params(argv):
+    tmpl, indiv = argv[0], argv[1]
+    triples = argv[2:]
+    values, rung = {}, {}
+    where = "(rungs read: template %s · individual %s)" % (tmpl, indiv)
+    for i in range(0, len(triples), 3):
+        key, tval, ival = triples[i], triples[i + 1], triples[i + 2]
+        if ival != "":
+            values[key], rung[key] = ival, "individual"
+        elif tval != "":
+            values[key], rung[key] = tval, "template"
+    def bad(key, why):
+        raise NotEvaluated("[quality_share_band].%s %s — %s %s" % (key, values.get(key, "absent"), why, where))
+    for key in KEYS:
+        if key not in values:
+            bad(key, "no value at either rung")
+        v = values[key]
+        if key in ("share_floor", "share_ceiling") and not FRACTION_RE.match(v):
+            bad(key, "not a decimal in [0.0, 1.0]")
+        if key == "window_releases" and not re.match(r"^[1-9][0-9]*$", v):
+            bad(key, "not a positive integer")
+        if key == "judged_on" and v not in ("pooled", "mean-of-shares"):
+            bad(key, "neither pooled nor mean-of-shares")
+        if key == "counted_label" and not re.match(r"^[^:]+:.+$", v):
+            bad(key, "no namespace prefix")
+    if Fraction(values["share_floor"]) > Fraction(values["share_ceiling"]):
+        bad("share_floor", "above share_ceiling %s" % values["share_ceiling"])
+    done(json.dumps({"values": values, "rung": rung}, sort_keys=True))
+
+
+def cmd_closing(argv):
+    done(closing_row(log_rows(text_arg(argv[0])), argv[1])["shas"][0])
+
+
+def cmd_window(argv):
+    text, tsv, title, size, set_at, shallow = argv[0], argv[1], argv[2], int(argv[3]), argv[4], argv[5]
+    if shallow != "false":
+        raise NotEvaluated("the clone is shallow; the merge history the window is read from is incomplete")
+    rows = log_rows(text_arg(text))
+    crow = closing_row(rows, title)
+    csha = crow["shas"][0]
+    hist = [ln.split("\t", 1) for ln in tsv.splitlines() if ln.strip()]
+    hist = [(h[0], h[1] if len(h) > 1 else "") for h in hist]
+    if not hist or hist[0][0] != csha:
+        raise NotEvaluated("the first-parent list does not start at the closing merge %s" % csha[:12])
+    pos = {}
+    for i, (sha, _subj) in enumerate(hist):
+        pos.setdefault(sha, i)
+    cands = []
+    for r in rows:
+        if r is crow:
+            continue
+        on = [pos[s] for s in r["shas"] if s in pos]
+        if on:
+            cands.append((min(on), r))
+    cands.sort(key=lambda x: x[0])
+    need = size - 1
+    if len(cands) < need:
+        raise NotEvaluated("the release log lists %d releases merged before %s; the window needs %d"
+                           % (len(cands), title, need))
+    members = cands[:need]
+    oldest = members[-1][0] if members else 0
+    all_shas = {s for r in rows for s in r["shas"]}
+    all_prs = {n for r in rows for n in r["prs"]}
+    merges = 0
+    for i in range(oldest + 1):
+        sha, subj = hist[i]
+        m = MERGE_RE.match(subj)
+        if not m:
+            continue
+        merges += 1
+        if sha not in all_shas and int(m.group(1)) not in all_prs:
+            raise NotEvaluated("release merge %s (#%s, %s) precedes %s on main and has no release-log row: "
+                               "the window would skip it" % (sha[:8], m.group(1), m.group(2), title))
+    placed = [(0, crow)] + cands
+    set_pos = None
+    for p, r in placed:
+        if r["milestone"] == set_at:
+            set_pos = p
+            break
+    measured = None if set_pos is None else sum(1 for p, _r in placed if p <= set_pos)
+    done(json.dumps({"releases": [title] + [r["milestone"] for _p, r in members],
+                     "merges": [csha] + [hist[p][0] for p, _r in members],
+                     "measured": measured,
+                     "guard": {"commits": oldest + 1, "release_merges": merges}}, sort_keys=True))
+
+
+def cmd_resolve(argv):
+    by = {}
+    for ln in argv[0].splitlines():
+        if ln.strip():
+            num, _sep, title = ln.partition("\t")
+            by.setdefault(title, []).append(int(num))
+    out = {}
+    for slug in json.loads(argv[1]):
+        k = len(by.get(slug, []))
+        if k != 1:
+            raise NotEvaluated("release %s resolves to %d milestones" % (slug, k))
+        out[slug] = by[slug][0]
+    done(json.dumps(out, sort_keys=True))
+
+
+def cmd_member_guard(argv):
+    count, limit, slug = int(argv[0]), int(argv[1]), argv[2]
+    if count >= limit:
+        raise NotEvaluated("membership read for %s returned %d items, the read limit; refusing a possibly "
+                           "truncated count" % (slug, limit))
+    done("")
+
+
+def cmd_compute(argv):
+    try:
+        win = json.loads(argv[0])
+    except ValueError:
+        raise NotEvaluated("the window input is not JSON")
+    p = json.loads(argv[1])
+    nd = [x.strip().lower() for x in argv[2].split(",") if x.strip()]
+    v = p["values"]
+    size = int(v["window_releases"])
+    rels = win.get("releases") if isinstance(win, dict) else None
+    if not isinstance(rels, list) or len(rels) < size:
+        raise NotEvaluated("the window input lists %d releases; the window needs %d"
+                           % (len(rels) if isinstance(rels, list) else 0, size))
+    rels = rels[:size]
+    if win.get("closing") != rels[0].get("slug"):
+        raise NotEvaluated("the window input does not start at its closing release %s" % win.get("closing"))
+    cl, sl, bl = v["counted_label"], v["scaffolding_label"], v["bug_type_label"]
+    prefix = cl.split(":", 1)[0] + ":"
+    per = []
+    for r in rels:
+        c = {"slug": r.get("slug"), "counted": 0, "shipped": 0, "unlabelled": 0, "bug_other": 0,
+             "excluded_scaffolding": 0, "excluded_not_shipped": 0}
+        for mem in r.get("members", []):
+            labels = [str(x) for x in mem.get("labels", [])]
+            if sl in labels:
+                c["excluded_scaffolding"] += 1
+                continue
+            if any(lb.strip().lower() in nd for lb in labels):
+                c["excluded_not_shipped"] += 1
+                continue
+            c["shipped"] += 1
+            ns = [lb for lb in labels if lb.startswith(prefix)]
+            if cl in labels:
+                c["counted"] += 1
+            if not ns:
+                c["unlabelled"] += 1
+            if bl in labels and any(lb != cl for lb in ns):
+                c["bug_other"] += 1
+        per.append(c)
+    live = [c for c in per if c["shipped"] > 0]
+    if not live:
+        raise NotEvaluated("no release in the window shipped an item")
+    counted = sum(c["counted"] for c in per)
+    shipped = sum(c["shipped"] for c in per)
+    pooled = Fraction(counted, shipped)
+    mean = sum((Fraction(c["counted"], c["shipped"]) for c in live), Fraction(0)) / len(live)
+    judged = pooled if v["judged_on"] == "pooled" else mean
+    floor, ceiling = Fraction(v["share_floor"]), Fraction(v["share_ceiling"])
+    verdict = "BELOW-FLOOR" if judged < floor else ("ABOVE-CEILING" if judged > ceiling else "IN-BAND")
+    rec = {"verdict": verdict, "judged_on": v["judged_on"], "values": v, "rung": p["rung"],
+           "releases": per, "counted": counted, "shipped": shipped,
+           "pooled": [pooled.numerator, pooled.denominator], "mean": [mean.numerator, mean.denominator],
+           "not_delivered": nd}
+    if "measured" in win:
+        rec["measured"] = win["measured"]
+    done(json.dumps(rec, sort_keys=True))
+
+
+def pct(n, d):
+    t = (2 * 1000 * n + d) // (2 * d)
+    return "%d.%d%%" % (t // 10, t % 10)
+
+
+def fpct(f):
+    return pct(f.numerator, f.denominator)
+
+
+def cmd_render(argv):
+    src, mode, source = argv[0], argv[1], argv[2]
+    mech = "compute-release-velocity.sh --quality-share"
+    if src.startswith("NE "):
+        reason = src[3:]
+        if mode == "json":
+            done(json.dumps({"verdict": "NOT-EVALUATED", "reason": reason, "mechanism": mech}, sort_keys=True))
+            return
+        done("#### Quality-share record\n\n```text\nquality-share: NOT-EVALUATED — %s (no reading was taken; "
+             "this is not a clean result)\nmechanism: %s\n```" % (reason, mech))
+        return
+    r = json.loads(src)
+    v, per = r["values"], r["releases"]
+    pooled, mean = Fraction(*r["pooled"]), Fraction(*r["mean"])
+    judged = pooled if r["judged_on"] == "pooled" else mean
+    size = len(per)
+    if "measured" not in r:
+        meas = "n/a (offline input)"
+    elif r["measured"] is None:
+        meas = "n/a (set-at release %s is not on this release's merge history)" % v["values_set_at"]
+    else:
+        meas = "%d of %d toward the re-set" % (r["measured"], RESETS)
+    indiv = [k for k in KEYS if r["rung"].get(k) == "individual"]
+    prefix = v["counted_label"].split(":", 1)[0] + ":"
+    if mode == "json":
+        out = dict(r)
+        out.update({"window_size": size, "pooled_display": fpct(pooled), "mean_display": fpct(mean),
+                    "judged_display": fpct(judged), "source": source, "mechanism": mech,
+                    "measured_display": meas, "individual_rung": indiv})
+        done(json.dumps(out, sort_keys=True))
+        return
+    c0 = per[0]
+    lines = ["quality-share: %s — %s %s against the band %s–%s, judged over %d releases (an advisory reading, "
+             "not a close verdict)" % (r["verdict"], r["judged_on"], fpct(judged),
+                                       fpct(Fraction(v["share_floor"])), fpct(Fraction(v["share_ceiling"])), size)]
+    share0 = pct(c0["counted"], c0["shipped"]) if c0["shipped"] else "n/a"
+    lines.append("this-release: %s · counted %d of %d shipped (%s) · unlabelled %d · bug-typed under another "
+                 "initiative %d · excluded: scaffolding %d, not shipped %d"
+                 % (c0["slug"], c0["counted"], c0["shipped"], share0, c0["unlabelled"], c0["bug_other"],
+                    c0["excluded_scaffolding"], c0["excluded_not_shipped"]))
+    pj, mj = ("judged", "reported beside, not judged") if r["judged_on"] == "pooled" else \
+             ("reported beside, not judged", "judged")
+    lines.append("window: pooled %d of %d (%s, %s) · mean of shares %s (%s) · releases with shipped items %d of "
+                 "%d · unlabelled %d · bug-typed under another initiative %d"
+                 % (r["counted"], r["shipped"], fpct(pooled), pj, fpct(mean), mj,
+                    sum(1 for c in per if c["shipped"]), size, sum(c["unlabelled"] for c in per),
+                    sum(c["bug_other"] for c in per)))
+    for c in per:
+        share = "%d of %d (%s)" % (c["counted"], c["shipped"], pct(c["counted"], c["shipped"])) \
+            if c["shipped"] else "n/a (0 shipped)"
+        lines.append("release %s: %s · unlabelled %d · bug-typed-other %d"
+                     % (c["slug"], share, c["unlabelled"], c["bug_other"]))
+    lines.append("counting-rule: counted %s · scaffolding %s excluded · bug-typed %s · unlabelled = no %s label · "
+                 "shipped = carries no %s label" % (v["counted_label"], v["scaffolding_label"],
+                                                    v["bug_type_label"], prefix, " or ".join(r["not_delivered"])))
+    lines.append("values: [quality_share_band] floor %s · ceiling %s · window %s · judged on %s (template; "
+                 "individual rung: %s) · set at %s · measured against these values: %s"
+                 % (v["share_floor"], v["share_ceiling"], v["window_releases"], v["judged_on"],
+                    ", ".join(indiv) if indiv else "none", v["values_set_at"], meas))
+    lines.append("source: %s" % source)
+    lines.append("mechanism: %s" % mech)
+    done("#### Quality-share record\n\n```text\n%s\n```" % "\n".join(lines))
+
+
+def cmd_window_json(argv):
+    # Assemble the live window from the window reading and each release members read,
+    # so the live and offline paths feed one computation. argv: title, measured, then
+    # slug and members-JSON pairs, newest first.
+    title, measured = argv[0], argv[1]
+    rels = []
+    for i in range(2, len(argv), 2):
+        rels.append({"slug": argv[i], "members": json.loads(argv[i + 1])})
+    done(json.dumps({"closing": title, "releases": rels,
+                     "measured": None if measured == "null" else int(measured)}, sort_keys=True))
+
+
+CMDS = {"params": cmd_params, "closing": cmd_closing, "window": cmd_window, "resolve": cmd_resolve,
+        "member_guard": cmd_member_guard, "compute": cmd_compute, "render": cmd_render,
+        "window_json": cmd_window_json}
+
+try:
+    CMDS[sys.argv[1]](sys.argv[2:])
+except NotEvaluated as e:
+    print("NE %s" % e)
+    print("OK")
+PYEOF
+
+# _rv_qs_params — resolve the eight [quality_share_band] values on their two rungs: the
+# template (rung 1) and the individual XDG file (rung 5), the individual value winning
+# when non-empty, through the section-aware reader of release/tools/lib/platform-toggle.sh.
+# Prints {values, rung} JSON and OK, or NE naming the key. The rung paths it names are
+# written repository-relative and with the home directory as ~, so a record never
+# carries an operator path.
+_rv_qs_params() {
+  if ! declare -F _pt_read_field >/dev/null 2>&1; then
+    /usr/bin/printf 'NE release/tools/lib/platform-toggle.sh is unavailable; no rung was read\nOK\n'
+    return 0
+  fi
+  local _root _t _i _ts _is _k
+  _root="$(_pt_src_root)"
+  _t="$_root/core/config/platform-config.toml.template"
+  _i="$(_pt_config_file)"
+  _ts="core/config/platform-config.toml.template"
+  [[ -r "$_t" ]] || _ts="none"
+  _is="$_i"
+  # shellcheck disable=SC2088  # a literal ~ is the point: a display form, never expanded
+  if [[ -n "${HOME:-}" && "$_i" == "$HOME/"* ]]; then _is="~/${_i#"$HOME"/}"; fi
+  local -a _a=("$_ts" "$_is")
+  for _k in counted_label scaffolding_label bug_type_label share_floor share_ceiling window_releases judged_on values_set_at; do
+    _a+=("$_k" "$(_pt_read_field "$_t" quality_share_band "$_k")" "$(_pt_read_field "$_i" quality_share_band "$_k")")
+  done
+  /usr/bin/python3 -c "$_RV_QS_PY" params "${_a[@]}" 2>/dev/null
+}
+# _rv_qs_closing LOG TITLE — the closing release's merge SHA from its release-log row.
+_rv_qs_closing() { /usr/bin/python3 -c "$_RV_QS_PY" closing "$@" 2>/dev/null; }
+# _rv_qs_window LOG FIRST-PARENT-TSV TITLE SIZE VALUES_SET_AT SHALLOW — the window by ancestry.
+_rv_qs_window() { /usr/bin/python3 -c "$_RV_QS_PY" window "$@" 2>/dev/null; }
+# _rv_qs_resolve MILESTONE-TSV SLUGS-JSON — each slug's milestone number, by exact title.
+_rv_qs_resolve() { /usr/bin/python3 -c "$_RV_QS_PY" resolve "$@" 2>/dev/null; }
+# _rv_qs_member_guard COUNT LIMIT SLUG — refuse a membership read that hit its own limit.
+_rv_qs_member_guard() { /usr/bin/python3 -c "$_RV_QS_PY" member_guard "$@" 2>/dev/null; }
+# _rv_qs_compute WINDOW-JSON PARAMS-JSON NOT-DELIVERED — the reading, as a record.
+_rv_qs_compute() { /usr/bin/python3 -c "$_RV_QS_PY" compute "$@" 2>/dev/null; }
+# _rv_qs_render RECORD-JSON-OR-NE human|json SOURCE — the record; never a share on NE.
+_rv_qs_render() { /usr/bin/python3 -c "$_RV_QS_PY" render "$@" 2>/dev/null; }
+
+# _rv_qs_take STEP OUTPUT — strip a function result of its OK sentinel. Sets the GLOBALS
+# _QS_BODY (the result) and _QS_NE (a NOT-EVALUATED reason), not stdout, for the reason
+# recorded at resolve_declared_kinds. Returns 0 on a result, 3 on an NE line, and 4 when
+# the sentinel is missing (the pass crashed), with _QS_NE naming the step.
+_rv_qs_take() {
+  _QS_BODY=""; _QS_NE=""
+  if [[ "$2" == "OK" ]]; then return 0; fi
+  if [[ "$2" != *$'\n'OK ]]; then
+    _QS_NE="the quality-share step $1 did not complete (no OK sentinel)"
+    return 4
+  fi
+  _QS_BODY="${2%$'\n'OK}"
+  if [[ "$_QS_BODY" == "NE "* ]]; then _QS_NE="${_QS_BODY#NE }"; _QS_BODY=""; return 3; fi
+  return 0
+}
+
 # ─── Self-test mode (no gh / no network) ─────────────────────────────────────
 
 if [[ "${1:-}" == "--self-test" ]]; then
@@ -2361,7 +2816,281 @@ $_wc_agree_out"
     --jq-dir "$(/usr/bin/dirname "$_cr_jq")" --min-store-schema "$COST_ROW_MIN_STORE_SCHEMA" || _cr_rc=$?
   [[ "$_cr_rc" -eq 0 ]] || die "self-test CR: the cost-row arms failed (exit $_cr_rc) — see the FAIL lines above"
 
+  # Test QS: the quality-share reading (--quality-share), offline. Every arm is hermetic:
+  # PMO_SRC_ROOT points the template rung at a temporary tree whose template carries the
+  # [quality_share_band] section with the values the band was set with, and
+  # PMO_PLATFORM_CONFIG_ROOT points the individual rung at a directory the arm controls,
+  # so no arm reads the operator's configuration and the arms hold across a later re-set
+  # of the shipped values. The fixtures are read from tests/fixtures/quality-share/. No
+  # arm touches gh, git or the network. QS-1 to QS-10 run the real command line in its
+  # offline form; QS-11 and QS-12 call the functions its live form runs. Every failure
+  # prints the observed value beside the expected one, and every arm runs before the
+  # group reports, so a mutation proof can quote the arm it turned red.
+  # QS-1 seeded red · QS-2 near-miss with its one-variable control · QS-3 the mean
+  # triggers nothing and judged_on is read · QS-4 exclusions and the counts beside ·
+  # QS-5 the floor edge · QS-6 the mean computed exactly · QS-7 the verdict is exact and
+  # the display is not · QS-8 empty releases · QS-9 fail closed · QS-10 rung precedence
+  # and section awareness · QS-11 the window by ancestry and its guard · QS-12 the
+  # resolver, the membership guard and the closing row.
+  _qs_n=0
+  _qs_fail() { echo "  FAIL: $1 — expected: $2 · observed: $3" >&2; _qs_n=$((_qs_n + 1)); return 0; }
+  _qs_fx="$SCRIPT_DIR/tests/fixtures/quality-share"
+  _qs_tmp="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rv-selftest-qs-XXXXXX")" \
+    || die "self-test QS: could not create the hermetic tree — the quality-share arms did not run, which is a FAIL, not a skip"
+  /bin/mkdir -p "$_qs_tmp/src/core/config" "$_qs_tmp/cfg-empty" "$_qs_tmp/cfg-band" "$_qs_tmp/cfg-other"
+  _qs_tpl="$_qs_tmp/src/core/config/platform-config.toml.template"
+  # _qs_tmpl [KEY=VALUE | KEY]... — write the hermetic template: the band as set, with
+  # KEY=VALUE replacing a line and a bare KEY dropping it.
+  _qs_tmpl() {
+    local _l _k _o _out=""
+    for _l in 'counted_label = "project:platform-quality"' 'scaffolding_label = "sub-task"' \
+              'bug_type_label = "type:bug"' 'share_floor = 0.15' 'share_ceiling = 0.35' \
+              'window_releases = 5' 'judged_on = "pooled"' 'values_set_at = "obligation-runners-declared"'; do
+      _k="${_l%% *}"
+      for _o in "$@"; do
+        if [[ "$_o" == "$_k" ]]; then _l=""; elif [[ "$_o" == "$_k="* ]]; then _l="$_k = ${_o#*=}"; fi
+      done
+      if [[ -n "$_l" ]]; then _out="${_out}${_l}"$'\n'; fi
+    done
+    /usr/bin/printf '[quality_share_band]\n%s' "$_out" > "$_qs_tpl"
+    return 0
+  }
+  # _qs_cli CFG-ROOT ARGS... — the real command line, hermetic, run from the repo root.
+  _qs_cli() {
+    local _c="$1"; shift
+    ( cd "$REPO_ROOT" && PMO_SRC_ROOT="$_qs_tmp/src" PMO_PLATFORM_CONFIG_ROOT="$_c" \
+        "${BASH:-/bin/bash}" "$SCRIPT_DIR/compute-release-velocity.sh" "$@" 2>&1 )
+  }
+  # _qs_line OUTPUT PREFIX — the first line of OUTPUT that starts with PREFIX.
+  _qs_line() {
+    local _l
+    while IFS= read -r _l; do
+      if [[ "$_l" == "$2"* ]]; then /usr/bin/printf '%s' "$_l"; return 0; fi
+    done <<< "$1"
+    return 0
+  }
+  # _qs_win "C/S ..." FILE — write a window, newest first: per release, C counted of S shipped.
+  _qs_win() {
+    /usr/bin/python3 -c 'import json, sys
+rels = []
+for i, cs in enumerate(sys.argv[1].split()):
+    c, s = (int(x) for x in cs.split("/"))
+    ms = [{"number": i * 10000 + j, "labels": ["project:platform-quality" if j < c else "project:other"]} for j in range(s)]
+    rels.append({"slug": "qs-release-%d" % (i + 1), "members": ms})
+json.dump({"closing": rels[0]["slug"], "releases": rels}, open(sys.argv[2], "w"))' "$1" "$2"
+  }
+  _qs_rel="release/tools/tests/fixtures/quality-share"
+
+  # QS-1: the seeded red, through the real command line — and the record byte for byte.
+  _qs_tmpl
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_rel/out-of-band.json")" || _qs_rc=$?
+  _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"
+  [[ "$_qs_rc" -eq 0 && "$_qs_v" == "quality-share: ABOVE-CEILING — pooled 40.0%"* ]] \
+    || _qs_fail "QS-1 seeded red" "exit 0, quality-share: ABOVE-CEILING — pooled 40.0%" "exit $_qs_rc, $_qs_v"
+  _qs_w="$(_qs_line "$_qs_o" "window: ")"
+  [[ "$_qs_w" == *"pooled 8 of 20 (40.0%, judged)"* ]] || _qs_fail "QS-1 window" "pooled 8 of 20 (40.0%, judged)" "$_qs_w"
+  read -r -d '' _qs_want <<'QSEOF' || true
+#### Quality-share record
+
+```text
+quality-share: ABOVE-CEILING — pooled 40.0% against the band 15.0%–35.0%, judged over 5 releases (an advisory reading, not a close verdict)
+this-release: fixture-release-5 · counted 2 of 4 shipped (50.0%) · unlabelled 1 · bug-typed under another initiative 1 · excluded: scaffolding 1, not shipped 1
+window: pooled 8 of 20 (40.0%, judged) · mean of shares 40.0% (reported beside, not judged) · releases with shipped items 5 of 5 · unlabelled 1 · bug-typed under another initiative 1
+release fixture-release-5: 2 of 4 (50.0%) · unlabelled 1 · bug-typed-other 1
+release fixture-release-4: 2 of 4 (50.0%) · unlabelled 0 · bug-typed-other 0
+release fixture-release-3: 1 of 4 (25.0%) · unlabelled 0 · bug-typed-other 0
+release fixture-release-2: 2 of 4 (50.0%) · unlabelled 0 · bug-typed-other 0
+release fixture-release-1: 1 of 4 (25.0%) · unlabelled 0 · bug-typed-other 0
+counting-rule: counted project:platform-quality · scaffolding sub-task excluded · bug-typed type:bug · unlabelled = no project: label · shipped = carries no status: deferred or status: rejected label
+values: [quality_share_band] floor 0.15 · ceiling 0.35 · window 5 · judged on pooled (template; individual rung: none) · set at obligation-runners-declared · measured against these values: n/a (offline input)
+source: --window-json release/tools/tests/fixtures/quality-share/out-of-band.json
+mechanism: compute-release-velocity.sh --quality-share
+```
+QSEOF
+  [[ "$_qs_o" == "$_qs_want" ]] || _qs_fail "QS-1 record" "the record of release-velocity-tracking.md section 7b, byte for byte" "$_qs_o"
+
+  # QS-4: the exclusions, and the counts reported beside the share (the same reading).
+  _qs_t="$(_qs_line "$_qs_o" "this-release: ")"
+  for _qs_x in "counted 2 of 4" "unlabelled 1" "bug-typed under another initiative 1" "excluded: scaffolding 1, not shipped 1"; do
+    [[ "$_qs_t" == *"$_qs_x"* ]] || _qs_fail "QS-4 exclusions" "$_qs_x" "$_qs_t"
+  done
+
+  # QS-2: the near-miss, exactly at the ceiling, stays silent; and the two files differ
+  # in one variable only.
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_rel/boundary-near-miss.json")" || _qs_rc=$?
+  _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"
+  [[ "$_qs_rc" -eq 0 && "$_qs_v" == "quality-share: IN-BAND — pooled 35.0%"* ]] \
+    || _qs_fail "QS-2 near-miss" "exit 0, quality-share: IN-BAND — pooled 35.0%" "exit $_qs_rc, $_qs_v"
+  _qs_w="$(_qs_line "$_qs_o" "window: ")"
+  [[ "$_qs_w" == *"pooled 7 of 20 (35.0%, judged)"* ]] || _qs_fail "QS-2 window" "pooled 7 of 20 (35.0%, judged)" "$_qs_w"
+  _qs_d="$(/usr/bin/python3 -c 'import json, sys
+a, b = (json.load(open(p)) for p in sys.argv[1:3])
+fl = lambda d: {(r["slug"], m["number"]): set(m["labels"]) for r in d["releases"] for m in r["members"]}
+fa, fb = fl(a), fl(b)
+diff = sorted(k for k in set(fa) | set(fb) if fa.get(k) != fb.get(k))
+print(len(diff), ",".join(str(k[1]) for k in diff), sum(len(fa.get(k, set()) ^ fb.get(k, set())) for k in diff))' \
+    "$_qs_fx/out-of-band.json" "$_qs_fx/boundary-near-miss.json" 2>&1)"
+  [[ "$_qs_d" == "1 401 2" ]] || _qs_fail "QS-2 one-variable control" "1 401 2 (one member, 401, with one label swapped)" "$_qs_d"
+
+  # QS-3: the mean triggers nothing under pooled, and judged_on is read.
+  _qs_win "1/1 1/1 0/4 0/4 1/4" "$_qs_tmp/w3.json"
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_tmp/w3.json")" || _qs_rc=$?
+  _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"; _qs_w="$(_qs_line "$_qs_o" "window: ")"
+  [[ "$_qs_v" == "quality-share: IN-BAND — pooled 21.4%"* ]] || _qs_fail "QS-3 pooled" "quality-share: IN-BAND — pooled 21.4%" "$_qs_v"
+  [[ "$_qs_w" == *"mean of shares 45.0% (reported beside, not judged)"* ]] || _qs_fail "QS-3 mean beside" "mean of shares 45.0% (reported beside, not judged)" "$_qs_w"
+  _qs_tmpl 'judged_on="mean-of-shares"'
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_tmp/w3.json")" || _qs_rc=$?
+  _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"
+  [[ "$_qs_v" == "quality-share: ABOVE-CEILING — mean-of-shares 45.0%"* ]] || _qs_fail "QS-3 judged_on read" "quality-share: ABOVE-CEILING — mean-of-shares 45.0%" "$_qs_v"
+  _qs_tmpl
+
+  # QS-5: the floor edge — one step below it, then exactly at it.
+  for _qs_x in "0/4 0/4 0/4 1/4 1/4|BELOW-FLOOR — pooled 10.0%" "1/4 0/4 0/4 1/4 1/4|IN-BAND — pooled 15.0%"; do
+    _qs_win "${_qs_x%%|*}" "$_qs_tmp/w5.json"
+    _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_tmp/w5.json")" || _qs_rc=$?
+    _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"
+    [[ "$_qs_v" == "quality-share: ${_qs_x#*|}"* ]] || _qs_fail "QS-5 floor edge" "quality-share: ${_qs_x#*|}" "$_qs_v"
+  done
+
+  # QS-6: the mean computed exactly, over the live v5.03 window's shape.
+  _qs_win "0/4 0/1 1/2 1/1 1/4" "$_qs_tmp/w6.json"
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_tmp/w6.json")" || _qs_rc=$?
+  _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"; _qs_w="$(_qs_line "$_qs_o" "window: ")"
+  [[ "$_qs_w" == *"pooled 3 of 12 (25.0%, judged) · mean of shares 35.0%"* ]] || _qs_fail "QS-6 mean exact" "pooled 3 of 12 (25.0%, judged) · mean of shares 35.0%" "$_qs_w"
+  [[ "$_qs_v" == "quality-share: IN-BAND — pooled 25.0%"* ]] || _qs_fail "QS-6 verdict" "quality-share: IN-BAND — pooled 25.0%" "$_qs_v"
+
+  # QS-7: the verdict is taken from the exact fraction, never the display: 876/2500 and
+  # 875/2500 (3504/10000 and 3500/10000) both display 35.0%.
+  for _qs_x in "176/500 175/500 175/500 175/500 175/500|ABOVE-CEILING — pooled 35.0%" "175/500 175/500 175/500 175/500 175/500|IN-BAND — pooled 35.0%"; do
+    _qs_win "${_qs_x%%|*}" "$_qs_tmp/w7.json"
+    _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_tmp/w7.json")" || _qs_rc=$?
+    _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"
+    [[ "$_qs_v" == "quality-share: ${_qs_x#*|}"* ]] || _qs_fail "QS-7 exact verdict" "quality-share: ${_qs_x#*|}" "$_qs_v"
+  done
+
+  # QS-8: a release that shipped nothing, then a window that shipped nothing.
+  _qs_win "4/4 0/0 1/4 1/4 1/4" "$_qs_tmp/w8.json"
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_tmp/w8.json")" || _qs_rc=$?
+  _qs_r="$(_qs_line "$_qs_o" "release qs-release-2: ")"; _qs_w="$(_qs_line "$_qs_o" "window: ")"
+  [[ "$_qs_r" == "release qs-release-2: n/a (0 shipped)"* ]] || _qs_fail "QS-8 empty release" "release qs-release-2: n/a (0 shipped)" "$_qs_r"
+  [[ "$_qs_w" == *"releases with shipped items 4 of 5"* ]] || _qs_fail "QS-8 empty release counted" "releases with shipped items 4 of 5" "$_qs_w"
+  _qs_win "0/0 0/0 0/0 0/0 0/0" "$_qs_tmp/w8.json"
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_tmp/w8.json")" || _qs_rc=$?
+  _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"
+  [[ "$_qs_rc" -eq 3 && "$_qs_v" == "quality-share: NOT-EVALUATED — no release in the window shipped an item"* && "$_qs_o" != *"%"* ]] \
+    || _qs_fail "QS-8 empty window" "exit 3, NOT-EVALUATED — no release in the window shipped an item, and no %" "exit $_qs_rc, $_qs_o"
+
+  # QS-9: fail closed — each malformed band value is NOT-EVALUATED, naming its key; the
+  # conforming template is the control, read above (QS-1, exit 0).
+  for _qs_x in "share_ceiling|share_ceiling|" "share_ceiling=1.5|share_ceiling|" "share_floor=0.40|share_floor|" \
+               'judged_on="median"|judged_on|' "window_releases=0|window_releases|" \
+               'counted_label="platform-quality"|counted_label|— no namespace prefix'; do
+    _qs_p="${_qs_x%%|*}"; _qs_k="${_qs_x#*|}"; _qs_k="${_qs_k%%|*}"; _qs_m="${_qs_x##*|}"
+    _qs_tmpl "$_qs_p"
+    _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_rel/out-of-band.json")" || _qs_rc=$?
+    _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"
+    [[ "$_qs_rc" -eq 3 && "$_qs_v" == "quality-share: NOT-EVALUATED — [quality_share_band].${_qs_k} "* && "$_qs_v" == *"$_qs_m"* ]] \
+      || _qs_fail "QS-9 fail closed ($_qs_p)" "exit 3, NOT-EVALUATED — [quality_share_band].${_qs_k} …${_qs_m:+ $_qs_m}" "exit $_qs_rc, $_qs_v"
+  done
+  _qs_tmpl
+
+  # QS-10: the individual rung wins, read only from its own [quality_share_band] section.
+  /usr/bin/printf '[quality_share_band]\nshare_ceiling = 0.45\n' > "$_qs_tmp/cfg-band/platform-config.toml"
+  /usr/bin/printf '[other]\nshare_ceiling = 0.10\n' > "$_qs_tmp/cfg-other/platform-config.toml"
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-band" v0.00 --quality-share --window-json "$_qs_rel/out-of-band.json")" || _qs_rc=$?
+  _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"; _qs_r="$(_qs_line "$_qs_o" "values: ")"
+  [[ "$_qs_v" == "quality-share: IN-BAND — pooled 40.0%"* && "$_qs_r" == *"individual rung: share_ceiling"* ]] \
+    || _qs_fail "QS-10 rung precedence" "IN-BAND — pooled 40.0% with individual rung: share_ceiling" "$_qs_v / $_qs_r"
+  _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-other" v0.00 --quality-share --window-json "$_qs_rel/out-of-band.json")" || _qs_rc=$?
+  _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"; _qs_r="$(_qs_line "$_qs_o" "values: ")"
+  [[ "$_qs_v" == "quality-share: ABOVE-CEILING — pooled 40.0%"* && "$_qs_r" == *"individual rung: none"* ]] \
+    || _qs_fail "QS-10 section awareness" "ABOVE-CEILING — pooled 40.0% with individual rung: none" "$_qs_v / $_qs_r"
+
+  # QS-11: the window, by first-parent ancestry, and its completeness guard. Synthetic
+  # SHAs are one hex digit repeated: x = 0..., y = 9..., z = 5.... The log lists its rows
+  # out of merge order, with x (merged after a) appended before a.
+  _qs_s() { local _h="$1$1$1$1$1$1$1$1"; /usr/bin/printf '%s' "$_h$_h$_h$_h$_h"; }
+  _qs_row() { /usr/bin/printf '| v%s | %s | #1 | %s | `%s` | `v%s` | VERIFIED | 2026-01-01 |\n' "$1" "$1" "$2" "$(_qs_s "$3")" "$1"; }
+  _qs_hdr='| Version | Milestone | Issues | Release PR | Merge SHA | Tag | State | Date |'$'\n''|---|---|---|---|---|---|---|---|'
+  _qs_rf="$(_qs_row f '#16' f)"; _qs_re="$(_qs_row e '#15' e)"; _qs_rcc="$(_qs_row c '#13' c)"
+  _qs_rd="$(_qs_row d '#14, #41' d)"; _qs_rb="$(_qs_row b '#12' b)"; _qs_rx="$(_qs_row x '#99' 0)"; _qs_ra="$(_qs_row a '#10' a)"
+  _qs_log="$_qs_hdr"$'\n'"$_qs_rf"$'\n'"$_qs_re"$'\n'"$_qs_rcc"$'\n'"$_qs_rd"$'\n'"$_qs_rb"$'\n'"$_qs_rx"$'\n'"$_qs_ra"
+  _qs_fp=""
+  for _qs_x in "a 10 release/a" "9 11 chore/y" "b 12 release/b" "c 13 release/c" "5 41 release/d-part" "d 14 release/d" "e 15 release/e" "f 16 release/f"; do
+    set -- $_qs_x
+    _qs_fp="${_qs_fp}$(_qs_s "$1")"$'\t'"Merge pull request #$2 from o/$3"$'\n'
+  done
+  _qs_fp="${_qs_fp%$'\n'}"
+  # _qs_call EXPECT-LABEL FN ARGS... — run one function and take its result.
+  _qs_call() {
+    local _lab="$1" _fn="$2"; shift 2
+    _qs_rc=0; _qs_o="$("$_fn" "$@")" || _qs_rc=$?
+    _QS_BODY=""; _QS_NE=""; _qs_tk=0; _rv_qs_take "$_fn" "$_qs_o" || _qs_tk=$?
+    return 0
+  }
+  # (a) and (b): the window is a b c d e, x is absent, and y is a silent chore merge.
+  _qs_call "QS-11 (a)" _rv_qs_window "$_qs_log" "$_qs_fp" a 5 a false
+  [[ "$_qs_tk" -eq 0 && "$_QS_BODY" == *'"releases": ["a", "b", "c", "d", "e"]'* ]] \
+    || _qs_fail "QS-11 (a) window" '"releases": ["a", "b", "c", "d", "e"]' "take $_qs_tk: ${_QS_BODY:-$_QS_NE}"
+  [[ "$_QS_BODY" == *'"guard": {"commits": 7, "release_merges": 6}'* ]] \
+    || _qs_fail "QS-11 (a) guard" '"guard": {"commits": 7, "release_merges": 6}' "${_QS_BODY:-$_QS_NE}"
+  [[ "$_QS_BODY" != *'"x"'* ]] || _qs_fail "QS-11 (b) merged after" "x absent from the window" "$_QS_BODY"
+  # (c): with c's row deleted, the guard names c's merge.
+  _qs_call "QS-11 (c)" _rv_qs_window "$_qs_hdr"$'\n'"$_qs_rf"$'\n'"$_qs_re"$'\n'"$_qs_rd"$'\n'"$_qs_rb"$'\n'"$_qs_rx"$'\n'"$_qs_ra" "$_qs_fp" a 5 a false
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "release merge cccccccc (#13, release/c) precedes a on main and has no release-log row: the window would skip it" ]] \
+    || _qs_fail "QS-11 (c) guard red" "release merge cccccccc (#13, release/c) precedes a on main and has no release-log row: the window would skip it" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  # (d): z (#41, no SHA in any row) is accounted for by d's Release PR cell; its firing
+  # control drops #41 from that cell.
+  _qs_call "QS-11 (d)" _rv_qs_window "$_qs_hdr"$'\n'"$_qs_rf"$'\n'"$_qs_re"$'\n'"$_qs_rcc"$'\n'"$(_qs_row d '#14' d)"$'\n'"$_qs_rb"$'\n'"$_qs_rx"$'\n'"$_qs_ra" "$_qs_fp" a 5 a false
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "release merge 55555555 (#41, release/d-part) precedes a"* ]] \
+    || _qs_fail "QS-11 (d) PR-cell control" "release merge 55555555 (#41, release/d-part) precedes a …" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  # (e): a window larger than the history the log can fill.
+  _qs_call "QS-11 (e)" _rv_qs_window "$_qs_log" "$_qs_fp" a 7 a false
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "the release log lists 5 releases merged before a; the window needs 6" ]] \
+    || _qs_fail "QS-11 (e) short window" "the release log lists 5 releases merged before a; the window needs 6" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  # (f): how many releases have been measured against the values, from values_set_at.
+  for _qs_x in "a|1" "c|3" "x|null"; do
+    _qs_call "QS-11 (f)" _rv_qs_window "$_qs_log" "$_qs_fp" a 5 "${_qs_x%%|*}" false
+    [[ "$_QS_BODY" == *"\"measured\": ${_qs_x#*|},"* ]] || _qs_fail "QS-11 (f) measured from ${_qs_x%%|*}" "\"measured\": ${_qs_x#*|}" "${_QS_BODY:-$_QS_NE}"
+  done
+  # (g): a shallow clone; (h): a list that does not start at the closing merge.
+  _qs_call "QS-11 (g)" _rv_qs_window "$_qs_log" "$_qs_fp" a 5 a true
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "the clone is shallow"* ]] || _qs_fail "QS-11 (g) shallow" "the clone is shallow …" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  _qs_call "QS-11 (h)" _rv_qs_window "$_qs_log" "${_qs_fp#*$'\n'}" a 5 a false
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "the first-parent list does not start at the closing merge aaaaaaaaaaaa" ]] \
+    || _qs_fail "QS-11 (h) anchor" "the first-parent list does not start at the closing merge aaaaaaaaaaaa" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+
+  # QS-12: the milestone resolver, the membership guard and the closing row.
+  _qs_ms=$'7\ta\n8\tb\n9\tb'
+  _qs_call "QS-12 resolve" _rv_qs_resolve "$_qs_ms" '["a"]'
+  [[ "$_qs_tk" -eq 0 && "$_QS_BODY" == '{"a": 7}' ]] || _qs_fail "QS-12 resolve one" '{"a": 7}' "take $_qs_tk: ${_QS_BODY:-$_QS_NE}"
+  _qs_call "QS-12 resolve" _rv_qs_resolve "$_qs_ms" '["zz"]'
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "release zz resolves to 0 milestones" ]] || _qs_fail "QS-12 resolve none" "release zz resolves to 0 milestones" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  _qs_call "QS-12 resolve" _rv_qs_resolve "$_qs_ms" '["b"]'
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "release b resolves to 2 milestones" ]] || _qs_fail "QS-12 resolve two" "release b resolves to 2 milestones" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  _qs_call "QS-12 guard" _rv_qs_member_guard 499 500 s
+  [[ "$_qs_tk" -eq 0 && "$_qs_o" == "OK" ]] || _qs_fail "QS-12 guard under the limit" "OK" "take $_qs_tk: $_qs_o"
+  _qs_call "QS-12 guard" _rv_qs_member_guard 500 500 s
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "membership read for s returned 500 items, the read limit; refusing a possibly truncated count" ]] \
+    || _qs_fail "QS-12 guard at the limit" "membership read for s returned 500 items, the read limit; refusing a possibly truncated count" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  _qs_call "QS-12 closing" _rv_qs_closing "$_qs_log" a
+  [[ "$_qs_tk" -eq 0 && "$_QS_BODY" == "$(_qs_s a)" ]] || _qs_fail "QS-12 closing present" "$(_qs_s a)" "take $_qs_tk: ${_QS_BODY:-$_QS_NE}"
+  _qs_call "QS-12 closing" _rv_qs_closing "$_qs_log" q
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "the release log has no row for q (its Stage 12 row has not landed)" ]] \
+    || _qs_fail "QS-12 closing absent" "the release log has no row for q (its Stage 12 row has not landed)" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  _qs_call "QS-12 closing" _rv_qs_closing "$_qs_log"$'\n'"$_qs_ra" a
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "2 release-log rows name a" ]] || _qs_fail "QS-12 closing twice" "2 release-log rows name a" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  _qs_call "QS-12 closing" _rv_qs_closing "$_qs_hdr"$'\n''| va | a | #1 | #10 | `'"$(_qs_s a)"'` `'"$(_qs_s b)"'` | `va` | VERIFIED | 2026-01-01 |' a
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "the release-log row for a carries 2 merge SHAs; the window anchor is ambiguous" ]] \
+    || _qs_fail "QS-12 closing two SHAs" "the release-log row for a carries 2 merge SHAs; the window anchor is ambiguous" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+  _qs_call "QS-12 closing" _rv_qs_closing '| Version | Milestone | Issues | Release PR | Commit | Tag | State | Date |'$'\n'"$_qs_ra" a
+  [[ "$_qs_tk" -eq 3 && "$_QS_NE" == "the release-log header lacks Merge SHA" ]] || _qs_fail "QS-12 closing header" "the release-log header lacks Merge SHA" "take $_qs_tk: ${_QS_NE:-$_QS_BODY}"
+
+  /bin/rm -rf "$_qs_tmp"
+  [[ "$_qs_n" -eq 0 ]] || die "self-test QS: $_qs_n quality-share check(s) failed — see the FAIL lines above"
+
   echo "self-test: PASS"
+  echo "  quality-share (QS-1..QS-12) validated offline, hermetic: seeded red byte for byte / near-miss at the ceiling with its one-variable control / the mean triggers nothing and judged_on is read / exclusions and the counts beside / floor edge / exact mean / exact verdict, rounded display / empty releases / fail closed on six malformed values / rung precedence and section awareness / the window by ancestry with its guard, its PR-cell control and its anchors / resolver, membership guard and closing row"
   echo "  cost-row (CR-1..CR-13 + unresolved unit) validated offline: multi-hub cell set + conservation / killed-spoke lower bound with a decoy harness total / symlink alias / fabricated slug refused / absent field not evaluated / minimum schema refused / subset rule + shared-id degrade / CIAC-3 both-bracket-ends / the cost-unit record's bracket rule with near-misses and a vacuity control / home guard / re-run containment / summary leak / fresh-vs-injected store parity"
   echo "  point scale (XS/S/M/L/XL) validated; out-of-set rejection validated"
   echo "  ratio round-half-up validated (exact / below-half / at-half / above-half / planned-zero)"
@@ -2389,6 +3118,9 @@ CR_SINCE=""
 CR_FORCE=0
 CR_HUB_ARGS=()          # repeated --hub-session <stem>, kept as engine arguments
 CR_FLAGS_SEEN=""        # any cost-row-only flag given, for the without---cost-row refusal
+QUALITY_SHARE=0         # --quality-share: the quality-share reading instead of the field
+QS_WINDOW_JSON=""       # --window-json <file>: the offline window input
+QS_WINDOW_SEEN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -2397,6 +3129,8 @@ while [[ $# -gt 0 ]]; do
     --base) BASE_REF="${2:-}"; shift 2 ;;
     --json) OUTPUT_FORMAT="json"; shift ;;
     --cost-row) COST_ROW=1; shift ;;
+    --quality-share) QUALITY_SHARE=1; shift ;;
+    --window-json) QS_WINDOW_JSON="${2:-}"; QS_WINDOW_SEEN=1; shift 2 ;;
     --out-dir) CR_OUT_DIR="${2:-}"; CR_FLAGS_SEEN="--out-dir"; shift 2 ;;
     --store) CR_STORE="${2:-}"; CR_FLAGS_SEEN="--store"; shift 2 ;;
     --source-root) CR_SOURCE_ROOT="${2:-}"; CR_FLAGS_SEEN="--source-root"; shift 2 ;;
@@ -2415,13 +3149,146 @@ done
 # ─── Required-field validation ───────────────────────────────────────────────
 
 [[ -z "$VERSION" ]] && die "Required: <version> (positional)"
-[[ -z "$MILESTONE" ]] && die "Required: --milestone <N> (the bundle's GitHub milestone number)"
+# The quality-share reading's own argument rules, settled before the field's
+# --milestone requirement, because its offline form (--window-json) takes no milestone.
+if [[ "$QUALITY_SHARE" -eq 0 && "$QS_WINDOW_SEEN" -eq 1 ]]; then
+  die "--window-json applies only with --quality-share"
+fi
+if [[ "$QUALITY_SHARE" -eq 1 ]]; then
+  if [[ "$COST_ROW" -eq 1 || -n "$MERGE_SHA" || -n "$BASE_REF" || -n "$CR_FLAGS_SEEN" ]]; then
+    die "--quality-share takes none of --cost-row, --merge-sha, --base or a cost-row flag: --merge-sha and --base apply only to the field, and the others only to the cost row"
+  fi
+  if [[ "$QS_WINDOW_SEEN" -eq 1 && -z "$QS_WINDOW_JSON" ]]; then
+    die "--window-json needs a file: the window input"
+  fi
+  if [[ -z "$QS_WINDOW_JSON" && -z "$MILESTONE" ]]; then
+    die "Required with --quality-share: --milestone <N> (the closing release's milestone number), or --window-json <file>"
+  fi
+fi
+[[ -z "$MILESTONE" && -z "$QS_WINDOW_JSON" ]] && die "Required: --milestone <N> (the bundle's GitHub milestone number)"
 if [[ "$COST_ROW" -eq 0 && -n "$CR_FLAGS_SEEN" ]]; then
   die "$CR_FLAGS_SEEN applies only with --cost-row"
 fi
 if [[ "$COST_ROW" -eq 1 ]]; then
   [[ "$OUTPUT_FORMAT" == "json" ]] && die "--json does not apply to --cost-row (the row itself is the JSON record)"
   [[ -n "$CR_OUT_DIR" ]] || die "Required with --cost-row: --out-dir <dir> (the row home; the row lands at <dir>/release-cost/<slug>.json)"
+fi
+
+# ─── The quality-share reading (--quality-share) ─────────────────────────────
+#
+# A separate mode, dispatched here, before the field path resolves gh, so neither the
+# offline input nor a missing gh reaches the field's generic exit 1. Offline
+# (--window-json) and live readings feed ONE computation: _rv_qs_compute over a window
+# JSON. Exit 0 on a reading, inside the band or not; exit 3 on NOT-EVALUATED, with the
+# record printed to stdout first; exit 1 is left to the argument checks above.
+#
+# The reads of the clone (the merge commit's presence, the shallow flag), the
+# membership reads and the counted-label check run only here, so the self-test does not
+# reach them; release-velocity-tracking.md section 7b states that bound.
+if [[ "$QUALITY_SHARE" -eq 1 ]]; then
+  # _rv_qs_ne REASON — print the NOT-EVALUATED record for REASON and exit 3. When the
+  # renderer itself cannot run, the two-line record is written here, by hand.
+  _rv_qs_ne() {
+    local _ro _rc=0
+    _ro="$(_rv_qs_render "NE $1" "$OUTPUT_FORMAT" "")" || true
+    _rv_qs_take render "$_ro" || _rc=$?
+    if [[ "$_rc" -eq 0 ]]; then
+      /usr/bin/printf '%s\n' "$_QS_BODY"
+    else
+      /usr/bin/printf '#### Quality-share record\n\n```text\nquality-share: NOT-EVALUATED — %s (no reading was taken; this is not a clean result)\nmechanism: compute-release-velocity.sh --quality-share\n```\n' "$1"
+    fi
+    exit 3
+  }
+  # _rv_qs_val KEY — one resolved band value from the params JSON.
+  _rv_qs_val() {
+    /usr/bin/python3 -c 'import json, sys; print(json.loads(sys.argv[1])["values"][sys.argv[2]])' "$QS_PARAMS" "$1"
+  }
+
+  _qs_o="$(_rv_qs_params)" || true
+  _rv_qs_take params "$_qs_o" || _rv_qs_ne "$_QS_NE"
+  QS_PARAMS="$_QS_BODY"
+
+  if [[ -n "$QS_WINDOW_JSON" ]]; then
+    [[ -r "$QS_WINDOW_JSON" ]] || _rv_qs_ne "the window file $QS_WINDOW_JSON is not readable"
+    QS_WINDOW="$(< "$QS_WINDOW_JSON")"
+    QS_SOURCE="--window-json $QS_WINDOW_JSON"
+  else
+    GH="$(find_gh)"
+    [[ -n "$GH" ]] || _rv_qs_ne "gh unavailable"
+    REPO="${REPO:-$("$GH" repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)}"
+    [[ -n "$REPO" ]] || _rv_qs_ne "the target repository could not be resolved (set REPO or run inside a gh-authenticated repo)"
+    MS_JSON="$("$GH" api "repos/$REPO/milestones/$MILESTONE" 2>/dev/null || true)"
+    MS_TITLE=""
+    if [[ -n "$MS_JSON" ]]; then
+      MS_TITLE="$(/usr/bin/python3 -c 'import json,sys
+try: print(json.loads(sys.argv[1]).get("title") or "")
+except Exception: print("")' "$MS_JSON" 2>/dev/null || true)"
+    fi
+    [[ -n "$MS_TITLE" ]] || _rv_qs_ne "milestone $MILESTONE does not resolve to a title"
+
+    QS_LOG="$REPO_ROOT/release/releases/RELEASE_LOG.md"
+    [[ -r "$QS_LOG" ]] || _rv_qs_ne "release/releases/RELEASE_LOG.md is not readable"
+    _qs_o="$(_rv_qs_closing - "$MS_TITLE" < "$QS_LOG")" || true
+    _rv_qs_take closing "$_qs_o" || _rv_qs_ne "$_QS_NE"
+    QS_SHA="$_QS_BODY"
+    git -C "$REPO_ROOT" cat-file -e "${QS_SHA}^{commit}" 2>/dev/null \
+      || _rv_qs_ne "the closing merge ${QS_SHA:0:12} is not in this clone; fetch origin main"
+    QS_SHALLOW="$(git -C "$REPO_ROOT" rev-parse --is-shallow-repository 2>/dev/null || true)"
+    [[ "$QS_SHALLOW" == "true" || "$QS_SHALLOW" == "false" ]] || _rv_qs_ne "whether this clone is shallow could not be read"
+    QS_FP="$(git -C "$REPO_ROOT" log --first-parent --format='%H%x09%s' "$QS_SHA" 2>/dev/null || true)"
+    [[ -n "$QS_FP" ]] || _rv_qs_ne "the first-parent history from ${QS_SHA:0:12} could not be read"
+    _qs_o="$(_rv_qs_window - "$QS_FP" "$MS_TITLE" "$(_rv_qs_val window_releases)" "$(_rv_qs_val values_set_at)" "$QS_SHALLOW" < "$QS_LOG")" || true
+    _rv_qs_take window "$_qs_o" || _rv_qs_ne "$_QS_NE"
+    QS_WIN_READ="$_QS_BODY"
+
+    QS_MS_TSV="$("$GH" api --paginate "repos/$REPO/milestones?state=all&per_page=100" --jq '.[] | [.number, .title] | @tsv' 2>/dev/null || true)"
+    [[ -n "$QS_MS_TSV" ]] || _rv_qs_ne "the repository's milestone list could not be read"
+    QS_SLUGS="$(/usr/bin/python3 -c 'import json, sys; print(json.dumps(json.loads(sys.argv[1])["releases"]))' "$QS_WIN_READ")"
+    _qs_o="$(_rv_qs_resolve "$QS_MS_TSV" "$QS_SLUGS")" || true
+    _rv_qs_take resolve "$_qs_o" || _rv_qs_ne "$_QS_NE"
+    QS_NUMS="$_QS_BODY"
+
+    # One membership read per release in the window, label names only. A read that
+    # returns its own limit is refused as possibly truncated.
+    QS_PAIRS=()
+    while IFS= read -r _qs_slug; do
+      _qs_num="$(/usr/bin/python3 -c 'import json, sys; print(json.loads(sys.argv[1])[sys.argv[2]])' "$QS_NUMS" "$_qs_slug")"
+      _qs_mem="$("$GH" issue list --repo "$REPO" --milestone "$_qs_num" --state all --limit 500 \
+        --json number,labels --jq '[.[] | {number, labels: [.labels[].name]}]' 2>/dev/null || true)"
+      [[ -n "$_qs_mem" ]] || _rv_qs_ne "the membership read for $_qs_slug (milestone $_qs_num) failed"
+      _qs_cnt="$(/usr/bin/python3 -c 'import json, sys; print(len(json.loads(sys.argv[1])))' "$_qs_mem" 2>/dev/null || true)"
+      [[ -n "$_qs_cnt" ]] || _rv_qs_ne "the membership read for $_qs_slug (milestone $_qs_num) is not JSON"
+      _qs_o="$(_rv_qs_member_guard "$_qs_cnt" 500 "$_qs_slug")" || true
+      _rv_qs_take member_guard "$_qs_o" || _rv_qs_ne "$_QS_NE"
+      QS_PAIRS+=("$_qs_slug" "$_qs_mem")
+    done < <(/usr/bin/python3 -c 'import json, sys
+for s in json.loads(sys.argv[1]): print(s)' "$QS_SLUGS")
+    QS_MEASURED="$(/usr/bin/python3 -c 'import json, sys; m = json.loads(sys.argv[1])["measured"]; print("null" if m is None else m)' "$QS_WIN_READ")"
+    _qs_o="$(/usr/bin/python3 -c "$_RV_QS_PY" window_json "$MS_TITLE" "$QS_MEASURED" "${QS_PAIRS[@]}" 2>/dev/null)" || true
+    _rv_qs_take window_json "$_qs_o" || _rv_qs_ne "$_QS_NE"
+    QS_WINDOW="$_QS_BODY"
+
+    # The counted label must exist: a renamed label would otherwise read 0% as a
+    # below-floor finding.
+    QS_CL="$(_rv_qs_val counted_label)"
+    QS_CL_ENC="$(/usr/bin/python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$QS_CL")"
+    _qs_le="$("$GH" api "repos/$REPO/labels/$QS_CL_ENC" 2>&1 >/dev/null)" || {
+      case "$_qs_le" in
+        *"HTTP 404"*|*"Not Found"*) _rv_qs_ne "counted label $QS_CL does not exist on the repository" ;;
+        *) _rv_qs_ne "the counted label $QS_CL could not be read from the repository" ;;
+      esac
+    }
+
+    QS_GUARD="$(/usr/bin/python3 -c 'import json, sys; g = json.loads(sys.argv[1])["guard"]; print("%d commits, %d release merges, each with a row" % (g["commits"], g["release_merges"]))' "$QS_WIN_READ")"
+    QS_SOURCE="release/releases/RELEASE_LOG.md by first-parent ancestry from ${QS_SHA:0:12} · guard: ${QS_GUARD} · read $(/bin/date -u +%Y-%m-%dT%H:%M:%SZ)"
+  fi
+
+  _qs_o="$(_rv_qs_compute "$QS_WINDOW" "$QS_PARAMS" "$_STATUS_NOT_DELIVERED")" || true
+  _rv_qs_take compute "$_qs_o" || _rv_qs_ne "$_QS_NE"
+  _qs_o="$(_rv_qs_render "$_QS_BODY" "$OUTPUT_FORMAT" "$QS_SOURCE")" || true
+  _rv_qs_take render "$_qs_o" || _rv_qs_ne "$_QS_NE"
+  /usr/bin/printf '%s\n' "$_QS_BODY"
+  exit 0
 fi
 
 GH="$(find_gh)"
