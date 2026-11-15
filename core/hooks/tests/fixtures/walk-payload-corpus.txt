@@ -2142,7 +2142,8 @@ CP70|block-destructive|rt-reach-ctl|-|?|a|noglob bash @D@/ok.sh
 # interpreters only). gt is `?`. The single-flag shapes are rows WR43-WR53, re-graded by this card. rt-xflag: two
 # flags, and xargs consumed behind a wrapper (a at base; B once #8492 lands). rt-xcmode: `-c` with no program string
 # on argv (a at base; B). rt-xencl: the enclosure-closer member, a spaced closer and an attached one (a at base;
-# recorded at the enclosure's phase). rt-xnear: a parse-only check, an inline program, a non-shell module that only
+# recorded at the enclosure's phase). A pipe inside the enclosure puts XF04 and XF05 in front of the first view, which
+# reads the closer and takes that phase; XF12 has no pipe inside, so only the second view walks it (DEV-16). rt-xnear: a parse-only check, an inline program, a non-shell module that only
 # compiles (a before and after). rt-xpos: an extensionless script named on argv behind the flags (Amendment 1: today's
 # verdict kept). rt-xres: a non-shell interpreter with only its flags (N1, declared). rt-xctl: the listed script.
 XF01|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -x -e
@@ -2156,3 +2157,4 @@ XF08|block-destructive|rt-xnear|-|?|a|printf x | xargs python3 -m py_compile
 XF09|block-destructive|rt-xpos|-|?|a|printf x | xargs bash -x @D@/wrapper
 XF10|block-destructive|rt-xres|-|?|a|printf x | xargs python3 -u
 XF11|block-destructive|rt-xctl|-|?|a|printf x | xargs bash -x @D@/ok.sh
+XF12|block-destructive|rt-xencl|-|?|W|echo $(xargs bash -x)

@@ -3158,19 +3158,21 @@ F2_M_MARKERS_MUT="$(/usr/bin/grep -c 'M-FWALK' "${F2_HOOKS}/block-destructive-mu
 # (see NOEXEC-* below): the arm now also clears the parse-only flag for any token it
 # steps over, three more lines inside the same `# M-FWALK-BODY` .. `;;` range. 20 -> 21
 # when it took on the word read of a token it steps over (#8318, OPND-*): one call
-# below both breaks. All four concerns — the domain test, the arity overlay, the
-# revocation and the word read — are what the mutant must revert, so the count is
-# UPDATED rather than the assertion loosened.
+# below both breaks. 21 -> 22 when it took on the positional mark of the xargs
+# stdin deny (#8492, XARGS-*): one line recording that the token it steps over is not
+# option-shaped. All five concerns — the domain test, the arity overlay, the
+# revocation, the word read and the positional mark — are what the mutant must revert,
+# so the count is UPDATED rather than the assertion loosened.
 # Loosening it to a range or a `-gt` would retire the only thing that catches a
 # reshaped arm.
-if [ "$F2_M_REMOVED" = 21 ] \
+if [ "$F2_M_REMOVED" = 22 ] \
   && [ "$F2_M_ARMS_MUT" = "$(( F2_M_ARMS_SHIP + 1 ))" ] \
   && [ "$F2_M_MARKERS_MUT" = 0 ]; then
-  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 21 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
+  /usr/bin/printf 'PASS: AC-D022-M1: fixture sed removed exactly the 22 body lines, dropped both M-FWALK markers, and restored one additional dash-anchored `*) break ;;` arm (%s -> %s)\n' \
     "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT"
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 21), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
+  /usr/bin/printf 'FAIL: AC-D022-M1: fixture sed removed %s lines (expected 22), break-arms %s -> %s (expected +1), residual M-FWALK markers in mutant = %s (expected 0) — it no longer targets the operand walk; re-point the sed\n' \
     "$F2_M_REMOVED" "$F2_M_ARMS_SHIP" "$F2_M_ARMS_MUT" "$F2_M_MARKERS_MUT"; FAIL=$((FAIL + 1))
 fi
 
@@ -7197,11 +7199,11 @@ STDIN_WALK="$(dirname "$HOOK")/block-destructive.STDIN-walk.sh"
 STDIN_WALK_GONE=$(( $(/usr/bin/wc -l < "$HOOK") - $(/usr/bin/wc -l < "$STDIN_WALK") ))
 STDIN_WALK_MARKS="$(/usr/bin/grep -c -e 'M-FWALK' -e '# M-OPAQUE (mutation' "$STDIN_WALK")"
 
-if [ "$STDIN_WALK_GONE" = 22 ] && [ "$STDIN_WALK_MARKS" = 0 ] && /bin/bash -n "$STDIN_WALK" 2>/dev/null; then
-  /usr/bin/printf 'PASS: STDIN-M4a walk-and-route revert mutation is live (the 21 body lines and the route line are gone, no marker of either remains, and the copy parses)\n'
+if [ "$STDIN_WALK_GONE" = 23 ] && [ "$STDIN_WALK_MARKS" = 0 ] && /bin/bash -n "$STDIN_WALK" 2>/dev/null; then
+  /usr/bin/printf 'PASS: STDIN-M4a walk-and-route revert mutation is live (the 22 body lines and the route line are gone, no marker of either remains, and the copy parses)\n'
   PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: STDIN-M4a walk-and-route revert mutation removed %s lines (expected 22) with %s markers left (expected 0), or the copy does not parse — M4b is unusable\n' "$STDIN_WALK_GONE" "$STDIN_WALK_MARKS"
+  /usr/bin/printf 'FAIL: STDIN-M4a walk-and-route revert mutation removed %s lines (expected 23) with %s markers left (expected 0), or the copy does not parse — M4b is unusable\n' "$STDIN_WALK_GONE" "$STDIN_WALK_MARKS"
   FAIL=$((FAIL + 1))
 fi
 
@@ -8319,7 +8321,7 @@ wrap_mut_live "WRAPPAIR-M-stdin: the stdin deny (STDIN-M1's mutation)" block-des
 wrap_mut_live "WRAPPAIR-M-xoff: the xargs-deny-off mutant" block-destructive-pxoff.sh 1 1
 wrap_mut_live "WRAPPAIR-M-xall: the every-xargs-interpreter deny mutant" block-destructive-pxall.sh 1 1
 wrap_mut_live "WRAPPAIR-M-nosplit: the no-split-stop mutant" block-destructive-pnosplit.sh 2 0
-wrap_mut_live "WRAPPAIR-M-walkroute: the operand-walk and conservative-route revert (STDIN-M4's mutation), with the operand join removed" block-destructive-pwalkroute.sh 24 1
+wrap_mut_live "WRAPPAIR-M-walkroute: the operand-walk and conservative-route revert (STDIN-M4's mutation), with the operand join removed" block-destructive-pwalkroute.sh 25 1
 wrap_mut_live "WRAPPAIR-M-ambig: the ambiguity-blind mutant" block-destructive-pambig.sh 1 1
 wrap_mut_live "WRAPPAIR-M-splitcmd: the always-a-command split-scan mutant (Stage 7 F-08 reverse)" block-destructive-splitcmd.sh 1 1
 
@@ -11002,6 +11004,7 @@ done
 sv_arm "XARGS-CMODE-01: -c with no program string on argv" XF03 B pxwalk a
 sv_arm "XARGS-ENCL-01: a spaced enclosure closer is not the shell's operand" XF04 W:shell-enclosure pxwalk a
 sv_arm "XARGS-ENCL-02: an attached closer, and the enclosing command's later word, are not the shell's operand" XF05 W:shell-enclosure pxwalk a
+sv_arm "XARGS-ENCL-03: the second view reads a shell that opens the enclosure" XF12 W:shell-enclosure pxwalk a
 sv_arm "XARGS-near-01: a parse-only check" XF06 a
 sv_arm "XARGS-near-02: an inline program string" XF07 a
 sv_arm "XARGS-near-03: a non-shell module that only compiles" XF08 a

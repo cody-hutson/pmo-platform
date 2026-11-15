@@ -2399,11 +2399,13 @@ destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
 # Verdict router for the always-enforce shell and source arms. First view: the shipped
 # call, unchanged — a pass-through to check_script_target, which arm AC-ENCL-P5
 # asserts. Second view (a command position behind a substitution or group opener):
-# the enclosure family's rollout phase. An unrecognised phase value falls through to
-# enforce, the direction the other two routers take.
-script_shell_verdict() {   # $1 = path  $2 = resolved
+# the enclosure family's rollout phase. A caller that knows its finding sits inside an
+# enclosure the first view did not cut passes 1 as $3, and takes that phase too. An
+# unrecognised phase value falls through to enforce, the direction the other two
+# routers take.
+script_shell_verdict() {   # $1 = path  $2 = resolved  $3 = 1 at an enclosure position
   local path="$1" resolved="${2:-1}"
-  if [ "${script_pass:-1}" -ne 2 ]; then   # M-ENCL-ROUTE
+  if [ "${script_pass:-1}" -ne 2 ] && [ "${3:-0}" -ne 1 ]; then   # M-ENCL-ROUTE
     check_script_target "$path" "$resolved"
     return 0
   fi
@@ -4838,23 +4840,28 @@ case "$TOOL_NAME" in
       # leaves today's verdict. At an enclosure position the enclosure's closer is not the
       # shell's: a token holding it ends the shell's list (the token itself counts when it opens
       # with the shell's own text), and every later word is the enclosing command's.
+      # BOTH VIEWS SCAN. A pipe inside the enclosure is split by the first view, which then
+      # walks the inner segment with the closer still on it; the second view keeps that segment
+      # as one the first view already read and does not walk it again. So the first view is
+      # the reader at that position, and script_xclose carries "this is an enclosure position"
+      # to the deny below whichever view reads it.
       script_xpos=0
+      script_xclose=0
       script_xend="${#script_tokens[@]}"
-      if [ "$script_pass" -eq 2 ]; then
-        script_xk=$(( script_hidx + 1 ))
-        while [ "$script_xk" -lt "${#script_tokens[@]}" ]; do
-          case "${script_tokens[$script_xk]}" in
-            *')'*|*'`'*)
-              case "${script_tokens[$script_xk]}" in
-                ')'*|'`'*|'"'*|"'"*) script_xend="$script_xk" ;;
-                *) script_xend=$(( script_xk + 1 )) ;;
-              esac
-              break
-              ;;
-          esac
-          script_xk=$(( script_xk + 1 ))
-        done
-      fi
+      script_xk=$(( script_hidx + 1 ))
+      while [ "$script_xk" -lt "${#script_tokens[@]}" ]; do
+        case "${script_tokens[$script_xk]}" in
+          *')'*|*'`'*)
+            case "${script_tokens[$script_xk]}" in
+              ')'*|'`'*|'"'*|"'"*) script_xend="$script_xk" ;;
+              *) script_xend=$(( script_xk + 1 )) ;;
+            esac
+            script_xclose=1
+            break
+            ;;
+        esac
+        script_xk=$(( script_xk + 1 ))
+      done
       # walk past flags to the first operand. `-c` takes a program STRING rather
       # than a path, so every .sh-bearing token after it is a candidate instead of
       # just one — and `-c` is meaningless for `source`, so cmode is gated on the
@@ -5385,15 +5392,13 @@ case "$TOOL_NAME" in
       # parse-only grant also reads its script from standard input. Every row this arm changes
       # left through the line below with nothing adjudicated, so it only adds a refusal.
       # >>> M-XF-WALK
-      if [ "$script_idx" -ge "$script_xend" ] && [ "$script_verb" = "interp" ] && [ "$script_interp_domain" = "interp" ] && [ "$script_noexec" -eq 0 ] && [ "$script_xpos" -eq 0 ]; then
-        if [ "$script_xargs" -eq 1 ]; then
-          if [ "$script_pass" -eq 2 ] && [ "$DESTRUCTIVE_022_ENCL_PHASE" != "enforce" ]; then
-            script_shell_verdict '$XARGS-STDIN' 1
-          else
-            block "BLOCK-DESTRUCTIVE-022" \
-              "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' its script on stdin after the interpreter's own flags, so no argv path exists for this hook to adjudicate." \
-              "pass the script path on the command line (xargs <interpreter> <flags> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
-          fi
+      if [ "$script_idx" -ge "$script_xend" ] && [ "$script_verb" = "interp" ] && [ "$script_interp_domain" = "interp" ] && [ "$script_noexec" -eq 0 ] && [ "$script_xpos" -eq 0 ] && [ "$script_xargs" -eq 1 ]; then
+        if { [ "$script_pass" -eq 2 ] || [ "$script_xclose" -eq 1 ]; } && [ "$DESTRUCTIVE_022_ENCL_PHASE" != "enforce" ]; then
+          script_shell_verdict '$XARGS-STDIN' 1 1
+        else
+          block "BLOCK-DESTRUCTIVE-022" \
+            "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' its script on stdin after the interpreter's own flags, so no argv path exists for this hook to adjudicate." \
+            "pass the script path on the command line (xargs <interpreter> <flags> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
         fi
       fi
       # <<< M-XF-WALK
