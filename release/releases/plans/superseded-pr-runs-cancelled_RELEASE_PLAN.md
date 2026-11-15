@@ -32,7 +32,7 @@ reversibility: CHEAP / Confidence HIGH — CI configuration, one prose sentence 
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate, re-rendered at Engineering Commit 0): a new pull-request-time gate rule plus CI configuration, with no skill behaviour change, per the Bump-Class Selection Guide's row "Protocol text addition or modification". The rule-computed next-free re-verified at Engineering Commit 0 is `v5.09` (§ Commit-0 Version Re-Verify Record). The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-15 (Sunday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file), #8440's four commits, then #9007's commits |
+| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) and #8440's four commits are on the branch; #9007's commits follow from the second Engineering spoke |
 | **Branch** | `release/superseded-pr-runs-cancelled` |
 | **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `superseded-pr-runs-cancelled` |
@@ -663,3 +663,97 @@ N/A — enumerated over {skill copy, rules mirror, harness artifact, schema migr
 - **Census at the base** (a PyYAML compose over `.github/workflows/*.yml` at `4e70b20f`): 27 files; 26 pull-request-triggered; 7 macOS; 0 workflow-level and 0 job-level `concurrency` keys; 27 names distinct after case-folding; 2 files with a non-blank line before `jobs:`. Every `push` trigger is filtered to `main` or to a `v*.00` tag, so a push to this branch dispatches no workflow.
 - **actionlint at the base:** local actionlint 1.7.12 with CI's `-ignore 'shellcheck reported issue in this script: SC2016:.+'` flag over `.github/workflows/*.yml` → exit 0, 0 findings (CI pins 1.7.1).
 - **ADR index:** N/A — no record under `release/ADRs/`; #9007's pointer record lands under `core/ADRs/`, whose README is not a projected index.
+
+### #8440 commits 1–4 — Stage 6 B1 / C4
+
+**Commits** (each signed, each pushed before the pull request opened):
+
+| # | Commit | Change | Diff shape |
+|---|---|---|---|
+| 1 | `5062961c` | Change 1 on the 7 macOS workflows | 7 files, 9 added / 0 removed each |
+| 2 | `d9fb6712` | Change 1 on the 19 Linux-only workflows | 17 files 9 / 0; `commit-message-depersonalization.yml` and `commit-signature-check.yml` 10 / 0 (the added blank line) |
+| 3 | `304404f7` | Change 2 (D-AlwaysStepTail (A)) | `release-tooling-smoke.yml` 10 / 8 |
+| 4 | `159a09c5` | Change 3 (D-RedArmEvidence (A)) | the selection map 2 / 0 |
+
+- **Exact lines, after commit 1 and after commit 2:** `/usr/bin/grep -x -F -l` over `.github/workflows/*.yml` for each of the three canonical lines (`concurrency:`, the two-space `group:` line, the two-space `cancel-in-progress: true` line) → 7 / 7 / 7, then 26 / 26 / 26. No added line carries trailing whitespace.
+- **Parsed, after commit 2:** a PyYAML `safe_load` of every workflow reads the top-level `concurrency` value equal to `{group: <the canonical string>, cancel-in-progress: True}` in 26 of 26 pull-request-triggered files; `sibling-merge-dark-branch.yml` carries none. The census reads 26 workflow-level keys and 0 job-level keys, with 27 names still distinct after case-folding.
+- **Change 2, parsed:** the `closeout-smoke` job's five step conditions read `${{ !cancelled() }}`; `grep -c -F 'always()'` on the file → 0.
+- **Change 3, verbatim:** the appended paragraph equals the design's Change 3 text byte for byte (one occurrence; a scripted comparison against `#9010 comment 6891530810`).
+- **actionlint, per commit:** local actionlint 1.7.12 with CI's `-ignore` flag over `.github/workflows/*.yml` on each of the trees of commits 1, 2 and 3 → exit 0, 0 findings. Commit 4 touches no workflow. CI's pinned 1.7.1 (`Workflow SAST (actionlint)`, required) grades the head.
+- **Plan verifier, #8440 rows — RED at the base, GREEN at commit 4:**
+
+| Row | Base `4e70b20f` | Head `159a09c5` |
+|---|---|---|
+| AC-1 | FAIL, count 0 | PASS, count 26 |
+| AC-1b | FAIL, count 0 | PASS, count 26 |
+| AC-2 (null) | PASS, count 0 | PASS, count 0 · control `grep -rcE '^[[:space:]]+cancel-in-progress:' .github/workflows` → 26 on the same tree |
+| AC-2b | FAIL, count 0 | PASS, count 26 |
+| AC-3 | SKIP (declared deferral) | SKIP (declared deferral) |
+
+- **Mutation controls** (a `git archive` of the head into the run directory, one property changed in `install-tests.yml`, the verifier run with `--root` on the copy): a `github.ref` key → AC-1 FAIL 25; `cancel-in-progress: false` → AC-1b FAIL 25; a job-level string-shorthand `concurrency:` → AC-2 FAIL 1. Every other #8440 row stays PASS on each copy, so each row is sensitive to its own property.
+- **#9007 rows at commit 4:** AC-1 to AC-3 ERROR (no fixture file yet); AC-4, OBL-1 and OBL-2 FAIL; AC-5, OBL-3, OBL-4 and OBL-5 PASS — the expected state before #9007's spoke. `FCM-COVERAGE` PASS (59 / 59 interpreted, 0 pathless); the plan's ADD reads delivered, and #9007's three ADDs read not-delivered on the range `4e70b20f..159a09c5`, which its commits discharge. `PROV-*` PASS (form A; no survival element lost).
+- **Workflow-reading checks, run locally as insurance** (not map-selected): `python3 core/deploy/tests/test_gate_efficacy_declarations.py` on the trees of commits 1 and 2 → exit 0, "44/44 gate-efficacy declaration(s) across 27 workflow file(s) agree with their triggers"; `python3 release/tools/check-selftest-coverage.py --reconcile` on commit 2's tree → `RECONCILE VERDICT: CLEAN (exit 0)`.
+- **Runtime-suite selection:** no row of `release/references/standards/runtime-suite-selection-map.md` § 2 matches `.github/workflows/*.yml` or the map itself, so the map selects the no-match row: `test-run/suite-skip`. For the map edit that is the honest no-op. For the workflow files it is a coverage gap in the map rather than a no-op — workflow configuration is graded by the CI runs on the release head, not by a local suite — and the two checks above are the local reads of that configuration.
+- **Skill-package freshness:** `git diff --name-only origin/main...HEAD` piped on stdin to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` → no skill named (control: `release/skills/release-hub/SKILL.md` → `release-hub`). No package is rebuilt.
+- **Doc links:** `python3 core/deploy/tools/check-doc-links.py --target-paths <the selection map>,<this file> --require-targets` → 0 findings; `python3 release/tools/check-release-links.py --plan-depth-lint --files <this file>` → 0 depth-sensitive links (this file carries no markdown link; the checker's `--self-test` confirms the lint fires).
+- **Close-keyword self-check:** `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` → 5 commits examined, 0 findings, CLEAN, before the first push; re-run before the second.
+- **Pre-PR push:** `git push -u origin release/superseded-pr-runs-cancelled` → the remote head reads `159a09c5`; `gh run list --branch release/superseded-pr-runs-cancelled` → 0 runs, as the push-trigger census predicts.
+- **Deliverable state:** each #8440 deliverable is `deployed-copy-synced` with no propagation target — workflow configuration and one corpus paragraph, effective on the branch and on `main` at merge.
+
+---
+
+## Deployment Execution Log
+
+(Populated during Stage 12.)
+
+| Step | Timestamp | Result | Notes |
+|------|-----------|--------|-------|
+| Pre-execution check | | | |
+| Merge PR | | | |
+| Tag release | | | |
+| Rules-mirror deployment (`./deploy.sh --deploy`) | | | |
+| Post-execution verification | | | |
+
+---
+
+## Change Description
+
+### Outcome
+
+From #8440's first commit on, a newer commit pushed to a pull request cancels the in-progress and pending runs that every pull-request-triggered workflow started for the commit it replaced, so the hosted macOS runners stop serving heads nobody will merge. A run triggered by a push to `main`, a tag, a schedule or a dispatch keys on its own run id: it is never cancelled and never waits. #9007, built next on this branch, adds the pull-request-time gate that keeps the property true as workflows are added.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8440 | all 26 pull-request-triggered workflows carry one canonical workflow-level concurrency block; the required macOS close-out smoke job stops running its five trailing suites on a cancelled run; the selection map says what a cancelled job is evidence of | DONE (Stage 6); AC-3 is graded after the merge (AI-004) |
+| #9007 | the `Workflow concurrency gate` job, its checker and fixtures, the register row, the rules sentence and a pointer decision record | IN PROGRESS — built by the second Engineering spoke on this branch; this section is refreshed when it lands |
+
+### Key decisions
+
+- **D-ReleaseClass:** `novel`. Stage 5 owned the group design, the population and the gate's predicate and host.
+- **D-C / D-Concurrency:** one branch and one pull request, written serially (P0).
+- **D-Version:** bump-class minor; the provisional display moved from v5.08 to v5.09 at Engineering Commit 0, after a sibling's merge claimed v5.08 (operator re-render). The number binds at the Stage-12 claim.
+- **D-SupersededRunKey (A):** `${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}` with `cancel-in-progress: true`, at workflow level. A `github.ref` key would put every push to `main` in one group.
+- **D-PopulationScope (B):** all 26 pull-request-triggered workflows, not only the 7 macOS ones, so the gate can scan the whole tree. #8440 is XL; kept as one card.
+- **D-RedArmEvidence (A):** one descriptive paragraph in the selection map, no stage-text edit.
+- **D-AlwaysStepTail (A):** the five `always()` steps become `${{ !cancelled() }}`, so a cancelled close-out run releases its macOS runner at once instead of after about five minutes.
+- **#9007:** an advisory, enforcing job in `repo-integrity.yml` over the whole tree; textual equality on the canonical lines; a pull-request trigger beside `workflow_call` is a finding; a local RED record; a pointer decision record.
+- **Size:** 28 effective points over the 25 ceiling, kept as one release by operator override.
+
+### Reversibility
+
+**CHEAP — HIGH confidence.** `git revert` of #9007's commits, then of #8440's (the gate fails on `main` without the blocks); every workflow token is read-only, so a cancelled run leaves nothing half-written, and any subset of files carrying the block is safe for `main`.
+
+### Downstream impact
+
+- Every pull request after the merge spends a runner only on its current head; release hubs stop cancelling superseded runs by hand.
+- Stage 6 and Stage 7 cite a superseded commit's CI evidence only by a job that concluded before the next push, or by the local `test-run` record (the selection map's new paragraph).
+- A sibling release that adds a pull-request-triggered workflow must carry the block: `engineering-harness-pages-published` (#8983) adds `process-catalog-check.yml` without it (AI-001, before the Stage-12 merge).
+- Same-head re-runs (`ready_for_review`, `edited`) now cancel an in-progress older run of the same head; the newer run reports. The follow-up candidate that would remove the redundant `ready_for_review` re-runs is held for Stage 9 / 13.
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `superseded-pr-runs-cancelled` (milestone 446).
+- User-facing release notes: `release/releases/notes/vX.Y_RELEASE_NOTES.md`, authored at Stage 13 Close per `release/references/standards/release-notes-standard.md`.
