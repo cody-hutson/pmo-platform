@@ -11,7 +11,7 @@ level: L0
 universe: engineering-harness
 owner: operator
 lens_status: deviates
-last_verified_commit: 7fae37579a54714fa6c56f469ab067b389219ad6
+last_verified_commit: 4c6bfa8eae91e4c5eb54ca22efb7ecdb83fedcda
 pack_version: 2
 ---
 # Engineering harness
