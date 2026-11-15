@@ -66,6 +66,19 @@ flip-scan-needles.txt
 # resolve-time git check-ignore guard (fail-closed); these patterns are defense-in-depth.
 **/pmo-instance/finops/
 **/finops/usage.jsonl
+# The prior-unit stores extract-usage.sh --rebuild keeps at every counting-unit crossing
+# (schema v2.0.0), never overwriting one: <store>/prior/schema-<old>/usage.jsonl, or, at a
+# later crossing from the same version, <store>/prior/schema-<old>-<UTC stamp>/usage.jsonl
+# — the same data class as the store. The one rule below covers both forms.
+**/finops/prior/
+
+# Per-release cost rows — derived working state about this repository's own releases,
+# one release-cost/<slug>.json per release, written by the release-velocity tool's
+# cost-row mode. Governed home: the main checkout's /local-state/telemetry/, resolved
+# through <OPERATOR_INSTANCE_WORKING_STATE_TELEMETRY_PATH> (instance-data placement
+# standard, surface register). This narrower rule precedes the /local-state/ home's own
+# ignore-rule pair, which covers this folder too once it lands and can absorb this line.
+/local-state/telemetry/*
 
 # Secret files (per core/standards/secrets-handling-policy.md §3)
 # Categories C3 (MCP tokens) and C5 (project-specific) may land in .env;
