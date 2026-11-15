@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v5.08 | deletion-guard-judges-every-segment-and-target | 2026-11-15 | — | #8992 | [notes/v5.08_RELEASE_NOTES.md](notes/v5.08_RELEASE_NOTES.md) |
 | never-invoked-specialists-dispositioned (version-less) | never-invoked-specialists-dispositioned | 2026-11-14 | — | #8994 | [notes/_unversioned/never-invoked-specialists-dispositioned_RELEASE_NOTES.md](notes/_unversioned/never-invoked-specialists-dispositioned_RELEASE_NOTES.md) |
 | v5.07 | fs-boundary-refuses-parameter-transformation | 2026-11-09 | — | #8832 | [notes/v5.07_RELEASE_NOTES.md](notes/v5.07_RELEASE_NOTES.md) |
 | v5.06 | sequencing-layer-foundation | 2026-11-08 | — | #8811 | [notes/v5.06_RELEASE_NOTES.md](notes/v5.06_RELEASE_NOTES.md) |

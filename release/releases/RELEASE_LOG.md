@@ -270,7 +270,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.06 | sequencing-layer-foundation | #7177, #6397, #6398 | #8811 | `b02fa16a90a73df993b7fd31a1eb118b0c19bf34` | `v5.06` | VERIFIED | 2026-11-08 |
 | v5.07 | fs-boundary-refuses-parameter-transformation | #8322 | #8832 | `2ce25400e196176b5f2ab5fb7381b471059e6591` | `v5.07` | VERIFIED | 2026-11-09 |
 | never-invoked-specialists-dispositioned (version-less) | never-invoked-specialists-dispositioned | #8452 | #8994 | `240d3c2ed44e2330d3882de56fbdbd21bc8b4418` | (none) | DEPLOYED | 2026-11-14 |
-| v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | DEPLOYED | 2026-11-15 |
+| v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
 
 #### Deployment Log v5.08
 **Files deployed:** **Three deployments, all complete: the merge, the hook-tier publish and the release-stamped rules-mirror deploy.** Each was verified by content, not by a script's exit status. Paths are given as placeholders.
@@ -321,7 +321,10 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.08, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Velocity:** planned 12 pts / delivered 12 pts (1.00); files-changed 11; allocation 0/12/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS. Every deployment this release owes is complete, and each was read back:
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 19/19 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
 - **The merge:** `MERGED`, with a non-null merge commit that `origin/main` carries.
 - **The version claim:** the signed tag peels to the merge commit.
 - **The plan stamp:** 0 residual placeholders.
@@ -329,6 +332,16 @@ The day of the week is computed from the date.
 - **The stamped deploy:** exit 0, with exactly the one `deploy-rules-mirror` row `--no-targets` requires.
 
 No owed item remains open.
+
+#### Release Learnings v5.08
+
+**Synthesized at:** 2026-11-15T13:27:54Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.08`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-15T12:45:49Z`
+
+**Surprise:** the line-continuation class gave a new Blocker or Major at each Stage 7-8 re-verify, so Stage 6 ran six fix-up passes after the lock
+**Would-change:** probe continuation, comment and redirection readings on 3 shells at Stage 5
+**Watch-for:** declared over-blocks refusing heredoc commit messages
 
 #### Deployment Log never-invoked-specialists-dispositioned
 **Files deployed:** The Operational Deployment Manifest is N/A: the merge carries a release plan and a decision record, and neither propagates. The Phase B4 release-stamped deploy still runs for every release, as the rules mirror with no named target, and it is **handed back to the hub, not yet run**: the Stage-12 spoke's brief does not assign it, and the rows it writes are permanent. **B4.3 derivation (read-only):** the merge changed 2 files, measured at the merge commit `240d3c2e` against its first parent `29c60404`: the release plan (`release/releases/plans/_unversioned/never-invoked-specialists-dispositioned_RELEASE_PLAN.md`) and the decision record (`core/ADRs/ADR-238-each-never-invoked-specialist-takes-one-disposition.md`). 0 of them sit under a skill root or `packages/`, so there are 0 candidates against the 55-name deploy roster and 0 non-members (sensitivity: a planted `release/skills/release-hub/SKILL.md` path derives `release-hub`). The command is therefore `bash core/deploy/deploy.sh --deploy --release never-invoked-specialists-dispositioned --no-targets`, run once from a worktree whose HEAD contains the merge. **B4.2:** the join key `never-invoked-specialists-dispositioned` reads back non-empty, with 59 rows under it before stamping, 0 of them `deployment-status`. The merge changes no `core/hooks/` path, no composition-surface source (0 of its 2 paths are in `COMPOSITION_SURFACE_FILES`; control: `core/CLAUDE.md.template` matches), no `harness/` path and no skill `references/` file, so no hook-bundle refresh, `update.sh` run or `.skill` rebuild is owed. The plan's conditional `core/ADRs/README.md` renumber-log line did not resolve, because no renumber happened.
