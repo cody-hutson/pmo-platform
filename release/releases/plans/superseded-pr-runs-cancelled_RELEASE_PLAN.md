@@ -10,7 +10,7 @@ reversibility: CHEAP / Confidence HIGH — CI configuration, one prose sentence 
 ---
 # Release Plan — `superseded-pr-runs-cancelled`
 
-**Milestone:** `superseded-pr-runs-cancelled` (milestone 446). Two cards in one native chain: **#8440** (superseded pull-request runs are cancelled) and **#9007** (a pull-request-time gate keeps that property true). The Stage-4 planning sub-task **#9009** carries the approved plan (`#9009 comment 6890921891`, part 1/2, and `#9009 comment 6890923144`, part 2/2) and the Stage-4 gate's Decision Recorded (`#9009 comment 6891094637`). The Stage-5 designs are on **#9010** (#8440: `#9010 comment 6891529696` and `#9010 comment 6891530810`) and **#9011** (#9007: `#9011 comment 6892548840` to `#9011 comment 6892549578`, parts 1/4 to 4/4); their independent Phase A6.5 adversarial reviews are on **#9023** (#8440, `#9023 comment 6891875981`) and **#9025** (#9007, `#9025 comment 6892828859`). The Collective Review scope lock's Decision Recorded is `#9010 comment 6892918087`. The Stage-6 Engineering sub-tasks are **#9012** (#8440) and the #9007 sub-task the hub routes next; this file is Engineering Commit 0, authored by the spoke on **#9012**, which also builds #8440's four commits. The D-Version re-render at this commit's first re-verify is `#9012 comment 6893150680`.
+**Milestone:** `superseded-pr-runs-cancelled` (milestone 446). Two cards in one native chain: **#8440** (superseded pull-request runs are cancelled) and **#9007** (a pull-request-time gate keeps that property true). The Stage-4 planning sub-task **#9009** carries the approved plan (`#9009 comment 6890921891`, part 1/2, and `#9009 comment 6890923144`, part 2/2) and the Stage-4 gate's Decision Recorded (`#9009 comment 6891094637`). The Stage-5 designs are on **#9010** (#8440: `#9010 comment 6891529696` and `#9010 comment 6891530810`) and **#9011** (#9007: `#9011 comment 6892548840` to `#9011 comment 6892549578`, parts 1/4 to 4/4); their independent Phase A6.5 adversarial reviews are on **#9023** (#8440, `#9023 comment 6891875981`) and **#9025** (#9007, `#9025 comment 6892828859`). The Collective Review scope lock's Decision Recorded is `#9010 comment 6892918087`. The Stage-6 Engineering sub-tasks are **#9012** (#8440) and **#9013** (#9007); this file is Engineering Commit 0, authored by the spoke on **#9012**, which also builds #8440's four commits, and the spoke on **#9013** builds #9007's three. The release pull request is **#9026**, opened in draft. The D-Version re-render at this commit's first re-verify is `#9012 comment 6893150680`.
 
 **Version identity:** **versioned** — bump-class **`minor`**. The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-primary while in flight, and the Header `**Version**` cell carries the double-brace release-version placeholder, which this file reproduces in that cell only. The rule-computed next-free at Engineering Commit 0 is **`v5.09`**, equal to the D-Version determination as re-rendered at this commit (§ Commit-0 Version Re-Verify Record).
 
@@ -32,9 +32,9 @@ reversibility: CHEAP / Confidence HIGH — CI configuration, one prose sentence 
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate, re-rendered at Engineering Commit 0): a new pull-request-time gate rule plus CI configuration, with no skill behaviour change, per the Bump-Class Selection Guide's row "Protocol text addition or modification". The rule-computed next-free re-verified at Engineering Commit 0 is `v5.09` (§ Commit-0 Version Re-Verify Record). The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-15 (Sunday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) and #8440's four commits are on the branch; #9007's commits follow from the second Engineering spoke |
+| **Status** | Executing — Stage 6 Engineering complete: Engineering Commit 0 (this file), #8440's four commits and #9007's three commits are on the branch; Stage 7 Dev Testing is next |
 | **Branch** | `release/superseded-pr-runs-cancelled` |
-| **PR** | opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
+| **PR** | #9026 — opened in **draft** at Stage 6 Phase C2; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `superseded-pr-runs-cancelled` |
 
 `domain_practice: { source: https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency, date: 2026-11-15, name: GitHub Actions workflow and job concurrency groups, domain: software }`
@@ -189,6 +189,7 @@ core/config/allowlists/script-execution-allowlist.txt  edit
 core/standards/gate-efficacy-standard.md  edit
 core/rules/git-workflow.md  edit
 core/ADRs/ADR-*-superseded-run-cancellation-convention.md  add
+core/ADRs/README.md  edit
 ```
 
 | Path | Intent | Card | Change specification |
@@ -206,7 +207,8 @@ core/ADRs/ADR-*-superseded-run-cancellation-convention.md  add
 | `core/config/allowlists/script-execution-allowlist.txt` | edit | #9007 | the four invocation-form rows for the checker |
 | `core/standards/gate-efficacy-standard.md` | edit | #9007 | one gate-coverage register row and one Version History row |
 | `core/rules/git-workflow.md` | edit | #9007 | one sentence in § Repository-Integrity Gates → Non-blocking integrity jobs; its deployed mirror is laid down at Stage 12 |
-| `core/ADRs/ADR-*-superseded-run-cancellation-convention.md` | add | #9007 | the pointer decision record (D-ConcurrencyADR): it cites the checker and the register row, and holds no second copy of the convention. Its number is taken against the global sequence at #9007's commit; if that spoke settles a different basename, it updates this row in the same commit |
+| `core/ADRs/ADR-*-superseded-run-cancellation-convention.md` | add | #9007 | the pointer decision record (D-ConcurrencyADR): it cites the checker and the register row, and holds no second copy of the convention. Built on the branch claim 240, against an anchor of 239; the glob keeps this row true if the record is renumbered at the Stage-12 claim (DEV-23) |
+| `core/ADRs/README.md` | edit | #9007 | one entry for the pointer record under the release-ops / capacity theme of the curated core index (DEV-23) |
 
 **Condition legend.**
 
@@ -236,7 +238,7 @@ release/ADRs/README.md  NOT EDITED
 
 - `sibling-merge-dark-branch.yml` has no pull-request trigger (a push to `main` and a manual dispatch only), so neither card's population includes it.
 - The two stage-text files were `CONDITIONAL:REDARM-STAGE-TEXT` rows; D-3 (A) puts the RED-arm sentence in the selection map instead, and neither file carries the practice (DEV-5).
-- The pointer decision record is cross-cutting and platform-wide, so it lands under `core/ADRs/` (the ADR guide's placement rule); the release-module ADR index is not touched. `core/ADRs/README.md` is a curated document with no projected index; the #9007 spoke adds a row here if the record earns a line there.
+- The pointer decision record is cross-cutting and platform-wide, so it lands under `core/ADRs/` (the ADR guide's placement rule); the release-module ADR index is not touched. `core/ADRs/README.md` is a curated document with no projected index; the record earns an entry there, which the #9007 spoke added (DEV-23).
 - Dropped Stage-4 conditional rows: `CHECKER-IN-RELEASE-TOOLS` (the checker lands under `core/deploy/tools/`) and `GATE-HOST-NEW-WORKFLOW` (the gate is a job in `repo-integrity.yml`) — DEV-10.
 
 **Mirror pairs:** `core/rules/git-workflow.md` is a mirror-pair member; its deployed copy is laid down by `./deploy.sh --deploy` at Stage 12 and confirmed by Check 9. No other matrix path is in the mirrored set.
@@ -347,7 +349,7 @@ concurrency:
 **Change Specification:**
 - **Files modified:** the checker and its fixture file (new); the tools README, the self-test manifest and the script-execution allowlist; `repo-integrity.yml` (a header block and a job); the gate-efficacy standard (a register row and a Version History row); `core/rules/git-workflow.md` (one sentence); one pointer decision record (new).
 - **Change description:** a new job, `Workflow concurrency gate`, in `repo-integrity.yml` runs `core/deploy/tools/check-workflow-concurrency.py` over the whole of `.github/workflows/`. Every workflow a pull request triggers (a `pull_request` or `pull_request_target` trigger) carries #8440's three canonical lines exactly, at workflow level, and no job of it carries a concurrency key; a trigger set holding a pull-request trigger and `workflow_call` is a finding (CD-3 (D)); a trigger set adding a review event to a pull-request trigger is a finding (FM-1); and the workflow identities the key embeds are distinct after case-folding. The checker's `--self-test` grades every fixture case against its declared verdict, requires exit 1 with a finding on a failing case (CD-2), and hard-fails ahead of the scan. The job adds no `concurrency`, `group: `, `cancel-in-progress: true`, `push` or `paths` text to its host.
-- **Commit shape (D-RedArmRecord (A)):** the checker, fixtures, README row, manifest, allowlist, host header and job together, with the local RED record; then the register row, the Version History row, the rules sentence and the pointer record. Subjects read `release(superseded-pr-runs-cancelled): <summary> (#9007)`.
+- **Commit shape (D-RedArmRecord (A)), as built:** three commits — RED, the checker and its fixtures, with the local RED record; GREEN, the README row, the manifest, the allowlist rows and the host header and job; then the register row, the Version History row, the rules sentence and the pointer record with its index entry (DEV-19). Subjects read `release(superseded-pr-runs-cancelled): <summary> (#9007)`.
 - **RED arm:** the Stage-6 C4 `test-run` record of the checker on a `git archive` of the base tree (expected exit 1, 26 `MISSING-GROUP` findings) and of its `--self-test`. **GREEN:** the gate job on the release head.
 - **Acceptance criteria:** the card's six criteria, AC-1 to AC-6, and five host obligations, OBL-1 to OBL-5 (§ Verification Plan).
 - **Estimated complexity:** Medium.
@@ -369,8 +371,9 @@ concurrency:
 | #9007 | `.github/workflows/repo-integrity.yml` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 | #9007 | `core/standards/gate-efficacy-standard.md`, `core/rules/git-workflow.md` | no (the deployed rules mirror is an arm, and Stage 12's `./deploy.sh --deploy` writes it as a script, not as a `Write`/`Edit` payload) | no | unconstrained | unconstrained | ordinary Engineering spoke |
 | #9007 | `core/ADRs/ADR-*-superseded-run-cancellation-convention.md` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
+| #9007 | `core/ADRs/README.md` | no | no | unconstrained | unconstrained | ordinary Engineering spoke |
 
-Both cards are `unconstrained`. The self-test manifest and the pointer-record rows are additions at this commit (late adds, re-derived over the same two controls). An `unconstrained` row means no control refuses the write; it does not make the change ungoverned.
+Both cards are `unconstrained`. The self-test manifest and the pointer-record rows are additions at Engineering Commit 0, and the `core/ADRs/README.md` row an addition at #9007's plan commit (late adds, each re-derived over the same two controls: the path is outside the Tier-0 union and outside `SKILL_SCOPE_RE`). An `unconstrained` row means no control refuses the write; it does not make the change ungoverned.
 
 ---
 
@@ -406,7 +409,9 @@ Stage-4 baseline: `c2c55a74086626d821e78561a312d9033d22fd47` (audit start 2026-1
 
 ### In-Flight Release Roster
 
-**Measured at:** `c2c55a74` · `2026-11-15T07:12:57Z` · **Population:** n=5 siblings (the pinned Stage-4 measurement; Stage 9 Phase A6.6 re-measures it)
+**Label: the Stage-4 pinned measurement, not a current read.** Its `EDITSET ∩ FCM` column carries the hunk notes Stage 5 added; Stage 9 Phase A6.6 re-measures the roster.
+
+**Measured at:** `c2c55a74` · `2026-11-15T07:12:57Z` · **Population:** n=5 siblings
 
 | Slug | PR | Head SHA | Bump-class | Carried label | Recomputed next-free | EDITSET ∩ FCM |
 |---|---|---|---|---|---|---|
@@ -647,6 +652,12 @@ N/A — enumerated over {skill copy, rules mirror, harness artifact, schema migr
 | DEV-16 | 6 (Commit 0) | #9007's checker folds in #9025's CD-2 (an exit-1 self-test arm and a reverse guard in the job), CD-3 (D) (a pull-request trigger beside `workflow_call` is a finding, so the `called-*` fixture verdicts change from the scaffold) and FM-1 (a finding code for a review event beside a pull-request trigger). The #9007 spoke records the exact codes and cases it builds | the scope lock |
 | DEV-17 | 6 (Commit 0) | The canonical block is written with the design's five comment lines above its three canonical lines; the RED-arm paragraph is the design's Change 3 text verbatim, and #9023's FM-3 clauses (job-granularity citation, the re-run caution) are not added | hub confirmation on the resume (`#9012 comment 6893150680`) |
 | DEV-18 | 6 (Commit 0) | The AC baseline is re-read at `4e70b20f`; the counts are unchanged (#8440 3, #9007 6) | Commit-0 re-read |
+| DEV-19 | 6 (#9007) | **[ADJUST]** #9007 lands in three commits, not two: RED (the checker and its fixtures), GREEN (the README row, the manifest, the allowlist rows, the host header and job), then the register row, the Version History row, the rules sentence and the pointer record. The RED arm is unchanged — the local record of D-RedArmRecord (A) — and the three were pushed together, so no CI run exists for the RED head | the hub's brief for the #9007 spoke (sub-task #9013) |
+| DEV-20 | 6 (#9007) | **The exact codes and cases DEV-16 asked for.** CD-3 (D): `CALLED-WITH-PR-TRIGGER` for a `pull_request` or `pull_request_target` trigger beside `workflow_call`; `CALLED-CARRIES-GROUP` is kept for a workflow-level key in any called workflow. FM-1: `REVIEW-WITH-PR-TRIGGER` for `pull_request_review` or `pull_request_review_comment` beside a pull-request trigger; a review event on its own stays exempt. CD-2: each case arm grades the exit `report()` returns, and a new arm requires a control-arm scan holding one `no-group` file to exit 1 with one `MISSING-GROUP` line; the job's reverse guard fails exit 0 when a finding line is printed. Fixture deltas: `called-with-group` reads `expect=1` with both called codes; `called-without-group` reads `expect=1 codes=CALLED-WITH-PR-TRIGGER kind=other`; added `review-event` (a one-hunk near-miss), `called-only` (`expect=0`, the remedy's called half) and `called-only-with-group` (`expect=1 codes=CALLED-CARRIES-GROUP`). The seven headers the AC-1 to AC-3 rows grep are unchanged | the scope lock's CD-2, CD-3 (D) and FM-1 |
+| DEV-21 | 6 (#9007) | **[ADJUST]** Self-test arms beyond the three fixes: code arms for `TRIGGER-UNREADABLE` and `NONCANONICAL-SHAPE`, which the scaffold emitted with no asserting arm, and trigger-class arms for a review-comment trigger alone, a `workflow_call` trigger alone and a file with no `on` key. The self-test grows from 35 arms to 47; removing any one of the 12 finding codes from the checker now fails it, though three codes keep a second emitting site no arm reaches on its own (§ Verification Evidence, #9007) | per-code mutation run (§ Verification Evidence, #9007) |
+| DEV-22 | 6 (#9007) | **[ADJUST]** The locked prose predates the review fixes, so it is adapted to CD-3 (D) and FM-1 wherever it states the population: the checker's docstring (its "every other event" sentence, which FM-1 showed false, is narrowed to a push, a tag, a schedule or a dispatch; a limits paragraph names the `labeled` activity type and the ungraded exempt keys), the teach text, the host header's invariant and falsification, the README row, the register row (invariant, falsification, specificity, anti-vacuity, stated limits) and one clause of the rules sentence | the scope lock's CD-3 (D) and FM-1; #9025 FM-1's docstring and `labeled` mitigations |
+| DEV-23 | 6 (#9007) | The pointer record stays under `core/ADRs/` (a platform-wide CI convention, not a release-pipeline mechanic) and is built on the branch claim 240, against an anchor of 239 on `origin/main`. At this commit a sibling release, `release-usage-measured-right`, holds a branch claim on the same slot; the second to merge is renumbered at its Stage-12 claim. This file cites the record by its slug token, which the Stage-12 stamp resolves, never by a number. `core/ADRs/README.md` gains its entry, so that row is added to the File Change Matrix and to the Agent-Editability Read | the ADR guide's placement rule; `renumber-adr.py --detect` (`ANCHOR 239`, `NEXT-FREE 240`, a branch-only claim on 240) |
+| DEV-24 | 6 (#9007) | The release pull request's body is not edited: the template asks for nothing below the Issue References block, so the body's #9007 rows (Implementation, Documentation Impact) still read PENDING. This file carries #9007's evidence; refreshing the body is the hub's | the hub's brief (body edit only if the template requires it) |
 
 ---
 
@@ -700,6 +711,48 @@ N/A — enumerated over {skill copy, rules mirror, harness artifact, schema migr
 - **Pre-PR push:** `git push -u origin release/superseded-pr-runs-cancelled` → the remote head reads `159a09c5`; `gh run list --branch release/superseded-pr-runs-cancelled` → 0 runs, as the push-trigger census predicts.
 - **Deliverable state:** each #8440 deliverable is `deployed-copy-synced` with no propagation target — workflow configuration and one corpus paragraph, effective on the branch and on `main` at merge.
 
+### #9007 commits 1–3 — Stage 6 B1 / C4
+
+**Commits** (each signed; pushed together after commit 3, so neither the RED nor the GREEN head has a CI run of its own — DEV-19):
+
+| # | Commit | Change | Diff shape |
+|---|---|---|---|
+| 1 (RED) | `0bb83175` | the checker, tracked `100755`, and its fixture file | 2 files added |
+| 2 (GREEN) | `e8f68579` | the host header and job, the README row, the manifest line and the four allowlist rows | 4 files, 133 added / 0 removed |
+| 3 | `8dac2925` | the register and Version History rows, the rules sentence, the pointer record and its index entry | 4 files, 78 added / 1 removed |
+
+- **RED record (D-RedArmRecord (A)), at commit 1.**
+  - `python3 core/deploy/tools/check-workflow-concurrency.py --workflows-dir <a git archive of 4e70b20f>/.github/workflows` → exit 1; `SCOPE: in-scope=26 called=0 trigger-exempt=1 unreadable=0`; 26 `MISSING-GROUP` lines; `VERDICT: FINDINGS (26)`.
+  - `python3 core/deploy/tools/check-workflow-concurrency.py --self-test` → `SELF-TEST: PASS`, 47 of 47 arms.
+  - The wiring reads RED at this commit: `python3 release/tools/check-selftest-coverage.py --reconcile` → exit 1, `UNLISTED` and `UNDOCUMENTED` for the checker, `RECONCILE VERDICT: BLOCKING`.
+  - Plan rows: AC-1, AC-2 and AC-3 PASS (each read ERROR before the fixture file existed); AC-4, OBL-1 and OBL-2 FAIL; AC-5, OBL-3, OBL-4 and OBL-5 PASS.
+- **GREEN, at commit 2 and at the head.**
+  - The default scan, with its control arm, on the live tree → exit 0; `CONTROL: repo-integrity.yml classified in-scope`; `VERDICT: CLEAN` over 26 in scope and 1 exempt. The same scan on a `git archive` of `7d189c5b` → exit 0.
+  - The reconcile → `RECONCILE VERDICT: CLEAN (exit 0)`. `--list --explain` puts the checker in the Ubuntu partition, whose `selftest-discovery` job installs PyYAML before it runs the self-tests.
+  - The plan verifier at `8dac2925`: #9007 — 10 PASS, AC-6 SKIP (declared deferral); #8440 — 4 PASS, AC-3 SKIP. `FCM-COVERAGE` PASS (61 declared, 61 interpreted, 0 pathless; every declared ADD delivered on `4e70b20f..8dac2925`, the record's glob row included). `PROV-*` PASS.
+  - INT-2: `grep -c 'group: ' .github/workflows/repo-integrity.yml` → 1.
+- **The review fixes, falsified on copies in the run directory.**
+  - CD-2: the review's mutant (`report()` returning 0 on findings) passes the locked scaffold's self-test (35 of 35, exit 0) and fails the built one (11 failing arms, exit 2).
+  - CD-3 (D) and FM-1: the review's call-hatch tree (`install-tests.yml` given `workflow_call` and stripped of its block) and its review-trigger tree (`install-tests.yml` given `pull_request_review`) read exit 0 under the scaffold, and exit 1 under the built checker with `CALLED-WITH-PR-TRIGGER` and `REVIEW-WITH-PR-TRIGGER` respectively.
+  - Per-code mutation: renaming each of the checker's 12 finding codes at its emitting sites fails the self-test, 12 of 12. Residual: three codes have a second emitting site that no arm reaches on its own — `UNPARSEABLE` (a document that is not a mapping), `TRIGGER-UNREADABLE` (an `on` value of an unread shape) and `NONCANONICAL-SHAPE` (a block mapping with an extra or duplicate key); each mutation renamed both sites at once.
+  - The job's reverse guard: a structural read of the step confirms the order — the `FAIL_LINES` assignment, the reverse guard and its `exit 1`, the clean branch, then the forward guard. Its runtime branch is NOT-EVALUATED locally (the stub run was refused by the script-execution guard), and no CI run reaches it while the checker is correct.
+- **`--case` reads,** the behaviour half Stage 7 repeats: each case reads its declared exit — 0 for `canonical`, `called-only` and the four `exempt-*` cases; 1 with its declared code for the other ten; an unknown id exits 2.
+- **Host constraints,** counted on the host before and after commit 2: `group: ` 1 → 1; `cancel-in-progress: true` 1 → 1; `^concurrency:` 1 → 1; indented `concurrency:` 0 → 0; `^  push:` 0 → 0; `paths` 12 → 12; the OBL-1 and OBL-2 strings 0 → 1. The one added `concurrency:` substring is the job id `workflow-concurrency:`, which no line-anchored row matches.
+- **Workflow-reading checks:** actionlint 1.7.12 with CI's `-ignore` flag over every workflow → exit 0 (sensitivity: a planted defect in a copy of the host → exit 1); `python3 core/deploy/tests/test_gate_efficacy_declarations.py` → OK, 45/45 declarations, 7 population declarations, and 22 binary-zero consumers of 47 exit-status consumers (unchanged at 22); `python3 core/deploy/tools/check-tool-exec-mode.py` → 0 findings; `bash release/tools/tests/test_deciders_carveout.sh` → 327/327.
+- **Register and record:** the AC-4 row → 1; the two new pointers resolve under Check 62's rule — the file exists and names the anchor — and a wrong anchor is absent (control); `python3 core/deploy/tools/check-rules-budget.py` → `VERDICT WITHIN` (164,141 of 204,800 bytes); `python3 release/tools/check-adr-numbers.py` → PASS, contiguous to 240; `python3 release/tools/check-adr-durability.py --diff-base origin/main` on the record → 0 findings (sensitivity: a planted live count in a copy → `R2-COUNT`); the record's two issue references resolve to open issues of this repository and sit under `## References`; `python3 release/tools/renumber-adr.py --stamp` (dry run) resolves this file's two slug tokens with no refusal.
+- **Links and text shapes:** `python3 release/tools/check-release-links.py` over the five changed markdown files, whole-file → 0 broken (sensitivity: a planted broken link → 1); `python3 core/deploy/tools/check-doc-links.py --require-targets` over the same files → 0 findings; a shape probe of the added lines for links, raw URLs, bare issue references and version references → 0 outside their sanctioned homes (control string: 1 / 1 / 1 / 1). The reference-durability detector itself was not run locally — its library is sourced only inside the workflow — and its required row on `8dac2925`, `Durable-corpus fragile-reference delta`, concluded success.
+- **CI on `8dac2925`,** read from the commit's own check-runs at 11:57Z: 59 rows, 49 completed success and 10 macOS rows queued, none failed. Success among them: `Workflow concurrency gate` (the GREEN of record), `Discovered tool self-tests (Ubuntu)`, `Python SAST (bandit)` (the checker was not run through bandit locally), `Workflow SAST (actionlint)`, `ADR-number integrity gate`, `ADR durability gate`, `Depersonalization gate`, `Commit-message depersonalization gate`, `Dead-file-reference gate` and `Issue-reference validity gate`.
+- **Runtime-suite selection** (§ 2, longest literal prefix): the checker selects row 4, the allowlist row 5, and the manifest, the tools README and the fixture file row 2; the workflow and the markdown files select no row.
+  - Row 4 — `python3 release/tools/check-selftest-coverage.py --run --runner=ubuntu` → 80 of 81 pass, the new checker among them. The one failure is `release/tools/cleanup-orphan-state.sh`, a tool this change does not touch: a timeout at the engine's 300 s per-tool budget (exit 124), run while row 5 was loading the same host. CI's run of the same job on `8dac2925`, `Discovered tool self-tests (Ubuntu)`, passed. Re-run on its own with no per-tool budget (`bash release/tools/cleanup-orphan-state.sh --self-test`, still beside row 5's hook floor): `self-test: PASS`, exit 0, in 537 s — slow on this host, not broken.
+  - Row 5 — `bash core/deploy/tests/run-install-regression.sh` → its 15 named members pass, 0 failed, among them `test_refresh_surfaces.sh` at 70/70, the suite that reads the allowlist as a composition surface. Its last member, the hook-test floor (`setup-ci-layout.sh`, then the hook runner), had run 21 minutes without a verdict when this commit was made, on a host other sessions were also loading; its result is in the #9013 output. CI's `Install/onboarding/update regression suite (macOS)` and `Hook test harness (macOS)` grade the head.
+  - Row 2 — no deploy suite reads the three paths (a per-path census of `core/deploy/tests/`, `install-tests.yml` and `deploy.sh`: 0 readers, the two `deploy.sh` mentions of the tools README being comment lines; control: the allowlist has 2 readers, `test_compose.py` and `test_refresh_surfaces.sh`), so the row's run of record is CI's `install-tests.yml` on the head.
+  - Insurance: `python3 -m pytest core/deploy/tests/test_compose.py`, which reads the allowlist's token-anchored rows → 93 passed.
+- **Skill-package freshness:** the change set on stdin to `bash core/deploy/tools/build-skill-packages.sh --skills-for-paths` → no skill named (control: `release/skills/release-hub/SKILL.md` → `release-hub`).
+- **Path-leak scan:** `bash core/deploy/tools/path-leak-patterns.sh --scan-file` on all ten changed files → exit 0 (control: a planted home path → exit 1).
+- **Close-keyword self-check:** `python3 core/deploy/tools/check-commit-close-keywords.py --base origin/main --head HEAD` → 9 commits examined, 0 findings, CLEAN, before the code push; re-run before the plan push.
+- **ADR index:** N/A for `release/ADRs/`; the record's entry in `core/ADRs/README.md` is a curated edit.
+- **Deliverable state:** each #9007 deliverable is `deployed-copy-synced`; `core/rules/git-workflow.md` reaches it at Stage 12, when `./deploy.sh --deploy` lays down the rules mirror.
+
 ---
 
 ## Deployment Execution Log
@@ -720,14 +773,14 @@ N/A — enumerated over {skill copy, rules mirror, harness artifact, schema migr
 
 ### Outcome
 
-From #8440's first commit on, a newer commit pushed to a pull request cancels the in-progress and pending runs that every pull-request-triggered workflow started for the commit it replaced, so the hosted macOS runners stop serving heads nobody will merge. A run triggered by a push to `main`, a tag, a schedule or a dispatch keys on its own run id: it is never cancelled and never waits. #9007, built next on this branch, adds the pull-request-time gate that keeps the property true as workflows are added.
+From #8440's first commit on, a newer commit pushed to a pull request cancels the in-progress and pending runs that every pull-request-triggered workflow started for the commit it replaced, so the hosted macOS runners stop serving heads nobody will merge. A run triggered by a push to `main`, a tag, a schedule or a dispatch keys on its own run id: it is never cancelled and never waits. #9007 adds the pull-request-time gate that keeps the property true as workflows are added: the `Workflow concurrency gate` job fails a pull request whose tree carries a pull-request-triggered workflow without the block, with any other form of it, with a job-level key, or with `workflow_call` or a review event beside its pull-request trigger.
 
 ### Issues resolved
 
 | # | Outcome (one line) | Status |
 |---|---|---|
 | #8440 | all 26 pull-request-triggered workflows carry one canonical workflow-level concurrency block; the required macOS close-out smoke job stops running its five trailing suites on a cancelled run; the selection map says what a cancelled job is evidence of | DONE (Stage 6); AC-3 is graded after the merge (AI-004) |
-| #9007 | the `Workflow concurrency gate` job, its checker and fixtures, the register row, the rules sentence and a pointer decision record | IN PROGRESS — built by the second Engineering spoke on this branch; this section is refreshed when it lands |
+| #9007 | the `Workflow concurrency gate` job, its checker and fixtures, the register row, the rules sentence and a pointer decision record ({{ADR:superseded-run-cancellation-convention}}) | DONE (Stage 6); AC-6 is graded after the merge (AI-004) |
 
 ### Key decisions
 
@@ -738,7 +791,7 @@ From #8440's first commit on, a newer commit pushed to a pull request cancels th
 - **D-PopulationScope (B):** all 26 pull-request-triggered workflows, not only the 7 macOS ones, so the gate can scan the whole tree. #8440 is XL; kept as one card.
 - **D-RedArmEvidence (A):** one descriptive paragraph in the selection map, no stage-text edit.
 - **D-AlwaysStepTail (A):** the five `always()` steps become `${{ !cancelled() }}`, so a cancelled close-out run releases its macOS runner at once instead of after about five minutes.
-- **#9007:** an advisory, enforcing job in `repo-integrity.yml` over the whole tree; textual equality on the canonical lines; a pull-request trigger beside `workflow_call` is a finding; a local RED record; a pointer decision record.
+- **#9007:** an advisory, enforcing job in `repo-integrity.yml` over the whole tree; textual equality on the canonical lines; a pull-request trigger beside `workflow_call` is a finding (`CALLED-WITH-PR-TRIGGER`), and so is a review event beside a pull-request trigger (`REVIEW-WITH-PR-TRIGGER`); the self-test grades the exit the gate returns and the job fails an exit 0 that prints a finding; a local RED record; a pointer decision record, {{ADR:superseded-run-cancellation-convention}}, whose number binds at the Stage-12 claim.
 - **Size:** 28 effective points over the 25 ceiling, kept as one release by operator override.
 
 ### Reversibility
