@@ -433,7 +433,7 @@ pass_rate_floor = 1.00
 # What the unit MEANS -- one weekly point of one account's shared all-models weekly
 # allowance, counted once per API response within a transcript file, reported as a
 # (low, high) pair, and when a value may move -- is canonical in
-# {{ADR:release-graph-cost-unit}}, which names these values BY ROLE and never restates
+# ADR-239, which names these values BY ROLE and never restates
 # their magnitude, so a recalibration moves a line here and nothing else. (Same
 # convention as [behavioral_regression].pass_rate_floor above.)
 #

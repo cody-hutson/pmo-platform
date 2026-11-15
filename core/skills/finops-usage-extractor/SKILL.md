@@ -97,7 +97,7 @@ bash core/skills/finops-usage-extractor/scripts/convert-usage.sh --params
 bash core/skills/finops-usage-extractor/scripts/convert-usage.sh --self-test
 ```
 
-`convert-usage.sh` is the **one conversion** from per-response token totals to weekly points (wp) of one account. What a weekly point is, how tokens are counted, the conversion's terms and the pair rule are canonical in {{ADR:release-graph-cost-unit}}; the script implements that record and restates none of its calibrated values.
+`convert-usage.sh` is the **one conversion** from per-response token totals to weekly points (wp) of one account. What a weekly point is, how tokens are counted, the conversion's terms and the pair rule are canonical in ADR-239; the script implements that record and restates none of its calibrated values.
 
 - **One implementation.** Every figure-producing tool — the per-release cost row (`release/tools/compute-release-velocity.sh --cost-row`) and the command-template ranking — calls this script for weekly points and never re-implements the weights, the bracket or `K`. A second conversion is a defect, not an optimization.
 - **One numeric home.** It reads the bracket, `K` at both ends, the price-relative weights, the calibration model and the per-model axis only from the `[cost_unit]` section of the platform behaviour configuration, on two rungs: the shipped template, then the operator's individual `platform-config.toml`, which wins key by key. A packaged copy of this skill sits outside any checkout, so it reads the template through `PMO_SRC_ROOT` or `${CLAUDE_WORKSPACE_ROOT}/pmo-platform`.

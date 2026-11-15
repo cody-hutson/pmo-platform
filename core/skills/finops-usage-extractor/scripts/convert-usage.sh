@@ -4,7 +4,7 @@
 # Converts token totals in the usage store's `tokens` shape into weekly points (wp) of
 # one account, at BOTH ends of the cache-read-weight bracket. What a weekly point is, how
 # tokens are counted, the conversion's terms and the pair rule are canonical in
-# {{ADR:release-graph-cost-unit}}; this script implements that record's conversion and
+# ADR-239; this script implements that record's conversion and
 # restates none of its calibrated values. Every figure-producing tool — the per-release
 # cost row, the command-template ranking — calls THIS script and never re-implements the
 # weights: one conversion, one numeric home.
