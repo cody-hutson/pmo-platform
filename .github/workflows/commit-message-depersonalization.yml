@@ -54,6 +54,14 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 permissions:
   contents: read
+
+# A newer push to the same pull request cancels this run. Any other event
+# (a push to main, a tag, a schedule, a dispatch) is grouped by its own run
+# id, so it is never cancelled and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   commit-message-scan:
     name: Commit-message depersonalization gate
