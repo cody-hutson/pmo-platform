@@ -236,6 +236,8 @@ A measurement separate from the `**Velocity:**` field, written by the same tool 
 
 The row is owed from its introducing release's own Stage 13 onward. Until the Stage-13 close-out carries a step that writes it, each release's hub writes its row at Stage 13 with an explicit `--out-dir` into the install-scoped telemetry home. Unlike § 10, the introducing release is **not** exempt: measuring itself is that release's purpose, and a row is a local record rather than a permanent ledger field, so the reflexive-loop reason for exempting the field does not apply.
 
+**Runner:** NONE — a registered named gap in the gate-coverage register of `core/standards/gate-efficacy-standard.md`. Nothing executes the hub-written row above until the Stage-13 close-out carries its write step. Until then, the declared observable is the row file at `<home>/release-cost/<slug>.json` after a release's Stage 13, or the cost-row mode's summary line in that release's Stage-13 output; a release that closes with neither is the gap made visible, read by a reviewer, not a gate.
+
 ### 7a.6 Design artifact — the cost-row data flow
 
 <!-- design-artifact: flow-class=data-flow; name=release-cost-row; depicts=release/tools/compute-release-velocity.sh,core/skills/finops-usage-extractor/scripts/convert-usage.sh,core/skills/finops-usage-extractor/scripts/extract-usage.sh -->
