@@ -34,7 +34,7 @@ reversibility: MODERATE / Confidence MEDIUM — one branch, one pull request and
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a new capability — tools, a CI check and a document tree. The rule-computed next-free re-verified at Engineering Commit 0 is `v5.08` (§ Commit-0 Version Re-Verify Record). The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-13 (Friday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 7 Dev Testing: fix passes 1 to 3 on the release branch. Pass 2 read seven cards PASS and #8562 FAIL on branch freshness; fix pass 3 merged the default branch and made one tool-and-pack commit; the Pass 3 re-review and Stage 8 next (§ Verification Evidence, Stage 7 — fix pass 3) |
+| **Status** | Executing — Stage 8 QA Testing accepted at Phase E: nine acceptance reviews, with #8556 returned to Stage 7 for one integration criterion and re-graded after its QA return. Stage 9 Plan Review next. The pull request's citation check is expected red on eight moved citations until the Stage 12 sync (DEV-50; § Verification Evidence, Stage 8) |
 | **Branch** | `release/engineering-harness-pages-published` |
 | **PR** | opened in **draft** by the hub after its scan of the first commits; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `engineering-harness-pages-published` |
@@ -687,6 +687,12 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 | DEV-42 | 7 (Phase E) | The not-evaluated lines that do not yet end with the not-a-clean-result clause (#8557 F-07's residual) are left as they are. The hub's note on #8860 lists five such lines and that sub-task's Iteration 2 report two more: seven at `6d0cf686`. Fix pass 3 prints the element inventory's two through the library's helper (#8556 F-11), and five remain at `fb36bca9`, by tool: the library's register check 2, the library's self-test wrapper 1 and the publication gate tool 2. The register check's form is fixed by its docstring, so changing it is a design call. `follow-up: none` | #8557's Stage 7 Iteration 2 report and the hub's note before it, sub-task #8860, F-07; #8556's Iteration 2 report, sub-task #8856, F-11; § Verification Evidence, Stage 7 — fix pass 3, P-32 |
 | DEV-43 | 7 (Phase E) | #8558 F-06: the citation-read pointer line is carried by the hub's notes on the six sub-tasks whose Stage 7 outputs lacked it (#8852, #8856, #8860, #8868, #8872 and #8876), not inside those outputs. The ruling on the population unit stays deferred (DEV-30) | #8558's Stage 7 Iteration 2 report, sub-task #8864, F-06; the operator's Phase E ruling |
 | DEV-44 | 7 (fix pass 1) | #8558 F-12: during fix pass 1 the hub edited two cards' criteria from "both checks" to three: #8558's criterion 5, which now reads "each of the three checks", and #8562's criterion 6, which now reads "the three catalog CI checks" | #8558's Stage 7 Iteration 2 report, sub-task #8864, F-12; #8562's, sub-task #8880, F-03; the two card bodies as read in fix pass 3 |
+| DEV-45 | 7 (after Pass 3) | After Stage 7 Pass 3, by the operator's Phase E decision, one tool commit, `4cf0dcfc`, addresses two Pass 3 findings: the publication gate's grounding check keeps the strict file-name edge (#8559 F-12), and one split call in the catalog library passes its limit by keyword (#8557 F-14). It changes the publication gate tool and the library, and no page, generated catalog file or catalog README. Stage 8 graded both at that head (§ Verification Evidence, Stage 7 — after Pass 3 and the QA return) | the hub's Stage 7 closing notes on sub-tasks #8860 and #8868; the operator's Phase E decision |
+| DEV-46 | 8 (Phase E) | Stage 8: nine acceptance reviews ran at `4cf0dcfc`, one on each card's Stage 8 sub-task. #8556 was returned to Stage 7 for INT-4 (#8556 QF-04; DEV-47). The operator's Phase E rulings: #8556 QF-04 is fixed now. #8558's four criteria with a limb observable only after the merge (AC-5, AC-8, INT-9 and INT-10) are accepted at Stage 8 and graded later: AC-5's push-to-`main` limb by #8562's sixth criterion, which reads the merge commit's check runs at Stage 12; AC-8's Stage 12 clause in this release's Stage 12 output, with the close gate's census for the presence of its two blocks; INT-9 and INT-10 in the Stage 12 output alone. #8561's manifest promise, the rows promising promotion by a later pages milestone, is carried as a release follow-up, `follow-up: none`. The criteria that name the merge commit (#8560 INT-6 and INT-7, and #8562's exit checks) are graded on the head form at Stage 8 and read on the merge commit at Stages 12 and 13 | the Stage 8 sub-tasks #8849, #8853, #8857, #8861, #8865, #8869, #8873, #8877 and #8881; #8558's acceptance report on #8865, S8-F1; the operator's Phase E rulings |
+| DEV-47 | 7 (QA return) | The QA return of #8556 INT-4 (#8556 QF-04): `618ceda6`, each catalog tool reports an unimportable or incomplete start-up module as not evaluated, exit 3; a full Stage 7 re-review of #8556 at that head read PASS. Then `cd9bd63d`, the four output options check their path first (#8556 F-14); a targeted check at that head read PASS. These are #8556's fourth and fifth Stage 7 passes, two past Stage 7's three-pass threshold, each by the operator's explicit decision | sub-task #8856, the QA-return full re-review and the F-14 targeted check; the operator's decisions |
+| DEV-48 | 7 (QA return) | #8556 F-13 is deferred: the workflow's hard self-test step leaves no summary block in the start-up-module state. `follow-up: none`. #8556 F-15 and #8556 F-12, each Informational, are accepted as notes | sub-task #8856, the QA-return full re-review (F-12, F-13) and the F-14 targeted check (F-15); the operator's Phase E rulings |
+| DEV-49 | 8 (Phase E) | The operator took the narrow reading of #8556 INT-4: its block limb binds the three commands that take a summary file. On that reading INT-4 reads MET at `cd9bd63d`, and the deferral of #8556 F-13 (DEV-48) needs no Operator Override Record | #8556's Stage 8 re-grade on sub-task #8857, QF-05; the operator's Phase E ruling |
+| DEV-50 | 8 (QA return) | The default branch moved after Stage 7: bringing it in makes seven pages stale and moves eight citations. By the operator's ruling, merging the default branch and restamping the seven pages, with the eight moved citations rewritten, are deferred to the Stage 12 sync, done once by Engineering under the operator's signature before the merge (§ Implementation Sequence, "When Stage 12 merges `main` again"). Until then the pull request's citation check is red on exactly those eight moved citations, by expectation | sub-task #8856, the known state recorded in the QA-return full re-review and the F-14 targeted check; sub-task #8857, QA pass 2; the operator's ruling |
 
 ---
 
@@ -1144,6 +1150,50 @@ P-35 Probe: git diff --cached --name-only fb36bca9, with this file staged
      Control - specificity: NOT TRIGGERED — an exact path listing has no near-miss class
      Result: 1 path, this file          Verdict: CLEAN
 ```
+
+### Stage 7 — after Pass 3 and the QA return
+
+The commits made after Stage 7 Pass 3: one tool commit, by the operator's Phase E decision, which Stage 8 graded (DEV-45); the two commits of #8556's QA return, each followed by a Stage 7 read (DEV-47); and this file's record of them. Each is signed; `cd9bd63d` is the remote release head.
+
+| Commit | What it changes |
+|---|---|
+| `4cf0dcfc` | the publication gate tool, whose grounding check keeps the strict file-name edge, with one self-test arm (#8559 F-12); and one call in the catalog library, which passes its split limit by keyword (#8557 F-14) |
+| `618ceda6` | the three catalog tools and the library: each reports an unimportable or incomplete start-up module as not evaluated, exit 3, with its census and, where a summary file is passed, its block; one self-test arm per file (#8556 QF-04) |
+| `cd9bd63d` | the generator, the element inventory and the library: the four output options check their path before any work, and a path that cannot be written is a usage exit naming it; one self-test arm per option (#8556 F-14) |
+| the commit that adds this entry | this file: DEV-45 to DEV-50, this entry and the Stage 8 entry, and the Header Status row |
+
+No page, generated catalog file or catalog README changed in the three commits, and the impact query reads `pages=0` over `ee980fe1..4cf0dcfc` (2 paths) and over `4cf0dcfc..cd9bd63d` (4 paths).
+
+- **Self-test arms, before and after.** `build-process-catalog.py` 442 → 443 → 446 · `check-process-catalog.py` 186 → 187 · `_process_catalog.py` 129 → 130 · `build-element-inventory.py` 29 → 30 → 31 · `check-process-catalog-publication.py` 125 → 126. At `cd9bd63d` the head's tool self-test job reads 446, 187, 130, 31 and 126 arms, 0 failed in each; the first four read the same in local runs there.
+- **Mutation and sensitivity controls.**
+  - `4cf0dcfc`: with the publication gate's pre-fix edge restored at its one site in memory, exactly the arm the commit adds fails, 1 of 126, and the unmutated tool passes 126 of 126 (#8559's Stage 8 report). For #8557 F-14, the head's tool self-test job prints no deprecation line for the library, while the same job at `ee980fe1` prints exactly one, at the changed line (#8557's Stage 8 report).
+  - `618ceda6`: nine in-memory mutants of the new arms, each removing one start-up guard, block write or incomplete-library check, fail exactly that file's start-up arm, 9 of 9. The code before the fix, run in memory, ends 7 of 7 start-up runs with exit 1 and a traceback; the fixed code meets the exit contract in 84 of 84 planted runs (the QA-return full re-review on #8856).
+  - `cd9bd63d`: the five unwritable-path inputs, run on `618ceda6` in memory, end 5 of 5 with exit 1 and a traceback; at the head they end 5 of 5 with a usage exit naming the path, no census, and the planted path unchanged (the targeted check on #8856). The record that the four new arms failed before the check was added is the commit's own.
+- **The Stage 7 reads.** The QA-return full re-review of #8556 at `618ceda6` reads PASS: #8556 QF-04 is repaired, and three new findings are raised, #8556 F-12 (Informational), F-13 (Minor) and F-14 (Minor). The targeted check at `cd9bd63d` reads PASS: #8556 F-14 is repaired, QF-04 holds in 56 of 56 start-up plants, and one new finding is raised, #8556 F-15 (Informational). Their dispositions are DEV-48 and DEV-49.
+
+### Stage 8
+
+Nine acceptance reviews ran at the pull-request head `4cf0dcfc`, one on each card's Stage 8 sub-task. #8556 was returned to Stage 7 for INT-4 and re-graded at `cd9bd63d` after its QA return. The operator's Phase E rulings are DEV-45 to DEV-50.
+
+| Card | Sub-task | Recommended verdict and criterion counts | At Phase E |
+|---|---|---|---|
+| #8554 | #8849 | ACCEPT: 3 of 3 criteria MET | accepted as recommended |
+| #8555 | #8853 | ACCEPT: 5 of 5 MET (4 issue, 1 integration) | accepted as recommended |
+| #8556 | #8857 | QA pass 1, at `4cf0dcfc`: REJECT, 12 of 13 gradable MET (10 of 10 issue, 2 of 3 integration), INT-4 PARTIAL and INT-3 FLAG-UPSTREAM; returned for INT-4 (#8556 QF-04). QA pass 2, at `cd9bd63d`: ACCEPT, 14 of 14 MET (10 issue, 4 integration) | accepted on the narrow reading of INT-4 (DEV-49) |
+| #8557 | #8861 | ACCEPT: 13 of 13 MET (6 issue, 7 integration) | accepted as recommended |
+| #8558 | #8865 | CONDITIONAL ACCEPT: 16 of 16 graded MET (8 issue, 8 integration), with AC-5, AC-8, INT-9 and INT-10 FLAG-UPSTREAM | accepted as recommended, the four accepted and graded at Stage 12 and at the close gate (DEV-46) |
+| #8559 | #8869 | CONDITIONAL ACCEPT: 12 of 12 graded MET (6 issue, 6 integration), with AC-3 and INT-6 FLAG-UPSTREAM, each awaiting one hub record; the report states that the card then reads ACCEPT | accepted, with both hub records posted (below) |
+| #8560 | #8873 | ACCEPT: 13 of 13 MET (6 issue, 7 integration), INT-6 and INT-7 graded on the design's Stage 8 head form | accepted as recommended, on the head form as ruled (DEV-46) |
+| #8561 | #8877 | ACCEPT: 4 of 4 MET (3 issue, 1 integration) | accepted as recommended, the manifest promise carried as a release follow-up (DEV-46) |
+| #8562 | #8881 | A rehearsal at the head: CONDITIONAL ACCEPT, 6 of 7 MET, AC-5 PARTIAL pending one hub record; the report states that it then reads ACCEPT | accepted, with the hub record posted (below); the card is graded on the merge commit at Stage 12 |
+
+**The hub's records the reviews called for.**
+
+- **#8555 AC-1**, on sub-task #8853: the name search re-run at `4cf0dcfc` over the pack document, `pack.json` and the four level templates reads 0, with a control line reading 1 and a near-miss reading 0.
+- **#8556 INT-3**, on sub-task #8857: run at `4cf0dcfc`, the validator's register load and the Register Contract's reference module print equal identifier lines on the tracked registers and on the fixture pair in every mode, and two mismatched comparisons read different. QA pass 2 ties the record to `cd9bd63d` and grades INT-3 MET.
+- **#8559 AC-3**, on sub-task #8869: with the head's tool at `4cf0dcfc`, the classes `ws-name` and `ws-path` read 0 on the 48 pages, the catalog README and the 15 generated files, and non-zero on the drafted pages as the control.
+- **#8559 INT-6**, on sub-task #8869: the gate records for the page push `c95c7864` and the repair push `2a576893` each read PASS on 37 rows, and each record's digest recomputes equal and equals the value stated when its push was signed.
+- **#8562 AC-5**, on sub-task #8881: the project-name scan and the identity reading over `4cf0dcfc` read 0, each with a planted control that fired; with GO-evidence rows 8 and 9 and the hub's record for `ee980fe1`, they cover every line the release adds at `4cf0dcfc`.
 
 ---
 
