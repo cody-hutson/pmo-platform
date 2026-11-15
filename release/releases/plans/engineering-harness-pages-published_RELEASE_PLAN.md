@@ -34,7 +34,7 @@ reversibility: MODERATE / Confidence MEDIUM — one branch, one pull request and
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a new capability — tools, a CI check and a document tree. The rule-computed next-free re-verified at Engineering Commit 0 is `v5.08` (§ Commit-0 Version Re-Verify Record). The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-13 (Friday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub) |
-| **Status** | Executing — Stage 7 Dev Testing: fix passes 1 and 2 on the release branch, the signed repair commit pushed, the Pass 2 re-review and Stage 8 next (§ Verification Evidence, Stage 7 — fix pass 1 and Stage 7 — fix pass 2) |
+| **Status** | Executing — Stage 7 Dev Testing: fix passes 1 to 3 on the release branch. Pass 2 read seven cards PASS and #8562 FAIL on branch freshness; fix pass 3 merged the default branch and made one tool-and-pack commit; the Pass 3 re-review and Stage 8 next (§ Verification Evidence, Stage 7 — fix pass 3) |
 | **Branch** | `release/engineering-harness-pages-published` |
 | **PR** | opened in **draft** by the hub after its scan of the first commits; transitions to ready-for-review at the Stage-9 gate |
 | **Milestone** | `engineering-harness-pages-published` |
@@ -477,7 +477,7 @@ Neither release declares a rename, a relocation or a delete. Structural (Tier-S)
 - [ ] **CIAC-2 (#8555 × #8559 × #8560 on `core/process-catalog/engineering-harness/check-backlog-hygiene.md`):** a published page that links the definitions pack links it at its tracked home. *Method:* `grep -c -F "](/core/process-catalog/definitions/pack.json" core/process-catalog/engineering-harness/check-backlog-hygiene.md` at least 1. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-3 (#8555 × #8556 × #8561 on `core/process-catalog/definitions/pack.json`):** the pack's controls-register pointer names a tracked file, and the validator fails loud when that file is absent. *Method:* declared, verification deferred to #8555 AC-2, #8556 AC-4, #8561 AC-2. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-4 (#8557 × #8559 × #8560 on `core/process-catalog/engineering-harness`):** every executed-evidence row on a published page is in measure-and-script form, any script it cites is a tracked file, and no page carries an inline executed figure. *Method:* declared, verification deferred to #8557 AC-3, #8559 AC-1, #8560 AC-4. *Graded at Stage 9 QC3.5 on the merged PR.*
-- [ ] **CIAC-5 (#8558 × #8560 × #8562 on `.github/workflows/process-catalog-check.yml`):** the three catalog checks run on the pull request that lands the pages and report on the final head — at step 5 the three names are present, each failing, each summary reading NOT EVALUATED; after the pages land each passes with a non-zero examined count. *Method:* `grep -c -F "pull_request" .github/workflows/process-catalog-check.yml` at least 1. *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-5 (#8558 × #8560 × #8562 on `.github/workflows/process-catalog-check.yml`):** the three catalog checks run on the pull request that lands the pages and report on the final head — at step 5 the three names are present, each failing, each summary reading NOT-EVALUATED; after the pages land each passes with a non-zero examined count. *Method:* `grep -c -F "pull_request" .github/workflows/process-catalog-check.yml` at least 1. *Graded at Stage 9 QC3.5 on the merged PR.*
 
 ---
 
@@ -681,6 +681,12 @@ N/A — enumerated over the classes {memory eviction, memory re-point}; none pre
 | DEV-36 | 7 (fix pass 2) | The catalog README's merge sentence (#8558 F-09) states the checks' posture as the gate-efficacy standard records it, attributed to that standard rather than stated as a property of the repository host (the hub's ruling) | #8558's Stage 7 report and the hub's note there, sub-task #8864; the commit `2a576893` |
 | DEV-37 | 7 (fix pass 2) | After the publication gate tool changed in fix pass 1, the gate's pins were written afresh at the new release head, `f3e7dc53`, and again at `b66463db`. The repair commit was gated against the pins written at `b66463db` | the hub's Stage 7 record; § Verification Evidence, Stage 7 — fix pass 2 |
 | DEV-38 | 7 (fix pass 2) | The plan's own matching sentence, in § Change Description under Downstream impact, is corrected in this commit: it states the checks' posture as the gate-efficacy standard records it (#8558 F-09, the plan's half) | #8558's Stage 7 report, sub-task #8864, F-09, which names this file's sentence beside the README's |
+| DEV-39 | 7 (Pass 2) | Stage 7 Pass 2 ran as four targeted re-reviews at `6d0cf686`, the pull request's head, with one Iteration 2 report on each card's sub-task. Seven cards read PASS; #8562 read FAIL on one Blocker, branch freshness (#8562 F-08). The operator approved the Pass 2 dispositions at Phase E. Pass 3 follows, the last re-review before the escalation threshold | the Stage 7 sub-tasks #8852, #8856, #8860, #8864, #8868, #8872, #8876 and #8880, the Iteration 2 report on each; the operator's Phase E dispositions |
+| DEV-40 | 7 (fix pass 3) | The default branch was merged at Stage 7 for branch freshness (#8562 F-08): its tip `c2c55a74` was merged into `6d0cf686` as one signed merge commit, `eb042aed`. This merge is in addition to the merges § Delivery Strategy names. It brings in two commits, which change four tracking files of another release; this release changes none of them, and the impact query over the merge returns no page | #8562's Stage 7 Iteration 2 report, sub-task #8880, F-08; § Verification Evidence, Stage 7 — fix pass 3 |
+| DEV-41 | 7 (Phase E) | #8560 F-01's remainder — settling what "produced" means in the data-flow view's matching rule — is deferred; the view's caveat (DEV-35) discloses it meanwhile. `follow-up: none · bug` | #8560's Stage 7 reports, sub-task #8872: F-01 in Pass 1, and F-07 in Iteration 2, which asks for this row; the operator's Phase E rulings |
+| DEV-42 | 7 (Phase E) | The not-evaluated lines that do not yet end with the not-a-clean-result clause (#8557 F-07's residual) are left as they are. The hub's note on #8860 lists five such lines and that sub-task's Iteration 2 report two more: seven at `6d0cf686`. Fix pass 3 prints the element inventory's two through the library's helper (#8556 F-11), and five remain at `fb36bca9`, by tool: the library's register check 2, the library's self-test wrapper 1 and the publication gate tool 2. The register check's form is fixed by its docstring, so changing it is a design call. `follow-up: none` | #8557's Stage 7 Iteration 2 report and the hub's note before it, sub-task #8860, F-07; #8556's Iteration 2 report, sub-task #8856, F-11; § Verification Evidence, Stage 7 — fix pass 3, P-32 |
+| DEV-43 | 7 (Phase E) | #8558 F-06: the citation-read pointer line is carried by the hub's notes on the six sub-tasks whose Stage 7 outputs lacked it (#8852, #8856, #8860, #8868, #8872 and #8876), not inside those outputs. The ruling on the population unit stays deferred (DEV-30) | #8558's Stage 7 Iteration 2 report, sub-task #8864, F-06; the operator's Phase E ruling |
+| DEV-44 | 7 (fix pass 1) | #8558 F-12: during fix pass 1 the hub edited two cards' criteria from "both checks" to three: #8558's criterion 5, which now reads "each of the three checks", and #8562's criterion 6, which now reads "the three catalog CI checks" | #8558's Stage 7 Iteration 2 report, sub-task #8864, F-12; #8562's, sub-task #8880, F-03; the two card bodies as read in fix pass 3 |
 
 ---
 
@@ -800,7 +806,7 @@ P-5  Probe: build-process-catalog.py build --check; and two runs of build --out 
 
 ### Pull-request-head GO evidence (#8561 limb b)
 
-This is the block the Register Contract calls "GO evidence — pull-request head" (sub-task #8874: Change 5 of the first design, which the later revisions leave standing). Every row but the last two was read at the merge commit `35228185`; the last two record the hub's run at `1df4a635`. The pull-request head is one commit above it, and that commit changes this file and nothing else. Stage 7 moves the head and reads the rows again there. The re-run on the merge into `main` goes in this file's Deployment Execution Log at close-out (#8562).
+This is the block the Register Contract calls "GO evidence — pull-request head" (sub-task #8874: Change 5 of the first design, which the later revisions leave standing). Every row but the last two was read at the merge commit `35228185`. Rows 8 and 9 were read at `fb36bca9`, the tool-and-pack commit of Stage 7 fix pass 3, and the hub runs the same two scans over the lines the commit recording them adds, before that commit is pushed. The re-run on the merge into `main` goes in this file's Deployment Execution Log at close-out (#8562).
 
 | Check | Command | Head | Result | Control |
 |---|---|---|---|---|
@@ -811,8 +817,8 @@ This is the block the Register Contract calls "GO evidence — pull-request head
 | Controls register admission | `python3 core/deploy/tools/check-process-catalog.py --registers-only --pattern-arm not-run` | `35228185` | 373 rows, 0 findings | the tracked fixture register pair under the fixture definitions: the failing register → 3 findings, the passing register → 0. Run against the published pack, as recorded before, the failing register drew 5 findings, and the passing register draws 2 of the same gap findings there, so that shape does not tell the planted class apart. The pattern arm is its holder's and was not run |
 | Pages against the ID registry | page file stems against the registry's rows for the same universe | `35228185` | 0 unregistered of 48 | a planted stem → 1 |
 | ID registry cell screen | the same `--registers-only` run | `35228185` | 212 rows, 1,272 cells, 0 findings | fixture form: the validator's self-test, 178 arms, 0 failed |
-| Depersonalization scan over this file and both registers | — | `1df4a635` | Run by the hub at `1df4a635` over the release's 166 paths and its 30,424 added lines: project-name scan 0; identity reading 0 for the name, handle and address; a planted control fired for each; the term and the identity values are not recorded here | — |
-| Name scan over this file and both registers | — | `1df4a635` | Run by the hub at `1df4a635` over the release's 166 paths and its 30,424 added lines: project-name scan 0; identity reading 0 for the name, handle and address; a planted control fired for each; the term and the identity values are not recorded here | — |
+| Depersonalization scan over this file and both registers | an identity reading the hub runs against the repository's commit identity over the release's added lines, changed paths and commit messages | `fb36bca9` | Run by the hub at `fb36bca9` over the release's 169 paths, its 31,062 added lines against the default branch's tip `c2c55a74`, and the release's commit messages, trailers aside: identity reading 0 for the name, handle and address; a planted control fired for each; the identity values are not recorded here. | — |
+| Name scan over this file and both registers | a term-list scan the hub runs from its private lists over the release's added lines and changed paths | `fb36bca9` | Run by the hub at `fb36bca9` over the release's 169 paths and its 31,062 added lines against the default branch's tip `c2c55a74`: project-name scan 0; a planted control fired; the term is not recorded here. | — |
 
 Both register files carry the checksums the Register Contract posts for 373 and 212 rows. The 373 rows and the two held ranges in `pack.json` together reach the highest minted ID the pack records.
 
@@ -902,6 +908,7 @@ P-10 Probe: build-process-catalog.py build --check; and two runs of build --out 
      Result: differing=0 missing=0 orphans=0          Verdict: CLEAN
 P-11 Probe: git diff --name-only 1df4a635 HEAD over the page, view, index, graph and README paths
      Control - sensitivity: the same pathspec over 29c60404..1df4a635 -> 64 paths
+     Control - specificity: NOT TRIGGERED — an exact path listing has no near-miss class
      Result: 0 paths          Verdict: CLEAN
 P-12 Probe: check-doc-links.py over the six changed Markdown files, --require-targets
      Control - sensitivity: a scratch root holding one planted dead link, same flags -> 1 row, broken-cross-ref
@@ -914,6 +921,8 @@ P-13 Probe: path-leak-patterns.sh --scan-file, 20 files
 P-14 Probe: check-commit-close-keywords.py --base ebc217d8 --head HEAD
      Denominator: 39 commits
      Control - sensitivity: the tool's self-test -> exit 1 on its flagged range
+     Control - specificity: not recorded in this pass; P-16 records the same claim with this arm,
+            on the same tool: its self-test, 20 of 20 must-not-flag fixtures silent
      Result: 0 findings          Verdict: CLEAN
 ```
 
@@ -982,6 +991,156 @@ P-19 Probe: build-process-catalog.py impact --paths <this file>
      Result: pages=0          Verdict: CLEAN
 P-20 Probe: git diff --cached --name-only 2a576893, with this file staged
      Control - sensitivity: git diff --name-only b66463db 2a576893 -> 7 paths
+     Control - specificity: NOT TRIGGERED — an exact path listing has no near-miss class
+     Result: 1 path, this file          Verdict: CLEAN
+```
+
+### Stage 7 — fix pass 3
+
+The Engineering commits for the Stage 7 Pass 2 findings (DEV-39): the merge the branch-freshness Blocker needs, one tool-and-pack commit, and this file's record of them. They were made on a branch cut at the pull-request head `6d0cf686`, in a clone with no remote; each is signed, and this pass pushed none of them.
+
+| Commit | What it changes |
+|---|---|
+| `eb042aed` | merges the default branch's tip `c2c55a74` into `6d0cf686` (#8562 F-08; DEV-40): two commits in, which change four tracking files of another release; no conflict |
+| `fb36bca9` | the publication gate tool (#8559 F-11), the element inventory (#8556 F-11) and one sentence of the definitions pack (#8555 F-04). No page, generated catalog file or catalog README changed |
+| the commit that adds this entry | this file: #8561 F-09 and F-10, #8562 F-06, #8560 F-07, #8558 F-06 and F-12, #8557 F-07's residual; DEV-39 to DEV-44; the CIAC-5 token; the Header Status row |
+
+- **GO-evidence rows 8 and 9** record the hub's two scans at `fb36bca9`, each with a planted control that fired.
+- **Self-test arms, before and after the pass.** `check-process-catalog-publication.py` 123 → 125, two arms for the listing-name rule; `build-element-inventory.py` stays at 29, its dash arm now asserting the clause; `build-process-catalog.py` 442, `check-process-catalog.py` 186 and `_process_catalog.py` 129 are unchanged. Each new or changed arm was shown failing on the code before its fix, and no other arm failed: the gate's two arms with the earlier form of the boundary set in memory (2 of 125; the committed form passes 125 of 125 under the same harness), and the inventory's dash arm with its earlier emit restored in the work tree, which was then restored (1 of 29).
+
+**The commands at the merge commit `eb042aed`**, run from the repository root, each Python tool as `python3 -B <path>`. The work tree read clean, ignored files included, before the first and after the last.
+
+| Command | Exit | Closing line |
+|---|---|---|
+| `release/skills/pmo-skill-refiner/scripts/assert_branch_fresh.py`, with the default branch's tip `c2c55a74` as its base, before the merge | 1 | `FAIL`, listing 2 commits not reachable from the head: `c2c55a74` and `cc916420` |
+| the same, after the merge | 0 | `PASS: branch is fresh`, 0 commits unreachable from the head |
+| `core/deploy/tools/build-process-catalog.py build --check` | 0 | `process-catalog generated-output status=pass exit=0 universes=1 pages=48 generated_files=15 differing=0 missing=0 orphans=0 link_findings=0` |
+| `core/deploy/tools/build-process-catalog.py anchors resolve --check` | 0 | `process-catalog citations status=pass exit=0 pages=48 citations=487 current=487 moved=0 gone=0 ambiguous=0 other=0 rewritten=0` |
+| `core/deploy/tools/build-process-catalog.py stale --fail-on any` | 0 | `process-catalog staleness status=pass exit=0 pages=48 sources=432 depicted_changed=0 cited_changed=0 fail_on=any` |
+| `core/deploy/tools/build-process-catalog.py impact --range 6d0cf686..HEAD`, with `eb042aed` as `HEAD` | 0 | `process-catalog impact status=pass exit=0 paths=4 unmatched=0 pages=0 hit_depicts=0 hit_cites=0 hit_controls=0` |
+| `core/deploy/tools/check-process-catalog.py --pattern-arm not-run` | 0 | `process-catalog page-validation status=pass exit=0 universes=1 pages=48 registry_rows=212 register_rows=373 pattern_arm=not-run errors=0 warns=7` |
+| `release/tools/check-adr-numbers.py` | 0 | `ADR-number integrity check: PASS (238 ADRs, contiguous 001..238, no duplicates)` |
+| `bash core/deploy/tools/check-pv7-vocabulary.sh`, after its `--self-test` (5 of 5 cases) | 0 | no finding; 2,354 tracked files enumerated, 814 sanctioned occurrences counted as the control |
+
+**The commands at `fb36bca9`**, the same way, with the commit's three files in the work tree before it was made.
+
+| Command | Exit | Closing line |
+|---|---|---|
+| `core/deploy/tools/build-process-catalog.py impact --paths` over the three files, at `eb042aed` before any edit | 0 | `process-catalog impact status=pass exit=0 paths=3 unmatched=0 pages=0 hit_depicts=0 hit_cites=0 hit_controls=0` |
+| `--self-test` of `build-process-catalog.py`, `check-process-catalog.py`, `_process_catalog.py` and `build-element-inventory.py` | 0, four times | 442, 186, 129 and 29 arms; 0 failed in each |
+| `core/deploy/tools/check-process-catalog-publication.py --self-test` | 0 | `publication self-test status=pass arms=125 failed=0`; 31 of 31 attacks fail on the row named for them, and the clean commit passes 37 rows |
+| `core/deploy/tools/build-element-inventory.py --rev=--all` | 3 | `NOT-EVALUATED: the commit --rev names begins with a dash, which git would read as an option; this is not a clean result` |
+| `core/deploy/tools/build-process-catalog.py build --check` | 0 | `process-catalog generated-output status=pass exit=0 universes=1 pages=48 generated_files=15 differing=0 missing=0 orphans=0 link_findings=0` |
+| `core/deploy/tools/check-process-catalog.py --pattern-arm not-run` | 0 | `process-catalog page-validation status=pass exit=0 universes=1 pages=48 registry_rows=212 register_rows=373 pattern_arm=not-run errors=0 warns=7` |
+| `core/deploy/tools/check-process-catalog.py --registers-only --pattern-arm not-run` | 0 | `process-catalog registers status=pass exit=0 register_rows=373 registry_rows=212 pattern_arm=not-run findings=0` |
+| `core/deploy/tools/build-process-catalog.py impact --paths <file>`, once for each of the three files | 0, three times | `paths=1 unmatched=0 pages=0` each |
+| `bash core/deploy/tools/check-pv7-vocabulary.sh`, after its `--self-test` (5 of 5 cases) | 0 | no finding; 2,354 tracked files enumerated, 813 sanctioned occurrences counted as the control — one fewer than at the merge commit, because the inventory's two literal not-evaluated tokens now come from the library's helper and its dash arm adds one |
+| `bash core/deploy/tools/path-leak-patterns.sh --scan-file`, over each of the three files | 0, three times | no row |
+| `core/deploy/tools/check-commit-close-keywords.py --base ebc217d8 --head HEAD`, with `fb36bca9` as `HEAD` | 0 | `commits examined: 47`, `findings: 0`, `verdict: CLEAN` |
+
+No command above says that a page, a generated file or a source must change.
+
+**Checks on this file, before its commit**, run the same way, with `fb36bca9` checked out and this file's edits in the work tree.
+
+| Command | Exit | Closing line |
+|---|---|---|
+| `release/tools/verify-release-plan.sh --ciac-lint` on this file | 0 | `CIAC-LINT-SUMMARY declared=5 parsed=5 clean=2 declared-deferral=3 flagged=0` |
+| `release/tools/verify-release-plan.sh` on this file, with the Stage-4 comment supplied, the release range given as `c2c55a74..fb36bca9` (the merge base since this pass's merge), and the release-level table out of the file for the length of the run; the file was restored equal by digest | 0 | 113 records: provenance-survival 4 PASS as printed, the delta among them, which this platform cannot measure (DEV-33; the run printed the three awk warnings); 55 per-issue rows and 3 cross-issue criteria SKIP as declared; #8556 AC-7 UNRUNNABLE, its command reading 0 as expected; CIAC-2 and CIAC-5 PASS; fcm-delivery 47 PASS, with the coverage record SKIP at `declared=65 interpreted=64 obligations=47 uninterpreted=1 pathless=0`. No FAIL and no ERROR |
+| `bash core/deploy/tools/path-leak-patterns.sh --scan-file` over this file | 0 | no row |
+| `bash core/deploy/tools/check-pv7-vocabulary.sh`, after its `--self-test` (5 of 5 cases) | 0 | no finding; 2,354 tracked files enumerated, 813 sanctioned occurrences counted as the control |
+| `core/deploy/tools/build-process-catalog.py impact --paths release/releases/plans/engineering-harness-pages-published_RELEASE_PLAN.md` | 0 | `process-catalog impact status=pass exit=0 paths=1 unmatched=0 pages=0 hit_depicts=0 hit_cites=0 hit_controls=0` |
+| `git diff --cached --name-only fb36bca9`, with this file staged | 0 | this file's path, and no other |
+
+Two commands read this file's commit itself, so they ran after it and are not recorded here: the commit-message check from `ebc217d8` to the new head, and the impact query over `fb36bca9..HEAD`. Their exits and closing lines are returned with the commit.
+
+**Probe records for the zeros above** (`core/disciplines/review-discipline-principles.md` § 8, PV-0 to PV-7). Every planted input is a copy kept outside the repository, except a change made in the work tree, which the record names and which was undone and checked equal afterwards.
+
+```
+P-21 Probe: assert_branch_fresh.py, with the default branch's tip c2c55a74 as its base
+     Denominator: the default branch's commits not reachable from the head
+     Control - sensitivity: the same command before the merge -> 2 commits listed, exit 1
+     Control - specificity: NOT TRIGGERED — a reachability listing has no near-miss class
+     Result: 0 commits          Verdict: CLEAN
+P-22 Probe: build-process-catalog.py impact --range 6d0cf686..HEAD, with eb042aed as HEAD
+     Denominator: 4 changed paths, read against 48 pages
+     Control - sensitivity: impact --paths core/deploy/tools/check-doc-links.py -> pages=1
+     Control - specificity: impact --paths core/process-catalog/README.md -> pages=0
+     Result: pages=0          Verdict: CLEAN
+P-23 Probe: build-process-catalog.py stale --fail-on any
+     Denominator: 48 pages, 432 sources
+     Control - sensitivity: a copy of one published page with its verification commit set back to
+            the release base -> depicted_changed=1 cited_changed=2, exit 1
+     Control - specificity: the same copy unchanged -> 0 and 0 over its 6 sources, exit 0
+     Result: depicted_changed=0 cited_changed=0          Verdict: CLEAN
+P-24 Probe: build-process-catalog.py anchors resolve --check
+     Denominator: 487 citations on 48 pages
+     Control - sensitivity: the copy with one cited line number moved by three -> moved=1, exit 1
+     Control - specificity: the copy unchanged -> 9 of 9 current, exit 0
+     Result: current=487 of 487          Verdict: CLEAN
+P-25 Probe: check-process-catalog.py --pattern-arm not-run
+     Denominator: 48 pages; 373 and 212 register rows
+     Control - sensitivity: the copy with its verdict line removed -> FM002 and FM012, once each
+     Control - specificity: the copy unchanged -> neither; read from outside the catalog it carries
+            6 link errors of its own, equal in both arms
+     Result: errors=0          Verdict: CLEAN for the planted class; the pattern arm was declared not run
+P-26 Probe: build-process-catalog.py build --check; and two runs of build --out <folder> under two hash
+            seeds, compared file by file with each other and with the committed files
+     Denominator: 15 generated files
+     Control - sensitivity: one byte changed in one file of the second build -> 1 file differs
+     Control - specificity: the two unchanged builds, and the first against the committed files -> 0 differ
+     Result: differing=0 missing=0 orphans=0          Verdict: CLEAN
+P-27 Probe: check-pv7-vocabulary.sh, at eb042aed and at fb36bca9
+     Denominator: 2,354 tracked files
+     Control - sensitivity: the gate's --self-test, 2 of 2 must-flag cases caught; 814 and 813
+            sanctioned occurrences counted in the two runs
+     Control - specificity: the same self-test, 2 of 2 must-not-flag cases clean
+     Result: 0 unsanctioned          Verdict: CLEAN
+P-28 Probe: build-process-catalog.py impact --paths, once for each of fb36bca9's three files and once
+            for this file
+     Denominator: 1 path each, read against 48 pages
+     Control - sensitivity: impact --paths core/deploy/tools/check-doc-links.py -> pages=1
+     Control - specificity: impact --paths core/process-catalog/README.md -> pages=0
+     Result: pages=0 each          Verdict: CLEAN
+P-29 Probe: check-process-catalog.py --registers-only --pattern-arm not-run
+     Denominator: 373 and 212 register rows; one pack
+     Control - sensitivity: the tracked fixture register pair, read under the fixture definitions:
+            the failing register -> 3 findings, exit 1. Pack parity in fixture form: the validator's
+            self-test, 186 arms with its PCK001 and PCK002 arms among them, 0 failed
+     Control - specificity: the passing register of the same pair -> 0 findings, exit 0
+     Result: findings=0          Verdict: CLEAN; the pattern arm was declared not run
+P-30 Probe: path-leak-patterns.sh --scan-file, over fb36bca9's three files and over this file
+     Control - sensitivity: a file with one planted home-directory path -> exit 1, that row
+     Control - specificity: a file of repository-relative paths only -> exit 0
+     Result: no row          Verdict: CLEAN
+P-31 Probe: check-commit-close-keywords.py --base ebc217d8 --head HEAD, with fb36bca9 as HEAD
+     Denominator: 47 commits
+     Control - sensitivity: the tool's self-test -> 14 of 14 must-flag fixtures fire; exit 1 on its
+            flagged range
+     Control - specificity: the same self-test -> 20 of 20 must-not-flag fixtures silent
+     Result: 0 findings          Verdict: CLEAN
+P-32 Probe: the five catalog tool files at fb36bca9, searched for a not-evaluated stop line printed
+            as a literal, each hit read and classed
+     Denominator: 5 files; 10 hits, 5 of them such stop lines without the clause
+     Control - sensitivity: the same search at 6d0cf686 -> 7 such lines, the element inventory's
+            two among them
+     Control - specificity: the other 5 hits, the helper itself and four self-test arms -> read
+            and not counted
+     Result: 5 lines (DEV-42)          Verdict: as DEV-42 records
+P-33 Probe: verify-release-plan.sh --ciac-lint, and the full verifier as run above
+     Denominator: 5 cross-issue criteria; 113 records
+     Control - sensitivity: this file with CIAC-2's method stripped of its input file, a change made
+            in the work tree and undone, the file's digest equal before and after -> the lint flags
+            CIAC-2, flagged=1, exit 3; the full verifier on the same text, its release-level table
+            also out -> CIAC-2 ERROR, exit 3
+     Control - specificity: CIAC-5 in the same two runs, a method that names its input file ->
+            CLEAN in the lint and PASS in the verifier
+     Result: flagged=0; 0 FAIL, 0 ERROR          Verdict: CLEAN
+P-34 Probe: this file's CIAC-5 line, read after the token fix; and check-pv7-vocabulary.sh
+     Control - sensitivity: the same line at fb36bca9 -> the token's space-separated spelling
+     Result: the line spells the token NOT-EVALUATED, its sanctioned hyphenated form; the gate
+            reads 0 unsanctioned          Verdict: CLEAN
+P-35 Probe: git diff --cached --name-only fb36bca9, with this file staged
+     Control - sensitivity: git diff --name-only eb042aed fb36bca9 -> 3 paths
      Control - specificity: NOT TRIGGERED — an exact path listing has no near-miss class
      Result: 1 path, this file          Verdict: CLEAN
 ```
