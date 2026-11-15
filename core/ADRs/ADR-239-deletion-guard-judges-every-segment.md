@@ -1,6 +1,6 @@
 ---
 title: ADR-239 — The deletion guard judges every segment of a command line, keeps no exit that allows on a match, and refuses a deletion or Trash call that does not name all its targets on its line
-status: Proposed
+status: Accepted — operator-ratified at the deletion-guard-judges-every-segment-and-target Stage 13 Close ratification beat (Phase A13), 2026-11-15
 date: 2026-11-13
 release: deletion-guard-judges-every-segment-and-target
 deciders: "Workspace owner (Stage-4 plan gate; Collective Review scope lock; Stage-13 ratification); design chosen at Stage 5 Solutioning against a scored candidate matrix and amended at the scope lock"
@@ -18,7 +18,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering for the `deletion-guard-judges-every-segment-and-target` release, per the Stage-6 ADR-authoring precedent. Ratification is recorded in this file's frontmatter `status:` field at Stage 13, which is where it must be verified, and is never inferred from milestone closure.
+**Accepted** — operator-ratified at the `deletion-guard-judges-every-segment-and-target` Stage 13 Close ratification beat (Phase A13), 2026-11-15, as one record of a decision rendered per record. Authored at Stage 6 Engineering for this release as `Proposed`, per the Stage-6 ADR-authoring precedent. The ratification is recorded in this file's frontmatter `status:` field, which is where it must be verified, and is never inferred from milestone closure.
 
 **Numbering provenance.** Claimed as **238** against an anchor of **237** on `origin/main`, read from `release/tools/renumber-adr.py --detect` at this record's authoring commit. A branch claim is detection-only and never binds; a sibling release in flight may claim the same slot, and should the mainline claim it first, the renumbering tool moves this record at merge time and appends one provenance note per hop. Citations from other branch-authored artifacts use the slug token `ADR-239`, which carries no number shape and resolves at the claim.
 
