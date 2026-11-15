@@ -3074,6 +3074,33 @@ def open_summary(path) -> None:
             raise Usage("--summary-file %s cannot be opened for appending (%s)" % (path, type(e).__name__))
 
 
+def open_output(option: str, path, folder: bool = False) -> None:
+    """Check an output path before anything is examined or written, and create nothing. A file that exists is opened
+    for appending, which changes no byte of it; a folder that exists must be writable; a path that does not exist yet
+    needs its nearest existing folder writable, because the folders on the way are made when the output is written. A
+    path that cannot be written is a usage error naming the option, as an unopenable --summary-file is, so no page is
+    rewritten ahead of the stop and no census is printed. A path of None means the command writes nothing through
+    the option."""
+    if path is None:
+        return
+    try:
+        target = Path(path).resolve()
+        nearest = target                                   # the nearest part of the path that exists
+        while not nearest.exists() and nearest.parent != nearest:
+            nearest = nearest.parent
+        if nearest == target and not folder:
+            if target.is_dir():
+                raise IsADirectoryError(path)
+            with open(target, "a", encoding="utf-8", newline="\n"):
+                pass
+        elif not nearest.is_dir():
+            raise NotADirectoryError(path)
+        elif not os.access(str(nearest), os.W_OK | os.X_OK):
+            raise PermissionError(path)
+    except (OSError, RuntimeError, ValueError) as e:
+        raise Usage("%s %s cannot be written (%s)" % (option, path, type(e).__name__))
+
+
 def write_summary(path, gate: str, status: str, examined: str, body: list) -> None:
     """Append one block to a summary file; do nothing when no path was given. The option changes
     no output stream and no exit; open_summary has already refused a path that cannot be opened."""

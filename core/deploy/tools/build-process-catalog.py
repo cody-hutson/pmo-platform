@@ -1313,6 +1313,9 @@ def main(argv=None) -> int:
     body = []
     try:
         PC.open_summary(summary)
+        PC.open_output("--out", getattr(a, "out", None) or None, folder=True)    # an empty --out writes the catalog
+        PC.open_output("--worklist", getattr(a, "worklist", None) or None)       # an empty --worklist writes none
+        PC.open_output("--to", getattr(a, "to", None))                           # an empty --to is the current folder
         code, pairs, body = handler(a, PC.resolve_roots(a))
     except PC.Usage as e:
         print("usage error: %s" % e, file=sys.stderr)
@@ -1782,6 +1785,28 @@ def self_test() -> int:
         arms.check("convert: a page with no bare fragment is left byte-identical (the discrimination arm)",
                    call(A + ["anchors", "convert", str(anchored_page)])[0] == 0 and anchored_page.read_bytes() == anchored_before)
         subject.write_text(subject_text, encoding="utf-8")
+
+        # -- an output path that cannot be written stops the run before anything is examined or written. The plant is
+        #    a file where a folder is needed, which no permission bit or user can make writable --
+        blocked = tmp / "blocked-output"
+        blocked.write_text("a file, not a folder\n", encoding="utf-8")
+        blocked_bytes = blocked.read_bytes()
+
+        def refused(args, option):
+            """A usage exit naming the option: exit 2, no census, no traceback, and the blocking file unchanged."""
+            code, lines, err = cli(args)
+            return (code == 2 and not lines and ("usage error: %s " % option) in err and "cannot be written" in err
+                    and "Traceback" not in err and blocked.read_bytes() == blocked_bytes), (code, lines[-2:], err[-300:])
+
+        pages_before = tree(ax.catalog)
+        ok, detail = refused(A + ["anchors", "convert", str(subject), "--refused", "demote",
+                                  "--worklist", str(blocked / "worklist.tsv")], "--worklist")
+        pages_after = tree(ax.catalog)
+        subject.write_text(subject_text, encoding="utf-8")       # a run that rewrote the page leaves no later arm its bytes
+        arms.check("output paths: an anchors convert --worklist that cannot be written is a usage exit naming the option, "
+                   "before any page is read, with no census and every page byte-identical",
+                   ok and pages_after == pages_before,
+                   (detail, sorted(k for k in set(pages_before) | set(pages_after) if pages_before.get(k) != pages_after.get(k))))
         worklist = tmp / "worklist.tsv"
         code, lines, c = convert("--refused", "demote", "--worklist", str(worklist))
         demoted = subject.read_text(encoding="utf-8")
@@ -1961,6 +1986,16 @@ def self_test() -> int:
         code, lines = call(C + ["build", "--check", "--summary-file", str(tmp / "no-such-folder" / "generated.md")])
         arms.check("summary file: a path that cannot be opened is a usage exit before anything is examined, with no census",
                    code == 2 and not lines, (code, lines))
+        ok, detail = refused(C + ["build", "--out", str(blocked)], "--out")
+        arms.check("output paths: a build --out that names a file is a usage exit naming the option, before anything is "
+                   "examined, with no census and nothing written", ok and blocked.is_file(), detail)
+        held = tmp / "held-output"                               # a folder where a file is needed
+        held.mkdir()
+        ok, detail = refused(C + ["data-flow-unmatched", "--to", str(held)], "--to")
+        ok_empty, detail_empty = refused(C + ["data-flow-unmatched", "--to", ""], "--to")    # empty: the current folder
+        arms.check("output paths: a data-flow-unmatched --to that names a folder, or is empty, is a usage exit naming the "
+                   "option, before anything is examined, with no census and nothing written",
+                   ok and ok_empty and held.is_dir() and not any(held.iterdir()), (detail, detail_empty))
         for name, target in (("the pack", ex.definitions / PC.default_part("pack")),
                              ("the ID registry", ex.definitions / PC.default_part("registry")),
                              ("the kinds table", ex.definitions / PC.default_part("kinds")),

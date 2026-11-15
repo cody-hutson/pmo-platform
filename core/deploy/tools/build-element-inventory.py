@@ -103,6 +103,7 @@ def inventory(paths: list, kinds: list) -> list:
 def run(a) -> int:
     pairs = [(k, None) for k in CENSUS_KEYS]
     try:
+        PC.open_output("--out", a.out or None)          # before anything is examined; an empty --out prints the rows
         roots = PC.resolve_roots(a)
         kinds = PC.load_kinds(roots.kinds)
         paths = tracked_paths(roots.repo, a.rev)
@@ -121,6 +122,9 @@ def run(a) -> int:
                 sys.stdout.write(line.encode("utf-8", "surrogateescape").decode("utf-8", "replace") + "\n")
         pairs = [("paths", len(rows)), ("kinds", len(counts)), ("other", counts.get("other", 0))]
         code = PC.EXIT_CLEAN
+    except PC.Usage as e:
+        print("usage error: %s" % e, file=sys.stderr)
+        return PC.EXIT_USAGE                            # a usage exit prints no census: nothing ran
     except PC.NotEvaluated as e:
         print(PC.not_evaluated(e))
         code = PC.EXIT_NOT_EVALUATED
@@ -208,6 +212,14 @@ def self_test() -> int:
         code, lines_out, _err = cli(base + ["--out", str(target)])
         arms.check("--out: the rows go to the file and standard output carries the census alone",
                    code == 0 and len(lines_out) == 1 and target.read_text(encoding="utf-8", errors="surrogateescape").rstrip("\n").split("\n") == lines[:-1])
+        blocked = tmp / "blocked-output"         # a file where a folder is needed, which no permission bit or user can write
+        blocked.write_text("a file, not a folder\n", encoding="utf-8")
+        code, lines_out, err = cli(base + ["--out", str(blocked / "inventory.tsv")])
+        arms.check("--out: a FILE that cannot be written is a usage exit naming the option, before anything is examined, "
+                   "with no census, no traceback and nothing written",
+                   code == 2 and not lines_out and "usage error: --out " in err and "cannot be written" in err
+                   and "Traceback" not in err and blocked.read_text(encoding="utf-8") == "a file, not a folder\n",
+                   (code, lines_out, err[-300:]))
         arms.check("clean checkout: the runs wrote nothing under the repository",
                    PC.git(fx.repo, "status", "--porcelain", "--untracked-files=all", "--ignored") == b"")
         code, lines_bad, _err = cli(base + ["--rev", "no-such-commit"])
