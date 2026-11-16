@@ -3,7 +3,7 @@ title: Release Plan — script-guard-reads-every-token-as-the-shell-does (BLOCK-
 type: release-plan
 plan_type: release
 status: ACTIVE
-release: versioned (bump-class minor; provisional display v5.08; the concrete number binds at the Stage-12 atomic claim)
+release: versioned (bump-class minor; provisional display v5.10; the concrete number binds at the Stage-12 atomic claim)
 milestone: script-guard-reads-every-token-as-the-shell-does
 release_class: novel
 reversibility: MODERATE / Confidence MEDIUM — one branch and one merge of a security hook; reverting the merge restores the hook, its suite, corpus and fragments, and the deployed copy is restored by the hook carrier's refresh
@@ -12,7 +12,7 @@ reversibility: MODERATE / Confidence MEDIUM — one branch and one merge of a se
 
 **Milestone:** `script-guard-reads-every-token-as-the-shell-does` (milestone 439; epic #7932). The Stage-4 planning sub-task **#8898** carries the approved plan (`#8898 comment 6859275987`).
 
-**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v5.08`**. The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-keyed until then.
+**Version identity:** **versioned** — bump-class **`minor`**, provisional display **`v5.10`**. The concrete number binds only at the Stage-12 atomic claim (ADR-092): the branch and this file stay slug-keyed until then.
 
 **Topology:** D-C **SINGLE** — one release branch, `release/script-guard-reads-every-token-as-the-shell-does`, one pull request opened in **draft** at Stage 6, one merge into `main`.
 
