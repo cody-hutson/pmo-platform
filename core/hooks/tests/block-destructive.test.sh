@@ -10846,6 +10846,17 @@ sv_arm "SPLITV-near-03: QUOTED-01's class ahead of a command that runs no script
 sv_arm "SPLITV-RESID-01 (S2): a quoted value carrying its own command word and an unlisted script" SV21 a
 sv_arm "SPLITV-RESID-02 (S4): a separator inside a quoted options-only value" SV22 a
 sv_arm "SPLITV-RESID-03 (S4): env's own quoting inside the decoded value, hiding an option's need for the following token" SV23 a
+# The precision cells P-1 and P-2 (D-8491-PrecAccept, Stage 8 QF-01): each takes its plain form's verdict, recorded at
+# the direct-execution arm's phase for a slash-bearing script and allowed for a PATH-resolved word. The reverse mutant
+# svread reads each as the pre-fix hook did (refused), which is the red-before evidence; the plain forms do not move.
+sv_arm "SPLITV-PREC-01: P-1, a path inside an option's argument, before a slash-bearing script, takes its plain form's verdict" SV27 W:exec svread B
+sv_arm "SPLITV-PREC-02: P-1, the same before a PATH-resolved word, is allowed as its plain form is" SV28 a svread B
+sv_arm "SPLITV-PREC-03: P-2, a token an option inside the value takes, before a slash-bearing script, takes its plain form's verdict" SV29 W:exec svread B
+sv_arm "SPLITV-PREC-04: P-2, the same before a PATH-resolved word, is allowed as its plain form is" SV30 a svread B
+sv_arm "SPLITV-PREC-ctl-01: P-1's plain form, slash-bearing" SV31 W:exec
+sv_arm "SPLITV-PREC-ctl-02: P-1's plain form, PATH-resolved" SV32 a
+sv_arm "SPLITV-PREC-ctl-03: P-2's plain form, slash-bearing" SV33 W:exec
+sv_arm "SPLITV-PREC-ctl-04: P-2's plain form, PATH-resolved" SV34 a
 sv_arm "SPLITV-RESID-04 (J0): a later piece whose stray quote hides an option's need for the following token" SV25 a
 
 # --- SPLITV-TWIN: the canonicalizer's twin (core/hooks/lib/command-position.awk, T1 with T1b) ---
