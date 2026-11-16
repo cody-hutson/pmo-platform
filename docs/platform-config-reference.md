@@ -11,7 +11,7 @@
 - **Audience:** Operators tuning platform behavior; anyone asking "what config knobs does the platform have, and where do I set them?"
 - **Two surfaces, one resolver.** Platform configuration lives in two files split by concern (per [ADR-022](../core/ADRs/ADR-022-platform-config-vs-operator-toml-split.md)):
   - **`operator.toml`** — operator-ENVIRONMENT / IDENTITY: identity, paths, host-adapter selectors, methodology default. Security-sensitive (`chmod 600`).
-  - **`platform-config.toml`** — platform-BEHAVIOR: bundling frame, release-size target, release-class default, relationship-mapping tuning, and the behavior categories added since (calibration accrual, failure-mode detector thresholds, progressive-rollout logging, spoke-runtime model posture, security-hook master activation, git-native release-automation toggles). Freely tunable; no PII. Section 4 below is the current catalog.
+  - **`platform-config.toml`** — platform-BEHAVIOR: bundling frame, release-size target, release-class default, relationship-mapping tuning, and the behavior categories added since (calibration accrual, failure-mode detector thresholds, progressive-rollout logging, spoke-runtime model posture, security-hook master activation, git-native release-automation toggles, the behavioral-regression floor, the release cost unit's calibration). Freely tunable; no PII. Section 4 below is the current catalog.
 - **How a value is resolved.** Both surfaces feed one **5-rung resolver** (global default → portfolio → program → project → individual; most-specific wins). The full resolver, the 3-level fallback, and the two-track update governance are in [`core/governance/OPERATIONS.md § Platform-Config Resolution Protocol`](../core/governance/OPERATIONS.md).
 - **Two ways to change config:**
   - **Track A (default / schema change):** edit a Layer-1 default or the schema → a governed PR (this is a governance file).
@@ -192,6 +192,31 @@ The pass-rate floor the behavioural-regression corpus must hold. This is the **s
 **Why the default is `1.00` rather than the `0.90` of the other rate floor.** A regression corpus's members are must-hold assertions — any failing scenario *is* a regression, by the corpus's own definition — so a sub-1.0 floor is a standing regression budget you may draw on forever while staying green. A genuinely known-open defect is carried instead as an expected-FAIL assertion in the corpus, which holds the rate at the floor while keeping the exception named in every run and retirable when it is fixed.
 
 **How the value reaches the gate.** The workflow reads this field and passes it to the scenario runner as `--fail-under`; the runner performs the comparison and sets its exit code; the gate consumes **only** that exit code and never parses the report. A consumer that cannot resolve the field must fail closed — read as zero, a floor satisfies every comparison and the gate would report green forever.
+
+### `[cost_unit]`
+
+The calibrated values of the release cost unit — weekly points of one account's shared all-models weekly allowance, counted once per API response within a transcript file and reported as a (low, high) pair. This is the **single numeric home** for those values: what they *mean*, and when one may move, lives in the cost-unit decision record (`release/ADRs/`, slug `release-graph-cost-unit`), which names them by role and never restates their magnitude. Every tool that states a cost in weekly points gets it from the FinOps measurement layer's single conversion, which reads this section.
+
+| Field | What it tunes | Allowed values | Default | Calibration |
+|---|---|---|---|---|
+| `cache_read_weight_low` | the cache-read weight at the low end of its bracket, where the meter readings point | a decimal > 0, below the high end | `0.0075` | CALIBRATE-AFTER-3 |
+| `cache_read_weight_high` | the cache-read weight at the high end, the API list-price ratio | a decimal above the low end, at most `1.0` | `0.10` | CALIBRATE-AFTER-3 |
+| `tokens_per_weekly_point_low` | weighted tokens per weekly point (`K`) at the low end | a positive integer | `3940000` | CALIBRATE-AFTER-3 |
+| `tokens_per_weekly_point_high` | `K` at the high end | a positive integer | `12390000` | CALIBRATE-AFTER-3 |
+| `cache_write_5m_weight` | the price-relative weight of a five-minute cache write (and of an untiered one) | a decimal > 0 | `1.25` | CALIBRATE-AFTER-3 (an assumption, not fitted) |
+| `cache_write_1h_weight` | the price-relative weight of a one-hour cache write | a decimal > 0 | `2.0` | CALIBRATE-AFTER-3 (an assumption, not fitted) |
+| `output_weight` | the price-relative weight of an output token, thinking included | a decimal > 0 | `5.0` | CALIBRATE-AFTER-3 (an assumption, not fitted) |
+| `calibration_model` | the model the current `K` values were fitted on, which every draw multiplier is relative to | a model id, or empty | `""` | set by a calibration revisit |
+| `model_draw_multipliers` | per model: its draw per weighted token relative to the calibration model's | an inline table, quoted model id → decimal > 0 | `{}` | set from a recorded probe |
+| `model_weekly_windows` | per model: the weekly window or windows its usage moves — `all-models` and/or `model-specific` | an inline table, quoted model id → comma-separated string | `{}` | set from a recorded probe |
+
+**Every figure is a pair.** The low end uses the low weight with the low `K`, the high end the high weight with the high `K`; a single number, a midpoint, or one end's weight with the other's `K` is not a figure in this unit.
+
+**An absent per-model entry means unprobed, not free.** A model with no entry in the two tables uses the shared values above and its figures carry the unprobed label. While `calibration_model` is empty — the shipped state, because the authoring calibration recorded no per-model split — every model's figures carry that label.
+
+**Where you can set these: 2 rungs, not 5.** The calibration is per plan and per account, so the values resolve from the global template (a governed Track A change) or from your individual `~/.config/pmo-platform/platform-config.toml` (Track B) — the place to put your own calibration if your plan differs. The portfolio, program and project rungs do not apply.
+
+**Unresolvable means UNRESOLVED.** A consumer that cannot resolve one of the seven numeric values here (both ends' cache-read weight and `K`, and the three price-relative weights) yields an unresolved figure that names the field — never zero and never a built-in constant, because a zero `K` divides by zero and a zero weight erases a token type from every figure. The calibration model and the per-model axis are optional by design: absent reads as "none named" / "none probed", which is their documented meaning, not a substituted value.
 
 ## 5. Consumer examples (how the platform reads these)
 

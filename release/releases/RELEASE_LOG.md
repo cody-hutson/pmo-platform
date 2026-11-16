@@ -270,6 +270,129 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.06 | sequencing-layer-foundation | #7177, #6397, #6398 | #8811 | `b02fa16a90a73df993b7fd31a1eb118b0c19bf34` | `v5.06` | VERIFIED | 2026-11-08 |
 | v5.07 | fs-boundary-refuses-parameter-transformation | #8322 | #8832 | `2ce25400e196176b5f2ab5fb7381b471059e6591` | `v5.07` | VERIFIED | 2026-11-09 |
 | never-invoked-specialists-dispositioned (version-less) | never-invoked-specialists-dispositioned | #8452 | #8994 | `240d3c2ed44e2330d3882de56fbdbd21bc8b4418` | (none) | DEPLOYED | 2026-11-14 |
+| v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
+| v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | DEPLOYED | 2026-11-15 |
+
+#### Deployment Log v5.09
+**Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped deploy of the FinOps skill are complete.** Each was read back by content. The plan's two `./update.sh` manifest rows are the operator's (PA-061) and are still pending. Paths are given as placeholders.
+
+- **(1) The merge.** It carries the release's 47 changed paths to `main` (14 added, 33 modified; +6677 / −115 lines and one binary), measured at the merge commit `1c2130c5` against its first parent `219f2a99`:
+  - the FinOps usage-extractor skill: `SKILL.md`, its reporting-contract reference, five scripts (two of them new, `convert-usage.sh` and `rank-command-templates.sh`) and fourteen test-fixture files;
+  - its package `packages/finops-usage-extractor.skill` and the content sidecar;
+  - the cost-unit ADR-240, the release ADR index and the core ADR renumber log;
+  - the usage-store and platform-config schemas, the platform-config and operator templates, the operator schema and the script-execution allowlist;
+  - `core/deploy/lib-instance-path.sh` and its test;
+  - five standards, two docs, `core/README.md`, the release-velocity standard and tool, the release-tooling smoke workflow and `.gitignore`;
+  - this release's plan.
+- **(2) Phase B4 ran once.** It ran from the Stage-12 session worktree detached at `origin/main`, which is the merge commit (`merge-base --is-ancestor` exit 0).
+  - **Command:** `bash core/deploy/deploy.sh --deploy --release release-usage-measured-right finops-usage-extractor`. It exited 0 and reported `Deployed: 1 skills, 1 packages, 0 harness artifacts, 9 rules-mirror files`.
+  - **B4.5 record:**
+    - **Join key:** `release-usage-measured-right`, read back non-empty, with 158 rows under it before the deploy and 0 of them `deployment-status`. Control: a deployed release reads 1.
+    - **Targets:** `finops-usage-extractor`. The B4.3 derivation found 23 of the merge's 47 paths under a skill root or `packages/`, giving 1 candidate, a member of the 55-name deploy roster, and no non-members. Sensitivity: planted `release/skills/release-hub/SKILL.md` and `packages/comms-writer.skill` paths derive both names.
+    - **Deploy mode:** the run printed no `Deploy mode: user-local only` line, so both halves ran: the skill went to the Cowork install and the user-local mirror, and the package to the Cowork install.
+    - **Rules mirror:** re-laid at `<deploy-root>/.claude/rules/`, 9 files written.
+  - **Rows written:** under the slug, `deployment-status` went from 0 to 3, all outcome `resolved` (`result:SUCCESS`): one `deploy-rules-mirror`, and one `deploy-skill` and one `deploy-package` for `finops-usage-extractor`.
+  - **Read back by content:**
+    - the user-local mirror `<deploy-root>/.claude/skills/finops-usage-extractor/` holds 51 files, all byte-identical to source;
+    - the Cowork install holds `SKILL.md` and `references/reporting-contract.md`, both byte-identical to source. Scripts and fixtures are not copied there for a non-supplementary skill, by design;
+    - the installed package's SHA-256 equals the merged `packages/finops-usage-extractor.skill`.
+- **(3) Owed by the operator and pending (PA-061).** The plan's Operational Deployment Manifest resolves two rows to `./update.sh`, which this deploy does not source:
+  - `core/config/allowlists/script-execution-allowlist.txt`, a composition surface. A full `./update.sh` regenerates the deployed hook-tier allowlist's managed section; until it runs, the script-execution hook refuses the two new FinOps scripts in local sessions.
+  - `core/deploy/lib-instance-path.sh`, a co-deployed hook-tier primitive. A full `./update.sh` (its Phase 5c hook refresh) refreshes the hook-tier copy; deploy Check 79 reports that copy drifted until then.
+  - The hub verifies the hook-tier copies before the Stage-13 cost-row write (PA-061).
+
+**Mechanism:** a git merge commit and the atomic version claim; the release-stamped deploy (S-2 direct copy) of the FinOps skill and its package; and, pending, the operator's `./update.sh`.
+- **The merge.** PR #8821 merged to `main` at `1c2130c500cd2447e9c5672650f2118647b8f2c3` (parents `219f2a99` / `73493119`) by `gh pr merge --merge --match-head-commit`, with no `--admin`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit. `origin/main` is the merge commit, and the host reads it `verified=true, reason=valid`. The repository's `delete_branch_on_merge` setting removed the release branch from the remote.
+- **The pre-merge state.** The merged head `73493119` carries the Phase A.5.7e citation stamp and the ADR-239 → ADR-240 renumber. On it, `--stamp --check` read 0 residual tokens and `--detect` read ADR-240 BINDS at anchor 239.
+- **The version claim.** `claim-version.sh` claimed **`v5.09`** for bump class `minor` by atomic ref-CAS, with no collision reported. That equals both dry runs: A.5.6 on the head, and the read immediately before the claim.
+  - `--stamp-slug`, derived from the PR's head ref, and `--stamp-branch` were passed explicitly, naming this branch, which was cut at the merge commit before the claim.
+  - `--max-attempts 1` was added, so a lost compare-and-swap would have stopped the claim rather than recomputed past `v5.09`.
+  - The tag object `104c4f2a` is signed and annotated and peels to the merge commit on `origin`; `git tag -v` reads a good ED25519 signature.
+- **The claim-time stamp.** The manifest was plan-only (0 packages staled). The stamp commit `d74affbf` (signed) renamed the plan to `release/releases/plans/v5/v5.09_RELEASE_PLAN.md` and resolved its 1 placeholder, leaving 0.
+- **The version-binding row (B3.1)** was appended to the event log under the slug, carrying `d:version-claim; claimed:v5.09; prov:v5.02`. The event-record integrity cutover was already bound, so B3.2 was a no-op (`--assert-bound` exit 0).
+
+**Timestamp:** 2026-11-15 21:36 UTC (Sunday). The `Date` cell is the merge event: the merge's `mergedAt`, `2026-11-15T21:36:38Z`. Sequence:
+- the re-read of the head, both check rosters (24 of 24 required and 57 of 57 `pass`) and `main` (`219f2a99`) at `21:36:22Z`;
+- the merge at `21:36:38Z`;
+- the Phase B1.1 sweep;
+- the tag at `21:42:32Z` and the stamp commit at `21:42:33Z`;
+- the version-binding row at `21:43:58Z`;
+- the stamped deploy's rows at `21:45:02Z`.
+
+The day of the week is computed from the date.
+**Cycle-Time:** 15h49m — (T_GO=2026-11-15T05:55:59Z; T_DEPLOY=2026-11-15T21:45:02Z; mechanism: compute-cycle-time.sh)
+**Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped FinOps deploy are complete and read back. The manifest's two `./update.sh` rows, the script-execution allowlist's managed section and the hook-tier copy of `core/deploy/lib-instance-path.sh`, are owed by the operator under PA-061 and are pending. Neither is a deploy failure.
+
+#### Deployment Log v5.08
+**Files deployed:** **Three deployments, all complete: the merge, the hook-tier publish and the release-stamped rules-mirror deploy.** Each was verified by content, not by a script's exit status. Paths are given as placeholders.
+
+- **(1) The merge.** It carries the release's 11 changed paths to `main`, measured at the merge commit `4e70b20f` against its first parent `c2c55a74`:
+  - the hook `core/hooks/block-rm-prefer-trash.sh` and the shared canonicalizer `core/hooks/lib/command-position.awk`;
+  - their two suites;
+  - ADR-239, ADR-235's reciprocal pointer and the ADR index;
+  - `core/rules/bypass-mode-readiness.md` and two of its fragments;
+  - this release's plan.
+- **(2) The hook tier.** This is the workspace `.claude/hooks/` tier, the plan's Operational Deployment Manifest row 1.
+  - **Disposition (a), propagate**, by the targeted operator-side route: `docs/scripts/setup-workspace.sh --refresh-hooks` with `--workspace-root` and `--source-repo`. The script-execution guard refuses that carrier to an agent session, so the operator ran it from their own terminal, from the primary checkout fast-forwarded to the merge commit.
+  - The carrier took a durable snapshot of the deployed bundle first. It reported `REFRESHED: block-rm-prefer-trash.sh (1336b7ae → 1caa0903)` and `INSTALLED: command-position.awk`, printed no `DECLINED:` line, and ended on `Hook-bundle currency: PASS` (24 hooks compared).
+  - Those are the two non-test paths of the merge's 4 under `core/hooks/`: `<workspace-root>/.claude/hooks/block-rm-prefer-trash.sh` and `<workspace-root>/.claude/hooks/lib/command-position.awk`.
+  - **Read back after the publish**, the deployed SHA-256 equals the merged source's for both:
+    - `block-rm-prefer-trash.sh` `1caa0903a3badd935f4826324639a7d7744a211ee547d2cda7534ea64d381806`
+    - `command-position.awk` `d0644aa782307dea79e09d2a51db861091990f7f47a2ba8b3f78ce4d021c5db1`
+  - Before the publish, both deployed copies read STALE (`1336b7ae…` and `6dca46ca…`). As a control, the unchanged `block-egress.sh` matches its source.
+  - The version file the carrier installs beside the hooks reads the last closed-out version until this release's Stage-13 close-out lands, which is expected.
+- **(3) Phase B4 ran once.** It ran from the Stage-12 session worktree detached at `origin/main`, which is the merge commit (`merge-base --is-ancestor` exit 0).
+  - **Command:** `bash core/deploy/deploy.sh --deploy --release deletion-guard-judges-every-segment-and-target --no-targets`. It exited 0 and reported nothing to deploy beyond the rules mirror.
+  - **B4.5 record:**
+    - **Join key:** `deletion-guard-judges-every-segment-and-target`, read back non-empty, with 30 rows under it before the deploy and 0 of them `deployment-status`. That count was re-read as 0 immediately before the deploy; control: a deployed release reads 1.
+    - **Targets:** none, so the run used `--no-targets`. The B4.3 derivation found 0 of the merge's 11 paths under a skill root or `packages/`, giving 0 candidates against the 55-name deploy roster and no non-members. Sensitivity: planted `release/skills/release-hub/SKILL.md` and `packages/comms-writer.skill` paths derive both names.
+    - **Deploy mode:** the run printed no `Deploy mode: user-local only` line. With no target named, neither the skill half nor the package half ran.
+    - **Rules mirror:** re-laid at `<deploy-root>/.claude/rules/`, 9 files written.
+  - **Rows written:** under the slug, `deployment-status` went from 0 to 1. The one row is `deploy-rules-mirror`, outcome `resolved` (`result:SUCCESS`). There is no `deploy-skill` and no `deploy-package` row, as `--no-targets` requires.
+- **Nothing else is owed.** The merge changes no composition-surface source (0 of the 21 `COMPOSITION_SURFACE_FILES` rows; control: `core/CLAUDE.md.template` matches), no `harness/` path and no skill `references/` file, so no `update.sh` run and no `.skill` rebuild is owed.
+
+**Mechanism:** a git merge commit and the atomic version claim; the operator-run hook-tier publish; and the release-stamped rules-mirror deploy (S-2 direct copy).
+- **The merge.** PR #8992 merged to `main` at `4e70b20faf6115ed47259b1f0520494fb1f0c88d` (parents `c2c55a74` / `1c54e878`) by `gh pr merge --merge --match-head-commit`, with no `--admin`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit, and `origin/main` is the merge commit.
+- **The pre-merge stamp.** Head `1c54e878` is the Phase A.5.7e commit that resolved this release's 9 deferred citation tokens to `ADR-239`; `--stamp --check` read 0 residual tokens.
+- **The version claim.** `claim-version.sh` claimed **`v5.08`** for bump class `minor` by atomic ref-CAS, with no collision reported. That equals the pre-merge dry run (A.5.6).
+  - `--stamp-slug` and `--stamp-branch` were passed explicitly, naming this branch, which was cut at the merge commit before the claim.
+  - The tag object `3436765f` is signed and annotated and peels to the merge commit on `origin`; `git tag -v` reads a good ED25519 signature.
+- **The claim-time stamp.** The manifest was plan-only (0 packages staled). The stamp commit `111e253d` (signed) renamed the plan to `release/releases/plans/v5/v5.08_RELEASE_PLAN.md` and resolved its 1 placeholder, leaving 0.
+- **The version-binding row (B3.1)** was appended to the event log under the slug, carrying `d:version-claim; claimed:v5.08; prov:v5.08`. The event-record integrity cutover was already bound, so B3.2 was a no-op (`--assert-bound` exit 0).
+- **The hook-tier publish and the stamped deploy** are recorded above.
+
+**Timestamp:** 2026-11-15 09:03 UTC (Sunday). The `Date` cell is the merge event: the merge's `mergedAt`, `2026-11-15T09:03:39Z`. Sequence:
+- the re-read of the head, the check roster (57 of 57 `pass`) and `main` (`c2c55a74`), immediately before the merge;
+- the merge at `09:03:39Z`;
+- the Phase B1.1 sweep;
+- the tag at `09:07:29Z` and the stamp commit at `09:07:31Z`;
+- the version-binding row at `09:08:07Z`;
+- the operator's hook-tier publish at about `09:15Z`;
+- the stamped deploy's row at `09:17:15Z`.
+
+The day of the week is computed from the date.
+**Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.08, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Velocity:** planned 12 pts / delivered 12 pts (1.00); files-changed 11; allocation 0/12/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
+**Result:** SUCCESS. Every deployment this release owes is complete, and each was read back:
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 19/19 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+- **The merge:** `MERGED`, with a non-null merge commit that `origin/main` carries.
+- **The version claim:** the signed tag peels to the merge commit.
+- **The plan stamp:** 0 residual placeholders.
+- **The hook-tier publish:** both deployed hooks equal the merged-source SHA-256 above, with no `DECLINED:` line and currency `PASS`.
+- **The stamped deploy:** exit 0, with exactly the one `deploy-rules-mirror` row `--no-targets` requires.
+
+No owed item remains open.
+
+#### Release Learnings v5.08
+
+**Synthesized at:** 2026-11-15T13:27:54Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.08`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-15T12:45:49Z`
+
+**Surprise:** the line-continuation class gave a new Blocker or Major at each Stage 7-8 re-verify, so Stage 6 ran six fix-up passes after the lock
+**Would-change:** probe continuation, comment and redirection readings on 3 shells at Stage 5
+**Watch-for:** declared over-blocks refusing heredoc commit messages
 
 #### Deployment Log never-invoked-specialists-dispositioned
 **Files deployed:** The Operational Deployment Manifest is N/A: the merge carries a release plan and a decision record, and neither propagates. The Phase B4 release-stamped deploy still runs for every release, as the rules mirror with no named target, and it is **handed back to the hub, not yet run**: the Stage-12 spoke's brief does not assign it, and the rows it writes are permanent. **B4.3 derivation (read-only):** the merge changed 2 files, measured at the merge commit `240d3c2e` against its first parent `29c60404`: the release plan (`release/releases/plans/_unversioned/never-invoked-specialists-dispositioned_RELEASE_PLAN.md`) and the decision record (`core/ADRs/ADR-238-each-never-invoked-specialist-takes-one-disposition.md`). 0 of them sit under a skill root or `packages/`, so there are 0 candidates against the 55-name deploy roster and 0 non-members (sensitivity: a planted `release/skills/release-hub/SKILL.md` path derives `release-hub`). The command is therefore `bash core/deploy/deploy.sh --deploy --release never-invoked-specialists-dispositioned --no-targets`, run once from a worktree whose HEAD contains the merge. **B4.2:** the join key `never-invoked-specialists-dispositioned` reads back non-empty, with 59 rows under it before stamping, 0 of them `deployment-status`. The merge changes no `core/hooks/` path, no composition-surface source (0 of its 2 paths are in `COMPOSITION_SURFACE_FILES`; control: `core/CLAUDE.md.template` matches), no `harness/` path and no skill `references/` file, so no hook-bundle refresh, `update.sh` run or `.skill` rebuild is owed. The plan's conditional `core/ADRs/README.md` renumber-log line did not resolve, because no renumber happened.
