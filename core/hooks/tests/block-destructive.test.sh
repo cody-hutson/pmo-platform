@@ -6593,7 +6593,7 @@ WC_HOOKS="${WC_ROOT}/.claude/hooks"
 /bin/cp "${HOOK%/*}/lib/"*.sh  "${WC_HOOKS}/lib/" 2>/dev/null || true
 /bin/cp "${HOOK%/*}/lib/"*.awk "${WC_HOOKS}/lib/" 2>/dev/null || true
 WC_D="/tmp/pmo-walk-corpus"
-/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/sp ace/ok.sh" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
 /usr/bin/printf 'enforce' > "${WC_HOOKS}/.mode"
 /bin/cp "$HOOK" "${WC_HOOKS}/block-destructive.sh"
 /usr/bin/sed \
@@ -9616,7 +9616,7 @@ qscan_arm "QSCAN-HD-R1 (declared cost): a carrier here-document whose operator l
 # here-document operator on a carrier here-document's operator line, with a body that names an
 # unlisted script. The comment clause latches, the body is not excised, and the body line is refused
 # although the shell runs nothing there — the declared precision cost PC-4.
-qscan_arm "QSCAN-HD-R2 (declared cost): a comment naming a here-document operator on a carrier here-document's operator line, its body naming an unlisted script" QC24 B - -
+qscan_arm "QSCAN-HD-R2 (control: refused before the card too, so not PC-4's move): a comment naming a here-document operator on a carrier here-document's operator line, its body naming an unlisted script" QC24 B - -
 
 # QSCAN-WS: the flag walk's word reader reads a dollar run as the shell does. The reader is lifted
 # out of the hook and run on every word of QC10 and of its control QC14: each must be read as a
@@ -9700,6 +9700,15 @@ qscan_mut "QSCAN-PRE: a command with no comment, nesting or backquote never reac
 qscan_mut "QSCAN-PRE-hd: a carrier here-document whose operator line has no comment and no nesting never reaches the program" block-destructive-qmall.sh QC19 a
 qscan_mut "QSCAN-CMT-near-midword-pair: latched, the mid-word hash's command is refused" block-destructive-qmall.sh QC17 B
 qscan_mut "QSCAN-NESTQ-near-brace-pair: latched, the plain expansion's command is refused" block-destructive-qmall.sh QC18 B
+# The Stage 7 fix batch for #8317 (F-07, F-09, F-10): QSCAN-CMT-R1 is the design's PC-1 row, a carrier's quoted
+# fragment naming an unlisted script before a comment that holds a quote, with the comment clause's mutant reading it
+# as allowed; QSCAN-HDBQ is a backquote in a comment on a carrier here-document's operator line; QSCAN-DOLLAR-P29 pins
+# QC29, the card's one refuse-to-allow row (B before the card). No marker isolates the dollar-run rule, so that arm
+# carries no mutant limb.
+qscan_arm "QSCAN-CMT-R1: a carrier's quoted fragment naming an unlisted script, then a comment holding a quote (PC-1)" QC30 B - -
+qscan_mut "QSCAN-CMT-R1-mut: the comment-clause mutant reads it as allowed" block-destructive-qmcmt.sh QC30 a
+qscan_arm "QSCAN-HDBQ: a backquote in a comment on a carrier here-document's operator line, its body naming an unlisted script" QC34 B - -
+qscan_arm "QSCAN-DOLLAR-P29: an even dollar run before a quote is a plain quote (QC29, the declared precision row)" QC29 a - -
 
 /bin/rm -rf "$ENCL_ROOT"
 
@@ -10493,7 +10502,7 @@ AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 /bin/mkdir -p "${AQ_HOOKS}/lib"
 /bin/cp "${HOOK%/*}/lib/"*.sh  "${AQ_HOOKS}/lib/" 2>/dev/null || true
 /bin/cp "${HOOK%/*}/lib/"*.awk "${AQ_HOOKS}/lib/" 2>/dev/null || true
-/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" > "${AQ_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/sp ace/ok.sh" > "${AQ_ROOT}/.claude/script-execution-allowlist.txt"
 /usr/bin/printf 'enforce' > "${AQ_HOOKS}/.mode"
 /bin/cp "$HOOK" "${AQ_HOOKS}/block-destructive.sh"
 # The copies, each the hook with one condition of the step removed by sed on its marked lines:
@@ -11110,6 +11119,43 @@ sv_arm "XARGS-near-03: a non-shell module that only compiles" XF08 a
 sv_arm "XARGS-POS-01: an extensionless script named on argv keeps today's verdict (Amendment 1)" XF09 a
 sv_arm "XARGS-res-01: a non-shell interpreter with only its flags (N1, declared)" XF10 a
 sv_arm "XARGS-ctl-01: the listed script on argv" XF11 a
+
+# ==========================================================================
+# The Stage 7 fix batch (#8319 D-8319-S7Fix, #8318 D-8318-S7Fix): HDOPEN-*, OPND-LIMIT-*, OPND-GAP-*, OPND-ADMIT-*
+# ==========================================================================
+# HDOPEN: the head walk marks a value open when its quote or escape is still open at the token's end, read with the
+# rule's own scanner (an escaped quote is not a delimiter; an odd backslash run carries the value on), beside the quote
+# count, which stays a disjunct so nothing it marked open is closed. The carrier answer at the fragment site is
+# withdrawn when the walk read the head from inside an open value. OPND-LIMIT: a join that stopped at its read limit is
+# unresolvable. OPND-GAP: a joined word whose pieces did not sit one space apart in the command is read inexact, so the
+# allowlist never admits it under its one-space name. The corpus roots list one spaced path for OPND-ADMIT.
+#   pheadscan  the escape-aware open read removed (its call line)
+#   pheadopen  the fragment-site withdrawal on an open head removed
+#   plimit     the read-limit refusal removed
+#   pgap       the spacing check removed
+/usr/bin/sed '/# M-HEAD-OPEN-SCAN$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pheadscan.sh"
+/usr/bin/sed '/# M-WRAP-QVAL-HEADOPEN$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pheadopen.sh"
+/usr/bin/sed '/# M-OPND-JOIN-LIMIT$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-plimit.sh"
+/usr/bin/sed '/# M-OPND-JOIN-GAP$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pgap.sh"
+/bin/chmod +x "${AQ_HOOKS}/block-destructive-pheadscan.sh" "${AQ_HOOKS}/block-destructive-pheadopen.sh" "${AQ_HOOKS}/block-destructive-plimit.sh" "${AQ_HOOKS}/block-destructive-pgap.sh"
+aq_shape_arm "HDOPEN-M1: the open-read mutant removes its call line" block-destructive-pheadscan.sh "1/0"
+aq_shape_arm "HDOPEN-M2: the open-head withdrawal mutant removes its line" block-destructive-pheadopen.sh "1/0"
+aq_shape_arm "OPND-LIMIT-M1: the read-limit mutant removes its refusal line" block-destructive-plimit.sh "1/0"
+aq_shape_arm "OPND-GAP-M1: the spacing mutant removes its check line" block-destructive-pgap.sh "1/0"
+sv_arm "HDOPEN-01: an escaped blank with no quote leaves the value open, so its carrier word is not the receiver (F-03)" AV51 B pheadscan a
+sv_arm "HDOPEN-02: an escaped quote before the real opener leaves the value open (F-02)" AV52 B pheadscan a
+sv_arm "HDOPEN-03: a declined value whose quote is still open withdraws the carrier answer at the fragment site (F-04)" AV53 B pheadopen a
+sv_arm "HDOPEN-04: an escaped quote before the opener, at the fragment site, needs the open read (F-02)" AV54 B pheadscan a
+sv_arm "HDOPEN-04b: the same row needs the fragment-site withdrawal (F-04)" AV54 B pheadopen a
+sv_arm "HDOPEN-near-01: an even backslash run before a real carrier keeps the carrier's excision" AV55 a
+sv_arm "HDOPEN-near-02: a lone escaped quote still reads open by the count, a kept over-block" AV56 B
+sv_arm "OPND-LIMIT-01: a spaced quoted path past the join's read limit is unresolvable (F-12)" OP28 B plimit a
+sv_arm "OPND-LIMIT-02: the same at four times the limit (F-12)" OP29 B plimit a
+sv_arm "OPND-LIMIT-ctl: the unspaced long path is refused as before" OP30 B
+sv_arm "OPND-ADMIT-01: a listed spaced path is admitted (the OPND-WS admit half)" OP31 a
+sv_arm "OPND-ADMIT-02: the same behind --" OP32 a
+sv_arm "OPND-GAP-01: the two-space spelling of a listed spaced path is not admitted as that name (F-15)" OP33 B pgap a
+sv_arm "OPND-ADMIT-ctl: an unlisted spaced path is refused" OP35 B
 
 /bin/rm -rf "$AQ_ROOT"
 
