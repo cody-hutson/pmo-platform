@@ -1884,6 +1884,27 @@ OP08|block-destructive|rt-opok|-|?|a|bash -- @D@/ok.s'h'
 OP09|block-destructive|rt-opcmode|-|?|B|bash -c 'echo hi; bash @D@/na.sh'
 OP10|block-destructive|rt-opcmode|-|?|a|bash -c 'echo a; echo b'
 OP11|block-destructive|rt-opnear|-|?|a|cat @D@/na.s'h'
+# --- seed 15.8: card #8318 Decision 6 — the built classes no row pinned, authored at Stage 7 entry (OP12-OP21) ---
+# Authored hub-direct (D-PayloadRoute) at #8318's Stage 7 entry, from its build record (finding 6) and the fragment's
+# residual item 3. gt is `?`; each row is recorded at what it reads at the release head. rt-op6src: `source` with a
+# relative quoted-suffix operand, alone and behind `--` (the advance-past step-over, which has no marker of its own).
+# rt-op6nox: the quoted-suffix operand behind a `-n` grant, and its plain twin. rt-op6cmode: python's `-c`, which the
+# walk names, so each piece keeps its own test, and its control. rt-op6prog: a non-shell program-string option the walk
+# does not name (`-e`), so the join reads the program as one word ending in the suffix (boundary g). rt-op6nj: the
+# not-joined positions, an option's argument slot, a `-c` program's words, and a quote that opens after the first
+# character under an interpreter and under `source`; each refuses on a piece, not on the joined path.
+OP12|block-destructive|rt-op6src|-|?|B|source na.s'h'
+OP13|block-destructive|rt-op6src|-|?|B|source -- na.s'h'
+OP14|block-destructive|rt-op6nox|-|?|B|bash -n @D@/na.s'h'
+OP15|block-destructive|rt-op6nox|-|?|a|bash -n @D@/na.sh
+OP16|block-destructive|rt-op6cmode|-|?|W|python3 -c 'import a b.py'
+OP17|block-destructive|rt-op6cmode|-|?|a|python3 -c 'import os'
+OP18|block-destructive|rt-op6nj|-|?|B|bash --rcfile '@D@/n a.sh' -i
+OP19|block-destructive|rt-op6nj|-|?|B|bash -c 'bash "@D@/n a.sh"'
+OP20|block-destructive|rt-op6nj|-|?|B|bash @D@/n' a.sh'
+OP21|block-destructive|rt-op6nj|-|?|B|source @D@/n' a.sh'
+OP22|block-destructive|rt-op6prog|-|?|W|perl -e 'print a b.pl'
+OP23|block-destructive|rt-op6prog|-|?|W|node -e 'void a b.js'
 # --- seed 15.3: card #8319 — the prefix walk steps over a space-bearing quoted assignment value (AV rows) ---
 # Authored hub-direct (D-PayloadRoute, DEV-7) from #8319's Stage-5 design (movement classes M1-M5), its review's CD-1
 # readable-set restriction and D-8319-RefRec (A); recorded at the release head after #8318. gt is `?`. The declared
