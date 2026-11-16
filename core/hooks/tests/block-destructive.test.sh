@@ -6593,7 +6593,7 @@ WC_HOOKS="${WC_ROOT}/.claude/hooks"
 /bin/cp "${HOOK%/*}/lib/"*.sh  "${WC_HOOKS}/lib/" 2>/dev/null || true
 /bin/cp "${HOOK%/*}/lib/"*.awk "${WC_HOOKS}/lib/" 2>/dev/null || true
 WC_D="/tmp/pmo-walk-corpus"
-/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/sp ace/ok.sh" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
 /usr/bin/printf 'enforce' > "${WC_HOOKS}/.mode"
 /bin/cp "$HOOK" "${WC_HOOKS}/block-destructive.sh"
 /usr/bin/sed \
@@ -10502,7 +10502,7 @@ AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 /bin/mkdir -p "${AQ_HOOKS}/lib"
 /bin/cp "${HOOK%/*}/lib/"*.sh  "${AQ_HOOKS}/lib/" 2>/dev/null || true
 /bin/cp "${HOOK%/*}/lib/"*.awk "${AQ_HOOKS}/lib/" 2>/dev/null || true
-/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/sp ace/ok.sh" > "${AQ_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" > "${AQ_ROOT}/.claude/script-execution-allowlist.txt"
 /usr/bin/printf 'enforce' > "${AQ_HOOKS}/.mode"
 /bin/cp "$HOOK" "${AQ_HOOKS}/block-destructive.sh"
 # The copies, each the hook with one condition of the step removed by sed on its marked lines:

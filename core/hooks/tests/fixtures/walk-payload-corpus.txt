@@ -2190,7 +2190,7 @@ XF12|block-destructive|rt-xencl|-|?|W|echo $(xargs bash -x)
 # a slash-bearing script, allowed for a PATH-resolved word, each its plain form's verdict; B before the card),
 # rt-svprecctl their plain forms. #8318 (D-8318-S7Fix): rt-op7fb, rt-op7src and rt-op7dollar, F-13's classes;
 # rt-op7limit, a spaced quoted path past the join's read limit (a before this batch, B after, F-12) with its unspaced
-# control rt-op7limitctl; rt-op7admit, the listed spaced path the corpus roots now list, alone and behind `--` (a), and
+# control rt-op7limitctl; rt-op7admit, the listed spaced path the corpus roots now list (a directory of its own, so O15's unlisted copy stays unlisted), alone and behind `--` (a), and
 # its unlisted twin (B); rt-op7gap, its two-space spelling (a before this batch, B after, F-15). #8317: rt-qcmtr1,
 # QSCAN-CMT-R1's class (F-07); rt-qnestbq, rt-qcloser, rt-qdollong and rt-qhdbq, F-09's classes and a here-document
 # operator-line backquote. QC24 moved to rt-qctl: it reads B before the card, so it is a control, not PC-4's move, and
@@ -2221,10 +2221,10 @@ OP27|block-destructive|rt-op7dollar|-|?|B|bash '@D@/n a'$$'.sh'
 OP28|block-destructive|rt-op7limit|-|?|B|bash '@D@/n a@MIDX@.sh'
 OP29|block-destructive|rt-op7limit|-|?|B|bash '@D@/n a@LONGX@.sh'
 OP30|block-destructive|rt-op7limitctl|-|?|B|bash '@D@/na@MIDX@.sh'
-OP31|block-destructive|rt-op7admit|-|?|a|bash '@D@/sp ace/ok.sh'
-OP32|block-destructive|rt-op7admit|-|?|a|bash -- '@D@/sp ace/ok.sh'
-OP33|block-destructive|rt-op7gap|-|?|B|bash '@D@/sp  ace/ok.sh'
-OP35|block-destructive|rt-op7admit|-|?|B|bash '@D@/sp ace/na.sh'
+OP31|block-destructive|rt-op7admit|-|?|a|bash '@D@/li sted/ok.sh'
+OP32|block-destructive|rt-op7admit|-|?|a|bash -- '@D@/li sted/ok.sh'
+OP33|block-destructive|rt-op7gap|-|?|B|bash '@D@/li  sted/ok.sh'
+OP35|block-destructive|rt-op7admit|-|?|B|bash '@D@/li sted/na.sh'
 QC30|block-destructive|rt-qcmtr1|-|?|B|echo 'x; bash @D@/na.sh' # it's
 QC31|block-destructive|rt-qnestbq|-|?|B|echo "`echo it's`"@NL@bash @D@/na.sh
 QC32|block-destructive|rt-qcloser|-|?|B|echo "${x:-)"it's"}"@NL@bash @D@/na.sh
