@@ -10516,7 +10516,10 @@ AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 #   pqvalread    the readable-set test is not asked (its two lines removed)
 #   pqvalguards  pqvalsubst and pqvalread together: nothing in the value's text declines
 #   pqvalhead    the carrier-head check never withdraws a carrier answer (its one line removed)
-#   pqvalheadcap a carrier answer stands when the check's own re-scan spends the work budget
+#   pqvalheadcap a carrier answer stands when the check's own re-scan spends the work budget; it also
+#                removes the open-value withdrawal (M-WRAP-QVAL-HEADOPEN), because AV50's padded value
+#                is open and the step declines it at the cap, so that line is a second hold on AV50
+#                that would hide the line under test (as FWALK-CLUSTER-M1 removes the join)
 #   pqvalhdhead  a here-document's receiver keeps a carrier word read from inside a value
 #   pallow      the allowlist never matches (the wrapper block's allowlist-blind mutant)
 /usr/bin/sed '/# M-WRAP-QVAL$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqval.sh"
@@ -10528,7 +10531,7 @@ AQ_HOOKS="${AQ_ROOT}/.claude/hooks"
 /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalguards.sh"
 /usr/bin/sed '/# M-WRAP-QVAL-GAP2$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalgap2.sh"
 /usr/bin/sed '/# M-WRAP-QVAL-HEAD$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalhead.sh"
-/usr/bin/sed '/# M-WRAP-QVAL-HEADCAP$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalheadcap.sh"
+/usr/bin/sed -e '/# M-WRAP-QVAL-HEADCAP$/d' -e '/# M-WRAP-QVAL-HEADOPEN$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalheadcap.sh"
 /usr/bin/sed '/# M-WRAP-QVAL-HDHEAD$/d' "$HOOK" > "${AQ_HOOKS}/block-destructive-pqvalhdhead.sh"
 /usr/bin/sed 's@^  \[ -f "\$SCRIPT_ALLOWLIST" \] || return 1$@  return 1@' "$HOOK" > "${AQ_HOOKS}/block-destructive-pallow.sh"
 for aq_c in pqval pqvalgate pqvalpfx pqvalgap pqvalgap2 pqvalsubst pqvalread pqvalguards pqvalhead pqvalheadcap pqvalhdhead pallow; do
@@ -10655,7 +10658,7 @@ aq_shape_arm "ASGN-QVAL-M6: the both-guards mutant is M4 and M5 together" block-
 aq_shape_arm "ASGN-QVAL-M7: the allowlist-blind mutant rewrites one line" block-destructive-pallow.sh "1/1"
 aq_shape_arm "ASGN-QVAL-M8: the carrier-head mutant removes the withdrawal line" block-destructive-pqvalhead.sh "1/0"
 aq_shape_arm "ASGN-QVAL-M9: the second escaped-blank mutant removes its clause line" block-destructive-pqvalgap2.sh "1/0"
-aq_shape_arm "ASGN-QVAL-M10: the carrier-head budget mutant removes its withdrawal line" block-destructive-pqvalheadcap.sh "1/0"
+aq_shape_arm "ASGN-QVAL-M10: the carrier-head budget mutant removes its withdrawal line and the open-value withdrawal" block-destructive-pqvalheadcap.sh "2/0"
 aq_shape_arm "ASGN-QVAL-M11: the here-document receiver mutant removes its withdrawal line" block-destructive-pqvalhdhead.sh "1/0"
 
 # --- the closures (fix-evidence): refused, or recorded at the arm's own phase; the walk before allows ---

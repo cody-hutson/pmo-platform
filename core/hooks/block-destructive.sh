@@ -812,6 +812,10 @@ script_operand_resolve() {   # $1 = domain  $2 = the token's index in script_tok
   fi
   if [ -z "$2" ]; then return 1; fi
   script_word_join "$2"   # M-OPND-JOIN (mutation target; pinned by OPND-M2b)
+  # The join puts ONE space between pieces, because the split discarded the run it cut. A word
+  # whose pieces did not sit one space apart in the command (two spaces, a tab) is a different
+  # name, so it is read inexact: the allowlist never admits it under its one-space spelling.
+  if [ "$script_wj_complete" -eq 1 ]; then case "$script_seg" in *"$script_wj_raw"*) : ;; *) script_wj_exact=0 ;; esac; fi   # M-OPND-JOIN-GAP
   if [ "$script_wj_complete" -eq 1 ]; then
     if script_word_subject "$1" "$script_wj_exact" "$script_wj_out" "$script_wj_raw"; then return 0; fi
     return 1
@@ -823,6 +827,9 @@ script_operand_resolve() {   # $1 = domain  $2 = the token's index in script_tok
     script_subj_ok=0
     return 0
   fi
+  # A join that stopped at the read limit never reached the word's end, so the word the shell
+  # passes is not known whatever its suffix: unresolvable, and refused.
+  if [ "$script_wj_limit" -eq 1 ]; then script_subj_out="$script_wj_raw"; script_subj_ok=0; return 0; fi   # M-OPND-JOIN-LIMIT
   return 1
 }
 
@@ -861,7 +868,7 @@ script_word_subject() {   # $1 = domain  $2 = exact (1|0)  $3 = the word's text 
 # the quote state across them: re-reading the joined text from its start for every piece
 # appended would be superlinear in the joined length on this shell. The joined text is
 # bounded by script_word_scan's own 1,024-character limit; past it the join stops, reports
-# no whole word, and the caller refuses what it read inside the domain.
+# no whole word, and the caller refuses the word as unresolvable whatever it read.
 #
 # THE STATE MACHINE IS script_word_scan's, RULE FOR RULE: the same four quote states, the
 # same escapes, the same dollar-run rule and the same state-0 exactness test. It is
@@ -875,8 +882,10 @@ script_word_subject() {   # $1 = domain  $2 = exact (1|0)  $3 = the word's text 
 #
 # DECLARED PRECISION LIMIT. Each piece is joined behind ONE space, because the split has
 # already discarded the run it cut: a quoted path holding two spaces, or a tab, is rejoined
-# to a name that differs from the real one. That subject still lands in the domain when its
-# suffix does, and it fails the allowlist, so it is refused — the safe direction.
+# to a name that differs from the real one. The caller checks that the joined text occurs in
+# the command as written, and reads a word whose pieces sat further apart as inexact, so the
+# allowlist never admits it under its one-space spelling; it is refused when its suffix lands
+# in the domain — the safe direction.
 #
 # OUTPUT — GLOBALS: script_wj_complete (1 when the joined text is one whole word),
 # script_wj_exact, script_wj_out (the word, or what was read), script_wj_raw (the joined
@@ -885,6 +894,7 @@ script_word_join() {   # $1 = index in script_tokens of a token script_word_scan
   local i="$1" n="${#script_tokens[@]}" t="" c="" out="" st=0 raw="" piece=""
   local sq="'" dq='"' bs='\' ds='$' bt='`'
   script_wj_complete=0
+  script_wj_limit=0
   script_wj_exact=1
   script_wj_out=""
   script_wj_raw=""
@@ -893,6 +903,7 @@ script_word_join() {   # $1 = index in script_tokens of a token script_word_scan
     if [ -n "$raw" ]; then piece=" ${piece}"; fi
     raw="${raw}${piece}"
     if [ "${#raw}" -gt 1024 ]; then
+      script_wj_limit=1
       script_wj_exact=0
       script_wj_out="$out"
       script_wj_raw="$raw"
@@ -3372,8 +3383,11 @@ script_resolve_head() {
   # script_head_open: 1 when the walk stepped over an assignment token whose single or double
   # quotes are odd in number, so the quote the token opens is still open at the token's end and
   # the head the walk returns is a piece of that value rather than the shell's command word. The
-  # here-document receiver test reads it (M-WRAP-QVAL-HDHEAD). Counting ignores escapes, so a
-  # miscount can only mark a token open, which withdraws an excision: the fail-closed direction.
+  # here-document receiver test reads it (M-WRAP-QVAL-HDHEAD). The count ignores escapes, so it
+  # also reads an escaped quote before the real opener as even, and an escaped blank as nothing:
+  # each token is therefore also read by script_head_token_scan, the rule's own quote scanner, and
+  # is open when either reading says so. The count stays a disjunct, so nothing it marked open is
+  # closed: withdraw-only, the fail-closed direction.
   script_head_open=0
   local _i _hsq _hdq _sq="'" _dq='"'
   local -a _tok
@@ -3391,6 +3405,7 @@ script_resolve_head() {
         _hsq="${_tok[$_i]//[!$_sq]/}"
         _hdq="${_tok[$_i]//[!$_dq]/}"
         if [ $(( ${#_hsq} % 2 )) -eq 1 ] || [ $(( ${#_hdq} % 2 )) -eq 1 ]; then script_head_open=1; fi
+        if [ "$script_head_open" -eq 0 ] && script_head_token_scan "${_tok[$_i]}"; then script_head_open=1; fi
         _i=$(( _i + 1 ))
         ;;
       *) break ;;
@@ -3400,6 +3415,34 @@ script_resolve_head() {
     script_head="${_tok[$_i]}"
   fi
   return 0
+}
+
+# THE OPEN READ OF AN ASSIGNMENT TOKEN, by the rule's own quote scanner from state 0 on saved and
+# restored state, so the read changes nothing the caller carries. An escaped quote is not a
+# delimiter, so a quote it precedes still opens; a token the scan leaves outside quotes that ends
+# on an odd backslash run carries the value into the next token; and a scan that reaches the
+# shared work cap reads open. Each answer can only mark a token open: the fail-closed direction.
+script_head_token_scan() {   # $1 = an assignment token -> 0 when its value is still open at its end
+  local _s="$script_qstate" _t="$script_qtaint" _w="$script_qwork" _b="$script_qbail" _r=1
+  script_qstate=0
+  script_qtaint=0
+  script_qadvance "$1"
+  if [ "$script_qstate" -ne 0 ] || { [ "$script_qbail" -eq 1 ] && [ "$_b" -eq 0 ]; } || script_qval_dangles "$1"; then _r=0; fi   # M-HEAD-OPEN-SCAN
+  script_qstate="$_s"
+  script_qtaint="$_t"
+  script_qwork="$_w"
+  script_qbail="$_b"
+  return "$_r"
+}
+
+# Open by either reading: the quote count script_resolve_head keeps, or the scan above.
+script_head_value_open() {   # $1 = an assignment token -> 0 when its value is still open at its end
+  local _sq="'" _dq='"' _c
+  _c="${1//[!$_sq]/}"
+  if [ $(( ${#_c} % 2 )) -eq 1 ]; then return 0; fi
+  _c="${1//[!$_dq]/}"
+  if [ $(( ${#_c} % 2 )) -eq 1 ]; then return 0; fi
+  script_head_token_scan "$1"
 }
 
 # THE JOINED LOGICAL LINE. The shell removes a backslash-newline outside quotes and inside "…"
@@ -3628,7 +3671,7 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
 script_qval_head_carrier() {   # reads script_seg -> 0 when the shell's head word is a carrier
   local -a script_tokens
   local script_hidx=0 script_qval_trust=0 script_qval_from=0 script_qval_gapi=-1
-  local script_qval_gaprest="" script_qval_gapn=0 script_qval_sq=0 script_qval_dq=0 _t
+  local script_qval_gaprest="" script_qval_gapn=0 script_qval_sq=0 script_qval_dq=0 _t _hn=0
   set -f
   # shellcheck disable=SC2206
   script_tokens=( $script_seg )
@@ -3642,7 +3685,12 @@ script_qval_head_carrier() {   # reads script_seg -> 0 when the shell's head wor
           *[!A-Za-z0-9_]*) break ;;
         esac
         script_hidx=$(( script_hidx + 1 ))
+        _hn="$script_hidx"
         script_assign_value_rest "$_t"
+        # A value the step declined whose quote or escape is still open: the word this walk would
+        # stop on is a piece of that value, not the shell's head word, so the answer is not
+        # confirmed. Withdraw-only; a value the step read moved the walk on and is not asked.
+        if [ "$script_hidx" -eq "$_hn" ] && script_head_value_open "$_t"; then return 1; fi   # M-WRAP-QVAL-HEADOPEN
         ;;
       *) break ;;
     esac
@@ -4104,6 +4152,7 @@ case "$TOOL_NAME" in
     script_subj_out=""
     script_subj_ok=1
     script_wj_complete=0
+    script_wj_limit=0
     script_wj_exact=1
     script_wj_out=""
     script_wj_raw=""
