@@ -104,6 +104,9 @@
 #     reads `boundary-disagreement`.
 #   - The pure-anchor limb of the link skip. The fragment strip already empties a `#...`
 #     target, which is then skipped, so the tool with that limb removed passes every case.
+# Two rules no case pins are not equivalents, since a case could pin each one, and only the
+# `--self-test` kills them: `C-guard`, the ambiguity guard, by its `guard` arm, and
+# `C-nested`, an item owning its nested lines, by its `parity` arm.
 # Cases: 10 DRIFT · 19 CLEAN · 9 UNRESOLVED · 2 SCOPE-OUT — 40 in all.
 
 --- DRIFT list seeded-mismatch
