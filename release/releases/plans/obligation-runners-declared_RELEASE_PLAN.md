@@ -992,3 +992,57 @@ Ten inherited rows carry the four designs' Commit-0 entries, renumbered in beat 
 **Adjudication record:** a version-less release's note sat flat at the `notes/` root, where the release-notes standard places every version-less note under `notes/_unversioned/` · authority: the standard — `release/references/standards/release-notes-standard.md` § File Location, Naming, Frontmatter — which has named the case since 2026-08-22, before this release resolved it · changed: practice — the `governance-ci-checks` note moved under `notes/_unversioned/` and its `RELEASE_INDEX.md` row followed · why: the standard already names the case, and the note was written before that rule landed
 
 **Adjudication record:** `release/governance/RELEASE_PROTOCOL.md` documented `versioned` as the release-identity default, and live practice, as re-read at Stage 4, did not always follow it · authority: the document — `release/governance/RELEASE_PROTOCOL.md` § Versioning, which stated the default and no rule for when a release departs from it · changed: the document — § Versioning gains the when-to-version rule, which names when each release-identity mode applies · why: the document was silent on the case, so this release names it there (`core/standards/duplicate-source-discipline.md` § 1.2, step 2)
+
+---
+
+## Change Description
+
+Authored at Stage 6 C1 per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol, from the branch: `git diff --stat origin/main...HEAD`, the first-parent commits, and this file's Decision Record, Delivery and Rollback strategies and Deviation Log. It stands last because this plan carries no Deployment Execution Log section, and it is refreshed if a later Tier 1 [ADJUST] commit changes which issues land or which decisions stand. It is not the user-facing release note.
+
+### Outcome
+
+A governance obligation this release touches now has a runner or a recorded decision that it will not: `deploy.sh --check` gains Check 83, which reports a hand-maintained enumeration whose list or count disagrees with the tracked files its marker's glob matches; `core/standards/duplicate-source-discipline.md` § 1.2 names the side that governs when a written convention and live practice disagree; and `core/disciplines/decision-discipline.md` § 3.2 requires a determination that constrains a code path to be recorded at that path. The standing quality initiative's band is set in the platform-config template's `[quality_share_band]` section — a 15% floor and a 35% ceiling, judged pooled over five releases — and `release/tools/compute-release-velocity.sh --quality-share` measures a release against it, a reading Stage 13 now records at every close (A14.2). The operator-committed hunks in `RELEASE_PROTOCOL.md` § Versioning add the rule for when a release is `versioned` and when it is `version-less`.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #6227 | A constraining determination is recorded where it constrains (`decision-discipline.md` § 3.2); the when-to-version rule sits in `RELEASE_PROTOCOL.md` § Versioning, committed by the operator, and is cited at `stage-03-bundle.md` § Release-Identity Mode; register rows `constraint-determinations-at-path` and `release-identity-rule-citations` | DONE (Stage 6) |
+| #6226 | A convention and live practice that disagree are settled by the owning document (`duplicate-source-discipline.md` § 1.2); the flat `governance-ci-checks` note moves under `release/releases/notes/_unversioned/`, its `RELEASE_INDEX.md` row with it; register row `spec-practice-adjudications`; two adjudication records in § Verification Evidence | DONE (Stage 6) |
+| #6225 | `core/deploy/tools/check-enumeration-drift.py` behind Check 83 (warn-mode, deploy-time only) reports enumeration drift; 40 fixture cases, against which 44 of 46 mutants fail and the two survivors are equivalents; the `docs/module-apis.md` hook list is marked and reconciled (1 drift row, then 0), and two enumerations become citations of their populations; register rows for Check 83 and `enumeration-sites-registered` | DONE (Stage 6) |
+| #7842 | `[quality_share_band]` in `core/config/platform-config.toml.template`, with its schema and reference rows; the `--quality-share` mode and its Test QS group (QS-1 to QS-12); § 7b of `release-velocity-tracking.md`; Stage 13's A14.2 and register row `quality-share-records`; an out-of-band fixture that reads `ABOVE-CEILING` and a near-miss at the ceiling that reads `IN-BAND` | DONE (Stage 6) |
+
+`DONE (Stage 6)` records what the branch delivers, not a graded criterion: #7842 goes to Stage 7 next, #6225 to its Stage-7 re-review pass 4 and Stage-8 QA pass 2, and the criteria are graded at the stages § Verification Plan names.
+
+### Key decisions
+
+Each is rendered in § Decision Record (the Stage-4 gate, the Stage-5 Collective Review and its scope lock):
+
+- **D-Editability-6227 (A):** the operator commits the Tier-0-floored `RELEASE_PROTOCOL.md` limb from agent-prepared text, and no agent writes, stages or applies that file (commit `642345e5`, 22 lines added).
+- **C2 (A):** beats 2 to 4 do not wait for that commit; beat 1b ran directly after it landed, during beat 3.
+- **D5-1:** a sibling check, Check 83, not an arm of Check 63, whose red on `main` belongs to #7414; the choice is recorded in the tool's module docstring and the check's header.
+- **D5-2 with OD-2:** the material-edit test selects the release-identity mode, and a release whose only product is a decision record ships `version-less`.
+- **D5-3 and D5-4:** the band is a parameter, judged pooled with the mean of shares printed beside it, over the release log read by merge ancestry with a completeness guard (OD-17).
+- **D5-5 (B′):** the index-versus-notes assertion is declined; the decision and its upgrade trigger are recorded in `release/releases/notes/README.md`.
+- **D5-6 (A′):** the #5502 site is graded against the existing executor census, with one comment-only citation in `install-tests.yml`; no test suite is switched on.
+- **D-C SINGLE, P0 and D-Version minor:** one branch, one pull request, one merge and one writer at a time, at bump-class minor with the number bound at the Stage-12 claim; the planned rebase onto PR #8821's merge ran as a merge commit instead, because this branch never force-pushes (DEV-21).
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** One revert of the release merge restores every file, the operator-committed `RELEASE_PROTOCOL.md` hunks and the moved note included, under the Rollback protocol in `RELEASE_PROTOCOL.md` § Pre-Change Snapshot Protocol; the claimed version tag is retained and recorded, never deleted, and because ms#363's pending `links.plan` edits cite the note's path, a revert is re-read against that sibling.
+
+### Downstream impact
+
+- **This release's Stage 13:** A14.1 writes a population record for each of the five `prose` register rows this release adds (`constraint-determinations-at-path`, `release-identity-rule-citations`, `spec-practice-adjudications`, `enumeration-sites-registered` and `quality-share-records`), and A14.2 takes this release's own quality-share reading. That reading prints `NOT-EVALUATED` while ms#429's release-log row is absent from `main` (DEV-10; `release/releases/RELEASE_LOG.md` carries no `release-usage-measured-right` row at this base), and A14.2 allows one re-run once the row lands.
+- **Every later close:** A14.2 runs at each Stage-13 close, and the band's values are re-set after three measured releases. An operator-instance `platform-config.toml` without the `[quality_share_band]` section reads `NOT-EVALUATED`, never a default (§ Operational Deployment Manifest).
+- **Deploy time:** `deploy.sh --check` gains Check 83, warn-mode on its own dial, with its shakedown armed on 2026-11-13; the flip to enforce is an operator decision. The corpus scan runs at deploy time only, and CI runs the tool's `--self-test` through the `selftest-discovery` job.
+- **Workspace charter:** `core/CLAUDE.md.template` turns one bullet into a citation, which the rendered charter takes at the operator's next composition refresh. No skill package, rules-mirror member, hook or harness artifact changes (§ Operational Deployment Manifest).
+- **Carried forward:** the live first-parent list passed on argv, over four fifths of Linux's per-argument cap (DEV-23 (a)); the `PROV-DELTA` limb's BSD-awk defect, which leaves that row's PASS vacuous on this host (§ Verification Evidence, Engineering Commit 0); and the `release-planner` Mode B step-3 follow-up, filed at Stage 13 (§ Scope, Exclusions).
+- **Merge order:** ms#363's `links.plan` edits re-read the moved note's path, and the version slot is shared with the other in-flight `minor` releases and settled at the atomic claim (§ Cross-PR Overlap Audit).
+
+### Cross-references
+
+- This plan: § Header (version identity: the double-brace release-version placeholder in the **Version** cell, bound at the Stage-12 claim), § Decision Record, § Implementation Sequence, § Deviation Log and § Verification Evidence.
+- Milestone `obligation-runners-declared` (milestone 400), under epic #5867; release pull request #8995, opened in draft at Stage 6; the Release Outcome Statement, in § Release Outcome Statement and in the milestone description.
+- The user-facing release note: written at Stage 13 Close under `release/releases/notes/`, named for the version the Stage-12 claim binds, per `release/references/standards/release-notes-standard.md`.
+- No markdown link is written here, although the protocol asks for links: the note does not exist before Stage 13, a milestone URL would carry the repository owner's handle into a `release/` file, which the depersonalization gate refuses, and this file carries no link opener (§ Verification Evidence, Engineering Commit 0).
