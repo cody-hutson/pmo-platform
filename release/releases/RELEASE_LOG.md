@@ -271,7 +271,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.07 | fs-boundary-refuses-parameter-transformation | #8322 | #8832 | `2ce25400e196176b5f2ab5fb7381b471059e6591` | `v5.07` | VERIFIED | 2026-11-09 |
 | never-invoked-specialists-dispositioned (version-less) | never-invoked-specialists-dispositioned | #8452 | #8994 | `240d3c2ed44e2330d3882de56fbdbd21bc8b4418` | (none) | DEPLOYED | 2026-11-14 |
 | v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
-| v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | DEPLOYED | 2026-11-15 |
+| v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
 
 #### Deployment Log v5.09
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped deploy of the FinOps skill are complete.** Each was read back by content. The plan's two `./update.sh` manifest rows are the operator's (PA-061) and are still pending. Paths are given as placeholders.
@@ -321,7 +321,21 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 
 The day of the week is computed from the date.
 **Cycle-Time:** 15h49m — (T_GO=2026-11-15T05:55:59Z; T_DEPLOY=2026-11-15T21:45:02Z; mechanism: compute-cycle-time.sh)
+**Velocity:** planned 15 pts / delivered 15 pts (1.00); files-changed 47; allocation 6/9/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped FinOps deploy are complete and read back. The manifest's two `./update.sh` rows, the script-execution allowlist's managed section and the hook-tier copy of `core/deploy/lib-instance-path.sh`, are owed by the operator under PA-061 and are pending. Neither is a deploy failure.
+**Outcome:** PARTIAL
+**Outcome rationale:** Two Outcome-Statement limbs moved to the next milestone (DEV-63) and the close-out cost-row write is carried on #9004 (PA-050); the delivered scope verified.
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation DEGRADED — 44/44 (1.00) over a label-scoped sample, 1 unlabelled stage sub-task candidates not counted — this is not a clean result; evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.09
+
+**Synthesized at:** 2026-11-16T01:06:54Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.09`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-16T00:59:01Z`
+
+**Surprise:** main moved twice under Stage 12 as a sibling took ADR-239 and v5.08, and 7 deferred ADR tokens sat outside the plan
+**Would-change:** run the branch-wide stamp check and merge main before the Stage-12 brief
+**Watch-for:** CI watchers that decide in shell
 
 #### Deployment Log v5.08
 **Files deployed:** **Three deployments, all complete: the merge, the hook-tier publish and the release-stamped rules-mirror deploy.** Each was verified by content, not by a script's exit status. Paths are given as placeholders.
