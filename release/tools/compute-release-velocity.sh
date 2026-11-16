@@ -1907,9 +1907,11 @@ PYX
 #
 # THE LOG MAY ARRIVE ON STDIN. _rv_qs_closing and _rv_qs_window take the release log's
 # text as $1, and read it from stdin instead when $1 is `-`. The live log is about a
-# megabyte, near the platform's argument-size limit, so the live caller redirects the
-# file; the self-test passes its inline logs on argv. The first-parent list stays on
-# argv: about a tenth of that limit today.
+# megabyte, near macOS's whole-argument limit, so the live caller redirects the file;
+# the self-test passes its inline logs on argv. The first-parent list stays on argv. It
+# is about a tenth of macOS's limit, but Linux also caps ONE argument at 128 KiB, and the
+# list is already over four fifths of that: past it, a live reading on Linux fails closed
+# as NOT-EVALUATED (the step prints no OK sentinel), never as a wrong reading.
 #
 # THE RELEASE TABLE. The log's rows are read from the table whose header line's first
 # cell is `Version`: that line pins the Milestone, Release PR and Merge SHA columns by
@@ -2959,9 +2961,11 @@ print(len(diff), ",".join(str(k[1]) for k in diff), sum(len(fa.get(k, set()) ^ f
   [[ "$_qs_w" == *"pooled 3 of 12 (25.0%, judged) · mean of shares 35.0%"* ]] || _qs_fail "QS-6 mean exact" "pooled 3 of 12 (25.0%, judged) · mean of shares 35.0%" "$_qs_w"
   [[ "$_qs_v" == "quality-share: IN-BAND — pooled 25.0%"* ]] || _qs_fail "QS-6 verdict" "quality-share: IN-BAND — pooled 25.0%" "$_qs_v"
 
-  # QS-7: the verdict is taken from the exact fraction, never the display: 876/2500 and
-  # 875/2500 (3504/10000 and 3500/10000) both display 35.0%.
-  for _qs_x in "176/500 175/500 175/500 175/500 175/500|ABOVE-CEILING — pooled 35.0%" "175/500 175/500 175/500 175/500 175/500|IN-BAND — pooled 35.0%"; do
+  # QS-7: the verdict is taken from the exact fraction, never the display: 219/625 and
+  # 35/100 (3504/10000 and 3500/10000) both display 35.0%. The windows stay small because
+  # the offline path passes the window file as ONE argument, and Linux caps a single
+  # argument at 128 KiB.
+  for _qs_x in "44/125 44/125 44/125 44/125 43/125|ABOVE-CEILING — pooled 35.0%" "7/20 7/20 7/20 7/20 7/20|IN-BAND — pooled 35.0%"; do
     _qs_win "${_qs_x%%|*}" "$_qs_tmp/w7.json"
     _qs_rc=0; _qs_o="$(_qs_cli "$_qs_tmp/cfg-empty" v0.00 --quality-share --window-json "$_qs_tmp/w7.json")" || _qs_rc=$?
     _qs_v="$(_qs_line "$_qs_o" "quality-share: ")"
