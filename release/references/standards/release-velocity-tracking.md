@@ -278,6 +278,7 @@ A measurement separate from the `**Velocity:**` field, written by the same tool 
   - Prior releases are re-read from live labels, so relabelling a past item moves later readings; each record freezes its own per-release lines, so a later read can be compared with them.
   - A release merged by squash, whose subject is not a branch merge, is not seen by the completeness guard.
   - The reads of the clone (shallow, an absent commit), the membership reads and the label check run only live, so the self-test does not reach them.
+  - The live first-parent list reaches the quality-share step as one argument, so Linux's per-argument cap (`MAX_ARG_STRLEN`, 131,072 bytes) bounds it. Read on `main` at `d293361e`, the list was 106,502 bytes, 81.3% of the cap, and it grows about 470–524 bytes a release. A reading past the cap fails closed: exit 3, `NOT-EVALUATED` with the reason `the quality-share step window did not complete (no OK sentinel)`, which names no cause.
 - **Why this mode lives here.** The share must use this tool's label-based delivery predicate, because at Stage 13 a milestone's members are not reliably closed yet, and the mode split keeps the field path unchanged. A dedicated tool would duplicate that predicate, and a close-class telemetry indicator would measure what a release contained in an instrument that measures how it closed.
 
 ## 8. Boundary statement (release-pipeline velocity ≠ delivery-team capacity)
