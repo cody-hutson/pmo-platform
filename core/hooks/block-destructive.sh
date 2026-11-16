@@ -3445,9 +3445,16 @@ script_cont_joined() {   # $1 = the command text -> stdout, one joined logical l
 }
 
 script_cont_add() {   # appends the joined logical lines of script_hdstripped to script_segments
-  local _j=""
+  local _j="" _jl=""
   _j="$(script_cont_joined "$script_hdstripped")" || _j=""
   if [ -z "$_j" ]; then return 0; fi
+  # THE LINEAR PASS, as for the segments. A joined line is as long as the command it joins, so the
+  # three substitutions below could hold the hook past the runtime's command-hook timeout on a large
+  # separator-dense continued command, and a hook that times out does not block. The joined lines
+  # are split first by the segments' own tr pass in the C locale, whose output equals the
+  # substitutions' byte for byte (AC-022-Z-EQ); they then find nothing left, and a pass that fails
+  # leaves the text to them.
+  if [ "${#_j}" -ge "$SCRIPT_LINEAR_MIN" ] && _jl="$(LC_ALL=C /usr/bin/tr '\073\046\174' '\012\012\012' <<< "${_j}.")"; then _j="${_jl%.}"; fi  # linear: cont
   _j="${_j//;/$'\n'}"
   _j="${_j//&/$'\n'}"
   _j="${_j//|/$'\n'}"
