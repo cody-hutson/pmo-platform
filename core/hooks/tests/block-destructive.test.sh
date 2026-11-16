@@ -9876,6 +9876,105 @@ else
   /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-X-FB: with the pass's tr missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
 fi
 
+# ---- AC-022-Z* (#8320, Stage 7 iteration): the joined logical lines take the linear pass too ----
+#
+# The continuation walk (M-CONT-WALK) adds each joined logical line to the first view and splits it
+# on the separators with the same three global substitutions the X family replaced. A command whose
+# lines end in a backslash-newline joins into one logical line as long as the command, so a large
+# separator-dense one could hold the hook past the runtime's command-hook timeout again, after which
+# a PreToolUse hook does not block. X1 to X24 never carry a continuation, so they never reached it.
+# The joined lines are now split first by the same tr pass, on the line marked `# linear: cont`.
+# Z1 to Z6 run the hook under the X watchdog on a benign separator-dense shape whose every unit ends
+# in a continuation, at 10, 20 and 40 KB in both locales. Z-CTL is the instrument's sensitivity on
+# that shape: the X copy whose bound never lets either pass run is stopped at the budget. Z-EQ lifts
+# the marked block and holds it equal to the substitutions byte for byte on the X dense input and its
+# edge endings, beside the X near miss. Z-FB repoints the block's tr and reads the shipped verdicts
+# on a long continued command that ends in an interpreter and its operand on two physical lines
+# (refused) and on its echo twin (allowed).
+/usr/bin/sed '/# linear: cont$/s#/usr/bin/tr#/nonexistent/tr#' "$HOOK" > "${LIN_HOOKS}/block-destructive-notool-cont.sh"
+lin_z_unit='echo a;echo b|cat&echo c \'$'\n'
+for lin_kb in 10 20 40; do lin_fill $(( lin_kb * 1024 )) 'echo gh;' "$lin_z_unit" 'gh api repos/o/r' > "${LIN_ROOT}/continued-${lin_kb}.cmd"; done
+lin_n=0
+for lin_loc in en_US.UTF-8 C; do
+  for lin_kb in 10 20 40; do
+    lin_n=$(( lin_n + 1 ))
+    lin_timed "${LIN_HOOKS}/block-destructive.sh" "$lin_loc" "${LIN_ROOT}/continued-${lin_kb}.cmd" "$LIN_LIMIT"
+    if [ "$LIN_DS" != -1 ] && [ "$LIN_EXIT" = 0 ]; then
+      /usr/bin/printf 'PASS: %s\n' "AC-022-Z${lin_n}: the continued separator shape at ${lin_kb} KB in ${lin_loc} clears the hook within the budget and is allowed"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Z${lin_n}: the long continued separator shape in ${lin_loc} clears the hook inside the budget and is allowed — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+        "\"stopped\" is the watchdog ending the run at the budget; exit=${LIN_EXIT} (want 0)"; FAIL=$((FAIL + 1))
+    fi
+  done
+done
+lin_timed "${LIN_HOOKS}/block-destructive-nopass.sh" en_US.UTF-8 "${LIN_ROOT}/continued-40.cmd" "$LIN_LIMIT"
+if [ "$LIN_DS" = -1 ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Z-CTL: the copy whose bound never lets a pass run is stopped at the budget on the long continued separator shape in UTF-8 — the instrument sees the cost"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Z-CTL: the copy whose bound never lets a pass run is stopped at the budget — measured ratio $(lin_ratio "${LIN_DS}" "${LIN_LIMIT}") of the budget, bound 1.00" \
+    "exit=${LIN_EXIT}; a copy that finishes cannot show Z1-Z6 measure anything (BROKEN PROBE)"; FAIL=$((FAIL + 1))
+fi
+# lin_zeval <locale> <bound> <block> <input> <out> — the marked block in a fresh /bin/bash, on _j.
+lin_zeval() {
+  LC_ALL="$1" /bin/bash -c 'set -euo pipefail; SCRIPT_LINEAR_MIN="$1"; _jl=""
+    _j="$(/bin/cat "$3"; printf x)"; _j="${_j%x}"
+    . "$2"
+    printf %s "$_j" > "$4"' _ "$2" "$3" "$4" "$5"
+}
+lin_why=""
+M='# linear: cont' /usr/bin/awk 'BEGIN { m = ENVIRON["M"] }
+  length($0) >= length(m) && substr($0, length($0) - length(m) + 1) == m { c++; n = 4 }
+  n > 0 { print; n-- }
+  END { exit c == 1 ? 0 : 1 }' "$HOOK" > "${LIN_ROOT}/zblock" || lin_why="${lin_why} no single line marked \`# linear: cont\`;"
+/usr/bin/head -1 "${LIN_ROOT}/zblock" > "${LIN_ROOT}/zone"
+F="'\\012\\012\\012'" T="'\\012\\012\\001'" /usr/bin/awk 'BEGIN { f = ENVIRON["F"]; t = ENVIRON["T"] }
+  !d && (i = index($0, f)) { $0 = substr($0, 1, i - 1) t substr($0, i + length(f)); d = 1 }
+  { print }
+  END { exit d ? 0 : 1 }' "${LIN_ROOT}/zblock" > "${LIN_ROOT}/znear" || lin_why="${lin_why} the near-miss edit did not apply;"
+if [ -z "$lin_why" ]; then
+  for lin_loc in en_US.UTF-8 C; do
+    for lin_k in 0 1 2 3 4 5; do
+      lin_zeval "$lin_loc" 1000000000 "${LIN_ROOT}/zblock" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/zship.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the substitutions did not run;"
+      lin_zeval "$lin_loc" 0 "${LIN_ROOT}/zblock" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/zpass.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass did not run;"
+      lin_zeval "$lin_loc" 0 "${LIN_ROOT}/zone" "${LIN_ROOT}/in-${lin_k}" "${LIN_ROOT}/zone.out" \
+        || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass line alone did not run;"
+      /usr/bin/cmp -s "${LIN_ROOT}/zship.out" "${LIN_ROOT}/zpass.out" || lin_why="${lin_why} [${lin_loc} in-${lin_k}] pass != substitutions;"
+      /usr/bin/cmp -s "${LIN_ROOT}/zship.out" "${LIN_ROOT}/zone.out" || lin_why="${lin_why} [${lin_loc} in-${lin_k}] the pass alone != substitutions;"
+    done
+    lin_zeval "$lin_loc" 1000000000 "${LIN_ROOT}/zblock" "${LIN_ROOT}/in-0" "${LIN_ROOT}/zship.out" || lin_why="${lin_why} [${lin_loc}] the reference did not run;"
+    lin_zeval "$lin_loc" 0 "${LIN_ROOT}/znear" "${LIN_ROOT}/in-0" "${LIN_ROOT}/znear.out" || lin_why="${lin_why} [${lin_loc}] the near miss did not run;"
+    [ -s "${LIN_ROOT}/zship.out" ] || lin_why="${lin_why} [${lin_loc}] empty reference output;"
+    /usr/bin/cmp -s "${LIN_ROOT}/zship.out" "${LIN_ROOT}/znear.out" \
+      && lin_why="${lin_why} [${lin_loc}] the near miss equals the substitutions (the comparison cannot see a difference);"
+  done
+fi
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Z-EQ: the \`# linear: cont\` pass equals the three substitutions byte for byte on the dense input and its edge endings in UTF-8 and C, alone and with them, and a near miss differs"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Z-EQ: the \`# linear: cont\` pass equals the three substitutions byte for byte" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+lin_why=""
+lin_tools="$(/usr/bin/grep -c -F '/nonexistent/tr' "${LIN_HOOKS}/block-destructive-notool-cont.sh")" || true
+[ "$lin_tools" = 1 ] || lin_why="${lin_why} the copy repoints ${lin_tools} pass lines, want 1;"
+lin_pad="$(lin_fill 400 '' "$lin_z_unit" '')"
+for lin_c in "b:2:${lin_pad};bash \\"$'\n'"/tmp/pmo-lin-na.sh" "a:0:${lin_pad};echo \\"$'\n'"done"; do
+  lin_tag="${lin_c%%:*}"; lin_rest="${lin_c#*:}"
+  lin_want="${lin_rest%%:*}"; lin_cmd_s="${lin_rest#*:}"
+  lin_s=0; lin_t=0
+  ( /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive.sh" > /dev/null 2>&1 ) || lin_s="$?"
+  lin_err="$( { /usr/bin/printf '%s' "$(bash_payload "$lin_cmd_s" "$LIN_ROOT")" | /bin/bash "${LIN_HOOKS}/block-destructive-notool-cont.sh" > /dev/null; } 2>&1 )" || lin_t="$?"
+  [ "$lin_s" = "$lin_want" ] || lin_why="${lin_why} [${lin_tag}] shipped exits ${lin_s}, want ${lin_want};"
+  [ "$lin_t" = "$lin_s" ] || lin_why="${lin_why} [${lin_tag}] the copy without its tr exits ${lin_t}, the shipped hook ${lin_s};"
+  case "$lin_err" in *HOOK-ERROR*) lin_why="${lin_why} [${lin_tag}] the copy without its tr raised a hook error;" ;; esac
+done
+if [ -z "$lin_why" ]; then
+  /usr/bin/printf 'PASS: %s\n' "AC-022-Z-FB: with the cont pass's tr missing, the joined lines fall back to their substitutions — the two-line interpreter run is refused and its echo twin allowed, as the shipped hook reads them, with no hook error"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  %s\n' "AC-022-Z-FB: with the cont pass's tr missing, the verdicts equal the shipped hook's" "$lin_why"; FAIL=$((FAIL + 1))
+fi
+
 # ---- AC-022-Y* (#8314, DT pass 4): the -022 quote scan is linear ----
 #
 # The script-execution rule carries its quote state across a command's segments with a scan
