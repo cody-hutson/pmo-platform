@@ -274,6 +274,60 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
 | v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | DEPLOYED | 2026-11-17 |
 | v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | DEPLOYED | 2026-11-17 |
+| v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | DEPLOYED | 2026-11-17 |
+
+#### Deployment Log v5.12
+**Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. Two composition-surface propagations are owed by the operator and pending: the plan's one Operational Deployment Manifest row, the charter template, and the script-execution allowlist, which the merge changes and the manifest does not list. Paths are repository-relative.
+
+- **(1) The merge.** It carries the release's 51 changed paths to `main` (45 modified, 5 added, 1 renamed; +4153 / −180 lines), measured at the merge commit `59be7694` against its first parent `20149aeb`:
+  - the enumeration-drift check: the new `core/deploy/tools/check-enumeration-drift.py` and its case file `core/deploy/tests/fixtures/enumeration-drift-fixtures.txt`; edits to `core/deploy/deploy.sh`, `.github/workflows/install-tests.yml`, two deploy allowlists, a deploy test, the tools README, `core/config/allowlists/script-execution-allowlist.txt`, `docs/module-apis.md` and `core/CLAUDE.md.template`;
+  - the quality-share reading: `release/tools/compute-release-velocity.sh` with two new fixtures under `release/tools/tests/fixtures/quality-share/`, the `[quality_share_band]` section of `core/config/platform-config.toml.template`, `core/schemas/platform-config-schema.md`, `docs/platform-config-reference.md`, `core/specs/label-taxonomy.md`, `core/standards/initiative-roadmap-framework.md`, `release/references/standards/release-velocity-tracking.md` and `release/references/pipeline/stage-13-close.md`;
+  - the determination and authority rules: `core/disciplines/decision-discipline.md`, `release/references/pipeline/stage-03-bundle.md`, the operator-committed § Versioning text in `release/governance/RELEASE_PROTOCOL.md`, `core/standards/duplicate-source-discipline.md` and `core/standards/gate-efficacy-standard.md`;
+  - the release note `governance-ci-checks_RELEASE_NOTES.md`, renamed into `release/releases/notes/_unversioned/`, with `release/releases/notes/README.md` and `release/releases/RELEASE_INDEX.md`;
+  - 21 process-catalog pages under `core/process-catalog/engineering-harness/`, carried by the Phase A.5.8 repairs;
+  - this release's plan.
+- **(2) Phase B4 ran once.** It ran from the Stage-12 session worktree detached at `origin/main` (`450038bb`, one merge past the release: PR #9049's), which contains the merge commit (`merge-base --is-ancestor` exit 0).
+  - **Command:** `bash core/deploy/deploy.sh --deploy --release obligation-runners-declared --no-targets`. It exited 0 and reported nothing to deploy beyond the rules mirror.
+  - **B4.5 record:**
+    - **Join key:** `obligation-runners-declared`, derived from the PR's head ref, asserted non-empty and read back with 116 rows under it, none of them `deployment-status` before the deploy. Control: v5.11's slug reads its `deployment-status` row.
+    - **Targets:** none, so the run used `--no-targets`. The B4.3 derivation found no path of the merge under a skill root or `packages/`, so there was no candidate and no non-member. Sensitivity: planted `release/skills/release-hub/SKILL.md` and `packages/comms-writer.skill` paths derive both names, and a planted non-roster skill lands among the non-members.
+    - **Deploy mode:** the run printed no `Deploy mode: user-local only` line. With no target named, neither the skill half nor the package half ran.
+    - **Rules mirror:** re-laid by the deploy (9 files), unchanged in membership; the hook-registry index was regenerated from `core/rules/bypass-mode-readiness.md`.
+  - **Rows written:** under the slug, the run wrote its `deploy-rules-mirror` row, outcome `resolved` (`result:SUCCESS`). There is no `deploy-skill` and no `deploy-package` row, as `--no-targets` requires.
+- **(3) Owed by the operator and pending.** `deploy.sh --deploy` sources neither of these composition surfaces, and the run's own output says so.
+  - **The plan's manifest row 1, `core/CLAUDE.md.template`.** It reaches the rendered workspace charter through the operator's next composition refresh (`./update.sh --surfaces-only`), outside this release. The manifest's verification for it is that the rendered charter carries the citation that replaces the five-value bullet.
+  - **`core/config/allowlists/script-execution-allowlist.txt`, which the manifest does not list.** The merge adds four lines for `check-enumeration-drift.py`. The deployed allowlist carries none of them yet: a read of the deployed copy finds 0 such lines, against 4 for the neighbouring `check-doc-links.py`. Its propagation is the installer's hook-tier provisioning, which the operator runs.
+- **Nothing else is owed.** The merge changes no `core/hooks/` path, no `core/rules/` path, no `harness/` path, no skill and no package, so no `.skill` rebuild, no hook-bundle refresh and no mirror-membership change is owed. The `[quality_share_band]` section of the platform-config template is not written to the operator's instance, by design: an instance without it reads `NOT-EVALUATED`, never a default.
+
+**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy); and, pending, the operator's composition refresh and hook-tier provisioning.
+- **The merge.** PR #8995 merged to `main` at `59be7694d4d5af4704f46dda7019b59afbdcc917` (parents `20149aeb` / `95e6aa73`) by `gh pr merge --merge`, with no `--admin`, no `--auto`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit, and the host reads the merge commit `verified=true, reason=valid`. The repository's `delete_branch_on_merge` setting removed the release branch from the remote.
+- **The pre-merge state, on head `95e6aa73`.**
+  - **A.5:** one plain merge of `main` (`20149aeb`) into the branch at Stage 12 (`5337c955`), never a rebase, then the plan's Stage-12 record (`4e86da8b`).
+  - **A.5.6:** the dry run read `v5.12` → FREE. No version label rode into the merge: the PR title and the branch name carry none, and the plan's `v5.08` is the provisional figure computed at Engineering Commit 0, beside the Header's release-version placeholder.
+  - **A.5.7:** the branch adds no ADR, so the sub-step did not fire.
+  - **A.5.8:** a repair was made (`95e6aa73`, `rewritten=17 regenerated_files=0 residue=0`).
+  - **A.6 and A.7:** `MERGEABLE` / `CLEAN`, and the PR was ready, not draft. **B0:** no dependent PR. All 24 required checks and all 61 checks on the head passed, and `main` had not moved from `20149aeb`.
+- **Phase B1.1.** The sweep exited 0: this merge left no open PR newly unmergeable. Of the three open PRs, two read clear; the third was already unmergeable before this merge, on one conflicted path.
+- **Phase B1.2.** The three process-catalog checks on the merge commit's push run completed `success`, and the three commands exited 0 in a worktree at the merge commit, so `repair owed at B5: no`.
+- **The version claim.** `claim-version.sh` claimed **`v5.12`** for bump class `minor` by atomic ref-CAS, with no collision reported. That equals both dry runs: A.5.6 on the head, and the read on the merge commit immediately before the claim.
+  - `--stamp-slug`, derived from the PR's head ref, and `--stamp-branch` were passed explicitly, naming this branch. The branch was cut from `main` after PR #9049 merged (`450038bb`), so it already carries the v5.11 row, and it contains the merge commit.
+  - The tag object `7ec2fbab` is signed and annotated and peels to the merge commit on `origin`. `git verify-tag` reads a good ED25519 signature, and the host reads the tag `verified=true, reason=valid`.
+- **The claim-time stamp.** The manifest was plan-only, staling no package. The stamp commit `c31dd381` (signed) renamed the plan to `release/releases/plans/v5/v5.12_RELEASE_PLAN.md` and resolved its placeholder, leaving none.
+- **The version-binding row (B3.1)** was appended to the event log under the slug, carrying `d:version-claim; claimed:v5.12; prov:v5.08`. The rows under the slug went from 115 to 116, and the rows carrying `claimed:v5.12` from 0 to 1. The event-record integrity cutover was already bound, so B3.2 was a no-op (`--assert-bound` exit 0).
+- **Phase B5.5, the GitHub Release, is held** until the pull request carrying this row merges. The hub runs it then.
+
+**Timestamp:** 2026-11-17 12:10 UTC (Tuesday). The `Date` cell is the merge event: the merge's `mergedAt`, `2026-11-17T12:10:42Z`. Sequence:
+- the re-read of the head, the check roster and `main` (`20149aeb`) at `12:10:28Z`;
+- the merge at `12:10:42Z`;
+- the Phase B1.1 sweep and the Phase B1.2 read by `12:12:26Z`;
+- PR #9049's merge at `12:13:02Z`, by the orchestrating session;
+- the claim between `12:16:44Z` and `12:18:02Z`, with the tag at `12:17:58Z` and the stamp commit at `12:18:00Z`;
+- the version-binding row at `12:18:48Z`;
+- the stamped deploy's row at `12:20:00Z`.
+
+The day of the week is computed from the date.
+**Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.12, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. Two composition-surface propagations, the charter template's and the script-execution allowlist's, are owed by the operator and pending. They are not deploy failures.
 
 #### Deployment Log v5.11
 **Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy and the hook-bundle refresh are complete.** Each was read back. The plan's Stage 12 Success Indicator holds: the deployed copies of `core/hooks/block-destructive.sh` and `core/hooks/lib/command-position.awk` byte-equal the merged source. Paths are repository-relative; the deployed bundle is written `<deploy-root>/.claude/hooks/`.
