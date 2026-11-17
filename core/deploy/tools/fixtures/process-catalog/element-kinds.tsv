@@ -1,0 +1,6 @@
+kind	pattern
+fixture-source	^core/deploy/tools/fixtures/process-catalog/sources/
+catalog-page	^core/process-catalog/[^/]+/[^/]+\.md$
+workflow	\.ya?ml$
+fixture-source	/sources/[^/]+$
+document	\.md$

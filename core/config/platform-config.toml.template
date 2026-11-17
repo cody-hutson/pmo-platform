@@ -519,3 +519,85 @@ model_draw_multipliers = {}
 #   Example: { "<model-id>" = "all-models,model-specific" }
 # Default: {}
 model_weekly_windows = {}
+
+[quality_share_band]
+# The band the standing quality initiative's share of shipped items is judged against:
+# its floor and ceiling, the rule that counts the share, and the window of closed
+# releases it is judged over. core/specs/label-taxonomy.md declares the initiative
+# standing and governed by this band, and names this section by role only.
+#
+# THIS SECTION IS THE SINGLE HOME FOR THE BAND'S VALUES AND ITS COUNTING RULE. They are
+# a parameter here, not prose in the label taxonomy, because they are scheduled to
+# change: after three releases have been measured against them, the values and the
+# counting rule are revisited together, and the revisit is then a governed change to
+# this section (Track A) that no doctrine text has to follow.
+#
+# WHY A FLOOR AND A CEILING. The floor keeps the standing quality flow from being
+# starved: support for shipped features and the security and privacy work live in it.
+# The ceiling exists because, when the band was set, the measured failure ran the other
+# way: quality and platform-machinery work were crowding out product-facing capability,
+# and a floor alone would never have fired.
+#
+# THE COUNTING RULE. Every share is over the shipped items of a release, and an item
+# carrying scaffolding_label is not an item of the release at all. Shipped means the
+# item carries no terminal not-delivered status label (the delivery predicate of the
+# release-velocity tool). Counted: shipped items carrying counted_label. Reported beside
+# the share and never counted in it: unlabelled items (shipped items carrying no label in
+# counted_label's prefix namespace, such as no `project:` label), as their own count, and
+# bug-typed items (bug_type_label) carried under another initiative label, so the counted
+# label's known under-count stays visible. Unlabelled items stay in the denominator.
+#
+# THE JUDGMENT. The window is the closing release and the window_releases - 1 releases
+# merged before it on main's first-parent history that carry a row in
+# release/releases/RELEASE_LOG.md, newest first. If a release merged on that history has
+# no row yet, the reading is NOT-EVALUATED, never a window shifted past it. The band is
+# judged on the aggregate judged_on names, and both aggregates are reported. A share
+# exactly at the floor or the ceiling is inside the band. A reading outside the band is
+# an advisory finding recorded at close, never a close verdict. The method is
+# release/references/standards/release-velocity-tracking.md section 7b.
+#
+# RESOLVES ON 2 RUNGS, NOT 5: the global default (this file) and the individual rung
+# (the XDG platform-config.toml, under a [quality_share_band] header there). The band
+# measures one release pipeline per install, so the portfolio, program and project rungs
+# carry no meaning for it.
+#
+# FAIL CLOSED. A value absent at both rungs, empty, or out of range makes the reading
+# NOT-EVALUATED, naming the key. No built-in value is substituted: a substituted floor
+# or ceiling would judge a release against a band nobody set.
+#
+# Calibration policy: CALIBRATE-AFTER-3. Revisit the values and the counting rule
+# together after three releases have been measured against them. values_set_at names the
+# release the current values took effect at; the reading counts the release-log rows from
+# it through the closing release.
+
+# The label whose shipped items the band counts.
+# Valid: a namespaced label (prefix:value) that exists on the repository; the reading is
+# NOT-EVALUATED otherwise. Default: "project:platform-quality"
+counted_label = "project:platform-quality"
+# The label marking stage scaffolding. An item carrying it is excluded from every count.
+# Valid: a label name. Default: "sub-task"
+scaffolding_label = "sub-task"
+# The label typing an item as a bug, for the count reported beside the share.
+# Valid: a label name. Default: "type:bug"
+bug_type_label = "type:bug"
+# The lowest share inside the band.
+# Valid: a decimal in [0.0, 1.0], not above share_ceiling. Default: 0.15
+share_floor = 0.15
+# The highest share inside the band.
+# Valid: a decimal in [0.0, 1.0], not below share_floor. Default: 0.35
+share_ceiling = 0.35
+# How many closed releases the band is judged over, the closing release included.
+# Valid: a positive integer. Default: 5
+window_releases = 5
+# Which aggregate the band is judged on: "pooled" (counted items over shipped items
+# across the window) or "mean-of-shares" (the mean of each release's own share).
+# Judged pooled, as settled at the Collective Review of 2026-11-13. The band decision
+# named a rolling mean of the last five closed releases; the pooled share was chosen
+# because it is less sensitive to re-bundling than the mean of per-release shares,
+# though not immune to it, since the window counts releases. The mean is printed beside
+# the pooled share on every reading and triggers nothing.
+# Valid: "pooled" | "mean-of-shares". Default: "pooled"
+judged_on = "pooled"
+# The release (its milestone slug) at which the current values took effect.
+# Valid: a release milestone slug. Default: "obligation-runners-declared"
+values_set_at = "obligation-runners-declared"

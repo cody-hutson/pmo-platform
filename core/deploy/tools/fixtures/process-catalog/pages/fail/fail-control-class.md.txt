@@ -1,0 +1,68 @@
+---
+title: Fail fixture
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: agent-process
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fail-control-class
+level: L2
+universe: fixture-landscape
+parent: fixture-stream
+actors: [spoke, script:fixture-script]
+owner: hub
+lens_status: conformant
+last_verified_commit: 0000000000000000000000000000000000000000
+pack_version: 2
+---
+# Fail fixture
+
+## Summary
+
+A fixture sub-process for one failing rule.
+
+## Entry and exit
+
+| Side | Criteria | Source |
+|---|---|---|
+| Entry | a fixture input record exists | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+
+## Flow
+
+```mermaid
+flowchart TD
+    s1[Read input] --> s2[Check input]
+    s2 --> g1{Valid?}
+    g1 -->|yes| s3[/Write output/]
+    g1 -->|no| s1
+```
+
+## Activities
+
+| Activity | Primary actor | Purpose | Page |
+|---|---|---|---|
+| Fixture activity | spoke | read and judge one record | fixture-activity-plain |
+
+## Controls
+
+| Control | Source | Enforcement class | Surface | Applies to |
+|---|---|---|---|---|
+| a rule with no control ID | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | code-enfroce | — | fixture-activity-plain |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the steps | [SOURCE] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
+
+<!-- expect: CTL005 -->

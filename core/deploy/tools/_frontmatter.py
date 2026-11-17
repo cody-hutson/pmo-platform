@@ -4,7 +4,7 @@ single shared corpus-traversal predicate for the deploy-tool family.
 
 This is the ONE place the deploy-tool family parses a doc's frontmatter block,
 so two checks that both reason about "does this doc carry frontmatter, and what
-keys does it carry" can never drift apart. Its seven live consumers, all under
+keys does it carry" can never drift apart. Its eight live consumers, all under
 core/deploy/tools/:
 
   * backfill-relationship-edges.py — via read_frontmatter();
@@ -15,8 +15,11 @@ core/deploy/tools/:
     on a git-object blob written to a temporary file;
   * check-version-anchors.py (Check 18b/18d) — via read_anchor(), which preserves
     that tool's exact 4-status contract;
-  * compose-portfolio.py — via read_frontmatter(); and
-  * stamp-node-frontmatter.py — via read_frontmatter().
+  * compose-portfolio.py — via read_frontmatter();
+  * stamp-node-frontmatter.py — via read_frontmatter(); and
+  * _process_catalog.py (the process-catalog tools' shared library) — via
+    read_frontmatter(), frontmatter_lines() and frontmatter_end(), by a static
+    import.
 
 The three checks among them — Checks 50, 18b/18d and 28 — load this module dynamically, through
 importlib.util.spec_from_file_location rather than a static import, which is why
@@ -52,8 +55,8 @@ leave a universal silently asserting the opposite of.
 FROZEN SEMANTICS
 ----------------
 The clauses below state what this module DOES, not what a YAML parser would do.
-They are frozen deliberately: every one of them is a property seven consumers
-already depend on, so changing one changes all seven resolved-value sets at once
+They are frozen deliberately: every one of them is a property eight consumers
+already depend on, so changing one changes all eight resolved-value sets at once
 and silently. Each clause is anchored by a named assertion in _self_test — F-1
 in cases (1), (2) and (5), F-2 / F-3 / F-4 in case (5), F-5 in case (1) — so a
 future well-meaning tightening fails a test rather than shipping. The case
@@ -164,7 +167,7 @@ def read_frontmatter(doc_path: Path) -> tuple[dict[str, str], str]:
             # branch is entered only when key is empty — in which case " " in key
             # is False and the `continue` below never runs. The effect is that
             # ANY flush-left line containing a colon becomes a top-level key,
-            # including a "#" comment line and ordinary prose. Six consumers have
+            # including a "#" comment line and ordinary prose. Its consumers have
             # resolved values under that behaviour since this module shipped.
             # Do not "repair" this into reachability: that is a corpus-wide
             # resolved-key change, and case (5) asserts against it.
@@ -192,6 +195,47 @@ def read_anchor(doc_path: Path) -> tuple[str | None, str]:
     if "framework_version_anchor" in keys:
         return keys["framework_version_anchor"], "ok"
     return None, "frontmatter-no-key"
+
+
+def frontmatter_lines(*, path: Path | None = None, text: str | None = None) -> list[str] | None:
+    """The lines of a doc, split EXACTLY as read_frontmatter() splits them, so no
+    caller that needs a line index into the block ever splits for itself.
+
+    Exactly one of `path` and `text` is given (ValueError otherwise). `path` is
+    read as read_frontmatter() reads it — UTF-8 with replacement — and an absent
+    or unreadable path returns None, the counterpart of that function's "no-file"
+    status. The split is str.splitlines(), which also breaks a line at a form
+    feed, a line-separator character and a bare carriage return: a caller that
+    split on the line feed alone would number the block's lines differently from
+    the reader, which is the drift this function exists to prevent."""
+    if (path is None) == (text is None):
+        raise ValueError("frontmatter_lines takes exactly one of path= and text=")
+    if path is not None:
+        if not path.exists():
+            return None
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+    return text.splitlines()
+
+
+def frontmatter_end(*, path: Path | None = None, text: str | None = None) -> int | None:
+    """Where a doc's frontmatter block ends, in frontmatter_lines() numbering.
+
+    Returns the index of the closing "---" fence; the line count when the block
+    never closes (read_frontmatter() then reads keys to the end of the file, and
+    so does this); and None when the doc has no frontmatter — its first line is
+    not a fence, it is empty, or the path cannot be read. The fence rule is F-1's
+    and is stated once, in read_frontmatter(); this function restates the test,
+    not a second rule, and case (7) of the self-test holds the two together."""
+    lines = frontmatter_lines(path=path, text=text)
+    if not lines or lines[0].strip() != "---":
+        return None
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            return index
+    return len(lines)
 
 
 def is_corpus_path(path: Path, root: Path) -> bool:
@@ -282,7 +326,7 @@ def _self_test() -> int:
         # F-4 — a "#" in a value is CONTENT. Each value must resolve WHOLE.
         assert keys5["project_id"] == "proj-alpha        # renamed from alpha-2024", (
             "F-4: a trailing '#' comment is part of the value; a strip here "
-            "would change resolved values across all seven consumers at once"
+            "would change resolved values across all eight consumers at once"
         )
         assert keys5["anchor"] == "terminology-glossary.md#term-work-item", (
             "F-4: a heading anchor's '#' has no preceding whitespace and must "
@@ -327,7 +371,7 @@ def _self_test() -> int:
         # F-1 — the two FENCE-BOUNDARY clauses. They are pinned HERE because no
         # other case reaches them: every fixture above either opens with a fence
         # or carries no later fence at all, so a mutation to either boundary
-        # leaves all of them green. Both clauses are properties seven consumers
+        # leaves all of them green. Both clauses are properties eight consumers
         # resolve values under.
         #
         # First arm — frontmatter exists IFF the FIRST line is a fence, HOWEVER
@@ -393,6 +437,53 @@ def _self_test() -> int:
             raise AssertionError("a path outside root must raise ValueError")
         except ValueError:
             pass
+
+        # (7) frontmatter_lines / frontmatter_end — the block's end, in the
+        # reader's own line numbering. Each arm is compared with what
+        # read_frontmatter() does on the same bytes, so the two cannot drift.
+        assert frontmatter_end(path=d7) is None, "a late fence is no frontmatter: None"
+        assert frontmatter_end(path=d2) is None, "no fence at all: None"
+        assert frontmatter_end(text="") is None, "an empty doc: None"
+        assert frontmatter_end(path=base / "does-not-exist.md") is None, "an unreadable path: None"
+        assert frontmatter_lines(path=base / "does-not-exist.md") is None
+        end8 = frontmatter_end(path=d8)
+        lines8 = frontmatter_lines(path=d8)
+        assert end8 == 2 and lines8[end8].strip() == "---", (end8, lines8)
+        assert "after_fence" not in keys8 and lines8[end8 + 1].startswith("after_fence"), (
+            "the closing fence index sits directly above the first body line, and "
+            "read_frontmatter() reads no key below it"
+        )
+        # Both argument forms agree on the same bytes.
+        assert frontmatter_end(text=d8.read_text(encoding="utf-8")) == end8
+        assert frontmatter_lines(text=d8.read_text(encoding="utf-8")) == lines8
+        # An unclosed block runs to the end of the file, for the reader and here.
+        unclosed = "---\ntitle: Open\nlate_key: still inside\n"
+        d9 = base / "unclosed.md"
+        d9.write_text(unclosed, encoding="utf-8")
+        keys9, status9 = read_frontmatter(d9)
+        assert status9 == "ok" and keys9.get("late_key") == "still inside", (status9, keys9)
+        assert frontmatter_end(path=d9) == len(frontmatter_lines(path=d9)) == 3
+        # Exactly one argument.
+        for bad in ({}, {"path": d8, "text": "x"}):
+            try:
+                frontmatter_end(**bad)
+                raise AssertionError("frontmatter_end must refuse %r" % sorted(bad))
+            except ValueError:
+                pass
+        # Split parity: a form feed, a line-separator character and a bare
+        # carriage return inside a value each END a line for the reader, so the
+        # text after it is its own key line and the fence index moves with it. A
+        # caller that split on the line feed alone would put the fence one line
+        # early for each of them.
+        for mark in ("\x0c", "\u2028", "\r"):
+            body = "---\nfirst: a" + mark + "second: b\n---\nthird: c\n"
+            d10 = base / "split.md"
+            d10.write_bytes(body.encode("utf-8"))   # bytes: no newline translation on write
+            keys10, status10 = read_frontmatter(d10)
+            assert status10 == "ok" and keys10.get("second") == "b" and "third" not in keys10, (mark, keys10)
+            assert frontmatter_end(path=d10) == 3, (mark, frontmatter_end(path=d10))
+            assert frontmatter_end(text=body) == 3
+            assert body.split("\n").index("---", 1) == 2, "the line-feed-only split disagrees: the control"
 
     print("_frontmatter self-test OK")
     return 0

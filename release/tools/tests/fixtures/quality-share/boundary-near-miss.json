@@ -1,0 +1,38 @@
+{
+  "fixture": "quality-share boundary near-miss: exactly at the ceiling. Identical to out-of-band.json except that member 401 carries project:governance-hygiene in place of project:platform-quality, so 7 of 20 are counted and both aggregates are exactly 35.0%; a share at the ceiling is inside the band.",
+  "closing": "fixture-release-5",
+  "releases": [
+    {"slug": "fixture-release-5", "members": [
+      {"number": 501, "labels": ["project:platform-quality", "type:bug"]},
+      {"number": 502, "labels": ["project:platform-quality", "type:task"]},
+      {"number": 503, "labels": ["type:task"]},
+      {"number": 504, "labels": ["project:pipeline", "type:bug"]},
+      {"number": 505, "labels": ["project:platform-quality", "sub-task"]},
+      {"number": 506, "labels": ["project:platform-quality", "type:task", "status: deferred"]}
+    ]},
+    {"slug": "fixture-release-4", "members": [
+      {"number": 401, "labels": ["project:governance-hygiene", "type:task"]},
+      {"number": 402, "labels": ["project:platform-quality", "type:bug"]},
+      {"number": 403, "labels": ["project:pipeline", "type:task"]},
+      {"number": 404, "labels": ["project:knowledge-corpus", "type:task"]}
+    ]},
+    {"slug": "fixture-release-3", "members": [
+      {"number": 301, "labels": ["project:platform-quality", "type:task"]},
+      {"number": 302, "labels": ["project:pipeline", "type:story"]},
+      {"number": 303, "labels": ["project:pipeline", "type:task"]},
+      {"number": 304, "labels": ["project:methodology-packs", "type:story"]}
+    ]},
+    {"slug": "fixture-release-2", "members": [
+      {"number": 201, "labels": ["project:platform-quality", "type:bug"]},
+      {"number": 202, "labels": ["project:platform-quality", "type:task"]},
+      {"number": 203, "labels": ["project:governance-hygiene", "type:task"]},
+      {"number": 204, "labels": ["project:pipeline", "type:task"]}
+    ]},
+    {"slug": "fixture-release-1", "members": [
+      {"number": 101, "labels": ["project:platform-quality", "type:task"]},
+      {"number": 102, "labels": ["project:skill-suite", "type:story"]},
+      {"number": 103, "labels": ["project:pipeline", "type:task"]},
+      {"number": 104, "labels": ["project:pipeline", "type:spike"]}
+    ]}
+  ]
+}

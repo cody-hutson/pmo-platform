@@ -1,0 +1,15 @@
+{
+  "synthetic": "invented values; not measured on any install",
+  "params": {
+    "today": "2001-01-14"
+  },
+  "inputs": {
+    "tracked:fixture-standard.md": [
+      [
+        "fixture-standard.md",
+        "# Fixture standard\n\n## Another section\n\n| Gate | Posture | Flip decision |\n|---|---|---|\n| a fixture gate outside the section | advisory | flipped |\n\n## Flip-decision status (fixture)\n\nA fixture paragraph.\n\n| Gate | Current posture | Flip decision |\n|---|---|---|\n| fixture gate alpha | advisory | shakedown continues — a fixture reason |\n| fixture gate beta | advisory | **DEFERRED — precondition-blocked, NOT evidence-blocked.** A fixture reason |\n| fixture gate gamma | advisory | **RATIFIED ADVISORY** — a fixture reason |\n| fixture gate delta | advisory | deferred — a fixture reason |\n| fixture gate epsilon | required | flipped |\n| fixture gate zeta | advisory | a decision outside the set |\n\n**Row form — a fixture paragraph.**\n\n| fixture hook rule alpha | advisory | **DEFERRED WITH A DEADLINE** — a fixture reason |\n| fixture hook rule beta | advisory | **SPLIT DISPOSITION** — a fixture reason |\n\n## A later section\n\n| fixture gate after the section | advisory | flipped |\n"
+      ]
+    ]
+  },
+  "expected": "first table: rows 6\n  DEFERRED — precondition-blocked: 1\n  RATIFIED ADVISORY: 1\n  deferred: 1\n  flipped: 1\n  other: 1\n  shakedown continues: 1\nsecond table: rows 2\n  DEFERRED WITH A DEADLINE: 1\n  SPLIT DISPOSITION: 1\n"
+}
