@@ -781,7 +781,7 @@ From #8440's first commit on, a newer commit pushed to a pull request cancels th
 | # | Outcome (one line) | Status |
 |---|---|---|
 | #8440 | all 26 pull-request-triggered workflows carry one canonical workflow-level concurrency block; the required macOS close-out smoke job stops running its five trailing suites on a cancelled run; the selection map says what a cancelled job is evidence of | DONE (Stage 6); AC-3 is graded after the merge (AI-004) |
-| #9007 | the `Workflow concurrency gate` job, its checker and fixtures, the register row, the rules sentence and a pointer decision record ({{ADR:superseded-run-cancellation-convention}}) | DONE (Stage 6); AC-6 is graded after the merge (AI-004) |
+| #9007 | the `Workflow concurrency gate` job, its checker and fixtures, the register row, the rules sentence and a pointer decision record (ADR-241) | DONE (Stage 6); AC-6 is graded after the merge (AI-004) |
 
 ### Key decisions
 
@@ -792,7 +792,7 @@ From #8440's first commit on, a newer commit pushed to a pull request cancels th
 - **D-PopulationScope (B):** all 26 pull-request-triggered workflows, not only the 7 macOS ones, so the gate can scan the whole tree. #8440 is XL; kept as one card.
 - **D-RedArmEvidence (A):** one descriptive paragraph in the selection map, no stage-text edit.
 - **D-AlwaysStepTail (A):** the five `always()` steps become `${{ !cancelled() }}`, so a cancelled close-out run releases its macOS runner at once instead of after about five minutes.
-- **#9007:** an advisory, enforcing job in `repo-integrity.yml` over the whole tree; textual equality on the canonical lines; a pull-request trigger beside `workflow_call` is a finding (`CALLED-WITH-PR-TRIGGER`), and so is a review event beside a pull-request trigger (`REVIEW-WITH-PR-TRIGGER`); the self-test grades the exit the gate returns and the job fails an exit 0 that prints a finding; a local RED record; a pointer decision record, {{ADR:superseded-run-cancellation-convention}}, whose number binds at the Stage-12 claim.
+- **#9007:** an advisory, enforcing job in `repo-integrity.yml` over the whole tree; textual equality on the canonical lines; a pull-request trigger beside `workflow_call` is a finding (`CALLED-WITH-PR-TRIGGER`), and so is a review event beside a pull-request trigger (`REVIEW-WITH-PR-TRIGGER`); the self-test grades the exit the gate returns and the job fails an exit 0 that prints a finding; a local RED record; a pointer decision record, ADR-241, whose number binds at the Stage-12 claim.
 - **Size:** 28 effective points over the 25 ceiling, kept as one release by operator override.
 
 ### Reversibility
