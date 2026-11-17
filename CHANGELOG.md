@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.09] - 2026-11-16
+
+Usage is now counted once per API response and stated in one unit, weekly points of one account, so a release's cost can be recorded and compared.
+
+[Full notes](release/releases/notes/v5.09_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.09)
+
 ## [v5.08] - 2026-11-15
 
 The deletion guard now judges every part of a command on the path it acts on, and no longer refuses text a command only carries.
