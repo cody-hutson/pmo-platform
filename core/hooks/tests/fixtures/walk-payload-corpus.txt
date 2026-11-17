@@ -127,13 +127,13 @@ G05|block-destructive|expn|K07|X|B|bash ""$'-x' @D@/na.sh
 G06|block-destructive|expn|K22|o|a|bash "$NOPE7019"-x @D@/ok.sh
 G07|block-destructive|expn|-|-|B|bash "$NOPE7019"/na.sh
 G08|block-destructive|expn|T24|X|B|bash "$NOPE7019"--rcfile @D@/ok.sh @D@/na.sh
-I01|block-destructive|frag|-|-|a|bash '-x @D@/na.sh'
+I01|block-destructive|frag|-|-|B|bash '-x @D@/na.sh'
 I02|block-destructive|frag|-|-|a|bash "-x y" @D@/na.sh
 I03|block-destructive|frag|-|-|a|bash 'a b' @D@/na.sh
 I04|block-destructive|frag|-|-|a|bash -n 'a b' @D@/na.sh
 I05|block-destructive|frag|-|-|a|bash ''"-x y" @D@/na.sh
-K01|block-destructive|ctl|-|X|a|bash '@D@/sp ace/na.sh'
-K02|block-destructive|ctl|-|?|a|bash '/tmp/pmo qtok probe na.sh'
+K01|block-destructive|ctl|-|X|B|bash '@D@/sp ace/na.sh'
+K02|block-destructive|ctl|-|?|B|bash '/tmp/pmo qtok probe na.sh'
 K03|block-destructive|ctl|-|-|a|bash -c 'echo a; echo b'
 K04|block-destructive|ctl|-|?|a|git commit -m 'two words'
 K05|block-destructive|ctl|-|-|a|bash -n @D@/na.sh
@@ -210,18 +210,18 @@ X02|block-destructive|concat|-|X|B|bash ''@D@/na.sh
 X03|block-destructive|concat|-|X|B|bash '@D@/na'.sh
 X04|block-destructive|concat|-|o|B|bash '@D@/'ok.sh
 X05|block-destructive|concat|-|o|B|bash ''@D@/ok.sh
-X06|block-destructive|concat|-|X|a|bash '@D@/na.'sh
-X07|block-destructive|concat|-|X|a|bash '@D@/na.s'h
-X08|block-destructive|concat|-|X|a|bash "@D@/na.s"h
+X06|block-destructive|concat|-|X|B|bash '@D@/na.'sh
+X07|block-destructive|concat|-|X|B|bash '@D@/na.s'h
+X08|block-destructive|concat|-|X|B|bash "@D@/na.s"h
 X09|block-destructive|concat|-|X|B|bash '@D@/na.sh'""
 X10|block-destructive|concat|-|X|B|source '@D@/na.'sh
 X11|block-destructive|concat|-|o|a|bash '@D@/ok.'sh
-X12|block-destructive|concat|-|X|a|bash @D@/na.'s'h
-X13|block-destructive|concat|-|X|a|bash @D@/na.'sh'
+X12|block-destructive|concat|-|X|B|bash @D@/na.'s'h
+X13|block-destructive|concat|-|X|B|bash @D@/na.'sh'
 X14|block-destructive|concat|-|X|B|bash @D@/na".sh"
-X15|block-destructive|concat|-|X|a|bash @D@/na.s\h
+X15|block-destructive|concat|-|X|B|bash @D@/na.s\h
 X16|block-destructive|concat|-|o|a|bash @D@/ok.'sh'
-X17|block-destructive|concat|-|X|a|bash @D@/na.s"h"
+X17|block-destructive|concat|-|X|B|bash @D@/na.s"h"
 X18|block-destructive|concat|-|X|B|bash @D@/n""a.sh
 X19|block-destructive|concat|-|X|B|source @D@/na.'sh'
 O01|block-destructive|fp|-|?|a|bash -lc 'echo a b'
@@ -238,11 +238,11 @@ O11|block-destructive|fp|-|-|a|node -e 'console.log(1 + 1)'
 O12|block-destructive|fp|-|-|a|python3 -m json.tool --indent 2 'no such file'
 O13|block-destructive|fp|-|o|a|bash @D@/ok.sh 'two words'
 O14|block-destructive|fp|-|o|a|bash -x @D@/ok.sh --msg "it's here"
-O15|block-destructive|fp|-|o|a|bash '@D@/sp ace/ok.sh'
+O15|block-destructive|fp|-|o|B|bash '@D@/sp ace/ok.sh'
 O16|block-destructive|fp|-|?|a|source 'my env file'
 O17|block-destructive|fp|-|-|a|bash -n '@D@/sp ace/ok.sh'
-O18|block-destructive|fp|-|X|a|FOO='a b' bash @D@/na.sh
-O19|block-destructive|fp|-|X|a|env FOO='a b' bash @D@/na.sh
+O18|block-destructive|fp|-|X|B|FOO='a b' bash @D@/na.sh
+O19|block-destructive|fp|-|X|B|env FOO='a b' bash @D@/na.sh
 O20|block-destructive|fp|-|?|a|bash -lc "echo 'x y'"
 O21|block-destructive|fp|-|-|a|sh -c "echo 'a b'"
 O22|block-destructive|fp|-|-|a|bash --norc -c 'echo a b'
@@ -251,13 +251,13 @@ O24|block-destructive|fp|-|-|B|bash -c 'cat @D@/na.sh'
 O25|block-destructive|fp|-|?|B|bash -lc 'bash @D@/na.sh'
 O26|block-destructive|fp|-|X|B|sh -ec "sh @D@/na.sh"
 O27|block-destructive|fp|-|X|B|zsh -ec 'zsh @D@/na.sh'
-O28|block-destructive|fp|-|X|a|X='a b' Y=1 sh @D@/na.sh
+O28|block-destructive|fp|-|X|B|X='a b' Y=1 sh @D@/na.sh
 O29|block-destructive|fp|-|o|a|bash -x -e -u -o pipefail @D@/ok.sh 'arg one'
 Y01|block-destructive|nonflag|K15|w|B|bash '@D@/wr'ap @D@/na.sh
 Y02|block-destructive|nonflag|K15|w|B|bash ''@D@/wrap @D@/na.sh
 Y03|block-destructive|nonflag|T48|w|a|bash '@D@/wr'ap @D@/ok.sh
-V01|block-destructive|verb|-|X|a|'ba'sh @D@/na.sh
-V02|block-destructive|verb|-|X|a|""bash @D@/na.sh
+V01|block-destructive|verb|-|X|B|'ba'sh @D@/na.sh
+V02|block-destructive|verb|-|X|B|""bash @D@/na.sh
 V03|block-destructive|verb|-|o|a|'ba'sh @D@/ok.sh
 V04|block-destructive|verb|-|X|W|''@D@/na.sh
 U01|block-destructive|unq|-|X|B|bash $NOPE7019-x @D@/na.sh
@@ -323,10 +323,10 @@ L22|block-destructive|long2|-|X|B|bash -@MIDX@ @D@/na.sh
 L23|block-destructive|long2|-|o|a|bash ""-@MIDX@ @D@/ok.sh
 L24|block-destructive|long2|L25|X|B|bash -n ""+@MIDN@ @D@/na.sh
 L25|block-destructive|long2|-|X|B|bash -n +@MIDN@ @D@/na.sh
-R05|block-destructive|resid2|-|X|a|bash "$(echo @D@)/na.sh"
-R06|block-destructive|resid2|-|o|a|bash "$(echo @D@)/ok.sh"
+R05|block-destructive|resid2|-|X|B|bash "$(echo @D@)/na.sh"
+R06|block-destructive|resid2|-|o|B|bash "$(echo @D@)/ok.sh"
 R07|block-destructive|resid2|-|-|B|bash "$NOPE7019/na.sh"
-R08|block-destructive|resid2|-|X|a|bash "$HOME/sp ace/na.sh"
+R08|block-destructive|resid2|-|X|B|bash "$HOME/sp ace/na.sh"
 R09|block-destructive|resid2|-|X|B|bash "$HOME/na.sh"
 X21|block-destructive|exec2|-|X|a|'@D@/na.s'h
 X22|block-destructive|exec2|-|o|a|'@D@/ok.s'h
@@ -731,6 +731,10 @@ ZR04|block-destructive|redir|-|-|a|bash -n @D@/na.sh > /dev/null 2>&1
 # are executions or shapes the walk does not reach, each declared in the readiness text.
 # WR150 and WR151, an abbreviated long option with a separate value, were declared here and
 # are closed by the card's iteration for its Stage 7 finding F-01 (group wrap-abbrev, below).
+# WR126 to WR131 were declared here and are closed by card #8319 (group wrap-qval, refused);
+# WR134 and WR135 are its declared precision rows (group wrap-qval-prec, allowed), re-graded with
+# ground truth `?`: for this release the operator waived the real-interpreter verification a
+# refuse-to-allow move otherwise needs (D-GroundTruth-Rev).
 WR01|block-destructive|wrap-opt|-|?|B|nice -n 10 bash @D@/na.sh
 WR02|block-destructive|wrap-opt|-|?|B|stdbuf -o0 bash @D@/na.sh
 WR03|block-destructive|wrap-opt|-|?|B|stdbuf -o 0 bash @D@/na.sh
@@ -769,17 +773,17 @@ WR39|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 node
 WR40|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 perl
 WR41|block-destructive|wrap-xargs|-|?|B|printf x | xargs -n1 ruby
 WR42|block-destructive|wrap-xargs|-|?|B|git ls-files '*.py' | xargs -n1 python3
-WR43|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -x
-WR44|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -e
-WR45|block-destructive|wrap-declared|-|?|a|printf x | xargs bash --
-WR46|block-destructive|wrap-declared|-|?|a|printf x | xargs bash --norc
-WR47|block-destructive|wrap-declared|-|?|a|printf x | xargs bash +x
-WR48|block-destructive|wrap-declared|-|?|a|printf x | xargs bash -o errexit
-WR49|block-destructive|wrap-declared|-|?|a|printf x | xargs sh -e
-WR50|block-destructive|wrap-declared|-|?|a|printf x | xargs zsh -f
-WR51|block-destructive|wrap-declared|-|?|a|printf x | xargs -n 1 bash -e
-WR52|block-destructive|wrap-declared|-|?|a|printf x | xargs -n 1 bash -x
-WR53|block-destructive|wrap-declared|-|?|a|printf x | xargs -0 sh -x
+WR43|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -x
+WR44|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -e
+WR45|block-destructive|rt-xflag|-|?|B|printf x | xargs bash --
+WR46|block-destructive|rt-xflag|-|?|B|printf x | xargs bash --norc
+WR47|block-destructive|rt-xflag|-|?|B|printf x | xargs bash +x
+WR48|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -o errexit
+WR49|block-destructive|rt-xflag|-|?|B|printf x | xargs sh -e
+WR50|block-destructive|rt-xflag|-|?|B|printf x | xargs zsh -f
+WR51|block-destructive|rt-xflag|-|?|B|printf x | xargs -n 1 bash -e
+WR52|block-destructive|rt-xflag|-|?|B|printf x | xargs -n 1 bash -x
+WR53|block-destructive|rt-xflag|-|?|B|printf x | xargs -0 sh -x
 WR54|block-destructive|wrap-xargs-ctl|-|?|a|printf x | xargs bash -n
 WR55|block-destructive|wrap-xargs-ctl|-|?|a|find @D@ -print0 | xargs -0 bash -n
 WR56|block-destructive|wrap-xargs-ctl|-|?|a|printf x | xargs -n 1 bash -c 'echo hi'
@@ -846,20 +850,20 @@ WR122|block-destructive|wrap-qval|-|?|B|gh pr view; X='a; b=' bash @D@/na.sh
 WR123|block-destructive|wrap-qval|-|?|B|X="a; b=" bash "$D/x.sh"
 WR124|block-destructive|wrap-qval-ctl|-|?|a|X='a; b=' bash @D@/ok.sh
 WR125|block-destructive|wrap-qval-ctl|-|?|B|FOO='ab' bash @D@/na.sh
-WR126|block-destructive|wrap-declared|-|?|a|FOO='a b' bash @D@/na.sh
-WR127|block-destructive|wrap-declared|-|?|a|FOO="a b" bash @D@/na.sh
-WR128|block-destructive|wrap-declared|-|?|a|env FOO='a b' bash @D@/na.sh
-WR129|block-destructive|wrap-declared|-|?|a|X='a b' Y=1 sh @D@/na.sh
-WR130|block-destructive|wrap-declared|-|?|a|A=1; B='x y' bash @D@/na.sh
-WR131|block-destructive|wrap-declared|-|?|a|FOO=a\ b bash @D@/na.sh
+WR126|block-destructive|wrap-qval|-|?|B|FOO='a b' bash @D@/na.sh
+WR127|block-destructive|wrap-qval|-|?|B|FOO="a b" bash @D@/na.sh
+WR128|block-destructive|wrap-qval|-|?|B|env FOO='a b' bash @D@/na.sh
+WR129|block-destructive|wrap-qval|-|?|B|X='a b' Y=1 sh @D@/na.sh
+WR130|block-destructive|wrap-qval|-|?|B|A=1; B='x y' bash @D@/na.sh
+WR131|block-destructive|wrap-qval|-|?|B|FOO=a\ b bash @D@/na.sh
 WR132|block-destructive|wrap-declared|-|?|a|TS=$(date +%s) bash @D@/na.sh
 WR133|block-destructive|wrap-declared|-|?|a|VERSION="$(git describe --tags)" bash @D@/na.sh
-WR134|block-destructive|wrap-overblock|-|?|B|MSG='run bash now' echo @D@/na.sh
-WR135|block-destructive|wrap-overblock|-|?|B|NOTE="see bash @D@/na.sh" true
+WR134|block-destructive|wrap-qval-prec|-|?|a|MSG='run bash now' echo @D@/na.sh
+WR135|block-destructive|wrap-qval-prec|-|?|a|NOTE="see bash @D@/na.sh" true
 WR136|block-destructive|wrap-overblock|-|?|B|cat 'it; B=' bash @D@/na.sh
-WR140|block-destructive|wrap-declared|-|?|a|>/dev/null bash @D@/na.sh
-WR141|block-destructive|wrap-declared|-|?|a|\bash @D@/na.sh
-WR142|block-destructive|wrap-declared|-|?|a|"sudo" bash @D@/na.sh
+WR140|block-destructive|rt-redir|-|?|B|>/dev/null bash @D@/na.sh
+WR141|block-destructive|rt-esc|-|?|B|\bash @D@/na.sh
+WR142|block-destructive|rt-qwrap|-|?|B|"sudo" bash @D@/na.sh
 WR143|block-destructive|wrap-declared|-|?|a|sudo --zz-unlisted VALUE bash @D@/na.sh
 WR144|block-destructive|wrap-declared|-|?|a|doas bash @D@/na.sh
 WR145|block-destructive|wrap-declared|-|?|a|setsid bash @D@/na.sh
@@ -942,9 +946,9 @@ DS63|block-destructive|dash-suffix-near|DS66|?|a|bash -n '-x.s'h @D@/ok.sh
 DS64|block-destructive|dash-suffix-near|-|?|a|bash -x.sh @D@/ok.sh
 DS65|block-destructive|dash-suffix-near|-|?|a|python3 -Wx.py @D@/ok.py
 DS66|block-destructive|dash-suffix-near|-|?|a|bash -n -x.sh @D@/ok.sh
-DS71|block-destructive|dash-suffix-decl|-|?|a|bash '+x.s'h @D@/na.sh
+DS71|block-destructive|dash-suffix-decl|-|?|B|bash '+x.s'h @D@/na.sh
 DS72|block-destructive|dash-suffix-decl|-|?|B|bash +x.sh @D@/na.sh
-DS73|block-destructive|dash-suffix-decl|-|?|a|bash --rcfile '-x.s'h @D@/ok.sh
+DS73|block-destructive|dash-suffix-decl|-|?|B|bash --rcfile '-x.s'h @D@/ok.sh
 DS74|block-destructive|dash-suffix-decl|-|?|B|bash --rcfile -x.sh @D@/ok.sh
 
 # --- iteration 1 on card #7020, for its Stage 7 finding F-01: a long option read as its parser reads it, unique prefixes included (57 rows) ---
@@ -1049,8 +1053,9 @@ GL91|block-destructive|wrap-abbrev-ambig|-|?|a|xargs --max 1 bash @D@/na.sh
 # encl-overmatch is text nothing executes, declared, which records now and is refused once the
 # phase graduates; open-encl is an execution the second view does not reach, declared open —
 # a `case` arm, `coproc`, a brace group, backticks nested through escaped backticks, quoting
-# the cut does not model, an apostrophe in a nested string, and a carrier at the head of an
-# unquoted substitution. Commands needing a newline (the here-document shapes) are suite arms
+# the cut does not model, and a carrier at the head of an unquoted substitution. EN86, an
+# apostrophe in a nested string, left open-encl for encl when the carried quote state stopped
+# being trusted across that nesting. Commands needing a newline (the here-document shapes) are suite arms
 # only.
 EN01|block-destructive|encl|-|X|W|echo $(bash @D@/na.sh)
 EN02|block-destructive|encl|-|X|W|echo "$(bash @D@/na.sh)"
@@ -1078,7 +1083,7 @@ EN05|block-destructive|encl-assign|-|X|W|X=$(bash @D@/na.sh)
 EN06|block-destructive|encl-assign|-|X|W|X="$(bash @D@/na.sh)"
 EN08|block-destructive|encl-assign|-|X|W|for i in 1 2; do X="$(bash "@D@/na.sh" arg)"; done
 EN30|block-destructive|encl-carrier|-|X|W|echo $(bash -c 'cd /tmp; bash @D@/na.sh')
-EN31|block-destructive|encl-carrier|-|X|W|echo `bash -c 'cd /tmp; bash @D@/na.sh'`
+EN31|block-destructive|encl-carrier|-|X|B|echo `bash -c 'cd /tmp; bash @D@/na.sh'`
 EN33|block-destructive|encl-carrier|-|X|W|printf '%s' $(bash -c 'true; bash @D@/na.sh')
 EN34|block-destructive|encl-carrier|-|X|W|echo $(bash -c "cd /tmp; bash @D@/na.sh")
 EN40|block-destructive|encl-exec|-|X|W|echo $(@D@/na.sh)
@@ -1112,13 +1117,13 @@ EN74|block-destructive|encl-overmatch|-|-|W|cmd=(bash @D@/na.sh arg)
 EN75|block-destructive|encl-overmatch|-|-|W|git commit -m "explain \$(bash @D@/na.sh) literally"
 EN76|block-destructive|encl-overmatch|-|-|W|grep -n '(bash @D@/na.sh)' f
 EN77|block-destructive|encl-overmatch|-|-|W|git commit -m 'see `x`. Then @D@/y'
-EN80|block-destructive|open-encl|-|X|a|case x in x) bash @D@/na.sh ;; esac
-EN81|block-destructive|open-encl|-|X|a|echo $(case x in x) bash @D@/na.sh;; esac)
+EN80|block-destructive|rt-case|-|X|B|case x in x) bash @D@/na.sh ;; esac
+EN81|block-destructive|encl|-|X|W|echo $(case x in x) bash @D@/na.sh;; esac)
 EN82|block-destructive|open-encl|-|X|a|echo `echo \`bash @D@/na.sh\` `
-EN83|block-destructive|open-encl|-|X|a|{ bash @D@/na.sh; }
-EN84|block-destructive|open-encl|-|X|a|coproc bash @D@/na.sh
+EN83|block-destructive|rt-brace|-|X|B|{ bash @D@/na.sh; }
+EN84|block-destructive|rt-coproc|-|X|B|coproc bash @D@/na.sh
 EN85|block-destructive|open-encl|-|X|a|echo $(X=$'\')' bash @D@/na.sh)
-EN86|block-destructive|open-encl|-|X|a|echo "$(printf "it's" $(bash @D@/na.sh))"
+EN86|block-destructive|encl|-|X|W|echo "$(printf "it's" $(bash @D@/na.sh))"
 EN87|block-destructive|open-encl|-|X|a|bash -c $(echo -n) 'true; (bash @D@/na.sh)'
 EN88|block-destructive|open-encl|-|X|a|echo $(X=${Y:-)} bash @D@/na.sh)
 # Stage 7 F-08 (sub-task #8177, #7020 iteration 2): an attached split string that carries no
@@ -1818,3 +1823,413 @@ OR22|block-destructive|ord-near|-|?|a|"X=/usr/bin/timeout" PATH=x true
 # allow, as a declared precision improvement. gt is `?`. This header does not take the card-block
 # form the cross-issue criterion counts.
 QB01|block-egress|qbs-over|-|?|B|'\gh' api -X POST @NO@
+
+# --- seed 15.1: card #8317 — the quote state the -022 scanner carries past a comment, a nested quote, a backquote, an arithmetic opener and a dollar run (QC rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8317's Stage-5 design, its review's CD-1 classes, D-8317-Scope and the
+# shared `$$'` class. gt is `?` and every row records the verdict at the base (D-GroundTruth). Groups: rt-qcmt, rt-qnest,
+# rt-qhd, rt-qbq and rt-qdollar are the fail-open classes (a at base, B or W once #8317 lands); rt-qctl are the controls
+# (B at base and after); rt-qnear are must-not-flag near-misses (a at base and after); rt-qcost are the declared precision
+# costs (a at base; B once #8317 lands). @NL@ is a newline.
+QC01|block-destructive|rt-qcmt|-|?|B|echo hi # it's@NL@bash @D@/na.sh
+QC02|block-destructive|rt-qctl|-|?|B|echo hi # x; it's@NL@bash @D@/na.sh
+QC03|block-destructive|rt-qcmt|-|?|B|echo hi # it's@NL@source @D@/na.sh
+QC04|block-destructive|rt-qcmt|-|?|W|echo hi # it's@NL@echo "$(bash @D@/na.sh)"
+QC05|block-destructive|rt-qnest|-|?|B|echo "$(printf "it's")"@NL@bash @D@/na.sh
+QC06|block-destructive|rt-qnest|-|?|B|echo "${x:-"it's"}"@NL@bash @D@/na.sh
+QC07|block-destructive|rt-qhd|-|?|B|echo hi # <<EOF@NL@bash @D@/na.sh@NL@EOF
+QC08|block-destructive|rt-qbq|-|?|B|echo `echo it's`@NL@bash @D@/na.sh
+QC09|block-destructive|rt-qnest|-|?|B|echo "$[ "it's" ]"@NL@bash @D@/na.sh
+QC10|block-destructive|rt-qdollar|-|?|B|echo $$'\'; bash @D@/na.sh
+QC11|block-destructive|rt-qctl|-|?|B|echo hi # its@NL@bash @D@/na.sh
+QC12|block-destructive|rt-qctl|-|?|B|echo "$(printf "its")"@NL@bash @D@/na.sh
+QC13|block-destructive|rt-qctl|-|?|B|echo hi # EOF@NL@bash @D@/na.sh
+QC14|block-destructive|rt-qctl|-|?|B|echo $$ '\'; bash @D@/na.sh
+QC15|block-destructive|rt-qnear|-|?|a|echo hi # it's fine
+QC16|block-destructive|rt-qnear|-|?|a|gh issue comment 1 --body 'see #12; run bash @D@/na.sh later'
+QC17|block-destructive|rt-qnear|-|?|a|echo foo#bar 'note; bash @D@/na.sh'
+QC18|block-destructive|rt-qnear|-|?|a|echo "${HOME}" 'x; bash @D@/na.sh'
+QC19|block-destructive|rt-qnear|-|?|a|gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+QC20|block-destructive|rt-qnear|-|?|a|echo 'x; bash @D@/na.sh'
+QC21|block-destructive|rt-qctl|-|?|B|echo hi # it's@NL@echo 'x; bash @D@/na.sh'
+QC22|block-destructive|rt-qcost|-|?|B|echo "$(printf "%s" "a b")" 'x; bash @D@/na.sh'
+QC23|block-destructive|rt-qcost|-|?|B|gh issue comment 1 --body-file - <<'EOF' # it's@NL@bash @D@/na.sh@NL@EOF
+QC24|block-destructive|rt-qctl|-|?|B|gh issue comment 1 --body-file - <<'EOF' # <<X@NL@bash @D@/na.sh@NL@EOF
+# Addendum to the #8317 rows, authored hub-direct after #8317's GREEN commit (D-PayloadRoute) for the clauses that block
+# left without a row; recorded at that GREEN head. rt-qspan: a queuing line whose quoted string runs past its end (the
+# pre-pass now declines it). rt-qcmt2: a comment holding a parenthesis on a carrier here-document's operator line, a
+# declared cost: nothing runs, and it is refused (Stage 7 F-11).
+# rt-qcase: a `case` inside a nested expansion. rt-qdollar-prec: the dollar fix's precision direction, in the pre-pass
+# (QC28) and in the scanner (QC29) — an even-length run before a quote is a plain quote, so nothing is refused.
+QC25|block-destructive|rt-qspan|-|?|B|gh issue comment 1 --body-file - <<'EOF' 'a@NL@b'; bash @D@/na.sh@NL@body@NL@EOF
+QC26|block-destructive|rt-qcmt2|-|?|B|gh issue comment 1 --body-file - <<'EOF' # see (x)@NL@bash @D@/na.sh@NL@EOF
+QC27|block-destructive|rt-qcase|-|?|B|echo "$(case x in x) printf "it's";; esac)"@NL@bash @D@/na.sh
+QC28|block-destructive|rt-qdollar-prec|-|?|a|echo $$'\'<<EOF@NL@bash @D@/na.sh@NL@EOF
+QC29|block-destructive|rt-qdollar-prec|-|?|a|echo $$'\' 'y; bash @D@/na.sh'
+
+# --- seed 15.2: card #8318 — the operand read after quote removal, in the F-09 slots and across a whitespace-bearing quoted path (OP rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8318's Stage-5 design and its Amendment 1; recorded at the release
+# head after #8317 (3893e3ae). gt is `?`. The plain-operand quoted-suffix and split-suffix classes are already rows
+# (group `concat`). rt-opsplit: a quote that splits the operand in the slot behind `--` and in an option's argument
+# slot, under an interpreter and under `source` (a at base; B once #8318 lands). rt-opws: a whitespace-bearing quoted
+# path (a at base; B once #8318 lands). rt-opok: the same shapes naming the listed script (a before and after).
+# rt-opcmode: the `-c` loop keeps every per-token verdict (Amendment 1) — an in-domain token in a program string stays
+# B, and a separator in a program string stays a. rt-opnear: a split-suffix path handed to a command that runs nothing.
+OP01|block-destructive|rt-opsplit|-|?|B|bash -- @D@/na.s'h'
+OP02|block-destructive|rt-opguard|-|?|B|source -- @D@/na.s'h'
+OP03|block-destructive|rt-opsplit|-|?|B|bash --rcfile @D@/na.s'h' -i
+OP04|block-destructive|rt-opsplit|-|?|B|bash -- '@D@/na.s'h
+OP05|block-destructive|rt-opws|-|?|B|bash '@D@/n a.sh'
+OP06|block-destructive|rt-opguard|-|?|B|source '@D@/n a.sh'
+OP07|block-destructive|rt-opok|-|?|a|bash @D@/ok.s'h'
+OP08|block-destructive|rt-opok|-|?|a|bash -- @D@/ok.s'h'
+OP09|block-destructive|rt-opcmode|-|?|B|bash -c 'echo hi; bash @D@/na.sh'
+OP10|block-destructive|rt-opcmode|-|?|a|bash -c 'echo a; echo b'
+OP11|block-destructive|rt-opnear|-|?|a|cat @D@/na.s'h'
+# --- seed 15.8: card #8318 Decision 6 — the built classes no row pinned, authored at Stage 7 entry (OP12-OP23) ---
+# Authored hub-direct (D-PayloadRoute) at #8318's Stage 7 entry, from its build record (finding 6) and the fragment's
+# residual item 3. gt is `?`; each row is recorded at what it reads at the release head. rt-op6src: `source` with a
+# relative quoted-suffix operand, alone and behind `--` (the advance-past step-over, which has no marker of its own).
+# rt-op6nox: the quoted-suffix operand behind a `-n` grant, and its plain twin. rt-op6cmode: python's `-c`, which the
+# walk names, so each piece keeps its own test, and its control. rt-op6prog: a non-shell program-string option the walk
+# does not name (`-e`), so the join reads the program as one word ending in the suffix (boundary g). rt-op6nj: the
+# not-joined positions, an option's argument slot, a `-c` program's words, and a quote that opens after the first
+# character under an interpreter and under `source`; each refuses on a piece, not on the joined path.
+OP12|block-destructive|rt-op6src|-|?|B|source na.s'h'
+OP13|block-destructive|rt-op6src|-|?|B|source -- na.s'h'
+OP14|block-destructive|rt-op6nox|-|?|B|bash -n @D@/na.s'h'
+OP15|block-destructive|rt-op6nox|-|?|a|bash -n @D@/na.sh
+OP16|block-destructive|rt-op6cmode|-|?|W|python3 -c 'import a b.py'
+OP17|block-destructive|rt-op6cmode|-|?|a|python3 -c 'import os'
+OP18|block-destructive|rt-op6nj|-|?|B|bash --rcfile '@D@/n a.sh' -i
+OP19|block-destructive|rt-op6nj|-|?|B|bash -c 'bash "@D@/n a.sh"'
+OP20|block-destructive|rt-op6nj|-|?|B|bash @D@/n' a.sh'
+OP21|block-destructive|rt-op6nj|-|?|B|source @D@/n' a.sh'
+OP22|block-destructive|rt-op6prog|-|?|W|perl -e 'print a b.pl'
+OP23|block-destructive|rt-op6prog|-|?|W|node -e 'void a b.js'
+# --- seed 15.3: card #8319 — the prefix walk steps over a space-bearing quoted assignment value (AV rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8319's Stage-5 design (movement classes M1-M5), its review's CD-1
+# readable-set restriction and D-8319-RefRec (A); recorded at the release head after #8318. gt is `?`. The declared
+# rows WR125-WR136, O18, O19 and O28 already carry the plain shapes; these extend them across forms and positions.
+# rt-asgn: M1, a space-bearing quoted value before an interpreter or `source` and an unlisted script (a at base; B
+# once #8319 lands). rt-asgn-rec: M1', the same before a direct execution, a non-shell interpreter or at an unquoted
+# enclosure position (a at base; recorded at that arm's phase once #8319 lands). rt-asgn-ctl: the listed script and
+# the no-whitespace forms (unchanged). rt-asgn-prec: M2, M3 and M3', a value whose pieces read as an execution before
+# a command that runs none (refused or recorded at base; the precision moves AC2 declares). rt-asgn-decl: M4, a value
+# ending on an interpreter word before a real script, which takes the plain form's verdict (D-8319-RefRec A).
+# rt-asgn-over: M5, an assignment behind a wrapper that takes none (a declared over-block once #8319 lands).
+# rt-asgn-keep: shapes the step must decline, at their base verdicts before and after. rt-asgn-limit: the carrier
+# head limit beside its no-space control, and the work-budget side effect (`@QMID@`); each carries a separator inside
+# the carrier's quoted argument, which is what lands its tail in a segment of its own. rt-asgn-resid: the declared
+# residuals, allowed before and after: a later line after a declined here-document, a braced expansion, an enclosure
+# opened inside double quotes, a redirection glued to the value, a separator inside the value, and the two values
+# CD-1 leaves to today's reading (ANSI-C quoting and a parameter expansion).
+# The precision rows here (AV19-AV22, AV24, beside WR134 and WR135) move to allowed with ground truth `?`: for this
+# release the operator waived the real-interpreter verification a refuse-to-allow move otherwise needs
+# (D-GroundTruth-Rev); each move is declared in the readiness text and pinned by an arm red against the pre-fix hook.
+AV01|block-destructive|rt-asgn|-|?|B|FOO='a b' sh @D@/na.sh
+AV02|block-destructive|rt-asgn|-|?|B|FOO="a b" source @D@/na.sh
+AV03|block-destructive|rt-asgn|-|?|B|FOO='a b' . @D@/na.sh
+AV04|block-destructive|rt-asgn|-|?|B|FOO+='a b' bash @D@/na.sh
+AV05|block-destructive|rt-asgn|-|?|B|sudo FOO='a b' bash @D@/na.sh
+AV06|block-destructive|rt-asgn|-|?|B|env -i FOO='a b' bash @D@/na.sh
+AV07|block-destructive|rt-asgn|-|?|B|FOO='a b c d' bash @D@/na.sh
+AV08|block-destructive|rt-asgn|-|?|B|FOO='a b' BAR="c d" bash @D@/na.sh
+AV09|block-destructive|rt-asgn|-|?|B|echo hi; FOO='a b' bash @D@/na.sh
+AV10|block-destructive|rt-asgn|-|?|B|FOO='a b' bash @D@/na.sh@NL@cat <<'EOF'@NL@x@NL@EOF
+AV11|block-destructive|rt-asgn-rec|-|?|W|FOO='a b' @D@/na.sh
+AV12|block-destructive|rt-asgn-rec|-|?|W|FOO='a b' python3 @D@/na.py
+AV13|block-destructive|rt-asgn-rec|-|?|W|X=$(FOO='a b' bash @D@/na.sh)
+AV14|block-destructive|rt-asgn-ctl|-|?|a|FOO='a b' bash @D@/ok.sh
+AV15|block-destructive|rt-asgn-ctl|-|?|B|FOO=ab sh @D@/na.sh
+AV16|block-destructive|rt-asgn-ctl|-|?|B|FOO='ab' source @D@/na.sh
+AV17|block-destructive|rt-asgn-ctl|-|?|W|FOO=ab @D@/na.sh
+AV18|block-destructive|rt-asgn-ctl|-|?|W|FOO=ab python3 @D@/na.py
+AV19|block-destructive|rt-asgn-prec|-|?|a|NOTE='see sh @D@/na.sh' true
+AV20|block-destructive|rt-asgn-prec|-|?|a|NOTE="run source @D@/na.sh" true
+AV21|block-destructive|rt-asgn-prec|-|?|a|NOTE='see @D@/na.sh' true
+AV22|block-destructive|rt-asgn-prec|-|?|a|NOTE='see bash @D@/na.sh; x' true
+AV23|block-destructive|rt-asgn-decl|-|?|W|FOO='x bash' @D@/na.sh
+AV24|block-destructive|rt-asgn-decl|-|?|a|FOO='x bash' na.sh
+AV25|block-destructive|rt-asgn-over|-|?|B|nice FOO='a b' bash @D@/na.sh
+AV26|block-destructive|rt-asgn-keep|-|?|B|NOTE='see sh @D@/na.sh' bash @D@/na.sh
+AV27|block-destructive|rt-asgn-keep|-|?|B|sudo -u 'a FOO=b' bash @D@/na.sh
+AV28|block-destructive|rt-asgn-keep|-|?|B|FOO=a\  bash @D@/na.sh
+AV29|block-destructive|rt-asgn-keep|-|?|W|X=$(bash @D@/na.sh)
+AV30|block-destructive|rt-asgn-limit|-|?|B|FOO='a b' echo "x; bash @D@/na.sh"
+AV31|block-destructive|rt-asgn-limit|-|?|a|FOO=ab echo "x; bash @D@/na.sh"
+AV32|block-destructive|rt-asgn-limit|-|?|B|FOO=@QMID@'a b' bash @D@/ok.sh; echo "x; bash @D@/na.sh"
+AV33|block-destructive|rt-asgn-resid|-|?|a|cat <<'EOF'@NL@x@NL@EOF@NL@FOO='a b' bash @D@/na.sh
+AV34|block-destructive|rt-asgn-resid|-|?|a|FOO="a ${X}" bash @D@/na.sh
+AV35|block-destructive|rt-asgn-resid|-|?|a|echo "$(FOO='a b' bash @D@/na.sh)"
+AV36|block-destructive|rt-asgn-resid|-|?|a|FOO='a b'> @D@/out bash @D@/na.sh
+AV37|block-destructive|rt-asgn-resid|-|?|a|FOO='x; y' bash @D@/na.sh
+AV38|block-destructive|rt-asgn-resid|-|?|a|FOO=$'a b' bash @D@/na.sh
+AV39|block-destructive|rt-asgn-resid|-|?|a|FOO="a $X" bash @D@/na.sh
+# seed 15.3 addendum, after #8319's slice (8e44cf61): the classes its Stage-6 output named as built but unpinned.
+# rt-asgn-head: the carrier-head resolver steps over only the first piece of a space-bearing value, so a carrier
+# word inside the value can be taken as the head and suppress a later quoted segment that executes (the review's
+# PR-2), beside its control with no carrier word in the value. rt-asgn-resid gains: a second escaped piece
+# followed by two blanks; a value whose single and double quotes both delimit; an env operand whose `=` sits in a
+# later piece (the review's FM-3); a `#` inside a quoted value; an unmodelled construct in a prefix token ahead of a
+# quoted assignment; and an earlier quote-dense part of the command that spends the shared work budget ahead of a
+# later line of the M1 shape. Recorded at 8e44cf61's verdicts.
+# #8319's second pass re-grades two of them to refused: AV40, whose carrier answer the head check now withdraws,
+# and AV42, now in rt-asgn, whose second escaped piece ends the word after its escaped blank.
+AV40|block-destructive|rt-asgn-head|-|?|B|FOO='a echo b' bash -c "x; bash @D@/na.sh"
+AV41|block-destructive|rt-asgn-head|-|?|B|FOO='a b' bash -c "x; bash @D@/na.sh"
+AV42|block-destructive|rt-asgn|-|?|B|FOO=a\ b\  bash @D@/na.sh
+AV43|block-destructive|rt-asgn-resid|-|?|a|FOO='a b'"c d" bash @D@/na.sh
+AV44|block-destructive|rt-asgn-resid|-|?|a|env 'A B=c' bash @D@/na.sh
+AV45|block-destructive|rt-asgn-resid|-|?|a|FOO='a #b' bash @D@/na.sh
+AV46|block-destructive|rt-asgn-resid|-|?|a|X=$(true) FOO='a b' bash @D@/na.sh
+AV47|block-destructive|rt-asgn-resid|-|?|a|X=@QPAD@@NL@FOO='a b' bash @D@/na.sh
+# seed 15.3 addendum 2, after #8319's second pass (abac5856): the two carrier-head shapes its output named. A
+# here-document's receiver is resolved by the same carrier-head reader, so a carrier word inside a space-bearing
+# value ahead of an interpreter fed a here-document can mark the body as a carrier's (beside its control with no
+# carrier word); and a quote-dense value of one quote kind whose re-scan crosses the shared work budget leaves the
+# carrier answer standing. Recorded at abac5856's verdicts; #8319's third pass closes both (AV48 and AV50 refused,
+# AV49 refused before and after).
+AV48|block-destructive|rt-asgn-head|-|?|B|FOO='a echo b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV49|block-destructive|rt-asgn-head|-|?|B|FOO='a b' bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV50|block-destructive|rt-asgn-head|-|?|B|FOO=@QMID@"a echo b" bash -c "x; bash @D@/na.sh"
+# --- seed 15.4: card #8491 — env's split-string value read as env reads it, after the shell removes its quotes (SV rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8491's Stage-5 design (Rule M; J0, no second join site; T1 with
+# T1b; S3 carried to #8316), recorded at the release head after #8319 (0b7adfb2). gt is `?` and twins are `-` (the design's
+# no-ground-truth branch, kept by D-GroundTruth-Rev); so no rt-svprec row is authored, and the precision classes P-1
+# and P-2 rest on env's documented grammar. rt-svq: a quote-led or quote-bearing value of options and assignments
+# only, ahead of an interpreter and an unlisted script (a at base; B once #8491 lands). rt-svs: a path inside an
+# option's argument or an assignment's value in the split value (a at base; B once #8491 lands). rt-svx: a long
+# option needing the following token, an assignment whose name is not a shell name, and a value the hook cannot read
+# (a at base; B once #8491 lands). rt-svctl: the unquoted, slash-free twins, and Rule M's control (B before and
+# after). rt-svcost: PC-SV1, an unreadable value carrying its own command ahead of an unlisted script-suffixed
+# argument nothing runs (a at base; B once #8491 lands, a declared precision cost). rt-svnear: the same classes
+# ahead of the listed script, or of a command that runs no script (a before and after). rt-svres: the declared
+# residuals — a value carrying its own command, a separator inside the value, env's own quoting inside the decoded
+# value, and the two whitespace-bearing quoted values J0 leaves to today's reading (a before and after).
+SV01|block-destructive|rt-svq|-|?|B|env -S'-v' bash @D@/na.sh
+SV02|block-destructive|rt-svq|-|?|B|env --split-string='-v' bash @D@/na.sh
+SV03|block-destructive|rt-svq|-|?|B|env --sp='-v' bash @D@/na.sh
+SV04|block-destructive|rt-svq|-|?|B|env -S'' bash @D@/na.sh
+SV05|block-destructive|rt-svq|-|?|B|env -S'BAR=2' bash @D@/na.sh
+SV06|block-destructive|rt-svq|-|?|B|env -S-'u' FOO bash @D@/na.sh
+SV07|block-destructive|rt-svs|-|?|B|env -S-C@D@/x bash @D@/na.sh
+SV08|block-destructive|rt-svs|-|?|B|env --split-string=--chdir=@D@/x bash @D@/na.sh
+SV09|block-destructive|rt-svs|-|?|B|env -SBAR=@D@/x bash @D@/na.sh
+SV10|block-destructive|rt-svx|-|?|B|env -S--unset FOO bash @D@/na.sh
+SV11|block-destructive|rt-svx|-|?|B|env -Sa-b=1 bash @D@/na.sh
+SV12|block-destructive|rt-svx|-|?|B|env -S"$X" bash @D@/na.sh
+SV13|block-destructive|rt-svctl|-|?|B|env -S-v bash @D@/na.sh
+SV14|block-destructive|rt-svctl|-|?|B|env -SBAR=2 bash @D@/na.sh
+SV15|block-destructive|rt-svctl|-|?|B|env -S-Cx bash @D@/na.sh
+SV16|block-destructive|rt-svctl|-|?|B|env -S-i' bash @D@/na.sh'
+SV17|block-destructive|rt-svcost|-|?|B|env -S'echo$X' bash @D@/na.sh
+SV18|block-destructive|rt-svnear|-|?|a|env -S'-v' bash @D@/ok.sh
+SV19|block-destructive|rt-svnear|-|?|a|env -S-C@D@/x bash @D@/ok.sh
+SV20|block-destructive|rt-svnear|-|?|a|env -S'-v' cat @D@/na.sh
+SV21|block-destructive|rt-svres|-|?|a|env -S'bash @D@/na.sh'
+SV22|block-destructive|rt-svres|-|?|a|env -S'-i;' bash @D@/na.sh
+SV23|block-destructive|rt-svres|-|?|a|env -S"'-u'" FOO bash @D@/na.sh
+SV24|block-destructive|rt-svq|-|?|B|env -S'-i FOO=1' bash @D@/na.sh
+SV25|block-destructive|rt-svres|-|?|a|env -S-i' -u' FOO bash @D@/na.sh
+# seed 15.4 addendum (the hub's trace of the design under J0): SV17 is re-authored as one token, since under J0 a
+# value spread over two tokens is read from its first piece only and never reaches PC-SV1's cell; SV26 is Rule M's
+# control under J0, a dash-led value the reading cannot read, which the walk walks on from today (B before and after).
+SV26|block-destructive|rt-svctl|-|?|B|env -S-i$X bash @D@/na.sh
+# #8316 (GREEN, slice C): CP46's substitution-valued assignment behind the first pattern is one token, so the walk
+# reaches the interpreter: an execution, moved to rt-case at B. CP50 is re-authored with `case` led by a blank, the
+# shape the case tracker reads, so it pins the declared cost PC-1 (the earlier spelling put `case` behind a quote,
+# which the tracker does not read, and the cost never fired).
+# #8491 (GREEN): SV01-SV12 and SV17 move a -> B as the block's legend says. SV24 also closes (B, regrouped from
+# rt-svres to rt-svq): its later piece is an assignment, so the walk reaches the interpreter even under J0.
+# --- seed 15.5: card #8320 — an interpreter and its operand read across a line continuation as one command (LC rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8320's Amendment 1 (the second walk of the joined logical line,
+# and the here-document receiver read from the physical and the logical line, excised only when both name a
+# carrier; nothing replaced), recorded at the release head after #8491 (89156a4f). gt is `?`. A line continuation is `\@NL@`.
+# rt-cont: an interpreter or `source` and an unlisted script split across a continuation the shell removes (recorded
+# or allowed at base, read as its physical lines; refused once #8320 lands). rt-cont-hd: a here-document whose
+# physical receiver line names a carrier while the logical command is a shell reading its standard input (allowed
+# at base; refused once #8320 lands). rt-cont-hold: the shapes the amendment must not move — a here-document
+# receiver read before a continuation, a later line equal to the delimiter, a continuation inside an enclosure, a
+# backslash ending a comment (with and without a quote in it), and a backslash-newline inside `'…'` or `$'…'` (each
+# at its base verdict before and after). rt-cont-near: the listed script. LC15, a continued argument line of a
+# command that runs no script, is recorded at W in rt-cont-hold: the physical line is walked as its own segment, a
+# direct execution at the exec arm's phase, and the amendment keeps every physical reading (declared, as today).
+LC01|block-destructive|rt-cont|-|?|B|bash \@NL@@D@/na.sh
+LC02|block-destructive|rt-cont|-|?|B|source \@NL@@D@/na.sh
+LC03|block-destructive|rt-cont|-|?|B|bash -x \@NL@@D@/na.sh
+LC04|block-destructive|rt-cont|-|?|B|bash \@NL@    @D@/na.sh
+LC05|block-destructive|rt-cont|-|?|B|bash "@D@/na\@NL@.sh"
+LC06|block-destructive|rt-cont-hd|-|?|B|bash -s -- \@NL@echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+LC07|block-destructive|rt-cont-hold|-|?|B|gh issue comment 1 --body-file - \@NL@<<'EOF'@NL@bash @D@/na.sh@NL@EOF
+LC08|block-destructive|rt-cont-hold|-|?|B|gh issue comment 1 --body-file - <<'EOF'@NL@x \@NL@EOF@NL@bash @D@/na.sh@NL@cat <<'EOF'@NL@y@NL@EOF
+LC09|block-destructive|rt-cont-hold|-|?|B|bash @D@/na.sh $(echo \@NL@x)
+LC10|block-destructive|rt-cont-hold|-|?|B|echo hi # note \@NL@bash @D@/na.sh
+LC11|block-destructive|rt-cont-hold|-|?|B|echo hi # it's \@NL@bash @D@/na.sh
+LC12|block-destructive|rt-cont-hold|-|?|a|echo 'bash \@NL@@D@/na.sh'
+LC13|block-destructive|rt-cont-hold|-|?|a|echo $'bash \@NL@@D@/na.sh'
+LC14|block-destructive|rt-cont-near|-|?|a|bash \@NL@@D@/ok.sh
+LC15|block-destructive|rt-cont-hold|-|?|W|cat \@NL@@D@/na.sh
+# --- seed 15.6: card #8316 — the command positions the walk did not reach (CP rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8316's Stage-5 design (R0: a token is newly stepped only where
+# today's walk ends on it and adjudicates nothing) with its review's CD-1 (a redirection classified by direction; an
+# input word ahead of an interpreter routed as a program), CD-2 (the redirection step inside the wrapper grammar) and
+# FM-2's inert gate; recorded at the release head after #8320 (3ab2ccf8). gt is `?` and twins are `-`. rt-redir, rt-redir-cut and
+# rt-redir-stdin: a leading redirection, attached or alone, a descriptor or `{name}` form, between assignments, after a
+# reserved word, inside a wrapper's grammar, cut by the separator split, and an input redirection feeding an
+# interpreter (allowed at base; refused, or recorded at the arm's phase, once #8316 lands). rt-esc: an escaped or
+# partly quoted verb. rt-qwrap: a quoted wrapper word or option. rt-case: a `case` arm's command. rt-coproc and
+# rt-brace: a `coproc` and a brace group. rt-zpre: the zsh precommand words. rt-reach-near: shapes that must not move
+# (today's verdict before and after), and one declared precision move, PM-1. rt-reach-cost: the declared costs PC-1
+# and PC-2 (allowed at base; refused once #8316 lands). rt-reach-resid: a redirection between a wrapper's option and
+# its value (the review's FM-1, declared). rt-reach-ctl: each class with the listed script (allowed before and after).
+CP01|block-destructive|rt-redir|-|?|B|2>/dev/null bash @D@/na.sh
+CP02|block-destructive|rt-redir|-|?|B|> /dev/null bash @D@/na.sh
+CP03|block-destructive|rt-redir|-|?|B|{fd}>/dev/null bash @D@/na.sh
+CP04|block-destructive|rt-redir|-|?|B|FOO=1 >/dev/null BAR=2 bash @D@/na.sh
+CP05|block-destructive|rt-redir|-|?|B|if true; then >/dev/null bash @D@/na.sh; fi
+CP06|block-destructive|rt-redir|-|?|B|sudo >/dev/null bash @D@/na.sh
+CP07|block-destructive|rt-redir|-|?|B|sudo >/dev/null -u x bash @D@/na.sh
+CP08|block-destructive|rt-redir|-|?|B|timeout >/dev/null 5 bash @D@/na.sh
+CP09|block-destructive|rt-redir|-|?|W|echo $(>/dev/null bash @D@/na.sh)
+CP10|block-destructive|rt-redir-cut|-|?|B|>&2 bash @D@/na.sh
+CP11|block-destructive|rt-redir-cut|-|?|B|2>&- bash @D@/na.sh
+CP12|block-destructive|rt-redir-cut|-|?|B|>|/dev/null bash @D@/na.sh
+CP13|block-destructive|rt-redir-stdin|-|?|B|<@D@/na.sh bash
+CP14|block-destructive|rt-redir-stdin|-|?|B|0<@D@/na.sh bash
+CP15|block-destructive|rt-redir-stdin|-|?|W|<@D@/na.py python3
+CP16|block-destructive|rt-redir-stdin|-|?|B|<<<'bash @D@/na.sh' bash
+CP17|block-destructive|rt-reach-near|-|?|a|>@D@/x.sh true
+CP18|block-destructive|rt-reach-near|-|?|a|<(true) cat @D@/na.sh
+CP19|block-destructive|rt-reach-near|-|?|B|>/tmp/bash @D@/na.sh
+CP20|block-destructive|rt-reach-cost|-|?|B|<@D@/na.sh bash @D@/ok.sh
+CP21|block-destructive|rt-reach-cost|-|?|B|<@D@/na.sh bash -n
+CP22|block-destructive|rt-reach-resid|-|?|a|sudo -u >/dev/null x bash @D@/na.sh
+CP23|block-destructive|rt-esc|-|?|B|ba\sh @D@/na.sh
+CP24|block-destructive|rt-esc|-|?|B|$'bash' @D@/na.sh
+CP25|block-destructive|rt-esc|-|?|B|\source @D@/na.sh
+CP26|block-destructive|rt-reach-near|-|?|B|\/bin/bash @D@/na.sh
+CP27|block-destructive|rt-reach-near|-|?|a|'ba' @D@/na.sh
+CP28|block-destructive|rt-reach-near|-|?|a|$'ba\x73h' @D@/na.sh
+CP29|block-destructive|rt-qwrap|-|?|B|'sudo' bash @D@/na.sh
+CP30|block-destructive|rt-qwrap|-|?|B|\sudo bash @D@/na.sh
+CP31|block-destructive|rt-qwrap|-|?|B|su"do" bash @D@/na.sh
+CP32|block-destructive|rt-qwrap|-|?|B|sudo "-u" x bash @D@/na.sh
+CP33|block-destructive|rt-qwrap|-|?|B|echo @D@/na.sh | "xargs" bash
+CP34|block-destructive|rt-qwrap|-|?|B|sudo "-D@D@/x" bash @D@/na.sh
+CP35|block-destructive|rt-reach-near|-|?|a|"if" bash @D@/na.sh
+CP36|block-destructive|rt-reach-near|-|?|a|command "-v" bash @D@/na.sh
+CP37|block-destructive|rt-reach-near|-|?|B|"/usr/bin"/sudo bash @D@/na.sh
+CP38|block-destructive|rt-reach-near|-|?|a|timeout "-s" KILL 5 bash @D@/na.sh
+CP39|block-destructive|rt-case|-|?|B|case x in y) true ;; x) bash @D@/na.sh ;; esac
+CP40|block-destructive|rt-case|-|?|B|case x in y|x) bash @D@/na.sh ;; esac
+CP41|block-destructive|rt-case|-|?|B|case x in (x) bash @D@/na.sh ;; esac
+CP42|block-destructive|rt-case|-|?|B|case x in ( x ) bash @D@/na.sh ;; esac
+CP43|block-destructive|rt-case|-|?|B|case x in 'a b' ) bash @D@/na.sh ;; esac
+CP44|block-destructive|rt-case|-|?|B|echo $(case x in y) true;; x) bash @D@/na.sh;; esac)
+CP45|block-destructive|rt-case|-|?|B|case x in y) true ;; /x/y) bash @D@/na.sh ;; esac
+CP46|block-destructive|rt-case|-|?|B|case x in x) TS=$(date) bash @D@/na.sh ;; esac
+CP47|block-destructive|rt-reach-near|-|?|a|case x in bash) true ;; esac
+CP48|block-destructive|rt-reach-near|-|?|a|case @D@/na.sh in x) true ;; esac
+CP49|block-destructive|rt-reach-near|-|?|a|grep 'a@NL@x) bash @D@/na.sh' f
+CP50|block-destructive|rt-reach-cost|-|?|B|grep 'x case y in@NL@x) bash @D@/na.sh' f
+CP51|block-destructive|rt-coproc|-|?|B|coproc NAME { bash @D@/na.sh; }
+CP52|block-destructive|rt-reach-near|-|?|a|mycmd { bash @D@/na.sh; }
+CP53|block-destructive|rt-brace|-|?|B|true && { bash @D@/na.sh; }
+CP54|block-destructive|rt-brace|-|?|B|if true; then { bash @D@/na.sh; }; fi
+CP55|block-destructive|rt-brace|-|?|W|echo $({ bash @D@/na.sh; })
+CP56|block-destructive|rt-reach-near|-|?|a|{bash,x} @D@/na.sh
+CP57|block-destructive|rt-reach-near|-|?|a|"{" bash @D@/na.sh
+CP58|block-destructive|rt-reach-near|-|?|W|( bash @D@/na.sh )
+CP59|block-destructive|rt-zpre|-|?|B|noglob bash @D@/na.sh
+CP60|block-destructive|rt-zpre|-|?|B|nocorrect bash @D@/na.sh
+CP61|block-destructive|rt-zpre|-|?|B|- bash @D@/na.sh
+CP62|block-destructive|rt-zpre|-|?|B|nocorrect noglob bash @D@/na.sh
+CP63|block-destructive|rt-reach-near|-|?|a|echo noglob nocorrect - bash @D@/na.sh
+CP64|block-destructive|rt-reach-ctl|-|?|a|>/dev/null bash @D@/ok.sh
+CP65|block-destructive|rt-reach-ctl|-|?|a|\bash @D@/ok.sh
+CP66|block-destructive|rt-reach-ctl|-|?|a|"sudo" bash @D@/ok.sh
+CP67|block-destructive|rt-reach-ctl|-|?|a|case x in x) bash @D@/ok.sh ;; esac
+CP68|block-destructive|rt-reach-ctl|-|?|a|coproc bash @D@/ok.sh
+CP69|block-destructive|rt-reach-ctl|-|?|a|{ bash @D@/ok.sh; }
+CP70|block-destructive|rt-reach-ctl|-|?|a|noglob bash @D@/ok.sh
+# seed 15.6, as measured at b740d865 (63 of 70 as predicted): CP13-CP15, CP20 and CP21 are recorded at W, because
+# today's walk reads a leading input-redirection word as the command word and the exec arm records it (the misread
+# PM-1 and the review's CD-1 describe); CP19 is refused today, its redirection word's basename read as the
+# interpreter (R-2, unchanged); CP26 is refused today, the normalized view already stripping the leading backslash
+# of an escaped absolute interpreter, so it moves to rt-reach-near.
+# --- seed 15.7: card #8492 — an xargs-fed shell interpreter whose flag walk ends with no operand (XF rows) ---
+# Authored hub-direct (D-PayloadRoute, DEV-7) from #8492's Stage-5 design (a post-walk arm of the xargs stdin deny)
+# and its Amendment 1 (the arm fires only when every stepped token was option-shaped or an option's argument; the
+# enclosure's own closer and later words of the enclosing command are not operands), with D-8492-NonShell N1 (shell
+# interpreters only). gt is `?`. The single-flag shapes are rows WR43-WR53, re-graded by this card. rt-xflag: two
+# flags, and xargs consumed behind a wrapper (a at base; B once #8492 lands). rt-xcmode: `-c` with no program string
+# on argv (a at base; B). rt-xencl: the enclosure-closer member, a spaced closer and an attached one (a at base;
+# recorded at the enclosure's phase). A pipe inside the enclosure puts XF04 and XF05 in front of the first view, which
+# reads the closer and takes that phase; XF12 has no pipe inside, so only the second view walks it (DEV-16). rt-xnear: a parse-only check, an inline program, a non-shell module that only
+# compiles (a before and after). rt-xpos: an extensionless script named on argv behind the flags (Amendment 1: today's
+# verdict kept). rt-xres: a non-shell interpreter with only its flags (N1, declared). rt-xctl: the listed script.
+XF01|block-destructive|rt-xflag|-|?|B|printf x | xargs bash -x -e
+XF02|block-destructive|rt-xflag|-|?|B|printf x | sudo xargs bash -x
+XF03|block-destructive|rt-xcmode|-|?|B|printf x | xargs bash -c
+XF04|block-destructive|rt-xencl|-|?|W|echo $(printf x | xargs bash -x )
+XF05|block-destructive|rt-xencl|-|?|W|echo "$(printf x | xargs bash -x)" done
+XF06|block-destructive|rt-xnear|-|?|a|printf x | xargs bash -n
+XF07|block-destructive|rt-xnear|-|?|a|printf x | xargs bash -c 'echo hi'
+XF08|block-destructive|rt-xnear|-|?|a|printf x | xargs python3 -m py_compile
+XF09|block-destructive|rt-xpos|-|?|a|printf x | xargs bash -x @D@/wrapper
+XF10|block-destructive|rt-xres|-|?|a|printf x | xargs python3 -u
+XF11|block-destructive|rt-xctl|-|?|a|printf x | xargs bash -x @D@/ok.sh
+XF12|block-destructive|rt-xencl|-|?|W|echo $(xargs bash -x)
+# --- seed 15.9: the Stage 7 fix batch — rows for the operator's Stage 7 rulings and the hub's Tier-1 dispositions ---
+# Authored hub-direct (D-PayloadRoute). gt is `?`. Rows whose verdict moves in this batch are recorded at the verdict
+# after it. #8319 (D-8319-S7Fix): rt-hdopen, a carrier word read from inside a value whose quote or escape is still open
+# (an escaped blank with no quote, F-03; an escaped quote before the real opener, F-02; a declined value at the fragment
+# site, F-04; both, F-02 and F-04) — a before this batch, B after. rt-hdopennear: an even backslash run before a real
+# carrier (a), and a lone escaped quote, which the quote count still reads open, a kept over-block (B). rt-hdpin: F-05's
+# rows, at their verdicts. #8491 (D-8491-PrecAccept): rt-svprec, the P-1 and P-2 cells in both script forms (recorded for
+# a slash-bearing script, allowed for a PATH-resolved word, each its plain form's verdict; B before the card),
+# rt-svprecctl their plain forms. #8318 (D-8318-S7Fix): rt-op7fb, rt-op7src and rt-op7dollar, F-13's classes;
+# rt-op7limit, a spaced quoted path past the join's read limit (a before this batch, B after, F-12) with its unspaced
+# control rt-op7limitctl; rt-op7admit, the listed spaced path the corpus roots now list (a directory of its own, so O15's unlisted copy stays unlisted), alone and behind `--` (a), and
+# its unlisted twin (B); rt-op7gap, its two-space spelling (a before this batch, B after, F-15). #8317: rt-qcmtr1,
+# QSCAN-CMT-R1's class (F-07); rt-qnestbq, rt-qcloser, rt-qdollong and rt-qhdbq, F-09's classes and a here-document
+# operator-line backquote. QC24 moved to rt-qctl: it reads B before the card, so it is a control, not PC-4's move, and
+# QC27 was re-authored to a case word that discriminates (F-08). #8492 (D-8492-PCX2): rt-xpcx2, an xargs-fed shell at
+# top level whose option argument is a quoted word holding a closer, recorded at the enclosure phase (a at the release
+# base, B at the card's first GREEN, W since the closer scan reads in both views), with its unquoted control rt-xpcx2ctl.
+AV51|block-destructive|rt-hdopen|-|?|B|FOO=a\ echo bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV52|block-destructive|rt-hdopen|-|?|B|FOO=\""a echo b" bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV53|block-destructive|rt-hdopen|-|?|B|FOO='a echo #b' bash -c "x; bash @D@/na.sh"
+AV54|block-destructive|rt-hdopen|-|?|B|FOO=\""a echo b" bash -c "x; bash @D@/na.sh"
+AV55|block-destructive|rt-hdopennear|-|?|a|FOO=a\\ echo bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV56|block-destructive|rt-hdopennear|-|?|B|FOO=\"a echo bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV57|block-destructive|rt-hdpin|-|?|B|FOO="a echo b" bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+AV58|block-destructive|rt-hdpin|-|?|B|NOTE='see sh @D@/na.sh #x' true
+AV59|block-destructive|rt-hdpin|-|?|B|NOTE='see sh @D@/na.sh #x' bash @D@/ok.sh
+SV27|block-destructive|rt-svprec|-|?|W|env -S-C@D@/bash @D@/na.sh
+SV28|block-destructive|rt-svprec|-|?|a|env -S-C@D@/bash na.sh
+SV29|block-destructive|rt-svprec|-|?|W|env -S-'u' bash @D@/na.sh
+SV30|block-destructive|rt-svprec|-|?|a|env -S-'u' bash na.sh
+SV31|block-destructive|rt-svprecctl|-|?|W|env -C @D@/bash @D@/na.sh
+SV32|block-destructive|rt-svprecctl|-|?|a|env -C @D@/bash na.sh
+SV33|block-destructive|rt-svprecctl|-|?|W|env -u bash @D@/na.sh
+SV34|block-destructive|rt-svprecctl|-|?|a|env -u bash na.sh
+OP24|block-destructive|rt-op7fb|-|?|B|bash '@D@/n a.sh;x'
+OP25|block-destructive|rt-op7src|-|?|B|source 'n a.sh'
+OP26|block-destructive|rt-op7src|-|?|B|source -- 'n a.sh'
+OP27|block-destructive|rt-op7dollar|-|?|B|bash '@D@/n a'$$'.sh'
+OP28|block-destructive|rt-op7limit|-|?|B|bash '@D@/n a@MIDX@.sh'
+OP29|block-destructive|rt-op7limit|-|?|B|bash '@D@/n a@LONGX@.sh'
+OP30|block-destructive|rt-op7limitctl|-|?|B|bash '@D@/na@MIDX@.sh'
+OP31|block-destructive|rt-op7admit|-|?|a|bash '@D@/li sted/ok.sh'
+OP32|block-destructive|rt-op7admit|-|?|a|bash -- '@D@/li sted/ok.sh'
+OP33|block-destructive|rt-op7gap|-|?|B|bash '@D@/li  sted/ok.sh'
+OP35|block-destructive|rt-op7admit|-|?|B|bash '@D@/li sted/na.sh'
+QC30|block-destructive|rt-qcmtr1|-|?|B|echo 'x; bash @D@/na.sh' # it's
+QC31|block-destructive|rt-qnestbq|-|?|B|echo "`echo it's`"@NL@bash @D@/na.sh
+QC32|block-destructive|rt-qcloser|-|?|B|echo "${x:-)"it's"}"@NL@bash @D@/na.sh
+QC33|block-destructive|rt-qdollong|-|?|B|echo @MIDX@ $$'\'; bash @D@/na.sh
+QC34|block-destructive|rt-qhdbq|-|?|B|gh issue comment 1 --body-file - <<'EOF' # see `x`@NL@bash @D@/na.sh@NL@EOF
+XF13|block-destructive|rt-xpcx2|-|?|W|printf x | xargs bash -o 'a)b'
+XF14|block-destructive|rt-xpcx2|-|?|W|printf x | xargs bash --rcfile 'a)b'
+XF15|block-destructive|rt-xpcx2ctl|-|?|B|printf x | xargs bash -o ab
