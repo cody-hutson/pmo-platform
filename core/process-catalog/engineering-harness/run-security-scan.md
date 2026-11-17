@@ -33,7 +33,7 @@ page names but does not describe: that limb belongs to the release pipeline's me
 | Side | Criteria | Source |
 |---|---|---|
 | Entry | Monday 06:00 UTC on the default branch (`schedule: cron '0 6 * * 1'`); the routine is admitted by its registry row, whose cadence must equal the workflow's cron | [security.yml](/.github/workflows/security.yml#L26)<!-- source-anchor: line=26; fp=c1e028899d3c9866 -->; [registry](/core/automations/registry.md#L23)<!-- source-anchor: line=23; fp=4c1e33b55de6ef70 --> |
-| Exit | Seven job conclusions recorded on the run; the operator has read them; the workflow created nothing else | [security.yml](/.github/workflows/security.yml#L32)<!-- source-anchor: line=32; fp=ad0c08162d013950 --> |
+| Exit | Seven job conclusions recorded on the run; the operator has read them; the workflow created nothing else | [security.yml](/.github/workflows/security.yml#L41)<!-- source-anchor: line=41; fp=ad0c08162d013950 --> |
 
 ## Flow
 
