@@ -1,0 +1,6781 @@
+{
+  "cited_by": {
+    ".github/close-completeness.enforce": [
+      "run-check-probes",
+      "run-single-check-probe"
+    ],
+    ".github/decision-emission.enforce": [
+      "run-check-probes",
+      "run-single-check-probe"
+    ],
+    ".github/deploy-check-ci.enforce": [
+      "run-check-probes",
+      "check-workspace-config-surfaces",
+      "run-required-subset",
+      "flip-gate-to-enforce"
+    ],
+    ".github/release-corpus-completeness.enforce": [
+      "run-check-probes",
+      "run-single-check-probe"
+    ],
+    ".github/skill-package-freshness.enforce": [
+      "run-check-probes",
+      "run-single-check-probe",
+      "flip-gate-to-enforce"
+    ],
+    ".github/workflows/automation-registry-check.yml": [
+      "observe-platform",
+      "run-scheduled-audit",
+      "check-control-layer-registries",
+      "resolve-routine-binding"
+    ],
+    ".github/workflows/close-completeness.yml": [
+      "run-check-probes",
+      "check-release-corpus-integrity"
+    ],
+    ".github/workflows/decision-emission.yml": [
+      "check-orchestration-surfaces"
+    ],
+    ".github/workflows/deploy-check-ci.yml": [
+      "check-workspace-config-surfaces",
+      "check-control-layer-registries"
+    ],
+    ".github/workflows/install-tests.yml": [
+      "install-or-update-workspace",
+      "run-platform-health-check",
+      "install-platform",
+      "update-platform",
+      "check-backlog-hygiene",
+      "bootstrap-workspace",
+      "validate-install",
+      "regenerate-composition-surfaces",
+      "refresh-hook-bundle"
+    ],
+    ".github/workflows/link-check.yml": [
+      "check-corpus-conventions"
+    ],
+    ".github/workflows/release-corpus-completeness.yml": [
+      "run-check-probes",
+      "check-release-corpus-integrity"
+    ],
+    ".github/workflows/release-tooling-smoke.yml": [
+      "observe-platform",
+      "measure-platform-usage",
+      "check-backlog-hygiene",
+      "extract-token-spend"
+    ],
+    ".github/workflows/repo-integrity.yml": [
+      "check-corpus-conventions",
+      "check-public-surface-hygiene"
+    ],
+    ".github/workflows/skill-canonical-structure-check.yml": [
+      "run-check-suite",
+      "check-skill-corpus-integrity"
+    ],
+    ".github/workflows/skill-count-imp-check.yml": [
+      "check-deployed-skill-parity"
+    ],
+    ".github/workflows/skill-package-freshness.yml": [
+      "run-platform-health-check",
+      "check-deployed-skill-parity"
+    ],
+    ".github/workflows/skill-registry-currency-check.yml": [
+      "check-deployed-skill-parity"
+    ],
+    ".github/workflows/version-freeness.yml": [
+      "run-check-probes",
+      "check-release-corpus-integrity"
+    ],
+    "core/CLAUDE.md.template": [
+      "run-check-suite",
+      "select-deploy-targets"
+    ],
+    "core/automations/registry.md": [
+      "measure-platform-usage",
+      "measure-context-budget",
+      "measure-skill-compliance"
+    ],
+    "core/config/operator.toml.template": [
+      "run-scheduled-audit",
+      "resolve-routine-binding"
+    ],
+    "core/deploy/allowlists/selftest-coverage-exclusions.txt": [
+      "measure-platform-usage",
+      "trigger-session-retro"
+    ],
+    "core/deploy/compose.py": [
+      "install-or-update-workspace",
+      "bootstrap-workspace"
+    ],
+    "core/deploy/composition-surface-manifest.sh": [
+      "install-or-update-workspace"
+    ],
+    "core/deploy/deploy.sh": [
+      "observe-platform",
+      "install-platform",
+      "update-platform",
+      "run-scheduled-audit",
+      "run-security-scan",
+      "measure-context-budget",
+      "bootstrap-workspace",
+      "validate-install",
+      "regenerate-composition-surfaces",
+      "trigger-post-merge-deploy"
+    ],
+    "core/deploy/lib-composition.sh": [
+      "bootstrap-workspace"
+    ],
+    "core/deploy/lib-dryrun-proxy.ps1": [
+      "install-platform"
+    ],
+    "core/deploy/lib-instance-path.sh": [
+      "regenerate-composition-surfaces"
+    ],
+    "core/deploy/orchestrate.sh": [
+      "install-or-update-workspace",
+      "install-platform",
+      "bootstrap-workspace"
+    ],
+    "core/deploy/tools/README.md": [
+      "check-public-surface-hygiene"
+    ],
+    "core/deploy/tools/build-hook-registry.py": [
+      "select-deploy-targets"
+    ],
+    "core/deploy/tools/check-automation-coverage.sh": [
+      "run-scheduled-audit",
+      "check-control-layer-registries"
+    ],
+    "core/deploy/tools/check-automation-registry.sh": [
+      "run-scheduled-audit"
+    ],
+    "core/deploy/tools/check-convention.sh": [
+      "check-corpus-conventions"
+    ],
+    "core/deploy/tools/check-doc-gates.py": [
+      "check-release-corpus-integrity"
+    ],
+    "core/deploy/tools/check-mirror-pair-parity.py": [
+      "deploy-merged-changes"
+    ],
+    "core/deploy/tools/check-operator-toml-schema.sh": [
+      "regenerate-composition-surfaces"
+    ],
+    "core/deploy/tools/check-pv7-vocabulary.sh": [
+      "check-corpus-conventions"
+    ],
+    "core/deploy/tools/check-rules-budget.py": [
+      "deploy-merged-changes"
+    ],
+    "core/deploy/tools/check-version-anchors.py": [
+      "check-corpus-conventions"
+    ],
+    "core/deploy/tools/process-catalog-measures/event-log-deploy-replay.py": [
+      "install-or-update-workspace"
+    ],
+    "core/deploy/tools/process-catalog-measures/event-log-deploy-status.py": [
+      "install-or-update-workspace",
+      "deploy-merged-changes",
+      "trigger-post-merge-deploy",
+      "select-deploy-targets",
+      "deploy-skill-artifacts"
+    ],
+    "core/deploy/tools/process-catalog-measures/event-log-population.py": [
+      "observe-platform",
+      "run-session-retro",
+      "emit-session-learnings"
+    ],
+    "core/deploy/tools/process-catalog-measures/flip-decision-rows.py": [
+      "run-platform-health-check",
+      "graduate-gate-modes",
+      "review-warn-log-drains",
+      "flip-gate-to-enforce"
+    ],
+    "core/deploy/tools/process-catalog-measures/gate-rollout-deadlines.py": [
+      "run-platform-health-check",
+      "graduate-gate-modes",
+      "check-control-layer-registries",
+      "run-required-subset",
+      "review-warn-log-drains",
+      "flip-gate-to-enforce"
+    ],
+    "core/deploy/tools/process-catalog-measures/scheduled-audit-folders.py": [
+      "observe-platform",
+      "run-scheduled-audit",
+      "run-platform-health-audit"
+    ],
+    "core/deploy/tools/process-catalog-measures/secret-scan-range.py": [
+      "run-security-scan",
+      "run-security-jobs"
+    ],
+    "core/deploy/tools/process-catalog-measures/workflow-run-history.py": [
+      "install-or-update-workspace",
+      "run-platform-health-check",
+      "observe-platform",
+      "install-platform",
+      "update-platform",
+      "run-check-probes",
+      "graduate-gate-modes",
+      "run-security-scan",
+      "check-deployed-skill-parity",
+      "check-skill-corpus-integrity",
+      "check-workspace-config-surfaces",
+      "check-corpus-conventions",
+      "check-public-surface-hygiene",
+      "check-release-corpus-integrity",
+      "check-orchestration-surfaces",
+      "run-single-check-probe",
+      "run-required-subset",
+      "reconcile-gate-posture",
+      "bootstrap-workspace",
+      "validate-install",
+      "regenerate-composition-surfaces",
+      "refresh-hook-bundle",
+      "resolve-routine-binding",
+      "run-security-jobs",
+      "route-scan-verdicts"
+    ],
+    "core/deploy/tools/run-count-structure-fixtures.sh": [
+      "check-corpus-conventions"
+    ],
+    "core/governance/OPERATIONS.md": [
+      "run-scheduled-audit",
+      "resolve-routine-binding"
+    ],
+    "core/hooks/deploy-check.mode.template": [
+      "run-platform-health-check"
+    ],
+    "core/hooks/git-post-merge-deploy.sh": [
+      "install-or-update-workspace",
+      "bootstrap-workspace"
+    ],
+    "core/hooks/lib/dep-resolve.sh": [
+      "bootstrap-workspace"
+    ],
+    "core/hooks/notify-version-skew.sh": [
+      "install-or-update-workspace"
+    ],
+    "core/hooks/run-fragile-ref-fixtures.sh": [
+      "check-corpus-conventions"
+    ],
+    "core/hooks/tests/check-hook-dep-hardening.sh": [
+      "run-security-jobs"
+    ],
+    "core/hooks/verify-session-config.sh": [
+      "install-or-update-workspace"
+    ],
+    "core/rules/bypass-mode-readiness.md": [
+      "check-control-layer-registries",
+      "select-deploy-targets"
+    ],
+    "core/rules/doc-link-maintenance.md": [
+      "run-platform-health-check",
+      "graduate-gate-modes"
+    ],
+    "core/rules/harness-deployment.md": [
+      "install-or-update-workspace"
+    ],
+    "core/rules/operations-bridge.md": [
+      "install-or-update-workspace",
+      "install-platform",
+      "update-platform"
+    ],
+    "core/rules/skill-deployment.md": [
+      "install-or-update-workspace",
+      "run-check-probes",
+      "measure-platform-usage",
+      "measure-context-budget"
+    ],
+    "core/schemas/automation-registry-schema.md": [
+      "run-scheduled-audit"
+    ],
+    "core/settings.json.template": [
+      "observe-platform",
+      "update-platform"
+    ],
+    "core/skills/finops-usage-extractor/scripts/provider-usage-connector.sh": [
+      "extract-token-spend"
+    ],
+    "core/skills/session-retro/references/emission-contract.md": [
+      "run-session-retro"
+    ],
+    "core/skills/session-retro/references/sampling-and-trigger.md": [
+      "run-session-retro"
+    ],
+    "core/standards/finops-attribution-convention.md": [
+      "extract-token-spend"
+    ],
+    "core/standards/gate-efficacy-standard.md": [
+      "check-deployed-skill-parity",
+      "check-skill-corpus-integrity",
+      "check-corpus-conventions",
+      "check-backlog-hygiene",
+      "check-release-corpus-integrity",
+      "check-orchestration-surfaces",
+      "run-single-check-probe"
+    ],
+    "docs/INSTALL.md": [
+      "resolve-routine-binding"
+    ],
+    "docs/ONBOARDING_JOURNEY.md": [
+      "bootstrap-workspace",
+      "resolve-routine-binding"
+    ],
+    "docs/UPDATE.md": [
+      "regenerate-composition-surfaces"
+    ],
+    "docs/scripts/setup-workspace.sh": [
+      "verify-session-setup",
+      "trigger-session-retro",
+      "regenerate-composition-surfaces"
+    ],
+    "docs/scripts/validate-install.sh": [
+      "install-or-update-workspace",
+      "update-platform"
+    ],
+    "doctor.sh": [
+      "install-or-update-workspace",
+      "validate-install"
+    ],
+    "install.ps1": [
+      "install-or-update-workspace",
+      "bootstrap-workspace"
+    ],
+    "install.sh": [
+      "deploy-merged-changes"
+    ],
+    "qa.sh": [
+      "install-or-update-workspace",
+      "validate-install"
+    ],
+    "release/references/pipeline/stage-06-engineering.md": [
+      "run-check-suite"
+    ],
+    "release/references/pipeline/stage-13-close.md": [
+      "run-check-suite",
+      "run-check-probes",
+      "check-release-corpus-integrity",
+      "check-orchestration-surfaces"
+    ],
+    "release/references/protocols/architecture-conformance-cadence.md": [
+      "observe-platform"
+    ],
+    "release/references/protocols/decision-audit-cadence.md": [
+      "observe-platform"
+    ],
+    "release/references/protocols/platform-health-audit-framework.md": [
+      "observe-platform"
+    ],
+    "release/references/protocols/process-fitness-cadence.md": [
+      "observe-platform"
+    ],
+    "release/references/protocols/structural-audit-cadence.md": [
+      "observe-platform"
+    ],
+    "release/references/standards/pipeline-event-log-schema.md": [
+      "run-session-retro",
+      "emit-session-learnings"
+    ],
+    "release/skills/pmo-skill-refiner/eval-viewer/test_generate_review.py": [
+      "run-security-jobs"
+    ],
+    "release/tools/append-pipeline-event.sh": [
+      "deploy-skill-artifacts"
+    ],
+    "release/tools/bundle-issues-parser.py": [
+      "check-backlog-hygiene"
+    ],
+    "release/tools/compute-dora-metrics.sh": [
+      "measure-platform-usage"
+    ],
+    "release/tools/compute-front-cluster-telemetry.sh": [
+      "measure-platform-usage"
+    ],
+    "release/tools/compute-middle-cluster-telemetry.sh": [
+      "measure-platform-usage"
+    ],
+    "release/tools/query-pipeline-event.sh": [
+      "emit-session-learnings"
+    ],
+    "release/tools/synthesize-release-learnings.sh": [
+      "run-session-retro"
+    ],
+    "release/tools/version-grammar.sh": [
+      "check-release-corpus-integrity"
+    ],
+    "update.ps1": [
+      "install-or-update-workspace"
+    ],
+    "update.sh": [
+      "deploy-merged-changes",
+      "verify-session-setup",
+      "trigger-post-merge-deploy",
+      "deploy-skill-artifacts",
+      "notify-version-skew"
+    ]
+  },
+  "counts": {
+    "edges_by_type": {
+      "depicts": 215,
+      "precedes": 32,
+      "sub-flow-of": 209,
+      "triggered-by": 89
+    },
+    "nodes": 212,
+    "nodes_by_level": {
+      "L0": 3,
+      "L1": 15,
+      "L2": 47,
+      "L3": 147
+    },
+    "pages_by_level": {
+      "L0": 1,
+      "L1": 3,
+      "L2": 11,
+      "L3": 33
+    },
+    "published": 48
+  },
+  "depicted_by": {
+    ".github/workflows/automation-registry-check.yml": [
+      "run-security-scan"
+    ],
+    ".github/workflows/close-completeness.yml": [
+      "run-single-check-probe"
+    ],
+    ".github/workflows/decision-emission.yml": [
+      "run-check-probes",
+      "run-single-check-probe"
+    ],
+    ".github/workflows/deploy-check-ci.yml": [
+      "run-platform-health-check",
+      "run-check-probes",
+      "run-required-subset"
+    ],
+    ".github/workflows/gate-posture-reconciliation.yml": [
+      "run-platform-health-check",
+      "graduate-gate-modes",
+      "reconcile-gate-posture"
+    ],
+    ".github/workflows/release-corpus-completeness.yml": [
+      "run-single-check-probe"
+    ],
+    ".github/workflows/security.yml": [
+      "observe-platform",
+      "run-security-scan",
+      "run-security-jobs",
+      "route-scan-verdicts"
+    ],
+    ".github/workflows/skill-package-freshness.yml": [
+      "run-check-probes",
+      "run-single-check-probe"
+    ],
+    ".github/workflows/version-freeness.yml": [
+      "run-single-check-probe"
+    ],
+    ".gitleaks.toml": [
+      "run-security-jobs"
+    ],
+    "core/CLAUDE.md.template": [
+      "route-scan-verdicts"
+    ],
+    "core/automations/registry.md": [
+      "engineering-harness",
+      "observe-platform",
+      "run-scheduled-audit",
+      "run-security-scan",
+      "resolve-routine-binding",
+      "run-platform-health-audit",
+      "run-security-jobs",
+      "route-scan-verdicts"
+    ],
+    "core/config/platform-config.toml.template": [
+      "verify-session-config"
+    ],
+    "core/deploy/compose.py": [
+      "regenerate-composition-surfaces"
+    ],
+    "core/deploy/composition-surface-manifest.sh": [
+      "bootstrap-workspace",
+      "regenerate-composition-surfaces"
+    ],
+    "core/deploy/deploy.sh": [
+      "engineering-harness",
+      "install-or-update-workspace",
+      "run-platform-health-check",
+      "deploy-merged-changes",
+      "run-check-suite",
+      "run-check-probes",
+      "graduate-gate-modes",
+      "check-deployed-skill-parity",
+      "check-skill-corpus-integrity",
+      "check-workspace-config-surfaces",
+      "check-corpus-conventions",
+      "check-public-surface-hygiene",
+      "check-backlog-hygiene",
+      "check-release-corpus-integrity",
+      "check-orchestration-surfaces",
+      "check-control-layer-registries",
+      "run-single-check-probe",
+      "run-required-subset",
+      "report-platform-health",
+      "review-warn-log-drains",
+      "flip-gate-to-enforce",
+      "select-deploy-targets",
+      "deploy-skill-artifacts"
+    ],
+    "core/deploy/lib-composition.sh": [
+      "regenerate-composition-surfaces"
+    ],
+    "core/deploy/orchestrate.sh": [
+      "update-platform"
+    ],
+    "core/deploy/tools/build-skill-packages.sh": [
+      "check-deployed-skill-parity"
+    ],
+    "core/deploy/tools/check-adr-flip.py": [
+      "check-control-layer-registries"
+    ],
+    "core/deploy/tools/check-approved-queue-depth.py": [
+      "check-backlog-hygiene"
+    ],
+    "core/deploy/tools/check-automation-registry.sh": [
+      "check-control-layer-registries"
+    ],
+    "core/deploy/tools/check-canonical-structure.sh": [
+      "check-skill-corpus-integrity"
+    ],
+    "core/deploy/tools/check-citation-anchors.sh": [
+      "check-skill-corpus-integrity"
+    ],
+    "core/deploy/tools/check-count-structure.py": [
+      "check-corpus-conventions"
+    ],
+    "core/deploy/tools/check-doc-frontmatter.py": [
+      "check-corpus-conventions"
+    ],
+    "core/deploy/tools/check-doc-gates.py": [
+      "run-single-check-probe"
+    ],
+    "core/deploy/tools/check-doc-links.py": [
+      "check-corpus-conventions"
+    ],
+    "core/deploy/tools/check-enum-parity.sh": [
+      "check-orchestration-surfaces"
+    ],
+    "core/deploy/tools/check-extraction-contract.py": [
+      "check-control-layer-registries"
+    ],
+    "core/deploy/tools/check-host-binding.py": [
+      "check-public-surface-hygiene"
+    ],
+    "core/deploy/tools/check-identity-conformance.py": [
+      "check-release-corpus-integrity"
+    ],
+    "core/deploy/tools/check-issue-body-anchors.sh": [
+      "check-backlog-hygiene"
+    ],
+    "core/deploy/tools/check-label-parity.py": [
+      "check-backlog-hygiene"
+    ],
+    "core/deploy/tools/check-milestone-epic-membership.py": [
+      "check-backlog-hygiene"
+    ],
+    "core/deploy/tools/check-mirror-pair-parity.py": [
+      "check-workspace-config-surfaces"
+    ],
+    "core/deploy/tools/check-operator-toml-schema.sh": [
+      "check-workspace-config-surfaces"
+    ],
+    "core/deploy/tools/check-ownership-collision.py": [
+      "check-skill-corpus-integrity"
+    ],
+    "core/deploy/tools/check-registry-currency.sh": [
+      "check-deployed-skill-parity"
+    ],
+    "core/deploy/tools/check-rules-budget.py": [
+      "check-workspace-config-surfaces"
+    ],
+    "core/deploy/tools/check-tool-exec-mode.py": [
+      "check-public-surface-hygiene"
+    ],
+    "core/deploy/tools/check-work-hierarchy.py": [
+      "check-corpus-conventions",
+      "check-backlog-hygiene"
+    ],
+    "core/deploy/tools/generate_release_index.py": [
+      "check-release-corpus-integrity"
+    ],
+    "core/deploy/tools/lint_release_corpus.py": [
+      "check-release-corpus-integrity"
+    ],
+    "core/deploy/tools/path-leak-patterns.sh": [
+      "check-public-surface-hygiene"
+    ],
+    "core/deploy/tools/reconcile-gate-posture.py": [
+      "graduate-gate-modes",
+      "reconcile-gate-posture"
+    ],
+    "core/deploy/tools/resolve-automation-binding.sh": [
+      "observe-platform",
+      "run-scheduled-audit",
+      "resolve-routine-binding"
+    ],
+    "core/governance/OPERATIONS.md": [
+      "observe-platform",
+      "run-platform-health-audit"
+    ],
+    "core/hooks/block-destructive.sh": [
+      "check-control-layer-registries"
+    ],
+    "core/hooks/deploy-check.mode.template": [
+      "run-check-suite",
+      "flip-gate-to-enforce"
+    ],
+    "core/hooks/git-post-merge-deploy.sh": [
+      "deploy-merged-changes",
+      "trigger-post-merge-deploy"
+    ],
+    "core/hooks/notify-version-skew.sh": [
+      "verify-session-setup",
+      "notify-version-skew"
+    ],
+    "core/hooks/run-theme-token-fixtures.sh": [
+      "check-public-surface-hygiene"
+    ],
+    "core/hooks/session-retro-trigger.sh": [
+      "observe-platform",
+      "run-session-retro",
+      "trigger-session-retro"
+    ],
+    "core/hooks/verify-session-config.sh": [
+      "verify-session-setup",
+      "verify-session-config"
+    ],
+    "core/rules/bypass-mode-readiness.md": [
+      "engineering-harness",
+      "run-platform-health-check",
+      "graduate-gate-modes",
+      "review-warn-log-drains",
+      "flip-gate-to-enforce"
+    ],
+    "core/rules/doc-link-maintenance.md": [
+      "check-corpus-conventions",
+      "review-warn-log-drains"
+    ],
+    "core/rules/harness-deployment.md": [
+      "deploy-merged-changes",
+      "check-workspace-config-surfaces",
+      "select-deploy-targets",
+      "deploy-skill-artifacts"
+    ],
+    "core/rules/skill-deployment.md": [
+      "deploy-merged-changes",
+      "run-check-suite",
+      "check-deployed-skill-parity",
+      "report-platform-health",
+      "trigger-post-merge-deploy",
+      "select-deploy-targets",
+      "deploy-skill-artifacts"
+    ],
+    "core/schemas/automation-registry-schema.md": [
+      "observe-platform",
+      "run-security-scan",
+      "resolve-routine-binding"
+    ],
+    "core/schemas/finops-usage-store-schema.md": [
+      "extract-token-spend"
+    ],
+    "core/settings.json.template": [
+      "engineering-harness",
+      "install-or-update-workspace",
+      "verify-session-setup",
+      "run-session-retro",
+      "trigger-session-retro",
+      "refresh-hook-bundle",
+      "verify-session-config",
+      "notify-version-skew"
+    ],
+    "core/skills/context-budget-auditor/SKILL.md": [
+      "measure-platform-usage",
+      "measure-context-budget"
+    ],
+    "core/skills/context-budget-auditor/scripts/measure-context-budget.sh": [
+      "measure-context-budget"
+    ],
+    "core/skills/finops-usage-extractor/SKILL.md": [
+      "measure-platform-usage",
+      "extract-token-spend"
+    ],
+    "core/skills/finops-usage-extractor/scripts/estimate-usage.sh": [
+      "extract-token-spend"
+    ],
+    "core/skills/finops-usage-extractor/scripts/extract-usage.sh": [
+      "extract-token-spend"
+    ],
+    "core/skills/finops-usage-extractor/scripts/report-usage.sh": [
+      "extract-token-spend"
+    ],
+    "core/skills/finops-usage-extractor/scripts/rollup-attribution.sh": [
+      "extract-token-spend"
+    ],
+    "core/skills/pmo-qa-auditor/SKILL.md": [
+      "observe-platform",
+      "run-scheduled-audit",
+      "run-platform-health-audit"
+    ],
+    "core/skills/session-retro/SKILL.md": [
+      "run-session-retro",
+      "emit-session-learnings"
+    ],
+    "core/skills/session-retro/references/emission-contract.md": [
+      "emit-session-learnings"
+    ],
+    "core/skills/session-retro/references/sampling-and-trigger.md": [
+      "trigger-session-retro"
+    ],
+    "core/skills/skill-compliance-auditor/SKILL.md": [
+      "measure-platform-usage",
+      "measure-skill-compliance"
+    ],
+    "core/skills/skill-compliance-auditor/references/scenario-and-calibration-schema.md": [
+      "measure-skill-compliance"
+    ],
+    "core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh": [
+      "measure-skill-compliance"
+    ],
+    "core/standards/composition-surface-spec.md": [
+      "update-platform",
+      "regenerate-composition-surfaces"
+    ],
+    "core/standards/gate-efficacy-standard.md": [
+      "run-platform-health-check",
+      "run-check-suite",
+      "run-check-probes",
+      "graduate-gate-modes",
+      "check-control-layer-registries",
+      "run-required-subset",
+      "review-warn-log-drains",
+      "reconcile-gate-posture",
+      "flip-gate-to-enforce"
+    ],
+    "core/standards/scheduler-adapter-routine-firing.md": [
+      "resolve-routine-binding"
+    ],
+    "docs/INSTALL.md": [
+      "install-or-update-workspace",
+      "install-platform",
+      "bootstrap-workspace",
+      "validate-install"
+    ],
+    "docs/ONBOARDING_JOURNEY.md": [
+      "install-or-update-workspace",
+      "install-platform"
+    ],
+    "docs/UPDATE.md": [
+      "install-or-update-workspace",
+      "update-platform",
+      "verify-session-setup",
+      "validate-install",
+      "refresh-hook-bundle",
+      "notify-version-skew"
+    ],
+    "docs/scripts/setup-workspace.sh": [
+      "engineering-harness",
+      "install-or-update-workspace",
+      "install-platform",
+      "update-platform",
+      "bootstrap-workspace",
+      "refresh-hook-bundle",
+      "trigger-post-merge-deploy"
+    ],
+    "docs/scripts/validate-install.sh": [
+      "install-platform",
+      "validate-install"
+    ],
+    "doctor.sh": [
+      "install-platform"
+    ],
+    "install.ps1": [
+      "install-platform"
+    ],
+    "install.sh": [
+      "install-or-update-workspace",
+      "install-platform",
+      "bootstrap-workspace"
+    ],
+    "qa.sh": [
+      "install-platform"
+    ],
+    "release/references/pipeline/stage-13-close.md": [
+      "run-single-check-probe"
+    ],
+    "release/references/protocols/architecture-conformance-cadence.md": [
+      "run-scheduled-audit"
+    ],
+    "release/references/protocols/decision-audit-cadence.md": [
+      "run-scheduled-audit"
+    ],
+    "release/references/protocols/platform-health-audit-framework.md": [
+      "run-scheduled-audit",
+      "run-platform-health-audit"
+    ],
+    "release/references/protocols/process-fitness-cadence.md": [
+      "run-scheduled-audit"
+    ],
+    "release/references/protocols/structural-audit-cadence.md": [
+      "run-scheduled-audit"
+    ],
+    "release/references/standards/pipeline-event-log-schema.md": [
+      "check-orchestration-surfaces"
+    ],
+    "release/skills/pmo-skill-refiner/scripts/run_eval_audit.py": [
+      "check-skill-corpus-integrity"
+    ],
+    "release/tools/append-pipeline-event.sh": [
+      "run-session-retro",
+      "emit-session-learnings"
+    ],
+    "release/tools/check-release-body-drift.sh": [
+      "check-release-corpus-integrity"
+    ],
+    "release/tools/compute-milestone-positions.py": [
+      "check-backlog-hygiene"
+    ],
+    "release/tools/query-pipeline-event.sh": [
+      "measure-platform-usage"
+    ],
+    "release/tools/sweep-release-corpus.py": [
+      "check-release-corpus-integrity"
+    ],
+    "release/tools/synthesize-release-learnings.sh": [
+      "emit-session-learnings"
+    ],
+    "update.ps1": [
+      "update-platform"
+    ],
+    "update.sh": [
+      "install-or-update-workspace",
+      "update-platform",
+      "regenerate-composition-surfaces",
+      "refresh-hook-bundle"
+    ]
+  },
+  "documented_by": {},
+  "edges": [
+    {
+      "from": "engineering-harness",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "engineering-harness",
+      "to": "docs/scripts/setup-workspace.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "engineering-harness",
+      "to": "core/automations/registry.md",
+      "type": "depicts"
+    },
+    {
+      "from": "engineering-harness",
+      "to": "core/rules/bypass-mode-readiness.md",
+      "type": "depicts"
+    },
+    {
+      "from": "engineering-harness",
+      "to": "core/settings.json.template",
+      "type": "depicts"
+    },
+    {
+      "from": "admit-work-item",
+      "target_published": false,
+      "to": "platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "deliver-platform-release",
+      "target_published": false,
+      "to": "platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "onboard-project",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "process-project-evidence",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "report-status",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "communicate-with-stakeholders",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "control-delivery",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "define-and-review-solution",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "manage-go-live-change",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "close-project",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "govern-portfolio",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "resolve-support-issue",
+      "target_published": false,
+      "to": "project-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "target_published": true,
+      "to": "engineering-harness",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "target_published": true,
+      "to": "observe-platform",
+      "type": "precedes"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "target_kind": "external",
+      "to": "external:fresh-clone",
+      "type": "triggered-by"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "target_kind": "event",
+      "to": "event:version-skew-notice",
+      "type": "triggered-by"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "target_kind": "event",
+      "to": "event:git-post-merge",
+      "type": "triggered-by"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "to": "install.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "to": "update.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "to": "docs/scripts/setup-workspace.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "to": "core/settings.json.template",
+      "type": "depicts"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "to": "docs/INSTALL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "to": "docs/UPDATE.md",
+      "type": "depicts"
+    },
+    {
+      "from": "install-or-update-workspace",
+      "to": "docs/ONBOARDING_JOURNEY.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-check",
+      "target_published": true,
+      "to": "engineering-harness",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-platform-health-check",
+      "target_published": true,
+      "to": "observe-platform",
+      "type": "precedes"
+    },
+    {
+      "from": "run-platform-health-check",
+      "target_kind": "event",
+      "to": "event:operator-runs-check",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-check",
+      "target_kind": "event",
+      "to": "event:pull-request",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-check",
+      "target_kind": "event",
+      "to": "event:push-to-main",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-check",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-engineering",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-check",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-close",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-check",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-check",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-check",
+      "to": "core/rules/bypass-mode-readiness.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-check",
+      "to": ".github/workflows/deploy-check-ci.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-check",
+      "to": ".github/workflows/gate-posture-reconciliation.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "observe-platform",
+      "target_published": true,
+      "to": "engineering-harness",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "observe-platform",
+      "target_kind": "schedule",
+      "to": "schedule:registered-routine",
+      "type": "triggered-by"
+    },
+    {
+      "from": "observe-platform",
+      "target_kind": "event",
+      "to": "event:session-stop",
+      "type": "triggered-by"
+    },
+    {
+      "from": "observe-platform",
+      "target_kind": "event",
+      "to": "event:operator-ask",
+      "type": "triggered-by"
+    },
+    {
+      "from": "observe-platform",
+      "to": "core/automations/registry.md",
+      "type": "depicts"
+    },
+    {
+      "from": "observe-platform",
+      "to": "core/schemas/automation-registry-schema.md",
+      "type": "depicts"
+    },
+    {
+      "from": "observe-platform",
+      "to": "core/deploy/tools/resolve-automation-binding.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "observe-platform",
+      "to": "core/skills/pmo-qa-auditor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "observe-platform",
+      "to": ".github/workflows/security.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "observe-platform",
+      "to": "core/hooks/session-retro-trigger.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "observe-platform",
+      "to": "core/governance/OPERATIONS.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-intake",
+      "target_published": false,
+      "to": "admit-work-item",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-triage",
+      "target_published": false,
+      "to": "admit-work-item",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-bundle",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-planning",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-solutioning",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-engineering",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-dev-testing",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-qa-testing",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-plan-review",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-dry-run",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-snapshot",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-execute",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-close",
+      "target_published": false,
+      "to": "deliver-platform-release",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "review-pr-structure",
+      "target_published": false,
+      "to": "run-dev-testing",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "verify-acceptance-contracts",
+      "target_published": false,
+      "to": "run-dev-testing",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "grade-content-quality",
+      "target_published": false,
+      "to": "run-dev-testing",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "assemble-quality-report",
+      "target_published": false,
+      "to": "run-dev-testing",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "dispose-and-route-findings",
+      "target_published": false,
+      "to": "run-dev-testing",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "install-platform",
+      "target_published": true,
+      "to": "install-or-update-workspace",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "install-platform",
+      "target_published": true,
+      "to": "update-platform",
+      "type": "precedes"
+    },
+    {
+      "from": "install-platform",
+      "target_kind": "external",
+      "to": "external:fresh-clone",
+      "type": "triggered-by"
+    },
+    {
+      "from": "install-platform",
+      "to": "install.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-platform",
+      "to": "install.ps1",
+      "type": "depicts"
+    },
+    {
+      "from": "install-platform",
+      "to": "docs/scripts/setup-workspace.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-platform",
+      "to": "docs/scripts/validate-install.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-platform",
+      "to": "doctor.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-platform",
+      "to": "qa.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "install-platform",
+      "to": "docs/INSTALL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "install-platform",
+      "to": "docs/ONBOARDING_JOURNEY.md",
+      "type": "depicts"
+    },
+    {
+      "from": "update-platform",
+      "target_published": true,
+      "to": "install-or-update-workspace",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "update-platform",
+      "target_published": true,
+      "to": "deploy-merged-changes",
+      "type": "precedes"
+    },
+    {
+      "from": "update-platform",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "verify-session-setup",
+      "type": "triggered-by"
+    },
+    {
+      "from": "update-platform",
+      "target_kind": "external",
+      "to": "external:newer-release",
+      "type": "triggered-by"
+    },
+    {
+      "from": "update-platform",
+      "to": "update.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "update-platform",
+      "to": "update.ps1",
+      "type": "depicts"
+    },
+    {
+      "from": "update-platform",
+      "to": "docs/scripts/setup-workspace.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "update-platform",
+      "to": "core/deploy/orchestrate.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "update-platform",
+      "to": "docs/UPDATE.md",
+      "type": "depicts"
+    },
+    {
+      "from": "update-platform",
+      "to": "core/standards/composition-surface-spec.md",
+      "type": "depicts"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "target_published": true,
+      "to": "install-or-update-workspace",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "target_published": true,
+      "to": "verify-session-setup",
+      "type": "precedes"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "target_kind": "event",
+      "to": "event:git-post-merge",
+      "type": "triggered-by"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "install-platform",
+      "type": "triggered-by"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "update-platform",
+      "type": "triggered-by"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "triggered-by"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "to": "core/hooks/git-post-merge-deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "to": "core/rules/skill-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "deploy-merged-changes",
+      "to": "core/rules/harness-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "verify-session-setup",
+      "target_published": true,
+      "to": "install-or-update-workspace",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "verify-session-setup",
+      "target_published": true,
+      "to": "update-platform",
+      "type": "precedes"
+    },
+    {
+      "from": "verify-session-setup",
+      "target_kind": "event",
+      "to": "event:session-start",
+      "type": "triggered-by"
+    },
+    {
+      "from": "verify-session-setup",
+      "to": "core/settings.json.template",
+      "type": "depicts"
+    },
+    {
+      "from": "verify-session-setup",
+      "to": "core/hooks/notify-version-skew.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "verify-session-setup",
+      "to": "core/hooks/verify-session-config.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "verify-session-setup",
+      "to": "docs/UPDATE.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-suite",
+      "target_published": true,
+      "to": "run-platform-health-check",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-check-suite",
+      "target_published": true,
+      "to": "run-check-probes",
+      "type": "precedes"
+    },
+    {
+      "from": "run-check-suite",
+      "target_kind": "event",
+      "to": "event:operator-runs-check",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-check-suite",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-engineering",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-check-suite",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-close",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-check-suite",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-suite",
+      "to": "core/hooks/deploy-check.mode.template",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-suite",
+      "to": "core/rules/skill-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-suite",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-probes",
+      "target_published": true,
+      "to": "run-platform-health-check",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-check-probes",
+      "target_published": true,
+      "to": "graduate-gate-modes",
+      "type": "precedes"
+    },
+    {
+      "from": "run-check-probes",
+      "target_kind": "event",
+      "to": "event:pull-request",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-check-probes",
+      "target_kind": "event",
+      "to": "event:push-to-main",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-check-probes",
+      "target_kind": "event",
+      "to": "event:operator-runs-check",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-check-probes",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-close",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-check-probes",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-probes",
+      "to": ".github/workflows/deploy-check-ci.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-probes",
+      "to": ".github/workflows/skill-package-freshness.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-probes",
+      "to": ".github/workflows/decision-emission.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-check-probes",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "target_published": true,
+      "to": "run-platform-health-check",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-close",
+      "type": "triggered-by"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "target_kind": "event",
+      "to": "event:pull-request",
+      "type": "triggered-by"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "target_kind": "event",
+      "to": "event:shakedown-window-elapsed",
+      "type": "triggered-by"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "to": "core/rules/bypass-mode-readiness.md",
+      "type": "depicts"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "to": "core/deploy/tools/reconcile-gate-posture.py",
+      "type": "depicts"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "to": ".github/workflows/gate-posture-reconciliation.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "graduate-gate-modes",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "target_published": true,
+      "to": "observe-platform",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "target_published": true,
+      "to": "run-security-scan",
+      "type": "precedes"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "target_kind": "schedule",
+      "to": "schedule:registered-routine",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "target_kind": "event",
+      "to": "event:operator-ask",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "to": "core/automations/registry.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "to": "core/deploy/tools/resolve-automation-binding.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "to": "core/skills/pmo-qa-auditor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "to": "release/references/protocols/platform-health-audit-framework.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "to": "release/references/protocols/process-fitness-cadence.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "to": "release/references/protocols/architecture-conformance-cadence.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "to": "release/references/protocols/decision-audit-cadence.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-scheduled-audit",
+      "to": "release/references/protocols/structural-audit-cadence.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-security-scan",
+      "target_published": true,
+      "to": "observe-platform",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-security-scan",
+      "target_kind": "schedule",
+      "to": "schedule:security-scan",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-security-scan",
+      "to": ".github/workflows/security.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-security-scan",
+      "to": "core/automations/registry.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-security-scan",
+      "to": "core/schemas/automation-registry-schema.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-security-scan",
+      "to": ".github/workflows/automation-registry-check.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-session-retro",
+      "target_published": true,
+      "to": "observe-platform",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-session-retro",
+      "target_published": true,
+      "to": "measure-platform-usage",
+      "type": "precedes"
+    },
+    {
+      "from": "run-session-retro",
+      "target_kind": "event",
+      "to": "event:stop-hook",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-session-retro",
+      "target_kind": "event",
+      "to": "event:operator-asks-for-retro",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-session-retro",
+      "to": "core/hooks/session-retro-trigger.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "run-session-retro",
+      "to": "core/settings.json.template",
+      "type": "depicts"
+    },
+    {
+      "from": "run-session-retro",
+      "to": "core/skills/session-retro/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-session-retro",
+      "to": "release/tools/append-pipeline-event.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-platform-usage",
+      "target_published": true,
+      "to": "observe-platform",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "measure-platform-usage",
+      "target_kind": "event",
+      "to": "event:operator-asks-for-usage",
+      "type": "triggered-by"
+    },
+    {
+      "from": "measure-platform-usage",
+      "to": "core/skills/finops-usage-extractor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-platform-usage",
+      "to": "core/skills/context-budget-auditor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-platform-usage",
+      "to": "core/skills/skill-compliance-auditor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-platform-usage",
+      "to": "release/tools/query-pipeline-event.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-deployed-skill-parity",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-deployed-skill-parity",
+      "target_published": true,
+      "to": "check-skill-corpus-integrity",
+      "type": "precedes"
+    },
+    {
+      "from": "check-deployed-skill-parity",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-deployed-skill-parity",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-deployed-skill-parity",
+      "to": "core/deploy/tools/check-registry-currency.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-deployed-skill-parity",
+      "to": "core/deploy/tools/build-skill-packages.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-deployed-skill-parity",
+      "to": "core/rules/skill-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "check-skill-corpus-integrity",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-skill-corpus-integrity",
+      "target_published": true,
+      "to": "check-workspace-config-surfaces",
+      "type": "precedes"
+    },
+    {
+      "from": "check-skill-corpus-integrity",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-skill-corpus-integrity",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-skill-corpus-integrity",
+      "to": "core/deploy/tools/check-canonical-structure.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-skill-corpus-integrity",
+      "to": "core/deploy/tools/check-ownership-collision.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-skill-corpus-integrity",
+      "to": "core/deploy/tools/check-citation-anchors.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-skill-corpus-integrity",
+      "to": "release/skills/pmo-skill-refiner/scripts/run_eval_audit.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-workspace-config-surfaces",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-workspace-config-surfaces",
+      "target_published": true,
+      "to": "check-corpus-conventions",
+      "type": "precedes"
+    },
+    {
+      "from": "check-workspace-config-surfaces",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-workspace-config-surfaces",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-workspace-config-surfaces",
+      "to": "core/deploy/tools/check-operator-toml-schema.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-workspace-config-surfaces",
+      "to": "core/deploy/tools/check-mirror-pair-parity.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-workspace-config-surfaces",
+      "to": "core/deploy/tools/check-rules-budget.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-workspace-config-surfaces",
+      "to": "core/rules/harness-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "target_published": true,
+      "to": "check-public-surface-hygiene",
+      "type": "precedes"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "to": "core/deploy/tools/check-doc-links.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "to": "core/deploy/tools/check-doc-frontmatter.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "to": "core/deploy/tools/check-count-structure.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "to": "core/deploy/tools/check-work-hierarchy.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-corpus-conventions",
+      "to": "core/rules/doc-link-maintenance.md",
+      "type": "depicts"
+    },
+    {
+      "from": "check-public-surface-hygiene",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-public-surface-hygiene",
+      "target_published": true,
+      "to": "check-backlog-hygiene",
+      "type": "precedes"
+    },
+    {
+      "from": "check-public-surface-hygiene",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-public-surface-hygiene",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-public-surface-hygiene",
+      "to": "core/deploy/tools/check-host-binding.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-public-surface-hygiene",
+      "to": "core/deploy/tools/path-leak-patterns.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-public-surface-hygiene",
+      "to": "core/deploy/tools/check-tool-exec-mode.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-public-surface-hygiene",
+      "to": "core/hooks/run-theme-token-fixtures.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "target_published": true,
+      "to": "check-release-corpus-integrity",
+      "type": "precedes"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "to": "core/deploy/tools/check-label-parity.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "to": "core/deploy/tools/check-approved-queue-depth.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "to": "core/deploy/tools/check-work-hierarchy.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "to": "core/deploy/tools/check-milestone-epic-membership.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "to": "core/deploy/tools/check-issue-body-anchors.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-backlog-hygiene",
+      "to": "release/tools/compute-milestone-positions.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "target_published": true,
+      "to": "check-orchestration-surfaces",
+      "type": "precedes"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "to": "core/deploy/tools/lint_release_corpus.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "to": "core/deploy/tools/generate_release_index.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "to": "release/tools/check-release-body-drift.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "to": "core/deploy/tools/check-identity-conformance.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-release-corpus-integrity",
+      "to": "release/tools/sweep-release-corpus.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-orchestration-surfaces",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-orchestration-surfaces",
+      "target_published": true,
+      "to": "check-control-layer-registries",
+      "type": "precedes"
+    },
+    {
+      "from": "check-orchestration-surfaces",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-orchestration-surfaces",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-orchestration-surfaces",
+      "to": "core/deploy/tools/check-enum-parity.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-orchestration-surfaces",
+      "to": "release/references/standards/pipeline-event-log-schema.md",
+      "type": "depicts"
+    },
+    {
+      "from": "check-control-layer-registries",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-control-layer-registries",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-check-suite",
+      "type": "triggered-by"
+    },
+    {
+      "from": "check-control-layer-registries",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-control-layer-registries",
+      "to": "core/deploy/tools/check-extraction-contract.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-control-layer-registries",
+      "to": "core/deploy/tools/check-adr-flip.py",
+      "type": "depicts"
+    },
+    {
+      "from": "check-control-layer-registries",
+      "to": "core/deploy/tools/check-automation-registry.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-control-layer-registries",
+      "to": "core/hooks/block-destructive.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "check-control-layer-registries",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-single-check-probe",
+      "target_published": true,
+      "to": "run-check-probes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-single-check-probe",
+      "target_published": true,
+      "to": "run-required-subset",
+      "type": "precedes"
+    },
+    {
+      "from": "run-single-check-probe",
+      "target_kind": "event",
+      "to": "event:pull-request",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-single-check-probe",
+      "target_kind": "event",
+      "to": "event:push-to-main",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-single-check-probe",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-close",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-single-check-probe",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "run-single-check-probe",
+      "to": "core/deploy/tools/check-doc-gates.py",
+      "type": "depicts"
+    },
+    {
+      "from": "run-single-check-probe",
+      "to": ".github/workflows/version-freeness.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-single-check-probe",
+      "to": ".github/workflows/close-completeness.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-single-check-probe",
+      "to": ".github/workflows/release-corpus-completeness.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-single-check-probe",
+      "to": ".github/workflows/skill-package-freshness.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-single-check-probe",
+      "to": ".github/workflows/decision-emission.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-single-check-probe",
+      "to": "release/references/pipeline/stage-13-close.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-required-subset",
+      "target_published": true,
+      "to": "run-check-probes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-required-subset",
+      "target_published": true,
+      "to": "report-platform-health",
+      "type": "precedes"
+    },
+    {
+      "from": "run-required-subset",
+      "target_kind": "event",
+      "to": "event:pull-request",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-required-subset",
+      "target_kind": "event",
+      "to": "event:push-to-main",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-required-subset",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "run-required-subset",
+      "to": ".github/workflows/deploy-check-ci.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-required-subset",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "report-platform-health",
+      "target_published": true,
+      "to": "run-check-probes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "report-platform-health",
+      "target_kind": "event",
+      "to": "event:operator-runs-check",
+      "type": "triggered-by"
+    },
+    {
+      "from": "report-platform-health",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-close",
+      "type": "triggered-by"
+    },
+    {
+      "from": "report-platform-health",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "report-platform-health",
+      "to": "core/rules/skill-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "review-warn-log-drains",
+      "target_published": true,
+      "to": "graduate-gate-modes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "review-warn-log-drains",
+      "target_published": true,
+      "to": "reconcile-gate-posture",
+      "type": "precedes"
+    },
+    {
+      "from": "review-warn-log-drains",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-close",
+      "type": "triggered-by"
+    },
+    {
+      "from": "review-warn-log-drains",
+      "target_kind": "event",
+      "to": "event:shakedown-window-elapsed",
+      "type": "triggered-by"
+    },
+    {
+      "from": "review-warn-log-drains",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "review-warn-log-drains",
+      "to": "core/rules/bypass-mode-readiness.md",
+      "type": "depicts"
+    },
+    {
+      "from": "review-warn-log-drains",
+      "to": "core/rules/doc-link-maintenance.md",
+      "type": "depicts"
+    },
+    {
+      "from": "review-warn-log-drains",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "reconcile-gate-posture",
+      "target_published": true,
+      "to": "graduate-gate-modes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "reconcile-gate-posture",
+      "target_published": true,
+      "to": "flip-gate-to-enforce",
+      "type": "precedes"
+    },
+    {
+      "from": "reconcile-gate-posture",
+      "target_kind": "event",
+      "to": "event:pull-request",
+      "type": "triggered-by"
+    },
+    {
+      "from": "reconcile-gate-posture",
+      "target_kind": "event",
+      "to": "event:push-to-main",
+      "type": "triggered-by"
+    },
+    {
+      "from": "reconcile-gate-posture",
+      "to": "core/deploy/tools/reconcile-gate-posture.py",
+      "type": "depicts"
+    },
+    {
+      "from": "reconcile-gate-posture",
+      "to": ".github/workflows/gate-posture-reconciliation.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "reconcile-gate-posture",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "flip-gate-to-enforce",
+      "target_published": true,
+      "to": "graduate-gate-modes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "flip-gate-to-enforce",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "review-warn-log-drains",
+      "type": "triggered-by"
+    },
+    {
+      "from": "flip-gate-to-enforce",
+      "to": "core/standards/gate-efficacy-standard.md",
+      "type": "depicts"
+    },
+    {
+      "from": "flip-gate-to-enforce",
+      "to": "core/rules/bypass-mode-readiness.md",
+      "type": "depicts"
+    },
+    {
+      "from": "flip-gate-to-enforce",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "flip-gate-to-enforce",
+      "to": "core/hooks/deploy-check.mode.template",
+      "type": "depicts"
+    },
+    {
+      "from": "trigger-session-retro",
+      "target_published": true,
+      "to": "run-session-retro",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "trigger-session-retro",
+      "target_published": true,
+      "to": "emit-session-learnings",
+      "type": "precedes"
+    },
+    {
+      "from": "trigger-session-retro",
+      "target_kind": "event",
+      "to": "event:stop-hook",
+      "type": "triggered-by"
+    },
+    {
+      "from": "trigger-session-retro",
+      "to": "core/hooks/session-retro-trigger.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "trigger-session-retro",
+      "to": "core/settings.json.template",
+      "type": "depicts"
+    },
+    {
+      "from": "trigger-session-retro",
+      "to": "core/skills/session-retro/references/sampling-and-trigger.md",
+      "type": "depicts"
+    },
+    {
+      "from": "emit-session-learnings",
+      "target_published": true,
+      "to": "run-session-retro",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "emit-session-learnings",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "trigger-session-retro",
+      "type": "triggered-by"
+    },
+    {
+      "from": "emit-session-learnings",
+      "target_kind": "event",
+      "to": "event:operator-asks-for-retro",
+      "type": "triggered-by"
+    },
+    {
+      "from": "emit-session-learnings",
+      "to": "core/skills/session-retro/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "emit-session-learnings",
+      "to": "core/skills/session-retro/references/emission-contract.md",
+      "type": "depicts"
+    },
+    {
+      "from": "emit-session-learnings",
+      "to": "release/tools/append-pipeline-event.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "emit-session-learnings",
+      "to": "release/tools/synthesize-release-learnings.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "extract-token-spend",
+      "target_published": true,
+      "to": "measure-platform-usage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "extract-token-spend",
+      "target_published": true,
+      "to": "measure-context-budget",
+      "type": "precedes"
+    },
+    {
+      "from": "extract-token-spend",
+      "target_kind": "event",
+      "to": "event:operator-asks-for-usage",
+      "type": "triggered-by"
+    },
+    {
+      "from": "extract-token-spend",
+      "to": "core/skills/finops-usage-extractor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "extract-token-spend",
+      "to": "core/skills/finops-usage-extractor/scripts/extract-usage.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "extract-token-spend",
+      "to": "core/skills/finops-usage-extractor/scripts/rollup-attribution.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "extract-token-spend",
+      "to": "core/skills/finops-usage-extractor/scripts/report-usage.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "extract-token-spend",
+      "to": "core/skills/finops-usage-extractor/scripts/estimate-usage.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "extract-token-spend",
+      "to": "core/schemas/finops-usage-store-schema.md",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-context-budget",
+      "target_published": true,
+      "to": "measure-platform-usage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "measure-context-budget",
+      "target_published": true,
+      "to": "measure-skill-compliance",
+      "type": "precedes"
+    },
+    {
+      "from": "measure-context-budget",
+      "target_kind": "event",
+      "to": "event:operator-asks-for-usage",
+      "type": "triggered-by"
+    },
+    {
+      "from": "measure-context-budget",
+      "target_kind": "schedule",
+      "to": "schedule:context-budget-run",
+      "type": "triggered-by"
+    },
+    {
+      "from": "measure-context-budget",
+      "to": "core/skills/context-budget-auditor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-context-budget",
+      "to": "core/skills/context-budget-auditor/scripts/measure-context-budget.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-skill-compliance",
+      "target_published": true,
+      "to": "measure-platform-usage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "measure-skill-compliance",
+      "target_kind": "event",
+      "to": "event:operator-asks-for-usage",
+      "type": "triggered-by"
+    },
+    {
+      "from": "measure-skill-compliance",
+      "target_kind": "schedule",
+      "to": "schedule:skill-compliance-run",
+      "type": "triggered-by"
+    },
+    {
+      "from": "measure-skill-compliance",
+      "to": "core/skills/skill-compliance-auditor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-skill-compliance",
+      "to": "core/skills/skill-compliance-auditor/scripts/measure-skill-compliance.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "measure-skill-compliance",
+      "to": "core/skills/skill-compliance-auditor/references/scenario-and-calibration-schema.md",
+      "type": "depicts"
+    },
+    {
+      "from": "bootstrap-workspace",
+      "target_published": true,
+      "to": "install-platform",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "bootstrap-workspace",
+      "target_published": true,
+      "to": "validate-install",
+      "type": "precedes"
+    },
+    {
+      "from": "bootstrap-workspace",
+      "target_kind": "external",
+      "to": "external:fresh-clone",
+      "type": "triggered-by"
+    },
+    {
+      "from": "bootstrap-workspace",
+      "to": "install.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "bootstrap-workspace",
+      "to": "docs/scripts/setup-workspace.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "bootstrap-workspace",
+      "to": "core/deploy/composition-surface-manifest.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "bootstrap-workspace",
+      "to": "docs/INSTALL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "validate-install",
+      "target_published": true,
+      "to": "install-platform",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "validate-install",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "bootstrap-workspace",
+      "type": "triggered-by"
+    },
+    {
+      "from": "validate-install",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "update-platform",
+      "type": "triggered-by"
+    },
+    {
+      "from": "validate-install",
+      "to": "docs/scripts/validate-install.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "validate-install",
+      "to": "docs/INSTALL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "validate-install",
+      "to": "docs/UPDATE.md",
+      "type": "depicts"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "target_published": true,
+      "to": "update-platform",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "target_published": true,
+      "to": "refresh-hook-bundle",
+      "type": "precedes"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "notify-version-skew",
+      "type": "triggered-by"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "target_kind": "external",
+      "to": "external:newer-release",
+      "type": "triggered-by"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "to": "update.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "to": "core/deploy/lib-composition.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "to": "core/deploy/compose.py",
+      "type": "depicts"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "to": "core/deploy/composition-surface-manifest.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "regenerate-composition-surfaces",
+      "to": "core/standards/composition-surface-spec.md",
+      "type": "depicts"
+    },
+    {
+      "from": "refresh-hook-bundle",
+      "target_published": true,
+      "to": "update-platform",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "refresh-hook-bundle",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "regenerate-composition-surfaces",
+      "type": "triggered-by"
+    },
+    {
+      "from": "refresh-hook-bundle",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "select-deploy-targets",
+      "type": "triggered-by"
+    },
+    {
+      "from": "refresh-hook-bundle",
+      "to": "update.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "refresh-hook-bundle",
+      "to": "docs/scripts/setup-workspace.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "refresh-hook-bundle",
+      "to": "docs/UPDATE.md",
+      "type": "depicts"
+    },
+    {
+      "from": "refresh-hook-bundle",
+      "to": "core/settings.json.template",
+      "type": "depicts"
+    },
+    {
+      "from": "trigger-post-merge-deploy",
+      "target_published": true,
+      "to": "deploy-merged-changes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "trigger-post-merge-deploy",
+      "target_published": true,
+      "to": "select-deploy-targets",
+      "type": "precedes"
+    },
+    {
+      "from": "trigger-post-merge-deploy",
+      "target_kind": "event",
+      "to": "event:git-post-merge",
+      "type": "triggered-by"
+    },
+    {
+      "from": "trigger-post-merge-deploy",
+      "to": "core/hooks/git-post-merge-deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "trigger-post-merge-deploy",
+      "to": "core/rules/skill-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "trigger-post-merge-deploy",
+      "to": "docs/scripts/setup-workspace.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "select-deploy-targets",
+      "target_published": true,
+      "to": "deploy-merged-changes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "select-deploy-targets",
+      "target_published": true,
+      "to": "deploy-skill-artifacts",
+      "type": "precedes"
+    },
+    {
+      "from": "select-deploy-targets",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "trigger-post-merge-deploy",
+      "type": "triggered-by"
+    },
+    {
+      "from": "select-deploy-targets",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "install-platform",
+      "type": "triggered-by"
+    },
+    {
+      "from": "select-deploy-targets",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "update-platform",
+      "type": "triggered-by"
+    },
+    {
+      "from": "select-deploy-targets",
+      "target_kind": "node",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "triggered-by"
+    },
+    {
+      "from": "select-deploy-targets",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "select-deploy-targets",
+      "to": "core/rules/skill-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "select-deploy-targets",
+      "to": "core/rules/harness-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "deploy-skill-artifacts",
+      "target_published": true,
+      "to": "deploy-merged-changes",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "deploy-skill-artifacts",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "select-deploy-targets",
+      "type": "triggered-by"
+    },
+    {
+      "from": "deploy-skill-artifacts",
+      "to": "core/deploy/deploy.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "deploy-skill-artifacts",
+      "to": "core/rules/skill-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "deploy-skill-artifacts",
+      "to": "core/rules/harness-deployment.md",
+      "type": "depicts"
+    },
+    {
+      "from": "verify-session-config",
+      "target_published": true,
+      "to": "verify-session-setup",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "verify-session-config",
+      "target_kind": "event",
+      "to": "event:session-start",
+      "type": "triggered-by"
+    },
+    {
+      "from": "verify-session-config",
+      "to": "core/hooks/verify-session-config.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "verify-session-config",
+      "to": "core/settings.json.template",
+      "type": "depicts"
+    },
+    {
+      "from": "verify-session-config",
+      "to": "core/config/platform-config.toml.template",
+      "type": "depicts"
+    },
+    {
+      "from": "notify-version-skew",
+      "target_published": true,
+      "to": "verify-session-setup",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "notify-version-skew",
+      "target_published": true,
+      "to": "verify-session-config",
+      "type": "precedes"
+    },
+    {
+      "from": "notify-version-skew",
+      "target_kind": "event",
+      "to": "event:session-start",
+      "type": "triggered-by"
+    },
+    {
+      "from": "notify-version-skew",
+      "to": "core/hooks/notify-version-skew.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "notify-version-skew",
+      "to": "core/settings.json.template",
+      "type": "depicts"
+    },
+    {
+      "from": "notify-version-skew",
+      "to": "docs/UPDATE.md",
+      "type": "depicts"
+    },
+    {
+      "from": "resolve-routine-binding",
+      "target_published": true,
+      "to": "run-scheduled-audit",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "resolve-routine-binding",
+      "target_published": true,
+      "to": "run-platform-health-audit",
+      "type": "precedes"
+    },
+    {
+      "from": "resolve-routine-binding",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "install-platform",
+      "type": "triggered-by"
+    },
+    {
+      "from": "resolve-routine-binding",
+      "target_kind": "event",
+      "to": "event:operator-ask",
+      "type": "triggered-by"
+    },
+    {
+      "from": "resolve-routine-binding",
+      "to": "core/deploy/tools/resolve-automation-binding.sh",
+      "type": "depicts"
+    },
+    {
+      "from": "resolve-routine-binding",
+      "to": "core/automations/registry.md",
+      "type": "depicts"
+    },
+    {
+      "from": "resolve-routine-binding",
+      "to": "core/schemas/automation-registry-schema.md",
+      "type": "depicts"
+    },
+    {
+      "from": "resolve-routine-binding",
+      "to": "core/standards/scheduler-adapter-routine-firing.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "target_published": true,
+      "to": "run-scheduled-audit",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "target_kind": "schedule",
+      "to": "schedule:platform-health-quarterly-audit",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "target_kind": "schedule",
+      "to": "schedule:platform-health-drift-watch",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "resolve-routine-binding",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "target_kind": "event",
+      "to": "event:operator-ask",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "to": "core/skills/pmo-qa-auditor/SKILL.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "to": "release/references/protocols/platform-health-audit-framework.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "to": "core/governance/OPERATIONS.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-platform-health-audit",
+      "to": "core/automations/registry.md",
+      "type": "depicts"
+    },
+    {
+      "from": "run-security-jobs",
+      "target_published": true,
+      "to": "run-security-scan",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-security-jobs",
+      "target_published": true,
+      "to": "route-scan-verdicts",
+      "type": "precedes"
+    },
+    {
+      "from": "run-security-jobs",
+      "target_kind": "schedule",
+      "to": "schedule:security-scan",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-security-jobs",
+      "target_kind": "external",
+      "to": "external:repo-host",
+      "type": "triggered-by"
+    },
+    {
+      "from": "run-security-jobs",
+      "to": ".github/workflows/security.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-security-jobs",
+      "to": ".gitleaks.toml",
+      "type": "depicts"
+    },
+    {
+      "from": "run-security-jobs",
+      "to": "core/automations/registry.md",
+      "type": "depicts"
+    },
+    {
+      "from": "route-scan-verdicts",
+      "target_published": true,
+      "to": "run-security-scan",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "route-scan-verdicts",
+      "target_kind": "node",
+      "target_published": true,
+      "to": "run-security-jobs",
+      "type": "triggered-by"
+    },
+    {
+      "from": "route-scan-verdicts",
+      "to": ".github/workflows/security.yml",
+      "type": "depicts"
+    },
+    {
+      "from": "route-scan-verdicts",
+      "to": "core/automations/registry.md",
+      "type": "depicts"
+    },
+    {
+      "from": "route-scan-verdicts",
+      "to": "core/CLAUDE.md.template",
+      "type": "depicts"
+    },
+    {
+      "from": "auto-log-demand-signal",
+      "target_published": false,
+      "to": "run-intake",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "elicit-work-item",
+      "target_published": false,
+      "to": "run-intake",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "file-issue-by-template",
+      "target_published": false,
+      "to": "run-intake",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "screen-proposed-issue",
+      "target_published": false,
+      "to": "run-triage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "assess-fit-and-priority",
+      "target_published": false,
+      "to": "run-triage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "assemble-triage-summary",
+      "target_published": false,
+      "to": "run-triage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "render-triage-verdict",
+      "target_published": false,
+      "to": "run-triage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "resolve-triage-outcome",
+      "target_published": false,
+      "to": "run-triage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "evaluate-release-readiness",
+      "target_published": false,
+      "to": "run-bundle",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "compose-bundle-recommendation",
+      "target_published": false,
+      "to": "run-bundle",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "commit-milestone-scope",
+      "target_published": false,
+      "to": "run-bundle",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "refresh-bundle-composition",
+      "target_published": false,
+      "to": "run-bundle",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "launch-planning-spoke",
+      "target_published": false,
+      "to": "run-planning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "verify-bundle-currency",
+      "target_published": false,
+      "to": "run-planning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "author-release-plan",
+      "target_published": false,
+      "to": "run-planning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "approve-release-plan",
+      "target_published": false,
+      "to": "run-planning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "scaffold-stage-sub-tasks",
+      "target_published": false,
+      "to": "run-planning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "discover-design-context",
+      "target_published": false,
+      "to": "run-solutioning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "draft-design-specification",
+      "target_published": false,
+      "to": "run-solutioning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "verify-spec-completeness",
+      "target_published": false,
+      "to": "run-solutioning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "conduct-adversarial-review",
+      "target_published": false,
+      "to": "run-solutioning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "accept-design-output",
+      "target_published": false,
+      "to": "run-solutioning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "lock-release-scope",
+      "target_published": false,
+      "to": "run-solutioning",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "decompose-release-plan",
+      "target_published": false,
+      "to": "run-engineering",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "implement-release-changes",
+      "target_published": false,
+      "to": "run-engineering",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "assemble-release-pr",
+      "target_published": false,
+      "to": "run-engineering",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "remediate-dt-findings",
+      "target_published": false,
+      "to": "run-engineering",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "set-up-project",
+      "target_published": false,
+      "to": "onboard-project",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "intake-project-evidence",
+      "target_published": false,
+      "to": "process-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "triage-project-evidence",
+      "target_published": false,
+      "to": "process-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "update-project-trackers",
+      "target_published": false,
+      "to": "process-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "dispose-follow-up-actions",
+      "target_published": false,
+      "to": "process-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "sync-external-systems",
+      "target_published": false,
+      "to": "process-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "post-daily-status",
+      "target_published": false,
+      "to": "report-status",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "roll-up-weekly-status",
+      "target_published": false,
+      "to": "report-status",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "draft-stakeholder-communication",
+      "target_published": false,
+      "to": "communicate-with-stakeholders",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "send-and-log-communication",
+      "target_published": false,
+      "to": "communicate-with-stakeholders",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "refine-delivery-backlog",
+      "target_published": false,
+      "to": "control-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "plan-and-run-sprint",
+      "target_published": false,
+      "to": "control-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "gate-delivery-readiness",
+      "target_published": false,
+      "to": "control-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "define-requirements",
+      "target_published": false,
+      "to": "define-and-review-solution",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "review-solution-design",
+      "target_published": false,
+      "to": "define-and-review-solution",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "assess-change-impact",
+      "target_published": false,
+      "to": "manage-go-live-change",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "prepare-users-for-go-live",
+      "target_published": false,
+      "to": "manage-go-live-change",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "run-hypercare",
+      "target_published": false,
+      "to": "manage-go-live-change",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "close-out-project",
+      "target_published": false,
+      "to": "close-project",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "steer-portfolio",
+      "target_published": false,
+      "to": "govern-portfolio",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "steer-program-delivery",
+      "target_published": false,
+      "to": "govern-portfolio",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "resolve-tier-1-issue",
+      "target_published": false,
+      "to": "resolve-support-issue",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "resolve-escalated-issue",
+      "target_published": false,
+      "to": "resolve-support-issue",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "validate-qa-entry",
+      "target_published": false,
+      "to": "run-qa-testing",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "review-acceptance-criteria",
+      "target_published": false,
+      "to": "run-qa-testing",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "settle-acceptance-verdict",
+      "target_published": false,
+      "to": "run-qa-testing",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "assemble-plan-review-evidence",
+      "target_published": false,
+      "to": "run-plan-review",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "ready-release-pr",
+      "target_published": false,
+      "to": "run-plan-review",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "decide-go-no-go",
+      "target_published": false,
+      "to": "run-plan-review",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "merge-upstream-pr-early",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "prepare-release-merge",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "merge-and-tag-release",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "deploy-release-targets",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "record-deployment-evidence",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "verify-and-hand-off-deployment",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "roll-back-release",
+      "target_published": false,
+      "to": "run-execute",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "land-release-record",
+      "target_published": false,
+      "to": "run-close",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "close-release-milestone",
+      "target_published": false,
+      "to": "run-close",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "verify-close-evidence",
+      "target_published": false,
+      "to": "run-close",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "capture-release-learnings",
+      "target_published": false,
+      "to": "run-close",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "author-release-note",
+      "target_published": false,
+      "to": "run-close",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "clean-up-release-state",
+      "target_published": false,
+      "to": "run-close",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "deploy-operational-manifest",
+      "target_published": false,
+      "to": "run-close",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "promote-observation-to-proposal",
+      "target_published": false,
+      "to": "run-triage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "sweep-deferred-backlog",
+      "target_published": false,
+      "to": "run-triage",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "scaffold-project-workspace",
+      "target_published": false,
+      "to": "set-up-project",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "register-project-in-portfolio",
+      "target_published": false,
+      "to": "set-up-project",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "hand-off-project-setup",
+      "target_published": false,
+      "to": "set-up-project",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "dispose-open-items-at-closure",
+      "target_published": false,
+      "to": "close-out-project",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "archive-closed-project",
+      "target_published": false,
+      "to": "close-out-project",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "capture-knowledge-asset",
+      "target_published": false,
+      "to": "close-out-project",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "sweep-evidence-inbox",
+      "target_published": false,
+      "to": "intake-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "route-evidence-file",
+      "target_published": false,
+      "to": "intake-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "analyze-evidence-against-trackers",
+      "target_published": false,
+      "to": "triage-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "emit-triage-handoffs",
+      "target_published": false,
+      "to": "triage-project-evidence",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "poll-external-status",
+      "target_published": false,
+      "to": "sync-external-systems",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "consolidate-tracker-updates",
+      "target_published": false,
+      "to": "update-project-trackers",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "write-approved-tracker-changes",
+      "target_published": false,
+      "to": "update-project-trackers",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "stage-generated-artifact",
+      "target_published": false,
+      "to": "update-project-trackers",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "dispose-surfaced-action-items",
+      "target_published": false,
+      "to": "dispose-follow-up-actions",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "close-items-through-evidence-gate",
+      "target_published": false,
+      "to": "dispose-follow-up-actions",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "generate-daily-status-update",
+      "target_published": false,
+      "to": "post-daily-status",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "post-and-log-daily-update",
+      "target_published": false,
+      "to": "post-daily-status",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "synthesize-weekly-roll-up",
+      "target_published": false,
+      "to": "roll-up-weekly-status",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "stage-portfolio-write-back",
+      "target_published": false,
+      "to": "roll-up-weekly-status",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "compose-communication-draft",
+      "target_published": false,
+      "to": "draft-stakeholder-communication",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "approve-communication-draft",
+      "target_published": false,
+      "to": "draft-stakeholder-communication",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "send-approved-communication",
+      "target_published": false,
+      "to": "send-and-log-communication",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "follow-up-stalled-communication",
+      "target_published": false,
+      "to": "send-and-log-communication",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "scan-backlog-health",
+      "target_published": false,
+      "to": "refine-delivery-backlog",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "analyze-work-item-similarity",
+      "target_published": false,
+      "to": "refine-delivery-backlog",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "gate-definition-of-ready",
+      "target_published": false,
+      "to": "refine-delivery-backlog",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "plan-sprint-scope",
+      "target_published": false,
+      "to": "plan-and-run-sprint",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "control-sprint-execution",
+      "target_published": false,
+      "to": "plan-and-run-sprint",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "gate-definition-of-done",
+      "target_published": false,
+      "to": "gate-delivery-readiness",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "update-raid-and-decision-records",
+      "target_published": false,
+      "to": "gate-delivery-readiness",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "define-structured-requirements",
+      "target_published": false,
+      "to": "define-requirements",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "document-process-workflow",
+      "target_published": false,
+      "to": "define-requirements",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "analyze-coverage-gaps",
+      "target_published": false,
+      "to": "define-requirements",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "build-traceability-matrix",
+      "target_published": false,
+      "to": "define-requirements",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "review-functional-design",
+      "target_published": false,
+      "to": "review-solution-design",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "review-integration-design",
+      "target_published": false,
+      "to": "review-solution-design",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "review-architecture-design",
+      "target_published": false,
+      "to": "review-solution-design",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "review-operational-procedure",
+      "target_published": false,
+      "to": "review-solution-design",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "assess-change-against-system-model",
+      "target_published": false,
+      "to": "review-solution-design",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "build-change-impact-assessment",
+      "target_published": false,
+      "to": "assess-change-impact",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "plan-go-live-training",
+      "target_published": false,
+      "to": "prepare-users-for-go-live",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "check-go-live-readiness",
+      "target_published": false,
+      "to": "prepare-users-for-go-live",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "render-readiness-go-no-go",
+      "target_published": false,
+      "to": "prepare-users-for-go-live",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "schedule-change-communications",
+      "target_published": false,
+      "to": "prepare-users-for-go-live",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "plan-and-track-hypercare",
+      "target_published": false,
+      "to": "run-hypercare",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "track-change-adoption",
+      "target_published": false,
+      "to": "run-hypercare",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "synthesize-portfolio-health",
+      "target_published": false,
+      "to": "steer-portfolio",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "decide-portfolio-intake-trade-off",
+      "target_published": false,
+      "to": "steer-portfolio",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "decide-steerco-readiness",
+      "target_published": false,
+      "to": "steer-portfolio",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "synthesize-program-risks-and-dependencies",
+      "target_published": false,
+      "to": "steer-program-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "decide-program-release-readiness",
+      "target_published": false,
+      "to": "steer-program-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "steward-program-raid-and-decisions",
+      "target_published": false,
+      "to": "steer-program-delivery",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "triage-support-issue",
+      "target_published": false,
+      "to": "resolve-tier-1-issue",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "resolve-known-issue",
+      "target_published": false,
+      "to": "resolve-tier-1-issue",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "escalate-support-issue",
+      "target_published": false,
+      "to": "resolve-tier-1-issue",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "answer-system-question",
+      "target_published": false,
+      "to": "resolve-tier-1-issue",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "root-cause-escalated-issue",
+      "target_published": false,
+      "to": "resolve-escalated-issue",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "close-escalated-issue",
+      "target_published": false,
+      "to": "resolve-escalated-issue",
+      "type": "sub-flow-of"
+    },
+    {
+      "from": "author-support-runbook",
+      "target_published": false,
+      "to": "resolve-escalated-issue",
+      "type": "sub-flow-of"
+    }
+  ],
+  "generator": "build-process-catalog.py",
+  "nodes": [
+    {
+      "children": [
+        "admit-work-item",
+        "deliver-platform-release"
+      ],
+      "id": "platform-release",
+      "lens_status": null,
+      "level": "L0",
+      "parent": null,
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Platform release pipeline",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "onboard-project",
+        "process-project-evidence",
+        "report-status",
+        "communicate-with-stakeholders",
+        "control-delivery",
+        "define-and-review-solution",
+        "manage-go-live-change",
+        "close-project",
+        "govern-portfolio",
+        "resolve-support-issue"
+      ],
+      "id": "project-delivery",
+      "lens_status": null,
+      "level": "L0",
+      "parent": null,
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Project delivery lifecycle",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "install-or-update-workspace",
+        "run-platform-health-check",
+        "observe-platform"
+      ],
+      "id": "engineering-harness",
+      "lens_status": "deviates",
+      "level": "L0",
+      "parent": null,
+      "path": "core/process-catalog/engineering-harness/engineering-harness.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Engineering harness",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "run-intake",
+        "run-triage"
+      ],
+      "id": "admit-work-item",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Admit a work item (Stages 1–2)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "run-bundle",
+        "run-planning",
+        "run-solutioning",
+        "run-engineering",
+        "run-dev-testing",
+        "run-qa-testing",
+        "run-plan-review",
+        "run-dry-run",
+        "run-snapshot",
+        "run-execute",
+        "run-close"
+      ],
+      "id": "deliver-platform-release",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Deliver a platform release (Stages 3–13)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "set-up-project"
+      ],
+      "id": "onboard-project",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Set up a new project",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "intake-project-evidence",
+        "triage-project-evidence",
+        "update-project-trackers",
+        "dispose-follow-up-actions",
+        "sync-external-systems"
+      ],
+      "id": "process-project-evidence",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Process inbound project evidence",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "post-daily-status",
+        "roll-up-weekly-status"
+      ],
+      "id": "report-status",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Report status daily and weekly",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "draft-stakeholder-communication",
+        "send-and-log-communication"
+      ],
+      "id": "communicate-with-stakeholders",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Draft, approve and send a stakeholder communication",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "refine-delivery-backlog",
+        "plan-and-run-sprint",
+        "gate-delivery-readiness"
+      ],
+      "id": "control-delivery",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Control delivery from backlog to release readiness",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "define-requirements",
+        "review-solution-design"
+      ],
+      "id": "define-and-review-solution",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Define requirements and review solution designs",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "assess-change-impact",
+        "prepare-users-for-go-live",
+        "run-hypercare"
+      ],
+      "id": "manage-go-live-change",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Manage organizational change for a go-live",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "close-out-project"
+      ],
+      "id": "close-project",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Close and archive a project",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "steer-portfolio",
+        "steer-program-delivery"
+      ],
+      "id": "govern-portfolio",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Govern the portfolio and its programs",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "resolve-tier-1-issue",
+        "resolve-escalated-issue"
+      ],
+      "id": "resolve-support-issue",
+      "lens_status": null,
+      "level": "L1",
+      "parent": "project-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Resolve a support issue (designed; unobserved)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "install-platform",
+        "update-platform",
+        "deploy-merged-changes",
+        "verify-session-setup"
+      ],
+      "id": "install-or-update-workspace",
+      "lens_status": "deviates",
+      "level": "L1",
+      "parent": "engineering-harness",
+      "path": "core/process-catalog/engineering-harness/install-or-update-workspace.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Install or update the platform",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "run-check-suite",
+        "run-check-probes",
+        "graduate-gate-modes"
+      ],
+      "id": "run-platform-health-check",
+      "lens_status": "deviates",
+      "level": "L1",
+      "parent": "engineering-harness",
+      "path": "core/process-catalog/engineering-harness/run-platform-health-check.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run a platform health check",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "run-scheduled-audit",
+        "run-security-scan",
+        "run-session-retro",
+        "measure-platform-usage"
+      ],
+      "id": "observe-platform",
+      "lens_status": "deviates",
+      "level": "L1",
+      "parent": "engineering-harness",
+      "path": "core/process-catalog/engineering-harness/observe-platform.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Observe the platform on a schedule",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "auto-log-demand-signal",
+        "elicit-work-item",
+        "file-issue-by-template"
+      ],
+      "id": "run-intake",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "admit-work-item",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 1 Intake",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "screen-proposed-issue",
+        "assess-fit-and-priority",
+        "assemble-triage-summary",
+        "render-triage-verdict",
+        "resolve-triage-outcome",
+        "promote-observation-to-proposal",
+        "sweep-deferred-backlog"
+      ],
+      "id": "run-triage",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "admit-work-item",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 2 Triage",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "evaluate-release-readiness",
+        "compose-bundle-recommendation",
+        "commit-milestone-scope",
+        "refresh-bundle-composition"
+      ],
+      "id": "run-bundle",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 3 Bundle",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "launch-planning-spoke",
+        "verify-bundle-currency",
+        "author-release-plan",
+        "approve-release-plan",
+        "scaffold-stage-sub-tasks"
+      ],
+      "id": "run-planning",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 4 Planning",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "discover-design-context",
+        "draft-design-specification",
+        "verify-spec-completeness",
+        "conduct-adversarial-review",
+        "accept-design-output",
+        "lock-release-scope"
+      ],
+      "id": "run-solutioning",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 5 Solutioning",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "decompose-release-plan",
+        "implement-release-changes",
+        "assemble-release-pr",
+        "remediate-dt-findings"
+      ],
+      "id": "run-engineering",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 6 Engineering",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "review-pr-structure",
+        "verify-acceptance-contracts",
+        "grade-content-quality",
+        "assemble-quality-report",
+        "dispose-and-route-findings"
+      ],
+      "id": "run-dev-testing",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 7 Dev Testing",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "validate-qa-entry",
+        "review-acceptance-criteria",
+        "settle-acceptance-verdict"
+      ],
+      "id": "run-qa-testing",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 8 QA Testing",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "assemble-plan-review-evidence",
+        "ready-release-pr",
+        "decide-go-no-go"
+      ],
+      "id": "run-plan-review",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 9 Plan Review",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "run-dry-run",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 10 Dry Run",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "run-snapshot",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 11 Snapshot",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "merge-upstream-pr-early",
+        "prepare-release-merge",
+        "merge-and-tag-release",
+        "deploy-release-targets",
+        "record-deployment-evidence",
+        "verify-and-hand-off-deployment",
+        "roll-back-release"
+      ],
+      "id": "run-execute",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 12 Execute",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "land-release-record",
+        "close-release-milestone",
+        "verify-close-evidence",
+        "capture-release-learnings",
+        "author-release-note",
+        "clean-up-release-state",
+        "deploy-operational-manifest"
+      ],
+      "id": "run-close",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "deliver-platform-release",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage 13 Close",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "review-pr-structure",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-dev-testing",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Review the PR structure (Stage 7 Phase A)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "verify-acceptance-contracts",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-dev-testing",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Verify the acceptance contracts (Stage 7 Phase B)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "grade-content-quality",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-dev-testing",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Grade content quality (Stage 7 Phase C)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "assemble-quality-report",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-dev-testing",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Assemble the quality report and handoff payload (Stage 7 Phase D)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "dispose-and-route-findings",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-dev-testing",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Dispose findings and route the verdict (Stage 7 Phase E)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "bootstrap-workspace",
+        "validate-install"
+      ],
+      "id": "install-platform",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "install-or-update-workspace",
+      "path": "core/process-catalog/engineering-harness/install-platform.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Install the platform on a workspace",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "regenerate-composition-surfaces",
+        "refresh-hook-bundle"
+      ],
+      "id": "update-platform",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "install-or-update-workspace",
+      "path": "core/process-catalog/engineering-harness/update-platform.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Update an installed workspace to a newer version",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "trigger-post-merge-deploy",
+        "select-deploy-targets",
+        "deploy-skill-artifacts"
+      ],
+      "id": "deploy-merged-changes",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "install-or-update-workspace",
+      "path": "core/process-catalog/engineering-harness/deploy-merged-changes.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Deploy merged changes to the runtime",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "notify-version-skew",
+        "verify-session-config"
+      ],
+      "id": "verify-session-setup",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "install-or-update-workspace",
+      "path": "core/process-catalog/engineering-harness/verify-session-setup.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Verify the session setup at session start",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "check-deployed-skill-parity",
+        "check-skill-corpus-integrity",
+        "check-workspace-config-surfaces",
+        "check-corpus-conventions",
+        "check-public-surface-hygiene",
+        "check-backlog-hygiene",
+        "check-release-corpus-integrity",
+        "check-orchestration-surfaces",
+        "check-control-layer-registries"
+      ],
+      "id": "run-check-suite",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "run-platform-health-check",
+      "path": "core/process-catalog/engineering-harness/run-check-suite.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run the deploy-time check suite",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "run-single-check-probe",
+        "run-required-subset",
+        "report-platform-health"
+      ],
+      "id": "run-check-probes",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "run-platform-health-check",
+      "path": "core/process-catalog/engineering-harness/run-check-probes.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run a named check probe or the pre-merge subset",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "review-warn-log-drains",
+        "reconcile-gate-posture",
+        "flip-gate-to-enforce"
+      ],
+      "id": "graduate-gate-modes",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "run-platform-health-check",
+      "path": "core/process-catalog/engineering-harness/graduate-gate-modes.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Review warn logs and graduate gate modes",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "resolve-routine-binding",
+        "run-platform-health-audit"
+      ],
+      "id": "run-scheduled-audit",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "observe-platform",
+      "path": "core/process-catalog/engineering-harness/run-scheduled-audit.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run a scheduled platform audit",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "run-security-jobs",
+        "route-scan-verdicts"
+      ],
+      "id": "run-security-scan",
+      "lens_status": "unobserved",
+      "level": "L2",
+      "parent": "observe-platform",
+      "path": "core/process-catalog/engineering-harness/run-security-scan.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run the scheduled security scan",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "trigger-session-retro",
+        "emit-session-learnings"
+      ],
+      "id": "run-session-retro",
+      "lens_status": "unobserved",
+      "level": "L2",
+      "parent": "observe-platform",
+      "path": "core/process-catalog/engineering-harness/run-session-retro.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run a session retro at session stop",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [
+        "extract-token-spend",
+        "measure-context-budget",
+        "measure-skill-compliance"
+      ],
+      "id": "measure-platform-usage",
+      "lens_status": "deviates",
+      "level": "L2",
+      "parent": "observe-platform",
+      "path": "core/process-catalog/engineering-harness/measure-platform-usage.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Measure platform usage and context cost",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-deployed-skill-parity",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-deployed-skill-parity.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check deployed skill and package parity (Checks 1, 2, 3, 5, 7, 12, 13)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-skill-corpus-integrity",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-skill-corpus-integrity.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check skill-corpus integrity (Checks 6, 10, 13b, 35, 54, 66, 67)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-workspace-config-surfaces",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-workspace-config-surfaces.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check workspace, config and operator-instance surfaces (Checks 4, 8, 9, 11, 30, 33, 36, 40, 70, 77, 78)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-corpus-conventions",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-corpus-conventions.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check documentation and schema conventions (Checks 14, 18, 25, 31, 34, 45, 49, 50, 63, 69, 75, 80)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-public-surface-hygiene",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-public-surface-hygiene.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check public-surface portability and tool hygiene (Checks 42, 43, 44, 64, 81)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-backlog-hygiene",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-backlog-hygiene.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check backlog and tracker hygiene on the host (Checks 16, 17, 21, 22, 51, 52, 53, 55, 56, 72)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-release-corpus-integrity",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-release-corpus-integrity.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check release-corpus and release-identity integrity (Checks 20, 23, 26, 28, 32, 39, 41, 47, 48, 59, 65)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-orchestration-surfaces",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-orchestration-surfaces.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check hub, spoke and event-log surfaces (Checks 19, 27, 29, 46, 61, 68)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "check-control-layer-registries",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "run-check-suite",
+      "path": "core/process-catalog/engineering-harness/check-control-layer-registries.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Check the control layer's own registries, rollouts and gate meta-checks (Checks 37, 38, 57, 58, 60, 62, 71, 73, 74, 76, 79)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "run-single-check-probe",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-check-probes",
+      "path": "core/process-catalog/engineering-harness/run-single-check-probe.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run a single-check CI probe and map its verdict to an exit code",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "run-required-subset",
+      "lens_status": "conformant",
+      "level": "L3",
+      "parent": "run-check-probes",
+      "path": "core/process-catalog/engineering-harness/run-required-subset.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run the pre-merge required subset (Checks 38, 73, 77, 78)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "report-platform-health",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "run-check-probes",
+      "path": "core/process-catalog/engineering-harness/report-platform-health.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Report platform health and list the check lifecycle",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "review-warn-log-drains",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "graduate-gate-modes",
+      "path": "core/process-catalog/engineering-harness/review-warn-log-drains.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Review the warn-log drains and rollout verdicts",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "reconcile-gate-posture",
+      "lens_status": "conformant",
+      "level": "L3",
+      "parent": "graduate-gate-modes",
+      "path": "core/process-catalog/engineering-harness/reconcile-gate-posture.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Reconcile declared gate posture against live branch protection",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "flip-gate-to-enforce",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "graduate-gate-modes",
+      "path": "core/process-catalog/engineering-harness/flip-gate-to-enforce.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Decide and record a gate's flip from warn to enforce",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "trigger-session-retro",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-session-retro",
+      "path": "core/process-catalog/engineering-harness/trigger-session-retro.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Trigger the session retro at a Stop boundary",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "emit-session-learnings",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-session-retro",
+      "path": "core/process-catalog/engineering-harness/emit-session-learnings.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Reflect over the session and emit learnings rows",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "extract-token-spend",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "measure-platform-usage",
+      "path": "core/process-catalog/engineering-harness/extract-token-spend.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Extract, attribute, report and estimate token spend",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "measure-context-budget",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "measure-platform-usage",
+      "path": "core/process-catalog/engineering-harness/measure-context-budget.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Measure the per-session context budget",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "measure-skill-compliance",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "measure-platform-usage",
+      "path": "core/process-catalog/engineering-harness/measure-skill-compliance.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Measure skill trigger-compliance",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "bootstrap-workspace",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "install-platform",
+      "path": "core/process-catalog/engineering-harness/bootstrap-workspace.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Bootstrap the workspace (install.sh Phase 1)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "validate-install",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "install-platform",
+      "path": "core/process-catalog/engineering-harness/validate-install.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Validate the install and the first task",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "regenerate-composition-surfaces",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "update-platform",
+      "path": "core/process-catalog/engineering-harness/regenerate-composition-surfaces.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Reconcile the operator config and regenerate composition surfaces (update.sh Phases 1–3)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "refresh-hook-bundle",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "update-platform",
+      "path": "core/process-catalog/engineering-harness/refresh-hook-bundle.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Refresh the hook bundle and settings, then finalize the update (update.sh Phases 5b0–5d, 5b, 4)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "trigger-post-merge-deploy",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "deploy-merged-changes",
+      "path": "core/process-catalog/engineering-harness/trigger-post-merge-deploy.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Trigger a deploy from a merge on main (the post-merge git hook)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "select-deploy-targets",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "deploy-merged-changes",
+      "path": "core/process-catalog/engineering-harness/select-deploy-targets.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Select the deploy targets (cmd_deploy entry to the E-02 exit)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "deploy-skill-artifacts",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "deploy-merged-changes",
+      "path": "core/process-catalog/engineering-harness/deploy-skill-artifacts.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Deploy the selected skills, packages and harness artifacts and assert the result",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "verify-session-config",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "verify-session-setup",
+      "path": "core/process-catalog/engineering-harness/verify-session-config.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Verify the session's model and effort posture at launch",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "notify-version-skew",
+      "lens_status": "deviates",
+      "level": "L3",
+      "parent": "verify-session-setup",
+      "path": "core/process-catalog/engineering-harness/notify-version-skew.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Notify the operator of version skew at launch",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "resolve-routine-binding",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-scheduled-audit",
+      "path": "core/process-catalog/engineering-harness/resolve-routine-binding.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Resolve a registered routine to its firing binding",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "run-platform-health-audit",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-scheduled-audit",
+      "path": "core/process-catalog/engineering-harness/run-platform-health-audit.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run the platform health audit (pmo-qa-auditor Mode E)",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "run-security-jobs",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-security-scan",
+      "path": "core/process-catalog/engineering-harness/run-security-jobs.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Run the security workflow's jobs on the weekly schedule",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "route-scan-verdicts",
+      "lens_status": "unobserved",
+      "level": "L3",
+      "parent": "run-security-scan",
+      "path": "core/process-catalog/engineering-harness/route-scan-verdicts.md",
+      "published": true,
+      "status": "ACTIVE",
+      "title": "Route the Monday scan verdicts",
+      "universe": "engineering-harness"
+    },
+    {
+      "children": [],
+      "id": "auto-log-demand-signal",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-intake",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Auto-log a demand signal (Stage 1 Path A, intake-desk Mode C)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "elicit-work-item",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-intake",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Elicit and confirm a work item with the intake desk (Stage 1 Path B, Modes A and B)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "file-issue-by-template",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-intake",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "File an issue through the issue form and land it in Proposed (Stage 1 Paths B and C)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "screen-proposed-issue",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-triage",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Screen a proposed issue for trust, readiness, duplicates and dependencies (Stage 2 A0–A3.5)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "assess-fit-and-priority",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-triage",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Assess fit, scope altitude, priority and size (Stage 2 A4–A5.5)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "assemble-triage-summary",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-triage",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Assemble the per-issue summaries, batch signals and the consolidated summary (Stage 2 A6–A6.5)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "render-triage-verdict",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-triage",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Render the triage verdict (Stage 2 Phase B)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "resolve-triage-outcome",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-triage",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Resolve the triage outcome on the tracker (Stage 2 CER Resolve)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "evaluate-release-readiness",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-bundle",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Evaluate release readiness at bundle entry (Stage 3 Phase A1)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "compose-bundle-recommendation",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-bundle",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Compose the bundle recommendation (Stage 3 Phase A2–A6, A8–A9)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "commit-milestone-scope",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-bundle",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Commit the milestone scope (Stage 3 Phase B)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "refresh-bundle-composition",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-bundle",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Refresh the bundle composition after creation (Stage 3 A7, gate G-BR)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "launch-planning-spoke",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-planning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Open the Stage 4 sub-task and launch the planning spoke (hub Procedure 0)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "verify-bundle-currency",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-planning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Verify the bundle's currency at planning entry (Stage 4 Phase A0, G-PL1–G-PL5)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "author-release-plan",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-planning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Author the release plan (Stage 4 Phase A1–A6)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "approve-release-plan",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-planning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Decide the D-Gates and approve the release plan (Stage 4 Phase B)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "scaffold-stage-sub-tasks",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-planning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Scaffold the release's stage sub-tasks (hub Procedure 1)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "discover-design-context",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-solutioning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Discover the design context (Stage 5 Phases 0.5, 0.7 and A1–A3)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "draft-design-specification",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-solutioning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Draft the design specification (Stage 5 Phases A4–A6)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "verify-spec-completeness",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-solutioning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Verify the specification's completeness (Stage 5 § 5.6, § 5.8 and the § 7.2 determinations)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "conduct-adversarial-review",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-solutioning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Conduct the independent adversarial design review (Stage 5 Phase A6.5)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "accept-design-output",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-solutioning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Accept the per-issue design output (Stage 5 Phase B)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "lock-release-scope",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-solutioning",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Hold the Collective Review and lock the release scope (Stage 5 release-level checkpoint)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "decompose-release-plan",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-engineering",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Validate the entry contract and decompose the release plan (Stage 6 Phase A)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "implement-release-changes",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-engineering",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Implement the release changes (Stage 6 Phase B)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "assemble-release-pr",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-engineering",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Assemble the draft release PR and self-verify (Stage 6 Phase C)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "remediate-dt-findings",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-engineering",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Remediate Dev Testing findings (Stage 6 Phase E)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [
+        "scaffold-project-workspace",
+        "register-project-in-portfolio",
+        "hand-off-project-setup"
+      ],
+      "id": "set-up-project",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "onboard-project",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Set up a new project (project-initiator Mode A)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "sweep-evidence-inbox",
+        "route-evidence-file"
+      ],
+      "id": "intake-project-evidence",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "process-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Take in and route project evidence (Entry and Routing stages)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "analyze-evidence-against-trackers",
+        "emit-triage-handoffs"
+      ],
+      "id": "triage-project-evidence",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "process-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Triage evidence and emit follow-up tags (PPM stage)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "consolidate-tracker-updates",
+        "write-approved-tracker-changes",
+        "stage-generated-artifact"
+      ],
+      "id": "update-project-trackers",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "process-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Update the trackers through the approval gate (Core-Tracker and Stakeholder-Review stages)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "dispose-surfaced-action-items",
+        "close-items-through-evidence-gate"
+      ],
+      "id": "dispose-follow-up-actions",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "process-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Dispose follow-up actions (Action-Triage stage)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "poll-external-status"
+      ],
+      "id": "sync-external-systems",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "process-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Sync the external work tracker and knowledge base (step 9, Path B)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "generate-daily-status-update",
+        "post-and-log-daily-update"
+      ],
+      "id": "post-daily-status",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "report-status",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Post the daily status update (AM and PM)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "synthesize-weekly-roll-up",
+        "stage-portfolio-write-back"
+      ],
+      "id": "roll-up-weekly-status",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "report-status",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Roll up the weekly status and write portfolio health back",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "compose-communication-draft",
+        "approve-communication-draft"
+      ],
+      "id": "draft-stakeholder-communication",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "communicate-with-stakeholders",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Draft a stakeholder communication to the approval gate",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "send-approved-communication",
+        "follow-up-stalled-communication"
+      ],
+      "id": "send-and-log-communication",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "communicate-with-stakeholders",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Send a communication and log its lifecycle",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "scan-backlog-health",
+        "analyze-work-item-similarity",
+        "gate-definition-of-ready"
+      ],
+      "id": "refine-delivery-backlog",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "control-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Refine the delivery backlog to the Definition-of-Ready gate",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "plan-sprint-scope",
+        "control-sprint-execution"
+      ],
+      "id": "plan-and-run-sprint",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "control-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Plan the sprint and control its execution",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "gate-definition-of-done",
+        "update-raid-and-decision-records"
+      ],
+      "id": "gate-delivery-readiness",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "control-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Gate Definition of Done and release readiness",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "define-structured-requirements",
+        "document-process-workflow",
+        "analyze-coverage-gaps",
+        "build-traceability-matrix"
+      ],
+      "id": "define-requirements",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "define-and-review-solution",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Define requirements and document the process",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "review-functional-design",
+        "review-integration-design",
+        "review-architecture-design",
+        "review-operational-procedure",
+        "assess-change-against-system-model"
+      ],
+      "id": "review-solution-design",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "define-and-review-solution",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Review solution designs and their requirements",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "build-change-impact-assessment"
+      ],
+      "id": "assess-change-impact",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "manage-go-live-change",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Assess the change impact of a go-live",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "plan-go-live-training",
+        "check-go-live-readiness",
+        "render-readiness-go-no-go",
+        "schedule-change-communications"
+      ],
+      "id": "prepare-users-for-go-live",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "manage-go-live-change",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Prepare users to the readiness go/no-go",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "plan-and-track-hypercare",
+        "track-change-adoption"
+      ],
+      "id": "run-hypercare",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "manage-go-live-change",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Run hypercare and track adoption to close",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "dispose-open-items-at-closure",
+        "archive-closed-project",
+        "capture-knowledge-asset"
+      ],
+      "id": "close-out-project",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "close-project",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Close out and archive a project (project-initiator Mode B)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "synthesize-portfolio-health",
+        "decide-portfolio-intake-trade-off",
+        "decide-steerco-readiness"
+      ],
+      "id": "steer-portfolio",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "govern-portfolio",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Steer the portfolio (health, risk, intake, SteerCo)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "synthesize-program-risks-and-dependencies",
+        "decide-program-release-readiness",
+        "steward-program-raid-and-decisions"
+      ],
+      "id": "steer-program-delivery",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "govern-portfolio",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Steer program delivery (dependencies, posture, readiness, RAID)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "triage-support-issue",
+        "resolve-known-issue",
+        "escalate-support-issue",
+        "answer-system-question"
+      ],
+      "id": "resolve-tier-1-issue",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "resolve-support-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Triage and resolve a first-line support issue",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [
+        "root-cause-escalated-issue",
+        "close-escalated-issue",
+        "author-support-runbook"
+      ],
+      "id": "resolve-escalated-issue",
+      "lens_status": null,
+      "level": "L2",
+      "parent": "resolve-support-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Root-cause and resolve an escalated issue",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "validate-qa-entry",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-qa-testing",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Validate QA entry: the handoff, the PR gate state and the criteria (Stage 8 Phase A)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "review-acceptance-criteria",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-qa-testing",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Review the acceptance criteria and assemble the Acceptance Report (Stage 8 Phases B and C)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "settle-acceptance-verdict",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-qa-testing",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Settle the acceptance verdict and route it (Stage 8 Phases D and E)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "assemble-plan-review-evidence",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-plan-review",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Assemble the Plan Review evidence package (Stage 9 Phase A1 to A7)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "ready-release-pr",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-plan-review",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Ready the release PR and record its draft state (Stage 9 Phases A8 and A9)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "decide-go-no-go",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-plan-review",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Brief, render and record the GO / NO-GO decision (Stage 9 Phases B to C1, hub Procedure 5)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "merge-upstream-pr-early",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-execute",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Merge an upstream issue's PR early to unblock a downstream issue (hub Procedure 6)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "prepare-release-merge",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-execute",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Prepare the release PR for merge (Stage 12 gate rows, Phase A, Phase B0)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "merge-and-tag-release",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-execute",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Merge the release PR and claim its version tag (Stage 12 Phase B1–B3.2)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "deploy-release-targets",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-execute",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Deploy the release's targets under its join key (Stage 12 Phase B4, Phase J.5)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "record-deployment-evidence",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-execute",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Record the DEPLOYED row through a chore PR and emit the release surface (Stage 12 Phase B5, B5.5)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "verify-and-hand-off-deployment",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-execute",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Verify the deployment and hand off to Stage 13 (Stage 12 Phases C and D)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "roll-back-release",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-execute",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Roll back a post-merge regression (operator-authorized rollback path)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "land-release-record",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-close",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Land the release record on main through the Stage 13 chore PR",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "close-release-milestone",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-close",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Verify the output set and close the milestone (hub Procedures 7 and 7a)",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "verify-close-evidence",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-close",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Re-verify the release and record the close verdicts",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "capture-release-learnings",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-close",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Capture the release learnings and the learnings register",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "author-release-note",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-close",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Author the user-facing release note",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "clean-up-release-state",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-close",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Clean up release-bound branches, worktrees and delivered epics",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "deploy-operational-manifest",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-close",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Deploy and verify the operational deployment manifest",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "promote-observation-to-proposal",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-triage",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Promote an observation to a proposal",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "sweep-deferred-backlog",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-triage",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Sweep the deferred backlog",
+      "universe": "platform-release"
+    },
+    {
+      "children": [],
+      "id": "scaffold-project-workspace",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "set-up-project",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Validate the inputs and scaffold the project workspace (project-initiator Mode A Steps 1 to 4)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "register-project-in-portfolio",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "set-up-project",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Register the project in the portfolio and verify it routes (Mode A Steps 5, 5a, 5b)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "hand-off-project-setup",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "set-up-project",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Hand the operator the external setup, next steps and summary (Mode A Steps 6 to 8)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "dispose-open-items-at-closure",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "close-out-project",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Read the project state and dispose every open item (project-initiator Mode B Steps B1 to B2)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "archive-closed-project",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "close-out-project",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Record the closure, archive the folder and de-register the project (Mode B Steps B3 to B8)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "capture-knowledge-asset",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "close-out-project",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Capture a knowledge asset into its governed home (pmo-knowledge-manager Mode 1)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "sweep-evidence-inbox",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "intake-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Sweep the evidence inbox on schedule (Path A)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "route-evidence-file",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "intake-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Classify and route an arriving evidence file (file-router)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "analyze-evidence-against-trackers",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "triage-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Analyze evidence against the project trackers (ppm-agent)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "emit-triage-handoffs",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "triage-project-evidence",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Emit the triage handoffs: tags, tracker instructions and manifest (ppm-agent)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "poll-external-status",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "sync-external-systems",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Poll external status and propose reconciliations (step 9, Path B)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "consolidate-tracker-updates",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "update-project-trackers",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Validate and consolidate tracker update instructions into one change summary",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "write-approved-tracker-changes",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "update-project-trackers",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Gate the stakeholder-facing changes and write the approved tracker changes",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "stage-generated-artifact",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "update-project-trackers",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Produce, stage and promote a generated project artifact",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "dispose-surfaced-action-items",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "dispose-follow-up-actions",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Dispose the action items triage surfaces for the operator",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "close-items-through-evidence-gate",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "dispose-follow-up-actions",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Close a carry-forward item only on qualifying evidence",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "generate-daily-status-update",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "post-daily-status",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Generate the AM or PM status update",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "post-and-log-daily-update",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "post-daily-status",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Post the daily update and log it",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "synthesize-weekly-roll-up",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "roll-up-weekly-status",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Synthesize the weekly roll-up (Sections 1-5 and 7)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "stage-portfolio-write-back",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "roll-up-weekly-status",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Stage the portfolio write-back (Section 6)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "compose-communication-draft",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "draft-stakeholder-communication",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Compose an audience-calibrated draft and its readiness verdict (comms-writer)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "approve-communication-draft",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "draft-stakeholder-communication",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Approve or return a communication draft (Document Tier 1 gate)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "send-approved-communication",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "send-and-log-communication",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Send an approved communication and attest the send",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "follow-up-stalled-communication",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "send-and-log-communication",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Draft the follow-up for a stalled communication (2-Day Rule)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "scan-backlog-health",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "refine-delivery-backlog",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Scan the delivery backlog and draft a remediation for every finding (delivery-engine Mode A)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "analyze-work-item-similarity",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "refine-delivery-backlog",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Analyze a work item against the backlog: related items, duplicates, dependency chain (delivery-engine Mode B)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "gate-definition-of-ready",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "refine-delivery-backlog",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Gate work items at the Definition of Ready and emit the admission rows (delivery-engine Mode C)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "plan-sprint-scope",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "plan-and-run-sprint",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Plan the sprint: focus-adjusted capacity, ranged scope, options and goal (delivery-engine Mode D)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "control-sprint-execution",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "plan-and-run-sprint",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Control the sprint in flight and report estimation calibration (delivery-engine Mode E)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "gate-definition-of-done",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "gate-delivery-readiness",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Gate completed work at the Definition of Done and release readiness (delivery-engine Mode F)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "update-raid-and-decision-records",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "gate-delivery-readiness",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Update the RAID, decision and milestone records (delivery-engine Mode G)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "define-structured-requirements",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "define-requirements",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Define structured, traceable requirements from business context (pmo-process-designer Mode A)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "document-process-workflow",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "define-requirements",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Document a process workflow, its decisions and exception paths (pmo-process-designer Mode B)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "analyze-coverage-gaps",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "define-requirements",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Classify coverage between two artifacts and draft the gap remediations (pmo-process-designer Mode C)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "build-traceability-matrix",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "define-requirements",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Build the traceability chain and flag its broken links (pmo-process-designer Mode D)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "review-functional-design",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "review-solution-design",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Review and score a functional design document (pmo-technical-analyst Mode A)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "review-integration-design",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "review-solution-design",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Review an integration specification (pmo-technical-analyst Mode B)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "review-architecture-design",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "review-solution-design",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Review an architecture or infrastructure design (pmo-technical-analyst Mode C)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "review-operational-procedure",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "review-solution-design",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Review an SOP or runbook for operational readiness (pmo-technical-analyst Mode D)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "assess-change-against-system-model",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "review-solution-design",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Assess a proposed change against a system's documented model (pmo-wms-specialist Assess)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "build-change-impact-assessment",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "assess-change-impact",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Build the change impact assessment (change-management Mode A, through Mode E when a change matrix is supplied)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "plan-go-live-training",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "prepare-users-for-go-live",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Plan the go-live training, gated on ADKAR readiness (change-management Mode B)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "check-go-live-readiness",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "prepare-users-for-go-live",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Build the go-live readiness checklist and verdict (change-management Mode C)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "render-readiness-go-no-go",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "prepare-users-for-go-live",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Render the readiness go/no-go and take the operator's call (pmo-ocm-lead Mode 3)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "schedule-change-communications",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "prepare-users-for-go-live",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Schedule the change communications against go-live (change-management Mode F)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "plan-and-track-hypercare",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-hypercare",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Plan hypercare and hold it to its committed SLAs and exit gate (change-management Mode D)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "track-change-adoption",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "run-hypercare",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Track adoption per audience to its measured horizon (change-management Mode G)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "synthesize-portfolio-health",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "steer-portfolio",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Synthesize the portfolio health call (Portfolio Manager Mode 1)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "decide-portfolio-intake-trade-off",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "steer-portfolio",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Decide a portfolio intake trade-off (Portfolio Manager Mode 3)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "decide-steerco-readiness",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "steer-portfolio",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Decide SteerCo or executive readiness (Portfolio Manager Mode 4)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "synthesize-program-risks-and-dependencies",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "steer-program-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Synthesize cross-project risks and dependencies (Program Manager Mode 1)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "decide-program-release-readiness",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "steer-program-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Decide program release readiness (Program Manager Mode 3)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "steward-program-raid-and-decisions",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "steer-program-delivery",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Steward the program RAID and decision log (Program Manager Mode 5)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "triage-support-issue",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "resolve-tier-1-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Triage an incoming support issue (pmo-tier-1-support Mode 1)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "resolve-known-issue",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "resolve-tier-1-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Resolve a known issue from a current runbook (pmo-tier-1-support Mode 2)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "escalate-support-issue",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "resolve-tier-1-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Escalate a novel issue with an Escalation Handoff Record (pmo-tier-1-support Mode 3)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "answer-system-question",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "resolve-tier-1-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Answer a system question from its documented corpus (pmo-wms-specialist Mode Answer)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "root-cause-escalated-issue",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "resolve-escalated-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Root-cause an escalated issue (pmo-tier-2-support Mode 1)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "close-escalated-issue",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "resolve-escalated-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Close an escalated issue with a fix (pmo-tier-2-support Mode 2)",
+      "universe": "project-delivery"
+    },
+    {
+      "children": [],
+      "id": "author-support-runbook",
+      "lens_status": null,
+      "level": "L3",
+      "parent": "resolve-escalated-issue",
+      "path": null,
+      "published": false,
+      "status": null,
+      "title": "Author or update the support runbook (pmo-tier-2-support Mode 3)",
+      "universe": "project-delivery"
+    }
+  ],
+  "pack_version": "2",
+  "schema_version": 1
+}

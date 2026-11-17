@@ -1,0 +1,13 @@
+# Fixture rules
+
+A step reads its input before it writes its output.
+A step names its actor.
+
+Repeated line of text.
+A span starts on this line
+and ends on this one.
+Repeated line of text.
+
+## Fixture notes
+
+The last unique line of the fixture source.
