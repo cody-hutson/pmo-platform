@@ -272,7 +272,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | never-invoked-specialists-dispositioned (version-less) | never-invoked-specialists-dispositioned | #8452 | #8994 | `240d3c2ed44e2330d3882de56fbdbd21bc8b4418` | (none) | DEPLOYED | 2026-11-14 |
 | v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
 | v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
-| v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | DEPLOYED | 2026-11-17 |
+| v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | VERIFIED | 2026-11-17 |
 | v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | DEPLOYED | 2026-11-17 |
 
 #### Deployment Log v5.11
@@ -330,7 +330,7 @@ The day of the week is computed from the date.
 **Result:** SUCCESS — the merge, the version claim, the plan stamp, the release-stamped rules-mirror deploy and the hook-bundle refresh are complete and read back, and the deployed guard and canonicalizer byte-equal the merged source.
 
 #### Deployment Log v5.10
-**Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. The plan's one Operational Deployment Manifest row, the script-execution allowlist, is propagated by the installer's hook-tier provisioning, which the operator runs; it is owed and pending. Paths are repository-relative.
+**Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy, and the plan's one Operational Deployment Manifest row are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. The manifest row, the script-execution allowlist, was propagated by the installer's hook-tier provisioning, which the operator ran after the merge. Paths are repository-relative.
 
 - **(1) The merge.** It carries the release's 169 changed paths to `main` (150 added, 19 modified), measured at the merge commit `931484d3` against its first parent `a6ef9bec`:
   - the process catalog's first universe under `core/process-catalog/`: the 48 engineering-harness pages, the generated index, graph and views, the definitions pack with its page templates and registers, and the catalog README;
@@ -347,10 +347,10 @@ The day of the week is computed from the date.
     - **Deploy mode:** the run printed no `Deploy mode: user-local only` line. With no target named, neither the skill half nor the package half ran.
     - **Rules mirror:** re-laid by the deploy, unchanged in membership.
   - **Rows written:** under the slug, the run wrote its `deploy-rules-mirror` row, outcome `resolved` (`result:SUCCESS`). There is no `deploy-skill` and no `deploy-package` row, as `--no-targets` requires.
-- **(3) Owed by the operator and pending.** The plan's Operational Deployment Manifest row 1 is `core/config/allowlists/script-execution-allowlist.txt`, a composition surface, which `deploy.sh --deploy` does not source. Its propagation is the installer's hook-tier provisioning, run by the operator after the merge and the primary checkout's fast-forward. The manifest's verification for it is that the provisioned copy carries the added lines.
+- **(3) Run by the operator and verified.** The plan's Operational Deployment Manifest row 1 is `core/config/allowlists/script-execution-allowlist.txt`, a composition surface, which `deploy.sh --deploy` does not source. The operator propagated it with the installer's hook-tier provisioning after the merge and the primary checkout's fast-forward (2026-11-17, 01:44 UTC). By the manifest's own method, the provisioned copy carries every line this release added, and a catalog tool runs agent-side.
 - **Nothing else is owed.** The merge changes no `core/hooks/` path, no `harness/` path, no skill and no package, and the allowlist is the only composition-surface source it changes, so no `.skill` rebuild and no hook-bundle refresh is owed.
 
-**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy); and, pending, the operator's hook-tier provisioning.
+**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy); and the operator's hook-tier provisioning.
 - **The merge.** PR #8983 merged to `main` at `931484d3661223e5b61ac5268d7cbc3190abe205` (parents `a6ef9bec` / `acc6d459`) by `gh pr merge --merge --match-head-commit`, with no `--admin`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit. `origin/main` is the merge commit, and the host reads it `verified=true, reason=valid`. The repository's `delete_branch_on_merge` setting removed the release branch from the remote.
 - **The pre-merge state, on head `acc6d459`.**
   - **A.5.6:** the dry run read `v5.10`. No version label rode into the merge: none of the branch's commit subjects, the PR title or the branch name carries a version, and the plan's `v5.08` is the provisional figure computed at Engineering Commit 0, beside the Header's release-version placeholder.
@@ -374,7 +374,20 @@ The day of the week is computed from the date.
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v5.10; 1 deployment-status row(s) exist for v5.10, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
-**Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. The manifest's one row, the hook-tier provisioning of the script-execution allowlist, is owed by the operator and pending. It is not a deploy failure.
+**Velocity:** planned 68 pts / delivered 68 pts (1.00); files-changed 169; allocation 30/38/0 pts (feature/debt/protocol-slack); class cross-cutting; mechanism: compute-release-velocity.sh
+**Result:** SUCCESS — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. The manifest's one row, the hook-tier provisioning of the script-execution allowlist, was run by the operator after the merge and verified by the manifest's method (recorded PARTIAL at Stage 12, before that run).
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 48/48 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.10
+
+**Synthesized at:** 2026-11-17T07:06:14Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.10`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-17T05:10:27Z`
+
+**Surprise:** siblings kept landing in Stage 12, so main was merged in four times and two merges each needed a signed catalog repair
+**Would-change:** hold a conflicted sync until its Tier 2 ruling, and log the Stage 9 verdict as plan-review-go
+**Watch-for:** superseded-head runs queueing macOS checks
 
 #### Deployment Log v5.09
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped deploy of the FinOps skill are complete.** Each was read back by content. The plan's two `./update.sh` manifest rows are the operator's (PA-061) and are still pending. Paths are given as placeholders.
