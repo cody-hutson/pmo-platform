@@ -1,0 +1,27 @@
+{
+  "synthetic": "invented values; not measured on any install",
+  "params": {
+    "today": "2001-01-14"
+  },
+  "inputs": {
+    "analysis-folder-summaries": [
+      [
+        "fixture-health-audit-2001-01-01",
+        "title: a fixture summary\nanalysis_type: audit\ncreated: 2001-01-01\n"
+      ],
+      [
+        "fixture-health-audit-2001-01-08",
+        "analysis_type: audit\n"
+      ],
+      [
+        "fixture-drift-watch-2001-01-02",
+        "analysis_type: research\ncreated: 2001-01-02\n"
+      ],
+      [
+        "fixture-drift-watch-2001-01-09",
+        ""
+      ]
+    ]
+  },
+  "expected": "dated folders: 4 in 2 families\nfamily fixture-drift-watch: folders 2; with a summary 1; stating a created date 1; by analysis type: research 1\nfamily fixture-health-audit: folders 2; with a summary 2; stating a created date 1; by analysis type: audit 2\n"
+}

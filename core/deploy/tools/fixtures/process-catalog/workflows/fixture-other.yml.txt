@@ -1,0 +1,10 @@
+# An invented workflow file for the catalog self-tests. It runs nothing.
+# No fixture measure lists this file as an input.
+name: Fixture other
+on:
+  pull_request:
+jobs:
+  fixture-job:
+    runs-on: fixture-runner
+    steps:
+      - run: echo fixture

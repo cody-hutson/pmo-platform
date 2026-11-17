@@ -1455,6 +1455,12 @@ This is the reader at the merge for a branch a sibling's merge darkens; the push
 
 **Cutover discipline:** Applies with Phase B1.1 — to releases entering Stage 12 strictly AFTER its introducing-release merge.
 
+**Stage 12 Chip Pattern — Process-Catalog Repair and Gate Read Discipline (Phases A.5.8 and B1.2):**
+
+When the hub authors a Stage 12 Execute chip prompt, the prompt MUST prescribe both sub-steps per [`pipeline/stage-12-execute.md`](../pipeline/stage-12-execute.md): a numbered step for Phase A.5.8 as the last step of Phase A.5, before the Phase A.6 mergeability read; a numbered step for Phase B1.2 immediately after Phase B1.1 and before Phase B3; the conditional Phase B5 repair; a required-deliverables entry for each block; and the reading-list line. The prompt MUST NOT treat residue or a finding as a HALT, and MUST NOT ask the spoke to edit page text, re-cite or remove a citation. The prompt MUST relay the release plan's Publication hold row. On a held release it MUST name the hold-repair sub-task's number, or say that none is offered. The spoke's conduct and its return values under a hold are those of Phase A.5.8 in `pipeline/stage-12-execute.md`; the prompt restates neither.
+
+**Cutover discipline:** Applies with those phases.
+
 **Stage 7/8/9 Entry Divergence Re-Check Discipline:**
 
 When the hub authors a Stage 7 Dev Testing, Stage 8 QA Testing, or Stage 9 Plan Review chip prompt, the chip prompt MUST embed a mid-pipeline divergence re-check per [`release-process.md § Mid-Pipeline Divergence Re-Check (G-PR8 — Phase A6.5)`](../../governance/release-process.md) and [`pipeline/stage-09-plan-review.md § Phase A6.5`](../pipeline/stage-09-plan-review.md). The check fires at stage-entry, before the chip's main work. The chip prompt MUST NOT skip the check on the grounds that "Stage 12 Phase A.5 will catch it" — Stage 12 catch is post-GO and forces full re-baseline.
