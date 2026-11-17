@@ -272,6 +272,54 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | never-invoked-specialists-dispositioned (version-less) | never-invoked-specialists-dispositioned | #8452 | #8994 | `240d3c2ed44e2330d3882de56fbdbd21bc8b4418` | (none) | DEPLOYED | 2026-11-14 |
 | v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
 | v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
+| v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | DEPLOYED | 2026-11-17 |
+
+#### Deployment Log v5.10
+**Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. The plan's one Operational Deployment Manifest row, the script-execution allowlist, is propagated by the installer's hook-tier provisioning, which the operator runs; it is owed and pending. Paths are repository-relative.
+
+- **(1) The merge.** It carries the release's 169 changed paths to `main` (150 added, 19 modified), measured at the merge commit `931484d3` against its first parent `a6ef9bec`:
+  - the process catalog's first universe under `core/process-catalog/`: the 48 engineering-harness pages, the generated index, graph and views, the definitions pack with its page templates and registers, and the catalog README;
+  - the catalog tools under `core/deploy/tools/`: the generator, the validator, the element inventory, the publication gate and their shared library, the registered measure scripts, and their fixtures; edits to the tools README and the frontmatter helper;
+  - the CI workflow `.github/workflows/process-catalog-check.yml`;
+  - `.gitignore` and three allowlists, among them `core/config/allowlists/script-execution-allowlist.txt`;
+  - three standards, six stage specifications, two how-to references and the close-out tool `release/tools/automated-closeout.sh`;
+  - this release's plan.
+- **(2) Phase B4 ran once.** It ran from the Stage-12 session worktree detached at `origin/main`, which is the merge commit (`merge-base --is-ancestor` exit 0).
+  - **Command:** `bash core/deploy/deploy.sh --deploy --release engineering-harness-pages-published --no-targets`. It exited 0 and reported nothing to deploy beyond the rules mirror.
+  - **B4.5 record:**
+    - **Join key:** `engineering-harness-pages-published`, asserted non-empty and read back with rows under it, none of them `deployment-status` before the deploy. Control: a deployed release reads `deployment-status` rows.
+    - **Targets:** none, so the run used `--no-targets`. The B4.3 derivation found no path of the merge under a skill root or `packages/`, so there was no candidate and no non-member. Sensitivity: planted `release/skills/release-hub/SKILL.md` and `packages/comms-writer.skill` paths derive both names.
+    - **Deploy mode:** the run printed no `Deploy mode: user-local only` line. With no target named, neither the skill half nor the package half ran.
+    - **Rules mirror:** re-laid by the deploy, unchanged in membership.
+  - **Rows written:** under the slug, the run wrote its `deploy-rules-mirror` row, outcome `resolved` (`result:SUCCESS`). There is no `deploy-skill` and no `deploy-package` row, as `--no-targets` requires.
+- **(3) Owed by the operator and pending.** The plan's Operational Deployment Manifest row 1 is `core/config/allowlists/script-execution-allowlist.txt`, a composition surface, which `deploy.sh --deploy` does not source. Its propagation is the installer's hook-tier provisioning, run by the operator after the merge and the primary checkout's fast-forward. The manifest's verification for it is that the provisioned copy carries the added lines.
+- **Nothing else is owed.** The merge changes no `core/hooks/` path, no `harness/` path, no skill and no package, and the allowlist is the only composition-surface source it changes, so no `.skill` rebuild and no hook-bundle refresh is owed.
+
+**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy); and, pending, the operator's hook-tier provisioning.
+- **The merge.** PR #8983 merged to `main` at `931484d3661223e5b61ac5268d7cbc3190abe205` (parents `a6ef9bec` / `acc6d459`) by `gh pr merge --merge --match-head-commit`, with no `--admin`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit. `origin/main` is the merge commit, and the host reads it `verified=true, reason=valid`. The repository's `delete_branch_on_merge` setting removed the release branch from the remote.
+- **The pre-merge state, on head `acc6d459`.**
+  - **A.5.6:** the dry run read `v5.10`. No version label rode into the merge: none of the branch's commit subjects, the PR title or the branch name carries a version, and the plan's `v5.08` is the provisional figure computed at Engineering Commit 0, beside the Header's release-version placeholder.
+  - **A.5.7:** the branch adds no ADR. `renumber-adr.py --detect` reported no claim, and `--stamp --check` read 0 residual tokens.
+  - **A.5.8, under the plan's publication hold:** all four check commands exited 0, so `process-catalog repair = not needed`.
+  - **A.6 and A.7:** `MERGEABLE` / `CLEAN`, and the PR was ready, not draft. **B0:** no dependent PR. Every check on the head passed, the required ones included, and `main` had not moved from `a6ef9bec`.
+- **Phase B1.2.** The three process-catalog checks on the merge commit's push run completed `success`, and the three commands exited 0 in a worktree at the merge commit, so `repair owed at B5: no`.
+- **The version claim.** `claim-version.sh` claimed **`v5.10`** for bump class `minor` by atomic ref-CAS, with no collision reported. That equals both dry runs: A.5.6 on the head, and the read on the merge commit immediately before the claim.
+  - `--stamp-slug`, derived from the PR's head ref, and `--stamp-branch` were passed explicitly, naming this branch, which was cut at the merge commit before the claim.
+  - The tag object `89fe5b17` is signed and annotated and peels to the merge commit on `origin`. `git tag -v` reads a good ED25519 signature, and the host reads the tag `verified=true, reason=valid`.
+- **The claim-time stamp.** The manifest was plan-only, staling no package. The stamp commit `9a21ebaa` (signed) renamed the plan to `release/releases/plans/v5/v5.10_RELEASE_PLAN.md` and resolved its placeholder, leaving none.
+- **The version-binding row (B3.1)** was appended to the event log under the slug, carrying `d:version-claim; claimed:v5.10; prov:v5.08`. The event-record integrity cutover was already bound, so B3.2 was a no-op (`--assert-bound` exit 0).
+
+**Timestamp:** 2026-11-17 01:19 UTC (Tuesday). The `Date` cell is the merge event: the merge's `mergedAt`, `2026-11-17T01:19:01Z`. Sequence:
+- the re-read of the head, the check roster and `main` (`a6ef9bec`) at `01:18:44Z`;
+- the merge at `01:19:01Z`;
+- the Phase B1.1 sweep and the Phase B1.2 read;
+- the tag at `01:24:11Z` and the stamp commit at `01:24:13Z`;
+- the version-binding row at `01:24:58Z`;
+- the stamped deploy's row at `01:26:39Z`.
+
+The day of the week is computed from the date.
+**Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v5.10; 1 deployment-status row(s) exist for v5.10, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. The manifest's one row, the hook-tier provisioning of the script-execution allowlist, is owed by the operator and pending. It is not a deploy failure.
 
 #### Deployment Log v5.09
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped deploy of the FinOps skill are complete.** Each was read back by content. The plan's two `./update.sh` manifest rows are the operator's (PA-061) and are still pending. Paths are given as placeholders.
