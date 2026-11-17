@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v5.10 | engineering-harness-pages-published | 2026-11-17 | — | #8983 | [notes/v5.10_RELEASE_NOTES.md](notes/v5.10_RELEASE_NOTES.md) |
 | v5.09 | release-usage-measured-right | 2026-11-15 | — | #8821 | [notes/v5.09_RELEASE_NOTES.md](notes/v5.09_RELEASE_NOTES.md) |
 | v5.08 | deletion-guard-judges-every-segment-and-target | 2026-11-15 | — | #8992 | [notes/v5.08_RELEASE_NOTES.md](notes/v5.08_RELEASE_NOTES.md) |
 | never-invoked-specialists-dispositioned (version-less) | never-invoked-specialists-dispositioned | 2026-11-14 | — | #8994 | [notes/_unversioned/never-invoked-specialists-dispositioned_RELEASE_NOTES.md](notes/_unversioned/never-invoked-specialists-dispositioned_RELEASE_NOTES.md) |

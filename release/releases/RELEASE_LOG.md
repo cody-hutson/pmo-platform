@@ -272,7 +272,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | never-invoked-specialists-dispositioned (version-less) | never-invoked-specialists-dispositioned | #8452 | #8994 | `240d3c2ed44e2330d3882de56fbdbd21bc8b4418` | (none) | DEPLOYED | 2026-11-14 |
 | v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
 | v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
-| v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | DEPLOYED | 2026-11-17 |
+| v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | VERIFIED | 2026-11-17 |
 
 #### Deployment Log v5.10
 **Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy, and the plan's one Operational Deployment Manifest row are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. The manifest row, the script-execution allowlist, was propagated by the installer's hook-tier provisioning, which the operator ran after the merge. Paths are repository-relative.
@@ -319,7 +319,20 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v5.10; 1 deployment-status row(s) exist for v5.10, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Velocity:** planned 68 pts / delivered 68 pts (1.00); files-changed 169; allocation 30/38/0 pts (feature/debt/protocol-slack); class cross-cutting; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. The manifest's one row, the hook-tier provisioning of the script-execution allowlist, was run by the operator after the merge and verified by the manifest's method (recorded PARTIAL at Stage 12, before that run).
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 48/48 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.10
+
+**Synthesized at:** 2026-11-17T07:06:14Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.10`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-17T05:10:27Z`
+
+**Surprise:** siblings kept landing in Stage 12, so main was merged in four times and two merges each needed a signed catalog repair
+**Would-change:** hold a conflicted sync until its Tier 2 ruling, and log the Stage 9 verdict as plan-review-go
+**Watch-for:** superseded-head runs queueing macOS checks
 
 #### Deployment Log v5.09
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped deploy of the FinOps skill are complete.** Each was read back by content. The plan's two `./update.sh` manifest rows are the operator's (PA-061) and are still pending. Paths are given as placeholders.
