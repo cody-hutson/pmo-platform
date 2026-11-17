@@ -1,0 +1,446 @@
+# enumeration-drift-fixtures.txt — labelled expected-verdict set for the enumeration-drift check
+#
+# PROVENANCE. These cases are the labelled fixture set of the enumeration <-> population
+# drift check (core/deploy/tools/check-enumeration-drift.py, deploy.sh Check 83), written
+# with the check by its introducing release. Case 1 is the seeded mismatch the check must
+# flag, and case 2 its near-miss — the same document as a true `subset-of` — which it must
+# not flag; together they are the control arm the check's acceptance criteria require.
+# Each remaining case pins one rule the tool's module docstring states, so a regression
+# names the rule it broke. The list below names the rule each case pins. It is not a sweep
+# of the docstring: a rule it does not name is not pinned by this set, and the rules found
+# unpinned so far are named at its end.
+#
+# FORMAT (case-block, because a marked enumeration is irreducibly multi-line):
+#   --- <EXPECT> <RELATION> <label>
+#   POPULATION: <repo-relative path> ...      (required; may be empty)
+#   DOCUMENT: <repo-relative path>            (optional; default fixture.md; sets the
+#                                              directory a relative link resolves from)
+#   <document lines>
+#   --- END
+# where
+#   <EXPECT> = DRIFT       at least 1 DRIFT row and 0 UNRESOLVED rows
+#            | CLEAN       at least 1 marker examined and 0 rows
+#            | UNRESOLVED  at least 1 UNRESOLVED row and 0 DRIFT rows
+#            | SCOPE-OUT   0 markers examined
+#   <RELATION> = count | list | subset-of — the relation the case exercises (a label; a
+#                malformed case cannot carry a parseable relation in its marker)
+# POPULATION stands in for the tracked-file list, so a case runs with no git and no
+# filesystem; the glob is matched against it exactly as against `git ls-files`.
+#
+# WHY EACH ARM IS LOAD-BEARING — read before tuning the tool against it.
+# A CLEAN case that examines zero markers is a FAILURE, not a pass: "not flagged" and
+# "not examined" are different verdicts, which is why SCOPE-OUT exists as its own
+# expectation (the Check 63 fixture set's rule, reused). A DRIFT case that comes back
+# UNRESOLVED is a FAILURE too: an unreadable marker is a finding, but it is not the drift
+# the case seeds, and a tool that cannot bind the seeded list would pass a looser test.
+#   - Cases 1 and 2 are the same items: only the relation differs. A tool that flags both
+#     cannot tell `subset-of` from `list`; a tool that flags neither cannot see drift.
+#   - Cases 3 to 6 pin each relation in both directions: an exact list, an extra member
+#     under `subset-of`, an understated count, and a number word that reconciles.
+#   - Case 7 pins segment-equal matching: a `*` that crossed `/` would make the nested
+#     file a member and case 7 would drift.
+#   - Cases 8 and 9 bound the preamble allowance at exactly one prose line.
+#   - Cases 10 to 13 each seed one UNRESOLVED reason, so a marker the tool cannot read is
+#     reported, never skipped as clean.
+#   - Case 14 pins the fence rule: a marker quoted inside a fence is not a marker.
+#   - Cases 15 and 16 pin wildcard-segment keys: every member is named SKILL.md, so a
+#     basename key could neither key the list nor stay silent on the count.
+#   - Cases 17 and 18 pin link resolution from the document's own directory, a leading
+#     `/` from the root, and an off-glob link reading as extra rather than vanishing.
+#   - Case 19 pins the code-span key of a glob with two wildcard segments.
+#   - Case 20 pins the `dup` rule: every member is listed once and one is listed again,
+#     so `missing` and `extra` are empty and only the repeat can drift. Case 3 is its
+#     near-miss: the same list without the repeat.
+#   - Case 21 pins the `**` limb of the malformed-glob rule: without the rule the glob is
+#     read one level deep, so it silently drops pop/b/deep/run.sh, and the list, which
+#     names both one-level members, reads CLEAN. Cases 26 and 27 pin its other two limbs.
+#   - Case 22 pins table-body items: the header and separator rows are not items, so the
+#     two body rows key alpha.sh and beta.sh, and gamma.sh is missing. Counted as items,
+#     they make the item count disagree with the table's.
+#   - Case 23 pins the strip of a `#...` fragment and of a `?...` query from a link target:
+#     without either strip, that link no longer names a member.
+#   - Case 24 pins code-span link masking: the item's first link sits inside a code span,
+#     so its key comes from the real link after it.
+#   - Case 25 pins the external-scheme limb of the link skip: the item's first link is
+#     `https:`, so its key comes from its code span. Without the limb that link reads as
+#     an extra path.
+#   - Cases 26 and 27 pin the malformed-glob rule's leading-`/` and `..` limbs. Each
+#     population carries paths of that shape, so the glob matches them: without its limb
+#     the glob reads as an ordinary pattern and the list reads CLEAN, where the rule reads
+#     `malformed-glob`.
+#   - Case 28 pins the `~~~` limb of the fence rule, as case 14 pins the backtick limb:
+#     without it the quoted marker is read, and its one-item list drifts.
+#   - Case 29 pins reading the marker from the stripped line: indented by two spaces, it
+#     is still a marker; read from the raw line, no marker is examined.
+#   - Case 30 pins that a count does not bind a line that opens a list: the cardinal sits
+#     in a list item, so the marker reads `count-target`; bound, the count reads CLEAN.
+#   - Case 31 pins the masking of non-counting spans on a count line: the numeral inside
+#     the code span is not a second cardinal; unmasked, the count reads UNRESOLVED.
+#   - Cases 32 and 33 pin the blank-line skip after the marker, before a preamble line and
+#     before a count line; without it the marker binds the blank line and reads UNRESOLVED.
+#   - Case 34 pins the `dup` rule under `subset-of`, as case 20 pins it under `list`: a
+#     repeated item drifts whatever the relation.
+#   - Case 35 pins the prefix match of a resolved link: its leading segments must match
+#     the glob's, so a link to ../lib/gamma.sh, a member's basename off the glob, reads as
+#     the extra path lib/gamma.sh, with gamma.sh missing. Matched on the key alone, the
+#     list reads CLEAN.
+#   - Case 36 pins the segment floor of a resolved link: a link to the glob's directory,
+#     pop/, is shorter than a member, so it reads as the extra path pop, with alpha.sh
+#     missing. Without the floor the tool fails on an index past the path's end.
+#   - Case 37 pins the full-path code span: a span with as many segments as the glob is
+#     resolved as a path, so pop/alpha.sh keys alpha.sh; unresolved, it reads UNRESOLVED.
+#   - Case 38 pins the strip of a trailing `/` from a code span: alpha/ keys the member
+#     sk/alpha/SKILL.md; unstripped, it reads UNRESOLVED.
+#   - Case 39 pins the key of a glob with no wildcard segment, which is its whole path;
+#     without it the key is empty and the tool fails on an empty sequence.
+#   - Case 40 pins the strip of a trailing `/` from a link target: a link to the root, /,
+#     strips to nothing and is skipped; unstripped, it reads as an extra path.
+# Not pinned by any case, and named so the set does not overstate its reach. Each is an
+# equivalent mutant: removing it changes no verdict on any document, so no case can pin it.
+#   - The `boundary-disagreement` verdict. The tool's item splitter computes the count by
+#     the same steps as structure_at, so no document makes the two disagree, and the tool
+#     with the verdict removed passes every case. It is a fail-closed assertion, reached
+#     only through a splitter fault: with the table header counted as an item, case 22
+#     reads `boundary-disagreement`.
+#   - The pure-anchor limb of the link skip. The fragment strip already empties a `#...`
+#     target, which is then skipped, so the tool with that limb removed passes every case.
+# Two rules no case pins are not equivalents, since a case could pin each one, and only the
+# `--self-test` kills them: `C-guard`, the ambiguity guard, by its `guard` arm, and
+# `C-nested`, an item owning its nested lines, by its `parity` arm.
+# Cases: 10 DRIFT · 19 CLEAN · 9 UNRESOLVED · 2 SCOPE-OUT — 40 in all.
+
+--- DRIFT list seeded-mismatch
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+--- END
+
+--- CLEAN subset-of near-miss-true-subset
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh subset-of -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+--- END
+
+--- CLEAN list exact
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- DRIFT subset-of extra-member
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh subset-of -->
+Some of the fixture hooks:
+- `alpha.sh`
+- `delta.sh`
+--- END
+
+--- DRIFT count understated
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+Read by 2 hooks.
+--- END
+
+--- CLEAN count number-word
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+Read by three hooks.
+--- END
+
+--- CLEAN list glob-is-one-level
+POPULATION: pop/alpha.sh pop/beta.sh pop/sub/epsilon.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+--- END
+
+--- CLEAN list preamble-between
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks, in the order they run:
+
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED list unbound
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks run in a fixed order.
+That order is the order below.
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED list unkeyed-item
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- the beta hook
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED count two-cardinals
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+2 of 3 hooks.
+--- END
+
+--- UNRESOLVED list empty-population
+POPULATION:
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED list malformed
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh equals -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- SCOPE-OUT list marker-in-fence
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+```text
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+```
+--- END
+
+--- CLEAN list directory-keyed
+POPULATION: sk/alpha/SKILL.md sk/beta/SKILL.md
+<!-- enumerates: sk/*/SKILL.md list -->
+The fixture skills:
+- `alpha`
+- `beta`
+--- END
+
+--- CLEAN count colliding-basenames
+POPULATION: sk/alpha/SKILL.md sk/beta/SKILL.md
+<!-- enumerates: sk/*/SKILL.md count -->
+Two skills.
+--- END
+
+--- CLEAN list link-resolves-from-document
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+DOCUMENT: docs/f.md
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [`alpha.sh`](../pop/alpha.sh)
+- [`beta.sh`](/pop/beta.sh)
+- [`gamma.sh`](../pop/gamma.sh)
+--- END
+
+--- DRIFT list off-glob-link
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+DOCUMENT: docs/f.md
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [`alpha.sh`](../pop/alpha.sh)
+- [`beta.sh`](/pop/beta.sh)
+- [`gamma.sh`](../pop/gamma.sh)
+- [`other.sh`](../lib/other.sh)
+--- END
+
+--- DRIFT list multi-wildcard-code-span
+POPULATION: mods/a/x.md mods/b/y.md
+<!-- enumerates: mods/*/*.md list -->
+The fixture modules:
+- `a/x.md`
+--- END
+
+--- DRIFT list duplicate-item
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+- `alpha.sh`
+--- END
+
+--- UNRESOLVED list malformed-glob-recursive
+POPULATION: pop/a/run.sh pop/b/run.sh pop/b/deep/run.sh
+<!-- enumerates: pop/**/run.sh list -->
+The fixture runners:
+- `a`
+- `b`
+--- END
+
+--- DRIFT list table-body-rows
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+| Hook | Runs |
+|---|---|
+| `alpha.sh` | first |
+| `beta.sh` | second |
+--- END
+
+--- CLEAN list link-fragment-and-query
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+DOCUMENT: docs/f.md
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [`alpha.sh`](../pop/alpha.sh#L3)
+- [`beta.sh`](../pop/beta.sh?plain=1)
+- [`gamma.sh`](../pop/gamma.sh)
+--- END
+
+--- CLEAN list link-in-code-span
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `[old](zzz.sh)` was its link; it is now [`beta.sh`](pop/beta.sh)
+- `gamma.sh`
+--- END
+
+--- CLEAN list external-link-skipped
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [upstream](https://example.com/pop/alpha.sh) mirrors `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED list P-leadslash-synthetic-population
+POPULATION: /pop/alpha.sh /pop/beta.sh
+<!-- enumerates: /pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+--- END
+
+--- UNRESOLVED list P-dotdot-synthetic-population
+POPULATION: pop/../alpha.sh pop/../beta.sh
+<!-- enumerates: pop/../*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+--- END
+
+--- SCOPE-OUT list P-tilde-marker-in-tilde-fence
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+~~~text
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+~~~
+--- END
+
+--- CLEAN list P-strip-indented-marker
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+  <!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- UNRESOLVED count P-cstruct-count-over-a-list
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+- 3 hooks
+--- END
+
+--- CLEAN count P-mask-numeral-in-code-span
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+Three hooks run under `set -o 2` here.
+--- END
+
+--- CLEAN list P-blank1-blank-before-preamble
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+
+The fixture hooks:
+- `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- CLEAN count P-cblank-blank-before-count-line
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh count -->
+
+Read by three hooks.
+--- END
+
+--- DRIFT subset-of P-subdup-subset-repeat
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh subset-of -->
+Some of the fixture hooks:
+- `alpha.sh`
+- `alpha.sh`
+--- END
+
+--- DRIFT list P-prefix-off-glob-link-with-member-basename
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+DOCUMENT: docs/f.md
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [`alpha.sh`](../pop/alpha.sh)
+- [`beta.sh`](../pop/beta.sh)
+- [`gamma.sh`](../lib/gamma.sh)
+--- END
+
+--- DRIFT list P-len2-link-to-the-glob-directory
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [`alpha.sh`](pop/)
+- `beta.sh`
+- `gamma.sh`
+--- END
+
+--- CLEAN list P-fullspan-full-path-code-spans
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- `pop/alpha.sh`
+- `pop/beta.sh`
+- `pop/gamma.sh`
+--- END
+
+--- CLEAN list P-spanslash-directory-span-with-slash
+POPULATION: sk/alpha/SKILL.md sk/beta/SKILL.md
+<!-- enumerates: sk/*/SKILL.md list -->
+The fixture skills:
+- `alpha/`
+- `beta/`
+--- END
+
+--- CLEAN list P-literal-glob
+POPULATION: pop/alpha.sh pop/beta.sh
+<!-- enumerates: pop/alpha.sh list -->
+The one hook:
+- `pop/alpha.sh`
+--- END
+
+--- CLEAN list P-linkslash-root-link
+POPULATION: pop/alpha.sh pop/beta.sh pop/gamma.sh
+<!-- enumerates: pop/*.sh list -->
+The fixture hooks:
+- [home](/) then `alpha.sh`
+- `beta.sh`
+- `gamma.sh`
+--- END

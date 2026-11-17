@@ -204,7 +204,7 @@ The correct decomposition: the **roadmap** holds the umbrella (Now/Next/Later se
 
 ### 4.6 The derived chain-head view is a read surface, not a roadmap
 
-The set of chain heads is derived from `project:` label membership plus label-less epics (label taxonomy § Initiative Labels, Derived chain-head view); no registry lists them, and a roadmap is not where they are enumerated. A roadmap remains the home of Now/Next/Later sequencing and its rationale: the view renders structure and counts, and it presents no order as a run sequence. A standing initiative is read from its label's description rather than from a roadmap's `sunset_criteria:` field, because a roadmap instance is operator-local and absent from a fresh install; where a roadmap exists, its sunset criteria still state why the initiative is standing.
+The set of chain heads is derived from `project:` label membership plus label-less epics (label taxonomy § Initiative Labels, Derived chain-head view); no registry lists them, and a roadmap is not where they are enumerated. A roadmap remains the home of Now/Next/Later sequencing and its rationale: the view renders structure and counts, and it presents no order as a run sequence. A standing initiative is read from its label's description rather than from a roadmap's `sunset_criteria:` field, because a roadmap instance is operator-local and absent from a fresh install; where a roadmap exists, its sunset criteria still state why the initiative is standing. A standing initiative's capacity band is not a roadmap field: its values and its counting rule live in the platform-config template's `[quality_share_band]` section, so a re-set of the band changes that section and no roadmap.
 
 ## 5. Forcing Function — Event-Bound Triggers + Calendar Fallback
 
