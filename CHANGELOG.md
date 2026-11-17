@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.10] - 2026-11-17
+
+The engineering harness has its first process-catalog pages, and a CI check fails when a page drifts from the code it cites.
+
+[Full notes](release/releases/notes/v5.10_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.10)
+
 ## [v5.09] - 2026-11-16
 
 Usage is now counted once per API response and stated in one unit, weekly points of one account, so a release's cost can be recorded and compared.
