@@ -1,0 +1,4 @@
+measure_id	script	inputs	input_class	params	population
+fixture-git-rows	fixture-count-rows.py	tracked:core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt	git		every line of the fixture rules file
+fixture-state-rows	fixture-count-rows.py	event-log-rows	repo-working-state		every kept row of an invented event log
+fixture-workflow-runs	fixture-count-rows.py	host-workflow-runs:fixture-probe.yml	host-api	window_days=14;slice_days=7	every invented run of the fixture probe workflow in the trailing window

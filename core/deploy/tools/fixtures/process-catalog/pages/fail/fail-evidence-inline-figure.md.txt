@@ -1,0 +1,82 @@
+---
+title: Fail fixture
+purpose: A catalog self-test fixture; it describes nothing real
+type: reference
+status: ACTIVE
+reversibility: CHEAP / Confidence HIGH
+flow_class: agent-process
+depicts: [core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt]
+id: fail-evidence-inline-figure
+level: L3
+universe: fixture-landscape
+parent: fixture-process
+actors: [spoke, script:fixture-script]
+owner: hub
+lens_status: unobserved
+last_verified_commit: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+pack_version: 2
+---
+# Fail fixture
+
+## Summary
+
+A fixture page for the catalog self-tests. It describes nothing real.
+
+## ICOM
+
+| Inputs | Controls | Outputs | Mechanisms |
+|---|---|---|---|
+| fixture input record | C-001 | fixture output record | script:fixture-script |
+
+## Flow
+
+```mermaid
+flowchart TD
+    s1[Read input] --> s2[Check input]
+    s2 --> g1{Valid?}
+    g1 -->|yes| s3[/Write output/]
+    g1 -->|no| s1
+```
+
+## Steps
+
+| Step | Action | Actor | Inputs → outputs (shape) | Controls | Mechanism | Harness | Model need | Source |
+|---|---|---|---|---|---|---|---|---|
+| read-input | Read the input file | spoke | file path → parsed record | C-001: prose-only | script:fixture-script | file-tools | XS/none/read/scriptable/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+| judge-input | Judge whether the record is usable | spoke | parsed record → fixture verdict | — | none | none | S/medium/read/judgment/batch | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) |
+
+## Row tally
+
+| Field | Value |
+|---|---|
+| Deterministic steps | 1 |
+| Judgment steps | 1 |
+
+## Evidence
+
+| Lens | Source | Observation | Label |
+|---|---|---|---|
+| designed | [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The rules file states the order of the steps | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | The measure reported 41 lines | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | The setting reads `threshold=12` | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | The line total is `17` | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) [41](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The link label carries the total | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | The rule FX-17 applies to the total | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | The measure counted twelve lines | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file over 14 days) | The measure reports the line total | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | The file was read on 2001-01-01 | [SOURCE] |
+| executed | held local — a store of sessions holds 41 rows | A reader of the repository cannot reproduce this row | [CONTEXT] |
+| designed vs executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt) | The measure shows 2 of 3 steps | [SOURCE] |
+| executed | measure `fixture-git-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | Check 63 and 41 more lines are reported | [SOURCE] |
+| executed | measure `fixture-absent-rows` — [fixture-count-rows.py](/core/deploy/tools/process-catalog-measures/fixture-count-rows.py) (population: every line of the fixture rules file) | The measure reports the line total | [SOURCE] |
+
+## Navigation
+
+<!-- nav:begin -->
+<!-- nav:end -->
+
+## Sources
+
+- [fixture rules](/core/deploy/tools/fixtures/process-catalog/sources/fixture-rules.md.txt)
+
+<!-- expect: EVD001, EVD002 -->
