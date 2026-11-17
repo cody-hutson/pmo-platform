@@ -274,7 +274,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
 | v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | VERIFIED | 2026-11-17 |
 | v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | DEPLOYED | 2026-11-17 |
-| v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | DEPLOYED | 2026-11-17 |
+| v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | VERIFIED | 2026-11-17 |
 
 #### Deployment Log v5.12
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. Two composition-surface propagations were owed by the operator at Stage 12: the plan's one Operational Deployment Manifest row, the charter template, and the script-execution allowlist, which the merge changes and the manifest does not list. Both were made at 2026-11-17T20:37Z and read back at Stage 13 (item (3)). Paths are repository-relative.
@@ -327,7 +327,20 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.12, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Velocity:** planned 20 pts / delivered 20 pts (1.00); files-changed 51; allocation 4/8/8 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back, and the two composition-surface propagations owed at Stage 12, the charter template's and the script-execution allowlist's, were made at 2026-11-17T20:37Z and read back at Stage 13. Stage 12 recorded `PARTIAL` while both were pending.
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 20/20 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.12
+
+**Synthesized at:** 2026-11-17T21:09:24Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.12`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-17T20:34:51Z`
+
+**Surprise:** siblings kept landing, so main was merged in again at Stage 9 and Stage 12 and each merge re-shifted catalog citations
+**Would-change:** list the allowlist hook-tier provisioning in the deployment manifest
+**Watch-for:** waiting on a CI run that has already gone red
 
 #### Deployment Log v5.11
 **Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy and the hook-bundle refresh are complete.** Each was read back. The plan's Stage 12 Success Indicator holds: the deployed copies of `core/hooks/block-destructive.sh` and `core/hooks/lib/command-position.awk` byte-equal the merged source. Paths are repository-relative; the deployed bundle is written `<deploy-root>/.claude/hooks/`.

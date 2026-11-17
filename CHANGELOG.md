@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.12] - 2026-11-17
+
+Deploy checks catch hand-kept file lists that drift, and every release close reports the quality share against a set band.
+
+[Full notes](release/releases/notes/v5.12_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.12)
+
 ## [v5.10] - 2026-11-17
 
 The engineering harness has its first process-catalog pages, and a CI check fails when a page drifts from the code it cites.
