@@ -187,6 +187,41 @@ name: Repository integrity
 #                 core/standards/gate-efficacy-standard.md § Declared-required
 #                 contexts — registration disposition defines, so this gate has no
 #                 row in that section's table.
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Workflow concurrency gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+#   population: roots=.github/workflows  filter=*.yml|*.yaml  exempts=none
+#   invariant: every workflow that a pull request triggers (a pull_request or
+#              pull_request_target trigger) carries the ONE canonical superseded-run
+#              cancellation block at workflow level, written exactly; no job of it
+#              carries a concurrency key; and its trigger set adds no review event
+#              (pull_request_review, pull_request_review_comment), whose run would
+#              join the pull request's group. A workflow that declares workflow_call
+#              has no pull-request trigger and carries no workflow-level concurrency
+#              key. The workflow identities the key embeds are distinct after
+#              case-folding. The block's exact text lives in
+#              core/deploy/tools/check-workflow-concurrency.py, which prints it on a
+#              finding; this file deliberately does not restate it.
+#   falsification: add a pull_request-triggered workflow with no concurrency key ->
+#                  the job FAILS (exit 1) naming it MISSING-GROUP; key its group on
+#                  github.ref instead -> NONCANONICAL-GROUP; add workflow_call beside
+#                  its pull_request trigger -> CALLED-WITH-PR-TRIGGER; add
+#                  pull_request_review beside it -> REVIEW-WITH-PR-TRIGGER; restore
+#                  the canonical block -> green. The committed --self-test grades
+#                  every case in core/deploy/tools/fixtures/workflow-concurrency/cases.yml
+#                  against its declared verdict and against the exit the gate returns,
+#                  requires a scan with a finding to exit 1, and hard-fails ahead of
+#                  the scan.
+#   scope note: WHOLE-TREE, not changed-files, for the reason the Tool exec-mode row
+#               gives: a workflow reaches a branch by a merge from main as often as by
+#               a commit on it, and relative to the pull request's base it is then
+#               unchanged. The name-collision clause is pairwise, so it needs the whole
+#               population in any case.
+#   posture note: `advisory`, not `required`, is the HONEST declaration today —
+#                 Requirement (b') makes `required` unavailable until the context is
+#                 registered in branch protection, which a PR cannot do. The gate is
+#                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
+#                 An `advisory` declaration is off the registration track, so this gate
+#                 has no row in the registration-disposition table.
 
 # Three PR-time integrity gates as three named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
@@ -217,6 +252,15 @@ on:
 permissions:
   contents: read
   issues: read            # issue-ref resolves #N via gh api
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -2578,6 +2622,98 @@ jobs:
             echo "file that arrives by merging \`main\` into a branch is unchanged relative to"
             echo "the pull request's base, and a changed-file gate would not see it. It reads"
             echo "the mode git tracks, never the mode a checkout happens to have on disk."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit 1
+
+  # ---------------------------------------------------------------------------
+  # Workflow concurrency — every pull-request-triggered workflow carries the one
+  # canonical superseded-run cancellation block. WHOLE-TREE. The checker holds
+  # the block's text and prints it on a finding. Consumes NO github.event.*
+  # input: every step is a static invocation against the checked-out tree.
+  # ---------------------------------------------------------------------------
+  workflow-concurrency:
+    name: Workflow concurrency gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Ensure PyYAML
+        # The checker reads workflow structure with a PyYAML compose. Without PyYAML
+        # it exits 2 (the instrument cannot assert), never a clean result.
+        run: python3 -m pip install --quiet 'pyyaml==6.0.2'
+
+      - name: Assert every pull-request-triggered workflow carries the canonical cancellation block
+        run: |
+          set -euo pipefail
+
+          # Self-test FIRST: every committed fixture case against its declared
+          # verdict and against the exit the gate returns, plus the parser,
+          # exit-code and control arms. Hard-fails.
+          python3 core/deploy/tools/check-workflow-concurrency.py --self-test \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+          set +e
+          python3 core/deploy/tools/check-workflow-concurrency.py | tee /tmp/workflow-concurrency.out
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "### Workflow concurrency scan"
+            echo '```'
+            cat /tmp/workflow-concurrency.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          FAIL_LINES="$(grep -c '^FAIL: ' /tmp/workflow-concurrency.out || true)"
+
+          # The exit and the finding lines must agree in BOTH directions. A
+          # findings-to-exit mapping that printed findings and exited 0 would read
+          # green on the event this gate exists to catch.
+          if [ "$RC" -eq 0 ] && [ "$FAIL_LINES" -ne 0 ]; then
+            echo "::error::Workflow concurrency gate exited 0 and printed ${FAIL_LINES} finding line(s) — a clean verdict that names findings is unreadable, not clean."
+            exit 1
+          fi
+          if [ "$RC" -eq 0 ]; then
+            echo ":white_check_mark: Workflow concurrency — every pull-request-triggered workflow carries the canonical superseded-run cancellation block" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$RC" -eq 2 ]; then
+            echo "::error::Workflow concurrency gate cannot assert (exit 2) — the scan is unusable, not clean. Its SCAN-ERROR line is in the run summary."
+            exit 1
+          fi
+          if [ "$RC" -eq 3 ]; then
+            echo "::error::Workflow concurrency gate: NOT-EVALUATED (exit 3) — the workflows directory could not be read; this is not a clean result."
+            exit 1
+          fi
+          if [ "$RC" -ne 1 ]; then
+            echo "::error::Workflow concurrency gate exited ${RC}, outside its exit contract — the verdict is unreadable, not clean."
+            exit 1
+          fi
+          if [ "$FAIL_LINES" -eq 0 ]; then
+            echo "::error::Workflow concurrency gate exited 1 and named no finding — a findings verdict that names nothing is unreadable, not a finding."
+            exit 1
+          fi
+
+          {
+            echo "## :x: Workflow concurrency gate FAILED"
+            echo ""
+            echo "A workflow that a pull request triggers lacks the canonical superseded-run"
+            echo "cancellation block, carries a different form, carries a job-level"
+            echo "concurrency key, or shares its trigger set with \`workflow_call\` or a"
+            echo "review event. Each finding, and the exact block to write, is in the scan"
+            echo "output above."
+            echo ""
+            echo "### When this pull request touches no workflow"
+            echo ""
+            echo "A red row here on a pull request that adds or changes no workflow means"
+            echo "\`main\` carries the workflow: it arrived through a merge from \`main\`. The"
+            echo "remedy belongs on \`main\`, in a pull request of its own."
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           exit 1
