@@ -273,6 +273,61 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
 | v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
 | v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | VERIFIED | 2026-11-17 |
+| v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | DEPLOYED | 2026-11-17 |
+
+#### Deployment Log v5.11
+**Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy and the hook-bundle refresh are complete.** Each was read back. The plan's Stage 12 Success Indicator holds: the deployed copies of `core/hooks/block-destructive.sh` and `core/hooks/lib/command-position.awk` byte-equal the merged source. Paths are repository-relative; the deployed bundle is written `<deploy-root>/.claude/hooks/`.
+
+- **(1) The merge.** It carries the release's 13 changed paths to `main` (12 modified, 1 added), measured at the merge commit `20149aeb` against its first parent `bfdaab51`:
+  - the guard `core/hooks/block-destructive.sh` and the shared canonicalizer `core/hooks/lib/command-position.awk`;
+  - the hook's suite `core/hooks/tests/block-destructive.test.sh`, the fixtures README and the walk payload corpus;
+  - `core/rules/bypass-mode-readiness.md` and two of its fragments, `_cross-cutting.md` and `block-destructive.md`;
+  - three process-catalog pages under `core/process-catalog/engineering-harness/`, carried by the Phase A.5.8 repair;
+  - `release/references/how-to/hub-spoke-bridge.md` (DEV-9);
+  - this release's plan.
+- **(2) Phase B4 ran once.** It ran from the Stage-12 session worktree detached at `origin/main`, which is the merge commit (`merge-base --is-ancestor` exit 0).
+  - **Command:** `bash core/deploy/deploy.sh --deploy --release script-guard-reads-every-token-as-the-shell-does --no-targets`. It exited 0 and reported nothing to deploy beyond the rules mirror.
+  - **B4.5 record:**
+    - **Join key:** `script-guard-reads-every-token-as-the-shell-does`, derived from the PR's head ref, asserted non-empty and read back with 79 rows under it, none of them `deployment-status` before the deploy.
+    - **Targets:** none, so the run used `--no-targets`. The B4.3 derivation found no path of the merge under a skill root or `packages/`, so there was no candidate and no non-member. Sensitivity: planted `release/skills/release-hub/SKILL.md` and `packages/comms-writer.skill` paths derive both names.
+    - **Deploy mode:** the run printed no `Deploy mode: user-local only` line. With no target named, neither the skill half nor the package half ran.
+    - **Rules mirror:** re-laid by the deploy (9 files), unchanged in membership; the hook-registry index was regenerated from `core/rules/bypass-mode-readiness.md`.
+  - **Rows written:** under the slug, the run wrote its `deploy-rules-mirror` row, outcome `resolved` (`result:SUCCESS`). There is no `deploy-skill` and no `deploy-package` row, as `--no-targets` requires.
+- **(3) The hook bundle — manifest default (a) propagate, executed.** The merge edits `core/hooks/**`, which `deploy.sh --deploy` does not source, so the bundle was refreshed by the agent-runnable route, a full `./update.sh` from the same tree at the merge commit.
+  - **Dry run first:** `./update.sh --dry-run` exited 64 and planned the hook-bundle refresh (`would REFRESH: block-destructive.sh (00a5350f → 2b3cc112)`, every other hook unchanged, the co-shipped primitives re-copied) plus routine regenerations (the instance backup, 0 of 21 composition surfaces regenerated, the unstamped skill redeploy, the settings refresh at S-0, the version snapshot). Nothing else, so the real run proceeded.
+  - **Real run:** `./update.sh` exited 0 (`Update complete.`). Phase 5c: `REFRESHED: block-destructive.sh (00a5350f → 2b3cc112)` and `INSTALLED: command-position.awk`; no hook was declined (no exit 75); `Hook-library closure: PASS`; `Hook-bundle currency: PASS (24 hook(s) compared; 0 accounted for by a recorded decline)`. Phase 5d left the managed settings byte-identical. The unstamped skill redeploy found 55 of 55 roster skills current and wrote no `deployment-status` row, as an unstamped run must not.
+  - **Success Indicator, by content:** `cmp` of the deployed `block-destructive.sh` and `lib/command-position.awk` against `git show 20149aeb:core/hooks/…` exited 0 for both (sha256 prefixes `2b3cc1128645` and `df05958f12cd`). Controls: before the refresh the same two comparisons exited 1, and after it the pre-merge source of `block-destructive.sh` against the deployed copy exits 1.
+- **Nothing else is owed.** The merge changes no skill, no package, no `harness/` path and no composition-surface source, so no `.skill` rebuild and no surface refresh is owed.
+
+**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy); and the hook-bundle refresh through `./update.sh` Phase 5c (`setup-workspace.sh --refresh-hooks`).
+- **The merge.** PR #8993 merged to `main` at `20149aebe456223290d7363da642fe842334fcc3` (parents `bfdaab51` / `c63893d5`) by `gh pr merge --merge --match-head-commit`, with no `--admin`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit. The repository's `delete_branch_on_merge` setting removed the release branch from the remote.
+- **The pre-merge state, on head `c63893d5`.**
+  - **A.5:** three plain merges of `main` into the branch (`529b9a1f`, `3f0c8930`, `c63893d5`), never a rebase.
+  - **A.5.6:** the dry run read `v5.11` → FREE, after two pre-merge relabels on the branch: `9ccbbf09` (v5.08 → v5.10) and `cc7bb33f` (v5.10 → v5.11).
+  - **A.5.7:** the branch adds no ADR, so the sub-step did not fire.
+  - **A.5.8:** pass 1 made a repair (`486021de`); pass 2 at `c63893d5` read `process-catalog repair = not needed`.
+  - **A.6 and A.7:** `MERGEABLE` / `CLEAN`, and the PR was ready, not draft. **B0:** no dependent PR. All 60 checks on the head passed, and `main` had not moved from `bfdaab51`.
+- **Phase B1.1.** The sweep exited 1: this merge left one open PR newly unmergeable on three process-catalog pages both releases touch, and that release's hub owns the remedy (a merge of `main` into its branch). A second open PR was already unmergeable before this merge.
+- **Phase B1.2.** The three process-catalog checks on the merge commit's push run completed `success`, and the three commands exited 0 in a worktree at the merge commit, so `repair owed at B5: no`.
+- **The version claim.** `claim-version.sh` claimed **`v5.11`** for bump class `minor` by atomic ref-CAS, with no collision reported. That equals both dry runs: A.5.6 on the head, and the read on the merge commit immediately before the claim (one transient host error, retried once).
+  - `--stamp-slug`, derived from the PR's head ref, and `--stamp-branch` were passed explicitly, naming this branch, which was cut at the merge commit before the claim.
+  - The tag object `bdd93747` is signed and annotated and peels to the merge commit on `origin`. `git tag -v` reads a good ED25519 signature, and the host reads the tag `verified=true, reason=valid`.
+  - **Re-version ledger input:** claim sequence `v5.08 → v5.10 → v5.11`; the colliding siblings `deletion-guard-judges-every-segment-and-target@v5.08`, `release-usage-measured-right@v5.09` and `engineering-harness-pages-published@v5.10`.
+- **The claim-time stamp.** The manifest was plan-only, staling no package. The stamp commit `b499e135` (signed) renamed the plan to `release/releases/plans/v5/v5.11_RELEASE_PLAN.md` and resolved its placeholder, leaving none.
+- **The version-binding row (B3.1)** was appended to the event log under the slug, carrying `d:version-claim; claimed:v5.11; prov:v5.11`; the rows matching it went from 0 to 1. The event-record integrity cutover was already bound, so B3.2 was a no-op (`--assert-bound` exit 0).
+
+**Timestamp:** 2026-11-17 08:25 UTC (Tuesday). The `Date` cell is the merge event: the merge's `mergedAt`, `2026-11-17T08:25:28Z`. Sequence:
+- the re-read of the head, the check roster and `main` (`bfdaab51`) at `08:25:13Z`;
+- the merge at `08:25:28Z`;
+- the Phase B1.1 sweep and the Phase B1.2 read by `08:26:15Z`;
+- the claim between `08:29:23Z` and `08:30:40Z`, with the tag and the stamp commit;
+- the version-binding row at `08:32:14Z`;
+- the stamped deploy's row at `08:33:20Z`;
+- the hook-bundle refresh between `08:34:45Z` and `08:35:54Z`.
+
+The day of the week is computed from the date.
+**Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v5.11; 1 deployment-status row(s) exist for v5.11, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Result:** SUCCESS — the merge, the version claim, the plan stamp, the release-stamped rules-mirror deploy and the hook-bundle refresh are complete and read back, and the deployed guard and canonicalizer byte-equal the merged source.
 
 #### Deployment Log v5.10
 **Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy, and the plan's one Operational Deployment Manifest row are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. The manifest row, the script-execution allowlist, was propagated by the installer's hook-tier provisioning, which the operator ran after the merge. Paths are repository-relative.

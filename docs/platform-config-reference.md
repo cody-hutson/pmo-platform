@@ -218,6 +218,31 @@ The calibrated values of the release cost unit — weekly points of one account'
 
 **Unresolvable means UNRESOLVED.** A consumer that cannot resolve one of the seven numeric values here (both ends' cache-read weight and `K`, and the three price-relative weights) yields an unresolved figure that names the field — never zero and never a built-in constant, because a zero `K` divides by zero and a zero weight erases a token type from every figure. The calibration model and the per-model axis are optional by design: absent reads as "none named" / "none probed", which is their documented meaning, not a substituted value.
 
+### `[quality_share_band]`
+
+The band the standing quality initiative's share of shipped items is judged against, the rule that counts the share, and the window it is judged over. This is the **single home** for those values: `core/specs/label-taxonomy.md` declares the initiative standing and governed by this band and names this section by role, and the method that reads it is `release/references/standards/release-velocity-tracking.md` § 7b. Every Stage 13 close records a reading against it (`stage-13-close.md` Phase A14.2).
+
+| Field | What it tunes | Allowed values | Default | Calibration |
+|---|---|---|---|---|
+| `counted_label` | the label whose shipped items the band counts | a namespaced label (`prefix:value`) that exists on the repository | `"project:platform-quality"` | revisited at the re-set |
+| `scaffolding_label` | the label marking stage scaffolding, excluded from every count | a label name | `"sub-task"` | revisited at the re-set |
+| `bug_type_label` | the label typing an item as a bug, for the count reported beside the share | a label name | `"type:bug"` | revisited at the re-set |
+| `share_floor` | the lowest share inside the band | a decimal in `[0.0, 1.0]`, not above the ceiling | `0.15` | CALIBRATE-AFTER-3 |
+| `share_ceiling` | the highest share inside the band | a decimal in `[0.0, 1.0]`, not below the floor | `0.35` | CALIBRATE-AFTER-3 |
+| `window_releases` | how many closed releases the band is judged over, the closing release included | a positive integer | `5` | CALIBRATE-AFTER-3 |
+| `judged_on` | which aggregate the band is judged on; the other is printed beside it and triggers nothing | `pooled` · `mean-of-shares` | `"pooled"` | revisited at the re-set |
+| `values_set_at` | the release the current values took effect at | a release milestone slug | `"obligation-runners-declared"` | moved by each re-set |
+
+**An edge is inside the band.** A share exactly at the floor or the ceiling reads in band. The reading compares exact fractions, never its rounded display.
+
+**Unlabelled items stay in the denominator.** They are reported beside the share as their own count, together with bug-typed items carried under another initiative label, so the counted label's under-count stays visible.
+
+**The window follows merge order.** It is the closing release and the releases merged before it that carry a release-log row. A release merged before it whose row has not landed yet makes the reading `NOT-EVALUATED` instead of a shifted window.
+
+**Where you can set these: 2 rungs, not 5.** The global template (a governed Track A change), or your individual `~/.config/pmo-platform/platform-config.toml` (Track B) under a `[quality_share_band]` section header in that file. The reader is section-aware, so a value placed under `[overrides]` is not read. The record names the rung each value came from, so an individual override is never silent.
+
+**Unresolvable means NOT-EVALUATED.** A value absent at both rungs, or out of range, gives a `NOT-EVALUATED` reading naming the field — never a built-in band.
+
 ## 5. Consumer examples (how the platform reads these)
 
 The wired examples, enumerated rather than totalled — the list grows as fields are added, and a stated count goes stale on the day a release adds one:

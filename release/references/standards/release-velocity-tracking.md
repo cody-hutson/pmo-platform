@@ -157,6 +157,8 @@ Reference implementation: `release/tools/compute-release-velocity.sh`.
 ./compute-release-velocity.sh <version> --milestone <N> --merge-sha <SHA>   # the **Velocity:** field value
 ./compute-release-velocity.sh <version> --milestone <N> --json             # JSON of all signals
 ./compute-release-velocity.sh <version> --milestone <N> --cost-row --out-dir <dir>   # the per-release cost row (§ 7a)
+./compute-release-velocity.sh <version> --milestone <N> --quality-share        # the quality-share reading (§ 7b)
+./compute-release-velocity.sh <version> --quality-share --window-json <file>   # the same reading over a fixture window
 ./compute-release-velocity.sh --self-test                                  # validate logic, no network
 ```
 
@@ -250,6 +252,35 @@ The row is owed from its introducing release's own Stage 13 onward. Until the St
 | 4 convert | `convert-usage.sh`, reading `[cost_unit]` | the pairs `{at_w_low, at_w_high}` per cell and total, the values used, the calibration label | step 5 |
 | 5 write | the velocity tool | `<home>/release-cost/<slug>.json` and one summary line | the consumers in § 11 |
 
+## 7b. Quality-share reading
+
+A measurement separate from the `**Velocity:**` field, written by the same tool in its `--quality-share` mode: the standing quality initiative's share of the items a window of closed releases shipped, judged against its band. It is a separate mode, not a sixth sub-signal, and the field and its consumers are untouched by it.
+
+- **Where the numbers and the rule live.** The band's floor and ceiling, the window length, the aggregation it is judged on, the release the values were set at, and the counting rule's three labels are the `[quality_share_band]` section of the platform-config template. That section is their single home; this section names them by role and states none of them. A value the reading cannot resolve at either rung (the global template and the individual configuration), or one out of range, makes the reading `NOT-EVALUATED`, naming the field. No built-in value is substituted.
+- **The release set.**
+  - The closing release (`--milestone <N>`) is the row of `release/releases/RELEASE_LOG.md` whose Milestone cell is its title. It must carry exactly one merge SHA.
+  - The window is the closing release and the `window_releases − 1` other log rows whose merge SHA is on the closing merge's first-parent history, nearest first.
+  - On that history, from the closing merge back to the window's oldest member, every merge of a `release/<slug>` branch must be accounted for by a log row, by its merge SHA or by its pull-request number. Otherwise the reading is `NOT-EVALUATED`, naming the merge, never a window shifted past a release whose row has not landed. A release merged after the closing one is not on that history, so its row cannot enter the window.
+  - Too few rows, a missing or ambiguous closing row, a shallow clone or an absent merge commit are each `NOT-EVALUATED`.
+  - The table rows are read by their header names (`Milestone`, `Release PR`, `Merge SHA`), the rule the release-index projector follows. The release index is not read: its rows land at each release's close, after later releases may already have merged.
+- **Per release.** An item carrying the scaffolding label is not an item of the release. Any other item is shipped when it carries no terminal not-delivered status label — the delivery predicate of § 2, read through the same constant — and counted when it is shipped and carries the counted label. The counted label must be namespaced (`prefix:value`). A shipped item carrying no label in that namespace is unlabelled: it stays in the denominator and is reported as its own count. A shipped item carrying the bug-type label and another label in that namespace is reported beside the share as bug-typed under another initiative. A membership read that returns its own limit is refused as possibly truncated.
+- **Aggregates.**
+  - **Pooled** = counted ÷ shipped across the window.
+  - **Mean of shares** = the mean, over the releases that shipped at least one item, of each release's counted ÷ shipped.
+  - A release that shipped nothing contributes to neither, and its row reads `n/a`. If no release in the window shipped anything, the reading is `NOT-EVALUATED`.
+  - Both aggregates are always reported. The band is judged on the one `judged_on` names; the other triggers nothing.
+- **Judgment.** In exact rational arithmetic: `BELOW-FLOOR` below the floor, `ABOVE-CEILING` above the ceiling, `IN-BAND` otherwise, so a share exactly at either edge is inside the band. Displayed percentages round half-up at one decimal (§ 3.2). The verdict is never taken from the displayed figure.
+- **The record.** A `#### Quality-share record` heading and one fenced block: the verdict line (the judged aggregate, the band, the window, and that it is an advisory reading, not a close verdict); this release's line; the window line, which marks the judged aggregate; one line per release; the counting-rule line; the values line (the rung each value came from, the release they were set at, and how many releases have been measured against them toward the re-set); the source line (the log, the closing merge and the guard's counts) and the mechanism line. A `NOT-EVALUATED` record carries only its reason and the mechanism line. `--json` gives the same fields. Stage 13 Phase A14.2 writes the block into the release plan's Verification Evidence.
+- **The counted label must exist.** A counted label the repository does not carry makes the reading `NOT-EVALUATED`; a renamed label would otherwise read 0% as a below-floor finding.
+- **Offline input.** `--window-json <file>` supplies the window's memberships in place of the GitHub, log and git reads; the band's values still come from the configuration. The committed fixtures under `release/tools/tests/fixtures/quality-share/` are such files: one a step above the ceiling, one exactly at it.
+- **Exit codes (quality-share mode).** `0` — a reading, inside the band or not. `1` — invalid arguments. `3` — `NOT-EVALUATED`: the record is still printed and names the reason.
+- **Known bounds.**
+  - Prior releases are re-read from live labels, so relabelling a past item moves later readings; each record freezes its own per-release lines, so a later read can be compared with them.
+  - A release merged by squash, whose subject is not a branch merge, is not seen by the completeness guard.
+  - The reads of the clone (shallow, an absent commit), the membership reads and the label check run only live, so the self-test does not reach them.
+  - The live first-parent list reaches the quality-share step as one argument, so Linux's per-argument cap (`MAX_ARG_STRLEN`, 131,072 bytes) bounds it. Read on `main` at `d293361e`, the list was 106,502 bytes, 81.3% of the cap, and it grows about 470–524 bytes a release. A reading past the cap fails closed: exit 3, `NOT-EVALUATED` with the reason `the quality-share step window did not complete (no OK sentinel)`, which names no cause.
+- **Why this mode lives here.** The share must use this tool's label-based delivery predicate, because at Stage 13 a milestone's members are not reliably closed yet, and the mode split keeps the field path unchanged. A dedicated tool would duplicate that predicate, and a close-class telemetry indicator would measure what a release contained in an instrument that measures how it closed.
+
 ## 8. Boundary statement (release-pipeline velocity ≠ delivery-team capacity)
 
 RELEASE_LOG velocity (this instrument) measures the **release pipeline's own throughput** — how the platform builds itself: story points planned-vs-delivered per release, files changed, and the realized feature/debt/slack mix of a release bundle. It is **NOT** a managed-delivery-team capacity model.
@@ -291,6 +322,7 @@ This matches how the two sibling visible-H4 fields grandfathered (the cycle-time
 | The weekly-allowance axis of the quota budget | Reads a row's weekly points as measured draw per release, in the cost unit |
 | Release-class capacity calibration and bundle planning | Reads measured cost per planned point (the row's weekly points over its raw planned points) in place of an estimate |
 | The model-use policy record | Reads the rows' per-model split (`by_model`) as cost evidence for a model choice |
+| `release/references/pipeline/stage-13-close.md` Phase A14.2 | Capture surface for the quality-share reading (§ 7b) — the Stage 13 spoke writes the printed record into the release plan's Verification Evidence |
 
 ## 12. Parser-safety invariant
 
