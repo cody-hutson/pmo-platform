@@ -76,7 +76,9 @@
 #   - a launcher outside the set (`doas`, `setsid`, `caffeinate`, …): it is the command;
 #   - a describe-only option (`command -v`, `sudo -l`) or an attached split string that
 #     carries a command word (`env -Srm …`): the walk stops ON that token, which is then
-#     the command word, so nothing behind it is promoted;
+#     the command word, so nothing behind it is promoted. The split value is read as env
+#     reads it, after quote removal (cp_split_read); a value that reading cannot read keeps
+#     that stop (T1b, where the -022 walk walks on);
 #   - more than ten prefix-run tokens (MAX_PREFIX_SKIP): a guarded word behind the
 #     eleventh is not reached. A wrapper's own options and operands do not count toward
 #     the cap.
@@ -394,12 +396,98 @@ function cp_skip_one(hi) {
   if (cp_token(CP_I, hi)) CP_I = TK_E + 1
 }
 
+# The split value read as env reads it: the twin of -022's script_split_read, under the same
+# Rule M (T1), with three differences. No join: cp_token keeps a quoted span whole, so the value is
+# never a fragment. A value this reading cannot read keeps today's stop (T1b; -022 walks on there,
+# declared divergence D-2), because walking on past it would mark a command start before an
+# argument of a command the value may itself carry, a false positive for every consumer. And the
+# plain set is the explicit character list script_plain_word uses, so the answer does not move
+# with the locale. Sets CP_SV to "go" (the walk goes on past the split token, and CP_SV_ARG
+# following tokens are an option's arguments) or "old" (cp_split_scan's unchanged body decides).
+function cp_split_read(v, hi,   pre, d, st, k, vl, ch, nx, raw, words, nw, wl, w, i, j, q, c, lname, r, plain) {
+  CP_SV = "old"; CP_SV_ARG = 0
+  if (v !~ /['"\\$`\/=]/ && substr(v, 1, 2) != "--") return
+  r = "go"
+  pre = substr(CP_SV_TOK, 1, length(CP_SV_TOK) - length(v))
+  if (pre ~ /['"\\]/) r = "unread"
+  d = ""; st = 0; vl = length(v)
+  for (k = 1; r == "go" && k <= vl; k++) {
+    ch = substr(v, k, 1)
+    if (st == 1) { if (ch == "'") st = 0; else d = d ch; continue }
+    if (st == 2) {
+      if (ch == "\"") { st = 0; continue }
+      if (ch == "$" || ch == "`") { r = "unread"; break }
+      if (ch == "\\" && k < vl) {
+        nx = substr(v, k + 1, 1)
+        if (nx == "$" || nx == "`" || nx == "\"" || nx == "\\") { d = d nx; k++; continue }
+        if (nx == "\n") { k++; continue }
+      }
+      d = d ch
+      continue
+    }
+    if (ch == "'") { st = 1; continue }
+    if (ch == "\"") { st = 2; continue }
+    if (ch == "\\") {
+      if (k == vl) { r = "unread"; break }
+      k++; d = d substr(v, k, 1)
+      continue
+    }
+    if (ch == "$" || ch == "`" || ch == "{" || ch == "*" || ch == "?" || ch == "[" || ch == "~") { r = "unread"; break }
+    d = d ch
+  }
+  if (r == "go" && st != 0) r = "unread"
+  nw = 0
+  if (r == "go") {
+    plain = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_=+,.:/@%-"
+    wl = split(d, raw, /[ \t]+/)
+    for (i = 1; i <= wl; i++) {
+      if (raw[i] == "") continue
+      for (k = 1; k <= length(raw[i]); k++) {
+        if (index(plain, substr(raw[i], k, 1)) == 0) { r = "unread"; break }
+      }
+      if (r != "go") break
+      words[++nw] = raw[i]
+    }
+  }
+  i = 1; j = 0; q = "opt"
+  while (r == "go" && i <= nw) {
+    w = words[i]; i++
+    if (q == "opt") {
+      if (w == "--" || w == "-") { q = "arg"; continue }
+      if (substr(w, 1, 2) == "--") {
+        lname = cp_longname(w)
+        if (index(R_LSPLIT, " " lname " ") > 0) { r = "unread"; break }
+        if (index(w, "=") == 0 && index(R_LARG, " " lname " ") > 0) { if (i <= nw) i++; else j++ }
+        continue
+      }
+      if (substr(w, 1, 1) == "-" && length(w) > 1) {
+        wl = length(w)
+        for (k = 2; k <= wl; k++) {
+          c = substr(w, k, 1)
+          if (R_SPLIT != "" && index(R_SPLIT, c) > 0) { r = "unread"; break }
+          if (R_NOX != "" && index(R_NOX, c) > 0) { r = "unread"; break }
+          if (index(R_OPT, c "::") > 0) break
+          if (index(R_OPT, c ":") > 0) { if (k == wl) { if (i <= nw) i++; else j++ }; break }
+        }
+        continue
+      }
+      q = "arg"
+    }
+    if (index(w, "=") == 0) { r = "stop"; break }
+  }
+  if (r == "go") { CP_SV = "go"; CP_SV_ARG = j }
+}
+
 # An attached split-string value is the wrapper's own argv. Returns 1 when the value is
 # itself a command word (the command is inside the string: the walk stops on the split
 # token), 0 when it is only options, an assignment or empty (the walk goes on to the
 # command that follows; an option in it that takes a separate argument takes the next
-# token). A value holding a `/` is read as a command word.
+# token). This body is today's reading of the value AS WRITTEN (a value holding a `/` is read
+# as a command word); cp_split_read runs first (M-CP-SPLITREAD) and reads the value as env
+# receives it, and this body decides only where that reading defers to it.
 function cp_split_scan(v, hi,   c2, nm, p, n) {
+  cp_split_read(v, hi)   # M-CP-SPLITREAD
+  if (CP_SV == "go") { for (p = 0; p < CP_SV_ARG; p++) cp_skip_one(hi); return 0 }   # M-CP-SPLITREAD
   if (v == "") return 0
   if (index(v, "/") > 0) return 1
   if (substr(v, 1, 1) != "-") {
@@ -430,6 +518,7 @@ function cp_wrapper_walk(w, hi,   tok, ts, c, lname, p, n, e) {
   while (cp_token(CP_I, hi)) {
     ts = TK_S
     tok = substr(out, TK_S, TK_E - TK_S + 1)
+    CP_SV_TOK = tok
     if (tok == "--") { CP_I = TK_E + 1; break }
     if (substr(tok, 1, 2) == "--" && index(tok, "=") > 0) {
       lname = cp_longname(tok)

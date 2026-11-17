@@ -457,6 +457,9 @@ normalize_script_token() {
 #                                   relied on.
 #   complete=1, script_ws_exact=1   A whole word with no expansion in it.
 #                                   script_ws_out IS the word after quote removal.
+#   script_ws_lit=1 (beside complete=1) The word is literal: exact, or exact but for a
+#                                   backslash-free `$'...'` run, whose bytes script_ws_out
+#                                   then holds. A verb or wrapper word is read on it.
 #   complete=1, script_ws_exact=0   A whole word whose VALUE argv does not
 #                                   determine: it carries `$` or a backtick where
 #                                   the shell expands them, an unquoted brace,
@@ -499,10 +502,12 @@ script_word_scan() {
   local sq="'" dq='"' bs='\' ds='$' bt='`'
   script_ws_complete=0
   script_ws_exact=1
+  script_ws_lit=1
   script_ws_out=""
   if [ "${#t}" -gt 1024 ]; then
     script_ws_complete=1
     script_ws_exact=0
+    script_ws_lit=0
     return 0
   fi
   while [ -n "$t" ]; do
@@ -517,15 +522,18 @@ script_word_scan() {
             out="${out}${t:1:1}"; t="${t:2}"
             ;;
           "$ds")
+            # `$$` is the parameter of that name, so a pair is consumed whole: only the LAST
+            # dollar of an odd-length run can open `$'...'` or `$"..."`.
             script_ws_exact=0
             case "${t:1:1}" in
+              "$ds") script_ws_lit=0; t="${t:2}" ;;
               "$sq") st=3; t="${t:2}" ;;
-              "$dq") st=2; t="${t:2}" ;;
-              *) t="${t:1}" ;;
+              "$dq") script_ws_lit=0; st=2; t="${t:2}" ;;
+              *) script_ws_lit=0; t="${t:1}" ;;
             esac
             ;;
-          "$bt") script_ws_exact=0; t="${t:1}" ;;
-          '{'|'*'|'?'|'['|'~') script_ws_exact=0; out="${out}${c}"; t="${t:1}" ;;
+          "$bt") script_ws_exact=0; script_ws_lit=0; t="${t:1}" ;;
+          '{'|'*'|'?'|'['|'~') script_ws_exact=0; script_ws_lit=0; out="${out}${c}"; t="${t:1}" ;;
           *) out="${out}${c}"; t="${t:1}" ;;
         esac
         ;;
@@ -547,18 +555,22 @@ script_word_scan() {
             esac
             t="${t:2}"
             ;;
-          "$ds"|"$bt") script_ws_exact=0; t="${t:1}" ;;
+          "$ds"|"$bt") script_ws_exact=0; script_ws_lit=0; t="${t:1}" ;;
           *) out="${out}${c}"; t="${t:1}" ;;
         esac
         ;;
       3)
+        # $'...' is not decoded: script_ws_exact stays 0 for it. A run holding no backslash
+        # is literal text, so its bytes are kept and script_ws_lit stays 1; a backslash
+        # escape is not decoded, so it clears script_ws_lit.
         case "$c" in
           "$sq") st=0; t="${t:1}" ;;
           "$bs")
             if [ "${#t}" -lt 2 ]; then return 0; fi
+            script_ws_lit=0
             t="${t:2}"
             ;;
-          *) t="${t:1}" ;;
+          *) out="${out}${c}"; t="${t:1}" ;;
         esac
         ;;
     esac
@@ -589,7 +601,9 @@ script_word_scan() {
 #   advanced past, for the reason that was measured: the first piece of a quoted
 #   path that contains a space cannot be shown NOT to be the operand, and
 #   stepping off it adjudicates a later piece — the wrong subject. Arm
-#   F1-QTOK-RESIDUAL-space pins that.
+#   FWALK-QWORD-ctl-fragment-noexec pins that (mutant OPND-M5b). At the
+#   operand after the walk a fragment is joined to the word it is a piece of
+#   (script_word_join); it is still never stepped over.
 #   A TOKEN ANY VIEW PLACES IN THE ARM'S OPERAND DOMAIN keeps script_norm_ok=0 as
 #   well, so it reaches the operand branch exactly as it did. The probe and raw
 #   views are asked FIRST, and that order is what keeps this change monotone:
@@ -741,6 +755,266 @@ script_operand_domain_hit() {   # $1 = domain  $2 = subject
     exec)   case "$2" in *.sh|*.bash|*.py|*.pl|*.pm|*.rb|*.js|*.mjs|*.cjs) return 0 ;; esac ;;
   esac
   return 1
+}
+# THE OPERAND SUBJECT AFTER QUOTE REMOVAL — a third view, asked where the first two
+# claim nothing.
+#
+# WHAT THE FIRST TWO VIEWS MISS. script_operand_implicated asks the normalizer's
+# reading and the raw argv token. Neither is the word the shell passes when a quote
+# or a backslash sits INSIDE the token rather than around it. The normalizer reads a
+# token that does not open with a quote as carrying none, so `<dir>/x.s'h'` keeps its
+# inner quote after the trailing strip and is reported resolved, and its suffix
+# question is asked of a string the shell never passes. A token that opens a quote
+# and closes it inside the suffix, `'<dir>/x.s'h`, is declined, and its probe and its
+# raw spelling both miss the suffix. The shell reads both as `<dir>/x.sh`, and
+# script_word_scan already computes that word for the flag walk.
+#
+# THE ORDER IS THE INVARIANT TO CHECK ANY EDIT AGAINST. The first two views are asked
+# first and unchanged. When either places the token in the domain, their subject and
+# their resolved flag stand and the word is never read: a token they refuse as
+# unresolvable stays refused even when its word is an allowlisted script, so no
+# refused operand moves to allow. The word is read only where the first two claim
+# nothing, which is where nothing was adjudicated before — so it can only ADD an
+# adjudication. It is read when the normalizer declined the token, or when the token
+# carries a quote or a backslash anywhere past its first character; a token with
+# neither is read by the first two views exactly as the shell reads it, and pays
+# nothing new.
+#
+# WHAT THE WORD ANSWERS.
+#   a whole word with an exact value  its value is the subject, resolved, when it
+#                                     lands in the domain;
+#   a whole word of unknown value     its literal text is asked the domain, and a hit
+#                                     is unresolvable: refused inside the domain;
+#   a fragment                        no claim, except where the caller passes an
+#                                     index to join from (the post-walk operand only).
+# No dash-word step is taken here. Behind `--` and in an option's argument slot a word
+# whose value begins with `-` is the operand, not a flag; the flag walk alone reads
+# such a word as a flag.
+#
+# OUTPUT — GLOBALS, for the reason normalize_script_token gives. script_subj_out and
+# script_subj_ok are read by the caller's verdict router exactly as it read
+# script_norm_out and script_norm_ok. Reads the globals normalize_script_token set, so
+# it is asked directly after that call on the same token.
+script_operand_resolve() {   # $1 = domain  $2 = the token's index in script_tokens to join from, or empty
+  script_subj_out="$script_norm_out"
+  script_subj_ok="$script_norm_ok"
+  if script_operand_implicated "$1"; then return 0; fi   # M-OPND-FIRST (mutation target; pinned by OPND-M3b)
+  if [ "$script_norm_ok" -eq 1 ]; then
+    case "${script_norm_raw:1}" in
+      *[\'\"\\]*) ;;
+      *) return 1 ;;
+    esac
+  fi
+  script_word_scan "$script_norm_raw"
+  if [ "$script_ws_complete" -eq 1 ]; then
+    if script_word_subject "$1" "$script_ws_exact" "$script_ws_out" "$script_norm_raw"; then return 0; fi   # M-OPND-WORD (mutation target; pinned by OPND-M1b)
+    return 1
+  fi
+  if [ -z "$2" ]; then return 1; fi
+  script_word_join "$2"   # M-OPND-JOIN (mutation target; pinned by OPND-M2b)
+  # The join puts ONE space between pieces, because the split discarded the run it cut. A word
+  # whose pieces did not sit one space apart in the command (two spaces, a tab) is a different
+  # name, so it is read inexact: the allowlist never admits it under its one-space spelling.
+  if [ "$script_wj_complete" -eq 1 ]; then case "$script_seg" in *"$script_wj_raw"*) : ;; *) script_wj_exact=0 ;; esac; fi   # M-OPND-JOIN-GAP
+  if [ "$script_wj_complete" -eq 1 ]; then
+    if script_word_subject "$1" "$script_wj_exact" "$script_wj_out" "$script_wj_raw"; then return 0; fi
+    return 1
+  fi
+  # The join found no whole word inside the segment or inside the read limit. What it
+  # did read is asked the domain, and a hit is unresolvable: refused, never stepped past.
+  if script_operand_domain_hit "$1" "$script_wj_out"; then
+    script_subj_out="$script_wj_raw"
+    script_subj_ok=0
+    return 0
+  fi
+  # A join that stopped at the read limit never reached the word's end, so the word the shell
+  # passes is not known whatever its suffix: unresolvable, and refused.
+  if [ "$script_wj_limit" -eq 1 ]; then script_subj_out="$script_wj_raw"; script_subj_ok=0; return 0; fi   # M-OPND-JOIN-LIMIT
+  return 1
+}
+
+# One read of a word against one domain, for script_operand_resolve and
+# script_word_stepover. Sets the subject only on a hit.
+script_word_subject() {   # $1 = domain  $2 = exact (1|0)  $3 = the word's text  $4 = the raw text it was read from
+  if ! script_operand_domain_hit "$1" "$3"; then return 1; fi
+  if [ "$2" -eq 1 ]; then
+    script_subj_out="$3"
+    script_subj_ok=1
+  else
+    script_subj_out="$4"
+    script_subj_ok=0
+  fi
+  return 0
+}
+
+# THE FRAGMENT JOIN — the whitespace-bearing quoted path, at the post-walk operand only.
+#
+# WHY. The segment is split on whitespace before any token exists, so a quoted path
+# holding a space reaches the operand site as its first piece, `'<dir>/a`, which leaves
+# its quote open: a FRAGMENT. Nothing claimed it, and nothing was adjudicated. The join
+# reads the pieces after it, each behind one space, until the word the shell passes is
+# whole. It does not step over the fragment — this file's rule that a fragment is never
+# advanced past stands — it reconstructs the word the fragment is a piece of.
+#
+# WHERE, AND WHY ONLY THERE. At the post-walk operand a fragment ended adjudication with
+# nothing adjudicated, so a join there can only add a subject; and once that one operand
+# is adjudicated the segment is done, so the tokens the join read are consumed by nothing
+# else. In the `-c` loop every token keeps its own test — those tokens are words of a
+# program string, and a join there would replace their verdicts with one test of the
+# joined word — and at an option's argument the walk's index must move exactly as before.
+# Neither site joins.
+#
+# INCREMENTAL, AND BOUNDED BY THE READ LIMIT. The pieces are scanned once each, carrying
+# the quote state across them: re-reading the joined text from its start for every piece
+# appended would be superlinear in the joined length on this shell. The joined text is
+# bounded by script_word_scan's own 1,024-character limit; past it the join stops, reports
+# no whole word, and the caller refuses the word as unresolvable whatever it read.
+#
+# THE STATE MACHINE IS script_word_scan's, RULE FOR RULE: the same four quote states, the
+# same escapes, the same dollar-run rule and the same state-0 exactness test. It is
+# written out here rather than called, because that function starts every read in state 0
+# and keeps its state local, and it is lifted out of this file whole by the suite; changing
+# its signature would change what that lift reads. One difference is the join's own: a
+# backslash at the end of a piece escapes the space the join puts after it, as the shell's
+# does, so it is carried into the next piece instead of ending the read. Arm
+# OPND-JOIN-PARITY reads every fragment in the walk-payload corpus both ways and fails on a
+# difference.
+#
+# DECLARED PRECISION LIMIT. Each piece is joined behind ONE space, because the split has
+# already discarded the run it cut: a quoted path holding two spaces, or a tab, is rejoined
+# to a name that differs from the real one. The caller checks that the joined text occurs in
+# the command as written, and reads a word whose pieces sat further apart as inexact, so the
+# allowlist never admits it under its one-space spelling; it is refused when its suffix lands
+# in the domain — the safe direction.
+#
+# OUTPUT — GLOBALS: script_wj_complete (1 when the joined text is one whole word),
+# script_wj_exact, script_wj_out (the word, or what was read), script_wj_raw (the joined
+# argv text).
+script_word_join() {   # $1 = index in script_tokens of a token script_word_scan read as a fragment
+  local i="$1" n="${#script_tokens[@]}" t="" c="" out="" st=0 raw="" piece=""
+  local sq="'" dq='"' bs='\' ds='$' bt='`'
+  script_wj_complete=0
+  script_wj_limit=0
+  script_wj_exact=1
+  script_wj_out=""
+  script_wj_raw=""
+  while [ "$i" -lt "$n" ]; do
+    piece="${script_tokens[$i]}"
+    if [ -n "$raw" ]; then piece=" ${piece}"; fi
+    raw="${raw}${piece}"
+    if [ "${#raw}" -gt 1024 ]; then
+      script_wj_limit=1
+      script_wj_exact=0
+      script_wj_out="$out"
+      script_wj_raw="$raw"
+      return 0
+    fi
+    t="${t}${piece}"
+    while [ -n "$t" ]; do
+      c="${t:0:1}"
+      case "$st" in
+        0)
+          case "$c" in
+            "$sq") st=1; t="${t:1}" ;;
+            "$dq") st=2; t="${t:1}" ;;
+            "$bs")
+              if [ "${#t}" -lt 2 ]; then break; fi
+              out="${out}${t:1:1}"; t="${t:2}"
+              ;;
+            "$ds")
+              script_wj_exact=0
+              case "${t:1:1}" in
+                "$ds") t="${t:2}" ;;
+                "$sq") st=3; t="${t:2}" ;;
+                "$dq") st=2; t="${t:2}" ;;
+                *) t="${t:1}" ;;
+              esac
+              ;;
+            "$bt") script_wj_exact=0; t="${t:1}" ;;
+            '{'|'*'|'?'|'['|'~') script_wj_exact=0; out="${out}${c}"; t="${t:1}" ;;
+            *) out="${out}${c}"; t="${t:1}" ;;
+          esac
+          ;;
+        1)
+          case "$c" in
+            "$sq") st=0 ;;
+            *) out="${out}${c}" ;;
+          esac
+          t="${t:1}"
+          ;;
+        2)
+          case "$c" in
+            "$dq") st=0; t="${t:1}" ;;
+            "$bs")
+              if [ "${#t}" -lt 2 ]; then break; fi
+              case "${t:1:1}" in
+                "$ds"|"$bt"|"$dq"|"$bs") out="${out}${t:1:1}" ;;
+                *) out="${out}${bs}${t:1:1}" ;;
+              esac
+              t="${t:2}"
+              ;;
+            "$ds"|"$bt") script_wj_exact=0; t="${t:1}" ;;
+            *) out="${out}${c}"; t="${t:1}" ;;
+          esac
+          ;;
+        3)
+          # as script_word_scan: a $'...' run's bytes are kept (the word stays inexact)
+          case "$c" in
+            "$sq") st=0; t="${t:1}" ;;
+            "$bs")
+              if [ "${#t}" -lt 2 ]; then break; fi
+              t="${t:2}"
+              ;;
+            *) out="${out}${c}"; t="${t:1}" ;;
+          esac
+          ;;
+      esac
+    done
+    if [ "$st" -eq 0 ] && [ -z "$t" ]; then
+      script_wj_complete=1
+      script_wj_out="$out"
+      script_wj_raw="$raw"
+      return 0
+    fi
+    i=$(( i + 1 ))
+  done
+  script_wj_out="$out"
+  script_wj_raw="$raw"
+}
+
+# A TOKEN THE FLAG WALK STEPS OVER IS STILL ADJUDICATED WHEN ITS WORD IS AN OPERAND.
+#
+# Two places in the walk step over a token without adjudicating it: the conservative
+# route, which hands a token the walk cannot read to the `-c` label (and that label steps
+# over it), and the advance-past arm, which steps over a token no view places in the
+# domain. Each asked the first two views only. A token whose quote or backslash sits
+# inside it — `<dir>/x.'sh'`, `<dir>/x.s\h` — is not plain, so under an interpreter it
+# takes the route and is stepped over; under `source`, which has no route, the
+# advance-past arm steps over it. Either way the script the shell runs was never read.
+#
+# THE FIX ADJUDICATES THE TOKEN AND MOVES NOTHING, the way script_adjudicate_optarg
+# adjudicates a consumed argument. The walk still routes and still advances exactly as
+# before, so every token adjudicated before is adjudicated still, no parse-only grant
+# changes, and the token is adjudicated as well. Monotone ALLOW -> BLOCK by construction.
+# Read here: a whole word whose value does not begin with `-` (a word that begins with `-`
+# spells a flag, as its unquoted twin does). A fragment is not read here; the post-walk
+# operand is the one place a fragment is joined.
+script_word_stepover() {   # $1 = the raw argv token the walk is stepping over
+  local tok="$1"
+  case "${tok:1}" in
+    *[\'\"\\]*) ;;
+    *) return 0 ;;
+  esac
+  script_word_scan "$tok"
+  if [ "$script_ws_complete" -eq 0 ]; then return 0; fi
+  case "$script_ws_out" in -*) return 0 ;; esac
+  if ! script_word_subject "$script_interp_domain" "$script_ws_exact" "$script_ws_out" "$tok"; then return 0; fi
+  if [ "$script_interp_domain" = "interp" ] || [ "$script_interp_domain" = "source" ]; then
+    script_shell_verdict "$script_subj_out" "$script_subj_ok"
+  else
+    destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
+  fi
+  return 0
 }
 
 # THE EXEC ARM'S SYSTEM-BIN EXEMPTION SET. One definition, asked twice below —
@@ -920,8 +1194,8 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # reading to a token whose quote it could not resolve. Such a token is not an
 # option word, so the option run ends on it; and it carries no character outside
 # the set, so it is not handed to the conservative route — it ends the walk in
-# the arm that has always ended on it, and arm F1-QTOK-RESIDUAL-space keeps
-# pinning that. A quoted empty argument (`--rcfile ""`) is one word whose text
+# the arm that has always ended on it, and arm FWALK-QWORD-ctl-fragment-noexec
+# keeps pinning that. A quoted empty argument (`--rcfile ""`) is one word whose text
 # this hook holds, and reads as exact for the same reason.
 #
 # `~` IS OUTSIDE THE SET ALTHOUGH A LEADING TILDE IS ALWAYS ONE WORD. The set is
@@ -1105,6 +1379,9 @@ script_interp_optarg_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # token it cannot read. Two definitions of one rewrite are two places to get the
 # domain-claim guard wrong.
 script_take_cmode_route() {   # reads script_ftok and the last read's globals; sets script_ftok
+  # The token the route is about to step over is read as a word first, and adjudicated
+  # if that word is an operand (script_word_stepover); the route itself is unchanged.
+  case "$script_ftok" in -*) ;; *) if ! script_operand_implicated "$script_interp_domain"; then script_word_stepover "$script_ftok"; fi ;; esac   # M-OPND-ROUTE (mutation target; pinned by OPND-M4b)
   case "$script_ftok" in
     -*) script_ftok="-c" ;;
     *) if ! script_operand_implicated "$script_interp_domain"; then script_ftok="-c"; fi ;;
@@ -1324,12 +1601,13 @@ script_wrapper_longname() {   # $1 = a token that begins with `--`
 # value is an option run, consume any following argv token an arg-taking option takes
 # as its separate argument, reading the row's own arity (script_wopt) the way the
 # cluster loop does, so `env --s=-u <ok> <na>` adjudicates <na> and not <ok>. The hook
-# tokenizes on whitespace, so the value is one word. A value holding a `/` is read as a
-# command word: a path is the command, and an option carrying a path keeps the verdict
-# it had before this helper (a declared residual, readiness item 2).
+# tokenizes on whitespace, so the value is one word. This body is today's reading of the value
+# AS WRITTEN; script_split_read runs first (M-WRAP-SPLITREAD) and reads the value as env
+# receives it, and this body decides only where that reading defers to it under Rule M.
 script_split_scan() {   # $1 = the attached split value
   local _v="$1" _c2="" _n="${#script_tokens[@]}"
   script_wsplit_cmd=0   # M-WRAP-SPLITCMD
+  script_split_read "$_v" "${2:-}"; case "$script_sv" in go|walk|cmd) return 0 ;; esac   # M-WRAP-SPLITREAD
   case "$_v" in
     "")   return 0 ;;
     */*)  script_wsplit_cmd=1; return 0 ;;
@@ -1351,6 +1629,310 @@ script_split_scan() {   # $1 = the attached split value
   return 0
 }
 
+# ENV'S SPLIT-STRING VALUE, READ AS ENV READS IT (Rule M). script_split_scan decides on the
+# value AS WRITTEN: a value holding a `/` stops the walk before any other test, a quote-led value
+# falls to the final arm and is read as a command word, and a dash-led value is walked letter by
+# letter, so a quote inside it reads as a flag letter and can hide an option's need for the
+# following token. This reading runs first and decides on the value env receives:
+#   1. Prefix guard: the split token's own text before the value carrying a quote or a backslash
+#      gives "unread" (a quoted option name is the quoted-wrapper class, not this one).
+#   2. Decode, only when the value carries a quoting character, `$` or a backtick: the word reader
+#      gives the value after quote removal. A value that leaves a quote open is read, under J0,
+#      from this one piece with its open quote closed, and the later pieces walk as ordinary
+#      tokens. Inexact (an expansion, or the read limit) gives "unread".
+#   3. Plain check: every decoded word must be in script_plain_word's set, or "unread".
+#   4. Classify in env's order: options first (`--` and a lone `-` end them; a long name by the
+#      row's own table, taking the next word or, when the value is exhausted, the following
+#      token; a cluster letter by letter against script_wopt; a nested split option, or a
+#      describe-only letter, gives "unread"), then assignments by env's grammar (any word holding
+#      `=`), and the first other word is the value's own command word: "stop". Words run out: go.
+# RULE M — THE STOP SET MAY ONLY SHRINK. OLD is today's answer, computed here as a pure predicate.
+#   go                          the walk goes on past the split token, consuming what the
+#                               options took from the following tokens
+#   stop or unread, OLD walks   today decides (M-WRAP-SPLITMONO)
+#   unread, OLD stops, no slash the walk goes on, consuming nothing (toward adjudication; the
+#                               declared cost PC-SV1: an unreadable value that carries a command
+#                               of its own has that command's arguments read as the next words)
+#   anything else               today decides
+# It never assigns script_wsplit_cmd=1, so it can only let the walk go on (SPLITV-STRUCT-01).
+script_split_read() {   # $1 = the attached split value  $2 = the split token -> script_sv
+  local _v="$1" _tok="${2:-}" _pre="" _d="" _w="" _old="" _r="go" _j=0 _ph="opt" _c="" _rest=""
+  local _i=0 _nw=0 _n="${#script_tokens[@]}"
+  local -a _words
+  script_sv="old"
+  # A value with no quoting character, no `$`, no backtick, no slash, no `=`, and not led by
+  # `--` reads the same both ways; the timing shapes take this path.
+  case "$_v" in
+    *"'"*|*'"'*|*\\*|*'$'*|*'`'*|*/*|*=*|--*) : ;;
+    *) return 0 ;;
+  esac
+  case "$_v" in
+    "")   _old="walk" ;;
+    */*)  _old="slash" ;;
+    -*)   _old="walk" ;;
+    *=*)  case "${_v%%=*}" in ''|*[!A-Za-z0-9_]*) _old="stop" ;; *) _old="walk" ;; esac ;;
+    *)    _old="stop" ;;
+  esac
+  _pre="${_tok%"$_v"}"
+  case "$_pre" in
+    *"'"*|*'"'*|*\\*) _r="unread" ;;
+  esac
+  if [ "$_r" = "go" ]; then
+    case "$_v" in
+      *"'"*|*'"'*|*\\*|*'$'*|*'`'*)
+        script_word_scan "$_v"
+        if [ "$script_ws_complete" -eq 0 ]; then
+          script_word_scan "${_v}'"
+          if [ "$script_ws_complete" -eq 0 ]; then script_word_scan "${_v}\""; fi
+        fi
+        if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_exact" -eq 1 ]; then
+          _d="$script_ws_out"
+        else
+          _r="unread"
+        fi
+        ;;
+      *) _d="$_v" ;;
+    esac
+  fi
+  if [ "$_r" = "go" ]; then
+    set -f
+    # shellcheck disable=SC2206
+    _words=( $_d )
+    set +f
+    _nw="${#_words[@]}"
+    while [ "$_i" -lt "$_nw" ]; do
+      if ! script_plain_word "${_words[$_i]}"; then _r="unread"; break; fi
+      _i=$(( _i + 1 ))
+    done
+  fi
+  if [ "$_r" = "go" ]; then
+    _i=0
+    while [ "$_i" -lt "$_nw" ]; do
+      _w="${_words[$_i]}"
+      _i=$(( _i + 1 ))
+      if [ "$_ph" = "opt" ]; then
+        case "$_w" in
+          --|-)
+            _ph="arg"
+            continue
+            ;;
+          --*)
+            script_wrapper_longname "$_w"
+            case "$script_wlsplit" in
+              *" $script_wlname "*) _r="unread"; break ;;
+            esac
+            case "$_w" in
+              *=*) : ;;
+              *)
+                case "$script_wlarg" in
+                  *" $script_wlname "*)
+                    if [ "$_i" -lt "$_nw" ]; then _i=$(( _i + 1 )); else _j=$(( _j + 1 )); fi
+                    ;;
+                esac
+                ;;
+            esac
+            continue
+            ;;
+          -?*)
+            _rest="${_w#-}"
+            while [ -n "$_rest" ]; do
+              _c="${_rest:0:1}"
+              _rest="${_rest:1}"
+              case "$script_wsplit" in *"$_c"*) _r="unread"; break 2 ;; esac
+              case "$script_wnox" in *"$_c"*) _r="unread"; break 2 ;; esac
+              case "$script_wopt" in
+                *"${_c}::"*) _rest="" ;;
+                *"${_c}:"*)
+                  if [ -z "$_rest" ]; then
+                    if [ "$_i" -lt "$_nw" ]; then _i=$(( _i + 1 )); else _j=$(( _j + 1 )); fi
+                  fi
+                  _rest=""
+                  ;;
+              esac
+            done
+            continue
+            ;;
+        esac
+        _ph="arg"
+      fi
+      case "$_w" in
+        *=*) : ;;
+        *) _r="stop"; break ;;
+      esac
+    done
+  fi
+  if [ "$_r" = "go" ]; then
+    while [ "$_j" -gt 0 ] && [ "$script_hidx" -lt "$_n" ]; do
+      script_hidx=$(( script_hidx + 1 ))
+      _j=$(( _j - 1 ))
+    done
+    script_sv="go"
+    return 0
+  fi
+  if [ "$_old" = "walk" ]; then script_sv=old; return 0; fi   # M-WRAP-SPLITMONO
+  if [ "$_r" = "unread" ] && [ "$_old" = "stop" ]; then script_sv="walk"; fi
+  return 0
+}
+
+# R0 — TODAY'S READING FIRST AND UNCHANGED. A token the walk newly steps past, or newly reads by
+# its value after quote removal, is one today's walk ends on and adjudicates nothing. These two
+# helpers are that test. A token is verbish when any reading of it names an interpreter or
+# `source`: its raw basename, its normalized basename when that resolves, or its literal word's
+# basename. It is inert when it is not verbish and stepping it could not pre-empt the exec arm:
+# not an exec candidate (a slash-bearing normalized text) whose operand domain the exec arm
+# implicates (the review's FM-2 gate, exactly the condition under which that arm records).
+script_reach_verbish() {   # $1 = token -> 0 when any reading of it names a verb
+  local _b="" _c="${1##*/}"
+  normalize_script_token "$1"
+  if [ "$script_norm_ok" -eq 1 ]; then _c="${_c}"$'\n'"${script_norm_out##*/}"; fi
+  case "$1" in
+    *"'"*|*'"'*|*\\*)
+      script_word_scan "$1"
+      if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_lit" -eq 1 ]; then _c="${_c}"$'\n'"${script_ws_out##*/}"; fi
+      ;;
+  esac
+  while IFS= read -r _b; do
+    case "$_b" in
+      bash|sh|zsh|python|python3|perl|ruby|node) return 0 ;;
+      source|.) return 0 ;;
+    esac
+  done <<< "$_c"
+  return 1
+}
+
+script_reach_inert() {   # $1 = token -> 0 when stepping it removes no adjudication
+  if script_reach_verbish "$1"; then return 1; fi
+  normalize_script_token "$1"
+  case "$script_norm_out" in
+    */*) if script_operand_implicated "exec"; then return 1; fi ;;
+  esac
+  return 0
+}
+
+# THE CASE LEAD-IN AND THE COPROC NAME. After `case`, the subject, `in`, an optional `(` and the
+# first pattern up to its closing `)` are not command words: the first arm's command follows the
+# closer. Stepping them stops at the segment's end, so a pattern the separator split cut is left
+# to the later-arm closer step. After `coproc`, a shell name directly followed by `{` names the
+# coprocess and is not its command.
+script_case_leadin() {
+  local _n="${#script_tokens[@]}" _t=""
+  while [ "$script_hidx" -lt "$_n" ]; do
+    _t="${script_tokens[$script_hidx]}"
+    script_hidx=$(( script_hidx + 1 ))
+    if [ "$_t" = "in" ]; then break; fi
+  done
+  if [ "$script_hidx" -lt "$_n" ] && [ "${script_tokens[$script_hidx]}" = "(" ]; then script_hidx=$(( script_hidx + 1 )); fi
+  while [ "$script_hidx" -lt "$_n" ]; do
+    _t="${script_tokens[$script_hidx]}"
+    script_hidx=$(( script_hidx + 1 ))
+    case "$_t" in
+      *'\)') : ;;
+      *')') break ;;
+    esac
+  done
+  return 0
+}
+
+script_coproc_name() {
+  local _n="${#script_tokens[@]}"
+  if [ $(( script_hidx + 1 )) -lt "$_n" ] && [ "${script_tokens[$(( script_hidx + 1 ))]}" = "{" ]; then
+    case "${script_tokens[$script_hidx]}" in
+      [A-Za-z_]*) case "${script_tokens[$script_hidx]}" in *[!A-Za-z0-9_]*) : ;; *) script_hidx=$(( script_hidx + 1 )) ;; esac ;;
+    esac
+  fi
+  return 0
+}
+
+# A REDIRECTION TOKEN (C1): an output or input operator, a leading descriptor or `{name}`
+# allowed, attached to its word or alone. A here-document operator and a process
+# substitution are not this step's: the pre-pass owns the first, and the second opens a
+# command the enclosure view reads.
+script_reach_c1() {   # $1 = token -> 0 when it is a redirection the reach step may step
+  local _t="$1"
+  case "$_t" in
+    '{'[A-Za-z_]*'}'*) _t="${_t#*\}}" ;;
+    [0-9]*) _t="${_t#"${_t%%[!0-9]*}"}" ;;
+  esac
+  case "$_t" in
+    '<<<'*) return 0 ;;
+    '<<'*|'<('*|'>('*) return 1 ;;
+    '>'*|'<'*|'&>'*) return 0 ;;
+  esac
+  return 1
+}
+
+# THE REACH STEP (R0). Asked where the prefix walk ends, on the token it ended on, and inside
+# a wrapper's own grammar (the review's CD-2). It steps a token only where today's walk would
+# end on it and adjudicate nothing: a redirection that is not verbish, with its word, or the
+# word an operator the separator split cut owes this segment (the one-segment carry). An input
+# word ahead of an interpreter is kept: it is that interpreter's program (the review's CD-1),
+# adjudicated by the M-REACH-STDIN block as the -c loop adjudicates a program string.
+script_reach_step() {   # -> 0 when it stepped at least one token at script_hidx
+  local _tok="" _t="" _op="" _w="" _k=0
+  if [ "$script_hidx" -ge "${#script_tokens[@]}" ]; then return 1; fi
+  _tok="${script_tokens[$script_hidx]}"
+  if [ "$script_hidx" -eq 0 ] && [ "${script_rdr_carry:-0}" -eq 1 ] && [ "$script_pass" -eq 1 ] && [ "$script_segstart" -eq 0 ] && ! script_reach_verbish "$_tok"; then script_rdr_carry=0; script_hidx=1; return 0; fi   # M-REACH-CARRY
+  script_rdr_carry=0
+  # a later case arm: at the segment's start, in a command that opened a case, a pattern's closer
+  # that stepping removes no adjudication from (the review's FM-2 gate)
+  if [ "$script_hidx" -eq 0 ] && [ "${script_incase_cur:-0}" -eq 1 ]; then
+    case "$_tok" in
+      *'\)') : ;;
+      *')') if script_reach_inert "$_tok"; then script_hidx=1; return 0; fi ;;
+    esac
+  fi
+  if ! script_reach_c1 "$_tok"; then return 1; fi
+  if script_reach_verbish "$_tok"; then return 1; fi
+  _t="$_tok"
+  case "$_t" in
+    '{'[A-Za-z_]*'}'*) _t="${_t#*\}}" ;;
+    [0-9]*) _t="${_t#"${_t%%[!0-9]*}"}" ;;
+  esac
+  case "$_t" in
+    '<<<'*) _op='<<<' ;;
+    '<>'*)  _op='<>' ;;
+    '&>>'*) _op='&>>' ;;
+    '&>'*)  _op='&>' ;;
+    '>>'*)  _op='>>' ;;
+    '>|'*)  _op='>|' ;;
+    '>&'*)  _op='>&' ;;
+    '<&'*)  _op='<&' ;;
+    '>'*)   _op='>' ;;
+    *)      _op='<' ;;
+  esac
+  _w="${_t#"$_op"}"
+  script_hidx=$(( script_hidx + 1 ))
+  if [ -z "$_w" ]; then
+    if [ "$script_hidx" -lt "${#script_tokens[@]}" ]; then
+      _w="${script_tokens[$script_hidx]}"
+      script_hidx=$(( script_hidx + 1 ))
+    elif [ "$script_pass" -eq 1 ]; then
+      script_rdr_owed=1
+    fi
+  fi
+  # a word whose quote spans whitespace is read to its close, bounded, so the walk resumes
+  # at the shell's next word
+  if [ -n "$_w" ]; then
+    script_word_scan "$_w"
+    while [ "$script_ws_complete" -eq 0 ] && [ "$script_hidx" -lt "${#script_tokens[@]}" ] && [ "$_k" -lt 64 ]; do
+      _w="${_w} ${script_tokens[$script_hidx]}"
+      script_hidx=$(( script_hidx + 1 ))
+      _k=$(( _k + 1 ))
+      script_word_scan "$_w"
+    done
+  fi
+  case "$_tok" in
+    [1-9]*|'{'*) : ;;
+    *)
+      case "$_op" in
+        '<'|'<>') script_rdr_in="$_w"; script_rdr_hs=0 ;;
+        '<<<')    script_rdr_in="$_w"; script_rdr_hs=1 ;;
+      esac
+      ;;
+  esac
+  return 0
+}
+
 # Step script_hidx over ONE wrapper's own option run and positional operands.
 # Entered with script_hidx on the token after the wrapper word and script_wrap
 # holding the wrapper's basename; leaves script_hidx on the first token that is
@@ -1358,10 +1940,30 @@ script_split_scan() {   # $1 = the attached split value
 # option was seen. It steps and never adjudicates: see FAILURE DIRECTION above.
 script_wrapper_options() {
   local _tok="" _rest="" _c="" _n="${#script_tokens[@]}"
+  local _wq=0
   script_wrapper_row "$script_wrap"
   if [ "$script_wrow" -eq 0 ]; then return 0; fi
   while [ "$script_hidx" -lt "$_n" ]; do
     _tok="${script_tokens[$script_hidx]}"
+    # A quoted option is read by its value (R0): only a token not led by `-` that holds a quote
+    # or a backslash, under a row whose operands are none, or assignments with no `=` here, and
+    # only when it is inert and its literal value is led by `-`. The cluster and long-option
+    # arms below then move script_hidx exactly as for the unquoted spelling.
+    case "$_tok" in
+      -*) : ;;
+      *"'"*|*'"'*|*\\*)
+        _wq=0
+        case "$script_wpos" in
+          none) _wq=1 ;;
+          assign) case "$_tok" in *=*) : ;; *) _wq=1 ;; esac ;;
+        esac
+        if [ "$_wq" -eq 1 ] && script_reach_inert "$_tok"; then
+          script_word_scan "$_tok"
+          if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_lit" -eq 1 ] && [ "${script_ws_out:0:1}" = "-" ]; then _tok="$script_ws_out"; fi
+        fi
+        ;;
+    esac   # M-REACH-WOPT
+    if script_reach_c1 "$_tok" && ! script_reach_verbish "$_tok"; then script_reach_step || :; continue; fi   # M-REACH-WOPT-RDR
     case "$_tok" in
       --)
         script_hidx=$(( script_hidx + 1 ))
@@ -1371,7 +1973,7 @@ script_wrapper_options() {
         script_wrapper_longname "$_tok"
         case "$script_wlsplit" in
           *" $script_wlname "*)
-            script_split_scan "${_tok#*=}"
+            script_split_scan "${_tok#*=}" "$_tok"
             if [ "$script_wsplit_cmd" -eq 1 ]; then return 0; fi
             ;;
         esac
@@ -1399,7 +2001,7 @@ script_wrapper_options() {
           case "$script_wsplit" in
             *"$_c"*)
               if [ -n "$_rest" ]; then
-                script_split_scan "$_rest"
+                script_split_scan "$_rest" "$_tok"
                 if [ "$script_wsplit_cmd" -eq 1 ]; then script_hidx=$(( script_hidx - 1 )); return 0; fi
                 _rest=""
               fi
@@ -1431,6 +2033,7 @@ script_wrapper_options() {
           -*) break ;;
           *=*)
             script_hidx=$(( script_hidx + 1 ))
+            script_assign_value_rest "$_tok"   # M-WRAP-QVAL
             ;;
           *) break ;;
         esac
@@ -1807,11 +2410,13 @@ destructive_022_interp_verdict() {   # $1 = path  $2 = resolved
 # Verdict router for the always-enforce shell and source arms. First view: the shipped
 # call, unchanged — a pass-through to check_script_target, which arm AC-ENCL-P5
 # asserts. Second view (a command position behind a substitution or group opener):
-# the enclosure family's rollout phase. An unrecognised phase value falls through to
-# enforce, the direction the other two routers take.
-script_shell_verdict() {   # $1 = path  $2 = resolved
+# the enclosure family's rollout phase. A caller that knows its finding sits inside an
+# enclosure the first view did not cut passes 1 as $3, and takes that phase too. An
+# unrecognised phase value falls through to enforce, the direction the other two
+# routers take.
+script_shell_verdict() {   # $1 = path  $2 = resolved  $3 = 1 at an enclosure position
   local path="$1" resolved="${2:-1}"
-  if [ "${script_pass:-1}" -ne 2 ]; then   # M-ENCL-ROUTE
+  if [ "${script_pass:-1}" -ne 2 ] && [ "${3:-0}" -ne 1 ]; then   # M-ENCL-ROUTE
     check_script_target "$path" "$resolved"
     return 0
   fi
@@ -1900,11 +2505,13 @@ script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argum
   # and no parse-only exemption applies. Both call sites of this function sit
   # behind the walk's interpreter test, so it is never reached under `source`.
   if ! script_arg_exact; then script_cmode=1; fi   # M-OPAQUE-ARG (mutation target; pinned by FWALK-OPAQUE-M3a)
-  if script_operand_implicated "$script_interp_domain"; then
+  # The argument is also read as the word the shell passes where the first two views
+  # claim nothing — no join, so the walk's index moves exactly as before.
+  if script_operand_resolve "$script_interp_domain" ""; then
     if [ "$script_interp_domain" = "interp" ]; then
-      script_shell_verdict "$script_norm_out" "$script_norm_ok"
+      script_shell_verdict "$script_subj_out" "$script_subj_ok"
     else
-      destructive_022_interp_verdict "$script_norm_out" "$script_norm_ok"
+      destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
     fi
   fi
 }
@@ -1950,6 +2557,11 @@ script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argum
 # searched in the same pass and wins by position, so it consumes the character
 # after it before the taint test is ever reached. '...' and $'...' perform no
 # expansion at all, so neither can be tainted.
+#
+# The carried state is trusted only where these four states follow the text. A
+# comment, or a quote nested inside a substitution or an expansion, is a construct
+# they do not follow; the trust boundary below (SCRIPT_QMODEL_AWK) latches the bail
+# for a command that holds one, so no fragment of it is suppressed.
 # --------------------------------------------------------------------------
 
 # Index of the earliest occurrence in $script_qt of any character in "$@".
@@ -1993,7 +2605,7 @@ script_qnext() {
 # work count and bail; a shorter one, or one whose pass fails, by the loop below.
 script_qadvance() {
   script_qt="$1"
-  local _pre
+  local _pre _nd
   if [ "${#1}" -ge "$SCRIPT_LINEAR_MIN" ] && script_qadvance_linear "$1"; then return 0; fi
   while [ -n "$script_qt" ]; do
     if [ "$script_qwork" -ge 1000 ]; then
@@ -2043,11 +2655,22 @@ script_qadvance() {
         script_qt="${script_qt:1}"
       elif [ "$script_qc" = "$script_q1" ]; then
         # A `'` directly preceded by `$` opens ANSI-C quoting, not a plain single
-        # quote. `\$'` cannot reach here: the backslash is earlier in the same
-        # search and consumes the `$` first.
+        # quote — but only when the run of `$` ahead of it has odd length: `$$` is the
+        # parameter of that name, so `$$'` is that parameter and then a plain quote.
+        # `\$'` cannot reach here: the backslash is earlier in the same search and
+        # consumes the `$` first, so an escaped dollar is never counted in the run.
         script_qstate=1
         case "$_pre" in
-          *"$script_qd") script_qstate=3 ;;
+          *"$script_qd")
+            _nd=0
+            while :; do
+              case "$_pre" in
+                *"$script_qd") _pre="${_pre%"$script_qd"}"; _nd=$(( _nd + 1 )) ;;
+                *) break ;;
+              esac
+            done
+            if [ $(( _nd % 2 )) -eq 1 ]; then script_qstate=3; fi   # M-QDOLLAR
+            ;;
         esac
       else
         script_qstate=2
@@ -2071,8 +2694,9 @@ script_qadvance() {
 # The program: tok[1], tok[3], … are runs of text (possibly empty) and tok[2],
 # tok[4], … one searched character each; i is the run the scan is in, p the next
 # byte it has not read. clen is the length of the character a run opens with, in
-# bytes. A `'` opens $'…' when a `$` ahead of it, with nothing between, is still
-# unread — the test the loop makes of the text before the quote.
+# bytes. A `'` opens $'…' when the run of `$` ahead of it — each still unread, with
+# nothing between them or before the quote — has odd length, the count the loop makes of
+# the text before the quote.
 readonly SCRIPT_QADVANCE_AWK='
     function clen(t,   b, n, j, c) {
       b = ord[substr(t, 1, 1)]
@@ -2109,7 +2733,7 @@ readonly SCRIPT_QADVANCE_AWK='
           else if (i + 1 <= m) { p += 1; i += 2 }
         } else if (st == 1 || st == 3) st = 0
         else if (st == 2) { if (c == "\"") { st = 0; ta = 0 } else ta = 1 }
-        else if (c == "\047") { st = 1; if (k - 1 > i0 && tok[k - 1] == "" && tok[k - 2] == "$") st = 3 }
+        else if (c == "\047") { st = 1; nd = 0; for (j = k - 2; j > i0 && tok[j] == "$" && tok[j + 1] == ""; j -= 2) nd++; if (nd % 2 == 1) st = 3 }
         else { st = 2; ta = 0 }
       }
       printf "%d %d %d %d\n", st, ta, wk, bail
@@ -2130,6 +2754,109 @@ script_qadvance_linear() {   # $1 = the segment
   return 0
 }
 
+# --------------------------------------------------------------------------
+# THE TRUST BOUNDARY OF THE CARRIED QUOTE STATE.
+#
+# The scanners above, and the here-document pre-pass's own walk, model four quote
+# states and nothing else. A command can hold a construct they do not follow, and there
+# the carried state is wrong in the fail-OPEN direction: a later segment is read as
+# quoted text and suppressed behind a carrier, or later lines are removed as a
+# here-document body, while the shell runs them. So the carried state is trusted only
+# where the model follows the text. The program below reads the command's operator lines
+# — a here-document body is not command text and is never passed to it — and prints 1,
+# which latches the pre-pass's existing bail (script_hdbail, whose meaning is "vouch for
+# nothing"), when it meets one of two named constructs:
+#
+#   A COMMENT (M-QMODEL-CMT, M-QMODEL-HD): a `#` at quote state 0 that begins a word —
+#   no byte before it on its line, or a blank, a backquote, or one of ; & | ( ) < > —
+#   running to the end of its line. It latches when the comment holds a quote character,
+#   which every scanner would carry past the line. In full mode (the command carries
+#   `<<`) it also latches when the comment holds `<`, a backquote or a parenthesis, the
+#   other bytes the pre-pass carries past a line: a here-document operator, its backquote
+#   parity and its enclosure stack.
+#
+#   A NESTED EXPANSION (M-QMODEL-NEST): `$(`, `${`, `$[` or a backquote inside "...",
+#   where the scanners close the run at an inner `"` the shell reads as nested; or a
+#   backquote outside quotes, inside which the shell does not track a quote that begins
+#   and does not end there (POSIX 2.6.3), while the scanners carry it. At quote state 0
+#   the shell reads `$(`, `${` and `$[` as a fresh quoting context that the scanners
+#   follow, and the enclosure positions they open belong to the second view, so those
+#   three are not untrusted there. The expansion's text, up to the first closer of the
+#   opener's own kind on the same line, must be plain: the characters script_plain_word
+#   allows, plus blank and tab, with no `case`
+#   word at either end of the text or between blanks — a case pattern's `)` is the one
+#   closer that set admits which does not close. No closer on the line, any other byte, or
+#   a `case` word latches. A plain expansion is stepped over, and the scan resumes after
+#   its closer in the state it opened in.
+#
+# The quote states are script_qadvance's, the dollar run's parity included. The latch
+# only ever REMOVES a suppression or an excision, so on the first view it moves a verdict
+# toward refusal and never away from it — whether or not the running shell reads `#` as a
+# comment — and it adds no state to the scanners. The two constructs are an enumeration
+# over shell grammar, not a closed class: a construct outside them keeps today's reading.
+# Output other than exactly `0`, or a program that does not run, latches too.
+readonly SCRIPT_QMODEL_AWK='
+    BEGIN {
+      full = ENVIRON["QM_FULL"] + 0; st = 0; lat = 0
+      PL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_=+,.:/@%- \t"
+      CS = " \t\n`;&|()<>"
+    }
+    {
+      s = $0; n = length(s); i = 1; nd = 0; pv = "\n"
+      while (i <= n) {
+        c = substr(s, i, 1)
+        if (st == 1) { if (c == "\047") { st = 0; pv = c }; i++; continue }
+        if (st == 3) { if (c == "\\") { i += 2; continue }; if (c == "\047") { st = 0; pv = c }; i++; continue }
+        if (c == "\\") { i += 2; nd = 0; pv = "x"; continue }
+        if (st == 2 && c == "\"") { st = 0; pv = c; i++; continue }
+        o = ""; b = 0
+        if (c == "`") { o = c; b = i + 1 }
+        else if (st == 2 && c == "$") { e = substr(s, i + 1, 1); if (e == "(") o = ")"; else if (e == "{") o = "}"; else if (e == "[") o = "]"; b = i + 2 }
+        if (o != "") {
+          bad = 0
+          for (j = b; j <= n; j++) { e = substr(s, j, 1); if (e == o) break; if (!index(PL, e)) { bad = 1; break } }
+          if (j > n) bad = 1
+          if (!bad) { t = " " substr(s, b, j - b) " "; gsub(/\t/, " ", t); if (index(t, " case ")) bad = 1 }
+          if (bad) lat = 1   # M-QMODEL-NEST
+          if (lat) exit
+          i = j + 1; nd = 0; pv = o; continue
+        }
+        if (st == 2) { i++; continue }
+        if (c == "\047") { st = (nd % 2 == 1) ? 3 : 1; nd = 0; i++; continue }
+        if (c == "\"") { st = 2; nd = 0; i++; continue }
+        if (c == "#" && index(CS, pv)) {
+          m = substr(s, i + 1)
+          if (m ~ /["\047]/) lat = 1   # M-QMODEL-CMT
+          if (full && m ~ /[<`()]/) lat = 1   # M-QMODEL-HD
+          if (lat) exit
+          break
+        }
+        if (c == "$") nd++; else nd = 0
+        pv = c; i++
+      }
+    }
+    END { print (lat ? 1 : 0) }'
+# 0 when the trust check must run: the text holds a quote character together with a `#`,
+# a nested opener or a backquote, or — in full mode — any `#`. Single-literal tests only,
+# each one pass over the text; a command it declines makes no fork and keeps today's path.
+script_qmodel_needed() {   # $1 = text  $2 = 1 in full mode
+  case "$1" in
+    *"$script_q1"*|*"$script_q2"*)
+      case "$1" in *'#'*|*'$('*|*'${'*|*'$['*|*"$script_qbt"*) return 0 ;; esac
+      ;;
+  esac
+  if [ "$2" -eq 1 ]; then
+    case "$1" in *'#'*) return 0 ;; esac
+  fi
+  return 1
+}
+# 0 only when the program ran and vouched for the text.
+script_qmodel_ok() {   # $1 = text  $2 = 1 in full mode
+  local _r
+  _r="$(LC_ALL=C QM_FULL="$2" /usr/bin/awk "$SCRIPT_QMODEL_AWK" <<< "$1")" || return 1  # qmodel: awk
+  [ "$_r" = 0 ]   # M-QMODEL-OK
+}
+
 # The text of a second-view position ends where its own enclosure closes: for a
 # parenthesis, the first `)` at depth 0 outside quotes; for a backtick, the next
 # unescaped backtick. Scanned LOCALLY from a fresh quote state, because the inside
@@ -2140,6 +2867,10 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
   script_cut_out="$1"
   script_qt="$1"
   local _used=0 _q=0 _d=0 _n=0 _lp='(' _rp=')'
+  local _case=0
+  # an enclosure that opens a case: its first pattern's `)` is not the enclosure's close, so the
+  # cut reads past it; a cut it cannot place still degrades to the text left whole
+  if [ "$2" -eq 1 ]; then case "${1#"${1%%[! 	]*}"}" in 'case '*|'case	'*) _case=1 ;; esac; fi   # M-REACH-CUT
   while [ -n "$script_qt" ]; do
     _n=$(( _n + 1 ))
     if [ "$_n" -gt 200 ]; then return 0; fi
@@ -2166,6 +2897,8 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
       "$_rp")
         if [ "$_d" -gt 0 ]; then
           _d=$(( _d - 1 ))
+        elif [ "$_q" -eq 0 ] && [ "$_case" -eq 1 ]; then
+          _case=0
         elif [ "$_q" -eq 0 ]; then
           script_cut_out="${1:0:$(( _used - 1 ))}"
           return 0
@@ -2278,18 +3011,26 @@ script_heredoc_prescan() {
   # FAST PATH. No `<<` anywhere means no here-document and no here-string, so the
   # adjudicated text is $COMMAND byte-for-byte and nothing below can perturb it.
   # This is what keeps every command that carries no such operator — the
-  # overwhelming majority — on exactly its pre-change code path.
+  # overwhelming majority — on exactly its pre-change code path. The one thing still
+  # asked of it is the trust boundary of the carried quote state (script_qmodel_ok),
+  # over the whole command, since no body is there to skip; a command whose quote
+  # state the model cannot follow latches the bail, and one the prefilter declines
+  # makes no fork.
   case "$COMMAND" in
     *'<<'*) : ;;
-    *) return 0 ;;
+    *)
+      if script_qmodel_needed "$COMMAND" 0 && ! script_qmodel_ok "$COMMAND" 0; then script_hdbail=1; fi   # M-QMODEL-FAST
+      return 0
+      ;;
   esac
 
   local _lt='<' _sc=';' _amp='&' _bar='|' _lp='(' _rp=')'
-  local -a _lines _qdelim _qquoted _qstrip _qhead _qhead2 _ostk
+  local -a _lines _qdelim _qquoted _qstrip _qhead _qhead2 _qlhead _ostk
   local _tmp="" _opline="" _cmp="" _pre="" _ch=""
   local _delim="" _delimline="" _body="" _bodyraw="" _headtxt=""
   local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0 _od=0 _bt=-1 _h2=0 _c2=0 _j=0 _rh2=""
-  local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out=""
+  local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out="" _ops="" _cont=0 _nd=0
+  local _lcar="" _lprev=""
 
   # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
   # unit this pass reasons in.
@@ -2306,9 +3047,13 @@ script_heredoc_prescan() {
   while [ "$_i" -lt "$_n" ]; do
     _opline="${_lines[$_i]}"
     _i=$(( _i + 1 ))
+    # the text of the earlier lines this one continues, kept while each ended in a continuation
+    if [ "$_cont" -eq 1 ]; then _lcar="${_lcar}${_lprev%"$script_bs"}"; else _lcar=""; fi
+    _lprev="$_opline"
     _qn=0
     _pos=0
     _lastsep=0
+    _cont=0
     # an enclosure still open from an earlier line opens this line at its start
     _j=0
     while [ "$_j" -lt "$_od" ]; do _ostk[$_j]=0; _j=$(( _j + 1 )); done
@@ -2353,14 +3098,28 @@ script_heredoc_prescan() {
         _abs=$(( _pos + script_qi ))
         _pos=$(( _abs + 1 )); script_qt="${script_qt:$(( script_qi + 1 ))}"
         if [ "$_ch" = "$script_bs" ]; then
+          # a backslash that ends the line is a continuation (read by the span check below)
+          if [ -z "$script_qt" ]; then _cont=1; fi
           _pos=$(( _pos + 1 )); script_qt="${script_qt:1}"
         elif [ "$_ch" = "$script_q1" ]; then
-          # A `'` directly preceded by `$` opens ANSI-C quoting, exactly as in
-          # script_qadvance. Reading it as a plain single quote would end one
-          # quote out of phase and report *inside* where bash is *outside*.
+          # A `'` directly preceded by an odd-length run of `$` opens ANSI-C quoting,
+          # exactly as in script_qadvance (`$$` is a parameter, so `$$'` opens a plain
+          # quote). Reading it as a plain single quote would end one quote out of phase
+          # and report *inside* where bash is *outside*. The run is counted to a bound;
+          # a longer run is a shape this pass declines.
           _qs=1
           case "$_pre" in
-            *"$script_qd") _qs=3 ;;
+            *"$script_qd")
+              _nd=0
+              while [ "$_nd" -lt 64 ]; do
+                case "$_pre" in
+                  *"$script_qd") _pre="${_pre%"$script_qd"}"; _nd=$(( _nd + 1 )) ;;
+                  *) break ;;
+                esac
+              done
+              if [ "$_nd" -ge 64 ]; then script_hdbail=1; return 0; fi
+              if [ $(( _nd % 2 )) -eq 1 ]; then _qs=3; fi
+              ;;
           esac
         elif [ "$_ch" = "$script_q2" ]; then
           _qs=2
@@ -2449,6 +3208,10 @@ script_heredoc_prescan() {
               _qquoted[$_qn]="$_quoted"
               _qstrip[$_qn]="$_strip"
               _qhead[$_qn]="${_opline:$_lastsep:$(( _abs - _lastsep ))}"
+              # the receiver read from the LOGICAL line: when no separator precedes the operator on
+              # this line, the earlier lines it continues are part of the receiver's command
+              _qlhead[$_qn]=""
+              if [ "$_lastsep" -eq 0 ] && [ -n "$_lcar" ]; then _qlhead[$_qn]="${_lcar##*[;&|]}${_qhead[$_qn]}"; fi
               # second view of the receiver: the text after the innermost enclosure
               # still OPEN at the operator, when that lies after the last separator
               _h2="$_lastsep"
@@ -2466,7 +3229,14 @@ script_heredoc_prescan() {
       fi
     done
 
+    # A line that queued a body while a quoted string, or a line continuation, runs past
+    # its end. The shell begins a body only after the next unquoted newline (POSIX 2.3),
+    # and this pass, which takes the physical line as its unit, would start it on the
+    # next physical line — removing command text the shell runs. It vouches for nothing.
+    if [ "$_qn" -gt 0 ] && { [ "$_qs" -ne 0 ] || [ "$_cont" -eq 1 ]; }; then script_hdbail=1; return 0; fi   # M-QMODEL-SPAN
+
     _out="${_out}${_opline}"$'\n'
+    _ops="${_ops}${_opline}"$'\n'
 
     # ---- consume the queued bodies, in operator order ----
     _k=0
@@ -2521,6 +3291,16 @@ script_heredoc_prescan() {
           fi
           ;;
       esac
+      # A carrier word the head walk read from inside a value that holds a blank is not the
+      # receiver: the walk reached it by stepping over an assignment token whose quote is still
+      # open, and the shell feeds the body to a later word (the review's PR-2, at this site). The
+      # excision is withdrawn and the body is adjudicated. Withdraw-only: a value whose quotes
+      # balance, ahead of a real carrier, keeps its excision.
+      if [ "$_ex" -eq 1 ] && [ "$script_head_open" -eq 1 ]; then _ex=0; fi   # M-WRAP-QVAL-HDHEAD
+      # The receiver is read from the physical line and from the logical line, and the body is
+      # excised only when both name a carrier: a continuation can make a carrier's physical line
+      # the tail of a shell's command, which reads the body. Withdraw-only.
+      if [ "$_ex" -eq 1 ] && [ -n "${_qlhead[$_k]}" ] && ! script_head_is_carrier "${_qlhead[$_k]}"; then _ex=0; fi   # M-CONT-RECV
 
       # >>> ENCL-HDHEAD-BEGIN — core/hooks/tests/block-destructive.test.sh
       # A body is excised only when the receiver read from the line head AND the one
@@ -2554,6 +3334,11 @@ script_heredoc_prescan() {
     done
   done
 
+  # The trust boundary of the carried quote state, over the operator lines alone (a body
+  # is not command text). It runs before the three exits below, so a command whose only
+  # `<<` sat inside a quote is still asked, and a declined command keeps every body.
+  if script_qmodel_needed "$_ops" 1 && ! script_qmodel_ok "$_ops" 1; then script_hdbail=1; return 0; fi   # M-QMODEL-FULL
+
   # No here-document operator at quote-state 0 — every `<<` in this command was a
   # here-string or quoted text. Nothing to excise, and nothing to decline.
   if [ "$_total" -eq 0 ]; then return 0; fi
@@ -2580,9 +3365,31 @@ script_heredoc_prescan() {
 # entry may only ever cost a false positive. The price of the asymmetry is exactly
 # that price: a wrapper in front of a carrier verb keeps the pre-existing false
 # positive on a quoted argument. Pay it here rather than on the other side.
+#
+# Nor does this walk take the assignment-value step the verb walk takes
+# (script_assign_value_rest): it steps over the first piece of a quoted value that holds a
+# blank and reads the next piece as the head, so a carrier written behind such a value keeps
+# the false positive on its quoted argument that its no-blank spelling does not have — a
+# declared limit, pinned by ASGN-QVAL-limit-carrier beside ASGN-QVAL-limit-ctl. The opposite
+# reading, a carrier WORD inside such a value taken for the head, suppressed a quoted segment
+# the shell runs. It is closed at the caller, not here: a carrier answer of this walk is checked
+# against the step (script_qval_head_carrier) and withdrawn when the shell's head word is not a
+# carrier (ASGN-QVAL-head). Taking the step in this walk instead would also turn the limit's
+# refusal into an allow, the direction this walk must not move. The here-document receiver test
+# reads the same walk and had the same impersonation; it is closed there by script_head_open, which
+# this walk sets and the receiver test reads to withdraw an excision (ASGN-QVAL-hdhead).
 script_resolve_head() {
   script_head=""
-  local _i
+  # script_head_open: 1 when the walk stepped over an assignment token whose single or double
+  # quotes are odd in number, so the quote the token opens is still open at the token's end and
+  # the head the walk returns is a piece of that value rather than the shell's command word. The
+  # here-document receiver test reads it (M-WRAP-QVAL-HDHEAD). The count ignores escapes, so it
+  # also reads an escaped quote before the real opener as even, and an escaped blank as nothing:
+  # each token is therefore also read by script_head_token_scan, the rule's own quote scanner, and
+  # is open when either reading says so. The count stays a disjunct, so nothing it marked open is
+  # closed: withdraw-only, the fail-closed direction.
+  script_head_open=0
+  local _i _hsq _hdq _sq="'" _dq='"'
   local -a _tok
   set -f
   # shellcheck disable=SC2206
@@ -2595,6 +3402,10 @@ script_resolve_head() {
         case "${_tok[$_i]%%=*}" in
           *[!A-Za-z0-9_]*) break ;;
         esac
+        _hsq="${_tok[$_i]//[!$_sq]/}"
+        _hdq="${_tok[$_i]//[!$_dq]/}"
+        if [ $(( ${#_hsq} % 2 )) -eq 1 ] || [ $(( ${#_hdq} % 2 )) -eq 1 ]; then script_head_open=1; fi
+        if [ "$script_head_open" -eq 0 ] && script_head_token_scan "${_tok[$_i]}"; then script_head_open=1; fi
         _i=$(( _i + 1 ))
         ;;
       *) break ;;
@@ -2604,6 +3415,291 @@ script_resolve_head() {
     script_head="${_tok[$_i]}"
   fi
   return 0
+}
+
+# THE OPEN READ OF AN ASSIGNMENT TOKEN, by the rule's own quote scanner from state 0 on saved and
+# restored state, so the read changes nothing the caller carries. An escaped quote is not a
+# delimiter, so a quote it precedes still opens; a token the scan leaves outside quotes that ends
+# on an odd backslash run carries the value into the next token; and a scan that reaches the
+# shared work cap reads open. Each answer can only mark a token open: the fail-closed direction.
+script_head_token_scan() {   # $1 = an assignment token -> 0 when its value is still open at its end
+  local _s="$script_qstate" _t="$script_qtaint" _w="$script_qwork" _b="$script_qbail" _r=1
+  script_qstate=0
+  script_qtaint=0
+  script_qadvance "$1"
+  if [ "$script_qstate" -ne 0 ] || { [ "$script_qbail" -eq 1 ] && [ "$_b" -eq 0 ]; } || script_qval_dangles "$1"; then _r=0; fi   # M-HEAD-OPEN-SCAN
+  script_qstate="$_s"
+  script_qtaint="$_t"
+  script_qwork="$_w"
+  script_qbail="$_b"
+  return "$_r"
+}
+
+# Open by either reading: the quote count script_resolve_head keeps, or the scan above.
+script_head_value_open() {   # $1 = an assignment token -> 0 when its value is still open at its end
+  local _sq="'" _dq='"' _c
+  _c="${1//[!$_sq]/}"
+  if [ $(( ${#_c} % 2 )) -eq 1 ]; then return 0; fi
+  _c="${1//[!$_dq]/}"
+  if [ $(( ${#_c} % 2 )) -eq 1 ]; then return 0; fi
+  script_head_token_scan "$1"
+}
+
+# THE JOINED LOGICAL LINE. The shell removes a backslash-newline outside quotes and inside "…"
+# before it splits words, so an interpreter on one physical line and its operand on the next are
+# one command, which the physical segmentation reads as two. One linear awk pass in the C locale
+# follows the quote states the scanners model (outside, '…', "…", and $'…' opened by an odd run of
+# `$`), a `#` that opens a comment at the start of a word outside quotes, and the escaping
+# backslash, and prints each logical line that holds at least one removed continuation and starts
+# outside any quote and outside a comment. A backslash-newline inside '…' or $'…', or ending a
+# comment, is not removed by the shell and is not joined here. The lines are ADDED to the first
+# view for one more walk (M-CONT-WALK): every physical reading stays, so nothing adjudicated
+# before stops being adjudicated, and a body excision is never widened.
+script_cont_joined() {   # $1 = the command text -> stdout, one joined logical line per line
+  /usr/bin/printf '%s' "$1" | LC_ALL=C /usr/bin/awk '
+    { t = t (NR > 1 ? "\n" : "") $0 }
+    END {
+      n = length(t); st = 0; cmt = 0; line = ""; joined = 0; ok = 1; prev = ""; dr = 0
+      for (i = 1; i <= n; i++) {
+        c = substr(t, i, 1)
+        if (c == "\\" && (st == 0 || st == 2) && !cmt && i < n && substr(t, i + 1, 1) == "\n") { i++; joined = 1; continue }
+        if (c == "\n") {
+          if (joined && ok) print line
+          line = ""; joined = 0; cmt = 0; ok = (st == 0); prev = ""; dr = 0
+          continue
+        }
+        line = line c
+        if (cmt) continue
+        if (st == 1) { if (c == "\047") st = 0; continue }
+        if (st == 3 || st == 2) {
+          if (c == "\\") { i++; if (i <= n) line = line substr(t, i, 1); continue }
+          if ((st == 3 && c == "\047") || (st == 2 && c == "\"")) st = 0
+          continue
+        }
+        if (c == "\\") { i++; if (i <= n) line = line substr(t, i, 1); prev = "x"; dr = 0; continue }
+        if (c == "#" && (prev == "" || prev ~ /[ \t;&|()]/)) { cmt = 1; continue }
+        if (c == "\047") st = (dr % 2 == 1) ? 3 : 1
+        else if (c == "\"") st = 2
+        dr = (c == "$") ? dr + 1 : 0
+        prev = c
+      }
+      if (joined && ok) print line
+    }'
+}
+
+script_cont_add() {   # appends the joined logical lines of script_hdstripped to script_segments
+  local _j="" _jl=""
+  _j="$(script_cont_joined "$script_hdstripped")" || _j=""
+  if [ -z "$_j" ]; then return 0; fi
+  # THE LINEAR PASS, as for the segments. A joined line is as long as the command it joins, so the
+  # three substitutions below could hold the hook past the runtime's command-hook timeout on a large
+  # separator-dense continued command, and a hook that times out does not block. The joined lines
+  # are split first by the segments' own tr pass in the C locale, whose output equals the
+  # substitutions' byte for byte (AC-022-Z-EQ); they then find nothing left, and a pass that fails
+  # leaves the text to them.
+  if [ "${#_j}" -ge "$SCRIPT_LINEAR_MIN" ] && _jl="$(LC_ALL=C /usr/bin/tr '\073\046\174' '\012\012\012' <<< "${_j}.")"; then _j="${_jl%.}"; fi  # linear: cont
+  _j="${_j//;/$'\n'}"
+  _j="${_j//&/$'\n'}"
+  _j="${_j//|/$'\n'}"
+  script_segments="${script_segments}"$'\n'"${_j}"
+  return 0
+}
+
+script_head_is_carrier() {   # $1 = text -> 0 when the head it resolves to is one of the four carriers
+  script_resolve_head "$1"
+  case "${script_head##*/}" in
+    gh|printf|echo|jq) return 0 ;;
+  esac
+  return 1
+}
+
+# THE ASSIGNMENT-VALUE STEP. The prefix walk splits a segment on whitespace before it reads a
+# token, so an assignment whose quoted or escaped value holds a blank reaches it as several
+# tokens: the first passes the assignment test, and a later piece of the value used to be read as
+# the command word. The command behind the value was then never adjudicated, and a value whose
+# pieces read as an invocation was refused for text the shell never runs.
+#
+# script_assign_value_rest reads the rest of the assignment word with the carried quote scanner,
+# script_qadvance (called, never edited, on saved and restored state), and moves script_hidx
+# from the token after the assignment token, h0, to the shell's next word, h. It moves it ONLY
+# when all of these hold:
+#   1. the segment is vouched to start outside any quote (script_qval_trust, set per segment);
+#   2. the tokens from the last boundary known to sit outside quotes (script_qval_from) up to the
+#      assignment token scan back to outside quotes, end on no escaping backslash, and carry no
+#      construct the scanner does not model (script_qval_opaque);
+#   3. the word ends at a token boundary outside quotes, unless that token ends on a backslash
+#      outside quotes followed by exactly one blank in the segment (script_qval_gap), which
+#      carries the word on to the next token, or the segment ends with the quote still open; a
+#      token that ends on a backslash outside quotes followed by two or more blanks ends the word
+#      after its escaped blank, as the shell ends it;
+#   4. no token of the word carries such a construct, and every character of the value is
+#      readable (script_qval_readable) — a backslash only where it escapes a blank, so a later
+#      token of the value that ends on a backslash at the end of the segment declines the step
+#      rather than ending the word there.
+# Otherwise h = h0 exactly — today's reading, byte for byte — and the carried state and taint are
+# restored on every path. Tokens [h0, h) are text inside the shell's assignment word and run
+# nothing, so every verdict today's reading drew from them is a precision move, and every verdict
+# on a token at or after h is the shell's reading.
+#
+# The step charges the shared work budget as every scan does. The step that reaches the cap
+# declines, and the cap latches script_qbail for the rest of the command: no later quoted
+# fragment is suppressed — fail-closed, and a possible false refusal.
+
+# A construct the value step never crosses: one that runs a command, or whose extent holds
+# blanks this scanner does not model.
+script_qval_opaque() {   # $1 = one token -> 0 when it carries such a construct
+  case "$1" in
+    *'$('*|*'${'*|*'$['*|*'`'*|*'<('*|*'>('*|*'=('*) return 0 ;;   # M-WRAP-QVAL-SUBST
+  esac
+  return 1
+}
+
+# The readable set. The step replaces today's reading of a value only when every character of
+# it is one the scanner reads as the shell does: the plain set (script_plain_word), the blanks
+# between its tokens, the quote characters that delimit it, and outside quotes a backslash
+# that escapes a blank. Asked of each token of the value just after it is scanned, so the
+# state then says whether a final backslash sits outside quotes; this test admits a backslash
+# only there, as a token's last character, and the escaped-blank rule in the step requires a
+# blank after it: exactly one carries the word on, two or more end it after the escaped blank.
+# A backslash anywhere else, or a run of two, is not readable. One quote kind per
+# value: with one kind alone every quote character delimits, so a value that holds both is
+# declined rather than read for which of them is text.
+script_qval_readable() {   # $1 = a token of the value, just scanned -> 0 when every character is readable
+  local _t="$1"
+  case "$_t" in *"$script_q1"*) script_qval_sq=1 ;; esac
+  case "$_t" in *"$script_q2"*) script_qval_dq=1 ;; esac
+  [ $(( script_qval_sq + script_qval_dq )) -lt 2 ] || return 1
+  case "$_t" in
+    *"$script_bs") [ "$script_qstate" -eq 0 ] || return 1; _t="${_t%"$script_bs"}" ;;
+  esac
+  case "$_t" in
+    *[!A-Za-z0-9_=+,.:/@%\'\"-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# A token scanned to state 0 that ends on an odd backslash run: its last backslash escapes the
+# character after the token (the house idiom of the enclosure view's escape rule).
+script_qval_dangles() {   # $1 = a token just scanned to state 0
+  local _r="${1##*[!\\]}"
+  [ $(( ${#_r} % 2 )) -eq 1 ]
+}
+
+# The length of the blank run after token $1 of the segment the walk tokenized. The blanks are
+# the two the token split uses inside a segment, space and tab. The read resumes where the last
+# one stopped — one cursor per segment, each token taken off by its length — so a step that moves
+# forward walks the segment at most once; a request behind the cursor starts it again.
+script_qval_gap() {   # $1 = token index -> script_qval_gapn
+  local _b _bl=$' \t'
+  if [ "$script_qval_gapi" -lt 0 ] || [ "$script_qval_gapi" -gt $(( $1 + 1 )) ]; then
+    script_qval_gapi=0
+    script_qval_gaprest="$script_seg"
+  fi
+  while [ "$script_qval_gapi" -le "$1" ]; do
+    _b="${script_qval_gaprest%%[!${_bl}]*}"
+    script_qval_gaprest="${script_qval_gaprest:$(( ${#_b} + ${#script_tokens[$script_qval_gapi]} ))}"
+    script_qval_gapi=$(( script_qval_gapi + 1 ))
+  done
+  _b="${script_qval_gaprest%%[!${_bl}]*}"
+  script_qval_gapn="${#_b}"
+}
+
+# Step script_hidx over the rest of an assignment word whose quoting or escaping spans more than
+# one whitespace-split token. Called right after the walk's one-token step, so script_hidx is the
+# token after the assignment token. Every decline leaves script_hidx where it stood.
+script_assign_value_rest() {   # $1 = the assignment token just stepped over
+  local _qs="$script_qstate" _qt="$script_qtaint" _h="$script_hidx" _k=$(( script_hidx - 1 ))
+  local _n="${#script_tokens[@]}" _i _j _ok=1
+  case "$1" in *[\'\"\\]*) ;; *) return 0 ;; esac
+  [ "$script_qval_trust" -eq 1 ] || return 0
+  if script_qval_opaque "$1"; then return 0; fi
+  script_qstate=0; script_qtaint=0
+  script_qval_sq=0; script_qval_dq=0
+  _i="$script_qval_from"
+  while [ "$_i" -lt "$_k" ]; do   # M-WRAP-QVAL-PFX
+    if script_qval_opaque "${script_tokens[$_i]}"; then _ok=0; break; fi
+    script_qadvance "${script_tokens[$_i]}"
+    if [ "$script_qstate" -eq 0 ] && script_qval_dangles "${script_tokens[$_i]}"; then _ok=0; break; fi
+    _i=$(( _i + 1 ))
+  done
+  if [ "$_ok" -eq 1 ] && [ "$script_qstate" -eq 0 ] && [ "$script_qwork" -lt 1000 ]; then
+    script_qadvance "$1"
+    script_qval_readable "$1" || _ok=0   # M-WRAP-QVAL-READ
+    _j="$_k"
+    while [ "$_ok" -eq 1 ] && [ "$script_qwork" -lt 1000 ]; do
+      if [ "$script_qstate" -eq 0 ]; then
+        script_qval_dangles "${script_tokens[$_j]}" || break
+        script_qval_gap "$_j"
+        if [ "$script_qval_gapn" -ge 2 ] && [ "$_j" -gt "$_k" ]; then break; fi   # M-WRAP-QVAL-GAP2
+        [ "$script_qval_gapn" -eq 1 ] || { [ "$_j" -eq "$_k" ] || _ok=0; break; }   # M-WRAP-QVAL-GAP
+      fi
+      [ "$script_hidx" -lt "$_n" ] || break
+      if script_qval_opaque "${script_tokens[$script_hidx]}"; then _ok=0; break; fi
+      script_qadvance "${script_tokens[$script_hidx]}"
+      script_qval_readable "${script_tokens[$script_hidx]}" || { _ok=0; break; }   # M-WRAP-QVAL-READ
+      _j="$script_hidx"
+      script_hidx=$(( script_hidx + 1 ))
+    done
+    if [ "$script_qwork" -ge 1000 ]; then _ok=0; fi
+  else
+    _ok=0
+  fi
+  if [ "$_ok" -eq 1 ]; then script_qval_from="$script_hidx"; else script_hidx="$_h"; fi
+  script_qstate="$_qs"; script_qtaint="$_qt"
+}
+
+# THE CARRIER HEAD, READ THROUGH THE STEP (the review's PR-2). script_resolve_head walks the
+# assignment run one whitespace-split token at a time, so behind a value that holds a blank it can
+# take a piece of the value for the command word. When that piece is a carrier word, the segments
+# interior to the quote it seems to open were suppressed, although the shell runs a different
+# command, which may execute them. This helper is asked only when the resolver's answer is a
+# carrier. It repeats that walk, with the same NAME=value test, and takes the assignment-value step
+# after each assignment token, under the step's own gate, prefix scan, readable set, construct
+# guard and restore on decline. A value the step declines leaves the resolver's answer as it was;
+# one whose rescan reaches the shared work cap latches the bail, and the caller then withdraws the
+# answer as well (M-WRAP-QVAL-HEADCAP). It returns 0 only when the word the walk
+# ends on is a carrier, and the caller withdraws the suppression otherwise. The answer can only be
+# withdrawn, never granted, which is why the limit documented at script_resolve_head stands. Its
+# carrier list repeats the caller's: a word missing here withdraws a suppression, the fail-closed
+# direction.
+#
+# The walk's state is declared local, so the step reads and writes these copies and the segment's
+# own walk below starts from its own reset. The shared work budget is not local: the step charges
+# it here as it does everywhere, which is the check's cost. A quote-dense carrier command spends
+# the budget sooner, and the bail the cap latches leaves neither this command's carrier answer nor
+# any later one standing, so some of those commands are now refused — the safe direction.
+script_qval_head_carrier() {   # reads script_seg -> 0 when the shell's head word is a carrier
+  local -a script_tokens
+  local script_hidx=0 script_qval_trust=0 script_qval_from=0 script_qval_gapi=-1
+  local script_qval_gaprest="" script_qval_gapn=0 script_qval_sq=0 script_qval_dq=0 _t _hn=0
+  set -f
+  # shellcheck disable=SC2206
+  script_tokens=( $script_seg )
+  set +f
+  if { [ "$script_qbail" -eq 0 ] && [ "$script_segstart" -eq 0 ]; } || { [ "$script_pass" -eq 1 ] && [ "$script_segno" -eq 1 ]; }; then script_qval_trust=1; fi
+  while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
+    _t="${script_tokens[$script_hidx]}"
+    case "$_t" in
+      [A-Za-z_]*=*)
+        case "${_t%%=*}" in
+          *[!A-Za-z0-9_]*) break ;;
+        esac
+        script_hidx=$(( script_hidx + 1 ))
+        _hn="$script_hidx"
+        script_assign_value_rest "$_t"
+        # A value the step declined whose quote or escape is still open: the word this walk would
+        # stop on is a piece of that value, not the shell's head word, so the answer is not
+        # confirmed. Withdraw-only; a value the step read moved the walk on and is not asked.
+        if [ "$script_hidx" -eq "$_hn" ] && script_head_value_open "$_t"; then return 1; fi   # M-WRAP-QVAL-HEADOPEN
+        ;;
+      *) break ;;
+    esac
+  done
+  [ "$script_hidx" -lt "${#script_tokens[@]}" ] || return 1
+  case "${script_tokens[$script_hidx]##*/}" in
+    gh|printf|echo|jq) return 0 ;;
+  esac
+  return 1
 }
 
 # ==========================================================================
@@ -3051,6 +4147,26 @@ case "$TOOL_NAME" in
     script_norm_out=""
     script_norm_raw=""
     script_norm_ok=1
+    # The operand subject (script_operand_resolve) and the fragment join's outputs
+    # (script_word_join). Initialised for the same reason as the three above.
+    script_subj_out=""
+    script_subj_ok=1
+    script_wj_complete=0
+    script_wj_limit=0
+    script_wj_exact=1
+    script_wj_out=""
+    script_wj_raw=""
+    # The assignment-value step's state (script_assign_value_rest), per segment: whether the
+    # segment is vouched to start outside any quote, the token its prefix scan starts from, the
+    # escaped-blank read's cursor and result, and the quote kinds the value has shown.
+    # Initialised for the same reason as script_ftok above.
+    script_qval_trust=0
+    script_qval_from=0
+    script_qval_gapi=-1
+    script_qval_gaprest=""
+    script_qval_gapn=0
+    script_qval_sq=0
+    script_qval_dq=0
 
     # HERE-DOCUMENT PRE-PASS. What stood here was a blunt latch —
     # `case "$COMMAND" in *'<<'*) script_qbail=1` — which switched suppression off
@@ -3066,7 +4182,10 @@ case "$TOOL_NAME" in
     # The pass below replaces the latch with a model of the construct and KEEPS the
     # latch for everything the model declines, so the fail-closed posture is
     # preserved for every shape it does not cover. script_qbail is reused because
-    # its meaning is already "stop vouching for anything".
+    # its meaning is already "stop vouching for anything". The pass also latches it,
+    # in both of its modes, for a command whose carried quote state the trust
+    # boundary (SCRIPT_QMODEL_AWK) cannot follow — then no fragment is suppressed
+    # and no body is excised.
     script_hdstripped="$COMMAND"
     script_hdbail=0
     script_heredoc_prescan
@@ -3093,6 +4212,7 @@ case "$TOOL_NAME" in
     script_segments="${script_segments//;/$'\n'}"
     script_segments="${script_segments//&/$'\n'}"
     script_segments="${script_segments//|/$'\n'}"
+    case "$script_hdstripped" in *$'\\\n'*) script_cont_add ;; esac   # M-CONT-WALK
 
     # >>> ENCLOSURE-VIEW-BEGIN — core/hooks/tests/block-destructive.test.sh
     # SECOND VIEW. The loop below runs twice over one text. Its first pass is the
@@ -3159,6 +4279,14 @@ case "$TOOL_NAME" in
 
     while IFS= read -r script_seg; do
       script_segno=$(( script_segno + 1 ))
+      script_rdr_carry="${script_rdr_owed:-0}"; script_rdr_owed=0
+      # the case state: a later arm's closer is stepped only in a command that opened a case (pass 1)
+      script_incase_cur=0
+      if [ "$script_pass" -eq 1 ]; then
+        script_incase_cur="${script_incase:-0}"
+        case "${script_seg#"${script_seg%%[! 	]*}"}" in 'esac'|'esac '*|'esac)'*) script_incase=0 ;; esac
+        case " $script_seg " in *[\ \(\`]case\ *\ in\ *|*[\ \(\`]case\ *\ in) script_incase=1 ;; esac
+      fi
       if [ "$script_pass" -eq 1 ] && [ "$script_p1n" -gt 0 ] && [ "$script_segno" -gt "$script_p1n" ]; then
         # the second view starts from the same clean state the first view started from
         script_pass=2
@@ -3210,6 +4338,15 @@ case "$TOOL_NAME" in
             gh|printf|echo|jq) script_carrier=1 ;;
           esac
         fi
+        # A carrier answer is checked against the assignment-value step, and withdrawn when the
+        # word the shell runs behind a value holding a blank is not a carrier. It is only ever
+        # withdrawn here: a non-carrier answer is never asked (script_qval_head_carrier).
+        if [ "$script_carrier" -eq 1 ] && ! script_qval_head_carrier; then script_carrier=0; fi   # M-WRAP-QVAL-HEAD
+        # The check's own rescan can reach the shared work cap. The step then declines and the
+        # resolver's answer stood by default, so a value padded to that density kept the carrier
+        # answer the check exists to test. A cap reached here latches the bail, and a carrier answer
+        # standing beside a latched bail is withdrawn too: still only ever withdrawn, never granted.
+        if [ "$script_carrier" -eq 1 ] && [ "$script_qbail" -eq 1 ]; then script_carrier=0; fi   # M-WRAP-QVAL-HEADCAP
       elif [ "$script_carrier" -eq 1 ]; then
         # Interior to a quoted argument of a command that cannot evaluate it —
         # condition (1). Condition (2) is the construct test: `'…'` (state 1) and
@@ -3307,6 +4444,16 @@ case "$TOOL_NAME" in
       # there costs a false positive and never an admission, and widening it would
       # turn refusals into allows.
       #
+      # A QUOTED OR ESCAPED VALUE THAT HOLDS A BLANK is read to the end of its word. The split
+      # above cut such a value into several tokens, and the one-token step leaves the walk on a
+      # piece of it, which used to be read as the command word: the command behind the value
+      # went unadjudicated, and a value whose pieces read as an invocation was refused. The step
+      # called after the one-token step, here and in env's operand loop
+      # (script_assign_value_rest), moves the walk on to the shell's next word where the segment
+      # is vouched to start outside quotes and every character of the value is readable, and
+      # leaves today's reading exactly as it is everywhere else. Its conditions and its declines
+      # are stated once, above that function.
+      #
       # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION,
       # and each wrapper's own options and operands are walked from its row. `sudo
       # bash <script>`, `nice -n 10 bash <script>` and `then bash <script>` are the
@@ -3343,10 +4490,20 @@ case "$TOOL_NAME" in
       # lib/command-position.awk records for `bash -c '…'`). A recorded residual, not
       # a half-closed case. `timeout` used to stand beside it, for the duration
       # operand the walk would additionally have to consume; its row consumes it now.
+      script_qval_from=0
+      script_qval_gapi=-1
+      script_qval_trust=0
+      if { [ "$script_qbail" -eq 0 ] && [ "$script_segstart" -eq 0 ]; } || { [ "$script_pass" -eq 1 ] && [ "$script_segno" -eq 1 ]; }; then script_qval_trust=1; fi   # M-WRAP-QVAL-GATE
       script_hidx=0
       script_xargs=0
       script_wrap=""
       script_winert=0
+      script_rdr_in=""
+      script_rdr_hs=0
+      # R0 at the loop: the outer loop re-runs the walk only after the reach step stepped a
+      # token today's walk ended on. The inner loop is not re-indented, because the suite's
+      # mutants key on its lines' text and indentation.
+      while :; do   # M-REACH-LOOP
       while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
         script_ptok="${script_tokens[$script_hidx]}"
         case "$script_ptok" in
@@ -3356,15 +4513,30 @@ case "$TOOL_NAME" in
               *+) case "${script_ptok#*=}" in '('*) break ;; esac ;;   # M-WRAP-APPEND-ARRAY
             esac
             script_hidx=$(( script_hidx + 1 ))
+            script_assign_value_rest "$script_ptok"   # M-WRAP-QVAL
             continue
             ;;
         esac
-        case "${script_ptok##*/}" in
-          then|do|else|elif|if|while|until|'in'|'!')   # M-WRAP-KEYWORDS
-            script_hidx=$(( script_hidx + 1 ))
+        # The token's word after quote removal names a keyword or a wrapper the raw token hides
+        # (`"sudo"`, `\sudo`, `su"do"`). Read only on a complete, literal reading whose basename
+        # differs from the raw one, so a token that matched before dispatches as before (R0).
+        script_plook="${script_ptok##*/}"
+        script_pqv=0
+        case "$script_ptok" in
+          *"'"*|*'"'*|*\\*)
+            script_word_scan "$script_ptok"
+            if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_lit" -eq 1 ] && [ "${script_ws_out##*/}" != "${script_ptok##*/}" ]; then script_plook="${script_ws_out##*/}"; script_pqv=1; fi   # M-REACH-LOOKUP
             ;;
-          sudo|env|command|builtin|exec|nohup|time|xargs|nice|stdbuf|timeout)   # M-WRAP-WORDS
-            script_wrap="${script_ptok##*/}"
+        esac
+        case "$script_plook" in
+          then|do|else|elif|if|while|until|'in'|'!'|'{'|case|coproc|nocorrect)   # M-WRAP-KEYWORDS
+            # a quoted reserved word is not reserved, in bash or zsh: it is the command word
+            [ "$script_pqv" -eq 0 ] || break
+            script_hidx=$(( script_hidx + 1 ))
+            case "$script_plook" in case) script_case_leadin ;; coproc) script_coproc_name ;; esac   # M-REACH-CASE
+            ;;
+          sudo|env|command|builtin|exec|noglob|-|nohup|time|xargs|nice|stdbuf|timeout)   # M-WRAP-WORDS
+            script_wrap="$script_plook"
             if [ "$script_wrap" = "xargs" ]; then script_xargs=1; fi
             script_hidx=$(( script_hidx + 1 ))
             script_wrapper_options   # M-WRAP-OPTIONS
@@ -3372,6 +4544,9 @@ case "$TOOL_NAME" in
             ;;
           *) break ;;
         esac
+      done
+        if [ "$script_winert" -eq 1 ]; then break; fi
+        script_reach_step || break   # M-REACH
       done
       # A describe-only wrapper option was seen: the wrapper executes nothing, so
       # this segment is not an execution of whatever follows it.
@@ -3501,6 +4676,28 @@ case "$TOOL_NAME" in
           esac
         fi
       fi
+      # THE WORD VIEW. A verb the shell reads after quote removal — an escaped or partly quoted
+      # command word (a backslash before or inside it, quotes around part of it, an empty-quote
+      # prefix, a backslash-free `$'…'`) — names the interpreter both views above missed. Asked
+      # only when neither found a verb and the raw token holds a quote or a backslash, and only
+      # on a complete, literal reading, so every token resolved before resolves as it did (R0).
+      # >>> M-REACH-VERB
+      if [ -z "$script_verb" ]; then
+        case "${script_tokens[$script_hidx]}" in
+          *"'"*|*'"'*|*\\*)
+            script_word_scan "${script_tokens[$script_hidx]}"
+            if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_lit" -eq 1 ]; then
+              case "${script_ws_out##*/}" in
+                bash|sh|zsh|python|python3|perl|ruby|node)
+                             script_verb="interp"; script_interp_base="${script_ws_out##*/}"
+                             script_set_interp_domain "$script_interp_base" ;;
+                source|.)    script_verb="source"; script_interp_domain="source" ;;
+              esac
+            fi
+            ;;
+        esac
+      fi
+      # <<< M-REACH-VERB
       # EXEC ARM (the former `*)` branch of the verb `case`). Its body is carried
       # over at its ORIGINAL indentation deliberately: re-indenting it would rewrite
       # ~60 unchanged lines and bury this change's three real edits in the diff.
@@ -3624,6 +4821,34 @@ case "$TOOL_NAME" in
         continue
       fi
 
+      # THE INTERPRETER'S STANDARD INPUT (the review's CD-1). An input redirection ahead of an
+      # interpreter feeds it its program: a file word is that program's file, and a here-string
+      # is the program text itself. Each is adjudicated as the -c loop adjudicates a program
+      # string, by the interpreter's own domain. An input word ahead of a command that runs no
+      # script is not read (PM-1, any direction).
+      # >>> M-REACH-STDIN
+      if [ "$script_verb" = "interp" ] && [ -n "${script_rdr_in:-}" ]; then
+        if [ "${script_rdr_hs:-0}" -eq 1 ]; then
+          script_word_scan "$script_rdr_in"
+          if [ "$script_ws_complete" -eq 1 ] && [ "$script_ws_exact" -eq 1 ]; then script_rdr_prog="$script_ws_out"; else script_rdr_prog="$script_rdr_in"; fi
+        else
+          script_rdr_prog="$script_rdr_in"
+        fi
+        set -f
+        for script_rdr_w in $script_rdr_prog; do
+          normalize_script_token "$script_rdr_w"
+          if script_operand_resolve "$script_interp_domain" ""; then
+            if [ "$script_interp_domain" = "interp" ]; then
+              script_shell_verdict "$script_subj_out" "$script_subj_ok"
+            else
+              destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
+            fi
+          fi
+        done
+        set +f
+      fi
+      # <<< M-REACH-STDIN
+
       # PER-ARM ARITY. The interpreter and source arms take a script as an
       # OPERAND, so they need a token after the verb; the exec arm, handled above,
       # does not. This is the predicate the old pre-verb guard applied, unchanged,
@@ -3666,6 +4891,33 @@ case "$TOOL_NAME" in
         continue
       fi
 
+      # THE XARGS-FED SHELL'S OWN TOKENS (Amendment 1). script_xpos records a positional token the
+      # walk stepped over: the shell then runs that word from argv, and the post-walk deny below
+      # leaves today's verdict. At an enclosure position the enclosure's closer is not the
+      # shell's: a token holding it ends the shell's list (the token itself counts when it opens
+      # with the shell's own text), and every later word is the enclosing command's.
+      # BOTH VIEWS SCAN. A pipe inside the enclosure is split by the first view, which then
+      # walks the inner segment with the closer still on it; the second view keeps that segment
+      # as one the first view already read and does not walk it again. So the first view is
+      # the reader at that position, and script_xclose carries "this is an enclosure position"
+      # to the deny below whichever view reads it.
+      script_xpos=0
+      script_xclose=0
+      script_xend="${#script_tokens[@]}"
+      script_xk=$(( script_hidx + 1 ))
+      while [ "$script_xk" -lt "${#script_tokens[@]}" ]; do
+        case "${script_tokens[$script_xk]}" in
+          *')'*|*'`'*)
+            case "${script_tokens[$script_xk]}" in
+              ')'*|'`'*|'"'*|"'"*) script_xend="$script_xk" ;;
+              *) script_xend=$(( script_xk + 1 )) ;;
+            esac
+            script_xclose=1
+            break
+            ;;
+        esac
+        script_xk=$(( script_xk + 1 ))
+      done
       # walk past flags to the first operand. `-c` takes a program STRING rather
       # than a path, so every .sh-bearing token after it is a candidate instead of
       # just one — and `-c` is meaningless for `source`, so cmode is gated on the
@@ -3885,8 +5137,11 @@ case "$TOOL_NAME" in
         # determined from argv cannot be shown not to be the operand either. Without the
         # clause the walk advances off `'/tmp/pmo` (whitespace splitting hands it the
         # first fragment of a space-bearing quoted path) onto a LATER fragment and
-        # adjudicates the wrong subject; arm F1-QTOK-RESIDUAL-space is that control and
-        # it turns red, which is how the clause was found. The clause is about
+        # adjudicates the wrong subject; arm F1-QTOK-RESIDUAL-space turned red, which is
+        # how the clause was found. That arm now pins the fragment join at the operand,
+        # under which stepping off the fragment refuses as well, so the clause's control
+        # is FWALK-QWORD-ctl-fragment-noexec: stepping off revokes the parse-only grant
+        # the fragment keeps (mutant OPND-M5b). The clause is about
         # fragments. A whole word that opens with a quote is decided by
         # script_walk_view before this arm sees it.
         #
@@ -4158,9 +5413,16 @@ case "$TOOL_NAME" in
             # be inert. The right reading of this ordering is a declared trade — the
             # card's value in exchange for a residual the OPERAND path owns — and not a
             # claim that the predicate cannot fail open.
+            #
+            # A TOKEN STEPPED OVER HERE IS STILL ADJUDICATED when its word after quote
+            # removal is an operand (script_word_stepover, the line after both breaks):
+            # under `source`, which has no conservative route, a quote or backslash inside
+            # the token's suffix is otherwise stepped over unread. The walk advances
+            # exactly as before, and the call sits below both breaks and above the revoke.
             script_walk_view "${script_tokens[$script_idx]}"   # M-FWALK-BODY
             if [ "$script_norm_ok" -eq 0 ]; then break; fi
             if script_operand_implicated "$script_interp_domain"; then break; fi
+            script_word_stepover "${script_tokens[$script_idx]}"
             if [ "$script_verb" = "interp" ]; then
               script_noexec=0   # M-NOEXEC-REVOKE (mutation target; pinned by NOEXEC-M1)
             fi
@@ -4170,6 +5432,7 @@ case "$TOOL_NAME" in
             # table and fall to the fail-OPEN side. Captured before the consumption
             # below re-normalizes into the same globals.
             script_fadv="$script_norm_out"
+            if [ "$script_idx" -lt "$script_xend" ]; then case "$script_fadv" in [-+]*) : ;; *) script_xpos=1 ;; esac; fi   # M-XF-POS
             script_idx=$(( script_idx + 1 ))
             if [ "$script_verb" = "interp" ] \
                && [ "$script_idx" -lt "${#script_tokens[@]}" ] \
@@ -4180,6 +5443,21 @@ case "$TOOL_NAME" in
             ;;
         esac
       done
+      # THE POST-WALK HALF OF THE XARGS STDIN DENY. The pre-walk half sees only "no token"; an
+      # xargs-fed shell with flags of its own and no operand, no inline program and no
+      # parse-only grant also reads its script from standard input. Every row this arm changes
+      # left through the line below with nothing adjudicated, so it only adds a refusal.
+      # >>> M-XF-WALK
+      if [ "$script_idx" -ge "$script_xend" ] && [ "$script_verb" = "interp" ] && [ "$script_interp_domain" = "interp" ] && [ "$script_noexec" -eq 0 ] && [ "$script_xpos" -eq 0 ] && [ "$script_xargs" -eq 1 ]; then
+        if { [ "$script_pass" -eq 2 ] || [ "$script_xclose" -eq 1 ]; } && [ "$DESTRUCTIVE_022_ENCL_PHASE" != "enforce" ]; then
+          script_shell_verdict '$XARGS-STDIN' 1 1
+        else
+          block "BLOCK-DESTRUCTIVE-022" \
+            "unresolvable script target: xargs feeds '${script_tokens[$script_hidx]}' its script on stdin after the interpreter's own flags, so no argv path exists for this hook to adjudicate." \
+            "pass the script path on the command line (xargs <interpreter> <flags> <path> ...), or set CLAUDE_HOOK_BYPASS=1"
+        fi
+      fi
+      # <<< M-XF-WALK
       [ "$script_idx" -lt "${#script_tokens[@]}" ] || continue
 
       # PARSE-ONLY EXEMPTION, AND WHAT script_noexec MEANS AT THIS GATE: the FINAL
@@ -4214,17 +5492,18 @@ case "$TOOL_NAME" in
       if [ "$script_cmode" -eq 1 ]; then
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
           normalize_script_token "${script_tokens[$script_idx]}"
-          script_cand="$script_norm_out"
           # This loop is the reason the domain gate exists at all: under `-c` the
           # tokens are WORDS OF A PROGRAM STRING, not declared operands, and
           # segment splitting routinely hands it fragments like `'echo`. The gate
           # keeps those inert (arm F1-FP-cmode) while a fragment whose real name
-          # ends `.sh` is still adjudicated.
-          if script_operand_implicated "$script_interp_domain"; then
+          # ends `.sh` is still adjudicated. Each token is also read as the word
+          # the shell passes where the first two views claim nothing, with NO join
+          # and nothing consumed: every token keeps its own test (script_operand_resolve).
+          if script_operand_resolve "$script_interp_domain" ""; then
             if [ "$script_interp_domain" = "interp" ]; then
-              script_shell_verdict "$script_cand" "$script_norm_ok"
+              script_shell_verdict "$script_subj_out" "$script_subj_ok"
             else
-              destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
+              destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
             fi
           fi
           script_idx=$(( script_idx + 1 ))
@@ -4239,9 +5518,10 @@ case "$TOOL_NAME" in
         # a PREFIX and the interpreter arm's domain is a SUFFIX test. Asking the
         # prefix alone is what let `bash '/tmp/'evil.sh` through: probe `/tmp/`,
         # no `.sh`, arm skipped, deny never reached. See THE SUBJECT RULE on
-        # script_operand_implicated.
+        # script_operand_implicated. Where neither of those views claims the token,
+        # the word after quote removal is read, and a fragment is joined to the word
+        # it is a piece of — here, and at no other site (script_operand_resolve).
         normalize_script_token "${script_tokens[$script_idx]}"
-        script_cand="$script_norm_out"
         if [ "$script_verb" = "source" ]; then
           # `source`/`.` take ANY file, not only a script suffix. Its domain is
           # preserved verbatim from the mechanism it replaces — it lives in
@@ -4249,8 +5529,8 @@ case "$TOOL_NAME" in
           # unify it with the interpreter arm's `*.sh`: narrowing silently drops
           # `/*`, `~/*` and `*.bash` coverage, and widening the interpreter arm to
           # `/*` opens a false-positive surface with no defect behind it.
-          if script_operand_implicated source; then
-            script_shell_verdict "$script_cand" "$script_norm_ok"
+          if script_operand_resolve source "$script_idx"; then
+            script_shell_verdict "$script_subj_out" "$script_subj_ok"
           fi
         else
           # THE SHELL TRIO'S PATH STAYS OFF THE NON-SHELL ROUTER, AND THE BRANCH IS
@@ -4261,11 +5541,11 @@ case "$TOOL_NAME" in
           # opened does that view's rollout phase apply. Only a newly-admitted
           # interpreter reaches the phase-gated non-shell router, so admitting
           # python cannot soften the arm that was always-enforce before it.
-          if script_operand_implicated "$script_interp_domain"; then
+          if script_operand_resolve "$script_interp_domain" "$script_idx"; then
             if [ "$script_interp_domain" = "interp" ]; then
-              script_shell_verdict "$script_cand" "$script_norm_ok"
+              script_shell_verdict "$script_subj_out" "$script_subj_ok"
             else
-              destructive_022_interp_verdict "$script_cand" "$script_norm_ok"
+              destructive_022_interp_verdict "$script_subj_out" "$script_subj_ok"
             fi
           fi
         fi
