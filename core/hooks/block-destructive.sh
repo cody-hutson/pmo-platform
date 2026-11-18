@@ -4137,6 +4137,15 @@ case "$TOOL_NAME" in
     # reason as the three below: an unset read under `set -u` exits 1, and exit 1
     # is NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
     script_ftok=""
+    # The backtick command word's state (M-EXEC-TICK): whether the second view gave every
+    # opener in this command its position, and the decline's cursor, text and answer.
+    # Initialised for the same reason as script_ftok above: an unset read under `set -u`
+    # exits 1, and exit 1 is NON-blocking in the PreToolUse contract — it would fail OPEN.
+    script_encl_all=0
+    script_tki=0
+    script_tkt=""
+    script_tkp=""
+    script_tick_decline=0
     # The option-run latch and the reading it tests (see script_option_word).
     # Initialised for the same reason as script_ftok above.
     script_fsub=""
@@ -4273,6 +4282,11 @@ case "$TOOL_NAME" in
           script_encl="${script_encl}${script_mark}${script_hold}${script_rest}"$'\n'$'\n'
         done <<< "$script_segments"
         script_segments="${script_segments}"$'\n'"${script_encl%$'\n'}"
+        # Every opener in this command was given its position, so the exec arm may leave a
+        # backtick command word to the position its backtick opened (M-EXEC-TICK). It stays 0
+        # when the position ceiling cut this loop short, and any other early exit added to the
+        # loop must leave it 0 as well.
+        if [ "$script_lift" -lt "$SCRIPT_ENCL_POS_MAX" ]; then script_encl_all=1; fi   # M-EXEC-TICK-ALL
         ;;
     esac
     # >>> ENCLOSURE-VIEW-END
@@ -4784,6 +4798,73 @@ case "$TOOL_NAME" in
               fi
               ;;
           esac
+          # >>> M-EXEC-TICK
+          # A COMMAND WORD THAT BEGINS WITH A BACKTICK OPENS A COMMAND SUBSTITUTION, AND IT IS
+          # NOT A PATHNAME. POSIX Shell Command Language 2.6.3 replaces a backquoted substitution
+          # with its command's output, and the slash test of 2.9.1.1 is asked of the command NAME
+          # that results: the slash in this token belongs to the program the substitution runs.
+          # Read as written, the token reached this arm as a backtick-led path (the trailing run
+          # strips the closing backtick), failed the allowlist on the backtick alone and was
+          # recorded — this arm's largest recorded class, text and real substitutions alike. The
+          # second view opens a position at that backtick and adjudicates what the substitution
+          # runs there, so this arm declines the word and leaves it to that position.
+          #
+          # A DECLINE IS AN EXEMPTION, SO IT IS TAKEN ONLY WHERE THE SECOND VIEW IS KNOWN TO READ
+          # THAT POSITION UNDER THE SAME QUOTE ATTRIBUTION, AND THE WORD HOLDS NOTHING BUT THE
+          # SUBSTITUTION. Anywhere else the token is read exactly as before.
+          #   - the second view gave every opener in the command its position (script_encl_all);
+          #   - the word is the segment's first, so the quote state at the backtick is the
+          #     segment's start state;
+          #   - in the second view's own pass; or, in the first, at state 0 (the position the
+          #     backtick opens is a command position) or state 2 (the backtick taints the run), or
+          #     with the trust boundary latched (nothing is suppressed). Inside a single-quoted or
+          #     ANSI-C run the second view can attribute the run to another carrier — a carrier at
+          #     the head of an unquoted substitution lends its exemption to a later program string
+          #     (AC-ENCL-RESIDUAL-carrier-head) — and this reading is then the only record;
+          #   - the closing backtick is on this segment, found token by token, and no token up to
+          #     and including it carries a backslash or a nested opener: past the second view's
+          #     remainder budget a position holds only the text up to its next opener, so a
+          #     script word behind a nested `(` would go unread there;
+          #   - nothing after the closer in its word is a slash, a `$`, a backtick or a
+          #     backslash: the name the shell looks up has no literal slash of its own, as `$X`
+          #     has none.
+          # It runs only for a word the slash test above sent here, and it reads the tokens in
+          # one expansion: bash 3.2 finds an indexed element by walking the array from its start.
+          # Declared residuals, pinned at today's reading (arms EXEC-TEXT-PIN-*, EXEC-TEXT-MF-carrier).
+          script_tick_decline=0
+          if [ "$script_verb" = "exec" ]; then
+            case "${script_tokens[$script_hidx]}" in
+              "$script_qbt"*)
+                if [ "$script_encl_all" -eq 1 ] && [ "$script_hidx" -eq 0 ]; then   # M-EXEC-TICK-GUARD
+                  case "${script_pass}:${script_segstart}:${script_qbail}" in
+                    2:*|1:0:*|1:2:*|1:*:1)   # M-EXEC-TICK-STATE
+                      script_tki=0
+                      for script_tkt in "${script_tokens[@]:$script_hidx}"; do
+                        if [ "$script_tki" -eq 0 ]; then script_tkt="${script_tkt:1}"; fi
+                        script_tki=$(( script_tki + 1 ))
+                        case "$script_tkt" in
+                          *"$script_bs"*) break ;;
+                          *"$script_qbt"*)
+                            script_tkp="${script_tkt%%"$script_qbt"*}"
+                            case "$script_tkp" in *'('*) break ;; esac   # M-EXEC-TICK-NEST
+                            script_tkt="${script_tkt#*"$script_qbt"}"
+                            case "$script_tkt" in
+                              */*|*'$'*|*"$script_qbt"*|*"$script_bs"*) : ;;   # M-EXEC-TICK-TAIL
+                              *) script_tick_decline=1 ;;
+                            esac
+                            break
+                            ;;
+                          *'('*) break ;;   # M-EXEC-TICK-NEST
+                        esac
+                      done
+                      ;;
+                  esac
+                fi
+                ;;
+            esac
+          fi
+          if [ "$script_tick_decline" -eq 1 ]; then continue; fi
+          # <<< M-EXEC-TICK
       fi
 
       # EXEC ARM. No flag walk and no operand arity: the command word IS the file

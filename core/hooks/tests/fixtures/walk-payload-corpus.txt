@@ -2236,10 +2236,10 @@ XF15|block-destructive|rt-xpcx2ctl|-|?|B|printf x | xargs bash -o ab
 
 # --- ms#440 Commit 0b: release script-guard-refuses-only-what-executes — rows at today's verdicts. gt is ? (Commit 0b runs no payload; Stage 7 takes the real-interpreter reading). @NL@ is a newline. ---
 # #8490: shapes the backtick command word admits (LT rows; GREEN moves them W -> a)
-LT01|block-destructive|looks-like-text|-|?|W|true <<'EOF'@NL@notes@NL@`@D@/ok.sh` is the entry point@NL@EOF
-LT02|block-destructive|looks-like-text|-|?|W|git commit -m "$(cat <<'EOF'@NL@Fix the walk@NL@`@D@/ok.sh` now reads it@NL@EOF@NL@)"
-LT03|block-destructive|looks-like-text|-|?|W|git commit -m 'Fix it (`@D@/ok.sh` reads the file)'
-LT04|block-destructive|looks-like-text|-|?|W|`@D@/ok.sh`
+LT01|block-destructive|looks-like-text|-|?|a|true <<'EOF'@NL@notes@NL@`@D@/ok.sh` is the entry point@NL@EOF
+LT02|block-destructive|looks-like-text|-|?|a|git commit -m "$(cat <<'EOF'@NL@Fix the walk@NL@`@D@/ok.sh` now reads it@NL@EOF@NL@)"
+LT03|block-destructive|looks-like-text|-|?|a|git commit -m 'Fix it (`@D@/ok.sh` reads the file)'
+LT04|block-destructive|looks-like-text|-|?|a|`@D@/ok.sh`
 # #8548: an interpreter inside an assignment value's command substitution (AS rows; design on sub-task #9060)
 AS01|block-destructive|looks-like-asgn|AS11|?|W|OUT=$(bash '@D@/ok.sh')
 AS02|block-destructive|looks-like-asgn|-|?|W|OUT="$(bash '@D@/ok.sh')"
