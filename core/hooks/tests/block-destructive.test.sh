@@ -9819,6 +9819,68 @@ xt_rem="echo \$(true) \$(true) xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xt_arm "EXEC-TEXT-PIN-remainder: a nested opener before the closer keeps the first view's record past the remainder budget" block-destructive-smallb.sh "$xt_rem" W 1+
 xt_arm "EXEC-TEXT-PIN-remainder-pair: without the nested-opener stop the execution goes unrecorded" block-destructive-xnonestb.sh "$xt_rem" a -
 
+# --- #8326: the here-document receiver read (release script-guard-refuses-only-what-executes; design
+# on sub-task #9061). An inert body behind a grammar opener, or received by cat under the whole-command
+# no-consumer test, is excised; a receiver that executes its input, a consumer of cat's output, and a
+# receiver text holding a compound-command closer keep the body. Rows HL01-HL12 and HM01-HM11 are read
+# by id; a shape no row carries is spelled here. Each arm reads the shipped copy and the enclosure
+# family's forced copy.
+#   hdnocons  the whole-command no-consumer test removed (its one line, M-HD-RECV-NOCONS)
+#   hdcloser  the closer rule removed (its one line, M-HD-RECV-CLOSER)
+/usr/bin/sed '/# M-HD-RECV-NOCONS$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdnocons.sh"
+/usr/bin/sed '/# M-HD-RECV-CLOSER$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdcloser.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdnocons.sh" "${ENCL_HOOKS}/block-destructive-hdcloser.sh"
+encl_shape_arm "HD-RECV-COPY-nocons: the no-consumer mutant removes its one line" block-destructive-hdnocons.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-closer: the closer-rule mutant removes its one line" block-destructive-hdcloser.sh "1/0"
+
+# --- admitted: an inert body handed to a receiver that does not execute it (RED: each reads B) ---
+qscan_arm "HD-RECV-ADMIT-paren: a subshell opener before a carrier receiver" HL01 a a -
+qscan_arm "HD-RECV-ADMIT-paren-attached: the subshell opener attached to the carrier word" HL02 a a -
+qscan_arm "HD-RECV-ADMIT-brace: a brace-group opener before a carrier receiver" HL03 a a -
+qscan_arm "HD-RECV-ADMIT-brace-printf: the same before another carrier" HL04 a a -
+qscan_arm "HD-RECV-ADMIT-kw: a reserved-word opener before a carrier receiver" HL05 a a -
+qscan_arm "HD-RECV-ADMIT-kw-gh: the same before another carrier" HL06 a a -
+qscan_arm "HD-RECV-ADMIT-bang: the negation word before a carrier receiver" HL07 a a -
+qscan_arm "HD-RECV-ADMIT-bang-echo: the same before another carrier" HL08 a a -
+qscan_arm "HD-RECV-ADMIT-cat-print: a cat receiver, quoted delimiter, no tail" HL09 a a -
+qscan_arm "HD-RECV-ADMIT-cat-print-rpt: the same under another delimiter" HL10 a a -
+qscan_arm "HD-RECV-ADMIT-cat-redirect: a cat receiver writing a file, the redirection ahead of the operator" HL11 a a -
+qscan_arm "HD-RECV-ADMIT-cat-redirect-after: the same, the redirection after the operator" HL12 a a -
+
+# --- must flag: today's refusal stands (each green before and after) ---
+qscan_arm "HD-RECV-MF-paren-shell: a subshell opener before a shell-interpreter receiver" HM01 B B -
+qscan_arm "HD-RECV-MF-cat-pipe: a cat receiver whose output pipes into an interpreter" HM02 B B -
+qscan_arm "HD-RECV-MF-cat-fd-pipe: a cat receiver with a descriptor duplication, then a pipe" HM03 B B -
+qscan_arm "HD-RECV-MF-cat-procsub: a cat receiver whose output goes to a process substitution" HM04 B B -
+qscan_arm "HD-RECV-MF-cat-subst-head: a cat receiver inside a substitution at command position" HM05 B B -
+qscan_arm "HD-RECV-MF-cat-earlier-subst: a cat receiver inside a substitution opened on an earlier line" HM06 B B -
+qscan_arm "HD-RECV-MF-cat-later-pipe: a cat receiver inside a group closed and piped after the body" HM07 B B -
+qscan_arm "HD-RECV-MF-cat-bare-dollar: a cat receiver, bare delimiter, a dollar in the body" HM08 B B -
+qscan_arm "HD-RECV-MF-loop-close: a loop closer receiving the here-document" HM10 B B -
+qscan_arm "HD-RECV-CTL-nonmember: a receiver on no list (R-4 stands)" HM11 B B -
+hd_nl=$'\n'
+hd_arith="(( echo <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF${hd_nl}))"
+hd_closer="( echo ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_closer_cat="( cat ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_coproc="coproc bash; cat <<'EOF' >&\${COPROC[1]}${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_tail="( bash; echo ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-MF-arith: an arithmetic opener is not stepped" "$hd_arith" B B -
+encl_arm "HD-RECV-MF-closer: a stepped opener whose receiver text holds a closer keeps the body" "$hd_closer" B B -
+encl_arm "HD-RECV-MF-closer-cat: a cat head whose receiver text holds a closer keeps the body" "$hd_closer_cat" B B -
+encl_arm "HD-RECV-MF-cat-coproc: a cat receiver writing into a coprocess keeps the body" "$hd_coproc" B B -
+encl_arm "HD-RECV-MF-group-tail: a here-document after a subshell closer keeps its body" "$hd_tail" B B -
+encl_mut_arm "HD-RECV-MF-group-tail-pair: without the closer rule that body is excised" block-destructive-hdcloser.sh "$hd_tail" a
+if wc_row_cmd HM02; then
+  encl_mut_arm "HD-RECV-MF-cat-pipe-pair: without the no-consumer test the piped body is excised [row HM02]" block-destructive-hdnocons.sh "$WC_CMDX" a
+else
+  /usr/bin/printf 'FAIL: HD-RECV-MF-cat-pipe-pair\n  row HM02 is not a block-destructive row of the corpus\n'
+  FAIL=$((FAIL + 1))
+fi
+
+# --- the closer rule's precision cost, measured: allowed before, refused after ---
+hd_cost_q="gh pr create --title \"fix(x): y\" --body-file - <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-COST-quoted: a carrier whose quoted argument holds a parenthesis, then an inert here-document" "$hd_cost_q" a a -
+
 /bin/rm -rf "$ENCL_ROOT"
 
 # ---- AC-022-X* (#8314, DT pass 3): the -022 separator split is a linear pass ----
@@ -10848,6 +10910,19 @@ aq_arm "ASGN-QVAL-over-wrap (declared over-block): an assignment behind a wrappe
 
 # --- the declared residuals: allowed before and after ---
 aq_arm "ASGN-QVAL-resid-bail: a later line of a command whose bail latched" AV33 a a pqvalgate B
+# The same residual on a receiver on no list, so the pin does not depend on which receivers the
+# here-document pre-pass admits (#8326 admits AV33's cat). Allowed on the hook; the copy whose gate
+# vouches for every segment refuses it.
+aq_hdresid="wc -l <<'EOF'"$'\n'"x"$'\n'"EOF"$'\n'"FOO='a b' bash ${WC_D}/na.sh"
+aq_run block-destructive.sh "$aq_hdresid"; aq_hdresid_v="$AQ_V"
+aq_run block-destructive-pqvalgate.sh "$aq_hdresid"; aq_hdresid_g="$AQ_V"
+if [ "$aq_hdresid_v" = a ] && [ "$aq_hdresid_g" = B ]; then
+  /usr/bin/printf 'PASS: ASGN-QVAL-resid-bail-nonmember: a later line of a command whose bail latched on a receiver on no list (hook %s, pqvalgate %s)\n' "$aq_hdresid_v" "$aq_hdresid_g"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: ASGN-QVAL-resid-bail-nonmember: a later line of a command whose bail latched on a receiver on no list\n  wanted hook=a pqvalgate=B; observed hook=%s pqvalgate=%s\n' "$aq_hdresid_v" "$aq_hdresid_g"
+  FAIL=$((FAIL + 1))
+fi
 aq_arm "ASGN-QVAL-resid-braced: a value holding a braced expansion" AV34 a a pqvalguards B
 aq_arm "ASGN-QVAL-resid-dqencl: a value at an enclosure position opened inside double quotes" AV35 a a pqvalgate W:shell-enclosure
 aq_arm "ASGN-QVAL-resid-redir: a redirection operator glued to the value's end" AV36 a a
@@ -11988,6 +12063,23 @@ if [ "$CE_DS" = -1 ]; then
   [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
 fi
 ce_report "CEIL-NEWSCAN-TEXT: the backtick command word's lookahead is charged once per pass [row LT01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
+
+# CEIL-NEWSCAN-HD — the here-document receiver read (#8326) is charged: its tag is traced on an
+# admitted receiver behind a group opener, and its gate-sized hand-off is decided inside the budget.
+ce_why=""
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+if wc_row_cmd HL01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/hdrecv.cmd"; fi
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/hdrecv.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'hd-recv' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} receiver-read-tag-traced=${ce_t:-0}"
+ce_fill 65000 '' '{ ' " gh api x --input - <<'EOF'"$'\n'"bash ${CE_NA}"$'\n'"EOF" > "${CE_ROOT}/hdrecv-big.cmd"
+ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/hdrecv-big.cmd" "$CEIL_LIMIT"
+if [ "$CE_DS" = -1 ]; then
+  ce_timed block-destructive-t2.sh en_US.UTF-8 "${CE_ROOT}/hdrecv-big.cmd" "$CEIL_LIMIT"
+  [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
+fi
+ce_report "CEIL-NEWSCAN-HD: the here-document receiver read is charged on an admitted receiver behind a group opener [row HL01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
 
 # CEIL-VIEW — past either of the view's budgets, once an arm that reads enclosure positions enforces,
 # the command is refused instead of losing a position; at the shipped warn phases nothing moves.
