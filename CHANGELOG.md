@@ -21,6 +21,11 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.13] - 2026-11-18
+
+A newer push to a pull request now cancels the older push's CI runs, and a pull-request check keeps every workflow doing so.
+
+[Full notes](release/releases/notes/v5.13_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.13)
 ## [v5.12] - 2026-11-17
 
 Deploy checks catch hand-kept file lists that drift, and every release close reports the quality share against a set band.

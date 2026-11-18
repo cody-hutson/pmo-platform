@@ -1,6 +1,6 @@
 ---
 title: ADR-241 — Superseded pull-request runs are cancelled by one canonical workflow-level concurrency block, and a pull-request-time gate keeps it on every pull-request-triggered workflow
-status: Proposed
+status: Accepted
 date: 2026-11-15
 release: superseded-pr-runs-cancelled
 deciders: "Workspace owner (Stage-4 plan gate; Collective Review scope lock; Stage-13 ratification); the key and the gate's predicate chosen at Stage 5 Solutioning and amended at the scope lock by the adversarial reviews' fixes"
@@ -16,7 +16,7 @@ source_observations:
 
 ## Status
 
-**Proposed** — authored at Stage 6 Engineering for the `superseded-pr-runs-cancelled` release, as the pointer record the Collective Review scope lock asked for. Ratification is recorded in this file's frontmatter `status:` field at Stage 13, which is where it must be verified, and is never inferred from milestone closure.
+**Accepted** — ratified by the workspace owner at Stage 13 Close of the `superseded-pr-runs-cancelled` release, by a decision rendered for this record alone. It was authored at Stage 6 Engineering for that release as the pointer record the Collective Review scope lock asked for. Ratification is recorded in this file's frontmatter `status:` field, which is where it must be verified, and is never inferred from milestone closure.
 
 **Numbering provenance.** Claimed as **240** against an anchor of **239** on `origin/main`, read from `release/tools/renumber-adr.py --detect` at this record's authoring commit. A branch claim is detection-only and never binds. At authoring, a sibling release in flight held a branch claim on the same slot; whichever of the two merges second is moved by the renumbering tool at merge time, which appends one provenance note per hop. Citations from other branch-authored artifacts use the slug token keyed on this record's slug, which carries no number shape and resolves at the claim.
 
