@@ -11591,6 +11591,413 @@ lc_mut_arm "LATCH-CAUSE-M2a: without M-ROUTE-NOTE the route's refusal carries no
 lc_mut_arm "LATCH-CAUSE-M3a: without M-ROUTE-LIVE the route's refusal is neither tagged nor noted" block-destructive-m3a.sh ZU34 both
 /bin/rm -rf "$LC_ROOT"
 
+# --- #8327: the rule's work ceiling (CEIL-*) ---
+# A command hook that outlasts the runtime's timeout does not block, so the rule bounds its own
+# time. At the head of every bash loop on its surface it compares bash's SECONDS with a deadline
+# fixed at hook start (SCRIPT_CEIL_SECONDS), and at -022 entry it compares the command's length
+# with SCRIPT_CEIL_CHARS, because one expansion between two checks cannot be interrupted. Past
+# either the command is refused, whatever the arms' phases; the refusal's block-log row carries
+# features {schema_version: 1, ceiling: <cause>}. Copies are built from the hook under test:
+#   t0 / t2   the deadline at 0 / 2 seconds          off    the ceiling and the gate off
+#   trace     each check also appends its tag        site   only the route loop's check refuses
+#   strip     every # M-CEIL- line deleted (no ceiling at all, for the cost control)
+#   sens      the check sleeps 50 ms per call (the cost control's sensitivity)
+#   v-*       an enclosure-reaching phase at enforce with the view's small-budget edits
+# No arm prints a size beside a time: each prints a ratio to its budget, as the lin_* arms do.
+CEIL_LIMIT="${CEIL_LIMIT_DS:-200}"   # tenths: the watchdog a refusal must beat
+CEIL_CTL="${CEIL_CTL_DS:-100}"       # tenths: the watchdog the ceiling-off limb must outlast
+CE_ROOT="$(/usr/bin/mktemp -d)"
+CE_HOOKS="${CE_ROOT}/.claude/hooks"
+/bin/mkdir -p "${CE_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${CE_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${CE_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" > "${CE_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${CE_HOOKS}/.mode"
+CE_TRACE="${CE_ROOT}/trace"
+CE_LOG="${CE_HOOKS}/block-log.jsonl"
+CE_DRAIN="${CE_HOOKS}/destructive-warn-log.jsonl"
+/bin/cp "$HOOK" "${CE_HOOKS}/block-destructive.sh"
+/usr/bin/sed 's/^readonly SCRIPT_CEIL_SECONDS=[0-9]*$/readonly SCRIPT_CEIL_SECONDS=0/' "$HOOK" > "${CE_HOOKS}/block-destructive-t0.sh"
+/usr/bin/sed 's/^readonly SCRIPT_CEIL_SECONDS=[0-9]*$/readonly SCRIPT_CEIL_SECONDS=2/' "$HOOK" > "${CE_HOOKS}/block-destructive-t2.sh"
+/usr/bin/sed -e 's/^readonly SCRIPT_CEIL_SECONDS=[0-9]*$/readonly SCRIPT_CEIL_SECONDS=1000000/' \
+  -e 's/^readonly SCRIPT_CEIL_CHARS=[0-9]*$/readonly SCRIPT_CEIL_CHARS=1000000000/' "$HOOK" > "${CE_HOOKS}/block-destructive-off.sh"
+F="$CE_TRACE" /usr/bin/awk 'BEGIN { f = ENVIRON["F"] } / # M-CEIL-TEST$/ { print "  /usr/bin/printf \"%s\\n\" \"$1\" >> \"" f "\"" } { print }' \
+  "$HOOK" > "${CE_HOOKS}/block-destructive-trace.sh"
+/usr/bin/awk '/ # M-CEIL-TEST$/ { print "  if [ \"$1\" = route ]; then script_ceil_refuse time \"$1\"; fi" } { print }' \
+  "$HOOK" > "${CE_HOOKS}/block-destructive-site.sh"
+/usr/bin/grep -v -- '# M-CEIL-' "$HOOK" > "${CE_HOOKS}/block-destructive-strip.sh"
+/usr/bin/awk '/ # M-CEIL-TEST$/ { print "  /bin/sleep 0.05" } { print }' "$HOOK" > "${CE_HOOKS}/block-destructive-sens.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-pos.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-rem.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-exec.sh"
+/usr/bin/sed 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-warn.sh"
+/bin/chmod +x "${CE_HOOKS}/"block-destructive*.sh
+# ce_live <copy> <lines that must differ> — 0 when the copy differs from the hook by exactly that many lines.
+ce_live() {
+  local d
+  d="$(/usr/bin/diff "$HOOK" "${CE_HOOKS}/$1" | /usr/bin/grep -c '^[<>]')"
+  [ "$d" = "$2" ]
+}
+# ce_timed <copy> <locale> <command-file> <limit> — the copy on the command's payload under a watchdog;
+# sets CE_DS (tenths elapsed, -1 when stopped), CE_EXIT, CE_ERR and CE_REC (the call's block-log record).
+CE_DS=0; CE_EXIT=0; CE_ERR=""; CE_REC=""
+ce_timed() {
+  local pay="${CE_ROOT}/payload.json" err="${CE_ROOT}/stderr" pid n=0
+  /bin/rm -f "$CE_LOG"
+  bash_payload "$(/bin/cat "$3")" "$CE_ROOT" > "$pay"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT; LC_ALL="$2" exec /bin/bash "${CE_HOOKS}/$1" < "$pay" > /dev/null 2> "$err" ) &
+  pid=$!
+  CE_REC=""; CE_ERR=""
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      lin_reap "$pid"; wait "$pid" 2>/dev/null
+      CE_DS=-1; CE_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  CE_EXIT=0; wait "$pid" || CE_EXIT=$?
+  CE_DS="$n"
+  CE_ERR="$(/bin/cat "$err" 2>/dev/null)"
+  if [ -s "$CE_LOG" ]; then CE_REC="$(/usr/bin/jq -s -c '.[-1]' "$CE_LOG" 2>/dev/null)"; fi
+}
+ce_ceiling() { # -> the features.ceiling of CE_REC, or empty
+  if [ -n "$CE_REC" ]; then /usr/bin/jq -r '.features.ceiling // ""' <<<"$CE_REC" 2>/dev/null; fi
+}
+ce_report() { # <label> <observed reasons; empty = pass>
+  if [ -z "$2" ]; then /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: %s\n  observed:%s\n' "$1" "$2"; FAIL=$((FAIL + 1)); fi
+}
+# ce_fill <chars> <head> <unit> <tail> — the head, whole units, blanks to the exact length, then the tail.
+ce_fill() {
+  H="$2" U="$3" T="$4" LC_ALL=C /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = n - length(h) - length(t); k = int(m / length(u)); r = ""; b = u
+    while (k > 0) { if (k % 2) r = r b; b = b b; k = int(k / 2) }
+    p = m - length(r); s = ""; while (length(s) < p) s = s " "
+    printf "%s%s%s%s", h, r, s, t }'
+}
+CE_NA="${WC_D}/na.sh"
+CE_Q="'"
+CE_BODY_HEAD="gh pr create --title t --body \"\$(cat <<${CE_Q}EOF${CE_Q}"$'\n'
+CE_BODY_TAIL=$'EOF\n)"'
+# ce_shape <class> <chars> <file> — one of the ten classes, each inert unless the class says so.
+ce_shape() {
+  case "$1" in
+    segment)    ce_fill "$2" 'echo' ' ab' '' ;;
+    segments)   ce_fill "$2" 'true' ';true' '' ;;
+    quotes)     ce_fill "$2" 'bash -n ' '""' '' ;;
+    openers)    ce_fill "$2" 'echo' ' $(true)' '' ;;
+    blanks)     ce_fill "$2" '' ' ' 'echo a' ;;
+    view)       ce_fill "$2" 'echo' " \$(true) $(/usr/bin/printf '%*s' 600 '' | /usr/bin/tr ' ' 'x')" '' ;;
+    cluster)    ce_fill "$2" 'sudo -' 'b' ' q' ;;
+    body)       ce_fill "$2" "$CE_BODY_HEAD" $'| a | b | `c` |\nSome prose with a `code span` and more plain words in it.\n' "$CE_BODY_TAIL" ;;
+    rows)       ce_fill "$2" "$CE_BODY_HEAD" "see \`${CE_NA}\` for the detail"$'\n' "$CE_BODY_TAIL" ;;
+    assignment) ce_fill "$2" 'X=' 'a' ' true' ;;
+  esac > "$3"
+}
+
+# CEIL-VALUE — the three constants, each one exact readonly line, and their margins.
+ce_why=""
+ce_sec="$(/usr/bin/sed -n 's/^readonly SCRIPT_CEIL_SECONDS=\([0-9][0-9]*\)$/\1/p' "$HOOK")"
+ce_chr="$(/usr/bin/sed -n 's/^readonly SCRIPT_CEIL_CHARS=\([0-9][0-9]*\)$/\1/p' "$HOOK")"
+[ "$(/usr/bin/grep -c '^readonly SCRIPT_CEIL_SECONDS=[0-9][0-9]*$' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-deadline-line"
+[ "$(/usr/bin/grep -c '^readonly SCRIPT_CEIL_CHARS=[0-9][0-9]*$' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-gate-line"
+[ "$(/usr/bin/grep -cF 'readonly SCRIPT_CEIL_AT=$(( SECONDS + SCRIPT_CEIL_SECONDS ))' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-anchor-line"
+if [ -n "$ce_sec" ] && [ -n "$ce_chr" ]; then
+  [ $(( ce_sec * 4 )) -le 600 ] || ce_why="${ce_why} deadline-not-four-times-under-600"
+  [ "$ce_chr" -ge 40960 ] || ce_why="${ce_why} gate-under-the-largest-timed-cell"
+fi
+ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly lines; the deadline is at least four times under 600 s and the gate at least the largest timed cell" "$ce_why"
+
+# CEIL-COVER — every bash loop on the -022 surface (the helpers from the allowlist reader to the
+# dispatch banner, and the -022 block) is charged by a check as its body's first statement, or
+# declared bounded by a `# ceil-bounded:` line directly above its head; no check sits inside the two
+# helpers that run in a command substitution. awk programs' loops (`for (`, `while (`) are not bash.
+ce_cover() { # <file> -> "loops charged bounded bad sub"
+  /usr/bin/awk '
+    /^is_script_allowlisted\(\) \{/ { on = 1 }
+    /^# BRANCH BY TOOL NAME/ { on = 0 }
+    /# BLOCK-DESTRUCTIVE-022 — an interpreter/ { on = 1 }
+    /# ---- Write\/Edit branch/ { on = 0 }
+    /^(script_realpath|script_cont_joined)\(\) / { insub = 1 }
+    insub && /script_ceil_(check|refuse)/ { sub_n++ }
+    insub && /^\}/ { insub = 0 }
+    { line[NR] = $0 }
+    on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /^[[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$)/) { head[++nh] = NR }
+    END {
+      for (i = 1; i <= nh; i++) {
+        h = head[i]
+        if (line[h - 1] ~ /^[[:space:]]*# ceil-bounded: [^[:space:]]/) { nb++; continue }
+        d = h; while (d <= NR && line[d] !~ /(^|[;[:space:]])do([[:space:]]+#.*)?$/) d++
+        b = d + 1; while (b <= NR && line[b] ~ /^[[:space:]]*$/) b++
+        if (line[b] ~ /^[[:space:]]*script_ceil_check [a-z0-9-]+[[:space:]]+# M-CEIL-[A-Z0-9-]+$/) nc++
+        else bad = bad (bad == "" ? "" : ",") h
+      }
+      printf "%d %d %d %s %d", nh, nc, nb, (bad == "" ? "-" : bad), sub_n
+    }' "$1"
+}
+read -r ce_nl ce_nc ce_nb ce_bad ce_sub <<<"$(ce_cover "$HOOK")"
+ce_why=""
+[ "$ce_nl" -ge 46 ] || ce_why="${ce_why} loops-found=${ce_nl}(wanted-at-least-46)"
+[ $(( ce_nc + ce_nb )) = "$ce_nl" ] || ce_why="${ce_why} charged=${ce_nc}+bounded=${ce_nb}-of-${ce_nl}; unannotated-at-lines:${ce_bad}"
+[ "$ce_sub" = 0 ] || ce_why="${ce_why} a-check-inside-a-subshell-helper=${ce_sub}"
+ce_report "CEIL-COVER: every bash loop on the -022 surface is charged or declared bounded (${ce_nl} loops: ${ce_nc} charged, ${ce_nb} bounded), and none is charged inside a subshell helper" "$ce_why"
+/usr/bin/grep -v -- '# M-CEIL-ROUTE$' "$HOOK" > "${CE_ROOT}/cover-m1"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe() {"; print "  while false; do"; print "    :"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-m2"
+ce_why=""
+[ "$ce_bad" = "-" ] || ce_why="${ce_why} the-shipped-hook-is-not-covered"
+ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m1" | /usr/bin/grep -c '^[<>]')"
+if [ "$ce_live_n" != 1 ]; then
+  ce_why="${ce_why} no-route-charge-line-to-delete"
+else
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub <<<"$(ce_cover "${CE_ROOT}/cover-m1")"
+  case "$ce_mbad" in -|*,*) ce_why="${ce_why} the-deleted-route-charge-reads-${ce_mbad}(wanted-one-loop)" ;; esac
+fi
+read -r ce_nl ce_nc ce_nb ce_mbad ce_sub <<<"$(ce_cover "${CE_ROOT}/cover-m2")"
+case "$ce_mbad" in -|*,*) ce_why="${ce_why} the-added-loop-reads-${ce_mbad}(wanted-one-loop)" ;; esac
+ce_report "CEIL-COVER-mut: a copy with the route loop's charge deleted, and one with an unannotated loop added, each read exactly one uncovered loop" "$ce_why"
+
+# CEIL-AT-CAP — at the deadline and at the gate the rule refuses, never allows.
+/usr/bin/printf '%s' 'ls -la' > "${CE_ROOT}/inert.cmd"
+ce_why=""
+ce_live block-destructive-t0.sh 2 || ce_why="${ce_why} the-t0-copy-edit-did-not-apply"
+ce_timed block-destructive-t0.sh en_US.UTF-8 "${CE_ROOT}/inert.cmd" "$CEIL_LIMIT"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+[ "$(ce_ceiling)" = time ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+ce_report "CEIL-AT-CAP-time-inert: past the deadline an ordinary allowed command is refused, cause time" "$ce_why"
+if wc_row_cmd X24; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/warn.cmd"; fi
+ce_why=""
+ce_live block-destructive-t0.sh 2 || ce_why="${ce_why} the-t0-copy-edit-did-not-apply"
+ce_d0=0; [ -f "$CE_DRAIN" ] && ce_d0="$(/usr/bin/wc -l < "$CE_DRAIN" | /usr/bin/tr -d '[:space:]')"
+ce_timed block-destructive-t0.sh en_US.UTF-8 "${CE_ROOT}/warn.cmd" "$CEIL_LIMIT"
+ce_d1=0; [ -f "$CE_DRAIN" ] && ce_d1="$(/usr/bin/wc -l < "$CE_DRAIN" | /usr/bin/tr -d '[:space:]')"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+[ "$ce_d1" = "$ce_d0" ] || ce_why="${ce_why} drain-rows-written=$(( ce_d1 - ce_d0 ))"
+ce_report "CEIL-AT-CAP-time-warn: past the deadline a command whose only finding is a warn-phase record is refused and writes no drain row [row X24]" "$ce_why"
+/usr/bin/printf '%s' "bash ${CE_NA}" > "${CE_ROOT}/refuse.cmd"
+ce_timed block-destructive-t0.sh en_US.UTF-8 "${CE_ROOT}/refuse.cmd" "$CEIL_LIMIT"
+ce_why=""; [ "$CE_EXIT" = 2 ] || ce_why=" exit=${CE_EXIT}"
+ce_report "CEIL-AT-CAP-time-refuse: past the deadline an unlisted execution is still refused" "$ce_why"
+ce_fill 65537 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "${CE_ROOT}/over.cmd"
+ce_fill 65536 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "${CE_ROOT}/edge.cmd"
+ce_fill 65537 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' "bash ${CE_NA}" > "${CE_ROOT}/late.cmd"
+for ce_loc in en_US.UTF-8 C; do
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/over.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  [ "$(ce_ceiling)" = chars ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+  ce_report "CEIL-AT-CAP-chars [${ce_loc}]: one character over the gate an inert allowed command is refused, cause chars, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT") of the budget" "$ce_why"
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/edge.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 0 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  ce_report "CEIL-AT-CAP-chars-edge [${ce_loc}]: a linear inert command of exactly the gate is allowed inside the budget, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$ce_why"
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/late.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  [ "$CE_EXIT" != 0 ] || ce_why="${ce_why} allowed"
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 2 ] || [ "$CE_DS" = -1 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  ce_report "CEIL-AT-CAP-chars-late [${ce_loc}]: just over the gate, its only refusal an unlisted execution at the end, the command is refused" "$ce_why"
+done
+
+# CEIL-SHAPE — ten pathological classes, each built just under the gate. With the ceiling off a
+# heavy class outlasts CEIL_CTL (its -ctl limb); with the deadline at 2 s the same class is refused
+# with cause time inside CEIL_LIMIT, never stopped and never allowed by running out the clock.
+for ce_s in segment segments quotes openers blanks view cluster body rows assignment; do
+  ce_shape "$ce_s" 65000 "${CE_ROOT}/shape-${ce_s}.cmd"
+  ce_loc=en_US.UTF-8
+  ce_timed block-destructive-off.sh "$ce_loc" "${CE_ROOT}/shape-${ce_s}.cmd" "$CEIL_CTL"
+  ce_heavy=0; ce_ctl_exit="$CE_EXIT"
+  if [ "$CE_DS" = -1 ]; then
+    ce_heavy=1
+    ce_report "CEIL-SHAPE-${ce_s}-ctl: with the ceiling off the ${ce_s} class outlasts the control watchdog" ""
+  else
+    /usr/bin/printf 'RESIDUAL: CEIL-SHAPE-%s-ctl bounded without the ceiling, ratio %s of the control watchdog (exit %s)\n' "$ce_s" "$(lin_ratio "$CE_DS" "$CEIL_CTL")" "$CE_EXIT"
+    ce_report "CEIL-SHAPE-${ce_s}-ctl: with the ceiling off the ${ce_s} class finishes inside the control watchdog (recorded as a residual)" ""
+  fi
+  ce_why=""
+  ce_live block-destructive-t2.sh 2 || ce_why="${ce_why} the-t2-copy-edit-did-not-apply"
+  ce_timed block-destructive-t2.sh "$ce_loc" "${CE_ROOT}/shape-${ce_s}.cmd" "$CEIL_LIMIT"
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  if [ "$ce_heavy" = 1 ]; then
+    [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}(wanted-2)"
+    [ "$(ce_ceiling)" = time ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)(wanted-time)"
+  else
+    if [ "$CE_EXIT" != "$ce_ctl_exit" ] && { [ "$CE_EXIT" != 2 ] || [ "$(ce_ceiling)" != time ]; }; then
+      ce_why="${ce_why} exit=${CE_EXIT}(wanted-${ce_ctl_exit}-or-a-time-refusal)"
+    fi
+  fi
+  ce_report "CEIL-SHAPE-${ce_s}: with the deadline at 2 s the ${ce_s} class is decided inside the watchdog, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$ce_why"
+done
+
+# CEIL-LIN — the head resolver's and the head-value check's whole-word quote counts take one linear
+# pass (`# linear: quote parity`) for a word of at least SCRIPT_LINEAR_MIN characters.
+ce_why=""
+/usr/bin/awk '/^script_quote_parity\(\) / { f = 1 } f { print } f && /^\}/ { exit }' "$HOOK" > "${CE_ROOT}/qp.fn"
+[ "$(/usr/bin/grep -c '# linear: quote parity$' "${CE_ROOT}/qp.fn")" = 1 ] || ce_why="${ce_why} no-single-marked-quote-parity-line"
+# ce_qp <locale> <bound> <function file> <input file> -> "sq dq"
+ce_qp() {
+  LC_ALL="$1" /bin/bash -c 'set -eu; SCRIPT_LINEAR_MIN="$1"; script_qp_sq=9; script_qp_dq=9
+    . "$2"; w="$(/bin/cat "$3"; printf x)"; w="${w%x}"; script_quote_parity "$w"; printf "%s %s" "$script_qp_sq" "$script_qp_dq"' _ "$2" "$3" "$4"
+}
+if [ -z "$ce_why" ]; then
+  LC_ALL=C /usr/bin/awk 'BEGIN { for (r = 0; r < 3; r++) { for (i = 1; i < 256; i++) printf "%c", i
+    printf "%s", "naïve 日本 ü \377\303 x\342\202 y\200 \047\047\047 \"\"\" a\047b\"c" } }' > "${CE_ROOT}/qd-0"
+  { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf "'"; } > "${CE_ROOT}/qd-1"
+  { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf '"'; } > "${CE_ROOT}/qd-2"
+  { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf "'\""; } > "${CE_ROOT}/qd-3"
+  /usr/bin/sed 's/gsub(q, "")/gsub(q, "") * 2/' "${CE_ROOT}/qp.fn" > "${CE_ROOT}/qp-near.fn"
+  for ce_loc in en_US.UTF-8 C; do
+    for ce_k in 0 1 2 3; do
+      ce_a="$(ce_qp "$ce_loc" 1000000000 "${CE_ROOT}/qp.fn" "${CE_ROOT}/qd-${ce_k}")" || ce_why="${ce_why} [${ce_loc} qd-${ce_k}] the substitutions did not run;"
+      ce_b="$(ce_qp "$ce_loc" 0 "${CE_ROOT}/qp.fn" "${CE_ROOT}/qd-${ce_k}")" || ce_why="${ce_why} [${ce_loc} qd-${ce_k}] the pass did not run;"
+      [ "$ce_a" = "$ce_b" ] || ce_why="${ce_why} [${ce_loc} qd-${ce_k}] pass ${ce_b} != substitutions ${ce_a};"
+    done
+    ce_a="$(ce_qp "$ce_loc" 1000000000 "${CE_ROOT}/qp.fn" "${CE_ROOT}/qd-1")"
+    ce_n="$(ce_qp "$ce_loc" 0 "${CE_ROOT}/qp-near.fn" "${CE_ROOT}/qd-1" 2>/dev/null)" || ce_n="error"
+    [ "$ce_a" != "$ce_n" ] || ce_why="${ce_why} [${ce_loc}] the near miss equals the substitutions;"
+  done
+fi
+ce_report "CEIL-LIN-EQ: the quote-parity pass equals the two substitutions on a dense input in UTF-8 and C, and a near miss differs" "$ce_why"
+/usr/bin/sed 's/^readonly SCRIPT_LINEAR_MIN=256$/readonly SCRIPT_LINEAR_MIN=1000000000/' "$HOOK" > "${CE_HOOKS}/block-destructive-nopass.sh"
+/usr/bin/sed '/# linear: quote parity$/s#/usr/bin/awk#/nonexistent/awk#' "$HOOK" > "${CE_HOOKS}/block-destructive-noawk.sh"
+/bin/chmod +x "${CE_HOOKS}/block-destructive-nopass.sh" "${CE_HOOKS}/block-destructive-noawk.sh"
+ce_n=0
+for ce_cell in 10:en_US.UTF-8 20:en_US.UTF-8 40:en_US.UTF-8 10:C 20:C 40:C; do
+  ce_kb="${ce_cell%%:*}"; ce_loc="${ce_cell#*:}"; ce_n=$(( ce_n + 1 ))
+  ce_fill $(( ce_kb * 1024 )) 'X=' 'a' "'b' true" > "${CE_ROOT}/lin-${ce_kb}.cmd"
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/lin-${ce_kb}.cmd" "$LIN_LIMIT"
+  ce_why=""
+  /usr/bin/grep -q '# linear: quote parity$' "$HOOK" || ce_why="${ce_why} no-marked-line"
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 0 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  ce_report "CEIL-LIN-${ce_n}: one assignment word at a segment head with a quoted piece, in ${ce_loc}, is allowed inside the budget at ratio $(lin_ratio "$CE_DS" "$LIN_LIMIT")" "$ce_why"
+done
+ce_why=""
+/usr/bin/grep -q '# linear: quote parity$' "$HOOK" || ce_why="${ce_why} no-marked-line"
+ce_timed block-destructive-nopass.sh en_US.UTF-8 "${CE_ROOT}/lin-40.cmd" "$LIN_LIMIT"
+[ "$CE_DS" = -1 ] || ce_why="${ce_why} not-stopped(ratio-$(lin_ratio "$CE_DS" "$LIN_LIMIT"))"
+ce_report "CEIL-LIN-CTL: a copy whose bound never lets the pass run is stopped at the budget on the largest UTF-8 cell" "$ce_why"
+ce_why=""
+/usr/bin/grep -q '# linear: quote parity$' "$HOOK" || ce_why="${ce_why} no-marked-line"
+ce_live block-destructive-noawk.sh 2 || ce_why="${ce_why} the-no-awk-copy-edit-did-not-apply"
+ce_fill 400 'X=' 'a' "'b' bash ${CE_NA}" > "${CE_ROOT}/fb-b.cmd"
+ce_fill 400 'X=' 'a' "'b' echo ${CE_NA}" > "${CE_ROOT}/fb-a.cmd"
+ce_fill 400 'X=' 'a' "'b' true" > "${CE_ROOT}/fb-long.cmd"
+for ce_f in fb-b:2 fb-a:0 fb-long:0; do
+  ce_timed block-destructive-noawk.sh en_US.UTF-8 "${CE_ROOT}/${ce_f%%:*}.cmd" "$LIN_LIMIT"
+  [ "$CE_EXIT" = "${ce_f#*:}" ] || ce_why="${ce_why} ${ce_f%%:*}-exit=${CE_EXIT}"
+  case "$CE_ERR" in *"line "[0-9]*": "*|*"No such file"*) ce_why="${ce_why} ${ce_f%%:*}-hook-error" ;; esac
+done
+ce_report "CEIL-LIN-FB: with the pass's awk missing the quote counts fall back to the substitutions and the verdicts are the shipped hook's" "$ce_why"
+
+# CEIL-CTL — ordinary commands pay nothing measurable, and no verdict moves.
+/usr/bin/printf '%s' 'git commit -m "fix: a short subject"' > "${CE_ROOT}/cost-1.cmd"
+/usr/bin/printf '%s' "${CE_BODY_HEAD}A short body with one line."$'\n'"${CE_BODY_TAIL}" > "${CE_ROOT}/cost-2.cmd"
+/usr/bin/printf '%s' 'git status && ls -la | head -5; echo done' > "${CE_ROOT}/cost-3.cmd"
+# ce_med <copy> <command file> <runs> -> the median of the runs' wall times, in milliseconds
+ce_ms() { /usr/bin/perl -MTime::HiRes=time -e 'printf "%d", time() * 1000'; }
+ce_cost() { # <copy A> <copy B> <command file> <runs> -> "medianA medianB", runs interleaved
+  local i=0 t0 t1 a="" b="" pay="${CE_ROOT}/cost.json"
+  bash_payload "$(/bin/cat "$3")" "$CE_ROOT" > "$pay"
+  while [ "$i" -lt "$4" ]; do
+    t0="$(ce_ms)"; ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT; /bin/bash "${CE_HOOKS}/$1" < "$pay" > /dev/null 2>&1 ) || true; t1="$(ce_ms)"; a="${a}$(( t1 - t0 ))"$'\n'
+    t0="$(ce_ms)"; ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT; /bin/bash "${CE_HOOKS}/$2" < "$pay" > /dev/null 2>&1 ) || true; t1="$(ce_ms)"; b="${b}$(( t1 - t0 ))"$'\n'
+    i=$(( i + 1 ))
+  done
+  /usr/bin/printf '%s %s' "$(/usr/bin/printf '%s' "$a" | /usr/bin/sort -n | /usr/bin/awk '{ v[NR] = $1 } END { print v[int((NR + 1) / 2)] }')" \
+    "$(/usr/bin/printf '%s' "$b" | /usr/bin/sort -n | /usr/bin/awk '{ v[NR] = $1 } END { print v[int((NR + 1) / 2)] }')"
+}
+for ce_k in 1 2 3; do
+  read -r ce_ma ce_mb <<<"$(ce_cost block-destructive.sh block-destructive-strip.sh "${CE_ROOT}/cost-${ce_k}.cmd" 40)"
+  ce_r="$(/usr/bin/awk -v a="$ce_ma" -v b="$ce_mb" 'BEGIN { printf "%.3f", (b > 0 ? a / b : 0) }')"
+  ce_why=""
+  /usr/bin/awk -v r="$ce_r" 'BEGIN { exit !(r < 1.10) }' || ce_why=" ratio-of-medians=${ce_r}"
+  ce_report "CEIL-CTL-cost-${ce_k}: an ordinary command costs the shipped hook under 1.10 times the copy with no ceiling (ratio of medians ${ce_r}, 40 interleaved runs)" "$ce_why"
+done
+ce_why=""
+ce_live block-destructive-sens.sh 1 || ce_why="${ce_why} the-sensitivity-copy-edit-did-not-apply"
+read -r ce_ma ce_mb <<<"$(ce_cost block-destructive-sens.sh block-destructive-strip.sh "${CE_ROOT}/cost-3.cmd" 5)"
+ce_r="$(/usr/bin/awk -v a="$ce_ma" -v b="$ce_mb" 'BEGIN { printf "%.3f", (b > 0 ? a / b : 0) }')"
+/usr/bin/awk -v r="$ce_r" 'BEGIN { exit !(r >= 1.10) }' || ce_why="${ce_why} ratio-of-medians=${ce_r}(wanted-over-1.10)"
+ce_report "CEIL-CTL-cost-sens: the same measure reads over its bound on a copy whose check sleeps 50 ms (ratio ${ce_r})" "$ce_why"
+ce_mv=0; ce_i=0
+while [ "$ce_i" -lt "$wc_n" ]; do
+  [ "${WC_OBS[$ce_i]:-}" = "${WC_REC[$ce_i]}" ] || ce_mv=$(( ce_mv + 1 ))
+  ce_i=$(( ce_i + 1 ))
+done
+ce_why=""; [ "$wc_n" -gt 0 ] || ce_why=" no-corpus-rows"; [ "$ce_mv" = 0 ] || ce_why="${ce_why} rows-moved=${ce_mv}"
+ce_report "CEIL-CTL-verdict: over the walk payload corpus no verdict moves (${wc_n} rows)" "$ce_why"
+
+# CEIL-CAUSE — the refusal names the ceiling and the remedy; its row says which ceiling.
+ce_timed block-destructive-t0.sh en_US.UTF-8 "${CE_ROOT}/inert.cmd" "$CEIL_LIMIT"
+ce_why=""
+case "$CE_ERR" in *"BLOCKED: "*"per-command work ceiling"*) ;; *) ce_why="${ce_why} reason-does-not-name-the-ceiling" ;; esac
+ce_ov="$(/usr/bin/printf '%s\n' "$CE_ERR" | /usr/bin/sed -n 's/^Override: //p')"
+case "$ce_ov" in "pass long text by file reference"*"not an agent's next step.") ;; *) ce_why="${ce_why} override-order" ;; esac
+ce_report "CEIL-CAUSE-text: the refusal names the work ceiling, and its Override leads with passing text by file and ends with the bypass" "$ce_why"
+ce_why=""
+for ce_c in t0:inert:time ship:over:chars; do
+  ce_cp="block-destructive-${ce_c%%:*}.sh"; [ "${ce_c%%:*}" = ship ] && ce_cp=block-destructive.sh
+  ce_rest="${ce_c#*:}"
+  ce_d0=0; [ -f "$CE_DRAIN" ] && ce_d0="$(/usr/bin/wc -l < "$CE_DRAIN" | /usr/bin/tr -d '[:space:]')"
+  ce_timed "$ce_cp" en_US.UTF-8 "${CE_ROOT}/${ce_rest%%:*}.cmd" "$CEIL_LIMIT"
+  ce_d1=0; [ -f "$CE_DRAIN" ] && ce_d1="$(/usr/bin/wc -l < "$CE_DRAIN" | /usr/bin/tr -d '[:space:]')"
+  if [ -z "$CE_REC" ]; then ce_why="${ce_why} [${ce_rest#*:}] no-record"; continue; fi
+  [ "$(/usr/bin/jq -r '[keys_unsorted[]] | join(",")' <<<"$CE_REC")" = "ts,hook,rule,tool,input_digest,cwd,features" ] || ce_why="${ce_why} [${ce_rest#*:}] keys"
+  [ "$(/usr/bin/jq -c '.features' <<<"$CE_REC")" = "{\"schema_version\":1,\"ceiling\":\"${ce_rest#*:}\"}" ] || ce_why="${ce_why} [${ce_rest#*:}] features=$(/usr/bin/jq -c '.features' <<<"$CE_REC")"
+  [ "$ce_d1" = "$ce_d0" ] || ce_why="${ce_why} [${ce_rest#*:}] drain-row-written"
+done
+ce_report "CEIL-CAUSE-row: a ceiling refusal's row holds the six base keys and features {schema_version, ceiling} exactly, and writes no drain row" "$ce_why"
+ce_why=""
+ce_live block-destructive-site.sh 1 || ce_why="${ce_why} the-site-copy-edit-did-not-apply"
+if wc_row_cmd ZU34; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/route.cmd"; fi
+ce_timed block-destructive-site.sh en_US.UTF-8 "${CE_ROOT}/route.cmd" "$CEIL_LIMIT"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+[ "$(ce_ceiling)" = time ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+[ -z "$CE_REC" ] || [ "$(/usr/bin/jq -r '.features.route // ""' <<<"$CE_REC")" = "" ] || ce_why="${ce_why} carries-features.route"
+case "$CE_ERR" in *"Read on the conservative route"*) ce_why="${ce_why} carries-the-route-note" ;; esac
+ce_report "CEIL-CAUSE-route: a ceiling refusal inside the latch route's loop carries features.ceiling and no route tag [row ZU34]" "$ce_why"
+
+# CEIL-NEWSCAN-TEXT — the backtick command word's lookahead (#8490) is charged: its tag is traced
+# once per pass, and its hand-off shape at the gate is decided inside the budget.
+ce_why=""
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+if wc_row_cmd LT01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/tick.cmd"; fi
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/tick.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'tick' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} lookahead-tag-traced=${ce_t:-0}"
+ce_fill 65000 '`' "x $(/usr/bin/printf '%*s' 60 '' | /usr/bin/tr ' ' 'y')" '` q' > "${CE_ROOT}/tick-big.cmd"
+ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/tick-big.cmd" "$CEIL_LIMIT"
+if [ "$CE_DS" = -1 ]; then
+  ce_timed block-destructive-t2.sh en_US.UTF-8 "${CE_ROOT}/tick-big.cmd" "$CEIL_LIMIT"
+  [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
+fi
+ce_report "CEIL-NEWSCAN-TEXT: the backtick command word's lookahead is charged once per pass [row LT01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
+
+# CEIL-VIEW — past either of the view's budgets, once an arm that reads enclosure positions enforces,
+# the command is refused instead of losing a position; at the shipped warn phases nothing moves.
+/usr/bin/printf '%s' 'echo $(true) $(true) $(true) $(true) $(true) $(true)' > "${CE_ROOT}/vpos.cmd"
+/usr/bin/printf '%s' "echo \$(true) $(/usr/bin/printf '%*s' 100 '' | /usr/bin/tr ' ' 'x') \$(true) y" > "${CE_ROOT}/vrem.cmd"
+for ce_v in v-pos:vpos:positions v-rem:vrem:remainder v-exec:vpos:positions; do
+  ce_cp="block-destructive-${ce_v%%:*}.sh"; ce_rest="${ce_v#*:}"
+  ce_timed "$ce_cp" en_US.UTF-8 "${CE_ROOT}/${ce_rest%%:*}.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  ce_live "$ce_cp" 4 || ce_why="${ce_why} the-copy-edits-did-not-apply"
+  [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  [ "$(ce_ceiling)" = "${ce_rest#*:}" ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+  ce_report "CEIL-VIEW-${ce_v%%:*}: with an enclosure-reaching arm at enforce, past the ${ce_rest#*:} budget the command is refused, cause ${ce_rest#*:}" "$ce_why"
+done
+ce_timed block-destructive-v-warn.sh en_US.UTF-8 "${CE_ROOT}/vpos.cmd" "$CEIL_LIMIT"
+ce_why=""; [ "$CE_EXIT" = 0 ] || ce_why=" exit=${CE_EXIT}"
+ce_report "CEIL-VIEW-warn: at the shipped warn phases, past the position budget, an inert command is allowed as today" "$ce_why"
+/bin/rm -rf "$CE_ROOT"
+
 # --- Summary ---
 echo ""
 echo "================================"
