@@ -10137,13 +10137,19 @@ LC_ALL=C /usr/bin/awk -v d="${LIN_Y}/in" 'BEGIN {
   }
 }'
 # lin_y_lift <src> <out> — the scan, its search helper, its linear pass and the pass's program.
+# ceil_stub — a hook function lifted out and run alone carries the rule's work-ceiling check
+# (#8327) as the first statement of each loop; a lift defines it as a no-op, because the ceiling
+# is not the subject of any arm that lifts a function, and an undefined check would print one
+# error per loop pass.
+ceil_stub() { /usr/bin/printf '%s\n' 'script_ceil_check() { return 0; }'; }
 lin_y_lift() {
   /usr/bin/awk '
     /^readonly SCRIPT_QADVANCE_AWK=/ { inp = 1 }
     inp { print; if ($0 == "    }\047") inp = 0; next }
     /^script_qnext\(\) \{/ || /^script_qadvance\(\) \{/ || /^script_qadvance_linear\(\) \{/ { inf = 1; k++ }
     inf { print; if ($0 == "}") inf = 0 }
-    END { exit k == 3 ? 0 : 1 }' "$1" > "$2"
+    END { exit k == 3 ? 0 : 1 }' "$1" > "$2" || return 1
+  ceil_stub >> "$2"
 }
 # lin_y_eval <locale> <bound> <lib> <out> — each case: its segments scanned in turn from its state,
 # the state after each written to <out>/<case>.
@@ -10274,7 +10280,8 @@ done
 # long spelling inside the budget, in en_US.UTF-8 and C, and allows each. The cells are the ones on which
 # `main`'s own hook keeps a wide margin under the budget. On the larger cells the cost is `main`'s own code
 # — the -022 rule's reading of a long word and of a long option cluster, which grows faster than the
-# command — and is that rule's work-ceiling card's to change, not this release's. The false-positive
+# command. The rule's work ceiling now bounds that cost and refuses past it (CEIL-*); the cells stay cut,
+# because the ceiling bounds the growth and does not change it. The false-positive
 # control's AC-CP-L arms time the canonicalizer alone on every size of every shape, beside their
 # sensitivity copy.
 lin_cph_cmd() { # <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling
@@ -10493,6 +10500,7 @@ opnd_join_lib="$(/usr/bin/mktemp)"
 opnd_join_why=""
 /usr/bin/awk '/^script_word_scan\(\) \{/ || /^script_word_join\(\) \{/ { f = 1; k++ } f { print; if ($0 == "}") f = 0 } END { exit k == 2 ? 0 : 1 }' "$HOOK" > "$opnd_join_lib" \
   || opnd_join_why="the reader and the join are not two single functions in the hook;"
+ceil_stub >> "$opnd_join_lib"
 opnd_join_compare() { # $1 = library file; prints one verdict line
   (
     . "$1"
@@ -10561,6 +10569,7 @@ fi
 if [ -z "$opnd_join_why" ]; then
   opnd_bound_lib="$(/usr/bin/mktemp)"
   /usr/bin/awk '/^script_word_join\(\) \{/ { f = 1 } f { print; if ($0 == "}") f = 0 }' "$HOOK" > "$opnd_bound_lib"
+  ceil_stub >> "$opnd_bound_lib"
   opnd_bound_v="$(
     . "$opnd_bound_lib"
     script_tokens=("'a")
@@ -11850,7 +11859,7 @@ if [ -z "$ce_why" ]; then
   { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf "'"; } > "${CE_ROOT}/qd-1"
   { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf '"'; } > "${CE_ROOT}/qd-2"
   { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf "'\""; } > "${CE_ROOT}/qd-3"
-  /usr/bin/sed 's/gsub(q, "")/gsub(q, "") * 2/' "${CE_ROOT}/qp.fn" > "${CE_ROOT}/qp-near.fn"
+  /usr/bin/sed 's/printf "%d %d", s % 2, t % 2/printf "%d %d", (s + 1) % 2, t % 2/' "${CE_ROOT}/qp.fn" > "${CE_ROOT}/qp-near.fn"
   for ce_loc in en_US.UTF-8 C; do
     for ce_k in 0 1 2 3; do
       ce_a="$(ce_qp "$ce_loc" 1000000000 "${CE_ROOT}/qp.fn" "${CE_ROOT}/qd-${ce_k}")" || ce_why="${ce_why} [${ce_loc} qd-${ce_k}] the substitutions did not run;"

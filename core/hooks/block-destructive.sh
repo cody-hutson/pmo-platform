@@ -261,7 +261,8 @@ log_block() {
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
     --arg route "${script_route:-}" --arg live "${script_route_live:-0}" --arg subj "$subj" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd} + (if $live == "1" and $route != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, route:$route, subject:$subj}} else {} end)' \
+    --arg ceil "${script_ceil_cause:-}" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd} + (if $live == "1" and $route != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, route:$route, subject:$subj}} elif $ceil != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, ceiling:$ceil}} else {} end)' \
     >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
@@ -291,6 +292,7 @@ is_script_allowlisted() {
   local path="$1"
   [ -f "$SCRIPT_ALLOWLIST" ] || return 1
   local pattern
+  # ceil-bounded: the tracked allowlist file, one pass over its lines
   while IFS= read -r pattern || [ -n "$pattern" ]; do
     # Skip comments and blank lines
     case "$pattern" in
@@ -437,6 +439,7 @@ normalize_script_token() {
       ;;
   esac
   while [ "$t" != "$prev" ]; do
+    script_ceil_check norm   # M-CEIL-NORM
     prev="$t"
     t="${t%[\"\'\`\(\)\;\&\|\<\>]}"
   done
@@ -516,6 +519,7 @@ script_word_scan() {
     script_ws_lit=0
     return 0
   fi
+  # ceil-bounded: the 1,024-character guard above
   while [ -n "$t" ]; do
     c="${t:0:1}"
     case "$st" in
@@ -905,6 +909,7 @@ script_word_join() {   # $1 = index in script_tokens of a token script_word_scan
   script_wj_out=""
   script_wj_raw=""
   while [ "$i" -lt "$n" ]; do
+    script_ceil_check wjoin-a   # M-CEIL-WJOIN-A
     piece="${script_tokens[$i]}"
     if [ -n "$raw" ]; then piece=" ${piece}"; fi
     raw="${raw}${piece}"
@@ -917,6 +922,7 @@ script_word_join() {   # $1 = index in script_tokens of a token script_word_scan
     fi
     t="${t}${piece}"
     while [ -n "$t" ]; do
+      script_ceil_check wjoin-b   # M-CEIL-WJOIN-B
       c="${t:0:1}"
       case "$st" in
         0)
@@ -1616,6 +1622,7 @@ script_wrapper_longname() {   # $1 = a token that begins with `--`
   case "$script_wlong" in
     *" --${_lname} "*) return 0 ;;
   esac
+  # ceil-bounded: the wrapper row's long-option table
   for _lw in $script_wlong; do
     case "$_lw" in
       "--${_lname}"*) _lk=$(( _lk + 1 )); _lhit="$_lw" ;;
@@ -1652,6 +1659,7 @@ script_split_scan() {   # $1 = the attached split value
   esac
   _v="${_v#-}"
   while [ -n "$_v" ]; do
+    script_ceil_check split-scan   # M-CEIL-SPLIT-SCAN
     _c2="${_v:0:1}"; _v="${_v:1}"
     case "$script_wopt" in
       *"${_c2}::"*) _v="" ;;
@@ -1735,6 +1743,7 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
     set +f
     _nw="${#_words[@]}"
     while [ "$_i" -lt "$_nw" ]; do
+      script_ceil_check split-read-a   # M-CEIL-SPLIT-READ-A
       if ! script_plain_word "${_words[$_i]}"; then _r="unread"; break; fi
       _i=$(( _i + 1 ))
     done
@@ -1742,6 +1751,7 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
   if [ "$_r" = "go" ]; then
     _i=0
     while [ "$_i" -lt "$_nw" ]; do
+      script_ceil_check split-read-b   # M-CEIL-SPLIT-READ-B
       _w="${_words[$_i]}"
       _i=$(( _i + 1 ))
       if [ "$_ph" = "opt" ]; then
@@ -1770,6 +1780,7 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
           -?*)
             _rest="${_w#-}"
             while [ -n "$_rest" ]; do
+              script_ceil_check split-read-c   # M-CEIL-SPLIT-READ-C
               _c="${_rest:0:1}"
               _rest="${_rest:1}"
               case "$script_wsplit" in *"$_c"*) _r="unread"; break 2 ;; esac
@@ -1797,6 +1808,7 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
   fi
   if [ "$_r" = "go" ]; then
     while [ "$_j" -gt 0 ] && [ "$script_hidx" -lt "$_n" ]; do
+      script_ceil_check split-read-d   # M-CEIL-SPLIT-READ-D
       script_hidx=$(( script_hidx + 1 ))
       _j=$(( _j - 1 ))
     done
@@ -1826,6 +1838,7 @@ script_reach_verbish() {   # $1 = token -> 0 when any reading of it names a verb
       ;;
   esac
   while IFS= read -r _b; do
+    script_ceil_check verb-read   # M-CEIL-VERB-READ
     case "$_b" in
       bash|sh|zsh|python|python3|perl|ruby|node) return 0 ;;
       source|.) return 0 ;;
@@ -1851,12 +1864,14 @@ script_reach_inert() {   # $1 = token -> 0 when stepping it removes no adjudicat
 script_case_leadin() {
   local _n="${#script_tokens[@]}" _t=""
   while [ "$script_hidx" -lt "$_n" ]; do
+    script_ceil_check case-a   # M-CEIL-CASE-A
     _t="${script_tokens[$script_hidx]}"
     script_hidx=$(( script_hidx + 1 ))
     if [ "$_t" = "in" ]; then break; fi
   done
   if [ "$script_hidx" -lt "$_n" ] && [ "${script_tokens[$script_hidx]}" = "(" ]; then script_hidx=$(( script_hidx + 1 )); fi
   while [ "$script_hidx" -lt "$_n" ]; do
+    script_ceil_check case-b   # M-CEIL-CASE-B
     _t="${script_tokens[$script_hidx]}"
     script_hidx=$(( script_hidx + 1 ))
     case "$_t" in
@@ -1948,6 +1963,7 @@ script_reach_step() {   # -> 0 when it stepped at least one token at script_hidx
   # at the shell's next word
   if [ -n "$_w" ]; then
     script_word_scan "$_w"
+    # ceil-bounded: 64 steps (_k)
     while [ "$script_ws_complete" -eq 0 ] && [ "$script_hidx" -lt "${#script_tokens[@]}" ] && [ "$_k" -lt 64 ]; do
       _w="${_w} ${script_tokens[$script_hidx]}"
       script_hidx=$(( script_hidx + 1 ))
@@ -1978,6 +1994,7 @@ script_wrapper_options() {
   script_wrapper_row "$script_wrap"
   if [ "$script_wrow" -eq 0 ]; then return 0; fi
   while [ "$script_hidx" -lt "$_n" ]; do
+    script_ceil_check wopt-a   # M-CEIL-WOPT-A
     _tok="${script_tokens[$script_hidx]}"
     # A quoted option is read by its value (R0): only a token not led by `-` that holds a quote
     # or a backslash, under a row whose operands are none, or assignments with no `=` here, and
@@ -2026,6 +2043,7 @@ script_wrapper_options() {
         script_hidx=$(( script_hidx + 1 ))
         _rest="${_tok#-}"
         while [ -n "$_rest" ]; do
+          script_ceil_check wopt-b   # M-CEIL-WOPT-B
           _c="${_rest:0:1}"
           _rest="${_rest:1}"
           if [ "$_c" = ":" ]; then continue; fi
@@ -2062,6 +2080,7 @@ script_wrapper_options() {
       ;;
     assign)
       while [ "$script_hidx" -lt "$_n" ]; do
+        script_ceil_check wopt-c   # M-CEIL-WOPT-C
         _tok="${script_tokens[$script_hidx]}"
         case "$_tok" in
           -*) break ;;
@@ -2274,6 +2293,18 @@ readonly SCRIPT_ENCL_TAIL_BYTES=262144
 # The separator split's linear pass, a bound in characters (see THE LINEAR PASS in the
 # script-execution rule): a command this long or longer is split by one tr pass first.
 readonly SCRIPT_LINEAR_MIN=256
+# THE WORK CEILING (see the work-ceiling paragraph in the script-execution rule). A command hook
+# that outlasts the runtime's timeout does not block, so this rule bounds its own time: a deadline
+# fixed here, at top level and before the dispatch, so it counts every rule's work, and a length
+# past which the rule does not read a command at all. The deadline is relative to what SECONDS
+# reads now, never an absolute count, because bash imports SECONDS from the environment.
+readonly SCRIPT_CEIL_SECONDS=120
+readonly SCRIPT_CEIL_CHARS=65536
+readonly SCRIPT_CEIL_AT=$(( SECONDS + SCRIPT_CEIL_SECONDS ))
+# Which ceiling refused (log_block reads it). Initialised here because the other rules call
+# log_block before the -022 block initialises, and an unset read under `set -u` exits 1, which
+# PreToolUse treats as non-blocking: a fail-open.
+script_ceil_cause=""
 
 # ── THE ENCLOSURE VIEW'S SHELL FINDINGS: A THIRD FAMILY, AND A SIBLING FOR THE REASON
 # THE NON-SHELL FAMILY IS ONE.
@@ -2339,6 +2370,67 @@ log_would_fire_022() {
     --arg arm "$arm" --arg path "$path" --arg cwd "$CWD" --arg pos "${script_rowpos:-}" \
     '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", arm:$arm, cause:$cause, path:$path, cwd:$cwd} + (if $pos != "" then {pos:$pos} else {} end)' \
     >> "$WARN_LOG" 2>/dev/null || true
+}
+
+# THE WORK CEILING'S CHECK. The first statement of every bash loop body on this rule's surface,
+# or the loop carries a `# ceil-bounded:` line above its head naming the cap that bounds it; arm
+# CEIL-COVER holds that inventory, so a loop added without either fails the suite. Past the
+# deadline the command is refused and the hook exits: the check never ends a loop early and lets
+# the walk go on, so it adds no path on which a position or a word goes unread. Never call it in
+# a command substitution, where an exit ends the subshell and not the hook; script_realpath and
+# script_cont_joined, the two helpers that run in one, are charged by their callers.
+script_ceil_check() {   # $1 = the loop's tag
+  [ "$SECONDS" -lt "$SCRIPT_CEIL_AT" ] && return 0   # M-CEIL-TEST
+  script_ceil_refuse time "$1"
+}
+
+# THE WORK CEILING'S REFUSAL, one definition for every cause. It clears the conservative route's
+# live flag first, so a ceiling refusal inside the route's loop never carries the route's tag:
+# the two `features` shapes stay disjoint (log_block).
+script_ceil_refuse() {   # $1 = time | chars | positions | remainder   $2 = where it was reached
+  local why
+  script_route_live=0
+  script_ceil_cause="$1"
+  case "$1" in
+    time) why="the command takes longer to read than this rule allows (its per-command work ceiling, reached while reading the ${2} loop). A guard that cannot finish refuses rather than allows." ;;
+    chars) why="the command is longer than this rule reads (${#COMMAND} characters; its length gate is ${SCRIPT_CEIL_CHARS}, part of its per-command work ceiling). A guard that cannot finish refuses rather than allows." ;;
+    positions) why="the command opens more enclosure positions than this rule reads (${SCRIPT_ENCL_POS_MAX}) while an arm that reads enclosure positions is at enforce, so a position past that budget would be a refusal the rule cannot make. A guard that cannot finish refuses rather than allows." ;;
+    *) why="an enclosure position's remainder is past the bytes this rule copies (${SCRIPT_ENCL_TAIL_BYTES}) while an arm that reads enclosure positions is at enforce, so the position could not be read whole. A guard that cannot finish refuses rather than allows." ;;
+  esac
+  block "BLOCK-DESTRUCTIVE-022" "$why" \
+    "pass long text by file reference instead of inline — a pull-request or issue body through --body-file, a commit message through -F, a file's content through the Write tool — or split the command into shorter ones. CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
+}
+
+# THE VIEW'S TWO BUDGETS, ONCE AN ARM THAT READS THEIR POSITIONS ENFORCES. Past the position
+# ceiling the view opens no further position, and past the remainder budget it opens one without
+# its remainder. Both exits are cheap, so the clock never reaches them; at `warn` they lose a
+# record, never a refusal. Once the enclosure family, the exec arm or the interpreter arm is at
+# `enforce`, a position the view cannot read would be a refusal the rule cannot make, so the
+# command is refused instead. Inert while every one of the three reads `warn`.
+script_ceil_budget() {   # $1 = positions | remainder
+  case "${DESTRUCTIVE_022_ENCL_PHASE}|${DESTRUCTIVE_022_EXEC_PHASE}|${DESTRUCTIVE_022_INTERP_PHASE}" in
+    *enforce*) script_ceil_refuse "$1" view ;;
+  esac
+  return 0
+}
+
+# THE QUOTE PARITY OF ONE WORD, linear. The head resolver and the head-value check read whether a
+# word's single and double quotes are odd in number. Two global substitutions of a bracket pattern
+# did that, and that class grows far faster than the word it reads, so a word of at least
+# SCRIPT_LINEAR_MIN characters is counted by one awk pass in the C locale. Both quote characters
+# are single bytes that no UTF-8 sequence contains, so counting bytes gives the parity counting
+# characters gives (arm CEIL-LIN-EQ). A shorter word, or a pass that fails, keeps the substitutions.
+script_quote_parity() {   # $1 = a word -> script_qp_sq, script_qp_dq: 1 when that quote is odd in number
+  local _sq="'" _dq='"' _c _r
+  if [ "${#1}" -ge "$SCRIPT_LINEAR_MIN" ] && _r="$(LC_ALL=C /usr/bin/awk -v q="$_sq" -v d="$_dq" '{ s += gsub(q, ""); t += gsub(d, "") } END { printf "%d %d", s % 2, t % 2 }' <<< "$1" 2>/dev/null)"; then   # linear: quote parity
+    case "$_r" in
+      [01]' '[01]) script_qp_sq="${_r%% *}"; script_qp_dq="${_r##* }"; return 0 ;;
+    esac
+  fi
+  _c="${1//[!$_sq]/}"
+  script_qp_sq=$(( ${#_c} % 2 ))
+  _c="${1//[!$_dq]/}"
+  script_qp_dq=$(( ${#_c} % 2 ))
 }
 
 # Adjudicate one direct-execution candidate under the rollout phase.
@@ -2610,6 +2702,7 @@ script_qnext() {
   script_qc=""
   script_qpre=""
   local _ch _pre
+  # ceil-bounded: the quote characters its callers pass, at most three
   for _ch in "$@"; do
     _pre="${script_qt%%"$_ch"*}"
     if [ "${#_pre}" -ne "${#script_qt}" ]; then
@@ -2644,6 +2737,7 @@ script_qadvance() {
   local _pre _nd
   if [ "${#1}" -ge "$SCRIPT_LINEAR_MIN" ] && script_qadvance_linear "$1"; then return 0; fi
   while [ -n "$script_qt" ]; do
+    script_ceil_check qscan   # M-CEIL-QSCAN
     if [ "$script_qwork" -ge 1000 ]; then
       script_qbail=1
       script_qstate=0
@@ -2700,6 +2794,7 @@ script_qadvance() {
           *"$script_qd")
             _nd=0
             while :; do
+              script_ceil_check qdollar   # M-CEIL-QDOLLAR
               case "$_pre" in
                 *"$script_qd") _pre="${_pre%"$script_qd"}"; _nd=$(( _nd + 1 )) ;;
                 *) break ;;
@@ -2907,6 +3002,7 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
   # an enclosure that opens a case: its first pattern's `)` is not the enclosure's close, so the
   # cut reads past it; a cut it cannot place still degrades to the text left whole
   if [ "$2" -eq 1 ]; then case "${1#"${1%%[! 	]*}"}" in 'case '*|'case	'*) _case=1 ;; esac; fi   # M-REACH-CUT
+  # ceil-bounded: the cut's 200 steps (_n)
   while [ -n "$script_qt" ]; do
     _n=$(( _n + 1 ))
     if [ "$_n" -gt 200 ]; then return 0; fi
@@ -3071,6 +3167,7 @@ script_heredoc_prescan() {
   # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
   # unit this pass reasons in.
   _tmp="$COMMAND"
+  # ceil-bounded: the pre-pass bails at 500 lines
   while [ -n "$_tmp" ]; do
     if [ "$_n" -ge 500 ]; then script_hdbail=1; return 0; fi
     case "$_tmp" in
@@ -3080,6 +3177,7 @@ script_heredoc_prescan() {
     _n=$(( _n + 1 ))
   done
 
+  # ceil-bounded: the 500 lines split above
   while [ "$_i" -lt "$_n" ]; do
     _opline="${_lines[$_i]}"
     _i=$(( _i + 1 ))
@@ -3092,11 +3190,13 @@ script_heredoc_prescan() {
     _cont=0
     # an enclosure still open from an earlier line opens this line at its start
     _j=0
+    # ceil-bounded: the opener stack's depth, inside the pre-pass's 2,000 steps
     while [ "$_j" -lt "$_od" ]; do _ostk[$_j]=0; _j=$(( _j + 1 )); done
     if [ "$_bt" -ge 0 ]; then _bt=0; fi
     script_qt="$_opline"
 
     # ---- scan this line for here-document operators at quote-state 0 ----
+    # ceil-bounded: the pre-pass's 2,000 steps (_work)
     while [ -n "$script_qt" ]; do
       _work=$(( _work + 1 ))
       if [ "$_work" -ge 2000 ]; then script_hdbail=1; return 0; fi
@@ -3147,6 +3247,7 @@ script_heredoc_prescan() {
           case "$_pre" in
             *"$script_qd")
               _nd=0
+              # ceil-bounded: 64 delimiter characters (_nd)
               while [ "$_nd" -lt 64 ]; do
                 case "$_pre" in
                   *"$script_qd") _pre="${_pre%"$script_qd"}"; _nd=$(( _nd + 1 )) ;;
@@ -3189,6 +3290,7 @@ script_heredoc_prescan() {
                 '-'*) _strip=1; _pos=$(( _pos + 1 )); script_qt="${script_qt:1}" ;;
               esac
               while :; do
+                script_ceil_check hd-blank   # M-CEIL-HD-BLANK
                 case "$script_qt" in
                   ' '*|$'\t'*) _pos=$(( _pos + 1 )); script_qt="${script_qt:1}" ;;
                   *) break ;;
@@ -3276,6 +3378,7 @@ script_heredoc_prescan() {
 
     # ---- consume the queued bodies, in operator order ----
     _k=0
+    # ceil-bounded: at most two bodies a line and eight a command (_qn)
     while [ "$_k" -lt "$_qn" ]; do
       _delim="${_qdelim[$_k]}"
       _quoted="${_qquoted[$_k]}"
@@ -3285,12 +3388,14 @@ script_heredoc_prescan() {
       _bodyraw=""
       _delimline=""
       _found=0
+      # ceil-bounded: the 500 lines split above
       while [ "$_i" -lt "$_n" ]; do
         _cmp="${_lines[$_i]}"
         _delimline="${_lines[$_i]}"
         _i=$(( _i + 1 ))
         if [ "$_strip" -eq 1 ]; then
           while :; do
+            script_ceil_check hd-tab   # M-CEIL-HD-TAB
             case "$_cmp" in
               $'\t'*) _cmp="${_cmp:1}" ;;
               *) break ;;
@@ -3425,7 +3530,7 @@ script_resolve_head() {
   # is open when either reading says so. The count stays a disjunct, so nothing it marked open is
   # closed: withdraw-only, the fail-closed direction.
   script_head_open=0
-  local _i _hsq _hdq _sq="'" _dq='"'
+  local _i
   local -a _tok
   set -f
   # shellcheck disable=SC2206
@@ -3433,14 +3538,14 @@ script_resolve_head() {
   set +f
   _i=0
   while [ "$_i" -lt "${#_tok[@]}" ]; do
+    script_ceil_check head   # M-CEIL-HEAD
     case "${_tok[$_i]}" in
       [A-Za-z_]*=*)
         case "${_tok[$_i]%%=*}" in
           *[!A-Za-z0-9_]*) break ;;
         esac
-        _hsq="${_tok[$_i]//[!$_sq]/}"
-        _hdq="${_tok[$_i]//[!$_dq]/}"
-        if [ $(( ${#_hsq} % 2 )) -eq 1 ] || [ $(( ${#_hdq} % 2 )) -eq 1 ]; then script_head_open=1; fi
+        script_quote_parity "${_tok[$_i]}"
+        if [ "$script_qp_sq" -eq 1 ] || [ "$script_qp_dq" -eq 1 ]; then script_head_open=1; fi
         if [ "$script_head_open" -eq 0 ] && script_head_token_scan "${_tok[$_i]}"; then script_head_open=1; fi
         _i=$(( _i + 1 ))
         ;;
@@ -3473,11 +3578,8 @@ script_head_token_scan() {   # $1 = an assignment token -> 0 when its value is s
 
 # Open by either reading: the quote count script_resolve_head keeps, or the scan above.
 script_head_value_open() {   # $1 = an assignment token -> 0 when its value is still open at its end
-  local _sq="'" _dq='"' _c
-  _c="${1//[!$_sq]/}"
-  if [ $(( ${#_c} % 2 )) -eq 1 ]; then return 0; fi
-  _c="${1//[!$_dq]/}"
-  if [ $(( ${#_c} % 2 )) -eq 1 ]; then return 0; fi
+  script_quote_parity "$1"
+  if [ "$script_qp_sq" -eq 1 ] || [ "$script_qp_dq" -eq 1 ]; then return 0; fi
   script_head_token_scan "$1"
 }
 
@@ -3632,6 +3734,7 @@ script_qval_gap() {   # $1 = token index -> script_qval_gapn
     script_qval_gaprest="$script_seg"
   fi
   while [ "$script_qval_gapi" -le "$1" ]; do
+    script_ceil_check qval-gap   # M-CEIL-QVAL-GAP
     _b="${script_qval_gaprest%%[!${_bl}]*}"
     script_qval_gaprest="${script_qval_gaprest:$(( ${#_b} + ${#script_tokens[$script_qval_gapi]} ))}"
     script_qval_gapi=$(( script_qval_gapi + 1 ))
@@ -3653,6 +3756,7 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
   script_qval_sq=0; script_qval_dq=0
   _i="$script_qval_from"
   while [ "$_i" -lt "$_k" ]; do   # M-WRAP-QVAL-PFX
+    script_ceil_check qval-pfx   # M-CEIL-QVAL-PFX
     if script_qval_opaque "${script_tokens[$_i]}"; then _ok=0; break; fi
     script_qadvance "${script_tokens[$_i]}"
     if [ "$script_qstate" -eq 0 ] && script_qval_dangles "${script_tokens[$_i]}"; then _ok=0; break; fi
@@ -3662,6 +3766,7 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
     script_qadvance "$1"
     script_qval_readable "$1" || _ok=0   # M-WRAP-QVAL-READ
     _j="$_k"
+    # ceil-bounded: the shared 1,000-step cap (script_qwork)
     while [ "$_ok" -eq 1 ] && [ "$script_qwork" -lt 1000 ]; do
       if [ "$script_qstate" -eq 0 ]; then
         script_qval_dangles "${script_tokens[$_j]}" || break
@@ -3714,6 +3819,7 @@ script_qval_head_carrier() {   # reads script_seg -> 0 when the shell's head wor
   set +f
   if { [ "$script_qbail" -eq 0 ] && [ "$script_segstart" -eq 0 ]; } || { [ "$script_pass" -eq 1 ] && [ "$script_segno" -eq 1 ]; }; then script_qval_trust=1; fi
   while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
+    script_ceil_check carrier   # M-CEIL-CARRIER
     _t="${script_tokens[$script_hidx]}"
     case "$_t" in
       [A-Za-z_]*=*)
@@ -4196,6 +4302,9 @@ case "$TOOL_NAME" in
     script_route_live=0
     script_route_n=0
     script_rnote=""
+    # The quote-parity helper's two outputs. Initialised for the same reason as script_ftok above.
+    script_qp_sq=0
+    script_qp_dq=0
     # normalize_script_token sets all three before any reader runs. Initialised
     # anyway because an unset read under `set -u` exits 1, and exit 1 is
     # NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
@@ -4241,6 +4350,8 @@ case "$TOOL_NAME" in
     # in both of its modes, for a command whose carried quote state the trust
     # boundary (SCRIPT_QMODEL_AWK) cannot follow — then no fragment is suppressed
     # and no body is excised.
+    # THE WORK CEILING'S ENTRY: the length gate, then one time check, before any -022 scan runs.
+    if [ "${#COMMAND}" -gt "$SCRIPT_CEIL_CHARS" ]; then script_ceil_refuse chars entry; fi; script_ceil_check entry   # M-CEIL-ENTRY
     script_hdstripped="$COMMAND"
     script_hdbail=0
     script_heredoc_prescan
@@ -4291,11 +4402,13 @@ case "$TOOL_NAME" in
     case "$script_hdstripped" in
       *'('*|*'`'*)
         while IFS= read -r script_seg; do
+          script_ceil_check view-seg   # M-CEIL-VIEW-SEG
           script_p1n=$(( script_p1n + 1 ))
           script_rest="$script_seg"
           script_mark="$SCRIPT_BND_OLD"
           script_hold=""
           while :; do
+            script_ceil_check view-pos   # M-CEIL-VIEW-POS
             case "$script_rest" in
               *'('*|*'`'*) ;;
               *) break ;;
@@ -4303,6 +4416,10 @@ case "$TOOL_NAME" in
             # TWO BUDGETS, both declared limits pinned by AC-ENCL-RESIDUAL-budget-*.
             # Past the position ceiling no further position is opened; past the
             # remainder budget a position is opened without its appended remainder.
+            # The work ceiling bounds their time. Each exit loses a position only at
+            # `warn`; once an arm that reads these positions enforces, it refuses
+            # instead (script_ceil_budget).
+            if [ "$script_lift" -ge "$SCRIPT_ENCL_POS_MAX" ]; then script_ceil_budget positions; fi   # M-CEIL-POS
             if [ "$script_lift" -ge "$SCRIPT_ENCL_POS_MAX" ]; then break; fi
             script_lift=$(( script_lift + 1 ))
             script_piece="${script_rest%%[\(\`]*}"
@@ -4317,6 +4434,7 @@ case "$TOOL_NAME" in
               script_liftb=$(( script_liftb + ${#script_rest} ))
               script_encl="${script_encl}${script_mark}${script_hold}${script_piece}"$'\n'"${script_rest}"$'\n'
             else
+              script_ceil_budget remainder   # M-CEIL-TAIL
               script_encl="${script_encl}${script_mark}${script_hold}${script_piece}"$'\n'$'\n'
             fi
             script_hold=""
@@ -4338,6 +4456,7 @@ case "$TOOL_NAME" in
     # >>> ENCLOSURE-VIEW-END
 
     while IFS= read -r script_seg; do
+      script_ceil_check segment   # M-CEIL-SEGMENT
       script_segno=$(( script_segno + 1 ))
       script_rdr_carry="${script_rdr_owed:-0}"; script_rdr_owed=0
       # the case state: a later arm's closer is stepped only in a command that opened a case (pass 1)
@@ -4564,7 +4683,9 @@ case "$TOOL_NAME" in
       # token today's walk ended on. The inner loop is not re-indented, because the suite's
       # mutants key on its lines' text and indentation.
       while :; do   # M-REACH-LOOP
+        script_ceil_check reach   # M-CEIL-REACH
       while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
+        script_ceil_check prefix   # M-CEIL-PREFIX
         script_ptok="${script_tokens[$script_hidx]}"
         case "$script_ptok" in
           [A-Za-z_]*=*)
@@ -4886,6 +5007,7 @@ case "$TOOL_NAME" in
                     2:*|1:0:*|1:2:*|1:*:1)   # M-EXEC-TICK-STATE
                       script_tki=0
                       for script_tkt in "${script_tokens[@]:$script_hidx}"; do
+                        script_ceil_check tick   # M-CEIL-TICK
                         if [ "$script_tki" -eq 0 ]; then script_tkt="${script_tkt:1}"; fi
                         script_tki=$(( script_tki + 1 ))
                         case "$script_tkt" in
@@ -4963,6 +5085,7 @@ case "$TOOL_NAME" in
         fi
         set -f
         for script_rdr_w in $script_rdr_prog; do
+          script_ceil_check rdr-prog   # M-CEIL-RDR-PROG
           normalize_script_token "$script_rdr_w"
           if script_operand_resolve "$script_interp_domain" ""; then
             if [ "$script_interp_domain" = "interp" ]; then
@@ -5033,6 +5156,7 @@ case "$TOOL_NAME" in
       script_xend="${#script_tokens[@]}"
       script_xk=$(( script_hidx + 1 ))
       while [ "$script_xk" -lt "${#script_tokens[@]}" ]; do
+        script_ceil_check closer   # M-CEIL-CLOSER
         case "${script_tokens[$script_xk]}" in
           *')'*|*'`'*)
             case "${script_tokens[$script_xk]}" in
@@ -5135,6 +5259,7 @@ case "$TOOL_NAME" in
       # value; 0 is the fail-safe one: it grants nothing.
       script_optrun=1
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
+        script_ceil_check flag-walk   # M-CEIL-FLAG-WALK
         script_ftok="${script_tokens[$script_idx]}"
         case "$script_ftok" in
           -*) ;;   # raw view already decides — unchanged, and asked first
@@ -5627,6 +5752,7 @@ case "$TOOL_NAME" in
       if [ "$script_cmode" -eq 1 ] && [ -n "$script_route" ]; then script_route_live=1; fi   # M-ROUTE-LIVE (mutation target; pinned by LATCH-CAUSE-M3a)
       if [ "$script_cmode" -eq 1 ]; then
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
+          script_ceil_check route   # M-CEIL-ROUTE
           normalize_script_token "${script_tokens[$script_idx]}"
           # This loop is the reason the domain gate exists at all: under `-c` the
           # tokens are WORDS OF A PROGRAM STRING, not declared operands, and
