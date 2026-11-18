@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.11] - 2026-11-17
+
+The script guard now finds and judges a script the way the shell will run it, at more positions, through quotes and line breaks.
+
+[Full notes](release/releases/notes/v5.11_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.11)
+
 ## [v5.10] - 2026-11-17
 
 The engineering harness has its first process-catalog pages, and a CI check fails when a page drifts from the code it cites.

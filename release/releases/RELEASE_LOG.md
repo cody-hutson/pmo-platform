@@ -273,7 +273,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
 | v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
 | v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | VERIFIED | 2026-11-17 |
-| v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | DEPLOYED | 2026-11-17 |
+| v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | VERIFIED | 2026-11-17 |
 | v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | DEPLOYED | 2026-11-17 |
 | v5.13 | superseded-pr-runs-cancelled | #8440, #9007 | #9026 | `f5df15cdc3000068c475487f21032c4e7e85c7bb` | `v5.13` | DEPLOYED | 2026-11-17 |
 
@@ -432,7 +432,21 @@ The day of the week is computed from the date.
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v5.11; 1 deployment-status row(s) exist for v5.11, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Velocity:** planned 26 pts / delivered 26 pts (1.00); files-changed 13; allocation 0/26/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — the merge, the version claim, the plan stamp, the release-stamped rules-mirror deploy and the hook-bundle refresh are complete and read back, and the deployed guard and canonicalizer byte-equal the merged source.
+**Outcome:** PARTIAL
+**Outcome rationale:** QC4-06 PARTIALLY-ATTAINED: five residuals accepted at the Stage 9 GO (PC-X2, #8318 Decision 4, CP15, CP22, N1) leave the end state's last clause unmet
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 38/39 (0.97); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.11
+
+**Synthesized at:** 2026-11-17T21:01:49Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.11`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-17T20:22:28Z`
+
+**Surprise:** safety classifiers stopped spawned agents, so four cards and a third pass were built hub-direct, Stage 7 the only independent check
+**Would-change:** emit the Stage 9 plan-review-go row at routing, missed two releases running
+**Watch-for:** Check 71 enclosure-phase dates, residuals PC-X2 and CP22
 
 #### Deployment Log v5.10
 **Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy, and the plan's one Operational Deployment Manifest row are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. The manifest row, the script-execution allowlist, was propagated by the installer's hook-tier provisioning, which the operator ran after the merge. Paths are repository-relative.

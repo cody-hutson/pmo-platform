@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v5.11 | script-guard-reads-every-token-as-the-shell-does | 2026-11-17 | — | #8993 | [notes/v5.11_RELEASE_NOTES.md](notes/v5.11_RELEASE_NOTES.md) |
 | v5.10 | engineering-harness-pages-published | 2026-11-17 | — | #8983 | [notes/v5.10_RELEASE_NOTES.md](notes/v5.10_RELEASE_NOTES.md) |
 | v5.09 | release-usage-measured-right | 2026-11-15 | — | #8821 | [notes/v5.09_RELEASE_NOTES.md](notes/v5.09_RELEASE_NOTES.md) |
 | v5.08 | deletion-guard-judges-every-segment-and-target | 2026-11-15 | — | #8992 | [notes/v5.08_RELEASE_NOTES.md](notes/v5.08_RELEASE_NOTES.md) |

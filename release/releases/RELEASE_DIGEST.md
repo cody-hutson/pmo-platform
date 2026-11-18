@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v5.11 (2026-11-17) — The script guard reads each command the way the shell will run it
+
 ### v5.10 (2026-11-17) — The engineering harness has catalog pages, and CI fails when they go stale
 
 ### v5.09 (2026-11-16) — Usage is counted once per response and stated in one unit, so a release's cost can be recorded
