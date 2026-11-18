@@ -1958,7 +1958,8 @@ AV29|block-destructive|rt-asgn-keep|-|?|W|X=$(bash @D@/na.sh)
 AV30|block-destructive|rt-asgn-limit|-|?|B|FOO='a b' echo "x; bash @D@/na.sh"
 AV31|block-destructive|rt-asgn-limit|-|?|a|FOO=ab echo "x; bash @D@/na.sh"
 AV32|block-destructive|rt-asgn-limit|-|?|B|FOO=@QMID@'a b' bash @D@/ok.sh; echo "x; bash @D@/na.sh"
-AV33|block-destructive|rt-asgn-resid|-|?|a|cat <<'EOF'@NL@x@NL@EOF@NL@FOO='a b' bash @D@/na.sh
+# AV33 refused since #8326: its here-document is received by cat, which the receiver read admits, so the bail no longer latches and the later line is adjudicated. The residual it pinned is re-pinned in the suite on a receiver on no list (ASGN-QVAL-resid-bail-nonmember).
+AV33|block-destructive|rt-asgn-resid|-|?|B|cat <<'EOF'@NL@x@NL@EOF@NL@FOO='a b' bash @D@/na.sh
 AV34|block-destructive|rt-asgn-resid|-|?|a|FOO="a ${X}" bash @D@/na.sh
 AV35|block-destructive|rt-asgn-resid|-|?|a|echo "$(FOO='a b' bash @D@/na.sh)"
 AV36|block-destructive|rt-asgn-resid|-|?|a|FOO='a b'> @D@/out bash @D@/na.sh
@@ -2264,19 +2265,19 @@ AS20|block-destructive|asubst-keep|-|?|B|OUT=$( bash '@D@/ok.sh')
 AS21|block-destructive|asubst-keep|-|?|B|OUT=$(env bash '@D@/ok.sh')
 AS22|block-destructive|asubst-keep|-|?|W|OUT="`bash '@D@/ok.sh'`"
 AS23|block-destructive|asubst-keep|-|?|W|OUT=$(@D@/na.sh '@D@/ok.sh')
-# #8326: inert here-document bodies the receiver read admits (HL rows) and the must-flag controls (HM rows; hub design on sub-task #9061)
-HL01|block-destructive|looks-like-hd|-|?|B|( gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
-HL02|block-destructive|looks-like-hd|-|?|B|(echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
-HL03|block-destructive|looks-like-hd|-|?|B|{ gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
-HL04|block-destructive|looks-like-hd|-|?|B|{ printf 'x' <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
-HL05|block-destructive|looks-like-hd|-|?|B|if true; then echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
-HL06|block-destructive|looks-like-hd|-|?|B|if true; then gh api x --input - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
-HL07|block-destructive|looks-like-hd|-|?|B|! jq . <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-HL08|block-destructive|looks-like-hd|-|?|B|! echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-HL09|block-destructive|looks-like-hd|-|?|B|cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-HL10|block-destructive|looks-like-hd|-|?|B|cat <<'RPT'@NL@bash @D@/na.sh --repro@NL@RPT
-HL11|block-destructive|looks-like-hd|-|?|B|cat > /tmp/notes.md <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-HL12|block-destructive|looks-like-hd|-|?|B|cat <<'EOF' > /tmp/notes.md@NL@bash @D@/na.sh@NL@EOF
+# #8326: inert here-document bodies the receiver read admits (HL rows; GREEN moves them B -> a) and the must-flag controls (HM rows; HM09, an inert subshell, moves a -> B under the closer rule; hub design on sub-task #9061)
+HL01|block-destructive|looks-like-hd|-|?|a|( gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HL02|block-destructive|looks-like-hd|-|?|a|(echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HL03|block-destructive|looks-like-hd|-|?|a|{ gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
+HL04|block-destructive|looks-like-hd|-|?|a|{ printf 'x' <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
+HL05|block-destructive|looks-like-hd|-|?|a|if true; then echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
+HL06|block-destructive|looks-like-hd|-|?|a|if true; then gh api x --input - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
+HL07|block-destructive|looks-like-hd|-|?|a|! jq . <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL08|block-destructive|looks-like-hd|-|?|a|! echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL09|block-destructive|looks-like-hd|-|?|a|cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL10|block-destructive|looks-like-hd|-|?|a|cat <<'RPT'@NL@bash @D@/na.sh --repro@NL@RPT
+HL11|block-destructive|looks-like-hd|-|?|a|cat > /tmp/notes.md <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL12|block-destructive|looks-like-hd|-|?|a|cat <<'EOF' > /tmp/notes.md@NL@bash @D@/na.sh@NL@EOF
 HM01|block-destructive|hd-recv-mf|-|?|B|( bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
 HM02|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' | bash@NL@bash @D@/na.sh@NL@EOF
 HM03|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' 2>&1 | bash@NL@bash @D@/na.sh@NL@EOF
@@ -2285,7 +2286,7 @@ HM05|block-destructive|hd-recv-mf|-|?|B|$(cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@N
 HM06|block-destructive|hd-recv-mf|-|?|B|X=$(@NL@cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
 HM07|block-destructive|hd-recv-mf|-|?|B|{ cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@} | bash
 HM08|block-destructive|hd-recv-mf|-|?|B|cat <<EOF@NL@bash @D@/na.sh $HOME@NL@EOF
-HM09|block-destructive|hd-recv-mf|-|?|a|( true; echo ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM09|block-destructive|hd-recv-mf|-|?|B|( true; echo ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 HM10|block-destructive|hd-recv-mf|-|?|B|while read l; do echo "$l"; done <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 HM11|block-destructive|hd-recv-mf|-|?|B|wc -l <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 # #8490 RED: backtick command words that stay recorded (TK rows; every row stays W through GREEN)

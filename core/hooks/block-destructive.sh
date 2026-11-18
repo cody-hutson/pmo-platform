@@ -3080,6 +3080,11 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
 #      DOES execute its stdin would be a fail-open here while remaining sound
 #      below. `bash <<'EOF'` is what this condition exists to refuse: bash reads
 #      its PROGRAM from stdin, so that body genuinely executes.
+#      The pass reads a RECEIVER LIST that is those four plus `cat`, and `cat` is
+#      NOT in the shared set (D-8326-1). `cat` does not execute its stdin, but it
+#      prints it, so for `cat` alone a third condition applies: nothing in the
+#      command reads its output — the whole-command no-consumer test after the
+#      scan (M-HD-RECV-NOCONS). The quoted-argument suppression is unchanged.
 #  (2) CONSTRUCT-INERT — the delimiter is QUOTED (`'D'`, `"D"`, `\D`), which
 #      suppresses every expansion in the body; or it is BARE and the body
 #      contains neither `$` nor a backtick. That is the identical two-tier split
@@ -3094,7 +3099,11 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
 # real interpreter's stdin the carrier's exemption. It is resolved a second time
 # from the innermost enclosure still open at the operator — `echo $(bash <<'E'`
 # hands the body to `bash`, not to `echo` — and a body is excised only when both
-# readings are carriers (ENCL-HDHEAD below). Below `enforce` on the enclosure
+# readings are carriers (ENCL-HDHEAD below). Each reading is taken through the
+# grammar openers in front of it (script_hd_recv_text), and a reading that holds
+# a compound-command closer keeps the body (M-HD-RECV-CLOSER). Where the line
+# reading came through an opener or names `cat`, the enclosure reading must name
+# a listed receiver at every phase (M-HD-RECV-NEWREACH). Below `enforce` on the enclosure
 # family's phase that finding is recorded and the body is still excised. Two limits
 # are measured and declared: a receiver behind a line continuation is not reached,
 # because this pass reads physical lines; and a carrier's unquoted substitution that
@@ -3111,7 +3120,10 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
 #
 # WHAT NEWLY PASSES, EXACTLY: the body of a here-document whose delimiter is
 # quoted, or is bare with a body free of `$` and backtick, redirected into `gh`,
-# `printf`, `echo` or `jq`. Nothing else. The RESIDUAL is that naming a carrier
+# `printf`, `echo` or `jq`, or into `cat` when nothing in the command reads `cat`'s
+# output — the receiver read through a leading `(` (not `((`) and the grammar
+# words `{`, `!`, `then`, `do`, `else`, `elif`, `if`, `while` and `until`, and never
+# from a text that holds a compound-command closer. Nothing else. The RESIDUAL is that naming a carrier
 # verb gets that body unadjudicated — which is NOT a new residual. It is exactly
 # the one the quoted-argument suppression below already carries and ships:
 # `gh … --body 'note; bash <x>.sh'` is allowed today by the same reasoning. This
@@ -3131,6 +3143,52 @@ script_hd_delim_ok() {
     *[!A-Za-z0-9_.-]*) return 1 ;;
     *) return 0 ;;
   esac
+}
+
+# THE RECEIVER READ THROUGH THE GRAMMAR OPENERS (D-8326-2). A receiver text runs from the last
+# separator to the operator, and neither `(` nor `{` is a separator, so a carrier behind a subshell or
+# brace-group opener, or behind a reserved word, resolved to the opener itself and its inert body was
+# kept. The read steps over the leading openers before the head is resolved: a `(` not followed by `(`
+# (`((` opens arithmetic), and a word that is exactly `{`, `!`, `then`, `do`, `else`, `elif`, `if`,
+# `while` or `until` followed by a blank. These are shell grammar, not command words: the redirection
+# binds to the simple command after them, and none of them reads standard input. The set is the one the
+# verb walk steps (M-WRAP-KEYWORDS) less `case`, `in`, `coproc` and `nocorrect`, and the read never steps
+# a wrapper, which executes its arguments (the asymmetry at script_resolve_head stands), nor `((`, nor a
+# closer. It stops at the first other word, and after 16 openers, where the opener is left as the head
+# and the body is kept: withdraw-only, and the step count keeps the read linear in the receiver text.
+#
+# THE CLOSER RULE. A here-document written after a compound command's closer is redirected to the
+# whole compound command, and the receiver test reads only the simple command whose own words reach the
+# operator. So a receiver text holding a `)` at any position, or a word that is exactly `}`, sets
+# script_hdrecv_closer, and the pre-pass keeps the body for every receiver reading (M-HD-RECV-CLOSER):
+# withdraw-only, the fail-closed direction.
+script_hd_recv_text() {   # $1 = a receiver text -> script_hdrecv_out, script_hdrecv_closer, script_hdrecv_step
+  local _t="$1" _w="" _s=0
+  script_hdrecv_closer=0
+  script_hdrecv_step=0
+  case "$1" in *')'*) script_hdrecv_closer=1 ;; esac
+  case "$1" in '}'|'}'[[:blank:]]*|*[[:blank:]]'}'|*[[:blank:]]'}'[[:blank:]]*) script_hdrecv_closer=1 ;; esac
+  while :; do
+    script_ceil_check hd-recv   # M-CEIL-HD-RECV
+    _t="${_t#"${_t%%[![:blank:]]*}"}"
+    if [ "$_s" -ge 16 ]; then break; fi
+    case "$_t" in
+      '(('*) break ;;
+      '('*) _t="${_t:1}"; _s=$(( _s + 1 )); continue ;;
+    esac
+    _w="${_t%%[[:blank:]]*}"
+    case "$_w" in
+      '{'|'!'|then|do|else|elif|if|while|until)
+        if [ "$_w" = "$_t" ]; then break; fi
+        _t="${_t:${#_w}}"
+        _s=$(( _s + 1 ))
+        ;;
+      *) break ;;
+    esac
+  done
+  script_hdrecv_out="$_t"
+  if [ "$_s" -gt 0 ]; then script_hdrecv_step=1; fi
+  return 0
 }
 
 # Walk $COMMAND left to right, honouring quote state so a `<<` inside a quoted
@@ -3163,6 +3221,7 @@ script_heredoc_prescan() {
   local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0 _od=0 _bt=-1 _h2=0 _c2=0 _j=0 _rh2=""
   local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out="" _ops="" _cont=0 _nd=0
   local _lcar="" _lprev=""
+  local _cls=0 _cat1=0 _lm=1 _catx=0 _stp=0
 
   # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
   # unit this pass reasons in.
@@ -3414,14 +3473,48 @@ script_heredoc_prescan() {
 
       _ex=0
       _c2=0
-      script_resolve_head "${_qhead2[$_k]}"
+      _cls=0
+      _cat1=0
+      _lm=1
+      # Each receiver reading is taken through the grammar openers (script_hd_recv_text), which also
+      # reports a closer in it. The logical-line reading is resolved first, so that the line reading
+      # below stays the last resolve before M-WRAP-QVAL-HDHEAD reads script_head_open. _lm: 1 when
+      # there is no logical reading or it names a carrier, 2 when it names cat, 0 otherwise.
+      if [ -n "${_qlhead[$_k]}" ]; then
+        script_hd_recv_text "${_qlhead[$_k]}"
+        if [ "$script_hdrecv_closer" -eq 1 ]; then _cls=1; fi
+        _lm=0
+        if script_head_is_carrier "$script_hdrecv_out"; then _lm=1; elif [ "${script_head##*/}" = cat ]; then _lm=2; fi
+      fi
+      script_hd_recv_text "${_qhead2[$_k]}"
+      if [ "$script_hdrecv_closer" -eq 1 ]; then _cls=1; fi
+      script_resolve_head "$script_hdrecv_out"
       _rh2="$script_head"
       case "${script_head##*/}" in
         gh|printf|echo|jq) _c2=1 ;;
+        # cat satisfies the enclosure reading only where that reading is the line reading's own text.
+        # Wherever the two differ an enclosure opens on the operator line, which the no-consumer test
+        # below declines, so a carrier head over a cat enclosure keeps today's reading.
+        cat) if [ "${_qhead2[$_k]}" = "$_headtxt" ]; then _c2=1; fi ;;   # M-HD-RECV-CAT2
       esac
-      script_resolve_head "$_headtxt"
+      script_hd_recv_text "$_headtxt"
+      if [ "$script_hdrecv_closer" -eq 1 ]; then _cls=1; fi
+      _stp="$script_hdrecv_step"
+      script_resolve_head "$script_hdrecv_out"
       case "${script_head##*/}" in
         gh|printf|echo|jq)
+          if [ "$_quoted" -eq 1 ]; then
+            _ex=1
+          else
+            case "$_body" in
+              *"$script_qd"*|*"$script_qbt"*) _ex=0 ;;
+              *) _ex=1 ;;
+            esac
+          fi
+          ;;
+        # The receiver list's fifth member, under condition (2) unchanged and the no-consumer test.
+        cat)
+          _cat1=1
           if [ "$_quoted" -eq 1 ]; then
             _ex=1
           else
@@ -3441,7 +3534,14 @@ script_heredoc_prescan() {
       # The receiver is read from the physical line and from the logical line, and the body is
       # excised only when both name a carrier: a continuation can make a carrier's physical line
       # the tail of a shell's command, which reads the body. Withdraw-only.
-      if [ "$_ex" -eq 1 ] && [ -n "${_qlhead[$_k]}" ] && ! script_head_is_carrier "${_qlhead[$_k]}"; then _ex=0; fi   # M-CONT-RECV
+      if [ "$_ex" -eq 1 ] && [ "$_lm" -eq 0 ]; then _ex=0; fi   # M-CONT-RECV
+      if [ "$_lm" -eq 2 ]; then _cat1=1; fi
+      # A receiver text holding a closer keeps the body, whichever reading holds it (script_hd_recv_text).
+      if [ "$_ex" -eq 1 ] && [ "$_cls" -eq 1 ]; then _ex=0; fi   # M-HD-RECV-CLOSER
+      # The new reach does not enter the enclosure family's warn-phase path below. Where the line reading
+      # came through a stepped opener or names cat, an enclosure reading that names no listed receiver keeps
+      # the body at every phase: today the line reading there was the opener itself, or cat, and kept it.
+      if [ "$_ex" -eq 1 ] && [ "$_c2" -eq 0 ] && { [ "$_stp" -eq 1 ] || [ "$_cat1" -eq 1 ]; }; then _ex=0; fi   # M-HD-RECV-NEWREACH
 
       # >>> ENCL-HDHEAD-BEGIN — core/hooks/tests/block-destructive.test.sh
       # A body is excised only when the receiver read from the line head AND the one
@@ -3467,6 +3567,7 @@ script_heredoc_prescan() {
       # >>> ENCL-HDHEAD-END
       if [ "$_ex" -eq 1 ]; then
         _excised=$(( _excised + 1 ))
+        if [ "$_cat1" -eq 1 ]; then _catx=1; fi
         _out="${_out}${_delimline}"$'\n'
       else
         _out="${_out}${_bodyraw}${_delimline}"$'\n'
@@ -3479,6 +3580,15 @@ script_heredoc_prescan() {
   # is not command text). It runs before the three exits below, so a command whose only
   # `<<` sat inside a quote is still asked, and a declined command keeps every body.
   if script_qmodel_needed "$_ops" 1 && ! script_qmodel_ok "$_ops" 1; then script_hdbail=1; return 0; fi   # M-QMODEL-FULL
+
+  # THE NO-CONSUMER TEST (D-8326-1). cat prints its input, so a cat-received body is inert only where
+  # nothing in the command reads cat's output. When an excision relied on cat, every operator line of
+  # the command is read, and a pipe, a parenthesis, a backtick or a coprocess anywhere in them latches
+  # the bail: all-or-nothing, today's verdict. Reading every line, not the operator's own, reaches a
+  # consumer behind a descriptor duplication on that line, a substitution opened on an earlier line
+  # (the opener stack resets per line) and a group closed and piped on a later one. Its cost is false
+  # positives only: any such character in a cat-received command keeps today's verdict, never an allow.
+  if [ "$_catx" -eq 1 ]; then case "$_ops" in *'|'*|*'('*|*')'*|*"$script_qbt"*|*coproc*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-NOCONS
 
   # No here-document operator at quote-state 0 — every `<<` in this command was a
   # here-string or quoted text. Nothing to excise, and nothing to decline.
@@ -4214,10 +4324,11 @@ case "$TOOL_NAME" in
     #       measured, in item 3 of the readiness fragment's residual list, with which
     #       of them an AC-ENCL-RESIDUAL arm pins and which no arm pins. A green
     #       here-document arm is still not evidence about any of them.
-    #   R-4 A NON-CARRIER RECEIVER KEEPS THE FALSE POSITIVE. `cat <<'RPT'` still
-    #       blocks. Deliberate: a missing carrier entry costs a false positive and
+    #   R-4 A RECEIVER ON NO LIST KEEPS THE FALSE POSITIVE. `tee <file> <<'RPT'`
+    #       still blocks. Deliberate: a missing entry costs a false positive and
     #       can never admit an evasion, which is the fail direction this block
-    #       demands below.
+    #       demands below. `cat` is on the pre-pass's receiver list, under the
+    #       whole-command no-consumer test (script_heredoc_prescan).
     #
     # Suppression stays gated on an ALLOWLIST of command words that cannot evaluate
     # their arguments. The direction of that choice is deliberate: an entry MISSING
@@ -4238,12 +4349,13 @@ case "$TOOL_NAME" in
     # here-document pre-pass asks. The four current members satisfy both, so the
     # value is shared rather than duplicated into a second set that could drift from
     # this one (keeping two matchers is what let the arms drift apart before). A
-    # verb that satisfies (a) but not (b) — `cat` and `tee` do not execute stdin, but
-    # any stdin-executing verb would — is a fail-open on the pre-pass while still
-    # sound here, so BOTH tests must be answered before adding a member. `cat` and
-    # `tee` are plausible additions that would remove the R-4 false positive; they
-    # are deliberately NOT added here, because membership risk does not belong in a
-    # change whose job is to narrow.
+    # verb that satisfies (a) but not (b) — any stdin-executing verb would — is a
+    # fail-open on the pre-pass while still sound here, so BOTH tests must be
+    # answered before adding a member. The pre-pass alone reads one more receiver,
+    # `cat`, which passes (b) but prints its input, so it is admitted there only under
+    # a third condition, the whole-command no-consumer test; it is not added to this
+    # set, whose quoted-argument suppression no card asks to widen. `tee` is on
+    # neither: it writes files whose names this rule does not read.
     script_q1="'"
     script_q2='"'
     script_bs='\'

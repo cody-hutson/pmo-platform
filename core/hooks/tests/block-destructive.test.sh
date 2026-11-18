@@ -5617,8 +5617,11 @@ test_case "HD-07a control: an unterminated here-document blocks (model cannot re
 bash /tmp/evil.sh')" \
   2 "BLOCK-DESTRUCTIVE-022"
 
-test_case "HD-07b control: a NON-carrier receiver keeps the false positive (residual R-4)" \
-  "$(bash_payload 'cat <<'"'"'RPT'"'"' > /tmp/out.md
+# Re-pointed by #8326: its receiver was cat, which the receiver list now admits under the
+# whole-command no-consumer test (HD-RECV-ADMIT-cat-redirect-after is that shape's arm). A receiver
+# on no list keeps R-4's role; HD-RECV-CTL-nonmember is its twin.
+test_case "HD-07b control: a receiver on no list keeps the false positive (residual R-4)" \
+  "$(bash_payload 'tee /tmp/out.md <<'"'"'RPT'"'"'
 bash /tmp/evil.sh
 RPT')" \
   2 "BLOCK-DESTRUCTIVE-022"
@@ -5717,12 +5720,14 @@ RPT')" \
   0
 
 # ALL-OR-NOTHING, asserted directly: a command mixing an excisable here-document
-# with a declined one excises NEITHER and keeps its pre-change verdict.
+# with a declined one excises NEITHER and keeps its pre-change verdict. The declined
+# body's receiver was cat until #8326 admitted it; a line counter, on no list, keeps
+# the arm's role.
 test_case "HD-16 control: one declined body means the whole command is left adjudicated" \
   "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'A'"'"'
 bash /tmp/evil.sh
 A
-cat <<'"'"'B'"'"'
+wc -l <<'"'"'B'"'"'
 plain
 B')" \
   2 "BLOCK-DESTRUCTIVE-022"
@@ -9050,7 +9055,8 @@ ENCL_NAPY='/tmp/pmo-encl-na.py'
 #   supp     a segment interior to a carrier's quote is not suppressed in the second view
 #   route    the shell-arm router sends a first-view finding to the enclosure phase too
 #   split    the first view reads `)` as a separator
-#   noex     the here-document pre-pass excises nothing
+#   noex     the here-document pre-pass excises nothing for the four carriers (the cat
+#            receiver, #8326, is its own pattern line, which this copy does not rewrite)
 #   suppall  the first view's carrier suppression is switched off
 #   smallp   the position ceiling lowered to 4
 #   smallb   the remainder budget lowered to 64 bytes
@@ -9333,14 +9339,16 @@ encl_arm "AC-ENCL-N12: echo \\(bash <unlisted>.sh\\) stays allowed (escaped pare
 encl_mut_arm "AC-ENCL-N12-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "echo \\(bash ${ENCL_NA}\\)" B "ENCL gate deny mutant"
 encl_arm "AC-ENCL-N13: find . \\( -name '*.sh' -o -name x \\) -newer <unlisted>.sh stays allowed" "find . \\( -name '*.sh' -o -name x \\) -newer ${ENCL_NA}" a - a
 encl_mut_arm "AC-ENCL-N13-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "find . \\( -name '*.sh' -o -name x \\) -newer ${ENCL_NA}" B "ENCL gate deny mutant"
-encl_arm "AC-ENCL-N14: a carrier receiving a here-document after a closed substitution stays allowed (the enclosure closed before the operator)" \
+# Re-graded by #8326: the receiver text holds the substitution's closer, and under the closer rule
+# every receiver reading that holds a `)` keeps the body, so this near miss is now refused. A declared
+# cost of that rule, which does not tell a substitution's `)` from a compound command's.
+encl_arm "AC-ENCL-N14: a carrier receiving a here-document after a closed substitution in its own arguments keeps its body (the closer rule's declared cost)" \
   "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
 note; bash ${ENCL_NA}
-EOF" a - a
-encl_mut_arm "AC-ENCL-N14-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh \
-  "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
-note; bash ${ENCL_NA}
-EOF" B "ENCL gate deny mutant"
+EOF" B - B
+# AC-ENCL-N14-pair moved to the #8326 block below: the shipped hook now refuses N14 at the first view, so
+# the gate-deny copy refuses it before its gate and the pair showed nothing; its pair is the copy without
+# the closer rule, on which the re-graded pin fails.
 encl_arm "AC-ENCL-N15: echo \"\$(date)\" 'x; bash <unlisted>.sh' stays allowed (the enclosure inside quotes does not move the carrier)" "echo \"\$(date)\" 'x; bash ${ENCL_NA}'" a - a
 encl_mut_arm "AC-ENCL-N15-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\$(date)\" 'x; bash ${ENCL_NA}'" W
 
@@ -9356,10 +9364,6 @@ encl_arm "AC-ENCL-RESIDUAL-body-idiom (pin, not fix-evidence): the commit idiom 
 Run \`bash ${ENCL_NA}\` to verify
 EOF
 )\"" W B a shell-enclosure
-encl_arm "AC-ENCL-RESIDUAL-heredoc-kept (pin, not fix-evidence): a body left in place with a code span naming a script" \
-  "cat > notes.md <<'EOF'
-Run \`bash ${ENCL_NA}\` to reproduce
-EOF" W B a shell-enclosure
 encl_arm "AC-ENCL-RESIDUAL-backtick-close (pin, not fix-evidence): text after a closing backtick" \
   "echo \`date\` bash ${ENCL_NA}" W B a shell-enclosure
 encl_arm "AC-ENCL-RESIDUAL-carrier-moved (pin, not fix-evidence): a quoted argument after an unquoted enclosure, under a carrier" \
@@ -9827,11 +9831,14 @@ xt_arm "EXEC-TEXT-PIN-remainder-pair: without the nested-opener stop the executi
 # family's forced copy.
 #   hdnocons  the whole-command no-consumer test removed (its one line, M-HD-RECV-NOCONS)
 #   hdcloser  the closer rule removed (its one line, M-HD-RECV-CLOSER)
+#   hdreach   the new reach's enclosure test removed (its one line, M-HD-RECV-NEWREACH)
 /usr/bin/sed '/# M-HD-RECV-NOCONS$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdnocons.sh"
 /usr/bin/sed '/# M-HD-RECV-CLOSER$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdcloser.sh"
-/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdnocons.sh" "${ENCL_HOOKS}/block-destructive-hdcloser.sh"
+/usr/bin/sed '/# M-HD-RECV-NEWREACH$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdreach.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdnocons.sh" "${ENCL_HOOKS}/block-destructive-hdcloser.sh" "${ENCL_HOOKS}/block-destructive-hdreach.sh"
 encl_shape_arm "HD-RECV-COPY-nocons: the no-consumer mutant removes its one line" block-destructive-hdnocons.sh "1/0"
 encl_shape_arm "HD-RECV-COPY-closer: the closer-rule mutant removes its one line" block-destructive-hdcloser.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-reach: the new-reach mutant removes its one line" block-destructive-hdreach.sh "1/0"
 
 # --- admitted: an inert body handed to a receiver that does not execute it (RED: each reads B) ---
 qscan_arm "HD-RECV-ADMIT-paren: a subshell opener before a carrier receiver" HL01 a a -
@@ -9846,6 +9853,13 @@ qscan_arm "HD-RECV-ADMIT-cat-print: a cat receiver, quoted delimiter, no tail" H
 qscan_arm "HD-RECV-ADMIT-cat-print-rpt: the same under another delimiter" HL10 a a -
 qscan_arm "HD-RECV-ADMIT-cat-redirect: a cat receiver writing a file, the redirection ahead of the operator" HL11 a a -
 qscan_arm "HD-RECV-ADMIT-cat-redirect-after: the same, the redirection after the operator" HL12 a a -
+# Re-labelled from AC-ENCL-RESIDUAL-heredoc-kept, a pin of a body left in place (recorded at warn and
+# refused at enforce before): its receiver is cat, so its shape is this card's fix and the arm is
+# fix-evidence.
+encl_arm "HD-RECV-ADMIT-cat-redirect-span: a cat receiver writing a file, its body holding a code span naming a script" \
+  "cat > notes.md <<'EOF'
+Run \`bash ${ENCL_NA}\` to reproduce
+EOF" a a a
 
 # --- must flag: today's refusal stands (each green before and after) ---
 qscan_arm "HD-RECV-MF-paren-shell: a subshell opener before a shell-interpreter receiver" HM01 B B -
@@ -9870,6 +9884,17 @@ encl_arm "HD-RECV-MF-closer-cat: a cat head whose receiver text holds a closer k
 encl_arm "HD-RECV-MF-cat-coproc: a cat receiver writing into a coprocess keeps the body" "$hd_coproc" B B -
 encl_arm "HD-RECV-MF-group-tail: a here-document after a subshell closer keeps its body" "$hd_tail" B B -
 encl_mut_arm "HD-RECV-MF-group-tail-pair: without the closer rule that body is excised" block-destructive-hdcloser.sh "$hd_tail" a
+encl_mut_arm "AC-ENCL-N14-pair: without the closer rule that body is excised and the command allowed" block-destructive-hdcloser.sh \
+  "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
+note; bash ${ENCL_NA}
+EOF" a
+# Added at GREEN, from the self-review: the new reach meeting an enclosure reading off the list. Each keeps
+# today's verdict (B, and an allow with no record); the pair shows the line that keeps the first.
+hd_reach_sh="( echo \$(bash <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF${hd_nl}) )"
+hd_reach_cat="( cat <<'EOF'${hd_nl}plain text${hd_nl}EOF${hd_nl})"
+encl_arm "HD-RECV-MF-reach-encl-shell: a stepped opener before a carrier whose substitution opens a shell that receives the here-document keeps the body at every phase" "$hd_reach_sh" B B -
+encl_mut_arm "HD-RECV-MF-reach-encl-shell-pair: without the new-reach line the shipped copy only records it" block-destructive-hdreach.sh "$hd_reach_sh" W
+encl_arm "HD-RECV-CTL-reach-encl-cat: cat behind a subshell opener with a plain body stays allowed, with no record" "$hd_reach_cat" a a -
 if wc_row_cmd HM02; then
   encl_mut_arm "HD-RECV-MF-cat-pipe-pair: without the no-consumer test the piped body is excised [row HM02]" block-destructive-hdnocons.sh "$WC_CMDX" a
 else
@@ -9879,7 +9904,7 @@ fi
 
 # --- the closer rule's precision cost, measured: allowed before, refused after ---
 hd_cost_q="gh pr create --title \"fix(x): y\" --body-file - <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
-encl_arm "HD-RECV-COST-quoted: a carrier whose quoted argument holds a parenthesis, then an inert here-document" "$hd_cost_q" a a -
+encl_arm "HD-RECV-COST-quoted: a carrier whose quoted argument holds a parenthesis, then an inert here-document, keeps its body (the closer rule's declared cost)" "$hd_cost_q" B B -
 
 /bin/rm -rf "$ENCL_ROOT"
 
@@ -10909,7 +10934,10 @@ aq_arm "ASGN-QVAL-hdhead-ctl: the same here-document with no carrier word in the
 aq_arm "ASGN-QVAL-over-wrap (declared over-block): an assignment behind a wrapper that takes none" AV25 B a
 
 # --- the declared residuals: allowed before and after ---
-aq_arm "ASGN-QVAL-resid-bail: a later line of a command whose bail latched" AV33 a a pqvalgate B
+# AV33's here-document is received by cat, which #8326 admits, so its bail no longer latches and the
+# later line is adjudicated: refused through the step, allowed by the walk before it. The residual it
+# pinned is re-pinned just below on a receiver on no list.
+aq_arm "ASGN-QVAL-resid-bail: a later line after a cat-received here-document, adjudicated now the body is admitted" AV33 B a
 # The same residual on a receiver on no list, so the pin does not depend on which receivers the
 # here-document pre-pass admits (#8326 admits AV33's cat). Allowed on the hook; the copy whose gate
 # vouches for every segment refuses it.
