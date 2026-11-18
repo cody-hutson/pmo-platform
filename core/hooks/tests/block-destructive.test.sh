@@ -11282,6 +11282,315 @@ sv_arm "OPND-ADMIT-ctl: an unlisted spaced path is refused" OP35 B
 
 /bin/rm -rf "$AQ_ROOT"
 
+# --- #8493: the option-run latch's two error directions (release script-guard-refuses-only-what-executes;
+# design on sub-task #9062, review on #9087). Part 1, the plain-character set swept on each shell; part 2,
+# the conservative route's refusal names its cause, and its block-log row carries a cause tag.
+
+# Part 1. The set is DERIVED from the hook's own `script_plain_word` pattern on every run, so a member
+# added later is swept automatically. Each word is handed to a fresh child shell as an unquoted word in
+# the child's PROGRAM TEXT (as argv nothing would be expanded), under a clean environment.
+ls_pw="$(/usr/bin/awk '/^script_plain_word\(\)/ { f = 1 } f && index($0, "*[!") { s = $0; sub(/^[^[]*\[!/, "", s); sub(/\]\*\).*$/, "", s); print s; exit }' "$HOOK")"
+ls_set="${ls_pw#A-Za-z0-9}"
+if [ -n "$ls_pw" ] && [ "$ls_set" != "$ls_pw" ] && [ "$ls_set" = "_=+,.:/@%-" ]; then
+  /usr/bin/printf 'PASS: LATCH-SWEEP-SET the plain set read from the hook is the recorded 10 members (%s)\n' "$ls_set"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: LATCH-SWEEP-SET the plain set read from the hook is [%s], not the recorded _=+,.:/@%%- — re-record the set, then re-sweep\n' "$ls_pw"
+  FAIL=$((FAIL + 1))
+fi
+ls_pl="$(/usr/bin/awk 'index($0, "PL = \"ABCDEFGHIJ") { s = $0; sub(/^[^"]*"/, "", s); sub(/".*$/, "", s); print s; exit }' "$HOOK")"
+ls_rd="$(/usr/bin/awk '/^script_qval_readable\(\)/ { f = 1 } f && index($0, "*[!") { s = $0; sub(/^[^[]*\[!/, "", s); sub(/\]\*\).*$/, "", s); print s; exit }' "$HOOK")"
+ls_rd_plain="${ls_rd//\\\'/}"; ls_rd_plain="${ls_rd_plain//\\\"/}"
+if [ "$ls_pl" = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789${ls_set} \\t" ] && [ "$ls_rd_plain" = "$ls_pw" ] && [ "$ls_rd" != "$ls_rd_plain" ]; then
+  /usr/bin/printf 'PASS: LATCH-SWEEP-PARITY the trust boundary'"'"'s PL string and script_qval_readable'"'"'s set each equal the swept set plus exactly their declared extras\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: LATCH-SWEEP-PARITY a second spelling of the plain set differs from the swept one (PL=[%s] readable=[%s])\n' "$ls_pl" "$ls_rd"
+  FAIL=$((FAIL + 1))
+fi
+LS_DIR="$(/usr/bin/mktemp -d)"
+LS_HOME="${LS_DIR}/home"
+/bin/mkdir -p "${LS_DIR}/cwd" "$LS_HOME"
+/usr/bin/touch "${LS_DIR}/cwd/-xb" "${LS_DIR}/cwd/-xc"
+ls_words() { # $1 = member set -> one word per line, the eight positions per member, deduplicated
+  local set="$1" i c
+  i=0
+  while [ "$i" -lt "${#set}" ]; do
+    c="${set:$i:1}"
+    /usr/bin/printf '%s\n' "-a${c}" "-${c}a" "--rc${c}file" "+${c}n" "${c}abc" "a${c}${c}b" "-${c}" "${c}"
+    i=$((i + 1))
+  done | /usr/bin/awk '!seen[$0]++'
+}
+LS_CLASS=""
+ls_child() { # $1 = shell  $2 = extra flag or ''  $3 = word -> LS_CLASS unchanged|split|rewritten|aborted
+  local out rc=0 n
+  out="$(cd "${LS_DIR}/cwd" && /usr/bin/env -i PATH=/usr/bin:/bin HOME="$LS_HOME" LC_ALL=C "$1" ${2:+"$2"} -c "printf '[%s]\\n' $3" 2>/dev/null)" || rc="$?"
+  n="$(/usr/bin/printf '%s' "$out" | /usr/bin/awk 'END { print NR }')"
+  if [ "$rc" -ne 0 ] || [ -z "$out" ]; then LS_CLASS="aborted"
+  elif [ "$n" -gt 1 ]; then LS_CLASS="split"
+  elif [ "$out" = "[$3]" ]; then LS_CLASS="unchanged"
+  else LS_CLASS="rewritten"; fi
+}
+ls_limb() { # $1 label  $2 shell  $3 extra flag or ''  $4 1 when the zsh rule applies
+  local label="$1" sh="$2" fl="$3" zr="$4" w un=0 rw=0 sp=0 ab=0 bad="" total=0 ctl_ok=1 ctlwhy="" isbash isz m1=0
+  while IFS= read -r w; do
+    total=$((total + 1))
+    ls_child "$sh" "$fl" "$w"
+    case "$LS_CLASS" in unchanged) un=$((un + 1)) ;; split) sp=$((sp + 1)) ;; rewritten) rw=$((rw + 1)) ;; aborted) ab=$((ab + 1)) ;; esac
+    if [ "$LS_CLASS" != "unchanged" ]; then
+      if [ "$zr" = 1 ] && [ "${w:0:1}" = "=" ] && [ "$LS_CLASS" != "split" ]; then :; else bad="${bad} ${w}(${LS_CLASS})"; fi
+    fi
+  done < <({ ls_words "$ls_set"; ls_words "a"; } | /usr/bin/awk '!seen[$0]++')
+  /usr/bin/printf 'RESIDUAL: %s population: %s · members %s (%s) · positions 8 · words %s · unchanged %s · rewritten %s · split %s · aborted %s\n' "$label" "$sh" "${#ls_set}" "$ls_set" "$total" "$un" "$rw" "$sp" "$ab"
+  if [ -z "$bad" ]; then
+    /usr/bin/printf 'PASS: %s every plain-set word comes back as one unchanged word (%s words)\n' "$label" "$total"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s words not unchanged:%s — a member that fails is re-filed at P1 and the slice stops (plan R13)\n' "$label" "$bad"; FAIL=$((FAIL + 1))
+  fi
+  ls_child "$sh" "$fl" '-x?'; [ "$LS_CLASS" = "split" ] || { ctl_ok=0; ctlwhy="${ctlwhy} glob=${LS_CLASS}"; }
+  ls_child "$sh" "$fl" '~'; [ "$LS_CLASS" = "rewritten" ] || { ctl_ok=0; ctlwhy="${ctlwhy} tilde=${LS_CLASS}"; }
+  isbash="$(/usr/bin/env -i PATH=/usr/bin:/bin "$sh" ${fl:+"$fl"} -c 'printf %s "${BASH_VERSION:-}${ZSH_VERSION:-}"' 2>/dev/null)"
+  if [ -n "$isbash" ]; then ls_child "$sh" "$fl" '-x{b,c}'; [ "$LS_CLASS" = "split" ] || { ctl_ok=0; ctlwhy="${ctlwhy} brace=${LS_CLASS}"; }; fi
+  /usr/bin/printf 'RESIDUAL: %s controls: glob splits, tilde rewritten, brace %s, 7 control words in the sweep above\n' "$label" "$([ -n "$isbash" ] && echo splits || echo not-applicable)"
+  if [ "$ctl_ok" = 1 ]; then /usr/bin/printf 'PASS: LATCH-SWEEP-CTL-%s the splitting and rewriting controls fire\n' "${label#LATCH-SWEEP-}"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: LATCH-SWEEP-CTL-%s a control did not fire:%s — the sweep cannot see a member that misbehaves\n' "${label#LATCH-SWEEP-}" "$ctlwhy"; FAIL=$((FAIL + 1)); fi
+  while IFS= read -r w; do ls_child "$sh" "$fl" "$w"; [ "$LS_CLASS" = "unchanged" ] || m1=$((m1 + 1)); done < <(ls_words '~')
+  if [ "$m1" -ge 1 ]; then /usr/bin/printf 'PASS: LATCH-SWEEP-M1-%s a wrongly included member (~) is caught (%s words not unchanged)\n' "${label#LATCH-SWEEP-}" "$m1"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: LATCH-SWEEP-M1-%s the sweep did not catch a wrongly included member\n' "${label#LATCH-SWEEP-}"; FAIL=$((FAIL + 1)); fi
+}
+ls_limb LATCH-SWEEP-bash /bin/bash "" 0
+ls_limb LATCH-SWEEP-sh /bin/sh "" 0
+ls_dash=""
+for ls_c in /bin/dash /usr/bin/dash; do [ -x "$ls_c" ] && { ls_dash="$ls_c"; break; }; done
+if [ -n "$ls_dash" ]; then ls_limb LATCH-SWEEP-dash "$ls_dash" "" 0
+else /usr/bin/printf 'RESIDUAL: LATCH-SWEEP-dash absent on this host: sh was measured only as the binary /bin/sh resolves to\n'; fi
+if [ -x /bin/zsh ]; then ls_limb LATCH-SWEEP-zsh /bin/zsh -f 1
+else /usr/bin/printf 'RESIDUAL: LATCH-SWEEP-zsh absent on this host\n'; fi
+/bin/rm -rf "$LS_DIR"
+
+# --- #8493 Part 2: the conservative route's refusal names its cause (LATCH-CAUSE-*) ---
+# Three gates hand a segment to the route a bare -c takes: an unreadable word ahead of the
+# operand (opaque), a command-string cluster other than a bare -c (cluster), and an option
+# argument whose text the walk does not hold (opaque-arg). A refusal the route's own loop
+# issues appends "Read on the conservative route (<gate>): ..." to its reason; the Override
+# line is unchanged. That refusal's block-log row gains one key, features {schema_version: 1,
+# route, subject} (ADR-205's forward-compatible shape); every other row keeps exactly the six
+# base keys in their order. Payloads are corpus rows read by id, under a hermetic root of
+# their own; the block log is cleared before each call, so the record read is that call's.
+LC_ROOT="$(/usr/bin/mktemp -d)"
+LC_HOOKS="${LC_ROOT}/.claude/hooks"
+/bin/mkdir -p "${LC_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${LC_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${LC_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" > "${LC_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${LC_HOOKS}/.mode"
+/bin/cp "$HOOK" "${LC_HOOKS}/block-destructive.sh"
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_INTERP_PHASE=.*/readonly DESTRUCTIVE_022_INTERP_PHASE="enforce"   # shadow | warn | enforce/' \
+  "$HOOK" > "${LC_HOOKS}/block-destructive-ienf.sh"
+/usr/bin/sed -e '/# M-OPAQUE (mutation/d' -e '/# M-CLUSTER/d' -e '/# M-OPAQUE-ARG/d' \
+  "$HOOK" > "${LC_HOOKS}/block-destructive-gateoff.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-TAG (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m1a.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-TAG-ARG (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m1b.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-NOTE (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m2a.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-LIVE (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m3a.sh"
+/bin/chmod +x "${LC_HOOKS}/"block-destructive*.sh
+LC_LOG="${LC_HOOKS}/block-log.jsonl"
+LC_DRAIN="${LC_HOOKS}/destructive-warn-log.jsonl"
+lc_gone() { # $1 = copy -> how many lines the copy lacks against the shipped hook
+  local a b
+  a="$(/usr/bin/wc -l < "$HOOK" | /usr/bin/tr -d '[:space:]')"
+  b="$(/usr/bin/wc -l < "${LC_HOOKS}/$1" | /usr/bin/tr -d '[:space:]')"
+  /usr/bin/printf '%s' "$((a - b))"
+}
+LC_EXIT=0; LC_ERR=""; LC_REC=""
+lc_run() { # $1 = copy  $2 = command -> LC_EXIT, LC_ERR, LC_REC (this call's block-log record, or empty)
+  local tmp
+  tmp="$(/usr/bin/mktemp)"
+  /bin/rm -f "$LC_LOG"
+  LC_EXIT=0
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$LC_ROOT")" | /bin/bash "${LC_HOOKS}/$1" >/dev/null 2>"$tmp" ) || LC_EXIT="$?"
+  LC_ERR="$(/bin/cat "$tmp")"; /bin/rm -f "$tmp"
+  LC_REC=""
+  if [ -s "$LC_LOG" ]; then LC_REC="$(/usr/bin/jq -s -c '.[-1]' "$LC_LOG" 2>/dev/null)"; fi
+}
+lc_route() { # -> the features.route of LC_REC, or empty
+  if [ -n "$LC_REC" ]; then /usr/bin/jq -r '.features.route // ""' <<<"$LC_REC" 2>/dev/null; fi
+}
+lc_report() { # $1 = label  $2 = observed reasons (empty = pass)
+  if [ -z "$2" ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  observed:%s\n  stderr: %s\n' "$1" "$2" "$LC_ERR"; FAIL=$((FAIL + 1))
+  fi
+}
+# lc_arm <label> <row id | -> <copy> <exit> <note gate | -> <token named | -> <features.route | -> <subject | any | -> [<command when row is ->]
+lc_arm() {
+  local name="$1" row="$2" copy="$3" want="$4" gate="$5" tok="$6" route="$7" subj="$8" cmd="${9:-}" why="" got gv gs keys last
+  if [ "$row" != "-" ]; then
+    if ! wc_row_cmd "$row"; then
+      /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$name" "$row"; FAIL=$((FAIL + 1)); return 0
+    fi
+    cmd="$WC_CMDX"; name="${name} [row ${row}]"
+  fi
+  lc_run "$copy" "$cmd"
+  [ "$LC_EXIT" = "$want" ] || why="${why} exit=${LC_EXIT}"
+  if [ "$gate" = "-" ]; then
+    case "$LC_ERR" in *"Read on the conservative route"*) why="${why} unexpected-note" ;; esac
+  else
+    case "$LC_ERR" in *"Read on the conservative route (${gate}): "*) ;; *) why="${why} no-(${gate})-note" ;; esac
+    if [ "$tok" != "-" ]; then
+      case "$LC_ERR" in *"(${gate}): "*"'${tok}'"*) ;; *) why="${why} note-does-not-name-${tok}" ;; esac
+    fi
+  fi
+  if [ "$want" = 2 ]; then
+    if [ -z "$LC_REC" ]; then
+      why="${why} no-block-log-record"
+    else
+      keys="$(/usr/bin/jq -r '[keys_unsorted[] | select(. != "features")] | join(",")' <<<"$LC_REC" 2>/dev/null)"
+      [ "$keys" = "ts,hook,rule,tool,input_digest,cwd" ] || why="${why} base-keys=${keys}"
+      got="$(/usr/bin/jq -r 'if has("features") then (.features.route // "<no-route>") else "" end' <<<"$LC_REC" 2>/dev/null)"
+      if [ "$route" = "-" ]; then
+        [ -z "$got" ] || why="${why} features.route=${got}(wanted-none)"
+      else
+        [ "$got" = "$route" ] || why="${why} features.route=${got:-absent}(wanted-${route})"
+        if [ -n "$got" ]; then
+          gv="$(/usr/bin/jq -r '.features.schema_version // ""' <<<"$LC_REC" 2>/dev/null)"
+          [ "$gv" = "1" ] || why="${why} schema_version=${gv:-absent}"
+          gs="$(/usr/bin/jq -r '.features.subject // ""' <<<"$LC_REC" 2>/dev/null)"
+          case "$subj" in
+            any) case "$gs" in first|later) ;; *) why="${why} subject=${gs:-absent}" ;; esac ;;
+            *) [ "$gs" = "$subj" ] || why="${why} subject=${gs:-absent}(wanted-${subj})" ;;
+          esac
+          last="$(/usr/bin/jq -r '[keys_unsorted[]] | last' <<<"$LC_REC" 2>/dev/null)"
+          [ "$last" = "features" ] || why="${why} features-not-last"
+          [ "$(/usr/bin/jq -r '.rule' <<<"$LC_REC" 2>/dev/null)" = "BLOCK-DESTRUCTIVE-022" ] || why="${why} tagged-row-not-022"
+        fi
+      fi
+    fi
+  else
+    [ -z "$LC_REC" ] || why="${why} unexpected-block-log-record"
+  fi
+  lc_report "$name" "$why"
+}
+
+# The three gates, each named with the token that sent the segment to the route.
+lc_arm "LATCH-CAUSE-opaque: an unreadable option word ahead of the script is named as the route's cause" ZU34 block-destructive.sh 2 opaque '-x$X' opaque later
+lc_arm "LATCH-CAUSE-opaque-word: an unreadable word that is not an option (a redirection) is named, not an option" ZH05 block-destructive.sh 2 opaque '2>/dev/null' opaque later
+lc_arm "LATCH-CAUSE-cluster: a command-string option cluster is named as the route's cause" ZC33 block-destructive.sh 2 cluster '-ec' cluster any
+lc_arm "LATCH-CAUSE-optarg: an option argument whose text the walk does not hold is named as the route's cause" ZH19 block-destructive.sh 2 opaque-arg 'pipe"fail"' opaque-arg later
+
+# The controls: every refusal outside the route keeps the plain row and the plain reason.
+lc_arm "LATCH-CAUSE-ctl-plain: the same unlisted script refused off the route keeps the six keys and no note" - block-destructive.sh 2 - - - - "bash $HINT_UNLISTED"
+lc_arm "LATCH-CAUSE-ctl-dashc: a bare -c program running an unlisted script is a real command string, untagged" T18 block-destructive.sh 2 - - - -
+lc_arm "LATCH-CAUSE-ctl-allow: the route taken over only an allowlisted script writes no record" ZU05 block-destructive.sh 0 - - - -
+lc_arm "LATCH-CAUSE-ctl-stepover: the route token's own word refused is untagged" X12 block-destructive.sh 2 - - - -
+lc_arm "LATCH-CAUSE-ctl-rule: another rule's refusal keeps exactly the six base keys" - block-destructive.sh 2 - - - - 'git push --force origin main'
+if wc_row_cmd ZU34; then
+  lc_run block-destructive.sh "$WC_CMDX"
+  lc_why=""
+  [ "$LC_EXIT" = 2 ] || lc_why="${lc_why} exit=${LC_EXIT}"
+  /usr/bin/grep -qE "$HINT_ORDER" <<<"$LC_ERR" || lc_why="${lc_why} override-order-changed"
+  lc_report "LATCH-CAUSE-ctl-hint: the route refusal's Override line keeps its order [row ZU34]" "$lc_why"
+else
+  lc_report "LATCH-CAUSE-ctl-hint: the route refusal's Override line keeps its order" " row ZU34 absent"
+fi
+# A non-shell interpreter on the route: at the shipped warn phase it is recorded, never refused,
+# and the drain row it writes is unchanged; at enforce the router delegates and the tag follows.
+if wc_row_cmd ZH16; then
+  lc_d0=0; [ -f "$LC_DRAIN" ] && lc_d0="$(/usr/bin/wc -l < "$LC_DRAIN" | /usr/bin/tr -d '[:space:]')"
+  lc_run block-destructive.sh "$WC_CMDX"
+  lc_why=""
+  [ "$LC_EXIT" = 0 ] || lc_why="${lc_why} exit=${LC_EXIT}"
+  [ -z "$LC_REC" ] || lc_why="${lc_why} unexpected-block-log-record"
+  lc_d1=0; [ -f "$LC_DRAIN" ] && lc_d1="$(/usr/bin/wc -l < "$LC_DRAIN" | /usr/bin/tr -d '[:space:]')"
+  if [ "$lc_d1" -gt "$lc_d0" ]; then
+    /usr/bin/tail -n 1 "$LC_DRAIN" | /usr/bin/jq -e 'has("features") | not' >/dev/null 2>&1 || lc_why="${lc_why} drain-row-gained-features"
+  else
+    lc_why="${lc_why} no-drain-row"
+  fi
+  lc_report "LATCH-CAUSE-ctl-warn: a non-shell interpreter on the route at the shipped warn phase writes a plain drain row and no block-log record [row ZH16]" "$lc_why"
+else
+  lc_report "LATCH-CAUSE-ctl-warn: a non-shell interpreter on the route at the shipped warn phase" " row ZH16 absent"
+fi
+if /usr/bin/grep -qF 'readonly DESTRUCTIVE_022_INTERP_PHASE="enforce"' "${LC_HOOKS}/block-destructive-ienf.sh"; then
+  lc_arm "LATCH-CAUSE-enf: the same at enforce is refused with its cause and tag (router delegation)" ZH16 block-destructive-ienf.sh 2 opaque '-u""' opaque first
+else
+  lc_report "LATCH-CAUSE-enf: the same at enforce is refused with its cause and tag" " the interpreter-phase copy is not at enforce"
+fi
+
+# The latch's own corpus rows: every refusal in its groups, through the shipped hook and through a
+# copy with the three gate lines deleted (the suite's own seds). Ground truth for these rows was
+# taken with marker scripts (seed 5); o and - are refusals that ran nothing unlisted.
+lc_cn=0; lc_ct=0; lc_co=0; lc_cc=0; lc_ca=0; lc_cok=0; lc_cbad=""; lc_m0t=0; lc_rg=""
+lc_i=0
+while [ "$lc_i" -lt "$wc_n" ]; do
+  case "${WC_GROUP[$lc_i]}" in
+    term-unread|term-run|term-run2|cluster|cluster-edge|optarg|unread-word)
+      if [ "${WC_REC[$lc_i]}" = "B" ]; then
+        wc_expand "${WC_CMD[$lc_i]}"
+        lc_cn=$((lc_cn + 1))
+        lc_run block-destructive.sh "$WC_CMDX"
+        lc_r="$(lc_route)"
+        case "$lc_r" in
+          "") ;;
+          opaque) lc_co=$((lc_co + 1)) ;;
+          cluster) lc_cc=$((lc_cc + 1)) ;;
+          opaque-arg) lc_ca=$((lc_ca + 1)) ;;
+          *) lc_cbad="${lc_cbad} ${WC_ID[$lc_i]}=${lc_r}" ;;
+        esac
+        if [ -n "$lc_r" ]; then
+          lc_ct=$((lc_ct + 1))
+          lc_rg="${lc_rg}${lc_r}/${WC_GT[$lc_i]}"$'\n'
+          case "${WC_GT[$lc_i]}" in o|-) lc_cok=$((lc_cok + 1)) ;; esac
+        fi
+        lc_run block-destructive-gateoff.sh "$WC_CMDX"
+        if [ -n "$(lc_route)" ]; then lc_m0t=$((lc_m0t + 1)); fi
+      fi ;;
+  esac
+  lc_i=$((lc_i + 1))
+done
+lc_rgs="$(/usr/bin/printf '%s' "$lc_rg" | /usr/bin/sort | /usr/bin/uniq -c | /usr/bin/awk '{printf "%s%s=%s", (NR > 1 ? " " : ""), $2, $1}')"
+/usr/bin/printf 'RESIDUAL: LATCH-CAUSE-CORPUS latch-group refusals=%s route-tagged=%s (opaque=%s cluster=%s opaque-arg=%s); by route/ground-truth: %s; tagged that ran nothing unlisted (ground truth o or -)=%s of %s\n' \
+  "$lc_cn" "$lc_ct" "$lc_co" "$lc_cc" "$lc_ca" "${lc_rgs:-none}" "$lc_cok" "$lc_ct"
+lc_why=""
+[ "$lc_cn" -gt 0 ] || lc_why="${lc_why} no-latch-group-refusals-read"
+[ -z "$lc_cbad" ] || lc_why="${lc_why} unknown-route-values:${lc_cbad}"
+[ "$lc_co" -ge 1 ] || lc_why="${lc_why} opaque=0"
+[ "$lc_cc" -ge 1 ] || lc_why="${lc_why} cluster=0"
+[ "$lc_ca" -ge 1 ] || lc_why="${lc_why} opaque-arg=0"
+LC_ERR=""
+lc_report "LATCH-CAUSE-CORPUS: the latch's refusals carry only the three route values, each at least once (${lc_ct} of ${lc_cn} tagged)" "$lc_why"
+lc_why=""
+lc_g="$(lc_gone block-destructive-gateoff.sh)"
+[ "$lc_g" = 3 ] || lc_why="${lc_why} gate-off-copy-lacks-${lc_g}-lines(wanted-3)"
+[ "$lc_m0t" = 0 ] || lc_why="${lc_why} tagged=${lc_m0t}"
+lc_report "LATCH-CAUSE-M0: with the three gate lines deleted, none of the ${lc_cn} latch-group refusals is tagged" "$lc_why"
+
+# The mutants: each marker line deleted alone (exactly one line gone), the matching core arm reads
+# untagged or note-less. A marker that does not exist yet leaves no mutant to show live.
+lc_mut_arm() { # <label> <copy> <row> <untagged | note-less | both>
+  local name="$1" copy="$2" row="$3" want="$4" g why="" got
+  g="$(lc_gone "$copy")"
+  if [ "$g" != 1 ]; then
+    LC_ERR=""; lc_report "$name" " the mutant is not live (${g} lines gone, wanted exactly 1: its marker is absent)"; return 0
+  fi
+  if ! wc_row_cmd "$row"; then LC_ERR=""; lc_report "$name" " row ${row} absent"; return 0; fi
+  lc_run "$copy" "$WC_CMDX"
+  [ "$LC_EXIT" = 2 ] || why="${why} exit=${LC_EXIT}"
+  got="$(lc_route)"
+  case "$want" in untagged|both) [ -z "$got" ] || why="${why} still-tagged=${got}" ;; esac
+  case "$want" in note-less|both)
+    case "$LC_ERR" in *"Read on the conservative route"*) why="${why} note-still-present" ;; esac ;;
+  esac
+  lc_report "${name} [row ${row}]" "$why"
+}
+lc_mut_arm "LATCH-CAUSE-M1a: without M-ROUTE-TAG the gate's refusal is untagged" block-destructive-m1a.sh ZU34 untagged
+lc_mut_arm "LATCH-CAUSE-M1b: without M-ROUTE-TAG-ARG the option argument's refusal is untagged" block-destructive-m1b.sh ZH19 untagged
+lc_mut_arm "LATCH-CAUSE-M2a: without M-ROUTE-NOTE the route's refusal carries no note" block-destructive-m2a.sh ZU34 note-less
+lc_mut_arm "LATCH-CAUSE-M3a: without M-ROUTE-LIVE the route's refusal is neither tagged nor noted" block-destructive-m3a.sh ZU34 both
+/bin/rm -rf "$LC_ROOT"
+
 # --- Summary ---
 echo ""
 echo "================================"
