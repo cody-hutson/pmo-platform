@@ -253,9 +253,15 @@ log_block() {
   local ts; ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   local tool_input; tool_input="$("$PRINTF" '%s' "$INPUT" | "$JQ" -c '.tool_input // {}')"
   local input_digest; input_digest="$(digest "$tool_input")"
+  # The conservative route's refusal (BLOCK-DESTRUCTIVE-022 only) carries which gate
+  # sent the segment there, in ADR-205's `features` shape; see script_route_note. The
+  # defaults cover every rule that logs before the -022 block initialises.
+  local subj="first"
+  if [ "${script_route_n:-0}" -gt 1 ]; then subj="later"; fi
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd}' \
+    --arg route "${script_route:-}" --arg live "${script_route_live:-0}" --arg subj "$subj" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd} + (if $live == "1" and $route != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, route:$route, subject:$subj}} else {} end)' \
     >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
@@ -1181,8 +1187,11 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # text IS the argv word and is exactly one word. Everything else is "not a text
 # this walk can read", and that answer grants nothing. There is no list of option
 # names, of words that end option parsing, or of quoting and expansion constructs
-# to keep complete. A spelling these functions have never seen costs an
-# over-block, never an exemption.
+# to keep complete. A character the set leaves out costs an over-block, never an
+# exemption. A character it contains is the other direction, and that one is
+# measured: arms LATCH-SWEEP-* hand every non-alphanumeric member, read from this
+# function on each run, to bash, sh, dash and zsh as unquoted words in eight
+# positions, and require each back as one unchanged word.
 #
 # ONE OF THOSE CHARACTERS IS REWRITTEN AT THE START OF A WORD. zsh expands a word
 # that begins with `=` to the path of the command it names, so the walk does not
@@ -1385,6 +1394,31 @@ script_take_cmode_route() {   # reads script_ftok and the last read's globals; s
   case "$script_ftok" in
     -*) script_ftok="-c" ;;
     *) if ! script_operand_implicated "$script_interp_domain"; then script_ftok="-c"; fi ;;
+  esac
+  if [ "$script_ftok" = "-c" ] && [ "$script_fsub" != "-c" ] && [ -z "$script_route" ]; then script_route="$script_route_gate"; script_route_tok="$script_fsub"; fi   # M-ROUTE-TAG (mutation target; pinned by LATCH-CAUSE-M1a)
+}
+
+# THE ROUTE NAMES ITS CAUSE (#8493). Three gates hand a segment to the route `-c`
+# takes: a word ahead of the operand whose reading is not plain (`opaque`), a
+# command-string cluster other than a bare `-c` (`cluster`), and an option argument
+# whose text the walk does not hold (`opaque-arg`, set in script_adjudicate_optarg).
+# The first gate to fire is recorded with the token that fired it. A bare `-c` is a
+# real command string, not a gate, and is never recorded. The record is read only by
+# a refusal the route's own loop issues (script_route_live): that refusal appends the
+# note below to its reason, and its block-log row gains `features` in the shape
+# ADR-205 gives a second writer of structure in the shared sink, `{schema_version: 1,
+# route, subject}` (log_block). The Override line is unchanged, and every other
+# refusal, before the loop or outside the route, keeps the plain reason and row.
+script_route_note() {   # sets script_rnote: the suffix a refusal inside the route's loop appends
+  script_rnote=""
+  if [ "${script_route_live:-0}" != 1 ] || [ -z "${script_route:-}" ]; then return 0; fi
+  case "$script_route" in
+    opaque)
+      script_rnote=" Read on the conservative route (opaque): the word '${script_route_tok}' ahead of the script carries a character this hook cannot read exactly (a quote, a backslash, an expansion, a glob, a brace or a redirection), so the hook cannot tell what it does to the words after it — it may be an option that takes the next word; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, spelling that word as a literal in plain characters (letters, digits and _ = + , . : / @ % -) lets the hook read it." ;;
+    cluster)
+      script_rnote=" Read on the conservative route (cluster): the option cluster '${script_route_tok}' carries the command-string letter c, so the shell reads the next argument as a program string, and every later script-suffixed word is adjudicated as it is behind a bare -c." ;;
+    opaque-arg)
+      script_rnote=" Read on the conservative route (opaque-arg): the option argument '${script_route_tok}' is not one word whose text this hook holds (an expansion, or a quote it cannot resolve), so the operand behind it is not known; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, write that argument as a literal." ;;
   esac
 }
 
@@ -2081,21 +2115,22 @@ script_wrapper_options() {
 # labelled as the operator's, not demoted out of the text.
 check_script_target() {
   local path="$1" resolved="${2:-1}"
+  script_route_note   # M-ROUTE-NOTE (mutation target; pinned by LATCH-CAUSE-M2a)
   if [ "$resolved" -eq 0 ]; then
     block "BLOCK-DESTRUCTIVE-022" \
-      "unresolvable script path (quoting): the operand's quotes do not close within its own token, so the filename the shell will run cannot be determined from argv (nearest resolvable prefix: $path)." \
+      "unresolvable script path (quoting): the operand's quotes do not close within its own token, so the filename the shell will run cannot be determined from argv (nearest resolvable prefix: $path).${script_rnote}" \
       "first retry the form the allowlist already permits: a fully-quoted literal path, spelled repository-relative from the repository root (bash 'core/deploy/deploy.sh'). The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
   case "$path" in
     *'$'*)
       block "BLOCK-DESTRUCTIVE-022" \
-        "unresolvable script path (variable-bearing): $path — the hook sees unexpanded argv and cannot resolve it to an allowlist entry." \
+        "unresolvable script path (variable-bearing): $path — the hook sees unexpanded argv and cannot resolve it to an allowlist entry.${script_rnote}" \
         "first retry the form the allowlist already permits: a literal path with no variable, spelled repository-relative from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
       ;;
   esac
   if ! is_script_allowlisted "$path"; then
     block "BLOCK-DESTRUCTIVE-022" \
-      "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation)." \
+      "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation).${script_rnote}" \
       "first retry the form the allowlist already permits: invoke the script by its repository-relative path from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add to .claude/script-execution-allowlist.txt (glob patterns supported); CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
 }
@@ -2505,6 +2540,7 @@ script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argum
   # and no parse-only exemption applies. Both call sites of this function sit
   # behind the walk's interpreter test, so it is never reached under `source`.
   if ! script_arg_exact; then script_cmode=1; fi   # M-OPAQUE-ARG (mutation target; pinned by FWALK-OPAQUE-M3a)
+  if [ "$script_cmode" -eq 1 ] && [ -z "$script_route" ]; then script_route="opaque-arg"; script_route_tok="$1"; fi   # M-ROUTE-TAG-ARG (mutation target; pinned by LATCH-CAUSE-M1b)
   # The argument is also read as the word the shell passes where the first two views
   # claim nothing — no join, so the walk's index moves exactly as before.
   if script_operand_resolve "$script_interp_domain" ""; then
@@ -4150,6 +4186,16 @@ case "$TOOL_NAME" in
     # Initialised for the same reason as script_ftok above.
     script_fsub=""
     script_optrun=1
+    # The conservative route's cause (see script_route_note): the gate that sent the
+    # segment there, the gate about to be asked, the token, whether the route's own
+    # loop is running, how many words it has placed in the operand domain, and the
+    # note. Initialised for the same reason as script_ftok above.
+    script_route=""
+    script_route_gate=""
+    script_route_tok=""
+    script_route_live=0
+    script_route_n=0
+    script_rnote=""
     # normalize_script_token sets all three before any reader runs. Initialised
     # anyway because an unset read under `set -u` exits 1, and exit 1 is
     # NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
@@ -5071,6 +5117,12 @@ case "$TOOL_NAME" in
       # checked against the interpreter, not argued from this code.
       script_idx=$(( script_hidx + 1 ))
       script_cmode=0
+      # The route's cause is per segment, as script_cmode is (script_route_note).
+      script_route=""
+      script_route_gate=""
+      script_route_tok=""
+      script_route_live=0
+      script_route_n=0
       # Is the interpreter in a parse-only mode AS OF THE LAST OPTION TOKEN SEEN?
       # Not "was a parse-only flag ever present" — the shells resolve this mode
       # last-one-wins, so the walk carries the RUNNING state and each stepped-over
@@ -5172,6 +5224,7 @@ case "$TOOL_NAME" in
         # quote did not resolve is left to the arm that ends the walk on it. Under
         # `source` no such route exists and there is no arity to get wrong, so the
         # token is stepped over as before.
+        script_route_gate="opaque"
         if [ "$script_verb" = "interp" ] && ! script_plain_word "$script_fsub"; then script_take_cmode_route; fi   # M-OPAQUE (mutation target; pinned by FWALK-OPAQUE-M1a)
         # A CLUSTER THAT CARRIES THE COMMAND-STRING LETTER IS `-c`. The label below is
         # an exact match; script_interp_cmode_flag is what lets `-ec`, `-xc` and `+ec`
@@ -5179,6 +5232,7 @@ case "$TOOL_NAME" in
         # cluster is still that cluster. No verb test is needed: script_interp_base
         # is cleared for every segment beside the verb, so under `source` the table
         # is asked about an empty basename and reaches its null.
+        script_route_gate="cluster"
         if script_interp_cmode_flag "$script_interp_base" "$script_fsub"; then script_take_cmode_route; fi   # M-CLUSTER (mutation target; pinned by FWALK-CLUSTER-M1a)
         # THE TERMINATION PREDICATE IS THE ARM'S OWN DECLARED OPERAND DOMAIN, not
         # "the first token that is not flag-shaped". Answering "where is the operand?"
@@ -5570,6 +5624,7 @@ case "$TOOL_NAME" in
         continue
       fi
 
+      if [ "$script_cmode" -eq 1 ] && [ -n "$script_route" ]; then script_route_live=1; fi   # M-ROUTE-LIVE (mutation target; pinned by LATCH-CAUSE-M3a)
       if [ "$script_cmode" -eq 1 ]; then
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
           normalize_script_token "${script_tokens[$script_idx]}"
@@ -5581,6 +5636,7 @@ case "$TOOL_NAME" in
           # the shell passes where the first two views claim nothing, with NO join
           # and nothing consumed: every token keeps its own test (script_operand_resolve).
           if script_operand_resolve "$script_interp_domain" ""; then
+            script_route_n=$(( script_route_n + 1 ))
             if [ "$script_interp_domain" = "interp" ]; then
               script_shell_verdict "$script_subj_out" "$script_subj_ok"
             else
@@ -5589,6 +5645,7 @@ case "$TOOL_NAME" in
           fi
           script_idx=$(( script_idx + 1 ))
         done
+        script_route_live=0
       else
         # normalize BEFORE the filter on both verbs — a quoted path does not end in
         # `.sh` and does not start with `/`, so an unstripped quote matches no
