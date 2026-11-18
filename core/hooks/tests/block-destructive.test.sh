@@ -9339,16 +9339,14 @@ encl_arm "AC-ENCL-N12: echo \\(bash <unlisted>.sh\\) stays allowed (escaped pare
 encl_mut_arm "AC-ENCL-N12-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "echo \\(bash ${ENCL_NA}\\)" B "ENCL gate deny mutant"
 encl_arm "AC-ENCL-N13: find . \\( -name '*.sh' -o -name x \\) -newer <unlisted>.sh stays allowed" "find . \\( -name '*.sh' -o -name x \\) -newer ${ENCL_NA}" a - a
 encl_mut_arm "AC-ENCL-N13-pair: the escape-blind gate-deny mutant REFUSES it" block-destructive-openall.sh "find . \\( -name '*.sh' -o -name x \\) -newer ${ENCL_NA}" B "ENCL gate deny mutant"
-# Re-graded by #8326: the receiver text holds the substitution's closer, and under the closer rule
-# every receiver reading that holds a `)` keeps the body, so this near miss is now refused. A declared
-# cost of that rule, which does not tell a substitution's `)` from a compound command's.
-encl_arm "AC-ENCL-N14: a carrier receiving a here-document after a closed substitution in its own arguments keeps its body (the closer rule's declared cost)" \
+encl_arm "AC-ENCL-N14: a carrier receiving a here-document after a closed substitution stays allowed (the enclosure closed before the operator)" \
   "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
 note; bash ${ENCL_NA}
-EOF" B - B
-# AC-ENCL-N14-pair moved to the #8326 block below: the shipped hook now refuses N14 at the first view, so
-# the gate-deny copy refuses it before its gate and the pair showed nothing; its pair is the copy without
-# the closer rule, on which the re-graded pin fails.
+EOF" a - a
+encl_mut_arm "AC-ENCL-N14-pair: the gate-deny mutant REFUSES it" block-destructive-deny.sh \
+  "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
+note; bash ${ENCL_NA}
+EOF" B "ENCL gate deny mutant"
 encl_arm "AC-ENCL-N15: echo \"\$(date)\" 'x; bash <unlisted>.sh' stays allowed (the enclosure inside quotes does not move the carrier)" "echo \"\$(date)\" 'x; bash ${ENCL_NA}'" a - a
 encl_mut_arm "AC-ENCL-N15-pair: the no-suppression mutant RECORDS it" block-destructive-supp.sh "echo \"\$(date)\" 'x; bash ${ENCL_NA}'" W
 
@@ -9832,13 +9830,23 @@ xt_arm "EXEC-TEXT-PIN-remainder-pair: without the nested-opener stop the executi
 #   hdnocons  the whole-command no-consumer test removed (its one line, M-HD-RECV-NOCONS)
 #   hdcloser  the closer rule removed (its one line, M-HD-RECV-CLOSER)
 #   hdreach   the new reach's enclosure test removed (its one line, M-HD-RECV-NEWREACH)
+#   hdwide    the closer read widened back to any `)` from the head on (its one line, M-HD-RECV-CLOSES)
+#   hdnodq    the closer read blind to double quotes (its one line, M-HD-RECV-DQ-OPEN)
+#   hdnosq    the closer read blind to single quotes (its one line, M-HD-RECV-SQ)
 /usr/bin/sed '/# M-HD-RECV-NOCONS$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdnocons.sh"
 /usr/bin/sed '/# M-HD-RECV-CLOSER$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdcloser.sh"
 /usr/bin/sed '/# M-HD-RECV-NEWREACH$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdreach.sh"
+/usr/bin/sed '/# M-HD-RECV-CLOSES$/s/script_hd_recv_closes "\$_t" && //' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdwide.sh"
+/usr/bin/sed '/# M-HD-RECV-DQ-OPEN$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdnodq.sh"
+/usr/bin/sed '/# M-HD-RECV-SQ$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdnosq.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdwide.sh" "${ENCL_HOOKS}/block-destructive-hdnodq.sh" "${ENCL_HOOKS}/block-destructive-hdnosq.sh"
 /bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdnocons.sh" "${ENCL_HOOKS}/block-destructive-hdcloser.sh" "${ENCL_HOOKS}/block-destructive-hdreach.sh"
 encl_shape_arm "HD-RECV-COPY-nocons: the no-consumer mutant removes its one line" block-destructive-hdnocons.sh "1/0"
 encl_shape_arm "HD-RECV-COPY-closer: the closer-rule mutant removes its one line" block-destructive-hdcloser.sh "1/0"
 encl_shape_arm "HD-RECV-COPY-reach: the new-reach mutant removes its one line" block-destructive-hdreach.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-wide: the widened closer read rewrites its one line" block-destructive-hdwide.sh "1/1"
+encl_shape_arm "HD-RECV-COPY-nodq: the double-quote-blind closer read removes its one line" block-destructive-hdnodq.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-nosq: the single-quote-blind closer read removes its one line" block-destructive-hdnosq.sh "1/0"
 
 # --- admitted: an inert body handed to a receiver that does not execute it (RED: each reads B) ---
 qscan_arm "HD-RECV-ADMIT-paren: a subshell opener before a carrier receiver" HL01 a a -
@@ -9884,10 +9892,6 @@ encl_arm "HD-RECV-MF-closer-cat: a cat head whose receiver text holds a closer k
 encl_arm "HD-RECV-MF-cat-coproc: a cat receiver writing into a coprocess keeps the body" "$hd_coproc" B B -
 encl_arm "HD-RECV-MF-group-tail: a here-document after a subshell closer keeps its body" "$hd_tail" B B -
 encl_mut_arm "HD-RECV-MF-group-tail-pair: without the closer rule that body is excised" block-destructive-hdcloser.sh "$hd_tail" a
-encl_mut_arm "AC-ENCL-N14-pair: without the closer rule that body is excised and the command allowed" block-destructive-hdcloser.sh \
-  "gh issue comment \$(cat list.txt) --body-file - <<'EOF'
-note; bash ${ENCL_NA}
-EOF" a
 # Added at GREEN, from the self-review: the new reach meeting an enclosure reading off the list. Each keeps
 # today's verdict (B, and an allow with no record); the pair shows the line that keeps the first.
 hd_reach_sh="( echo \$(bash <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF${hd_nl}) )"
@@ -9902,9 +9906,19 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# --- the closer rule's precision cost, measured: allowed before, refused after ---
+# --- the closer read: a `)` keeps the body only when it closes an opener before the receiver's head ---
+# A parenthesis inside a carrier's quoted argument closes nothing the receiver sits inside, so the body
+# is excised as it was before this card; the copy whose read counts any `)` keeps it. A real closer after
+# a quoted span holding an unclosed `(` still keeps the body, and each quote-blind copy loses it.
 hd_cost_q="gh pr create --title \"fix(x): y\" --body-file - <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
-encl_arm "HD-RECV-COST-quoted: a carrier whose quoted argument holds a parenthesis, then an inert here-document, keeps its body (the closer rule's declared cost)" "$hd_cost_q" B B -
+encl_arm "HD-RECV-NARROW-quoted: a carrier whose quoted argument holds a parenthesis, then an inert here-document, is excised as before" "$hd_cost_q" a a -
+encl_mut_arm "HD-RECV-NARROW-quoted-pair: the copy whose closer read counts any parenthesis keeps that body" block-destructive-hdwide.sh "$hd_cost_q" B
+hd_close_dq="( bash; echo \"a (\" ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_close_sq="( bash; echo 'a (' ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-MF-closer-dq: a subshell closer after a double-quoted argument holding an unclosed parenthesis keeps the body" "$hd_close_dq" B B -
+encl_mut_arm "HD-RECV-MF-closer-dq-pair: the double-quote-blind closer read excises it" block-destructive-hdnodq.sh "$hd_close_dq" a
+encl_arm "HD-RECV-MF-closer-sq: a subshell closer after a single-quoted argument holding an unclosed parenthesis keeps the body" "$hd_close_sq" B B -
+encl_mut_arm "HD-RECV-MF-closer-sq-pair: the single-quote-blind closer read excises it" block-destructive-hdnosq.sh "$hd_close_sq" a
 
 /bin/rm -rf "$ENCL_ROOT"
 
@@ -10887,6 +10901,18 @@ aq_arm "ASGN-QVAL-env: as an env operand" WR128 B a
 aq_arm "ASGN-QVAL-env-seed1: as env, the seed-1 row" O19 B a
 aq_arm "ASGN-QVAL-env-opt: as an env operand behind an option" AV06 B a
 aq_arm "ASGN-QVAL-bail1: in the first segment of a command whose bail latches" AV10 B a
+# AV10's here-document is received by cat, which #8326 admits, so its bail no longer latches and the arm
+# above no longer reads its premise. The same shape on a receiver on no list keeps it exercised.
+aq_bail1="FOO='a b' bash ${WC_D}/na.sh"$'\n'"wc -l <<'EOF'"$'\n'"x"$'\n'"EOF"
+aq_run block-destructive.sh "$aq_bail1"; aq_bail1_v="$AQ_V"
+aq_run block-destructive-pqval.sh "$aq_bail1"; aq_bail1_m="$AQ_V"
+if [ "$aq_bail1_v" = B ] && [ "$aq_bail1_m" = a ]; then
+  /usr/bin/printf 'PASS: ASGN-QVAL-bail1-nonmember: in the first segment of a command whose bail latches on a receiver on no list (hook %s, pqval %s)\n' "$aq_bail1_v" "$aq_bail1_m"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: ASGN-QVAL-bail1-nonmember: in the first segment of a command whose bail latches on a receiver on no list\n  wanted hook=B pqval=a; observed hook=%s pqval=%s\n' "$aq_bail1_v" "$aq_bail1_m"
+  FAIL=$((FAIL + 1))
+fi
 aq_arm "ASGN-QVAL-exec: before a direct execution, recorded at that arm's phase" AV11 W:exec a
 aq_arm "ASGN-QVAL-nonshell: before a non-shell interpreter, recorded at that arm's phase" AV12 W:interp-nonshell a
 aq_arm "ASGN-QVAL-encl: at an unquoted enclosure position, recorded at that view's phase" AV13 W:shell-enclosure a
