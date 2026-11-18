@@ -21,6 +21,11 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.12] - 2026-11-17
+
+Deploy checks catch hand-kept file lists that drift, and every release close reports the quality share against a set band.
+
+[Full notes](release/releases/notes/v5.12_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.12)
 ## [v5.11] - 2026-11-17
 
 The script guard now finds and judges a script the way the shell will run it, at more positions, through quotes and line breaks.
