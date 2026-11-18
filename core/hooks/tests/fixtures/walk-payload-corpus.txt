@@ -2233,3 +2233,58 @@ QC34|block-destructive|rt-qhdbq|-|?|B|gh issue comment 1 --body-file - <<'EOF' #
 XF13|block-destructive|rt-xpcx2|-|?|W|printf x | xargs bash -o 'a)b'
 XF14|block-destructive|rt-xpcx2|-|?|W|printf x | xargs bash --rcfile 'a)b'
 XF15|block-destructive|rt-xpcx2ctl|-|?|B|printf x | xargs bash -o ab
+
+# --- ms#440 Commit 0b: release script-guard-refuses-only-what-executes — rows at today's verdicts. gt is ? (Commit 0b runs no payload; Stage 7 takes the real-interpreter reading). @NL@ is a newline. ---
+# #8490: shapes the backtick command word admits (LT rows; GREEN moves them W -> a)
+LT01|block-destructive|looks-like-text|-|?|W|true <<'EOF'@NL@notes@NL@`@D@/ok.sh` is the entry point@NL@EOF
+LT02|block-destructive|looks-like-text|-|?|W|git commit -m "$(cat <<'EOF'@NL@Fix the walk@NL@`@D@/ok.sh` now reads it@NL@EOF@NL@)"
+LT03|block-destructive|looks-like-text|-|?|W|git commit -m 'Fix it (`@D@/ok.sh` reads the file)'
+LT04|block-destructive|looks-like-text|-|?|W|`@D@/ok.sh`
+# #8548: an interpreter inside an assignment value's command substitution (AS rows; design on sub-task #9060)
+AS01|block-destructive|looks-like-asgn|AS11|?|W|OUT=$(bash '@D@/ok.sh')
+AS02|block-destructive|looks-like-asgn|-|?|W|OUT="$(bash '@D@/ok.sh')"
+AS03|block-destructive|looks-like-asgn|-|?|W|OUT=`bash '@D@/ok.sh'`
+AS04|block-destructive|looks-like-asgn|-|?|W|OUT=$(python3 '@D@/ok.py')
+AS05|block-destructive|looks-like-asgn|-|?|W|OUT=$(source '@D@/ok.sh')
+AS06|block-destructive|looks-like-asgn|-|?|W|env OUT=$(bash '@D@/ok.sh') true
+AS07|block-destructive|looks-like-asgn|-|?|W|true; OUT=$(bash '@D@/ok.sh')
+AS08|block-destructive|looks-like-asgn|-|?|W|( OUT=$(bash '@D@/ok.sh') )
+AS09|block-destructive|looks-like-asgn|-|?|W|OUT=$(cat '@D@/ok.sh')
+AS10|block-destructive|looks-like-asgn|-|?|W|OUT=$( '@D@/ok.sh')
+AS11|block-destructive|asubst-ctl|-|?|a|OUT=$(bash @D@/ok.sh)
+AS12|block-destructive|asubst-unl|-|?|W|OUT=$(bash '@D@/na.sh')
+AS13|block-destructive|asubst-unl|-|?|W|OUT=$(bash "$NOPE7019/ok.sh")
+AS14|block-destructive|asubst-outer|-|?|W|OUT=$(bash '@D@/ok.sh') @D@/na.sh
+AS15|block-destructive|asubst-outer|-|?|W|OUT=$(bash '@D@/ok.sh') bash @D@/na.sh
+AS16|block-destructive|asubst-keep|-|?|W|true; OUT="$(bash '@D@/ok.sh')"
+AS17|block-destructive|asubst-keep|-|?|W|NOTE="x OUT=$(bash '@D@/ok.sh') y" true
+AS18|block-destructive|asubst-keep|-|?|W|OUT="$(bash '@D@/ok.sh') more" @D@/na.sh
+AS19|block-destructive|asubst-keep|-|?|W|OUT=$(bash '@D@/ok.sh') true @QPAD@
+AS20|block-destructive|asubst-keep|-|?|B|OUT=$( bash '@D@/ok.sh')
+AS21|block-destructive|asubst-keep|-|?|B|OUT=$(env bash '@D@/ok.sh')
+AS22|block-destructive|asubst-keep|-|?|W|OUT="`bash '@D@/ok.sh'`"
+AS23|block-destructive|asubst-keep|-|?|W|OUT=$(@D@/na.sh '@D@/ok.sh')
+# #8326: inert here-document bodies the receiver read admits (HL rows) and the must-flag controls (HM rows; hub design on sub-task #9061)
+HL01|block-destructive|looks-like-hd|-|?|B|( gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HL02|block-destructive|looks-like-hd|-|?|B|(echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HL03|block-destructive|looks-like-hd|-|?|B|{ gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
+HL04|block-destructive|looks-like-hd|-|?|B|{ printf 'x' <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
+HL05|block-destructive|looks-like-hd|-|?|B|if true; then echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
+HL06|block-destructive|looks-like-hd|-|?|B|if true; then gh api x --input - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
+HL07|block-destructive|looks-like-hd|-|?|B|! jq . <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL08|block-destructive|looks-like-hd|-|?|B|! echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL09|block-destructive|looks-like-hd|-|?|B|cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL10|block-destructive|looks-like-hd|-|?|B|cat <<'RPT'@NL@bash @D@/na.sh --repro@NL@RPT
+HL11|block-destructive|looks-like-hd|-|?|B|cat > /tmp/notes.md <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL12|block-destructive|looks-like-hd|-|?|B|cat <<'EOF' > /tmp/notes.md@NL@bash @D@/na.sh@NL@EOF
+HM01|block-destructive|hd-recv-mf|-|?|B|( bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HM02|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' | bash@NL@bash @D@/na.sh@NL@EOF
+HM03|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' 2>&1 | bash@NL@bash @D@/na.sh@NL@EOF
+HM04|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' > >(bash)@NL@bash @D@/na.sh@NL@EOF
+HM05|block-destructive|hd-recv-mf|-|?|B|$(cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HM06|block-destructive|hd-recv-mf|-|?|B|X=$(@NL@cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HM07|block-destructive|hd-recv-mf|-|?|B|{ cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@} | bash
+HM08|block-destructive|hd-recv-mf|-|?|B|cat <<EOF@NL@bash @D@/na.sh $HOME@NL@EOF
+HM09|block-destructive|hd-recv-mf|-|?|a|( true; echo ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM10|block-destructive|hd-recv-mf|-|?|B|while read l; do echo "$l"; done <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM11|block-destructive|hd-recv-mf|-|?|B|wc -l <<'EOF'@NL@bash @D@/na.sh@NL@EOF
