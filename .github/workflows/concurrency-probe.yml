@@ -1,0 +1,19 @@
+name: Concurrency probe
+
+# gate-efficacy: posture=advisory  enforcement=ci-enforce  always-reports=yes
+#   invariant: none — a throwaway probe for the Workflow concurrency gate; never merged.
+#   falsification: none.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Concurrency probe
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo probe
