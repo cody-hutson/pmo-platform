@@ -2288,3 +2288,10 @@ HM08|block-destructive|hd-recv-mf|-|?|B|cat <<EOF@NL@bash @D@/na.sh $HOME@NL@EOF
 HM09|block-destructive|hd-recv-mf|-|?|a|( true; echo ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 HM10|block-destructive|hd-recv-mf|-|?|B|while read l; do echo "$l"; done <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 HM11|block-destructive|hd-recv-mf|-|?|B|wc -l <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+# #8490 RED: backtick command words that stay recorded (TK rows; every row stays W through GREEN)
+TK01|block-destructive|tick-cmdword|-|?|W|`@D@/na.sh`
+TK02|block-destructive|tick-cmdword|-|?|W|true <<'EOF'@NL@notes@NL@`@D@/na.sh` is the entry point@NL@EOF
+TK03|block-destructive|tick-cmdword|-|?|W|`@D@/ok.sh`${X8490}.sh
+TK04|block-destructive|tick-cmdword|-|?|W|$(@D@/ok.sh)
+TK05|block-destructive|tick-cmdword|-|?|W|git commit -m 'Fix@NL@`@D@/ok.sh` reads it'
+TK06|block-destructive|tick-cmdword|-|?|W|bash -c $(echo -n) 'true@NL@`@D@/na.sh`'

@@ -9710,6 +9710,115 @@ qscan_mut "QSCAN-CMT-R1-mut: the comment-clause mutant reads it as allowed" bloc
 qscan_arm "QSCAN-HDBQ: a backquote in a comment on a carrier here-document's operator line, its body naming an unlisted script" QC34 B - -
 qscan_arm "QSCAN-DOLLAR-P29: an even dollar run before a quote is a plain quote (QC29, the declared precision row)" QC29 a - -
 
+# --- #8490: a command word that begins with a backtick is a command substitution, not a path
+# (release script-guard-refuses-only-what-executes; design on sub-task #9059, review on #9084).
+# The exec arm declines such a word and leaves it to the position its backtick opens, only where
+# the second view is known to read that position (markers M-EXEC-TICK*). Rows are read from the
+# hermetic enclosure root above. XT_TICK counts the call's rows whose path begins with a backtick.
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-xforced.sh"
+/usr/bin/sed '/# >>> M-EXEC-TICK$/,/# <<< M-EXEC-TICK$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xrev.sh"
+/usr/bin/sed '/# M-EXEC-TICK-GUARD/s/\[ "\$script_encl_all" -eq 1 \] && //' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnoguard.sh"
+/usr/bin/sed '/# M-EXEC-TICK-GUARD/s/ && \[ "\$script_hidx" -eq 0 \]//' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnohidx.sh"
+/usr/bin/sed '/# M-EXEC-TICK-STATE/s/^\([[:space:]]*\)[^)]*)/\1*)/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnostate.sh"
+/usr/bin/sed '/# M-EXEC-TICK-TAIL/s/) : ;;/) script_tick_decline=1 ;;/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnotail.sh"
+/usr/bin/sed -e '/# M-EXEC-TICK-NEST/d' -e 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnonestb.sh"
+/usr/bin/sed -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' \
+  -e '/# M-EXEC-TICK-GUARD/s/\[ "\$script_encl_all" -eq 1 \] && //' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xsmallpng.sh"
+for xt_c in xforced xrev xnoguard xnohidx xnostate xnotail xnonestb xsmallpng; do
+  /bin/chmod +x "${ENCL_HOOKS}/block-destructive-${xt_c}.sh"
+done
+xt_marks="$(/usr/bin/awk '/# >>> M-EXEC-TICK$/ { f = 1 } f { n++ } /# <<< M-EXEC-TICK$/ { f = 0 } END { printf "%d", n }' "$HOOK")"
+xt_nest="$(/usr/bin/grep -c 'M-EXEC-TICK-NEST' "$HOOK" || true)"
+xt_mk_ok=1
+for xt_m in "# >>> M-EXEC-TICK" "M-EXEC-TICK-ALL" "M-EXEC-TICK-GUARD" "M-EXEC-TICK-STATE" "M-EXEC-TICK-NEST" "M-EXEC-TICK-TAIL" "# <<< M-EXEC-TICK"; do
+  /usr/bin/grep -qF -- "$xt_m" "$HOOK" || xt_mk_ok=0
+done
+if [ "$xt_mk_ok" = 1 ] && [ "$xt_marks" -gt 0 ] && [ "$xt_nest" -gt 0 ]; then
+  /usr/bin/printf 'PASS: EXEC-TEXT-MARKS the hook carries the M-EXEC-TICK block (%s lines) and its markers, so the copies below are live\n' "$xt_marks"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EXEC-TEXT-MARKS the hook lacks the M-EXEC-TICK block or a marker; every copy below is inert\n'
+  FAIL=$((FAIL + 1)); xt_marks="missing"; xt_nest=999
+fi
+encl_shape_arm "EXEC-TEXT-COPY-xforced: only the exec arm's phase constant differs" block-destructive-xforced.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xrev: the M-EXEC-TICK block removed (${xt_marks} lines)" block-destructive-xrev.sh "${xt_marks}/0"
+encl_shape_arm "EXEC-TEXT-COPY-xnoguard: the position-coverage guard removed" block-destructive-xnoguard.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xnohidx: the first-word guard removed" block-destructive-xnohidx.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xnostate: the quote-state condition widened to every state" block-destructive-xnostate.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xnotail: the tail condition removed" block-destructive-xnotail.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xnonestb: the nested-opener stop removed, remainder budget at 64" block-destructive-xnonestb.sh "$(( xt_nest + 1 ))/1"
+encl_shape_arm "EXEC-TEXT-COPY-xsmallpng: position ceiling at 4 and the guard removed" block-destructive-xsmallpng.sh "2/2"
+
+XT_TICK=0
+xt_count() { # counts ENCL_ROWS rows whose path begins with a backtick -> XT_TICK
+  local line
+  XT_TICK=0
+  while IFS= read -r line; do
+    case "$line" in
+      *'"path":"`'*) XT_TICK=$((XT_TICK + 1)) ;;
+    esac
+  done <<<"$ENCL_ROWS"
+}
+# xt_arm <label> <copy> <command> <verdict> <tick: 0 | 1+ | -> [<B pattern>]
+xt_arm() {
+  local name="$1" copy="$2" cmd="$3" want="$4" tick="$5" pat="${6:-}" ok=1 why=""
+  encl_run "$copy" "$cmd"
+  xt_count
+  if [ "$ENCL_V" != "$want" ]; then ok=0; why="verdict=${ENCL_V}"; fi
+  case "$tick" in
+    0) if [ "$XT_TICK" -ne 0 ]; then ok=0; why="${why} backtick-led rows=${XT_TICK}"; fi ;;
+    1+) if [ "$XT_TICK" -lt 1 ]; then ok=0; why="${why} backtick-led rows=0 (wanted at least 1)"; fi ;;
+  esac
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && ! /usr/bin/grep -q "${pat:-BLOCK-DESTRUCTIVE-022}" <<<"$ENCL_ERR"; then ok=0; why="refusal lacks ${pat:-BLOCK-DESTRUCTIVE-022}"; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (%s, backtick-led rows %s)\n' "$name" "$ENCL_V" "$XT_TICK"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted %s with backtick-led rows %s; observed%s\n  stderr: %s\n' "$name" "$want" "$tick" " ${why# }" "$ENCL_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+xt_nl=$'\n'
+xt_lt01="true <<'EOF'${xt_nl}notes${xt_nl}\`${ENCL_OK}\` is the entry point${xt_nl}EOF"
+xt_lt01na="true <<'EOF'${xt_nl}notes${xt_nl}\`${ENCL_NA}\` is the entry point${xt_nl}EOF"
+xt_lt02="git commit -m \"\$(cat <<'EOF'${xt_nl}Fix the walk${xt_nl}\`${ENCL_OK}\` now reads it${xt_nl}EOF${xt_nl})\""
+xt_lt03="git commit -m 'Fix it (\`${ENCL_OK}\` reads the file)'"
+# Must-not-flag: text that executes nothing writes no exec-arm row (RED: each reads W).
+xt_arm "EXEC-TEXT-NF-01: an inert here-document line opening with a code span naming a listed script" block-destructive.sh "$xt_lt01" a 0
+xt_arm "EXEC-TEXT-NF-01-forced: the same with the exec arm at enforce" block-destructive-xforced.sh "$xt_lt01" a 0
+xt_arm "EXEC-TEXT-NF-02: the commit idiom, a code span at quote state 2" block-destructive.sh "$xt_lt02" a 0
+xt_arm "EXEC-TEXT-NF-03: a code span opening a parenthesized span inside a single-quoted argument" block-destructive.sh "$xt_lt03" a 0
+xt_arm "EXEC-TEXT-NF-04: the same text naming an unlisted script keeps one row, from the enclosure position only" block-destructive.sh "$xt_lt01na" W 0
+xt_arm "EXEC-TEXT-NF-04-forced: at enforce that enclosure row refuses" block-destructive-xforced.sh "$xt_lt01na" B 0
+# The boundary with #8548 (CIAC-1): a substitution outside an assignment's value is this card's.
+xt_arm "SUBST-BOUNDARY-TEXT-LISTED: a backtick substitution as the first word, running a listed script" block-destructive.sh "\`${ENCL_OK}\`" a 0
+xt_arm "SUBST-BOUNDARY-TEXT-LISTED-forced: the same at enforce" block-destructive-xforced.sh "\`${ENCL_OK}\`" a 0
+xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED: running an unlisted script is still recorded, from the enclosure position" block-destructive.sh "\`${ENCL_NA}\`" W 0
+xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED-forced: and refused at enforce" block-destructive-xforced.sh "\`${ENCL_NA}\`" B 0
+xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED-pair: without the view the declined word goes unread (the guard's reason)" block-destructive-xsmallpng.sh "true \$(a) \$(b) \$(c) \$(d); \`${ENCL_NA}\`" a -
+xt_arm "EXEC-TEXT-MF-dollar: a backtick substitution running a variable-bearing path is still recorded" block-destructive.sh '`$NOPE8490/x.sh`' W 0
+# Declared residuals: today's first-view reading kept (green before and after), each with the mutant that would lose it.
+xt_mfcar="bash -c \$(echo -n) 'true${xt_nl}\`${ENCL_NA}\`'"
+xt_arm "EXEC-TEXT-MF-carrier: a carrier-head program string whose later line opens a backtick substitution keeps the first view's record" block-destructive.sh "$xt_mfcar" W 1+
+xt_arm "EXEC-TEXT-MF-carrier-pair: without the quote-state condition that record is lost" block-destructive-xnostate.sh "$xt_mfcar" a -
+xt_pinsq="git commit -m 'Fix${xt_nl}\`${ENCL_OK}\` reads it'"
+xt_arm "EXEC-TEXT-PIN-sq: a single-quoted run spanning lines keeps today's reading (declared residual)" block-destructive.sh "$xt_pinsq" W 1+
+xt_arm "EXEC-TEXT-PIN-sq-pair: without the quote-state condition it is declined" block-destructive-xnostate.sh "$xt_pinsq" a -
+xt_arm "EXEC-TEXT-PIN-ceiling: past the position ceiling today's reading stands" block-destructive-smallp.sh "true \$(a) \$(b) \$(c) \$(d); \`${ENCL_NA}\`" W 1+
+xt_arm "EXEC-TEXT-PIN-tail: a closer followed by a variable-bearing script tail keeps today's reading" block-destructive.sh '`/tmp/pmo-encl-ok.sh`${X8490}.sh' W 1+
+xt_arm "EXEC-TEXT-PIN-tail-pair: without the tail condition it is declined" block-destructive-xnotail.sh '`/tmp/pmo-encl-ok.sh`${X8490}.sh' a -
+xt_arm "EXEC-TEXT-PIN-prefix: behind a wrapper word the word is not the first, and today's reading stands" block-destructive.sh "command \`${ENCL_OK}\`" W 1+
+xt_arm "EXEC-TEXT-PIN-prefix-pair: without the first-word guard it is declined" block-destructive-xnohidx.sh "command \`${ENCL_OK}\`" a -
+xt_arm "EXEC-TEXT-PIN-sep: a substitution holding a pipe has no closer on its segment, and today's reading stands" block-destructive.sh "\`${ENCL_OK} | cat\`" W 1+
+xt_arm "EXEC-TEXT-PIN-escape: a substitution holding an escaped character keeps today's reading" block-destructive.sh "\`${ENCL_OK} a\\ b\`" W 1+
+xt_arm "EXEC-TEXT-PIN-dollar-paren: a command word opened by \$( keeps today's reading (D-2)" block-destructive.sh "\$(${ENCL_OK})" W -
+# CD-1 (review FM-1): past the remainder budget a position holds only the text up to a nested opener,
+# so the decline stops on a nested opener before the closer and today's first-view record stands.
+xt_rem="echo \$(true) \$(true) xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; \`/tmp/pmo\$(true)-encl-na.sh\`"
+xt_arm "EXEC-TEXT-PIN-remainder: a nested opener before the closer keeps the first view's record past the remainder budget" block-destructive-smallb.sh "$xt_rem" W 1+
+xt_arm "EXEC-TEXT-PIN-remainder-pair: without the nested-opener stop the execution goes unrecorded" block-destructive-xnonestb.sh "$xt_rem" a -
+
 /bin/rm -rf "$ENCL_ROOT"
 
 # ---- AC-022-X* (#8314, DT pass 3): the -022 separator split is a linear pass ----
