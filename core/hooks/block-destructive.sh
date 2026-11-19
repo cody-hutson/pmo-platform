@@ -3159,15 +3159,56 @@ script_hd_delim_ok() {
 #
 # THE CLOSER RULE. A here-document written after a compound command's closer is redirected to the
 # whole compound command, and the receiver test reads only the simple command whose own words reach the
-# operator. So a receiver text holding a `)` at any position, or a word that is exactly `}`, sets
-# script_hdrecv_closer, and the pre-pass keeps the body for every receiver reading (M-HD-RECV-CLOSER):
-# withdraw-only, the fail-closed direction.
+# operator. So a receiver text that, read from its head on, holds a `)` closing an opener the head sits
+# inside (script_hd_recv_closes), or a `}` word with no `{` word beside it, sets script_hdrecv_closer, and
+# the pre-pass keeps the body for every receiver reading (M-HD-RECV-CLOSER): withdraw-only, the
+# fail-closed direction. A parenthesis inside a quoted argument, or one that closes a substitution opened
+# in the command's own words, closes nothing the receiver sits inside, and keeps nothing.
+#
+# THE CLOSER READ. One awk pass in the C locale, linear in the text, read with the shell's quoting: a
+# backslash escapes the next byte; a single-quoted span is literal; a double-quoted span is skipped
+# except for a substitution it opens, which is read as the command's own words; a backtick opens a span
+# read to its own close. A `(` opens and a `)` closes; a `)` with nothing open is the closer of an opener
+# before the head. An unterminated single-quoted span keeps the body, the fail-closed answer, and so does
+# a read that fails. An unterminated double-quoted span or substitution, as in a body passed inline
+# through "$(cat <<'EOF'", closes nothing.
+script_hd_recv_closes() {   # $1 = a receiver text from its head on -> 0 when a `)` closes an opener before the head
+  local _r
+  script_ceil_check hd-closes   # M-CEIL-HD-CLOSES
+  _r="$(LC_ALL=C /usr/bin/awk '
+    { s = s (NR > 1 ? "\n" : "") $0 }
+    END {
+      n = length(s); sp = 0; st[0] = "O"
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1); t = st[sp]
+        if (t == "D") {
+          if (c == "\\") { i++; continue }
+          if (c == "\"") { sp--; continue }
+          if (c == "$" && substr(s, i + 1, 1) == "(") { st[++sp] = "S"; i++; continue }
+          if (c == "`") st[++sp] = "B"
+          continue
+        }
+        if (t == "B") {
+          if (c == "\\") { i++; continue }
+          if (c == "`") sp--
+          continue
+        }
+        if (c == "\\") { i++; continue }
+        if (c == "\047") { j = index(substr(s, i + 1), "\047"); if (j == 0) { print "1"; exit } i += j; continue }   # M-HD-RECV-SQ
+        if (c == "\"") { st[++sp] = "D"; continue }   # M-HD-RECV-DQ-OPEN
+        if (c == "`") { st[++sp] = "B"; continue }
+        if (c == "(") { st[++sp] = "P"; continue }
+        if (c == ")") { if (sp == 0) { print "1"; exit } sp--; continue }
+      }
+      print "0"
+    }' <<< "$1" 2>/dev/null)" || return 0
+  [ "$_r" != 0 ]
+}
+
 script_hd_recv_text() {   # $1 = a receiver text -> script_hdrecv_out, script_hdrecv_closer, script_hdrecv_step
   local _t="$1" _w="" _s=0
   script_hdrecv_closer=0
   script_hdrecv_step=0
-  case "$1" in *')'*) script_hdrecv_closer=1 ;; esac
-  case "$1" in '}'|'}'[[:blank:]]*|*[[:blank:]]'}'|*[[:blank:]]'}'[[:blank:]]*) script_hdrecv_closer=1 ;; esac
   while :; do
     script_ceil_check hd-recv   # M-CEIL-HD-RECV
     _t="${_t#"${_t%%[![:blank:]]*}"}"
@@ -3186,6 +3227,11 @@ script_hd_recv_text() {   # $1 = a receiver text -> script_hdrecv_out, script_hd
       *) break ;;
     esac
   done
+  case "$_t" in *')'*) script_hd_recv_closes "$_t" && script_hdrecv_closer=1 ;; esac   # M-HD-RECV-CLOSES
+  case "$_t" in
+    '}'|'}'[[:blank:]]*|*[[:blank:]]'}'|*[[:blank:]]'}'[[:blank:]]*)
+      case "$_t" in '{'|'{'[[:blank:]]*|*[[:blank:]]'{'|*[[:blank:]]'{'[[:blank:]]*) ;; *) script_hdrecv_closer=1 ;; esac ;;
+  esac
   script_hdrecv_out="$_t"
   if [ "$_s" -gt 0 ]; then script_hdrecv_step=1; fi
   return 0
