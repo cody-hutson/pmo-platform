@@ -10989,6 +10989,319 @@ aq_arm "ASGN-QVAL-resid-hash: a # inside a quoted value" AV45 a a pqvalread B
 aq_arm "ASGN-QVAL-resid-pfxsubst: a construct the scanner does not model in a prefix token ahead of the quoted assignment" AV46 a a pqvalsubst B
 aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense part spent the shared work budget" AV47 a a
 
+# ---- SUBST-BOUNDARY-ASGN-* / ASGN-SUBST-* (#8548): an allowlisted script run inside an assignment's command substitution ----
+#
+# SUBJECT. The characters of a command substitution are part of the word they sit in, but the walk
+# splits a segment on whitespace first, so an assignment whose value opens a substitution reached it
+# as the assignment's first piece and the substitution's later words, and the walk took the last of
+# them — the path with the closer attached — for the command word. A listed script written in quotes
+# there was recorded by the exec arm as unresolvable, and a command word written after the
+# assignment was never read. The walk, and env's operand loop with it, now read such a word through
+# the substitution's closer and go on at the shell's next word, only when the word that closes the
+# substitution is one literal word the allowlist admits; every other value keeps today's reading.
+# Every corpus arm here reads its command from the walk-payload corpus by row id (rows AS01 to AS23,
+# and EN06, AV29, WR132, WR133, AV46, EN52, EN54); the few commands spelled below are the
+# discriminating fixtures for a decline no corpus row isolates.
+#
+# A VERDICT HERE NAMES THE CAUSE as well as the arm of each would-fire row the call added
+# (W:<arm>:<cause>[+…]), because the corpus differential cannot see a record that moves from the
+# substitution's path to the real command word, or a two-record reading that becomes one.
+#
+# THE COPIES, each the hook with one decline of the step removed by sed on its marked line:
+#   pasubst          the two call lines removed: the walk before this change (the reverse mutant)
+#   pasubstmoved     the test that no step moved the walk since the assignment token
+#   pasubsttrust     the value step's trust gate
+#   pasubstshape     the value's form: an optional double quote, a plain run, one opener, a plain word
+#   pasubstslash     the slash test on the word against the opener
+#   pasubstpfx       the prefix scan (its loop rewritten to `while false`)
+#   pasubstwork      the work-budget test
+#   pasubstcut       the test that the closer sits inside the next token
+#   pasubstend       the test that nothing but the value's own closing quote follows the closer
+#   pasubstnorm      the test that the closing text normalizes to exactly one literal word
+#   pasubstplain     the test that the word is non-empty and plain
+#   pasubstopt       the test that the word is not option-shaped
+#   pasubstallow     the allowlist test
+#   forced           the exec arm's phase at enforce; forced-pasubst is forced and pasubst together
+#   enclforced       the enclosure family's phase at enforce
+#   gd, gd-pasubst,  the value step's two text guards off (the ASGN-QVAL block's pqvalguards), alone,
+#   gd-moved         with the step removed, and with the moved-walk test removed: the one copy on which
+#                    the value step can cross a substitution-bearing value, so the moved-walk test can
+#                    be shown live there; on the shipped hook the value step never moves before it
+# A third limb, or a relational arm, must read a verdict the arm forbids: a limb that expects the
+# arm's own verdict fails, since it could not show the condition holding the arm.
+#
+# TWO HERMETIC ROOTS. AS_ROOT allowlists exactly the fixture's listed paths, as the ASGN-QVAL root
+# does. AS_GROOT allowlists the same two scripts through leading-glob entries, the shape some rows
+# of the tracked allowlist have; the decline arms run there again, beside the rows of the classes
+# such an entry could otherwise admit.
+AS_ROOT="$(/usr/bin/mktemp -d)"
+AS_GROOT="$(/usr/bin/mktemp -d)"
+as_build() { # $1 = root  $2… = its allowlist entries -> the hook and its copies in the root's hooks dir
+  local root="$1" h="$1/.claude/hooks" c n m
+  local ph='s/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/'
+  local pe='s/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="enforce"   # shadow | warn | enforce/'
+  shift
+  /bin/mkdir -p "${h}/lib"
+  /bin/cp "${HOOK%/*}/lib/"*.sh  "${h}/lib/" 2>/dev/null || true
+  /bin/cp "${HOOK%/*}/lib/"*.awk "${h}/lib/" 2>/dev/null || true
+  /usr/bin/printf '%s\n' "$@" > "${root}/.claude/script-execution-allowlist.txt"
+  /usr/bin/printf 'enforce' > "${h}/.mode"
+  /bin/cp "$HOOK" "${h}/block-destructive.sh"
+  /usr/bin/sed '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-pasubst.sh"
+  for c in moved:MOVED trust:TRUST shape:SHAPE slash:SLASH work:WORK cut:CUT end:END norm:NORM plain:PLAIN opt:OPT allow:ALLOW; do
+    n="${c%%:*}"; m="${c#*:}"
+    /usr/bin/sed "/# M-ASGN-SUBST-${m}\$/d" "$HOOK" > "${h}/block-destructive-pasubst${n}.sh"
+  done
+  /usr/bin/sed '/# M-ASGN-SUBST-PFX$/s/while \[ "\$_i" -lt "\$_k" \]; do/while false; do/' "$HOOK" > "${h}/block-destructive-pasubstpfx.sh"
+  /usr/bin/sed "$ph" "$HOOK" > "${h}/block-destructive-forced.sh"
+  /usr/bin/sed -e "$ph" -e '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-forced-pasubst.sh"
+  /usr/bin/sed "$pe" "$HOOK" > "${h}/block-destructive-enclforced.sh"
+  /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' "$HOOK" > "${h}/block-destructive-gd.sh"
+  /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' -e '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-gd-pasubst.sh"
+  /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' -e '/# M-ASGN-SUBST-MOVED$/d' "$HOOK" > "${h}/block-destructive-gd-moved.sh"
+  /bin/chmod +x "${h}/"block-destructive*.sh
+}
+as_build "$AS_ROOT" "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh"
+as_build "$AS_GROOT" '*/ok.sh' '*/ok.py'
+
+AS_R=""; AS_H=""; AS_DRAIN=""
+as_root() { # $1 = root: the root the arms below run in
+  AS_R="$1"; AS_H="$1/.claude/hooks"; AS_DRAIN="${AS_H}/destructive-warn-log.jsonl"
+}
+as_drain_rows() {
+  if [ -f "$AS_DRAIN" ]; then
+    /usr/bin/wc -l < "$AS_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+AS_V=""
+AS_ERR=""
+# Run one command through one copy in the current root -> AS_V: a, B, E<exit>, or
+# W:<arm>:<cause>[+<arm>:<cause>…] naming every would-fire row the call added, in the order written.
+as_run() { # $1 = copy (hook, or the suffix of block-destructive-<suffix>.sh)  $2 = command
+  local rc=0 before after tmp n f="block-destructive.sh"
+  [ "$1" = hook ] || f="block-destructive-$1.sh"
+  tmp="$(/usr/bin/mktemp)"
+  before="$(as_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$AS_R")" \
+      | /bin/bash "${AS_H}/${f}" 2>"$tmp" >/dev/null ) || rc="$?"
+  after="$(as_drain_rows)"
+  AS_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  n=$(( after - before ))
+  case "$rc" in
+    2) AS_V="B" ;;
+    0)
+      if [ "$n" -gt 0 ]; then
+        AS_V="W:$(/usr/bin/awk -v from="$(( before + 1 ))" 'NR >= from { a = "?"; c = "?"
+          if (match($0, /"arm":"[^"]*"/)) { a = substr($0, RSTART + 7, RLENGTH - 8) }
+          if (match($0, /"cause":"[^"]*"/)) { c = substr($0, RSTART + 9, RLENGTH - 10) }
+          printf "%s%s:%s", (k++ ? "+" : ""), a, c }' "$AS_DRAIN")"
+      else
+        AS_V="a"
+      fi
+      ;;
+    *) AS_V="E${rc}" ;;
+  esac
+}
+
+as_pass() { /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1)); }
+as_fail() { /usr/bin/printf 'FAIL: %s\n  observed:%s\n' "$1" "$2"; FAIL=$((FAIL + 1)); }
+
+# as_arm <label> <row id> <hook verdict> <pasubst verdict> [<copy> <its verdict>] — the shipped copy
+# and the reverse mutant on that row's command, then the third limb when a copy is named. A wanted
+# B must name BLOCK-DESTRUCTIVE-022.
+as_arm() {
+  local name="$1" row="$2" want="$3" wantm="$4" pmut="${5:-}" pwant="${6:-}" got gotm gotp="" herr why=""
+  if ! wc_row_cmd "$row"; then as_fail "$name" " row ${row} is not a block-destructive row of the corpus"; return 0; fi
+  as_run hook "$WC_CMDX"; got="$AS_V"; herr="$AS_ERR"
+  [ "$got" = "$want" ] || why="${why} hook=${got}(wanted ${want})"
+  if [ "$want" = B ] && [ "$got" = B ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$herr"; then why="${why} the-refusal-does-not-name-BLOCK-DESTRUCTIVE-022"; fi
+  as_run pasubst "$WC_CMDX"; gotm="$AS_V"
+  [ "$gotm" = "$wantm" ] || why="${why} pasubst=${gotm}(wanted ${wantm})"
+  if [ -n "$pmut" ]; then
+    [ "$pwant" != "$want" ] || why="${why} the-${pmut}-limb-expects-the-arm's-own-verdict"
+    as_run "$pmut" "$WC_CMDX"; gotp="$AS_V"
+    [ "$gotp" = "$pwant" ] || why="${why} ${pmut}=${gotp}(wanted ${pwant})"
+  fi
+  if [ -z "$why" ]; then
+    as_pass "${name} [row ${row}] (hook ${got}, pasubst ${gotm}${pmut:+, ${pmut} ${gotp}})"
+  else
+    as_fail "${name} [row ${row}]" "${why} stderr: ${herr}"
+  fi
+}
+
+# as_rows_arm <label> "<copy>:<verdict> …" <row id>… — each named copy on each row's command.
+as_rows_arm() {
+  local name="$1" spec="$2" r s cp want why=""
+  shift 2
+  for r in "$@"; do
+    if ! wc_row_cmd "$r"; then why="${why} ${r}:absent"; continue; fi
+    for s in $spec; do
+      cp="${s%%:*}"; want="${s#*:}"
+      as_run "$cp" "$WC_CMDX"
+      [ "$AS_V" = "$want" ] || why="${why} ${r}:${cp}=${AS_V}(wanted ${want})"
+      if [ "$want" = B ] && [ "$AS_V" = B ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$AS_ERR"; then why="${why} ${r}:${cp}-refusal-not-022"; fi
+    done
+  done
+  if [ -z "$why" ]; then as_pass "${name} [rows $*] (${spec})"; else as_fail "$name" "$why"; fi
+}
+
+# as_rel_arm <label> <command> <base copy> <stepless copy> <mutant copy> — a decline shown on a
+# command no corpus row isolates: on the base copy the step declines (the base reads as the copy
+# without the step), the copy with that decline removed reads otherwise, and no copy errors.
+as_rel_arm() {
+  local name="$1" cmd="$2" base="$3" off="$4" mut="$5" vb vo vm why=""
+  as_run "$base" "$cmd"; vb="$AS_V"
+  as_run "$off" "$cmd"; vo="$AS_V"
+  as_run "$mut" "$cmd"; vm="$AS_V"
+  case "${vb}|${vo}|${vm}" in E[0-9]*|*'|E'[0-9]*) why="${why} a-copy-errored" ;; esac
+  [ "$vb" = "$vo" ] || why="${why} the-step-moved-on-${base}"
+  [ "$vm" != "$vb" ] || why="${why} ${mut}-reads-the-same"
+  if [ -z "$why" ]; then
+    as_pass "${name} (${base} ${vb}, ${off} ${vo}, ${mut} ${vm})"
+  else
+    as_fail "$name" "${why} (${base} ${vb}, ${off} ${vo}, ${mut} ${vm})"
+  fi
+}
+
+# The difference between two copies, as "<lines removed>/<lines added>".
+as_shape() { # $1 = copy file  $2 = base file
+  /usr/bin/diff "${AS_H}/$2" "${AS_H}/$1" \
+    | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }'
+}
+as_shape_arm() { # $1 label  $2 copy suffix  $3 the shape it must have  [$4 base suffix; default the hook]
+  local got base="block-destructive.sh"
+  [ -z "${4:-}" ] || base="block-destructive-$4.sh"
+  got="$(as_shape "block-destructive-$2.sh" "$base")"
+  if [ "$got" = "$3" ] && /bin/bash -n "${AS_H}/block-destructive-$2.sh" 2>/dev/null; then
+    as_pass "$1 (shape ${got}, parses)"
+  else
+    as_fail "$1" " wanted shape $3 and a copy that parses; observed shape ${got}"
+  fi
+}
+
+# The discriminating fixtures, spelled here because no corpus row isolates their decline. Each but
+# the moved-walk one ends on an unlisted script written after the assignment, so a step that crosses
+# reads it as the command word and adds a record the declined reading never writes.
+as_q="'"
+as_bt='`'
+as_cut="OUT=\$(bash ${WC_D}/ok.sh ${WC_D}/na.sh)"
+as_norm="OUT=\$(bash ${as_q}${WC_D}/ok.sh${as_q}x) ${WC_D}/na.sh"
+as_moved="X=\"\$(true a)\" ${as_q}${WC_D}/ok.sh${as_q})\" ${WC_D}/na.sh"
+as_optd="OUT=\$(bash ${as_q}-x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
+as_optp="OUT=\$(bash ${as_q}+x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
+as_int="OUT=\$(bash ${as_q}${WC_D}/ok.sh${as_q}) ${as_bt}${WC_D}/na.sh${as_bt}"
+
+as_root "$AS_ROOT"
+
+# --- each copy differs from the hook by exactly its marked lines, and parses ---
+as_shape_arm "ASGN-SUBST-M0: the reverse mutant removes the two call lines" pasubst "2/0"
+as_shape_arm "ASGN-SUBST-M1: the trust mutant removes the gate line" pasubsttrust "1/0"
+as_shape_arm "ASGN-SUBST-M2: the prefix-scan mutant rewrites its loop line" pasubstpfx "1/1"
+as_shape_arm "ASGN-SUBST-M3: the slash mutant removes its line" pasubstslash "1/0"
+as_shape_arm "ASGN-SUBST-M4: the work-budget mutant removes its line" pasubstwork "1/0"
+as_shape_arm "ASGN-SUBST-M5: the closing-quote mutant removes its line" pasubstend "1/0"
+as_shape_arm "ASGN-SUBST-M6: the allowlist mutant removes its line" pasubstallow "1/0"
+as_shape_arm "ASGN-SUBST-M7: the forced copy rewrites the exec arm's phase line" forced "1/1"
+as_shape_arm "ASGN-SUBST-M8: the enclosure-forced copy rewrites the enclosure family's phase line" enclforced "1/1"
+as_shape_arm "ASGN-SUBST-M9: the value-form mutant removes its line" pasubstshape "1/0"
+as_shape_arm "ASGN-SUBST-M10: the closer-inside-the-token mutant removes its line" pasubstcut "1/0"
+as_shape_arm "ASGN-SUBST-M11: the one-literal-word mutant removes its line" pasubstnorm "1/0"
+as_shape_arm "ASGN-SUBST-M12: the plain-word mutant removes its line" pasubstplain "1/0"
+as_shape_arm "ASGN-SUBST-M13: the option-shape mutant removes its line" pasubstopt "1/0"
+as_shape_arm "ASGN-SUBST-M14: the moved-walk mutant removes its line from the guards-off copy" gd-moved "1/0" gd
+as_shape_arm "ASGN-SUBST-M15: the forced reverse copy is the phase line and the two call lines" forced-pasubst "3/1"
+as_shape_arm "ASGN-SUBST-M16: the guards-off copy without the step removes the two call lines" gd-pasubst "2/0" gd
+
+# --- the listed script inside the substitution: recorded as unresolvable before, admitted after ---
+as_arm "SUBST-BOUNDARY-ASGN-LISTED: an admitted shell interpreter against the opener, the listed script quoted as the substitution's last word" AS01 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-dq: as LISTED, the value double-quoted" AS02 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-tick: as LISTED, opened by a backtick" AS03 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-nonshell: a non-shell interpreter and its listed script" AS04 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-source: the dot or source against the opener" AS05 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-env: as an env operand ahead of a plain command" AS06 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-later: a later segment of a command whose bail does not latch" AS07 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-encl: inside a subshell group, at its enclosure position" AS08 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-arg (declared precision): a reader command against the opener, the listed path its argument" AS09 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-direct: a blank after the opener, the listed path itself the inner command word" AS10 a W:exec:unresolvable
+as_rows_arm "SUBST-BOUNDARY-ASGN-LISTED-enforce: with the exec arm at enforce the listed rows are admitted; the walk before refuses them" "forced:a forced-pasubst:B" AS01 AS02 AS03 AS04 AS05 AS06 AS07 AS08 AS09 AS10
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-ctl: the listed path unquoted, which the trailing-run strip already resolves" AS11 a a
+
+# --- the unlisted or unresolvable script keeps both of today's records ---
+as_arm "SUBST-BOUNDARY-ASGN-UNLISTED: an unlisted script keeps the exec arm's record beside the enclosure family's" AS12 W:exec:unresolvable+shell-enclosure:not-allowlisted W:exec:unresolvable+shell-enclosure:not-allowlisted pasubstallow W:shell-enclosure:not-allowlisted
+as_arm "SUBST-BOUNDARY-ASGN-UNLISTED-row: the seed row of a double-quoted value running an unlisted script" EN06 W:exec:not-allowlisted+shell-enclosure:not-allowlisted W:exec:not-allowlisted+shell-enclosure:not-allowlisted
+as_arm "SUBST-BOUNDARY-ASGN-UNLISTED-plain: the unquoted spelling" AV29 W:exec:not-allowlisted+shell-enclosure:not-allowlisted W:exec:not-allowlisted+shell-enclosure:not-allowlisted
+as_arm "SUBST-BOUNDARY-ASGN-UNLISTED-var: a variable-bearing path" AS13 W:exec:unresolvable+shell-enclosure:unresolvable W:exec:unresolvable+shell-enclosure:unresolvable
+as_rows_arm "SUBST-BOUNDARY-ASGN-UNLISTED-enforce: refused under either family's graduation, before and after" "forced:B enclforced:B forced-pasubst:B" AS12 EN06 AV29
+
+# --- the declared tightening: a command word written after the assignment is now adjudicated ---
+as_arm "ASGN-SUBST-OUTER-exec (declared tightening): the record names the unlisted command word, not the substitution's path" AS14 W:exec:not-allowlisted W:exec:unresolvable
+as_arm "ASGN-SUBST-OUTER-interp (declared tightening): an interpreter after the assignment is refused, as a first-view finding" AS15 B W:exec:unresolvable
+
+# --- the declines: today's reading, each held by its condition ---
+as_arm "ASGN-SUBST-KEEP-trust: a later segment of a command whose bail latched" AS16 W:exec:unresolvable W:exec:unresolvable pasubsttrust a
+as_arm "ASGN-SUBST-KEEP-pfx: a double-quoted value left open across the assignment" AS17 W:exec:unresolvable W:exec:unresolvable pasubstpfx a
+as_arm "ASGN-SUBST-KEEP-end: a value that continues past the closer, before an unlisted script" AS18 W:exec:unresolvable W:exec:unresolvable pasubstend a
+as_arm "ASGN-SUBST-KEEP-work: the shared work budget already spent (fail-closed)" AS19 W:exec:unresolvable W:exec:unresolvable pasubstwork a
+as_arm "ASGN-SUBST-KEEP-blank (declared over-block): a blank between the opener and the interpreter" AS20 B B
+as_arm "ASGN-SUBST-KEEP-wrap (declared over-block): a wrapper against the opener, then the interpreter" AS21 B B
+as_arm "ASGN-SUBST-KEEP-tickdq: a backtick opener inside a double-quoted value" AS22 W:exec:unresolvable W:exec:unresolvable pasubstshape a
+as_arm "ASGN-SUBST-KEEP-slash: a path written against the opener keeps the first view's record of the listed argument" AS23 W:exec:unresolvable+exec:not-allowlisted W:exec:unresolvable+exec:not-allowlisted pasubstslash W:exec:not-allowlisted
+as_rel_arm "ASGN-SUBST-KEEP-cut: a listed word with no closer in its token, the substitution going on to an unlisted word" "$as_cut" hook pasubst pasubstcut
+as_rel_arm "ASGN-SUBST-KEEP-norm: a closing word that closes its quote and continues normalizes to no single word" "$as_norm" hook pasubst pasubstnorm
+as_rel_arm "ASGN-SUBST-KEEP-moved: where the value step crossed the value (guards off), the step does not read past it" "$as_moved" gd gd-pasubst gd-moved
+
+# --- the seam with the backtick command word: the step crosses, and the word after it keeps its reading ---
+as_run hook "$as_int"; as_int_v="$AS_V"
+as_run pasubst "$as_int"; as_int_m="$AS_V"
+case "$as_int_v" in
+  a|B|E[0-9]*) as_fail "ASGN-SUBST-INT-tick: a backtick-led command word after a listed assignment substitution is still recorded" " hook=${as_int_v} pasubst=${as_int_m}" ;;
+  *)
+    if [ "$as_int_v" != "$as_int_m" ]; then
+      as_pass "ASGN-SUBST-INT-tick: a backtick-led command word after a listed assignment substitution is still recorded (hook ${as_int_v}, pasubst ${as_int_m})"
+    else
+      as_fail "ASGN-SUBST-INT-tick: a backtick-led command word after a listed assignment substitution is still recorded" " the-step-did-not-cross: hook=${as_int_v} pasubst=${as_int_m}"
+    fi
+    ;;
+esac
+
+# --- the adjacent rows that must not move ---
+as_arm "ASGN-SUBST-PIN-adjacent: a substitution value whose closing word is an option" WR132 a a
+as_arm "ASGN-SUBST-PIN-adjacent-dq: a double-quoted substitution value with no closer in the next token" WR133 a a
+as_arm "ASGN-SUBST-PIN-av46: a substitution whose closer is in the assignment token itself" AV46 a a
+as_arm "ASGN-SUBST-PIN-near: an interpreter run for its version" EN52 a a
+as_arm "ASGN-SUBST-PIN-near-redir: a counting command reading the script on standard input" EN54 a a
+
+# --- the same block under leading-glob allowlist entries: the classes such an entry could admit decline ---
+as_why=""
+for as_c in pasubst pasubstmoved pasubsttrust pasubstshape pasubstslash pasubstpfx pasubstwork pasubstcut pasubstend pasubstnorm pasubstplain pasubstopt pasubstallow forced forced-pasubst enclforced gd gd-pasubst gd-moved; do
+  /usr/bin/cmp -s "${AS_ROOT}/.claude/hooks/block-destructive-${as_c}.sh" "${AS_GROOT}/.claude/hooks/block-destructive-${as_c}.sh" || as_why="${as_why} ${as_c}"
+done
+if [ -z "$as_why" ]; then
+  as_pass "ASGN-SUBST-GLOB-copies: the leading-glob root's copies are the ones whose shapes are shown above"
+else
+  as_fail "ASGN-SUBST-GLOB-copies: the leading-glob root's copies are the ones whose shapes are shown above" "$as_why"
+fi
+as_root "$AS_GROOT"
+as_arm "ASGN-SUBST-GLOB-LISTED: the listed script, admitted through a leading-glob entry" AS01 a W:exec:unresolvable
+as_rel_arm "ASGN-SUBST-GLOB-opt-dash: a closing word that begins with a dash, which a leading-glob entry matches, is not crossed" "$as_optd" hook pasubst pasubstopt
+as_rel_arm "ASGN-SUBST-GLOB-opt-plus: a closing word that begins with a plus, which a leading-glob entry matches, is not crossed" "$as_optp" hook pasubst pasubstopt
+as_arm "ASGN-SUBST-GLOB-var: a variable-bearing closing word, which a leading-glob entry matches, is not crossed" AS13 W:exec:unresolvable+shell-enclosure:unresolvable W:exec:unresolvable+shell-enclosure:unresolvable pasubstplain W:shell-enclosure:unresolvable
+as_rel_arm "ASGN-SUBST-GLOB-norm: a closing word that normalizes to no single word is not crossed" "$as_norm" hook pasubst pasubstnorm
+as_arm "ASGN-SUBST-GLOB-UNLISTED: an unlisted script keeps both records" AS12 W:exec:unresolvable+shell-enclosure:not-allowlisted W:exec:unresolvable+shell-enclosure:not-allowlisted pasubstallow W:shell-enclosure:not-allowlisted
+as_arm "ASGN-SUBST-GLOB-trust: a later segment of a command whose bail latched" AS16 W:exec:unresolvable W:exec:unresolvable pasubsttrust a
+as_arm "ASGN-SUBST-GLOB-pfx: a double-quoted value left open across the assignment" AS17 W:exec:unresolvable W:exec:unresolvable pasubstpfx a
+as_arm "ASGN-SUBST-GLOB-end: a value that continues past the closer" AS18 W:exec:unresolvable W:exec:unresolvable pasubstend a
+as_arm "ASGN-SUBST-GLOB-work: the shared work budget already spent" AS19 W:exec:unresolvable W:exec:unresolvable pasubstwork a
+as_arm "ASGN-SUBST-GLOB-tickdq: a backtick opener inside a double-quoted value" AS22 W:exec:unresolvable W:exec:unresolvable pasubstshape a
+as_arm "ASGN-SUBST-GLOB-slash: a path written against the opener" AS23 W:exec:unresolvable+exec:not-allowlisted W:exec:unresolvable+exec:not-allowlisted pasubstslash W:exec:not-allowlisted
+as_rel_arm "ASGN-SUBST-GLOB-cut: a listed word with no closer in its token" "$as_cut" hook pasubst pasubstcut
+/bin/rm -rf "$AS_ROOT" "$AS_GROOT"
+
 # ==========================================================================
 # BLOCK-022 — env's split-string value read as env reads it (SPLITV-*)
 # ==========================================================================
@@ -12134,6 +12447,25 @@ if [ "$CE_DS" = -1 ]; then
   [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
 fi
 ce_report "CEIL-NEWSCAN-HD: the here-document receiver read is charged on an admitted receiver behind a group opener [row HL01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
+
+# CEIL-NEWSCAN-ASGN — the assignment-substitution step (#8548) is charged: its tag is traced on an
+# admitted assignment substitution, and its gate-sized hand-off — one segment of assignment words,
+# each closing on the listed script so every attempt reaches the allowlist read, the first with a
+# long closing token, past the shared work budget — is decided inside the budget.
+ce_why=""
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+if wc_row_cmd AS01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/asgn.cmd"; fi
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/asgn.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'asgn-subst' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} step-tag-traced=${ce_t:-0}"
+ce_fill 65000 "OUT=\$(bash ${WC_D}/$(/usr/bin/printf '%*s' 600 '' | /usr/bin/tr ' ' 'x')/ok.sh) " "OUT=\$(bash ${WC_D}/ok.sh) " 'true' > "${CE_ROOT}/asgn-big.cmd"
+ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/asgn-big.cmd" "$CEIL_LIMIT"
+if [ "$CE_DS" = -1 ]; then
+  ce_timed block-destructive-t2.sh en_US.UTF-8 "${CE_ROOT}/asgn-big.cmd" "$CEIL_LIMIT"
+  [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
+fi
+ce_report "CEIL-NEWSCAN-ASGN: the assignment-substitution step is charged on an admitted assignment substitution [row AS01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
 
 # CEIL-VIEW — past either of the view's budgets, once an arm that reads enclosure positions enforces,
 # the command is refused instead of losing a position; at the shipped warn phases nothing moves.
