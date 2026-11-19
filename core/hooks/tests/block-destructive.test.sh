@@ -11109,7 +11109,8 @@ as_run() { # $1 = copy (hook, or the suffix of block-destructive-<suffix>.sh)  $
 }
 
 as_pass() { /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1)); }
-as_fail() { /usr/bin/printf 'FAIL: %s\n  observed:%s\n' "$1" "$2"; FAIL=$((FAIL + 1)); }
+# A failure's observations ride on its FAIL line, newlines folded, because the runner forwards only that line.
+as_fail() { local o="$2"; o="${o//$'\n'/ | }"; /usr/bin/printf 'FAIL: %s — observed:%s\n' "$1" "$o"; FAIL=$((FAIL + 1)); }
 
 # as_arm <label> <row id> <hook verdict> <pasubst verdict> [<copy> <its verdict>] — the shipped copy
 # and the reverse mutant on that row's command, then the third limb when a copy is named. A wanted
@@ -12465,7 +12466,7 @@ if [ "$CE_DS" = -1 ]; then
   ce_timed block-destructive-t2.sh en_US.UTF-8 "${CE_ROOT}/asgn-big.cmd" "$CEIL_LIMIT"
   [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
 fi
-ce_report "CEIL-NEWSCAN-ASGN: the assignment-substitution step is charged on an admitted assignment substitution [row AS01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
+ce_report "CEIL-NEWSCAN-ASGN: the assignment-substitution step is charged on an admitted assignment substitution [row AS01], and its gate-sized hand-off is decided inside the budget${ce_why:+ — observed:${ce_why}}" "$ce_why"
 
 # CEIL-VIEW — past either of the view's budgets, once an arm that reads enclosure positions enforces,
 # the command is refused instead of losing a position; at the shipped warn phases nothing moves.

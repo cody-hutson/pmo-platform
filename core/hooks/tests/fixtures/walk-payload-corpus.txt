@@ -2242,21 +2242,21 @@ LT02|block-destructive|looks-like-text|-|?|a|git commit -m "$(cat <<'EOF'@NL@Fix
 LT03|block-destructive|looks-like-text|-|?|a|git commit -m 'Fix it (`@D@/ok.sh` reads the file)'
 LT04|block-destructive|looks-like-text|-|?|a|`@D@/ok.sh`
 # #8548: an interpreter inside an assignment value's command substitution (AS rows; design on sub-task #9060)
-AS01|block-destructive|looks-like-asgn|AS11|?|W|OUT=$(bash '@D@/ok.sh')
-AS02|block-destructive|looks-like-asgn|-|?|W|OUT="$(bash '@D@/ok.sh')"
-AS03|block-destructive|looks-like-asgn|-|?|W|OUT=`bash '@D@/ok.sh'`
-AS04|block-destructive|looks-like-asgn|-|?|W|OUT=$(python3 '@D@/ok.py')
-AS05|block-destructive|looks-like-asgn|-|?|W|OUT=$(source '@D@/ok.sh')
-AS06|block-destructive|looks-like-asgn|-|?|W|env OUT=$(bash '@D@/ok.sh') true
-AS07|block-destructive|looks-like-asgn|-|?|W|true; OUT=$(bash '@D@/ok.sh')
-AS08|block-destructive|looks-like-asgn|-|?|W|( OUT=$(bash '@D@/ok.sh') )
-AS09|block-destructive|looks-like-asgn|-|?|W|OUT=$(cat '@D@/ok.sh')
-AS10|block-destructive|looks-like-asgn|-|?|W|OUT=$( '@D@/ok.sh')
+AS01|block-destructive|looks-like-asgn|AS11|?|a|OUT=$(bash '@D@/ok.sh')
+AS02|block-destructive|looks-like-asgn|-|?|a|OUT="$(bash '@D@/ok.sh')"
+AS03|block-destructive|looks-like-asgn|-|?|a|OUT=`bash '@D@/ok.sh'`
+AS04|block-destructive|looks-like-asgn|-|?|a|OUT=$(python3 '@D@/ok.py')
+AS05|block-destructive|looks-like-asgn|-|?|a|OUT=$(source '@D@/ok.sh')
+AS06|block-destructive|looks-like-asgn|-|?|a|env OUT=$(bash '@D@/ok.sh') true
+AS07|block-destructive|looks-like-asgn|-|?|a|true; OUT=$(bash '@D@/ok.sh')
+AS08|block-destructive|looks-like-asgn|-|?|a|( OUT=$(bash '@D@/ok.sh') )
+AS09|block-destructive|looks-like-asgn|-|?|a|OUT=$(cat '@D@/ok.sh')
+AS10|block-destructive|looks-like-asgn|-|?|a|OUT=$( '@D@/ok.sh')
 AS11|block-destructive|asubst-ctl|-|?|a|OUT=$(bash @D@/ok.sh)
 AS12|block-destructive|asubst-unl|-|?|W|OUT=$(bash '@D@/na.sh')
 AS13|block-destructive|asubst-unl|-|?|W|OUT=$(bash "$NOPE7019/ok.sh")
 AS14|block-destructive|asubst-outer|-|?|W|OUT=$(bash '@D@/ok.sh') @D@/na.sh
-AS15|block-destructive|asubst-outer|-|?|W|OUT=$(bash '@D@/ok.sh') bash @D@/na.sh
+AS15|block-destructive|asubst-outer|-|?|B|OUT=$(bash '@D@/ok.sh') bash @D@/na.sh
 AS16|block-destructive|asubst-keep|-|?|W|true; OUT="$(bash '@D@/ok.sh')"
 AS17|block-destructive|asubst-keep|-|?|W|NOTE="x OUT=$(bash '@D@/ok.sh') y" true
 AS18|block-destructive|asubst-keep|-|?|W|OUT="$(bash '@D@/ok.sh') more" @D@/na.sh

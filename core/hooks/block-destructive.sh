@@ -2087,6 +2087,7 @@ script_wrapper_options() {
           *=*)
             script_hidx=$(( script_hidx + 1 ))
             script_assign_value_rest "$_tok"   # M-WRAP-QVAL
+            script_assign_subst_rest "$_tok"   # M-ASGN-SUBST
             ;;
           *) break ;;
         esac
@@ -3840,7 +3841,9 @@ script_head_is_carrier() {   # $1 = text -> 0 when the head it resolves to is on
 # fragment is suppressed — fail-closed, and a possible false refusal.
 
 # A construct the value step never crosses: one that runs a command, or whose extent holds
-# blanks this scanner does not model.
+# blanks this scanner does not model. The assignment-substitution step after it crosses one
+# shape of a command substitution under conditions of its own (script_assign_subst_rest); this
+# guard is not widened for it.
 script_qval_opaque() {   # $1 = one token -> 0 when it carries such a construct
   case "$1" in
     *'$('*|*'${'*|*'$['*|*'`'*|*'<('*|*'>('*|*'=('*) return 0 ;;   # M-WRAP-QVAL-SUBST
@@ -3943,6 +3946,94 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
   fi
   if [ "$_ok" -eq 1 ]; then script_qval_from="$script_hidx"; else script_hidx="$_h"; fi
   script_qstate="$_qs"; script_qtaint="$_qt"
+}
+
+# THE ASSIGNMENT-SUBSTITUTION STEP. The characters of a command substitution, from its opener to
+# its closer, are part of the word they appear in (POSIX Shell Command Language 2.3), but the walk
+# splits a segment on whitespace first, so `NAME=$(<word> <path>)` reaches it as the assignment's
+# first piece and the substitution's later words, and the one-token step leaves the walk on the
+# last of them: the path with the closer attached. That was read as the command word. The exec arm
+# recorded a word it could not resolve when the path was written in quotes, and a command word
+# written after the assignment was never read. The value step above never crosses such a value:
+# its construct guard (script_qval_opaque) declines every command substitution.
+#
+# script_assign_subst_rest reads one shape of that word to its end and moves script_hidx to the
+# shell's next word. It moves it ONLY when all of these hold, each tested on its own marked line;
+# every decline leaves script_hidx, script_qval_from and the normalizer's outputs as they stood:
+#   1. no step has moved the walk since the assignment token (script_qval_from is behind
+#      script_hidx), so script_hidx is the token after it (M-ASGN-SUBST-MOVED);
+#   2. the segment is vouched to start outside any quote: the value step's gate,
+#      script_qval_trust (M-ASGN-SUBST-TRUST);
+#   3. the value is an optional double quote, a plain run, one opener — `$(`, or a backtick when
+#      the value is not double-quoted — and a plain word that is not `case`, so a second opener,
+#      an arithmetic expansion and every escape decline here (M-ASGN-SUBST-SHAPE);
+#   4. that word carries no slash. A slash-bearing word there is a direct execution only the
+#      enclosure view reads, and past that view's position ceiling the first view's record of it
+#      is its only one (M-ASGN-SUBST-SLASH);
+#   5. no token from the last boundary known to sit outside quotes (script_qval_from) up to the
+#      assignment token carries a quote, a backslash, a backtick or a `$` (M-ASGN-SUBST-PFX);
+#   6. the shared work budget is unspent; the step charges it one unit (M-ASGN-SUBST-WORK);
+#   7. the enclosure view's own cut (script_encl_cut, its local quote state and step bound
+#      unchanged) finds the substitution's closer inside the next token. The cut returns 0 on
+#      every path, so found means its output is shorter than the token (M-ASGN-SUBST-CUT);
+#   8. what follows the closer is exactly the value's own closing quote: one `"` for a
+#      double-quoted value, and nothing at all for an unquoted one (M-ASGN-SUBST-END);
+#   9. the text before the closer normalizes to exactly one literal word (M-ASGN-SUBST-NORM),
+#      a non-empty plain one (M-ASGN-SUBST-PLAIN), which is not option-shaped, because a word
+#      that begins with `-` or `+` is read by an interpreter as an option and not as the script
+#      it names (M-ASGN-SUBST-OPT), and which the allowlist admits (M-ASGN-SUBST-ALLOW).
+# A token that carries neither opener is passed over at once, before any reading of its value.
+# Condition 3 declines every such token, so that first test changes no verdict and has no mutant;
+# it keeps the step's cost on an ordinary assignment to one pattern match.
+# The gate on the allowlist is the failure-direction argument. Whatever runs that word inside the
+# substitution — the interpreter written against the opener, a command that reads it, or the word
+# itself — the verdict is the one the allowlist gives the word in plain form; the only other word
+# in the substitution is the one against the opener, which condition 4 keeps slash-free, a
+# PATH-resolved word this rule does not adjudicate in plain form. So the step can only stop the
+# exec arm adjudicating a listed script. It never removes a record or a refusal of anything
+# unlisted or unresolvable, and the enclosure view adjudicates the substitution's command as
+# before. A command word written after the assignment is now read where it never was. It is asked
+# from the prefix walk and from env's operand loop, and not from the head resolver or the
+# carrier-head check, which stay withdraw-only.
+script_assign_subst_rest() {   # $1 = the assignment token just stepped over
+  local _k=$(( script_hidx - 1 )) _v="${1#*=}" _dq=0 _o=0 _e="" _p _r _w _t _i _c _ok
+  local _no="$script_norm_out" _nr="$script_norm_raw" _nk="$script_norm_ok"
+  script_ceil_check asgn-subst   # M-CEIL-ASGN-SUBST
+  case "$1" in *'$('*|*'`'*) ;; *) return 0 ;; esac
+  [ "$script_qval_from" -lt "$script_hidx" ] || return 0   # M-ASGN-SUBST-MOVED
+  [ "$script_qval_trust" -eq 1 ] || return 0   # M-ASGN-SUBST-TRUST
+  case "$_v" in '"'*) _dq=1; _e='"'; _v="${_v:1}" ;; esac
+  _p="${_v%%[!A-Za-z0-9_=+,.:/@%-]*}"
+  _r="${_v:${#_p}}"
+  case "$_r" in
+    '$('*) _o=1; _w="${_r:2}" ;;
+    '`'*) _o=2; _w="${_r:1}" ;;
+    *) _w="$_r" ;;
+  esac
+  if [ "$_o" -eq 0 ] || [ "${_o}${_dq}" = 21 ] || [ "$_w" = case ] || ! script_plain_word "$_w"; then return 0; fi   # M-ASGN-SUBST-SHAPE
+  case "$_w" in */*) return 0 ;; esac   # M-ASGN-SUBST-SLASH
+  _i="$script_qval_from"
+  while [ "$_i" -lt "$_k" ]; do   # M-ASGN-SUBST-PFX
+    script_ceil_check asgn-pfx   # M-CEIL-ASGN-PFX
+    case "${script_tokens[$_i]}" in *[\'\"\\\`\$]*) return 0 ;; esac
+    _i=$(( _i + 1 ))
+  done
+  [ "$script_qwork" -lt 1000 ] || return 0   # M-ASGN-SUBST-WORK
+  script_qwork=$(( script_qwork + 1 ))
+  _t="${script_tokens[$script_hidx]:-}"
+  script_encl_cut "$_t" "$_o"
+  [ "${#script_cut_out}" -lt "${#_t}" ] || return 0   # M-ASGN-SUBST-CUT
+  [ "${_t:$(( ${#script_cut_out} + 1 ))}" = "$_e" ] || return 0   # M-ASGN-SUBST-END
+  normalize_script_token "$script_cut_out"
+  _c="$script_norm_out"; _ok="$script_norm_ok"
+  script_norm_out="$_no"; script_norm_raw="$_nr"; script_norm_ok="$_nk"
+  [ "$_ok" -eq 1 ] || return 0   # M-ASGN-SUBST-NORM
+  { [ -n "$_c" ] && script_plain_word "$_c"; } || return 0   # M-ASGN-SUBST-PLAIN
+  case "$_c" in [-+]*) return 0 ;; esac   # M-ASGN-SUBST-OPT
+  is_script_allowlisted "$_c" || return 0   # M-ASGN-SUBST-ALLOW
+  script_hidx=$(( script_hidx + 1 ))
+  script_qval_from="$script_hidx"
+  return 0
 }
 
 # THE CARRIER HEAD, READ THROUGH THE STEP (the review's PR-2). script_resolve_head walks the
@@ -4789,7 +4880,10 @@ case "$TOOL_NAME" in
       # (script_assign_value_rest), moves the walk on to the shell's next word where the segment
       # is vouched to start outside quotes and every character of the value is readable, and
       # leaves today's reading exactly as it is everywhere else. Its conditions and its declines
-      # are stated once, above that function.
+      # are stated once, above that function. A value that opens a command substitution is read
+      # by a second step called after it (script_assign_subst_rest), and only where the word that
+      # closes the substitution is one literal path the allowlist admits; its conditions are
+      # stated above it.
       #
       # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION,
       # and each wrapper's own options and operands are walked from its row. `sudo
@@ -4853,6 +4947,7 @@ case "$TOOL_NAME" in
             esac
             script_hidx=$(( script_hidx + 1 ))
             script_assign_value_rest "$script_ptok"   # M-WRAP-QVAL
+            script_assign_subst_rest "$script_ptok"   # M-ASGN-SUBST
             continue
             ;;
         esac
