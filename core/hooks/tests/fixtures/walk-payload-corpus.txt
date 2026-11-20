@@ -2306,3 +2306,6 @@ TK03|block-destructive|tick-cmdword|-|?|W|`@D@/ok.sh`${X8490}.sh
 TK04|block-destructive|tick-cmdword|-|?|W|$(@D@/ok.sh)
 TK05|block-destructive|tick-cmdword|-|?|W|git commit -m 'Fix@NL@`@D@/ok.sh` reads it'
 TK06|block-destructive|tick-cmdword|-|?|W|bash -c $(echo -n) 'true@NL@`@D@/na.sh`'
+# #8490 Stage 7: the quote-led residual in its blank-carrying spelling, and the empty-output hand-off (both stay W)
+TK07|block-destructive|tick-cmdword|-|?|W|"`@D@/ok.sh a`"
+TK08|block-destructive|tick-cmdword|-|?|W|`true` @D@/na.sh

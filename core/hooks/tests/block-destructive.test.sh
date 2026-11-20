@@ -9762,9 +9762,11 @@ xt_count() { # counts ENCL_ROWS rows whose path begins with a backtick -> XT_TIC
     esac
   done <<<"$ENCL_ROWS"
 }
-# xt_arm <label> <copy> <command> <verdict> <tick: 0 | 1+ | -> [<B pattern>]
+# xt_arm <label> <copy> <command> <verdict> <tick: 0 | 1+ | -> [<B pattern>] [<rows>:<arm>]
+# The last, where an arm's label claims it: the call added exactly <rows> rows, one of which carries
+# <arm> at the enclosure position.
 xt_arm() {
-  local name="$1" copy="$2" cmd="$3" want="$4" tick="$5" pat="${6:-}" ok=1 why=""
+  local name="$1" copy="$2" cmd="$3" want="$4" tick="$5" pat="${6:-}" rows="${7:-}" ok=1 why=""
   encl_run "$copy" "$cmd"
   xt_count
   if [ "$ENCL_V" != "$want" ]; then ok=0; why="verdict=${ENCL_V}"; fi
@@ -9772,6 +9774,10 @@ xt_arm() {
     0) if [ "$XT_TICK" -ne 0 ]; then ok=0; why="${why} backtick-led rows=${XT_TICK}"; fi ;;
     1+) if [ "$XT_TICK" -lt 1 ]; then ok=0; why="${why} backtick-led rows=0 (wanted at least 1)"; fi ;;
   esac
+  if [ -n "$rows" ]; then
+    if [ "$ENCL_NROWS" != "${rows%%:*}" ]; then ok=0; why="${why} rows=${ENCL_NROWS} (wanted ${rows%%:*})"; fi
+    if ! encl_row_has "${rows#*:}"; then ok=0; why="${why} no row carries arm ${rows#*:} at the enclosure position"; fi
+  fi
   if [ "$ok" = 1 ] && [ "$want" = "B" ] && ! /usr/bin/grep -q "${pat:-BLOCK-DESTRUCTIVE-022}" <<<"$ENCL_ERR"; then ok=0; why="refusal lacks ${pat:-BLOCK-DESTRUCTIVE-022}"; fi
   if [ "$ok" = 1 ]; then
     /usr/bin/printf 'PASS: %s (%s, backtick-led rows %s)\n' "$name" "$ENCL_V" "$XT_TICK"
@@ -9791,15 +9797,15 @@ xt_arm "EXEC-TEXT-NF-01: an inert here-document line opening with a code span na
 xt_arm "EXEC-TEXT-NF-01-forced: the same with the exec arm at enforce" block-destructive-xforced.sh "$xt_lt01" a 0
 xt_arm "EXEC-TEXT-NF-02: the commit idiom, a code span at quote state 2" block-destructive.sh "$xt_lt02" a 0
 xt_arm "EXEC-TEXT-NF-03: a code span opening a parenthesized span inside a single-quoted argument" block-destructive.sh "$xt_lt03" a 0
-xt_arm "EXEC-TEXT-NF-04: the same text naming an unlisted script keeps one row, from the enclosure position only" block-destructive.sh "$xt_lt01na" W 0
+xt_arm "EXEC-TEXT-NF-04: the same text naming an unlisted script keeps one row, from the enclosure position only" block-destructive.sh "$xt_lt01na" W 0 "" 1:exec
 xt_arm "EXEC-TEXT-NF-04-forced: at enforce that enclosure row refuses" block-destructive-xforced.sh "$xt_lt01na" B 0
 # The boundary with #8548 (CIAC-1): a substitution outside an assignment's value is this card's.
 xt_arm "SUBST-BOUNDARY-TEXT-LISTED: a backtick substitution as the first word, running a listed script" block-destructive.sh "\`${ENCL_OK}\`" a 0
 xt_arm "SUBST-BOUNDARY-TEXT-LISTED-forced: the same at enforce" block-destructive-xforced.sh "\`${ENCL_OK}\`" a 0
-xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED: running an unlisted script is still recorded, from the enclosure position" block-destructive.sh "\`${ENCL_NA}\`" W 0
+xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED: running an unlisted script is still recorded, from the enclosure position" block-destructive.sh "\`${ENCL_NA}\`" W 0 "" 1:exec
 xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED-forced: and refused at enforce" block-destructive-xforced.sh "\`${ENCL_NA}\`" B 0
 xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED-pair: without the view the declined word goes unread (the guard's reason)" block-destructive-xsmallpng.sh "true \$(a) \$(b) \$(c) \$(d); \`${ENCL_NA}\`" a -
-xt_arm "EXEC-TEXT-MF-dollar: a backtick substitution running a variable-bearing path is still recorded" block-destructive.sh '`$NOPE8490/x.sh`' W 0
+xt_arm "EXEC-TEXT-MF-dollar: a backtick substitution running a variable-bearing path is still recorded, from the enclosure position" block-destructive.sh '`$NOPE8490/x.sh`' W 0 "" 1:exec
 # Declared residuals: today's first-view reading kept (green before and after), each with the mutant that would lose it.
 xt_mfcar="bash -c \$(echo -n) 'true${xt_nl}\`${ENCL_NA}\`'"
 xt_arm "EXEC-TEXT-MF-carrier: a carrier-head program string whose later line opens a backtick substitution keeps the first view's record" block-destructive.sh "$xt_mfcar" W 1+
@@ -9820,6 +9826,19 @@ xt_arm "EXEC-TEXT-PIN-dollar-paren: a command word opened by \$( keeps today's r
 xt_rem="echo \$(true) \$(true) xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; \`/tmp/pmo\$(true)-encl-na.sh\`"
 xt_arm "EXEC-TEXT-PIN-remainder: a nested opener before the closer keeps the first view's record past the remainder budget" block-destructive-smallb.sh "$xt_rem" W 1+
 xt_arm "EXEC-TEXT-PIN-remainder-pair: without the nested-opener stop the execution goes unrecorded" block-destructive-xnonestb.sh "$xt_rem" a -
+# Stage 7: the quote-led residual in its blank-carrying spelling, the `$(` spelling at enforce, and the
+# empty-output hand-off, each with its corpus row (TK07, TK08). A double-quoted substitution as the
+# command word, whose closer falls in a later token, opens with a quote, so the decline never reads it;
+# it normalizes as unresolvable and is recorded with a backtick-led path, its script listed. A
+# substitution at command position whose output yields no field hands command position to the next
+# word, which only the position at the closer reads.
+xt_pinq="\"\`${ENCL_OK} a\`\""
+xt_arm "EXEC-TEXT-PIN-quote: a double-quoted backtick command word whose closer falls in a later token keeps today's reading" block-destructive.sh "$xt_pinq" W 1+
+xt_arm "EXEC-TEXT-PIN-quote-forced: and is refused at enforce, its script listed" block-destructive-xforced.sh "$xt_pinq" B -
+xt_arm "EXEC-TEXT-PIN-dollar-paren-forced: a command word opened by \$( is refused at enforce, its script listed (D-2)" block-destructive-xforced.sh "\$(${ENCL_OK})" B -
+xt_handoff="\`true\` ${ENCL_NA}"
+xt_arm "EXEC-TEXT-PIN-handoff: a substitution at command position followed by an unlisted script word keeps that word's one record, from the closer's position" block-destructive.sh "$xt_handoff" W 0 "" 1:exec
+xt_arm "EXEC-TEXT-PIN-handoff-forced: and refuses it at enforce" block-destructive-xforced.sh "$xt_handoff" B -
 
 # --- #8326: the here-document receiver read (release script-guard-refuses-only-what-executes; design
 # on sub-task #9061). An inert body behind a grammar opener, or received by cat under the whole-command
