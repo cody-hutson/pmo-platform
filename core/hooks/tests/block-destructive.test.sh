@@ -11131,6 +11131,8 @@ aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense
 #   pasubstplain     the test that the word is non-empty and plain
 #   pasubstopt       the test that the word is not option-shaped
 #   pasubstallow     the allowlist test
+#   pasubstname      the test that an operand's text before its first `=` is plain (env's operand loop)
+#   pasubstverb      the test that the closing word's basename names no interpreter and is not the source word
 #   forced           the exec arm's phase at enforce; forced-pasubst is forced and pasubst together
 #   enclforced       the enclosure family's phase at enforce
 #   gd, gd-pasubst,  the value step's two text guards off (the ASGN-QVAL block's pqvalguards), alone,
@@ -11158,7 +11160,7 @@ as_build() { # $1 = root  $2… = its allowlist entries -> the hook and its copi
   /usr/bin/printf 'enforce' > "${h}/.mode"
   /bin/cp "$HOOK" "${h}/block-destructive.sh"
   /usr/bin/sed '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-pasubst.sh"
-  for c in moved:MOVED trust:TRUST shape:SHAPE slash:SLASH work:WORK cut:CUT end:END norm:NORM plain:PLAIN opt:OPT allow:ALLOW; do
+  for c in moved:MOVED trust:TRUST shape:SHAPE slash:SLASH work:WORK cut:CUT end:END norm:NORM plain:PLAIN opt:OPT allow:ALLOW name:NAME verb:VERB; do
     n="${c%%:*}"; m="${c#*:}"
     /usr/bin/sed "/# M-ASGN-SUBST-${m}\$/d" "$HOOK" > "${h}/block-destructive-pasubst${n}.sh"
   done
@@ -11171,7 +11173,7 @@ as_build() { # $1 = root  $2… = its allowlist entries -> the hook and its copi
   /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' -e '/# M-ASGN-SUBST-MOVED$/d' "$HOOK" > "${h}/block-destructive-gd-moved.sh"
   /bin/chmod +x "${h}/"block-destructive*.sh
 }
-as_build "$AS_ROOT" "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh"
+as_build "$AS_ROOT" "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" "${WC_D}/bin/bash"
 as_build "$AS_GROOT" '*/ok.sh' '*/ok.py'
 
 AS_R=""; AS_H=""; AS_DRAIN=""
@@ -11306,6 +11308,8 @@ as_moved="X=\"\$(true a)\" ${as_q}${WC_D}/ok.sh${as_q})\" ${WC_D}/na.sh"
 as_optd="OUT=\$(bash ${as_q}-x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
 as_optp="OUT=\$(bash ${as_q}+x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
 as_int="OUT=\$(bash ${as_q}${WC_D}/ok.sh${as_q}) ${as_bt}${WC_D}/na.sh${as_bt}"
+# D-2: a listed closing word whose basename is an interpreter's name (this root lists one such path).
+as_verb="OUT=\$(bash ${as_q}${WC_D}/bin/bash${as_q}) ${WC_D}/na.sh"
 
 as_root "$AS_ROOT"
 
@@ -11327,6 +11331,8 @@ as_shape_arm "ASGN-SUBST-M13: the option-shape mutant removes its line" pasubsto
 as_shape_arm "ASGN-SUBST-M14: the moved-walk mutant removes its line from the guards-off copy" gd-moved "1/0" gd
 as_shape_arm "ASGN-SUBST-M15: the forced reverse copy is the phase line and the two call lines" forced-pasubst "3/1"
 as_shape_arm "ASGN-SUBST-M16: the guards-off copy without the step removes the two call lines" gd-pasubst "2/0" gd
+as_shape_arm "ASGN-SUBST-M17: the operand-name mutant removes its line" pasubstname "1/0"
+as_shape_arm "ASGN-SUBST-M18: the closing-word verb mutant removes its line" pasubstverb "1/0"
 
 # --- the listed script inside the substitution: recorded as unresolvable before, admitted after ---
 as_arm "SUBST-BOUNDARY-ASGN-LISTED: an admitted shell interpreter against the opener, the listed script quoted as the substitution's last word" AS01 a W:exec:unresolvable
@@ -11365,6 +11371,14 @@ as_arm "ASGN-SUBST-KEEP-slash: a path written against the opener keeps the first
 as_rel_arm "ASGN-SUBST-KEEP-cut: a listed word with no closer in its token, the substitution going on to an unlisted word" "$as_cut" hook pasubst pasubstcut
 as_rel_arm "ASGN-SUBST-KEEP-norm: a closing word that closes its quote and continues normalizes to no single word" "$as_norm" hook pasubst pasubstnorm
 as_rel_arm "ASGN-SUBST-KEEP-moved: where the value step crossed the value (guards off), the step does not read past it" "$as_moved" gd gd-pasubst gd-moved
+# Stage 7: env's operand loop takes any assignment-shaped operand, so an operand whose text before its
+# first `=` opens a quote carries the shell's word past the closer (F-01); a quoted listed path holding a
+# space, which the closer test, the one-word test and the allowlist each decline, so no one-line mutant
+# moves it (F-04); and a listed closing word named as an interpreter, after which today's walk refuses
+# the next word (D-2).
+as_arm "ASGN-SUBST-KEEP-name: an env operand whose name part opens a quote keeps today's record" AS24 W:exec:unresolvable W:exec:unresolvable pasubstname a
+as_arm "ASGN-SUBST-KEEP-space (declared residual): a quoted listed path holding a space keeps today's reading, an allow" AS25 a a
+as_rel_arm "ASGN-SUBST-KEEP-verb: a listed closing word named as an interpreter keeps the next word's reading" "$as_verb" hook pasubst pasubstverb
 
 # --- the seam with the backtick command word: the step crosses, and the word after it keeps its reading ---
 as_run hook "$as_int"; as_int_v="$AS_V"
@@ -11389,7 +11403,7 @@ as_arm "ASGN-SUBST-PIN-near-redir: a counting command reading the script on stan
 
 # --- the same block under leading-glob allowlist entries: the classes such an entry could admit decline ---
 as_why=""
-for as_c in pasubst pasubstmoved pasubsttrust pasubstshape pasubstslash pasubstpfx pasubstwork pasubstcut pasubstend pasubstnorm pasubstplain pasubstopt pasubstallow forced forced-pasubst enclforced gd gd-pasubst gd-moved; do
+for as_c in pasubst pasubstmoved pasubsttrust pasubstshape pasubstslash pasubstpfx pasubstwork pasubstcut pasubstend pasubstnorm pasubstplain pasubstopt pasubstallow pasubstname pasubstverb forced forced-pasubst enclforced gd gd-pasubst gd-moved; do
   /usr/bin/cmp -s "${AS_ROOT}/.claude/hooks/block-destructive-${as_c}.sh" "${AS_GROOT}/.claude/hooks/block-destructive-${as_c}.sh" || as_why="${as_why} ${as_c}"
 done
 if [ -z "$as_why" ]; then
@@ -12692,9 +12706,11 @@ fi
 ce_report "CEIL-NEWSCAN-HD: the here-document receiver read is charged on an admitted receiver behind a group opener [row HL01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
 
 # CEIL-NEWSCAN-ASGN — the assignment-substitution step (#8548) is charged: its tag is traced on an
-# admitted assignment substitution, and its gate-sized hand-off — one segment of assignment words,
-# each closing on the listed script so every attempt reaches the allowlist read, the first with a
-# long closing token, past the shared work budget — is decided inside the budget.
+# admitted assignment substitution; on one segment of 1,100 admitted assignment words, each closing on
+# the listed script so every attempt reaches the allowlist read, the step is attempted until the shared
+# work budget declines it (a copy traces only the step's tag and that decline, with bash's own printf);
+# and its gate-sized hand-off, the same words with a long closing token last, is decided inside the
+# budget. The arm names the limb that decided, with no timing figure.
 ce_why=""
 ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
 if wc_row_cmd AS01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/asgn.cmd"; fi
@@ -12702,13 +12718,30 @@ if wc_row_cmd AS01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/asgn.cmd"
 ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/asgn.cmd" "$CEIL_LIMIT"
 ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'asgn-subst' "$CE_TRACE"; } || /usr/bin/printf 0)"
 [ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} step-tag-traced=${ce_t:-0}"
-ce_fill 65000 "OUT=\$(bash ${WC_D}/$(/usr/bin/printf '%*s' 600 '' | /usr/bin/tr ' ' 'x')/ok.sh) " "OUT=\$(bash ${WC_D}/ok.sh) " 'true' > "${CE_ROOT}/asgn-big.cmd"
+F="$CE_TRACE" /usr/bin/awk 'BEGIN { f = ENVIRON["F"] }
+  / # M-CEIL-TEST$/ { print "  if [ \"$1\" = asgn-subst ]; then builtin printf \"%s\\n\" \"$1\" >> \"" f "\"; fi" }
+  / # M-ASGN-SUBST-WORK$/ { print "  if [ \"$script_qwork\" -ge 1000 ]; then builtin printf \"%s\\n\" asgn-work >> \"" f "\"; fi" }
+  { print }' "$HOOK" > "${CE_HOOKS}/block-destructive-trace-asgn.sh"
+/bin/chmod +x "${CE_HOOKS}/block-destructive-trace-asgn.sh"
+ce_live block-destructive-trace-asgn.sh 2 || ce_why="${ce_why} the-step-trace-copy-edits-did-not-apply"
+ce_unit="OUT=\$(bash ${WC_D}/ok.sh) "
+ce_fill $(( 1100 * ${#ce_unit} + 4 )) '' "$ce_unit" 'true' > "${CE_ROOT}/asgn-budget.cmd"
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace-asgn.sh en_US.UTF-8 "${CE_ROOT}/asgn-budget.cmd" "$CEIL_LIMIT"
+ce_ta="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'asgn-subst' "$CE_TRACE"; } || /usr/bin/printf 0)"
+ce_tw="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'asgn-work' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_tw:-0}" -ge 1 ] || ce_why="${ce_why} the-step-never-reached-the-shared-budget(attempts=${ce_ta:-0})"
+[ "${ce_ta:-0}" -ge 990 ] || ce_why="${ce_why} attempts=${ce_ta:-0}(wanted-at-least-990-of-the-1000-unit-budget)"
+ce_fill 65000 '' "$ce_unit" "OUT=\$(bash ${WC_D}/$(/usr/bin/printf '%*s' 600 '' | /usr/bin/tr ' ' 'x')/ok.sh) true" > "${CE_ROOT}/asgn-big.cmd"
+ce_lim="shipped copy"
 ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/asgn-big.cmd" "$CEIL_LIMIT"
 if [ "$CE_DS" = -1 ]; then
+  ce_lim="2-second deadline copy, the shipped copy having been stopped"
   ce_timed block-destructive-t2.sh en_US.UTF-8 "${CE_ROOT}/asgn-big.cmd" "$CEIL_LIMIT"
   [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
 fi
-ce_report "CEIL-NEWSCAN-ASGN: the assignment-substitution step is charged on an admitted assignment substitution [row AS01], and its gate-sized hand-off is decided inside the budget${ce_why:+ — observed:${ce_why}}" "$ce_why"
+/usr/bin/printf 'RESIDUAL: CEIL-NEWSCAN-ASGN the gate-sized hand-off was decided by the %s (exit %s); on the budget shape the step was attempted %s times and reached the shared budget %s time(s)\n' "$ce_lim" "$CE_EXIT" "${ce_ta:-0}" "${ce_tw:-0}"
+ce_report "CEIL-NEWSCAN-ASGN: the assignment-substitution step is charged on an admitted assignment substitution [row AS01], is attempted until the shared work budget declines it, and its gate-sized hand-off is decided inside the budget (by the ${ce_lim})" "$ce_why"
 
 # CEIL-VIEW — past either of the view's budgets, once an arm that reads enclosure positions enforces,
 # the command is refused instead of losing a position; at the shipped warn phases nothing moves.
