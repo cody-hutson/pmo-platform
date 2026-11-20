@@ -9963,6 +9963,53 @@ encl_arm "HD-RECV-MF-cat-path: a receiver whose path only ends in cat keeps the 
 encl_mut_arm "HD-RECV-MF-cat-path-pair: without the cat-path line that body is excised" block-destructive-hdcatpath.sh "$hd_cat_path" a
 encl_arm "HD-RECV-MF-cat-rebind: a cat receiver in a command that rebinds a command name keeps the body" "$hd_cat_rebind" B B -
 encl_mut_arm "HD-RECV-MF-cat-rebind-pair: without the rebinding line that body is excised" block-destructive-hdrebind.sh "$hd_cat_rebind" a
+# Stage 7 pass 2. A `}` that begins a word and is followed directly by a redirection or a control
+# character closes a group (P2-1); the logical-line reading takes cat only as itself or a system path
+# (P2-2); a rebinding is read however its builtin is quoted or spaced, and through the shells' alias and
+# command tables (P2-3); the rebinding test and the unmodelled-text read each carry a declared cost
+# (P2-5); and the unmodelled-text classes are shown at the hook, not only in the lifted read (P2-6).
+# Rows HM12-HM19. A stepped opener holds no receiver that reads its input, so the hook-level classes run
+# on a group's last command, before a carrier and before cat.
+#   hdbraceop   the brace-and-operator line removed (its one line, M-HD-RECV-BRACE-OP)
+#   hdcatlm     the logical-line cat value taken from the basename alone (its one line, M-HD-RECV-CATPATH-LM)
+#   hdmodeloff  the unmodelled-text lines removed (its two lines, M-HD-RECV-UNMODELED)
+#   hdmodelbr   only the brace-and-bracket line of those two removed
+/usr/bin/sed '/# M-HD-RECV-BRACE-OP$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdbraceop.sh"
+/usr/bin/sed '/# M-HD-RECV-CATPATH-LM$/s/case "\$script_head" in cat|\/bin\/cat|\/usr\/bin\/cat) _lm=2 ;; esac/_lm=2/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdcatlm.sh"
+/usr/bin/sed '/# M-HD-RECV-UNMODELED$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdmodeloff.sh"
+/usr/bin/sed '/if (c == "{" || c == "\[") { print "1"; exit }   # M-HD-RECV-UNMODELED$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdmodelbr.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdbraceop.sh" "${ENCL_HOOKS}/block-destructive-hdcatlm.sh" "${ENCL_HOOKS}/block-destructive-hdmodeloff.sh" "${ENCL_HOOKS}/block-destructive-hdmodelbr.sh"
+encl_shape_arm "HD-RECV-COPY-braceop: the brace-and-operator mutant removes its one line" block-destructive-hdbraceop.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-catlm: the logical-line cat-path mutant rewrites its one line" block-destructive-hdcatlm.sh "1/1"
+encl_shape_arm "HD-RECV-COPY-modeloff: the unmodelled-text mutant removes its two lines" block-destructive-hdmodeloff.sh "2/0"
+encl_shape_arm "HD-RECV-COPY-modelbr: the brace-and-bracket mutant removes its one line" block-destructive-hdmodelbr.sh "1/0"
+hd_read_lift "${ENCL_HOOKS}/block-destructive-hdmodelbr.sh" "${ENCL_ROOT}/hd-read-br.lib"
+hd_read_arm "HD-RECV-READ-brace-op: a receiver text holding a brace word followed directly by a redirection keeps the body" "$hd_read_lib" 'cat }>/dev/null ' 1
+hd_read_arm "HD-RECV-READ-glob-pair: the copy without the brace-and-bracket line loses the bracket expression's body" "${ENCL_ROOT}/hd-read-br.lib" "$hd_t_glob" 0
+qscan_arm "HD-RECV-MF-brace-op: a cat head whose brace word is followed directly by a redirection closes the group and keeps the body" HM12 B B -
+qscan_mut "HD-RECV-MF-brace-op-pair: without the brace-and-operator line that body is excised" block-destructive-hdbraceop.sh HM12 a
+qscan_arm "HD-RECV-MF-cat-cont: a continuation joining a path that only ends in cat to a carrier's line keeps the body" HM13 B B -
+qscan_mut "HD-RECV-MF-cat-cont-pair: with the logical-line cat value read from the basename alone that body is excised" block-destructive-hdcatlm.sh HM13 a
+hd_rb_quoted="'alias' cat=bash${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_rb_tab="function"$'\t'"cat { bash; }${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_rb_btable="BASH_ALIASES[cat]=bash${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_rb_ztable="commands[cat]=/bin/bash${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-MF-cat-rebind-quoted: a quoted rebinding builtin keeps a cat-received body" "$hd_rb_quoted" B B -
+encl_arm "HD-RECV-MF-cat-rebind-tab: a function definition whose keyword is followed by a tab keeps a cat-received body" "$hd_rb_tab" B B -
+encl_arm "HD-RECV-MF-cat-rebind-table: an assignment to bash's alias table keeps a cat-received body" "$hd_rb_btable" B B -
+encl_arm "HD-RECV-MF-cat-rebind-ztable: an assignment to zsh's command table keeps a cat-received body" "$hd_rb_ztable" B B -
+hd_rb_prose="cat <<'EOF'${hd_nl}the helper function is described below${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-COST-rebind-prose: a cat-received body whose prose names a rebinding word is kept and adjudicated, because the rebinding test reads the whole command (declared cost)" "$hd_rb_prose" B B -
+hd_cost_ub="gh api repos/{owner}/x --title \"a (b)\" --input - <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-COST-unmodeled-carrier: a carrier whose arguments hold an unquoted brace beside a quoted parenthesis keeps its inert body (declared cost)" "$hd_cost_ub" B B -
+encl_mut_arm "HD-RECV-COST-unmodeled-carrier-pair: the copy that models nothing extra excises that body, as before this rule" block-destructive-hdmodeloff.sh "$hd_cost_ub" a
+qscan_arm "HD-RECV-MF-hook-ansic: an ANSI-C quote in a group's last command before a carrier keeps the body at the hook" HM14 B B -
+qscan_mut "HD-RECV-MF-hook-ansic-pair: the copy that models nothing extra excises that body" block-destructive-hdmodeloff.sh HM14 a
+qscan_arm "HD-RECV-MF-hook-pexp: a parameter expansion holding a parenthesis in a group's last command before a carrier keeps the body at the hook" HM15 B B -
+qscan_arm "HD-RECV-MF-hook-glob: a bracket expression holding a parenthesis in a group's last command before a carrier keeps the body at the hook" HM16 B B -
+qscan_arm "HD-RECV-MF-hook-ansic-cat: the same ANSI-C quote before a cat head keeps the body at the hook" HM17 B B -
+qscan_arm "HD-RECV-MF-hook-pexp-cat: the same parameter expansion before a cat head keeps the body at the hook" HM18 B B -
+qscan_arm "HD-RECV-MF-hook-glob-cat: the same bracket expression before a cat head keeps the body at the hook" HM19 B B -
 
 /bin/rm -rf "$ENCL_ROOT"
 

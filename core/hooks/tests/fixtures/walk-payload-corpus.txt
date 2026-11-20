@@ -2289,6 +2289,16 @@ HM08|block-destructive|hd-recv-mf|-|?|B|cat <<EOF@NL@bash @D@/na.sh $HOME@NL@EOF
 HM09|block-destructive|hd-recv-mf|-|?|B|( true; echo ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 HM10|block-destructive|hd-recv-mf|-|?|B|while read l; do echo "$l"; done <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 HM11|block-destructive|hd-recv-mf|-|?|B|wc -l <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+# #8326 Stage 7 pass 2: a brace closer followed by a redirection, a cat-named path on the logical line, and the
+# unmodelled-text classes at the hook (HM12 and HM13 record today's allow; the GREEN commit moves them to B)
+HM12|block-destructive|hd-recv-mf|-|?|a|{ bash; cat }>/dev/null <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM13|block-destructive|hd-recv-mf|-|?|a|./tool/cat \@NL@echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM14|block-destructive|hd-recv-mf|-|?|B|( bash; echo $'\'"' ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM15|block-destructive|hd-recv-mf|-|?|B|( bash; echo ${x:-(} ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM16|block-destructive|hd-recv-mf|-|?|B|( bash; echo [(] ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM17|block-destructive|hd-recv-mf|-|?|B|( bash; cat $'\'"' ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM18|block-destructive|hd-recv-mf|-|?|B|( bash; cat ${x:-(} ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM19|block-destructive|hd-recv-mf|-|?|B|( bash; cat [(] ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 # #8490 RED: backtick command words that stay recorded (TK rows; every row stays W through GREEN)
 TK01|block-destructive|tick-cmdword|-|?|W|`@D@/na.sh`
 TK02|block-destructive|tick-cmdword|-|?|W|true <<'EOF'@NL@notes@NL@`@D@/na.sh` is the entry point@NL@EOF
