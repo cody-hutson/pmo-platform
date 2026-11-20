@@ -273,9 +273,9 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.08 | deletion-guard-judges-every-segment-and-target | #7644, #8122, #8123 | #8992 | `4e70b20faf6115ed47259b1f0520494fb1f0c88d` | `v5.08` | VERIFIED | 2026-11-15 |
 | v5.09 | release-usage-measured-right | #7940, #7937, #7938, #7939, #7943, #7945 | #8821 | `1c2130c500cd2447e9c5672650f2118647b8f2c3` | `v5.09` | VERIFIED | 2026-11-15 |
 | v5.10 | engineering-harness-pages-published | #8554, #8555, #8556, #8557, #8558, #8559, #8560, #8561, #8562 | #8983 | `931484d3661223e5b61ac5268d7cbc3190abe205` | `v5.10` | VERIFIED | 2026-11-17 |
-| v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | DEPLOYED | 2026-11-17 |
-| v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | DEPLOYED | 2026-11-17 |
-| v5.13 | superseded-pr-runs-cancelled | #8440, #9007 | #9026 | `f5df15cdc3000068c475487f21032c4e7e85c7bb` | `v5.13` | DEPLOYED | 2026-11-17 |
+| v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | VERIFIED | 2026-11-17 |
+| v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | VERIFIED | 2026-11-17 |
+| v5.13 | superseded-pr-runs-cancelled | #8440, #9007 | #9026 | `f5df15cdc3000068c475487f21032c4e7e85c7bb` | `v5.13` | VERIFIED | 2026-11-17 |
 
 #### Deployment Log v5.13
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** Each was read back. The plan's one Operational Deployment Manifest row, `core/rules/git-workflow.md` to the rules mirror, is deployed and byte-equal to source. One composition surface the manifest does not list, the script-execution allowlist, is not propagated and is owed (item 3). Paths are repository-relative.
@@ -325,10 +325,24 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.13, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
-**Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back, and the manifest's one row reads byte-equal to source. The script-execution allowlist, a composition surface the manifest does not list, is not propagated and is owed. It is not a deploy failure.
+**Velocity:** planned 24 pts / delivered 24 pts (1.00); files-changed 48; allocation 24/0/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
+**Result:** PARTIAL → SUCCESS (propagation completed after Stage 12, with no retry: `./update.sh --surfaces-only`, run on the operator's decision on 2026-11-17 (#9021 comment 6960329141); details: `core/config/allowlists/script-execution-allowlist.txt`, whose deployed copy Stage 13 re-read carrying this release's four rows). As recorded at Stage 12: the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back, and the manifest's one row reads byte-equal to source. The script-execution allowlist, a composition surface the manifest does not list, was not propagated and was owed. It was not a deploy failure.
+**Outcome:** SUCCESS
+**Outcome rationale:** SUCCESS rests on the deploy and QC4-01 to QC4-05, and QC4-06 reads ATTAINED: the post-merge probe AI-004, on throwaway pull request #9088, read #8440 AC-3, #9007 AC-4's post-merge limb and #9007 AC-6 met. On its second head 24 of 24 required contexts reported, one of them red on the HDATA-COST timing flake alone (#9044).
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 14/14 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.13
+
+**Synthesized at:** 2026-11-18T01:25:43Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.13`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-18T01:04:12Z`
+
+**Surprise:** a sibling merged first with an ungrouped PR workflow, so SIBLING-WORKFLOW fired at Stage 12 and the version moved twice to v5.13
+**Would-change:** list the allowlist hook-tier rows in the deployment manifest, missed two releases running
+**Watch-for:** macOS runner waits stretching chore CI to hours
 
 #### Deployment Log v5.12
-**Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. Two composition-surface propagations are owed by the operator and pending: the plan's one Operational Deployment Manifest row, the charter template, and the script-execution allowlist, which the merge changes and the manifest does not list. Paths are repository-relative.
+**Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. Two composition-surface propagations were owed by the operator at Stage 12: the plan's one Operational Deployment Manifest row, the charter template, and the script-execution allowlist, which the merge changes and the manifest does not list. Both were made at 2026-11-17T20:37Z and read back at Stage 13 (item (3)). Paths are repository-relative.
 
 - **(1) The merge.** It carries the release's 51 changed paths to `main` (45 modified, 5 added, 1 renamed; +4153 / −180 lines), measured at the merge commit `59be7694` against its first parent `20149aeb`:
   - the enumeration-drift check: the new `core/deploy/tools/check-enumeration-drift.py` and its case file `core/deploy/tests/fixtures/enumeration-drift-fixtures.txt`; edits to `core/deploy/deploy.sh`, `.github/workflows/install-tests.yml`, two deploy allowlists, a deploy test, the tools README, `core/config/allowlists/script-execution-allowlist.txt`, `docs/module-apis.md` and `core/CLAUDE.md.template`;
@@ -345,12 +359,12 @@ The day of the week is computed from the date.
     - **Deploy mode:** the run printed no `Deploy mode: user-local only` line. With no target named, neither the skill half nor the package half ran.
     - **Rules mirror:** re-laid by the deploy (9 files), unchanged in membership; the hook-registry index was regenerated from `core/rules/bypass-mode-readiness.md`.
   - **Rows written:** under the slug, the run wrote its `deploy-rules-mirror` row, outcome `resolved` (`result:SUCCESS`). There is no `deploy-skill` and no `deploy-package` row, as `--no-targets` requires.
-- **(3) Owed by the operator and pending.** `deploy.sh --deploy` sources neither of these composition surfaces, and the run's own output says so.
-  - **The plan's manifest row 1, `core/CLAUDE.md.template`.** It reaches the rendered workspace charter through the operator's next composition refresh (`./update.sh --surfaces-only`), outside this release. The manifest's verification for it is that the rendered charter carries the citation that replaces the five-value bullet.
-  - **`core/config/allowlists/script-execution-allowlist.txt`, which the manifest does not list.** The merge adds four lines for `check-enumeration-drift.py`. The deployed allowlist carries none of them yet: a read of the deployed copy finds 0 such lines, against 4 for the neighbouring `check-doc-links.py`. Its propagation is the installer's hook-tier provisioning, which the operator runs.
+- **(3) Owed by the operator at Stage 12, propagated at 20:37Z.** `deploy.sh --deploy` sources neither of these composition surfaces, and the run's own output says so. Both were carried by `./update.sh --surfaces-only`, run with the operator's approval from a tree at `b7ea0de8` (#9021 comment 6960329141).
+  - **The plan's manifest row 1, `core/CLAUDE.md.template`.** It reached the rendered workspace charter through that composition refresh. The manifest's verification holds: re-read at Stage 13, the rendered charter's Build-philosophy bullet is byte-identical to the template on `main`, and it differs from the pre-release template.
+  - **`core/config/allowlists/script-execution-allowlist.txt`, which the manifest does not list.** The merge adds four lines for `check-enumeration-drift.py`. At Stage 12 the deployed allowlist carried none of them (0, against 4 for the neighbouring `check-doc-links.py`). Re-read at Stage 13, after the refresh, it carries all 4 (control 4).
 - **Nothing else is owed.** The merge changes no `core/hooks/` path, no `core/rules/` path, no `harness/` path, no skill and no package, so no `.skill` rebuild, no hook-bundle refresh and no mirror-membership change is owed. The `[quality_share_band]` section of the platform-config template is not written to the operator's instance, by design: an instance without it reads `NOT-EVALUATED`, never a default.
 
-**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy); and, pending, the operator's composition refresh and hook-tier provisioning.
+**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy); and the composition refresh (`./update.sh --surfaces-only`) that carried the charter template and the hook-tier allowlist.
 - **The merge.** PR #8995 merged to `main` at `59be7694d4d5af4704f46dda7019b59afbdcc917` (parents `20149aeb` / `95e6aa73`) by `gh pr merge --merge`, with no `--admin`, no `--auto`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit, and the host reads the merge commit `verified=true, reason=valid`. The repository's `delete_branch_on_merge` setting removed the release branch from the remote.
 - **The pre-merge state, on head `95e6aa73`.**
   - **A.5:** one plain merge of `main` (`20149aeb`) into the branch at Stage 12 (`5337c955`), never a rebase, then the plan's Stage-12 record (`4e86da8b`).
@@ -378,7 +392,20 @@ The day of the week is computed from the date.
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.12, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
-**Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. Two composition-surface propagations, the charter template's and the script-execution allowlist's, are owed by the operator and pending. They are not deploy failures.
+**Velocity:** planned 20 pts / delivered 20 pts (1.00); files-changed 51; allocation 4/8/8 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
+**Result:** SUCCESS — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back, and the two composition-surface propagations owed at Stage 12, the charter template's and the script-execution allowlist's, were made at 2026-11-17T20:37Z and read back at Stage 13. Stage 12 recorded `PARTIAL` while both were pending.
+**Outcome:** SUCCESS
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 20/20 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.12
+
+**Synthesized at:** 2026-11-17T21:09:24Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.12`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-17T20:34:51Z`
+
+**Surprise:** siblings kept landing, so main was merged in again at Stage 9 and Stage 12 and each merge re-shifted catalog citations
+**Would-change:** list the allowlist hook-tier provisioning in the deployment manifest
+**Watch-for:** waiting on a CI run that has already gone red
 
 #### Deployment Log v5.11
 **Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy and the hook-bundle refresh are complete.** Each was read back. The plan's Stage 12 Success Indicator holds: the deployed copies of `core/hooks/block-destructive.sh` and `core/hooks/lib/command-position.awk` byte-equal the merged source. Paths are repository-relative; the deployed bundle is written `<deploy-root>/.claude/hooks/`.
@@ -432,7 +459,21 @@ The day of the week is computed from the date.
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (no gate-outcome/plan-review-go event for v5.11; 1 deployment-status row(s) exist for v5.11, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Velocity:** planned 26 pts / delivered 26 pts (1.00); files-changed 13; allocation 0/26/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
 **Result:** SUCCESS — the merge, the version claim, the plan stamp, the release-stamped rules-mirror deploy and the hook-bundle refresh are complete and read back, and the deployed guard and canonicalizer byte-equal the merged source.
+**Outcome:** PARTIAL
+**Outcome rationale:** QC4-06 PARTIALLY-ATTAINED: five residuals accepted at the Stage 9 GO (PC-X2, #8318 Decision 4, CP15, CP22, N1) leave the end state's last clause unmet
+**Close-Class-Telemetry:** retro-conformance 10/10 (1.00); lessons-population 0/2 (0.00); carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence present; evidence-preservation 38/39 (0.97); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.11
+
+**Synthesized at:** 2026-11-17T21:01:49Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.11`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-17T20:22:28Z`
+
+**Surprise:** safety classifiers stopped spawned agents, so four cards and a third pass were built hub-direct, Stage 7 the only independent check
+**Would-change:** emit the Stage 9 plan-review-go row at routing, missed two releases running
+**Watch-for:** Check 71 enclosure-phase dates, residuals PC-X2 and CP22
 
 #### Deployment Log v5.10
 **Files deployed:** **The merge, the version claim with its plan stamp, the release-stamped rules-mirror deploy, and the plan's one Operational Deployment Manifest row are complete.** The merge, the tag, the stamp commit and the deploy's row were each read back. The manifest row, the script-execution allowlist, was propagated by the installer's hook-tier provisioning, which the operator ran after the merge. Paths are repository-relative.
