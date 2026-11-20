@@ -3161,7 +3161,7 @@ script_hd_delim_ok() {
 # THE CLOSER RULE. A here-document written after a compound command's closer is redirected to the
 # whole compound command, and the receiver test reads only the simple command whose own words reach the
 # operator. So a receiver text that, read from its head on, holds a `)` closing an opener the head sits
-# inside (script_hd_recv_closes), or a `}` word with no `{` word beside it, sets script_hdrecv_closer, and
+# inside (script_hd_recv_closes), or a `}` word, sets script_hdrecv_closer, and
 # the pre-pass keeps the body for every receiver reading (M-HD-RECV-CLOSER): withdraw-only, the
 # fail-closed direction. A parenthesis inside a quoted argument, or one that closes a substitution opened
 # in the command's own words, closes nothing the receiver sits inside, and keeps nothing.
@@ -3170,7 +3170,9 @@ script_hd_delim_ok() {
 # backslash escapes the next byte; a single-quoted span is literal; a double-quoted span is skipped
 # except for a substitution it opens, which is read as the command's own words; a backtick opens a span
 # read to its own close. A `(` opens and a `)` closes; a `)` with nothing open is the closer of an opener
-# before the head. An unterminated single-quoted span keeps the body, the fail-closed answer, and so does
+# before the head. Text this read does not model keeps the body: an ANSI-C quote, a parameter,
+# arithmetic or brace expansion, and an unquoted brace or bracket, in any of which a parenthesis can be
+# literal to the shell (M-HD-RECV-UNMODELED). An unterminated single-quoted span keeps the body, the fail-closed answer, and so does
 # a read that fails. An unterminated double-quoted span or substitution, as in a body passed inline
 # through "$(cat <<'EOF'", closes nothing.
 script_hd_recv_closes() {   # $1 = a receiver text from its head on -> 0 when a `)` closes an opener before the head
@@ -3195,6 +3197,8 @@ script_hd_recv_closes() {   # $1 = a receiver text from its head on -> 0 when a 
           continue
         }
         if (c == "\\") { i++; continue }
+        if (c == "$" && (substr(s, i + 1, 1) == "\047" || substr(s, i + 1, 1) == "{" || substr(s, i + 1, 1) == "[")) { print "1"; exit }   # M-HD-RECV-UNMODELED
+        if (c == "{" || c == "[") { print "1"; exit }   # M-HD-RECV-UNMODELED
         if (c == "\047") { j = index(substr(s, i + 1), "\047"); if (j == 0) { print "1"; exit } i += j; continue }   # M-HD-RECV-SQ
         if (c == "\"") { st[++sp] = "D"; continue }   # M-HD-RECV-DQ-OPEN
         if (c == "`") { st[++sp] = "B"; continue }
@@ -3229,10 +3233,8 @@ script_hd_recv_text() {   # $1 = a receiver text -> script_hdrecv_out, script_hd
     esac
   done
   case "$_t" in *')'*) script_hd_recv_closes "$_t" && script_hdrecv_closer=1 ;; esac   # M-HD-RECV-CLOSES
-  case "$_t" in
-    '}'|'}'[[:blank:]]*|*[[:blank:]]'}'|*[[:blank:]]'}'[[:blank:]]*)
-      case "$_t" in '{'|'{'[[:blank:]]*|*[[:blank:]]'{'|*[[:blank:]]'{'[[:blank:]]*) ;; *) script_hdrecv_closer=1 ;; esac ;;
-  esac
+  # A `}` word keeps the body whatever stands beside it: zsh reads a lone `}` as a group's closer.
+  case "$_t" in '}'|'}'[[:blank:]]*|*[[:blank:]]'}'|*[[:blank:]]'}'[[:blank:]]*) script_hdrecv_closer=1 ;; esac
   script_hdrecv_out="$_t"
   if [ "$_s" -gt 0 ]; then script_hdrecv_step=1; fi
   return 0
@@ -3572,6 +3574,8 @@ script_heredoc_prescan() {
           fi
           ;;
       esac
+      # cat is read as the receiver only as itself or a system path: a name that only ends in cat is not.
+      case "${script_head##*/}" in cat) case "$script_head" in cat|/bin/cat|/usr/bin/cat) ;; *) _ex=0 ;; esac ;; esac   # M-HD-RECV-CATPATH
       # A carrier word the head walk read from inside a value that holds a blank is not the
       # receiver: the walk reached it by stepping over an assignment token whose quote is still
       # open, and the shell feeds the body to a later word (the review's PR-2, at this site). The
@@ -3636,6 +3640,9 @@ script_heredoc_prescan() {
   # (the opener stack resets per line) and a group closed and piped on a later one. Its cost is false
   # positives only: any such character in a cat-received command keeps today's verdict, never an allow.
   if [ "$_catx" -eq 1 ]; then case "$_ops" in *'|'*|*'('*|*')'*|*"$script_qbt"*|*coproc*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-NOCONS
+  # Nor in a command that rebinds a command name, where the word cat may not run cat: an alias, a
+  # function definition, a hash entry or an enabled builtin anywhere in the command keeps every body.
+  if [ "$_catx" -eq 1 ]; then case "$COMMAND" in *'alias '*|*'function '*|*'hash '*|*'cat()'*|*'cat ()'*|*'enable '*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-REBIND
 
   # No here-document operator at quote-state 0 — every `<<` in this command was a
   # here-string or quoted text. Nothing to excise, and nothing to decline.
