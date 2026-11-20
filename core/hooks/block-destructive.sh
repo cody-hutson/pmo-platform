@@ -4004,7 +4004,10 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
 #   1. no step has moved the walk since the assignment token (script_qval_from is behind
 #      script_hidx), so script_hidx is the token after it (M-ASGN-SUBST-MOVED);
 #   2. the segment is vouched to start outside any quote: the value step's gate,
-#      script_qval_trust (M-ASGN-SUBST-TRUST);
+#      script_qval_trust (M-ASGN-SUBST-TRUST), and the token's text before its first `=`
+#      is plain (M-ASGN-SUBST-NAME). The prefix walk only steps a token whose name is plain,
+#      but env's operand loop takes any assignment-shaped operand, and a quote, an escape or
+#      an expansion there carries the shell's word past the substitution's closer;
 #   3. the value is an optional double quote, a plain run, one opener — `$(`, or a backtick when
 #      the value is not double-quoted — and a plain word that is not `case`, so a second opener,
 #      an arithmetic expansion and every escape decline here (M-ASGN-SUBST-SHAPE);
@@ -4043,6 +4046,7 @@ script_assign_subst_rest() {   # $1 = the assignment token just stepped over
   case "$1" in *'$('*|*'`'*) ;; *) return 0 ;; esac
   [ "$script_qval_from" -lt "$script_hidx" ] || return 0   # M-ASGN-SUBST-MOVED
   [ "$script_qval_trust" -eq 1 ] || return 0   # M-ASGN-SUBST-TRUST
+  script_plain_word "${1%%=*}" || return 0   # M-ASGN-SUBST-NAME
   case "$_v" in '"'*) _dq=1; _e='"'; _v="${_v:1}" ;; esac
   _p="${_v%%[!A-Za-z0-9_=+,.:/@%-]*}"
   _r="${_v:${#_p}}"

@@ -11132,7 +11132,6 @@ aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense
 #   pasubstopt       the test that the word is not option-shaped
 #   pasubstallow     the allowlist test
 #   pasubstname      the test that an operand's text before its first `=` is plain (env's operand loop)
-#   pasubstverb      the test that the closing word's basename names no interpreter and is not the source word
 #   forced           the exec arm's phase at enforce; forced-pasubst is forced and pasubst together
 #   enclforced       the enclosure family's phase at enforce
 #   gd, gd-pasubst,  the value step's two text guards off (the ASGN-QVAL block's pqvalguards), alone,
@@ -11160,7 +11159,7 @@ as_build() { # $1 = root  $2… = its allowlist entries -> the hook and its copi
   /usr/bin/printf 'enforce' > "${h}/.mode"
   /bin/cp "$HOOK" "${h}/block-destructive.sh"
   /usr/bin/sed '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-pasubst.sh"
-  for c in moved:MOVED trust:TRUST shape:SHAPE slash:SLASH work:WORK cut:CUT end:END norm:NORM plain:PLAIN opt:OPT allow:ALLOW name:NAME verb:VERB; do
+  for c in moved:MOVED trust:TRUST shape:SHAPE slash:SLASH work:WORK cut:CUT end:END norm:NORM plain:PLAIN opt:OPT allow:ALLOW name:NAME; do
     n="${c%%:*}"; m="${c#*:}"
     /usr/bin/sed "/# M-ASGN-SUBST-${m}\$/d" "$HOOK" > "${h}/block-destructive-pasubst${n}.sh"
   done
@@ -11332,7 +11331,6 @@ as_shape_arm "ASGN-SUBST-M14: the moved-walk mutant removes its line from the gu
 as_shape_arm "ASGN-SUBST-M15: the forced reverse copy is the phase line and the two call lines" forced-pasubst "3/1"
 as_shape_arm "ASGN-SUBST-M16: the guards-off copy without the step removes the two call lines" gd-pasubst "2/0" gd
 as_shape_arm "ASGN-SUBST-M17: the operand-name mutant removes its line" pasubstname "1/0"
-as_shape_arm "ASGN-SUBST-M18: the closing-word verb mutant removes its line" pasubstverb "1/0"
 
 # --- the listed script inside the substitution: recorded as unresolvable before, admitted after ---
 as_arm "SUBST-BOUNDARY-ASGN-LISTED: an admitted shell interpreter against the opener, the listed script quoted as the substitution's last word" AS01 a W:exec:unresolvable
@@ -11374,11 +11372,17 @@ as_rel_arm "ASGN-SUBST-KEEP-moved: where the value step crossed the value (guard
 # Stage 7: env's operand loop takes any assignment-shaped operand, so an operand whose text before its
 # first `=` opens a quote carries the shell's word past the closer (F-01); a quoted listed path holding a
 # space, which the closer test, the one-word test and the allowlist each decline, so no one-line mutant
-# moves it (F-04); and a listed closing word named as an interpreter, after which today's walk refuses
-# the next word (D-2).
+# moves it (F-04); and a quoted listed closing word named as an interpreter, where the step records
+# the unlisted script after it and the walk before records nothing, so no decline is taken there (D-2).
 as_arm "ASGN-SUBST-KEEP-name: an env operand whose name part opens a quote keeps today's record" AS24 W:exec:unresolvable W:exec:unresolvable pasubstname a
 as_arm "ASGN-SUBST-KEEP-space (declared residual): a quoted listed path holding a space keeps today's reading, an allow" AS25 a a
-as_rel_arm "ASGN-SUBST-KEEP-verb: a listed closing word named as an interpreter keeps the next word's reading" "$as_verb" hook pasubst pasubstverb
+as_run hook "$as_verb"; as_verb_h="$AS_V"
+as_run pasubst "$as_verb"; as_verb_m="$AS_V"
+if [ "$as_verb_h" = "W:exec:not-allowlisted" ] && [ "$as_verb_m" = a ]; then
+  as_pass "ASGN-SUBST-PIN-verb: a quoted listed closing word named as an interpreter, then an unlisted script: the step records the script, the walk before records nothing (hook ${as_verb_h}, pasubst ${as_verb_m})"
+else
+  as_fail "ASGN-SUBST-PIN-verb: a quoted listed closing word named as an interpreter, then an unlisted script: the step records the script, the walk before records nothing" " hook=${as_verb_h}(wanted W:exec:not-allowlisted) pasubst=${as_verb_m}(wanted a)"
+fi
 
 # --- the seam with the backtick command word: the step crosses, and the word after it keeps its reading ---
 as_run hook "$as_int"; as_int_v="$AS_V"
@@ -11403,7 +11407,7 @@ as_arm "ASGN-SUBST-PIN-near-redir: a counting command reading the script on stan
 
 # --- the same block under leading-glob allowlist entries: the classes such an entry could admit decline ---
 as_why=""
-for as_c in pasubst pasubstmoved pasubsttrust pasubstshape pasubstslash pasubstpfx pasubstwork pasubstcut pasubstend pasubstnorm pasubstplain pasubstopt pasubstallow pasubstname pasubstverb forced forced-pasubst enclforced gd gd-pasubst gd-moved; do
+for as_c in pasubst pasubstmoved pasubsttrust pasubstshape pasubstslash pasubstpfx pasubstwork pasubstcut pasubstend pasubstnorm pasubstplain pasubstopt pasubstallow pasubstname forced forced-pasubst enclforced gd gd-pasubst gd-moved; do
   /usr/bin/cmp -s "${AS_ROOT}/.claude/hooks/block-destructive-${as_c}.sh" "${AS_GROOT}/.claude/hooks/block-destructive-${as_c}.sh" || as_why="${as_why} ${as_c}"
 done
 if [ -z "$as_why" ]; then
