@@ -9839,6 +9839,22 @@ xt_arm "EXEC-TEXT-PIN-dollar-paren-forced: a command word opened by \$( is refus
 xt_handoff="\`true\` ${ENCL_NA}"
 xt_arm "EXEC-TEXT-PIN-handoff: a substitution at command position followed by an unlisted script word keeps that word's one record, from the closer's position" block-destructive.sh "$xt_handoff" W 0 "" 1:exec
 xt_arm "EXEC-TEXT-PIN-handoff-forced: and refuses it at enforce" block-destructive-xforced.sh "$xt_handoff" B -
+# Stage 7 pass 2 (F-04, F-09). The hand-off behind the declined form: a listed slash-bearing substitution that
+# closes its own token, then an unlisted script word. The decline ends the segment, so the position at the
+# closer is that word's only record, and no backtick-led row is written (row TK09). And the quote-led command
+# word in its other spelling, its double quote closed at its token's end: this arm's operand filter does not
+# reach the word, and the position its backtick opens reads the substitution as it reads a declined word, so
+# a listed script is admitted and an unlisted one is recorded from that position and refused at enforce
+# (row LT05; TK07 is the spelling whose quote stays open within its token).
+xt_hodecl="\`${ENCL_OK}\` ${ENCL_NA}"
+xt_arm "EXEC-TEXT-PIN-handoff-declined: a listed slash-bearing substitution this arm declines, then an unlisted script word, keeps that word's one record, from the closer's position" block-destructive.sh "$xt_hodecl" W 0 "" 1:exec
+xt_arm "EXEC-TEXT-PIN-handoff-declined-forced: and refuses it at enforce" block-destructive-xforced.sh "$xt_hodecl" B -
+xt_qcl="\"\`${ENCL_OK}\`\""
+xt_qclna="\"\`${ENCL_NA}\`\""
+xt_arm "EXEC-TEXT-PIN-quote-closed: a quote-led command word whose double quote closes at its token's end admits its listed script" block-destructive.sh "$xt_qcl" a 0
+xt_arm "EXEC-TEXT-PIN-quote-closed-forced: and admits it at enforce" block-destructive-xforced.sh "$xt_qcl" a 0
+xt_arm "EXEC-TEXT-PIN-quote-closed-na: the same spelling running an unlisted script is recorded once, from the enclosure position" block-destructive.sh "$xt_qclna" W 0 "" 1:exec
+xt_arm "EXEC-TEXT-PIN-quote-closed-na-forced: and refused at enforce" block-destructive-xforced.sh "$xt_qclna" B -
 
 # --- #8326: the here-document receiver read (release script-guard-refuses-only-what-executes; design
 # on sub-task #9061). An inert body behind a grammar opener, or received by cat under the whole-command
