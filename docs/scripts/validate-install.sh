@@ -121,9 +121,9 @@ readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 # are EXCLUDED by construction: an INFO is a record, not a step, and increments
 # no counter.
 #
-# Both Mode A sub-modes emit the SAME total. --mode install runs all fourteen
-# checks. --mode operator-pre-existing runs ten (A1, A2, A3, A3c, A5, A6, A6b,
-# A7, A8, A9) and emits SKIP for the four whose surfaces postdate such a
+# Both Mode A sub-modes emit the SAME total. --mode install runs all fifteen
+# checks. --mode operator-pre-existing runs eleven (A1, A2, A3, A3c, A3d, A5, A6,
+# A6b, A7, A8, A9) and emits SKIP for the four whose surfaces postdate such a
 # workspace — A3b composition-surface manifest, A4 state marker, A5b operations
 # anchor, A10 operator.toml. A SKIP is still an emitted record, so a single
 # constant is correct for both sub-modes, which is what stops this number
@@ -134,7 +134,7 @@ readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 # from the current release's file list, so it is satisfiable by a pre-installer
 # workspace. It may still emit SKIP at runtime when the derivation matches
 # nothing — a SKIP is an emitted record either way, so the total is unaffected.
-readonly MODE_A_TOTAL=14
+readonly MODE_A_TOTAL=15
 readonly MODE_B_TOTAL=4
 
 # --- Section 3: Mutable state (scalars only; bash-3.2-compatible) ---
@@ -174,7 +174,7 @@ Verify pmo-platform install (Mode A) and first-task invocation (Mode B).
 Options:
   --mode {install,first-task,all,operator-pre-existing}
                           Select scope (default: all).
-                          - install: Mode A only (13 checks).
+                          - install: Mode A only (15 checks).
                           - first-task: Mode B only (4 checks).
                           - all: Mode A followed by Mode B.
                           - operator-pre-existing: subset of Mode A for
@@ -198,7 +198,7 @@ Output channels:
 
 Modes:
   - install                  Verifies setup-workspace.sh succeeded.
-                             13 checks, all read-only bash.
+                             15 checks, all read-only bash.
   - first-task               Verifies demo skill output parses correctly.
                              4 checks; B2 emits an operator hand-off block;
                              re-run with --continue after capturing the
@@ -207,10 +207,11 @@ Modes:
                              skipped (install must verify first).
   - operator-pre-existing    Workspaces created before setup-workspace.sh
                              shipped (no state-marker yet). Runs A1, A2, A3,
-                             A5, A6, A6b, A7, A8, A9; A3b, A4, A5b and A10 emit
+                             A3c, A3d, A5, A6, A6b, A7, A8, A9; A3b, A4, A5b and
+                             A10 emit
                              SKIP because those surfaces postdate such a
                              workspace.
-                             Emits 13 check records — the same total as the
+                             Emits 15 check records — the same total as the
                              install sub-mode, because a SKIP is still a record.
                              Aggregate verdict is per-mode unambiguous.
 
@@ -768,6 +769,71 @@ check_a3c_hook_lib_closure() {
     "${present} declared hook librar(y/ies) present and readable under ${hooks_dir}/lib/" "A"
 }
 
+# A3d asserts the commit-time PII guard is WIRED as the source repo's pre-commit git hook
+# (GHSA-c748). A3 sees the guard's copy under .claude/hooks/, which git never reads, so A3
+# PASSes on an install where the guard is fully off. The predicate is the resolved hook, not
+# the file's presence: <hooks>/pre-commit must resolve -- through every symlink -- to the
+# main worktree's executable git-pre-commit-pii.sh, or be a custom hook that calls it. A
+# dangling link FAILs here, because git skips a dangling hook without a word.
+#
+# Scope mirrors the installer's. A source repo outside the workspace root is not auto-wired
+# by design (the test suites pass the real checkout that way), so an unwired guard there is
+# SKIP with the manual step named, never PASS. A wired guard PASSes wherever the repo sits.
+# RUNS in operator-pre-existing mode too: the guard predates the installer, so a
+# pre-installer workspace is judged on the same predicate.
+check_a3d_pii_precommit_wired() {
+  local hooks_dir main target p link n=0 src_phys ws_phys diag
+  local manual="ln -s ../../core/hooks/git-pre-commit-pii.sh \"\$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit\""
+  hooks_dir="$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-path hooks 2>/dev/null || true)"
+  if [ -z "${hooks_dir}" ]; then
+    emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
+      "source repo is not a git checkout; there is no commit path to guard" "A"
+    return
+  fi
+  main="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null \
+          | awk 'NR == 1 && $1 == "worktree" { sub(/^worktree /, ""); print; exit }')"
+  main="$(cd "${main:-/nonexistent}" 2>/dev/null && pwd -P || true)"
+  target="${main}/core/hooks/git-pre-commit-pii.sh"
+  p="${hooks_dir}/pre-commit"
+  while [ -L "${p}" ] && [ "${n}" -lt 16 ]; do
+    link="$(readlink "${p}")"
+    case "${link}" in /*) p="${link}" ;; *) p="$(dirname "${p}")/${link}" ;; esac
+    n=$((n + 1))
+  done
+  if [ -e "${p}" ]; then
+    p="$(cd "$(dirname "${p}")" && pwd -P)/$(basename "${p}")"
+  fi
+  if [ -n "${main}" ] && [ "${p}" = "${target}" ] && [ -x "${p}" ]; then
+    emit_pass "A3d" "INSTALL-PII-PRECOMMIT" "pre-commit resolves to ${target}" "A"
+    return
+  fi
+  if [ -f "${p}" ] && [ -x "${p}" ] && [ "${p}" != "${target}" ] && grep -q 'git-pre-commit-pii\.sh' "${p}" 2>/dev/null; then
+    emit_pass "A3d" "INSTALL-PII-PRECOMMIT" "custom pre-commit hook ${p} calls the PII guard" "A"
+    return
+  fi
+  if [ ! -e "${hooks_dir}/pre-commit" ] && [ ! -L "${hooks_dir}/pre-commit" ]; then
+    diag="no pre-commit hook at ${hooks_dir}/pre-commit"
+  elif [ ! -e "${p}" ]; then
+    diag="pre-commit is a dangling link (git skips it silently)"
+  elif [ ! -x "${p}" ]; then
+    diag="pre-commit resolves to ${p}, which is not executable"
+  else
+    diag="pre-commit is a different hook (${p}) that does not call the PII guard"
+  fi
+  src_phys="$(cd "${SOURCE_REPO}" 2>/dev/null && pwd -P || true)"
+  ws_phys="$(cd "${WORKSPACE_ROOT}" 2>/dev/null && pwd -P || true)"
+  case "${src_phys}/" in
+    "${ws_phys}"/*)
+      emit_fail "A3d" "INSTALL-PII-PRECOMMIT" "commit-time PII guard is NOT active: ${diag}" \
+        "run 'setup-workspace.sh --refresh-hooks' (or ./update.sh); a custom pre-commit hook must call ${target}" "A"
+      ;;
+    *)
+      emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
+        "source repo is outside the workspace root, so the installer does not wire it (${diag}); wire it from the repo root: ${manual}" "A"
+      ;;
+  esac
+}
+
 check_a4_state_marker() {
   local state_file="${WORKSPACE_ROOT}/.claude/${STATE_FILE_NAME}"
   if ! assert_file_exists "${state_file}"; then
@@ -1234,6 +1300,7 @@ mode_a_install_verify() {
   check_a3_hooks_layout
   check_a3b_composition_surface
   check_a3c_hook_lib_closure
+  check_a3d_pii_precommit_wired
   check_a4_state_marker
   check_a5_claude_md
   check_a5b_operations_anchor
@@ -1257,7 +1324,7 @@ mode_a_operator_pre_existing() {
   # only, so this population cannot satisfy it by definition.
   #
   # Every dropped check emits SKIP rather than vanishing, so this sub-mode emits
-  # the same 14 step records as --mode install (see MODE_A_TOTAL). A3b was
+  # the same 15 step records as --mode install (see MODE_A_TOTAL). A3b was
   # previously the one dropped check that left no trace in the record at all.
   check_a1_platform
   check_a2_workspace_layout
@@ -1267,6 +1334,8 @@ mode_a_operator_pre_existing() {
   # workspace actually has, so a pre-installer workspace is measured against its own hooks'
   # declarations and cannot be failed for lacking a library nothing there loads.
   check_a3c_hook_lib_closure
+  # A3d RUNS here too: the PII guard predates the installer, so the same predicate applies.
+  check_a3d_pii_precommit_wired
   emit_skip "A4" "INSTALL-STATE-MARKER" "operator-pre-existing mode (state marker not expected)" "A"
   check_a5_claude_md
   emit_skip "A5b" "INSTALL-OPERATIONS-ANCHOR" "operator-pre-existing mode (operations anchor not expected)" "A"

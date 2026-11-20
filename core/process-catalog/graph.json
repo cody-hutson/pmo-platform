@@ -249,6 +249,9 @@
       "install-or-update-workspace",
       "bootstrap-workspace"
     ],
+    "core/hooks/git-pre-commit-pii.sh": [
+      "bootstrap-workspace"
+    ],
     "core/hooks/lib/dep-resolve.sh": [
       "bootstrap-workspace"
     ],
@@ -4967,7 +4970,7 @@
     {
       "children": [],
       "id": "validate-install",
-      "lens_status": "deviates",
+      "lens_status": "unobserved",
       "level": "L3",
       "parent": "install-platform",
       "path": "core/process-catalog/engineering-harness/validate-install.md",

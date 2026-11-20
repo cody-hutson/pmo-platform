@@ -2680,6 +2680,65 @@ install_hooks() {
     info "INSTALLED: post-merge deploy git hook (auto-redeploy on merge to main)"
   fi
 
+  # Wire the commit-time PII guard as the source repo's pre-commit hook (GHSA-c748).
+  # The hook registry classes git-pre-commit-pii.sh as security/floor -- always enforce,
+  # never silently disabled -- and the copy loop above only places it in .claude/hooks/,
+  # which git never reads. Without this link the guard is fully off.
+  #
+  # Same scope as the post-merge block (gh_scoped, gh_dir), for the same reason: the test
+  # suites pass the REAL checkout as --source-repo. Three choices differ from that block:
+  #   - The link targets the MAIN worktree's copy, never ${SOURCE_REPO}'s. Linked worktrees
+  #     share this hooks dir, so a link into a worktree runs unmerged branch content on
+  #     every commit, and dangles once the worktree is swept -- and git skips a dangling
+  #     hook without a word, which turns the guard off again.
+  #   - The link is relative when the hooks dir is <main>/.git/hooks (survives moving the
+  #     repo), absolute otherwise (a core.hooksPath elsewhere).
+  #   - An existing pre-commit hook that is not ours is never replaced: it stays, and the
+  #     run says loudly that the guard is not active. A link of ours that is stale or points
+  #     at a worktree copy is re-pointed.
+  local pc_dst pc_main pc_target pc_link pc_cur
+  pc_dst="${gh_dir}/pre-commit"
+  pc_main="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null \
+             | awk 'NR == 1 && $1 == "worktree" { sub(/^worktree /, ""); print; exit }')"
+  [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
+  pc_target="${pc_main}/core/hooks/git-pre-commit-pii.sh"
+  if [ -n "${gh_dir}" ] && [ "$(cd "${gh_dir}" 2>/dev/null && pwd -P)" = "${pc_main}/.git/hooks" ]; then
+    pc_link="../../core/hooks/git-pre-commit-pii.sh"
+  else
+    pc_link="${pc_target}"
+  fi
+  if [ "${gh_scoped}" -eq 0 ]; then
+    info "NOTE: PII pre-commit guard not auto-wired (source repo is outside this workspace root)."
+    info "      It is a security/floor control; wire it from the repo root:"
+    info "        ln -s ../../core/hooks/git-pre-commit-pii.sh \"\$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit\""
+  elif [ -z "${pc_main}" ] || [ -z "${gh_dir}" ] || [ ! -x "${pc_target}" ]; then
+    warn "PII pre-commit guard NOT installed: main worktree, hooks dir or an executable ${pc_target} did not resolve. Commits are not scanned for PII."
+  elif [ -L "${pc_dst}" ] || [ -e "${pc_dst}" ]; then
+    pc_cur="$(readlink "${pc_dst}" 2>/dev/null || true)"
+    if [ -L "${pc_dst}" ] && [ "$(cd "$(dirname "${pc_dst}")" && cd "$(dirname "${pc_cur}")" 2>/dev/null && pwd -P)/$(basename "${pc_cur}")" = "${pc_target}" ]; then
+      info "OK: PII pre-commit guard already wired (${pc_dst})"
+    elif [ -L "${pc_dst}" ] && [ "$(basename "${pc_cur}")" = "git-pre-commit-pii.sh" ]; then
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] would re-point the stale PII pre-commit link ${pc_dst} (now -> ${pc_cur})"
+      else
+        rm -f "${pc_dst}"
+        record_write_rollback "${pc_dst}"
+        ln -s "${pc_link}" "${pc_dst}"
+        info "INSTALLED: PII pre-commit guard re-pointed (was -> ${pc_cur})"
+      fi
+    else
+      warn "PII pre-commit guard NOT active: ${pc_dst} is a different hook and was left in place."
+      warn "  To keep both, have that hook also run ${pc_target} (it reads the staged diff itself)."
+    fi
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would wire PII pre-commit guard → ${pc_dst}"
+  else
+    mkdir -p "${gh_dir}"
+    record_write_rollback "${pc_dst}"
+    ln -s "${pc_link}" "${pc_dst}"
+    info "INSTALLED: PII pre-commit guard (commit-time PII scan)"
+  fi
+
   # Co-deploy the shared positional-issue-ref classifier into .claude/hooks/lib/.
   # block-fragile-refs.sh sources it from ${HOOK_DIR}/lib/positional-issueref.awk at
   # runtime; the source lib lives at core/hooks/lib/ (shared with the fixture-runner and

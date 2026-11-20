@@ -13,7 +13,7 @@ Artifacts and records named in the ICOM tables and the Steps rows of the activit
 
 | Universe | Items | Records matched | Artifacts matched | Items matched | Items unmatched |
 |---|---|---|---|---|---|
-| Engineering harness | 1638 | 34 | 3 | 103 | 1535 |
+| Engineering harness | 1646 | 34 | 3 | 103 | 1543 |
 
 ## Engineering harness
 

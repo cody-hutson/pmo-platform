@@ -20,7 +20,10 @@
 # The operator's public handle / legal name are intentionally NOT patterns here
 # (kept in accepted homes; governed by deploy.sh Check 25 path-aware logic).
 #
-# Install:  ln -sf ../../core/hooks/git-pre-commit-pii.sh .git/hooks/pre-commit
+# Install:  wired as the repo's pre-commit hook by docs/scripts/setup-workspace.sh
+#           (install, and update.sh via --refresh-hooks); validate-install.sh A3d
+#           reports it missing. Manual form, from the repo root:
+#           ln -s ../../core/hooks/git-pre-commit-pii.sh "$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit"
 # Bypass:   CLAUDE_HOOK_BYPASS=1 git commit ...
 # Needles:  resolved by core/deploy/lib-instance-path.sh (pmo_localized_needles);
 #           default <instance-dir>/localized-context-needles.txt, override via
