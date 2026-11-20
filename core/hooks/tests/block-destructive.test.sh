@@ -9919,6 +9919,50 @@ encl_arm "HD-RECV-MF-closer-dq: a subshell closer after a double-quoted argument
 encl_mut_arm "HD-RECV-MF-closer-dq-pair: the double-quote-blind closer read excises it" block-destructive-hdnodq.sh "$hd_close_dq" a
 encl_arm "HD-RECV-MF-closer-sq: a subshell closer after a single-quoted argument holding an unclosed parenthesis keeps the body" "$hd_close_sq" B B -
 encl_mut_arm "HD-RECV-MF-closer-sq-pair: the single-quote-blind closer read excises it" block-destructive-hdnosq.sh "$hd_close_sq" a
+# The closer read keeps the body on what it does not model (Stage 7 DS-1 to DS-3). Lifted out of the
+# hook and run alone on plain receiver texts: an ANSI-C quote, a brace or bracket expansion, an unquoted
+# brace or bracket, and a `}` word read as a closer; the controls keep their earlier answers. The pair
+# runs the same text on a copy whose unmodelled-text lines are removed.
+hd_read_lib="${ENCL_ROOT}/hd-read.lib"
+/usr/bin/sed '/# M-HD-RECV-UNMODELED$/d' "$HOOK" > "${ENCL_ROOT}/hd-model-off.sh"
+hd_read_lift() { # $1 = hook file, $2 = lib out
+  /usr/bin/awk '/^script_hd_recv_closes\(\) / || /^script_hd_recv_text\(\) / { f = 1; k++ } f { print; if ($0 == "}") f = 0 } END { exit k == 2 ? 0 : 1 }' "$1" > "$2" || return 1
+  /usr/bin/printf '%s\n' 'script_ceil_check() { return 0; }' >> "$2"
+}
+hd_read_lift "$HOOK" "$hd_read_lib"; hd_read_lift "${ENCL_ROOT}/hd-model-off.sh" "${ENCL_ROOT}/hd-read-off.lib"
+hd_read() { # $1 = lib, $2 = receiver text -> prints script_hdrecv_closer
+  /bin/bash -c '. "$1"; script_hd_recv_text "$2"; printf "%s" "$script_hdrecv_closer"' _ "$1" "$2" 2>/dev/null
+}
+hd_read_arm() { # <label> <lib> <text> <want>
+  local got; got="$(hd_read "$2" "$3")"
+  if [ "$got" = "$4" ]; then /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: %s\n  closer=%s (wanted %s)\n' "$1" "${got:-none}" "$4"; FAIL=$((FAIL + 1)); fi
+}
+hd_t_ansic="echo \$'\\'\"' ) \""
+hd_t_pexp='echo ${x:-(} ) '
+hd_t_glob='echo [(] ) '
+hd_t_brace='echo { x } '
+hd_read_arm "HD-RECV-READ-ansic: a receiver text holding an ANSI-C quote keeps the body" "$hd_read_lib" "$hd_t_ansic" 1
+hd_read_arm "HD-RECV-READ-pexp: a receiver text holding a parameter expansion's parenthesis keeps the body" "$hd_read_lib" "$hd_t_pexp" 1
+hd_read_arm "HD-RECV-READ-glob: a receiver text holding a bracket expression's parenthesis keeps the body" "$hd_read_lib" "$hd_t_glob" 1
+hd_read_arm "HD-RECV-READ-brace: a receiver text holding a brace word keeps the body, beside an opening one too" "$hd_read_lib" "$hd_t_brace" 1
+hd_read_arm "HD-RECV-READ-ctl-title: a parenthesised quoted title still closes nothing" "$hd_read_lib" 'gh pr create --title "fix(x): y" --body-file - ' 0
+hd_read_arm "HD-RECV-READ-ctl-subst: a closed substitution in a carrier's arguments still closes nothing" "$hd_read_lib" 'gh issue comment $(cat list.txt) --body-file - ' 0
+hd_read_arm "HD-RECV-READ-ctl-closer: a bare closer still keeps the body" "$hd_read_lib" ' echo ) ' 1
+hd_read_arm "HD-RECV-READ-ansic-pair: the copy that models nothing extra loses that body" "${ENCL_ROOT}/hd-read-off.lib" "$hd_t_ansic" 0
+# A receiver that only carries cat's name (Stage 7 F-2): cat is admitted only as itself or a system
+# path, and not in a command that rebinds a command name. Each pair runs a copy without the line.
+/usr/bin/sed '/# M-HD-RECV-CATPATH$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdcatpath.sh"
+/usr/bin/sed '/# M-HD-RECV-REBIND$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdrebind.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdcatpath.sh" "${ENCL_HOOKS}/block-destructive-hdrebind.sh"
+encl_shape_arm "HD-RECV-COPY-catpath: the cat-path mutant removes its one line" block-destructive-hdcatpath.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-rebind: the rebinding mutant removes its one line" block-destructive-hdrebind.sh "1/0"
+hd_cat_path="./tool/cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_cat_rebind="alias cat=bash${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-MF-cat-path: a receiver whose path only ends in cat keeps the body" "$hd_cat_path" B B -
+encl_mut_arm "HD-RECV-MF-cat-path-pair: without the cat-path line that body is excised" block-destructive-hdcatpath.sh "$hd_cat_path" a
+encl_arm "HD-RECV-MF-cat-rebind: a cat receiver in a command that rebinds a command name keeps the body" "$hd_cat_rebind" B B -
+encl_mut_arm "HD-RECV-MF-cat-rebind-pair: without the rebinding line that body is excised" block-destructive-hdrebind.sh "$hd_cat_rebind" a
 
 /bin/rm -rf "$ENCL_ROOT"
 
