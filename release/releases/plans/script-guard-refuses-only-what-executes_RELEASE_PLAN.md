@@ -583,7 +583,7 @@ The milestone's `## Release Class` block lacks the posture sub-field. Add it in 
 - **R-REC-3.** Given DEV-14's weekly cost, prefer hub-direct builds at Stage 6, as in the v5.11 precedent, and keep spokes for Stage 5 design and the Stage 7/8 independent checks. Launch Stage 5 after the 2026-11-20T15:00Z reset if the hub's Checkpoint B reading is not fresh.
 - **R-REC-4 (correction, informational).** The Mode R relay and carry-forward 2 say v5.08 changed the -022 walk. It did not (Phase A0, A0.5). The surfaces that did move are #8306, v5.05 and v5.11.
 - **Pattern Cache Scan** (`decision-discipline.md` § 2.3). Domain: release-ops.
-  - Checked: `feedback_release_ops_intake_pre_rendered_artifacts` (CONFIRMED). **Not applicable**: no card's ACs pass at the pin, and every mechanism is present.
+  - Checked: whether any card's acceptance criteria already pass at the pin, in which case the card is verified and closed rather than rebuilt (CONFIRMED). **Not applicable**: no card's ACs pass at the pin, and every mechanism is present.
   - Checked: the general-behaviour patterns indexed for one-PR milestones, never merging red CI, discrete sizes, no hedge-defer at planning, assertions over prose, and public-surface abstraction.
   - Applied: one PR (Delivery). A single size bucket per card (D-F07 offers L, not "M–L"). D-F07 is decided on gating evidence rather than deferred to an idle re-measure. RED→GREEN arms. Spellings kept off this comment.
   - No emergence candidate; no observation logged (no operator correction in this run).
