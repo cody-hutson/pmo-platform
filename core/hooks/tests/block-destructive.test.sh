@@ -10029,6 +10029,12 @@ qscan_arm "HD-RECV-MF-hook-glob: a bracket expression holding a parenthesis in a
 qscan_arm "HD-RECV-MF-hook-ansic-cat: the same ANSI-C quote before a cat head keeps the body at the hook" HM17 B B -
 qscan_arm "HD-RECV-MF-hook-pexp-cat: the same parameter expansion before a cat head keeps the body at the hook" HM18 B B -
 qscan_arm "HD-RECV-MF-hook-glob-cat: the same bracket expression before a cat head keeps the body at the hook" HM19 B B -
+# Stage 7 pass 3 (P3-3). A function definition spelled with a parenthesis names none of the rebinding
+# test's words, so what keeps a cat-received body behind it is the no-consumer test's parenthesis. Row
+# HM20; its pair runs the copy without the no-consumer line, where the definition's own body is one the
+# walk passes and no text of the command holds a rebinding word, so the excised body leaves it allowed.
+qscan_arm "HD-RECV-MF-cat-rebind-paren: a function definition of cat spelled with a parenthesis ahead of a cat head keeps the body" HM20 B B -
+qscan_mut "HD-RECV-MF-cat-rebind-paren-pair: without the no-consumer test that body is excised" block-destructive-hdnocons.sh HM20 a
 
 /bin/rm -rf "$ENCL_ROOT"
 

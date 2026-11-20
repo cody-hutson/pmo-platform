@@ -2303,6 +2303,9 @@ HM16|block-destructive|hd-recv-mf|-|?|B|( bash; echo [(] ) <<'EOF'@NL@bash @D@/n
 HM17|block-destructive|hd-recv-mf|-|?|B|( bash; cat $'\'"' ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 HM18|block-destructive|hd-recv-mf|-|?|B|( bash; cat ${x:-(} ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 HM19|block-destructive|hd-recv-mf|-|?|B|( bash; cat [(] ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+# #8326 Stage 7 pass 3: a function definition of cat spelled with a parenthesis, ahead of a cat-received body;
+# its parenthesis is read by the no-consumer test, not by the rebinding test (B at RED and at GREEN)
+HM20|block-destructive|hd-recv-mf|-|?|B|cat() { :; }@NL@cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
 # #8490 RED: backtick command words that stay recorded (TK rows; every row stays W through GREEN)
 TK01|block-destructive|tick-cmdword|-|?|W|`@D@/na.sh`
 TK02|block-destructive|tick-cmdword|-|?|W|true <<'EOF'@NL@notes@NL@`@D@/na.sh` is the entry point@NL@EOF
