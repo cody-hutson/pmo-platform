@@ -790,8 +790,11 @@ check_a3d_pii_precommit_wired() {
       "source repo is not a git checkout; there is no commit path to guard" "A"
     return
   fi
-  main="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null \
-          | awk 'NR == 1 && $1 == "worktree" { sub(/^worktree /, ""); print; exit }')"
+  # Captured, then cut -- never piped into a reader that stops early, which under
+  # `set -Eeuo pipefail` aborts this script on a repo with a few hundred worktrees.
+  main="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null || true)"
+  main="${main%%$'\n'*}"
+  case "${main}" in "worktree "*) main="${main#worktree }" ;; *) main="" ;; esac
   main="$(cd "${main:-/nonexistent}" 2>/dev/null && pwd -P || true)"
   target="${main}/core/hooks/git-pre-commit-pii.sh"
   p="${hooks_dir}/pre-commit"
@@ -807,8 +810,14 @@ check_a3d_pii_precommit_wired() {
     emit_pass "A3d" "INSTALL-PII-PRECOMMIT" "pre-commit resolves to ${target}" "A"
     return
   fi
-  if [ -f "${p}" ] && [ -x "${p}" ] && [ "${p}" != "${target}" ] && grep -q 'git-pre-commit-pii\.sh' "${p}" 2>/dev/null; then
-    emit_pass "A3d" "INSTALL-PII-PRECOMMIT" "custom pre-commit hook ${p} calls the PII guard" "A"
+  # A custom hook is never a PASS: naming the guard (a comment is enough) is not running it,
+  # and a byte copy of the guard resolves its library and needle list from the hooks dir, so
+  # it runs degraded. A copy FAILs below; a hook that only mentions the guard is SKIP, which
+  # says this check cannot confirm it rather than vouching for it.
+  if [ -f "${p}" ] && [ -x "${p}" ] && [ "${p}" != "${target}" ] && ! cmp -s "${p}" "${target}" \
+     && grep -q 'git-pre-commit-pii\.sh' "${p}" 2>/dev/null; then
+    emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
+      "custom pre-commit hook ${p} names the PII guard; A3d cannot confirm it runs it — link ${target} as pre-commit to make this check decisive" "A"
     return
   fi
   if [ ! -e "${hooks_dir}/pre-commit" ] && [ ! -L "${hooks_dir}/pre-commit" ]; then
@@ -817,6 +826,8 @@ check_a3d_pii_precommit_wired() {
     diag="pre-commit is a dangling link (git skips it silently)"
   elif [ ! -x "${p}" ]; then
     diag="pre-commit resolves to ${p}, which is not executable"
+  elif cmp -s "${p}" "${target}"; then
+    diag="pre-commit is a copy of the guard, not a link to it (a copy resolves its library and needle list from the hooks dir and runs degraded)"
   else
     diag="pre-commit is a different hook (${p}) that does not call the PII guard"
   fi

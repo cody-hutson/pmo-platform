@@ -23,9 +23,12 @@
 #           longer exists, e.g. inside a swept worktree) is re-pointed, never left
 #           dangling: git ignores a dangling hook without a word.
 #   Arm 5 — a DIFFERENT pre-commit hook the operator installed is left untouched,
-#           and the run warns that the PII guard is not active.
+#           and the run warns that the PII guard is not active. A3d FAILs it, never
+#           PASSes a hook that only names the guard, and FAILs a byte copy of it.
 #   Arm 6 — a source repo outside the workspace root is not wired (the test suites
 #           pass the real checkout that way) and the run prints the manual step.
+#   Arm 7 — with a few hundred linked worktrees (the operator's real shape), re-bootstrap
+#           and validate-install still run: no early-exit reader in a pipefail pipeline.
 #
 # Arms 1-2 are RED on an installer that wires only post-merge — measured, which is
 # how this suite was written. Darwin-only (setup-workspace.sh's check_platform).
@@ -172,6 +175,12 @@ out="$(refresh)"; rc=$?
 report "refresh exits 0" "$([ "${rc}" -eq 0 ] && echo 1 || echo 0)" "exit ${rc}; tail: $(printf '%s' "${out}" | tail -3 | tr '\n' '|')"
 report "refresh re-wires pre-commit to the guard" \
   "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)"
+# update.sh decides "changed anything?" from REFRESHED/MODE-REPAIRED/RECONCILED/WIRED; an
+# INSTALLED line would let an update that wired the guard exit EX_NOCHANGE.
+report "the wiring is logged WIRED:, a token update.sh counts as a change" \
+  "$(printf '%s' "${out}" | grep -q 'WIRED: PII pre-commit guard' && echo 1 || echo 0)"
+report "update.sh counts WIRED: as a change" \
+  "$(grep -qF "RECONCILED:|WIRED:'" "${SRC}/update.sh" && echo 1 || echo 0)"
 
 # --- Arm 4: a dangling link of our own is re-pointed ---
 printf '\nArm 4. A stale link to a vanished guard is re-pointed\n'
@@ -197,6 +206,22 @@ report "the foreign hook's content is unchanged" "$([ "$(cksum < "${HD}/pre-comm
 report "the run warns that the PII guard is not active" \
   "$(printf '%s' "${out}" | grep -q 'WARN.*PII pre-commit guard NOT active' && echo 1 || echo 0)" \
   "no 'PII pre-commit guard NOT active' warning in the refresh output"
+out="$(validate foreign)"
+report "validate-install A3d FAILs on a foreign hook" \
+  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] FAIL.*different hook' && echo 1 || echo 0)" \
+  "A3d line: $(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)"
+# Naming the guard is not running it: a comment is enough to mention it.
+printf '#!/bin/sh\n# git-pre-commit-pii.sh is off for now\nexit 0\n' > "${HD}/pre-commit"
+out="$(validate mention)"
+report "A3d never PASSes a hook that only names the guard (SKIP, not PASS)" \
+  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] SKIP' && echo 1 || echo 0)" \
+  "A3d line: $(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)"
+# A byte copy resolves its library and needle list from the hooks dir, so it runs degraded.
+/bin/cp "${GUARD}" "${HD}/pre-commit"; chmod +x "${HD}/pre-commit"
+out="$(validate copy)"
+report "A3d FAILs on a copy of the guard (not a link)" \
+  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] FAIL.*copy of the guard' && echo 1 || echo 0)" \
+  "A3d line: $(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)"
 
 # --- Arm 6: a source repo outside the workspace root is not wired ---
 printf '\nArm 6. A source repo outside the workspace root is told, not wired\n'
@@ -206,6 +231,33 @@ out="$("${SETUP}" --dry-run --source-repo "${SRC}" --workspace-root "${WS2}" --c
 report "the run prints the manual pre-commit step" \
   "$(printf '%s' "${out}" | grep -q 'git-pre-commit-pii.sh.*/pre-commit' && echo 1 || echo 0)"
 report "no pre-commit link is created" "$([ ! -e "${HD}/pre-commit" ] && [ ! -L "${HD}/pre-commit" ] && echo 1 || echo 0)"
+
+# --- Arm 7: a repo with many linked worktrees still installs and validates ---
+# Reading `git worktree list` through a reader that exits early (awk … exit) under
+# `set -Eeuo pipefail` turns git's EPIPE into the pipeline's status once the list outgrows
+# one write. The operator's repo carries a few hundred worktrees; a one-worktree sandbox
+# cannot see the abort, so this arm adds enough --no-checkout worktrees to make it certain.
+printf '\nArm 7. Many linked worktrees: re-bootstrap and validate-install still run\n'
+/bin/rm -f "${HD}/pre-commit"
+i=0
+while [ "${i}" -lt 200 ]; do
+  git -C "${SRC}" worktree add -q --no-checkout --detach \
+    "${SBX}/many-worktrees/a-linked-worktree-with-a-deliberately-long-name-to-fill-the-list-${i}" 2>/dev/null
+  i=$((i + 1))
+done
+wl_bytes="$(git -C "${SRC}" worktree list --porcelain | wc -c | tr -d ' ')"
+report "precondition: the worktree list outgrows one pipe write (${wl_bytes} bytes)" \
+  "$([ "${wl_bytes}" -gt 32768 ] && echo 1 || echo 0)"
+out="$("${SETUP}" --source-repo "${SRC}" --workspace-root "${WS}" --config-root "${CFG}" < <(yes "") 2>&1)"
+rc=$?
+report "re-bootstrap exits 0 with many worktrees" "$([ "${rc}" -eq 0 ] && echo 1 || echo 0)" \
+  "exit ${rc}; tail: $(printf '%s' "${out}" | tail -3 | tr '\n' '|')"
+report "re-bootstrap wires the guard with many worktrees" \
+  "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)"
+out="$(validate many)"
+report "validate-install reaches an A3d verdict with many worktrees" \
+  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] PASS' && echo 1 || echo 0)" \
+  "A3d line: '$(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)'; tail: $(printf '%s' "${out}" | tail -2 | tr '\n' '|')"
 
 printf '\nTotal: %d  PASS: %d  FAIL: %d\n' "$((PASS + FAIL))" "${PASS}" "${FAIL}"
 [ "${FAIL}" -eq 0 ]

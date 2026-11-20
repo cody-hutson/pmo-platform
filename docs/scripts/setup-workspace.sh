@@ -2696,10 +2696,14 @@ install_hooks() {
   #   - An existing pre-commit hook that is not ours is never replaced: it stays, and the
   #     run says loudly that the guard is not active. A link of ours that is stale or points
   #     at a worktree copy is re-pointed.
-  local pc_dst pc_main pc_target pc_link pc_cur
+  local pc_dst pc_main pc_target pc_link pc_cur pc_wl
   pc_dst="${gh_dir}/pre-commit"
-  pc_main="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null \
-             | awk 'NR == 1 && $1 == "worktree" { sub(/^worktree /, ""); print; exit }')"
+  # Captured, then cut -- never piped into a reader that stops early. Under `set -Eeuo
+  # pipefail` an early-exiting reader (awk … exit, head) makes git's EPIPE the pipeline's
+  # status, and on a repo with a few hundred worktrees that aborted the install every time.
+  pc_wl="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null || true)"
+  pc_main="${pc_wl%%$'\n'*}"
+  case "${pc_main}" in "worktree "*) pc_main="${pc_main#worktree }" ;; *) pc_main="" ;; esac
   [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
   pc_target="${pc_main}/core/hooks/git-pre-commit-pii.sh"
   if [ -n "${gh_dir}" ] && [ "$(cd "${gh_dir}" 2>/dev/null && pwd -P)" = "${pc_main}/.git/hooks" ]; then
@@ -2721,10 +2725,14 @@ install_hooks() {
       if [ "${DRY_RUN}" -eq 1 ]; then
         info "[dry-run] would re-point the stale PII pre-commit link ${pc_dst} (now -> ${pc_cur})"
       else
+        # Removed BEFORE the rollback record, deliberately: recording a live symlink makes
+        # the ledger `cp` its target, and replaying that would write through the new link
+        # into the main worktree's guard. A rolled-back re-point therefore leaves no hook,
+        # which the next run (or validate-install A3d) reports.
         rm -f "${pc_dst}"
         record_write_rollback "${pc_dst}"
         ln -s "${pc_link}" "${pc_dst}"
-        info "INSTALLED: PII pre-commit guard re-pointed (was -> ${pc_cur})"
+        info "WIRED: PII pre-commit guard re-pointed (was -> ${pc_cur})"
       fi
     else
       warn "PII pre-commit guard NOT active: ${pc_dst} is a different hook and was left in place."
@@ -2736,7 +2744,9 @@ install_hooks() {
     mkdir -p "${gh_dir}"
     record_write_rollback "${pc_dst}"
     ln -s "${pc_link}" "${pc_dst}"
-    info "INSTALLED: PII pre-commit guard (commit-time PII scan)"
+    # WIRED, not INSTALLED: update.sh counts REFRESHED/MODE-REPAIRED/RECONCILED/WIRED to
+    # decide whether the update changed anything, and INSTALLED is logged on every run.
+    info "WIRED: PII pre-commit guard (commit-time PII scan)"
   fi
 
   # Co-deploy the shared positional-issue-ref classifier into .claude/hooks/lib/.
