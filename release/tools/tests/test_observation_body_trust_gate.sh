@@ -14,21 +14,30 @@
 # Four arm kinds, because a reader that issues read commands owes more than one that
 # only describes a path in prose:
 #   cmd   — a section that issues read commands (a, b, c1, d). It must carry a LITERAL
-#           `author_association` read, positioned before its first body read. A bare
-#           "A0" citation is not enough here: a section can cite A0 and still read every
-#           body first.
+#           `author_association` read, positioned before its first body read, and the
+#           clause introducing that body read must say it reads trusted members only.
+#           A bare "A0" citation is not enough here: a section can cite A0 and still read
+#           every body first. A body read is a `--json` field list or jq filter naming
+#           body, or a `gh issue view` with no `--json` (its default view prints the body).
 #   neg   — the same sections (a¬, b¬, c1¬, d¬). FAIL if the section contains any
 #           population-wide observation read that pulls `body` — `gh issue list`,
 #           `gh api` or `gh search issues` over the observation label whose fields or
 #           jq filter include body. Such a read puts untrusted bodies in front of the
 #           reader regardless of where the trust read sits.
+#           Both kinds match on commands joined across lines first: a backslash
+#           continuation anywhere, and a trailing pipe or `&&` / `||` inside a fence.
 #   prose — a section that describes a drafting path without issuing commands (c2, e,
 #           g). An A0 citation (or a literal `author_association`) must come before the
 #           section's body-read anchor.
 #   co    — co-occurrence (f, h1, h2, i1, i2). Every line in the section matching an
 #           anchor must also match a required pattern: the A0 definition names
-#           observations, a force-bundle names UNTRUSTED-BODY, and a "prior operator
-#           decision" read is limited to trusted-set comment authors.
+#           observations, a force-bundle persists UNTRUSTED-BODY in the issue's triage
+#           decision comment (where A0 persists it and the Stage-5 re-trigger reads it),
+#           and a "prior operator decision" read is limited to trusted-set comment authors.
+#
+# NO EARLY-EXIT READERS. Every awk here reads its whole input; nothing pipes into a
+# reader that stops early (grep -q, head, an awk that exits, sed q, read). The
+# repository's SIGPIPE-idiom gate scans this whole file.
 #
 # WHAT IT DOES NOT ASSERT. It reads governing prose, not agent behaviour: it proves the
 # instructions gate the body read on trust, not that an agent following them will. It
@@ -62,7 +71,7 @@ extract_section() {
 
 # first_pos TEXT ERE -> 1-based character offset of the first match, 0 when none.
 first_pos() {
-  printf '%s' "$1" | OTG_RE="$2" LC_ALL=C awk 'BEGIN { RS = "\001"; re = ENVIRON["OTG_RE"] } { p = match($0, re); print (p > 0 ? p : 0); exit } END { if (NR == 0) print 0 }'
+  printf '%s' "$1" | OTG_RE="$2" LC_ALL=C awk 'BEGIN { RS = "\001"; re = ENVIRON["OTG_RE"] } { p = match($0, re); print (p > 0 ? p : 0) } END { if (NR == 0) print 0 }'
 }
 
 # count_lines TEXT ERE -> number of lines matching ERE.
@@ -81,6 +90,76 @@ JSON_BODY_RE='(--json[ =][^ ]*body|\.body)'
 # One backtick span holding a population-wide gh read over the observation label that
 # pulls body (either order of the two words).
 POP_BODY_RE='gh (issue list|api|search issues)[^`]*observation[^`]*body|gh (issue list|api|search issues)[^`]*body[^`]*observation'
+# The clause that introduces a section's first body read must say it is limited.
+TRUSTED_ONLY_RE='trusted members only'
+
+# normalize_cmds TEXT -> TEXT with each continued command joined into one logical line:
+# a line ending in a backslash anywhere, and inside a fenced block a line ending in a
+# pipe or `&&` / `||`. A command written across lines is then one line for matching.
+# Every awk below reads its whole input: none exits early inside a pipe.
+normalize_cmds() {
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    /^[[:space:]]*```/ { if (buf != "") { print buf; buf = "" } fence = !fence; print; next }
+    {
+      line = $0; cont = 0
+      if (line ~ /\\$/) { sub(/\\$/, "", line); cont = 1 }
+      else if (fence && line ~ /(\||&&)[[:space:]]*$/) { cont = 1 }
+      buf = (buf == "") ? line : buf " " line
+      if (!cont) { print buf; buf = "" }
+    }
+    END { if (buf != "") print buf }
+  '
+}
+
+# first_body_pos TEXT -> 1-based offset of the first body read, 0 when none. A body read
+# is a `--json` field list or a jq filter naming body, or a `gh issue view` without
+# `--json` — its default view prints the body. A `gh issue view --json` whose fields
+# omit body is not a body read.
+first_body_pos() {
+  printf '%s' "$1" | LC_ALL=C awk 'BEGIN { RS = "\001" }
+    {
+      s = $0; best = 0
+      p = match(s, /--json[ =][^ \n]*body|\.body/); if (p > 0) best = p
+      off = 0; rest = s; found = 0
+      while (!found && (q = match(rest, /gh issue view[^`\n|;&)]*/)) > 0) {
+        span = substr(rest, q, RLENGTH)
+        if (span !~ /--json/) { pos = off + q; if (best == 0 || pos < best) best = pos; found = 1 }
+        else { off += q + RLENGTH - 1; rest = substr(rest, q + RLENGTH) }
+      }
+      print best
+    }
+    END { if (NR == 0) print 0 }'
+}
+
+# lead_clause TEXT POS -> the text from the last sentence end (". ") or line start
+# before POS, up to POS: the clause that introduces the read found at POS.
+lead_clause() {
+  printf '%s' "$1" | OTG_P="$2" LC_ALL=C awk 'BEGIN { RS = "\001" }
+    {
+      pre = substr($0, 1, ENVIRON["OTG_P"] - 1); start = 1; done = 0
+      for (i = length(pre); i >= 1 && !done; i--) {
+        if (substr(pre, i, 1) == "\n" || substr(pre, i, 2) == ". ") { start = i + 1; done = 1 }
+      }
+      print substr(pre, start)
+    }'
+}
+
+# cmd_verdict TEXT -> "PASS" or "FAIL: <reason>", for a section that issues read
+# commands: a literal author_association read precedes the first body read, and the
+# clause introducing that body read says it reads trusted members only.
+cmd_verdict() {
+  local text tpos bpos clause
+  if [ -z "$1" ]; then echo "FAIL: section not found"; return; fi
+  text="$(normalize_cmds "$1")"
+  bpos="$(first_body_pos "$text")"
+  if [ "$bpos" -eq 0 ]; then echo "FAIL: body-read anchor not found in the section"; return; fi
+  tpos="$(first_pos "$text" "$CMD_TRUST_RE")"
+  if [ "$tpos" -eq 0 ]; then echo "FAIL: required trust anchor not found in the section"; return; fi
+  if [ "$tpos" -gt "$bpos" ]; then echo "FAIL: the trust read comes after the body read (trust@${tpos} body@${bpos})"; return; fi
+  clause="$(lead_clause "$text" "$bpos")"
+  if [ "$(count_lines "$clause" "$TRUSTED_ONLY_RE")" -eq 0 ]; then echo "FAIL: the body read does not say it reads trusted members only"; return; fi
+  echo "PASS"
+}
 
 # order_verdict TEXT TRUST_RE BODY_RE -> "PASS" or "FAIL: <reason>"
 order_verdict() {
@@ -102,7 +181,7 @@ order_verdict() {
 neg_verdict() {
   local text="$1" n
   if [ -z "$text" ]; then echo "FAIL: section not found"; return; fi
-  n="$(count_lines "$text" "$POP_BODY_RE")"
+  n="$(count_lines "$(normalize_cmds "$text")" "$POP_BODY_RE")"
   if [ "$n" -gt 0 ]; then echo "FAIL: ${n} population-wide observation read(s) pulling body"; return; fi
   echo "PASS"
 }
@@ -132,7 +211,7 @@ section() { # file parent_re start_re end_re -> section text, or empty when the 
 
 arm_cmd() { # id label file parent_re start_re end_re  (emits the cmd arm and its neg arm)
   local text; text="$(section "$3" "$4" "$5" "$6")"
-  report "$1  $2 — literal author_association read before the body read" "$(order_verdict "$text" "$CMD_TRUST_RE" "$JSON_BODY_RE")"
+  report "$1  $2 — literal author_association read before a trusted-members-only body read" "$(cmd_verdict "$text")"
   report "$1¬ $2 — no population-wide observation body read" "$(neg_verdict "$text")"
 }
 
@@ -162,7 +241,20 @@ T_EARLY_TRUST='resolve author_association first, then read --json number,body fo
 T_NO_ANCHOR='resolve author_association; nothing else'
 T_A01='see A01, then --json body'
 T_BARE_A0='(see A0), then `gh issue view <N> --json body`'
-T_CMD_OK='`gh api x --jq "{number, author_association}"` then `gh issue view <N> --json body`'
+T_CMD_OK='`gh api x --jq "{number, author_association}"`. Then read bodies for trusted members only: `gh issue view <N> --json body`'
+T_UNLIMITED='`gh api x --jq "{number, author_association}"`. **Then the body read, for every observation listed:** `gh issue view <N> --json body`'
+T_VIEW_FIRST='Skim each with `gh issue view <N>`. Then `gh api x --jq "{number, author_association}"`. Read bodies for trusted members only: `gh issue view <N> --json body`'
+T_VIEW_NOBODY='List with `gh issue view <N> --json number,title`. Then `gh api x --jq "{number, author_association}"`. Read bodies for trusted members only: `gh issue view <N> --json body`'
+T_POP_CONT='author_association first.
+```bash
+gh issue list --label observation --state open \
+  --json number,title,body,createdAt
+```'
+T_POP_CONT_OK='author_association first.
+```bash
+gh issue list --label observation --state open \
+  --json number --jq length
+```'
 T_POP_LIST='author_association first; then `gh issue list --label observation --state open --json number,title,body`'
 T_POP_API='`gh api "repos/o/r/issues?labels=observation&state=open" --jq ".[] | .body"`'
 T_POP_SEARCH='`gh search issues --json number,body -- label:observation`'
@@ -170,6 +262,11 @@ T_POP_OK='`gh issue view <N> --json body` and `gh issue list --label observation
 T_CO_MISS='a force-bundled issue is logged'
 T_CO_NONE='nothing relevant here'
 T_CO_OK='a force-bundled issue records UNTRUSTED-BODY'
+T_FB_LOG_ONLY='a force-bundled issue records UNTRUSTED-BODY in its deviation-log entry'
+T_FB_COMMENT='a force-bundled issue has UNTRUSTED-BODY persisted in its triage decision comment'
+# A force-bundle must persist UNTRUSTED-BODY where A0 persists it and where the Stage-5
+# re-trigger reads it: the issue's triage decision comment, not only the deviation log.
+FB_PERSIST_RE='UNTRUSTED-BODY.*triage decision comment|triage decision comment.*UNTRUSTED-BODY'
 
 printf '\nControl arms (each predicate can fail)\n'
 expect "prose: no trust read"             FAIL "$(order_verdict "$T_NO_TRUST" "$PROSE_TRUST_RE" "$JSON_BODY_RE")"
@@ -179,8 +276,13 @@ expect "section missing"                  FAIL "$(order_verdict "" "$PROSE_TRUST
 expect "body anchor missing"              FAIL "$(order_verdict "$T_NO_ANCHOR" "$PROSE_TRUST_RE" "$JSON_BODY_RE")"
 expect "A01 is not an A0 citation"        FAIL "$(order_verdict "$T_A01" "$PROSE_TRUST_RE" "$JSON_BODY_RE")"
 expect "prose: a bare A0 citation counts" PASS "$(order_verdict "$T_BARE_A0" "$PROSE_TRUST_RE" "$JSON_BODY_RE")"
-expect "cmd: a bare A0 citation does not" FAIL "$(order_verdict "$T_BARE_A0" "$CMD_TRUST_RE" "$JSON_BODY_RE")"
-expect "cmd: literal read before body"    PASS "$(order_verdict "$T_CMD_OK" "$CMD_TRUST_RE" "$JSON_BODY_RE")"
+expect "cmd: a bare A0 citation does not" FAIL "$(cmd_verdict "$T_BARE_A0")"
+expect "cmd: literal read before a trusted-only body read" PASS "$(cmd_verdict "$T_CMD_OK")"
+expect "cmd: body read not limited to trusted members" FAIL "$(cmd_verdict "$T_UNLIMITED")"
+expect "cmd: a default gh issue view is a body read" FAIL "$(cmd_verdict "$T_VIEW_FIRST")"
+expect "cmd: gh issue view --json without body is not" PASS "$(cmd_verdict "$T_VIEW_NOBODY")"
+expect "neg: backslash-continued fenced read pulling body" FAIL "$(neg_verdict "$T_POP_CONT")"
+expect "neg: backslash-continued count-only read" PASS "$(neg_verdict "$T_POP_CONT_OK")"
 expect "neg: issue list pulling body"     FAIL "$(neg_verdict "$T_POP_LIST")"
 expect "neg: gh api jq pulling .body"     FAIL "$(neg_verdict "$T_POP_API")"
 expect "neg: body before label"           FAIL "$(neg_verdict "$T_POP_SEARCH")"
@@ -188,6 +290,8 @@ expect "neg: per-issue view + count only" PASS "$(neg_verdict "$T_POP_OK")"
 expect "co: anchor line lacks required"   FAIL "$(co_verdict "$T_CO_MISS" 'force-bundle' 'UNTRUSTED-BODY')"
 expect "co: anchor absent"                FAIL "$(co_verdict "$T_CO_NONE" 'force-bundle' 'UNTRUSTED-BODY')"
 expect "co: anchor line carries it"       PASS "$(co_verdict "$T_CO_OK" 'force-bundle' 'UNTRUSTED-BODY')"
+expect "co: deviation log alone is not where A0 persists" FAIL "$(co_verdict "$T_FB_LOG_ONLY" 'force-bundle' "$FB_PERSIST_RE")"
+expect "co: persisted in the triage decision comment" PASS "$(co_verdict "$T_FB_COMMENT" 'force-bundle' "$FB_PERSIST_RE")"
 
 STAGE2="release/references/pipeline/stage-02-triage.md"
 STAGE3="release/references/pipeline/stage-03-bundle.md"
@@ -217,10 +321,10 @@ arm_prose g  "stage-03 Template-Conversion Rule invocation" "$STAGE3" '' \
 printf '\nTrust scope and trust carried forward\n'
 arm_co f  "stage-02 A0 block names observations in its scope" "$STAGE2" '^## 5\. Process' \
   '^\*\*A0 ' '^$' 'A0 — author-association body-trust resolution' '[Oo]bservation'
-arm_co h1 "gate-criteria-spec path (B): a force-bundle records UNTRUSTED-BODY" "$GCS" '' \
-  '^### Template-Conversion Rule' '^\*\*Retroactive applicability|^#{1,3} ' 'force-bundled' 'UNTRUSTED-BODY'
-arm_co h2 "stage-03 path (B): a force-bundle records UNTRUSTED-BODY" "$STAGE3" '' \
-  '^\*\*Template-Conversion Rule invocation' '^$' 'force-bundle' 'UNTRUSTED-BODY'
+arm_co h1 "gate-criteria-spec path (B): a force-bundle persists UNTRUSTED-BODY in the triage decision comment" "$GCS" '' \
+  '^### Template-Conversion Rule' '^\*\*Retroactive applicability|^#{1,3} ' 'force-bundled' "$FB_PERSIST_RE"
+arm_co h2 "stage-03 path (B): a force-bundle persists UNTRUSTED-BODY in the triage decision comment" "$STAGE3" '' \
+  '^\*\*Template-Conversion Rule invocation' '^$' 'force-bundle' "$FB_PERSIST_RE"
 arm_co i1 "stage-02 step 5: prior decisions from trusted comment authors only" "$STAGE2" '^## 5\. Process' \
   '^\*\*Observation counting \(per batch' '^<!-- design-artifact|^#{1,6} ' 'prior operator decision' 'trusted set'
 arm_co i2 "triage-execution: prior decisions from trusted comment authors only" "$TRIAGE_EXEC" '' \
