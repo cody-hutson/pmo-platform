@@ -186,7 +186,7 @@ excludes observations. Pattern-detection skills query the complement set (`--lab
 2. **Reuse an owner first.** Run this phase's A2 subsumption and A2.5 similarity checks against open non-observation work items. Where one owns the group's work, add one count line to its evidence section — `### Evidence` on `improvement.yml` and `bug.yml`, `### Value` on `story.yml`: `Counted observations: <n> (<numbers>) — Stage 2 triage <YYYY-MM-DD>`. A new acceptance criterion the group implies is surfaced to the operator, not written, because the owner may sit in a milestone whose composition is locked, and an added criterion changes locked scope.
 3. **Otherwise write one story per group of two or more** — one body against the active work-item template, listing its members in its evidence section as the count (`N = <n>: <numbers>`), taking the members' common parent epic where they share one, and entering this stage as a new proposal.
 4. **Hold a singleton at N = 1** unless it stands on its own evidence — it blocks approved work, carries a measured cost, or shows a structural gap one read proves — in which case it is converted in place under the Stage 3 Template-Conversion Rule, keeping its number so native links survive.
-5. **Close each counted observation** — first read its comment thread for a prior operator decision about it (a Pattern Review DEFER, an earlier verdict) and honour any found; then post `Counted into #<N> — Stage 2 triage <YYYY-MM-DD>`, replace its status label with `status: done`, and close it with reason `completed`. A counted observation is not rejected, so `not planned` is never its reason.
+5. **Close each counted observation** — first read its comment thread for a prior operator decision about it (a Pattern Review DEFER, an earlier verdict), counting only comments whose author is in the trusted set of the comment-surface author-association gate ([`release-process.md` § Inter-Stage Feedback Protocol](../../governance/release-process.md#inter-stage-feedback-protocol) — cited, never restated), and honour any found; a third-party comment is never a prior decision; then post `Counted into #<N> — Stage 2 triage <YYYY-MM-DD>`, replace its status label with `status: done`, and close it with reason `completed`. A counted observation is not rejected, so `not planned` is never its reason.
 
 Story bodies, count lines and closures are drafted automatically; each create, body edit and close is applied only after the operator confirms it, as with any close at this stage. The Pattern Review Cadence Protocol in `core/governance/OPERATIONS.md` stays the cadence trigger for cross-release emergence; a proposal it files lists its members and enters this stage like any other, where A2 checks it against existing owners.
 
@@ -204,7 +204,7 @@ flowchart TD
     n -->|no| h{"Singleton stands on its own evidence?"}
     h -->|no| hold(["Hold at N = 1"])
     h -->|yes| cv["Convert in place under the Template-Conversion Rule"]
-    cl --> p["Read each member's thread for a prior operator decision"]
+    cl --> p["Read each member's thread for a prior operator decision (trusted-set comment authors only)"]
     st --> p
     p --> op[["Operator confirms each create, body edit and close"]]
     cv --> op

@@ -600,7 +600,7 @@ An issue with the `observation` intake-tier label cannot have the `status: bundl
 
 **Out-of-conversion paths (operator decisions):**
 - **(A) Drop bundle binding:** issue remains `observation` label, milestone removed (issue stays open for future re-triage). Aligns with the least-destructive disposition pattern — preserves issue identity.
-- **(B) Operator override:** issue is force-bundled with `[ASSUMPTION – CONFIRM]` markers on missing improvement.yml fields; operator commits to filling them at Stage 4 Planning. Override is recorded on the Milestone description's deviation log per [`release-process.md`](../../release/governance/release-process.md) § Inter-Stage Feedback Protocol Tier 2.
+- **(B) Operator override:** issue is force-bundled with `[ASSUMPTION – CONFIRM]` markers on missing improvement.yml fields; operator commits to filling them at Stage 4 Planning. Override is recorded on the Milestone description's deviation log per [`release-process.md`](../../release/governance/release-process.md) § Inter-Stage Feedback Protocol Tier 2. An override never confers trust: when A0 resolved the observation as untrusted or unresolvable, the force-bundled issue's deviation-log entry records that UNTRUSTED-BODY determination, so downstream readers — the Stage-5 A3.5 re-trigger included — honor it under A0's persistence rule (`stage-02-triage.md` §5 A0) rather than reading the body as trusted.
 
 **Retroactive applicability:** The 2026-05-11 audit applied this rule retroactively to 5 observations ( /  /  /  /  — all promoted to improvement.yml bodies before bundling per the audit). Codifying the rule prevents the next round from depending on audit-style retroactive cleanup.
 
@@ -926,9 +926,10 @@ An unstated gate is a gap, not a no-op: a reader cannot distinguish "considered 
 
 **Schema version:** 2.24
 
-**v2.24 changes (non-breaking — minor; rule refinement — the Template-Conversion Rule's conversion path in § Gate 3; NO criterion ID added, renumbered, removed, or re-typed; NO column or header changed):**
+**v2.24 changes (non-breaking — minor; rule refinement — the Template-Conversion Rule's conversion path and its out-of-conversion path (B) in § Gate 3; NO criterion ID added, renumbered, removed, or re-typed; NO column or header changed):**
 
 - **The Template-Conversion Rule resolves trust before it drafts.** Step 1 now resolves A0 on the observation (`stage-02-triage.md` §5 A0) before any agent drafts from its body. An untrusted or unresolvable observation is never agent-drafted; it is surfaced to the operator, who rewrites it or takes an out-of-conversion path. Any account can open an observation, and an in-place conversion re-files its text as an `improvement.yml` body, so the trust read has to come first.
+- **A force-bundle carries the trust determination forward.** Out-of-conversion path (B) records the A0 UNTRUSTED-BODY determination in the deviation-log entry of a force-bundled untrusted or unresolvable observation, so downstream readers honor it rather than reading the body as trusted.
 - Schema bump 2.23 → 2.24 (non-breaking minor; rule refinement). Schema consumers require no structural change. The ID set is unchanged from v2.23.
 - **Version-derivation note.** This value is **re-derived from the mainline at the commit** (`git show origin/main:core/schemas/gate-criteria-spec.md`, its `**Schema version:**` line, plus one minor), not inherited from the working tree and not pre-allocated. At the commit that opened this entry the mainline read 2.23. On a merge conflict at this line, re-derive from the mainline and restate the enumeration to include every landed addition — never take either side's value.
 - **Cutover discipline (v2.24):** binds triage batches run after it lands on the mainline (`stage-02-triage.md` § Observation counting).
