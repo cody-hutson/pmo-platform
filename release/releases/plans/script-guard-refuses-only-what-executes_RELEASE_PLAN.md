@@ -667,3 +667,64 @@ Recorded on #9058 (comment 6966866565): the narrowed claims accepted (#8490 AC1,
 | DEV-6 | 6 | The Stage-4 premise that the block log's digest is one-way is narrowed: it cannot be inverted but can be matched (#8493 design F-1); D-Readings (A) stands | #8493 design, Tier 1 |
 | DEV-8 | 6 | Commit 0b adds 48 corpus rows (LT01–LT04, AS01–AS23, HL01–HL12, HM01–HM11) in 8 new groups at today's verdicts. #8326's closer row (HM09) is an inert subshell, recorded `a` today and moved to B by the closer rule. The runner read every row at its recorded verdict: block-destructive 2096 PASS / 0 FAIL | hub |
 | DEV-7 | 5 | v5.08 did not change the -022 walk (the Mode R carry-forward said it did); the surfaces that moved are #8306, v5.05 and v5.11 | Stage-4 spoke, R-REC-4 |
+| DEV-9 | 6 | Builders: the hub built #8490, #8493 and #8327. After two safety-classifier stops on the hub, #8326 and #8548 were each built by one Engineering spoke, attempted once | operator, 2026-11-18 |
+| DEV-10 | 6 | #8326's closer rule, applied to every receiver reading as the Collective Review rendered it, also refused two inert classes: a carrier whose quoted argument holds a parenthesis (a conventional pull-request title) and a carrier with a closed substitution in its own arguments. Narrowed: a `)` keeps the body only when, read with the shell's quoting from the receiver's head on, it closes an opener the head sits inside | operator, on #8326's Stage 6 sub-task |
+| DEV-11 | 6 | #8327: `CEIL-NEWSCAN-ASGN` and `-HD` were authored by the #8548 and #8326 spokes, whose scans were built after #8327; three existing arms that lift hook functions define a no-op ceiling check; R11's Z-cell observation is the existing `AC-022-Z-CTL` arm | hub, Tier 1 |
+| DEV-12 | 6 | #8493: `LATCH-CAUSE-opaque-word` and `-ctl-allow` read corpus rows ZH05 and ZU05 in place of the design's candidates | hub, Tier 1 |
+| DEV-13 | 6 | #8548: twelve decline markers (six beyond the design), so every decline has a mutant; arms beyond the design's table; the moved-walk test compares indices (FM-3) | spoke, Tier 1 |
+
+## Change Description
+
+### Outcome
+
+BLOCK-DESTRUCTIVE-022 refuses fewer commands that run nothing, and refuses every command it cannot finish reading. Five changes to `core/hooks/block-destructive.sh`:
+- **Text read as a path:** a backtick-led command word is no longer read as a path to execute.
+- **Substitution in a value:** an allowlisted script inside an assignment's substitution is read as that script.
+- **Here-document bodies:** an inert body behind a grammar opener, or received by `cat` with no consumer, is excised.
+- **Named causes:** the option-run latch's conservative route names its cause in the refusal and in the block log.
+- **Work ceiling:** a per-command deadline and a length gate refuse a command whose reading would outlast the runtime's hook timeout.
+
+### Issues resolved
+
+| # | Outcome | Status |
+|---|---|---|
+| #8490 | The exec arm declines a backtick-led command word to the enclosure position its backtick opens; the text-shaped hold-back is narrowed and re-attributed, with its residual shapes declared | DONE |
+| #8548 | An allowlisted script inside an assignment's substitution is read as that script, not as unresolvable; the second hold-back is narrowed to the admitted spellings, its residuals declared | DONE |
+| #8326 | An inert here-document body behind `(`, `{` or a reserved word, or received by `cat` with no consumer, is excised; a closer of the receiver's own enclosure keeps the body | DONE |
+| #8493 | The latch's plain set is measured on bash, sh, dash and zsh; the conservative route's refusal names its gate and its block-log row carries `features.route` | DONE |
+| #8327 | A 120-second per-command deadline at every loop on the rule's surface and a 65,536-character gate refuse what the rule cannot finish; four cubic quote counts take a linear pass | DONE |
+
+### Key decisions
+
+- **D-8548-A (A):** the bail-latched chained spelling stays a declared residual.
+- **D-8326-1 (A), D-8326-2 (A):** `cat` joins a pre-pass-only receiver list under a whole-command no-consumer condition, and the receiver read steps the grammar openers.
+- **The closer rule:** it applies to every receiver reading, and the operator narrowed it at Stage 6 to a closer of the receiver's own enclosure (DEV-10).
+- **D-8493-Legit:** a refused command's legitimacy is judged by a script join. An agent judges only rows from this repository's own sessions; every other row goes on an operator-only worksheet, and only counts are published.
+- **D-8327-3 (A), D-8327-4 (A), D-8327-5:**
+  - the enclosure view's two budget exits refuse once an enclosure-reaching arm enforces;
+  - the ceiling's row carries `features.ceiling`;
+  - ADR-150 gains a dated amendment (the rule's one refusal no phase governs).
+
+### Reversibility
+
+MODERATE · confidence MEDIUM. Before merge, reverting the five GREEN commits restores today's verdicts. Once deployed, the hook refresh is reverted the same way, and the corpus re-grades revert with their commits.
+
+### Downstream impact
+
+- **Exec arm review, 2026-12-15 (Tue):** it reads the first drain written after this hook is published. Two hold-backs are narrowed, not cleared. Their declared residual spellings, and the enclosure-position class (its owner card is held for filing at Stage 9), still gate graduation.
+- **Ceiling cost:** an inline command longer than 65,536 characters is now refused. The documented remedy is passing the text by file (`--body-file`, `-F`, or the Write tool).
+- **Stage 7 owes:**
+  - the real-interpreter readings for corpus rows whose verdict moved (ground truth `?`);
+  - a check of the declared standard-input residual for `cat`-received bodies.
+- **Follow-up candidates held for filing at Stage 9 / Stage 13:**
+  - the enclosure-rows owner card;
+  - #8548's blank- or wrapper-led over-block;
+  - #8490 F-7;
+  - the spoke-template transcript rule;
+  - #8548 FM-4, CD-1 and CD-2.
+
+### Cross-references
+
+- This plan: `release/releases/plans/script-guard-refuses-only-what-executes_RELEASE_PLAN.md` (top: § Header, § Summary).
+- Milestone #440, `script-guard-refuses-only-what-executes`.
+- User-facing release notes: authored at Stage 13 Close under `release/releases/notes/`.
