@@ -377,7 +377,7 @@ The control census: risks=16 · control=R1, R2, R3, R4, R5, R6, R15 · owner-act
 - [ ] **CIAC-1 (#8490 × #8548 on `core/hooks/tests/block-destructive.test.sh`):** each command-substitution execution shape on the exec arm belongs to exactly one card. A substitution outside an assignment's value is #8490's; a substitution inside an assignment's value is #8548's. Each owner carries a listed-script must-not-flag arm and an unlisted-script must-flag arm. *Method:* `grep -c -F "SUBST-BOUNDARY-" core/hooks/tests/block-destructive.test.sh` at least 4. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-2 (#8490 × #8548 × #8326 on `core/hooks/tests/fixtures/walk-payload-corpus.txt`):** the corpus carries at least two rows per card for the shapes this release admits, under the shared group prefix. Each row was re-graded to `a` in its card's GREEN commit, so the single differential grades all three cards together. *Method:* `grep -c -F "|looks-like-" core/hooks/tests/fixtures/walk-payload-corpus.txt` at least 6. *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-3 (#8327 × #8490 × #8548 × #8326 on `core/hooks/tests/block-destructive.test.sh`):** every scan the three precision cards add charges the per-command ceiling, and has a timing arm under the ceiling's cap on the final walk. *Method:* `grep -c -F "CEIL-NEWSCAN-" core/hooks/tests/block-destructive.test.sh` at least 3. *Graded at Stage 9 QC3.5 on the merged PR.*
-- [ ] **CIAC-4 (#8490 × #8548 on `core/rules/bypass-mode-readiness/block-destructive.md`):** the exec arm's graduation record states the disposition, as of merge, of all four hold-backs it lists, including the two this release clears, and the generated registry equals the fragments. *Method:* declared, verification deferred to core/rules/bypass-mode-readiness/block-destructive.md (the graduation record) and core/deploy/tools/build-hook-registry.py (the registry check run in CI). *Graded at Stage 9 QC3.5 on the merged PR.*
+- [ ] **CIAC-4 (#8490 × #8548 on `core/rules/bypass-mode-readiness/block-destructive.md`):** the exec arm's graduation record states the disposition, as of merge, of all four hold-backs it lists, including the two this release narrows, and the generated registry equals the fragments. *Method:* declared, verification deferred to core/rules/bypass-mode-readiness/block-destructive.md (the graduation record) and core/deploy/tools/build-hook-registry.py (the registry check run in CI). *Graded at Stage 9 QC3.5 on the merged PR.*
 - [ ] **CIAC-5 (#8490 × #8548 × #8493 on the post-deploy reading specification):** one reading specification in the fragment governs all three readings. It states the population, a window opening at the Stage-12 hook refresh, a hook hash taken at reading time, and a control. *Method:* declared, verification deferred to core/rules/bypass-mode-readiness/block-destructive.md (the reading specification). *Graded at Stage 9 QC3.5 on the merged PR.*
 
 **Lint (G4-06).** `release/tools/verify-release-plan.sh --ciac-lint` was run on this section written to a draft plan file:
@@ -392,6 +392,10 @@ The control census: risks=16 · control=R1, R2, R3, R4, R5, R6, R15 · owner-act
 
 ### Per-Issue Verification
 
+The criteria counts as the cards carry them, read on the release branch; #8326 and #8327 each carry a fourth criterion added after plan time, and each is bound by its own row below.
+
+`ac_baseline: { #8490: 4, #8548: 4, #8326: 4, #8327: 4, #8493: 3, read_at: b150bbe91b4336baa7f3f9aa93257366ee6d9fd8 }`
+
 | Issue | AC | Verification Method | Expected Result |
 |---|---|---|---|
 | #8490 | AC-1 | `grep -c -F "EXEC-TEXT-NF" core/hooks/tests/block-destructive.test.sh` at least 1 | ≥1 must-not-flag arm; red at its RED commit; its behaviour graded by the suite in the CI shell harness |
@@ -405,9 +409,11 @@ The control census: risks=16 · control=R1, R2, R3, R4, R5, R6, R15 · owner-act
 | #8326 | AC-1 | `grep -c -F "HD-RECV-ADMIT-" core/hooks/tests/block-destructive.test.sh` at least 2 | the allowlist-direction receiver arms and the group-opener arm, red pre-fix |
 | #8326 | AC-2 | `grep -c -F "HD-RECV-MF" core/hooks/tests/block-destructive.test.sh` at least 1 | a stdin-executing receiver is still refused |
 | #8326 | AC-3 | `grep -c -F "looks-like-hd" core/hooks/tests/fixtures/walk-payload-corpus.txt` at least 2 | 0 undeclared movements; the full runner at or above the Commit-0 floor · control: as #8490 AC-3 |
+| #8326 | AC-4 | `grep -c -F "AC-ENCL-RESIDUAL-hd-continuation" core/hooks/tests/block-destructive.test.sh` at least 1 | the continuation pin keeps its verdict, and the INT-2 premise is re-checked against the continuation reading v5.11 shipped, with the finding recorded at Stage 5 |
 | #8327 | AC-1 | `grep -c -F "CEIL-SHAPE-" core/hooks/tests/block-destructive.test.sh` at least 4 | timing arms for a long segment, many segments, empty quotes and enclosure openers, under the cap |
 | #8327 | AC-2 | `grep -c -F "CEIL-AT-CAP" core/hooks/tests/block-destructive.test.sh` at least 1 | at the ceiling the verdict is never an allow |
-| #8327 | AC-3 | `grep -c -F "CEIL-CTL" core/hooks/tests/block-destructive.test.sh` at least 1 | ordinary commands are unaffected; the full runner at or above the floor |
+| #8327 | AC-3 | `grep -c -F "CEIL-VIEW-" core/hooks/tests/block-destructive.test.sh` at least 2 | at either of the enclosure view's two budget exits the command is refused when an arm that reads enclosure positions is at `enforce`, and is unchanged at `warn` |
+| #8327 | AC-4 | `grep -c -F "CEIL-CTL" core/hooks/tests/block-destructive.test.sh` at least 1 | ordinary commands are unaffected; the full runner at or above the floor |
 | #8493 | AC-1 | `grep -c -F "LATCH-SWEEP-" core/hooks/tests/block-destructive.test.sh` at least 3 | bash and sh, every non-alphanumeric member in 8 positions, plus a splitting control |
 | #8493 | AC-2 | [DEFERRED — live-traffic reading after the Stage-12 hook refresh, per D-Readings] | the population, window, and legitimate-work count stated |
 | #8493 | AC-3 | `grep -c -F "LATCH-CAUSE-" core/hooks/tests/block-destructive.test.sh` at least 1 | the route's refusal names its condition |
@@ -463,7 +469,7 @@ The control census: risks=16 · control=R1, R2, R3, R4, R5, R6, R15 · owner-act
 
 ## Release Outcome Statement (draft, for Phase B1)
 
-- **AFTER.** BLOCK-DESTRUCTIVE-022 refuses commands that execute a script and lets text through that only looks like one: a backtick-led path inside text, or a here-document fed to a non-carrier receiver or to one behind a group opener. An allowlisted script run inside an assignment's command substitution is admitted as the script it is. The rule's per-command work stays bounded on pathological shapes, and both error directions of its option-run latch are measured. That clears the two over-match classes the exec arm's record names as holding it back from enforce at its 2026-12-15 (Tuesday) review. The arm's other enclosure-position rows are read separately, as the 2026-10-23 decision requires.
+- **AFTER.** BLOCK-DESTRUCTIVE-022 refuses commands that execute a script and lets text through that only looks like one: a backtick-led path inside text, or a here-document fed to a non-carrier receiver or to one behind a group opener. An allowlisted script run inside an assignment's command substitution is admitted as the script it is. The rule's per-command work stays bounded on pathological shapes, and both error directions of its option-run latch are measured. That narrows the two over-match classes the exec arm's record names as holding it back from enforce at its 2026-12-15 (Tuesday) review. The arm's other enclosure-position rows are read separately, as the 2026-10-23 decision requires.
 - **BEFORE.** Unchanged from the milestone.
 - **Actor(s):** unchanged from the milestone.
 - **Success Indicator:** unchanged from the milestone.
