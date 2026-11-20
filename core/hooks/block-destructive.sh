@@ -2703,7 +2703,7 @@ script_qnext() {
   script_qc=""
   script_qpre=""
   local _ch _pre
-  # ceil-bounded: the quote characters its callers pass, at most three
+  # ceil-bounded: the characters its callers pass, at most ten
   for _ch in "$@"; do
     _pre="${script_qt%%"$_ch"*}"
     if [ "${#_pre}" -ne "${#script_qt}" ]; then
@@ -3003,8 +3003,9 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
   # an enclosure that opens a case: its first pattern's `)` is not the enclosure's close, so the
   # cut reads past it; a cut it cannot place still degrades to the text left whole
   if [ "$2" -eq 1 ]; then case "${1#"${1%%[! 	]*}"}" in 'case '*|'case	'*) _case=1 ;; esac; fi   # M-REACH-CUT
-  # ceil-bounded: the cut's 200 steps (_n)
+  # Charged, and capped at the cut's 200 steps (_n): a step reads the position's remainder.
   while [ -n "$script_qt" ]; do
+    script_ceil_check encl-cut   # M-CEIL-ENCL-CUT
     _n=$(( _n + 1 ))
     if [ "$_n" -gt 200 ]; then return 0; fi
     if [ "$2" -eq 2 ]; then
@@ -3313,8 +3314,9 @@ script_heredoc_prescan() {
     script_qt="$_opline"
 
     # ---- scan this line for here-document operators at quote-state 0 ----
-    # ceil-bounded: the pre-pass's 2,000 steps (_work)
+    # Charged, and capped at the pre-pass's 2,000 steps (_work): a step reads the line left to scan.
     while [ -n "$script_qt" ]; do
+      script_ceil_check hd-scan   # M-CEIL-HD-SCAN
       _work=$(( _work + 1 ))
       if [ "$_work" -ge 2000 ]; then script_hdbail=1; return 0; fi
 
