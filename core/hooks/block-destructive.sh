@@ -254,15 +254,17 @@ log_block() {
   local tool_input; tool_input="$("$PRINTF" '%s' "$INPUT" | "$JQ" -c '.tool_input // {}')"
   local input_digest; input_digest="$(digest "$tool_input")"
   # The conservative route's refusal (BLOCK-DESTRUCTIVE-022 only) carries which gate
-  # sent the segment there, in ADR-205's `features` shape; see script_route_note. The
-  # defaults cover every rule that logs before the -022 block initialises.
+  # sent the segment there, in ADR-205's `features` shape; see script_route_note. It is
+  # written only where check_script_target marked this refusal (script_route_mark) and
+  # the route's loop is running (script_route_live), so a deny site added elsewhere
+  # stays plain. The defaults cover every rule that logs before the -022 block initialises.
   local subj="first"
   if [ "${script_route_n:-0}" -gt 1 ]; then subj="later"; fi
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
     --arg route "${script_route:-}" --arg live "${script_route_live:-0}" --arg subj "$subj" \
-    --arg ceil "${script_ceil_cause:-}" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd} + (if $live == "1" and $route != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, route:$route, subject:$subj}} elif $ceil != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, ceiling:$ceil}} else {} end)' \
+    --arg ceil "${script_ceil_cause:-}" --arg mark "${script_route_mark:-0}" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd} + (if $live == "1" and $mark == "1" and $route != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, route:$route, subject:$subj}} elif $ceil != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, ceiling:$ceil}} else {} end)' \
     >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
@@ -271,7 +273,9 @@ block() {
   local rule_id="$1"
   local reason="$2"
   local override="$3"
-  log_block "$rule_id"
+  # The row is best-effort: a write that fails must not exit the hook before the refusal (exit 1 does
+  # not block), so nothing added to the writer can cost one (ADR-205 Decision 3).
+  log_block "$rule_id" || true
   "$PRINTF" '[CLAUDE-HOOK:%s:%s] BLOCKED: %s\nOverride: %s\n' "$HOOK_NAME" "$rule_id" "$reason" "$override" >&2
   exit 2
 }
@@ -1196,8 +1200,10 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # to keep complete. A character the set leaves out costs an over-block, never an
 # exemption. A character it contains is the other direction, and that one is
 # measured: arms LATCH-SWEEP-* hand every non-alphanumeric member, read from this
-# function on each run, to bash, sh, dash and zsh as unquoted words in eight
-# positions, and require each back as one unchanged word.
+# function on each run, to bash and sh, and to dash and zsh where present, as
+# unquoted words in eight positions, and require each back as one unchanged word.
+# The measurement holds for the shell versions the run prints, each at its default
+# options, in a clean environment; an option that rewrites such a word is outside it.
 #
 # ONE OF THOSE CHARACTERS IS REWRITTEN AT THE START OF A WORD. zsh expands a word
 # that begins with `=` to the path of the command it names, so the walk does not
@@ -1409,7 +1415,9 @@ script_take_cmode_route() {   # reads script_ftok and the last read's globals; s
 # command-string cluster other than a bare `-c` (`cluster`), and an option argument
 # whose text the walk does not hold (`opaque-arg`, set in script_adjudicate_optarg).
 # The first gate to fire is recorded with the token that fired it. A bare `-c` is a
-# real command string, not a gate, and is never recorded. The record is read only by
+# real command string, not a gate, and is never recorded; a bare `-c` the walk reaches
+# after an `opaque-arg` clears that gate's record, because its program string runs
+# whatever the option argument did (M-ROUTE-CLEAR-ARG). The record is read only by
 # a refusal the route's own loop issues (script_route_live): that refusal appends the
 # note below to its reason, and its block-log row gains `features` in the shape
 # ADR-205 gives a second writer of structure in the shared sink, `{schema_version: 1,
@@ -1420,12 +1428,19 @@ script_route_note() {   # sets script_rnote: the suffix a refusal inside the rou
   if [ "${script_route_live:-0}" != 1 ] || [ -z "${script_route:-}" ]; then return 0; fi
   case "$script_route" in
     opaque)
-      script_rnote=" Read on the conservative route (opaque): the word '${script_route_tok}' ahead of the script carries a character this hook cannot read exactly (a quote, a backslash, an expansion, a glob, a brace or a redirection), so the hook cannot tell what it does to the words after it — it may be an option that takes the next word; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, spelling that word as a literal in plain characters (letters, digits and _ = + , . : / @ % -) lets the hook read it." ;;
+      # A redirection or here-string word has no plain spelling, so its note gives the move that works.
+      case "${script_route_tok:-}" in
+        *'<'*|*'>'*)
+          script_rnote=" Read on the conservative route (opaque): the word '${script_route_tok}' ahead of the script carries a character this hook cannot read exactly (a quote, a backslash, an expansion, a glob, a brace or a redirection), so the hook cannot tell what it does to the words after it — it may be an option that takes the next word; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, a redirection or here-string word has no plain spelling; placing it after the script and its arguments, where the hook does not read it, lets the hook read the command." ;;
+        *)
+          script_rnote=" Read on the conservative route (opaque): the word '${script_route_tok}' ahead of the script carries a character this hook cannot read exactly (a quote, a backslash, an expansion, a glob, a brace or a redirection), so the hook cannot tell what it does to the words after it — it may be an option that takes the next word; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, spelling that word as a literal in plain characters (letters, digits and _ = + , . : / @ % -) lets the hook read it." ;;
+      esac ;;
     cluster)
       script_rnote=" Read on the conservative route (cluster): the option cluster '${script_route_tok}' carries the command-string letter c, so the shell reads the next argument as a program string, and every later script-suffixed word is adjudicated as it is behind a bare -c." ;;
     opaque-arg)
       script_rnote=" Read on the conservative route (opaque-arg): the option argument '${script_route_tok}' is not one word whose text this hook holds (an expansion, or a quote it cannot resolve), so the operand behind it is not known; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, write that argument as a literal." ;;
   esac
+  return 0
 }
 
 # THE COMMAND-STRING TABLE, KEYED ON THE INTERPRETER — the fourth per-interpreter
@@ -2137,18 +2152,21 @@ check_script_target() {
   local path="$1" resolved="${2:-1}"
   script_route_note   # M-ROUTE-NOTE (mutation target; pinned by LATCH-CAUSE-M2a)
   if [ "$resolved" -eq 0 ]; then
+    script_route_mark=1   # M-ROUTE-MARK
     block "BLOCK-DESTRUCTIVE-022" \
       "unresolvable script path (quoting): the operand's quotes do not close within its own token, so the filename the shell will run cannot be determined from argv (nearest resolvable prefix: $path).${script_rnote}" \
       "first retry the form the allowlist already permits: a fully-quoted literal path, spelled repository-relative from the repository root (bash 'core/deploy/deploy.sh'). The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
   case "$path" in
     *'$'*)
+      script_route_mark=1   # M-ROUTE-MARK
       block "BLOCK-DESTRUCTIVE-022" \
         "unresolvable script path (variable-bearing): $path — the hook sees unexpanded argv and cannot resolve it to an allowlist entry.${script_rnote}" \
         "first retry the form the allowlist already permits: a literal path with no variable, spelled repository-relative from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
       ;;
   esac
   if ! is_script_allowlisted "$path"; then
+    script_route_mark=1   # M-ROUTE-MARK
     block "BLOCK-DESTRUCTIVE-022" \
       "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation).${script_rnote}" \
       "first retry the form the allowlist already permits: invoke the script by its repository-relative path from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add to .claude/script-execution-allowlist.txt (glob patterns supported); CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
@@ -5721,6 +5739,10 @@ case "$TOOL_NAME" in
           --) script_idx=$(( script_idx + 1 )); break ;;
           -c)
             if [ "$script_verb" = "interp" ]; then script_cmode=1; fi
+            # A real bare -c (the walk's own reading of the token is -c, not a token the route rewrote to
+            # -c) runs its program string whatever an option argument before it did, so the tag that
+            # argument's gate set is cleared; the verdict does not depend on it.
+            if [ "$script_fsub" = "-c" ] && [ "${script_route:-}" = "opaque-arg" ]; then script_route=""; script_route_tok=""; fi   # M-ROUTE-CLEAR-ARG (mutation target; pinned by LATCH-CAUSE-M1c)
             script_idx=$(( script_idx + 1 )); break ;;
           -*)
             # PARSE-ONLY DETECTION — AN ASSIGNMENT OF THE *CURRENT EFFECTIVE STATE*,
