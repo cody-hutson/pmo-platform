@@ -12299,6 +12299,25 @@ for ce_loc in en_US.UTF-8 C; do
   [ "$CE_EXIT" = 2 ] || [ "$CE_DS" = -1 ] || ce_why="${ce_why} exit=${CE_EXIT}"
   ce_report "CEIL-AT-CAP-chars-late [${ce_loc}]: just over the gate, its only refusal an unlisted execution at the end, the command is refused" "$ce_why"
 done
+# The gate stands ahead of the first pass that reads the whole command (Stage 7 F-02, operator option
+# A): the command-position pass runs only on a command the gate admits. Structural, and timed at four
+# times the gate in both locales, where the refusal must come inside the watchdog with cause chars.
+ce_why=""
+ce_ge="$(/usr/bin/grep -n '# M-CEIL-GATE-EARLY$' "$HOOK" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+ce_cp="$(/usr/bin/grep -n '^    COMMAND_CMDPOS="\$(' "$HOOK" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+[ -n "$ce_ge" ] || ce_why="${ce_why} no-early-gate-line"
+[ -n "$ce_cp" ] || ce_why="${ce_why} no-command-position-pass-line"
+if [ -n "$ce_ge" ] && [ -n "$ce_cp" ] && [ "$ce_ge" -ge "$ce_cp" ]; then ce_why="${ce_why} the-gate-follows-the-pass"; fi
+ce_report "CEIL-GATE-ORDER: the length gate stands ahead of the command-position pass" "$ce_why"
+ce_fill 262144 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "${CE_ROOT}/far.cmd"
+for ce_loc in en_US.UTF-8 C; do
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/far.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  [ "$(ce_ceiling)" = chars ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+  ce_report "CEIL-AT-CAP-chars-far [${ce_loc}]: at four times the gate an inert command is refused inside the watchdog, cause chars, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$ce_why"
+done
 
 # CEIL-SHAPE — ten pathological classes, each built just under the gate. With the ceiling off a
 # heavy class outlasts CEIL_CTL (its -ctl limb); with the deadline at 2 s the same class is refused
