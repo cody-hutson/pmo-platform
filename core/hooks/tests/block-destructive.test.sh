@@ -12517,6 +12517,32 @@ for ce_loc in en_US.UTF-8 C; do
   [ "$(ce_ceiling)" = chars ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
   ce_report "CEIL-AT-CAP-chars-far [${ce_loc}]: at four times the gate an inert command is refused inside the watchdog, cause chars, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$ce_why"
 done
+# CEIL-GATE-EARLY-rule (Stage 7 F-13) — the early gate pinned by what it does, not only by where its line
+# stands. One character over the gate, a command whose one finding is another rule's (its last line, with
+# nothing after it) is refused under BLOCK-DESTRUCTIVE-022 with cause chars, because the gate refuses before
+# that rule reads it. On a copy that keeps the gate's marker line and neutralises its test, the same command
+# is refused by the other rule instead, so a gate that stops refusing fails this arm.
+/usr/bin/sed '/# M-CEIL-GATE-EARLY$/s/-gt "\$SCRIPT_CEIL_CHARS"/-lt 0/' "$HOOK" > "${CE_HOOKS}/block-destructive-gatenull.sh"
+/bin/chmod +x "${CE_HOOKS}/block-destructive-gatenull.sh"
+ce_fill 65537 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'git push --force origin main' > "${CE_ROOT}/early.cmd"
+ce_why=""
+ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/early.cmd" "$CEIL_LIMIT"
+[ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+ce_rule=""; if [ -n "$CE_REC" ]; then ce_rule="$(/usr/bin/jq -r '.rule // ""' <<<"$CE_REC" 2>/dev/null)"; fi
+[ "$ce_rule" = BLOCK-DESTRUCTIVE-022 ] || ce_why="${ce_why} rule=${ce_rule:-none}"
+[ "$(ce_ceiling)" = chars ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+ce_report "CEIL-GATE-EARLY-rule: one character over the gate, a command another rule would refuse is refused under BLOCK-DESTRUCTIVE-022, cause chars" "$ce_why"
+ce_why=""
+ce_live block-destructive-gatenull.sh 2 || ce_why="${ce_why} the-gatenull-copy-edit-did-not-apply"
+[ "$(/usr/bin/grep -c '# M-CEIL-GATE-EARLY$' "${CE_HOOKS}/block-destructive-gatenull.sh")" = 1 ] || ce_why="${ce_why} the-copy-lost-the-marker-line"
+ce_timed block-destructive-gatenull.sh en_US.UTF-8 "${CE_ROOT}/early.cmd" "$CEIL_LIMIT"
+[ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+ce_rule=""; if [ -n "$CE_REC" ]; then ce_rule="$(/usr/bin/jq -r '.rule // ""' <<<"$CE_REC" 2>/dev/null)"; fi
+[ "$ce_rule" = BLOCK-DESTRUCTIVE-001 ] || ce_why="${ce_why} rule=${ce_rule:-none}(wanted-BLOCK-DESTRUCTIVE-001)"
+[ -z "$(ce_ceiling)" ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)(wanted-none)"
+ce_report "CEIL-GATE-EARLY-rule-pair: on a copy that keeps the gate's marker line and neutralises its test, the same command is refused by the other rule, so the arm above fails there" "$ce_why"
 
 # CEIL-SHAPE — ten pathological classes, each built just under the gate. With the ceiling off a
 # heavy class outlasts CEIL_CTL (its -ctl limb); with the deadline at 2 s the same class is refused
