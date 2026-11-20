@@ -11955,6 +11955,13 @@ LC_HOOKS="${LC_ROOT}/.claude/hooks"
 /usr/bin/grep -vF -- '# M-ROUTE-TAG-ARG (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m1b.sh"
 /usr/bin/grep -vF -- '# M-ROUTE-NOTE (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m2a.sh"
 /usr/bin/grep -vF -- '# M-ROUTE-LIVE (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m3a.sh"
+# Stage 7: the bare -c clear (m1c), the refusal marker (m5), a block-log writer that fails (logfail),
+# and the live test removed from both readers of the route (m6).
+/usr/bin/grep -vF -- '# M-ROUTE-CLEAR-ARG (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m1c.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-MARK' "$HOOK" > "${LC_HOOKS}/block-destructive-m5.sh"
+/usr/bin/awk '/^log_block\(\) \{$/ { print; print "  return 1"; next } { print }' "$HOOK" > "${LC_HOOKS}/block-destructive-logfail.sh"
+/usr/bin/sed -e 's/if \$live == "1" and /if /' -e 's/if \[ "\${script_route_live:-0}" != 1 \] || \[ -z "\${script_route:-}" \]; then return 0; fi/if [ -z "${script_route:-}" ]; then return 0; fi/' \
+  "$HOOK" > "${LC_HOOKS}/block-destructive-m6.sh"
 /bin/chmod +x "${LC_HOOKS}/"block-destructive*.sh
 LC_LOG="${LC_HOOKS}/block-log.jsonl"
 LC_DRAIN="${LC_HOOKS}/destructive-warn-log.jsonl"
@@ -12151,6 +12158,76 @@ lc_mut_arm "LATCH-CAUSE-M1a: without M-ROUTE-TAG the gate's refusal is untagged"
 lc_mut_arm "LATCH-CAUSE-M1b: without M-ROUTE-TAG-ARG the option argument's refusal is untagged" block-destructive-m1b.sh ZH19 untagged
 lc_mut_arm "LATCH-CAUSE-M2a: without M-ROUTE-NOTE the route's refusal carries no note" block-destructive-m2a.sh ZU34 note-less
 lc_mut_arm "LATCH-CAUSE-M3a: without M-ROUTE-LIVE the route's refusal is neither tagged nor noted" block-destructive-m3a.sh ZU34 both
+
+# --- Stage 7 (#9072): the review's carried adjustments FM-3, FM-4, FM-6 and CD-2, and the reader guard (F-06) ---
+# lc_copy_arm <label> <copy> <shape removed/added> <row id | -> <untagged | tagged:<route>> [<command when row is ->]
+# The copy must differ from the hook by exactly that shape; then the call must refuse, and the row must carry
+# no route tag, or carry that route with its note.
+lc_copy_arm() {
+  local name="$1" copy="$2" shape="$3" row="$4" want="$5" cmd="${6:-}" why="" got
+  got="$(/usr/bin/diff "$HOOK" "${LC_HOOKS}/$copy" | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }')"
+  if [ "$got" != "$shape" ]; then LC_ERR=""; lc_report "$name" " the copy is not live (shape ${got}, wanted ${shape})"; return 0; fi
+  if [ "$row" != "-" ]; then
+    if ! wc_row_cmd "$row"; then LC_ERR=""; lc_report "$name" " row ${row} absent"; return 0; fi
+    cmd="$WC_CMDX"; name="${name} [row ${row}]"
+  fi
+  lc_run "$copy" "$cmd"
+  [ "$LC_EXIT" = 2 ] || why="${why} exit=${LC_EXIT}"
+  case "$want" in
+    untagged) [ -z "$(lc_route)" ] || why="${why} still-tagged=$(lc_route)" ;;
+    tagged:*)
+      [ "$(lc_route)" = "${want#tagged:}" ] || why="${why} features.route=$(lc_route)(wanted-${want#tagged:})"
+      case "$LC_ERR" in *"Read on the conservative route (${want#tagged:}): "*) ;; *) why="${why} no-${want#tagged:}-note" ;; esac ;;
+  esac
+  lc_report "$name" "$why"
+}
+# FM-3: the opaque note's remedy fits its token. A redirection or here-string word has no plain spelling, so
+# its note gives the move that works; an option word keeps the plain-spelling remedy.
+lc_why=""
+if wc_row_cmd ZH05; then
+  lc_run block-destructive.sh "$WC_CMDX"
+  case "$LC_ERR" in *"(opaque): "*"has no plain spelling"*"after the script and its arguments"*) ;; *) lc_why="${lc_why} ZH05-lacks-the-redirection-remedy" ;; esac
+  case "$LC_ERR" in *"in plain characters"*) lc_why="${lc_why} ZH05-offers-the-plain-spelling" ;; esac
+else
+  lc_why="${lc_why} row-ZH05-absent"
+fi
+if wc_row_cmd ZU34; then
+  lc_run block-destructive.sh "$WC_CMDX"
+  case "$LC_ERR" in *"(opaque): "*"in plain characters"*) ;; *) lc_why="${lc_why} ZU34-lacks-the-plain-spelling-remedy" ;; esac
+  case "$LC_ERR" in *"has no plain spelling"*) lc_why="${lc_why} ZU34-offers-the-redirection-remedy" ;; esac
+else
+  lc_why="${lc_why} row-ZU34-absent"
+fi
+lc_report "LATCH-CAUSE-opaque-remedy: the opaque note gives a redirection word the move that works and an option word its plain spelling [rows ZH05, ZU34]" "$lc_why"
+# FM-4: a bare -c after an option argument the walk cannot read is a real command string. Its refusals are
+# untagged; without the clear they carry the option argument's tag. The verdict is the same either way.
+lc_dashc="bash -o pipe\"fail\" -c 'bash ${WC_D}/na.sh'"
+lc_arm "LATCH-CAUSE-ctl-optarg-dashc: a bare -c program after an unreadable option argument is a real command string, untagged" - block-destructive.sh 2 - - - - "$lc_dashc"
+lc_copy_arm "LATCH-CAUSE-M1c: without M-ROUTE-CLEAR-ARG that refusal keeps the option argument's tag" block-destructive-m1c.sh 1/0 - tagged:opaque-arg "$lc_dashc"
+# FM-6: the deny path cannot lose a refusal. A copy whose block-log writer returns non-zero still refuses,
+# on another rule's refusal and on this rule's; block() guards the writer and the note helper ends return 0.
+lc_why=""
+lc_g="$(/usr/bin/diff "$HOOK" "${LC_HOOKS}/block-destructive-logfail.sh" | /usr/bin/grep -c '^>')"
+[ "$lc_g" = 1 ] || lc_why="${lc_why} the-failing-writer-copy-adds-${lc_g}-lines(wanted-1)"
+for lc_c in "git push --force origin main" "bash $HINT_UNLISTED"; do
+  lc_run block-destructive-logfail.sh "$lc_c"
+  [ "$LC_EXIT" = 2 ] || lc_why="${lc_why} [${lc_c%% *}]exit=${LC_EXIT}"
+done
+lc_report "LATCH-CAUSE-M4-logfail: with a block-log writer that returns non-zero, a refusal still exits 2" "$lc_why"
+lc_why=""
+/usr/bin/grep -qF 'log_block "$rule_id" || true' "$HOOK" || lc_why="${lc_why} block-does-not-guard-the-writer"
+lc_last="$(/usr/bin/awk '/^script_route_note\(\) / { f = 1 } f && /^\}/ { print p; exit } f && NF { p = $0 }' "$HOOK" | /usr/bin/sed 's/^[[:space:]]*//')"
+[ "$lc_last" = "return 0" ] || lc_why="${lc_why} the-note-helper-ends-with:${lc_last}"
+lc_report "LATCH-CAUSE-STRUCT-deny: block() guards the block-log writer and the note helper ends with return 0" "$lc_why"
+# CD-2: the tag is keyed on a marker check_script_target sets before each of its three refusals, as well as
+# on the loop's flag. Without the marker the route's refusal is untagged.
+lc_copy_arm "LATCH-CAUSE-M5: without the refusal marker the route's refusal is untagged" block-destructive-m5.sh 3/0 ZU34 untagged
+# F-06: a refusal outside the route's loop while the route is already recorded. An option argument the walk
+# cannot read, carrying a script suffix, is refused on its own value before the loop runs: plain row, no note.
+# With the live test removed from both readers, the same refusal is tagged and noted.
+lc_own="bash --rcfile \$X.sh ${WC_D}/ok.sh"
+lc_arm "LATCH-CAUSE-ctl-optarg-own: an unreadable option argument carrying a script suffix, refused on its own value before the loop, keeps the six keys and no note" - block-destructive.sh 2 - - - - "$lc_own"
+lc_copy_arm "LATCH-CAUSE-M6: with the live test removed from both readers that refusal is tagged and noted" block-destructive-m6.sh 2/2 - tagged:opaque-arg "$lc_own"
 /bin/rm -rf "$LC_ROOT"
 
 # --- #8327: the rule's work ceiling (CEIL-*) ---
