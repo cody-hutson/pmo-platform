@@ -6598,7 +6598,8 @@ WC_HOOKS="${WC_ROOT}/.claude/hooks"
 /bin/cp "${HOOK%/*}/lib/"*.sh  "${WC_HOOKS}/lib/" 2>/dev/null || true
 /bin/cp "${HOOK%/*}/lib/"*.awk "${WC_HOOKS}/lib/" 2>/dev/null || true
 WC_D="/tmp/pmo-walk-corpus"
-/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
+# The interpreter-named path is listed for row AS26 (#8548, D-2); no other row names it.
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" "${WC_D}/bin/bash" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
 /usr/bin/printf 'enforce' > "${WC_HOOKS}/.mode"
 /bin/cp "$HOOK" "${WC_HOOKS}/block-destructive.sh"
 /usr/bin/sed \
@@ -11154,6 +11155,7 @@ aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense
 #   pasubstopt       the test that the word is not option-shaped
 #   pasubstallow     the allowlist test
 #   pasubstname      the test that an operand's text before its first `=` is plain (env's operand loop)
+#   pasubstverb      the decline where the walk before the step refuses the next word (D-2)
 #   forced           the exec arm's phase at enforce; forced-pasubst is forced and pasubst together
 #   enclforced       the enclosure family's phase at enforce
 #   gd, gd-pasubst,  the value step's two text guards off (the ASGN-QVAL block's pqvalguards), alone,
@@ -11181,7 +11183,7 @@ as_build() { # $1 = root  $2… = its allowlist entries -> the hook and its copi
   /usr/bin/printf 'enforce' > "${h}/.mode"
   /bin/cp "$HOOK" "${h}/block-destructive.sh"
   /usr/bin/sed '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-pasubst.sh"
-  for c in moved:MOVED trust:TRUST shape:SHAPE slash:SLASH work:WORK cut:CUT end:END norm:NORM plain:PLAIN opt:OPT allow:ALLOW name:NAME; do
+  for c in moved:MOVED trust:TRUST shape:SHAPE slash:SLASH work:WORK cut:CUT end:END norm:NORM plain:PLAIN opt:OPT allow:ALLOW name:NAME verb:VERB; do
     n="${c%%:*}"; m="${c#*:}"
     /usr/bin/sed "/# M-ASGN-SUBST-${m}\$/d" "$HOOK" > "${h}/block-destructive-pasubst${n}.sh"
   done
@@ -11194,7 +11196,7 @@ as_build() { # $1 = root  $2… = its allowlist entries -> the hook and its copi
   /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' -e '/# M-ASGN-SUBST-MOVED$/d' "$HOOK" > "${h}/block-destructive-gd-moved.sh"
   /bin/chmod +x "${h}/"block-destructive*.sh
 }
-as_build "$AS_ROOT" "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" "${WC_D}/bin/bash"
+as_build "$AS_ROOT" "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" "${WC_D}/bin/bash" "${WC_D}/bin/python3"
 as_build "$AS_GROOT" '*/ok.sh' '*/ok.py'
 
 AS_R=""; AS_H=""; AS_DRAIN=""
@@ -11331,6 +11333,15 @@ as_optp="OUT=\$(bash ${as_q}+x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
 as_int="OUT=\$(bash ${as_q}${WC_D}/ok.sh${as_q}) ${as_bt}${WC_D}/na.sh${as_bt}"
 # D-2: a listed closing word whose basename is an interpreter's name (this root lists one such path).
 as_verb="OUT=\$(bash ${as_q}${WC_D}/bin/bash${as_q}) ${WC_D}/na.sh"
+# D-2, the unquoted spelling (Stage 7): the closing word unquoted with the next word outside the shell
+# family's operand domain and inside the exec arm's; a non-shell-named closing word; a word between the
+# closing word and the script, one that is no command and one that is a wrapper; and the in-domain
+# spelling at an enclosure position. The in-domain spelling at a first-view position is row AS26.
+as_vb_out="OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.py"
+as_vb_ns="OUT=\$(bash ${WC_D}/bin/python3) ${WC_D}/na.py"
+as_vb_flag="OUT=\$(bash ${WC_D}/bin/bash) -x ${WC_D}/na.sh"
+as_vb_wrap="OUT=\$(bash ${WC_D}/bin/bash) nice ${WC_D}/na.sh"
+as_vb_encl="( OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.sh )"
 
 as_root "$AS_ROOT"
 
@@ -11353,6 +11364,7 @@ as_shape_arm "ASGN-SUBST-M14: the moved-walk mutant removes its line from the gu
 as_shape_arm "ASGN-SUBST-M15: the forced reverse copy is the phase line and the two call lines" forced-pasubst "3/1"
 as_shape_arm "ASGN-SUBST-M16: the guards-off copy without the step removes the two call lines" gd-pasubst "2/0" gd
 as_shape_arm "ASGN-SUBST-M17: the operand-name mutant removes its line" pasubstname "1/0"
+as_shape_arm "ASGN-SUBST-M18: the walk-before-refuses mutant removes its line" pasubstverb "1/0"
 
 # --- the listed script inside the substitution: recorded as unresolvable before, admitted after ---
 as_arm "SUBST-BOUNDARY-ASGN-LISTED: an admitted shell interpreter against the opener, the listed script quoted as the substitution's last word" AS01 a W:exec:unresolvable
@@ -11405,6 +11417,27 @@ if [ "$as_verb_h" = "W:exec:not-allowlisted" ] && [ "$as_verb_m" = a ]; then
 else
   as_fail "ASGN-SUBST-PIN-verb: a quoted listed closing word named as an interpreter, then an unlisted script: the step records the script, the walk before records nothing" " hook=${as_verb_h}(wanted W:exec:not-allowlisted) pasubst=${as_verb_m}(wanted a)"
 fi
+# D-2, the unquoted spelling (operator's revised decision). Where the closing word names a shell
+# interpreter and the next word lies in that interpreter's own operand domain, the walk before refuses the
+# next word at a first-view position, so the step declines there and the refusal stands (row AS26; the
+# third limb is the copy without the decline). Every other reading keeps the step's, each pinned below.
+as_arm "ASGN-SUBST-KEEP-verb: an unquoted listed closing word named as a shell interpreter, then an unlisted script in its domain: the walk before's refusal stands" AS26 B B pasubstverb W:exec:not-allowlisted
+# as_pair_arm <label> <command> <hook verdict> <pasubst verdict> — a reading the decline must not move.
+as_pair_arm() {
+  local h m
+  as_run hook "$2"; h="$AS_V"
+  as_run pasubst "$2"; m="$AS_V"
+  if [ "$h" = "$3" ] && [ "$m" = "$4" ]; then
+    as_pass "$1 (hook ${h}, pasubst ${m})"
+  else
+    as_fail "$1" " hook=${h}(wanted $3) pasubst=${m}(wanted $4)"
+  fi
+}
+as_pair_arm "ASGN-SUBST-PIN-verb-domain: the next word outside the shell interpreter's domain, inside the exec arm's: the walk before reads nothing, the step records it" "$as_vb_out" W:exec:not-allowlisted a
+as_pair_arm "ASGN-SUBST-PIN-verb-nonshell: a closing word named as a non-shell interpreter: the walk before writes that family's record, the step the exec arm's" "$as_vb_ns" W:exec:not-allowlisted W:interp-nonshell:not-allowlisted
+as_pair_arm "ASGN-SUBST-PIN-verb-between-flag: a word that is no command between the closing word and the script: the walk before refuses the script as the interpreter's operand, the step reads nothing past that word" "$as_vb_flag" a B
+as_pair_arm "ASGN-SUBST-PIN-verb-between-wrap: a wrapper between the closing word and the script: the walk before refuses the script, the step records it as the wrapper's command" "$as_vb_wrap" W:exec:not-allowlisted B
+as_pair_arm "ASGN-SUBST-PIN-verb-encl: the in-domain spelling at an enclosure position: at the shipped phases the walk before records the next word in the enclosure family, the step in the exec arm's" "$as_vb_encl" W:exec:not-allowlisted W:shell-enclosure:not-allowlisted
 
 # --- the seam with the backtick command word: the step crosses, and the word after it keeps its reading ---
 as_run hook "$as_int"; as_int_v="$AS_V"
@@ -11429,7 +11462,7 @@ as_arm "ASGN-SUBST-PIN-near-redir: a counting command reading the script on stan
 
 # --- the same block under leading-glob allowlist entries: the classes such an entry could admit decline ---
 as_why=""
-for as_c in pasubst pasubstmoved pasubsttrust pasubstshape pasubstslash pasubstpfx pasubstwork pasubstcut pasubstend pasubstnorm pasubstplain pasubstopt pasubstallow pasubstname forced forced-pasubst enclforced gd gd-pasubst gd-moved; do
+for as_c in pasubst pasubstmoved pasubsttrust pasubstshape pasubstslash pasubstpfx pasubstwork pasubstcut pasubstend pasubstnorm pasubstplain pasubstopt pasubstallow pasubstname pasubstverb forced forced-pasubst enclforced gd gd-pasubst gd-moved; do
   /usr/bin/cmp -s "${AS_ROOT}/.claude/hooks/block-destructive-${as_c}.sh" "${AS_GROOT}/.claude/hooks/block-destructive-${as_c}.sh" || as_why="${as_why} ${as_c}"
 done
 if [ -z "$as_why" ]; then
