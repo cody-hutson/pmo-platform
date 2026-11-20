@@ -12177,6 +12177,12 @@ F="$CE_TRACE" /usr/bin/awk 'BEGIN { f = ENVIRON["F"] } / # M-CEIL-TEST$/ { print
 /usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/' \
   -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-exec.sh"
 /usr/bin/sed 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-warn.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-exec-rem.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_INTERP_PHASE=.*/readonly DESTRUCTIVE_022_INTERP_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-int.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_INTERP_PHASE=.*/readonly DESTRUCTIVE_022_INTERP_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-int-rem.sh"
 /bin/chmod +x "${CE_HOOKS}/"block-destructive*.sh
 # ce_live <copy> <lines that must differ> — 0 when the copy differs from the hook by exactly that many lines.
 ce_live() {
@@ -12258,7 +12264,7 @@ ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly
 # dispatch banner, and the -022 block) is charged by a check as its body's first statement, or
 # declared bounded by a `# ceil-bounded:` line directly above its head; no check sits inside the two
 # helpers that run in a command substitution. awk programs' loops (`for (`, `while (`) are not bash.
-ce_cover() { # <file> -> "loops charged bounded bad sub"
+ce_cover() { # <file> -> "loops charged bounded bad sub unseen"
   /usr/bin/awk '
     /^is_script_allowlisted\(\) \{/ { on = 1 }
     /^# BRANCH BY TOOL NAME/ { on = 0 }
@@ -12269,6 +12275,9 @@ ce_cover() { # <file> -> "loops charged bounded bad sub"
     insub && /^\}/ { insub = 0 }
     { line[NR] = $0 }
     on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /^[[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$)/) { head[++nh] = NR }
+    # The forms the head pattern does not read: an arithmetic for, a select, and a loop keyword after a
+    # separator or a pipe on the same line. None may appear on the surface (an awk loop opens with a paren).
+    on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /(^|[;&|[:space:]])for[[:space:]]*\(\(/ || $0 ~ /(^|[;&|[:space:]])select[[:space:]]+[A-Za-z_]/ || $0 ~ /[;&|][[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /[;&|][[:space:]]*for[[:space:]]+[A-Za-z_]/) { un = un (un == "" ? "" : ",") NR }
     END {
       for (i = 1; i <= nh; i++) {
         h = head[i]
@@ -12278,30 +12287,53 @@ ce_cover() { # <file> -> "loops charged bounded bad sub"
         if (line[b] ~ /^[[:space:]]*script_ceil_check [a-z0-9-]+[[:space:]]+# M-CEIL-[A-Z0-9-]+$/) nc++
         else bad = bad (bad == "" ? "" : ",") h
       }
-      printf "%d %d %d %s %d", nh, nc, nb, (bad == "" ? "-" : bad), sub_n
+      printf "%d %d %d %s %d %s", nh, nc, nb, (bad == "" ? "-" : bad), sub_n, (un == "" ? "-" : un)
     }' "$1"
 }
-read -r ce_nl ce_nc ce_nb ce_bad ce_sub <<<"$(ce_cover "$HOOK")"
+read -r ce_nl ce_nc ce_nb ce_bad ce_sub ce_un <<<"$(ce_cover "$HOOK")"
 ce_why=""
 [ "$ce_nl" -ge 46 ] || ce_why="${ce_why} loops-found=${ce_nl}(wanted-at-least-46)"
 [ $(( ce_nc + ce_nb )) = "$ce_nl" ] || ce_why="${ce_why} charged=${ce_nc}+bounded=${ce_nb}-of-${ce_nl}; unannotated-at-lines:${ce_bad}"
 [ "$ce_sub" = 0 ] || ce_why="${ce_why} a-check-inside-a-subshell-helper=${ce_sub}"
-ce_report "CEIL-COVER: every bash loop on the -022 surface is charged or declared bounded (${ce_nl} loops: ${ce_nc} charged, ${ce_nb} bounded), and none is charged inside a subshell helper" "$ce_why"
+[ "$ce_un" = "-" ] || ce_why="${ce_why} a-loop-form-the-arm-does-not-read-at-lines:${ce_un}"
+ce_report "CEIL-COVER: every bash loop on the -022 surface is charged or declared bounded (${ce_nl} loops: ${ce_nc} charged, ${ce_nb} bounded), none is charged inside a subshell helper, and no loop form the arm does not read appears" "$ce_why"
 /usr/bin/grep -v -- '# M-CEIL-ROUTE$' "$HOOK" > "${CE_ROOT}/cover-m1"
 /usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe() {"; print "  while false; do"; print "    :"; print "  done"; print "}"; d = 1 } { print }' \
   "$HOOK" > "${CE_ROOT}/cover-m2"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe2() {"; print "  for (( i = 0; i < 1; i++ )); do :; done"; print "  select w in a; do break; done"; print "  true; while false; do :; done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-m3"
 ce_why=""
 [ "$ce_bad" = "-" ] || ce_why="${ce_why} the-shipped-hook-is-not-covered"
 ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m1" | /usr/bin/grep -c '^[<>]')"
 if [ "$ce_live_n" != 1 ]; then
   ce_why="${ce_why} no-route-charge-line-to-delete"
 else
-  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub <<<"$(ce_cover "${CE_ROOT}/cover-m1")"
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m1")"
   case "$ce_mbad" in -|*,*) ce_why="${ce_why} the-deleted-route-charge-reads-${ce_mbad}(wanted-one-loop)" ;; esac
 fi
-read -r ce_nl ce_nc ce_nb ce_mbad ce_sub <<<"$(ce_cover "${CE_ROOT}/cover-m2")"
+read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m2")"
 case "$ce_mbad" in -|*,*) ce_why="${ce_why} the-added-loop-reads-${ce_mbad}(wanted-one-loop)" ;; esac
-ce_report "CEIL-COVER-mut: a copy with the route loop's charge deleted, and one with an unannotated loop added, each read exactly one uncovered loop" "$ce_why"
+read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m3")"
+case "$ce_un" in *,*,*) ;; *) ce_why="${ce_why} the-three-unread-forms-read-${ce_un}(wanted-three-lines)" ;; esac
+ce_report "CEIL-COVER-mut: a copy with the route loop's charge deleted, and one with an unannotated loop added, each read exactly one uncovered loop; a copy with an arithmetic for, a select and a loop after a separator added reads all three as forms the arm does not read" "$ce_why"
+# CEIL-COVER-charged (Stage 7 F-03) — the here-document pre-pass's character scan and the enclosure cut's
+# loop, whose steps read text as long as a line or a position's remainder, carry the check, not only a
+# step cap: each marker is present once, and on the trace copy each tag is traced on a command that runs it.
+ce_why=""
+[ "$(/usr/bin/grep -c '# M-CEIL-HD-SCAN$' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-scan-charge"
+[ "$(/usr/bin/grep -c '# M-CEIL-ENCL-CUT$' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-cut-charge"
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+if wc_row_cmd HL01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/charge-hd.cmd"; fi
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/charge-hd.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'hd-scan' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} scan-tag-traced=${ce_t:-0}"
+/usr/bin/printf '%s' 'echo $(true) $(true)' > "${CE_ROOT}/charge-cut.cmd"
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/charge-cut.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'encl-cut' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} cut-tag-traced=${ce_t:-0}"
+ce_report "CEIL-COVER-charged: the here-document pre-pass's character scan [row HL01] and the enclosure cut's loop are charged, each tag traced" "$ce_why"
 
 # CEIL-AT-CAP — at the deadline and at the gate the rule refuses, never allows.
 /usr/bin/printf '%s' 'ls -la' > "${CE_ROOT}/inert.cmd"
@@ -12496,12 +12528,16 @@ ce_why=""; [ "$wc_n" -gt 0 ] || ce_why=" no-corpus-rows"; [ "$ce_mv" = 0 ] || ce
 ce_report "CEIL-CTL-verdict: over the walk payload corpus no verdict moves (${wc_n} rows)" "$ce_why"
 
 # CEIL-CAUSE — the refusal names the ceiling and the remedy; its row says which ceiling.
-ce_timed block-destructive-t0.sh en_US.UTF-8 "${CE_ROOT}/inert.cmd" "$CEIL_LIMIT"
 ce_why=""
-case "$CE_ERR" in *"BLOCKED: "*"per-command work ceiling"*) ;; *) ce_why="${ce_why} reason-does-not-name-the-ceiling" ;; esac
-ce_ov="$(/usr/bin/printf '%s\n' "$CE_ERR" | /usr/bin/sed -n 's/^Override: //p')"
-case "$ce_ov" in "pass long text by file reference"*"not an agent's next step.") ;; *) ce_why="${ce_why} override-order" ;; esac
-ce_report "CEIL-CAUSE-text: the refusal names the work ceiling, and its Override leads with passing text by file and ends with the bypass" "$ce_why"
+for ce_c in "t0:inert:takes longer to read than this rule allows" "ship:over:is longer than this rule reads"; do
+  ce_cp="block-destructive-${ce_c%%:*}.sh"; [ "${ce_c%%:*}" = ship ] && ce_cp=block-destructive.sh
+  ce_rest="${ce_c#*:}"
+  ce_timed "$ce_cp" en_US.UTF-8 "${CE_ROOT}/${ce_rest%%:*}.cmd" "$CEIL_LIMIT"
+  case "$CE_ERR" in *"BLOCKED: "*"${ce_rest#*:}"*"per-command work ceiling"*) ;; *) ce_why="${ce_why} [${ce_rest%%:*}] reason-does-not-name-the-ceiling-and-its-cause" ;; esac
+  ce_ov="$(/usr/bin/printf '%s\n' "$CE_ERR" | /usr/bin/sed -n 's/^Override: //p')"
+  case "$ce_ov" in "pass long text by file reference"*"not an agent's next step.") ;; *) ce_why="${ce_why} [${ce_rest%%:*}] override-order" ;; esac
+done
+ce_report "CEIL-CAUSE-text: each refusal names the work ceiling and its cause, the deadline and the length gate, and its Override leads with passing text by file and ends with the bypass" "$ce_why"
 ce_why=""
 for ce_c in t0:inert:time ship:over:chars; do
   ce_cp="block-destructive-${ce_c%%:*}.sh"; [ "${ce_c%%:*}" = ship ] && ce_cp=block-destructive.sh
@@ -12582,7 +12618,7 @@ ce_report "CEIL-NEWSCAN-ASGN: the assignment-substitution step is charged on an 
 # the command is refused instead of losing a position; at the shipped warn phases nothing moves.
 /usr/bin/printf '%s' 'echo $(true) $(true) $(true) $(true) $(true) $(true)' > "${CE_ROOT}/vpos.cmd"
 /usr/bin/printf '%s' "echo \$(true) $(/usr/bin/printf '%*s' 100 '' | /usr/bin/tr ' ' 'x') \$(true) y" > "${CE_ROOT}/vrem.cmd"
-for ce_v in v-pos:vpos:positions v-rem:vrem:remainder v-exec:vpos:positions; do
+for ce_v in v-pos:vpos:positions v-rem:vrem:remainder v-exec:vpos:positions v-exec-rem:vrem:remainder v-int:vpos:positions v-int-rem:vrem:remainder; do
   ce_cp="block-destructive-${ce_v%%:*}.sh"; ce_rest="${ce_v#*:}"
   ce_timed "$ce_cp" en_US.UTF-8 "${CE_ROOT}/${ce_rest%%:*}.cmd" "$CEIL_LIMIT"
   ce_why=""
