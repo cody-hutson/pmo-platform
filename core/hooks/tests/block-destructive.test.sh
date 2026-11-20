@@ -11998,6 +11998,8 @@ LC_HOOKS="${LC_ROOT}/.claude/hooks"
 # Stage 7: the bare -c clear (m1c), the refusal marker (m5), a block-log writer that fails (logfail),
 # and the live test removed from both readers of the route (m6).
 /usr/bin/grep -vF -- '# M-ROUTE-CLEAR-ARG (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m1c.sh"
+# Stage 7 pass 2: the bare -c clear with its token test dropped, so it clears on any token the label reaches (m1d).
+/usr/bin/sed '/# M-ROUTE-CLEAR-ARG (mutation/s/if \[ "\$script_fsub" = "-c" \] && \[/if [/' "$HOOK" > "${LC_HOOKS}/block-destructive-m1d.sh"
 /usr/bin/grep -vF -- '# M-ROUTE-MARK' "$HOOK" > "${LC_HOOKS}/block-destructive-m5.sh"
 /usr/bin/awk '/^log_block\(\) \{$/ { print; print "  return 1"; next } { print }' "$HOOK" > "${LC_HOOKS}/block-destructive-logfail.sh"
 /usr/bin/sed -e 's/if \$live == "1" and /if /' -e 's/if \[ "\${script_route_live:-0}" != 1 \] || \[ -z "\${script_route:-}" \]; then return 0; fi/if [ -z "${script_route:-}" ]; then return 0; fi/' \
@@ -12244,6 +12246,13 @@ lc_report "LATCH-CAUSE-opaque-remedy: the opaque note gives a redirection word t
 lc_dashc="bash -o pipe\"fail\" -c 'bash ${WC_D}/na.sh'"
 lc_arm "LATCH-CAUSE-ctl-optarg-dashc: a bare -c program after an unreadable option argument is a real command string, untagged" - block-destructive.sh 2 - - - - "$lc_dashc"
 lc_copy_arm "LATCH-CAUSE-M1c: without M-ROUTE-CLEAR-ARG that refusal keeps the option argument's tag" block-destructive-m1c.sh 1/0 - tagged:opaque-arg "$lc_dashc"
+# Stage 7 pass 2 (N-1): the clear waits for a real bare -c. After an option argument the walk cannot read, a
+# second gate's token is rewritten to -c and reaches the same label; the walk's own reading of that token is
+# not -c, so the first gate's tag stands and the refusal carries it and its note. With the token test
+# dropped, the clear fires there too and the same refusal is untagged.
+lc_gate2="bash -o pipe\"fail\" -x\$X ${WC_D}/na.sh"
+lc_arm "LATCH-CAUSE-ctl-optarg-gate2: a second gate after an unreadable option argument keeps the option argument's tag and note" - block-destructive.sh 2 opaque-arg 'pipe"fail"' opaque-arg any "$lc_gate2"
+lc_copy_arm "LATCH-CAUSE-M1d: with the clear's token test dropped that refusal is untagged" block-destructive-m1d.sh 1/1 - untagged "$lc_gate2"
 # FM-6: the deny path cannot lose a refusal. A copy whose block-log writer returns non-zero still refuses,
 # on another rule's refusal and on this rule's; block() guards the writer and the note helper ends return 0.
 lc_why=""
