@@ -3085,7 +3085,10 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
 #      NOT in the shared set (D-8326-1). `cat` does not execute its stdin, but it
 #      prints it, so for `cat` alone a third condition applies: nothing in the
 #      command reads its output — the whole-command no-consumer test after the
-#      scan (M-HD-RECV-NOCONS). The quoted-argument suppression is unchanged.
+#      scan (M-HD-RECV-NOCONS). `cat` is read only as itself or a system path, on the
+#      physical and the logical line (M-HD-RECV-CATPATH, M-HD-RECV-CATPATH-LM), and
+#      not in a command that names a rebinding (M-HD-RECV-REBIND). The
+#      quoted-argument suppression is unchanged.
 #  (2) CONSTRUCT-INERT — the delimiter is QUOTED (`'D'`, `"D"`, `\D`), which
 #      suppresses every expansion in the body; or it is BARE and the body
 #      contains neither `$` nor a backtick. That is the identical two-tier split
@@ -3121,8 +3124,9 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
 #
 # WHAT NEWLY PASSES, EXACTLY: the body of a here-document whose delimiter is
 # quoted, or is bare with a body free of `$` and backtick, redirected into `gh`,
-# `printf`, `echo` or `jq`, or into `cat` when nothing in the command reads `cat`'s
-# output — the receiver read through a leading `(` (not `((`) and the grammar
+# `printf`, `echo` or `jq`, or into `cat` — written as `cat`, `/bin/cat` or
+# `/usr/bin/cat`, in a command that names no rebinding — when nothing in the command
+# reads `cat`'s output — the receiver read through a leading `(` (not `((`) and the grammar
 # words `{`, `!`, `then`, `do`, `else`, `elif`, `if`, `while` and `until`, and never
 # from a text that holds a compound-command closer. Nothing else. The RESIDUAL is that naming a carrier
 # verb gets that body unadjudicated — which is NOT a new residual. It is exactly
@@ -3161,7 +3165,8 @@ script_hd_delim_ok() {
 # THE CLOSER RULE. A here-document written after a compound command's closer is redirected to the
 # whole compound command, and the receiver test reads only the simple command whose own words reach the
 # operator. So a receiver text that, read from its head on, holds a `)` closing an opener the head sits
-# inside (script_hd_recv_closes), or a `}` word, sets script_hdrecv_closer, and
+# inside (script_hd_recv_closes), or a `}` word, alone or followed directly by a redirection or a
+# control character (M-HD-RECV-BRACE-OP), sets script_hdrecv_closer, and
 # the pre-pass keeps the body for every receiver reading (M-HD-RECV-CLOSER): withdraw-only, the
 # fail-closed direction. A parenthesis inside a quoted argument, or one that closes a substitution opened
 # in the command's own words, closes nothing the receiver sits inside, and keeps nothing.
@@ -3170,8 +3175,9 @@ script_hd_delim_ok() {
 # backslash escapes the next byte; a single-quoted span is literal; a double-quoted span is skipped
 # except for a substitution it opens, which is read as the command's own words; a backtick opens a span
 # read to its own close. A `(` opens and a `)` closes; a `)` with nothing open is the closer of an opener
-# before the head. Text this read does not model keeps the body: an ANSI-C quote, a parameter,
-# arithmetic or brace expansion, and an unquoted brace or bracket, in any of which a parenthesis can be
+# before the head. Text this read does not model keeps the body: an ANSI-C quote, a parameter expansion,
+# an arithmetic expansion in its bracket form (the double-parenthesis form is read as two parentheses, as
+# bash parses it), a brace expansion, and an unquoted brace or bracket, in any of which a parenthesis can be
 # literal to the shell (M-HD-RECV-UNMODELED). An unterminated single-quoted span keeps the body, the fail-closed answer, and so does
 # a read that fails. An unterminated double-quoted span or substitution, as in a body passed inline
 # through "$(cat <<'EOF'", closes nothing.
@@ -3235,6 +3241,9 @@ script_hd_recv_text() {   # $1 = a receiver text -> script_hdrecv_out, script_hd
   case "$_t" in *')'*) script_hd_recv_closes "$_t" && script_hdrecv_closer=1 ;; esac   # M-HD-RECV-CLOSES
   # A `}` word keeps the body whatever stands beside it: zsh reads a lone `}` as a group's closer.
   case "$_t" in '}'|'}'[[:blank:]]*|*[[:blank:]]'}'|*[[:blank:]]'}'[[:blank:]]*) script_hdrecv_closer=1 ;; esac
+  # zsh also ends that word at a redirection or a control character, so a `}` that begins a word and is
+  # followed directly by one closes the group too, and the redirections after it bind to the whole group.
+  case "$_t" in '}'['<>|&;()']*|*[[:blank:]]'}'['<>|&;()']*) script_hdrecv_closer=1 ;; esac   # M-HD-RECV-BRACE-OP
   script_hdrecv_out="$_t"
   if [ "$_s" -gt 0 ]; then script_hdrecv_step=1; fi
   return 0
@@ -3533,7 +3542,8 @@ script_heredoc_prescan() {
         script_hd_recv_text "${_qlhead[$_k]}"
         if [ "$script_hdrecv_closer" -eq 1 ]; then _cls=1; fi
         _lm=0
-        if script_head_is_carrier "$script_hdrecv_out"; then _lm=1; elif [ "${script_head##*/}" = cat ]; then _lm=2; fi
+        # cat counts for the logical reading only as itself or a system path, as for the line reading below.
+        if script_head_is_carrier "$script_hdrecv_out"; then _lm=1; elif [ "${script_head##*/}" = cat ]; then case "$script_head" in cat|/bin/cat|/usr/bin/cat) _lm=2 ;; esac; fi   # M-HD-RECV-CATPATH-LM
       fi
       script_hd_recv_text "${_qhead2[$_k]}"
       if [ "$script_hdrecv_closer" -eq 1 ]; then _cls=1; fi
@@ -3642,7 +3652,11 @@ script_heredoc_prescan() {
   if [ "$_catx" -eq 1 ]; then case "$_ops" in *'|'*|*'('*|*')'*|*"$script_qbt"*|*coproc*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-NOCONS
   # Nor in a command that rebinds a command name, where the word cat may not run cat: an alias, a
   # function definition, a hash entry or an enabled builtin anywhere in the command keeps every body.
-  if [ "$_catx" -eq 1 ]; then case "$COMMAND" in *'alias '*|*'function '*|*'hash '*|*'cat()'*|*'cat ()'*|*'enable '*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-REBIND
+  # Each word is read as a substring, so a builtin quoted, escaped or followed by any blank is read too,
+  # and so are the shells' alias and command tables (BASH_ALIASES, BASH_CMDS, zsh's aliases and
+  # commands; zsh's functions is read through `function`). A definition with a parenthesis already ends
+  # at M-HD-RECV-NOCONS. It is an enumeration, not a closed class: R-1 names what it does not read.
+  if [ "$_catx" -eq 1 ]; then case "$COMMAND" in *alias*|*function*|*hash*|*enable*|*BASH_ALIASES*|*BASH_CMDS*|*commands*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-REBIND
 
   # No here-document operator at quote-state 0 — every `<<` in this command was a
   # here-string or quoted text. Nothing to excise, and nothing to decline.
@@ -4465,7 +4479,12 @@ case "$TOOL_NAME" in
     #       prior-turn state. NOT NEW — the quoted-argument suppression below
     #       carries the identical hole (`gh … --body 'note; bash <x>.sh'` ships
     #       allowed). The surface grows to here-document bodies; the kind, the
-    #       precondition and the fail direction do not.
+    #       precondition and the fail direction do not. The pre-pass's receiver list
+    #       adds cat, so a function, alias or command-hash entry named cat grows the
+    #       surface by one name. The rebinding test that guards it (M-HD-RECV-REBIND)
+    #       is a non-exhaustive enumeration over this command's own text: it does not
+    #       read a rebinding made in an earlier turn, one made by text the shell
+    #       evaluates, or one whose builtin name is split by quotes.
     #   R-2 A BARE-DELIMITER EXPANSION INTRODUCED BY NEITHER `$` NOR A BACKTICK.
     #       None exists in POSIX; this is the same claim condition (2) already
     #       makes for `"…"`, so both break together if a shell ever adds one.
