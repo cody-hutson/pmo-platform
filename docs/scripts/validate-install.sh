@@ -121,9 +121,9 @@ readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 # are EXCLUDED by construction: an INFO is a record, not a step, and increments
 # no counter.
 #
-# Both Mode A sub-modes emit the SAME total. --mode install runs all fifteen
-# checks. --mode operator-pre-existing runs eleven (A1, A2, A3, A3c, A3d, A5, A6,
-# A6b, A7, A8, A9) and emits SKIP for the four whose surfaces postdate such a
+# Both Mode A sub-modes emit the SAME total. --mode install runs all sixteen
+# checks. --mode operator-pre-existing runs twelve (A1, A2, A3, A3c, A3d, A3e, A5,
+# A6, A6b, A7, A8, A9) and emits SKIP for the four whose surfaces postdate such a
 # workspace — A3b composition-surface manifest, A4 state marker, A5b operations
 # anchor, A10 operator.toml. A SKIP is still an emitted record, so a single
 # constant is correct for both sub-modes, which is what stops this number
@@ -134,7 +134,7 @@ readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 # from the current release's file list, so it is satisfiable by a pre-installer
 # workspace. It may still emit SKIP at runtime when the derivation matches
 # nothing — a SKIP is an emitted record either way, so the total is unaffected.
-readonly MODE_A_TOTAL=15
+readonly MODE_A_TOTAL=16
 readonly MODE_B_TOTAL=4
 
 # --- Section 3: Mutable state (scalars only; bash-3.2-compatible) ---
@@ -174,7 +174,7 @@ Verify pmo-platform install (Mode A) and first-task invocation (Mode B).
 Options:
   --mode {install,first-task,all,operator-pre-existing}
                           Select scope (default: all).
-                          - install: Mode A only (15 checks).
+                          - install: Mode A only (16 checks).
                           - first-task: Mode B only (4 checks).
                           - all: Mode A followed by Mode B.
                           - operator-pre-existing: subset of Mode A for
@@ -198,7 +198,7 @@ Output channels:
 
 Modes:
   - install                  Verifies setup-workspace.sh succeeded.
-                             15 checks, all read-only bash.
+                             16 checks, all read-only bash.
   - first-task               Verifies demo skill output parses correctly.
                              4 checks; B2 emits an operator hand-off block;
                              re-run with --continue after capturing the
@@ -207,11 +207,11 @@ Modes:
                              skipped (install must verify first).
   - operator-pre-existing    Workspaces created before setup-workspace.sh
                              shipped (no state-marker yet). Runs A1, A2, A3,
-                             A3c, A3d, A5, A6, A6b, A7, A8, A9; A3b, A4, A5b and
-                             A10 emit
+                             A3c, A3d, A3e, A5, A6, A6b, A7, A8, A9; A3b, A4,
+                             A5b and A10 emit
                              SKIP because those surfaces postdate such a
                              workspace.
-                             Emits 15 check records — the same total as the
+                             Emits 16 check records — the same total as the
                              install sub-mode, because a SKIP is still a record.
                              Aggregate verdict is per-mode unambiguous.
 
@@ -770,27 +770,41 @@ check_a3c_hook_lib_closure() {
 }
 
 # A3d asserts the commit-time PII guard is WIRED as the source repo's pre-commit git hook
-# (GHSA-c748). A3 sees the guard's copy under .claude/hooks/, which git never reads, so A3
-# PASSes on an install where the guard is fully off. The predicate is the hook as the guard
-# itself resolves it, not the file's presence: <hooks>/pre-commit must be ONE link to the main
-# worktree's executable git-pre-commit-pii.sh. A dangling link, a chain of links, a link to
-# another copy of the guard and a byte copy all FAIL; a custom hook that names the guard is
-# SKIP, because naming it is not running it. Git skips a dangling hook without a word.
+# (GHSA-c748), and A3e asserts the push-time backstop is wired as its pre-push hook. A3 sees
+# their copies under .claude/hooks/, which git never reads, so A3 PASSes on an install where
+# both are fully off. The pre-push hook is the backstop for the commits git makes without
+# pre-commit (merge, cherry-pick, revert, rebase, stash, commit-tree): with it unwired, those
+# reach the remote unscanned. The predicate is the hook as it resolves itself, not the file's
+# presence: <hooks>/<hook> must be ONE link to the main worktree's executable script. A
+# dangling link, a chain of links, a link to another copy and a byte copy all FAIL; a custom
+# hook that names the script is SKIP, because naming it is not running it. Git skips a
+# dangling hook without a word.
 #
 # Scope mirrors the installer's. A source repo outside the workspace root is not auto-wired
-# by design (the test suites pass the real checkout that way), so an unwired guard there is
-# SKIP with the manual step named, never PASS. A wired guard PASSes wherever the repo sits.
+# by design (the test suites pass the real checkout that way), so an unwired hook there is
+# SKIP with the manual step named, never PASS. A wired hook PASSes wherever the repo sits.
 # A core.hooksPath set outside the repository's own config (a hooks dir other repositories
 # share) is SKIP too: the installer does not wire it, so FAIL would name a remedy that cannot work.
 # RUNS in operator-pre-existing mode too: the guard predates the installer, so a
 # pre-installer workspace is judged on the same predicate.
 check_a3d_pii_precommit_wired() {
+  check_pii_git_hook_wired "A3d" "INSTALL-PII-PRECOMMIT" "pre-commit" "git-pre-commit-pii.sh" \
+    "commit-time PII guard" "commit"
+}
+check_a3e_pii_prepush_wired() {
+  check_pii_git_hook_wired "A3e" "INSTALL-PII-PREPUSH" "pre-push" "git-pre-push-pii.sh" \
+    "push-time PII backstop" "push"
+}
+
+# check_pii_git_hook_wired <id> <check-name> <git-hook> <script> <what> <path-noun>
+check_pii_git_hook_wired() {
+  local id="$1" name="$2" hname="$3" script="$4" what="$5" noun="$6"
   local hooks_dir main target hook one diag src_phys ws_phys hp_eff hp_local
-  local manual="ln -s ../../core/hooks/git-pre-commit-pii.sh \"\$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit\""
+  local manual="ln -s ../../core/hooks/${script} \"\$(git rev-parse --path-format=absolute --git-path hooks)/${hname}\""
   hooks_dir="$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-path hooks 2>/dev/null || true)"
   if [ -z "${hooks_dir}" ]; then
-    emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
-      "source repo is not a git checkout; there is no commit path to guard" "A"
+    emit_skip "${id}" "${name}" \
+      "source repo is not a git checkout; there is no ${noun} path to guard" "A"
     return
   fi
   # The main worktree, captured then cut -- never piped into a reader that stops early,
@@ -802,16 +816,16 @@ check_a3d_pii_precommit_wired() {
   main="${main%%$'\n'*}"
   case "${main}" in "worktree "*) main="${main#worktree }" ;; *) main="" ;; esac
   main="$(cd "${main:-/nonexistent}" 2>/dev/null && pwd -P || true)"
-  if [ ! -f "${main}/core/hooks/git-pre-commit-pii.sh" ] \
+  if [ ! -f "${main}/core/hooks/${script}" ] \
      && [ "$(git -C "${SOURCE_REPO}" rev-parse --absolute-git-dir 2>/dev/null || true)" = \
           "$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)" ]; then
     main="$(git -C "${SOURCE_REPO}" rev-parse --show-toplevel 2>/dev/null || true)"
     main="$(cd "${main:-/nonexistent}" 2>/dev/null && pwd -P || true)"
   fi
-  target="${main}/core/hooks/git-pre-commit-pii.sh"
-  hook="${hooks_dir}/pre-commit"
-  # Judged at ONE hop, because that is how far the guard follows its own link to find its
-  # library and needle list. A chain of links PASSed a guard that then ran degraded.
+  target="${main}/core/hooks/${script}"
+  hook="${hooks_dir}/${hname}"
+  # Judged at ONE hop, because that is how far each script follows its own link to find its
+  # library, needle list and siblings. A chain of links PASSed a guard that then ran degraded.
   one=""
   if [ -L "${hook}" ]; then
     one="$(readlink "${hook}")"
@@ -821,50 +835,50 @@ check_a3d_pii_precommit_wired() {
     fi
   fi
   if [ -L "${hook}" ] && [ -n "${main}" ] && [ "${one}" = "${target}" ] && [ ! -L "${one}" ] && [ -x "${one}" ]; then
-    emit_pass "A3d" "INSTALL-PII-PRECOMMIT" "pre-commit links to ${target}" "A"
+    emit_pass "${id}" "${name}" "${hname} links to ${target}" "A"
     return
   fi
-  # Everything else is a named failure, except a custom hook that names the guard: naming it
+  # Everything else is a named failure, except a custom hook that names the script: naming it
   # (a comment is enough) is not running it, so that is SKIP -- this check cannot confirm it --
   # and never PASS.
   if [ ! -e "${hook}" ] && [ ! -L "${hook}" ]; then
-    diag="no pre-commit hook at ${hook}"
+    diag="no ${hname} hook at ${hook}"
   elif [ ! -e "${hook}" ]; then
-    diag="pre-commit is a dangling link (git skips it silently)"
+    diag="${hname} is a dangling link (git skips it silently)"
   elif [ -L "${hook}" ] && [ -L "${one}" ]; then
-    diag="pre-commit is a chain of links; the guard follows one link only, so it resolves its library and needle list from $(dirname "${one}") and runs degraded"
-  elif [ -L "${hook}" ] && [ "$(basename "${one}")" = "git-pre-commit-pii.sh" ]; then
-    diag="pre-commit links to another copy of the guard (${one}), not the main worktree's; --refresh-hooks re-points it"
+    diag="${hname} is a chain of links; the script follows one link only, so it resolves its library, needle list and siblings from $(dirname "${one}") and runs degraded"
+  elif [ -L "${hook}" ] && [ "$(basename "${one}")" = "${script}" ]; then
+    diag="${hname} links to another copy of the guard (${one}), not the main worktree's; --refresh-hooks re-points it"
   elif [ ! -x "${hook}" ]; then
-    diag="pre-commit is not executable"
+    diag="${hname} is not executable"
   elif cmp -s "${hook}" "${target}"; then
-    diag="pre-commit is a copy of the guard, not a link to it (a copy resolves its library and needle list from the hooks dir and runs degraded)"
-  elif grep -q 'git-pre-commit-pii\.sh' "${hook}" 2>/dev/null; then
-    emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
-      "custom pre-commit hook ${hook} names the PII guard; A3d cannot confirm it runs it — link ${target} as pre-commit to make this check decisive" "A"
+    diag="${hname} is a copy of the guard, not a link to it (a copy resolves its library, needle list and siblings from the hooks dir and runs degraded)"
+  elif grep -qF "${script}" "${hook}" 2>/dev/null; then
+    emit_skip "${id}" "${name}" \
+      "custom ${hname} hook ${hook} names ${script}; ${id} cannot confirm it runs it — link ${target} as ${hname} to make this check decisive" "A"
     return
   else
-    diag="pre-commit is a different hook that does not call the PII guard"
+    diag="${hname} is a different hook that does not call ${script}"
   fi
   # A core.hooksPath set outside this repository's own config names a hooks dir other
-  # repositories share. The installer does not wire the guard there, so FAIL would point at a
+  # repositories share. The installer does not wire the hook there, so FAIL would point at a
   # remedy that cannot work.
   hp_eff="$(git -C "${SOURCE_REPO}" config --get core.hooksPath 2>/dev/null || true)"
   hp_local="$(git -C "${SOURCE_REPO}" config --local --get core.hooksPath 2>/dev/null || true)"
   if [ -n "${hp_eff}" ] && [ -z "${hp_local}" ]; then
-    emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
-      "core.hooksPath (${hp_eff}) is set outside this repository's config, so the installer does not wire a shared hooks dir (${diag}); wire the guard there by hand if that is intended" "A"
+    emit_skip "${id}" "${name}" \
+      "core.hooksPath (${hp_eff}) is set outside this repository's config, so the installer does not wire a shared hooks dir (${diag}); wire the ${hname} hook there by hand if that is intended" "A"
     return
   fi
   src_phys="$(cd "${SOURCE_REPO}" 2>/dev/null && pwd -P || true)"
   ws_phys="$(cd "${WORKSPACE_ROOT}" 2>/dev/null && pwd -P || true)"
   case "${src_phys}/" in
     "${ws_phys}"/*)
-      emit_fail "A3d" "INSTALL-PII-PRECOMMIT" "commit-time PII guard is NOT active: ${diag}" \
-        "run 'setup-workspace.sh --refresh-hooks' (or ./update.sh); a custom pre-commit hook must call ${target}" "A"
+      emit_fail "${id}" "${name}" "${what} is NOT active: ${diag}" \
+        "run 'setup-workspace.sh --refresh-hooks' (or ./update.sh); a custom ${hname} hook must call ${target}" "A"
       ;;
     *)
-      emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
+      emit_skip "${id}" "${name}" \
         "source repo is outside the workspace root, so the installer does not wire it (${diag}); wire it from the repo root: ${manual}" "A"
       ;;
   esac
@@ -1337,6 +1351,7 @@ mode_a_install_verify() {
   check_a3b_composition_surface
   check_a3c_hook_lib_closure
   check_a3d_pii_precommit_wired
+  check_a3e_pii_prepush_wired
   check_a4_state_marker
   check_a5_claude_md
   check_a5b_operations_anchor
@@ -1360,7 +1375,7 @@ mode_a_operator_pre_existing() {
   # only, so this population cannot satisfy it by definition.
   #
   # Every dropped check emits SKIP rather than vanishing, so this sub-mode emits
-  # the same 15 step records as --mode install (see MODE_A_TOTAL). A3b was
+  # the same 16 step records as --mode install (see MODE_A_TOTAL). A3b was
   # previously the one dropped check that left no trace in the record at all.
   check_a1_platform
   check_a2_workspace_layout
@@ -1370,8 +1385,10 @@ mode_a_operator_pre_existing() {
   # workspace actually has, so a pre-installer workspace is measured against its own hooks'
   # declarations and cannot be failed for lacking a library nothing there loads.
   check_a3c_hook_lib_closure
-  # A3d RUNS here too: the PII guard predates the installer, so the same predicate applies.
+  # A3d and A3e RUN here too: the PII guard predates the installer, so the same predicate
+  # applies, and the push-time backstop is the same guard reached from a different hook.
   check_a3d_pii_precommit_wired
+  check_a3e_pii_prepush_wired
   emit_skip "A4" "INSTALL-STATE-MARKER" "operator-pre-existing mode (state marker not expected)" "A"
   check_a5_claude_md
   emit_skip "A5b" "INSTALL-OPERATIONS-ANCHOR" "operator-pre-existing mode (operations anchor not expected)" "A"

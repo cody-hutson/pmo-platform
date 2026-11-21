@@ -20,6 +20,26 @@
 # The operator's public handle / legal name are intentionally NOT patterns here
 # (kept in accepted homes; governed by deploy.sh Check 25 path-aware logic).
 #
+# Two inputs, one detector. With no arguments — how git runs it as pre-commit —
+# the guard reads the staged additions. With --commits it reads object ids on
+# stdin, which is how the push-time backstop (git-pre-push-pii.sh, and the
+# push-time CI job) runs it. For each commit it scans the lines that commit adds
+# that are in none of its parents, plus the raw commit object: author, committer
+# and message. For each annotated tag it scans the raw tag object. Any other
+# object, or an id that does not resolve, is refused. git runs merge,
+# cherry-pick, revert, rebase, stash and commit-tree without pre-commit, so the
+# commit hook alone is not a boundary. Arguments come only from a direct caller:
+# git passes pre-commit none, and an environment prefix cannot add one.
+#   --commits            read object ids on stdin, one per line
+#   --redact             report commit, path and pattern class, never the matched
+#                        text (a CI log on a public repo is public)
+#   --needle-file <path> ADD the needles in <path> to the resolved set (the CI job's
+#                        source); it never replaces them, and an unreadable or
+#                        unfilled file is refused
+# The commit range is read with the same diff flags as the staged read (see
+# "Environment inputs" below), plus -M so a pure move adds nothing, as it does at
+# commit time.
+#
 # Install:  wired as the repo's pre-commit hook by docs/scripts/setup-workspace.sh
 #           (install, and update.sh via --refresh-hooks); validate-install.sh A3d
 #           reports it missing. Manual form, from the repo root:
@@ -72,13 +92,85 @@
 # PATH (and GIT_EXEC_PATH, which git puts at the head of PATH) is NOT covered: a
 # planted executable named like a command used here still runs. This hook is not the
 # only PII boundary (commands that create commits without running pre-commit skip it
-# entirely); it is the commit-time layer.
+# entirely); it is the commit-time layer, and git-pre-push-pii.sh runs it again over
+# every commit a push would publish.
 set +o posix
 unset POSIXLY_CORRECT CDPATH GREP_OPTIONS
 export LC_ALL=C
 set -uo pipefail
 
 [[ "${CLAUDE_HOOK_BYPASS:-0}" == "1" ]] && exit 0
+
+pii_input="staged"; pii_redact=0; pii_needle_arg=""; pii_needle_arg_set=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --commits) pii_input="commits" ;;
+    --redact) pii_redact=1 ;;
+    --needle-file)
+      if [[ $# -lt 2 ]]; then echo "[git-pre-commit-pii] --needle-file needs a path" >&2; exit 2; fi
+      pii_needle_arg="$2"; pii_needle_arg_set=1; shift ;;
+    *) echo "[git-pre-commit-pii] unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# Prints each line a diff ADDS, as "+<text>". In a hunk, a header's run of `@` gives
+# the parent count: `@@` is one parent; `@@@` is two, a merge's combined diff. An
+# added line has a `+` in every parent's column. A `++` in a two-parent merge is in
+# neither parent, which is how an evil merge shows. A space in a column means the
+# line is in that parent already, so it is that parent's commit to answer for, and
+# the push scans that commit too unless it is already public. The parse is a state
+# machine, not a prefix grep, so an added line that starts with `++` is not mistaken
+# for a `+++ b/` header. With LOC set, writes "<commit> <path>" to LOC for each
+# printed line, in the same order.
+readonly PII_ADDED_AWK='
+function run(n,   s) { s = ""; while (n-- > 0) s = s "+"; return s }
+{
+  if (inh) {
+    c = substr($0, 1, 1)
+    if (c == "+" || c == "-" || c == " " || c == "\\") {
+      if (substr($0, 1, w) == pr) {
+        print "+" substr($0, w + 1)
+        if (LOC != "") print id " " path >> LOC
+      }
+      next
+    }
+    inh = 0
+  }
+  if ($0 ~ /^[0-9a-f]+$/ && (length($0) == 40 || length($0) == 64)) { id = substr($0, 1, 12); path = "?"; next }
+  if (substr($0, 1, 5) == "diff ") { path = "?"; next }
+  if (substr($0, 1, 6) == "+++ b/") { path = substr($0, 7); next }
+  if (substr($0, 1, 4) == "+++ ") { path = substr($0, 5); next }
+  if (substr($0, 1, 2) == "@@") { w = match($0, /[^@]/) - 2; if (w < 1) w = 1; pr = run(w); inh = 1; next }
+}'
+
+# Prints every line of each object in `git cat-file --batch` output as "+<line>".
+# The batch format is a "<id> <type> <size>" header, <size> bytes, then a newline,
+# so the object's end is found by its byte count, not by a delimiter its own text
+# could contain. Exits 3 on a header it cannot read: a missing object has no body.
+readonly PII_OBJECT_AWK='
+{
+  if (!inobj) {
+    n = split($0, f, " ")
+    if (n == 3 && f[3] ~ /^[0-9]+$/) { id = substr(f[1], 1, 12); kind = f[2]; rem = f[3] + 0; inobj = 1; next }
+    bad = 1; next
+  }
+  rem -= length($0) + 1
+  print "+" $0
+  if (LOC != "") print id " (" kind " object)" >> LOC
+  if (rem < 0) inobj = 0
+}
+END { if (bad || inobj) exit 3 }'
+
+# The accepted homes, as the exclude pathspec both inputs pass to the personal-email read.
+pii_home_excludes=(':(exclude)LICENSE' ':(exclude)SECURITY.md' ':(exclude).github/CODEOWNERS'
+  ':(exclude).github/FUNDING.yml' ':(exclude)core/ADRs/*' ':(exclude)release/ADRs/*')
+
+# --commits fails closed: a scan that could not run is refused, never passed.
+pii_refuse_unscanned() {
+  echo "BLOCKED: [git-pre-commit-pii] $1; nothing was scanned, so this is refused." >&2
+  exit 1
+}
 
 # --- Resolve the operator-instance / needle path via the single resolver ---
 # The hook is symlinked into .git/hooks/pre-commit, so $0 points at the symlink;
@@ -158,16 +250,85 @@ fi
 # from a staged .gitattributes or a core.attributesFile) would otherwise turn every
 # added line into "Binary files differ". Binary content is therefore read as text: NUL
 # bytes are dropped (a shell variable cannot hold them, and they would make grep treat
-# the whole stream as binary), and every grep that reads this text runs with -a.
+# the whole stream as binary), and every grep that reads this text runs with -a. The
+# added lines are taken by PII_ADDED_AWK's hunk parse, so a line that starts with `++`
+# is read, not dropped as a header.
 _pii_added() {
   git diff --cached --no-color --no-ext-diff --no-textconv --text -U0 "$@" 2>/dev/null \
-    | tr -d '\000' | grep -aE '^\+' | grep -avE '^\+\+\+' || true
+    | tr -d '\000' | awk -v LOC= "$PII_ADDED_AWK" || true
+}
+# The same read over the commits listed in <ids>, appended to <out> with locations in
+# <loc>. Its status is the pipeline's, so a diff that could not run is visible.
+_pii_added_commits() { # <ids> <out> <loc> [-- pathspec...]
+  local ids="$1" out="$2" loc="$3"; shift 3
+  git diff-tree --stdin -r -p -M --cc --root --src-prefix=a/ --dst-prefix=b/ \
+    --no-color --no-ext-diff --no-textconv --text -U0 "$@" < "$ids" 2>/dev/null \
+    | tr -d '\000' | awk -v LOC="$loc" "$PII_ADDED_AWK" >> "$out"
+}
+
+# --- The added lines: added_all (every file) and added_nonhome (accepted homes excluded) ---
+pii_loc_all=""; pii_loc_nonhome=""
+if [[ "$pii_input" == "staged" ]]; then
+  added_all="$(_pii_added)"
+  added_nonhome="$(_pii_added -- . "${pii_home_excludes[@]}")"
+else
+  pii_tmp="$(mktemp -d 2>/dev/null || true)"
+  [[ -n "$pii_tmp" && -d "$pii_tmp" ]] || pii_refuse_unscanned "could not create a scratch directory"
+  trap 'rm -rf "$pii_tmp"' EXIT
+  cat > "$pii_tmp/ids" || pii_refuse_unscanned "could not read the object ids on stdin"
+  git cat-file --batch-check < "$pii_tmp/ids" > "$pii_tmp/kinds" 2>/dev/null \
+    || pii_refuse_unscanned "git could not look up the objects to scan"
+  # Commits and annotated tags are scanned; anything else (a missing id, a tree or blob
+  # a ref was pointed at directly) is refused rather than let through unread.
+  awk -v C="$pii_tmp/commits" -v O="$pii_tmp/objects" -v B="$pii_tmp/other" '
+    $2 == "commit" { print $1 >> C; print $1 >> O; next }
+    $2 == "tag"    { print $1 >> O; next }
+    NF > 0         { print >> B }' "$pii_tmp/kinds" || pii_refuse_unscanned "could not classify the objects"
+  if [[ -s "$pii_tmp/other" ]]; then
+    {
+      echo "BLOCKED: [git-pre-commit-pii] these objects are not commits or annotated tags, so they cannot be scanned:"
+      sed -n 's/^/   /;1,10p' "$pii_tmp/other"
+    } >&2
+    exit 1
+  fi
+  [[ -s "$pii_tmp/objects" ]] || exit 0
+  pii_loc_all="$pii_tmp/all.loc"; pii_loc_nonhome="$pii_tmp/nonhome.loc"
+  : > "$pii_tmp/all.txt"; : > "$pii_tmp/nonhome.txt"; : > "$pii_loc_all"; : > "$pii_loc_nonhome"
+  if [[ -s "$pii_tmp/commits" ]]; then
+    _pii_added_commits "$pii_tmp/commits" "$pii_tmp/all.txt" "$pii_loc_all" \
+      || pii_refuse_unscanned "git could not diff the commits"
+    _pii_added_commits "$pii_tmp/commits" "$pii_tmp/nonhome.txt" "$pii_loc_nonhome" -- . "${pii_home_excludes[@]}" \
+      || pii_refuse_unscanned "git could not diff the commits"
+  fi
+  # The raw objects: author, committer, message, tag name, tagger. No accepted home
+  # covers them, so they join both sets.
+  git cat-file --batch < "$pii_tmp/objects" > "$pii_tmp/objects.raw" \
+    || pii_refuse_unscanned "git could not read the commit and tag objects"
+  for pii_set in all nonhome; do
+    awk -v LOC="$pii_tmp/${pii_set}.loc" "$PII_OBJECT_AWK" "$pii_tmp/objects.raw" >> "$pii_tmp/${pii_set}.txt" \
+      || pii_refuse_unscanned "could not read the commit and tag objects"
+  done
+  added_all="$(cat "$pii_tmp/all.txt")"
+  added_nonhome="$(cat "$pii_tmp/nonhome.txt")"
+fi
+
+# One report line per hit: "<commit> <path>: <text>" in --commits mode, the pattern
+# class in place of the text under --redact. Staged mode keeps its own report.
+pii_report=""
+pii_locate() { # <class> <loc-file> <grep -n hits>
+  [[ -n "$2" && -n "$3" ]] || return 0
+  local lines
+  lines="$(awk -v CLASS="$1" -v R="$pii_redact" '
+    NR == FNR { loc[FNR] = $0; next }
+    { n = $0; sub(/:.*/, "", n); t = $0; sub(/^[0-9]+:/, "", t); print loc[n + 0] ": " (R ? CLASS : t) }' \
+    "$2" - <<<"$3")"
+  pii_report="$(printf '%s\n%s\n' "$pii_report" "$lines")"
 }
 
 # Tier 1 — always-block patterns (every staged file).
 always='/Users/[a-z][a-z0-9._-]+/|[0-9]{3}-[0-9]{3}-[0-9]{4}'
-added_all="$(_pii_added)"
 hits="$(printf '%s\n' "$added_all" | grep -ainE "$always" || true)"
+pii_locate "home path or phone number" "$pii_loc_all" "$hits"
 
 # Tier 1b — coworker / org needles (gitignored instance file), every file.
 needles="$(pmo_localized_needles)"
@@ -218,7 +379,18 @@ needle_filled=0
 needle_cleaned=""
 _pii_nl=$'\n'
 _pii_seen=""
-for _nf in "$needles" "$anchor_needles"; do
+_pii_needle_files=("$needles" "$anchor_needles")
+# A needle file named on the command line was asked for by its caller, so failing to
+# read it is refused rather than downgraded to the unconfigured notice below. It joins
+# the union: it can add needles, never remove the resolved ones.
+if [[ "$pii_needle_arg_set" == "1" ]]; then
+  if [[ ! -r "$pii_needle_arg" ]] || [[ -z "$(grep -vE '^[[:space:]]*(#|$)' "$pii_needle_arg" 2>/dev/null || true)" ]]; then
+    echo "BLOCKED: [git-pre-commit-pii] --needle-file $pii_needle_arg is unreadable or holds no entry." >&2
+    exit 1
+  fi
+  _pii_needle_files+=("$pii_needle_arg")
+fi
+for _nf in "${_pii_needle_files[@]}"; do
   [[ -n "$_nf" && "$_nf" != "$_pii_seen" && -r "$_nf" ]] || continue
   _pii_seen="$_nf"
   _nc="$(grep -vE '^[[:space:]]*(#|$)' "$_nf" 2>/dev/null || true)"
@@ -230,6 +402,7 @@ if [[ "$needle_filled" == "1" ]]; then
   # Configured + filled → scan staged additions against the needles.
   nhits="$(printf '%s\n' "$added_all" | grep -ainFf <(printf '%s\n' "$needle_cleaned") || true)"
   [[ -n "$nhits" ]] && hits="$(printf '%s\n%s\n' "$hits" "$nhits" || true)"
+  pii_locate "localized-context needle" "$pii_loc_all" "$nhits"
 elif [[ "$needle_mode" != "off" ]]; then
   # Two distinct unconfigured states, distinct messages (#1830 Part 4).
   #
@@ -303,13 +476,28 @@ fi
 
 # Tier 2 — personal-email patterns, EXCLUDING accepted-home files.
 pmail='@(gmail|ymail|yahoo|outlook|hotmail|icloud|proton(mail)?)\.com'
-added_nonhome="$(_pii_added -- . \
-  ':(exclude)LICENSE' ':(exclude)SECURITY.md' ':(exclude).github/CODEOWNERS' \
-  ':(exclude).github/FUNDING.yml' ':(exclude)core/ADRs/*' ':(exclude)release/ADRs/*')"
 ehits="$(printf '%s\n' "$added_nonhome" | grep -ainE "$pmail" || true)"
 [[ -n "$ehits" ]] && hits="$(printf '%s\n%s\n' "$hits" "$ehits" || true)"
+pii_locate "personal email" "$pii_loc_nonhome" "$ehits"
 
 hits="$(printf '%s\n' "$hits" | grep -avE '^[[:space:]]*$' || true)"
+if [[ -n "$hits" && "$pii_input" == "commits" ]]; then
+  pii_report="$(printf '%s\n' "$pii_report" | grep -avE '^[[:space:]]*$' || true)"
+  {
+    echo "──────────────────────────────────────────────────────────────"
+    echo "BLOCKED: PII guard found private data in the commits or tags being published"
+    echo "($(printf '%s\n' "$pii_report" | wc -l | tr -d ' ') line(s); the first 25 below):"
+    # Control characters dropped and lines capped, as in the staged report below.
+    printf '%s\n' "$pii_report" | LC_ALL=C tr -d '\001-\010\013-\037\177' \
+      | LC_ALL=C awk 'NR <= 25 { print "   " substr($0, 1, 2000) }'
+    echo ""
+    echo "A pushed commit stays readable in the history even when a later commit removes"
+    echo "the line, so rewrite or drop each commit named above before pushing again."
+    echo "CLAUDE_HOOK_BYPASS=1 is the operator's bypass for an intentional case."
+    echo "──────────────────────────────────────────────────────────────"
+  } >&2
+  exit 1
+fi
 if [[ -n "$hits" ]]; then
   {
     echo "──────────────────────────────────────────────────────────────"

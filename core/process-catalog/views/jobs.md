@@ -17,7 +17,7 @@ Every automated runner the pages name, what fires it and where it acts, and ever
 
 ### Registered, not depicted
 
-16 of the controls register's 27 workflows are named by no page's `actors`: `ci:behavioral-regression`, `ci:commit-message-depersonalization`, `ci:commit-signature-check`, `ci:eval-viewer-tests`, `ci:link-check`, `ci:operator-memory-ref`, `ci:pr-body-parser-clean`, `ci:pr-title-convention`, `ci:reference-durability`, `ci:release-link-check`, `ci:repo-integrity`, `ci:sibling-merge-dark-branch`, `ci:skill-canonical-structure-check`, `ci:skill-count-imp-check`, `ci:skill-license-check`, `ci:skill-registry-currency-check`.
+17 of the controls register's 28 workflows are named by no page's `actors`: `ci:behavioral-regression`, `ci:commit-message-depersonalization`, `ci:commit-signature-check`, `ci:eval-viewer-tests`, `ci:link-check`, `ci:operator-memory-ref`, `ci:pii-push-scan`, `ci:pr-body-parser-clean`, `ci:pr-title-convention`, `ci:reference-durability`, `ci:release-link-check`, `ci:repo-integrity`, `ci:sibling-merge-dark-branch`, `ci:skill-canonical-structure-check`, `ci:skill-count-imp-check`, `ci:skill-license-check`, `ci:skill-registry-currency-check`.
 
 ## Engineering harness
 
