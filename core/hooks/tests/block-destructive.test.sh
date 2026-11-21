@@ -9830,9 +9830,9 @@ xt_arm "EXEC-TEXT-PIN-remainder-pair: without the nested-opener stop the executi
 # Stage 7: the quote-led residual in its blank-carrying spelling, the `$(` spelling at enforce, and the
 # empty-output hand-off, each with its corpus row (TK07, TK08). A command word that opens a double quote
 # before its backtick is never declined, because its token does not begin with a backtick, so the exec
-# arm's operand filter reads it: the word is recorded with a backtick-led path, its script listed or not,
-# exactly when a script suffix ends the token, in its normalized reading or, where that does not resolve,
-# in its raw spelling. Here the closer falls in a later token, the quote stays open, and the probe ends in
+# arm's operand filter reads it: the word is recorded with a backtick-led path, which no exact allowlist
+# entry matches (a leading-glob entry can), so its script listed or not, exactly when a script suffix ends
+# the token, in its normalized reading or, where that does not resolve, in its raw spelling. Here the closer falls in a later token, the quote stays open, and the probe ends in
 # the suffix. A substitution at command position whose output yields no field hands command position to
 # the next word, which only the position at the closer reads.
 xt_pinq="\"\`${ENCL_OK} a\`\""
