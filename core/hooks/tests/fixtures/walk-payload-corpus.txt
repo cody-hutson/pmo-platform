@@ -2253,7 +2253,7 @@ AS07|block-destructive|looks-like-asgn|-|o|a|true; OUT=$(bash '@D@/ok.sh')
 AS08|block-destructive|looks-like-asgn|-|o|a|( OUT=$(bash '@D@/ok.sh') )
 AS09|block-destructive|looks-like-asgn|-|-|a|OUT=$(cat '@D@/ok.sh')
 AS10|block-destructive|looks-like-asgn|-|o|a|OUT=$( '@D@/ok.sh')
-AS11|block-destructive|asubst-ctl|-|?|a|OUT=$(bash @D@/ok.sh)
+AS11|block-destructive|asubst-ctl|-|o|a|OUT=$(bash @D@/ok.sh)
 AS12|block-destructive|asubst-unl|-|?|W|OUT=$(bash '@D@/na.sh')
 AS13|block-destructive|asubst-unl|-|?|W|OUT=$(bash "$NOPE7019/ok.sh")
 AS14|block-destructive|asubst-outer|-|?|W|OUT=$(bash '@D@/ok.sh') @D@/na.sh
@@ -2269,24 +2269,24 @@ AS23|block-destructive|asubst-keep|-|?|W|OUT=$(@D@/na.sh '@D@/ok.sh')
 # #8548 Stage 7: an env operand whose name part opens a quote (AS24 recorded the allow at RED; the GREEN commit
 # moved it to W), and a quoted listed path holding a space (AS25, allowed through GREEN)
 AS24|block-destructive|asubst-keep|-|?|W|env "N=$(bash '@D@/ok.sh') x" @D@/na.sh
-AS25|block-destructive|asubst-keep|-|?|a|OUT=$(bash '@D@/li sted/ok.sh')
+AS25|block-destructive|asubst-keep|-|o|a|OUT=$(bash '@D@/li sted/ok.sh')
 # #8548 Stage 7 pass 2 (D-2): an unquoted listed closing word named as a shell interpreter, then an unlisted
 # script in that interpreter's domain. The corpus root lists that path for this row (block-destructive.test.sh).
 # W at RED (the step recorded the script at the exec arm's phase); B at GREEN (the step declines, the refusal stands)
 AS26|block-destructive|asubst-keep|-|?|B|OUT=$(bash @D@/bin/bash) @D@/na.sh
 # #8326: inert here-document bodies the receiver read admits (HL rows; GREEN moves them B -> a) and the must-flag controls (HM rows; HM09, an inert subshell, moves a -> B under the closer rule; hub design on sub-task #9061)
-HL01|block-destructive|looks-like-hd|-|?|a|( gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
-HL02|block-destructive|looks-like-hd|-|?|a|(echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
-HL03|block-destructive|looks-like-hd|-|?|a|{ gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
-HL04|block-destructive|looks-like-hd|-|?|a|{ printf 'x' <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
-HL05|block-destructive|looks-like-hd|-|?|a|if true; then echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
-HL06|block-destructive|looks-like-hd|-|?|a|if true; then gh api x --input - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
-HL07|block-destructive|looks-like-hd|-|?|a|! jq . <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-HL08|block-destructive|looks-like-hd|-|?|a|! echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-HL09|block-destructive|looks-like-hd|-|?|a|cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-HL10|block-destructive|looks-like-hd|-|?|a|cat <<'RPT'@NL@bash @D@/na.sh --repro@NL@RPT
-HL11|block-destructive|looks-like-hd|-|?|a|cat > /tmp/notes.md <<'EOF'@NL@bash @D@/na.sh@NL@EOF
-HL12|block-destructive|looks-like-hd|-|?|a|cat <<'EOF' > /tmp/notes.md@NL@bash @D@/na.sh@NL@EOF
+HL01|block-destructive|looks-like-hd|-|-|a|( gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HL02|block-destructive|looks-like-hd|-|-|a|(echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HL03|block-destructive|looks-like-hd|-|-|a|{ gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
+HL04|block-destructive|looks-like-hd|-|-|a|{ printf 'x' <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
+HL05|block-destructive|looks-like-hd|-|-|a|if true; then echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
+HL06|block-destructive|looks-like-hd|-|-|a|if true; then gh api x --input - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
+HL07|block-destructive|looks-like-hd|-|-|a|! jq . <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL08|block-destructive|looks-like-hd|-|-|a|! echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL09|block-destructive|looks-like-hd|-|-|a|cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL10|block-destructive|looks-like-hd|-|-|a|cat <<'RPT'@NL@bash @D@/na.sh --repro@NL@RPT
+HL11|block-destructive|looks-like-hd|-|-|a|cat > /tmp/notes.md <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL12|block-destructive|looks-like-hd|-|-|a|cat <<'EOF' > /tmp/notes.md@NL@bash @D@/na.sh@NL@EOF
 HM01|block-destructive|hd-recv-mf|-|?|B|( bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
 HM02|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' | bash@NL@bash @D@/na.sh@NL@EOF
 HM03|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' 2>&1 | bash@NL@bash @D@/na.sh@NL@EOF
@@ -2324,7 +2324,7 @@ TK08|block-destructive|tick-cmdword|-|?|W|`true` @D@/na.sh
 # #8490 Stage 7 pass 2: the hand-off behind a listed slash-bearing substitution this arm declines (stays W), and the
 # quote-led command word whose double quote closes at its token's end, its script listed (admitted, a)
 TK09|block-destructive|tick-cmdword|-|?|W|`@D@/ok.sh` @D@/na.sh
-LT05|block-destructive|looks-like-text|-|?|a|"`@D@/ok.sh`"
+LT05|block-destructive|looks-like-text|-|o|a|"`@D@/ok.sh`"
 # #8490 Stage 7 pass 3 (F-11): quote-led command words sorted by the exec arm's operand-filter test, whether a
 # script suffix ends the token (its normalized reading, or its raw spelling where that does not resolve), and
 # not by where the double quote closes. A quote left open whose token ends at the substitution's closer (no
