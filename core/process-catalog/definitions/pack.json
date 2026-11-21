@@ -457,7 +457,7 @@
       "C-256..C-264",
       "C-383..C-451"
     ],
-    "highest_minted_id": "C-451",
+    "highest_minted_id": "C-453",
     "kinds": [
       "hook-rule",
       "hook-registration",

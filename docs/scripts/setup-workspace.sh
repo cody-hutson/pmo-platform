@@ -2534,6 +2534,96 @@ install_mode_template_if_missing() {
   printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
 }
 
+# wire_pii_git_hook <git-hook> <script> <label> <purpose> <subject> <reads> <scoped> <hooks-dir>
+#
+# Links <hooks-dir>/<git-hook> to the main worktree's core/hooks/<script>. The hook registry
+# classes the PII guard as security/floor -- always enforce, never silently disabled -- and
+# install_hooks' copy loop only places the scripts in .claude/hooks/, which git never reads.
+# Without these links the guard is fully off.
+#
+# Same scope as the post-merge block (<scoped>, <hooks-dir>), for the same reason: the test
+# suites pass the REAL checkout as --source-repo. Three choices differ from that block:
+#   - The link targets the MAIN worktree's copy, never ${SOURCE_REPO}'s. Linked worktrees
+#     share this hooks dir, so a link into a worktree runs unmerged branch content on
+#     every commit or push, and dangles once the worktree is swept -- and git skips a
+#     dangling hook without a word, which turns the guard off again.
+#   - The link is relative when the hooks dir is <main>/.git/hooks (survives moving the
+#     repo), absolute otherwise (a core.hooksPath elsewhere).
+#   - An existing hook that is not ours is never replaced: it stays, and the run says
+#     loudly that the guard is not active. A link of ours that is stale or points at a
+#     worktree copy is re-pointed.
+wire_pii_git_hook() {
+  local pc_hook="$1" pc_script="$2" pc_label="$3" pc_purpose="$4" pc_subject="$5" pc_reads="$6"
+  local pc_scoped="$7" pc_hdir="$8"
+  local pc_dst pc_main pc_target pc_link pc_cur pc_wl pc_hp_eff pc_hp_local
+  pc_dst="${pc_hdir}/${pc_hook}"
+  # Captured, then cut -- never piped into a reader that stops early. Under `set -Eeuo
+  # pipefail` an early-exiting reader (awk … exit, head) makes git's EPIPE the pipeline's
+  # status, and on a repo with a few hundred worktrees that aborted the install every time.
+  pc_wl="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null || true)"
+  pc_main="${pc_wl%%$'\n'*}"
+  case "${pc_main}" in "worktree "*) pc_main="${pc_main#worktree }" ;; *) pc_main="" ;; esac
+  [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
+  # Where that first entry names a git dir rather than a checkout (a separate git dir, a
+  # submodule) and the source repo is not a linked worktree, its own top level is the checkout.
+  if [ ! -f "${pc_main}/core/hooks/${pc_script}" ] \
+     && [ "$(git -C "${SOURCE_REPO}" rev-parse --absolute-git-dir 2>/dev/null || true)" = \
+          "$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)" ]; then
+    pc_main="$(git -C "${SOURCE_REPO}" rev-parse --show-toplevel 2>/dev/null || true)"
+    [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
+  fi
+  pc_target="${pc_main}/core/hooks/${pc_script}"
+  # A core.hooksPath set outside this repository's own config (global or system scope) names
+  # a hooks dir other repositories share; wiring the guard there would scan their commits too.
+  pc_hp_eff="$(git -C "${SOURCE_REPO}" config --get core.hooksPath 2>/dev/null || true)"
+  pc_hp_local="$(git -C "${SOURCE_REPO}" config --local --get core.hooksPath 2>/dev/null || true)"
+  if [ -n "${pc_hdir}" ] && [ "$(cd "${pc_hdir}" 2>/dev/null && pwd -P)" = "${pc_main}/.git/hooks" ]; then
+    pc_link="../../core/hooks/${pc_script}"
+  else
+    pc_link="${pc_target}"
+  fi
+  if [ "${pc_scoped}" -eq 0 ]; then
+    info "NOTE: ${pc_label} not auto-wired (source repo is outside this workspace root)."
+    info "      It is a security/floor control; wire it from the repo root:"
+    info "        ln -s ../../core/hooks/${pc_script} \"\$(git rev-parse --path-format=absolute --git-path hooks)/${pc_hook}\""
+  elif [ -n "${pc_hp_eff}" ] && [ -z "${pc_hp_local}" ]; then
+    info "NOTE: ${pc_label} not auto-wired: core.hooksPath (${pc_hp_eff}) is set outside this"
+    info "      repository's config, a hooks dir other repositories share. Wire it there by hand if intended."
+  elif [ -z "${pc_main}" ] || [ -z "${pc_hdir}" ] || [ ! -x "${pc_target}" ]; then
+    warn "${pc_label} NOT installed: main worktree, hooks dir or an executable ${pc_target} did not resolve. ${pc_subject} are not scanned for PII."
+  elif [ -L "${pc_dst}" ] || [ -e "${pc_dst}" ]; then
+    pc_cur="$(readlink "${pc_dst}" 2>/dev/null || true)"
+    if [ -L "${pc_dst}" ] && [ "$(cd "$(dirname "${pc_dst}")" && cd "$(dirname "${pc_cur}")" 2>/dev/null && pwd -P)/$(basename "${pc_cur}")" = "${pc_target}" ]; then
+      info "OK: ${pc_label} already wired (${pc_dst})"
+    elif [ -L "${pc_dst}" ] && [ "$(basename "${pc_cur}")" = "${pc_script}" ]; then
+      if [ "${DRY_RUN}" -eq 1 ]; then
+        info "[dry-run] would re-point the stale ${pc_label} link ${pc_dst} (now -> ${pc_cur})"
+      else
+        # Removed BEFORE the rollback record, deliberately: recording a live symlink makes
+        # the ledger `cp` its target, and replaying that would write through the new link
+        # into the main worktree's guard. A rolled-back re-point therefore leaves no hook,
+        # which the next run (or validate-install A3d / A3e) reports.
+        rm -f "${pc_dst}"
+        record_write_rollback "${pc_dst}"
+        ln -s "${pc_link}" "${pc_dst}"
+        info "WIRED: ${pc_label} re-pointed (was -> ${pc_cur})"
+      fi
+    else
+      warn "${pc_label} NOT active: ${pc_dst} is a different hook and was left in place."
+      warn "  To keep both, have that hook also run ${pc_target} (${pc_reads})."
+    fi
+  elif [ "${DRY_RUN}" -eq 1 ]; then
+    info "[dry-run] would wire ${pc_label} → ${pc_dst}"
+  else
+    mkdir -p "${pc_hdir}"
+    record_write_rollback "${pc_dst}"
+    ln -s "${pc_link}" "${pc_dst}"
+    # WIRED, not INSTALLED: update.sh counts REFRESHED/MODE-REPAIRED/RECONCILED/WIRED to
+    # decide whether the update changed anything, and INSTALLED is logged on every run.
+    info "WIRED: ${pc_label} (${pc_purpose})"
+  fi
+}
+
 install_hooks() {
   if [ "${DRY_RUN}" -eq 0 ]; then
     if ! mkdir -p "${WORKSPACE_ROOT}/.claude/hooks"; then
@@ -2680,89 +2770,15 @@ install_hooks() {
     info "INSTALLED: post-merge deploy git hook (auto-redeploy on merge to main)"
   fi
 
-  # Wire the commit-time PII guard as the source repo's pre-commit hook (GHSA-c748).
-  # The hook registry classes git-pre-commit-pii.sh as security/floor -- always enforce,
-  # never silently disabled -- and the copy loop above only places it in .claude/hooks/,
-  # which git never reads. Without this link the guard is fully off.
-  #
-  # Same scope as the post-merge block (gh_scoped, gh_dir), for the same reason: the test
-  # suites pass the REAL checkout as --source-repo. Three choices differ from that block:
-  #   - The link targets the MAIN worktree's copy, never ${SOURCE_REPO}'s. Linked worktrees
-  #     share this hooks dir, so a link into a worktree runs unmerged branch content on
-  #     every commit, and dangles once the worktree is swept -- and git skips a dangling
-  #     hook without a word, which turns the guard off again.
-  #   - The link is relative when the hooks dir is <main>/.git/hooks (survives moving the
-  #     repo), absolute otherwise (a core.hooksPath elsewhere).
-  #   - An existing pre-commit hook that is not ours is never replaced: it stays, and the
-  #     run says loudly that the guard is not active. A link of ours that is stale or points
-  #     at a worktree copy is re-pointed.
-  local pc_dst pc_main pc_target pc_link pc_cur pc_wl pc_hp_eff pc_hp_local
-  pc_dst="${gh_dir}/pre-commit"
-  # Captured, then cut -- never piped into a reader that stops early. Under `set -Eeuo
-  # pipefail` an early-exiting reader (awk … exit, head) makes git's EPIPE the pipeline's
-  # status, and on a repo with a few hundred worktrees that aborted the install every time.
-  pc_wl="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null || true)"
-  pc_main="${pc_wl%%$'\n'*}"
-  case "${pc_main}" in "worktree "*) pc_main="${pc_main#worktree }" ;; *) pc_main="" ;; esac
-  [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
-  # Where that first entry names a git dir rather than a checkout (a separate git dir, a
-  # submodule) and the source repo is not a linked worktree, its own top level is the checkout.
-  if [ ! -f "${pc_main}/core/hooks/git-pre-commit-pii.sh" ] \
-     && [ "$(git -C "${SOURCE_REPO}" rev-parse --absolute-git-dir 2>/dev/null || true)" = \
-          "$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)" ]; then
-    pc_main="$(git -C "${SOURCE_REPO}" rev-parse --show-toplevel 2>/dev/null || true)"
-    [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
-  fi
-  pc_target="${pc_main}/core/hooks/git-pre-commit-pii.sh"
-  # A core.hooksPath set outside this repository's own config (global or system scope) names
-  # a hooks dir other repositories share; wiring the guard there would scan their commits too.
-  pc_hp_eff="$(git -C "${SOURCE_REPO}" config --get core.hooksPath 2>/dev/null || true)"
-  pc_hp_local="$(git -C "${SOURCE_REPO}" config --local --get core.hooksPath 2>/dev/null || true)"
-  if [ -n "${gh_dir}" ] && [ "$(cd "${gh_dir}" 2>/dev/null && pwd -P)" = "${pc_main}/.git/hooks" ]; then
-    pc_link="../../core/hooks/git-pre-commit-pii.sh"
-  else
-    pc_link="${pc_target}"
-  fi
-  if [ "${gh_scoped}" -eq 0 ]; then
-    info "NOTE: PII pre-commit guard not auto-wired (source repo is outside this workspace root)."
-    info "      It is a security/floor control; wire it from the repo root:"
-    info "        ln -s ../../core/hooks/git-pre-commit-pii.sh \"\$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit\""
-  elif [ -n "${pc_hp_eff}" ] && [ -z "${pc_hp_local}" ]; then
-    info "NOTE: PII pre-commit guard not auto-wired: core.hooksPath (${pc_hp_eff}) is set outside this"
-    info "      repository's config, a hooks dir other repositories share. Wire it there by hand if intended."
-  elif [ -z "${pc_main}" ] || [ -z "${gh_dir}" ] || [ ! -x "${pc_target}" ]; then
-    warn "PII pre-commit guard NOT installed: main worktree, hooks dir or an executable ${pc_target} did not resolve. Commits are not scanned for PII."
-  elif [ -L "${pc_dst}" ] || [ -e "${pc_dst}" ]; then
-    pc_cur="$(readlink "${pc_dst}" 2>/dev/null || true)"
-    if [ -L "${pc_dst}" ] && [ "$(cd "$(dirname "${pc_dst}")" && cd "$(dirname "${pc_cur}")" 2>/dev/null && pwd -P)/$(basename "${pc_cur}")" = "${pc_target}" ]; then
-      info "OK: PII pre-commit guard already wired (${pc_dst})"
-    elif [ -L "${pc_dst}" ] && [ "$(basename "${pc_cur}")" = "git-pre-commit-pii.sh" ]; then
-      if [ "${DRY_RUN}" -eq 1 ]; then
-        info "[dry-run] would re-point the stale PII pre-commit link ${pc_dst} (now -> ${pc_cur})"
-      else
-        # Removed BEFORE the rollback record, deliberately: recording a live symlink makes
-        # the ledger `cp` its target, and replaying that would write through the new link
-        # into the main worktree's guard. A rolled-back re-point therefore leaves no hook,
-        # which the next run (or validate-install A3d) reports.
-        rm -f "${pc_dst}"
-        record_write_rollback "${pc_dst}"
-        ln -s "${pc_link}" "${pc_dst}"
-        info "WIRED: PII pre-commit guard re-pointed (was -> ${pc_cur})"
-      fi
-    else
-      warn "PII pre-commit guard NOT active: ${pc_dst} is a different hook and was left in place."
-      warn "  To keep both, have that hook also run ${pc_target} (it reads the staged diff itself)."
-    fi
-  elif [ "${DRY_RUN}" -eq 1 ]; then
-    info "[dry-run] would wire PII pre-commit guard → ${pc_dst}"
-  else
-    mkdir -p "${gh_dir}"
-    record_write_rollback "${pc_dst}"
-    ln -s "${pc_link}" "${pc_dst}"
-    # WIRED, not INSTALLED: update.sh counts REFRESHED/MODE-REPAIRED/RECONCILED/WIRED to
-    # decide whether the update changed anything, and INSTALLED is logged on every run.
-    info "WIRED: PII pre-commit guard (commit-time PII scan)"
-  fi
+  # Wire the PII guard into the source repo's git hooks (GHSA-c748): the commit-time guard as
+  # pre-commit, and the push-time backstop as pre-push. git runs pre-commit only for `git
+  # commit`; merge, cherry-pick, revert, rebase, stash and commit-tree make commits without
+  # it, so pre-push is where those are read before they leave this machine. One helper wires
+  # both, so they share every scope and ownership rule below.
+  wire_pii_git_hook pre-commit git-pre-commit-pii.sh "PII pre-commit guard" "commit-time PII scan" \
+    "Commits" "it reads the staged diff itself" "${gh_scoped}" "${gh_dir}"
+  wire_pii_git_hook pre-push git-pre-push-pii.sh "PII pre-push guard" "push-time PII scan" \
+    "Pushes" "it reads git's pre-push input on stdin" "${gh_scoped}" "${gh_dir}"
 
   # Co-deploy the shared positional-issue-ref classifier into .claude/hooks/lib/.
   # block-fragile-refs.sh sources it from ${HOOK_DIR}/lib/positional-issueref.awk at

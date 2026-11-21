@@ -1005,9 +1005,9 @@ refresh_hooks() {
   # branch is reached only when a deployed hook was actually found non-executable —
   # so it cannot turn every update into a non-no-op. RECONCILED joins them for the same
   # reason: it is a forced write of the platform version, which changes the workspace.
-  # WIRED joins them too: it is the delegate linking the PII pre-commit guard (a first
-  # link or a re-point), and an already-wired repo logs OK instead, so a healthy run
-  # still reduces to EX_NOCHANGE.
+  # WIRED joins them too: it is the delegate linking the PII guard's pre-commit or
+  # pre-push hook (a first link or a re-point), and an already-wired repo logs OK instead,
+  # so a healthy run still reduces to EX_NOCHANGE.
   #
   # COMPUTED BEFORE THE `rc` BRANCH, and the ordering is the fix rather than tidiness.
   # This read used to sit BELOW the non-zero branch's `return 0`, so a run that refreshed

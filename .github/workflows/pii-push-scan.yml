@@ -1,0 +1,134 @@
+name: PII push scan
+
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"PII push scan" (no warn-mode — a finding turns the check red)  always-reports=yes
+#   invariant: no commit or annotated tag a push adds carries a home-directory path, a
+#              phone number or (outside the accepted homes) a personal email, or, when
+#              the PII_NEEDLES secret is set, a coworker/org needle, in its added lines,
+#              its message, its author/committer lines or its tag object. Asserted by
+#              core/hooks/git-pre-push-pii.sh, which runs core/hooks/git-pre-commit-pii.sh
+#              --commits over every pushed commit the default branch does not already hold.
+#   falsification: push a branch whose new commit adds a phone-number-shaped line -> this
+#                  job turns red, naming the commit and the file, never the line.
+#
+# WHAT THIS IS FOR. The pre-push hook stops a push on a machine where it is wired. This job
+# reads every push the repository receives from anywhere: a clone with no hooks, a cloud
+# session, a push made with --no-verify or git send-pack, and commits written through the
+# hosting API, which never pass through a local push at all.
+#
+# WHAT IT CANNOT DO. It runs after the push, so the branch is already public. It is
+# detection, not prevention; its value is a red check minutes after the push instead of
+# nothing. It is advisory, never a merge gate: the pull-request gates own merges.
+#
+# WHAT IT READS FROM THE PUSHED REF. The workflow and both scripts are the pushed commit's
+# copies. A branch cut before this file existed, or one that edits it or the scripts, runs
+# its own copy or none.
+#
+# THE PUBLIC BASE IS THE DEFAULT BRANCH ONLY. A commit already on the default branch is not
+# re-read. Other branches and tags are not trusted as a base: two refs pushed together that
+# share new commits would each see the other as public, and neither run would read them. A
+# push to the default branch reads before..after. If `before` is gone (a force-push), it
+# reads the whole history the push names.
+#
+# THE LOG IS PUBLIC. The scripts run with --redact: findings name the commit, the file and
+# the pattern class, never the matched text. Needles come from the optional PII_NEEDLES
+# secret (one per line), written to a file only this job can read and passed by argument.
+# Unset, the needle tier is dormant and the run summary says so.
+#
+# Injection-safety: every github-context value is bound through env: and referenced as a
+# quoted shell variable; none is interpolated into the run block.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+
+permissions:
+  contents: read
+
+# Superseded-run cancellation: on a pull request, a newer run of this
+# workflow for the same pull request (a new push, or a re-run on the same
+# head) cancels this one. Any other event (a push to main, a tag, a
+# schedule, a dispatch) keys on its own run id, so it is never cancelled
+# and never waits behind another run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  pii-push-scan:
+    name: PII push scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        if: ${{ !github.event.deleted }}
+        with:
+          fetch-depth: 0
+
+      - name: Scan the pushed commits and tags (redacted)
+        env:
+          PUSHED_REF: ${{ github.ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PII_NEEDLES: ${{ secrets.PII_NEEDLES }}
+        run: |
+          set -uo pipefail
+          case "${AFTER_SHA:-}" in
+            *[!0]*) : ;;
+            *) echo ":white_check_mark: PII push scan — ref deletion; nothing is published" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0 ;;
+          esac
+          if [ -z "${DEFAULT_BRANCH:-}" ]; then
+            echo "::error::PII push scan: the default branch did not resolve, so the public base is unknown"
+            exit 1
+          fi
+          # A pushed commit without the scripts (a branch cut before they existed) cannot be
+          # scanned by this job. Say so, rather than report a finding there was no run to make.
+          for f in core/hooks/git-pre-push-pii.sh core/hooks/git-pre-commit-pii.sh core/deploy/lib-instance-path.sh; do
+            if [ ! -r "$f" ]; then
+              echo "::error::PII push scan: $f is not in the pushed commit, so this push was not scanned"
+              echo ":x: PII push scan — not scanned: $f is not in the pushed commit" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          done
+
+          # The public base, under a remote name of its own: only the default branch, and
+          # not when the default branch is the ref being pushed (then `before` is the base).
+          if [ "$PUSHED_REF" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+            if base="$(git rev-parse -q --verify "refs/remotes/origin/${DEFAULT_BRANCH}^{commit}")"; then
+              git update-ref "refs/remotes/pii-base/${DEFAULT_BRANCH}" "$base"
+            else
+              echo "::error::PII push scan: refs/remotes/origin/${DEFAULT_BRANCH} is not in the checkout"
+              exit 1
+            fi
+          fi
+
+          args=(--redact)
+          if [ -n "${PII_NEEDLES:-}" ]; then
+            nf="${RUNNER_TEMP}/pii-push-scan-needles.txt"
+            ( umask 077 && printf '%s\n' "$PII_NEEDLES" > "$nf" )
+            args+=(--needle-file "$nf")
+          else
+            echo "::notice::PII push scan: the PII_NEEDLES secret is unset, so the coworker/org needle tier is dormant; home paths, phone numbers and personal emails are still scanned." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+          out="$(printf '%s %s %s %s\n' "$PUSHED_REF" "$AFTER_SHA" "$PUSHED_REF" "${BEFORE_SHA:-0000000000000000000000000000000000000000}" \
+                 | bash core/hooks/git-pre-push-pii.sh pii-base pii-base "${args[@]}" 2>&1)"
+          rc=$?
+          printf '%s\n' "$out"
+          if [ "$rc" -eq 0 ]; then
+            echo ":white_check_mark: PII push scan — no finding in the commits and tags this push adds" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## :x: PII push scan found private data in this push"
+            echo ""
+            echo "This branch is already public. Rewrite or drop each commit named below and force-push,"
+            echo "or delete the branch, then ask the hosting provider to purge the cached commits if the"
+            echo "data must not stay reachable by its commit id. Findings are redacted: commit, file, class."
+            echo ""
+            echo '```'
+            printf '%s\n' "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::PII push scan: the push adds private data (see the run summary; redacted)"
+          exit 1

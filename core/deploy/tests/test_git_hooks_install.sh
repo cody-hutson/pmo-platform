@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# test_git_hooks_install.sh — the installer wires the commit-time PII guard (GHSA-c748).
+# test_git_hooks_install.sh — the installer wires the commit-time PII guard (GHSA-c748)
+# and the push-time backstop that runs it over every pushed commit.
 #
 # The hook-class registry classes git-pre-commit-pii.sh as security/floor: always
 # enforce, never silently disabled. A guard that nothing installs as a git hook is
@@ -35,6 +36,13 @@
 #   Arm 9 — A3d judges the hook at one hop, as the guard resolves itself: a chain of links
 #           and a link to another copy of the guard FAIL (refresh re-points the copy), and
 #           a global core.hooksPath is neither wired nor FAILed, with the reason printed.
+#
+# The pre-push hook (git-pre-push-pii.sh) is wired by the same installer helper, so the
+# arms that pin the helper's behaviour assert it for pre-push as well: Arm 1 (linked,
+# A3e PASS), Arm 2 (a wired pre-push refuses a commit-tree commit carrying a home path
+# and passes a benign one), Arm 3 (refresh re-wires it), Arm 5 (a foreign pre-push is
+# kept, warned about and A3e FAILs it), Arm 6 (the manual step is printed), Arm 7 (many
+# worktrees), Arm 8 (update.sh re-wires it) and Arm 9 (a chain of links FAILs A3e).
 #
 # Arms 1-2 are RED on an installer that wires only post-merge — measured, which is
 # how this suite was written. Darwin-only (setup-workspace.sh's check_platform).
@@ -124,6 +132,7 @@ chmod 600 "${CFG}/operator.toml"
 SETUP="${SRC}/docs/scripts/setup-workspace.sh"
 HD="$(git -C "${SRC}" rev-parse --path-format=absolute --git-path hooks)"
 GUARD="${SRC}/core/hooks/git-pre-commit-pii.sh"
+PUSHHOOK="${SRC}/core/hooks/git-pre-push-pii.sh"
 
 # --- Arm 1: fresh install wires the guard ---
 printf '\nArm 1. Fresh install links pre-commit to the PII guard\n'
@@ -136,6 +145,10 @@ report "pre-commit resolves to the main worktree's git-pre-commit-pii.sh" \
   "pre-commit resolves to '${got:-<nothing>}'"
 report "the resolved guard is executable" "$([ -n "${got}" ] && [ -x "${got}" ] && echo 1 || echo 0)"
 report "post-merge is still wired" "$([ -n "$(resolve_path "${HD}/post-merge")" ] && echo 1 || echo 0)"
+got="$(resolve_path "${HD}/pre-push")"
+report "pre-push resolves to the main worktree's git-pre-push-pii.sh" \
+  "$([ -n "${got}" ] && [ "${got}" = "$(resolve_path "${PUSHHOOK}")" ] && echo 1 || echo 0)" \
+  "pre-push resolves to '${got:-<nothing>}'"
 
 validate() {
   HOME="${HOME}" PMO_USER_SETTINGS_FILE="${SBX}/no-such-user-settings.json" \
@@ -147,6 +160,9 @@ out="$(validate wired)"
 report "validate-install A3d PASSes on the wired guard" \
   "$(grep -q '^\[A3d\] PASS' <<<"${out}" && echo 1 || echo 0)" \
   "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
+report "validate-install A3e PASSes on the wired pre-push hook" \
+  "$(grep -q '^\[A3e\] PASS' <<<"${out}" && echo 1 || echo 0)" \
+  "A3e line: $(grep -m1 '^\[A3e\]' <<<"${out}")"
 
 # --- Arm 2: the wired guard actually refuses a home path, and only that ---
 printf '\nArm 2. The wired guard refuses a home-path commit and accepts a benign one\n'
@@ -169,6 +185,33 @@ if git -C "${SRC}" commit -q -m "add a benign line" >/dev/null 2>&1; then
 else
   report "control: a benign commit is accepted" 0 "the guard refused a benign commit"
 fi
+# The wired pre-push hook reads what the commit hook never sees: a commit made with
+# plumbing. Pushed to a local bare remote, so nothing leaves the sandbox.
+git init -q --bare "${SBX}/push-remote.git"
+git -C "${SRC}" remote add sandbox-remote "${SBX}/push-remote.git"
+# The snapshot commit is the remote's public base, pushed unhooked as setup. A first push
+# to an empty remote has no remote-tracking ref to compare against, so without this the
+# hook would read the whole snapshot rather than the commits under test.
+git -C "${SRC}" push -q --no-verify sandbox-remote "$(git -C "${SRC}" rev-list --max-parents=0 HEAD):refs/heads/base" >/dev/null 2>&1
+pp_blob="$(printf '%s\n' "${home_line}" | git -C "${SRC}" hash-object -w --stdin)"
+pp_idx="${SBX}/pp.idx"
+GIT_INDEX_FILE="${pp_idx}" git -C "${SRC}" read-tree HEAD
+GIT_INDEX_FILE="${pp_idx}" git -C "${SRC}" update-index --add --cacheinfo "100644,${pp_blob},hooks-test-plumbed.txt"
+pp_tree="$(GIT_INDEX_FILE="${pp_idx}" git -C "${SRC}" write-tree)"
+pp_commit="$(git -C "${SRC}" commit-tree "${pp_tree}" -p HEAD -m "plumbed")"
+git -C "${SRC}" update-ref refs/heads/plumbed "${pp_commit}"
+if git -C "${SRC}" push -q sandbox-remote plumbed >/dev/null 2>&1; then
+  report "the wired pre-push hook refuses a commit-tree commit carrying a home path" 0 "the push was ACCEPTED"
+else
+  report "the wired pre-push hook refuses a commit-tree commit carrying a home path" \
+    "$([ -z "$(git --git-dir="${SBX}/push-remote.git" rev-parse -q --verify refs/heads/plumbed 2>/dev/null)" ] && echo 1 || echo 0)" \
+    "the push failed but the ref landed"
+fi
+if git -C "${SRC}" push -q sandbox-remote HEAD:refs/heads/benign >/dev/null 2>&1; then
+  report "control: the wired pre-push hook passes a benign push" 1
+else
+  report "control: the wired pre-push hook passes a benign push" 0 "the hook refused a benign push"
+fi
 
 refresh() {
   "${SETUP}" --refresh-hooks --source-repo "${SRC}" --workspace-root "${WS}" --config-root "${CFG}" 2>&1
@@ -185,6 +228,10 @@ report "refresh re-wires pre-commit to the guard" \
 # INSTALLED line would let an update that wired the guard exit EX_NOCHANGE.
 report "the wiring is logged WIRED:, a token update.sh counts as a change" \
   "$(grep -q 'WIRED: PII pre-commit guard' <<<"${out}" && echo 1 || echo 0)"
+/bin/rm -f "${HD}/pre-push"
+out="$(refresh)"
+report "refresh re-wires a missing pre-push hook, logged WIRED:" \
+  "$([ "$(resolve_path "${HD}/pre-push")" = "$(resolve_path "${PUSHHOOK}")" ] && grep -q 'WIRED: PII pre-push guard' <<<"${out}" && echo 1 || echo 0)"
 report "update.sh counts WIRED: as a change" \
   "$(grep -qF "RECONCILED:|WIRED:'" "${SRC}/update.sh" && echo 1 || echo 0)"
 
@@ -228,6 +275,19 @@ out="$(validate copy)"
 report "A3d FAILs on a copy of the guard (not a link)" \
   "$(grep -q '^\[A3d\] FAIL.*copy of the guard' <<<"${out}" && echo 1 || echo 0)" \
   "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
+# The same ownership rule for pre-push: a foreign hook is kept, warned about, and FAILed.
+/bin/rm -f "${HD}/pre-commit" "${HD}/pre-push"
+printf '#!/bin/sh\n# operator-owned push hook\nexit 0\n' > "${HD}/pre-push"
+chmod +x "${HD}/pre-push"
+before="$(cksum < "${HD}/pre-push")"
+out="$(refresh)"
+report "a foreign pre-push hook's content is unchanged" "$([ "$(cksum < "${HD}/pre-push")" = "${before}" ] && [ ! -L "${HD}/pre-push" ] && echo 1 || echo 0)"
+report "the run warns that the PII pre-push guard is not active" \
+  "$(grep -q 'WARN.*PII pre-push guard NOT active' <<<"${out}" && echo 1 || echo 0)"
+out="$(validate foreignpush)"
+report "validate-install A3e FAILs on a foreign pre-push hook" \
+  "$(grep -q '^\[A3e\] FAIL.*different hook' <<<"${out}" && echo 1 || echo 0)" \
+  "A3e line: $(grep -m1 '^\[A3e\]' <<<"${out}")"
 
 # --- Arm 6: a source repo outside the workspace root is not wired ---
 printf '\nArm 6. A source repo outside the workspace root is told, not wired\n'
@@ -237,21 +297,28 @@ out="$("${SETUP}" --dry-run --source-repo "${SRC}" --workspace-root "${WS2}" --c
 report "the run prints the manual pre-commit step" \
   "$(grep -q 'git-pre-commit-pii.sh.*/pre-commit' <<<"${out}" && echo 1 || echo 0)"
 report "no pre-commit link is created" "$([ ! -e "${HD}/pre-commit" ] && [ ! -L "${HD}/pre-commit" ] && echo 1 || echo 0)"
+report "the run prints the manual pre-push step" \
+  "$(grep -q 'git-pre-push-pii.sh.*/pre-push' <<<"${out}" && echo 1 || echo 0)"
 
 # --- Arm 8: the remediation users are told to run — a real update.sh — re-wires ---
 # Arm 3 drives the delegate directly; this runs the entrypoint the advisory names, end to
 # end, and pins its exit: an update that wired the guard must not report EX_NOCHANGE (64).
 printf '\nArm 8. A real update.sh re-wires an unwired guard, and says it changed something\n'
 [ -L "${HD}/pre-commit" ] || [ -e "${HD}/pre-commit" ] && /bin/rm -f "${HD}/pre-commit"
+[ -L "${HD}/pre-push" ] || [ -e "${HD}/pre-push" ] && /bin/rm -f "${HD}/pre-push"
 out="$("${SRC}/update.sh" --config-root "${CFG}" --workspace-root "${WS}" 2>&1)"
 rc=$?
 report "update.sh re-wires pre-commit to the guard" \
   "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)" \
   "exit ${rc}; tail: $(tail -3 <<<"${out}" | tr '\n' '|')"
+report "update.sh re-wires pre-push to the push-time hook" \
+  "$([ "$(resolve_path "${HD}/pre-push")" = "$(resolve_path "${PUSHHOOK}")" ] && echo 1 || echo 0)"
 report "update.sh does not exit EX_NOCHANGE after wiring (exit ${rc})" "$([ "${rc}" -ne 64 ] && echo 1 || echo 0)"
 out="$("${SRC}/update.sh" --config-root "${CFG}" --workspace-root "${WS}" 2>&1)"
 report "a second update.sh leaves the wired guard alone (logs OK, not WIRED)" \
   "$(grep -q 'OK: PII pre-commit guard already wired' <<<"${out}" && ! grep -q 'WIRED: PII pre-commit guard' <<<"${out}" && echo 1 || echo 0)"
+report "a second update.sh leaves the wired pre-push hook alone (logs OK, not WIRED)" \
+  "$(grep -q 'OK: PII pre-push guard already wired' <<<"${out}" && ! grep -q 'WIRED: PII pre-push guard' <<<"${out}" && echo 1 || echo 0)"
 
 # --- Arm 9: states where A3d and the guard must agree ---
 # The guard follows ONE link to find its library and needle list, so A3d judges one hop:
@@ -265,6 +332,12 @@ out="$(validate chain)"
 report "A3d FAILs a chain of links (the guard follows one hop)" \
   "$(grep -q '^\[A3d\] FAIL.*chain of links' <<<"${out}" && echo 1 || echo 0)" \
   "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
+/bin/rm -f "${HD}/pre-push"
+ln -s "${PUSHHOOK}" "${SBX}/share/pp"; ln -s "${SBX}/share/pp" "${HD}/pre-push"
+out="$(validate chainpush)"
+report "A3e FAILs a chain of links to the pre-push hook" \
+  "$(grep -q '^\[A3e\] FAIL.*chain of links' <<<"${out}" && echo 1 || echo 0)" \
+  "A3e line: $(grep -m1 '^\[A3e\]' <<<"${out}")"
 /bin/rm -f "${HD}/pre-commit"
 mkdir -p "${SBX}/other-worktree/core/hooks"
 printf '#!/usr/bin/env bash\n# git-pre-commit-pii.sh, disabled on a branch\nexit 0\n' > "${SBX}/other-worktree/core/hooks/git-pre-commit-pii.sh"
@@ -312,6 +385,8 @@ report "re-bootstrap exits 0 with many worktrees" "$([ "${rc}" -eq 0 ] && echo 1
 report "re-bootstrap wires the guard with many worktrees" \
   "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)"
 out="$(validate many)"
+report "re-bootstrap wires the pre-push hook with many worktrees" \
+  "$([ "$(resolve_path "${HD}/pre-push")" = "$(resolve_path "${PUSHHOOK}")" ] && echo 1 || echo 0)"
 report "validate-install reaches an A3d verdict with many worktrees" \
   "$(grep -q '^\[A3d\] PASS' <<<"${out}" && echo 1 || echo 0)" \
   "A3d line: '$(grep -m1 '^\[A3d\]' <<<"${out}")'; tail: $(tail -2 <<<"${out}" | tr '\n' '|')"
