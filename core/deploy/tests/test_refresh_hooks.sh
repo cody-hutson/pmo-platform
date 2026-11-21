@@ -239,8 +239,9 @@ printf '\nCase 1-3: stale hook refreshed · missing hook libs co-deployed (awk +
 # surviving PASS is precisely the vacuous pass this precondition exists to report, so
 # the mutation demonstrates both arms at once.
 #
-# Unmutated on THIS tree: 77 passed / 0 failed — re-measured here after the DT-1 and
-# DT-5 arms landed. The MUTATED half of the pair was last measured at 74 passed /
+# Unmutated on THIS tree: 83 passed / 0 failed — re-measured here after the hist-enum
+# and Case 18 merge-history arms landed (77 before them, measured after the DT-1 and
+# DT-5 arms). The MUTATED half of the pair was last measured at 74 passed /
 # 1 failed on the 75-arm tree and is NOT re-run here, so it is recorded as the
 # superseded pair rather than renumbered: the 74/75 pair predates the DT arms, the
 # 50/51 pair before it predates the Case 13-17 platform-version arms, the 49/50 pair
@@ -1698,7 +1699,9 @@ printf '======================================================================\n
 # To exercise this rule on a full-history checkout without touching the tree, make the
 # environment probe fail on purpose: GIT_DIR=<a path that does not exist> makes the
 # `rev-parse --git-dir` read fail, the five arms route to SKIP, and the suite must exit
-# non-zero without the permit and 0 with it — the same 72 / 0 / 5 both ways.
+# non-zero without the permit and 0 with it — the same 78 / 0 / 5 both ways. Case 18's
+# arms stay measured under that probe: they build their own repository and strip the
+# inherited GIT_DIR, so the checkout's history is not what they read.
 if [ "${SKIP}" -gt 0 ]; then
   printf '\n!! NOT FULL COVERAGE: %d arm(s) were SKIPPED and did NOT measure their subject.\n' "${SKIP}"
   printf '!! Reason: %s\n' "${HIST_REASON}"

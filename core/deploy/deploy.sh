@@ -6162,11 +6162,34 @@ for row in rows:
 dep_unclassified = sorted(p for p in dep_pop if classify(1, p) is None)
 
 # ── drift classifier: bounded git-history walk, drift rows ONLY ─────────────
+#
+# THE REVISIONS SEARCHED are the same list hook_history_revs builds in the installer
+# (docs/scripts/setup-workspace.sh), built the same way, so the cap cuts both copies at
+# the same revision and they cannot return opposite verdicts on one deployed file. It is
+# the union of two git listings, because neither is complete alone:
+#   `git log --follow`  every non-merge commit that changed the path, and NO merge at all;
+#                       without -m a merge has no diff, so --follow never sees one.
+#   `git log --merges`  under default simplification: exactly the merges whose content
+#                       differs from every parent. A merge where both sides changed the
+#                       file writes a version that exists only there.
+# Newest committer time first, ties by hash. A failed read yields no revisions, as the
+# installer's does, and so reads as an unfinished search.
+def history_revs(s):
+    when = {}
+    for listing in ('--follow', '--merges'):
+        r = subprocess.run(['git', '-C', repo, 'log', '--format=%ct %H', listing, '--', s],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return []
+        for line in r.stdout.split('\n'):
+            f = line.split()
+            if len(f) == 2:
+                when[f[1]] = int(f[0])
+    return sorted(when, key=lambda h: (-when[h], h))
+
 def classify_drift(s, deployed_sha):
     try:
-        r = subprocess.run(['git', '-C', repo, 'log', '--format=%H', '--follow', '--', s],
-                           capture_output=True, text=True)
-        revs = [x for x in r.stdout.split('\n') if x.strip()]
+        revs = history_revs(s)
     except Exception:
         return 'UNCLASSIFIED-DEPTH', 'git history is unreadable for %s' % s
     if not revs:
