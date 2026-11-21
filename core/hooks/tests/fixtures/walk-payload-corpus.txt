@@ -2331,6 +2331,6 @@ LT05|block-destructive|looks-like-text|-|o|a|"`@D@/ok.sh`"
 # suffix at the end: the enclosure position alone reads it, listed, a); a quote closed at the token's end
 # behind a suffix, the closer in a later token (recorded, W); a quote closed inside the token, which goes on
 # to a suffix (recorded, W)
-TK10|block-destructive|tick-quote|-|?|a|"`@D@/ok.sh` x"
-TK11|block-destructive|tick-quote|-|?|W|"`@D@/ok.sh" "`"
-TK12|block-destructive|tick-quote|-|?|W|"`@D@/ok.sh`".sh
+TK10|block-destructive|tick-quote|-|o|a|"`@D@/ok.sh` x"
+TK11|block-destructive|tick-quote|-|-|W|"`@D@/ok.sh" "`"
+TK12|block-destructive|tick-quote|-|o|W|"`@D@/ok.sh`".sh
