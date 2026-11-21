@@ -22,8 +22,9 @@
 #            today's allow, and the change that closes it updates the verdict and drops
 #            the `open-` prefix in the same commit
 #
-# Placeholders: @D@ is the fixture directory, in which ok.sh and ok.py are the only
-# allowlisted paths; @LONGX@ @LONGN@ are 4,100 x / n; @SHORTX@ 4,000 x; @MIDX@ @MIDN@
+# Placeholders: @D@ is the fixture directory, in which the reader's root allowlists four
+# paths: ok.sh, ok.py, `li sted/ok.sh` (a path holding a space) and bin/bash (a path named as
+# a shell interpreter, which only row AS26 names); @LONGX@ @LONGN@ are 4,100 x / n; @SHORTX@ 4,000 x; @MIDX@ @MIDN@
 # 1,000 x / n; @QPAD@ 2,050 pairs of empty double quotes. $NOPE7019, $VAR and $HOME are
 # plain text to the guard: a PreToolUse hook sees argv unexpanded. The block-egress rows use
 # @OK@, the one gh api path the egress reader's root allowlists, and @NO@, a path it does not.

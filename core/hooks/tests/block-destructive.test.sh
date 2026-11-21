@@ -11336,7 +11336,8 @@ as_moved="X=\"\$(true a)\" ${as_q}${WC_D}/ok.sh${as_q})\" ${WC_D}/na.sh"
 as_optd="OUT=\$(bash ${as_q}-x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
 as_optp="OUT=\$(bash ${as_q}+x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
 as_int="OUT=\$(bash ${as_q}${WC_D}/ok.sh${as_q}) ${as_bt}${WC_D}/na.sh${as_bt}"
-# D-2: a listed closing word whose basename is an interpreter's name (this root lists one such path).
+# D-2: a quoted listed closing word whose basename is an interpreter's name (this root lists three such
+# paths: a shell interpreter's name, a non-shell interpreter's and the source word).
 as_verb="OUT=\$(bash ${as_q}${WC_D}/bin/bash${as_q}) ${WC_D}/na.sh"
 # D-2, the unquoted spelling (Stage 7): the closing word unquoted with the next word outside the shell
 # family's operand domain and inside the exec arm's; a non-shell-named closing word; a word between the

@@ -4030,10 +4030,10 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
 #      a non-empty plain one (M-ASGN-SUBST-PLAIN), which is not option-shaped, because a word
 #      that begins with `-` or `+` is read by an interpreter as an option and not as the script
 #      it names (M-ASGN-SUBST-OPT), and which the allowlist admits (M-ASGN-SUBST-ALLOW);
-#  10. the walk before the step does not refuse the next word: where it reads the closing token as a
-#      shell interpreter and the next word lies in that interpreter's own operand domain, a first-view
-#      position refuses that word unless it is listed, so the step declines and the refusal stands
-#      (M-ASGN-SUBST-VERB; script_assign_subst_verbnext states what it reads and what it does not).
+#  10. the walk before the step reads the closing token as no verb: where the verb classifier's raw or
+#      normalized view names an interpreter, shell or non-shell, or the source word, every word after
+#      it is that verb's to read, so the step declines, whatever follows and at either view, and the walk
+#      before's reading stands (M-ASGN-SUBST-VERB; script_assign_subst_verbnext states what it reads).
 # A token that carries neither opener is passed over at once, before any reading of its value.
 # Condition 3 declines every such token, so that first test changes no verdict and has no mutant;
 # it keeps the step's cost on an ordinary assignment to one pattern match.
@@ -4043,20 +4043,17 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
 # in the substitution is the one against the opener, which condition 4 keeps slash-free, a
 # PATH-resolved word this rule does not adjudicate in plain form. So the step can only stop the
 # exec arm adjudicating a listed script. The enclosure view adjudicates the substitution's command as
-# before. Where the walk before took a listed closing word for an interpreter, the words after it read
-# as the suite's readings show, each taken with a slash-bearing next word or script (arms
-# ASGN-SUBST-KEEP-verb and ASGN-SUBST-PIN-verb-*). A next word the walk before refused as a shell
-# interpreter's operand at a first-view position keeps that refusal: the step declines (condition 10).
-# A next word the walk before recorded, in a non-shell interpreter's family or the enclosure family,
-# the step records in the exec arm's family. A later word the walk before refused as the operand past
-# a next word outside the interpreter's domain loses that refusal: the step reads the next word as the
-# command word, as the shell does, so it records the script a wrapper there runs and reads nothing
-# further behind a word that is no command. At a phase other than the shipped ones (a non-shell
-# interpreter family's, or the enclosure family's, at enforce), a next word the walk before would
-# refuse the step records at the exec arm's phase instead. Not read on a copy, by code reading only: a
-# slash-free next word, which the exec arm does not read, so where the walk before records it in those
-# two families the step reads nothing; and a closing word named as the source word, which condition 10
-# neither reads nor declines.
+# before. That argument rests on condition 10. Without the step the walk takes the closing token for
+# the command word. Read as no verb, that token is the only word the walk before reads there: its closer
+# keeps every wrapper and keyword reading off it, it is no redirection, and the walk ends the segment at
+# it, judging it as a direct execution when it carries a slash. Read as a verb, the words after it are
+# that verb's operands, and the verb's arm reads them by views and in families the exec arm does not
+# share (among them the word after quote removal, the join of a quoted path holding whitespace, a
+# non-shell interpreter's family, the enclosure family and the source word's domain), so the step
+# declines there, and every command keeps the walk before's reading, with the one work unit condition 6
+# charged (row AS26, arms ASGN-SUBST-KEEP-verb* and ASGN-SUBST-PIN-verb-*). A quoted closing word the
+# normalizer does not resolve is read as no verb, so the walk before records nothing and the step
+# records the word after it (arm ASGN-SUBST-PIN-verb).
 # A command word written after the assignment is now read where it never was. It is asked
 # from the prefix walk and from env's operand loop, and not from the head resolver or the
 # carrier-head check, which stay withdraw-only.
@@ -4097,45 +4094,38 @@ script_assign_subst_rest() {   # $1 = the assignment token just stepped over
   { [ -n "$_c" ] && script_plain_word "$_c"; } || return 0   # M-ASGN-SUBST-PLAIN
   case "$_c" in [-+]*) return 0 ;; esac   # M-ASGN-SUBST-OPT
   is_script_allowlisted "$_c" || return 0   # M-ASGN-SUBST-ALLOW
-  if script_assign_subst_verbnext "$_t" "${script_tokens[$(( script_hidx + 1 ))]:-}"; then return 0; fi   # M-ASGN-SUBST-VERB
+  if script_assign_subst_verbnext "$_t"; then return 0; fi   # M-ASGN-SUBST-VERB
   script_hidx=$(( script_hidx + 1 ))
   script_qval_from="$script_hidx"
   return 0
 }
 
-# THE WALK BEFORE THE STEP, ON A LISTED CLOSING WORD THAT NAMES A SHELL INTERPRETER (condition 10 of
-# script_assign_subst_rest; the operator's revised D-2). Without the step the walk takes the closing token
-# for the command word. Where the verb classifier's two views that resolve such a token (its raw basename,
-# then its normalized one) read it as `bash`, `sh` or `zsh`, the next word is that interpreter's operand
-# when it lies in the interpreter's own operand domain, and at a first-view position the interpreter arm
-# refuses it unless the allowlist admits it (script_shell_verdict passes a first-view finding straight
-# through). There the step would put the exec arm's record at its phase, or for a slash-free word
-# nothing, in place of that refusal, so it declines. It reads the next word's domain as well as the
-# closing word, so where it declines the walk before either refuses the next word, and the decline puts
-# that refusal back, or allows it, when the allowlist admits it, as the step does. It removes no record
-# anywhere the walk before records or allows. It does not decline a next word outside that domain, which
-# the walk before does not read; a non-shell interpreter's name, whose family records at its phase; an
-# enclosure position, where the enclosure family records at its phase; or a closing token those two
-# views do not resolve, the quoted spelling, which the walk before reads as no interpreter. The source
-# word is not read here and is not declined. Returns 0 to decline; the normalizer's outputs are restored
-# on every path.
-script_assign_subst_verbnext() {   # $1 = the closing token  $2 = the next word, empty when there is none
-  local _d="" _r=1
+# THE WALK BEFORE THE STEP, ON A LISTED CLOSING WORD IT READS AS A VERB (condition 10 of
+# script_assign_subst_rest; the operator's decision at Stage 7 pass 3, option (a)). Without the step the
+# walk takes the closing token for the command word, and the verb classifier names an interpreter or the
+# source word from the token's raw basename, then, when the normalizer resolves the token, from its
+# normalized one, against the same ten names. This helper asks those two views of the same token, in that
+# order, and declines when either names a verb, whatever the next word is and at a first-view or an
+# enclosure position alike. It does not read the next word. Where it declines, the walk before's reading
+# stands for every word after the closing one, with the one work unit the step has already charged. The
+# classifier's third view, the word after quote removal (M-REACH-VERB), is not asked: it names no verb
+# for any closing token the step admits, because the substitution's closer stays a literal character at
+# the word's end, a double-quoted value's closing quote leaves the word unclosed, and a backtick makes it
+# no literal word. For the same reason the raw-basename test never matches; it is kept so that the order
+# is the classifier's. A quoted closing word the normalizer does not resolve names no verb in either view,
+# so the step's reading stands there. Returns 0 to decline; the normalizer's outputs are restored on every
+# path.
+script_assign_subst_verbnext() {   # $1 = the closing token
+  local _r=1
   local _no="$script_norm_out" _nr="$script_norm_raw" _nk="$script_norm_ok"
-  if [ -z "$2" ] || [ "${script_pass:-1}" -eq 2 ]; then return 1; fi
   case "${1##*/}" in
-    bash|sh|zsh) _d=interp ;;
-    python|python3|perl|ruby|node|source|.) _d=- ;;
+    bash|sh|zsh|python|python3|perl|ruby|node|source|.) return 0 ;;
   esac
-  if [ -z "$_d" ]; then
-    normalize_script_token "$1"
-    if [ "$script_norm_ok" -eq 1 ]; then
-      case "${script_norm_out##*/}" in bash|sh|zsh) _d=interp ;; esac
-    fi
-  fi
-  if [ "$_d" = interp ]; then
-    normalize_script_token "$2"
-    if script_operand_implicated interp; then _r=0; fi
+  normalize_script_token "$1"
+  if [ "$script_norm_ok" -eq 1 ]; then
+    case "${script_norm_out##*/}" in
+      bash|sh|zsh|python|python3|perl|ruby|node|source|.) _r=0 ;;
+    esac
   fi
   script_norm_out="$_no"; script_norm_raw="$_nr"; script_norm_ok="$_nk"
   return "$_r"
