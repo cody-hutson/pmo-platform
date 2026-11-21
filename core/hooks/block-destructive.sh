@@ -269,14 +269,35 @@ block() {
   exit 2
 }
 
-# Pattern match against the canonicalized command (single-string scan via printf —
-# preserves newlines, avoids IFS splitting). Rule patterns are unchanged; only the text
-# they read is, so a verb at any genuine command start is now anchored. Direct "$COMMAND"
-# readers below — the BLOCK-DESTRUCTIVE-022 segment loop and its quote-parity tracking —
-# deliberately keep the RAW command and are unaffected.
+# Pattern match against the canonicalized command, as one string (preserves newlines,
+# avoids IFS splitting). Rule patterns are unchanged; only the text they read is, so a
+# verb at any genuine command start is now anchored. Direct "$COMMAND" readers below — the
+# BLOCK-DESTRUCTIVE-022 segment loop and its quote-parity tracking — deliberately keep the
+# RAW command and are unaffected.
+#
+# FED BY HERE-STRING, NEVER BY A PIPE (GHSA-xxjm-mhfm-xq5v). `grep -q` exits at its first
+# match. Piped, a command longer than the pipe's capacity (64 KiB) left its writer with text
+# still to push; the writer took SIGPIPE (141) or a write error (1), `pipefail` made that the
+# pipeline's status, and the rule read "no match" and did not fire. A here-string has no
+# second process. It has a prerequisite of its own — bash backs it with a temp file (always
+# on bash 3.2, above the pipe's capacity on 5.1+) — and when that file cannot be created the
+# group never runs, _rc stays empty, and matcher_not_evaluated refuses: an unread command is
+# not a clean one. tests/ghsa-xxjm-long-input-matchers.test.sh pins both, and puts this line
+# back to the pipe shape on a copy to prove its arms can tell the two apart — keep the line's
+# shape in step with that suite's to_old_shape.
 matches() {
-  local pattern="$1"
-  "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
+  local pattern="$1" _rc=
+  { _rc=0; "$GREP" -qE "$pattern" || _rc=$?; } <<< "$COMMAND_CMDPOS" || true
+  [ -n "$_rc" ] || matcher_not_evaluated
+  [ "$_rc" = 0 ]
+}
+
+# matcher_not_evaluated — the rule matcher's here-string could not be created, so no rule read
+# the command. This hook has no .mode, so it refuses (ADR-078 D2). Never returns.
+matcher_not_evaluated() {
+  log_error "INPUT-NOT-EVALUATED: the rule matcher's here-string could not be created (temp file)"
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] BLOCKED (fail-closed): the command could not be handed to the rule matcher (bash could not create the temp file behind its here-string); this is not a clean result: the hook could not evaluate its input. See %s.\n' "$HOOK_NAME" "$ERROR_LOG" >&2
+  exit 2
 }
 
 # Check if a path matches any glob pattern in the script-execution allowlist
