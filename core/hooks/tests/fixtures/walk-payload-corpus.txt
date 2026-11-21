@@ -2324,3 +2324,12 @@ TK08|block-destructive|tick-cmdword|-|?|W|`true` @D@/na.sh
 # quote-led command word whose double quote closes at its token's end, its script listed (admitted, a)
 TK09|block-destructive|tick-cmdword|-|?|W|`@D@/ok.sh` @D@/na.sh
 LT05|block-destructive|looks-like-text|-|?|a|"`@D@/ok.sh`"
+# #8490 Stage 7 pass 3 (F-11): quote-led command words sorted by the exec arm's operand-filter test, whether a
+# script suffix ends the token (its normalized reading, or its raw spelling where that does not resolve), and
+# not by where the double quote closes. A quote left open whose token ends at the substitution's closer (no
+# suffix at the end: the enclosure position alone reads it, listed, a); a quote closed at the token's end
+# behind a suffix, the closer in a later token (recorded, W); a quote closed inside the token, which goes on
+# to a suffix (recorded, W)
+TK10|block-destructive|tick-quote|-|?|a|"`@D@/ok.sh` x"
+TK11|block-destructive|tick-quote|-|?|W|"`@D@/ok.sh" "`"
+TK12|block-destructive|tick-quote|-|?|W|"`@D@/ok.sh`".sh

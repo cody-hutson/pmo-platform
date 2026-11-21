@@ -9850,6 +9850,10 @@ xt_arm "EXEC-TEXT-PIN-handoff-forced: and refuses it at enforce" block-destructi
 xt_hodecl="\`${ENCL_OK}\` ${ENCL_NA}"
 xt_arm "EXEC-TEXT-PIN-handoff-declined: a listed slash-bearing substitution this arm declines, then an unlisted script word, keeps that word's one record, from the closer's position" block-destructive.sh "$xt_hodecl" W 0 "" 1:exec
 xt_arm "EXEC-TEXT-PIN-handoff-declined-forced: and refuses it at enforce" block-destructive-xforced.sh "$xt_hodecl" B -
+# Stage 7 pass 3 (F-10): the declined form's row assertions, paired. On the copy with the M-EXEC-TICK block
+# removed the first view keeps the first word's backtick-led row, so the pin's no-backtick-led-row and
+# one-row assertions fail there.
+xt_arm "EXEC-TEXT-PIN-handoff-declined-pair: on the copy without the decline the first word keeps its backtick-led row" block-destructive-xrev.sh "$xt_hodecl" W 1+
 xt_qcl="\"\`${ENCL_OK}\`\""
 xt_qclna="\"\`${ENCL_NA}\`\""
 xt_arm "EXEC-TEXT-PIN-quote-closed: a quote-led command word whose double quote closes at its token's end admits its listed script" block-destructive.sh "$xt_qcl" a 0
