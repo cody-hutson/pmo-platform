@@ -219,9 +219,34 @@ apply_block() {
 
 # --- HELPERS ---
 
-# Pattern match against $COMMAND
+# Pattern match against $COMMAND.
+#
+# FED BY HERE-STRING, NEVER BY A PIPE (GHSA-xxjm-mhfm-xq5v). `grep -q` exits at its first
+# match. Piped, a command longer than the pipe's capacity (64 KiB) left its writer with text
+# still to push; the writer took SIGPIPE (141) or a write error (1), `pipefail` made that the
+# pipeline's status, and the rule read "no match" and did not fire. A here-string has no
+# second process; when bash cannot create the temp file behind it, _rc stays empty and
+# matcher_not_evaluated takes the mode-coupled posture. Pinned by
+# tests/ghsa-xxjm-long-input-matchers.test.sh — keep the line's shape in step with that
+# suite's to_old_shape.
 matches() {
-  "$PRINTF" '%s' "$COMMAND" | "$GREP" -qE "$1"
+  local _rc=
+  { _rc=0; "$GREP" -qE "$1" || _rc=$?; } <<< "$COMMAND" || true
+  [ -n "$_rc" ] || matcher_not_evaluated
+  [ "$_rc" = 0 ]
+}
+
+# matcher_not_evaluated — the rule matcher's here-string could not be created, so no rule read
+# the command. Mode-coupled (ADR-078 D2): enforce refuses; warn and off stand down loudly,
+# because no rule ran. Never returns.
+matcher_not_evaluated() {
+  log_error "INPUT-NOT-EVALUATED: the rule matcher's here-string could not be created (temp file)"
+  if [ "$LIB_GUARD_MODE" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] BLOCKED (fail-closed): the command could not be handed to the rule matcher (bash could not create the temp file behind its here-string); this is not a clean result: the hook could not evaluate its input. See %s.\n' "$HOOK_NAME" "$ERROR_LOG" >&2
+    exit 2
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] WARN (degraded, %s=%s): the command could not be handed to the rule matcher (bash could not create the temp file behind its here-string); this is not a clean result: no rule read the command this run.\n' "$HOOK_NAME" "${MODE_FILE##*/}" "$LIB_GUARD_MODE" >&2
+  exit 0
 }
 
 # Check the literal $COMMAND against a glob-pattern allowlist file (bash case globbing)
