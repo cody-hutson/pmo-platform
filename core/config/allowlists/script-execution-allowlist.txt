@@ -385,6 +385,16 @@ release/tools/tests/test_deciders_carveout.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_domain_blast_radius.sh
 ./release/tools/tests/test_domain_blast_radius.sh
 release/tools/tests/test_domain_blast_radius.sh
+# test_intake_mode_c_body_abstraction.sh — prose-structure suite for the intake-desk
+# Mode C body-abstraction rule. Its control arms mutate sandbox copies of the skill,
+# its output contract and the gate-coverage register and require each mutation to
+# fail, so a blocked agent-side invocation leaves the arms that prove the suite can
+# fail unrunnable. It runs in CI and is invoked agent-side at Stage 6
+# self-verification and Stage 7 Dev Testing.
+[PMO_PLATFORM_ROOT]/release/tools/tests/test_intake_mode_c_body_abstraction.sh
+[PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_intake_mode_c_body_abstraction.sh
+./release/tools/tests/test_intake_mode_c_body_abstraction.sh
+release/tools/tests/test_intake_mode_c_body_abstraction.sh
 [PMO_PLATFORM_ROOT]/release/tools/tests/test_lint_release_corpus_versionless.sh
 [PMO_PLATFORM_ROOT]/.claude/worktrees/*/release/tools/tests/test_lint_release_corpus_versionless.sh
 ./release/tools/tests/test_lint_release_corpus_versionless.sh
