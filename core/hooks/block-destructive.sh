@@ -129,8 +129,22 @@ JQ="$(resolve_jq)"; readonly JQ
 #   `mygit_subcommand`). The optional path-prefix group composes here
 #   to also detect `/usr/bin/git push --force`, which the prior
 #   bare-token anchor evaded under BLOCK-DESTRUCTIVE-001.
+# - GIT_WORD_ANYCASE / RM_WORD_ANYCASE: the command word that follows the anchor in
+#   the git rules (-001..-003, -010..-015) and the rm rules (-004..-009), matched in
+#   any case. macOS's default filesystem is case-insensitive, so `GIT` and `RM` run
+#   git and rm (measured: /usr/bin/GIT and /bin/RM are the same files as their
+#   lower-case names). The builtin subcommands these rules name (push, reset, clean,
+#   update-ref, symbolic-ref, reflog) and every flag stay matched as written, because
+#   git does not resolve a builtin in another case (`git PUSH` fails, measured).
+#   filter-branch and filter-repo are not builtins: git runs them as the files
+#   git-filter-branch and git-filter-repo, which the same filesystem resolves in any
+#   case, so -014 and -015 match those two names in any case as well. The anchor
+#   constants above are unchanged, so they stay byte-identical across the four hooks
+#   that declare them.
 readonly ANCHOR_PREFIX_BASH='(^|[;&|])[[:space:]]*(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?'
 readonly ANCHOR_PREFIX_GIT='(^|[^[:alnum:]_-])(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?'
+readonly GIT_WORD_ANYCASE='[gG][iI][tT]'
+readonly RM_WORD_ANYCASE='[rR][mM]'
 
 # --- COMMAND-POSITION CANONICALIZER (shared primitive, #5644) ---
 # ANCHOR_PREFIX_BASH recognises a command start ONLY at start-of-line or after `;`, `&`,
@@ -3957,21 +3971,21 @@ case "$TOOL_NAME" in
 
     # BLOCK-DESTRUCTIVE-001 — git push --force / -f (explicit allow: --force-with-lease, --force-if-includes)
     # Absolute-path-aware: also detects /usr/bin/git push --force, etc.
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+push[[:space:]]+[^;&|]*(-f|--force)([[:space:]]|$)'; then
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+push[[:space:]]+[^;&|]*(-f|--force)([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-001" \
         "git push --force is denied (rewrites remote history, coordinates poorly with teammates)." \
         "use 'git push --force-with-lease' (safer variant), or set CLAUDE_HOOK_BYPASS=1 before launching claude"
     fi
 
     # BLOCK-DESTRUCTIVE-002 — git reset --hard
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+reset[[:space:]]+[^;&|]*--hard([[:space:]]|$)'; then
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+reset[[:space:]]+[^;&|]*--hard([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-002" \
         "git reset --hard is denied (discards uncommitted work irreversibly)." \
         "use 'git reset' (soft/mixed) or 'git stash' first, or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # BLOCK-DESTRUCTIVE-003 — git clean -f / -fd / --force
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+clean[[:space:]]+[^;&|]*(-[a-zA-Z]*f[a-zA-Z]*|--force)([[:space:]]|$)'; then
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+clean[[:space:]]+[^;&|]*(-[a-zA-Z]*f[a-zA-Z]*|--force)([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-003" \
         "git clean -f is denied (irreversible deletion of untracked files)." \
         "use 'git clean -n' (dry run) to inspect first, or set CLAUDE_HOOK_BYPASS=1"
@@ -3979,21 +3993,21 @@ case "$TOOL_NAME" in
 
     # BLOCK-DESTRUCTIVE-004 — rm on catastrophic system paths
     # Absolute-path-aware: also detects /bin/rm -rf /, /usr/bin/rm -rf /, etc.
-    if matches "${ANCHOR_PREFIX_BASH}"'rm[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?(/|/Users|/Applications|/Library|/System|/bin|/sbin|/usr|/etc|/var)([[:space:]]|$|/\*)'; then
+    if matches "${ANCHOR_PREFIX_BASH}${RM_WORD_ANYCASE}"'[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?(/|/Users|/Applications|/Library|/System|/bin|/sbin|/usr|/etc|/var)([[:space:]]|$|/\*)'; then
       block "BLOCK-DESTRUCTIVE-004" \
         "rm on catastrophic system path denied (/, /Users, /Applications, /Library, /System, /bin, /sbin, /usr, /etc, /var)." \
         "scope the rm to a specific subdirectory, or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # BLOCK-DESTRUCTIVE-005 — rm -rf $HOME bare
-    if matches "${ANCHOR_PREFIX_BASH}"'rm[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?\$HOME/?([[:space:]]|$)'; then
+    if matches "${ANCHOR_PREFIX_BASH}${RM_WORD_ANYCASE}"'[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?\$HOME/?([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-005" \
         "rm -rf \$HOME (bare) denied (would wipe user home directory on shell expansion)." \
         "scope the rm to a specific subdirectory under \$HOME (e.g., \$HOME/Downloads/temp), or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # BLOCK-DESTRUCTIVE-006 — rm -rf .git
-    if matches "${ANCHOR_PREFIX_BASH}"'rm[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?\.git([[:space:]]|$|/)'; then
+    if matches "${ANCHOR_PREFIX_BASH}${RM_WORD_ANYCASE}"'[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?\.git([[:space:]]|$|/)'; then
       block "BLOCK-DESTRUCTIVE-006" \
         "rm on .git denied (destroys local git history and metadata)." \
         "back up repo first, or set CLAUDE_HOOK_BYPASS=1"
@@ -4003,21 +4017,21 @@ case "$TOOL_NAME" in
     # repo-integrity: allow-projects-casing — this guard is an INTENTIONAL legacy-
     # uppercase matcher; its Projects/ literals are by-design and file-exempt from
     # the net-new Projects/ casing gate (repo-integrity.yml § projects-casing).
-    if matches "${ANCHOR_PREFIX_BASH}"'rm[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?Projects/'; then
+    if matches "${ANCHOR_PREFIX_BASH}${RM_WORD_ANYCASE}"'[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?Projects/'; then
       block "BLOCK-DESTRUCTIVE-007" \
         "rm on Projects/ denied (legacy uppercase project directory; data loss risk)." \
         "rm specific files or subdirectories, or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # BLOCK-DESTRUCTIVE-008 — rm -rf projects/ (Layer 2 Cowork)
-    if matches "${ANCHOR_PREFIX_BASH}"'rm[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?projects/'; then
+    if matches "${ANCHOR_PREFIX_BASH}${RM_WORD_ANYCASE}"'[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?projects/'; then
       block "BLOCK-DESTRUCTIVE-008" \
         "rm on projects/ denied (Layer 2 Cowork-owned operational data; data loss risk)." \
         "rm specific files or subdirectories, or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # BLOCK-DESTRUCTIVE-009 — rm -rf pmo-platform/ (Layer 1 source tree)
-    if matches "${ANCHOR_PREFIX_BASH}"'rm[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?pmo-platform/'; then
+    if matches "${ANCHOR_PREFIX_BASH}${RM_WORD_ANYCASE}"'[[:space:]]+([^[:space:]]+[[:space:]]+)*(--[[:space:]]+)?pmo-platform/'; then
       block "BLOCK-DESTRUCTIVE-009" \
         "rm on pmo-platform/ denied (Layer 1 source tree; use git to remove tracked files instead)." \
         "rm specific files or subdirectories, or set CLAUDE_HOOK_BYPASS=1"
@@ -4026,14 +4040,14 @@ case "$TOOL_NAME" in
     # ----- NEW-B: git plumbing coverage -----
 
     # BLOCK-DESTRUCTIVE-010 — git update-ref on dangerous refs (main, master, HEAD)
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+update-ref[[:space:]]+(-d[[:space:]]+)?(refs/heads/(main|master)|HEAD)([[:space:]]|$)'; then
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+update-ref[[:space:]]+(-d[[:space:]]+)?(refs/heads/(main|master)|HEAD)([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-010" \
         "git update-ref on main/master/HEAD denied (low-level ref manipulation rewrites history)." \
         "use standard git commands (commit, merge, rebase), or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # BLOCK-DESTRUCTIVE-011 — git symbolic-ref HEAD to main/master
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+symbolic-ref[[:space:]]+HEAD[[:space:]]+refs/heads/(main|master)([[:space:]]|$)'; then
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+symbolic-ref[[:space:]]+HEAD[[:space:]]+refs/heads/(main|master)([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-011" \
         "git symbolic-ref HEAD to main/master denied (can abandon commits, corrupt branch state)." \
         "use standard git commands (checkout, switch), or set CLAUDE_HOOK_BYPASS=1"
@@ -4041,28 +4055,31 @@ case "$TOOL_NAME" in
 
     # BLOCK-DESTRUCTIVE-012 — git push with plus-refspec (force push via +<refspec>)
     # Matches: git push <remote> +main, +master, +refs/heads/main:<dst>, etc.
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+push[[:space:]]+[^;&|]*\+([^[:space:];&|]*:)?(main|master|refs/heads/(main|master))([[:space:]]|:|$)'; then
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+push[[:space:]]+[^;&|]*\+([^[:space:];&|]*:)?(main|master|refs/heads/(main|master))([[:space:]]|:|$)'; then
       block "BLOCK-DESTRUCTIVE-012" \
         "git push with plus-refspec (+main/+master/+refs/heads/main) denied (bypasses --force detection, still rewrites history)." \
         "use 'git push --force-with-lease' or branch-specific pushes, or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # BLOCK-DESTRUCTIVE-013 — git reflog expire / delete
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+reflog[[:space:]]+(expire|delete)([[:space:]]|$)'; then
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+reflog[[:space:]]+(expire|delete)([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-013" \
         "git reflog expire/delete denied (removes recovery safety net for recent ref changes)." \
         "only needed for disk space; set CLAUDE_HOOK_BYPASS=1 if intentional"
     fi
 
     # BLOCK-DESTRUCTIVE-014 — git filter-branch
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+filter-branch([[:space:]]|$)'; then
+    # The subcommand is matched in any case too: it is not a builtin, and git runs it as
+    # the file git-filter-branch, which the filesystem resolves in any case.
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+[fF][iI][lL][tT][eE][rR]-[bB][rR][aA][nN][cC][hH]([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-014" \
         "git filter-branch denied (rewrites entire history; forces coordinated pushes)." \
         "use 'git filter-repo' with caution (still blocked — see BLOCK-DESTRUCTIVE-015) or set CLAUDE_HOOK_BYPASS=1"
     fi
 
     # BLOCK-DESTRUCTIVE-015 — git filter-repo
-    if matches "${ANCHOR_PREFIX_GIT}"'git[[:space:]]+filter-repo([[:space:]]|$)'; then
+    # The subcommand is matched in any case, as for -014 (git runs it as git-filter-repo).
+    if matches "${ANCHOR_PREFIX_GIT}${GIT_WORD_ANYCASE}"'[[:space:]]+[fF][iI][lL][tT][eE][rR]-[rR][eE][pP][oO]([[:space:]]|$)'; then
       block "BLOCK-DESTRUCTIVE-015" \
         "git filter-repo denied (rewrites entire history; forces coordinated pushes)." \
         "coordinate with team first, or set CLAUDE_HOOK_BYPASS=1"
