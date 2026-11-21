@@ -12622,6 +12622,44 @@ else
   [ "$ce_mbad" = "$ce_sn" ] || ce_why="${ce_why} the-splitter-control-reads-${ce_mbad}(wanted-${ce_sn})"
 fi
 ce_report "CEIL-COVER-oneline: a loop whose do has a statement after it on its line is read as its own loop: with only the opener-stack reset's bound line deleted exactly that loop reads uncovered, a loop charged on its do line ahead of an unannotated one leaves only the second uncovered, and the control, with only the splitter's bound line deleted, reads the splitter uncovered" "$ce_why"
+# CEIL-COVER-unplaced (Stage 7 F-18) — a loop whose own `do` the arm cannot place reads uncovered, whatever
+# follows it, and is never credited with a later loop's check or with text later on its own line. Three
+# copies each add one unannotated loop whose `do` the do-word pattern misses, and each reads exactly that
+# loop uncovered: a `do` glued to the statement after it, and a `do` continued onto the next line, each
+# ahead of a loop in a form the arm does not read that carries a check; and a glued `do` with a `do` word
+# later on its line followed by the check's text. Two controls each add one charged loop and read none
+# uncovered, with one loop and one charge more than the hook: one charged on its `do` line ahead of a loop
+# the arm does not read that carries a check, and one whose `do` stands alone on the line after its head.
+# Each copy is checked to differ from the hook by exactly the lines it adds.
+ce_why=""
+read -r ce_hnl ce_hnc ce_hnb ce_hbad ce_hsub ce_hun <<<"$(ce_cover "$HOOK")"
+ce_bn="$(/usr/bin/awk '/^# BRANCH BY TOOL NAME/ { print NR; exit }' "$HOOK")"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe4() {"; print "  while false; do(:)"; print "  done"; print "  if true; then while false; do"; print "    script_ceil_check probe   # M-CEIL-PROBE"; print "  done; fi"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u1"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe5() {"; print "  while false; do\\"; print "    :"; print "  done"; print "  for w"; print "  do"; print "    script_ceil_check probe   # M-CEIL-PROBE"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u2"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe6() {"; print "  while false; do(:); : do script_ceil_check probe   # M-CEIL-PROBE"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u3"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe7() {"; print "  while false; do script_ceil_check probe   # M-CEIL-PROBE"; print "  done"; print "  if true; then while false; do"; print "    script_ceil_check probe   # M-CEIL-PROBE"; print "  done; fi"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u4"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe8() {"; print "  for w in a b"; print "  do"; print "    script_ceil_check probe   # M-CEIL-PROBE"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u5"
+if [ -z "$ce_bn" ] || [ -z "$ce_hnl" ] || [ -z "$ce_hnc" ]; then
+  ce_why="${ce_why} no-banner-or-hook-reading:banner=${ce_bn:-none},loops=${ce_hnl:-none},charged=${ce_hnc:-none}"
+else
+  for ce_u in u1:7 u2:9 u3:4 u4:7 u5:6; do
+    ce_un_f="${ce_u%%:*}"
+    ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-${ce_un_f}" | /usr/bin/grep -c '^[<>]')"
+    [ "$ce_live_n" = "${ce_u##*:}" ] || ce_why="${ce_why} the-${ce_un_f}-copy-differs-by-${ce_live_n}-lines(wanted-${ce_u##*:})"
+    read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-${ce_un_f}")"
+    case "$ce_un_f" in
+      u1|u2|u3) [ "$ce_mbad" = "$(( ce_bn + 1 ))" ] || ce_why="${ce_why} the-${ce_un_f}-unplaced-do-copy-reads-${ce_mbad}(wanted-$(( ce_bn + 1 )))" ;;
+      *) [ "$ce_mbad" = "-" ] && [ "$ce_nl" = "$(( ce_hnl + 1 ))" ] && [ "$ce_nc" = "$(( ce_hnc + 1 ))" ] \
+           || ce_why="${ce_why} the-${ce_un_f}-control-reads-${ce_nl}-loops-${ce_nc}-charged-${ce_mbad}(wanted-$(( ce_hnl + 1 ))-$(( ce_hnc + 1 ))--)" ;;
+    esac
+  done
+fi
+ce_report "CEIL-COVER-unplaced: a loop whose do the do-word pattern misses reads uncovered, whatever follows it: copies with that do glued ahead of a checked loop the arm does not read, continued onto the next line ahead of one, and glued with a do word later on its line before the check's text each read exactly that loop uncovered; the controls, a loop charged on its do line ahead of a checked loop the arm does not read and one whose do stands alone on the line after its head, read none uncovered" "$ce_why"
 # CEIL-COVER-charged (Stage 7 F-03) — the here-document pre-pass's character scan and the enclosure cut's
 # loop, whose steps read text as long as a line or a position's remainder, carry the check, not only a
 # step cap: each marker is present once, and on the trace copy each tag is traced on a command that runs it.
