@@ -4178,11 +4178,14 @@ case "$TOOL_NAME" in
       deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
       exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
     fi
-    # THE LENGTH GATE, AHEAD OF THE FIRST WHOLE-COMMAND PASS (the work ceiling's gate; see
-    # script_ceil_refuse). The command-position pass below reads the whole command, so a command
-    # longer than SCRIPT_CEIL_CHARS is refused before it runs and no step that reads the whole
-    # command precedes the gate. No verdict moves: nothing between here and the -022 entry lets a
-    # command through, so only the refusing rule's ID changes for a long command another rule refuses.
+    # THE LENGTH GATE, AFTER THE COMMAND'S EXTRACTION AND AHEAD OF THE FIRST PASS THAT READS THE WHOLE
+    # COMMAND (the work ceiling's gate; see script_ceil_refuse). The extraction above reads the whole
+    # tool input once, and the gate measures what it returns; between the two stand only the
+    # empty-command exit and the canary probes, which read fixed strings. The command-position pass
+    # below is the first pass that reads the whole extracted command, so a command longer than
+    # SCRIPT_CEIL_CHARS is refused before it runs. No verdict moves: nothing between here and the -022
+    # entry lets a command through, so only the refusing rule's ID changes for a long command another
+    # rule refuses (arm CEIL-GATE-EARLY-rule).
     if [ "${#COMMAND}" -gt "$SCRIPT_CEIL_CHARS" ]; then script_ceil_refuse chars entry; fi   # M-CEIL-GATE-EARLY
     COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
     # Belt-and-braces: a non-empty command must never canonicalize to nothing.

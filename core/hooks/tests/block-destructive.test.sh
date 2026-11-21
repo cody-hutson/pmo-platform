@@ -12441,7 +12441,17 @@ ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly
 # CEIL-COVER — every bash loop on the -022 surface (the helpers from the allowlist reader to the
 # dispatch banner, and the -022 block) is charged by a check as its body's first statement, or
 # declared bounded by a `# ceil-bounded:` line directly above its head; no check sits inside the two
-# helpers that run in a command substitution. awk programs' loops (`for (`, `while (`) are not bash.
+# helpers that run in a command substitution.
+# WHAT IT READS. A loop head at the start of a line: `while` or `until` followed by a blank and a
+# character other than `(`, or `for NAME in`. And, so that it fails on them, the forms it knows that head
+# misses: an arithmetic `for ((`, a `select NAME`, and a `while`, `until` or `for NAME` after `;`, `&` or
+# `|` on the same line.
+# WHAT IT DOES NOT READ, written down so that a new form is a documented exclusion and not a defect: a
+# `for NAME` with no word list; an arithmetic `while ((` or `until ((` condition; a loop keyword after a
+# reserved word, a group opener or any other word on the same line; recursion, which repeats work with
+# no loop head; and a helper defined outside the two windows or in a sourced library. Nothing fails on
+# these, so a loop in one of those forms is covered by review, not by this arm. An enumeration with a
+# stated boundary, not a closed class. awk programs' loops (`for (`, `while (`) are not bash.
 ce_cover() { # <file> -> "loops charged bounded bad sub unseen"
   /usr/bin/awk '
     /^is_script_allowlisted\(\) \{/ { on = 1 }
@@ -12556,12 +12566,13 @@ for ce_loc in en_US.UTF-8 C; do
   [ "$CE_EXIT" = 2 ] || [ "$CE_DS" = -1 ] || ce_why="${ce_why} exit=${CE_EXIT}"
   ce_report "CEIL-AT-CAP-chars-late [${ce_loc}]: just over the gate, its only refusal an unlisted execution at the end, the command is refused" "$ce_why"
 done
-# The gate stands ahead of the first pass that reads the whole command (Stage 7 F-02, operator option
-# A): the command-position pass runs only on a command the gate admits. Structural, and timed at four
-# times the gate in both locales, where the refusal must come inside the watchdog with cause chars.
+# The gate stands after the command's extraction and ahead of the first pass that reads the whole
+# extracted command (Stage 7 F-02, operator option A): the command-position pass runs only on a command
+# the gate admits. Structural, and timed at four times the gate in both locales, where the refusal must
+# come inside the watchdog with cause chars; CEIL-GATE-EARLY-rule below pins it by behaviour.
 ce_why=""
-ce_ge="$(/usr/bin/grep -n '# M-CEIL-GATE-EARLY$' "$HOOK" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
-ce_cp="$(/usr/bin/grep -n '^    COMMAND_CMDPOS="\$(' "$HOOK" | /usr/bin/head -1 | /usr/bin/cut -d: -f1)"
+ce_ge="$(/usr/bin/grep -m 1 -n '# M-CEIL-GATE-EARLY$' "$HOOK" | /usr/bin/cut -d: -f1)"
+ce_cp="$(/usr/bin/grep -m 1 -n '^    COMMAND_CMDPOS="\$(' "$HOOK" | /usr/bin/cut -d: -f1)"
 [ -n "$ce_ge" ] || ce_why="${ce_why} no-early-gate-line"
 [ -n "$ce_cp" ] || ce_why="${ce_why} no-command-position-pass-line"
 if [ -n "$ce_ge" ] && [ -n "$ce_cp" ] && [ "$ce_ge" -ge "$ce_cp" ]; then ce_why="${ce_why} the-gate-follows-the-pass"; fi
