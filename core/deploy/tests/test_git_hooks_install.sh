@@ -29,6 +29,12 @@
 #           pass the real checkout that way) and the run prints the manual step.
 #   Arm 7 — with a few hundred linked worktrees (the operator's real shape), re-bootstrap
 #           and validate-install still run: no early-exit reader in a pipefail pipeline.
+#   Arm 8 — the remediation users are told to run, a real update.sh, re-wires an unwired
+#           guard and does not exit EX_NOCHANGE; a second run leaves it alone. (Runs
+#           before Arm 7 in the file, so it is not slowed by Arm 7's worktrees.)
+#   Arm 9 — A3d judges the hook at one hop, as the guard resolves itself: a chain of links
+#           and a link to another copy of the guard FAIL (refresh re-points the copy), and
+#           a global core.hooksPath is neither wired nor FAILed, with the reason printed.
 #
 # Arms 1-2 are RED on an installer that wires only post-merge — measured, which is
 # how this suite was written. Darwin-only (setup-workspace.sh's check_platform).
@@ -139,8 +145,8 @@ validate() {
 }
 out="$(validate wired)"
 report "validate-install A3d PASSes on the wired guard" \
-  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] PASS' && echo 1 || echo 0)" \
-  "A3d line: $(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)"
+  "$(grep -q '^\[A3d\] PASS' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
 
 # --- Arm 2: the wired guard actually refuses a home path, and only that ---
 printf '\nArm 2. The wired guard refuses a home-path commit and accepts a benign one\n'
@@ -178,7 +184,7 @@ report "refresh re-wires pre-commit to the guard" \
 # update.sh decides "changed anything?" from REFRESHED/MODE-REPAIRED/RECONCILED/WIRED; an
 # INSTALLED line would let an update that wired the guard exit EX_NOCHANGE.
 report "the wiring is logged WIRED:, a token update.sh counts as a change" \
-  "$(printf '%s' "${out}" | grep -q 'WIRED: PII pre-commit guard' && echo 1 || echo 0)"
+  "$(grep -q 'WIRED: PII pre-commit guard' <<<"${out}" && echo 1 || echo 0)"
 report "update.sh counts WIRED: as a change" \
   "$(grep -qF "RECONCILED:|WIRED:'" "${SRC}/update.sh" && echo 1 || echo 0)"
 
@@ -188,8 +194,8 @@ printf '\nArm 4. A stale link to a vanished guard is re-pointed\n'
 ln -s "${SBX}/swept-worktree/core/hooks/git-pre-commit-pii.sh" "${HD}/pre-commit"
 out="$(validate dangling)"
 report "validate-install A3d FAILs on a dangling guard link" \
-  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] FAIL.*dangling' && echo 1 || echo 0)" \
-  "A3d line: $(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)"
+  "$(grep -q '^\[A3d\] FAIL.*dangling' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
 out="$(refresh)"
 report "the dangling link is re-pointed at the live guard" \
   "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)" \
@@ -204,24 +210,24 @@ before="$(cksum < "${HD}/pre-commit")"
 out="$(refresh)"
 report "the foreign hook's content is unchanged" "$([ "$(cksum < "${HD}/pre-commit")" = "${before}" ] && [ ! -L "${HD}/pre-commit" ] && echo 1 || echo 0)"
 report "the run warns that the PII guard is not active" \
-  "$(printf '%s' "${out}" | grep -q 'WARN.*PII pre-commit guard NOT active' && echo 1 || echo 0)" \
+  "$(grep -q 'WARN.*PII pre-commit guard NOT active' <<<"${out}" && echo 1 || echo 0)" \
   "no 'PII pre-commit guard NOT active' warning in the refresh output"
 out="$(validate foreign)"
 report "validate-install A3d FAILs on a foreign hook" \
-  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] FAIL.*different hook' && echo 1 || echo 0)" \
-  "A3d line: $(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)"
+  "$(grep -q '^\[A3d\] FAIL.*different hook' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
 # Naming the guard is not running it: a comment is enough to mention it.
 printf '#!/bin/sh\n# git-pre-commit-pii.sh is off for now\nexit 0\n' > "${HD}/pre-commit"
 out="$(validate mention)"
 report "A3d never PASSes a hook that only names the guard (SKIP, not PASS)" \
-  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] SKIP' && echo 1 || echo 0)" \
-  "A3d line: $(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)"
+  "$(grep -q '^\[A3d\] SKIP' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
 # A byte copy resolves its library and needle list from the hooks dir, so it runs degraded.
 /bin/cp "${GUARD}" "${HD}/pre-commit"; chmod +x "${HD}/pre-commit"
 out="$(validate copy)"
 report "A3d FAILs on a copy of the guard (not a link)" \
-  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] FAIL.*copy of the guard' && echo 1 || echo 0)" \
-  "A3d line: $(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)"
+  "$(grep -q '^\[A3d\] FAIL.*copy of the guard' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
 
 # --- Arm 6: a source repo outside the workspace root is not wired ---
 printf '\nArm 6. A source repo outside the workspace root is told, not wired\n'
@@ -229,8 +235,59 @@ printf '\nArm 6. A source repo outside the workspace root is told, not wired\n'
 WS2="${SBX}/ws-elsewhere"; mkdir -p "${WS2}"
 out="$("${SETUP}" --dry-run --source-repo "${SRC}" --workspace-root "${WS2}" --config-root "${CFG}" < <(yes "") 2>&1)"
 report "the run prints the manual pre-commit step" \
-  "$(printf '%s' "${out}" | grep -q 'git-pre-commit-pii.sh.*/pre-commit' && echo 1 || echo 0)"
+  "$(grep -q 'git-pre-commit-pii.sh.*/pre-commit' <<<"${out}" && echo 1 || echo 0)"
 report "no pre-commit link is created" "$([ ! -e "${HD}/pre-commit" ] && [ ! -L "${HD}/pre-commit" ] && echo 1 || echo 0)"
+
+# --- Arm 8: the remediation users are told to run — a real update.sh — re-wires ---
+# Arm 3 drives the delegate directly; this runs the entrypoint the advisory names, end to
+# end, and pins its exit: an update that wired the guard must not report EX_NOCHANGE (64).
+printf '\nArm 8. A real update.sh re-wires an unwired guard, and says it changed something\n'
+[ -L "${HD}/pre-commit" ] || [ -e "${HD}/pre-commit" ] && /bin/rm -f "${HD}/pre-commit"
+out="$("${SRC}/update.sh" --config-root "${CFG}" --workspace-root "${WS}" 2>&1)"
+rc=$?
+report "update.sh re-wires pre-commit to the guard" \
+  "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)" \
+  "exit ${rc}; tail: $(tail -3 <<<"${out}" | tr '\n' '|')"
+report "update.sh does not exit EX_NOCHANGE after wiring (exit ${rc})" "$([ "${rc}" -ne 64 ] && echo 1 || echo 0)"
+out="$("${SRC}/update.sh" --config-root "${CFG}" --workspace-root "${WS}" 2>&1)"
+report "a second update.sh leaves the wired guard alone (logs OK, not WIRED)" \
+  "$(grep -q 'OK: PII pre-commit guard already wired' <<<"${out}" && ! grep -q 'WIRED: PII pre-commit guard' <<<"${out}" && echo 1 || echo 0)"
+
+# --- Arm 9: states where A3d and the guard must agree ---
+# The guard follows ONE link to find its library and needle list, so A3d judges one hop:
+# a chain of links runs the guard degraded; a link to another copy (a worktree's, which a
+# branch can disable) is not the guard the main worktree carries. And a core.hooksPath set
+# outside the repository's own config names a hooks dir other repositories share.
+printf '\nArm 9. A chain of links, another copy of the guard, a shared core.hooksPath\n'
+/bin/rm -f "${HD}/pre-commit"
+mkdir -p "${SBX}/share"; ln -s "${GUARD}" "${SBX}/share/pii"; ln -s "${SBX}/share/pii" "${HD}/pre-commit"
+out="$(validate chain)"
+report "A3d FAILs a chain of links (the guard follows one hop)" \
+  "$(grep -q '^\[A3d\] FAIL.*chain of links' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
+/bin/rm -f "${HD}/pre-commit"
+mkdir -p "${SBX}/other-worktree/core/hooks"
+printf '#!/usr/bin/env bash\n# git-pre-commit-pii.sh, disabled on a branch\nexit 0\n' > "${SBX}/other-worktree/core/hooks/git-pre-commit-pii.sh"
+chmod +x "${SBX}/other-worktree/core/hooks/git-pre-commit-pii.sh"
+ln -s "${SBX}/other-worktree/core/hooks/git-pre-commit-pii.sh" "${HD}/pre-commit"
+out="$(validate othercopy)"
+report "A3d FAILs a link to another copy of the guard (never SKIP or PASS)" \
+  "$(grep -q '^\[A3d\] FAIL.*another copy of the guard' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
+out="$(refresh)"
+report "refresh re-points a link to another copy at the main worktree's guard" \
+  "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)"
+/bin/rm -f "${HD}/pre-commit"
+mkdir -p "${SBX}/global-hooks"
+git config --global core.hooksPath "${SBX}/global-hooks"
+out="$(refresh)"
+report "a global core.hooksPath is not wired, and the run says why" \
+  "$([ ! -e "${SBX}/global-hooks/pre-commit" ] && [ ! -L "${SBX}/global-hooks/pre-commit" ] && grep -q 'NOTE: PII pre-commit guard not auto-wired: core.hooksPath' <<<"${out}" && echo 1 || echo 0)"
+out="$(validate globalhooks)"
+report "A3d SKIPs a global core.hooksPath rather than FAILing with a remedy that cannot work" \
+  "$(grep -q '^\[A3d\] SKIP.*outside this repository' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
+git config --global --unset core.hooksPath
 
 # --- Arm 7: a repo with many linked worktrees still installs and validates ---
 # Reading `git worktree list` through a reader that exits early (awk … exit) under
@@ -256,8 +313,8 @@ report "re-bootstrap wires the guard with many worktrees" \
   "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)"
 out="$(validate many)"
 report "validate-install reaches an A3d verdict with many worktrees" \
-  "$(printf '%s\n' "${out}" | grep -q '^\[A3d\] PASS' && echo 1 || echo 0)" \
-  "A3d line: '$(printf '%s\n' "${out}" | grep '^\[A3d\]' | head -1)'; tail: $(printf '%s' "${out}" | tail -2 | tr '\n' '|')"
+  "$(grep -q '^\[A3d\] PASS' <<<"${out}" && echo 1 || echo 0)" \
+  "A3d line: '$(grep -m1 '^\[A3d\]' <<<"${out}")'; tail: $(tail -2 <<<"${out}" | tr '\n' '|')"
 
 printf '\nTotal: %d  PASS: %d  FAIL: %d\n' "$((PASS + FAIL))" "${PASS}" "${FAIL}"
 [ "${FAIL}" -eq 0 ]

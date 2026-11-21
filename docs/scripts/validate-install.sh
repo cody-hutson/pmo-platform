@@ -771,18 +771,21 @@ check_a3c_hook_lib_closure() {
 
 # A3d asserts the commit-time PII guard is WIRED as the source repo's pre-commit git hook
 # (GHSA-c748). A3 sees the guard's copy under .claude/hooks/, which git never reads, so A3
-# PASSes on an install where the guard is fully off. The predicate is the resolved hook, not
-# the file's presence: <hooks>/pre-commit must resolve -- through every symlink -- to the
-# main worktree's executable git-pre-commit-pii.sh, or be a custom hook that calls it. A
-# dangling link FAILs here, because git skips a dangling hook without a word.
+# PASSes on an install where the guard is fully off. The predicate is the hook as the guard
+# itself resolves it, not the file's presence: <hooks>/pre-commit must be ONE link to the main
+# worktree's executable git-pre-commit-pii.sh. A dangling link, a chain of links, a link to
+# another copy of the guard and a byte copy all FAIL; a custom hook that names the guard is
+# SKIP, because naming it is not running it. Git skips a dangling hook without a word.
 #
 # Scope mirrors the installer's. A source repo outside the workspace root is not auto-wired
 # by design (the test suites pass the real checkout that way), so an unwired guard there is
 # SKIP with the manual step named, never PASS. A wired guard PASSes wherever the repo sits.
+# A core.hooksPath set outside the repository's own config (a hooks dir other repositories
+# share) is SKIP too: the installer does not wire it, so FAIL would name a remedy that cannot work.
 # RUNS in operator-pre-existing mode too: the guard predates the installer, so a
 # pre-installer workspace is judged on the same predicate.
 check_a3d_pii_precommit_wired() {
-  local hooks_dir main target p link n=0 src_phys ws_phys diag
+  local hooks_dir main target hook one diag src_phys ws_phys hp_eff hp_local
   local manual="ln -s ../../core/hooks/git-pre-commit-pii.sh \"\$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit\""
   hooks_dir="$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-path hooks 2>/dev/null || true)"
   if [ -z "${hooks_dir}" ]; then
@@ -790,46 +793,68 @@ check_a3d_pii_precommit_wired() {
       "source repo is not a git checkout; there is no commit path to guard" "A"
     return
   fi
-  # Captured, then cut -- never piped into a reader that stops early, which under
-  # `set -Eeuo pipefail` aborts this script on a repo with a few hundred worktrees.
+  # The main worktree, captured then cut -- never piped into a reader that stops early,
+  # which under `set -Eeuo pipefail` aborts this script on a repo with a few hundred
+  # worktrees. Where the first entry names a git dir rather than a checkout (a separate
+  # git dir, a submodule) and the source repo is not a linked worktree, its own top level
+  # is the checkout.
   main="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null || true)"
   main="${main%%$'\n'*}"
   case "${main}" in "worktree "*) main="${main#worktree }" ;; *) main="" ;; esac
   main="$(cd "${main:-/nonexistent}" 2>/dev/null && pwd -P || true)"
+  if [ ! -f "${main}/core/hooks/git-pre-commit-pii.sh" ] \
+     && [ "$(git -C "${SOURCE_REPO}" rev-parse --absolute-git-dir 2>/dev/null || true)" = \
+          "$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)" ]; then
+    main="$(git -C "${SOURCE_REPO}" rev-parse --show-toplevel 2>/dev/null || true)"
+    main="$(cd "${main:-/nonexistent}" 2>/dev/null && pwd -P || true)"
+  fi
   target="${main}/core/hooks/git-pre-commit-pii.sh"
-  p="${hooks_dir}/pre-commit"
-  while [ -L "${p}" ] && [ "${n}" -lt 16 ]; do
-    link="$(readlink "${p}")"
-    case "${link}" in /*) p="${link}" ;; *) p="$(dirname "${p}")/${link}" ;; esac
-    n=$((n + 1))
-  done
-  if [ -e "${p}" ]; then
-    p="$(cd "$(dirname "${p}")" && pwd -P)/$(basename "${p}")"
+  hook="${hooks_dir}/pre-commit"
+  # Judged at ONE hop, because that is how far the guard follows its own link to find its
+  # library and needle list. A chain of links PASSed a guard that then ran degraded.
+  one=""
+  if [ -L "${hook}" ]; then
+    one="$(readlink "${hook}")"
+    case "${one}" in /*) : ;; *) one="$(dirname "${hook}")/${one}" ;; esac
+    if [ -d "$(dirname "${one}")" ]; then
+      one="$(cd "$(dirname "${one}")" && pwd -P)/$(basename "${one}")"
+    fi
   fi
-  if [ -n "${main}" ] && [ "${p}" = "${target}" ] && [ -x "${p}" ]; then
-    emit_pass "A3d" "INSTALL-PII-PRECOMMIT" "pre-commit resolves to ${target}" "A"
+  if [ -L "${hook}" ] && [ -n "${main}" ] && [ "${one}" = "${target}" ] && [ ! -L "${one}" ] && [ -x "${one}" ]; then
+    emit_pass "A3d" "INSTALL-PII-PRECOMMIT" "pre-commit links to ${target}" "A"
     return
   fi
-  # A custom hook is never a PASS: naming the guard (a comment is enough) is not running it,
-  # and a byte copy of the guard resolves its library and needle list from the hooks dir, so
-  # it runs degraded. A copy FAILs below; a hook that only mentions the guard is SKIP, which
-  # says this check cannot confirm it rather than vouching for it.
-  if [ -f "${p}" ] && [ -x "${p}" ] && [ "${p}" != "${target}" ] && ! cmp -s "${p}" "${target}" \
-     && grep -q 'git-pre-commit-pii\.sh' "${p}" 2>/dev/null; then
-    emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
-      "custom pre-commit hook ${p} names the PII guard; A3d cannot confirm it runs it — link ${target} as pre-commit to make this check decisive" "A"
-    return
-  fi
-  if [ ! -e "${hooks_dir}/pre-commit" ] && [ ! -L "${hooks_dir}/pre-commit" ]; then
-    diag="no pre-commit hook at ${hooks_dir}/pre-commit"
-  elif [ ! -e "${p}" ]; then
+  # Everything else is a named failure, except a custom hook that names the guard: naming it
+  # (a comment is enough) is not running it, so that is SKIP -- this check cannot confirm it --
+  # and never PASS.
+  if [ ! -e "${hook}" ] && [ ! -L "${hook}" ]; then
+    diag="no pre-commit hook at ${hook}"
+  elif [ ! -e "${hook}" ]; then
     diag="pre-commit is a dangling link (git skips it silently)"
-  elif [ ! -x "${p}" ]; then
-    diag="pre-commit resolves to ${p}, which is not executable"
-  elif cmp -s "${p}" "${target}"; then
+  elif [ -L "${hook}" ] && [ -L "${one}" ]; then
+    diag="pre-commit is a chain of links; the guard follows one link only, so it resolves its library and needle list from $(dirname "${one}") and runs degraded"
+  elif [ -L "${hook}" ] && [ "$(basename "${one}")" = "git-pre-commit-pii.sh" ]; then
+    diag="pre-commit links to another copy of the guard (${one}), not the main worktree's; --refresh-hooks re-points it"
+  elif [ ! -x "${hook}" ]; then
+    diag="pre-commit is not executable"
+  elif cmp -s "${hook}" "${target}"; then
     diag="pre-commit is a copy of the guard, not a link to it (a copy resolves its library and needle list from the hooks dir and runs degraded)"
+  elif grep -q 'git-pre-commit-pii\.sh' "${hook}" 2>/dev/null; then
+    emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
+      "custom pre-commit hook ${hook} names the PII guard; A3d cannot confirm it runs it — link ${target} as pre-commit to make this check decisive" "A"
+    return
   else
-    diag="pre-commit is a different hook (${p}) that does not call the PII guard"
+    diag="pre-commit is a different hook that does not call the PII guard"
+  fi
+  # A core.hooksPath set outside this repository's own config names a hooks dir other
+  # repositories share. The installer does not wire the guard there, so FAIL would point at a
+  # remedy that cannot work.
+  hp_eff="$(git -C "${SOURCE_REPO}" config --get core.hooksPath 2>/dev/null || true)"
+  hp_local="$(git -C "${SOURCE_REPO}" config --local --get core.hooksPath 2>/dev/null || true)"
+  if [ -n "${hp_eff}" ] && [ -z "${hp_local}" ]; then
+    emit_skip "A3d" "INSTALL-PII-PRECOMMIT" \
+      "core.hooksPath (${hp_eff}) is set outside this repository's config, so the installer does not wire a shared hooks dir (${diag}); wire the guard there by hand if that is intended" "A"
+    return
   fi
   src_phys="$(cd "${SOURCE_REPO}" 2>/dev/null && pwd -P || true)"
   ws_phys="$(cd "${WORKSPACE_ROOT}" 2>/dev/null && pwd -P || true)"

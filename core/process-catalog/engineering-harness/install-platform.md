@@ -36,7 +36,7 @@ QA-as-code registry through `qa.sh`.
 | Side | Criteria | Source |
 |---|---|---|
 | Entry | A clone with its marker files, on macOS with `python3`, `shasum`, `git` and `jq` (exit 78 / 69 / 66 otherwise); `./install.sh` run from the clone root; on Windows only `install.ps1 -DryRun` runs, through the shared [`core/deploy/lib-dryrun-proxy.ps1`](/core/deploy/lib-dryrun-proxy.ps1) proof primitives (exit 3 otherwise) | [install.sh](/install.sh#L76)<!-- source-anchor: line=76; fp=6212afec21124365 -->; [setup](/docs/scripts/setup-workspace.sh#L474)<!-- source-anchor: line=474; fp=7af34357e69cdf2a -->; [install.ps1](/install.ps1#L102)<!-- source-anchor: line=102; fp=3392cfdcc9ab2908 --> |
-| Exit | `.workspace-setup.state` carries `verification_passed: true`; `deploy.sh` reported the full roster deployed; `validate-install.sh` Mode A is PASS (the documented fourth command); the next step is the first-task walkthrough | [setup](/docs/scripts/setup-workspace.sh#L3379)<!-- source-anchor: line=3379; fp=87b29e7568f40990 -->; [install.sh](/install.sh#L238)<!-- source-anchor: line=238; fp=b5fb67a4cfd2796f -->; [INSTALL.md](/docs/INSTALL.md#L149)<!-- source-anchor: line=149; fp=b565fa398edd1369 --> |
+| Exit | `.workspace-setup.state` carries `verification_passed: true`; `deploy.sh` reported the full roster deployed; `validate-install.sh` Mode A is PASS (the documented fourth command); the next step is the first-task walkthrough | [setup](/docs/scripts/setup-workspace.sh#L3394)<!-- source-anchor: line=3394; fp=87b29e7568f40990 -->; [install.sh](/install.sh#L238)<!-- source-anchor: line=238; fp=b5fb67a4cfd2796f -->; [INSTALL.md](/docs/INSTALL.md#L149)<!-- source-anchor: line=149; fp=b565fa398edd1369 --> |
 
 ## Flow
 

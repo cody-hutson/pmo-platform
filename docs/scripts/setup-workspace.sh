@@ -2696,7 +2696,7 @@ install_hooks() {
   #   - An existing pre-commit hook that is not ours is never replaced: it stays, and the
   #     run says loudly that the guard is not active. A link of ours that is stale or points
   #     at a worktree copy is re-pointed.
-  local pc_dst pc_main pc_target pc_link pc_cur pc_wl
+  local pc_dst pc_main pc_target pc_link pc_cur pc_wl pc_hp_eff pc_hp_local
   pc_dst="${gh_dir}/pre-commit"
   # Captured, then cut -- never piped into a reader that stops early. Under `set -Eeuo
   # pipefail` an early-exiting reader (awk … exit, head) makes git's EPIPE the pipeline's
@@ -2705,7 +2705,19 @@ install_hooks() {
   pc_main="${pc_wl%%$'\n'*}"
   case "${pc_main}" in "worktree "*) pc_main="${pc_main#worktree }" ;; *) pc_main="" ;; esac
   [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
+  # Where that first entry names a git dir rather than a checkout (a separate git dir, a
+  # submodule) and the source repo is not a linked worktree, its own top level is the checkout.
+  if [ ! -f "${pc_main}/core/hooks/git-pre-commit-pii.sh" ] \
+     && [ "$(git -C "${SOURCE_REPO}" rev-parse --absolute-git-dir 2>/dev/null || true)" = \
+          "$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)" ]; then
+    pc_main="$(git -C "${SOURCE_REPO}" rev-parse --show-toplevel 2>/dev/null || true)"
+    [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
+  fi
   pc_target="${pc_main}/core/hooks/git-pre-commit-pii.sh"
+  # A core.hooksPath set outside this repository's own config (global or system scope) names
+  # a hooks dir other repositories share; wiring the guard there would scan their commits too.
+  pc_hp_eff="$(git -C "${SOURCE_REPO}" config --get core.hooksPath 2>/dev/null || true)"
+  pc_hp_local="$(git -C "${SOURCE_REPO}" config --local --get core.hooksPath 2>/dev/null || true)"
   if [ -n "${gh_dir}" ] && [ "$(cd "${gh_dir}" 2>/dev/null && pwd -P)" = "${pc_main}/.git/hooks" ]; then
     pc_link="../../core/hooks/git-pre-commit-pii.sh"
   else
@@ -2715,6 +2727,9 @@ install_hooks() {
     info "NOTE: PII pre-commit guard not auto-wired (source repo is outside this workspace root)."
     info "      It is a security/floor control; wire it from the repo root:"
     info "        ln -s ../../core/hooks/git-pre-commit-pii.sh \"\$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit\""
+  elif [ -n "${pc_hp_eff}" ] && [ -z "${pc_hp_local}" ]; then
+    info "NOTE: PII pre-commit guard not auto-wired: core.hooksPath (${pc_hp_eff}) is set outside this"
+    info "      repository's config, a hooks dir other repositories share. Wire it there by hand if intended."
   elif [ -z "${pc_main}" ] || [ -z "${gh_dir}" ] || [ ! -x "${pc_target}" ]; then
     warn "PII pre-commit guard NOT installed: main worktree, hooks dir or an executable ${pc_target} did not resolve. Commits are not scanned for PII."
   elif [ -L "${pc_dst}" ] || [ -e "${pc_dst}" ]; then
