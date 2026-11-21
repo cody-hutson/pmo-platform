@@ -2270,8 +2270,9 @@ AS23|block-destructive|asubst-keep|-|?|W|OUT=$(@D@/na.sh '@D@/ok.sh')
 AS24|block-destructive|asubst-keep|-|?|W|env "N=$(bash '@D@/ok.sh') x" @D@/na.sh
 AS25|block-destructive|asubst-keep|-|?|a|OUT=$(bash '@D@/li sted/ok.sh')
 # #8548 Stage 7 pass 2 (D-2): an unquoted listed closing word named as a shell interpreter, then an unlisted
-# script in that interpreter's domain. The corpus root lists that path for this row (block-destructive.test.sh)
-AS26|block-destructive|asubst-keep|-|?|W|OUT=$(bash @D@/bin/bash) @D@/na.sh
+# script in that interpreter's domain. The corpus root lists that path for this row (block-destructive.test.sh).
+# W at RED (the step recorded the script at the exec arm's phase); B at GREEN (the step declines, the refusal stands)
+AS26|block-destructive|asubst-keep|-|?|B|OUT=$(bash @D@/bin/bash) @D@/na.sh
 # #8326: inert here-document bodies the receiver read admits (HL rows; GREEN moves them B -> a) and the must-flag controls (HM rows; HM09, an inert subshell, moves a -> B under the closer rule; hub design on sub-task #9061)
 HL01|block-destructive|looks-like-hd|-|?|a|( gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
 HL02|block-destructive|looks-like-hd|-|?|a|(echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
