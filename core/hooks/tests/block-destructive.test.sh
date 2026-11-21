@@ -12555,6 +12555,47 @@ case "$ce_mbad" in -|*,*) ce_why="${ce_why} the-added-loop-reads-${ce_mbad}(want
 read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m3")"
 case "$ce_un" in *,*,*) ;; *) ce_why="${ce_why} the-three-unread-forms-read-${ce_un}(wanted-three-lines)" ;; esac
 ce_report "CEIL-COVER-mut: a copy with the route loop's charge deleted, and one with an unannotated loop added, each read exactly one uncovered loop; a copy with an arithmetic for, a select and a loop after a separator added reads all three as forms the arm does not read" "$ce_why"
+# CEIL-COVER-oneline (Stage 7 F-18) — a loop whose `do` has a statement after it on its own line is read
+# as its own loop, with that statement as its first, and is never credited with a later loop's check. A
+# copy with only the opener-stack reset's bound line deleted reads exactly that loop uncovered; a copy with
+# a loop charged on its `do` line added ahead of an unannotated loop reads only the second uncovered; and
+# the control, a copy with only the splitter's bound line deleted, reads the splitter uncovered. Each copy
+# differs from the hook by the one line, and each reported line is checked to be the loop it names.
+ce_why=""
+ce_obl="# ceil-bounded: the opener stack's depth"
+ce_sbl="# ceil-bounded: the pre-pass bails at 500 lines"
+ce_on="$(/usr/bin/awk -v t="$ce_obl" 'index($0, t) { n++; l = NR } END { if (n == 1) print l }' "$HOOK")"
+ce_sn="$(/usr/bin/awk -v t="$ce_sbl" 'index($0, t) { n++; l = NR } END { if (n == 1) print l }' "$HOOK")"
+ce_bn="$(/usr/bin/awk '/^# BRANCH BY TOOL NAME/ { print NR; exit }' "$HOOK")"
+/usr/bin/grep -v -F -- "$ce_obl" "$HOOK" > "${CE_ROOT}/cover-m4"
+/usr/bin/grep -v -F -- "$ce_sbl" "$HOOK" > "${CE_ROOT}/cover-m5"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe3() {"; print "  while false; do script_ceil_check probe   # M-CEIL-PROBE"; print "    :"; print "  done"; print "  while false; do"; print "    :"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-m6"
+if [ -z "$ce_on" ] || [ -z "$ce_sn" ] || [ -z "$ce_bn" ]; then
+  ce_why="${ce_why} no-single-line-for:opener-stack-bound=${ce_on:-none},splitter-bound=${ce_sn:-none},banner=${ce_bn:-none}"
+else
+  case "$(/usr/bin/sed -n "$(( ce_on + 1 ))p" "$HOOK")" in
+    *'while '*'; do '*'; done') ;;
+    *) ce_why="${ce_why} the-line-under-the-opener-stack-bound-is-not-a-one-line-loop" ;;
+  esac
+  case "$(/usr/bin/sed -n "$(( ce_sn + 1 ))p" "$HOOK")" in
+    *'while [ -n "$_tmp" ]; do') ;;
+    *) ce_why="${ce_why} the-line-under-the-splitter-bound-is-not-the-splitter" ;;
+  esac
+  ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m4" | /usr/bin/grep -c '^[<>]')"
+  [ "$ce_live_n" = 1 ] || ce_why="${ce_why} the-one-line-copy-differs-by-${ce_live_n}-lines"
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m4")"
+  [ "$ce_mbad" = "$ce_on" ] || ce_why="${ce_why} the-one-line-loop-copy-reads-${ce_mbad}(wanted-${ce_on})"
+  ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m6" | /usr/bin/grep -c '^[<>]')"
+  [ "$ce_live_n" = 8 ] || ce_why="${ce_why} the-do-line-charge-copy-differs-by-${ce_live_n}-lines"
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m6")"
+  [ "$ce_mbad" = "$(( ce_bn + 4 ))" ] || ce_why="${ce_why} the-do-line-charge-copy-reads-${ce_mbad}(wanted-$(( ce_bn + 4 )))"
+  ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m5" | /usr/bin/grep -c '^[<>]')"
+  [ "$ce_live_n" = 1 ] || ce_why="${ce_why} the-splitter-copy-differs-by-${ce_live_n}-lines"
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m5")"
+  [ "$ce_mbad" = "$ce_sn" ] || ce_why="${ce_why} the-splitter-control-reads-${ce_mbad}(wanted-${ce_sn})"
+fi
+ce_report "CEIL-COVER-oneline: a loop whose do has a statement after it on its line is read as its own loop: with only the opener-stack reset's bound line deleted exactly that loop reads uncovered, a loop charged on its do line ahead of an unannotated one leaves only the second uncovered, and the control, with only the splitter's bound line deleted, reads the splitter uncovered" "$ce_why"
 # CEIL-COVER-charged (Stage 7 F-03) — the here-document pre-pass's character scan and the enclosure cut's
 # loop, whose steps read text as long as a line or a position's remainder, carry the check, not only a
 # step cap: each marker is present once, and on the trace copy each tag is traced on a command that runs it.
