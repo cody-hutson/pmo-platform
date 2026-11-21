@@ -1,0 +1,50 @@
+# linux-known-failures.txt — the hook-harness failures the Linux job tolerates for now.
+#
+# Read by check-known-failures.py, which is the Linux hook-harness job's verdict: the job is
+# green only when every failure the run shows has a row here, and red on any other failure,
+# on a suite that ran without a summary line, or on a missing AGGREGATE line.
+#
+# This list is a stopgap, not an exemption. Every row is a defect that is fixed under its own
+# work item, and the row is removed in the change that fixes it. The Linux job becomes a
+# required check once this file holds no rows.
+#
+# Format: suite|arm|class|reason
+#   suite   the suite file name
+#   arm     a literal prefix of the failure's text after "FAIL: "
+#   class   defect — the arm fails on every Linux run; a row whose arm passes turns the job
+#                    red, so a fix cannot land without its row being removed
+#           timing — a timed arm whose result moves between runs on a shared runner; the
+#                    row tolerates its failure and cannot demand it
+#   reason  why the arm fails on Linux, in words
+#
+# Measured on GitHub's ubuntu-latest runner: Ubuntu 26.04, bash 5.3, gawk, GNU grep and sed,
+# and the uutils coreutils.
+
+# The skill-edit guard parses its sentinel's timestamp with BSD-only date options, so on
+# Linux it refuses every sanctioned edit.
+block-skill-direct-edit.test.sh|Test 4:|defect|the hook parses the sentinel timestamp with BSD-only date -j -f, so a valid sentinel reads as unparseable
+block-skill-direct-edit.test.sh|Test 26:|defect|the hook parses the sentinel timestamp with BSD-only date -j -f, so a valid sentinel reads as unparseable
+
+# uutils printf rejects a %*s width of 1 MiB, so this arm's padding is never built.
+block-egress.test.sh|AC-E007-V7c0:|defect|uutils printf rejects the 1 MiB %*s width, so the command never passes the cap the arm grades
+
+# Timing controls: on bash 5.3 the deliberately slow pre-fix copy finishes far inside the
+# budget, so the control cannot show that its timed arms would see a cost.
+block-destructive.test.sh|AC-022-X-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
+block-destructive.test.sh|AC-022-Y-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
+block-destructive.test.sh|AC-022-Z-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
+block-egress.test.sh|AC-E007-T-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
+block-egress.test.sh|AC-E007-X-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
+block-egress.test.sh|AC-E007-Y-CTL:|timing|the pre-fix copy is not reliably slow under bash 5.3; this control passed on one run and failed on the next
+block-egress.test.sh|AC-E007-NQ-CTL:|timing|the pre-fix copy stays within the ratio bound under bash 5.3, so the control cannot exceed it
+block-fs-boundary.test.sh|AC-FSB-X-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
+command-position-fp-control.test.sh|AC-CP-L-CTL:|timing|the pre-fix code stays within the ratio bound under bash 5.3, so the control cannot exceed it
+
+# Cost ratios: on Linux these hooks cost more than their declared multiple of a neutral twin
+# on long input. Each run still finishes inside its absolute budget and is allowed.
+block-egress.test.sh|AC-E007-NB5:|timing|the long brace group costs more than 3.0 times its neutral twin on Linux; at 40 KB in UTF-8 it sits at the bound
+block-egress.test.sh|AC-E007-NB6:|timing|the long brace group costs more than 3.0 times its neutral twin on Linux
+block-egress.test.sh|AC-E007-NB7:|timing|the long brace group costs more than 3.0 times its neutral twin on Linux
+block-egress.test.sh|AC-E007-NB8:|timing|the long brace group costs more than 3.0 times its neutral twin on Linux
+block-rm-prefer-trash.test.sh|AC-CPV-R-U:|timing|the hook costs more than 1.75 times one canonicalizer run on the 80 KB long word on Linux
+block-rm-prefer-trash.test.sh|AC-CPV-R-C:|timing|the hook costs more than 1.75 times one canonicalizer run on the 80 KB long word on Linux
