@@ -3724,6 +3724,194 @@ script_qval_head_carrier() {   # reads script_seg -> 0 when the shell's head wor
 }
 
 # ==========================================================================
+# GIT WORD VIEW — the text BLOCK-DESTRUCTIVE-024 reads
+# ==========================================================================
+# -024 refuses the git spellings that skip the commit-time PII guard. Those spellings live
+# in WORDS, and the canonicalized command keeps quoted text verbatim, so a pattern reading
+# it would fire on a commit MESSAGE that names a flag (`-m "fix -n handling"`) and would
+# miss a flag written in quotes (`"-n"`). The word view is the command as the shell splits
+# it: each word with its quotes and backslashes removed; whitespace and separator
+# characters INSIDE a quoted word replaced by `_`, so the word stays one token; an empty
+# quoted word left as `_`; the separators `;` `&` `|` `(` `)` padded with spaces, while a
+# redirection's `&` or `|` (`2>&1`, `>|`) is written `_`; a backslash-newline joined; a `#`
+# comment dropped. ANSI-C quoting (`$'…'`) is read as a quoted word whose escapes are NOT
+# decoded.
+#
+# TWO READINGS, matched together. A command substitution — `$( … )`, a backtick body or a
+# process substitution, quoted or not — runs, so the first reading reads its body as
+# commands; the second collapses each one to a single `_`, so an argument such as
+# `"$(date)"` does not cut the command around it in two.
+#
+# HEREDOCS. The delimiter is read off the `<<` line (quoted or not, `<<-` stripping tabs),
+# and each body line up to it is read as one literal line — quotes and backslashes
+# dropped, separators padded — so a body cannot open or close a quote, and a command
+# spelled in a body (one another shell runs, or a substitution in an unquoted body) is
+# still read. The cost is declared: a body line that spells a refused command is refused.
+#
+# CONSERVATIVE FALLBACK. When the quotes do not balance, when a heredoc delimiter cannot be
+# read, or whenever awk fails, the rule reads a conservative copy of the raw command
+# instead: every quote and backslash deleted, every separator character made a space, an
+# empty quoted word left as `_` — twice, with continuation lines joined and without (a line
+# ending in an escaped backslash is no continuation). It is built with sed and tr, never
+# with bash's ${var//…}, whose cost on bash 3.2 grows with the square of a long command
+# (measured: five passes over 60 KB did not finish in 300 s; sed and tr take under 1 s).
+readonly GIT_WORD_VIEW_AWK='
+BEGIN { SQ = "\047"; DQ = "\042"; BS = "\134"; BT = "\140"; sp = 0; st[0] = "U"; hd = 0; joined = 0; last = "\n"; ec = 0; sd = 0; hn = 0; hh = 1 }
+function inword(ch) {
+  if (ch == " " || ch == "\t" || ch == ";" || ch == "&" || ch == "|" || ch == "(" || ch == ")" || ch == "<" || ch == ">") return "_"
+  return ch
+}
+function ws(x) { return (x == "\n" || x == " " || x == "\t" || x == ";" || x == "&" || x == "|" || x == "(" || x == ")") }
+function we(y) { return (y == "" || y == " " || y == "\t" || y == ";" || y == "&" || y == "|" || y == ")" || y == "<" || y == ">") }
+# FLAT=1 is the second reading: every command substitution collapses to one `_`, so an
+# argument such as "$(date)" does not cut the command around it. FLAT=0 reads the bodies.
+function out(s) { if (FLAT && sd > 0) return; printf "%s", s; ec++ }
+function openq(kind) { st[++sp] = kind; qpre[sp] = last; qec[sp] = ec }
+# A quoted span that emitted nothing and stands as a whole word is the EMPTY word: it
+# still occupies an argument position, so it leaves a `_` placeholder.
+function closeq(nx) { if (ec == qec[sp] && ws(qpre[sp]) && we(nx)) out("_"); sp-- }
+function opens(kind) { if (FLAT && sd == 0) { printf "_"; ec++ } else out(" ( "); st[++sp] = kind; sd++ }
+function closes() { sp--; sd--; if (!FLAT) out(" ) ") }
+# A heredoc body line is data to this shell. It is read as one literal line — quotes and
+# backslashes dropped, separators padded — so its text cannot open or close a quote, and
+# a command spelled in it (a body another shell runs, a substitution in an unquoted body)
+# is still read.
+function body(ln,   k, m, ch) {
+  last = "\n"; m = length(ln)
+  for (k = 1; k <= m; k++) {
+    ch = substr(ln, k, 1)
+    if (ch == "#" && ws(last)) break
+    if (ch == SQ || ch == DQ || ch == BS) continue
+    if (ch == ";" || ch == "&" || ch == "|" || ch == "(" || ch == ")") out(" " ch " ")
+    else out(ch)
+    last = ch
+  }
+  if (!(FLAT && sd > 0)) printf "\n"
+}
+{
+  if (hh <= hn && !joined) {
+    cmp = $0
+    if (hstrip[hh]) gsub(/^\t+/, "", cmp)
+    if (cmp == hdel[hh]) hh++
+    else body($0)
+    next
+  }
+  line = $0; n = length(line); i = 1
+  if (!joined) last = "\n"
+  joined = 0
+  while (i <= n) {
+    c = substr(line, i, 1); t = st[sp]
+    if (t == "S") { if (c == SQ) closeq(substr(line, i + 1, 1)); else out(inword(c)); last = c; i++; continue }
+    if (t == "A") {
+      if (c == BS && i < n) { d = substr(line, i + 1, 1); out(inword(d)); last = d; i += 2; continue }
+      if (c == SQ) closeq(substr(line, i + 1, 1)); else out(inword(c))
+      last = c; i++; continue
+    }
+    if (t == "D") {
+      if (c == BS) {
+        if (i == n) { joined = 1; i++; continue }
+        d = substr(line, i + 1, 1)
+        if (d == "$" || d == BT || d == DQ || d == BS) { out(inword(d)); last = d; i += 2; continue }
+        out(BS); last = c; i++; continue
+      }
+      if (c == DQ) { closeq(substr(line, i + 1, 1)); last = c; i++; continue }
+      if (c == "$" && substr(line, i + 1, 1) == "(") { opens("P"); last = "("; i += 2; continue }
+      if (c == BT) { opens("B"); last = "("; i++; continue }
+      out(inword(c)); last = c; i++; continue
+    }
+    if (c == BS) {
+      if (i == n) { joined = 1; i++; continue }
+      d = substr(line, i + 1, 1); out(inword(d)); last = d; i += 2; continue
+    }
+    if (c == SQ) { openq("S"); last = c; i++; continue }
+    if (c == DQ) { openq("D"); last = c; i++; continue }
+    if (c == "$") {
+      d = substr(line, i + 1, 1)
+      if (d == SQ) { openq("A"); last = d; i += 2; continue }
+      if (d == DQ) { openq("D"); last = d; i += 2; continue }
+      if (d == "(") { opens("P"); last = "("; i += 2; continue }
+    }
+    if (c == BT) { if (t == "B") closes(); else opens("B"); last = c; i++; continue }
+    if (c == "(") { if (last == "<" || last == ">") opens("P"); else { st[++sp] = "p"; out(" ( ") }; last = c; i++; continue }
+    if (c == ")") { if (t == "P") closes(); else { if (t == "p") sp--; out(" ) ") }; last = c; i++; continue }
+    if (c == "#" && ws(last)) { i = n + 1; continue }
+    if (c == "<" && substr(line, i + 1, 1) == "<") {
+      if (substr(line, i + 2, 1) == "<") { out("<<<"); last = "<"; i += 3; continue }
+      j = i + 2; strip = 0; delim = ""; bad = 0
+      if (substr(line, j, 1) == "-") { strip = 1; j++ }
+      while (j <= n && (substr(line, j, 1) == " " || substr(line, j, 1) == "\t")) j++
+      while (j <= n) {
+        ch = substr(line, j, 1)
+        if (ch == " " || ch == "\t" || ch == ";" || ch == "&" || ch == "|" || ch == "<" || ch == ">" || ch == "(" || ch == ")") break
+        if (ch == SQ || ch == DQ) {
+          k = index(substr(line, j + 1), ch)
+          if (k == 0) { bad = 1; break }
+          delim = delim substr(line, j + 1, k - 1); j += k + 1; continue
+        }
+        if (ch == BS) { delim = delim substr(line, j + 1, 1); j += 2; continue }
+        delim = delim ch; j++
+      }
+      if (bad || delim == "") { hd = 1; out("<<"); last = "<"; i += 2; continue }
+      hdel[++hn] = delim; hstrip[hn] = strip
+      out("<< " delim " "); last = " "; i = j; continue
+    }
+    # A redirection operator is not a separator (`2>&1`, `&>`, `>|`): its `&` or `|` is
+    # written `_`, so the span classes, which stop at a literal `&` or `|`, read across it.
+    if (c == "&" && (last == ">" || last == "<" || substr(line, i + 1, 1) == ">")) { out("_"); last = c; i++; continue }
+    if (c == "|" && last == ">") { out("_"); last = c; i++; continue }
+    if (c == ";" || c == "&" || c == "|") { out(" " c " "); last = c; i++; continue }
+    out(c); last = c; i++
+  }
+  if (!joined) { if (st[sp] == "S" || st[sp] == "A" || st[sp] == "D") { out("_"); last = "_" } else if (!(FLAT && sd > 0)) printf "\n" }
+}
+END { printf "\n%s\n", ((sp == 0 && !hd) ? "WORDVIEW:OK" : "WORDVIEW:FALLBACK") }
+'
+
+# git_word_view — set WORD_VIEW for BLOCK-DESTRUCTIVE-024 from the RAW command. Never
+# empty for a non-empty command: the last resort is the raw command itself.
+git_word_view() {
+  local _nv="" _fv="" _jn="" _un=""
+  WORD_VIEW=""
+  _nv="$("$PRINTF" '%s' "$COMMAND" | LC_ALL=C /usr/bin/awk -v FLAT=0 "$GIT_WORD_VIEW_AWK" 2>/dev/null)" || _nv=""
+  _fv="$("$PRINTF" '%s' "$COMMAND" | LC_ALL=C /usr/bin/awk -v FLAT=1 "$GIT_WORD_VIEW_AWK" 2>/dev/null)" || _fv=""
+  case "$_nv" in
+    *$'\n'WORDVIEW:OK)
+      case "$_fv" in
+        *$'\n'WORDVIEW:OK) WORD_VIEW="${_nv%$'\n'WORDVIEW:OK}"$'\n'"${_fv%$'\n'WORDVIEW:OK}" ;;
+      esac ;;
+  esac
+  if [ -z "$WORD_VIEW" ]; then
+    # Conservative view: two copies, one with continuation lines joined and one without
+    # (a line ending in an escaped backslash, or a comment ending in one, is not a
+    # continuation, and a join there would glue it onto the next command). In both, an
+    # empty quoted word becomes `_`, every quote and backslash is deleted, and every
+    # separator character becomes a space, so a quoted one cannot cut a span.
+    _jn="$("$PRINTF" '%s' "$COMMAND" \
+      | /usr/bin/sed -e ':a' -e '/\\$/{' -e '$!N' -e 's/\\\n//' -e 'ta' -e '}' \
+      | /usr/bin/sed -E -e "s/(^|[[:space:];&|()])(\"\"|'')([[:space:];&|()<>]|\$)/\\1_\\3/g" \
+      | /usr/bin/tr -d "\"'\\\\" | /usr/bin/tr ';&|()' '     ' 2>/dev/null)" || _jn=""
+    _un="$("$PRINTF" '%s' "$COMMAND" \
+      | /usr/bin/sed -E -e "s/(^|[[:space:];&|()])(\"\"|'')([[:space:];&|()<>]|\$)/\\1_\\3/g" \
+      | /usr/bin/tr -d "\"'\\\\" | /usr/bin/tr ';&|()' '     ' 2>/dev/null)" || _un=""
+    WORD_VIEW="${_jn}"$'\n'"${_un}"
+  fi
+  [ -n "$WORD_VIEW" ] || WORD_VIEW="$COMMAND"
+}
+
+# matches_word_view — the matcher BLOCK-DESTRUCTIVE-024 uses: matches() over WORD_VIEW instead
+# of the canonicalized command. It is its own function so COMMAND_CMDPOS keeps exactly one
+# source — the shared canonicalizer — for every rule matches() serves (the single-source
+# invariant in tests/command-position-fp-control.test.sh). Same here-string shape and the same
+# fail-closed exit as matches(), for the same reason (GHSA-xxjm-mhfm-xq5v): never a pipe into
+# `grep -q`, and an unread view is not a clean one.
+matches_word_view() {
+  local pattern="$1" _wrc=
+  { _wrc=0; "$GREP" -qE "$pattern" || _wrc=$?; } <<< "$WORD_VIEW" || true
+  [ -n "$_wrc" ] || matcher_not_evaluated
+  [ "$_wrc" = 0 ]
+}
+
+# ==========================================================================
 # BRANCH BY TOOL NAME
 # ==========================================================================
 
@@ -3942,6 +4130,54 @@ case "$TOOL_NAME" in
       block "BLOCK-DESTRUCTIVE-023" \
         "PMO_SCOPE_GUARD_ROOT cannot be set mid-session (it re-points the layer-3 workspace-scope guard)." \
         "to change the governed scope root, exit claude and relaunch with: PMO_SCOPE_GUARD_ROOT=<path> claude"
+    fi
+
+    # BLOCK-DESTRUCTIVE-024 — skipping the commit-time PII guard. git runs
+    # core/hooks/git-pre-commit-pii.sh as its pre-commit hook, and each spelling below makes
+    # git skip it with no other step: commit's own flag (`--no-verify`, the abbreviations git
+    # accepts for it, or `-n` alone or bundled behind letters that take no value); a
+    # one-invocation hooks-directory override (`-c` or `--config-env` naming core.hooksPath,
+    # or the GIT_CONFIG_KEY_<n> / GIT_CONFIG_PARAMETERS environment naming it); and a write,
+    # unset or section removal of core.hooksPath through `git config`. Every one was measured
+    # to skip a pre-commit hook. Case: the command word is matched in any case (macOS resolves
+    # `GIT` to git, measured), the subcommand and its flags as written (git rejects `COMMIT`
+    # and `-N`), and the config key in any case (git folds it). git's global options are
+    # stepped over, so `git -C <dir> commit -n` is read and `git log --grep commit -n 3` is
+    # not. This block reads the word view (GIT WORD VIEW, above) through its own matcher,
+    # matches_word_view, so COMMAND_CMDPOS stays the shared canonicalizer's text for every
+    # other rule. The declared over-refusals, the
+    # spellings it does not judge, and the commit-creating commands that never run pre-commit
+    # are on its registry row and in § Known Limitations — this is not class closure.
+    r024_w='[^[:space:];&|()]'
+    r024_key='[cC][oO][rR][eE][.][hH][oO][oO][kK][sS][pP][aA][tT][hH]'
+    r024_git="${ANCHOR_PREFIX_GIT}"'[gG][iI][tT]'
+    r024_globals='([[:space:]]+(-[Cc][[:space:]]+'"$r024_w"'+|--(git-dir|work-tree|namespace|config-env|super-prefix|attr-source|shallow-file)[[:space:]]+'"$r024_w"'+|-'"$r024_w"'*))*'
+    r024_rest='([[:space:]][^;&|()]*)?'
+    r024_commit="(${r024_git}${r024_globals}[[:space:]]+commit|${ANCHOR_PREFIX_GIT}[gG][iI][tT]-commit)${r024_rest}[[:space:]]"
+    r024_config="(${r024_git}${r024_globals}[[:space:]]+config|${ANCHOR_PREFIX_GIT}[gG][iI][tT]-config)${r024_rest}[[:space:]]"
+    git_word_view
+    if matches_word_view "${r024_commit}"'--no-veri(f|fy)?([^[:alnum:]_-]|$)' \
+       || matches_word_view "${r024_commit}"'-[^-[:space:];&|()<>_mFcCtUSu]*n'; then
+      block "BLOCK-DESTRUCTIVE-024" \
+        "git commit --no-verify / -n is denied (it skips the commit-time PII guard, core/hooks/git-pre-commit-pii.sh)." \
+        "commit without the flag and let the guard run; for a message that contains a flag-shaped word, use 'git commit -F <file>'; an intentional bypass is the operator's: exit claude and relaunch with CLAUDE_HOOK_BYPASS=1 claude"
+    fi
+    if matches_word_view "${r024_git}${r024_rest}"'[[:space:]](-c|--config-env)(=|[[:space:]]+)'"${r024_key}"; then
+      block "BLOCK-DESTRUCTIVE-024" \
+        "git -c / --config-env naming core.hooksPath is denied (it re-points git's hooks directory, so the commit-time PII guard does not run)." \
+        "run git without the override and let the guard run; an intentional bypass is the operator's: exit claude and relaunch with CLAUDE_HOOK_BYPASS=1 claude"
+    fi
+    if matches_word_view '(^|[^[:alnum:]_])GIT_CONFIG_(KEY_[0-9]+=|PARAMETERS=[^;&|()]*)'"${r024_key}"; then
+      block "BLOCK-DESTRUCTIVE-024" \
+        "GIT_CONFIG_KEY_<n> / GIT_CONFIG_PARAMETERS naming core.hooksPath is denied (it injects a hooks-directory override, so the commit-time PII guard does not run)." \
+        "run git without the injected setting and let the guard run; an intentional bypass is the operator's: exit claude and relaunch with CLAUDE_HOOK_BYPASS=1 claude"
+    fi
+    if matches_word_view "${r024_config}${r024_key}"'[[:space:]]+([^[:space:];&|()<>0-9]|[0-9]+[^[:space:];&|()<>0-9]|[0-9]+([[:space:];&|()]|$))' \
+       || matches_word_view "${r024_config}"'(--unset(-all)?|unset)'"${r024_rest}[[:space:]]${r024_key}"'([^[:alnum:]_.-]|$)' \
+       || matches_word_view "${r024_config}"'(--)?(remove|rename)-section'"${r024_rest}"'[[:space:]][cC][oO][rR][eE]([^[:alnum:]_.-]|$)'; then
+      block "BLOCK-DESTRUCTIVE-024" \
+        "git config writing, unsetting or removing core.hooksPath is denied (it re-points git's hooks directory, so the commit-time PII guard does not run)." \
+        "read the setting with 'git config --get core.hooksPath'; a change to it is the operator's, made from their own terminal"
     fi
 
     # ----- NEW-B: subprocess script ban (closes Red Team C1 — script laundering) -----
