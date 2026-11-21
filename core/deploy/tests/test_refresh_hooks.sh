@@ -35,6 +35,11 @@
 #      created (9d) (Cases 9a-9d)
 #  10. the hook-library closure post-condition FAILS when a deployed hook references a
 #      library that is not present, and PASSES on a healthy refresh (Cases 10a-10d)
+#  11. a deployed version that exists ONLY at a merge commit -- both sides changed the hook --
+#      is recognised as a platform copy and refreshed, by the installer AND by the deploy
+#      checker's copy of the same classifier, while an operator edit against the same source
+#      is still preserved; and the historical fixtures pick their revision from the
+#      publisher's own enumeration, so fixture and publisher search one list (Case 18)
 #
 # NOTE ON ASSERTION SHAPE (carried forward, and now the known limitation of this file).
 # Contract item 2 asserts co-deployment PER NAMED PRIMITIVE because the co-deploy list in
@@ -1076,16 +1081,40 @@ printf '    [counts] rebootstrapped=%s file(s) -> damaged=%s -> recovered=%s\n' 
 # satisfied by a publisher that always refreshes, or always preserves.
 # ============================================================================
 
+# THE FIXTURE ENUMERATES HISTORY WITH THE PUBLISHER'S OWN FUNCTION, not a second copy of it.
+# plant_historical used to pick its revision with a plain `git log`, while the publisher
+# searched with `git log --follow`. Those are two different lists: plain log lists a merge
+# whose content exists only at that merge, and --follow lists no merge at all. So the fixture
+# could plant a version the publisher was structurally unable to find, and an arm failed for
+# a reason none of them named. hook_history_revs is read out of setup-workspace.sh and
+# defined here, so the revision the fixture plants comes from the same list the publisher
+# searches, and the two cannot drift apart again.
+#
+# The extraction is the one idiom this tree already uses to call a script's function without
+# running the script: a top-level `name() {` ... `}` range, evaluated in this shell. It is
+# asserted rather than assumed: an extraction that matched nothing would leave no function
+# behind, and every historical arm would then fail for an unnamed reason.
+HIST_REVS_FN="$(sed -n '/^hook_history_revs() {$/,/^}$/p' "${SETUP}")"
+eval "${HIST_REVS_FN}"
+if declare -F hook_history_revs >/dev/null 2>&1; then
+  report "hist-enum: the publisher's history enumeration (hook_history_revs) is read from setup-workspace.sh" 1
+else
+  report "hist-enum: the publisher's history enumeration (hook_history_revs) is read from setup-workspace.sh" 0 \
+    "no top-level hook_history_revs() in ${SETUP} — plant_historical has nothing to enumerate with, and Cases 13-15 and 18 cannot mean what they claim"
+fi
+
 # plant_historical <ws> <hook-basename> — overwrite the DEPLOYED hook with a real historical
 # revision of its own source path: the most recent revision whose content differs from
-# current source. Echoes the revision; returns non-zero when no differing revision exists
-# within the search window, so a fixture that could not be built is REPORTED rather than
-# mistaken for one that was.
+# current source, within the first 25 the publisher would search. Echoes the revision;
+# returns non-zero when no differing revision exists within that window, so a fixture that
+# could not be built is REPORTED rather than mistaken for one that was.
 plant_historical() {
-  local ws="$1" h="$2" rel cur rev blob
+  local ws="$1" h="$2" rel cur rev blob n=0
   rel="core/hooks/$2"
   cur="$(sha "${REPO_ROOT}/${rel}")"
-  for rev in $(git -C "${REPO_ROOT}" log --format=%H -n 25 -- "${rel}" 2>/dev/null); do
+  for rev in $(hook_history_revs "${REPO_ROOT}" "${rel}" 2>/dev/null); do
+    n=$((n + 1))
+    [ "${n}" -le 25 ] || break
     blob="$(git -C "${REPO_ROOT}" show "${rev}:${rel}" 2>/dev/null | shasum -a 256 | awk '{print $1}')"
     [ -n "${blob}" ] || continue
     [ "${blob}" != "${cur}" ] || continue
@@ -1495,6 +1524,161 @@ else
   report "17d (AC-12): Phase 5c asserts on the delegate's status and re-implements no classification" 0 \
     "Phase 5c grew its own hash comparison, baseline read or history walk — a second opinion that can silently disagree with the first"
 fi
+
+printf '\nCase 18: a version written ONLY at a merge commit is a PLATFORM copy (AC-1) — in both copies of the classifier\n'
+# THE DEFECT. `git log --follow` lists no merge commit: without -m a merge has no diff, so
+# --follow never sees one. A merge where both sides changed a hook writes a version that
+# exists at that merge and in no other commit. A search built on --follow alone cannot find
+# it, so a deployed copy of it is declined as an operator edit. That is the safe direction,
+# since the copy is kept, but a later security fix then never reaches it.
+#
+# OBSERVED, not hypothesised. A release branch that merged main mid-flight held the only copy
+# of one block-destructive.sh version at that sync merge; plant_historical, which then used a
+# plain `git log` that does list such merges, planted it, and 15d failed. main itself already
+# held merge-only versions of five hooks when this case was written.
+#
+# WHY A THROWAWAY REPOSITORY. The arms need a merge-only version whose place in history is
+# known, at any checkout depth. A repository built here carries its own full history, so,
+# unlike Cases 13-15, these arms are measured in a shallow CI checkout too and use report(),
+# never report_hist().
+#
+# ISOLATION. Every git call below runs with the inherited GIT_DIR / GIT_WORK_TREE /
+# GIT_INDEX_FILE removed and the global and system config ignored. A suite run from inside a
+# git hook inherits GIT_DIR, which overrides -C and would aim every command at the checkout
+# under test (the skip-path procedure at the foot of this file sets it on purpose); a global
+# commit.gpgsign or core.hooksPath would make the fixture's commits need a signing key or
+# run someone's own hooks.
+SRC_M="${SBX}/src-merge"; mk_src_mirror "${SRC_M}"
+M_HOOK=block-egress.sh; M_REL="core/hooks/${M_HOOK}"
+fx_git() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+    git -C "${SRC_M}" -c user.name=fixture -c user.email=fixture@example.invalid \
+      -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+}
+fx_refresh() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE \
+    bash "${SETUP}" --refresh-hooks --workspace-root "$1" --source-repo "${SRC_M}" --config-root "${CFGROOT}" 2>&1
+}
+# fx_blob <rev> — the sha256 of the fixture hook's content at <rev>, the unit the publisher compares.
+fx_blob() { fx_git show "$1:${M_REL}" 2>/dev/null | shasum -a 256 | awk '{print $1}'; }
+
+# Both sides change the hook, in different hunks, so the merge is a clean automatic one and
+# its result equals neither parent. The side edit is written back with `cat >`, not moved
+# into place, so the file keeps its mode and a mode change cannot be any commit's only
+# difference. The commit after the merge makes source differ from the merge's version, which
+# is what makes a deployed copy of that version STALE rather than current.
+fx_ok=1; M_REV=""
+{
+  fx_git init -q \
+  && fx_git add -A -f . \
+  && fx_git commit -q -m "fixture: base" \
+  && fx_git checkout -q -b fixture-trunk \
+  && fx_git checkout -q -b fixture-side \
+  && awk 'NR == 2 { print "# fixture: side-branch edit" } { print }' "${SRC_M}/${M_REL}" > "${SBX}/fx-side.tmp" \
+  && cat "${SBX}/fx-side.tmp" > "${SRC_M}/${M_REL}" \
+  && fx_git commit -q -a -m "fixture: side-branch edit" \
+  && fx_git checkout -q fixture-trunk \
+  && printf '# fixture: trunk edit\n' >> "${SRC_M}/${M_REL}" \
+  && fx_git commit -q -a -m "fixture: trunk edit" \
+  && fx_git merge -q --no-ff --no-edit -m "fixture: merge the side branch" fixture-side \
+  && M_REV="$(fx_git rev-parse HEAD)" \
+  && printf '# fixture: after the merge\n' >> "${SRC_M}/${M_REL}" \
+  && fx_git commit -q -a -m "fixture: after the merge"
+} >/dev/null 2>&1 || fx_ok=0
+M_SRC_SHA="$(sha "${SRC_M}/${M_REL}")"
+m_blob=""; m_p1=""; m_p2=""; m_follow=""
+if [ -n "${M_REV}" ]; then
+  m_blob="$(fx_blob "${M_REV}")"; m_p1="$(fx_blob "${M_REV}^1")"; m_p2="$(fx_blob "${M_REV}^2")"
+  m_follow="$(fx_git log --format=%H --follow -- "${M_REL}" 2>/dev/null)"
+fi
+
+# 18-pre — FIXTURE PRECONDITION. The version planted below must be one that exists only at the
+# merge: different from both parents and from source, and absent from what `git log --follow`
+# lists. Without this the arms below could be measuring an ordinary revision, which Case 13
+# already covers, and would prove nothing about merges.
+if [ "${fx_ok}" -eq 1 ] && [ -n "${m_blob}" ] && [ -n "${m_p1}" ] && [ -n "${m_p2}" ] \
+   && [ "${m_blob}" != "${m_p1}" ] && [ "${m_blob}" != "${m_p2}" ] && [ "${m_blob}" != "${M_SRC_SHA}" ] \
+   && ! grep -qxF -- "${M_REV}" <<<"${m_follow}"; then
+  report "18-pre: the fixture version exists ONLY at a merge, and git log --follow does not list that merge" 1
+else
+  report "18-pre: the fixture version exists ONLY at a merge, and git log --follow does not list that merge" 0 \
+    "built=${fx_ok} merge=${M_REV:0:12} merge-blob=${m_blob:0:8} parents=${m_p1:0:8}/${m_p2:0:8} source=${M_SRC_SHA:0:8} — the arms below are vacuous unless every one of these holds"
+fi
+
+# 18-enum — the enumeration itself. The publisher and the fixture share it (see hist-enum),
+# so this is the list both of them search.
+m_revs="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; hook_history_revs "${SRC_M}" "${M_REL}" 2>/dev/null)" || m_revs=""
+if [ -n "${M_REV}" ] && grep -qxF -- "${M_REV}" <<<"${m_revs}"; then
+  report "18-enum: the shared history enumeration lists the merge that holds the only copy of a version" 1
+else
+  report "18-enum: the shared history enumeration lists the merge that holds the only copy of a version" 0 \
+    "merge ${M_REV:0:12} is not among the $(printf '%s\n' "${m_revs}" | grep -c .) revision(s) listed — a search that lists no merge cannot find a version that exists only at one"
+fi
+
+# 18-M — MUST-REFRESH ARM. A deployed copy of the merge-only version, behind a stale baseline:
+# exactly fixture L of Case 13, with the version moved onto a merge. The REFRESHED line must
+# name the merge as the revision it matched, so the arm cannot pass on some other match.
+WS="${SBX}/ws18M"; deploy_ws "${WS}"
+fx_git show "${M_REV}:${M_REL}" > "${WS}/.claude/hooks/${M_HOOK}" 2>/dev/null
+plant_third_baseline "${WS}" "${M_HOOK}"
+rc18m=0; OUT18m="$(fx_refresh "${WS}")" || rc18m=$?
+m_after="$(sha "${WS}/.claude/hooks/${M_HOOK}")"
+m_line="$(grep -F "REFRESHED: ${M_HOOK}" <<<"${OUT18m}")" || m_line=""
+case "${M_REV:+built}:${rc18m}:${m_after}:${m_line}" in
+  "built:0:${M_SRC_SHA}:"*"@${M_REV:0:12}"*)
+    report "18-M (AC-1): a deployed MERGE-ONLY platform version is recognised and REFRESHED to source" 1 ;;
+  *)
+    report "18-M (AC-1): a deployed MERGE-ONLY platform version is recognised and REFRESHED to source" 0 \
+      "exit=${rc18m}; deployed ${m_after:0:8} vs source ${M_SRC_SHA:0:8}; refresh line: ${m_line:-none} — the version exists only at merge ${M_REV:0:12}, and a search that skips merges declines it as an operator edit" ;;
+esac
+
+# 18-E — CONTROL ARM, against the SAME merge-carrying source. Content in no commit is still an
+# operator decision. Without this, 18-M is satisfied by a publisher that refreshes everything
+# whenever the source history contains a merge.
+WS="${SBX}/ws18E"; deploy_ws "${WS}"
+cat "${SRC_M}/${M_REL}" > "${WS}/.claude/hooks/${M_HOOK}"
+printf '\n# OPERATOR EDIT - fixture E (merge source)\n' >> "${WS}/.claude/hooks/${M_HOOK}"
+rc18e=0; OUT18e="$(fx_refresh "${WS}")" || rc18e=$?
+if grep -qF "PRESERVED (operator-edited): ${M_HOOK}" <<<"${OUT18e}" \
+   && grep -qF 'OPERATOR EDIT - fixture E (merge source)' "${WS}/.claude/hooks/${M_HOOK}"; then
+  report "18-E (AC-4): a GENUINE operator edit against a merge-carrying source is still PRESERVED" 1
+else
+  report "18-E (AC-4): a GENUINE operator edit against a merge-carrying source is still PRESERVED" 0 \
+    "exit=${rc18e} — the edit was clobbered or not warned"
+fi
+
+# 18-twin — THE OTHER COPY. The deploy checker's hook-parity check (Check 79) carries the same
+# history classifier in Python, and ADR-203 holds the two to one rule: they must never return
+# opposite verdicts on one input. This is that input. The check's verdict body and the two
+# declarations it reads are pulled out of deploy.sh with the same top-level-function idiom
+# as hist-enum and run against the fixture repository and a deployed tree holding the
+# merge-only version. Its DRIFT note for the hook must read STALE and name the same merge.
+#
+# The sed range is built in a variable first, on purpose: written inline inside
+# "$( ... "..." ... )", bash 3.2 drops the escaped `$` anchors, sed rejects the script, and
+# nothing is defined. That was observed here, and it is why the arm below checks each
+# function is defined rather than trusting the eval.
+c79_missing=""
+for fn in hook_publish_set hook_parity_remedy _c79_compute_verdict; do
+  fn_range="/^${fn}() {\$/,/^}\$/p"
+  eval "$(sed -n "${fn_range}" "${REPO_ROOT}/core/deploy/deploy.sh")"
+  declare -F "${fn}" >/dev/null 2>&1 || c79_missing="${c79_missing} ${fn}"
+done
+hist_cap="$(awk -F= '/^readonly HOOK_HISTORY_WALK_CAP=/ { print $2; exit }' "${SETUP}")"
+WS="${SBX}/ws18T"; deploy_ws "${WS}"
+fx_git show "${M_REV}:${M_REL}" > "${WS}/.claude/hooks/${M_HOOK}" 2>/dev/null
+OUT18t=""
+if [ -z "${c79_missing}" ] && [ -n "${hist_cap}" ]; then
+  OUT18t="$(unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE; _c79_compute_verdict "${SRC_M}" "${WS}/.claude/hooks" "${SETUP}" "${hist_cap}" 2>&1)"
+fi
+t_line="$(grep -F "DRIFT ${M_HOOK} — " <<<"${OUT18t}")" || t_line=""
+case "${M_REV:+built}:${t_line}" in
+  "built:"*"— STALE: "*"@${M_REV:0:12}"*)
+    report "18-twin: the deploy checker's classifier ALSO reads the merge-only version as STALE (no opposite verdicts)" 1 ;;
+  *)
+    report "18-twin: the deploy checker's classifier ALSO reads the merge-only version as STALE (no opposite verdicts)" 0 \
+      "not extracted from deploy.sh:${c79_missing:- none}; cap=${hist_cap:-<unread>}; drift note: ${t_line:-none} — the installer and the deploy check now disagree about one deployed file" ;;
+esac
 
 printf '\n======================================================================\n'
 printf 'test_refresh_hooks.sh: %d passed, %d failed, %d skipped (bash %s)\n' \

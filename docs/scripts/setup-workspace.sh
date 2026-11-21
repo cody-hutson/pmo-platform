@@ -2224,6 +2224,12 @@ prune_durable_hook_snapshots() {
 # here, so the two copies of this algorithm cannot disagree about where a search stops.
 readonly HOOK_HISTORY_WALK_CAP=60
 
+# hook_history_revs <repo> <repo-relative path> -> the revisions to search, newest first.
+hook_history_revs() {
+  local repo="$1" rel="$2"
+  git -C "${repo}" log --format=%H --follow -- "${rel}"
+}
+
 # hook_history_classify <repo-relative source path> <deployed sha256>
 #   -> "<VERDICT> <explanation>" on stdout, always exit 0.
 #
@@ -2264,7 +2270,7 @@ hook_history_classify() {
     printf 'UNCLASSIFIED-DEPTH the source repository is a shallow clone, so its history is truncated by construction\n'
     return 0
   fi
-  revs="$(git -C "${SOURCE_REPO}" log --format=%H --follow -- "${rel}" 2>/dev/null)" || revs=""
+  revs="$(hook_history_revs "${SOURCE_REPO}" "${rel}" 2>/dev/null)" || revs=""
   if [ -z "${revs}" ]; then
     printf 'UNCLASSIFIED-DEPTH no revisions found for %s\n' "${rel}"
     return 0
