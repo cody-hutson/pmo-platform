@@ -11155,7 +11155,7 @@ aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense
 #   pasubstopt       the test that the word is not option-shaped
 #   pasubstallow     the allowlist test
 #   pasubstname      the test that an operand's text before its first `=` is plain (env's operand loop)
-#   pasubstverb      the decline where the walk before the step refuses the next word (D-2)
+#   pasubstverb      the decline where the walk before reads the closing word as a verb (option (a))
 #   forced           the exec arm's phase at enforce; forced-pasubst is forced and pasubst together
 #   enclforced       the enclosure family's phase at enforce
 #   gd, gd-pasubst,  the value step's two text guards off (the ASGN-QVAL block's pqvalguards), alone,
@@ -11165,8 +11165,9 @@ aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense
 # A third limb, or a relational arm, must read a verdict the arm forbids: a limb that expects the
 # arm's own verdict fails, since it could not show the condition holding the arm.
 #
-# TWO HERMETIC ROOTS. AS_ROOT allowlists exactly the fixture's listed paths, as the ASGN-QVAL root
-# does. AS_GROOT allowlists the same two scripts through leading-glob entries, the shape some rows
+# TWO HERMETIC ROOTS. AS_ROOT allowlists the corpus root's four listed paths and two more closing words
+# named as verbs, a non-shell interpreter's name and the source word, which only the arms below close on.
+# AS_GROOT allowlists the same two scripts through leading-glob entries, the shape some rows
 # of the tracked allowlist have; the decline arms run there again, beside the rows of the classes
 # such an entry could otherwise admit.
 AS_ROOT="$(/usr/bin/mktemp -d)"
@@ -11196,7 +11197,7 @@ as_build() { # $1 = root  $2… = its allowlist entries -> the hook and its copi
   /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' -e '/# M-ASGN-SUBST-MOVED$/d' "$HOOK" > "${h}/block-destructive-gd-moved.sh"
   /bin/chmod +x "${h}/"block-destructive*.sh
 }
-as_build "$AS_ROOT" "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" "${WC_D}/bin/bash" "${WC_D}/bin/python3"
+as_build "$AS_ROOT" "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" "${WC_D}/bin/bash" "${WC_D}/bin/python3" "${WC_D}/bin/source"
 as_build "$AS_GROOT" '*/ok.sh' '*/ok.py'
 
 AS_R=""; AS_H=""; AS_DRAIN=""
@@ -11342,6 +11343,22 @@ as_vb_ns="OUT=\$(bash ${WC_D}/bin/python3) ${WC_D}/na.py"
 as_vb_flag="OUT=\$(bash ${WC_D}/bin/bash) -x ${WC_D}/na.sh"
 as_vb_wrap="OUT=\$(bash ${WC_D}/bin/bash) nice ${WC_D}/na.sh"
 as_vb_encl="( OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.sh )"
+# Option (a), Stage 7 pass 3: the next words the direct-execution arm reads by fewer views than an
+# interpreter's arm (a quote or a backslash inside the script suffix, and the first piece of a
+# single-quoted path holding a space), behind a shell-named and a non-shell-named closing word, at an
+# enclosure position and behind a wrapper; and an extensionless absolute next word behind a closing word
+# named as the source word.
+as_bsl='\'
+as_vb_iq="OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.${as_q}sh${as_q}"
+as_vb_ibs="OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.s${as_bsl}h"
+as_vb_ws="OUT=\$(bash ${WC_D}/bin/bash) ${as_q}${WC_D}/n a.sh${as_q}"
+as_vb_ns_iq="OUT=\$(bash ${WC_D}/bin/python3) ${WC_D}/na.${as_q}py${as_q}"
+as_vb_ns_ibs="OUT=\$(bash ${WC_D}/bin/python3) ${WC_D}/na.p${as_bsl}y"
+as_vb_ns_ws="OUT=\$(bash ${WC_D}/bin/python3) ${as_q}${WC_D}/n a.py${as_q}"
+as_vb_encl_iq="( OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.${as_q}sh${as_q} )"
+as_vb_encl_ws="( OUT=\$(bash ${WC_D}/bin/bash) ${as_q}${WC_D}/n a.sh${as_q} )"
+as_vb_wrap_iq="OUT=\$(bash ${WC_D}/bin/bash) nice ${WC_D}/na.${as_q}sh${as_q}"
+as_vb_src="OUT=\$(bash ${WC_D}/bin/source) ${WC_D}/na"
 
 as_root "$AS_ROOT"
 
@@ -11417,27 +11434,45 @@ if [ "$as_verb_h" = "W:exec:not-allowlisted" ] && [ "$as_verb_m" = a ]; then
 else
   as_fail "ASGN-SUBST-PIN-verb: a quoted listed closing word named as an interpreter, then an unlisted script: the step records the script, the walk before records nothing" " hook=${as_verb_h}(wanted W:exec:not-allowlisted) pasubst=${as_verb_m}(wanted a)"
 fi
-# D-2, the unquoted spelling (operator's revised decision). Where the closing word names a shell
-# interpreter and the next word lies in that interpreter's own operand domain, the walk before refuses the
-# next word at a first-view position, so the step declines there and the refusal stands (row AS26; the
-# third limb is the copy without the decline). Every other reading keeps the step's, each pinned below.
+# Option (a), the operator's decision at Stage 7 pass 3. Where the walk before the step reads the closing
+# word as a verb (a shell interpreter, a non-shell interpreter or the source word), every word after it is
+# that verb's to read, so the step stands aside, whatever follows and at either view, and every command
+# there keeps the walk before's reading. The third limb is the copy without the decline. Row AS26 is the
+# in-domain spelling at a first-view position. Each pin below reads one cell the walk before treats
+# differently, and each KEEP-verb-* arm a next word the direct-execution arm reads by fewer views than an
+# interpreter's arm, where the copy without the decline allows what the walk before refuses or records.
 as_arm "ASGN-SUBST-KEEP-verb: an unquoted listed closing word named as a shell interpreter, then an unlisted script in its domain: the walk before's refusal stands" AS26 B B pasubstverb W:exec:not-allowlisted
-# as_pair_arm <label> <command> <hook verdict> <pasubst verdict> — a reading the decline must not move.
-as_pair_arm() {
-  local h m
-  as_run hook "$2"; h="$AS_V"
+# as_verb_arm <label> <command> <verdict> <pasubstverb verdict> — the hook and the walk before both read
+# <verdict>, and the copy without the decline reads otherwise. A wanted B must name BLOCK-DESTRUCTIVE-022.
+as_verb_arm() {
+  local h m v herr why=""
+  as_run hook "$2"; h="$AS_V"; herr="$AS_ERR"
   as_run pasubst "$2"; m="$AS_V"
-  if [ "$h" = "$3" ] && [ "$m" = "$4" ]; then
-    as_pass "$1 (hook ${h}, pasubst ${m})"
-  else
-    as_fail "$1" " hook=${h}(wanted $3) pasubst=${m}(wanted $4)"
-  fi
+  as_run pasubstverb "$2"; v="$AS_V"
+  [ "$h" = "$3" ] || why="${why} hook=${h}(wanted $3)"
+  if [ "$3" = B ] && [ "$h" = B ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$herr"; then why="${why} the-refusal-does-not-name-BLOCK-DESTRUCTIVE-022"; fi
+  [ "$m" = "$3" ] || why="${why} pasubst=${m}(wanted $3)"
+  [ "$4" != "$3" ] || why="${why} the-pasubstverb-limb-expects-the-arm's-own-verdict"
+  [ "$v" = "$4" ] || why="${why} pasubstverb=${v}(wanted $4)"
+  if [ -z "$why" ]; then as_pass "$1 (hook ${h}, pasubst ${m}, pasubstverb ${v})"; else as_fail "$1" "$why"; fi
 }
-as_pair_arm "ASGN-SUBST-PIN-verb-domain: the next word outside the shell interpreter's domain, inside the exec arm's: the walk before reads nothing, the step records it" "$as_vb_out" W:exec:not-allowlisted a
-as_pair_arm "ASGN-SUBST-PIN-verb-nonshell: a closing word named as a non-shell interpreter: the walk before writes that family's record, the step the exec arm's" "$as_vb_ns" W:exec:not-allowlisted W:interp-nonshell:not-allowlisted
-as_pair_arm "ASGN-SUBST-PIN-verb-between-flag: a word that is no command between the closing word and the script: the walk before refuses the script as the interpreter's operand, the step reads nothing past that word" "$as_vb_flag" a B
-as_pair_arm "ASGN-SUBST-PIN-verb-between-wrap: a wrapper between the closing word and the script: the walk before refuses the script, the step records it as the wrapper's command" "$as_vb_wrap" W:exec:not-allowlisted B
-as_pair_arm "ASGN-SUBST-PIN-verb-encl: the in-domain spelling at an enclosure position: at the shipped phases the walk before records the next word in the enclosure family, the step in the exec arm's" "$as_vb_encl" W:exec:not-allowlisted W:shell-enclosure:not-allowlisted
+as_verb_arm "ASGN-SUBST-PIN-verb-domain: the next word outside the shell interpreter's domain, inside the exec arm's: the walk before reads nothing, and the step stands aside" "$as_vb_out" a W:exec:not-allowlisted
+as_verb_arm "ASGN-SUBST-PIN-verb-nonshell: a closing word named as a non-shell interpreter: the walk before writes that family's record, and the step stands aside" "$as_vb_ns" W:interp-nonshell:not-allowlisted W:exec:not-allowlisted
+as_verb_arm "ASGN-SUBST-PIN-verb-between-flag: a word that is no command between the closing word and the script: the walk before refuses the script as the interpreter's operand, and the step stands aside" "$as_vb_flag" B a
+as_verb_arm "ASGN-SUBST-PIN-verb-between-wrap: a wrapper between the closing word and the script: the walk before refuses the script, and the step stands aside" "$as_vb_wrap" B W:exec:not-allowlisted
+as_verb_arm "ASGN-SUBST-PIN-verb-encl: the in-domain spelling at an enclosure position: at the shipped phases the walk before records the next word in the enclosure family, and the step stands aside" "$as_vb_encl" W:shell-enclosure:not-allowlisted W:exec:not-allowlisted
+# The next words two readers read by different views, each arm relational: the hook reads as the walk
+# before (base hook, stepless pasubst), and the copy without the decline reads otherwise.
+as_rel_arm "ASGN-SUBST-KEEP-verb-iq: a quote inside the next word's script suffix, behind a closing word named as a shell interpreter" "$as_vb_iq" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-ibs: a backslash inside the next word's script suffix, behind a closing word named as a shell interpreter" "$as_vb_ibs" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-ws: the first piece of a single-quoted path holding a space, behind a closing word named as a shell interpreter" "$as_vb_ws" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-nonshell-iq: a quote inside the script suffix, behind a closing word named as a non-shell interpreter" "$as_vb_ns_iq" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-nonshell-ibs: a backslash inside the script suffix, behind a closing word named as a non-shell interpreter" "$as_vb_ns_ibs" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-nonshell-ws: the first piece of a single-quoted path holding a space, behind a closing word named as a non-shell interpreter" "$as_vb_ns_ws" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-encl-iq: a quote inside the script suffix, at an enclosure position" "$as_vb_encl_iq" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-encl-ws: the first piece of a single-quoted path holding a space, at an enclosure position" "$as_vb_encl_ws" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-between-wrap-iq: a wrapper between the closing word and a script whose suffix holds a quote" "$as_vb_wrap_iq" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-source: a closing word named as the source word, then an extensionless absolute path" "$as_vb_src" hook pasubst pasubstverb
 
 # --- the seam with the backtick command word: the step crosses, and the word after it keeps its reading ---
 as_run hook "$as_int"; as_int_v="$AS_V"
