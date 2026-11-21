@@ -12447,9 +12447,10 @@ ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly
 # misses: an arithmetic `for ((`, a `select NAME`, and a `while`, `until` or `for NAME` after `;`, `&` or
 # `|` on the same line.
 # WHAT IT DOES NOT READ, written down so that a new form is a documented exclusion and not a defect: a
-# `for NAME` with no word list; an arithmetic `while ((` or `until ((` condition; a loop keyword after a
-# reserved word, a group opener or any other word on the same line; recursion, which repeats work with
-# no loop head; and a helper defined outside the two windows or in a sourced library. Nothing fails on
+# `for NAME` with no word list; a `while` or `until` whose condition opens with a parenthesis, an
+# arithmetic or a subshell condition; a loop keyword after a reserved word, a group opener or any other
+# word on the same line; recursion, which repeats work with no loop head; and a helper defined outside
+# the two windows or in a sourced library. Nothing fails on
 # these, so a loop in one of those forms is covered by review, not by this arm. An enumeration with a
 # stated boundary, not a closed class. awk programs' loops (`for (`, `while (`) are not bash.
 ce_cover() { # <file> -> "loops charged bounded bad sub unseen"
