@@ -4051,9 +4051,10 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
 # share (among them the word after quote removal, the join of a quoted path holding whitespace, a
 # non-shell interpreter's family, the enclosure family and the source word's domain), so the step
 # declines there, and every command keeps the walk before's reading, with the one work unit condition 6
-# charged (row AS26, arms ASGN-SUBST-KEEP-verb* and ASGN-SUBST-PIN-verb-*). A quoted closing word the
-# normalizer does not resolve is read as no verb, so the walk before records nothing and the step
-# records the word after it (arm ASGN-SUBST-PIN-verb).
+# charged (row AS26, arms ASGN-SUBST-KEEP-verb* and ASGN-SUBST-PIN-verb-*). A quoted closing word named
+# as an interpreter, which the normalizer does not resolve, is read as no verb, and its name ends in no
+# script suffix, so the walk before records nothing there and the step records the word after it (arm
+# ASGN-SUBST-PIN-verb).
 # A command word written after the assignment is now read where it never was. It is asked
 # from the prefix walk and from env's operand loop, and not from the head resolver or the
 # carrier-head check, which stay withdraw-only.
