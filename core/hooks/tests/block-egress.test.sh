@@ -3398,6 +3398,19 @@ fi
 # so its copy also tests the line it has grown for an open comment at every join, as the join before
 # this pass did, and is stopped at the budget on a long continuation-dense command in UTF-8. X-FB
 # holds the walk's fallback.
+# e007_utf8_texts <dir> — rewrite each text in <dir> as the hook receives it. The payload reaches the
+# hook as JSON, and jq gives every byte of it that is not part of a valid UTF-8 sequence as U+FFFD,
+# keeping every other byte as it is; the decoder produces U+FFFD for the bytes it decodes above 0x7F
+# for the same reason. So no text the rule handles holds a lone lead byte, and an equivalence arm fed
+# one would grade an input the hook cannot receive — on bash 5.x in a UTF-8 locale, where removing a
+# backslash-led suffix from a text that starts with a lone lead byte returns bytes never in the text,
+# it fails for that reason alone.
+e007_utf8_texts() {
+  local f
+  for f in "$1"/t-*; do
+    /usr/bin/jq -Rsj . < "$f" > "${f}.u" && /bin/mv "${f}.u" "$f" || return 1
+  done
+}
 E007_Y_R="${E007_W_BASE}/y"
 /bin/mkdir -p "${E007_Y_R}/in"
 E007_Y_FUNCS="egress_long egress_cat egress_trailing_backslash_odd egress_comment_open_at_end egress_neutralize_into egress_neutralize_long egress_comment_neutralize egress_span_neutralize egress_ansic_span egress_ansic_decode egress_ansic_decode_long egress_split_bs egress_split_at egress_keep_line egress_base_gh egress_respell_word egress_brace_words egress_unescape_rv egress_unescape_long egress_fold_rv egress_mark_free_text egress_join_state egress_join_continuations egress_join_lines"
@@ -3451,6 +3464,7 @@ e007_y_eval() {
     done' _ "${E007_L_R}/prelude.sh" "$2" "$3" "${E007_Y_R}/in" "$4"
 }
 _y_why=""
+e007_utf8_texts "${E007_Y_R}/in" || _y_why="${_y_why} the texts could not be read as the hook receives them;"
 e007_y_lift "$E007_W_SRC" "${E007_Y_R}/lib" || _y_why="${_y_why} a function of the walk or the join is missing from the hook;"
 /usr/bin/grep -q '^egress_neutralize_long() {' "${E007_Y_R}/lib" && /usr/bin/grep -q '^egress_join_state() {' "${E007_Y_R}/lib" \
   || _y_why="${_y_why} the hook carries no linear walk or join;"
@@ -3544,7 +3558,8 @@ fi
 # either is read, answers a text that does not end in a backslash by one match; Y-EQ pins it. Z-EQ
 # lifts these functions and runs them with the bound at 0 (every long path) and at 10^9 (the code
 # before this pass) on a dense set of texts — every escape the decoder reads and many it does not,
-# escapes that decode to NUL, runs of backslashes, multibyte letters, undecodable bytes, the scanner's
+# escapes that decode to NUL, runs of backslashes, multibyte letters, undecodable bytes (read, as the
+# hook receives every payload, as U+FFFD: e007_utf8_texts), the scanner's
 # sentinels, glob characters, slashes, braces and case variants — in en_US.UTF-8 and in C: the decoded
 # text, the unescaped words, the normalized words, the basename test and the keep rule's verdicts must
 # be equal byte for byte, and eight near misses, each one edit of a long path, must each differ. Z1 to
@@ -3621,6 +3636,7 @@ e007_z_eval() {
     done' _ "${E007_L_R}/prelude.sh" "$2" "$3" "${E007_Z_R}/in" "$4"
 }
 _z_why=""
+e007_utf8_texts "${E007_Z_R}/in" || _z_why="${_z_why} the texts could not be read as the hook receives them;"
 e007_z_lift "$E007_W_SRC" "${E007_Z_R}/lib" || _z_why="${_z_why} a function of the decode, the normalization or the keep rule is missing from the hook;"
 # The near misses, each one edit of a long path: the decode drops the backslash an escaped backslash
 # yields; it drops the quote character an escaped quote yields; it reads on past a decoded NUL; the
@@ -3661,6 +3677,60 @@ if [ -z "$_z_why" ]; then
   e007_d_pass "AC-E007-Z-EQ: the linear decode, escape step, basename test and case step equal the code before them byte for byte on ${_z_n} dense texts in UTF-8 and C, through the keep rule as well, and eight near misses each differ"
 else
   e007_d_fail "AC-E007-Z-EQ: the linear decode, escape step, basename test and case step equal the code before them byte for byte" "$_z_why"
+fi
+# Z-UTF8 — the decoder never produces an invalid UTF-8 sequence. Every escape that decodes above 0x7F
+# yields U+FFFD, on both paths (the bound at 10^9 and at 0) and in both locales, on bodies that put
+# such an escape alone, before a backslash, between other escapes and across a long body. The near
+# miss is the short path producing the raw byte again: on the same bodies it must yield invalid UTF-8,
+# so the check can see the byte it guards against.
+E007_ZU_R="${E007_Z_R}/utf8"
+/bin/mkdir -p "${E007_ZU_R}/in"
+_zu_i=0
+for _zu_b in '\xc3' '\xc3\\' 'a\xc3\\b' '\377' '\303\\x41' '\x80\x41\200' '\xff\xc3\\\xa9'; do
+  _zu_i=$(( _zu_i + 1 ))
+  /usr/bin/printf '%s' "$_zu_b" > "${E007_ZU_R}/in/t-0${_zu_i}"
+done
+e007_l_fill 2000 'gh ' '\xc3\\\x41\303' '' > "${E007_ZU_R}/in/t-08"
+# e007_zu_eval <locale> <bound> <lib> <out-dir> — each body through the decode alone.
+e007_zu_eval() {
+  /bin/mkdir -p "$4"
+  LC_ALL="$1" /bin/bash -c '. "$1"; readonly EGRESS_UC=ABCDEFGHIJKLMNOPQRSTUVWXYZ EGRESS_LC=abcdefghijklmnopqrstuvwxyz
+    EGRESS_LINEAR_MIN="$2"; . "$3"
+    for f in "$4"/t-*; do
+      s="$(/bin/cat "$f"; printf x)"; s="${s%x}"
+      egress_ansic_decode "$s"; printf "%s" "$EGRESS_AC" > "$5/${f##*/}"
+    done' _ "${E007_L_R}/prelude.sh" "$2" "$3" "${E007_ZU_R}/in" "$4"
+}
+# e007_zu_valid <file> — 0 when the file is valid UTF-8: jq reads it back unchanged.
+e007_zu_valid() { /usr/bin/jq -Rsj . < "$1" | /usr/bin/cmp -s - "$1"; }
+_zu_why=""
+[ -s "${E007_ZU_R}/in/t-08" ] || _zu_why="${_zu_why} the long body was not written;"
+e007_l_swap "${E007_Z_R}/lib" "c=\$'\\357\\277\\275'  # utf8: decoded-high-byte" "c=\$'\\303'" "${E007_ZU_R}/nm-raw" \
+  || _zu_why="${_zu_why} the raw-byte near miss did not apply;"
+for _zu_loc in en_US.UTF-8 C; do
+  for _zu_bound in 1000000000 0; do
+    _zu_o="${E007_ZU_R}/${_zu_loc}-${_zu_bound}"
+    e007_zu_eval "$_zu_loc" "$_zu_bound" "${E007_Z_R}/lib" "$_zu_o" || _zu_why="${_zu_why} [${_zu_loc} ${_zu_bound}] the decode did not run;"
+    for _zu_f in "${E007_ZU_R}/in"/t-*; do
+      _zu_k="${_zu_f##*/}"
+      e007_zu_valid "${_zu_o}/${_zu_k}" || _zu_why="${_zu_why} [${_zu_loc} bound ${_zu_bound} ${_zu_k}] invalid UTF-8;"
+      case "$(/bin/cat "${_zu_o}/${_zu_k}")" in
+        *$'\357\277\275'*) ;;
+        *) _zu_why="${_zu_why} [${_zu_loc} bound ${_zu_bound} ${_zu_k}] no U+FFFD;" ;;
+      esac
+    done
+  done
+  e007_zu_eval "$_zu_loc" 1000000000 "${E007_ZU_R}/nm-raw" "${E007_ZU_R}/${_zu_loc}-nm" || _zu_why="${_zu_why} [${_zu_loc}] the near miss did not run;"
+  _zu_d=0
+  for _zu_f in "${E007_ZU_R}/in"/t-*; do
+    e007_zu_valid "${E007_ZU_R}/${_zu_loc}-nm/${_zu_f##*/}" || _zu_d=$(( _zu_d + 1 ))
+  done
+  [ "$_zu_d" -gt 0 ] || _zu_why="${_zu_why} [${_zu_loc}] the raw-byte near miss reads as valid UTF-8 (the check cannot see the byte);"
+done
+if [ -z "$_zu_why" ]; then
+  e007_d_pass "AC-E007-Z-UTF8: every escape that decodes above 0x7F yields U+FFFD, on both paths and in UTF-8 and C, and the raw-byte near miss yields invalid UTF-8"
+else
+  e007_d_fail "AC-E007-Z-UTF8: every escape that decodes above 0x7F yields U+FFFD on both paths" "$_zu_why"
 fi
 # e007_z_cmd <shape> <bytes> <file> — a benign command holding one long ANSI-C span of many escapes, or
 # one whose continuation line is one long word dense with escapes; each carries `gh`, so the fast path
