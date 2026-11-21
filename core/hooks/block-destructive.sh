@@ -4042,18 +4042,21 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
 # itself — the verdict is the one the allowlist gives the word in plain form; the only other word
 # in the substitution is the one against the opener, which condition 4 keeps slash-free, a
 # PATH-resolved word this rule does not adjudicate in plain form. So the step can only stop the
-# exec arm adjudicating a listed script, and where the walk before records a word after the closing
-# word, the step records it too, in the exec arm's family. The enclosure view adjudicates the
-# substitution's command as before. Where the walk before took a listed closing word for an
-# interpreter and refused a word after it, the step keeps that refusal in one case: the next word,
-# refused as a shell interpreter's operand at a first-view position, where the step declines
-# (condition 10). It removes it in three. A later word, reached as the operand past a next word outside
-# the interpreter's domain: the step reads the next word as the command word, as the shell does, so it
-# records the script a wrapper there runs and reads nothing further behind a word that is no command
-# (arms ASGN-SUBST-PIN-verb-between-*). The next word, at a phase other than the shipped ones (a
-# non-shell interpreter family's, or the enclosure family's, at enforce): the step records it at the
-# exec arm's phase instead. And, by code reading and not read on a copy, the next word after a closing
-# word named as the source word, which condition 10 does not read: the step records it there too.
+# exec arm adjudicating a listed script. The enclosure view adjudicates the substitution's command as
+# before. Where the walk before took a listed closing word for an interpreter, the words after it read
+# as the suite's readings show, each taken with a slash-bearing next word or script (arms
+# ASGN-SUBST-KEEP-verb and ASGN-SUBST-PIN-verb-*). A next word the walk before refused as a shell
+# interpreter's operand at a first-view position keeps that refusal: the step declines (condition 10).
+# A next word the walk before recorded, in a non-shell interpreter's family or the enclosure family,
+# the step records in the exec arm's family. A later word the walk before refused as the operand past
+# a next word outside the interpreter's domain loses that refusal: the step reads the next word as the
+# command word, as the shell does, so it records the script a wrapper there runs and reads nothing
+# further behind a word that is no command. At a phase other than the shipped ones (a non-shell
+# interpreter family's, or the enclosure family's, at enforce), a next word the walk before would
+# refuse the step records at the exec arm's phase instead. Not read on a copy, by code reading only: a
+# slash-free next word, which the exec arm does not read, so where the walk before records it in those
+# two families the step reads nothing; and a closing word named as the source word, which condition 10
+# neither reads nor declines.
 # A command word written after the assignment is now read where it never was. It is asked
 # from the prefix walk and from env's operand loop, and not from the head resolver or the
 # carrier-head check, which stay withdraw-only.
@@ -4106,13 +4109,16 @@ script_assign_subst_rest() {   # $1 = the assignment token just stepped over
 # then its normalized one) read it as `bash`, `sh` or `zsh`, the next word is that interpreter's operand
 # when it lies in the interpreter's own operand domain, and at a first-view position the interpreter arm
 # refuses it unless the allowlist admits it (script_shell_verdict passes a first-view finding straight
-# through). There the step would put the exec arm's record, at its phase, in place of that refusal, so it
-# declines. It reads the next word's domain as well as the closing word, so it declines nowhere the walk
-# before records or allows: a next word outside that domain, which the walk before does not read; a
-# non-shell interpreter's name, whose family records at its phase; an enclosure position, where the
-# enclosure family records at its phase; and a closing token those two views do not resolve, the quoted
-# spelling, which the walk before reads as no interpreter. The source word is not read here, and the step
-# keeps its record there. Returns 0 to decline; the normalizer's outputs are restored on every path.
+# through). There the step would put the exec arm's record at its phase, or for a slash-free word
+# nothing, in place of that refusal, so it declines. It reads the next word's domain as well as the
+# closing word, so where it declines the walk before either refuses the next word, and the decline puts
+# that refusal back, or allows it, when the allowlist admits it, as the step does. It removes no record
+# anywhere the walk before records or allows. It does not decline a next word outside that domain, which
+# the walk before does not read; a non-shell interpreter's name, whose family records at its phase; an
+# enclosure position, where the enclosure family records at its phase; or a closing token those two
+# views do not resolve, the quoted spelling, which the walk before reads as no interpreter. The source
+# word is not read here and is not declined. Returns 0 to decline; the normalizer's outputs are restored
+# on every path.
 script_assign_subst_verbnext() {   # $1 = the closing token  $2 = the next word, empty when there is none
   local _d="" _r=1
   local _no="$script_norm_out" _nr="$script_norm_raw" _nk="$script_norm_ok"
