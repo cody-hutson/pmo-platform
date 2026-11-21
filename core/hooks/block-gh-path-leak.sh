@@ -191,9 +191,27 @@ COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
 
 # Only act on gh issue/PR WRITES (create / edit / comment) or gh api writes to
 # issues/pulls. Reads (view/list) carry no authored body → skip.
-if ! "$PRINTF" '%s' "$COMMAND" | "$GREP" -qE 'gh[[:space:]]+(issue|pr)[[:space:]]+(create|edit|comment)|gh[[:space:]]+api[[:space:]]+[^|;&]*(issues|pulls)'; then
+#
+# FED BY HERE-STRING, NEVER BY A PIPE (GHSA-xxjm-mhfm-xq5v). Piped into `grep -q`, a write
+# command longer than the pipe's capacity (64 KiB) killed its writer with SIGPIPE, `pipefail`
+# turned that into the gate's status, and the write read as "not a gh write" — the scan was
+# skipped. An empty _gate_rc means bash could not create the temp file behind the here-string,
+# so nothing read the command: mode-coupled (ADR-078 D2), like the primitive gate below.
+# Pinned by tests/ghsa-xxjm-long-input-matchers.test.sh — keep the gate line's shape in step
+# with that suite's to_old_shape.
+_gate_rc=
+{ _gate_rc=0; "$GREP" -qE 'gh[[:space:]]+(issue|pr)[[:space:]]+(create|edit|comment)|gh[[:space:]]+api[[:space:]]+[^|;&]*(issues|pulls)' || _gate_rc=$?; } <<< "$COMMAND" || true
+if [ -z "$_gate_rc" ]; then
+  log_error "INPUT-NOT-EVALUATED: the gh-write gate's here-string could not be created (temp file)"
+  _pmode="$(get_mode)"
+  if [ "$_pmode" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] BLOCKED (fail-closed): the command could not be handed to the gh-write gate (bash could not create the temp file behind its here-string); this is not a clean result: the hook could not evaluate its input. See %s.\n' "$HOOK_NAME" "$ERROR_LOG" >&2
+    exit 2
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] WARN (degraded, %s=%s): the command could not be handed to the gh-write gate (bash could not create the temp file behind its here-string); this is not a clean result: gh path-leak scan skipped.\n' "$HOOK_NAME" "${MODE_FILE##*/}" "$_pmode" >&2
   exit 0
 fi
+[ "$_gate_rc" = 0 ] || exit 0
 
 # --- SHARED PRIMITIVE gate (mode-gated posture — GHSA-g9g6-28c9-vrx5). We are now
 # committed to scanning a gh issue/PR body, which REQUIRES the co-shipped primitive's API
