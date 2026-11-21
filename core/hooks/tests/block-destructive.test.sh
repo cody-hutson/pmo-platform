@@ -12495,8 +12495,9 @@ ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly
 # WHAT IT DOES NOT READ, written down so that a new form is a documented exclusion and not a defect: a
 # `while` or `until` not followed on its line by a blank and a character other than `(`, wherever it
 # stands, which is one that ends its line, its condition on the next, and one whose condition opens with a
-# parenthesis after at most one blank, an arithmetic or a subshell condition (after two or more blanks it
-# is read); at the line's start, a `for NAME` whose `in` is on a later line, or that has no word list; a
+# parenthesis after at most one blank, an arithmetic or a subshell condition (at the line's start, or after
+# `;`, `&` or `|`, one with two or more blanks before the `(` is read); at the line's start, a `for NAME`
+# whose `in` is on a later line, or that has no word list; a
 # `while`, `until` or `for NAME` after a reserved word, a group opener or any other word on the same line;
 # recursion, which repeats work with no loop head; and a helper defined outside the two windows or in a
 # sourced library. Nothing fails on these, so a loop in one of those forms is covered by review, not by
