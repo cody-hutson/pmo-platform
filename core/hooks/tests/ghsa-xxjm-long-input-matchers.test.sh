@@ -46,6 +46,12 @@
 # mechanism control detects that and the old-shape arms report RESIDUAL instead of a verdict. The
 # long arms hold either way: a here-string has no writer to signal.
 #
+# THE OLD SHAPE'S MISS IS A RACE. The writer fills the pipe, grep drains it, and the rest of the
+# command still fits: when the writer is scheduled before grep exits, its last write lands, it exits
+# 0, and the rule fires. Under heavy load that happens. So the mechanism control and each old-shape
+# arm make up to SENS_TRIES runs and pass on the first miss: the question they answer is whether the
+# old shape CAN miss. The fixed shape has no race, so its arms run once.
+#
 # Self-contained: builds its own layout copies, so it runs identically in the setup-ci-layout.sh
 # sandbox and standalone from it. bash 3.2-safe. No payload is executed: every command here is
 # data handed to a hook on stdin.
@@ -221,10 +227,17 @@ head2k() { /usr/bin/head -c 2048 "$1"; }
 # --- the mechanism control: does the old shape fail at this size, in this process? ---------
 LONG_PROBE="$(long_text 'git push --force origin main')"
 printf '%s' "$LONG_PROBE" > "${WORK}/probe.cmd"
+SENS_TRIES=10
 MECH_RC=0
-( set -o pipefail; /usr/bin/printf '%s' "$LONG_PROBE" | /usr/bin/grep -qE '^git' ) || MECH_RC=$?   # sigpipe-idiom: allow — the mechanism control reproduces the defect's own shape on purpose, to learn whether this process can demonstrate it
+MECH_TRY=0
+while [ "$MECH_TRY" -lt "$SENS_TRIES" ]; do
+  MECH_TRY=$((MECH_TRY+1))
+  MECH_RC=0
+  ( set -o pipefail; /usr/bin/printf '%s' "$LONG_PROBE" | /usr/bin/grep -qE '^git' ) || MECH_RC=$?   # sigpipe-idiom: allow — the mechanism control reproduces the defect's own shape on purpose, to learn whether this process can demonstrate it
+  [ "$MECH_RC" != 0 ] && break
+done
 if [ "$MECH_RC" != 0 ]; then
-  /usr/bin/printf 'MECHANISM: the pipe shape misses a first-line match at %s bytes in this process (status %s)\n' "$(file_bytes "${WORK}/probe.cmd")" "$MECH_RC"
+  /usr/bin/printf 'MECHANISM: the pipe shape misses a first-line match at %s bytes in this process (status %s, run %s of up to %s)\n' "$(file_bytes "${WORK}/probe.cmd")" "$MECH_RC" "$MECH_TRY" "$SENS_TRIES"
   MECH=1
 else
   /usr/bin/printf 'RESIDUAL: ghsa-xxjm: the pipe shape did not fail here (SIGPIPE ignored and a printf that swallows the write error), so the old-shape arms report no verdict; the long arms still hold\n'
@@ -283,10 +296,17 @@ while IFS='|' read -r h rule mf <&3; do
   else fail "${h}: the same padding behind a benign first line is allowed" "exit=${RC} stderr: $(head2k "${WORK}/e")"; fi
 
   if [ "$OLD_OK" = 1 ] && [ "$MECH" = 1 ]; then
-    run_hook "$OLD" "$h" "${WORK}/${h}-long.json" "${WORK}/e"
-    if names_rule "${WORK}/e" "$rule"; then
-      fail "${h}: on the pipe-shape copy the long form slips past ${rule} (sensitivity)" "the old shape still refused (exit=${RC}): this arm cannot tell the shapes apart. stderr: $(head2k "${WORK}/e")"
-    else pass "${h}: on the pipe-shape copy the long form slips past ${rule} (sensitivity)"; fi
+    slipped=0; try=0
+    while [ "$try" -lt "$SENS_TRIES" ]; do
+      try=$((try+1))
+      run_hook "$OLD" "$h" "${WORK}/${h}-long.json" "${WORK}/e"
+      if ! names_rule "${WORK}/e" "$rule"; then slipped=1; break; fi
+    done
+    if [ "$slipped" = 1 ]; then
+      pass "${h}: on the pipe-shape copy the long form slips past ${rule} (sensitivity; run ${try} of up to ${SENS_TRIES})"
+    else
+      fail "${h}: on the pipe-shape copy the long form slips past ${rule} (sensitivity)" "the old shape refused in all ${SENS_TRIES} runs (last exit=${RC}): this arm cannot tell the shapes apart. stderr: $(head2k "${WORK}/e")"
+    fi
   elif [ "$OLD_OK" = 1 ]; then
     /usr/bin/printf 'RESIDUAL: ghsa-xxjm: %s old-shape arm not run (mechanism did not reproduce here)\n' "$h"
   fi
