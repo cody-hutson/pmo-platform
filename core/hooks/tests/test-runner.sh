@@ -57,8 +57,12 @@ for test_file in *.test.sh; do
   output="$(/bin/bash "$test_file" 2>&1)"
   rc=$?
 
-  # Parse the summary line
-  summary="$(/usr/bin/printf '%s\n' "$output" | /usr/bin/grep -E '^Total: [0-9]+  PASS: [0-9]+  FAIL: [0-9]+' | /usr/bin/tail -1)"
+  # Parse the summary line. A suite's output reaches grep by here-string, never as an
+  # argument to an external printf: Linux caps one argument at 128 KiB, and a suite
+  # whose output passed that (block-destructive's does) failed the exec, lost its
+  # summary line and was reported as having none — so none of its assertions were
+  # counted. The RESIDUAL and FAIL pass-throughs below read it the same way.
+  summary="$(/usr/bin/grep -E '^Total: [0-9]+  PASS: [0-9]+  FAIL: [0-9]+' <<<"$output" | /usr/bin/tail -1)"
   if [ -z "$summary" ]; then
     echo "ERROR: $test_file produced no summary line"
     echo "$output"
@@ -83,7 +87,7 @@ for test_file in *.test.sh; do
   # moment it is meant to speak, while three artifacts (including a ratifying ADR)
   # asserted it printed on every run. True locally, false at the authoritative
   # runner. Forward the lines so the claim and the behaviour agree.
-  /usr/bin/printf '%s\n' "$output" | /usr/bin/grep -E '^RESIDUAL' || true
+  /usr/bin/grep -E '^RESIDUAL' <<<"$output" || true
 
   # FAIL pass-through, for the same reason and by the same mechanism. A summary line
   # reports HOW MANY assertions failed and never WHICH, so an ordinary red run at the
@@ -93,7 +97,7 @@ for test_file in *.test.sh; do
   # invocation, which takes several minutes — and a red CI result should not require
   # that. Forwarding costs nothing on a green run (no lines match) and is the difference
   # between a red CI result that can be acted on and one that can only be re-run.
-  /usr/bin/printf '%s\n' "$output" | /usr/bin/grep -E '^FAIL' || true
+  /usr/bin/grep -E '^FAIL' <<<"$output" || true
 
   if [ "$rc" -ne 0 ] || [ "$fail" -gt 0 ]; then
     FAILED_FILES+=("$test_file")
