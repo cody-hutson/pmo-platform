@@ -298,6 +298,19 @@ always_block() {
   exit 2
 }
 
+# filing_gate_not_evaluated — the filing-verb gate's here-string could not be created, so
+# nothing read the command and no rule below can run. Mode-coupled (ADR-078 D2), as this hook's
+# missing-jq posture is: enforce refuses; warn and off stand down loudly. Never returns.
+filing_gate_not_evaluated() {
+  log_error "INPUT-NOT-EVALUATED: the filing-verb gate's here-string could not be created (temp file)"
+  if [ "$LIB_GUARD_MODE" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] BLOCKED (fail-closed): the command could not be handed to the filing-verb gate (bash could not create the temp file behind its here-string); this is not a clean result: the hook could not evaluate its input. See %s.\n' "$HOOK_NAME" "$ERROR_LOG" >&2
+    exit 2
+  fi
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] WARN (degraded, .scope-segregation-mode=%s): the command could not be handed to the filing-verb gate (bash could not create the temp file behind its here-string); this is not a clean result: scope-segregation scan skipped.\n' "$HOOK_NAME" "$LIB_GUARD_MODE" >&2
+  exit 0
+}
+
 # ==========================================================================
 # STEP 1 — FILING-VERB EARLY EXIT (performance: fires on every Bash/MCP call)
 # ==========================================================================
@@ -310,7 +323,17 @@ case "$TOOL_NAME" in
     COMMAND="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
     [ -z "$COMMAND" ] && exit 0
     # gh issue/pr create|comment ; gh api POST-ish to issues/pulls ; gh project item-*
-    if "$PRINTF" '%s' "$COMMAND" | "$GREP" -qE 'gh[[:space:]]+(issue|pr)[[:space:]]+(create|comment)|gh[[:space:]]+api[[:space:]]+[^|;&]*(issues|pulls)|gh[[:space:]]+project[[:space:]]+item-(create|add)'; then
+    # FED BY HERE-STRING, NEVER BY A PIPE (GHSA-xxjm-mhfm-xq5v). Piped into `grep -q`, a filing
+    # command longer than the pipe's capacity (64 KiB) killed its writer with SIGPIPE,
+    # `pipefail` turned that into this test's status, and the filing read as "not a filing" —
+    # every rule below was skipped. An empty _gate_rc means bash could not create the temp file
+    # behind the here-string: filing_gate_not_evaluated (mode-coupled). Pinned by
+    # tests/ghsa-xxjm-long-input-matchers.test.sh — keep the gate line's shape in step with
+    # that suite's to_old_shape.
+    _gate_rc=
+    { _gate_rc=0; "$GREP" -qE 'gh[[:space:]]+(issue|pr)[[:space:]]+(create|comment)|gh[[:space:]]+api[[:space:]]+[^|;&]*(issues|pulls)|gh[[:space:]]+project[[:space:]]+item-(create|add)' || _gate_rc=$?; } <<< "$COMMAND" || true
+    [ -n "$_gate_rc" ] || filing_gate_not_evaluated
+    if [ "$_gate_rc" = 0 ]; then
       FILING=1
     fi
     ;;

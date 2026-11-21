@@ -546,9 +546,27 @@ block_unclassified() {
 # own quoting, not the canonical form — they parse quoted argument text, which canonicalization
 # is not for. "$COMMAND" is the command as judged: the raw text with any quoted here-document
 # data body removed (see QUOTED HERE-DOCUMENT DATA).
+#
+# FED BY HERE-STRING, NEVER BY A PIPE (GHSA-xxjm-mhfm-xq5v). `grep -q` exits at its first
+# match. Piped, a command longer than the pipe's capacity (64 KiB) left its writer with text
+# still to push; the writer took SIGPIPE (141) or a write error (1), `pipefail` made that the
+# pipeline's status, and the rule read "no match" and did not fire. A here-string has no
+# second process; when bash cannot create the temp file behind it, _rc stays empty and
+# matcher_not_evaluated refuses. Pinned by tests/ghsa-xxjm-long-input-matchers.test.sh — keep
+# the line's shape in step with that suite's to_old_shape.
 matches() {
-  local pattern="$1"
-  "$PRINTF" '%s' "$COMMAND_CMDPOS" | "$GREP" -qE "$pattern"
+  local pattern="$1" _rc=
+  { _rc=0; "$GREP" -qE "$pattern" || _rc=$?; } <<< "$COMMAND_CMDPOS" || true
+  [ -n "$_rc" ] || matcher_not_evaluated
+  [ "$_rc" = 0 ]
+}
+
+# matcher_not_evaluated — the rule matcher's here-string could not be created, so no rule read
+# the command. This hook has no .mode, so it refuses (ADR-078 D2). Never returns.
+matcher_not_evaluated() {
+  log_error "INPUT-NOT-EVALUATED: the rule matcher's here-string could not be created (temp file)"
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] BLOCKED (fail-closed): the command could not be handed to the rule matcher (bash could not create the temp file behind its here-string); this is not a clean result: the hook could not evaluate its input. See %s.\n' "$HOOK_NAME" "$ERROR_LOG" >&2
+  exit 2
 }
 
 # CLASSIFY_PY — normalize the target AND the workspace root with the same function, then print
