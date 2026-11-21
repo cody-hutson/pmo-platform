@@ -12679,6 +12679,36 @@ for ce_s in segment segments quotes openers blanks view cluster body rows assign
   ce_report "CEIL-SHAPE-${ce_s}: with the deadline at 2 s the ${ce_s} class is decided inside the watchdog, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$ce_why"
 done
 
+# CEIL-SPLIT (Stage 7 D-1, timed on the operator's decision) — the here-document pre-pass's line splitter
+# takes each line off the command with a star-led prefix removal, inside its 500-line bound and with no
+# check between its steps, so one step's removal costs what the distance to the next newline makes it. A
+# command under the gate whose first line is long and which carries a here-document operator drives that
+# distance near the gate. Reach: on the trace copy the same command passes the splitter into the operator
+# scan, whose tag is traced. Then, in both locales, the shipped copy decides it inside the budget; where the
+# shipped copy is stopped, the 2-second-deadline copy must refuse it inside the budget. The RESIDUAL line
+# names the limb that decided, with its ratio to the budget and no timing figure.
+ce_fill 65000 ': ' 'x' " <<'EOF'"$'\n'"x"$'\n'"EOF" > "${CE_ROOT}/split.cmd"
+ce_why=""
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh C "${CE_ROOT}/split.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'hd-scan' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} scan-tag-traced=${ce_t:-0}"
+ce_report "CEIL-SPLIT-reach: a command under the gate whose first line is long and which carries a here-document operator passes the line splitter into the operator scan, its tag traced" "$ce_why"
+for ce_loc in en_US.UTF-8 C; do
+  ce_why=""; ce_lim="shipped copy"
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/split.cmd" "$CEIL_LIMIT"
+  if [ "$CE_DS" = -1 ]; then
+    ce_lim="2-second deadline copy, the shipped copy having been stopped"
+    ce_timed block-destructive-t2.sh "$ce_loc" "${CE_ROOT}/split.cmd" "$CEIL_LIMIT"
+    { [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] && [ "$(ce_ceiling)" = time ]; } || ce_why="${ce_why} not-decided-inside-the-budget(exit=${CE_EXIT})"
+  else
+    [ "$CE_EXIT" = 0 ] || ce_why="${ce_why} exit=${CE_EXIT}(wanted-0)"
+  fi
+  /usr/bin/printf 'RESIDUAL: CEIL-SPLIT [%s] decided by the %s at ratio %s of the budget (exit %s)\n' "$ce_loc" "$ce_lim" "$(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$CE_EXIT"
+  ce_report "CEIL-SPLIT [${ce_loc}]: a command under the gate whose first line is long and which carries a here-document operator is decided inside the budget (by the ${ce_lim})" "$ce_why"
+done
+
 # CEIL-LIN — the head resolver's and the head-value check's whole-word quote counts take one linear
 # pass (`# linear: quote parity`) for a word of at least SCRIPT_LINEAR_MIN characters.
 ce_why=""
