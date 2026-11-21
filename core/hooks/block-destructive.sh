@@ -3671,11 +3671,15 @@ script_heredoc_prescan() {
   # positives only: any such character in a cat-received command keeps today's verdict, never an allow.
   if [ "$_catx" -eq 1 ]; then case "$_ops" in *'|'*|*'('*|*')'*|*"$script_qbt"*|*coproc*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-NOCONS
   # Nor in a command that rebinds a command name, where the word cat may not run cat: an alias, a
-  # function definition, a hash entry or an enabled builtin anywhere in the command keeps every body.
-  # Each word is read as a substring, so a builtin quoted, escaped or followed by any blank is read too,
-  # and so are the shells' alias and command tables (BASH_ALIASES, BASH_CMDS, zsh's aliases and
-  # commands; zsh's functions is read through `function`). A definition with a parenthesis already ends
-  # at M-HD-RECV-NOCONS. It is an enumeration, not a closed class: R-1 names what it does not read.
+  # function definition by its keyword, a hash entry or an enabled builtin anywhere in the command keeps
+  # every body.
+  # Each word is read as a substring of the whole command, every body included, so a builtin quoted,
+  # escaped or followed by any blank is read too, and so is any longer word that holds one, such as a
+  # plural or an inflection (a declared cost, arm HD-RECV-COST-rebind-prose), and so are the shells' alias
+  # and command tables (BASH_ALIASES, BASH_CMDS, zsh's aliases and commands; zsh's functions is read
+  # through `function`). A function definition spelled with a parenthesis names none of these words: the
+  # no-consumer test above reads its parenthesis (arm HD-RECV-MF-cat-rebind-paren). It is an enumeration,
+  # not a closed class: R-1 names, as an open list, some of what it does not read.
   if [ "$_catx" -eq 1 ]; then case "$COMMAND" in *alias*|*function*|*hash*|*enable*|*BASH_ALIASES*|*BASH_CMDS*|*commands*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-REBIND
 
   # No here-document operator at quote-state 0 — every `<<` in this command was a
@@ -4506,9 +4510,15 @@ case "$TOOL_NAME" in
     #       precondition and the fail direction do not. The pre-pass's receiver list
     #       adds cat, so a function, alias or command-hash entry named cat grows the
     #       surface by one name. The rebinding test that guards it (M-HD-RECV-REBIND)
-    #       is a non-exhaustive enumeration over this command's own text: it does not
-    #       read a rebinding made in an earlier turn, one made by text the shell
-    #       evaluates, or one whose builtin name is split by quotes.
+    #       is a non-exhaustive enumeration over this command's own text, and what it
+    #       does not read is an open list, which includes a rebinding made in an earlier
+    #       turn, one made by text the shell evaluates, and one whose builtin name is
+    #       split by quotes or put together by an expansion. It also includes a change to
+    #       the command search path in the same command that BLOCK-DESTRUCTIVE-020 does not
+    #       judge: that rule's not-judged spellings, zsh's array tied to the search path
+    #       among them, are known instances and not a closed list, and are routed to its
+    #       successor card. Neither that rule nor this test reads such a change, so a cat
+    #       head behind one is this residual too, as a carrier head behind one already was.
     #   R-2 A BARE-DELIMITER EXPANSION INTRODUCED BY NEITHER `$` NOR A BACKTICK.
     #       None exists in POSIX; this is the same claim condition (2) already
     #       makes for `"…"`, so both break together if a shell ever adds one.
