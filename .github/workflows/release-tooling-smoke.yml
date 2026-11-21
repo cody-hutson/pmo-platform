@@ -496,6 +496,21 @@ jobs:
         # is interpolated. Gates on exit code.
         run: bash release/tools/tests/test_agent_editability_read.sh
 
+      - name: intake-desk Mode C body abstraction (prose structure + mutation arms)
+        # Mode C auto-logs to the work tracker with no per-item confirm at
+        # bounded_auto, and the default tracker is a public repository. Its callers
+        # process the operator's own files, so the rule that an item names only what
+        # the platform publishes plus abstract signal — never an operator file, a
+        # project, client or person name, or an operator path segment — is the only
+        # thing between that content and a world-readable issue. The rule is prose,
+        # so nothing else executes it. The suite reads the SKILL.md subsection, its
+        # placement before the clamp, the output-contract bullet, the failure mode
+        # and the gate-coverage register row, and fails when any is removed or loses
+        # an anchor. Six mutation arms each remove or move one part on a sandbox copy
+        # and must fail; each asserts its copy differs before grading it. Offline, no
+        # gh, no writes outside one mktemp tree. Gates on exit code.
+        run: bash release/tools/tests/test_intake_mode_c_body_abstraction.sh
+
       - name: close-class-telemetry regression suite (mutation-graded)
         # Wires a suite that shipped with ZERO executors — the same class as the
         # bundle-issues-parser step below, and found the same way: the platform's own

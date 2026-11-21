@@ -12,7 +12,7 @@ description: >
   interactive path invoked programmatically, not by a conversational phrase. Use when the user
   says "help me file this idea as an issue", "turn this into a work item", "log this idea", "is
   this intake-ready", or "help me write up this bug/story/initiative".
-version: v4.61
+version: v5.14
 license: BUSL-1.1
 ---
 <!-- reference-durability: allow-link -->
@@ -152,6 +152,33 @@ Mode C removes is the human `AskUserQuestion` confirm — replaced by the
 `automation_level` clamp plus the Tier-0 floor below. There is **no parallel emit
 schema** and **no new persistence surface**.
 
+### Body abstraction (on the input, before the threshold and render, at every dial)
+
+Mode C can file to a public tracker with no human reading the item first, so what an item may name is settled before anything is written. The rule applies to the caller's input **before the render step**, and before the filing threshold below, which renders the body it holds for a release sweep. Every later step inherits it: that held-for-sweep body, the re-author and the observation downgrade (§ Non-interactive self-repair), the body `recommend` surfaces, and the create. It covers the item's title, its body, any enrich comment block, and the duplicate guard's search terms. The boundary it applies is the egress boundary in [`analysis-workspace-standard.md`](../../../core/standards/analysis-workspace-standard.md) § 6, cited and not restated: that section draws the line for analysis content, and Mode C draws the same line for the operational content its callers process.
+
+**An item may name:**
+- what the platform repository already publishes — a path it tracks, a skill name, a section heading, a check or rule ID;
+- abstract signal about the operational content — its document type (transcript, RAID log, status report, …), the signal class (gap, inconsistency, broken handoff, missing artifact, friction point, quality finding), the confidence, the standard folder tier (`01-Governance` … `08-Generated`), and counts.
+
+**An item never names an operational identifier:**
+- the name of a file from the operator's tree;
+- a project, client, engagement, program or person name;
+- a path segment from the operator's tree;
+- text quoted or paraphrased from operator content.
+
+**The affected-file test.** The caller's affected file stays as written only when the platform repository tracks that path. Any other path is an operator file: render it as its document type and folder tier ("a RAID log in `01-Governance`"), and leave the specific file in the caller's own output.
+
+**Where it binds.** On every destination except one that resolves to `scope: private` under the destination routing in § Output contract. A deployment that declares no `[trackers.*]` files to its default tracker, and that destination counts as public.
+
+**The self-scan (before a body is held for a release sweep, surfaced, or created).** Write the rendered title, body and any enrich block to the process-local body file, then scan it two ways. Only a clean result on both lets the item continue:
+
+1. **Path classes.** Run `bash core/deploy/tools/path-leak-patterns.sh --scan-file <body-file>` from the platform checkout. Exit 0 is clean and exit 1 is a hit. Exit 2 means the file could not be read, and is not clean.
+2. **Declared names.** Resolve the operator's localized-context needle file with `pmo_localized_needles` in `core/deploy/lib-instance-path.sh`. Strip its comment and blank lines first, with `grep -vE '^[[:space:]]*(#|$)' <needle-file> > <needles-file>`, because a blank pattern line matches every body. If the needle file is absent or unreadable, or nothing is left after stripping, the scan could not run, and is not clean. Otherwise run `grep -iF -f <needles-file> <body-file>`, a fixed-string, case-insensitive match. Exit 1 is clean and exit 0 is a hit. Any other exit means the scan could not run, and is not clean.
+
+On a hit, re-author once from the abstracted input and scan again. If a hit remains, or either scan could not run, the item is **surface-only at every dial**: it takes the `recommend` path **without** the create command, its surfaced body is marked "not fileable as rendered" with the scan result, and it is **never auto-filed** — the same downgrade the Tier-0 floor applies. A body that would be held for a release sweep is held with the same mark, so the sweep does not file it as rendered.
+
+**Runner: NONE — a registered named gap.** A create that applied this rule and one that skipped it are the same tool call, and both scans are lexical: a file name or a name nobody declared passes them. The rule is a skill-level self-limit (§ Honest safety read, fact 3), and its gate-coverage register row is in `core/standards/gate-efficacy-standard.md`.
+
 ### The filing threshold (before the clamp, at every dial)
 
 Before the clamp, Mode C reads the signal against the filing threshold — `core/standards/work-item-filing-threshold.md`, the rule's single home, cited and not restated. The caller's input gains three optional fields beside the triplet and the implied type: `class` and `severity` (the threshold's two limbs, read by the caller where it surfaced the signal) and `release_context` (the milestone slug of a release run). Where the caller supplies no reading, Mode C reads one from the signal under the threshold's § 3 and records it. The test runs at **every** `automation_level`, in or out of a release run, and every outcome leaves a trace:
@@ -221,8 +248,8 @@ consumer, may treat "agent-authored" as a reason to skip review or auto-approve.
 
 ### Honest safety read (do NOT soften — read this before relying on the clamp)
 
-Two facts about Mode C's safety envelope must be stated plainly; neither is a reason
-not to ship, but both bound what the clamp actually guarantees:
+Three facts about Mode C's safety envelope must be stated plainly; none is a reason
+not to ship, but each bounds what the clamp actually guarantees:
 
 1. **Substituting the confirm gate is a genuine reduction of the § Mode detection per-item-confirm invariant,
    not a "no-op reconciliation."** The interactive modes require a **per-item**
@@ -263,6 +290,16 @@ not to ship, but both bound what the clamp actually guarantees:
    Tier-0 classifier below runs on the skill side, unconditionally, before any
    create branch.
 
+3. **§ Body abstraction has no mechanical backstop on a default install either.**
+   `core/hooks/block-scope-segregation.sh` scans content only for a destination
+   declared `scope: public`; on a deployment with no `[trackers.*]` declared it lets
+   the create through unscanned. Where it does scan, it catches only the names the
+   operator declared in the needle file. `core/hooks/block-gh-path-leak.sh` matches
+   path classes, not names, and the coverage conditions in fact 2 bound it. A file
+   name or a person name is not a lexical class, so the abstraction rule is a
+   skill-level self-limit, and its self-scan is defense in depth, not proof that an
+   item is clean.
+
 ### The Tier-0 never-auto floor (cite the canonical set — do NOT re-list it)
 
 A signal whose **implied work item** would touch any Irreducible Human Task is
@@ -299,7 +336,7 @@ Mode C's validation failures cannot pause for a human, so:
 3. If it **still fails** (the signal is too thin to reach a well-formed typed item
    without a human): **downgrade to the observation tier** — render as
    `observation.yml` (what is missing / what good looks like / affected file — the
-   exact triplet the caller supplied as the floor), emit under the same
+   exact triplet the caller supplied as the floor, as § Body abstraction left it), emit under the same
    `automation_level` clamp, and record in the run output that it was filed as an
    observation placeholder for Triage to promote. **Never** emit a malformed typed
    item; **never** silently drop the signal. This mirrors the interactive
@@ -835,3 +872,11 @@ handling.
 - **Root cause:** process-substitution → the 5-test and the dedup scan answer "is it well-formed and new?" and were read as "is it worth filing?" → agent-authored issues for internal gaps that triage later closes in bulk.
 - **Mitigation:** run § The filing threshold first, at every dial; return the held record; write the threshold line on every body rendered for a create.
 - **Principal response vs. junior response:** Principal states the threshold reading and holds an internal gap in the run output. Junior files it because the template passed and no duplicate exists.
+
+### Naming an operational identifier in an item bound for a public tracker (Mode C) — OUT
+
+- **Signature (observable signal):** An agent-authored item's title, body or enrich comment names a file from the operator's tree, a project, client, engagement, program or person name, or a path segment from the operator's tree, and the item went to a destination that does not resolve to `scope: private`.
+- **Conditional:** do NOT carry a caller's signal into the rendered item as given when it came from operational content. The caller's affected file and evidence describe the operator's work in the operator's own names. The default tracker is public, and at `bounded_auto` nobody reads the item before it files. A published issue keeps its text in its edit history, so the exposure cannot be undone, and no hook stops it on a default install (§ Honest safety read, fact 3).
+- **Root cause:** input-mirroring → the observation triplet asks for an affected file and the auto-logging protocol asks for enough evidence to plan from, so the most specific value to hand — the operator's file and what it says — reads as the most useful → the operator's private names reach a world-readable tracker under the operator's own account.
+- **Mitigation:** apply § Body abstraction to the input before render. Keep an affected file only when the platform repository tracks it, and render any other as its document type and folder tier. Run the self-scan on the rendered body file. On a hit the one re-author does not clear, or a scan that could not run, take the surface-only path at every dial.
+- **Principal response vs. junior response:** Principal files "a RAID log in `01-Governance` carries no owner column" and leaves the file's name in the caller's run output. Junior puts the file's name and the client in the title, and the operator finds them on a public issue whose edit history keeps them.
