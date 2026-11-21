@@ -92,7 +92,7 @@ tracker" / "work item" / "item reference", not a specific tool's nouns.
 ## Mode C — non-interactive emit
 
 Mode C (Ambient Auto-Log, `SKILL.md` § Mode C) drives the **same emit process above**
-with **one added test and one substitution**: the filing threshold runs first (`SKILL.md` § Mode C — The filing threshold), then the human `AskUserQuestion` confirm is replaced by a
+with **two added steps and one substitution**: the body abstraction runs first, on the caller's input (`SKILL.md` § Mode C — Body abstraction), then the filing threshold (`SKILL.md` § Mode C — The filing threshold), then the human `AskUserQuestion` confirm is replaced by a
 standing `operator.toml [automation].automation_level` ceiling plus the Tier-0
 never-auto floor. Everything else — Render, Gate (5-test + title-informativeness),
 Log, Read back, Report, and the § Structured-field carriage rules — is **reused
@@ -102,6 +102,7 @@ paths remain the logged item or the chat-returned copy/paste body; no scratch `.
 
 **Confirm-gate substitution (per `automation_level`):**
 
+- **Body abstraction (every dial, before the threshold and Render)** — unless the destination resolves to `scope: private`, the title, body, any enrich block and the duplicate guard's search terms name only what the platform repository publishes plus abstract signal, never an operational identifier. The rendered body file is self-scanned before it is held for a release sweep, surfaced, or logged. A hit the one re-author does not clear, or a scan that could not run, forces the surface-only `recommend` path at every dial, with the body marked "not fileable as rendered" and no create command.
 - **Threshold hold (every dial)** — a below-threshold signal returns the held record; a passing signal with `release_context` returns the follow-up candidate record; neither runs Log.
 - `off` — author nothing, create nothing; return a structured **"signal detected,
   held — dial is off"** record to the caller so the signal is surfaced, not dropped.
