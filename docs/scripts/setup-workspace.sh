@@ -2224,6 +2224,44 @@ prune_durable_hook_snapshots() {
 # here, so the two copies of this algorithm cannot disagree about where a search stops.
 readonly HOOK_HISTORY_WALK_CAP=60
 
+# hook_history_revs <repo> <repo-relative path>
+#   -> the revisions whose content the history search compares, newest first, one 40-hex
+#      hash per line. Non-zero when either git read fails; the caller then preserves.
+#
+# THE ONE ENUMERATION. hook_history_classify searches this list, and the refresh-hooks
+# suite reads this function out of this file to plant its historical fixtures, so the
+# fixture and the publisher cannot search different lists. Check 79 in the deploy checker
+# builds the same list in Python, in the same order, and the walk cap cuts both at the same
+# point. Neither git listing is complete alone, so the list is the union of two:
+#
+#   1. `git log --follow` -- every non-merge commit that changed the path, including one on
+#      a side branch whose changes a later merge discarded. It lists NO merge commit:
+#      without -m a merge has no diff, so --follow never sees one.
+#   2. `git log --merges` under default history simplification -- exactly the merges whose
+#      content differs from EVERY parent. A merge where both sides changed the file writes
+#      a version that exists at that merge and in no other commit, and only this listing
+#      can reach it. A merge equal to one of its parents adds no version, is not listed,
+#      and so uses no slot under the cap.
+#
+# The --follow merge forms (-m, --diff-merges=...) were measured and rejected: they also
+# list merges equal to a parent. For block-destructive.sh on main, --follow lists 73
+# revisions and --follow --diff-merges=combined lists over 15,000, which would push every
+# real revision past the cap. A merge-only version on a side that a later
+# merge pruned is not listed by (2); a deployed copy of one is preserved, the safe
+# direction. The merges that (2) does list take slots under the cap like any revision, so
+# on a history already longer than the cap each one moves the oldest searched revision
+# out of the window. A version pushed out reads as an unfinished search and is preserved,
+# the same safe direction.
+#
+# Ordered by committer time, newest first, ties by hash, under LC_ALL=C, so the order does
+# not depend on locale and matches the Python copy exactly.
+hook_history_revs() {
+  local repo="$1" rel="$2" follow merges
+  follow="$(git -C "${repo}" log --format='%ct %H' --follow -- "${rel}")" || return 1
+  merges="$(git -C "${repo}" log --format='%ct %H' --merges -- "${rel}")" || return 1
+  printf '%s\n%s\n' "${follow}" "${merges}" | LC_ALL=C sort -k1,1nr -k2,2 -u | awk 'NF == 2 { print $2 }'
+}
+
 # hook_history_classify <repo-relative source path> <deployed sha256>
 #   -> "<VERDICT> <explanation>" on stdout, always exit 0.
 #
@@ -2264,7 +2302,7 @@ hook_history_classify() {
     printf 'UNCLASSIFIED-DEPTH the source repository is a shallow clone, so its history is truncated by construction\n'
     return 0
   fi
-  revs="$(git -C "${SOURCE_REPO}" log --format=%H --follow -- "${rel}" 2>/dev/null)" || revs=""
+  revs="$(hook_history_revs "${SOURCE_REPO}" "${rel}" 2>/dev/null)" || revs=""
   if [ -z "${revs}" ]; then
     printf 'UNCLASSIFIED-DEPTH no revisions found for %s\n' "${rel}"
     return 0
