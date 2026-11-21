@@ -316,5 +316,6 @@ report "validate-install reaches an A3d verdict with many worktrees" \
   "$(grep -q '^\[A3d\] PASS' <<<"${out}" && echo 1 || echo 0)" \
   "A3d line: '$(grep -m1 '^\[A3d\]' <<<"${out}")'; tail: $(tail -2 <<<"${out}" | tr '\n' '|')"
 
-printf '\nTotal: %d  PASS: %d  FAIL: %d\n' "$((PASS + FAIL))" "${PASS}" "${FAIL}"
+# The member contract of run-install-regression.sh: "<name>: N passed, M failed".
+printf '\ntest_git_hooks_install.sh: %d passed, %d failed (bash %s)\n' "${PASS}" "${FAIL}" "${BASH_VERSION}"
 [ "${FAIL}" -eq 0 ]
