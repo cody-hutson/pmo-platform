@@ -4568,10 +4568,11 @@ case "$TOOL_NAME" in
     #       turn, one made by text the shell evaluates, and one whose builtin name is
     #       split by quotes or put together by an expansion. It also includes a change to
     #       the command search path in the same command that BLOCK-DESTRUCTIVE-020 does not
-    #       judge: that rule's not-judged spellings, zsh's array tied to the search path
-    #       among them, are known instances and not a closed list, and are routed to its
-    #       successor card. Neither that rule nor this test reads such a change, so a cat
-    #       head behind one is this residual too, as a carrier head behind one already was.
+    #       judge: that rule's not-judged spellings are known instances and not a closed
+    #       list, and its row routes some of them to its successor card, zsh's array tied
+    #       to the search path among them. Neither that rule nor this test reads such a
+    #       change, so a cat head behind one is this residual too, as a carrier head behind
+    #       one already was.
     #   R-2 A BARE-DELIMITER EXPANSION INTRODUCED BY NEITHER `$` NOR A BACKTICK.
     #       None exists in POSIX; this is the same claim condition (2) already
     #       makes for `"…"`, so both break together if a shell ever adds one.
