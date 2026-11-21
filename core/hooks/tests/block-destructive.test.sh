@@ -12483,16 +12483,20 @@ ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly
 # declared bounded by a `# ceil-bounded:` line directly above its head; no check sits inside the two
 # helpers that run in a command substitution.
 # WHAT IT READS. A loop head at the start of a line: `while` or `until` followed by a blank and a
-# character other than `(`, or `for NAME in`. And, so that it fails on them, the forms it knows that head
-# misses: an arithmetic `for ((`, a `select NAME`, and a `while`, `until` or `for NAME` after `;`, `&` or
-# `|` on the same line.
+# character other than `(`, or `for NAME in` followed by a blank or the line's end. And, so that it fails
+# on them, the forms it knows that head misses: an arithmetic `for ((` and a `select NAME`, at the line's
+# start or after a blank, `;`, `&` or `|`; and, after `;`, `&` or `|` on the same line, a `while` or
+# `until` followed by a blank and a character other than `(`, or a `for NAME`.
 # WHAT IT DOES NOT READ, written down so that a new form is a documented exclusion and not a defect: a
-# `for NAME` with no word list; a `while` or `until` whose condition opens with a parenthesis, an
-# arithmetic or a subshell condition; a loop keyword after a reserved word, a group opener or any other
-# word on the same line; recursion, which repeats work with no loop head; and a helper defined outside
-# the two windows or in a sourced library. Nothing fails on
-# these, so a loop in one of those forms is covered by review, not by this arm. An enumeration with a
-# stated boundary, not a closed class. awk programs' loops (`for (`, `while (`) are not bash.
+# `while` or `until` not followed on its line by a blank and a character other than `(`, wherever it
+# stands, which is one that ends its line, its condition on the next, and one whose condition opens with a
+# parenthesis after at most one blank, an arithmetic or a subshell condition (after two or more blanks it
+# is read); at the line's start, a `for NAME` whose `in` is on a later line, or that has no word list; a
+# `while`, `until` or `for NAME` after a reserved word, a group opener or any other word on the same line;
+# recursion, which repeats work with no loop head; and a helper defined outside the two windows or in a
+# sourced library. Nothing fails on these, so a loop in one of those forms is covered by review, not by
+# this arm. An enumeration with a stated boundary, not a closed class. awk programs' loops (`for (`,
+# `while (`) are not bash.
 ce_cover() { # <file> -> "loops charged bounded bad sub unseen"
   /usr/bin/awk '
     /^is_script_allowlisted\(\) \{/ { on = 1 }
