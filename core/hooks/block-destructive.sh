@@ -2415,7 +2415,8 @@ log_would_fire_022() {
 # THE WORK CEILING'S CHECK. The first statement of every bash loop body on this rule's surface,
 # or the loop carries a `# ceil-bounded:` line directly above its head naming the cap that bounds
 # it; arm CEIL-COVER holds that inventory, so a loop added without either, in a form it reads, fails
-# the suite. Past the deadline the command is refused and the hook exits: the check never ends a loop
+# the suite, as does a loop whose own `do` the arm cannot place, whatever its body opens with. Past
+# the deadline the command is refused and the hook exits: the check never ends a loop
 # early and lets the walk go on, so it adds no path on which a position or a word goes unread. Never
 # call it in a command substitution, where an exit ends the subshell and not the hook; script_realpath
 # and script_cont_joined, the two helpers that run in one, are charged by their callers.

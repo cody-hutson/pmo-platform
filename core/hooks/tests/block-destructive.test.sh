@@ -12498,17 +12498,21 @@ ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly
 # helpers that run in a command substitution.
 # WHAT IT READS. A loop head at the start of a line: `while` or `until` followed by a blank and a
 # character other than `(`, or `for NAME in` followed by a blank or the line's end. For each head with no
-# bound line, the loop's own `do`: the first `do` word (at the line's start or after a blank or `;`, and
-# followed by a blank or the line's end) from the head's line on, past whole-line comments and short of
-# the next head. What follows that `do` on its line is the body's first statement, and where only a
+# bound line, the loop's own `do`, which the arm places in one of two spots or not at all. A head line
+# that carries a `do` glued on either side to `&`, `|`, a parenthesis or a redirection sign, or followed
+# directly by `;` or a backslash, places none, wherever on the line that `do` stands, comments and quoted
+# text included. Otherwise the `do` is the first `do` word (at the line's start or after a blank or `;`,
+# and followed by a blank or the line's end) on the head's line or, where that line has none, the next
+# line that is neither blank nor a whole-line comment, when that line holds only `do` and perhaps a
+# comment. What follows the placed `do` on its line is the body's first statement, and where only a
 # comment or nothing does, the next non-blank line is. The loop is charged when that statement is
 # `script_ceil_check <tag>`, blanks and its `# M-CEIL-<TAG>` marker, and nothing else; otherwise, and
-# when no `do` comes short of the next head, it is uncovered and the arm fails. A `do` word earlier in the
-# head's own text, in its condition, its word list or a trailing comment, is taken for the loop's own, and
-# what follows it is read as the first statement. And, so that it fails on them, the forms it knows that
-# head misses: an arithmetic `for ((` and a `select NAME`, at the line's start or after a blank, `;`, `&`
-# or `|`; and, after `;`, `&` or `|` on the same line, a `while` or `until` followed by a blank and a
-# character other than `(`, or a `for NAME`.
+# when no `do` is placed, whatever its body opens with, it is uncovered and the arm fails. A `do` word
+# earlier in the head's own text, in its condition, its word list or a trailing comment, is taken for the
+# loop's own, and what follows it is read as the first statement. And, so that it fails on them, the forms
+# it knows that head misses: an arithmetic `for ((` and a `select NAME`, at the line's start or after a
+# blank, `;`, `&` or `|`; and, after `;`, `&` or `|` on the same line, a `while` or `until` followed by a
+# blank and a character other than `(`, or a `for NAME`.
 # WHAT IT DOES NOT READ, written down so that a new form is a documented exclusion and not a defect: a
 # `while` or `until` not followed on its line by a blank and a character other than `(`, wherever it
 # stands, which is one that ends its line, its condition on the next, and one whose condition opens with a
@@ -12530,7 +12534,7 @@ ce_cover() { # <file> -> "loops charged bounded bad sub unseen"
     insub && /script_ceil_(check|refuse)/ { sub_n++ }
     insub && /^\}/ { insub = 0 }
     { line[NR] = $0 }
-    on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /^[[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$)/) { head[++nh] = NR; ishead[NR] = 1 }
+    on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /^[[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$)/) { head[++nh] = NR }
     # The forms it fails on, which the head pattern misses (the header above names them): an arithmetic
     # for, and a select followed by a name, at the line start or after a blank, a separator or a pipe;
     # and, after a separator or a pipe, a while or until followed by a blank and a character other than
@@ -12540,12 +12544,18 @@ ce_cover() { # <file> -> "loops charged bounded bad sub unseen"
       for (i = 1; i <= nh; i++) {
         h = head[i]
         if (line[h - 1] ~ /^[[:space:]]*# ceil-bounded: [^[:space:]]/) { nb++; continue }
-        # The do of this loop: the first do word from the head line on, past comment lines and short of
-        # the next head. What follows it on its line is the first statement of the body; where only a
-        # comment or nothing does, the next non-blank line is. With no such do the loop is uncovered.
-        d = h; while (d <= NR && !(d > h && d in ishead) && (line[d] ~ /^[[:space:]]*#/ || line[d] !~ /(^|[;[:space:]])do([[:space:]]|$)/)) d++
+        # The do of this loop, placed in one of two spots or not at all. A head line that carries a do
+        # the do-word pattern misses, one glued on either side to an ampersand, a pipe, a paren or a
+        # redirection sign, or followed directly by a semicolon or a backslash, places none. Otherwise
+        # the do is the first do word on the head line or, where that line has none, the next line that
+        # is neither blank nor a comment, when it holds only do and perhaps a comment. What follows the
+        # do on its line is the first statement of the body; where only a comment or nothing does, the
+        # next non-blank line is. With no do placed the loop is uncovered, whatever its body opens with.
+        d = h
+        if (line[h] ~ /(^|[;&|()<>[:space:]])do[;&|()<>\\]/ || line[h] ~ /[&|()<>]do([;&|()<>\\[:space:]]|$)/) d = NR + 1
+        else if (line[h] !~ /(^|[;[:space:]])do([[:space:]]|$)/) { d = h + 1; while (d <= NR && line[d] ~ /^[[:space:]]*(#.*)?$/) d++; if (line[d] !~ /^[[:space:]]*do([[:space:]]+#.*)?[[:space:]]*$/) d = NR + 1 }
         s = ""
-        if (d <= NR && !(d > h && d in ishead)) {
+        if (d <= NR) {
           match(line[d], /(^|[;[:space:]])do([[:space:]]|$)/); s = substr(line[d], RSTART + RLENGTH)
           if (s ~ /^[[:space:]]*(#.*)?$/) { b = d + 1; while (b <= NR && line[b] ~ /^[[:space:]]*$/) b++; s = line[b] }
         }
@@ -12581,8 +12591,9 @@ case "$ce_mbad" in -|*,*) ce_why="${ce_why} the-added-loop-reads-${ce_mbad}(want
 read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m3")"
 case "$ce_un" in *,*,*) ;; *) ce_why="${ce_why} the-three-unread-forms-read-${ce_un}(wanted-three-lines)" ;; esac
 ce_report "CEIL-COVER-mut: a copy with the route loop's charge deleted, and one with an unannotated loop added, each read exactly one uncovered loop; a copy with an arithmetic for, a select and a loop after a separator added reads all three as forms the arm does not read" "$ce_why"
-# CEIL-COVER-oneline (Stage 7 F-18) — a loop whose `do` has a statement after it on its own line is read
-# as its own loop, with that statement as its first, and is never credited with a later loop's check. A
+# CEIL-COVER-oneline (Stage 7 F-18) — a loop whose `do` word has a statement after it on its own line is
+# read from that `do`, with that statement as its first, and is never credited with a later loop's check;
+# a `do` glued to what follows it is no `do` word, and its loop reads uncovered (CEIL-COVER-unplaced). A
 # copy with only the opener-stack reset's bound line deleted reads exactly that loop uncovered; a copy with
 # a loop charged on its `do` line added ahead of an unannotated loop reads only the second uncovered; and
 # the control, a copy with only the splitter's bound line deleted, reads the splitter uncovered. Each copy
@@ -12621,9 +12632,9 @@ else
   read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m5")"
   [ "$ce_mbad" = "$ce_sn" ] || ce_why="${ce_why} the-splitter-control-reads-${ce_mbad}(wanted-${ce_sn})"
 fi
-ce_report "CEIL-COVER-oneline: a loop whose do has a statement after it on its line is read as its own loop: with only the opener-stack reset's bound line deleted exactly that loop reads uncovered, a loop charged on its do line ahead of an unannotated one leaves only the second uncovered, and the control, with only the splitter's bound line deleted, reads the splitter uncovered" "$ce_why"
+ce_report "CEIL-COVER-oneline: a loop whose do word has a statement after it on its line is read from that do: with only the opener-stack reset's bound line deleted exactly that loop reads uncovered, a loop charged on its do line ahead of an unannotated one leaves only the second uncovered, and the control, with only the splitter's bound line deleted, reads the splitter uncovered" "$ce_why"
 # CEIL-COVER-unplaced (Stage 7 F-18) — a loop whose own `do` the arm cannot place reads uncovered, whatever
-# follows it, and is never credited with a later loop's check or with text later on its own line. Three
+# its body opens with, and is never credited with a later loop's check or with text later on its line. Three
 # copies each add one unannotated loop whose `do` the do-word pattern misses, and each reads exactly that
 # loop uncovered: a `do` glued to the statement after it, and a `do` continued onto the next line, each
 # ahead of a loop in a form the arm does not read that carries a check; and a glued `do` with a `do` word
@@ -12659,7 +12670,7 @@ else
     esac
   done
 fi
-ce_report "CEIL-COVER-unplaced: a loop whose do the do-word pattern misses reads uncovered, whatever follows it: copies with that do glued ahead of a checked loop the arm does not read, continued onto the next line ahead of one, and glued with a do word later on its line before the check's text each read exactly that loop uncovered; the controls, a loop charged on its do line ahead of a checked loop the arm does not read and one whose do stands alone on the line after its head, read none uncovered" "$ce_why"
+ce_report "CEIL-COVER-unplaced: a loop whose do the do-word pattern misses reads uncovered, whatever its body opens with: copies with that do glued ahead of a checked loop the arm does not read, continued onto the next line ahead of one, and glued with a do word later on its line before the check's text each read exactly that loop uncovered; the controls, a loop charged on its do line ahead of a checked loop the arm does not read and one whose do stands alone on the line after its head, read none uncovered" "$ce_why"
 # CEIL-COVER-charged (Stage 7 F-03) — the here-document pre-pass's character scan and the enclosure cut's
 # loop, whose steps read text as long as a line or a position's remainder, carry the check, not only a
 # step cap: each marker is present once, and on the trace copy each tag is traced on a command that runs it.
