@@ -11976,7 +11976,8 @@ ls_limb() { # $1 label  $2 shell  $3 extra flag or ''  $4 1 when the zsh rule ap
       if [ "$zr" = 1 ] && [ "${w:0:1}" = "=" ] && [ "$LS_CLASS" != "split" ]; then :; else bad="${bad} ${w}(${LS_CLASS})"; fi
     fi
   done < <({ ls_words "$ls_set"; ls_words "a"; } | /usr/bin/awk '!seen[$0]++')
-  /usr/bin/printf 'RESIDUAL: %s population: %s · members %s (%s) · positions 8 · words %s · unchanged %s · rewritten %s · split %s · aborted %s\n' "$label" "$sh" "${#ls_set}" "$ls_set" "$total" "$un" "$rw" "$sp" "$ab"
+  isbash="$(/usr/bin/env -i PATH=/usr/bin:/bin "$sh" ${fl:+"$fl"} -c 'printf %s "${BASH_VERSION:-}${ZSH_VERSION:-}"' 2>/dev/null)"
+  /usr/bin/printf 'RESIDUAL: %s population: %s · members %s (%s) · positions 8 · words %s · unchanged %s · rewritten %s · split %s · aborted %s · version %s\n' "$label" "$sh" "${#ls_set}" "$ls_set" "$total" "$un" "$rw" "$sp" "$ab" "${isbash:-none exposed (the shell sets neither BASH_VERSION nor ZSH_VERSION)}"
   if [ -z "$bad" ]; then
     /usr/bin/printf 'PASS: %s every plain-set word comes back as one unchanged word (%s words)\n' "$label" "$total"; PASS=$((PASS + 1))
   else
@@ -11984,7 +11985,6 @@ ls_limb() { # $1 label  $2 shell  $3 extra flag or ''  $4 1 when the zsh rule ap
   fi
   ls_child "$sh" "$fl" '-x?'; [ "$LS_CLASS" = "split" ] || { ctl_ok=0; ctlwhy="${ctlwhy} glob=${LS_CLASS}"; }
   ls_child "$sh" "$fl" '~'; [ "$LS_CLASS" = "rewritten" ] || { ctl_ok=0; ctlwhy="${ctlwhy} tilde=${LS_CLASS}"; }
-  isbash="$(/usr/bin/env -i PATH=/usr/bin:/bin "$sh" ${fl:+"$fl"} -c 'printf %s "${BASH_VERSION:-}${ZSH_VERSION:-}"' 2>/dev/null)"
   if [ -n "$isbash" ]; then ls_child "$sh" "$fl" '-x{b,c}'; [ "$LS_CLASS" = "split" ] || { ctl_ok=0; ctlwhy="${ctlwhy} brace=${LS_CLASS}"; }; fi
   /usr/bin/printf 'RESIDUAL: %s controls: glob splits, tilde rewritten, brace %s, 7 control words in the sweep above\n' "$label" "$([ -n "$isbash" ] && echo splits || echo not-applicable)"
   if [ "$ctl_ok" = 1 ]; then /usr/bin/printf 'PASS: LATCH-SWEEP-CTL-%s the splitting and rewriting controls fire\n' "${label#LATCH-SWEEP-}"; PASS=$((PASS + 1))
