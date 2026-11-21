@@ -9828,11 +9828,13 @@ xt_rem="echo \$(true) \$(true) xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 xt_arm "EXEC-TEXT-PIN-remainder: a nested opener before the closer keeps the first view's record past the remainder budget" block-destructive-smallb.sh "$xt_rem" W 1+
 xt_arm "EXEC-TEXT-PIN-remainder-pair: without the nested-opener stop the execution goes unrecorded" block-destructive-xnonestb.sh "$xt_rem" a -
 # Stage 7: the quote-led residual in its blank-carrying spelling, the `$(` spelling at enforce, and the
-# empty-output hand-off, each with its corpus row (TK07, TK08). A double-quoted substitution as the
-# command word, whose closer falls in a later token, opens with a quote, so the decline never reads it;
-# it normalizes as unresolvable and is recorded with a backtick-led path, its script listed. A
-# substitution at command position whose output yields no field hands command position to the next
-# word, which only the position at the closer reads.
+# empty-output hand-off, each with its corpus row (TK07, TK08). A command word that opens a double quote
+# before its backtick is never declined, because its token does not begin with a backtick, so the exec
+# arm's operand filter reads it: the word is recorded with a backtick-led path, its script listed or not,
+# exactly when a script suffix ends the token, in its normalized reading or, where that does not resolve,
+# in its raw spelling. Here the closer falls in a later token, the quote stays open, and the probe ends in
+# the suffix. A substitution at command position whose output yields no field hands command position to
+# the next word, which only the position at the closer reads.
 xt_pinq="\"\`${ENCL_OK} a\`\""
 xt_arm "EXEC-TEXT-PIN-quote: a double-quoted backtick command word whose closer falls in a later token keeps today's reading" block-destructive.sh "$xt_pinq" W 1+
 xt_arm "EXEC-TEXT-PIN-quote-forced: and is refused at enforce, its script listed" block-destructive-xforced.sh "$xt_pinq" B -
@@ -9840,13 +9842,16 @@ xt_arm "EXEC-TEXT-PIN-dollar-paren-forced: a command word opened by \$( is refus
 xt_handoff="\`true\` ${ENCL_NA}"
 xt_arm "EXEC-TEXT-PIN-handoff: a substitution at command position followed by an unlisted script word keeps that word's one record, from the closer's position" block-destructive.sh "$xt_handoff" W 0 "" 1:exec
 xt_arm "EXEC-TEXT-PIN-handoff-forced: and refuses it at enforce" block-destructive-xforced.sh "$xt_handoff" B -
-# Stage 7 pass 2 (F-04, F-09). The hand-off behind the declined form: a listed slash-bearing substitution that
-# closes its own token, then an unlisted script word. The decline ends the segment, so the position at the
-# closer is that word's only record, and no backtick-led row is written (row TK09). And the quote-led command
-# word in its other spelling, its double quote closed at its token's end: this arm's operand filter does not
-# reach the word, and the position its backtick opens reads the substitution as it reads a declined word, so
-# a listed script is admitted and an unlisted one is recorded from that position and refused at enforce
-# (row LT05; TK07 is the spelling whose quote stays open within its token).
+# Stage 7 pass 2 (F-04, F-09), restated at pass 3 (F-11). The hand-off behind the declined form: a listed
+# slash-bearing substitution that closes its own token, then an unlisted script word. The decline ends the
+# segment, so the position at the closer is that word's only record, and no backtick-led row is written (row
+# TK09). And a quote-led command word whose token ends with no script suffix, here at a quote right after
+# the substitution's closer: the operand filter is not implicated, so the first view writes no record of
+# it, and the position its backtick opens is its only reading. A listed script is admitted and an unlisted
+# one is recorded from that position and refused at enforce (row LT05). With no first-view record behind
+# it, the word carries every limit of the enclosure view. TK07 and LT05 sit one on each side of the
+# filter's test; corpus group tick-quote holds a row for each sub-class the double quote's place does not
+# sort as that test does (TK10 to TK12).
 xt_hodecl="\`${ENCL_OK}\` ${ENCL_NA}"
 xt_arm "EXEC-TEXT-PIN-handoff-declined: a listed slash-bearing substitution this arm declines, then an unlisted script word, keeps that word's one record, from the closer's position" block-destructive.sh "$xt_hodecl" W 0 "" 1:exec
 xt_arm "EXEC-TEXT-PIN-handoff-declined-forced: and refuses it at enforce" block-destructive-xforced.sh "$xt_hodecl" B -
