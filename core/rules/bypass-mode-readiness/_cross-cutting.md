@@ -7,10 +7,10 @@ All four regex-based PreToolUse hooks that match Bash verb invocations (`block-d
 (^|[;&|])[[:space:]]*(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?<verb>
 ```
 
-with a companion variant for git-family rules in `block-destructive.sh`:
+with a companion variant for git-family rules in `block-destructive.sh`, which matches the word `git` in any case (`GIT_WORD_ANYCASE`, because macOS resolves `GIT` to git):
 
 ```
-(^|[^[:alnum:]_-])(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?git[[:space:]]+<subverb>
+(^|[^[:alnum:]_-])(/(usr/(local/)?|opt/(homebrew|local)/)?bin/)?[gG][iI][tT][[:space:]]+<subverb>
 ```
 
 Each hook declares `readonly ANCHOR_PREFIX_BASH` (and `ANCHOR_PREFIX_GIT` in `block-destructive.sh`) near its other readonly constants. The optional prefix group captures the 5 canonical macOS/Linux absolute-path prefixes:
