@@ -2321,8 +2321,8 @@ TK06|block-destructive|tick-cmdword|-|?|W|bash -c $(echo -n) 'true@NL@`@D@/na.sh
 # #8490 Stage 7: the quote-led residual in its blank-carrying spelling, and the empty-output hand-off (both stay W)
 TK07|block-destructive|tick-cmdword|-|?|W|"`@D@/ok.sh a`"
 TK08|block-destructive|tick-cmdword|-|?|W|`true` @D@/na.sh
-# #8490 Stage 7 pass 2: the hand-off behind a listed slash-bearing substitution this arm declines (stays W), and the
-# quote-led command word whose double quote closes at its token's end, its script listed (admitted, a)
+# #8490 Stage 7 pass 2: the hand-off behind a listed slash-bearing substitution this arm declines (stays W), and a
+# quote-led command word that no script suffix ends in either reading, its script listed (read at its position, a)
 TK09|block-destructive|tick-cmdword|-|?|W|`@D@/ok.sh` @D@/na.sh
 LT05|block-destructive|looks-like-text|-|o|a|"`@D@/ok.sh`"
 # #8490 Stage 7 pass 3 (F-11): quote-led command words sorted by the exec arm's operand-filter test, whether a
