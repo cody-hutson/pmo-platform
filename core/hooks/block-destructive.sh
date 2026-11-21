@@ -2413,12 +2413,12 @@ log_would_fire_022() {
 }
 
 # THE WORK CEILING'S CHECK. The first statement of every bash loop body on this rule's surface,
-# or the loop carries a `# ceil-bounded:` line above its head naming the cap that bounds it; arm
-# CEIL-COVER holds that inventory, so a loop added without either fails the suite. Past the
-# deadline the command is refused and the hook exits: the check never ends a loop early and lets
-# the walk go on, so it adds no path on which a position or a word goes unread. Never call it in
-# a command substitution, where an exit ends the subshell and not the hook; script_realpath and
-# script_cont_joined, the two helpers that run in one, are charged by their callers.
+# or the loop carries a `# ceil-bounded:` line directly above its head naming the cap that bounds
+# it; arm CEIL-COVER holds that inventory, so a loop added without either, in a form it reads, fails
+# the suite. Past the deadline the command is refused and the hook exits: the check never ends a loop
+# early and lets the walk go on, so it adds no path on which a position or a word goes unread. Never
+# call it in a command substitution, where an exit ends the subshell and not the hook; script_realpath
+# and script_cont_joined, the two helpers that run in one, are charged by their callers.
 script_ceil_check() {   # $1 = the loop's tag
   [ "$SECONDS" -lt "$SCRIPT_CEIL_AT" ] && return 0   # M-CEIL-TEST
   script_ceil_refuse time "$1"

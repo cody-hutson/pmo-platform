@@ -12488,10 +12488,18 @@ ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly
 # declared bounded by a `# ceil-bounded:` line directly above its head; no check sits inside the two
 # helpers that run in a command substitution.
 # WHAT IT READS. A loop head at the start of a line: `while` or `until` followed by a blank and a
-# character other than `(`, or `for NAME in` followed by a blank or the line's end. And, so that it fails
-# on them, the forms it knows that head misses: an arithmetic `for ((` and a `select NAME`, at the line's
-# start or after a blank, `;`, `&` or `|`; and, after `;`, `&` or `|` on the same line, a `while` or
-# `until` followed by a blank and a character other than `(`, or a `for NAME`.
+# character other than `(`, or `for NAME in` followed by a blank or the line's end. For each head with no
+# bound line, the loop's own `do`: the first `do` word (at the line's start or after a blank or `;`, and
+# followed by a blank or the line's end) from the head's line on, past whole-line comments and short of
+# the next head. What follows that `do` on its line is the body's first statement, and where only a
+# comment or nothing does, the next non-blank line is. The loop is charged when that statement is
+# `script_ceil_check <tag>`, blanks and its `# M-CEIL-<TAG>` marker, and nothing else; otherwise, and
+# when no `do` comes short of the next head, it is uncovered and the arm fails. A `do` word earlier in the
+# head's own text, in its condition, its word list or a trailing comment, is taken for the loop's own, and
+# what follows it is read as the first statement. And, so that it fails on them, the forms it knows that
+# head misses: an arithmetic `for ((` and a `select NAME`, at the line's start or after a blank, `;`, `&`
+# or `|`; and, after `;`, `&` or `|` on the same line, a `while` or `until` followed by a blank and a
+# character other than `(`, or a `for NAME`.
 # WHAT IT DOES NOT READ, written down so that a new form is a documented exclusion and not a defect: a
 # `while` or `until` not followed on its line by a blank and a character other than `(`, wherever it
 # stands, which is one that ends its line, its condition on the next, and one whose condition opens with a
@@ -12513,17 +12521,26 @@ ce_cover() { # <file> -> "loops charged bounded bad sub unseen"
     insub && /script_ceil_(check|refuse)/ { sub_n++ }
     insub && /^\}/ { insub = 0 }
     { line[NR] = $0 }
-    on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /^[[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$)/) { head[++nh] = NR }
-    # The forms the head pattern does not read: an arithmetic for, a select, and a loop keyword after a
-    # separator or a pipe on the same line. None may appear on the surface (an awk loop opens with a paren).
+    on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /^[[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$)/) { head[++nh] = NR; ishead[NR] = 1 }
+    # The forms it fails on, which the head pattern misses (the header above names them): an arithmetic
+    # for, and a select followed by a name, at the line start or after a blank, a separator or a pipe;
+    # and, after a separator or a pipe, a while or until followed by a blank and a character other than
+    # a paren, or a for followed by a name. Excluding the paren keeps awk loops, which open with one, unread.
     on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /(^|[;&|[:space:]])for[[:space:]]*\(\(/ || $0 ~ /(^|[;&|[:space:]])select[[:space:]]+[A-Za-z_]/ || $0 ~ /[;&|][[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /[;&|][[:space:]]*for[[:space:]]+[A-Za-z_]/) { un = un (un == "" ? "" : ",") NR }
     END {
       for (i = 1; i <= nh; i++) {
         h = head[i]
         if (line[h - 1] ~ /^[[:space:]]*# ceil-bounded: [^[:space:]]/) { nb++; continue }
-        d = h; while (d <= NR && line[d] !~ /(^|[;[:space:]])do([[:space:]]+#.*)?$/) d++
-        b = d + 1; while (b <= NR && line[b] ~ /^[[:space:]]*$/) b++
-        if (line[b] ~ /^[[:space:]]*script_ceil_check [a-z0-9-]+[[:space:]]+# M-CEIL-[A-Z0-9-]+$/) nc++
+        # The do of this loop: the first do word from the head line on, past comment lines and short of
+        # the next head. What follows it on its line is the first statement of the body; where only a
+        # comment or nothing does, the next non-blank line is. With no such do the loop is uncovered.
+        d = h; while (d <= NR && !(d > h && d in ishead) && (line[d] ~ /^[[:space:]]*#/ || line[d] !~ /(^|[;[:space:]])do([[:space:]]|$)/)) d++
+        s = ""
+        if (d <= NR && !(d > h && d in ishead)) {
+          match(line[d], /(^|[;[:space:]])do([[:space:]]|$)/); s = substr(line[d], RSTART + RLENGTH)
+          if (s ~ /^[[:space:]]*(#.*)?$/) { b = d + 1; while (b <= NR && line[b] ~ /^[[:space:]]*$/) b++; s = line[b] }
+        }
+        if (s ~ /^[[:space:]]*script_ceil_check [a-z0-9-]+[[:space:]]+# M-CEIL-[A-Z0-9-]+$/) nc++
         else bad = bad (bad == "" ? "" : ",") h
       }
       printf "%d %d %d %s %d %s", nh, nc, nb, (bad == "" ? "-" : bad), sub_n, (un == "" ? "-" : un)
