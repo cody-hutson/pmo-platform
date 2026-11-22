@@ -128,14 +128,27 @@ must_block "bash <<'EOF'${NL}git commit -n -m wip${NL}EOF"                      
 must_block "cat <<EOF${NL}\$(git commit -n -m wip)${NL}EOF"                       # unquoted heredoc: substitution runs
 must_block "cat > /tmp/m.txt <<'EOF'${NL}Don't${NL}EOF${NL}git commit -n -F /tmp/m.txt"
 
-# Long input: a command above a pipe's 64 KiB capacity. A matcher fed by a pipe into
-# `grep -q` reads "no match" there; -024's matcher is fed by a here-string, and this pair
-# pins that for it (tests/ghsa-xxjm-long-input-matchers.test.sh pins the shared matches()).
+# Long input. BLOCK-DESTRUCTIVE-022's per-command work ceiling refuses a command longer than
+# its length gate (SCRIPT_CEIL_CHARS, 65536 characters) before any rule reads it, so a 70 KB
+# command never reaches -024: it is refused with or without the flag. That fail-closed
+# outcome is what this pair pins.
 LONG_WORD="$(/usr/bin/printf '%070000d' 0)"
-test_case "refuse: git commit -m <70 KB word> -n" \
-  "$(bash_payload "git commit -m ${LONG_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-024"
-test_case "allow: git commit -m <70 KB word>" \
-  "$(bash_payload "git commit -m ${LONG_WORD}")" 0
+test_case "refuse: git commit -m <70 KB word> -n (above -022's length gate)" \
+  "$(bash_payload "git commit -m ${LONG_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-022"
+test_case "refuse: git commit -m <70 KB word> (above -022's length gate)" \
+  "$(bash_payload "git commit -m ${LONG_WORD}")" 2 "BLOCK-DESTRUCTIVE-022"
+# Near the gate. An ASCII command short enough for -024 to read also fits within a pipe's
+# 64 KiB capacity, so no input -024 can still see tells a pipe-fed matcher from its
+# here-string one: this pair pins only that -024 reads a command near the gate in full,
+# refusing the flag and allowing the plain form. (A multi-byte command can be under the
+# gate and over a pipe's capacity only where ${#} counts characters, which depends on the
+# locale, so no such arm is kept. tests/ghsa-xxjm-long-input-matchers.test.sh pins the
+# shared matches() for the hooks without a length gate.)
+NEAR_WORD="$(/usr/bin/printf '%060000d' 0)"
+test_case "refuse: git commit -m <60 KB word> -n" \
+  "$(bash_payload "git commit -m ${NEAR_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-024"
+test_case "allow: git commit -m <60 KB word>" \
+  "$(bash_payload "git commit -m ${NEAR_WORD}")" 0
 
 # ---------------------------------------------------------------------------
 # Positive arms — hooks-directory override for one invocation
