@@ -7,6 +7,19 @@ name: Install tests
 #   falsification: break an install.sh exit-code propagation path -> the
 #                  install-regression job fails.
 # (Posture realized per core/standards/gate-efficacy-standard.md Requirement (b).)
+#
+# gate-efficacy: posture=advisory  enforcement=ci-enforce:"Hook test harness (Linux)"  always-reports=yes
+#   invariant: the hook test harness runs on Linux against the same materialized layout as
+#              the macOS job, and every failure it shows is a row of
+#              core/hooks/tests/linux-known-failures.txt; a suite with no summary line, a
+#              missing AGGREGATE line, or a defect row whose arm now passes is a failure too.
+#   falsification: add an arm that fails to any suite -> check-known-failures.py reports an
+#                  unlisted failure -> this job goes red. Delete a defect row whose arm still
+#                  fails -> red. The checker's own --self-test runs first and holds both arms.
+#   graduation: not a required context while the known-failure list holds rows; the list is
+#               a stopgap whose rows are each fixed under their own work item. Once it is
+#               empty, the declaration moves to posture=required and the context is
+#               registered in branch protection, in that order.
 
 # Which suites run, and where that is recorded. The step lists below name what
 # each job invokes; they are not the suite population, so a suite this file
@@ -16,7 +29,7 @@ name: Install tests
 # every pull request, in core/standards/gate-efficacy-standard.md § Exit-consumer
 # and executor census, which lists any suite that nothing executes.
 #
-# Four jobs:
+# Five jobs:
 #
 # shell-tests — runs the full deploy-test harness under core/deploy/tests/
 # against /tmp sandboxes (no writes outside the sandbox roots), plus the
@@ -148,6 +161,16 @@ name: Install tests
 # core/hooks/tests/setup-ci-layout.sh. The runner gates: any test-file FAIL
 # yields a non-zero exit → red CI.
 #
+# hook-tests-linux — the same harness against the same materialized layout, on
+# ubuntu-latest (bash 5.x, gawk, GNU grep and sed, the uutils coreutils). Some
+# suites still fail there for reasons each filed as its own defect, so the
+# runner's exit code is not this job's verdict: core/hooks/tests/
+# check-known-failures.py is. It passes the run only when every failure is a row
+# of core/hooks/tests/linux-known-failures.txt, and fails it on any other
+# failure, on a suite with no summary line, or on a missing AGGREGATE line. The
+# job is not a required check while that list holds rows (see its gate-efficacy
+# declaration above).
+#
 # install-regression — runs the STANDING install/onboarding/update regression
 # suite (core/deploy/tests/run-install-regression.sh; #706 / epic #325 ticket
 # C8). The runner aggregates the install/onboarding/update deploy-test subset
@@ -179,10 +202,12 @@ name: Install tests
 # what genuinely exercises on that OS (see the job's own header for the per-OS
 # tier and the CIAC-2 / CIAC-3 mapping).
 #
-# Platform: the first three jobs are macOS-only (setup-workspace.sh hard-fails on
-# non-Darwin per its check_platform gate; the end-to-end test self-skips on Linux
-# too; the hook tests use BSD-tool / macOS-path assumptions consistent with the
-# hook layer). The cross-platform job tiers per-OS (see its header).
+# Platform: shell-tests, hook-tests and install-regression are macOS-only
+# (setup-workspace.sh hard-fails on non-Darwin per its check_platform gate; the
+# end-to-end test self-skips on Linux too). The hook harness runs on both:
+# hook-tests on macOS and hook-tests-linux on Linux, where the failures it still
+# has are listed rather than assumed away. The cross-platform job tiers per-OS
+# (see its header).
 #
 # Security: this workflow does NOT consume any untrusted github.event.*
 # inputs (no issue titles, PR bodies, comment bodies, head refs, etc.).
@@ -1182,6 +1207,48 @@ jobs:
           TESTS_DIR="$(bash core/hooks/tests/setup-ci-layout.sh --sandbox "${sandbox}")"
           echo "Materialized hook test layout at: ${TESTS_DIR}"
           bash "${TESTS_DIR}/test-runner.sh"
+
+  hook-tests-linux:
+    name: Hook test harness (Linux)
+    # The hook-tests job above, on Linux, where the hooks also run and where none had
+    # been tested before this job. Same materialized layout, same runner. The verdict is
+    # not the runner's exit code but check-known-failures.py: the Linux failures already
+    # filed as defects are rows of core/hooks/tests/linux-known-failures.txt, and any
+    # other failure, a suite with no summary line, or a missing AGGREGATE line turns this
+    # job red. It is not a required check while that list holds rows.
+    runs-on: ubuntu-latest
+    # Job-level OUTER bound. The harness's first measured Linux runs took about 36 minutes
+    # on a 2-core runner; this is that plus well over a third of headroom.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ensure jq
+        # The hooks resolve jq at /usr/bin/jq first (core/hooks/lib/dep-resolve.sh), which
+        # is where the Ubuntu image ships it.
+        run: |
+          if [ ! -x /usr/bin/jq ]; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+          /usr/bin/jq --version
+
+      - name: Known-failure checker self-test
+        # A checker that cannot tell an unlisted failure from a listed one must not judge
+        # the run, so its sensitivity and specificity arms run first.
+        run: python3 core/hooks/tests/check-known-failures.py --self-test
+
+      - name: Run hook test harness against materialized deployed layout, judged against the known-failure list
+        # The runner exits non-zero while listed failures remain, so its exit code is
+        # printed and the checker, the last command, gates the step.
+        run: |
+          sandbox="$(mktemp -d -t hook-ci-layout.XXXXXX)"
+          TESTS_DIR="$(bash core/hooks/tests/setup-ci-layout.sh --sandbox "${sandbox}")"
+          echo "Materialized hook test layout at: ${TESTS_DIR}"
+          log="${RUNNER_TEMP}/hook-harness.log"
+          bash "${TESTS_DIR}/test-runner.sh" 2>&1 | tee "${log}"
+          echo "runner exit: ${PIPESTATUS[0]}"
+          python3 core/hooks/tests/check-known-failures.py --run-log "${log}" \
+            --list core/hooks/tests/linux-known-failures.txt --tests-dir "${TESTS_DIR}"
 
   install-regression:
     name: Install/onboarding/update regression suite (macOS)

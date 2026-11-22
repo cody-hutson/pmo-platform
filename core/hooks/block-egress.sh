@@ -891,6 +891,15 @@ egress_ansic_span() {
 # no command-derived text ever reaches a format string: a character is produced from a number the
 # decoder computed.
 #
+# A decoded byte above 0x7F is produced as U+FFFD, both here and in egress_ansic_decode_long — the
+# character jq already gives any byte of the command text that is not valid UTF-8. So no text this
+# rule handles ever holds an invalid UTF-8 sequence. That matters on bash 5.x in a UTF-8 locale,
+# where removing a backslash-led suffix from a text that starts with a lone lead byte (`${s%%\\*}`
+# on $'\xc3\\') returns bytes that were never in the text. It changes no verdict: a byte above 0x7F
+# cannot spell a command word, an option, a method or an allowlisted path, so whether it reads as
+# itself or as U+FFFD, the word it sits in names none of them. Each such site is marked
+# `# utf8: decoded-high-byte`.
+#
 # The loop below steps through the body left to decode, once per escape, with removals and slices
 # that re-measure that text each time, so on bash 3.2 it costs more than linear time in a body of
 # many escapes (see EGRESS_LINEAR_MIN). A long body is decoded by egress_ansic_decode_long, which
@@ -955,8 +964,12 @@ egress_ansic_decode() {
       *) out="${out}\\"; continue ;;
     esac
     if [ "$v" -eq 0 ]; then break; fi
-    builtin printf -v d '%o' "$v"
-    builtin printf -v c "\\${d}"
+    if [ "$v" -gt 127 ]; then
+      c=$'\357\277\275'  # utf8: decoded-high-byte
+    else
+      builtin printf -v d '%o' "$v"
+      builtin printf -v c "\\${d}"
+    fi
     out="${out}${c}"
   done
   EGRESS_AC="$out"
@@ -1053,8 +1066,12 @@ egress_ansic_decode_long() {
     esac
     # A decoded NUL ends the string: nothing after it is kept.
     [ "$v" -ne 0 ] || break
-    builtin printf -v d '%o' "$v"
-    builtin printf -v c "\\${d}"
+    if [ "$v" -gt 127 ]; then
+      c=$'\357\277\275'  # utf8: decoded-high-byte
+    else
+      builtin printf -v d '%o' "$v"
+      builtin printf -v c "\\${d}"
+    fi
     AP[${#AP[@]}]="${c}${rest}"
   done
   egress_cat AP
