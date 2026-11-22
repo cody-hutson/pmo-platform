@@ -2394,27 +2394,80 @@ test_case "HDATA-CAP-OVER: past 20 000 scanned characters the command keeps toda
 test_case "HDATA-CAP-LINE: a scanned line over 4096 characters keeps today's verdict" \
   "$(bash_payload "$HD_CAP_LINE")" 2 "BLOCK-TRASH-001"
 
-# The cost at the cap: the hook on HDATA-CAP-IN against the same padding with no here-document,
-# the least of three interleaved runs of each; the first may cost at most HD_COST_BOUND times the
-# second.
+# The cost at the cap (#9044): the hook on HDATA-CAP-IN against the same padding with no
+# here-document; the first may cost at most HD_COST_BOUND times the second.
+#   The cost read is CPU time — user and system time of the hook and of every process it waits
+#   for, from getrusage(RUSAGE_CHILDREN) — not wall-clock time. On a shared runner wall-clock time
+#   mostly measures the wait for a free CPU, so a wall-clock ratio follows the runner's load: it
+#   failed this arm on unchanged hook code, on macOS and on Linux. A CPU ratio leaves the wait out.
+#   On one 14-core Mac with 28 busy processes beside it, the three-run wall-clock ratio read 0.61
+#   to 1.67 on unchanged hook code while the CPU ratio read 1.16 to 1.29.
+#   A round takes the least of five interleaved runs of each command, because load only adds
+#   cost. A round over the bound is measured once more, and the verdict is "over" only when both
+#   rounds are: a slower here-document path is over in every round, a load spike seldom in two.
+#   A run whose cost reads zero makes the verdict "unmeasured", which fails both arms below.
+#   hd_cost <hook> prints the verdict, then each round's CPU seconds with/without=ratio, or
+#   nothing when the measurement did not run.
 HD_COST_BOUND="${HD_COST_BOUND:-1.5}"
-HD_COST_PY='import os, subprocess, sys, time
-hook, a, b = sys.argv[1], sys.argv[2].encode(), sys.argv[3].encode()
+HD_COST_PY='import resource, subprocess, sys
+hook, a, b, bound = sys.argv[1], sys.argv[2].encode(), sys.argv[3].encode(), float(sys.argv[4])
+def cpu():
+    r = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return r.ru_utime + r.ru_stime
 def one(pay):
-    t0 = time.time()
+    t0 = cpu()
     subprocess.run(["/bin/bash", hook], input=pay, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
-    return time.time() - t0
-x, y = [], []
-for _ in range(3):
-    x.append(one(a)); y.append(one(b))
-print("%.3f %.3f" % (min(x), min(y)))'
-hd_cost_out="$(/usr/bin/python3 -c "$HD_COST_PY" "$HOOK" "$(bash_payload "$HD_CAP_IN")" "$(bash_payload "$(hd_pad 5)"$'\ncat /dev/null')" 2>/dev/null)" || hd_cost_out=""
-hd_cost_h="${hd_cost_out% *}"; hd_cost_c="${hd_cost_out#* }"
-if [ -n "$hd_cost_out" ] && /usr/bin/awk -v h="$hd_cost_h" -v c="$hd_cost_c" -v b="$HD_COST_BOUND" 'BEGIN { exit !(c > 0 && h <= b * c) }'; then
-  /usr/bin/printf 'PASS: %s\n' "HDATA-COST: at the cap the hook costs within ${HD_COST_BOUND} times the same command with no here-document"; PASS=$((PASS + 1))
+    return cpu() - t0
+rounds = []
+for _ in range(2):
+    x, y = [], []
+    for _ in range(5):
+        x.append(one(a)); y.append(one(b))
+    h, c = min(x), min(y)
+    if h <= 0 or c <= 0:
+        rounds.append("%.4f/%.4f" % (h, c)); print("unmeasured " + " ".join(rounds)); sys.exit(0)
+    rounds.append("%.4f/%.4f=%.2f" % (h, c, h / c))
+    if h <= bound * c:
+        print("within " + " ".join(rounds)); sys.exit(0)
+print("over " + " ".join(rounds))'
+hd_cost() {
+  /usr/bin/python3 -c "$HD_COST_PY" "$1" "$(bash_payload "$HD_CAP_IN")" "$(bash_payload "$(hd_pad 5)"$'\ncat /dev/null')" "$HD_COST_BOUND" 2>/dev/null || true
+}
+hd_cost_out="$(hd_cost "$HOOK")"
+if [ "${hd_cost_out%% *}" = within ]; then
+  /usr/bin/printf 'PASS: %s\n' "HDATA-COST: at the cap the hook costs within ${HD_COST_BOUND} times the same command with no here-document — CPU seconds with/without per round: ${hd_cost_out#within }"; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: %s\n  %s\n' "HDATA-COST: at the cap the hook costs at most ${HD_COST_BOUND} times the same command with no here-document" \
-    "measured (seconds, with / without): ${hd_cost_out:-not measured}"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: %s\n' "HDATA-COST: at the cap the hook costs at most ${HD_COST_BOUND} times the same command with no here-document — measured ${hd_cost_out:-nothing (the measurement did not run)}, as CPU seconds with/without per round"; FAIL=$((FAIL + 1))
+fi
+# The arm can fail (#9044): the same measurement on a copy of the hook whose here-document
+# pre-pass runs HD_COST_SENS_RUNS extra times before its real run (that copy's one changed line)
+# must read over the bound. The copy is built from the pre-pass call line; when that line changes
+# the copy equals the hook, is not live, and this arm fails until the anchor follows it.
+#   Each pre-pass run adds about a fifth to the hook's CPU cost at the cap, so the bound sits at a
+#   here-document path about two and a half times today's: on that Mac a copy running the pre-pass
+#   three times read 1.59 to 1.73, and this copy's six runs read 2.18 to 2.31, idle or loaded.
+HD_COST_SENS_RUNS="${HD_COST_SENS_RUNS:-5}"
+hd_sens_dir="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/rmt-hdc.XXXXXX" 2>/dev/null)" || hd_sens_dir=""
+if [ -z "$hd_sens_dir" ]; then
+  /usr/bin/printf 'FAIL: HDATA-COST-SENS: could not create a sandbox, so the arm did not run\n'; FAIL=$((FAIL + 1))
+else
+  /bin/mkdir -p "${hd_sens_dir}/lib"
+  /bin/cp "${HOOK_DIR}/lib/dep-resolve.sh" "${HOOK_DIR}/lib/command-position.awk" "${hd_sens_dir}/lib/"
+  hd_sens_loop="$(/usr/bin/awk -v n="$HD_COST_SENS_RUNS" 'BEGIN { for (i = 1; i <= n; i++) printf " %d", i }')"
+  # shellcheck disable=SC2016  # sed program writing shell text — single quotes intentional
+  /usr/bin/sed -e 's#^    _hd_out="\$("\$PRINTF" #    for _hd_k in'"${hd_sens_loop}"'; do "$PRINTF" %s "$COMMAND" | /usr/bin/awk "$HEREDOC_DATA_AWK" >/dev/null 2>\&1; done; &#' \
+    "$HOOK" > "${hd_sens_dir}/block-rm-prefer-trash-slowhd.sh"
+  if ! ra_live "${hd_sens_dir}/block-rm-prefer-trash-slowhd.sh"; then
+    /usr/bin/printf 'FAIL: %s\n' "HDATA-COST-SENS: the copy with a slower here-document path is not live (its anchor, the pre-pass call line, did not match exactly once, or it does not parse)"; FAIL=$((FAIL + 1))
+  else
+    hd_sens_out="$(hd_cost "${hd_sens_dir}/block-rm-prefer-trash-slowhd.sh")"
+    if [ "${hd_sens_out%% *}" = over ]; then
+      /usr/bin/printf 'PASS: %s\n' "HDATA-COST-SENS: a here-document path run $((HD_COST_SENS_RUNS + 1)) times reads over ${HD_COST_BOUND} — CPU seconds with/without per round: ${hd_sens_out#over }"; PASS=$((PASS + 1))
+    else
+      /usr/bin/printf 'FAIL: %s\n' "HDATA-COST-SENS: a here-document path run $((HD_COST_SENS_RUNS + 1)) times reads over ${HD_COST_BOUND} — measured ${hd_sens_out:-nothing (the measurement did not run)}, as CPU seconds with/without per round"; FAIL=$((FAIL + 1))
+    fi
+  fi
+  case "${hd_sens_dir##*/}" in rmt-hdc.*) /bin/rm -rf "$hd_sens_dir" ;; esac
 fi
 
 # The git receiver (#7644 Q5). While the whole-line git exit (M-TRASH-GITEXEMPT) exists it allows
