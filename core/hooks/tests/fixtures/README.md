@@ -58,8 +58,10 @@ last field and may itself contain `|`. Lines starting with `#` and blank lines a
 | `verdict` | The guard's recorded verdict: `a` allowed, `B` refused (exit 2), `W` warned at a rollout phase (exit 0 and a would-fire record). |
 | `command` | The Bash command, with the placeholders below. |
 
-**Placeholders.** `@D@` is the fixture directory; the reader allowlists exactly
-`@D@/ok.sh` and `@D@/ok.py` in a hermetic root of its own. `@LONGX@` and `@LONGN@` are
+**Placeholders.** `@D@` is the fixture directory; the reader allowlists exactly four paths in
+a hermetic root of its own: `@D@/ok.sh`, `@D@/ok.py`, `@D@/li sted/ok.sh`, a path holding a
+space, and `@D@/bin/bash`, a path named as a shell interpreter, which only row AS26 names.
+`@LONGX@` and `@LONGN@` are
 4,100 repetitions of `x` and `n`, `@SHORTX@` 4,000 of `x`, `@MIDX@` and `@MIDN@` 1,000 of
 `x` and `n`, `@QPAD@` 2,050 pairs of empty double quotes, `@QMID@` 400 pairs of empty
 double quotes (dense enough that one scan of it stays under the quote tracker's shared
