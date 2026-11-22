@@ -56,7 +56,3 @@ block-egress.test.sh|AC-E007-NB7:|timing|the long brace group costs more than 3.
 block-egress.test.sh|AC-E007-NB8:|timing|the long brace group costs more than 3.0 times its neutral twin on Linux
 block-rm-prefer-trash.test.sh|AC-CPV-R-U:|timing|the hook costs more than 1.75 times one canonicalizer run on the 80 KB long word on Linux
 block-rm-prefer-trash.test.sh|AC-CPV-R-C:|timing|the hook costs more than 1.75 times one canonicalizer run on the 80 KB long word on Linux
-
-# A cost ratio that depends on runner load, not on the platform: it fails intermittently on the
-# macOS runners as well, with no hook change, and is owned there.
-block-rm-prefer-trash.test.sh|HDATA-COST:|timing|the here-document cost ratio rests on six short process spawns, so runner load moves it; it also fails intermittently on macOS with no hook change
