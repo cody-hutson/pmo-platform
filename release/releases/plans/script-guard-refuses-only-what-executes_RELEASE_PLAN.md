@@ -678,6 +678,7 @@ Recorded on #9058 (comment 6966866565): the narrowed claims accepted (#8490 AC1,
 | DEV-11 | 6 | #8327: `CEIL-NEWSCAN-ASGN` and `-HD` were authored by the #8548 and #8326 spokes, whose scans were built after #8327; three existing arms that lift hook functions define a no-op ceiling check; R11's Z-cell observation is the existing `AC-022-Z-CTL` arm | hub, Tier 1 |
 | DEV-12 | 6 | #8493: `LATCH-CAUSE-opaque-word` and `-ctl-allow` read corpus rows ZH05 and ZU05 in place of the design's candidates | hub, Tier 1 |
 | DEV-13 | 6 | #8548: twelve decline markers (six beyond the design), so every decline has a mutant; arms beyond the design's table; the moved-walk test compares indices (FM-3) | spoke, Tier 1 |
+| DEV-14 | 7–9 | #8490: CIAC-2 says each `looks-like-` row was re-graded to `a` in its card's GREEN commit. That holds for LT01–LT04 (re-graded W→a) but not for LT05, which #8490's RED commit added already at `a` and which was never re-graded. The row's record is correct; this clause of the criterion is not. CIAC-2's count method still reads MET at the release head (27 rows, at least 6 required). | #8490 Stage 7 F-12 (#9069); operator, Stage 9 GO WITH CONDITIONS |
 
 ## Change Description
 
