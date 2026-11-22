@@ -75,8 +75,8 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 | Implementation Partner | Vendor name (if applicable). "None" if internal-only. | [VENDOR_X] |
 | Key Stakeholders | Minimum: Sponsor, PM, Tech Lead. Include role and name. | [COLLEAGUE_A] (Sponsor), [COLLEAGUE_B] (Tech Lead) |
 | Dual-Framing Co-Managed? | Whether the project is co-managed with dual Agile/Waterfall framing. Controls Dual-Framing Bridge activation. (Sets frontmatter `dual_framing_enabled`.) | Yes / No |
-| Jira Project Key | If Agile/Hybrid: the Jira project key for MCP configuration. N/A for pure Waterfall. | WHO |
-| Confluence Space | Primary Confluence space key. N/A if SharePoint-only. | TS |
+| Jira Project Key | If Agile/Hybrid: the Jira project key for MCP configuration. N/A for pure Waterfall. | [PROJECT_KEY] |
+| Confluence Space | Primary Confluence space key. N/A if SharePoint-only. | [SPACE_KEY] |
 
 ### Optional Inputs
 

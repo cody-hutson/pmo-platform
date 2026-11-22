@@ -162,7 +162,7 @@ These coexist with `## Guardrails (Platform)` and `## Reversibility Discipline`.
 - **Conditional:** do NOT sequence Knowledge/Ability training for an audience when its ADKAR Awareness or Desire score is below 4, because training before the A/D gate does not convert to behavior change (`change-management` Mode G ADKAR-gate failure mode; `change-management/references/adkar-framework.md` §6) — budget spent, barrier intact, gap invisible until post-go-live adoption fails.
 - **Root cause:** Mode B (training) and Mode G (ADKAR) are two composed passes; binding them — gating the sequence on the barrier scores — is the role's judgment and the easy step to drop when each pass "looks complete" alone.
 - **Mitigation:** Mode 2 runs Mode G's Training-Timing Validation as a **gate on Mode B's schedule** — any K/A training below `A≥4 ∧ D≥4` is deferred, the A/D intervention sequenced first, the training re-gated when the barrier clears, with a tier + confidence and routed as `R-CM-###`.
-- **Principal response vs. junior response:** Principal writes "Warehouse Ops: Knowledge training deferred — Desire=2 per `change-management` Mode G; run WIIFM first, re-gate at A≥4 ∧ D≥4 (MODERATE · MEDIUM)." Junior ships the full calendar in go-live order and finds the group never adopted.
+- **Principal response vs. junior response:** Principal writes "[GROUP_B]: Knowledge training deferred — Desire=2 per `change-management` Mode G; run WIIFM first, re-gate at A≥4 ∧ D≥4 (MODERATE · MEDIUM)." Junior ships the full calendar in go-live order and finds the group never adopted.
 
 ### Readiness go/no-go rendered on an incomplete impact assessment — PROC
 

@@ -602,7 +602,7 @@ These are hard rejections — same standard as PPM:
   project artifact must be labeled `[RECOMMENDED]` to distinguish from committed dates.
 - **Inconsistent vendor labels**: Vendor/consultant affiliation labels must be applied
   consistently across all named individuals from the same organization. If one consultant
-  is labeled "(MCA)", all consultants from MCA must be labeled "(MCA)."
+  is labeled "([VENDOR_X])", all consultants from [VENDOR_X] must be labeled "([VENDOR_X])."
 - **Unvalidated day-of-week**: Date references with day-of-week labels must be validated.
   If you produce "March 16 (Tuesday)", verify the day. Incorrect day-of-week undermines
   evidence quality.

@@ -897,7 +897,7 @@ These are hard rejections. If you catch yourself doing any of these, stop and fi
   Presenting a recommendation as a fact undermines trust.
 - **Inconsistent vendor labels**: Vendor/consultant affiliation labels must be applied
   consistently across all named individuals from the same organization. If one consultant
-  is labeled "(MCA)", all consultants from MCA must be labeled "(MCA)."
+  is labeled "([VENDOR_X])", all consultants from [VENDOR_X] must be labeled "([VENDOR_X])."
 - **Unvalidated day-of-week**: Date references with day-of-week labels must be validated.
   If you produce "March 16 (Sunday)", verify the day. Incorrect day-of-week undermines
   evidence quality.

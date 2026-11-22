@@ -110,20 +110,20 @@ skill's RAID ID namespacing.
 The regression fixture for ADKAR scoring lives in `adkar-framework.md §12` (three named
 groups). Re-use that fixture by reference rather than inventing a parallel one (a second
 fixture would drift from the regression source). Reading that fixture's scores
-(Warehouse Ops: A=4, D=2, K=3, Ab=2, R=1 — barrier at Desire), the capability output is:
+([GROUP_B]: A=4, D=2, K=3, Ab=2, R=1 — barrier at Desire), the capability output is:
 
-ADKAR Assessment Table (Warehouse Ops row):
+ADKAR Assessment Table ([GROUP_B] row):
 
 ```
 | Impacted Audience | A | D | K | Ab | R | Barrier Stage | Intervention | Readiness | Reversibility · Confidence |
 |-------------------|---|---|---|----|----|--------------|--------------|-----------|----------------------------|
-| Warehouse Ops     | 4 | 2 | 3 | 2  | 1  | Desire       | WIIFM framing, involvement in design, address fears, peer champions | NOT READY | MODERATE · HIGH |
+| [GROUP_B]     | 4 | 2 | 3 | 2  | 1  | Desire       | WIIFM framing, involvement in design, address fears, peer champions | NOT READY | MODERATE · HIGH |
 ```
 
-Training-Timing finding (if Knowledge training were scheduled for Warehouse Ops):
+Training-Timing finding (if Knowledge training were scheduled for [GROUP_B]):
 
 ```
-FINDING (Training-Timing): Warehouse Ops — Knowledge training scheduled T-2wk but
+FINDING (Training-Timing): [GROUP_B] — Knowledge training scheduled T-2wk but
   ADKAR gate unmet: Awareness=4 / Desire=2 (barrier: Desire).
   Remediation: defer the Knowledge training; run WIIFM framing + involvement in design first;
   re-gate when A≥4 ∧ D≥4.
