@@ -1,6 +1,6 @@
 ---
 title: Controls — hook-rule
-purpose: The 84 controls whose mechanism kind is hook-rule, from the controls register
+purpose: The 86 controls whose mechanism kind is hook-rule, from the controls register
 type: reference
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
@@ -9,7 +9,7 @@ generated_by: build-process-catalog.py
 
 # Controls — hook-rule
 
-84 controls from the controls register. The statement, the class and the surface are the register's cells. Cited by counts the pages that cite the control; the pages and steps are on [controls-cited](controls-cited.md).
+86 controls from the controls register. The statement, the class and the surface are the register's cells. Cited by counts the pages that cite the control; the pages and steps are on [controls-cited](controls-cited.md).
 
 | Control | Statement | Enforcement class | Surface | Source path | Cited by |
 |---|---|---|---|---|---|
@@ -97,3 +97,5 @@ generated_by: build-process-catalog.py
 | C-082 | (support) audit-mcp-usage.sh — after-the-fact scan of session logs for MCP write-tool invocations (BLOCK-MCP-001 coverage check); not a gate | not-a-control | hook | `core/hooks/audit-mcp-usage.sh` | — |
 | C-083 | (support) run-fragile-ref-fixtures.sh / run-theme-token-fixtures.sh — fixture self-tests for the reference-durability detectors and the TH-3 theme-token lint; consumed by CI and Check 64 | not-a-control | hook | `core/hooks/run-fragile-ref-fixtures.sh` | — |
 | C-084 | (automation) After a merge lands on main, changed skills are redeployed by running deploy.sh --deploy (never --check) | not-a-control | hook | `core/hooks/git-post-merge-deploy.sh` | — |
+| C-452 | Bash git commit --no-verify or -n, a -c, --config-env, GIT_CONFIG_KEY_`<n>` or GIT_CONFIG_PARAMETERS override naming core.hooksPath, and a git config write, unset or core-section removal of core.hooksPath are refused (each skips the commit-time PII guard) | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
+| C-453 | A git push whose new commits or annotated tags carry a literal home-directory path, phone number, or personal-email pattern (accepted homes excepted), in an added line, a commit or tag object, or a needle-file hit, is refused: the commit-time guard runs over every commit the push would publish, including the commits merge, cherry-pick, revert, rebase, stash and commit-tree make without pre-commit | code-enforce | hook | `core/hooks/git-pre-push-pii.sh` | — |

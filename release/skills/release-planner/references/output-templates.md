@@ -59,8 +59,13 @@ abstraction:
 ## Pattern Review — YYYY-MM-DD (release-planner Mode D — DRAFT only)
 
 ### Open Observations Scanned
-N total · grouped by (domain, Pass-2 broadened theme) tuple
+N total (T trusted — bodies read for trusted members only) · grouped by (domain, Pass-2 broadened theme) tuple
 Pass-1 narrow tags surfaced for operator reference
+
+### Untrusted Observations — Not Clustered (if any)
+- #<obs_n> — <author_association> — filed YYYY-MM-DD
+  [Author outside the trusted set, or association unresolvable: body not read,
+  never clustered or embedded; for the operator to triage by hand]
 
 ### Uncategorized Observations Requiring Operator Theme Assignment (if any)
 - #<obs_n> — title — <reason Pass-2 produced unknown-mechanism>

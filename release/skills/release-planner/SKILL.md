@@ -2,7 +2,7 @@
 name: release-planner
 description: >
   Plans the PMO platform release lifecycle. Modes: Backlog analysis · Release planning · Dry run · Pattern review (draft). Analyzes the improvement backlog, maps dependencies, suggests release bundles, generates release plans, and produces dry-run diffs. Read-only — never modifies governance files. Triggers: "analyze the improvement backlog", "bundle the milestone", "generate the release plan", "produce the dry-run diff", "what's in v[X.Y]".
-version: v4.78
+version: v5.14
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -291,7 +291,7 @@ Mode B narrative: declare the per-release posture in the D-Gate block; when the 
 
 **Steps:**
 
-1. **Enumerate open observations** — `gh issue list --label observation --state open --json number,title,body,createdAt,labels --limit 5000`.
+1. **Enumerate open observations, trust first** — run the A0 author-association read before reading any body, per `core/governance/OPERATIONS.md` § Pattern Review Cadence Protocol Rule 2 step 1 (cite it; do not restate the trusted set): `gh api --paginate "repos/:owner/:repo/issues?labels=observation&state=open&per_page=100" --jq '.[] | select(.pull_request | not) | {number, author_association, created_at}'`. Then read bodies for trusted members only — `gh issue view <N> --json number,title,body,createdAt,labels`. An untrusted or unresolvable observation is never parsed, clustered or embedded in a drafted body; list it in the Decision Briefing by number, association and created date only.
 
 2. **Parse domain + theme (two-pass heuristic):**
    - **Pass 1 (narrow):** kebab-case derivation from observation title and body — produces per-instance tag (e.g., `plug-and-play-architecture`, `dim-drift`, `drift-check-enumeration`).

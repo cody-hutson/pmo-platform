@@ -154,7 +154,7 @@ def parse_hook_fragment(path: Path) -> dict:
     """Extract the summary-row fields from a per-hook fragment.
 
     Returns {name_display, scope, anchor}. `name_display` is the H2 heading text
-    (e.g. "`block-destructive.sh` (BLOCK-DESTRUCTIVE-001..023)"); `scope` is the
+    (e.g. "`block-destructive.sh` (BLOCK-DESTRUCTIVE-001..024)"); `scope` is the
     Scope-row text from the field table; `anchor` is the in-file GitHub anchor for
     the heading.
     """

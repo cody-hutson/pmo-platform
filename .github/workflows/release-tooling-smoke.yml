@@ -417,6 +417,20 @@ jobs:
         # the checkout. Bash 3.2 compatible for this macOS runner. Gates on exit code.
         run: bash release/tools/tests/test_deciders_carveout.sh
 
+      - name: Observation-body trust gate (GHSA-g92j)
+        # Any account can open an observation on a public repository. Every documented
+        # reader that drafts from an observation body — Stage 2 observation counting,
+        # its pipeline-triage execution reference, Pattern Review in OPERATIONS.md and
+        # release-planner Mode D, and the Template-Conversion Rule — must resolve the
+        # author-association (A0) BEFORE it reads the body, or untrusted text reaches an
+        # agent untagged and is re-filed under the operator's account as trusted.
+        # The governing text is prose, so nothing else executes this ordering; the suite
+        # reads each named section and fails when the trust read is missing, sits after
+        # the body read, or the section itself has moved. Its control arms run the same
+        # predicate over synthetic sections that must fail, so a predicate that stopped
+        # discriminating turns this step red rather than green. Offline, no gh, no writes.
+        run: bash release/tools/tests/test_observation_body_trust_gate.sh
+
       - name: Procedure 7a action-item gate predicate (escaped-pipe regression)
         # The Stage-13 HARD GATE predicate is PROSE-EMBEDDED — it lives in a bash
         # fence inside release/references/how-to/hub-spoke-bridge.md, so no runner
@@ -481,6 +495,21 @@ jobs:
         # to any operator-instance path or into the checkout). No workflow input
         # is interpolated. Gates on exit code.
         run: bash release/tools/tests/test_agent_editability_read.sh
+
+      - name: intake-desk Mode C body abstraction (prose structure + mutation arms)
+        # Mode C auto-logs to the work tracker with no per-item confirm at
+        # bounded_auto, and the default tracker is a public repository. Its callers
+        # process the operator's own files, so the rule that an item names only what
+        # the platform publishes plus abstract signal — never an operator file, a
+        # project, client or person name, or an operator path segment — is the only
+        # thing between that content and a world-readable issue. The rule is prose,
+        # so nothing else executes it. The suite reads the SKILL.md subsection, its
+        # placement before the clamp, the output-contract bullet, the failure mode
+        # and the gate-coverage register row, and fails when any is removed or loses
+        # an anchor. Six mutation arms each remove or move one part on a sandbox copy
+        # and must fail; each asserts its copy differs before grading it. Offline, no
+        # gh, no writes outside one mktemp tree. Gates on exit code.
+        run: bash release/tools/tests/test_intake_mode_c_body_abstraction.sh
 
       - name: close-class-telemetry regression suite (mutation-graded)
         # Wires a suite that shipped with ZERO executors — the same class as the

@@ -1005,6 +1005,9 @@ refresh_hooks() {
   # branch is reached only when a deployed hook was actually found non-executable —
   # so it cannot turn every update into a non-no-op. RECONCILED joins them for the same
   # reason: it is a forced write of the platform version, which changes the workspace.
+  # WIRED joins them too: it is the delegate linking the PII guard's pre-commit or
+  # pre-push hook (a first link or a re-point), and an already-wired repo logs OK instead,
+  # so a healthy run still reduces to EX_NOCHANGE.
   #
   # COMPUTED BEFORE THE `rc` BRANCH, and the ordering is the fix rather than tidiness.
   # This read used to sit BELOW the non-zero branch's `return 0`, so a run that refreshed
@@ -1013,7 +1016,7 @@ refresh_hooks() {
   # workspace that was genuinely deployed into. The captured output is valid regardless of
   # exit status (the `cat` above already prints it unconditionally), so there is no reason
   # to read it later and one real defect in doing so.
-  if grep -qE 'REFRESHED:|MODE-REPAIRED:|RECONCILED:' "${refresh_out}"; then
+  if grep -qE 'REFRESHED:|MODE-REPAIRED:|RECONCILED:|WIRED:' "${refresh_out}"; then
     PHASE5_DEPLOYED=1
   fi
   # DISCRIMINATE the two conditions the old single branch conflated (#5251 AC-12).

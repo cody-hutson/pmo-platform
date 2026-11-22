@@ -35,7 +35,7 @@ narrow the blast radius. The Windows entry point only previews.
 | Side | Criteria | Source |
 |---|---|---|
 | Entry | A workspace previously bootstrapped (`operator.toml` present, else exit 65); the clone pulled to the newer version; `./update.sh` run from the clone root with the composition library and manifest present; on Windows only `update.ps1 -DryRun` | [update.sh](/update.sh#L203)<!-- source-anchor: line=203; fp=6212afec21124365 -->; [UPDATE.md](/docs/UPDATE.md#L9)<!-- source-anchor: line=9; fp=0e2101f4400c0f83 -->; [update.ps1](/update.ps1#L113)<!-- source-anchor: line=113; fp=02716d08fd049e2e --> |
-| Exit | Exit 0 with ≥ 1 regeneration, skill deploy, hook refresh, settings delta or legacy retirement; or 64 with none; or 75 naming an absent escape surface, a non-executable hook or a declined hook; `.last-update` written on completion; the documented follow-up is `validate-install.sh` | [update.sh](/update.sh#L1344)<!-- source-anchor: line=1344; fp=3c5bdc08997df139 -->; [UPDATE.md](/docs/UPDATE.md#L95)<!-- source-anchor: line=95; fp=6d4085a98571fd15 --> |
+| Exit | Exit 0 with ≥ 1 regeneration, skill deploy, hook refresh, settings delta or legacy retirement; or 64 with none; or 75 naming an absent escape surface, a non-executable hook or a declined hook; `.last-update` written on completion; the documented follow-up is `validate-install.sh` | [update.sh](/update.sh#L1347)<!-- source-anchor: line=1347; fp=3c5bdc08997df139 -->; [UPDATE.md](/docs/UPDATE.md#L95)<!-- source-anchor: line=95; fp=6d4085a98571fd15 --> |
 
 ## Flow
 

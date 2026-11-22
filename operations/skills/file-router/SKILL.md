@@ -2,7 +2,7 @@
 name: file-router
 description: >
   Classifies, routes, and triggers processing for new files arriving in the PMO workspace. Uses three-layer classification (content analysis, project identification, filename patterns) with confidence thresholds. Triggers: "route this", "file this", "where does this go", "classify this", "I have a new transcript", "I just uploaded this", "what folder does this go in."
-version: v1.11
+version: v5.14
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -358,28 +358,21 @@ When a user corrects a misclassification:
    - New pattern to add
    - Existing pattern to modify
    - Confidence adjustment
-4. **Create** a GitHub Issue for the proposed rule update:
-   ```bash
-   gh issue create \
-     --title "[Skill Update] File Router: [brief description of rule change]" \
-     --body "## Improvement Proposal
-
-   **Source:** file-router correction on [filename]
-   **Severity:** P3
-
-   ### Description
-   User corrected a misclassification. Original: [X] at [Y]% confidence. Correct: [Z] in [folder].
-
-   ### Proposed Change
-   Update \`references/routing-patterns.md\`:
-   - [specific pattern or signal to add/modify]
-
-   ### Acceptance Criteria
-   - [ ] routing-patterns.md updated with new rule
-   - [ ] Similar files classified correctly on next encounter
-   " \
-     --label "improvement,P3,skill-update"
-   ```
+4. **Propose** the rule update through the governed intake path — never file it
+   directly. Hand the proposal to `intake-desk` Mode A (the operator who made the
+   correction is present). It renders the item, runs its 5-test and duplicate scan,
+   resolves the filing destination, and files only after the operator approves the
+   exact body at its binary confirm gate. Draft the proposal from the abstracted
+   correction, never from the file itself:
+   - **The body may carry:** the document type (transcript, contract, status
+     report, …), the class of signal that misfired (content keyword, filename
+     pattern, project identifier), the original and corrected confidence, and the
+     standard folder tier the file belonged in (`01-Governance` … `08-Generated`).
+   - **The body never carries:** the file's name, any project, client, engagement
+     or person name, or any path segment from the operator's tree. The filing
+     destination can be a public tracker, and those names often identify a client
+     or a person. The specific file stays in the local correction record from step 1.
+   - State priority in the body per the work-item template; pass no priority label.
 5. On Issue approval (user adds `approved` label): update `references/routing-patterns.md`
 
 ## Multi-Project Routing
@@ -448,7 +441,7 @@ is CHEAP. Every decision-class item must carry a **reversibility tier** paired w
 - Confidence & Approval Gate — the HIGH / MEDIUM / LOW routing decision itself (confidence-threshold gate for the inbound-family), with the MEDIUM proposals explicitly awaiting user confirmation, plus the flat-approval promotion gate and the mandatory cross-project approval.
 - High-confidence auto-routes to approval-required folders (1-Governance/, 2-Delivery/, 3-Operations/, 5-Reference/) that are surfaced for approval despite HIGH confidence.
 - FILE ROUTING SUMMARY output sections — HIGH CONFIDENCE (auto-routed), MEDIUM CONFIDENCE (proposed), LOW CONFIDENCE (queued), DOWNSTREAM TRIGGERS, ROUTING RULE UPDATES PROPOSED.
-- Self-Update Protocol — routing-rule update proposals opened as GitHub Issues with the `improvement` label, and the subsequent post-approval update to `references/routing-patterns.md`.
+- Self-Update Protocol — routing-rule update proposals routed through `intake-desk` Mode A and filed as a work item only after the operator approves the exact body, and the subsequent post-approval update to `references/routing-patterns.md`.
 - Unclassified queue escalation flags after >3 business days unassigned.
 - Single-source recording flags and participant extraction from content mentions.
 - Multi-project routing recommendations when multiple projects match with similar scores.

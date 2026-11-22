@@ -66,7 +66,7 @@ One row per deployed CI. The CI population is the **deployed roster** resolved f
 | [`comms-writer`](../../operations/skills/comms-writer/SKILL.md) | function-skill | operations | active | — | platform-maintainer | — | — |
 | [`daily-status`](../../operations/skills/daily-status/SKILL.md) | function-skill | operations | active | — | platform-maintainer | — | — |
 | [`delivery-engine`](../../operations/skills/delivery-engine/SKILL.md) | function-skill | operations | active | — | platform-maintainer | — | — |
-| [`file-router`](../../operations/skills/file-router/SKILL.md) | function-skill | operations | active | — | platform-maintainer | — | — |
+| [`file-router`](../../operations/skills/file-router/SKILL.md) | function-skill | operations | active | RELATES_TO intake-desk | platform-maintainer | — | — |
 | [`generated-cleanup`](../../operations/skills/generated-cleanup/SKILL.md) | function-skill | operations | active | DEPENDS_ON artifact-lint · RELATES_TO artifact-generator | platform-maintainer | — | — |
 | [`health-check`](../../operations/skills/health-check/SKILL.md) | function-skill | operations | active | — | platform-maintainer | — | — |
 | [`intake-desk`](../../operations/skills/intake-desk/SKILL.md) | function-skill | operations | active | — | platform-maintainer | — | — |

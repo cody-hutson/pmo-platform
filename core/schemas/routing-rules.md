@@ -129,10 +129,11 @@ When a user corrects a misclassification:
 1. Record the correction: original classification → correct classification
 2. Identify what signal was missing or misread
 3. Propose a new rule or rule modification to this file
-4. Log the proposal as a GitHub Issue (`improvement.yml` for a proposal, `observation.yml` for an observation)
+4. Propose it through `intake-desk` Mode A, which files the work item (`improvement.yml` for a proposal, `observation.yml` for an observation) only after the operator approves the exact body at its confirm gate. The body describes the misclassification by document type, the class of signal that misfired, confidence and the standard folder tier; it never carries the file's name, any project, client, engagement or person name, or any path segment from the operator's tree, because the filing destination can be a public tracker. The file-router skill's § Self-Update Protocol is the operative statement of this step.
 5. On approval: update this file, test with similar past files if available
 
 ## Version History
 | Date | Change | Evidence |
 |------|--------|---------|
 | 2026-03-18 | Initial creation from v3 implementation plan | Phase 1, Task 1.1 |
+| 2026-11-20 | Self-Update step 4 routes the proposal through intake-desk Mode A's confirm gate, and its body carries no file, project, client, person or path names | A correction filed to a public tracker could otherwise carry operator file names |
