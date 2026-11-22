@@ -2572,6 +2572,33 @@ install_mode_template_if_missing() {
   printf 'rm-file:%s\n' "${target}" >> "${ROLLBACK_OPS_FILE}"
 }
 
+# main_worktree_of <script>
+#
+# Prints the physical path of the source repo's MAIN worktree, the checkout whose
+# core/hooks/<script> every git hook this installer wires must run, or nothing when it does
+# not resolve. Linked worktrees share the repo's hooks dir, so a hook linked into a
+# worktree's copy runs that branch's unreviewed content on every merge, commit or push, and
+# dangles once the worktree is swept; git skips a dangling hook without a word.
+main_worktree_of() {
+  local mw_script="$1" mw_wl mw_main
+  # Captured, then cut -- never piped into a reader that stops early. Under `set -Eeuo
+  # pipefail` an early-exiting reader (awk … exit, head) makes git's EPIPE the pipeline's
+  # status, and on a repo with a few hundred worktrees that aborted the install every time.
+  mw_wl="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null || true)"
+  mw_main="${mw_wl%%$'\n'*}"
+  case "${mw_main}" in "worktree "*) mw_main="${mw_main#worktree }" ;; *) mw_main="" ;; esac
+  [ -n "${mw_main}" ] && mw_main="$(cd "${mw_main}" 2>/dev/null && pwd -P || true)"
+  # Where that first entry names a git dir rather than a checkout (a separate git dir, a
+  # submodule) and the source repo is not a linked worktree, its own top level is the checkout.
+  if [ ! -f "${mw_main}/core/hooks/${mw_script}" ] \
+     && [ "$(git -C "${SOURCE_REPO}" rev-parse --absolute-git-dir 2>/dev/null || true)" = \
+          "$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)" ]; then
+    mw_main="$(git -C "${SOURCE_REPO}" rev-parse --show-toplevel 2>/dev/null || true)"
+    [ -n "${mw_main}" ] && mw_main="$(cd "${mw_main}" 2>/dev/null && pwd -P || true)"
+  fi
+  printf '%s' "${mw_main}"
+}
+
 # wire_pii_git_hook <git-hook> <script> <label> <purpose> <subject> <reads> <scoped> <hooks-dir>
 #
 # Links <hooks-dir>/<git-hook> to the main worktree's core/hooks/<script>. The hook registry
@@ -2579,12 +2606,10 @@ install_mode_template_if_missing() {
 # install_hooks' copy loop only places the scripts in .claude/hooks/, which git never reads.
 # Without these links the guard is fully off.
 #
-# Same scope as the post-merge block (<scoped>, <hooks-dir>), for the same reason: the test
-# suites pass the REAL checkout as --source-repo. Three choices differ from that block:
-#   - The link targets the MAIN worktree's copy, never ${SOURCE_REPO}'s. Linked worktrees
-#     share this hooks dir, so a link into a worktree runs unmerged branch content on
-#     every commit or push, and dangles once the worktree is swept -- and git skips a
-#     dangling hook without a word, which turns the guard off again.
+# Same scope and the same target as the post-merge block (<scoped>, <hooks-dir>, the main
+# worktree's copy per main_worktree_of), for the same reasons: the test suites pass the REAL
+# checkout as --source-repo, and linked worktrees share this hooks dir. Two choices differ
+# from that block:
 #   - The link is relative when the hooks dir is <main>/.git/hooks (survives moving the
 #     repo), absolute otherwise (a core.hooksPath elsewhere).
 #   - An existing hook that is not ours is never replaced: it stays, and the run says
@@ -2593,23 +2618,9 @@ install_mode_template_if_missing() {
 wire_pii_git_hook() {
   local pc_hook="$1" pc_script="$2" pc_label="$3" pc_purpose="$4" pc_subject="$5" pc_reads="$6"
   local pc_scoped="$7" pc_hdir="$8"
-  local pc_dst pc_main pc_target pc_link pc_cur pc_wl pc_hp_eff pc_hp_local
+  local pc_dst pc_main pc_target pc_link pc_cur pc_hp_eff pc_hp_local
   pc_dst="${pc_hdir}/${pc_hook}"
-  # Captured, then cut -- never piped into a reader that stops early. Under `set -Eeuo
-  # pipefail` an early-exiting reader (awk … exit, head) makes git's EPIPE the pipeline's
-  # status, and on a repo with a few hundred worktrees that aborted the install every time.
-  pc_wl="$(git -C "${SOURCE_REPO}" worktree list --porcelain 2>/dev/null || true)"
-  pc_main="${pc_wl%%$'\n'*}"
-  case "${pc_main}" in "worktree "*) pc_main="${pc_main#worktree }" ;; *) pc_main="" ;; esac
-  [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
-  # Where that first entry names a git dir rather than a checkout (a separate git dir, a
-  # submodule) and the source repo is not a linked worktree, its own top level is the checkout.
-  if [ ! -f "${pc_main}/core/hooks/${pc_script}" ] \
-     && [ "$(git -C "${SOURCE_REPO}" rev-parse --absolute-git-dir 2>/dev/null || true)" = \
-          "$(git -C "${SOURCE_REPO}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)" ]; then
-    pc_main="$(git -C "${SOURCE_REPO}" rev-parse --show-toplevel 2>/dev/null || true)"
-    [ -n "${pc_main}" ] && pc_main="$(cd "${pc_main}" 2>/dev/null && pwd -P || true)"
-  fi
+  pc_main="$(main_worktree_of "${pc_script}")"
   pc_target="${pc_main}/core/hooks/${pc_script}"
   # A core.hooksPath set outside this repository's own config (global or system scope) names
   # a hooks dir other repositories share; wiring the guard there would scan their commits too.
@@ -2762,7 +2773,15 @@ install_hooks() {
   # every test skips it. A repo cloned outside the workspace is a legitimate but
   # non-default layout: it is told how to install the hook rather than silently
   # skipped, and PMO_INSTALL_GIT_HOOKS=1 forces the install for it.
-  local gh_src="${SOURCE_REPO}/core/hooks/git-post-merge-deploy.sh"
+  #
+  # The link targets the MAIN worktree's copy (main_worktree_of), never ${SOURCE_REPO}'s:
+  # an install run from a linked worktree would otherwise make every merge in the primary
+  # run that worktree's deploy script, unreviewed branch edits included, and leave the hook
+  # dangling once the worktree is swept. An unresolved main worktree leaves gh_src empty,
+  # which the unresolved branch below reports instead of linking anything.
+  local gh_main gh_src=""
+  gh_main="$(main_worktree_of git-post-merge-deploy.sh)"
+  [ -n "${gh_main}" ] && gh_src="${gh_main}/core/hooks/git-post-merge-deploy.sh"
   local gh_dir gh_dst gh_repo_abs gh_ws_abs gh_scoped=0
   gh_repo_abs="$(cd "${SOURCE_REPO}" 2>/dev/null && pwd -P || true)"
   gh_ws_abs="$(cd "${WORKSPACE_ROOT}" 2>/dev/null && pwd -P || true)"

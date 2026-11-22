@@ -36,6 +36,11 @@
 #   Arm 9 — A3d judges the hook at one hop, as the guard resolves itself: a chain of links
 #           and a link to another copy of the guard FAIL (refresh re-points the copy), and
 #           a global core.hooksPath is neither wired nor FAILed, with the reason printed.
+#   Arm 10 — an install run from a linked worktree of the sandbox repo links post-merge,
+#           pre-commit and pre-push to the MAIN worktree's copies, and post-merge still
+#           resolves once that worktree is removed. Linked worktrees share the hooks dir,
+#           so a post-merge linked to a worktree's copy would run that branch's deploy
+#           script on every merge in the primary. (Runs before Arm 7, like Arm 8.)
 #
 # The pre-push hook (git-pre-push-pii.sh) is wired by the same installer helper, so the
 # arms that pin the helper's behaviour assert it for pre-push as well: Arm 1 (linked,
@@ -361,6 +366,33 @@ report "A3d SKIPs a global core.hooksPath rather than FAILing with a remedy that
   "$(grep -q '^\[A3d\] SKIP.*outside this repository' <<<"${out}" && echo 1 || echo 0)" \
   "A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}")"
 git config --global --unset core.hooksPath
+
+# --- Arm 10: an install from a linked worktree keeps every hook on the main worktree ---
+# The worktree is one of the SANDBOX repo's, so it shares only the sandbox's hooks dir. It
+# sits inside the workspace root, which puts the install in scope, and it is installed from
+# with its own copy of the installer, the way an operator in an agent worktree would.
+printf '\nArm 10. An install from a linked worktree links every hook to the main worktree\n'
+/bin/rm -f "${HD}/pre-commit" "${HD}/pre-push"
+LWT="${WS}/linked-worktree"
+git -C "${SRC}" worktree add -q --detach "${LWT}" 2>/dev/null
+MAINPM="$(resolve_path "${SRC}/core/hooks/git-post-merge-deploy.sh")"
+report "precondition: the linked worktree carries its own deploy-script copy" \
+  "$([ -f "${LWT}/core/hooks/git-post-merge-deploy.sh" ] && [ -n "${MAINPM}" ] && echo 1 || echo 0)"
+out="$("${LWT}/docs/scripts/setup-workspace.sh" --source-repo "${LWT}" --workspace-root "${WS}" --config-root "${CFG}" < <(yes "") 2>&1)"
+rc=$?
+report "an install from the linked worktree exits 0" "$([ "${rc}" -eq 0 ] && echo 1 || echo 0)" \
+  "exit ${rc}; tail: $(printf '%s' "${out}" | tail -3 | tr '\n' '|')"
+got="$(resolve_path "${HD}/post-merge")"
+report "post-merge resolves to the main worktree's deploy script, not the linked worktree's" \
+  "$([ -n "${got}" ] && [ "${got}" = "${MAINPM}" ] && echo 1 || echo 0)" \
+  "post-merge resolves to '${got:-<nothing>}'"
+report "pre-commit and pre-push resolve to the main worktree's copies" \
+  "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && [ "$(resolve_path "${HD}/pre-push")" = "$(resolve_path "${PUSHHOOK}")" ] && echo 1 || echo 0)"
+git -C "${SRC}" worktree remove --force "${LWT}" 2>/dev/null
+got="$(resolve_path "${HD}/post-merge")"
+report "post-merge still resolves after the linked worktree is removed" \
+  "$([ -n "${got}" ] && [ "${got}" = "${MAINPM}" ] && echo 1 || echo 0)" \
+  "post-merge resolves to '${got:-<nothing>}'"
 
 # --- Arm 7: a repo with many linked worktrees still installs and validates ---
 # Reading `git worktree list` through a reader that exits early (awk … exit) under
