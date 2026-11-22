@@ -276,6 +276,58 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | VERIFIED | 2026-11-17 |
 | v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | VERIFIED | 2026-11-17 |
 | v5.13 | superseded-pr-runs-cancelled | #8440, #9007 | #9026 | `f5df15cdc3000068c475487f21032c4e7e85c7bb` | `v5.13` | VERIFIED | 2026-11-17 |
+| v5.14 | script-guard-refuses-only-what-executes | #8490, #8548, #8326, #8493, #8327 | #9093 | `d8814512bf4612d330ef23132316d9b536fef312` | `v5.14` | DEPLOYED | 2026-11-22 |
+
+#### Deployment Log v5.14
+**Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** Each was read back. The plan's one deployment item, the refresh of the deployed security-hook bundle, is operator-side and is pending (item 3), so the deployed `block-destructive.sh` is not yet the merged version. Paths are repository-relative.
+
+- **(1) The merge.** It carries the release's 11 changed paths to `main` (1 added, 10 modified), measured at the merge commit `d8814512` against its first parent `45d2c144`:
+  - `core/hooks/block-destructive.sh` (BLOCK-DESTRUCTIVE-022), its suite `core/hooks/tests/block-destructive.test.sh`, the walk payload corpus `core/hooks/tests/fixtures/walk-payload-corpus.txt` and the fixtures README;
+  - the readiness fragment `core/rules/bypass-mode-readiness/block-destructive.md` and the registry generated from it, `core/rules/bypass-mode-readiness.md`;
+  - ADR-150;
+  - three process-catalog pages under `core/process-catalog/engineering-harness/`, carried by the citation re-resolve made earlier on the branch (`10665717`, citation line numbers only);
+  - this release's plan.
+- **(2) Phase B4 ran once.** It ran from the Stage-12 session worktree detached at `origin/main` `afbdce66`, which contains the merge commit (`merge-base --is-ancestor` exit 0). `main` had moved past the merge by one pull request, #9106, merged at 04:21:39Z. It changes `core/hooks/block-egress.sh`, that hook's suite, the hook test runner and the generated registry, and touches no skill, no package and no rules-mirror source.
+  - **Command:** `bash core/deploy/deploy.sh --deploy --release script-guard-refuses-only-what-executes --no-targets`. It exited 0 and reported nothing to deploy beyond the rules mirror.
+  - **B4.5 record:**
+    - **Join key:** `script-guard-refuses-only-what-executes`, derived from the PR's head ref, asserted non-empty and read back with 60 rows under it before the deploy, none of them `deployment-status`. Control: the v5.13 slug reads 71.
+    - **Targets:** none, so the run used `--no-targets`. The B4.3 derivation found 0 of the merge's 11 paths under a skill root or `packages/`, so there was no candidate and no non-member; the roster read 55 names. Sensitivity: planted `release/skills/release-hub/SKILL.md` and `packages/comms-writer.skill` paths derive both names.
+    - **Deploy mode:** the run printed no `Deploy mode: user-local only` line. With no target named, neither the skill half nor the package half ran.
+    - **Rules mirror:** re-laid at `<deploy-root>/.claude/rules/`, 9 files written, unchanged in membership. All 9 members read byte-equal to source before and after the deploy; the merge changes no mirror member.
+    - **Registry:** the run regenerated the hook-registry index from its sources and left the tracked tree unchanged; `build-hook-registry.py --check` on `afbdce66` reads in sync.
+  - **Rows written:** under the slug, the run wrote one `deploy-rules-mirror` row, outcome `resolved` (`result:SUCCESS`), at 04:26:19Z. There is no `deploy-skill` and no `deploy-package` row, as `--no-targets` requires.
+- **(3) Owed and pending: the security-hook bundle.** The merge edits `core/hooks/block-destructive.sh`, and `deploy.sh --deploy` does not propagate the deployed hook tree. The plan's Delivery Strategy gives the refresh to the operator: `docs/scripts/setup-workspace.sh --refresh-hooks`, which carries no script-execution allowlist row, so the executor did not run it. At Stage 12 the deployed copy at `<workspace-root>/.claude/hooks/block-destructive.sh` reads sha256 prefix `026464b84939`, equal to the pre-merge source; the merged source reads `bb55850d503d`. The Success Indicator is therefore not yet met. A refresh from `main`'s tip also carries #9106's `block-egress.sh`. After the refresh the hub verifies `deploy.sh --check` Check 79, and the refresh instant opens the D-Readings window.
+- **Nothing else is owed.** The merge changes no skill, no package, no `harness/` path, no allowlist and no context-file template, so no `.skill` rebuild and no composition-surface propagation is owed.
+
+**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy); and, pending, the operator's hook-bundle refresh.
+- **The merge.** PR #9093 merged to `main` at `d8814512bf4612d330ef23132316d9b536fef312` (parents `45d2c144` / `3263b7a9`) by `gh pr merge --merge --match-head-commit`, with no `--admin`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit, and the host reads the merge commit `verified=true, reason=valid`. The repository's `delete_branch_on_merge` setting removed the release branch from the remote. The PR carries no closing reference, so the five cards stay open for their Stage 13 readings, as the Stage 9 decision requires.
+- **The pre-merge state, on head `3263b7a9`.**
+  - **A.4:** the plan declares no strategy token; the merge-commit strategy used is allowed (`merge`, `squash` and `rebase` all read `true`).
+  - **A.5:** 0 commits behind `main` `45d2c144`, so no merge into the branch.
+  - **A.5.6:** the dry run read `v5.14`, equal to the provisional, so `version-freeness = FREE`.
+  - **A.5.7:** the release adds no ADR, so the sub-step does not fire.
+  - **A.5.8:** the four commands exited 0, 0, 1 and 0, so `process-catalog repair = not needed`. The staleness command's exit 1 (`depicted_changed=66 cited_changed=64`) is reported and decides nothing. No publication hold: the plan carries no hold row and the release adds no catalog file.
+  - **A.6 and A.7:** `MERGEABLE` / `CLEAN`. The PR reached Stage 12 still in draft, which means the Stage 9 draft-to-ready transition had not run. It was marked ready on the hub's brief at 04:14:41Z and read back `isDraft=false`. The ready event re-ran the PR workflows; once they finished, 61 of 61 checks were in the `pass` bucket and `main` had not moved. **B0:** no dependent PR.
+- **Phase B1.1.** The sweep exited 0: 2 open pull requests on `main`, both clear, none newly unmergeable.
+- **Phase B1.2.** The three process-catalog checks on the merge commit's push run completed `success`, and the three commands exited 0 in a worktree at the merge commit, so `repair owed at B5: no`.
+- **The version claim.** `claim-version.sh` claimed **`v5.14`** for bump class `minor` by atomic ref-CAS, with no collision reported. That equals the A.5.6 dry run.
+  - `--stamp-slug`, derived from the PR's head ref, and `--stamp-branch` were passed explicitly. The branch was cut at the merge commit before the claim.
+  - The tag object `a46f143f` is signed and annotated and peels to the merge commit on `origin`. `git tag -v` reads a good ED25519 signature, and the host reads the tag `verified=true, reason=valid`. The message is the tool's default, `v5.14 — release SHA = merge d8814512bf46`.
+  - **Re-version ledger input:** none. The provisional and the claimed version are both `v5.14`.
+- **The claim-time stamp.** The manifest was plan-only, staling no package. The stamp commit `8ef9a7e7` (signed; the host reads it `verified=true, reason=valid`) renamed the plan to `release/releases/plans/v5/v5.14_RELEASE_PLAN.md` and resolved its one placeholder, leaving none.
+- **The version-binding row (B3.1)** was appended by the executor at 04:25:26Z: rows under the slug went from 59 to 60, and rows with the `d:version-claim` payload from 0 to 1. The event-record integrity cutover was already bound, so B3.2 was a no-op (`--assert-bound` exit 0).
+
+**Timestamp:** 2026-11-22 04:16 UTC (Sunday). The `Date` cell is the merge event: the merge's `mergedAt`, `2026-11-22T04:16:43Z`. Sequence:
+- the draft-to-ready transition at `04:14:41Z`;
+- the re-read of the head, the check roster and `main` (`45d2c144`), then the merge, issued at `04:16:39Z`;
+- the Phase B1.1 sweep and the Phase B1.2 read after the merge;
+- the claim, with the tag at `04:24:33Z` and the stamp commit at `04:24:35Z`;
+- the version-binding row at `04:25:26Z`;
+- the stamped deploy's row at `04:26:19Z`.
+
+The day of the week is computed from the date.
+**Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.14, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. The security-hook bundle refresh, the plan's one deployment item, is operator-side and pending, so the deployed `block-destructive.sh` is not yet the merged version. It is not a deploy failure.
 
 #### Deployment Log v5.13
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** Each was read back. The plan's one Operational Deployment Manifest row, `core/rules/git-workflow.md` to the rules mirror, is deployed and byte-equal to source. One composition surface the manifest does not list, the script-execution allowlist, is not propagated and is owed (item 3). Paths are repository-relative.
