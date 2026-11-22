@@ -28,11 +28,19 @@ block-skill-direct-edit.test.sh|Test 26:|defect|the hook parses the sentinel tim
 # uutils printf rejects a %*s width of 1 MiB, so this arm's padding is never built.
 block-egress.test.sh|AC-E007-V7c0:|defect|uutils printf rejects the 1 MiB %*s width, so the command never passes the cap the arm grades
 
+# A 256 KiB command passes Linux's 128 KiB per-argument limit twice over: the suite hands it to jq
+# as an argument, so its payload is never built, and the hook hands its input to an external printf
+# as one. Either way the hook refuses the command as malformed input, exit 2, before the length gate
+# runs, so the arm sees a refusal whose cause is not chars. The verdict is still a refusal.
+block-destructive.test.sh|CEIL-AT-CAP-chars-far [en_US.UTF-8]:|defect|the 256 KiB command passes Linux's per-argument limit in the suite's payload builder and in the hook's input check, so it is refused as malformed input instead of by the length gate
+block-destructive.test.sh|CEIL-AT-CAP-chars-far [C]:|defect|the 256 KiB command passes Linux's per-argument limit in the suite's payload builder and in the hook's input check, so it is refused as malformed input instead of by the length gate
+
 # Timing controls: on bash 5.3 the deliberately slow pre-fix copy finishes far inside the
 # budget, so the control cannot show that its timed arms would see a cost.
 block-destructive.test.sh|AC-022-X-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
 block-destructive.test.sh|AC-022-Y-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
 block-destructive.test.sh|AC-022-Z-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
+block-destructive.test.sh|CEIL-LIN-CTL:|timing|the copy whose quote-parity pass never runs is not slow under bash 5.3, so the control cannot reach the budget
 block-egress.test.sh|AC-E007-T-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
 block-egress.test.sh|AC-E007-X-CTL:|timing|the pre-fix copy is not slow under bash 5.3, so the control cannot reach the budget
 block-egress.test.sh|AC-E007-Y-CTL:|timing|the pre-fix copy is not reliably slow under bash 5.3; this control passed on one run and failed on the next
