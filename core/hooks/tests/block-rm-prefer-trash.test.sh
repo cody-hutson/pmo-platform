@@ -2433,11 +2433,15 @@ print("over " + " ".join(rounds))'
 hd_cost() {
   /usr/bin/python3 -c "$HD_COST_PY" "$1" "$(bash_payload "$HD_CAP_IN")" "$(bash_payload "$(hd_pad 5)"$'\ncat /dev/null')" "$HD_COST_BOUND" 2>/dev/null || true
 }
+hd_cost_says() { # $1 = hd_cost output -> its verdict and rounds, on the arm's own line
+  if [ -z "$1" ]; then /usr/bin/printf '%s' 'not measured (the measurement did not run)'
+  else /usr/bin/printf 'verdict %s; CPU seconds with/without per round: %s' "${1%% *}" "${1#* }"; fi
+}
 hd_cost_out="$(hd_cost "$HOOK")"
 if [ "${hd_cost_out%% *}" = within ]; then
-  /usr/bin/printf 'PASS: %s\n' "HDATA-COST: at the cap the hook costs within ${HD_COST_BOUND} times the same command with no here-document — CPU seconds with/without per round: ${hd_cost_out#within }"; PASS=$((PASS + 1))
+  /usr/bin/printf 'PASS: %s\n' "HDATA-COST: at the cap the hook costs within ${HD_COST_BOUND} times the same command with no here-document — $(hd_cost_says "$hd_cost_out")"; PASS=$((PASS + 1))
 else
-  /usr/bin/printf 'FAIL: %s\n' "HDATA-COST: at the cap the hook costs at most ${HD_COST_BOUND} times the same command with no here-document — measured ${hd_cost_out:-nothing (the measurement did not run)}, as CPU seconds with/without per round"; FAIL=$((FAIL + 1))
+  /usr/bin/printf 'FAIL: %s\n' "HDATA-COST: at the cap the hook costs at most ${HD_COST_BOUND} times the same command with no here-document — $(hd_cost_says "$hd_cost_out")"; FAIL=$((FAIL + 1))
 fi
 # The arm can fail (#9044): the same measurement on a copy of the hook whose here-document
 # pre-pass runs HD_COST_SENS_RUNS extra times before its real run (that copy's one changed line)
@@ -2462,9 +2466,9 @@ else
   else
     hd_sens_out="$(hd_cost "${hd_sens_dir}/block-rm-prefer-trash-slowhd.sh")"
     if [ "${hd_sens_out%% *}" = over ]; then
-      /usr/bin/printf 'PASS: %s\n' "HDATA-COST-SENS: a here-document path run $((HD_COST_SENS_RUNS + 1)) times reads over ${HD_COST_BOUND} — CPU seconds with/without per round: ${hd_sens_out#over }"; PASS=$((PASS + 1))
+      /usr/bin/printf 'PASS: %s\n' "HDATA-COST-SENS: a here-document path run $((HD_COST_SENS_RUNS + 1)) times reads over ${HD_COST_BOUND} — $(hd_cost_says "$hd_sens_out")"; PASS=$((PASS + 1))
     else
-      /usr/bin/printf 'FAIL: %s\n' "HDATA-COST-SENS: a here-document path run $((HD_COST_SENS_RUNS + 1)) times reads over ${HD_COST_BOUND} — measured ${hd_sens_out:-nothing (the measurement did not run)}, as CPU seconds with/without per round"; FAIL=$((FAIL + 1))
+      /usr/bin/printf 'FAIL: %s\n' "HDATA-COST-SENS: a here-document path run $((HD_COST_SENS_RUNS + 1)) times reads over ${HD_COST_BOUND} — $(hd_cost_says "$hd_sens_out")"; FAIL=$((FAIL + 1))
     fi
   fi
   case "${hd_sens_dir##*/}" in rmt-hdc.*) /bin/rm -rf "$hd_sens_dir" ;; esac
