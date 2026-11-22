@@ -7,6 +7,7 @@ Corpus-level index of all pmo-platform releases. Chronological-recent-first row 
 
 | Version | Milestone | Date | Theme | Release PR | Release Notes |
 |---|---|---|---|---|---|
+| v5.14 | script-guard-refuses-only-what-executes | 2026-11-22 | — | #9093 | [notes/v5.14_RELEASE_NOTES.md](notes/v5.14_RELEASE_NOTES.md) |
 | v5.13 | superseded-pr-runs-cancelled | 2026-11-17 | — | #9026 | [notes/v5.13_RELEASE_NOTES.md](notes/v5.13_RELEASE_NOTES.md) |
 | v5.12 | obligation-runners-declared | 2026-11-17 | — | #8995 | [notes/v5.12_RELEASE_NOTES.md](notes/v5.12_RELEASE_NOTES.md) |
 | v5.11 | script-guard-reads-every-token-as-the-shell-does | 2026-11-17 | — | #8993 | [notes/v5.11_RELEASE_NOTES.md](notes/v5.11_RELEASE_NOTES.md) |

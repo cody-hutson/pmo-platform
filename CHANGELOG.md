@@ -21,6 +21,12 @@ forward, never backfilled.
 
 ## [Unreleased]
 
+## [v5.14] - 2026-11-22
+
+The script guard lets harmless text and here-documents through, names its option check's cause, and refuses commands it cannot finish.
+
+[Full notes](release/releases/notes/v5.14_RELEASE_NOTES.md) · [Release](https://github.com/cody-hutson/pmo-platform/releases/tag/v5.14)
+
 ## [v5.13] - 2026-11-18
 
 A newer push to a pull request now cancels the older push's CI runs, and a pull-request check keeps every workflow doing so.

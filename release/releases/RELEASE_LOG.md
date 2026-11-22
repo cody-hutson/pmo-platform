@@ -276,7 +276,7 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.11 | script-guard-reads-every-token-as-the-shell-does | #8317, #8318, #8319, #8491, #8320, #8316, #8492 | #8993 | `20149aebe456223290d7363da642fe842334fcc3` | `v5.11` | VERIFIED | 2026-11-17 |
 | v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | VERIFIED | 2026-11-17 |
 | v5.13 | superseded-pr-runs-cancelled | #8440, #9007 | #9026 | `f5df15cdc3000068c475487f21032c4e7e85c7bb` | `v5.13` | VERIFIED | 2026-11-17 |
-| v5.14 | script-guard-refuses-only-what-executes | #8490, #8548, #8326, #8493, #8327 | #9093 | `d8814512bf4612d330ef23132316d9b536fef312` | `v5.14` | DEPLOYED | 2026-11-22 |
+| v5.14 | script-guard-refuses-only-what-executes | #8490, #8548, #8326, #8493, #8327 | #9093 | `d8814512bf4612d330ef23132316d9b536fef312` | `v5.14` | VERIFIED | 2026-11-22 |
 
 #### Deployment Log v5.14
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** Each was read back. The plan's one deployment item, the refresh of the deployed security-hook bundle, is operator-side and is pending (item 3), so the deployed `block-destructive.sh` is not yet the merged version. Paths are repository-relative.
@@ -327,7 +327,21 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 
 The day of the week is computed from the date.
 **Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.14, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
-**Result:** PARTIAL — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. The security-hook bundle refresh, the plan's one deployment item, is operator-side and pending, so the deployed `block-destructive.sh` is not yet the merged version. It is not a deploy failure.
+**Velocity:** planned 22 pts / delivered 22 pts (1.00); files-changed 11; allocation 4/18/0 pts (feature/debt/protocol-slack); class novel; mechanism: compute-release-velocity.sh
+**Result:** PARTIAL → SUCCESS (the plan's one deployment item completed after Stage 12: the operator refreshed the deployed security-hook bundle, and the reading window opened at the refresh instant, 2026-11-22T04:36:21Z, as relayed by the release hub. Stage 13 re-read the deployed `block-destructive.sh` at sha256 prefix `bb55850d503d`, equal to the merged source, and every file Check 79's publish map compares by content reads byte-equal to source: 31 under `core/hooks/` and the 2 libraries co-deployed from `core/deploy/`. The 4 instance mode files the map requires are present, and the map marks test data not deployed. Control: the pre-merge source reads `026464b84939`, which the deployed copy no longer matches). As recorded at Stage 12: the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back. The security-hook bundle refresh, the plan's one deployment item, is operator-side and pending, so the deployed `block-destructive.sh` is not yet the merged version. It is not a deploy failure.
+**Outcome:** PARTIAL
+**Outcome rationale:** PARTIAL rests on QC4-06 reading PARTIALLY-ATTAINED: the code limbs hold on post-deploy `main` and the deployed guard equals the merged source, while the three post-deploy readings (#8490 AC4, #8548 AC-4, #8493 AC-2) fall inside the 30-day window and the enclosure-rows owner card, follow-up F7, is not yet filed. The token is read back when the readings land.
+**Close-Class-Telemetry:** retro-conformance N/A — no retro register found for v5.14; lessons-population N/A — no lessons register found; carry-forward-closure N/A — no carry-forward items raised; pattern-emergence deferred-to-aggregate (see synthesize-release-learnings.sh); rollup-presence N/A — no retro register found; evidence-preservation 29/29 (1.00); evidence-close-gate N/A; mechanism: compute-close-class-telemetry.sh
+
+#### Release Learnings v5.14
+
+**Synthesized at:** 2026-11-22T06:48:18Z
+**Source events:** 1 `release-synthesis/learnings-triple` row(s) from `pipeline-event-log.md` (filter: release=`v5.14`)
+**Source-row anchors:** `pipeline-event-log.md` row(s) at ts `2026-11-22T06:47:41Z`
+
+**Surprise:** the PR reached Stage 12 in draft, as the Stage 9 draft-to-ready step never ran, and Stage 12 readied it on the hub brief, not a HALT
+**Would-change:** record each lean compression as a decision
+**Watch-for:** three readings due by the 2026-12-15 review, on cards the close-out driver would close
 
 #### Deployment Log v5.13
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** Each was read back. The plan's one Operational Deployment Manifest row, `core/rules/git-workflow.md` to the rules mirror, is deployed and byte-equal to source. One composition surface the manifest does not list, the script-execution allowlist, is not propagated and is owed (item 3). Paths are repository-relative.

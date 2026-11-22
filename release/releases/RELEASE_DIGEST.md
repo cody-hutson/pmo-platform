@@ -8,6 +8,8 @@ Corpus-level digest grouped by version family. Per-version 3-5 line summary. App
 
 ## Knowledge Corpus
 
+### v5.14 (2026-11-22) — The script guard lets harmless text through and refuses what it cannot finish
+
 ### v5.13 (2026-11-18) — A newer push cancels the older push's CI runs, and a gate keeps it that way
 ### v5.12 (2026-11-17) — Stale hand-kept lists get caught, and every release close measures quality share
 ### v5.11 (2026-11-17) — The script guard reads each command the way the shell will run it
