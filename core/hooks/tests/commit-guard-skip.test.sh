@@ -132,7 +132,24 @@ must_block "cat > /tmp/m.txt <<'EOF'${NL}Don't${NL}EOF${NL}git commit -n -F /tmp
 # its length gate (SCRIPT_CEIL_CHARS, 65536 characters) before any rule reads it, so a 70 KB
 # command never reaches -024: it is refused with or without the flag. That fail-closed
 # outcome is what this pair pins.
-LONG_WORD="$(/usr/bin/printf '%070000d' 0)"
+# Both words are built in the shell, not with a printf field width: the Linux runner's uutils
+# printf refuses very wide fields (linux-known-failures.txt records it at 1 MiB), and an empty
+# word would turn every arm below into a short command that tests nothing. The length check
+# makes a builder that ever comes up short fail here, loudly, instead.
+zero_word() {
+  local w="0" n="$1"
+  while [ "${#w}" -lt "$n" ]; do w="${w}${w}"; done
+  /usr/bin/printf '%s' "${w:0:n}"
+}
+word_len_check() { # $1 label, $2 the word, $3 the length it must have
+  if [ "${#2}" -eq "$3" ]; then
+    /usr/bin/printf 'PASS: precondition: the %s word is %s characters\n' "$1" "$3"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: precondition: the %s word is %s characters, want %s\n' "$1" "${#2}" "$3"; FAIL=$((FAIL + 1))
+  fi
+}
+LONG_WORD="$(zero_word 70000)"
+word_len_check "70 KB" "$LONG_WORD" 70000
 test_case "refuse: git commit -m <70 KB word> -n (above -022's length gate)" \
   "$(bash_payload "git commit -m ${LONG_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-022"
 test_case "refuse: git commit -m <70 KB word> (above -022's length gate)" \
@@ -144,7 +161,8 @@ test_case "refuse: git commit -m <70 KB word> (above -022's length gate)" \
 # gate and over a pipe's capacity only where ${#} counts characters, which depends on the
 # locale, so no such arm is kept. tests/ghsa-xxjm-long-input-matchers.test.sh pins the
 # shared matches() for the hooks without a length gate.)
-NEAR_WORD="$(/usr/bin/printf '%060000d' 0)"
+NEAR_WORD="$(zero_word 60000)"
+word_len_check "60 KB" "$NEAR_WORD" 60000
 test_case "refuse: git commit -m <60 KB word> -n" \
   "$(bash_payload "git commit -m ${NEAR_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-024"
 test_case "allow: git commit -m <60 KB word>" \
