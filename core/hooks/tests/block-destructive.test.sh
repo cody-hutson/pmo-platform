@@ -5617,8 +5617,11 @@ test_case "HD-07a control: an unterminated here-document blocks (model cannot re
 bash /tmp/evil.sh')" \
   2 "BLOCK-DESTRUCTIVE-022"
 
-test_case "HD-07b control: a NON-carrier receiver keeps the false positive (residual R-4)" \
-  "$(bash_payload 'cat <<'"'"'RPT'"'"' > /tmp/out.md
+# Re-pointed by #8326: its receiver was cat, which the receiver list now admits under the
+# whole-command no-consumer test (HD-RECV-ADMIT-cat-redirect-after is that shape's arm). A receiver
+# on no list keeps R-4's role; HD-RECV-CTL-nonmember is its twin.
+test_case "HD-07b control: a receiver on no list keeps the false positive (residual R-4)" \
+  "$(bash_payload 'tee /tmp/out.md <<'"'"'RPT'"'"'
 bash /tmp/evil.sh
 RPT')" \
   2 "BLOCK-DESTRUCTIVE-022"
@@ -5717,12 +5720,14 @@ RPT')" \
   0
 
 # ALL-OR-NOTHING, asserted directly: a command mixing an excisable here-document
-# with a declined one excises NEITHER and keeps its pre-change verdict.
+# with a declined one excises NEITHER and keeps its pre-change verdict. The declined
+# body's receiver was cat until #8326 admitted it; a line counter, on no list, keeps
+# the arm's role.
 test_case "HD-16 control: one declined body means the whole command is left adjudicated" \
   "$(bash_payload 'gh issue comment 1 --body-file - <<'"'"'A'"'"'
 bash /tmp/evil.sh
 A
-cat <<'"'"'B'"'"'
+wc -l <<'"'"'B'"'"'
 plain
 B')" \
   2 "BLOCK-DESTRUCTIVE-022"
@@ -6593,7 +6598,8 @@ WC_HOOKS="${WC_ROOT}/.claude/hooks"
 /bin/cp "${HOOK%/*}/lib/"*.sh  "${WC_HOOKS}/lib/" 2>/dev/null || true
 /bin/cp "${HOOK%/*}/lib/"*.awk "${WC_HOOKS}/lib/" 2>/dev/null || true
 WC_D="/tmp/pmo-walk-corpus"
-/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
+# The interpreter-named path is listed for row AS26 (#8548, D-2); no other row names it.
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" "${WC_D}/bin/bash" > "${WC_ROOT}/.claude/script-execution-allowlist.txt"
 /usr/bin/printf 'enforce' > "${WC_HOOKS}/.mode"
 /bin/cp "$HOOK" "${WC_HOOKS}/block-destructive.sh"
 /usr/bin/sed \
@@ -9050,7 +9056,8 @@ ENCL_NAPY='/tmp/pmo-encl-na.py'
 #   supp     a segment interior to a carrier's quote is not suppressed in the second view
 #   route    the shell-arm router sends a first-view finding to the enclosure phase too
 #   split    the first view reads `)` as a separator
-#   noex     the here-document pre-pass excises nothing
+#   noex     the here-document pre-pass excises nothing for the four carriers (the cat
+#            receiver, #8326, is its own pattern line, which this copy does not rewrite)
 #   suppall  the first view's carrier suppression is switched off
 #   smallp   the position ceiling lowered to 4
 #   smallb   the remainder budget lowered to 64 bytes
@@ -9356,10 +9363,6 @@ encl_arm "AC-ENCL-RESIDUAL-body-idiom (pin, not fix-evidence): the commit idiom 
 Run \`bash ${ENCL_NA}\` to verify
 EOF
 )\"" W B a shell-enclosure
-encl_arm "AC-ENCL-RESIDUAL-heredoc-kept (pin, not fix-evidence): a body left in place with a code span naming a script" \
-  "cat > notes.md <<'EOF'
-Run \`bash ${ENCL_NA}\` to reproduce
-EOF" W B a shell-enclosure
 encl_arm "AC-ENCL-RESIDUAL-backtick-close (pin, not fix-evidence): text after a closing backtick" \
   "echo \`date\` bash ${ENCL_NA}" W B a shell-enclosure
 encl_arm "AC-ENCL-RESIDUAL-carrier-moved (pin, not fix-evidence): a quoted argument after an unquoted enclosure, under a carrier" \
@@ -9710,6 +9713,364 @@ qscan_mut "QSCAN-CMT-R1-mut: the comment-clause mutant reads it as allowed" bloc
 qscan_arm "QSCAN-HDBQ: a backquote in a comment on a carrier here-document's operator line, its body naming an unlisted script" QC34 B - -
 qscan_arm "QSCAN-DOLLAR-P29: an even dollar run before a quote is a plain quote (QC29, the declared precision row)" QC29 a - -
 
+# --- #8490: a command word that begins with a backtick is a command substitution, not a path
+# (release script-guard-refuses-only-what-executes; design on sub-task #9059, review on #9084).
+# The exec arm declines such a word and leaves it to the position its backtick opens, only where
+# the second view is known to read that position (markers M-EXEC-TICK*). Rows are read from the
+# hermetic enclosure root above. XT_TICK counts the call's rows whose path begins with a backtick.
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/' \
+  "$HOOK" > "${ENCL_HOOKS}/block-destructive-xforced.sh"
+/usr/bin/sed '/# >>> M-EXEC-TICK$/,/# <<< M-EXEC-TICK$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xrev.sh"
+/usr/bin/sed '/# M-EXEC-TICK-GUARD/s/\[ "\$script_encl_all" -eq 1 \] && //' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnoguard.sh"
+/usr/bin/sed '/# M-EXEC-TICK-GUARD/s/ && \[ "\$script_hidx" -eq 0 \]//' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnohidx.sh"
+/usr/bin/sed '/# M-EXEC-TICK-STATE/s/^\([[:space:]]*\)[^)]*)/\1*)/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnostate.sh"
+/usr/bin/sed '/# M-EXEC-TICK-TAIL/s/) : ;;/) script_tick_decline=1 ;;/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnotail.sh"
+/usr/bin/sed -e '/# M-EXEC-TICK-NEST/d' -e 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xnonestb.sh"
+/usr/bin/sed -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' \
+  -e '/# M-EXEC-TICK-GUARD/s/\[ "\$script_encl_all" -eq 1 \] && //' "$HOOK" > "${ENCL_HOOKS}/block-destructive-xsmallpng.sh"
+for xt_c in xforced xrev xnoguard xnohidx xnostate xnotail xnonestb xsmallpng; do
+  /bin/chmod +x "${ENCL_HOOKS}/block-destructive-${xt_c}.sh"
+done
+xt_marks="$(/usr/bin/awk '/# >>> M-EXEC-TICK$/ { f = 1 } f { n++ } /# <<< M-EXEC-TICK$/ { f = 0 } END { printf "%d", n }' "$HOOK")"
+xt_nest="$(/usr/bin/grep -c 'M-EXEC-TICK-NEST' "$HOOK" || true)"
+xt_mk_ok=1
+for xt_m in "# >>> M-EXEC-TICK" "M-EXEC-TICK-ALL" "M-EXEC-TICK-GUARD" "M-EXEC-TICK-STATE" "M-EXEC-TICK-NEST" "M-EXEC-TICK-TAIL" "# <<< M-EXEC-TICK"; do
+  /usr/bin/grep -qF -- "$xt_m" "$HOOK" || xt_mk_ok=0
+done
+if [ "$xt_mk_ok" = 1 ] && [ "$xt_marks" -gt 0 ] && [ "$xt_nest" -gt 0 ]; then
+  /usr/bin/printf 'PASS: EXEC-TEXT-MARKS the hook carries the M-EXEC-TICK block (%s lines) and its markers, so the copies below are live\n' "$xt_marks"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: EXEC-TEXT-MARKS the hook lacks the M-EXEC-TICK block or a marker; every copy below is inert\n'
+  FAIL=$((FAIL + 1)); xt_marks="missing"; xt_nest=999
+fi
+encl_shape_arm "EXEC-TEXT-COPY-xforced: only the exec arm's phase constant differs" block-destructive-xforced.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xrev: the M-EXEC-TICK block removed (${xt_marks} lines)" block-destructive-xrev.sh "${xt_marks}/0"
+encl_shape_arm "EXEC-TEXT-COPY-xnoguard: the position-coverage guard removed" block-destructive-xnoguard.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xnohidx: the first-word guard removed" block-destructive-xnohidx.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xnostate: the quote-state condition widened to every state" block-destructive-xnostate.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xnotail: the tail condition removed" block-destructive-xnotail.sh "1/1"
+encl_shape_arm "EXEC-TEXT-COPY-xnonestb: the nested-opener stop removed, remainder budget at 64" block-destructive-xnonestb.sh "$(( xt_nest + 1 ))/1"
+encl_shape_arm "EXEC-TEXT-COPY-xsmallpng: position ceiling at 4 and the guard removed" block-destructive-xsmallpng.sh "2/2"
+
+XT_TICK=0
+xt_count() { # counts ENCL_ROWS rows whose path begins with a backtick -> XT_TICK
+  local line
+  XT_TICK=0
+  while IFS= read -r line; do
+    case "$line" in
+      *'"path":"`'*) XT_TICK=$((XT_TICK + 1)) ;;
+    esac
+  done <<<"$ENCL_ROWS"
+}
+# xt_arm <label> <copy> <command> <verdict> <tick: 0 | 1+ | -> [<B pattern>] [<rows>:<arm>]
+# The last, where an arm's label claims it: the call added exactly <rows> rows, one of which carries
+# <arm> at the enclosure position.
+xt_arm() {
+  local name="$1" copy="$2" cmd="$3" want="$4" tick="$5" pat="${6:-}" rows="${7:-}" ok=1 why=""
+  encl_run "$copy" "$cmd"
+  xt_count
+  if [ "$ENCL_V" != "$want" ]; then ok=0; why="verdict=${ENCL_V}"; fi
+  case "$tick" in
+    0) if [ "$XT_TICK" -ne 0 ]; then ok=0; why="${why} backtick-led rows=${XT_TICK}"; fi ;;
+    1+) if [ "$XT_TICK" -lt 1 ]; then ok=0; why="${why} backtick-led rows=0 (wanted at least 1)"; fi ;;
+  esac
+  if [ -n "$rows" ]; then
+    if [ "$ENCL_NROWS" != "${rows%%:*}" ]; then ok=0; why="${why} rows=${ENCL_NROWS} (wanted ${rows%%:*})"; fi
+    if ! encl_row_has "${rows#*:}"; then ok=0; why="${why} no row carries arm ${rows#*:} at the enclosure position"; fi
+  fi
+  if [ "$ok" = 1 ] && [ "$want" = "B" ] && ! /usr/bin/grep -q "${pat:-BLOCK-DESTRUCTIVE-022}" <<<"$ENCL_ERR"; then ok=0; why="refusal lacks ${pat:-BLOCK-DESTRUCTIVE-022}"; fi
+  if [ "$ok" = 1 ]; then
+    /usr/bin/printf 'PASS: %s (%s, backtick-led rows %s)\n' "$name" "$ENCL_V" "$XT_TICK"
+    PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  wanted %s with backtick-led rows %s; observed%s\n  stderr: %s\n' "$name" "$want" "$tick" " ${why# }" "$ENCL_ERR"
+    FAIL=$((FAIL + 1))
+  fi
+}
+xt_nl=$'\n'
+xt_lt01="true <<'EOF'${xt_nl}notes${xt_nl}\`${ENCL_OK}\` is the entry point${xt_nl}EOF"
+xt_lt01na="true <<'EOF'${xt_nl}notes${xt_nl}\`${ENCL_NA}\` is the entry point${xt_nl}EOF"
+xt_lt02="git commit -m \"\$(cat <<'EOF'${xt_nl}Fix the walk${xt_nl}\`${ENCL_OK}\` now reads it${xt_nl}EOF${xt_nl})\""
+xt_lt03="git commit -m 'Fix it (\`${ENCL_OK}\` reads the file)'"
+# Must-not-flag: text that executes nothing writes no exec-arm row (RED: each reads W).
+xt_arm "EXEC-TEXT-NF-01: an inert here-document line opening with a code span naming a listed script" block-destructive.sh "$xt_lt01" a 0
+xt_arm "EXEC-TEXT-NF-01-forced: the same with the exec arm at enforce" block-destructive-xforced.sh "$xt_lt01" a 0
+xt_arm "EXEC-TEXT-NF-02: the commit idiom, a code span at quote state 2" block-destructive.sh "$xt_lt02" a 0
+xt_arm "EXEC-TEXT-NF-03: a code span opening a parenthesized span inside a single-quoted argument" block-destructive.sh "$xt_lt03" a 0
+xt_arm "EXEC-TEXT-NF-04: the same text naming an unlisted script keeps one row, from the enclosure position only" block-destructive.sh "$xt_lt01na" W 0 "" 1:exec
+xt_arm "EXEC-TEXT-NF-04-forced: at enforce that enclosure row refuses" block-destructive-xforced.sh "$xt_lt01na" B 0
+# The boundary with #8548 (CIAC-1): a substitution outside an assignment's value is this card's.
+xt_arm "SUBST-BOUNDARY-TEXT-LISTED: a backtick substitution as the first word, running a listed script" block-destructive.sh "\`${ENCL_OK}\`" a 0
+xt_arm "SUBST-BOUNDARY-TEXT-LISTED-forced: the same at enforce" block-destructive-xforced.sh "\`${ENCL_OK}\`" a 0
+xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED: running an unlisted script is still recorded, from the enclosure position" block-destructive.sh "\`${ENCL_NA}\`" W 0 "" 1:exec
+xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED-forced: and refused at enforce" block-destructive-xforced.sh "\`${ENCL_NA}\`" B 0
+xt_arm "SUBST-BOUNDARY-TEXT-UNLISTED-pair: without the view the declined word goes unread (the guard's reason)" block-destructive-xsmallpng.sh "true \$(a) \$(b) \$(c) \$(d); \`${ENCL_NA}\`" a -
+xt_arm "EXEC-TEXT-MF-dollar: a backtick substitution running a variable-bearing path is still recorded, from the enclosure position" block-destructive.sh '`$NOPE8490/x.sh`' W 0 "" 1:exec
+# Declared residuals: today's first-view reading kept (green before and after), each with the mutant that would lose it.
+xt_mfcar="bash -c \$(echo -n) 'true${xt_nl}\`${ENCL_NA}\`'"
+xt_arm "EXEC-TEXT-MF-carrier: a carrier-head program string whose later line opens a backtick substitution keeps the first view's record" block-destructive.sh "$xt_mfcar" W 1+
+xt_arm "EXEC-TEXT-MF-carrier-pair: without the quote-state condition that record is lost" block-destructive-xnostate.sh "$xt_mfcar" a -
+xt_pinsq="git commit -m 'Fix${xt_nl}\`${ENCL_OK}\` reads it'"
+xt_arm "EXEC-TEXT-PIN-sq: a single-quoted run spanning lines keeps today's reading (declared residual)" block-destructive.sh "$xt_pinsq" W 1+
+xt_arm "EXEC-TEXT-PIN-sq-pair: without the quote-state condition it is declined" block-destructive-xnostate.sh "$xt_pinsq" a -
+xt_arm "EXEC-TEXT-PIN-ceiling: past the position ceiling today's reading stands" block-destructive-smallp.sh "true \$(a) \$(b) \$(c) \$(d); \`${ENCL_NA}\`" W 1+
+xt_arm "EXEC-TEXT-PIN-tail: a closer followed by a variable-bearing script tail keeps today's reading" block-destructive.sh '`/tmp/pmo-encl-ok.sh`${X8490}.sh' W 1+
+xt_arm "EXEC-TEXT-PIN-tail-pair: without the tail condition it is declined" block-destructive-xnotail.sh '`/tmp/pmo-encl-ok.sh`${X8490}.sh' a -
+xt_arm "EXEC-TEXT-PIN-prefix: behind a wrapper word the word is not the first, and today's reading stands" block-destructive.sh "command \`${ENCL_OK}\`" W 1+
+xt_arm "EXEC-TEXT-PIN-prefix-pair: without the first-word guard it is declined" block-destructive-xnohidx.sh "command \`${ENCL_OK}\`" a -
+xt_arm "EXEC-TEXT-PIN-sep: a substitution holding a pipe has no closer on its segment, and today's reading stands" block-destructive.sh "\`${ENCL_OK} | cat\`" W 1+
+xt_arm "EXEC-TEXT-PIN-escape: a substitution holding an escaped character keeps today's reading" block-destructive.sh "\`${ENCL_OK} a\\ b\`" W 1+
+xt_arm "EXEC-TEXT-PIN-dollar-paren: a command word opened by \$( keeps today's reading (D-2)" block-destructive.sh "\$(${ENCL_OK})" W -
+# CD-1 (review FM-1): past the remainder budget a position holds only the text up to a nested opener,
+# so the decline stops on a nested opener before the closer and today's first-view record stands.
+xt_rem="echo \$(true) \$(true) xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; \`/tmp/pmo\$(true)-encl-na.sh\`"
+xt_arm "EXEC-TEXT-PIN-remainder: a nested opener before the closer keeps the first view's record past the remainder budget" block-destructive-smallb.sh "$xt_rem" W 1+
+xt_arm "EXEC-TEXT-PIN-remainder-pair: without the nested-opener stop the execution goes unrecorded" block-destructive-xnonestb.sh "$xt_rem" a -
+# Stage 7: the quote-led residual in its blank-carrying spelling, the `$(` spelling at enforce, and the
+# empty-output hand-off, each with its corpus row (TK07, TK08). A command word that opens a double quote
+# before its backtick is never declined, because its token does not begin with a backtick, so the exec
+# arm's operand filter reads it, and the fragment's table gives the reading cell by cell. Where no script
+# suffix ends the token in either reading, its normalized one or, where the token does not resolve, its
+# raw spelling, the first view writes no record. Where one does, a token that does not resolve (its quote
+# left open, or closed inside a token that goes on) is recorded as unresolvable and refused at enforce
+# whatever the allowlist holds; a resolved one, its quote closed at its end and no `$` in its path, is
+# asked of the allowlist as written, backtick first: an entry spelling the script's own path never matches
+# it, one a star or another glob character leads can, and without a match it is recorded and refused at
+# enforce. Here the quote stays open, its closer falling in a later token, and the probe ends in the
+# suffix, so the word is recorded whatever the allowlist holds. A substitution at command position whose
+# output yields no field hands command position to the next word, which only the position at the closer
+# reads.
+xt_pinq="\"\`${ENCL_OK} a\`\""
+xt_arm "EXEC-TEXT-PIN-quote: a double-quoted backtick command word whose closer falls in a later token keeps today's reading" block-destructive.sh "$xt_pinq" W 1+
+xt_arm "EXEC-TEXT-PIN-quote-forced: and is refused at enforce, its script listed" block-destructive-xforced.sh "$xt_pinq" B -
+xt_arm "EXEC-TEXT-PIN-dollar-paren-forced: a command word opened by \$( is refused at enforce, its script listed (D-2)" block-destructive-xforced.sh "\$(${ENCL_OK})" B -
+xt_handoff="\`true\` ${ENCL_NA}"
+xt_arm "EXEC-TEXT-PIN-handoff: a substitution at command position followed by an unlisted script word keeps that word's one record, from the closer's position" block-destructive.sh "$xt_handoff" W 0 "" 1:exec
+xt_arm "EXEC-TEXT-PIN-handoff-forced: and refuses it at enforce" block-destructive-xforced.sh "$xt_handoff" B -
+# Stage 7 pass 2 (F-04, F-09), restated at pass 3 (F-11). The hand-off behind the declined form: a listed
+# slash-bearing substitution that closes its own token, then an unlisted script word. The decline ends the
+# segment, so the position at the closer is that word's only record, and no backtick-led row is written (row
+# TK09). And a quote-led command word whose token no script suffix ends in either reading, its normalized
+# one or its raw spelling, here a token that ends at a quote right after the substitution's closer: the
+# operand filter is not implicated, so the first view writes no record of it, and the position its
+# backtick opens is its only reading. A listed script is admitted and an unlisted one is recorded from that
+# position and refused at enforce (row LT05). With no first-view record behind it, the word carries every
+# limit of the enclosure view. TK07 and LT05 sit one on each side of the filter's test; corpus group
+# tick-quote holds a row for each sub-class the double quote's place does not sort as that test does (TK10
+# to TK12).
+xt_hodecl="\`${ENCL_OK}\` ${ENCL_NA}"
+xt_arm "EXEC-TEXT-PIN-handoff-declined: a listed slash-bearing substitution this arm declines, then an unlisted script word, keeps that word's one record, from the closer's position" block-destructive.sh "$xt_hodecl" W 0 "" 1:exec
+xt_arm "EXEC-TEXT-PIN-handoff-declined-forced: and refuses it at enforce" block-destructive-xforced.sh "$xt_hodecl" B -
+# Stage 7 pass 3 (F-10): the declined form's row assertions, paired. On the copy with the M-EXEC-TICK block
+# removed the first view keeps the first word's backtick-led row, so the pin's no-backtick-led-row and
+# one-row assertions fail there.
+xt_arm "EXEC-TEXT-PIN-handoff-declined-pair: on the copy without the decline the first word keeps its backtick-led row" block-destructive-xrev.sh "$xt_hodecl" W 1+
+# The quote-closed ids name this spelling, and the fragment cites them. The class they pin is a quote-led
+# word whose token no script suffix ends in either reading, wherever its double quote closes.
+xt_qcl="\"\`${ENCL_OK}\`\""
+xt_qclna="\"\`${ENCL_NA}\`\""
+xt_arm "EXEC-TEXT-PIN-quote-closed: a quote-led command word that no script suffix ends in either reading, here one whose double quote closes at its token's end, admits its listed script" block-destructive.sh "$xt_qcl" a 0
+xt_arm "EXEC-TEXT-PIN-quote-closed-forced: and admits it at enforce" block-destructive-xforced.sh "$xt_qcl" a 0
+xt_arm "EXEC-TEXT-PIN-quote-closed-na: the same spelling running an unlisted script is recorded once, from the enclosure position" block-destructive.sh "$xt_qclna" W 0 "" 1:exec
+xt_arm "EXEC-TEXT-PIN-quote-closed-na-forced: and refused at enforce" block-destructive-xforced.sh "$xt_qclna" B -
+
+# --- #8326: the here-document receiver read (release script-guard-refuses-only-what-executes; design
+# on sub-task #9061). An inert body behind a grammar opener, or received by cat under the whole-command
+# no-consumer test, is excised; a receiver that executes its input, a consumer of cat's output, and a
+# receiver text holding a compound-command closer keep the body. Rows HL01-HL12 and HM01-HM11 are read
+# by id; a shape no row carries is spelled here. Each arm reads the shipped copy and the enclosure
+# family's forced copy.
+#   hdnocons  the whole-command no-consumer test removed (its one line, M-HD-RECV-NOCONS)
+#   hdcloser  the closer rule removed (its one line, M-HD-RECV-CLOSER)
+#   hdreach   the new reach's enclosure test removed (its one line, M-HD-RECV-NEWREACH)
+#   hdwide    the closer read widened back to any `)` from the head on (its one line, M-HD-RECV-CLOSES)
+#   hdnodq    the closer read blind to double quotes (its one line, M-HD-RECV-DQ-OPEN)
+#   hdnosq    the closer read blind to single quotes (its one line, M-HD-RECV-SQ)
+/usr/bin/sed '/# M-HD-RECV-NOCONS$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdnocons.sh"
+/usr/bin/sed '/# M-HD-RECV-CLOSER$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdcloser.sh"
+/usr/bin/sed '/# M-HD-RECV-NEWREACH$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdreach.sh"
+/usr/bin/sed '/# M-HD-RECV-CLOSES$/s/script_hd_recv_closes "\$_t" && //' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdwide.sh"
+/usr/bin/sed '/# M-HD-RECV-DQ-OPEN$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdnodq.sh"
+/usr/bin/sed '/# M-HD-RECV-SQ$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdnosq.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdwide.sh" "${ENCL_HOOKS}/block-destructive-hdnodq.sh" "${ENCL_HOOKS}/block-destructive-hdnosq.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdnocons.sh" "${ENCL_HOOKS}/block-destructive-hdcloser.sh" "${ENCL_HOOKS}/block-destructive-hdreach.sh"
+encl_shape_arm "HD-RECV-COPY-nocons: the no-consumer mutant removes its one line" block-destructive-hdnocons.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-closer: the closer-rule mutant removes its one line" block-destructive-hdcloser.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-reach: the new-reach mutant removes its one line" block-destructive-hdreach.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-wide: the widened closer read rewrites its one line" block-destructive-hdwide.sh "1/1"
+encl_shape_arm "HD-RECV-COPY-nodq: the double-quote-blind closer read removes its one line" block-destructive-hdnodq.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-nosq: the single-quote-blind closer read removes its one line" block-destructive-hdnosq.sh "1/0"
+
+# --- admitted: an inert body handed to a receiver that does not execute it (RED: each reads B) ---
+qscan_arm "HD-RECV-ADMIT-paren: a subshell opener before a carrier receiver" HL01 a a -
+qscan_arm "HD-RECV-ADMIT-paren-attached: the subshell opener attached to the carrier word" HL02 a a -
+qscan_arm "HD-RECV-ADMIT-brace: a brace-group opener before a carrier receiver" HL03 a a -
+qscan_arm "HD-RECV-ADMIT-brace-printf: the same before another carrier" HL04 a a -
+qscan_arm "HD-RECV-ADMIT-kw: a reserved-word opener before a carrier receiver" HL05 a a -
+qscan_arm "HD-RECV-ADMIT-kw-gh: the same before another carrier" HL06 a a -
+qscan_arm "HD-RECV-ADMIT-bang: the negation word before a carrier receiver" HL07 a a -
+qscan_arm "HD-RECV-ADMIT-bang-echo: the same before another carrier" HL08 a a -
+qscan_arm "HD-RECV-ADMIT-cat-print: a cat receiver, quoted delimiter, no tail" HL09 a a -
+qscan_arm "HD-RECV-ADMIT-cat-print-rpt: the same under another delimiter" HL10 a a -
+qscan_arm "HD-RECV-ADMIT-cat-redirect: a cat receiver writing a file, the redirection ahead of the operator" HL11 a a -
+qscan_arm "HD-RECV-ADMIT-cat-redirect-after: the same, the redirection after the operator" HL12 a a -
+# Re-labelled from AC-ENCL-RESIDUAL-heredoc-kept, a pin of a body left in place (recorded at warn and
+# refused at enforce before): its receiver is cat, so its shape is this card's fix and the arm is
+# fix-evidence.
+encl_arm "HD-RECV-ADMIT-cat-redirect-span: a cat receiver writing a file, its body holding a code span naming a script" \
+  "cat > notes.md <<'EOF'
+Run \`bash ${ENCL_NA}\` to reproduce
+EOF" a a a
+
+# --- must flag: today's refusal stands (each green before and after) ---
+qscan_arm "HD-RECV-MF-paren-shell: a subshell opener before a shell-interpreter receiver" HM01 B B -
+qscan_arm "HD-RECV-MF-cat-pipe: a cat receiver whose output pipes into an interpreter" HM02 B B -
+qscan_arm "HD-RECV-MF-cat-fd-pipe: a cat receiver with a descriptor duplication, then a pipe" HM03 B B -
+qscan_arm "HD-RECV-MF-cat-procsub: a cat receiver whose output goes to a process substitution" HM04 B B -
+qscan_arm "HD-RECV-MF-cat-subst-head: a cat receiver inside a substitution at command position" HM05 B B -
+qscan_arm "HD-RECV-MF-cat-earlier-subst: a cat receiver inside a substitution opened on an earlier line" HM06 B B -
+qscan_arm "HD-RECV-MF-cat-later-pipe: a cat receiver inside a group closed and piped after the body" HM07 B B -
+qscan_arm "HD-RECV-MF-cat-bare-dollar: a cat receiver, bare delimiter, a dollar in the body" HM08 B B -
+qscan_arm "HD-RECV-MF-loop-close: a loop closer receiving the here-document" HM10 B B -
+qscan_arm "HD-RECV-CTL-nonmember: a receiver on no list (R-4 stands)" HM11 B B -
+hd_nl=$'\n'
+hd_arith="(( echo <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF${hd_nl}))"
+hd_closer="( echo ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_closer_cat="( cat ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_coproc="coproc bash; cat <<'EOF' >&\${COPROC[1]}${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_tail="( bash; echo ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-MF-arith: an arithmetic opener is not stepped" "$hd_arith" B B -
+encl_arm "HD-RECV-MF-closer: a stepped opener whose receiver text holds a closer keeps the body" "$hd_closer" B B -
+encl_arm "HD-RECV-MF-closer-cat: a cat head whose receiver text holds a closer keeps the body" "$hd_closer_cat" B B -
+encl_arm "HD-RECV-MF-cat-coproc: a cat receiver writing into a coprocess keeps the body" "$hd_coproc" B B -
+encl_arm "HD-RECV-MF-group-tail: a here-document after a subshell closer keeps its body" "$hd_tail" B B -
+encl_mut_arm "HD-RECV-MF-group-tail-pair: without the closer rule that body is excised" block-destructive-hdcloser.sh "$hd_tail" a
+# Added at GREEN, from the self-review: the new reach meeting an enclosure reading off the list. Each keeps
+# today's verdict (B, and an allow with no record); the pair shows the line that keeps the first.
+hd_reach_sh="( echo \$(bash <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF${hd_nl}) )"
+hd_reach_cat="( cat <<'EOF'${hd_nl}plain text${hd_nl}EOF${hd_nl})"
+encl_arm "HD-RECV-MF-reach-encl-shell: a stepped opener before a carrier whose substitution opens a shell that receives the here-document keeps the body at every phase" "$hd_reach_sh" B B -
+encl_mut_arm "HD-RECV-MF-reach-encl-shell-pair: without the new-reach line the shipped copy only records it" block-destructive-hdreach.sh "$hd_reach_sh" W
+encl_arm "HD-RECV-CTL-reach-encl-cat: cat behind a subshell opener with a plain body stays allowed, with no record" "$hd_reach_cat" a a -
+if wc_row_cmd HM02; then
+  encl_mut_arm "HD-RECV-MF-cat-pipe-pair: without the no-consumer test the piped body is excised [row HM02]" block-destructive-hdnocons.sh "$WC_CMDX" a
+else
+  /usr/bin/printf 'FAIL: HD-RECV-MF-cat-pipe-pair\n  row HM02 is not a block-destructive row of the corpus\n'
+  FAIL=$((FAIL + 1))
+fi
+
+# --- the closer read: a `)` keeps the body only when it closes an opener before the receiver's head ---
+# A parenthesis inside a carrier's quoted argument closes nothing the receiver sits inside, so the body
+# is excised as it was before this card; the copy whose read counts any `)` keeps it. A real closer after
+# a quoted span holding an unclosed `(` still keeps the body, and each quote-blind copy loses it.
+hd_cost_q="gh pr create --title \"fix(x): y\" --body-file - <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-NARROW-quoted: a carrier whose quoted argument holds a parenthesis, then an inert here-document, is excised as before" "$hd_cost_q" a a -
+encl_mut_arm "HD-RECV-NARROW-quoted-pair: the copy whose closer read counts any parenthesis keeps that body" block-destructive-hdwide.sh "$hd_cost_q" B
+hd_close_dq="( bash; echo \"a (\" ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_close_sq="( bash; echo 'a (' ) <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-MF-closer-dq: a subshell closer after a double-quoted argument holding an unclosed parenthesis keeps the body" "$hd_close_dq" B B -
+encl_mut_arm "HD-RECV-MF-closer-dq-pair: the double-quote-blind closer read excises it" block-destructive-hdnodq.sh "$hd_close_dq" a
+encl_arm "HD-RECV-MF-closer-sq: a subshell closer after a single-quoted argument holding an unclosed parenthesis keeps the body" "$hd_close_sq" B B -
+encl_mut_arm "HD-RECV-MF-closer-sq-pair: the single-quote-blind closer read excises it" block-destructive-hdnosq.sh "$hd_close_sq" a
+# The closer read keeps the body on what it does not model (Stage 7 DS-1 to DS-3). Lifted out of the
+# hook and run alone on plain receiver texts: an ANSI-C quote, a brace or bracket expansion, an unquoted
+# brace or bracket, and a `}` word read as a closer; the controls keep their earlier answers. The pair
+# runs the same text on a copy whose unmodelled-text lines are removed.
+hd_read_lib="${ENCL_ROOT}/hd-read.lib"
+/usr/bin/sed '/# M-HD-RECV-UNMODELED$/d' "$HOOK" > "${ENCL_ROOT}/hd-model-off.sh"
+hd_read_lift() { # $1 = hook file, $2 = lib out
+  /usr/bin/awk '/^script_hd_recv_closes\(\) / || /^script_hd_recv_text\(\) / { f = 1; k++ } f { print; if ($0 == "}") f = 0 } END { exit k == 2 ? 0 : 1 }' "$1" > "$2" || return 1
+  /usr/bin/printf '%s\n' 'script_ceil_check() { return 0; }' >> "$2"
+}
+hd_read_lift "$HOOK" "$hd_read_lib"; hd_read_lift "${ENCL_ROOT}/hd-model-off.sh" "${ENCL_ROOT}/hd-read-off.lib"
+hd_read() { # $1 = lib, $2 = receiver text -> prints script_hdrecv_closer
+  /bin/bash -c '. "$1"; script_hd_recv_text "$2"; printf "%s" "$script_hdrecv_closer"' _ "$1" "$2" 2>/dev/null
+}
+hd_read_arm() { # <label> <lib> <text> <want>
+  local got; got="$(hd_read "$2" "$3")"
+  if [ "$got" = "$4" ]; then /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: %s\n  closer=%s (wanted %s)\n' "$1" "${got:-none}" "$4"; FAIL=$((FAIL + 1)); fi
+}
+hd_t_ansic="echo \$'\\'\"' ) \""
+hd_t_pexp='echo ${x:-(} ) '
+hd_t_glob='echo [(] ) '
+hd_t_brace='echo { x } '
+hd_read_arm "HD-RECV-READ-ansic: a receiver text holding an ANSI-C quote keeps the body" "$hd_read_lib" "$hd_t_ansic" 1
+hd_read_arm "HD-RECV-READ-pexp: a receiver text holding a parameter expansion's parenthesis keeps the body" "$hd_read_lib" "$hd_t_pexp" 1
+hd_read_arm "HD-RECV-READ-glob: a receiver text holding a bracket expression's parenthesis keeps the body" "$hd_read_lib" "$hd_t_glob" 1
+hd_read_arm "HD-RECV-READ-brace: a receiver text holding a brace word keeps the body, beside an opening one too" "$hd_read_lib" "$hd_t_brace" 1
+hd_read_arm "HD-RECV-READ-ctl-title: a parenthesised quoted title still closes nothing" "$hd_read_lib" 'gh pr create --title "fix(x): y" --body-file - ' 0
+hd_read_arm "HD-RECV-READ-ctl-subst: a closed substitution in a carrier's arguments still closes nothing" "$hd_read_lib" 'gh issue comment $(cat list.txt) --body-file - ' 0
+hd_read_arm "HD-RECV-READ-ctl-closer: a bare closer still keeps the body" "$hd_read_lib" ' echo ) ' 1
+hd_read_arm "HD-RECV-READ-ansic-pair: the copy that models nothing extra loses that body" "${ENCL_ROOT}/hd-read-off.lib" "$hd_t_ansic" 0
+# A receiver that only carries cat's name (Stage 7 F-2): cat is admitted only as itself or a system
+# path, and not in a command that rebinds a command name. Each pair runs a copy without the line.
+/usr/bin/sed '/# M-HD-RECV-CATPATH$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdcatpath.sh"
+/usr/bin/sed '/# M-HD-RECV-REBIND$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdrebind.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdcatpath.sh" "${ENCL_HOOKS}/block-destructive-hdrebind.sh"
+encl_shape_arm "HD-RECV-COPY-catpath: the cat-path mutant removes its one line" block-destructive-hdcatpath.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-rebind: the rebinding mutant removes its one line" block-destructive-hdrebind.sh "1/0"
+hd_cat_path="./tool/cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_cat_rebind="alias cat=bash${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-MF-cat-path: a receiver whose path only ends in cat keeps the body" "$hd_cat_path" B B -
+encl_mut_arm "HD-RECV-MF-cat-path-pair: without the cat-path line that body is excised" block-destructive-hdcatpath.sh "$hd_cat_path" a
+encl_arm "HD-RECV-MF-cat-rebind: a cat receiver in a command that rebinds a command name keeps the body" "$hd_cat_rebind" B B -
+encl_mut_arm "HD-RECV-MF-cat-rebind-pair: without the rebinding line that body is excised" block-destructive-hdrebind.sh "$hd_cat_rebind" a
+# Stage 7 pass 2. A `}` that begins a word and is followed directly by a redirection or a control
+# character closes a group (P2-1); the logical-line reading takes cat only as itself or a system path
+# (P2-2); a rebinding is read however its builtin is quoted or spaced, and through the shells' alias and
+# command tables (P2-3); the rebinding test and the unmodelled-text read each carry a declared cost
+# (P2-5); and the unmodelled-text classes are shown at the hook, not only in the lifted read (P2-6).
+# Rows HM12-HM19. A stepped opener holds no receiver that reads its input, so the hook-level classes run
+# on a group's last command, before a carrier and before cat.
+#   hdbraceop   the brace-and-operator line removed (its one line, M-HD-RECV-BRACE-OP)
+#   hdcatlm     the logical-line cat value taken from the basename alone (its one line, M-HD-RECV-CATPATH-LM)
+#   hdmodeloff  the unmodelled-text lines removed (its two lines, M-HD-RECV-UNMODELED)
+#   hdmodelbr   only the brace-and-bracket line of those two removed
+/usr/bin/sed '/# M-HD-RECV-BRACE-OP$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdbraceop.sh"
+/usr/bin/sed '/# M-HD-RECV-CATPATH-LM$/s/case "\$script_head" in cat|\/bin\/cat|\/usr\/bin\/cat) _lm=2 ;; esac/_lm=2/' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdcatlm.sh"
+/usr/bin/sed '/# M-HD-RECV-UNMODELED$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdmodeloff.sh"
+/usr/bin/sed '/if (c == "{" || c == "\[") { print "1"; exit }   # M-HD-RECV-UNMODELED$/d' "$HOOK" > "${ENCL_HOOKS}/block-destructive-hdmodelbr.sh"
+/bin/chmod +x "${ENCL_HOOKS}/block-destructive-hdbraceop.sh" "${ENCL_HOOKS}/block-destructive-hdcatlm.sh" "${ENCL_HOOKS}/block-destructive-hdmodeloff.sh" "${ENCL_HOOKS}/block-destructive-hdmodelbr.sh"
+encl_shape_arm "HD-RECV-COPY-braceop: the brace-and-operator mutant removes its one line" block-destructive-hdbraceop.sh "1/0"
+encl_shape_arm "HD-RECV-COPY-catlm: the logical-line cat-path mutant rewrites its one line" block-destructive-hdcatlm.sh "1/1"
+encl_shape_arm "HD-RECV-COPY-modeloff: the unmodelled-text mutant removes its two lines" block-destructive-hdmodeloff.sh "2/0"
+encl_shape_arm "HD-RECV-COPY-modelbr: the brace-and-bracket mutant removes its one line" block-destructive-hdmodelbr.sh "1/0"
+hd_read_lift "${ENCL_HOOKS}/block-destructive-hdmodelbr.sh" "${ENCL_ROOT}/hd-read-br.lib"
+hd_read_arm "HD-RECV-READ-brace-op: a receiver text holding a brace word followed directly by a redirection keeps the body" "$hd_read_lib" 'cat }>/dev/null ' 1
+hd_read_arm "HD-RECV-READ-glob-pair: the copy without the brace-and-bracket line loses the bracket expression's body" "${ENCL_ROOT}/hd-read-br.lib" "$hd_t_glob" 0
+qscan_arm "HD-RECV-MF-brace-op: a cat head whose brace word is followed directly by a redirection closes the group and keeps the body" HM12 B B -
+qscan_mut "HD-RECV-MF-brace-op-pair: without the brace-and-operator line that body is excised" block-destructive-hdbraceop.sh HM12 a
+qscan_arm "HD-RECV-MF-cat-cont: a continuation joining a path that only ends in cat to a carrier's line keeps the body" HM13 B B -
+qscan_mut "HD-RECV-MF-cat-cont-pair: with the logical-line cat value read from the basename alone that body is excised" block-destructive-hdcatlm.sh HM13 a
+hd_rb_quoted="'alias' cat=bash${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_rb_tab="function"$'\t'"cat { bash; }${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_rb_btable="BASH_ALIASES[cat]=bash${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+hd_rb_ztable="commands[cat]=/bin/bash${hd_nl}cat <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-MF-cat-rebind-quoted: a quoted rebinding builtin keeps a cat-received body" "$hd_rb_quoted" B B -
+encl_arm "HD-RECV-MF-cat-rebind-tab: a function definition whose keyword is followed by a tab keeps a cat-received body" "$hd_rb_tab" B B -
+encl_arm "HD-RECV-MF-cat-rebind-table: an assignment to bash's alias table keeps a cat-received body" "$hd_rb_btable" B B -
+encl_arm "HD-RECV-MF-cat-rebind-ztable: an assignment to zsh's command table keeps a cat-received body" "$hd_rb_ztable" B B -
+hd_rb_prose="cat <<'EOF'${hd_nl}the helper function is described below${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-COST-rebind-prose: a cat-received body whose prose names a rebinding word is kept and adjudicated, because the rebinding test reads the whole command (declared cost)" "$hd_rb_prose" B B -
+hd_cost_ub="gh api repos/{owner}/x --title \"a (b)\" --input - <<'EOF'${hd_nl}bash ${ENCL_NA}${hd_nl}EOF"
+encl_arm "HD-RECV-COST-unmodeled-carrier: a carrier whose arguments hold an unquoted brace beside a quoted parenthesis keeps its inert body (declared cost)" "$hd_cost_ub" B B -
+encl_mut_arm "HD-RECV-COST-unmodeled-carrier-pair: the copy that models nothing extra excises that body, as before this rule" block-destructive-hdmodeloff.sh "$hd_cost_ub" a
+qscan_arm "HD-RECV-MF-hook-ansic: an ANSI-C quote in a group's last command before a carrier keeps the body at the hook" HM14 B B -
+qscan_mut "HD-RECV-MF-hook-ansic-pair: the copy that models nothing extra excises that body" block-destructive-hdmodeloff.sh HM14 a
+qscan_arm "HD-RECV-MF-hook-pexp: a parameter expansion holding a parenthesis in a group's last command before a carrier keeps the body at the hook" HM15 B B -
+qscan_arm "HD-RECV-MF-hook-glob: a bracket expression holding a parenthesis in a group's last command before a carrier keeps the body at the hook" HM16 B B -
+qscan_arm "HD-RECV-MF-hook-ansic-cat: the same ANSI-C quote before a cat head keeps the body at the hook" HM17 B B -
+qscan_arm "HD-RECV-MF-hook-pexp-cat: the same parameter expansion before a cat head keeps the body at the hook" HM18 B B -
+qscan_arm "HD-RECV-MF-hook-glob-cat: the same bracket expression before a cat head keeps the body at the hook" HM19 B B -
+# Stage 7 pass 3 (P3-3). A function definition spelled with a parenthesis names none of the rebinding
+# test's words, so what keeps a cat-received body behind it is the no-consumer test's parenthesis. Row
+# HM20; its pair runs the copy without the no-consumer line, where the definition's own body is one the
+# walk passes and no text of the command holds a rebinding word, so the excised body leaves it allowed.
+qscan_arm "HD-RECV-MF-cat-rebind-paren: a function definition of cat spelled with a parenthesis ahead of a cat head keeps the body" HM20 B B -
+qscan_mut "HD-RECV-MF-cat-rebind-paren-pair: without the no-consumer test that body is excised" block-destructive-hdnocons.sh HM20 a
+
 /bin/rm -rf "$ENCL_ROOT"
 
 # ---- AC-022-X* (#8314, DT pass 3): the -022 separator split is a linear pass ----
@@ -10028,13 +10389,19 @@ LC_ALL=C /usr/bin/awk -v d="${LIN_Y}/in" 'BEGIN {
   }
 }'
 # lin_y_lift <src> <out> — the scan, its search helper, its linear pass and the pass's program.
+# ceil_stub — a hook function lifted out and run alone carries the rule's work-ceiling check
+# (#8327) as the first statement of each loop; a lift defines it as a no-op, because the ceiling
+# is not the subject of any arm that lifts a function, and an undefined check would print one
+# error per loop pass.
+ceil_stub() { /usr/bin/printf '%s\n' 'script_ceil_check() { return 0; }'; }
 lin_y_lift() {
   /usr/bin/awk '
     /^readonly SCRIPT_QADVANCE_AWK=/ { inp = 1 }
     inp { print; if ($0 == "    }\047") inp = 0; next }
     /^script_qnext\(\) \{/ || /^script_qadvance\(\) \{/ || /^script_qadvance_linear\(\) \{/ { inf = 1; k++ }
     inf { print; if ($0 == "}") inf = 0 }
-    END { exit k == 3 ? 0 : 1 }' "$1" > "$2"
+    END { exit k == 3 ? 0 : 1 }' "$1" > "$2" || return 1
+  ceil_stub >> "$2"
 }
 # lin_y_eval <locale> <bound> <lib> <out> — each case: its segments scanned in turn from its state,
 # the state after each written to <out>/<case>.
@@ -10165,7 +10532,8 @@ done
 # long spelling inside the budget, in en_US.UTF-8 and C, and allows each. The cells are the ones on which
 # `main`'s own hook keeps a wide margin under the budget. On the larger cells the cost is `main`'s own code
 # — the -022 rule's reading of a long word and of a long option cluster, which grows faster than the
-# command — and is that rule's work-ceiling card's to change, not this release's. The false-positive
+# command. The rule's work ceiling now bounds that cost and refuses past it (CEIL-*); the cells stay cut,
+# because the ceiling bounds the growth and does not change it. The false-positive
 # control's AC-CP-L arms time the canonicalizer alone on every size of every shape, beside their
 # sensitivity copy.
 lin_cph_cmd() { # <shape> <bytes> <file> — the head, as many units as fit, then the tail, built by doubling
@@ -10384,6 +10752,7 @@ opnd_join_lib="$(/usr/bin/mktemp)"
 opnd_join_why=""
 /usr/bin/awk '/^script_word_scan\(\) \{/ || /^script_word_join\(\) \{/ { f = 1; k++ } f { print; if ($0 == "}") f = 0 } END { exit k == 2 ? 0 : 1 }' "$HOOK" > "$opnd_join_lib" \
   || opnd_join_why="the reader and the join are not two single functions in the hook;"
+ceil_stub >> "$opnd_join_lib"
 opnd_join_compare() { # $1 = library file; prints one verdict line
   (
     . "$1"
@@ -10452,6 +10821,7 @@ fi
 if [ -z "$opnd_join_why" ]; then
   opnd_bound_lib="$(/usr/bin/mktemp)"
   /usr/bin/awk '/^script_word_join\(\) \{/ { f = 1 } f { print; if ($0 == "}") f = 0 }' "$HOOK" > "$opnd_bound_lib"
+  ceil_stub >> "$opnd_bound_lib"
   opnd_bound_v="$(
     . "$opnd_bound_lib"
     script_tokens=("'a")
@@ -10682,6 +11052,18 @@ aq_arm "ASGN-QVAL-env: as an env operand" WR128 B a
 aq_arm "ASGN-QVAL-env-seed1: as env, the seed-1 row" O19 B a
 aq_arm "ASGN-QVAL-env-opt: as an env operand behind an option" AV06 B a
 aq_arm "ASGN-QVAL-bail1: in the first segment of a command whose bail latches" AV10 B a
+# AV10's here-document is received by cat, which #8326 admits, so its bail no longer latches and the arm
+# above no longer reads its premise. The same shape on a receiver on no list keeps it exercised.
+aq_bail1="FOO='a b' bash ${WC_D}/na.sh"$'\n'"wc -l <<'EOF'"$'\n'"x"$'\n'"EOF"
+aq_run block-destructive.sh "$aq_bail1"; aq_bail1_v="$AQ_V"
+aq_run block-destructive-pqval.sh "$aq_bail1"; aq_bail1_m="$AQ_V"
+if [ "$aq_bail1_v" = B ] && [ "$aq_bail1_m" = a ]; then
+  /usr/bin/printf 'PASS: ASGN-QVAL-bail1-nonmember: in the first segment of a command whose bail latches on a receiver on no list (hook %s, pqval %s)\n' "$aq_bail1_v" "$aq_bail1_m"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: ASGN-QVAL-bail1-nonmember: in the first segment of a command whose bail latches on a receiver on no list\n  wanted hook=B pqval=a; observed hook=%s pqval=%s\n' "$aq_bail1_v" "$aq_bail1_m"
+  FAIL=$((FAIL + 1))
+fi
 aq_arm "ASGN-QVAL-exec: before a direct execution, recorded at that arm's phase" AV11 W:exec a
 aq_arm "ASGN-QVAL-nonshell: before a non-shell interpreter, recorded at that arm's phase" AV12 W:interp-nonshell a
 aq_arm "ASGN-QVAL-encl: at an unquoted enclosure position, recorded at that view's phase" AV13 W:shell-enclosure a
@@ -10729,7 +11111,23 @@ aq_arm "ASGN-QVAL-hdhead-ctl: the same here-document with no carrier word in the
 aq_arm "ASGN-QVAL-over-wrap (declared over-block): an assignment behind a wrapper that takes none" AV25 B a
 
 # --- the declared residuals: allowed before and after ---
-aq_arm "ASGN-QVAL-resid-bail: a later line of a command whose bail latched" AV33 a a pqvalgate B
+# AV33's here-document is received by cat, which #8326 admits, so its bail no longer latches and the
+# later line is adjudicated: refused through the step, allowed by the walk before it. The residual it
+# pinned is re-pinned just below on a receiver on no list.
+aq_arm "ASGN-QVAL-resid-bail: a later line after a cat-received here-document, adjudicated now the body is admitted" AV33 B a
+# The same residual on a receiver on no list, so the pin does not depend on which receivers the
+# here-document pre-pass admits (#8326 admits AV33's cat). Allowed on the hook; the copy whose gate
+# vouches for every segment refuses it.
+aq_hdresid="wc -l <<'EOF'"$'\n'"x"$'\n'"EOF"$'\n'"FOO='a b' bash ${WC_D}/na.sh"
+aq_run block-destructive.sh "$aq_hdresid"; aq_hdresid_v="$AQ_V"
+aq_run block-destructive-pqvalgate.sh "$aq_hdresid"; aq_hdresid_g="$AQ_V"
+if [ "$aq_hdresid_v" = a ] && [ "$aq_hdresid_g" = B ]; then
+  /usr/bin/printf 'PASS: ASGN-QVAL-resid-bail-nonmember: a later line of a command whose bail latched on a receiver on no list (hook %s, pqvalgate %s)\n' "$aq_hdresid_v" "$aq_hdresid_g"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: ASGN-QVAL-resid-bail-nonmember: a later line of a command whose bail latched on a receiver on no list\n  wanted hook=a pqvalgate=B; observed hook=%s pqvalgate=%s\n' "$aq_hdresid_v" "$aq_hdresid_g"
+  FAIL=$((FAIL + 1))
+fi
 aq_arm "ASGN-QVAL-resid-braced: a value holding a braced expansion" AV34 a a pqvalguards B
 aq_arm "ASGN-QVAL-resid-dqencl: a value at an enclosure position opened inside double quotes" AV35 a a pqvalgate W:shell-enclosure
 aq_arm "ASGN-QVAL-resid-redir: a redirection operator glued to the value's end" AV36 a a
@@ -10741,6 +11139,406 @@ aq_arm "ASGN-QVAL-resid-envpiece (FM-3): an env operand whose = sits in a later 
 aq_arm "ASGN-QVAL-resid-hash: a # inside a quoted value" AV45 a a pqvalread B
 aq_arm "ASGN-QVAL-resid-pfxsubst: a construct the scanner does not model in a prefix token ahead of the quoted assignment" AV46 a a pqvalsubst B
 aq_arm "ASGN-QVAL-resid-cap: a later line of a command whose earlier quote-dense part spent the shared work budget" AV47 a a
+
+# ---- SUBST-BOUNDARY-ASGN-* / ASGN-SUBST-* (#8548): an allowlisted script run inside an assignment's command substitution ----
+#
+# SUBJECT. The characters of a command substitution are part of the word they sit in, but the walk
+# splits a segment on whitespace first, so an assignment whose value opens a substitution reached it
+# as the assignment's first piece and the substitution's later words, and the walk took the last of
+# them — the path with the closer attached — for the command word. A listed script written in quotes
+# there was recorded by the exec arm as unresolvable, and a command word written after the
+# assignment was never read. The walk, and env's operand loop with it, now read such a word through
+# the substitution's closer and go on at the shell's next word, only when the word that closes the
+# substitution is one literal word the allowlist admits; every other value keeps today's reading.
+# Every corpus arm here reads its command from the walk-payload corpus by row id (rows AS01 to AS23,
+# and EN06, AV29, WR132, WR133, AV46, EN52, EN54); the few commands spelled below are the
+# discriminating fixtures for a decline no corpus row isolates.
+#
+# A VERDICT HERE NAMES THE CAUSE as well as the arm of each would-fire row the call added
+# (W:<arm>:<cause>[+…]), because the corpus differential cannot see a record that moves from the
+# substitution's path to the real command word, or a two-record reading that becomes one.
+#
+# THE COPIES, each the hook with one decline of the step removed by sed on its marked line:
+#   pasubst          the two call lines removed: the walk before this change (the reverse mutant)
+#   pasubstmoved     the test that no step moved the walk since the assignment token
+#   pasubsttrust     the value step's trust gate
+#   pasubstshape     the value's form: an optional double quote, a plain run, one opener, a plain word
+#   pasubstslash     the slash test on the word against the opener
+#   pasubstpfx       the prefix scan (its loop rewritten to `while false`)
+#   pasubstwork      the work-budget test
+#   pasubstcut       the test that the closer sits inside the next token
+#   pasubstend       the test that nothing but the value's own closing quote follows the closer
+#   pasubstnorm      the test that the closing text normalizes to exactly one literal word
+#   pasubstplain     the test that the word is non-empty and plain
+#   pasubstopt       the test that the word is not option-shaped
+#   pasubstallow     the allowlist test
+#   pasubstname      the test that an operand's text before its first `=` is plain (env's operand loop)
+#   pasubstverb      the decline where the walk before reads the closing word as a verb (option (a))
+#   forced           the exec arm's phase at enforce; forced-pasubst is forced and pasubst together
+#   enclforced       the enclosure family's phase at enforce
+#   gd, gd-pasubst,  the value step's two text guards off (the ASGN-QVAL block's pqvalguards), alone,
+#   gd-moved         with the step removed, and with the moved-walk test removed: the one copy on which
+#                    the value step can cross a substitution-bearing value, so the moved-walk test can
+#                    be shown live there; on the shipped hook the value step never moves before it
+# A third limb, or a relational arm, must read a verdict the arm forbids: a limb that expects the
+# arm's own verdict fails, since it could not show the condition holding the arm.
+#
+# TWO HERMETIC ROOTS. AS_ROOT allowlists the corpus root's four listed paths and two more closing words
+# named as verbs, a non-shell interpreter's name and the source word, which only the arms below close on.
+# AS_GROOT allowlists the same two scripts through leading-glob entries, the shape some rows
+# of the tracked allowlist have; the decline arms run there again, beside the rows of the classes
+# such an entry could otherwise admit.
+AS_ROOT="$(/usr/bin/mktemp -d)"
+AS_GROOT="$(/usr/bin/mktemp -d)"
+as_build() { # $1 = root  $2… = its allowlist entries -> the hook and its copies in the root's hooks dir
+  local root="$1" h="$1/.claude/hooks" c n m
+  local ph='s/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/'
+  local pe='s/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="enforce"   # shadow | warn | enforce/'
+  shift
+  /bin/mkdir -p "${h}/lib"
+  /bin/cp "${HOOK%/*}/lib/"*.sh  "${h}/lib/" 2>/dev/null || true
+  /bin/cp "${HOOK%/*}/lib/"*.awk "${h}/lib/" 2>/dev/null || true
+  /usr/bin/printf '%s\n' "$@" > "${root}/.claude/script-execution-allowlist.txt"
+  /usr/bin/printf 'enforce' > "${h}/.mode"
+  /bin/cp "$HOOK" "${h}/block-destructive.sh"
+  /usr/bin/sed '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-pasubst.sh"
+  for c in moved:MOVED trust:TRUST shape:SHAPE slash:SLASH work:WORK cut:CUT end:END norm:NORM plain:PLAIN opt:OPT allow:ALLOW name:NAME verb:VERB; do
+    n="${c%%:*}"; m="${c#*:}"
+    /usr/bin/sed "/# M-ASGN-SUBST-${m}\$/d" "$HOOK" > "${h}/block-destructive-pasubst${n}.sh"
+  done
+  /usr/bin/sed '/# M-ASGN-SUBST-PFX$/s/while \[ "\$_i" -lt "\$_k" \]; do/while false; do/' "$HOOK" > "${h}/block-destructive-pasubstpfx.sh"
+  /usr/bin/sed "$ph" "$HOOK" > "${h}/block-destructive-forced.sh"
+  /usr/bin/sed -e "$ph" -e '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-forced-pasubst.sh"
+  /usr/bin/sed "$pe" "$HOOK" > "${h}/block-destructive-enclforced.sh"
+  /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' "$HOOK" > "${h}/block-destructive-gd.sh"
+  /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' -e '/# M-ASGN-SUBST$/d' "$HOOK" > "${h}/block-destructive-gd-pasubst.sh"
+  /usr/bin/sed -e '/# M-WRAP-QVAL-SUBST$/s/return 0 ;;/: ;;/' -e '/# M-WRAP-QVAL-READ$/d' -e '/# M-ASGN-SUBST-MOVED$/d' "$HOOK" > "${h}/block-destructive-gd-moved.sh"
+  /bin/chmod +x "${h}/"block-destructive*.sh
+}
+as_build "$AS_ROOT" "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" "${WC_D}/bin/bash" "${WC_D}/bin/python3" "${WC_D}/bin/source"
+as_build "$AS_GROOT" '*/ok.sh' '*/ok.py'
+
+AS_R=""; AS_H=""; AS_DRAIN=""
+as_root() { # $1 = root: the root the arms below run in
+  AS_R="$1"; AS_H="$1/.claude/hooks"; AS_DRAIN="${AS_H}/destructive-warn-log.jsonl"
+}
+as_drain_rows() {
+  if [ -f "$AS_DRAIN" ]; then
+    /usr/bin/wc -l < "$AS_DRAIN" | /usr/bin/tr -d '[:space:]'
+  else
+    /usr/bin/printf '0'
+  fi
+}
+
+AS_V=""
+AS_ERR=""
+# Run one command through one copy in the current root -> AS_V: a, B, E<exit>, or
+# W:<arm>:<cause>[+<arm>:<cause>…] naming every would-fire row the call added, in the order written.
+as_run() { # $1 = copy (hook, or the suffix of block-destructive-<suffix>.sh)  $2 = command
+  local rc=0 before after tmp n f="block-destructive.sh"
+  [ "$1" = hook ] || f="block-destructive-$1.sh"
+  tmp="$(/usr/bin/mktemp)"
+  before="$(as_drain_rows)"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$AS_R")" \
+      | /bin/bash "${AS_H}/${f}" 2>"$tmp" >/dev/null ) || rc="$?"
+  after="$(as_drain_rows)"
+  AS_ERR="$(/bin/cat "$tmp")"
+  /bin/rm -f "$tmp"
+  n=$(( after - before ))
+  case "$rc" in
+    2) AS_V="B" ;;
+    0)
+      if [ "$n" -gt 0 ]; then
+        AS_V="W:$(/usr/bin/awk -v from="$(( before + 1 ))" 'NR >= from { a = "?"; c = "?"
+          if (match($0, /"arm":"[^"]*"/)) { a = substr($0, RSTART + 7, RLENGTH - 8) }
+          if (match($0, /"cause":"[^"]*"/)) { c = substr($0, RSTART + 9, RLENGTH - 10) }
+          printf "%s%s:%s", (k++ ? "+" : ""), a, c }' "$AS_DRAIN")"
+      else
+        AS_V="a"
+      fi
+      ;;
+    *) AS_V="E${rc}" ;;
+  esac
+}
+
+as_pass() { /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1)); }
+# A failure's observations ride on its FAIL line, newlines folded, because the runner forwards only that line.
+as_fail() { local o="$2"; o="${o//$'\n'/ | }"; /usr/bin/printf 'FAIL: %s — observed:%s\n' "$1" "$o"; FAIL=$((FAIL + 1)); }
+
+# as_arm <label> <row id> <hook verdict> <pasubst verdict> [<copy> <its verdict>] — the shipped copy
+# and the reverse mutant on that row's command, then the third limb when a copy is named. A wanted
+# B must name BLOCK-DESTRUCTIVE-022.
+as_arm() {
+  local name="$1" row="$2" want="$3" wantm="$4" pmut="${5:-}" pwant="${6:-}" got gotm gotp="" herr why=""
+  if ! wc_row_cmd "$row"; then as_fail "$name" " row ${row} is not a block-destructive row of the corpus"; return 0; fi
+  as_run hook "$WC_CMDX"; got="$AS_V"; herr="$AS_ERR"
+  [ "$got" = "$want" ] || why="${why} hook=${got}(wanted ${want})"
+  if [ "$want" = B ] && [ "$got" = B ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$herr"; then why="${why} the-refusal-does-not-name-BLOCK-DESTRUCTIVE-022"; fi
+  as_run pasubst "$WC_CMDX"; gotm="$AS_V"
+  [ "$gotm" = "$wantm" ] || why="${why} pasubst=${gotm}(wanted ${wantm})"
+  if [ -n "$pmut" ]; then
+    [ "$pwant" != "$want" ] || why="${why} the-${pmut}-limb-expects-the-arm's-own-verdict"
+    as_run "$pmut" "$WC_CMDX"; gotp="$AS_V"
+    [ "$gotp" = "$pwant" ] || why="${why} ${pmut}=${gotp}(wanted ${pwant})"
+  fi
+  if [ -z "$why" ]; then
+    as_pass "${name} [row ${row}] (hook ${got}, pasubst ${gotm}${pmut:+, ${pmut} ${gotp}})"
+  else
+    as_fail "${name} [row ${row}]" "${why} stderr: ${herr}"
+  fi
+}
+
+# as_rows_arm <label> "<copy>:<verdict> …" <row id>… — each named copy on each row's command.
+as_rows_arm() {
+  local name="$1" spec="$2" r s cp want why=""
+  shift 2
+  for r in "$@"; do
+    if ! wc_row_cmd "$r"; then why="${why} ${r}:absent"; continue; fi
+    for s in $spec; do
+      cp="${s%%:*}"; want="${s#*:}"
+      as_run "$cp" "$WC_CMDX"
+      [ "$AS_V" = "$want" ] || why="${why} ${r}:${cp}=${AS_V}(wanted ${want})"
+      if [ "$want" = B ] && [ "$AS_V" = B ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$AS_ERR"; then why="${why} ${r}:${cp}-refusal-not-022"; fi
+    done
+  done
+  if [ -z "$why" ]; then as_pass "${name} [rows $*] (${spec})"; else as_fail "$name" "$why"; fi
+}
+
+# as_rel_arm <label> <command> <base copy> <stepless copy> <mutant copy> — a decline shown on a
+# command no corpus row isolates: on the base copy the step declines (the base reads as the copy
+# without the step), the copy with that decline removed reads otherwise, and no copy errors.
+as_rel_arm() {
+  local name="$1" cmd="$2" base="$3" off="$4" mut="$5" vb vo vm why=""
+  as_run "$base" "$cmd"; vb="$AS_V"
+  as_run "$off" "$cmd"; vo="$AS_V"
+  as_run "$mut" "$cmd"; vm="$AS_V"
+  case "${vb}|${vo}|${vm}" in E[0-9]*|*'|E'[0-9]*) why="${why} a-copy-errored" ;; esac
+  [ "$vb" = "$vo" ] || why="${why} the-step-moved-on-${base}"
+  [ "$vm" != "$vb" ] || why="${why} ${mut}-reads-the-same"
+  if [ -z "$why" ]; then
+    as_pass "${name} (${base} ${vb}, ${off} ${vo}, ${mut} ${vm})"
+  else
+    as_fail "$name" "${why} (${base} ${vb}, ${off} ${vo}, ${mut} ${vm})"
+  fi
+}
+
+# The difference between two copies, as "<lines removed>/<lines added>".
+as_shape() { # $1 = copy file  $2 = base file
+  /usr/bin/diff "${AS_H}/$2" "${AS_H}/$1" \
+    | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }'
+}
+as_shape_arm() { # $1 label  $2 copy suffix  $3 the shape it must have  [$4 base suffix; default the hook]
+  local got base="block-destructive.sh"
+  [ -z "${4:-}" ] || base="block-destructive-$4.sh"
+  got="$(as_shape "block-destructive-$2.sh" "$base")"
+  if [ "$got" = "$3" ] && /bin/bash -n "${AS_H}/block-destructive-$2.sh" 2>/dev/null; then
+    as_pass "$1 (shape ${got}, parses)"
+  else
+    as_fail "$1" " wanted shape $3 and a copy that parses; observed shape ${got}"
+  fi
+}
+
+# The discriminating fixtures, spelled here because no corpus row isolates their decline. Each but
+# the moved-walk one ends on an unlisted script written after the assignment, so a step that crosses
+# reads it as the command word and adds a record the declined reading never writes.
+as_q="'"
+as_bt='`'
+as_cut="OUT=\$(bash ${WC_D}/ok.sh ${WC_D}/na.sh)"
+as_norm="OUT=\$(bash ${as_q}${WC_D}/ok.sh${as_q}x) ${WC_D}/na.sh"
+as_moved="X=\"\$(true a)\" ${as_q}${WC_D}/ok.sh${as_q})\" ${WC_D}/na.sh"
+as_optd="OUT=\$(bash ${as_q}-x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
+as_optp="OUT=\$(bash ${as_q}+x${WC_D}/ok.sh${as_q}) ${WC_D}/na.sh"
+as_int="OUT=\$(bash ${as_q}${WC_D}/ok.sh${as_q}) ${as_bt}${WC_D}/na.sh${as_bt}"
+# D-2: a quoted listed closing word whose basename is an interpreter's name (this root lists three such
+# paths: a shell interpreter's name, a non-shell interpreter's and the source word).
+as_verb="OUT=\$(bash ${as_q}${WC_D}/bin/bash${as_q}) ${WC_D}/na.sh"
+# D-2, the unquoted spelling (Stage 7): the closing word unquoted with the next word outside the shell
+# family's operand domain and inside the exec arm's; a non-shell-named closing word; a word between the
+# closing word and the script, one that is no command and one that is a wrapper; and the in-domain
+# spelling at an enclosure position. The in-domain spelling at a first-view position is row AS26.
+as_vb_out="OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.py"
+as_vb_ns="OUT=\$(bash ${WC_D}/bin/python3) ${WC_D}/na.py"
+as_vb_flag="OUT=\$(bash ${WC_D}/bin/bash) -x ${WC_D}/na.sh"
+as_vb_wrap="OUT=\$(bash ${WC_D}/bin/bash) nice ${WC_D}/na.sh"
+as_vb_encl="( OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.sh )"
+# Option (a), Stage 7 pass 3: the next words the direct-execution arm reads by fewer views than an
+# interpreter's arm (a quote or a backslash inside the script suffix, and the first piece of a
+# single-quoted path holding a space), behind a shell-named and a non-shell-named closing word, at an
+# enclosure position and behind a wrapper; and an extensionless absolute next word behind a closing word
+# named as the source word.
+as_bsl='\'
+as_vb_iq="OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.${as_q}sh${as_q}"
+as_vb_ibs="OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.s${as_bsl}h"
+as_vb_ws="OUT=\$(bash ${WC_D}/bin/bash) ${as_q}${WC_D}/n a.sh${as_q}"
+as_vb_ns_iq="OUT=\$(bash ${WC_D}/bin/python3) ${WC_D}/na.${as_q}py${as_q}"
+as_vb_ns_ibs="OUT=\$(bash ${WC_D}/bin/python3) ${WC_D}/na.p${as_bsl}y"
+as_vb_ns_ws="OUT=\$(bash ${WC_D}/bin/python3) ${as_q}${WC_D}/n a.py${as_q}"
+as_vb_encl_iq="( OUT=\$(bash ${WC_D}/bin/bash) ${WC_D}/na.${as_q}sh${as_q} )"
+as_vb_encl_ws="( OUT=\$(bash ${WC_D}/bin/bash) ${as_q}${WC_D}/n a.sh${as_q} )"
+as_vb_wrap_iq="OUT=\$(bash ${WC_D}/bin/bash) nice ${WC_D}/na.${as_q}sh${as_q}"
+as_vb_src="OUT=\$(bash ${WC_D}/bin/source) ${WC_D}/na"
+
+as_root "$AS_ROOT"
+
+# --- each copy differs from the hook by exactly its marked lines, and parses ---
+as_shape_arm "ASGN-SUBST-M0: the reverse mutant removes the two call lines" pasubst "2/0"
+as_shape_arm "ASGN-SUBST-M1: the trust mutant removes the gate line" pasubsttrust "1/0"
+as_shape_arm "ASGN-SUBST-M2: the prefix-scan mutant rewrites its loop line" pasubstpfx "1/1"
+as_shape_arm "ASGN-SUBST-M3: the slash mutant removes its line" pasubstslash "1/0"
+as_shape_arm "ASGN-SUBST-M4: the work-budget mutant removes its line" pasubstwork "1/0"
+as_shape_arm "ASGN-SUBST-M5: the closing-quote mutant removes its line" pasubstend "1/0"
+as_shape_arm "ASGN-SUBST-M6: the allowlist mutant removes its line" pasubstallow "1/0"
+as_shape_arm "ASGN-SUBST-M7: the forced copy rewrites the exec arm's phase line" forced "1/1"
+as_shape_arm "ASGN-SUBST-M8: the enclosure-forced copy rewrites the enclosure family's phase line" enclforced "1/1"
+as_shape_arm "ASGN-SUBST-M9: the value-form mutant removes its line" pasubstshape "1/0"
+as_shape_arm "ASGN-SUBST-M10: the closer-inside-the-token mutant removes its line" pasubstcut "1/0"
+as_shape_arm "ASGN-SUBST-M11: the one-literal-word mutant removes its line" pasubstnorm "1/0"
+as_shape_arm "ASGN-SUBST-M12: the plain-word mutant removes its line" pasubstplain "1/0"
+as_shape_arm "ASGN-SUBST-M13: the option-shape mutant removes its line" pasubstopt "1/0"
+as_shape_arm "ASGN-SUBST-M14: the moved-walk mutant removes its line from the guards-off copy" gd-moved "1/0" gd
+as_shape_arm "ASGN-SUBST-M15: the forced reverse copy is the phase line and the two call lines" forced-pasubst "3/1"
+as_shape_arm "ASGN-SUBST-M16: the guards-off copy without the step removes the two call lines" gd-pasubst "2/0" gd
+as_shape_arm "ASGN-SUBST-M17: the operand-name mutant removes its line" pasubstname "1/0"
+as_shape_arm "ASGN-SUBST-M18: the walk-before-refuses mutant removes its line" pasubstverb "1/0"
+
+# --- the listed script inside the substitution: recorded as unresolvable before, admitted after ---
+as_arm "SUBST-BOUNDARY-ASGN-LISTED: an admitted shell interpreter against the opener, the listed script quoted as the substitution's last word" AS01 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-dq: as LISTED, the value double-quoted" AS02 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-tick: as LISTED, opened by a backtick" AS03 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-nonshell: a non-shell interpreter and its listed script" AS04 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-source: the dot or source against the opener" AS05 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-env: as an env operand ahead of a plain command" AS06 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-later: a later segment of a command whose bail does not latch" AS07 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-encl: inside a subshell group, at its enclosure position" AS08 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-arg (declared precision): a reader command against the opener, the listed path its argument" AS09 a W:exec:unresolvable
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-direct: a blank after the opener, the listed path itself the inner command word" AS10 a W:exec:unresolvable
+as_rows_arm "SUBST-BOUNDARY-ASGN-LISTED-enforce: with the exec arm at enforce the listed rows are admitted; the walk before refuses them" "forced:a forced-pasubst:B" AS01 AS02 AS03 AS04 AS05 AS06 AS07 AS08 AS09 AS10
+as_arm "SUBST-BOUNDARY-ASGN-LISTED-ctl: the listed path unquoted, which the trailing-run strip already resolves" AS11 a a
+
+# --- the unlisted or unresolvable script keeps both of today's records ---
+as_arm "SUBST-BOUNDARY-ASGN-UNLISTED: an unlisted script keeps the exec arm's record beside the enclosure family's" AS12 W:exec:unresolvable+shell-enclosure:not-allowlisted W:exec:unresolvable+shell-enclosure:not-allowlisted pasubstallow W:shell-enclosure:not-allowlisted
+as_arm "SUBST-BOUNDARY-ASGN-UNLISTED-row: the seed row of a double-quoted value running an unlisted script" EN06 W:exec:not-allowlisted+shell-enclosure:not-allowlisted W:exec:not-allowlisted+shell-enclosure:not-allowlisted
+as_arm "SUBST-BOUNDARY-ASGN-UNLISTED-plain: the unquoted spelling" AV29 W:exec:not-allowlisted+shell-enclosure:not-allowlisted W:exec:not-allowlisted+shell-enclosure:not-allowlisted
+as_arm "SUBST-BOUNDARY-ASGN-UNLISTED-var: a variable-bearing path" AS13 W:exec:unresolvable+shell-enclosure:unresolvable W:exec:unresolvable+shell-enclosure:unresolvable
+as_rows_arm "SUBST-BOUNDARY-ASGN-UNLISTED-enforce: refused under either family's graduation, before and after" "forced:B enclforced:B forced-pasubst:B" AS12 EN06 AV29
+
+# --- the declared tightening: a command word written after the assignment is now adjudicated ---
+as_arm "ASGN-SUBST-OUTER-exec (declared tightening): the record names the unlisted command word, not the substitution's path" AS14 W:exec:not-allowlisted W:exec:unresolvable
+as_arm "ASGN-SUBST-OUTER-interp (declared tightening): an interpreter after the assignment is refused, as a first-view finding" AS15 B W:exec:unresolvable
+
+# --- the declines: today's reading, each held by its condition ---
+as_arm "ASGN-SUBST-KEEP-trust: a later segment of a command whose bail latched" AS16 W:exec:unresolvable W:exec:unresolvable pasubsttrust a
+as_arm "ASGN-SUBST-KEEP-pfx: a double-quoted value left open across the assignment" AS17 W:exec:unresolvable W:exec:unresolvable pasubstpfx a
+as_arm "ASGN-SUBST-KEEP-end: a value that continues past the closer, before an unlisted script" AS18 W:exec:unresolvable W:exec:unresolvable pasubstend a
+as_arm "ASGN-SUBST-KEEP-work: the shared work budget already spent (fail-closed)" AS19 W:exec:unresolvable W:exec:unresolvable pasubstwork a
+as_arm "ASGN-SUBST-KEEP-blank (declared over-block): a blank between the opener and the interpreter" AS20 B B
+as_arm "ASGN-SUBST-KEEP-wrap (declared over-block): a wrapper against the opener, then the interpreter" AS21 B B
+as_arm "ASGN-SUBST-KEEP-tickdq: a backtick opener inside a double-quoted value" AS22 W:exec:unresolvable W:exec:unresolvable pasubstshape a
+as_arm "ASGN-SUBST-KEEP-slash: a path written against the opener keeps the first view's record of the listed argument" AS23 W:exec:unresolvable+exec:not-allowlisted W:exec:unresolvable+exec:not-allowlisted pasubstslash W:exec:not-allowlisted
+as_rel_arm "ASGN-SUBST-KEEP-cut: a listed word with no closer in its token, the substitution going on to an unlisted word" "$as_cut" hook pasubst pasubstcut
+as_rel_arm "ASGN-SUBST-KEEP-norm: a closing word that closes its quote and continues normalizes to no single word" "$as_norm" hook pasubst pasubstnorm
+as_rel_arm "ASGN-SUBST-KEEP-moved: where the value step crossed the value (guards off), the step does not read past it" "$as_moved" gd gd-pasubst gd-moved
+# Stage 7: env's operand loop takes any assignment-shaped operand, so an operand whose text before its
+# first `=` opens a quote carries the shell's word past the closer (F-01); a quoted listed path holding a
+# space, which the closer test, the one-word test and the allowlist each decline, so no one-line mutant
+# moves it (F-04); and a quoted listed closing word named as an interpreter, where the step records
+# the unlisted script after it and the walk before records nothing, so no decline is taken there (D-2).
+as_arm "ASGN-SUBST-KEEP-name: an env operand whose name part opens a quote keeps today's record" AS24 W:exec:unresolvable W:exec:unresolvable pasubstname a
+as_arm "ASGN-SUBST-KEEP-space (declared residual): a quoted listed path holding a space keeps today's reading, an allow" AS25 a a
+as_run hook "$as_verb"; as_verb_h="$AS_V"
+as_run pasubst "$as_verb"; as_verb_m="$AS_V"
+if [ "$as_verb_h" = "W:exec:not-allowlisted" ] && [ "$as_verb_m" = a ]; then
+  as_pass "ASGN-SUBST-PIN-verb: a quoted listed closing word named as an interpreter, then an unlisted script: the step records the script, the walk before records nothing (hook ${as_verb_h}, pasubst ${as_verb_m})"
+else
+  as_fail "ASGN-SUBST-PIN-verb: a quoted listed closing word named as an interpreter, then an unlisted script: the step records the script, the walk before records nothing" " hook=${as_verb_h}(wanted W:exec:not-allowlisted) pasubst=${as_verb_m}(wanted a)"
+fi
+# Option (a), the operator's decision at Stage 7 pass 3. Where the walk before the step reads the closing
+# word as a verb (a shell interpreter, a non-shell interpreter or the source word), every word after it is
+# that verb's to read, so the step stands aside, whatever follows and at either view, and every command
+# there keeps the walk before's reading. The third limb is the copy without the decline. Row AS26 is the
+# in-domain spelling at a first-view position. Each pin below reads one cell the walk before treats
+# differently, and each KEEP-verb-* arm a next word the direct-execution arm reads by fewer views than an
+# interpreter's arm, where the copy without the decline allows what the walk before refuses or records.
+as_arm "ASGN-SUBST-KEEP-verb: an unquoted listed closing word named as a shell interpreter, then an unlisted script in its domain: the walk before's refusal stands" AS26 B B pasubstverb W:exec:not-allowlisted
+# as_verb_arm <label> <command> <verdict> <pasubstverb verdict> — the hook and the walk before both read
+# <verdict>, and the copy without the decline reads otherwise. A wanted B must name BLOCK-DESTRUCTIVE-022.
+as_verb_arm() {
+  local h m v herr why=""
+  as_run hook "$2"; h="$AS_V"; herr="$AS_ERR"
+  as_run pasubst "$2"; m="$AS_V"
+  as_run pasubstverb "$2"; v="$AS_V"
+  [ "$h" = "$3" ] || why="${why} hook=${h}(wanted $3)"
+  if [ "$3" = B ] && [ "$h" = B ] && ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-022' <<<"$herr"; then why="${why} the-refusal-does-not-name-BLOCK-DESTRUCTIVE-022"; fi
+  [ "$m" = "$3" ] || why="${why} pasubst=${m}(wanted $3)"
+  [ "$4" != "$3" ] || why="${why} the-pasubstverb-limb-expects-the-arm's-own-verdict"
+  [ "$v" = "$4" ] || why="${why} pasubstverb=${v}(wanted $4)"
+  if [ -z "$why" ]; then as_pass "$1 (hook ${h}, pasubst ${m}, pasubstverb ${v})"; else as_fail "$1" "$why"; fi
+}
+as_verb_arm "ASGN-SUBST-PIN-verb-domain: the next word outside the shell interpreter's domain, inside the exec arm's: the walk before reads nothing, and the step stands aside" "$as_vb_out" a W:exec:not-allowlisted
+as_verb_arm "ASGN-SUBST-PIN-verb-nonshell: a closing word named as a non-shell interpreter: the walk before writes that family's record, and the step stands aside" "$as_vb_ns" W:interp-nonshell:not-allowlisted W:exec:not-allowlisted
+as_verb_arm "ASGN-SUBST-PIN-verb-between-flag: a word that is no command between the closing word and the script: the walk before refuses the script as the interpreter's operand, and the step stands aside" "$as_vb_flag" B a
+as_verb_arm "ASGN-SUBST-PIN-verb-between-wrap: a wrapper between the closing word and the script: the walk before refuses the script, and the step stands aside" "$as_vb_wrap" B W:exec:not-allowlisted
+as_verb_arm "ASGN-SUBST-PIN-verb-encl: the in-domain spelling at an enclosure position: at the shipped phases the walk before records the next word in the enclosure family, and the step stands aside" "$as_vb_encl" W:shell-enclosure:not-allowlisted W:exec:not-allowlisted
+# The next words two readers read by different views, each arm relational: the hook reads as the walk
+# before (base hook, stepless pasubst), and the copy without the decline reads otherwise.
+as_rel_arm "ASGN-SUBST-KEEP-verb-iq: a quote inside the next word's script suffix, behind a closing word named as a shell interpreter" "$as_vb_iq" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-ibs: a backslash inside the next word's script suffix, behind a closing word named as a shell interpreter" "$as_vb_ibs" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-ws: the first piece of a single-quoted path holding a space, behind a closing word named as a shell interpreter" "$as_vb_ws" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-nonshell-iq: a quote inside the script suffix, behind a closing word named as a non-shell interpreter" "$as_vb_ns_iq" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-nonshell-ibs: a backslash inside the script suffix, behind a closing word named as a non-shell interpreter" "$as_vb_ns_ibs" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-nonshell-ws: the first piece of a single-quoted path holding a space, behind a closing word named as a non-shell interpreter" "$as_vb_ns_ws" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-encl-iq: a quote inside the script suffix, at an enclosure position" "$as_vb_encl_iq" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-encl-ws: the first piece of a single-quoted path holding a space, at an enclosure position" "$as_vb_encl_ws" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-between-wrap-iq: a wrapper between the closing word and a script whose suffix holds a quote" "$as_vb_wrap_iq" hook pasubst pasubstverb
+as_rel_arm "ASGN-SUBST-KEEP-verb-source: a closing word named as the source word, then an extensionless absolute path" "$as_vb_src" hook pasubst pasubstverb
+
+# --- the seam with the backtick command word: the step crosses, and the word after it keeps its reading ---
+as_run hook "$as_int"; as_int_v="$AS_V"
+as_run pasubst "$as_int"; as_int_m="$AS_V"
+case "$as_int_v" in
+  a|B|E[0-9]*) as_fail "ASGN-SUBST-INT-tick: a backtick-led command word after a listed assignment substitution is still recorded" " hook=${as_int_v} pasubst=${as_int_m}" ;;
+  *)
+    if [ "$as_int_v" != "$as_int_m" ]; then
+      as_pass "ASGN-SUBST-INT-tick: a backtick-led command word after a listed assignment substitution is still recorded (hook ${as_int_v}, pasubst ${as_int_m})"
+    else
+      as_fail "ASGN-SUBST-INT-tick: a backtick-led command word after a listed assignment substitution is still recorded" " the-step-did-not-cross: hook=${as_int_v} pasubst=${as_int_m}"
+    fi
+    ;;
+esac
+
+# --- the adjacent rows that must not move ---
+as_arm "ASGN-SUBST-PIN-adjacent: a substitution value whose closing word is an option" WR132 a a
+as_arm "ASGN-SUBST-PIN-adjacent-dq: a double-quoted substitution value with no closer in the next token" WR133 a a
+as_arm "ASGN-SUBST-PIN-av46: a substitution whose closer is in the assignment token itself" AV46 a a
+as_arm "ASGN-SUBST-PIN-near: an interpreter run for its version" EN52 a a
+as_arm "ASGN-SUBST-PIN-near-redir: a counting command reading the script on standard input" EN54 a a
+
+# --- the same block under leading-glob allowlist entries: the classes such an entry could admit decline ---
+as_why=""
+for as_c in pasubst pasubstmoved pasubsttrust pasubstshape pasubstslash pasubstpfx pasubstwork pasubstcut pasubstend pasubstnorm pasubstplain pasubstopt pasubstallow pasubstname pasubstverb forced forced-pasubst enclforced gd gd-pasubst gd-moved; do
+  /usr/bin/cmp -s "${AS_ROOT}/.claude/hooks/block-destructive-${as_c}.sh" "${AS_GROOT}/.claude/hooks/block-destructive-${as_c}.sh" || as_why="${as_why} ${as_c}"
+done
+if [ -z "$as_why" ]; then
+  as_pass "ASGN-SUBST-GLOB-copies: the leading-glob root's copies are the ones whose shapes are shown above"
+else
+  as_fail "ASGN-SUBST-GLOB-copies: the leading-glob root's copies are the ones whose shapes are shown above" "$as_why"
+fi
+as_root "$AS_GROOT"
+as_arm "ASGN-SUBST-GLOB-LISTED: the listed script, admitted through a leading-glob entry" AS01 a W:exec:unresolvable
+as_rel_arm "ASGN-SUBST-GLOB-opt-dash: a closing word that begins with a dash, which a leading-glob entry matches, is not crossed" "$as_optd" hook pasubst pasubstopt
+as_rel_arm "ASGN-SUBST-GLOB-opt-plus: a closing word that begins with a plus, which a leading-glob entry matches, is not crossed" "$as_optp" hook pasubst pasubstopt
+as_arm "ASGN-SUBST-GLOB-var: a variable-bearing closing word, which a leading-glob entry matches, is not crossed" AS13 W:exec:unresolvable+shell-enclosure:unresolvable W:exec:unresolvable+shell-enclosure:unresolvable pasubstplain W:shell-enclosure:unresolvable
+as_rel_arm "ASGN-SUBST-GLOB-norm: a closing word that normalizes to no single word is not crossed" "$as_norm" hook pasubst pasubstnorm
+as_arm "ASGN-SUBST-GLOB-UNLISTED: an unlisted script keeps both records" AS12 W:exec:unresolvable+shell-enclosure:not-allowlisted W:exec:unresolvable+shell-enclosure:not-allowlisted pasubstallow W:shell-enclosure:not-allowlisted
+as_arm "ASGN-SUBST-GLOB-trust: a later segment of a command whose bail latched" AS16 W:exec:unresolvable W:exec:unresolvable pasubsttrust a
+as_arm "ASGN-SUBST-GLOB-pfx: a double-quoted value left open across the assignment" AS17 W:exec:unresolvable W:exec:unresolvable pasubstpfx a
+as_arm "ASGN-SUBST-GLOB-end: a value that continues past the closer" AS18 W:exec:unresolvable W:exec:unresolvable pasubstend a
+as_arm "ASGN-SUBST-GLOB-work: the shared work budget already spent" AS19 W:exec:unresolvable W:exec:unresolvable pasubstwork a
+as_arm "ASGN-SUBST-GLOB-tickdq: a backtick opener inside a double-quoted value" AS22 W:exec:unresolvable W:exec:unresolvable pasubstshape a
+as_arm "ASGN-SUBST-GLOB-slash: a path written against the opener" AS23 W:exec:unresolvable+exec:not-allowlisted W:exec:unresolvable+exec:not-allowlisted pasubstslash W:exec:not-allowlisted
+as_rel_arm "ASGN-SUBST-GLOB-cut: a listed word with no closer in its token" "$as_cut" hook pasubst pasubstcut
+/bin/rm -rf "$AS_ROOT" "$AS_GROOT"
 
 # ==========================================================================
 # BLOCK-022 — env's split-string value read as env reads it (SPLITV-*)
@@ -11172,6 +11970,1098 @@ sv_arm "OPND-GAP-01: the two-space spelling of a listed spaced path is not admit
 sv_arm "OPND-ADMIT-ctl: an unlisted spaced path is refused" OP35 B
 
 /bin/rm -rf "$AQ_ROOT"
+
+# --- #8493: the option-run latch's two error directions (release script-guard-refuses-only-what-executes;
+# design on sub-task #9062, review on #9087). Part 1, the plain-character set swept on each shell; part 2,
+# the conservative route's refusal names its cause, and its block-log row carries a cause tag.
+
+# Part 1. The set is DERIVED from the hook's own `script_plain_word` pattern on every run, so a member
+# added later is swept automatically. Each word is handed to a fresh child shell as an unquoted word in
+# the child's PROGRAM TEXT (as argv nothing would be expanded), under a clean environment.
+ls_pw="$(/usr/bin/awk '/^script_plain_word\(\)/ { f = 1 } f && index($0, "*[!") { s = $0; sub(/^[^[]*\[!/, "", s); sub(/\]\*\).*$/, "", s); print s; exit }' "$HOOK")"
+ls_set="${ls_pw#A-Za-z0-9}"
+if [ -n "$ls_pw" ] && [ "$ls_set" != "$ls_pw" ] && [ "$ls_set" = "_=+,.:/@%-" ]; then
+  /usr/bin/printf 'PASS: LATCH-SWEEP-SET the plain set read from the hook is the recorded 10 members (%s)\n' "$ls_set"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: LATCH-SWEEP-SET the plain set read from the hook is [%s], not the recorded _=+,.:/@%%- — re-record the set, then re-sweep\n' "$ls_pw"
+  FAIL=$((FAIL + 1))
+fi
+ls_pl="$(/usr/bin/awk 'index($0, "PL = \"ABCDEFGHIJ") { s = $0; sub(/^[^"]*"/, "", s); sub(/".*$/, "", s); print s; exit }' "$HOOK")"
+ls_rd="$(/usr/bin/awk '/^script_qval_readable\(\)/ { f = 1 } f && index($0, "*[!") { s = $0; sub(/^[^[]*\[!/, "", s); sub(/\]\*\).*$/, "", s); print s; exit }' "$HOOK")"
+ls_rd_plain="${ls_rd//\\\'/}"; ls_rd_plain="${ls_rd_plain//\\\"/}"
+if [ "$ls_pl" = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789${ls_set} \\t" ] && [ "$ls_rd_plain" = "$ls_pw" ] && [ "$ls_rd" != "$ls_rd_plain" ]; then
+  /usr/bin/printf 'PASS: LATCH-SWEEP-PARITY the trust boundary'"'"'s PL string and script_qval_readable'"'"'s set each equal the swept set plus exactly their declared extras\n'
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: LATCH-SWEEP-PARITY a second spelling of the plain set differs from the swept one (PL=[%s] readable=[%s])\n' "$ls_pl" "$ls_rd"
+  FAIL=$((FAIL + 1))
+fi
+LS_DIR="$(/usr/bin/mktemp -d)"
+LS_HOME="${LS_DIR}/home"
+/bin/mkdir -p "${LS_DIR}/cwd" "$LS_HOME"
+/usr/bin/touch "${LS_DIR}/cwd/-xb" "${LS_DIR}/cwd/-xc"
+ls_words() { # $1 = member set -> one word per line, the eight positions per member, deduplicated
+  local set="$1" i c
+  i=0
+  while [ "$i" -lt "${#set}" ]; do
+    c="${set:$i:1}"
+    /usr/bin/printf '%s\n' "-a${c}" "-${c}a" "--rc${c}file" "+${c}n" "${c}abc" "a${c}${c}b" "-${c}" "${c}"
+    i=$((i + 1))
+  done | /usr/bin/awk '!seen[$0]++'
+}
+LS_CLASS=""
+ls_child() { # $1 = shell  $2 = extra flag or ''  $3 = word -> LS_CLASS unchanged|split|rewritten|aborted
+  local out rc=0 n
+  out="$(cd "${LS_DIR}/cwd" && /usr/bin/env -i PATH=/usr/bin:/bin HOME="$LS_HOME" LC_ALL=C "$1" ${2:+"$2"} -c "printf '[%s]\\n' $3" 2>/dev/null)" || rc="$?"
+  n="$(/usr/bin/printf '%s' "$out" | /usr/bin/awk 'END { print NR }')"
+  if [ "$rc" -ne 0 ] || [ -z "$out" ]; then LS_CLASS="aborted"
+  elif [ "$n" -gt 1 ]; then LS_CLASS="split"
+  elif [ "$out" = "[$3]" ]; then LS_CLASS="unchanged"
+  else LS_CLASS="rewritten"; fi
+}
+ls_limb() { # $1 label  $2 shell  $3 extra flag or ''  $4 1 when the zsh rule applies
+  local label="$1" sh="$2" fl="$3" zr="$4" w un=0 rw=0 sp=0 ab=0 bad="" total=0 ctl_ok=1 ctlwhy="" isbash isz m1=0
+  while IFS= read -r w; do
+    total=$((total + 1))
+    ls_child "$sh" "$fl" "$w"
+    case "$LS_CLASS" in unchanged) un=$((un + 1)) ;; split) sp=$((sp + 1)) ;; rewritten) rw=$((rw + 1)) ;; aborted) ab=$((ab + 1)) ;; esac
+    if [ "$LS_CLASS" != "unchanged" ]; then
+      if [ "$zr" = 1 ] && [ "${w:0:1}" = "=" ] && [ "$LS_CLASS" != "split" ]; then :; else bad="${bad} ${w}(${LS_CLASS})"; fi
+    fi
+  done < <({ ls_words "$ls_set"; ls_words "a"; } | /usr/bin/awk '!seen[$0]++')
+  isbash="$(/usr/bin/env -i PATH=/usr/bin:/bin "$sh" ${fl:+"$fl"} -c 'printf %s "${BASH_VERSION:-}${ZSH_VERSION:-}"' 2>/dev/null)"
+  /usr/bin/printf 'RESIDUAL: %s population: %s · members %s (%s) · positions 8 · words %s · unchanged %s · rewritten %s · split %s · aborted %s · version %s\n' "$label" "$sh" "${#ls_set}" "$ls_set" "$total" "$un" "$rw" "$sp" "$ab" "${isbash:-none exposed (the shell sets neither BASH_VERSION nor ZSH_VERSION)}"
+  if [ -z "$bad" ]; then
+    /usr/bin/printf 'PASS: %s every plain-set word comes back as one unchanged word (%s words)\n' "$label" "$total"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s words not unchanged:%s — a member that fails is re-filed at P1 and the slice stops (plan R13)\n' "$label" "$bad"; FAIL=$((FAIL + 1))
+  fi
+  ls_child "$sh" "$fl" '-x?'; [ "$LS_CLASS" = "split" ] || { ctl_ok=0; ctlwhy="${ctlwhy} glob=${LS_CLASS}"; }
+  ls_child "$sh" "$fl" '~'; [ "$LS_CLASS" = "rewritten" ] || { ctl_ok=0; ctlwhy="${ctlwhy} tilde=${LS_CLASS}"; }
+  if [ -n "$isbash" ]; then ls_child "$sh" "$fl" '-x{b,c}'; [ "$LS_CLASS" = "split" ] || { ctl_ok=0; ctlwhy="${ctlwhy} brace=${LS_CLASS}"; }; fi
+  /usr/bin/printf 'RESIDUAL: %s controls: glob splits, tilde rewritten, brace %s, 7 control words in the sweep above\n' "$label" "$([ -n "$isbash" ] && echo splits || echo not-applicable)"
+  if [ "$ctl_ok" = 1 ]; then /usr/bin/printf 'PASS: LATCH-SWEEP-CTL-%s the splitting and rewriting controls fire\n' "${label#LATCH-SWEEP-}"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: LATCH-SWEEP-CTL-%s a control did not fire:%s — the sweep cannot see a member that misbehaves\n' "${label#LATCH-SWEEP-}" "$ctlwhy"; FAIL=$((FAIL + 1)); fi
+  while IFS= read -r w; do ls_child "$sh" "$fl" "$w"; [ "$LS_CLASS" = "unchanged" ] || m1=$((m1 + 1)); done < <(ls_words '~')
+  if [ "$m1" -ge 1 ]; then /usr/bin/printf 'PASS: LATCH-SWEEP-M1-%s a wrongly included member (~) is caught (%s words not unchanged)\n' "${label#LATCH-SWEEP-}" "$m1"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: LATCH-SWEEP-M1-%s the sweep did not catch a wrongly included member\n' "${label#LATCH-SWEEP-}"; FAIL=$((FAIL + 1)); fi
+}
+ls_limb LATCH-SWEEP-bash /bin/bash "" 0
+ls_limb LATCH-SWEEP-sh /bin/sh "" 0
+ls_dash=""
+for ls_c in /bin/dash /usr/bin/dash; do [ -x "$ls_c" ] && { ls_dash="$ls_c"; break; }; done
+if [ -n "$ls_dash" ]; then ls_limb LATCH-SWEEP-dash "$ls_dash" "" 0
+else /usr/bin/printf 'RESIDUAL: LATCH-SWEEP-dash absent on this host: sh was measured only as the binary /bin/sh resolves to\n'; fi
+if [ -x /bin/zsh ]; then ls_limb LATCH-SWEEP-zsh /bin/zsh -f 1
+else /usr/bin/printf 'RESIDUAL: LATCH-SWEEP-zsh absent on this host\n'; fi
+/bin/rm -rf "$LS_DIR"
+
+# --- #8493 Part 2: the conservative route's refusal names its cause (LATCH-CAUSE-*) ---
+# Three gates hand a segment to the route a bare -c takes: an unreadable word ahead of the
+# operand (opaque), a command-string cluster other than a bare -c (cluster), and an option
+# argument whose text the walk does not hold (opaque-arg). A refusal the route's own loop
+# issues appends "Read on the conservative route (<gate>): ..." to its reason; the Override
+# line is unchanged. That refusal's block-log row gains one key, features {schema_version: 1,
+# route, subject} (ADR-205's forward-compatible shape); every other row keeps exactly the six
+# base keys in their order. Payloads are corpus rows read by id, under a hermetic root of
+# their own; the block log is cleared before each call, so the record read is that call's.
+LC_ROOT="$(/usr/bin/mktemp -d)"
+LC_HOOKS="${LC_ROOT}/.claude/hooks"
+/bin/mkdir -p "${LC_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${LC_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${LC_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" "${WC_D}/li sted/ok.sh" > "${LC_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${LC_HOOKS}/.mode"
+/bin/cp "$HOOK" "${LC_HOOKS}/block-destructive.sh"
+/usr/bin/sed 's/^readonly DESTRUCTIVE_022_INTERP_PHASE=.*/readonly DESTRUCTIVE_022_INTERP_PHASE="enforce"   # shadow | warn | enforce/' \
+  "$HOOK" > "${LC_HOOKS}/block-destructive-ienf.sh"
+/usr/bin/sed -e '/# M-OPAQUE (mutation/d' -e '/# M-CLUSTER/d' -e '/# M-OPAQUE-ARG/d' \
+  "$HOOK" > "${LC_HOOKS}/block-destructive-gateoff.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-TAG (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m1a.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-TAG-ARG (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m1b.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-NOTE (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m2a.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-LIVE (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m3a.sh"
+# Stage 7: the bare -c clear (m1c), the refusal marker (m5), a block-log writer that fails (logfail),
+# and the live test removed from both readers of the route (m6).
+/usr/bin/grep -vF -- '# M-ROUTE-CLEAR-ARG (mutation' "$HOOK" > "${LC_HOOKS}/block-destructive-m1c.sh"
+# Stage 7 pass 2: the bare -c clear with its token test dropped, so it clears on any token the label reaches (m1d).
+/usr/bin/sed '/# M-ROUTE-CLEAR-ARG (mutation/s/if \[ "\$script_fsub" = "-c" \] && \[/if [/' "$HOOK" > "${LC_HOOKS}/block-destructive-m1d.sh"
+/usr/bin/grep -vF -- '# M-ROUTE-MARK' "$HOOK" > "${LC_HOOKS}/block-destructive-m5.sh"
+/usr/bin/awk '/^log_block\(\) \{$/ { print; print "  return 1"; next } { print }' "$HOOK" > "${LC_HOOKS}/block-destructive-logfail.sh"
+/usr/bin/sed -e 's/if \$live == "1" and /if /' -e 's/if \[ "\${script_route_live:-0}" != 1 \] || \[ -z "\${script_route:-}" \]; then return 0; fi/if [ -z "${script_route:-}" ]; then return 0; fi/' \
+  "$HOOK" > "${LC_HOOKS}/block-destructive-m6.sh"
+/bin/chmod +x "${LC_HOOKS}/"block-destructive*.sh
+LC_LOG="${LC_HOOKS}/block-log.jsonl"
+LC_DRAIN="${LC_HOOKS}/destructive-warn-log.jsonl"
+lc_gone() { # $1 = copy -> how many lines the copy lacks against the shipped hook
+  local a b
+  a="$(/usr/bin/wc -l < "$HOOK" | /usr/bin/tr -d '[:space:]')"
+  b="$(/usr/bin/wc -l < "${LC_HOOKS}/$1" | /usr/bin/tr -d '[:space:]')"
+  /usr/bin/printf '%s' "$((a - b))"
+}
+LC_EXIT=0; LC_ERR=""; LC_REC=""
+lc_run() { # $1 = copy  $2 = command -> LC_EXIT, LC_ERR, LC_REC (this call's block-log record, or empty)
+  local tmp
+  tmp="$(/usr/bin/mktemp)"
+  /bin/rm -f "$LC_LOG"
+  LC_EXIT=0
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT
+    /usr/bin/printf '%s' "$(bash_payload "$2" "$LC_ROOT")" | /bin/bash "${LC_HOOKS}/$1" >/dev/null 2>"$tmp" ) || LC_EXIT="$?"
+  LC_ERR="$(/bin/cat "$tmp")"; /bin/rm -f "$tmp"
+  LC_REC=""
+  if [ -s "$LC_LOG" ]; then LC_REC="$(/usr/bin/jq -s -c '.[-1]' "$LC_LOG" 2>/dev/null)"; fi
+}
+lc_route() { # -> the features.route of LC_REC, or empty
+  if [ -n "$LC_REC" ]; then /usr/bin/jq -r '.features.route // ""' <<<"$LC_REC" 2>/dev/null; fi
+}
+lc_report() { # $1 = label  $2 = observed reasons (empty = pass)
+  if [ -z "$2" ]; then
+    /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: %s\n  observed:%s\n  stderr: %s\n' "$1" "$2" "$LC_ERR"; FAIL=$((FAIL + 1))
+  fi
+}
+# lc_arm <label> <row id | -> <copy> <exit> <note gate | -> <token named | -> <features.route | -> <subject | any | -> [<command when row is ->]
+lc_arm() {
+  local name="$1" row="$2" copy="$3" want="$4" gate="$5" tok="$6" route="$7" subj="$8" cmd="${9:-}" why="" got gv gs keys last
+  if [ "$row" != "-" ]; then
+    if ! wc_row_cmd "$row"; then
+      /usr/bin/printf 'FAIL: %s\n  row %s is not a block-destructive row of the corpus\n' "$name" "$row"; FAIL=$((FAIL + 1)); return 0
+    fi
+    cmd="$WC_CMDX"; name="${name} [row ${row}]"
+  fi
+  lc_run "$copy" "$cmd"
+  [ "$LC_EXIT" = "$want" ] || why="${why} exit=${LC_EXIT}"
+  if [ "$gate" = "-" ]; then
+    case "$LC_ERR" in *"Read on the conservative route"*) why="${why} unexpected-note" ;; esac
+  else
+    case "$LC_ERR" in *"Read on the conservative route (${gate}): "*) ;; *) why="${why} no-(${gate})-note" ;; esac
+    if [ "$tok" != "-" ]; then
+      case "$LC_ERR" in *"(${gate}): "*"'${tok}'"*) ;; *) why="${why} note-does-not-name-${tok}" ;; esac
+    fi
+  fi
+  if [ "$want" = 2 ]; then
+    if [ -z "$LC_REC" ]; then
+      why="${why} no-block-log-record"
+    else
+      keys="$(/usr/bin/jq -r '[keys_unsorted[] | select(. != "features")] | join(",")' <<<"$LC_REC" 2>/dev/null)"
+      [ "$keys" = "ts,hook,rule,tool,input_digest,cwd" ] || why="${why} base-keys=${keys}"
+      got="$(/usr/bin/jq -r 'if has("features") then (.features.route // "<no-route>") else "" end' <<<"$LC_REC" 2>/dev/null)"
+      if [ "$route" = "-" ]; then
+        [ -z "$got" ] || why="${why} features.route=${got}(wanted-none)"
+      else
+        [ "$got" = "$route" ] || why="${why} features.route=${got:-absent}(wanted-${route})"
+        if [ -n "$got" ]; then
+          gv="$(/usr/bin/jq -r '.features.schema_version // ""' <<<"$LC_REC" 2>/dev/null)"
+          [ "$gv" = "1" ] || why="${why} schema_version=${gv:-absent}"
+          gs="$(/usr/bin/jq -r '.features.subject // ""' <<<"$LC_REC" 2>/dev/null)"
+          case "$subj" in
+            any) case "$gs" in first|later) ;; *) why="${why} subject=${gs:-absent}" ;; esac ;;
+            *) [ "$gs" = "$subj" ] || why="${why} subject=${gs:-absent}(wanted-${subj})" ;;
+          esac
+          last="$(/usr/bin/jq -r '[keys_unsorted[]] | last' <<<"$LC_REC" 2>/dev/null)"
+          [ "$last" = "features" ] || why="${why} features-not-last"
+          [ "$(/usr/bin/jq -r '.rule' <<<"$LC_REC" 2>/dev/null)" = "BLOCK-DESTRUCTIVE-022" ] || why="${why} tagged-row-not-022"
+        fi
+      fi
+    fi
+  else
+    [ -z "$LC_REC" ] || why="${why} unexpected-block-log-record"
+  fi
+  lc_report "$name" "$why"
+}
+
+# The three gates, each named with the token that sent the segment to the route.
+lc_arm "LATCH-CAUSE-opaque: an unreadable option word ahead of the script is named as the route's cause" ZU34 block-destructive.sh 2 opaque '-x$X' opaque later
+lc_arm "LATCH-CAUSE-opaque-word: an unreadable word that is not an option (a redirection) is named, not an option" ZH05 block-destructive.sh 2 opaque '2>/dev/null' opaque later
+lc_arm "LATCH-CAUSE-cluster: a command-string option cluster is named as the route's cause" ZC33 block-destructive.sh 2 cluster '-ec' cluster any
+lc_arm "LATCH-CAUSE-optarg: an option argument whose text the walk does not hold is named as the route's cause" ZH19 block-destructive.sh 2 opaque-arg 'pipe"fail"' opaque-arg later
+
+# The controls: every refusal outside the route keeps the plain row and the plain reason.
+lc_arm "LATCH-CAUSE-ctl-plain: the same unlisted script refused off the route keeps the six keys and no note" - block-destructive.sh 2 - - - - "bash $HINT_UNLISTED"
+lc_arm "LATCH-CAUSE-ctl-dashc: a bare -c program running an unlisted script is a real command string, untagged" T18 block-destructive.sh 2 - - - -
+lc_arm "LATCH-CAUSE-ctl-allow: the route taken over only an allowlisted script writes no record" ZU05 block-destructive.sh 0 - - - -
+lc_arm "LATCH-CAUSE-ctl-stepover: the route token's own word refused is untagged" X12 block-destructive.sh 2 - - - -
+lc_arm "LATCH-CAUSE-ctl-rule: another rule's refusal keeps exactly the six base keys" - block-destructive.sh 2 - - - - 'git push --force origin main'
+if wc_row_cmd ZU34; then
+  lc_run block-destructive.sh "$WC_CMDX"
+  lc_why=""
+  [ "$LC_EXIT" = 2 ] || lc_why="${lc_why} exit=${LC_EXIT}"
+  /usr/bin/grep -qE "$HINT_ORDER" <<<"$LC_ERR" || lc_why="${lc_why} override-order-changed"
+  lc_report "LATCH-CAUSE-ctl-hint: the route refusal's Override line keeps its order [row ZU34]" "$lc_why"
+else
+  lc_report "LATCH-CAUSE-ctl-hint: the route refusal's Override line keeps its order" " row ZU34 absent"
+fi
+# A non-shell interpreter on the route: at the shipped warn phase it is recorded, never refused,
+# and the drain row it writes is unchanged; at enforce the router delegates and the tag follows.
+if wc_row_cmd ZH16; then
+  lc_d0=0; [ -f "$LC_DRAIN" ] && lc_d0="$(/usr/bin/wc -l < "$LC_DRAIN" | /usr/bin/tr -d '[:space:]')"
+  lc_run block-destructive.sh "$WC_CMDX"
+  lc_why=""
+  [ "$LC_EXIT" = 0 ] || lc_why="${lc_why} exit=${LC_EXIT}"
+  [ -z "$LC_REC" ] || lc_why="${lc_why} unexpected-block-log-record"
+  lc_d1=0; [ -f "$LC_DRAIN" ] && lc_d1="$(/usr/bin/wc -l < "$LC_DRAIN" | /usr/bin/tr -d '[:space:]')"
+  if [ "$lc_d1" -gt "$lc_d0" ]; then
+    /usr/bin/tail -n 1 "$LC_DRAIN" | /usr/bin/jq -e 'has("features") | not' >/dev/null 2>&1 || lc_why="${lc_why} drain-row-gained-features"
+  else
+    lc_why="${lc_why} no-drain-row"
+  fi
+  lc_report "LATCH-CAUSE-ctl-warn: a non-shell interpreter on the route at the shipped warn phase writes a plain drain row and no block-log record [row ZH16]" "$lc_why"
+else
+  lc_report "LATCH-CAUSE-ctl-warn: a non-shell interpreter on the route at the shipped warn phase" " row ZH16 absent"
+fi
+if /usr/bin/grep -qF 'readonly DESTRUCTIVE_022_INTERP_PHASE="enforce"' "${LC_HOOKS}/block-destructive-ienf.sh"; then
+  lc_arm "LATCH-CAUSE-enf: the same at enforce is refused with its cause and tag (router delegation)" ZH16 block-destructive-ienf.sh 2 opaque '-u""' opaque first
+else
+  lc_report "LATCH-CAUSE-enf: the same at enforce is refused with its cause and tag" " the interpreter-phase copy is not at enforce"
+fi
+
+# The latch's own corpus rows: every refusal in its groups, through the shipped hook and through a
+# copy with the three gate lines deleted (the suite's own seds). Ground truth for these rows was
+# taken with marker scripts (seed 5); o and - are refusals that ran nothing unlisted.
+lc_cn=0; lc_ct=0; lc_co=0; lc_cc=0; lc_ca=0; lc_cok=0; lc_cbad=""; lc_m0t=0; lc_rg=""
+lc_i=0
+while [ "$lc_i" -lt "$wc_n" ]; do
+  case "${WC_GROUP[$lc_i]}" in
+    term-unread|term-run|term-run2|cluster|cluster-edge|optarg|unread-word)
+      if [ "${WC_REC[$lc_i]}" = "B" ]; then
+        wc_expand "${WC_CMD[$lc_i]}"
+        lc_cn=$((lc_cn + 1))
+        lc_run block-destructive.sh "$WC_CMDX"
+        lc_r="$(lc_route)"
+        case "$lc_r" in
+          "") ;;
+          opaque) lc_co=$((lc_co + 1)) ;;
+          cluster) lc_cc=$((lc_cc + 1)) ;;
+          opaque-arg) lc_ca=$((lc_ca + 1)) ;;
+          *) lc_cbad="${lc_cbad} ${WC_ID[$lc_i]}=${lc_r}" ;;
+        esac
+        if [ -n "$lc_r" ]; then
+          lc_ct=$((lc_ct + 1))
+          lc_rg="${lc_rg}${lc_r}/${WC_GT[$lc_i]}"$'\n'
+          case "${WC_GT[$lc_i]}" in o|-) lc_cok=$((lc_cok + 1)) ;; esac
+        fi
+        lc_run block-destructive-gateoff.sh "$WC_CMDX"
+        if [ -n "$(lc_route)" ]; then lc_m0t=$((lc_m0t + 1)); fi
+      fi ;;
+  esac
+  lc_i=$((lc_i + 1))
+done
+lc_rgs="$(/usr/bin/printf '%s' "$lc_rg" | /usr/bin/sort | /usr/bin/uniq -c | /usr/bin/awk '{printf "%s%s=%s", (NR > 1 ? " " : ""), $2, $1}')"
+/usr/bin/printf 'RESIDUAL: LATCH-CAUSE-CORPUS latch-group refusals=%s route-tagged=%s (opaque=%s cluster=%s opaque-arg=%s); by route/ground-truth: %s; tagged that ran nothing unlisted (ground truth o or -)=%s of %s\n' \
+  "$lc_cn" "$lc_ct" "$lc_co" "$lc_cc" "$lc_ca" "${lc_rgs:-none}" "$lc_cok" "$lc_ct"
+lc_why=""
+[ "$lc_cn" -gt 0 ] || lc_why="${lc_why} no-latch-group-refusals-read"
+[ -z "$lc_cbad" ] || lc_why="${lc_why} unknown-route-values:${lc_cbad}"
+[ "$lc_co" -ge 1 ] || lc_why="${lc_why} opaque=0"
+[ "$lc_cc" -ge 1 ] || lc_why="${lc_why} cluster=0"
+[ "$lc_ca" -ge 1 ] || lc_why="${lc_why} opaque-arg=0"
+LC_ERR=""
+lc_report "LATCH-CAUSE-CORPUS: the latch's refusals carry only the three route values, each at least once (${lc_ct} of ${lc_cn} tagged)" "$lc_why"
+lc_why=""
+lc_g="$(lc_gone block-destructive-gateoff.sh)"
+[ "$lc_g" = 3 ] || lc_why="${lc_why} gate-off-copy-lacks-${lc_g}-lines(wanted-3)"
+[ "$lc_m0t" = 0 ] || lc_why="${lc_why} tagged=${lc_m0t}"
+lc_report "LATCH-CAUSE-M0: with the three gate lines deleted, none of the ${lc_cn} latch-group refusals is tagged" "$lc_why"
+
+# The mutants: each marker line deleted alone (exactly one line gone), the matching core arm reads
+# untagged or note-less. A marker that does not exist yet leaves no mutant to show live.
+lc_mut_arm() { # <label> <copy> <row> <untagged | note-less | both>
+  local name="$1" copy="$2" row="$3" want="$4" g why="" got
+  g="$(lc_gone "$copy")"
+  if [ "$g" != 1 ]; then
+    LC_ERR=""; lc_report "$name" " the mutant is not live (${g} lines gone, wanted exactly 1: its marker is absent)"; return 0
+  fi
+  if ! wc_row_cmd "$row"; then LC_ERR=""; lc_report "$name" " row ${row} absent"; return 0; fi
+  lc_run "$copy" "$WC_CMDX"
+  [ "$LC_EXIT" = 2 ] || why="${why} exit=${LC_EXIT}"
+  got="$(lc_route)"
+  case "$want" in untagged|both) [ -z "$got" ] || why="${why} still-tagged=${got}" ;; esac
+  case "$want" in note-less|both)
+    case "$LC_ERR" in *"Read on the conservative route"*) why="${why} note-still-present" ;; esac ;;
+  esac
+  lc_report "${name} [row ${row}]" "$why"
+}
+lc_mut_arm "LATCH-CAUSE-M1a: without M-ROUTE-TAG the gate's refusal is untagged" block-destructive-m1a.sh ZU34 untagged
+lc_mut_arm "LATCH-CAUSE-M1b: without M-ROUTE-TAG-ARG the option argument's refusal is untagged" block-destructive-m1b.sh ZH19 untagged
+lc_mut_arm "LATCH-CAUSE-M2a: without M-ROUTE-NOTE the route's refusal carries no note" block-destructive-m2a.sh ZU34 note-less
+lc_mut_arm "LATCH-CAUSE-M3a: without M-ROUTE-LIVE the route's refusal is neither tagged nor noted" block-destructive-m3a.sh ZU34 both
+
+# --- Stage 7 (#9072): the review's carried adjustments FM-3, FM-4, FM-6 and CD-2, and the reader guard (F-06) ---
+# lc_copy_arm <label> <copy> <shape removed/added> <row id | -> <untagged | tagged:<route>> [<command when row is ->]
+# The copy must differ from the hook by exactly that shape; then the call must refuse, and the row must carry
+# no route tag, or carry that route with its note.
+lc_copy_arm() {
+  local name="$1" copy="$2" shape="$3" row="$4" want="$5" cmd="${6:-}" why="" got
+  got="$(/usr/bin/diff "$HOOK" "${LC_HOOKS}/$copy" | /usr/bin/awk 'index($0, "<") == 1 { r++ } index($0, ">") == 1 { a++ } END { printf "%d/%d", r, a }')"
+  if [ "$got" != "$shape" ]; then LC_ERR=""; lc_report "$name" " the copy is not live (shape ${got}, wanted ${shape})"; return 0; fi
+  if [ "$row" != "-" ]; then
+    if ! wc_row_cmd "$row"; then LC_ERR=""; lc_report "$name" " row ${row} absent"; return 0; fi
+    cmd="$WC_CMDX"; name="${name} [row ${row}]"
+  fi
+  lc_run "$copy" "$cmd"
+  [ "$LC_EXIT" = 2 ] || why="${why} exit=${LC_EXIT}"
+  case "$want" in
+    untagged) [ -z "$(lc_route)" ] || why="${why} still-tagged=$(lc_route)" ;;
+    tagged:*)
+      [ "$(lc_route)" = "${want#tagged:}" ] || why="${why} features.route=$(lc_route)(wanted-${want#tagged:})"
+      case "$LC_ERR" in *"Read on the conservative route (${want#tagged:}): "*) ;; *) why="${why} no-${want#tagged:}-note" ;; esac ;;
+  esac
+  lc_report "$name" "$why"
+}
+# FM-3: the opaque note's remedy fits its token. A redirection or here-string word has no plain spelling, so
+# its note gives the move that works; an option word keeps the plain-spelling remedy.
+lc_why=""
+if wc_row_cmd ZH05; then
+  lc_run block-destructive.sh "$WC_CMDX"
+  case "$LC_ERR" in *"(opaque): "*"has no plain spelling"*"after the script and its arguments"*) ;; *) lc_why="${lc_why} ZH05-lacks-the-redirection-remedy" ;; esac
+  case "$LC_ERR" in *"in plain characters"*) lc_why="${lc_why} ZH05-offers-the-plain-spelling" ;; esac
+else
+  lc_why="${lc_why} row-ZH05-absent"
+fi
+if wc_row_cmd ZU34; then
+  lc_run block-destructive.sh "$WC_CMDX"
+  case "$LC_ERR" in *"(opaque): "*"in plain characters"*) ;; *) lc_why="${lc_why} ZU34-lacks-the-plain-spelling-remedy" ;; esac
+  case "$LC_ERR" in *"has no plain spelling"*) lc_why="${lc_why} ZU34-offers-the-redirection-remedy" ;; esac
+else
+  lc_why="${lc_why} row-ZU34-absent"
+fi
+lc_report "LATCH-CAUSE-opaque-remedy: the opaque note gives a redirection word the move that works and an option word its plain spelling [rows ZH05, ZU34]" "$lc_why"
+# FM-4: a bare -c after an option argument the walk cannot read is a real command string. Its refusals are
+# untagged; without the clear they carry the option argument's tag. The verdict is the same either way.
+lc_dashc="bash -o pipe\"fail\" -c 'bash ${WC_D}/na.sh'"
+lc_arm "LATCH-CAUSE-ctl-optarg-dashc: a bare -c program after an unreadable option argument is a real command string, untagged" - block-destructive.sh 2 - - - - "$lc_dashc"
+lc_copy_arm "LATCH-CAUSE-M1c: without M-ROUTE-CLEAR-ARG that refusal keeps the option argument's tag" block-destructive-m1c.sh 1/0 - tagged:opaque-arg "$lc_dashc"
+# Stage 7 pass 2 (N-1): the clear waits for a real bare -c. After an option argument the walk cannot read, a
+# second gate's token is rewritten to -c and reaches the same label; the walk's own reading of that token is
+# not -c, so the first gate's tag stands and the refusal carries it and its note. With the token test
+# dropped, the clear fires there too and the same refusal is untagged.
+lc_gate2="bash -o pipe\"fail\" -x\$X ${WC_D}/na.sh"
+lc_arm "LATCH-CAUSE-ctl-optarg-gate2: a second gate after an unreadable option argument keeps the option argument's tag and note" - block-destructive.sh 2 opaque-arg 'pipe"fail"' opaque-arg any "$lc_gate2"
+lc_copy_arm "LATCH-CAUSE-M1d: with the clear's token test dropped that refusal is untagged" block-destructive-m1d.sh 1/1 - untagged "$lc_gate2"
+# FM-6: the deny path cannot lose a refusal. A copy whose block-log writer returns non-zero still refuses,
+# on another rule's refusal and on this rule's; block() guards the writer and the note helper ends return 0.
+lc_why=""
+lc_g="$(/usr/bin/diff "$HOOK" "${LC_HOOKS}/block-destructive-logfail.sh" | /usr/bin/grep -c '^>')"
+[ "$lc_g" = 1 ] || lc_why="${lc_why} the-failing-writer-copy-adds-${lc_g}-lines(wanted-1)"
+for lc_c in "git push --force origin main" "bash $HINT_UNLISTED"; do
+  lc_run block-destructive-logfail.sh "$lc_c"
+  [ "$LC_EXIT" = 2 ] || lc_why="${lc_why} [${lc_c%% *}]exit=${LC_EXIT}"
+done
+lc_report "LATCH-CAUSE-M4-logfail: with a block-log writer that returns non-zero, a refusal still exits 2" "$lc_why"
+lc_why=""
+/usr/bin/grep -qF 'log_block "$rule_id" || true' "$HOOK" || lc_why="${lc_why} block-does-not-guard-the-writer"
+lc_last="$(/usr/bin/awk '/^script_route_note\(\) / { f = 1 } f && /^\}/ { print p; exit } f && NF { p = $0 }' "$HOOK" | /usr/bin/sed 's/^[[:space:]]*//')"
+[ "$lc_last" = "return 0" ] || lc_why="${lc_why} the-note-helper-ends-with:${lc_last}"
+lc_report "LATCH-CAUSE-STRUCT-deny: block() guards the block-log writer and the note helper ends with return 0" "$lc_why"
+# CD-2: the tag is keyed on a marker check_script_target sets before each of its three refusals, as well as
+# on the loop's flag. Without the marker the route's refusal is untagged.
+lc_copy_arm "LATCH-CAUSE-M5: without the refusal marker the route's refusal is untagged" block-destructive-m5.sh 3/0 ZU34 untagged
+# F-06: a refusal outside the route's loop while the route is already recorded. An option argument the walk
+# cannot read, carrying a script suffix, is refused on its own value before the loop runs: plain row, no note.
+# With the live test removed from both readers, the same refusal is tagged and noted.
+lc_own="bash --rcfile \$X.sh ${WC_D}/ok.sh"
+lc_arm "LATCH-CAUSE-ctl-optarg-own: an unreadable option argument carrying a script suffix, refused on its own value before the loop, keeps the six keys and no note" - block-destructive.sh 2 - - - - "$lc_own"
+lc_copy_arm "LATCH-CAUSE-M6: with the live test removed from both readers that refusal is tagged and noted" block-destructive-m6.sh 2/2 - tagged:opaque-arg "$lc_own"
+/bin/rm -rf "$LC_ROOT"
+
+# --- #8327: the rule's work ceiling (CEIL-*) ---
+# A command hook that outlasts the runtime's timeout does not block, so the rule bounds its own
+# time. At the head of every bash loop on its surface it compares bash's SECONDS with a deadline
+# fixed at hook start (SCRIPT_CEIL_SECONDS), and at -022 entry it compares the command's length
+# with SCRIPT_CEIL_CHARS, because one expansion between two checks cannot be interrupted. Past
+# either the command is refused, whatever the arms' phases; the refusal's block-log row carries
+# features {schema_version: 1, ceiling: <cause>}. Copies are built from the hook under test:
+#   t0 / t2   the deadline at 0 / 2 seconds          off    the ceiling and the gate off
+#   trace     each check also appends its tag        site   only the route loop's check refuses
+#   strip     every # M-CEIL- line deleted (no ceiling at all, for the cost control)
+#   sens      the check sleeps 50 ms per call (the cost control's sensitivity)
+#   v-*       an enclosure-reaching phase at enforce with the view's small-budget edits
+# No arm prints a size beside a time: each prints a ratio to its budget, as the lin_* arms do.
+CEIL_LIMIT="${CEIL_LIMIT_DS:-200}"   # tenths: the watchdog a refusal must beat
+CEIL_CTL="${CEIL_CTL_DS:-100}"       # tenths: the watchdog the ceiling-off limb must outlast
+CE_ROOT="$(/usr/bin/mktemp -d)"
+CE_HOOKS="${CE_ROOT}/.claude/hooks"
+/bin/mkdir -p "${CE_HOOKS}/lib"
+/bin/cp "${HOOK%/*}/lib/"*.sh  "${CE_HOOKS}/lib/" 2>/dev/null || true
+/bin/cp "${HOOK%/*}/lib/"*.awk "${CE_HOOKS}/lib/" 2>/dev/null || true
+/usr/bin/printf '%s\n' "${WC_D}/ok.sh" "${WC_D}/ok.py" > "${CE_ROOT}/.claude/script-execution-allowlist.txt"
+/usr/bin/printf 'enforce' > "${CE_HOOKS}/.mode"
+CE_TRACE="${CE_ROOT}/trace"
+CE_LOG="${CE_HOOKS}/block-log.jsonl"
+CE_DRAIN="${CE_HOOKS}/destructive-warn-log.jsonl"
+/bin/cp "$HOOK" "${CE_HOOKS}/block-destructive.sh"
+/usr/bin/sed 's/^readonly SCRIPT_CEIL_SECONDS=[0-9]*$/readonly SCRIPT_CEIL_SECONDS=0/' "$HOOK" > "${CE_HOOKS}/block-destructive-t0.sh"
+/usr/bin/sed 's/^readonly SCRIPT_CEIL_SECONDS=[0-9]*$/readonly SCRIPT_CEIL_SECONDS=2/' "$HOOK" > "${CE_HOOKS}/block-destructive-t2.sh"
+/usr/bin/sed -e 's/^readonly SCRIPT_CEIL_SECONDS=[0-9]*$/readonly SCRIPT_CEIL_SECONDS=1000000/' \
+  -e 's/^readonly SCRIPT_CEIL_CHARS=[0-9]*$/readonly SCRIPT_CEIL_CHARS=1000000000/' "$HOOK" > "${CE_HOOKS}/block-destructive-off.sh"
+F="$CE_TRACE" /usr/bin/awk 'BEGIN { f = ENVIRON["F"] } / # M-CEIL-TEST$/ { print "  /usr/bin/printf \"%s\\n\" \"$1\" >> \"" f "\"" } { print }' \
+  "$HOOK" > "${CE_HOOKS}/block-destructive-trace.sh"
+/usr/bin/awk '/ # M-CEIL-TEST$/ { print "  if [ \"$1\" = route ]; then script_ceil_refuse time \"$1\"; fi" } { print }' \
+  "$HOOK" > "${CE_HOOKS}/block-destructive-site.sh"
+/usr/bin/grep -v -- '# M-CEIL-' "$HOOK" > "${CE_HOOKS}/block-destructive-strip.sh"
+/usr/bin/awk '/ # M-CEIL-TEST$/ { print "  /bin/sleep 0.05" } { print }' "$HOOK" > "${CE_HOOKS}/block-destructive-sens.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-pos.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_ENCL_PHASE=.*/readonly DESTRUCTIVE_022_ENCL_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-rem.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-exec.sh"
+/usr/bin/sed 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-warn.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_EXEC_PHASE=.*/readonly DESTRUCTIVE_022_EXEC_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-exec-rem.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_INTERP_PHASE=.*/readonly DESTRUCTIVE_022_INTERP_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_POS_MAX=512$/readonly SCRIPT_ENCL_POS_MAX=4/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-int.sh"
+/usr/bin/sed -e 's/^readonly DESTRUCTIVE_022_INTERP_PHASE=.*/readonly DESTRUCTIVE_022_INTERP_PHASE="enforce"   # shadow | warn | enforce/' \
+  -e 's/^readonly SCRIPT_ENCL_TAIL_BYTES=262144$/readonly SCRIPT_ENCL_TAIL_BYTES=64/' "$HOOK" > "${CE_HOOKS}/block-destructive-v-int-rem.sh"
+/bin/chmod +x "${CE_HOOKS}/"block-destructive*.sh
+# ce_live <copy> <lines that must differ> — 0 when the copy differs from the hook by exactly that many lines.
+ce_live() {
+  local d
+  d="$(/usr/bin/diff "$HOOK" "${CE_HOOKS}/$1" | /usr/bin/grep -c '^[<>]')"
+  [ "$d" = "$2" ]
+}
+# ce_timed <copy> <locale> <command-file> <limit> — the copy on the command's payload under a watchdog;
+# sets CE_DS (tenths elapsed, -1 when stopped), CE_EXIT, CE_ERR and CE_REC (the call's block-log record).
+CE_DS=0; CE_EXIT=0; CE_ERR=""; CE_REC=""
+ce_timed() {
+  local pay="${CE_ROOT}/payload.json" err="${CE_ROOT}/stderr" pid n=0
+  /bin/rm -f "$CE_LOG"
+  bash_payload "$(/bin/cat "$3")" "$CE_ROOT" > "$pay"
+  ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT; LC_ALL="$2" exec /bin/bash "${CE_HOOKS}/$1" < "$pay" > /dev/null 2> "$err" ) &
+  pid=$!
+  CE_REC=""; CE_ERR=""
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$n" -ge "$4" ]; then
+      lin_reap "$pid"; wait "$pid" 2>/dev/null
+      CE_DS=-1; CE_EXIT=-1; return 0
+    fi
+    /bin/sleep 0.1; n=$(( n + 1 ))
+  done
+  CE_EXIT=0; wait "$pid" || CE_EXIT=$?
+  CE_DS="$n"
+  CE_ERR="$(/bin/cat "$err" 2>/dev/null)"
+  if [ -s "$CE_LOG" ]; then CE_REC="$(/usr/bin/jq -s -c '.[-1]' "$CE_LOG" 2>/dev/null)"; fi
+}
+ce_ceiling() { # -> the features.ceiling of CE_REC, or empty
+  if [ -n "$CE_REC" ]; then /usr/bin/jq -r '.features.ceiling // ""' <<<"$CE_REC" 2>/dev/null; fi
+}
+ce_report() { # <label> <observed reasons; empty = pass>
+  if [ -z "$2" ]; then /usr/bin/printf 'PASS: %s\n' "$1"; PASS=$((PASS + 1))
+  else /usr/bin/printf 'FAIL: %s\n  observed:%s\n' "$1" "$2"; FAIL=$((FAIL + 1)); fi
+}
+# ce_fill <chars> <head> <unit> <tail> — the head, whole units, blanks to the exact length, then the tail.
+ce_fill() {
+  H="$2" U="$3" T="$4" LC_ALL=C /usr/bin/awk -v n="$1" 'BEGIN { h = ENVIRON["H"]; u = ENVIRON["U"]; t = ENVIRON["T"]
+    m = n - length(h) - length(t); k = int(m / length(u)); r = ""; b = u
+    while (k > 0) { if (k % 2) r = r b; b = b b; k = int(k / 2) }
+    p = m - length(r); s = ""; while (length(s) < p) s = s " "
+    printf "%s%s%s%s", h, r, s, t }'
+}
+CE_NA="${WC_D}/na.sh"
+CE_Q="'"
+CE_BODY_HEAD="gh pr create --title t --body \"\$(cat <<${CE_Q}EOF${CE_Q}"$'\n'
+CE_BODY_TAIL=$'EOF\n)"'
+# ce_shape <class> <chars> <file> — one of the ten classes, each inert unless the class says so.
+ce_shape() {
+  case "$1" in
+    segment)    ce_fill "$2" 'echo' ' ab' '' ;;
+    segments)   ce_fill "$2" 'true' ';true' '' ;;
+    quotes)     ce_fill "$2" 'bash -n ' '""' '' ;;
+    openers)    ce_fill "$2" 'echo' ' $(true)' '' ;;
+    blanks)     ce_fill "$2" '' ' ' 'echo a' ;;
+    view)       ce_fill "$2" 'echo' " \$(true) $(/usr/bin/printf '%*s' 600 '' | /usr/bin/tr ' ' 'x')" '' ;;
+    cluster)    ce_fill "$2" 'sudo -' 'b' ' q' ;;
+    body)       ce_fill "$2" "$CE_BODY_HEAD" $'| a | b | `c` |\nSome prose with a `code span` and more plain words in it.\n' "$CE_BODY_TAIL" ;;
+    rows)       ce_fill "$2" "$CE_BODY_HEAD" "see \`${CE_NA}\` for the detail"$'\n' "$CE_BODY_TAIL" ;;
+    assignment) ce_fill "$2" 'X=' 'a' ' true' ;;
+  esac > "$3"
+}
+
+# CEIL-VALUE — the three constants, each one exact readonly line, and their margins.
+ce_why=""
+ce_sec="$(/usr/bin/sed -n 's/^readonly SCRIPT_CEIL_SECONDS=\([0-9][0-9]*\)$/\1/p' "$HOOK")"
+ce_chr="$(/usr/bin/sed -n 's/^readonly SCRIPT_CEIL_CHARS=\([0-9][0-9]*\)$/\1/p' "$HOOK")"
+[ "$(/usr/bin/grep -c '^readonly SCRIPT_CEIL_SECONDS=[0-9][0-9]*$' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-deadline-line"
+[ "$(/usr/bin/grep -c '^readonly SCRIPT_CEIL_CHARS=[0-9][0-9]*$' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-gate-line"
+[ "$(/usr/bin/grep -cF 'readonly SCRIPT_CEIL_AT=$(( SECONDS + SCRIPT_CEIL_SECONDS ))' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-anchor-line"
+if [ -n "$ce_sec" ] && [ -n "$ce_chr" ]; then
+  [ $(( ce_sec * 4 )) -le 600 ] || ce_why="${ce_why} deadline-not-four-times-under-600"
+  [ "$ce_chr" -ge 40960 ] || ce_why="${ce_why} gate-under-the-largest-timed-cell"
+fi
+ce_report "CEIL-VALUE: the deadline, the gate and the anchor are single readonly lines; the deadline is at least four times under 600 s and the gate at least the largest timed cell" "$ce_why"
+
+# CEIL-COVER — every bash loop on the -022 surface (the helpers from the allowlist reader to the
+# dispatch banner, and the -022 block) is charged by a check as its body's first statement, or
+# declared bounded by a `# ceil-bounded:` line directly above its head; no check sits inside the two
+# helpers that run in a command substitution.
+# WHAT IT READS. A loop head at the start of a line: `while` or `until` followed by a blank and a
+# character other than `(`, or `for NAME in` followed by a blank or the line's end. For each head with no
+# bound line, the loop's own `do`, which the arm places in one of two spots or not at all. A head line
+# that carries a `do` glued on either side to `&`, `|`, a parenthesis or a redirection sign, or followed
+# directly by `;` or a backslash, places none, wherever on the line that `do` stands, comments and quoted
+# text included. Otherwise the `do` is the first `do` word (at the line's start or after a blank or `;`,
+# and followed by a blank or the line's end) on the head's line or, where that line has none, the next
+# line that is neither blank nor a whole-line comment, when that line holds only `do` and perhaps a
+# comment. What follows the placed `do` on its line is the body's first statement, and where only a
+# comment or nothing does, the next non-blank line is. The loop is charged when that statement is
+# `script_ceil_check <tag>`, blanks and its `# M-CEIL-<TAG>` marker, and nothing else; otherwise, and
+# when no `do` is placed, whatever its body opens with, it is uncovered and the arm fails. A `do` word
+# earlier in the head's own text, in its condition, its word list or a trailing comment, is taken for the
+# loop's own, and what follows it is read as the first statement. And, so that it fails on them, the forms
+# it knows that head misses: an arithmetic `for ((` and a `select NAME`, at the line's start or after a
+# blank, `;`, `&` or `|`; and, after `;`, `&` or `|` on the same line, a `while` or `until` followed by a
+# blank and a character other than `(`, or a `for NAME`.
+# WHAT IT DOES NOT READ, written down so that a new form is a documented exclusion and not a defect: a
+# `while` or `until` not followed on its line by a blank and a character other than `(`, wherever it
+# stands, which is one that ends its line, its condition on the next, and one whose condition opens with a
+# parenthesis after at most one blank, an arithmetic or a subshell condition (at the line's start, or after
+# `;`, `&` or `|`, one with two or more blanks before the `(` is read); at the line's start, a `for NAME`
+# whose `in` is on a later line, or that has no word list; a
+# `while`, `until` or `for NAME` after a reserved word, a group opener or any other word on the same line;
+# recursion, which repeats work with no loop head; and a helper defined outside the two windows or in a
+# sourced library. Nothing fails on these, so a loop in one of those forms is covered by review, not by
+# this arm. An enumeration with a stated boundary, not a closed class. awk programs' loops (`for (`,
+# `while (`) are not bash.
+ce_cover() { # <file> -> "loops charged bounded bad sub unseen"
+  /usr/bin/awk '
+    /^is_script_allowlisted\(\) \{/ { on = 1 }
+    /^# BRANCH BY TOOL NAME/ { on = 0 }
+    /# BLOCK-DESTRUCTIVE-022 — an interpreter/ { on = 1 }
+    /# ---- Write\/Edit branch/ { on = 0 }
+    /^(script_realpath|script_cont_joined)\(\) / { insub = 1 }
+    insub && /script_ceil_(check|refuse)/ { sub_n++ }
+    insub && /^\}/ { insub = 0 }
+    { line[NR] = $0 }
+    on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /^[[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /^[[:space:]]*for[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+in([[:space:]]|$)/) { head[++nh] = NR }
+    # The forms it fails on, which the head pattern misses (the header above names them): an arithmetic
+    # for, and a select followed by a name, at the line start or after a blank, a separator or a pipe;
+    # and, after a separator or a pipe, a while or until followed by a blank and a character other than
+    # a paren, or a for followed by a name. Excluding the paren keeps awk loops, which open with one, unread.
+    on && $0 !~ /^[[:space:]]*#/ && ($0 ~ /(^|[;&|[:space:]])for[[:space:]]*\(\(/ || $0 ~ /(^|[;&|[:space:]])select[[:space:]]+[A-Za-z_]/ || $0 ~ /[;&|][[:space:]]*(while|until)[[:space:]]+[^(]/ || $0 ~ /[;&|][[:space:]]*for[[:space:]]+[A-Za-z_]/) { un = un (un == "" ? "" : ",") NR }
+    END {
+      for (i = 1; i <= nh; i++) {
+        h = head[i]
+        if (line[h - 1] ~ /^[[:space:]]*# ceil-bounded: [^[:space:]]/) { nb++; continue }
+        # The do of this loop, placed in one of two spots or not at all. A head line that carries a do
+        # the do-word pattern misses, one glued on either side to an ampersand, a pipe, a paren or a
+        # redirection sign, or followed directly by a semicolon or a backslash, places none. Otherwise
+        # the do is the first do word on the head line or, where that line has none, the next line that
+        # is neither blank nor a comment, when it holds only do and perhaps a comment. What follows the
+        # do on its line is the first statement of the body; where only a comment or nothing does, the
+        # next non-blank line is. With no do placed the loop is uncovered, whatever its body opens with.
+        d = h
+        if (line[h] ~ /(^|[;&|()<>[:space:]])do[;&|()<>\\]/ || line[h] ~ /[&|()<>]do([;&|()<>\\[:space:]]|$)/) d = NR + 1
+        else if (line[h] !~ /(^|[;[:space:]])do([[:space:]]|$)/) { d = h + 1; while (d <= NR && line[d] ~ /^[[:space:]]*(#.*)?$/) d++; if (line[d] !~ /^[[:space:]]*do([[:space:]]+#.*)?[[:space:]]*$/) d = NR + 1 }
+        s = ""
+        if (d <= NR) {
+          match(line[d], /(^|[;[:space:]])do([[:space:]]|$)/); s = substr(line[d], RSTART + RLENGTH)
+          if (s ~ /^[[:space:]]*(#.*)?$/) { b = d + 1; while (b <= NR && line[b] ~ /^[[:space:]]*$/) b++; s = line[b] }
+        }
+        if (s ~ /^[[:space:]]*script_ceil_check [a-z0-9-]+[[:space:]]+# M-CEIL-[A-Z0-9-]+$/) nc++
+        else bad = bad (bad == "" ? "" : ",") h
+      }
+      printf "%d %d %d %s %d %s", nh, nc, nb, (bad == "" ? "-" : bad), sub_n, (un == "" ? "-" : un)
+    }' "$1"
+}
+read -r ce_nl ce_nc ce_nb ce_bad ce_sub ce_un <<<"$(ce_cover "$HOOK")"
+ce_why=""
+[ "$ce_nl" -ge 46 ] || ce_why="${ce_why} loops-found=${ce_nl}(wanted-at-least-46)"
+[ $(( ce_nc + ce_nb )) = "$ce_nl" ] || ce_why="${ce_why} charged=${ce_nc}+bounded=${ce_nb}-of-${ce_nl}; unannotated-at-lines:${ce_bad}"
+[ "$ce_sub" = 0 ] || ce_why="${ce_why} a-check-inside-a-subshell-helper=${ce_sub}"
+[ "$ce_un" = "-" ] || ce_why="${ce_why} a-loop-form-the-arm-does-not-read-at-lines:${ce_un}"
+ce_report "CEIL-COVER: every bash loop on the -022 surface is charged or declared bounded (${ce_nl} loops: ${ce_nc} charged, ${ce_nb} bounded), none is charged inside a subshell helper, and no loop form the arm does not read appears" "$ce_why"
+/usr/bin/grep -v -- '# M-CEIL-ROUTE$' "$HOOK" > "${CE_ROOT}/cover-m1"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe() {"; print "  while false; do"; print "    :"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-m2"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe2() {"; print "  for (( i = 0; i < 1; i++ )); do :; done"; print "  select w in a; do break; done"; print "  true; while false; do :; done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-m3"
+ce_why=""
+[ "$ce_bad" = "-" ] || ce_why="${ce_why} the-shipped-hook-is-not-covered"
+ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m1" | /usr/bin/grep -c '^[<>]')"
+if [ "$ce_live_n" != 1 ]; then
+  ce_why="${ce_why} no-route-charge-line-to-delete"
+else
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m1")"
+  case "$ce_mbad" in -|*,*) ce_why="${ce_why} the-deleted-route-charge-reads-${ce_mbad}(wanted-one-loop)" ;; esac
+fi
+read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m2")"
+case "$ce_mbad" in -|*,*) ce_why="${ce_why} the-added-loop-reads-${ce_mbad}(wanted-one-loop)" ;; esac
+read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m3")"
+case "$ce_un" in *,*,*) ;; *) ce_why="${ce_why} the-three-unread-forms-read-${ce_un}(wanted-three-lines)" ;; esac
+ce_report "CEIL-COVER-mut: a copy with the route loop's charge deleted, and one with an unannotated loop added, each read exactly one uncovered loop; a copy with an arithmetic for, a select and a loop after a separator added reads all three as forms the arm does not read" "$ce_why"
+# CEIL-COVER-oneline (Stage 7 F-18) — a loop whose `do` word has a statement after it on its own line is
+# read from that `do`, with that statement as its first, and is never credited with a later loop's check;
+# a `do` glued to what follows it is no `do` word, and its loop reads uncovered (CEIL-COVER-unplaced). A
+# copy with only the opener-stack reset's bound line deleted reads exactly that loop uncovered; a copy with
+# a loop charged on its `do` line added ahead of an unannotated loop reads only the second uncovered; and
+# the control, a copy with only the splitter's bound line deleted, reads the splitter uncovered. Each copy
+# differs from the hook by the one line, and each reported line is checked to be the loop it names.
+ce_why=""
+ce_obl="# ceil-bounded: the opener stack's depth"
+ce_sbl="# ceil-bounded: the pre-pass bails at 500 lines"
+ce_on="$(/usr/bin/awk -v t="$ce_obl" 'index($0, t) { n++; l = NR } END { if (n == 1) print l }' "$HOOK")"
+ce_sn="$(/usr/bin/awk -v t="$ce_sbl" 'index($0, t) { n++; l = NR } END { if (n == 1) print l }' "$HOOK")"
+ce_bn="$(/usr/bin/awk '/^# BRANCH BY TOOL NAME/ { print NR; exit }' "$HOOK")"
+/usr/bin/grep -v -F -- "$ce_obl" "$HOOK" > "${CE_ROOT}/cover-m4"
+/usr/bin/grep -v -F -- "$ce_sbl" "$HOOK" > "${CE_ROOT}/cover-m5"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe3() {"; print "  while false; do script_ceil_check probe   # M-CEIL-PROBE"; print "    :"; print "  done"; print "  while false; do"; print "    :"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-m6"
+if [ -z "$ce_on" ] || [ -z "$ce_sn" ] || [ -z "$ce_bn" ]; then
+  ce_why="${ce_why} no-single-line-for:opener-stack-bound=${ce_on:-none},splitter-bound=${ce_sn:-none},banner=${ce_bn:-none}"
+else
+  case "$(/usr/bin/sed -n "$(( ce_on + 1 ))p" "$HOOK")" in
+    *'while '*'; do '*'; done') ;;
+    *) ce_why="${ce_why} the-line-under-the-opener-stack-bound-is-not-a-one-line-loop" ;;
+  esac
+  case "$(/usr/bin/sed -n "$(( ce_sn + 1 ))p" "$HOOK")" in
+    *'while [ -n "$_tmp" ]; do') ;;
+    *) ce_why="${ce_why} the-line-under-the-splitter-bound-is-not-the-splitter" ;;
+  esac
+  ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m4" | /usr/bin/grep -c '^[<>]')"
+  [ "$ce_live_n" = 1 ] || ce_why="${ce_why} the-one-line-copy-differs-by-${ce_live_n}-lines"
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m4")"
+  [ "$ce_mbad" = "$ce_on" ] || ce_why="${ce_why} the-one-line-loop-copy-reads-${ce_mbad}(wanted-${ce_on})"
+  ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m6" | /usr/bin/grep -c '^[<>]')"
+  [ "$ce_live_n" = 8 ] || ce_why="${ce_why} the-do-line-charge-copy-differs-by-${ce_live_n}-lines"
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m6")"
+  [ "$ce_mbad" = "$(( ce_bn + 4 ))" ] || ce_why="${ce_why} the-do-line-charge-copy-reads-${ce_mbad}(wanted-$(( ce_bn + 4 )))"
+  ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-m5" | /usr/bin/grep -c '^[<>]')"
+  [ "$ce_live_n" = 1 ] || ce_why="${ce_why} the-splitter-copy-differs-by-${ce_live_n}-lines"
+  read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-m5")"
+  [ "$ce_mbad" = "$ce_sn" ] || ce_why="${ce_why} the-splitter-control-reads-${ce_mbad}(wanted-${ce_sn})"
+fi
+ce_report "CEIL-COVER-oneline: a loop whose do word has a statement after it on its line is read from that do: with only the opener-stack reset's bound line deleted exactly that loop reads uncovered, a loop charged on its do line ahead of an unannotated one leaves only the second uncovered, and the control, with only the splitter's bound line deleted, reads the splitter uncovered" "$ce_why"
+# CEIL-COVER-unplaced (Stage 7 F-18) — a loop whose own `do` the arm cannot place reads uncovered, whatever
+# its body opens with, and is never credited with a later loop's check or with text later on its line. Three
+# copies each add one unannotated loop whose `do` the do-word pattern misses, and each reads exactly that
+# loop uncovered: a `do` glued to the statement after it, and a `do` continued onto the next line, each
+# ahead of a loop in a form the arm does not read that carries a check; and a glued `do` with a `do` word
+# later on its line followed by the check's text. Two controls each add one charged loop and read none
+# uncovered, with one loop and one charge more than the hook: one charged on its `do` line ahead of a loop
+# the arm does not read that carries a check, and one whose `do` stands alone on the line after its head.
+# Each copy is checked to differ from the hook by exactly the lines it adds.
+ce_why=""
+read -r ce_hnl ce_hnc ce_hnb ce_hbad ce_hsub ce_hun <<<"$(ce_cover "$HOOK")"
+ce_bn="$(/usr/bin/awk '/^# BRANCH BY TOOL NAME/ { print NR; exit }' "$HOOK")"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe4() {"; print "  while false; do(:)"; print "  done"; print "  if true; then while false; do"; print "    script_ceil_check probe   # M-CEIL-PROBE"; print "  done; fi"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u1"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe5() {"; print "  while false; do\\"; print "    :"; print "  done"; print "  for w"; print "  do"; print "    script_ceil_check probe   # M-CEIL-PROBE"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u2"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe6() {"; print "  while false; do(:); : do script_ceil_check probe   # M-CEIL-PROBE"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u3"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe7() {"; print "  while false; do script_ceil_check probe   # M-CEIL-PROBE"; print "  done"; print "  if true; then while false; do"; print "    script_ceil_check probe   # M-CEIL-PROBE"; print "  done; fi"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u4"
+/usr/bin/awk '/^# BRANCH BY TOOL NAME/ && !d { print "ceil_cover_probe8() {"; print "  for w in a b"; print "  do"; print "    script_ceil_check probe   # M-CEIL-PROBE"; print "  done"; print "}"; d = 1 } { print }' \
+  "$HOOK" > "${CE_ROOT}/cover-u5"
+if [ -z "$ce_bn" ] || [ -z "$ce_hnl" ] || [ -z "$ce_hnc" ]; then
+  ce_why="${ce_why} no-banner-or-hook-reading:banner=${ce_bn:-none},loops=${ce_hnl:-none},charged=${ce_hnc:-none}"
+else
+  for ce_u in u1:7 u2:9 u3:4 u4:7 u5:6; do
+    ce_un_f="${ce_u%%:*}"
+    ce_live_n="$(/usr/bin/diff "$HOOK" "${CE_ROOT}/cover-${ce_un_f}" | /usr/bin/grep -c '^[<>]')"
+    [ "$ce_live_n" = "${ce_u##*:}" ] || ce_why="${ce_why} the-${ce_un_f}-copy-differs-by-${ce_live_n}-lines(wanted-${ce_u##*:})"
+    read -r ce_nl ce_nc ce_nb ce_mbad ce_sub ce_un <<<"$(ce_cover "${CE_ROOT}/cover-${ce_un_f}")"
+    case "$ce_un_f" in
+      u1|u2|u3) [ "$ce_mbad" = "$(( ce_bn + 1 ))" ] || ce_why="${ce_why} the-${ce_un_f}-unplaced-do-copy-reads-${ce_mbad}(wanted-$(( ce_bn + 1 )))" ;;
+      *) [ "$ce_mbad" = "-" ] && [ "$ce_nl" = "$(( ce_hnl + 1 ))" ] && [ "$ce_nc" = "$(( ce_hnc + 1 ))" ] \
+           || ce_why="${ce_why} the-${ce_un_f}-control-reads-${ce_nl}-loops-${ce_nc}-charged-${ce_mbad}(wanted-$(( ce_hnl + 1 ))-$(( ce_hnc + 1 ))--)" ;;
+    esac
+  done
+fi
+ce_report "CEIL-COVER-unplaced: a loop whose do the do-word pattern misses reads uncovered, whatever its body opens with: copies with that do glued ahead of a checked loop the arm does not read, continued onto the next line ahead of one, and glued with a do word later on its line before the check's text each read exactly that loop uncovered; the controls, a loop charged on its do line ahead of a checked loop the arm does not read and one whose do stands alone on the line after its head, read none uncovered" "$ce_why"
+# CEIL-COVER-charged (Stage 7 F-03) — the here-document pre-pass's character scan and the enclosure cut's
+# loop, whose steps read text as long as a line or a position's remainder, carry the check, not only a
+# step cap: each marker is present once, and on the trace copy each tag is traced on a command that runs it.
+ce_why=""
+[ "$(/usr/bin/grep -c '# M-CEIL-HD-SCAN$' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-scan-charge"
+[ "$(/usr/bin/grep -c '# M-CEIL-ENCL-CUT$' "$HOOK")" = 1 ] || ce_why="${ce_why} no-single-cut-charge"
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+if wc_row_cmd HL01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/charge-hd.cmd"; fi
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/charge-hd.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'hd-scan' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} scan-tag-traced=${ce_t:-0}"
+/usr/bin/printf '%s' 'echo $(true) $(true)' > "${CE_ROOT}/charge-cut.cmd"
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/charge-cut.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'encl-cut' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} cut-tag-traced=${ce_t:-0}"
+ce_report "CEIL-COVER-charged: the here-document pre-pass's character scan [row HL01] and the enclosure cut's loop are charged, each tag traced" "$ce_why"
+
+# CEIL-AT-CAP — at the deadline and at the gate the rule refuses, never allows.
+/usr/bin/printf '%s' 'ls -la' > "${CE_ROOT}/inert.cmd"
+ce_why=""
+ce_live block-destructive-t0.sh 2 || ce_why="${ce_why} the-t0-copy-edit-did-not-apply"
+ce_timed block-destructive-t0.sh en_US.UTF-8 "${CE_ROOT}/inert.cmd" "$CEIL_LIMIT"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+[ "$(ce_ceiling)" = time ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+ce_report "CEIL-AT-CAP-time-inert: past the deadline an ordinary allowed command is refused, cause time" "$ce_why"
+if wc_row_cmd X24; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/warn.cmd"; fi
+ce_why=""
+ce_live block-destructive-t0.sh 2 || ce_why="${ce_why} the-t0-copy-edit-did-not-apply"
+ce_d0=0; [ -f "$CE_DRAIN" ] && ce_d0="$(/usr/bin/wc -l < "$CE_DRAIN" | /usr/bin/tr -d '[:space:]')"
+ce_timed block-destructive-t0.sh en_US.UTF-8 "${CE_ROOT}/warn.cmd" "$CEIL_LIMIT"
+ce_d1=0; [ -f "$CE_DRAIN" ] && ce_d1="$(/usr/bin/wc -l < "$CE_DRAIN" | /usr/bin/tr -d '[:space:]')"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+[ "$ce_d1" = "$ce_d0" ] || ce_why="${ce_why} drain-rows-written=$(( ce_d1 - ce_d0 ))"
+ce_report "CEIL-AT-CAP-time-warn: past the deadline a command whose only finding is a warn-phase record is refused and writes no drain row [row X24]" "$ce_why"
+/usr/bin/printf '%s' "bash ${CE_NA}" > "${CE_ROOT}/refuse.cmd"
+ce_timed block-destructive-t0.sh en_US.UTF-8 "${CE_ROOT}/refuse.cmd" "$CEIL_LIMIT"
+ce_why=""; [ "$CE_EXIT" = 2 ] || ce_why=" exit=${CE_EXIT}"
+ce_report "CEIL-AT-CAP-time-refuse: past the deadline an unlisted execution is still refused" "$ce_why"
+ce_fill 65537 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "${CE_ROOT}/over.cmd"
+ce_fill 65536 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "${CE_ROOT}/edge.cmd"
+ce_fill 65537 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' "bash ${CE_NA}" > "${CE_ROOT}/late.cmd"
+for ce_loc in en_US.UTF-8 C; do
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/over.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  [ "$(ce_ceiling)" = chars ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+  ce_report "CEIL-AT-CAP-chars [${ce_loc}]: one character over the gate an inert allowed command is refused, cause chars, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT") of the budget" "$ce_why"
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/edge.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 0 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  ce_report "CEIL-AT-CAP-chars-edge [${ce_loc}]: a linear inert command of exactly the gate is allowed inside the budget, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$ce_why"
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/late.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  [ "$CE_EXIT" != 0 ] || ce_why="${ce_why} allowed"
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 2 ] || [ "$CE_DS" = -1 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  ce_report "CEIL-AT-CAP-chars-late [${ce_loc}]: just over the gate, its only refusal an unlisted execution at the end, the command is refused" "$ce_why"
+done
+# The gate stands after the command's extraction and ahead of the first pass that reads the whole
+# extracted command (Stage 7 F-02, operator option A): the command-position pass runs only on a command
+# the gate admits. Structural, and timed at four times the gate in both locales, where the refusal must
+# come inside the watchdog with cause chars; CEIL-GATE-EARLY-rule below pins it by behaviour.
+ce_why=""
+ce_ge="$(/usr/bin/grep -m 1 -n '# M-CEIL-GATE-EARLY$' "$HOOK" | /usr/bin/cut -d: -f1)"
+ce_cp="$(/usr/bin/grep -m 1 -n '^    COMMAND_CMDPOS="\$(' "$HOOK" | /usr/bin/cut -d: -f1)"
+[ -n "$ce_ge" ] || ce_why="${ce_why} no-early-gate-line"
+[ -n "$ce_cp" ] || ce_why="${ce_why} no-command-position-pass-line"
+if [ -n "$ce_ge" ] && [ -n "$ce_cp" ] && [ "$ce_ge" -ge "$ce_cp" ]; then ce_why="${ce_why} the-gate-follows-the-pass"; fi
+ce_report "CEIL-GATE-ORDER: the length gate stands ahead of the command-position pass" "$ce_why"
+ce_fill 262144 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'gh api repos/o/r' > "${CE_ROOT}/far.cmd"
+for ce_loc in en_US.UTF-8 C; do
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/far.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  [ "$(ce_ceiling)" = chars ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+  ce_report "CEIL-AT-CAP-chars-far [${ce_loc}]: at four times the gate an inert command is refused inside the watchdog, cause chars, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$ce_why"
+done
+# CEIL-GATE-EARLY-rule (Stage 7 F-13) — the early gate pinned by what it does, not only by where its line
+# stands. One character over the gate, a command whose one finding is another rule's (its last line, with
+# nothing after it) is refused under BLOCK-DESTRUCTIVE-022 with cause chars, because the gate refuses before
+# that rule reads it. On a copy that keeps the gate's marker line and neutralises its test, the same command
+# is refused by the other rule instead, so a gate that stops refusing fails this arm.
+/usr/bin/sed '/# M-CEIL-GATE-EARLY$/s/-gt "\$SCRIPT_CEIL_CHARS"/-lt 0/' "$HOOK" > "${CE_HOOKS}/block-destructive-gatenull.sh"
+/bin/chmod +x "${CE_HOOKS}/block-destructive-gatenull.sh"
+ce_fill 65537 '' 'echo the quick brown fox jumps over $one lazy dog'$'\n' 'git push --force origin main' > "${CE_ROOT}/early.cmd"
+ce_why=""
+ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/early.cmd" "$CEIL_LIMIT"
+[ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+ce_rule=""; if [ -n "$CE_REC" ]; then ce_rule="$(/usr/bin/jq -r '.rule // ""' <<<"$CE_REC" 2>/dev/null)"; fi
+[ "$ce_rule" = BLOCK-DESTRUCTIVE-022 ] || ce_why="${ce_why} rule=${ce_rule:-none}"
+[ "$(ce_ceiling)" = chars ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+ce_report "CEIL-GATE-EARLY-rule: one character over the gate, a command another rule would refuse is refused under BLOCK-DESTRUCTIVE-022, cause chars" "$ce_why"
+ce_why=""
+ce_live block-destructive-gatenull.sh 2 || ce_why="${ce_why} the-gatenull-copy-edit-did-not-apply"
+[ "$(/usr/bin/grep -c '# M-CEIL-GATE-EARLY$' "${CE_HOOKS}/block-destructive-gatenull.sh")" = 1 ] || ce_why="${ce_why} the-copy-lost-the-marker-line"
+ce_timed block-destructive-gatenull.sh en_US.UTF-8 "${CE_ROOT}/early.cmd" "$CEIL_LIMIT"
+[ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+ce_rule=""; if [ -n "$CE_REC" ]; then ce_rule="$(/usr/bin/jq -r '.rule // ""' <<<"$CE_REC" 2>/dev/null)"; fi
+[ "$ce_rule" = BLOCK-DESTRUCTIVE-001 ] || ce_why="${ce_why} rule=${ce_rule:-none}(wanted-BLOCK-DESTRUCTIVE-001)"
+[ -z "$(ce_ceiling)" ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)(wanted-none)"
+ce_report "CEIL-GATE-EARLY-rule-pair: on a copy that keeps the gate's marker line and neutralises its test, the same command is refused by the other rule, so the arm above fails there" "$ce_why"
+
+# CEIL-SHAPE — ten pathological classes, each built just under the gate. With the ceiling off a
+# heavy class outlasts CEIL_CTL (its -ctl limb); with the deadline at 2 s the same class is refused
+# with cause time inside CEIL_LIMIT, never stopped and never allowed by running out the clock.
+for ce_s in segment segments quotes openers blanks view cluster body rows assignment; do
+  ce_shape "$ce_s" 65000 "${CE_ROOT}/shape-${ce_s}.cmd"
+  ce_loc=en_US.UTF-8
+  ce_timed block-destructive-off.sh "$ce_loc" "${CE_ROOT}/shape-${ce_s}.cmd" "$CEIL_CTL"
+  ce_heavy=0; ce_ctl_exit="$CE_EXIT"
+  if [ "$CE_DS" = -1 ]; then
+    ce_heavy=1
+    ce_report "CEIL-SHAPE-${ce_s}-ctl: with the ceiling off the ${ce_s} class outlasts the control watchdog" ""
+  else
+    /usr/bin/printf 'RESIDUAL: CEIL-SHAPE-%s-ctl bounded without the ceiling, ratio %s of the control watchdog (exit %s)\n' "$ce_s" "$(lin_ratio "$CE_DS" "$CEIL_CTL")" "$CE_EXIT"
+    ce_report "CEIL-SHAPE-${ce_s}-ctl: with the ceiling off the ${ce_s} class finishes inside the control watchdog (recorded as a residual)" ""
+  fi
+  ce_why=""
+  ce_live block-destructive-t2.sh 2 || ce_why="${ce_why} the-t2-copy-edit-did-not-apply"
+  ce_timed block-destructive-t2.sh "$ce_loc" "${CE_ROOT}/shape-${ce_s}.cmd" "$CEIL_LIMIT"
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  if [ "$ce_heavy" = 1 ]; then
+    [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}(wanted-2)"
+    [ "$(ce_ceiling)" = time ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)(wanted-time)"
+  else
+    if [ "$CE_EXIT" != "$ce_ctl_exit" ] && { [ "$CE_EXIT" != 2 ] || [ "$(ce_ceiling)" != time ]; }; then
+      ce_why="${ce_why} exit=${CE_EXIT}(wanted-${ce_ctl_exit}-or-a-time-refusal)"
+    fi
+  fi
+  ce_report "CEIL-SHAPE-${ce_s}: with the deadline at 2 s the ${ce_s} class is decided inside the watchdog, at ratio $(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$ce_why"
+done
+
+# CEIL-SPLIT (Stage 7 D-1, timed on the operator's decision) — the here-document pre-pass's line splitter
+# takes each line off the command with a star-led prefix removal, inside its 500-line bound and with no
+# check between its steps, so one step's removal costs what the distance to the next newline makes it. A
+# command under the gate whose first line is long and which carries a here-document operator drives that
+# distance near the gate. Reach: on the trace copy the same command passes the splitter into the operator
+# scan, whose tag is traced. Then, in both locales, the shipped copy decides it inside the budget; where the
+# shipped copy is stopped, the 2-second-deadline copy must refuse it inside the budget. The RESIDUAL line
+# names the limb that decided, with its ratio to the budget and no timing figure.
+ce_fill 65000 ': ' 'x' " <<'EOF'"$'\n'"x"$'\n'"EOF" > "${CE_ROOT}/split.cmd"
+ce_why=""
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh C "${CE_ROOT}/split.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'hd-scan' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} scan-tag-traced=${ce_t:-0}"
+ce_report "CEIL-SPLIT-reach: a command under the gate whose first line is long and which carries a here-document operator passes the line splitter into the operator scan, its tag traced" "$ce_why"
+for ce_loc in en_US.UTF-8 C; do
+  ce_why=""; ce_lim="shipped copy"
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/split.cmd" "$CEIL_LIMIT"
+  if [ "$CE_DS" = -1 ]; then
+    ce_lim="2-second deadline copy, the shipped copy having been stopped"
+    ce_timed block-destructive-t2.sh "$ce_loc" "${CE_ROOT}/split.cmd" "$CEIL_LIMIT"
+    { [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] && [ "$(ce_ceiling)" = time ]; } || ce_why="${ce_why} not-decided-inside-the-budget(exit=${CE_EXIT})"
+  else
+    [ "$CE_EXIT" = 0 ] || ce_why="${ce_why} exit=${CE_EXIT}(wanted-0)"
+  fi
+  /usr/bin/printf 'RESIDUAL: CEIL-SPLIT [%s] decided by the %s at ratio %s of the budget (exit %s)\n' "$ce_loc" "$ce_lim" "$(lin_ratio "$CE_DS" "$CEIL_LIMIT")" "$CE_EXIT"
+  ce_report "CEIL-SPLIT [${ce_loc}]: a command under the gate whose first line is long and which carries a here-document operator is decided inside the budget (by the ${ce_lim})" "$ce_why"
+done
+
+# CEIL-LIN — the head resolver's and the head-value check's whole-word quote counts take one linear
+# pass (`# linear: quote parity`) for a word of at least SCRIPT_LINEAR_MIN characters.
+ce_why=""
+/usr/bin/awk '/^script_quote_parity\(\) / { f = 1 } f { print } f && /^\}/ { exit }' "$HOOK" > "${CE_ROOT}/qp.fn"
+[ "$(/usr/bin/grep -c '# linear: quote parity$' "${CE_ROOT}/qp.fn")" = 1 ] || ce_why="${ce_why} no-single-marked-quote-parity-line"
+# ce_qp <locale> <bound> <function file> <input file> -> "sq dq"
+ce_qp() {
+  LC_ALL="$1" /bin/bash -c 'set -eu; SCRIPT_LINEAR_MIN="$1"; script_qp_sq=9; script_qp_dq=9
+    . "$2"; w="$(/bin/cat "$3"; printf x)"; w="${w%x}"; script_quote_parity "$w"; printf "%s %s" "$script_qp_sq" "$script_qp_dq"' _ "$2" "$3" "$4"
+}
+if [ -z "$ce_why" ]; then
+  LC_ALL=C /usr/bin/awk 'BEGIN { for (r = 0; r < 3; r++) { for (i = 1; i < 256; i++) printf "%c", i
+    printf "%s", "naïve 日本 ü \377\303 x\342\202 y\200 \047\047\047 \"\"\" a\047b\"c" } }' > "${CE_ROOT}/qd-0"
+  { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf "'"; } > "${CE_ROOT}/qd-1"
+  { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf '"'; } > "${CE_ROOT}/qd-2"
+  { /bin/cat "${CE_ROOT}/qd-0"; /usr/bin/printf "'\""; } > "${CE_ROOT}/qd-3"
+  /usr/bin/sed 's/printf "%d %d", s % 2, t % 2/printf "%d %d", (s + 1) % 2, t % 2/' "${CE_ROOT}/qp.fn" > "${CE_ROOT}/qp-near.fn"
+  for ce_loc in en_US.UTF-8 C; do
+    for ce_k in 0 1 2 3; do
+      ce_a="$(ce_qp "$ce_loc" 1000000000 "${CE_ROOT}/qp.fn" "${CE_ROOT}/qd-${ce_k}")" || ce_why="${ce_why} [${ce_loc} qd-${ce_k}] the substitutions did not run;"
+      ce_b="$(ce_qp "$ce_loc" 0 "${CE_ROOT}/qp.fn" "${CE_ROOT}/qd-${ce_k}")" || ce_why="${ce_why} [${ce_loc} qd-${ce_k}] the pass did not run;"
+      [ "$ce_a" = "$ce_b" ] || ce_why="${ce_why} [${ce_loc} qd-${ce_k}] pass ${ce_b} != substitutions ${ce_a};"
+    done
+    ce_a="$(ce_qp "$ce_loc" 1000000000 "${CE_ROOT}/qp.fn" "${CE_ROOT}/qd-1")"
+    ce_n="$(ce_qp "$ce_loc" 0 "${CE_ROOT}/qp-near.fn" "${CE_ROOT}/qd-1" 2>/dev/null)" || ce_n="error"
+    [ "$ce_a" != "$ce_n" ] || ce_why="${ce_why} [${ce_loc}] the near miss equals the substitutions;"
+  done
+fi
+ce_report "CEIL-LIN-EQ: the quote-parity pass equals the two substitutions on a dense input in UTF-8 and C, and a near miss differs" "$ce_why"
+/usr/bin/sed 's/^readonly SCRIPT_LINEAR_MIN=256$/readonly SCRIPT_LINEAR_MIN=1000000000/' "$HOOK" > "${CE_HOOKS}/block-destructive-nopass.sh"
+/usr/bin/sed '/# linear: quote parity$/s#/usr/bin/awk#/nonexistent/awk#' "$HOOK" > "${CE_HOOKS}/block-destructive-noawk.sh"
+/bin/chmod +x "${CE_HOOKS}/block-destructive-nopass.sh" "${CE_HOOKS}/block-destructive-noawk.sh"
+ce_n=0
+for ce_cell in 10:en_US.UTF-8 20:en_US.UTF-8 40:en_US.UTF-8 10:C 20:C 40:C; do
+  ce_kb="${ce_cell%%:*}"; ce_loc="${ce_cell#*:}"; ce_n=$(( ce_n + 1 ))
+  ce_fill $(( ce_kb * 1024 )) 'X=' 'a' "'b' true" > "${CE_ROOT}/lin-${ce_kb}.cmd"
+  ce_timed block-destructive.sh "$ce_loc" "${CE_ROOT}/lin-${ce_kb}.cmd" "$LIN_LIMIT"
+  ce_why=""
+  /usr/bin/grep -q '# linear: quote parity$' "$HOOK" || ce_why="${ce_why} no-marked-line"
+  [ "$CE_DS" != -1 ] || ce_why="${ce_why} stopped"
+  [ "$CE_EXIT" = 0 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  ce_report "CEIL-LIN-${ce_n}: one assignment word at a segment head with a quoted piece, in ${ce_loc}, is allowed inside the budget at ratio $(lin_ratio "$CE_DS" "$LIN_LIMIT")" "$ce_why"
+done
+ce_why=""
+/usr/bin/grep -q '# linear: quote parity$' "$HOOK" || ce_why="${ce_why} no-marked-line"
+ce_timed block-destructive-nopass.sh en_US.UTF-8 "${CE_ROOT}/lin-40.cmd" "$LIN_LIMIT"
+[ "$CE_DS" = -1 ] || ce_why="${ce_why} not-stopped(ratio-$(lin_ratio "$CE_DS" "$LIN_LIMIT"))"
+ce_report "CEIL-LIN-CTL: a copy whose bound never lets the pass run is stopped at the budget on the largest UTF-8 cell" "$ce_why"
+ce_why=""
+/usr/bin/grep -q '# linear: quote parity$' "$HOOK" || ce_why="${ce_why} no-marked-line"
+ce_live block-destructive-noawk.sh 2 || ce_why="${ce_why} the-no-awk-copy-edit-did-not-apply"
+ce_fill 400 'X=' 'a' "'b' bash ${CE_NA}" > "${CE_ROOT}/fb-b.cmd"
+ce_fill 400 'X=' 'a' "'b' echo ${CE_NA}" > "${CE_ROOT}/fb-a.cmd"
+ce_fill 400 'X=' 'a' "'b' true" > "${CE_ROOT}/fb-long.cmd"
+for ce_f in fb-b:2 fb-a:0 fb-long:0; do
+  ce_timed block-destructive-noawk.sh en_US.UTF-8 "${CE_ROOT}/${ce_f%%:*}.cmd" "$LIN_LIMIT"
+  [ "$CE_EXIT" = "${ce_f#*:}" ] || ce_why="${ce_why} ${ce_f%%:*}-exit=${CE_EXIT}"
+  case "$CE_ERR" in *"line "[0-9]*": "*|*"No such file"*) ce_why="${ce_why} ${ce_f%%:*}-hook-error" ;; esac
+done
+ce_report "CEIL-LIN-FB: with the pass's awk missing the quote counts fall back to the substitutions and the verdicts are the shipped hook's" "$ce_why"
+
+# CEIL-CTL — ordinary commands pay nothing measurable, and no verdict moves.
+/usr/bin/printf '%s' 'git commit -m "fix: a short subject"' > "${CE_ROOT}/cost-1.cmd"
+/usr/bin/printf '%s' "${CE_BODY_HEAD}A short body with one line."$'\n'"${CE_BODY_TAIL}" > "${CE_ROOT}/cost-2.cmd"
+/usr/bin/printf '%s' 'git status && ls -la | head -5; echo done' > "${CE_ROOT}/cost-3.cmd"
+# ce_med <copy> <command file> <runs> -> the median of the runs' wall times, in milliseconds
+ce_ms() { /usr/bin/perl -MTime::HiRes=time -e 'printf "%d", time() * 1000'; }
+ce_cost() { # <copy A> <copy B> <command file> <runs> -> "medianA medianB", runs interleaved
+  local i=0 t0 t1 a="" b="" pay="${CE_ROOT}/cost.json"
+  bash_payload "$(/bin/cat "$3")" "$CE_ROOT" > "$pay"
+  while [ "$i" -lt "$4" ]; do
+    t0="$(ce_ms)"; ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT; /bin/bash "${CE_HOOKS}/$1" < "$pay" > /dev/null 2>&1 ) || true; t1="$(ce_ms)"; a="${a}$(( t1 - t0 ))"$'\n'
+    t0="$(ce_ms)"; ( unset PMO_SCOPE_GUARD_ROOT CLAUDE_WORKSPACE_ROOT; /bin/bash "${CE_HOOKS}/$2" < "$pay" > /dev/null 2>&1 ) || true; t1="$(ce_ms)"; b="${b}$(( t1 - t0 ))"$'\n'
+    i=$(( i + 1 ))
+  done
+  /usr/bin/printf '%s %s' "$(/usr/bin/printf '%s' "$a" | /usr/bin/sort -n | /usr/bin/awk '{ v[NR] = $1 } END { print v[int((NR + 1) / 2)] }')" \
+    "$(/usr/bin/printf '%s' "$b" | /usr/bin/sort -n | /usr/bin/awk '{ v[NR] = $1 } END { print v[int((NR + 1) / 2)] }')"
+}
+for ce_k in 1 2 3; do
+  read -r ce_ma ce_mb <<<"$(ce_cost block-destructive.sh block-destructive-strip.sh "${CE_ROOT}/cost-${ce_k}.cmd" 40)"
+  ce_r="$(/usr/bin/awk -v a="$ce_ma" -v b="$ce_mb" 'BEGIN { printf "%.3f", (b > 0 ? a / b : 0) }')"
+  ce_why=""
+  /usr/bin/awk -v r="$ce_r" 'BEGIN { exit !(r < 1.10) }' || ce_why=" ratio-of-medians=${ce_r}"
+  ce_report "CEIL-CTL-cost-${ce_k}: an ordinary command costs the shipped hook under 1.10 times the copy with no ceiling (ratio of medians ${ce_r}, 40 interleaved runs)" "$ce_why"
+done
+ce_why=""
+ce_live block-destructive-sens.sh 1 || ce_why="${ce_why} the-sensitivity-copy-edit-did-not-apply"
+read -r ce_ma ce_mb <<<"$(ce_cost block-destructive-sens.sh block-destructive-strip.sh "${CE_ROOT}/cost-3.cmd" 5)"
+ce_r="$(/usr/bin/awk -v a="$ce_ma" -v b="$ce_mb" 'BEGIN { printf "%.3f", (b > 0 ? a / b : 0) }')"
+/usr/bin/awk -v r="$ce_r" 'BEGIN { exit !(r >= 1.10) }' || ce_why="${ce_why} ratio-of-medians=${ce_r}(wanted-over-1.10)"
+ce_report "CEIL-CTL-cost-sens: the same measure reads over its bound on a copy whose check sleeps 50 ms (ratio ${ce_r})" "$ce_why"
+ce_mv=0; ce_i=0
+while [ "$ce_i" -lt "$wc_n" ]; do
+  [ "${WC_OBS[$ce_i]:-}" = "${WC_REC[$ce_i]}" ] || ce_mv=$(( ce_mv + 1 ))
+  ce_i=$(( ce_i + 1 ))
+done
+ce_why=""; [ "$wc_n" -gt 0 ] || ce_why=" no-corpus-rows"; [ "$ce_mv" = 0 ] || ce_why="${ce_why} rows-moved=${ce_mv}"
+ce_report "CEIL-CTL-verdict: over the walk payload corpus no verdict moves (${wc_n} rows)" "$ce_why"
+
+# CEIL-CAUSE — the refusal names the ceiling and the remedy; its row says which ceiling.
+ce_why=""
+for ce_c in "t0:inert:takes longer to read than this rule allows" "ship:over:is longer than this rule reads"; do
+  ce_cp="block-destructive-${ce_c%%:*}.sh"; [ "${ce_c%%:*}" = ship ] && ce_cp=block-destructive.sh
+  ce_rest="${ce_c#*:}"
+  ce_timed "$ce_cp" en_US.UTF-8 "${CE_ROOT}/${ce_rest%%:*}.cmd" "$CEIL_LIMIT"
+  case "$CE_ERR" in *"BLOCKED: "*"${ce_rest#*:}"*"per-command work ceiling"*) ;; *) ce_why="${ce_why} [${ce_rest%%:*}] reason-does-not-name-the-ceiling-and-its-cause" ;; esac
+  ce_ov="$(/usr/bin/printf '%s\n' "$CE_ERR" | /usr/bin/sed -n 's/^Override: //p')"
+  case "$ce_ov" in "pass long text by file reference"*"not an agent's next step.") ;; *) ce_why="${ce_why} [${ce_rest%%:*}] override-order" ;; esac
+done
+ce_report "CEIL-CAUSE-text: each refusal names the work ceiling and its cause, the deadline and the length gate, and its Override leads with passing text by file and ends with the bypass" "$ce_why"
+ce_why=""
+for ce_c in t0:inert:time ship:over:chars; do
+  ce_cp="block-destructive-${ce_c%%:*}.sh"; [ "${ce_c%%:*}" = ship ] && ce_cp=block-destructive.sh
+  ce_rest="${ce_c#*:}"
+  ce_d0=0; [ -f "$CE_DRAIN" ] && ce_d0="$(/usr/bin/wc -l < "$CE_DRAIN" | /usr/bin/tr -d '[:space:]')"
+  ce_timed "$ce_cp" en_US.UTF-8 "${CE_ROOT}/${ce_rest%%:*}.cmd" "$CEIL_LIMIT"
+  ce_d1=0; [ -f "$CE_DRAIN" ] && ce_d1="$(/usr/bin/wc -l < "$CE_DRAIN" | /usr/bin/tr -d '[:space:]')"
+  if [ -z "$CE_REC" ]; then ce_why="${ce_why} [${ce_rest#*:}] no-record"; continue; fi
+  [ "$(/usr/bin/jq -r '[keys_unsorted[]] | join(",")' <<<"$CE_REC")" = "ts,hook,rule,tool,input_digest,cwd,features" ] || ce_why="${ce_why} [${ce_rest#*:}] keys"
+  [ "$(/usr/bin/jq -c '.features' <<<"$CE_REC")" = "{\"schema_version\":1,\"ceiling\":\"${ce_rest#*:}\"}" ] || ce_why="${ce_why} [${ce_rest#*:}] features=$(/usr/bin/jq -c '.features' <<<"$CE_REC")"
+  [ "$ce_d1" = "$ce_d0" ] || ce_why="${ce_why} [${ce_rest#*:}] drain-row-written"
+done
+ce_report "CEIL-CAUSE-row: a ceiling refusal's row holds the six base keys and features {schema_version, ceiling} exactly, and writes no drain row" "$ce_why"
+ce_why=""
+ce_live block-destructive-site.sh 1 || ce_why="${ce_why} the-site-copy-edit-did-not-apply"
+if wc_row_cmd ZU34; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/route.cmd"; fi
+ce_timed block-destructive-site.sh en_US.UTF-8 "${CE_ROOT}/route.cmd" "$CEIL_LIMIT"
+[ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+[ "$(ce_ceiling)" = time ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+[ -z "$CE_REC" ] || [ "$(/usr/bin/jq -r '.features.route // ""' <<<"$CE_REC")" = "" ] || ce_why="${ce_why} carries-features.route"
+case "$CE_ERR" in *"Read on the conservative route"*) ce_why="${ce_why} carries-the-route-note" ;; esac
+ce_report "CEIL-CAUSE-route: a ceiling refusal inside the latch route's loop carries features.ceiling and no route tag [row ZU34]" "$ce_why"
+
+# CEIL-NEWSCAN-TEXT — the backtick command word's lookahead (#8490) is charged: its tag is traced
+# once per pass, and its hand-off shape at the gate is decided inside the budget.
+ce_why=""
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+if wc_row_cmd LT01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/tick.cmd"; fi
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/tick.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'tick' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} lookahead-tag-traced=${ce_t:-0}"
+ce_fill 65000 '`' "x $(/usr/bin/printf '%*s' 60 '' | /usr/bin/tr ' ' 'y')" '` q' > "${CE_ROOT}/tick-big.cmd"
+ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/tick-big.cmd" "$CEIL_LIMIT"
+if [ "$CE_DS" = -1 ]; then
+  ce_timed block-destructive-t2.sh en_US.UTF-8 "${CE_ROOT}/tick-big.cmd" "$CEIL_LIMIT"
+  [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
+fi
+ce_report "CEIL-NEWSCAN-TEXT: the backtick command word's lookahead is charged once per pass [row LT01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
+
+# CEIL-NEWSCAN-HD — the here-document receiver read (#8326) is charged: its tag is traced on an
+# admitted receiver behind a group opener, and its gate-sized hand-off is decided inside the budget.
+ce_why=""
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+if wc_row_cmd HL01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/hdrecv.cmd"; fi
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/hdrecv.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'hd-recv' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} receiver-read-tag-traced=${ce_t:-0}"
+ce_fill 65000 '' '{ ' " gh api x --input - <<'EOF'"$'\n'"bash ${CE_NA}"$'\n'"EOF" > "${CE_ROOT}/hdrecv-big.cmd"
+ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/hdrecv-big.cmd" "$CEIL_LIMIT"
+if [ "$CE_DS" = -1 ]; then
+  ce_timed block-destructive-t2.sh en_US.UTF-8 "${CE_ROOT}/hdrecv-big.cmd" "$CEIL_LIMIT"
+  [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
+fi
+ce_report "CEIL-NEWSCAN-HD: the here-document receiver read is charged on an admitted receiver behind a group opener [row HL01], and its gate-sized hand-off is decided inside the budget" "$ce_why"
+
+# CEIL-NEWSCAN-ASGN — the assignment-substitution step (#8548) is charged: its tag is traced on an
+# admitted assignment substitution; on one segment of 1,100 admitted assignment words, each closing on
+# the listed script so every attempt reaches the allowlist read, the step is attempted until the shared
+# work budget declines it (a copy traces only the step's tag and that decline, with bash's own printf);
+# and its gate-sized hand-off, the same words with a long closing token last, is decided inside the
+# budget. The arm names the limb that decided, with no timing figure.
+ce_why=""
+ce_live block-destructive-trace.sh 1 || ce_why="${ce_why} the-trace-copy-edit-did-not-apply"
+if wc_row_cmd AS01; then /usr/bin/printf '%s' "$WC_CMDX" > "${CE_ROOT}/asgn.cmd"; fi
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace.sh en_US.UTF-8 "${CE_ROOT}/asgn.cmd" "$CEIL_LIMIT"
+ce_t="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'asgn-subst' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_t:-0}" -ge 1 ] || ce_why="${ce_why} step-tag-traced=${ce_t:-0}"
+F="$CE_TRACE" /usr/bin/awk 'BEGIN { f = ENVIRON["F"] }
+  / # M-CEIL-TEST$/ { print "  if [ \"$1\" = asgn-subst ]; then builtin printf \"%s\\n\" \"$1\" >> \"" f "\"; fi" }
+  / # M-ASGN-SUBST-WORK$/ { print "  if [ \"$script_qwork\" -ge 1000 ]; then builtin printf \"%s\\n\" asgn-work >> \"" f "\"; fi" }
+  { print }' "$HOOK" > "${CE_HOOKS}/block-destructive-trace-asgn.sh"
+/bin/chmod +x "${CE_HOOKS}/block-destructive-trace-asgn.sh"
+ce_live block-destructive-trace-asgn.sh 2 || ce_why="${ce_why} the-step-trace-copy-edits-did-not-apply"
+ce_unit="OUT=\$(bash ${WC_D}/ok.sh) "
+ce_fill $(( 1100 * ${#ce_unit} + 4 )) '' "$ce_unit" 'true' > "${CE_ROOT}/asgn-budget.cmd"
+/bin/rm -f "$CE_TRACE"
+ce_timed block-destructive-trace-asgn.sh en_US.UTF-8 "${CE_ROOT}/asgn-budget.cmd" "$CEIL_LIMIT"
+ce_ta="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'asgn-subst' "$CE_TRACE"; } || /usr/bin/printf 0)"
+ce_tw="$( { [ -f "$CE_TRACE" ] && /usr/bin/grep -cx 'asgn-work' "$CE_TRACE"; } || /usr/bin/printf 0)"
+[ "${ce_tw:-0}" -ge 1 ] || ce_why="${ce_why} the-step-never-reached-the-shared-budget(attempts=${ce_ta:-0})"
+[ "${ce_ta:-0}" -ge 990 ] || ce_why="${ce_why} attempts=${ce_ta:-0}(wanted-at-least-990-of-the-1000-unit-budget)"
+ce_fill 65000 '' "$ce_unit" "OUT=\$(bash ${WC_D}/$(/usr/bin/printf '%*s' 600 '' | /usr/bin/tr ' ' 'x')/ok.sh) true" > "${CE_ROOT}/asgn-big.cmd"
+ce_lim="shipped copy"
+ce_timed block-destructive.sh en_US.UTF-8 "${CE_ROOT}/asgn-big.cmd" "$CEIL_LIMIT"
+if [ "$CE_DS" = -1 ]; then
+  ce_lim="2-second deadline copy, the shipped copy having been stopped"
+  ce_timed block-destructive-t2.sh en_US.UTF-8 "${CE_ROOT}/asgn-big.cmd" "$CEIL_LIMIT"
+  [ "$CE_DS" != -1 ] && [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} the-gate-sized-hand-off-is-not-decided-inside-the-budget"
+fi
+/usr/bin/printf 'RESIDUAL: CEIL-NEWSCAN-ASGN the gate-sized hand-off was decided by the %s (exit %s); on the budget shape the step was attempted %s times and reached the shared budget %s time(s)\n' "$ce_lim" "$CE_EXIT" "${ce_ta:-0}" "${ce_tw:-0}"
+ce_report "CEIL-NEWSCAN-ASGN: the assignment-substitution step is charged on an admitted assignment substitution [row AS01], is attempted until the shared work budget declines it, and its gate-sized hand-off is decided inside the budget (by the ${ce_lim})" "$ce_why"
+
+# CEIL-VIEW — past either of the view's budgets, once an arm that reads enclosure positions enforces,
+# the command is refused instead of losing a position; at the shipped warn phases nothing moves.
+/usr/bin/printf '%s' 'echo $(true) $(true) $(true) $(true) $(true) $(true)' > "${CE_ROOT}/vpos.cmd"
+/usr/bin/printf '%s' "echo \$(true) $(/usr/bin/printf '%*s' 100 '' | /usr/bin/tr ' ' 'x') \$(true) y" > "${CE_ROOT}/vrem.cmd"
+for ce_v in v-pos:vpos:positions v-rem:vrem:remainder v-exec:vpos:positions v-exec-rem:vrem:remainder v-int:vpos:positions v-int-rem:vrem:remainder; do
+  ce_cp="block-destructive-${ce_v%%:*}.sh"; ce_rest="${ce_v#*:}"
+  ce_timed "$ce_cp" en_US.UTF-8 "${CE_ROOT}/${ce_rest%%:*}.cmd" "$CEIL_LIMIT"
+  ce_why=""
+  ce_live "$ce_cp" 4 || ce_why="${ce_why} the-copy-edits-did-not-apply"
+  [ "$CE_EXIT" = 2 ] || ce_why="${ce_why} exit=${CE_EXIT}"
+  [ "$(ce_ceiling)" = "${ce_rest#*:}" ] || ce_why="${ce_why} features.ceiling=$(ce_ceiling)"
+  ce_report "CEIL-VIEW-${ce_v%%:*}: with an enclosure-reaching arm at enforce, past the ${ce_rest#*:} budget the command is refused, cause ${ce_rest#*:}" "$ce_why"
+done
+ce_timed block-destructive-v-warn.sh en_US.UTF-8 "${CE_ROOT}/vpos.cmd" "$CEIL_LIMIT"
+ce_why=""; [ "$CE_EXIT" = 0 ] || ce_why=" exit=${CE_EXIT}"
+ce_report "CEIL-VIEW-warn: at the shipped warn phases, past the position budget, an inert command is allowed as today" "$ce_why"
+/bin/rm -rf "$CE_ROOT"
 
 # --- Summary ---
 echo ""
