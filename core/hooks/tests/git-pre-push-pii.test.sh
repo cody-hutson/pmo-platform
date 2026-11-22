@@ -499,8 +499,17 @@ fi
 # W. The push-time CI job's own run block, extracted from the workflow file and run
 #    against a scratch "server" and a full-history "runner" clone of it
 # =============================================================================
+# The workflow sits beside core/ in a source checkout. Under the deployed-layout sandbox
+# the hook-test floor builds (setup-ci-layout.sh --sandbox, which both CI jobs that run
+# these suites use), nothing near this file carries it, so the .source-repo-root pointer
+# that helper writes beside the materialized tests is the rung that resolves there.
 WF=""
-for _cand in "${SRC_DIR}/../../.github/workflows/pii-push-scan.yml" "${SRC_DIR}/../../../.github/workflows/pii-push-scan.yml"; do
+_wf_src_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  IFS= read -r _wf_src_root < "$(dirname "$0")/.source-repo-root" || true
+fi
+for _cand in "${SRC_DIR}/../../.github/workflows/pii-push-scan.yml" "${SRC_DIR}/../../../.github/workflows/pii-push-scan.yml" "${_wf_src_root:+${_wf_src_root}/.github/workflows/pii-push-scan.yml}"; do
+  [ -n "$_cand" ] || continue
   [ -r "$_cand" ] && { WF="$_cand"; break; }
 done
 if [ -z "$WF" ]; then
