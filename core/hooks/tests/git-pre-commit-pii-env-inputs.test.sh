@@ -277,12 +277,22 @@ arm_setup b3; mk_inst "$INST" "" "$NEEDLE"; stage_line "$HOME_LINE"
 do_commit GIT_CONFIG_GLOBAL="${SBX}/gitconfig-attrs"
 expect_refused "B3 GIT_CONFIG_GLOBAL=<core.attributesFile '* -diff'> + home path -> refused"
 # B4: the repo's real binaries (the packages/*.skill zips) do not trip the scan.
+# The packages sit beside core/ in a source checkout. Under the deployed-layout sandbox the
+# hook-test floor builds (setup-ci-layout.sh --sandbox, as run-install-regression.sh runs
+# it), nothing near this file carries them, so the .source-repo-root pointer that helper
+# writes beside the materialized tests is the rung that resolves there. No rung resolving
+# is a FAIL, never a skip: the control would otherwise grade nothing while reading green.
 PKG_DIR=""
-for _cand in "${SRC_DIR}/../../packages" "${SRC_DIR}/../../../packages"; do
+_pkg_src_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then
+  IFS= read -r _pkg_src_root < "$(dirname "$0")/.source-repo-root" || true
+fi
+for _cand in "${SRC_DIR}/../../packages" "${SRC_DIR}/../../../packages" "${_pkg_src_root:+${_pkg_src_root}/packages}"; do
+  [ -n "$_cand" ] || continue
   if [ -d "$_cand" ] && /bin/ls "$_cand"/*.skill >/dev/null 2>&1; then PKG_DIR="$(cd "$_cand" && pwd -P)"; break; fi
 done
 if [ -z "$PKG_DIR" ]; then
-  report "B4 control: the repo's packages/*.skill zips -> accepted" 0 "no packages/*.skill found near ${SRC_DIR}"
+  report "B4 control: the repo's packages/*.skill zips -> accepted" 0 "no packages/*.skill found near ${SRC_DIR} or under the .source-repo-root pointer (${_pkg_src_root:-<none>})"
 else
   arm_setup b4; mk_inst "$INST" "" "$NEEDLE"
   /bin/mkdir -p "${REPO}/packages"; /bin/cp "$PKG_DIR"/*.skill "${REPO}/packages/"
