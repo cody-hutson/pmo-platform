@@ -22,8 +22,9 @@
 #            today's allow, and the change that closes it updates the verdict and drops
 #            the `open-` prefix in the same commit
 #
-# Placeholders: @D@ is the fixture directory, in which ok.sh and ok.py are the only
-# allowlisted paths; @LONGX@ @LONGN@ are 4,100 x / n; @SHORTX@ 4,000 x; @MIDX@ @MIDN@
+# Placeholders: @D@ is the fixture directory, in which the reader's root allowlists four
+# paths: ok.sh, ok.py, `li sted/ok.sh` (a path holding a space) and bin/bash (a path named as
+# a shell interpreter, which only row AS26 names); @LONGX@ @LONGN@ are 4,100 x / n; @SHORTX@ 4,000 x; @MIDX@ @MIDN@
 # 1,000 x / n; @QPAD@ 2,050 pairs of empty double quotes. $NOPE7019, $VAR and $HOME are
 # plain text to the guard: a PreToolUse hook sees argv unexpanded. The block-egress rows use
 # @OK@, the one gh api path the egress reader's root allowlists, and @NO@, a path it does not.
@@ -1958,7 +1959,8 @@ AV29|block-destructive|rt-asgn-keep|-|?|W|X=$(bash @D@/na.sh)
 AV30|block-destructive|rt-asgn-limit|-|?|B|FOO='a b' echo "x; bash @D@/na.sh"
 AV31|block-destructive|rt-asgn-limit|-|?|a|FOO=ab echo "x; bash @D@/na.sh"
 AV32|block-destructive|rt-asgn-limit|-|?|B|FOO=@QMID@'a b' bash @D@/ok.sh; echo "x; bash @D@/na.sh"
-AV33|block-destructive|rt-asgn-resid|-|?|a|cat <<'EOF'@NL@x@NL@EOF@NL@FOO='a b' bash @D@/na.sh
+# AV33 refused since #8326: its here-document is received by cat, which the receiver read admits, so the bail no longer latches and the later line is adjudicated. The residual it pinned is re-pinned in the suite on a receiver on no list (ASGN-QVAL-resid-bail-nonmember).
+AV33|block-destructive|rt-asgn-resid|-|?|B|cat <<'EOF'@NL@x@NL@EOF@NL@FOO='a b' bash @D@/na.sh
 AV34|block-destructive|rt-asgn-resid|-|?|a|FOO="a ${X}" bash @D@/na.sh
 AV35|block-destructive|rt-asgn-resid|-|?|a|echo "$(FOO='a b' bash @D@/na.sh)"
 AV36|block-destructive|rt-asgn-resid|-|?|a|FOO='a b'> @D@/out bash @D@/na.sh
@@ -2233,3 +2235,102 @@ QC34|block-destructive|rt-qhdbq|-|?|B|gh issue comment 1 --body-file - <<'EOF' #
 XF13|block-destructive|rt-xpcx2|-|?|W|printf x | xargs bash -o 'a)b'
 XF14|block-destructive|rt-xpcx2|-|?|W|printf x | xargs bash --rcfile 'a)b'
 XF15|block-destructive|rt-xpcx2ctl|-|?|B|printf x | xargs bash -o ab
+
+# --- ms#440 Commit 0b: release script-guard-refuses-only-what-executes — rows at today's verdicts. gt is ? (Commit 0b runs no payload; Stage 7 takes the real-interpreter reading). @NL@ is a newline. ---
+# #8490: shapes the backtick command word admits (LT rows; GREEN moves them W -> a)
+LT01|block-destructive|looks-like-text|-|-|a|true <<'EOF'@NL@notes@NL@`@D@/ok.sh` is the entry point@NL@EOF
+LT02|block-destructive|looks-like-text|-|-|a|git commit -m "$(cat <<'EOF'@NL@Fix the walk@NL@`@D@/ok.sh` now reads it@NL@EOF@NL@)"
+LT03|block-destructive|looks-like-text|-|-|a|git commit -m 'Fix it (`@D@/ok.sh` reads the file)'
+LT04|block-destructive|looks-like-text|-|o|a|`@D@/ok.sh`
+# #8548: an interpreter inside an assignment value's command substitution (AS rows; design on sub-task #9060)
+AS01|block-destructive|looks-like-asgn|AS11|o|a|OUT=$(bash '@D@/ok.sh')
+AS02|block-destructive|looks-like-asgn|-|o|a|OUT="$(bash '@D@/ok.sh')"
+AS03|block-destructive|looks-like-asgn|-|o|a|OUT=`bash '@D@/ok.sh'`
+AS04|block-destructive|looks-like-asgn|-|o|a|OUT=$(python3 '@D@/ok.py')
+AS05|block-destructive|looks-like-asgn|-|o|a|OUT=$(source '@D@/ok.sh')
+AS06|block-destructive|looks-like-asgn|-|o|a|env OUT=$(bash '@D@/ok.sh') true
+AS07|block-destructive|looks-like-asgn|-|o|a|true; OUT=$(bash '@D@/ok.sh')
+AS08|block-destructive|looks-like-asgn|-|o|a|( OUT=$(bash '@D@/ok.sh') )
+AS09|block-destructive|looks-like-asgn|-|-|a|OUT=$(cat '@D@/ok.sh')
+AS10|block-destructive|looks-like-asgn|-|o|a|OUT=$( '@D@/ok.sh')
+AS11|block-destructive|asubst-ctl|-|o|a|OUT=$(bash @D@/ok.sh)
+AS12|block-destructive|asubst-unl|-|?|W|OUT=$(bash '@D@/na.sh')
+AS13|block-destructive|asubst-unl|-|?|W|OUT=$(bash "$NOPE7019/ok.sh")
+AS14|block-destructive|asubst-outer|-|?|W|OUT=$(bash '@D@/ok.sh') @D@/na.sh
+AS15|block-destructive|asubst-outer|-|?|B|OUT=$(bash '@D@/ok.sh') bash @D@/na.sh
+AS16|block-destructive|asubst-keep|-|?|W|true; OUT="$(bash '@D@/ok.sh')"
+AS17|block-destructive|asubst-keep|-|?|W|NOTE="x OUT=$(bash '@D@/ok.sh') y" true
+AS18|block-destructive|asubst-keep|-|?|W|OUT="$(bash '@D@/ok.sh') more" @D@/na.sh
+AS19|block-destructive|asubst-keep|-|?|W|OUT=$(bash '@D@/ok.sh') true @QPAD@
+AS20|block-destructive|asubst-keep|-|?|B|OUT=$( bash '@D@/ok.sh')
+AS21|block-destructive|asubst-keep|-|?|B|OUT=$(env bash '@D@/ok.sh')
+AS22|block-destructive|asubst-keep|-|?|W|OUT="`bash '@D@/ok.sh'`"
+AS23|block-destructive|asubst-keep|-|?|W|OUT=$(@D@/na.sh '@D@/ok.sh')
+# #8548 Stage 7: an env operand whose name part opens a quote (AS24 recorded the allow at RED; the GREEN commit
+# moved it to W), and a quoted listed path holding a space (AS25, allowed through GREEN)
+AS24|block-destructive|asubst-keep|-|?|W|env "N=$(bash '@D@/ok.sh') x" @D@/na.sh
+AS25|block-destructive|asubst-keep|-|o|a|OUT=$(bash '@D@/li sted/ok.sh')
+# #8548 Stage 7 pass 2 (D-2): an unquoted listed closing word named as a shell interpreter, then an unlisted
+# script in that interpreter's domain. The corpus root lists that path for this row (block-destructive.test.sh).
+# W at RED (the step recorded the script at the exec arm's phase); B at GREEN (the step declines, the refusal stands)
+AS26|block-destructive|asubst-keep|-|?|B|OUT=$(bash @D@/bin/bash) @D@/na.sh
+# #8326: inert here-document bodies the receiver read admits (HL rows; GREEN moves them B -> a) and the must-flag controls (HM rows; HM09, an inert subshell, moves a -> B under the closer rule; hub design on sub-task #9061)
+HL01|block-destructive|looks-like-hd|-|-|a|( gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HL02|block-destructive|looks-like-hd|-|-|a|(echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HL03|block-destructive|looks-like-hd|-|-|a|{ gh issue comment 1 --body-file - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
+HL04|block-destructive|looks-like-hd|-|-|a|{ printf 'x' <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@}
+HL05|block-destructive|looks-like-hd|-|-|a|if true; then echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
+HL06|block-destructive|looks-like-hd|-|-|a|if true; then gh api x --input - <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@fi
+HL07|block-destructive|looks-like-hd|-|-|a|! jq . <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL08|block-destructive|looks-like-hd|-|-|a|! echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL09|block-destructive|looks-like-hd|-|-|a|cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL10|block-destructive|looks-like-hd|-|-|a|cat <<'RPT'@NL@bash @D@/na.sh --repro@NL@RPT
+HL11|block-destructive|looks-like-hd|-|-|a|cat > /tmp/notes.md <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HL12|block-destructive|looks-like-hd|-|-|a|cat <<'EOF' > /tmp/notes.md@NL@bash @D@/na.sh@NL@EOF
+HM01|block-destructive|hd-recv-mf|-|?|B|( bash <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HM02|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' | bash@NL@bash @D@/na.sh@NL@EOF
+HM03|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' 2>&1 | bash@NL@bash @D@/na.sh@NL@EOF
+HM04|block-destructive|hd-recv-mf|-|?|B|cat <<'EOF' > >(bash)@NL@bash @D@/na.sh@NL@EOF
+HM05|block-destructive|hd-recv-mf|-|?|B|$(cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HM06|block-destructive|hd-recv-mf|-|?|B|X=$(@NL@cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@)
+HM07|block-destructive|hd-recv-mf|-|?|B|{ cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF@NL@} | bash
+HM08|block-destructive|hd-recv-mf|-|?|B|cat <<EOF@NL@bash @D@/na.sh $HOME@NL@EOF
+HM09|block-destructive|hd-recv-mf|-|?|B|( true; echo ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM10|block-destructive|hd-recv-mf|-|?|B|while read l; do echo "$l"; done <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM11|block-destructive|hd-recv-mf|-|?|B|wc -l <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+# #8326 Stage 7 pass 2: a brace closer followed by a redirection, a cat-named path on the logical line, and the
+# unmodelled-text classes at the hook (HM12 and HM13 recorded the allow at RED; the GREEN commit moved them to B)
+HM12|block-destructive|hd-recv-mf|-|?|B|{ bash; cat }>/dev/null <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM13|block-destructive|hd-recv-mf|-|?|B|./tool/cat \@NL@echo <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM14|block-destructive|hd-recv-mf|-|?|B|( bash; echo $'\'"' ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM15|block-destructive|hd-recv-mf|-|?|B|( bash; echo ${x:-(} ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM16|block-destructive|hd-recv-mf|-|?|B|( bash; echo [(] ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM17|block-destructive|hd-recv-mf|-|?|B|( bash; cat $'\'"' ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM18|block-destructive|hd-recv-mf|-|?|B|( bash; cat ${x:-(} ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+HM19|block-destructive|hd-recv-mf|-|?|B|( bash; cat [(] ) <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+# #8326 Stage 7 pass 3: a function definition of cat spelled with a parenthesis, ahead of a cat-received body;
+# its parenthesis is read by the no-consumer test, not by the rebinding test (B at RED and at GREEN)
+HM20|block-destructive|hd-recv-mf|-|?|B|cat() { :; }@NL@cat <<'EOF'@NL@bash @D@/na.sh@NL@EOF
+# #8490 RED: backtick command words that stay recorded (TK rows; every row stays W through GREEN)
+TK01|block-destructive|tick-cmdword|-|?|W|`@D@/na.sh`
+TK02|block-destructive|tick-cmdword|-|?|W|true <<'EOF'@NL@notes@NL@`@D@/na.sh` is the entry point@NL@EOF
+TK03|block-destructive|tick-cmdword|-|?|W|`@D@/ok.sh`${X8490}.sh
+TK04|block-destructive|tick-cmdword|-|?|W|$(@D@/ok.sh)
+TK05|block-destructive|tick-cmdword|-|?|W|git commit -m 'Fix@NL@`@D@/ok.sh` reads it'
+TK06|block-destructive|tick-cmdword|-|?|W|bash -c $(echo -n) 'true@NL@`@D@/na.sh`'
+# #8490 Stage 7: the quote-led residual in its blank-carrying spelling, and the empty-output hand-off (both stay W)
+TK07|block-destructive|tick-cmdword|-|?|W|"`@D@/ok.sh a`"
+TK08|block-destructive|tick-cmdword|-|?|W|`true` @D@/na.sh
+# #8490 Stage 7 pass 2: the hand-off behind a listed slash-bearing substitution this arm declines (stays W), and a
+# quote-led command word that no script suffix ends in either reading, its script listed (read at its position, a)
+TK09|block-destructive|tick-cmdword|-|?|W|`@D@/ok.sh` @D@/na.sh
+LT05|block-destructive|looks-like-text|-|o|a|"`@D@/ok.sh`"
+# #8490 Stage 7 pass 3 (F-11): quote-led command words sorted by the exec arm's operand-filter test, whether a
+# script suffix ends the token (its normalized reading, or its raw spelling where that does not resolve), and
+# not by where the double quote closes. A quote left open whose token ends at the substitution's closer (no
+# suffix at the end: the enclosure position alone reads it, listed, a); a quote closed at the token's end
+# behind a suffix, the closer in a later token (recorded, W); a quote closed inside the token, which goes on
+# to a suffix (recorded, W)
+TK10|block-destructive|tick-quote|-|o|a|"`@D@/ok.sh` x"
+TK11|block-destructive|tick-quote|-|-|W|"`@D@/ok.sh" "`"
+TK12|block-destructive|tick-quote|-|o|W|"`@D@/ok.sh`".sh

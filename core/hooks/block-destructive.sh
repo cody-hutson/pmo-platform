@@ -253,9 +253,18 @@ log_block() {
   local ts; ts="$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
   local tool_input; tool_input="$("$PRINTF" '%s' "$INPUT" | "$JQ" -c '.tool_input // {}')"
   local input_digest; input_digest="$(digest "$tool_input")"
+  # The conservative route's refusal (BLOCK-DESTRUCTIVE-022 only) carries which gate
+  # sent the segment there, in ADR-205's `features` shape; see script_route_note. It is
+  # written only where check_script_target marked this refusal (script_route_mark) and
+  # the route's loop is running (script_route_live), so a deny site added elsewhere
+  # stays plain. The defaults cover every rule that logs before the -022 block initialises.
+  local subj="first"
+  if [ "${script_route_n:-0}" -gt 1 ]; then subj="later"; fi
   "$JQ" -n --arg ts "$ts" --arg hook "$HOOK_NAME" --arg rule "$rule_id" \
     --arg tool "$TOOL_NAME" --arg digest "$input_digest" --arg cwd "$CWD" \
-    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd}' \
+    --arg route "${script_route:-}" --arg live "${script_route_live:-0}" --arg subj "$subj" \
+    --arg ceil "${script_ceil_cause:-}" --arg mark "${script_route_mark:-0}" \
+    '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, input_digest:$digest, cwd:$cwd} + (if $live == "1" and $mark == "1" and $route != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, route:$route, subject:$subj}} elif $ceil != "" and $rule == "BLOCK-DESTRUCTIVE-022" then {features:{schema_version:1, ceiling:$ceil}} else {} end)' \
     >> "$BLOCK_LOG" 2>/dev/null || true
 }
 
@@ -264,7 +273,9 @@ block() {
   local rule_id="$1"
   local reason="$2"
   local override="$3"
-  log_block "$rule_id"
+  # The row is best-effort: a write that fails must not exit the hook before the refusal (exit 1 does
+  # not block), so nothing added to the writer can cost one (ADR-205 Decision 3).
+  log_block "$rule_id" || true
   "$PRINTF" '[CLAUDE-HOOK:%s:%s] BLOCKED: %s\nOverride: %s\n' "$HOOK_NAME" "$rule_id" "$reason" "$override" >&2
   exit 2
 }
@@ -306,6 +317,7 @@ is_script_allowlisted() {
   local path="$1"
   [ -f "$SCRIPT_ALLOWLIST" ] || return 1
   local pattern
+  # ceil-bounded: the tracked allowlist file, one pass over its lines
   while IFS= read -r pattern || [ -n "$pattern" ]; do
     # Skip comments and blank lines
     case "$pattern" in
@@ -452,6 +464,7 @@ normalize_script_token() {
       ;;
   esac
   while [ "$t" != "$prev" ]; do
+    script_ceil_check norm   # M-CEIL-NORM
     prev="$t"
     t="${t%[\"\'\`\(\)\;\&\|\<\>]}"
   done
@@ -531,6 +544,7 @@ script_word_scan() {
     script_ws_lit=0
     return 0
   fi
+  # ceil-bounded: the 1,024-character guard above
   while [ -n "$t" ]; do
     c="${t:0:1}"
     case "$st" in
@@ -920,6 +934,7 @@ script_word_join() {   # $1 = index in script_tokens of a token script_word_scan
   script_wj_out=""
   script_wj_raw=""
   while [ "$i" -lt "$n" ]; do
+    script_ceil_check wjoin-a   # M-CEIL-WJOIN-A
     piece="${script_tokens[$i]}"
     if [ -n "$raw" ]; then piece=" ${piece}"; fi
     raw="${raw}${piece}"
@@ -932,6 +947,7 @@ script_word_join() {   # $1 = index in script_tokens of a token script_word_scan
     fi
     t="${t}${piece}"
     while [ -n "$t" ]; do
+      script_ceil_check wjoin-b   # M-CEIL-WJOIN-B
       c="${t:0:1}"
       case "$st" in
         0)
@@ -1202,8 +1218,13 @@ script_interp_noexec_flag() {   # $1 = interpreter basename  $2 = normalized fla
 # text IS the argv word and is exactly one word. Everything else is "not a text
 # this walk can read", and that answer grants nothing. There is no list of option
 # names, of words that end option parsing, or of quoting and expansion constructs
-# to keep complete. A spelling these functions have never seen costs an
-# over-block, never an exemption.
+# to keep complete. A character the set leaves out costs an over-block, never an
+# exemption. A character it contains is the other direction, and that one is
+# measured: arms LATCH-SWEEP-* hand every non-alphanumeric member, read from this
+# function on each run, to bash and sh, and to dash and zsh where present, as
+# unquoted words in eight positions, and require each back as one unchanged word.
+# The measurement holds for the shell versions the run prints, each at its default
+# options, in a clean environment; an option that rewrites such a word is outside it.
 #
 # ONE OF THOSE CHARACTERS IS REWRITTEN AT THE START OF A WORD. zsh expands a word
 # that begins with `=` to the path of the command it names, so the walk does not
@@ -1407,6 +1428,40 @@ script_take_cmode_route() {   # reads script_ftok and the last read's globals; s
     -*) script_ftok="-c" ;;
     *) if ! script_operand_implicated "$script_interp_domain"; then script_ftok="-c"; fi ;;
   esac
+  if [ "$script_ftok" = "-c" ] && [ "$script_fsub" != "-c" ] && [ -z "$script_route" ]; then script_route="$script_route_gate"; script_route_tok="$script_fsub"; fi   # M-ROUTE-TAG (mutation target; pinned by LATCH-CAUSE-M1a)
+}
+
+# THE ROUTE NAMES ITS CAUSE (#8493). Three gates hand a segment to the route `-c`
+# takes: a word ahead of the operand whose reading is not plain (`opaque`), a
+# command-string cluster other than a bare `-c` (`cluster`), and an option argument
+# whose text the walk does not hold (`opaque-arg`, set in script_adjudicate_optarg).
+# The first gate to fire is recorded with the token that fired it. A bare `-c` is a
+# real command string, not a gate, and is never recorded; a bare `-c` the walk reaches
+# after an `opaque-arg` clears that gate's record, because its program string runs
+# whatever the option argument did (M-ROUTE-CLEAR-ARG). The record is read only by
+# a refusal the route's own loop issues (script_route_live): that refusal appends the
+# note below to its reason, and its block-log row gains `features` in the shape
+# ADR-205 gives a second writer of structure in the shared sink, `{schema_version: 1,
+# route, subject}` (log_block). The Override line is unchanged, and every other
+# refusal, before the loop or outside the route, keeps the plain reason and row.
+script_route_note() {   # sets script_rnote: the suffix a refusal inside the route's loop appends
+  script_rnote=""
+  if [ "${script_route_live:-0}" != 1 ] || [ -z "${script_route:-}" ]; then return 0; fi
+  case "$script_route" in
+    opaque)
+      # A redirection or here-string word has no plain spelling, so its note gives the move that works.
+      case "${script_route_tok:-}" in
+        *'<'*|*'>'*)
+          script_rnote=" Read on the conservative route (opaque): the word '${script_route_tok}' ahead of the script carries a character this hook cannot read exactly (a quote, a backslash, an expansion, a glob, a brace or a redirection), so the hook cannot tell what it does to the words after it — it may be an option that takes the next word; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, a redirection or here-string word has no plain spelling; placing it after the script and its arguments, where the hook does not read it, lets the hook read the command." ;;
+        *)
+          script_rnote=" Read on the conservative route (opaque): the word '${script_route_tok}' ahead of the script carries a character this hook cannot read exactly (a quote, a backslash, an expansion, a glob, a brace or a redirection), so the hook cannot tell what it does to the words after it — it may be an option that takes the next word; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, spelling that word as a literal in plain characters (letters, digits and _ = + , . : / @ % -) lets the hook read it." ;;
+      esac ;;
+    cluster)
+      script_rnote=" Read on the conservative route (cluster): the option cluster '${script_route_tok}' carries the command-string letter c, so the shell reads the next argument as a program string, and every later script-suffixed word is adjudicated as it is behind a bare -c." ;;
+    opaque-arg)
+      script_rnote=" Read on the conservative route (opaque-arg): the option argument '${script_route_tok}' is not one word whose text this hook holds (an expansion, or a quote it cannot resolve), so the operand behind it is not known; every later script-suffixed word is adjudicated and no parse-only exemption applies. If the command only parses or runs an allowlisted script, write that argument as a literal." ;;
+  esac
+  return 0
 }
 
 # THE COMMAND-STRING TABLE, KEYED ON THE INTERPRETER — the fourth per-interpreter
@@ -1603,6 +1658,7 @@ script_wrapper_longname() {   # $1 = a token that begins with `--`
   case "$script_wlong" in
     *" --${_lname} "*) return 0 ;;
   esac
+  # ceil-bounded: the wrapper row's long-option table
   for _lw in $script_wlong; do
     case "$_lw" in
       "--${_lname}"*) _lk=$(( _lk + 1 )); _lhit="$_lw" ;;
@@ -1639,6 +1695,7 @@ script_split_scan() {   # $1 = the attached split value
   esac
   _v="${_v#-}"
   while [ -n "$_v" ]; do
+    script_ceil_check split-scan   # M-CEIL-SPLIT-SCAN
     _c2="${_v:0:1}"; _v="${_v:1}"
     case "$script_wopt" in
       *"${_c2}::"*) _v="" ;;
@@ -1722,6 +1779,7 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
     set +f
     _nw="${#_words[@]}"
     while [ "$_i" -lt "$_nw" ]; do
+      script_ceil_check split-read-a   # M-CEIL-SPLIT-READ-A
       if ! script_plain_word "${_words[$_i]}"; then _r="unread"; break; fi
       _i=$(( _i + 1 ))
     done
@@ -1729,6 +1787,7 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
   if [ "$_r" = "go" ]; then
     _i=0
     while [ "$_i" -lt "$_nw" ]; do
+      script_ceil_check split-read-b   # M-CEIL-SPLIT-READ-B
       _w="${_words[$_i]}"
       _i=$(( _i + 1 ))
       if [ "$_ph" = "opt" ]; then
@@ -1757,6 +1816,7 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
           -?*)
             _rest="${_w#-}"
             while [ -n "$_rest" ]; do
+              script_ceil_check split-read-c   # M-CEIL-SPLIT-READ-C
               _c="${_rest:0:1}"
               _rest="${_rest:1}"
               case "$script_wsplit" in *"$_c"*) _r="unread"; break 2 ;; esac
@@ -1784,6 +1844,7 @@ script_split_read() {   # $1 = the attached split value  $2 = the split token ->
   fi
   if [ "$_r" = "go" ]; then
     while [ "$_j" -gt 0 ] && [ "$script_hidx" -lt "$_n" ]; do
+      script_ceil_check split-read-d   # M-CEIL-SPLIT-READ-D
       script_hidx=$(( script_hidx + 1 ))
       _j=$(( _j - 1 ))
     done
@@ -1813,6 +1874,7 @@ script_reach_verbish() {   # $1 = token -> 0 when any reading of it names a verb
       ;;
   esac
   while IFS= read -r _b; do
+    script_ceil_check verb-read   # M-CEIL-VERB-READ
     case "$_b" in
       bash|sh|zsh|python|python3|perl|ruby|node) return 0 ;;
       source|.) return 0 ;;
@@ -1838,12 +1900,14 @@ script_reach_inert() {   # $1 = token -> 0 when stepping it removes no adjudicat
 script_case_leadin() {
   local _n="${#script_tokens[@]}" _t=""
   while [ "$script_hidx" -lt "$_n" ]; do
+    script_ceil_check case-a   # M-CEIL-CASE-A
     _t="${script_tokens[$script_hidx]}"
     script_hidx=$(( script_hidx + 1 ))
     if [ "$_t" = "in" ]; then break; fi
   done
   if [ "$script_hidx" -lt "$_n" ] && [ "${script_tokens[$script_hidx]}" = "(" ]; then script_hidx=$(( script_hidx + 1 )); fi
   while [ "$script_hidx" -lt "$_n" ]; do
+    script_ceil_check case-b   # M-CEIL-CASE-B
     _t="${script_tokens[$script_hidx]}"
     script_hidx=$(( script_hidx + 1 ))
     case "$_t" in
@@ -1935,6 +1999,7 @@ script_reach_step() {   # -> 0 when it stepped at least one token at script_hidx
   # at the shell's next word
   if [ -n "$_w" ]; then
     script_word_scan "$_w"
+    # ceil-bounded: 64 steps (_k)
     while [ "$script_ws_complete" -eq 0 ] && [ "$script_hidx" -lt "${#script_tokens[@]}" ] && [ "$_k" -lt 64 ]; do
       _w="${_w} ${script_tokens[$script_hidx]}"
       script_hidx=$(( script_hidx + 1 ))
@@ -1965,6 +2030,7 @@ script_wrapper_options() {
   script_wrapper_row "$script_wrap"
   if [ "$script_wrow" -eq 0 ]; then return 0; fi
   while [ "$script_hidx" -lt "$_n" ]; do
+    script_ceil_check wopt-a   # M-CEIL-WOPT-A
     _tok="${script_tokens[$script_hidx]}"
     # A quoted option is read by its value (R0): only a token not led by `-` that holds a quote
     # or a backslash, under a row whose operands are none, or assignments with no `=` here, and
@@ -2013,6 +2079,7 @@ script_wrapper_options() {
         script_hidx=$(( script_hidx + 1 ))
         _rest="${_tok#-}"
         while [ -n "$_rest" ]; do
+          script_ceil_check wopt-b   # M-CEIL-WOPT-B
           _c="${_rest:0:1}"
           _rest="${_rest:1}"
           if [ "$_c" = ":" ]; then continue; fi
@@ -2049,12 +2116,14 @@ script_wrapper_options() {
       ;;
     assign)
       while [ "$script_hidx" -lt "$_n" ]; do
+        script_ceil_check wopt-c   # M-CEIL-WOPT-C
         _tok="${script_tokens[$script_hidx]}"
         case "$_tok" in
           -*) break ;;
           *=*)
             script_hidx=$(( script_hidx + 1 ))
             script_assign_value_rest "$_tok"   # M-WRAP-QVAL
+            script_assign_subst_rest "$_tok"   # M-ASGN-SUBST
             ;;
           *) break ;;
         esac
@@ -2102,21 +2171,25 @@ script_wrapper_options() {
 # labelled as the operator's, not demoted out of the text.
 check_script_target() {
   local path="$1" resolved="${2:-1}"
+  script_route_note   # M-ROUTE-NOTE (mutation target; pinned by LATCH-CAUSE-M2a)
   if [ "$resolved" -eq 0 ]; then
+    script_route_mark=1   # M-ROUTE-MARK
     block "BLOCK-DESTRUCTIVE-022" \
-      "unresolvable script path (quoting): the operand's quotes do not close within its own token, so the filename the shell will run cannot be determined from argv (nearest resolvable prefix: $path)." \
+      "unresolvable script path (quoting): the operand's quotes do not close within its own token, so the filename the shell will run cannot be determined from argv (nearest resolvable prefix: $path).${script_rnote}" \
       "first retry the form the allowlist already permits: a fully-quoted literal path, spelled repository-relative from the repository root (bash 'core/deploy/deploy.sh'). The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
   case "$path" in
     *'$'*)
+      script_route_mark=1   # M-ROUTE-MARK
       block "BLOCK-DESTRUCTIVE-022" \
-        "unresolvable script path (variable-bearing): $path — the hook sees unexpanded argv and cannot resolve it to an allowlist entry." \
+        "unresolvable script path (variable-bearing): $path — the hook sees unexpanded argv and cannot resolve it to an allowlist entry.${script_rnote}" \
         "first retry the form the allowlist already permits: a literal path with no variable, spelled repository-relative from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add the resolved path to .claude/script-execution-allowlist.txt; CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
       ;;
   esac
   if ! is_script_allowlisted "$path"; then
+    script_route_mark=1   # M-ROUTE-MARK
     block "BLOCK-DESTRUCTIVE-022" \
-      "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation)." \
+      "subprocess script execution not in allowlist: $path (Red Team C1 — script-laundering mitigation).${script_rnote}" \
       "first retry the form the allowlist already permits: invoke the script by its repository-relative path from the repository root. The allowlist matches the path AS WRITTEN, so an absolute path can be refused where the identical script's repository-relative form is allowed. Only if no permitted form matches, add to .claude/script-execution-allowlist.txt (glob patterns supported); CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
   fi
 }
@@ -2260,6 +2333,18 @@ readonly SCRIPT_ENCL_TAIL_BYTES=262144
 # The separator split's linear pass, a bound in characters (see THE LINEAR PASS in the
 # script-execution rule): a command this long or longer is split by one tr pass first.
 readonly SCRIPT_LINEAR_MIN=256
+# THE WORK CEILING (see the work-ceiling paragraph in the script-execution rule). A command hook
+# that outlasts the runtime's timeout does not block, so this rule bounds its own time: a deadline
+# fixed here, at top level and before the dispatch, so it counts every rule's work, and a length
+# past which the rule does not read a command at all. The deadline is relative to what SECONDS
+# reads now, never an absolute count, because bash imports SECONDS from the environment.
+readonly SCRIPT_CEIL_SECONDS=120
+readonly SCRIPT_CEIL_CHARS=65536
+readonly SCRIPT_CEIL_AT=$(( SECONDS + SCRIPT_CEIL_SECONDS ))
+# Which ceiling refused (log_block reads it). Initialised here because the other rules call
+# log_block before the -022 block initialises, and an unset read under `set -u` exits 1, which
+# PreToolUse treats as non-blocking: a fail-open.
+script_ceil_cause=""
 
 # ── THE ENCLOSURE VIEW'S SHELL FINDINGS: A THIRD FAMILY, AND A SIBLING FOR THE REASON
 # THE NON-SHELL FAMILY IS ONE.
@@ -2325,6 +2410,68 @@ log_would_fire_022() {
     --arg arm "$arm" --arg path "$path" --arg cwd "$CWD" --arg pos "${script_rowpos:-}" \
     '{ts:$ts, hook:$hook, rule:$rule, tool:$tool, phase:$phase, reason:"would-fire", arm:$arm, cause:$cause, path:$path, cwd:$cwd} + (if $pos != "" then {pos:$pos} else {} end)' \
     >> "$WARN_LOG" 2>/dev/null || true
+}
+
+# THE WORK CEILING'S CHECK. The first statement of every bash loop body on this rule's surface,
+# or the loop carries a `# ceil-bounded:` line directly above its head naming the cap that bounds
+# it; arm CEIL-COVER holds that inventory, so a loop added without either, in a form it reads, fails
+# the suite, as does a loop whose own `do` the arm cannot place, whatever its body opens with. Past
+# the deadline the command is refused and the hook exits: the check never ends a loop
+# early and lets the walk go on, so it adds no path on which a position or a word goes unread. Never
+# call it in a command substitution, where an exit ends the subshell and not the hook; script_realpath
+# and script_cont_joined, the two helpers that run in one, are charged by their callers.
+script_ceil_check() {   # $1 = the loop's tag
+  [ "$SECONDS" -lt "$SCRIPT_CEIL_AT" ] && return 0   # M-CEIL-TEST
+  script_ceil_refuse time "$1"
+}
+
+# THE WORK CEILING'S REFUSAL, one definition for every cause. It clears the conservative route's
+# live flag first, so a ceiling refusal inside the route's loop never carries the route's tag:
+# the two `features` shapes stay disjoint (log_block).
+script_ceil_refuse() {   # $1 = time | chars | positions | remainder   $2 = where it was reached
+  local why
+  script_route_live=0
+  script_ceil_cause="$1"
+  case "$1" in
+    time) why="the command takes longer to read than this rule allows (its per-command work ceiling, reached while reading the ${2} loop). A guard that cannot finish refuses rather than allows." ;;
+    chars) why="the command is longer than this rule reads (${#COMMAND} characters; its length gate is ${SCRIPT_CEIL_CHARS}, part of its per-command work ceiling). A guard that cannot finish refuses rather than allows." ;;
+    positions) why="the command opens more enclosure positions than this rule reads (${SCRIPT_ENCL_POS_MAX}) while an arm that reads enclosure positions is at enforce, so a position past that budget would be a refusal the rule cannot make. A guard that cannot finish refuses rather than allows." ;;
+    *) why="an enclosure position's remainder is past the bytes this rule copies (${SCRIPT_ENCL_TAIL_BYTES}) while an arm that reads enclosure positions is at enforce, so the position could not be read whole. A guard that cannot finish refuses rather than allows." ;;
+  esac
+  block "BLOCK-DESTRUCTIVE-022" "$why" \
+    "pass long text by file reference instead of inline — a pull-request or issue body through --body-file, a commit message through -F, a file's content through the Write tool — or split the command into shorter ones. CLAUDE_HOOK_BYPASS=1 is an operator-only escape hatch, not an agent's next step."
+}
+
+# THE VIEW'S TWO BUDGETS, ONCE AN ARM THAT READS THEIR POSITIONS ENFORCES. Past the position
+# ceiling the view opens no further position, and past the remainder budget it opens one without
+# its remainder. Both exits are cheap, so the clock never reaches them; at `warn` they lose a
+# record, never a refusal. Once the enclosure family, the exec arm or the interpreter arm is at
+# `enforce`, a position the view cannot read would be a refusal the rule cannot make, so the
+# command is refused instead. Inert while every one of the three reads `warn`.
+script_ceil_budget() {   # $1 = positions | remainder
+  case "${DESTRUCTIVE_022_ENCL_PHASE}|${DESTRUCTIVE_022_EXEC_PHASE}|${DESTRUCTIVE_022_INTERP_PHASE}" in
+    *enforce*) script_ceil_refuse "$1" view ;;
+  esac
+  return 0
+}
+
+# THE QUOTE PARITY OF ONE WORD, linear. The head resolver and the head-value check read whether a
+# word's single and double quotes are odd in number. Two global substitutions of a bracket pattern
+# did that, and that class grows far faster than the word it reads, so a word of at least
+# SCRIPT_LINEAR_MIN characters is counted by one awk pass in the C locale. Both quote characters
+# are single bytes that no UTF-8 sequence contains, so counting bytes gives the parity counting
+# characters gives (arm CEIL-LIN-EQ). A shorter word, or a pass that fails, keeps the substitutions.
+script_quote_parity() {   # $1 = a word -> script_qp_sq, script_qp_dq: 1 when that quote is odd in number
+  local _sq="'" _dq='"' _c _r
+  if [ "${#1}" -ge "$SCRIPT_LINEAR_MIN" ] && _r="$(LC_ALL=C /usr/bin/awk -v q="$_sq" -v d="$_dq" '{ s += gsub(q, ""); t += gsub(d, "") } END { printf "%d %d", s % 2, t % 2 }' <<< "$1" 2>/dev/null)"; then   # linear: quote parity
+    case "$_r" in
+      [01]' '[01]) script_qp_sq="${_r%% *}"; script_qp_dq="${_r##* }"; return 0 ;;
+    esac
+  fi
+  _c="${1//[!$_sq]/}"
+  script_qp_sq=$(( ${#_c} % 2 ))
+  _c="${1//[!$_dq]/}"
+  script_qp_dq=$(( ${#_c} % 2 ))
 }
 
 # Adjudicate one direct-execution candidate under the rollout phase.
@@ -2526,6 +2673,7 @@ script_adjudicate_optarg() {   # $1 = raw argv token consumed as an option argum
   # and no parse-only exemption applies. Both call sites of this function sit
   # behind the walk's interpreter test, so it is never reached under `source`.
   if ! script_arg_exact; then script_cmode=1; fi   # M-OPAQUE-ARG (mutation target; pinned by FWALK-OPAQUE-M3a)
+  if [ "$script_cmode" -eq 1 ] && [ -z "$script_route" ]; then script_route="opaque-arg"; script_route_tok="$1"; fi   # M-ROUTE-TAG-ARG (mutation target; pinned by LATCH-CAUSE-M1b)
   # The argument is also read as the word the shell passes where the first two views
   # claim nothing — no join, so the walk's index moves exactly as before.
   if script_operand_resolve "$script_interp_domain" ""; then
@@ -2595,6 +2743,7 @@ script_qnext() {
   script_qc=""
   script_qpre=""
   local _ch _pre
+  # ceil-bounded: the characters its callers pass, at most ten
   for _ch in "$@"; do
     _pre="${script_qt%%"$_ch"*}"
     if [ "${#_pre}" -ne "${#script_qt}" ]; then
@@ -2629,6 +2778,7 @@ script_qadvance() {
   local _pre _nd
   if [ "${#1}" -ge "$SCRIPT_LINEAR_MIN" ] && script_qadvance_linear "$1"; then return 0; fi
   while [ -n "$script_qt" ]; do
+    script_ceil_check qscan   # M-CEIL-QSCAN
     if [ "$script_qwork" -ge 1000 ]; then
       script_qbail=1
       script_qstate=0
@@ -2685,6 +2835,7 @@ script_qadvance() {
           *"$script_qd")
             _nd=0
             while :; do
+              script_ceil_check qdollar   # M-CEIL-QDOLLAR
               case "$_pre" in
                 *"$script_qd") _pre="${_pre%"$script_qd"}"; _nd=$(( _nd + 1 )) ;;
                 *) break ;;
@@ -2892,7 +3043,9 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
   # an enclosure that opens a case: its first pattern's `)` is not the enclosure's close, so the
   # cut reads past it; a cut it cannot place still degrades to the text left whole
   if [ "$2" -eq 1 ]; then case "${1#"${1%%[! 	]*}"}" in 'case '*|'case	'*) _case=1 ;; esac; fi   # M-REACH-CUT
+  # Charged, and capped at the cut's 200 steps (_n): a step reads the position's remainder.
   while [ -n "$script_qt" ]; do
+    script_ceil_check encl-cut   # M-CEIL-ENCL-CUT
     _n=$(( _n + 1 ))
     if [ "$_n" -gt 200 ]; then return 0; fi
     if [ "$2" -eq 2 ]; then
@@ -2969,6 +3122,14 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
 #      DOES execute its stdin would be a fail-open here while remaining sound
 #      below. `bash <<'EOF'` is what this condition exists to refuse: bash reads
 #      its PROGRAM from stdin, so that body genuinely executes.
+#      The pass reads a RECEIVER LIST that is those four plus `cat`, and `cat` is
+#      NOT in the shared set (D-8326-1). `cat` does not execute its stdin, but it
+#      prints it, so for `cat` alone a third condition applies: nothing in the
+#      command reads its output — the whole-command no-consumer test after the
+#      scan (M-HD-RECV-NOCONS). `cat` is read only as itself or a system path, on the
+#      physical and the logical line (M-HD-RECV-CATPATH, M-HD-RECV-CATPATH-LM), and
+#      not in a command that names a rebinding (M-HD-RECV-REBIND). The
+#      quoted-argument suppression is unchanged.
 #  (2) CONSTRUCT-INERT — the delimiter is QUOTED (`'D'`, `"D"`, `\D`), which
 #      suppresses every expansion in the body; or it is BARE and the body
 #      contains neither `$` nor a backtick. That is the identical two-tier split
@@ -2983,7 +3144,11 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
 # real interpreter's stdin the carrier's exemption. It is resolved a second time
 # from the innermost enclosure still open at the operator — `echo $(bash <<'E'`
 # hands the body to `bash`, not to `echo` — and a body is excised only when both
-# readings are carriers (ENCL-HDHEAD below). Below `enforce` on the enclosure
+# readings are carriers (ENCL-HDHEAD below). Each reading is taken through the
+# grammar openers in front of it (script_hd_recv_text), and a reading that holds
+# a compound-command closer keeps the body (M-HD-RECV-CLOSER). Where the line
+# reading came through an opener or names `cat`, the enclosure reading must name
+# a listed receiver at every phase (M-HD-RECV-NEWREACH). Below `enforce` on the enclosure
 # family's phase that finding is recorded and the body is still excised. Two limits
 # are measured and declared: a receiver behind a line continuation is not reached,
 # because this pass reads physical lines; and a carrier's unquoted substitution that
@@ -3000,7 +3165,11 @@ script_encl_cut() {   # $1 = text  $2 = 1 (parenthesis) | 2 (backtick)  -> scrip
 #
 # WHAT NEWLY PASSES, EXACTLY: the body of a here-document whose delimiter is
 # quoted, or is bare with a body free of `$` and backtick, redirected into `gh`,
-# `printf`, `echo` or `jq`. Nothing else. The RESIDUAL is that naming a carrier
+# `printf`, `echo` or `jq`, or into `cat` — written as `cat`, `/bin/cat` or
+# `/usr/bin/cat`, in a command that names no rebinding — when nothing in the command
+# reads `cat`'s output — the receiver read through a leading `(` (not `((`) and the grammar
+# words `{`, `!`, `then`, `do`, `else`, `elif`, `if`, `while` and `until`, and never
+# from a text that holds a compound-command closer. Nothing else. The RESIDUAL is that naming a carrier
 # verb gets that body unadjudicated — which is NOT a new residual. It is exactly
 # the one the quoted-argument suppression below already carries and ships:
 # `gh … --body 'note; bash <x>.sh'` is allowed today by the same reasoning. This
@@ -3020,6 +3189,105 @@ script_hd_delim_ok() {
     *[!A-Za-z0-9_.-]*) return 1 ;;
     *) return 0 ;;
   esac
+}
+
+# THE RECEIVER READ THROUGH THE GRAMMAR OPENERS (D-8326-2). A receiver text runs from the last
+# separator to the operator, and neither `(` nor `{` is a separator, so a carrier behind a subshell or
+# brace-group opener, or behind a reserved word, resolved to the opener itself and its inert body was
+# kept. The read steps over the leading openers before the head is resolved: a `(` not followed by `(`
+# (`((` opens arithmetic), and a word that is exactly `{`, `!`, `then`, `do`, `else`, `elif`, `if`,
+# `while` or `until` followed by a blank. These are shell grammar, not command words: the redirection
+# binds to the simple command after them, and none of them reads standard input. The set is the one the
+# verb walk steps (M-WRAP-KEYWORDS) less `case`, `in`, `coproc` and `nocorrect`, and the read never steps
+# a wrapper, which executes its arguments (the asymmetry at script_resolve_head stands), nor `((`, nor a
+# closer. It stops at the first other word, and after 16 openers, where the opener is left as the head
+# and the body is kept: withdraw-only, and the step count keeps the read linear in the receiver text.
+#
+# THE CLOSER RULE. A here-document written after a compound command's closer is redirected to the
+# whole compound command, and the receiver test reads only the simple command whose own words reach the
+# operator. So a receiver text that, read from its head on, holds a `)` closing an opener the head sits
+# inside (script_hd_recv_closes), or a `}` word, alone or followed directly by a redirection or a
+# control character (M-HD-RECV-BRACE-OP), sets script_hdrecv_closer, and
+# the pre-pass keeps the body for every receiver reading (M-HD-RECV-CLOSER): withdraw-only, the
+# fail-closed direction. A parenthesis inside a quoted argument, or one that closes a substitution opened
+# in the command's own words, closes nothing the receiver sits inside, and keeps nothing.
+#
+# THE CLOSER READ. One awk pass in the C locale, linear in the text, read with the shell's quoting: a
+# backslash escapes the next byte; a single-quoted span is literal; a double-quoted span is skipped
+# except for a substitution it opens, which is read as the command's own words; a backtick opens a span
+# read to its own close. A `(` opens and a `)` closes; a `)` with nothing open is the closer of an opener
+# before the head. Text this read does not model keeps the body: an ANSI-C quote, a parameter expansion,
+# an arithmetic expansion in its bracket form (the double-parenthesis form is read as two parentheses, as
+# bash parses it), a brace expansion, and an unquoted brace or bracket, in any of which a parenthesis can be
+# literal to the shell (M-HD-RECV-UNMODELED). An unterminated single-quoted span keeps the body, the fail-closed answer, and so does
+# a read that fails. An unterminated double-quoted span or substitution, as in a body passed inline
+# through "$(cat <<'EOF'", closes nothing.
+script_hd_recv_closes() {   # $1 = a receiver text from its head on -> 0 when a `)` closes an opener before the head
+  local _r
+  script_ceil_check hd-closes   # M-CEIL-HD-CLOSES
+  _r="$(LC_ALL=C /usr/bin/awk '
+    { s = s (NR > 1 ? "\n" : "") $0 }
+    END {
+      n = length(s); sp = 0; st[0] = "O"
+      for (i = 1; i <= n; i++) {
+        c = substr(s, i, 1); t = st[sp]
+        if (t == "D") {
+          if (c == "\\") { i++; continue }
+          if (c == "\"") { sp--; continue }
+          if (c == "$" && substr(s, i + 1, 1) == "(") { st[++sp] = "S"; i++; continue }
+          if (c == "`") st[++sp] = "B"
+          continue
+        }
+        if (t == "B") {
+          if (c == "\\") { i++; continue }
+          if (c == "`") sp--
+          continue
+        }
+        if (c == "\\") { i++; continue }
+        if (c == "$" && (substr(s, i + 1, 1) == "\047" || substr(s, i + 1, 1) == "{" || substr(s, i + 1, 1) == "[")) { print "1"; exit }   # M-HD-RECV-UNMODELED
+        if (c == "{" || c == "[") { print "1"; exit }   # M-HD-RECV-UNMODELED
+        if (c == "\047") { j = index(substr(s, i + 1), "\047"); if (j == 0) { print "1"; exit } i += j; continue }   # M-HD-RECV-SQ
+        if (c == "\"") { st[++sp] = "D"; continue }   # M-HD-RECV-DQ-OPEN
+        if (c == "`") { st[++sp] = "B"; continue }
+        if (c == "(") { st[++sp] = "P"; continue }
+        if (c == ")") { if (sp == 0) { print "1"; exit } sp--; continue }
+      }
+      print "0"
+    }' <<< "$1" 2>/dev/null)" || return 0
+  [ "$_r" != 0 ]
+}
+
+script_hd_recv_text() {   # $1 = a receiver text -> script_hdrecv_out, script_hdrecv_closer, script_hdrecv_step
+  local _t="$1" _w="" _s=0
+  script_hdrecv_closer=0
+  script_hdrecv_step=0
+  while :; do
+    script_ceil_check hd-recv   # M-CEIL-HD-RECV
+    _t="${_t#"${_t%%[![:blank:]]*}"}"
+    if [ "$_s" -ge 16 ]; then break; fi
+    case "$_t" in
+      '(('*) break ;;
+      '('*) _t="${_t:1}"; _s=$(( _s + 1 )); continue ;;
+    esac
+    _w="${_t%%[[:blank:]]*}"
+    case "$_w" in
+      '{'|'!'|then|do|else|elif|if|while|until)
+        if [ "$_w" = "$_t" ]; then break; fi
+        _t="${_t:${#_w}}"
+        _s=$(( _s + 1 ))
+        ;;
+      *) break ;;
+    esac
+  done
+  case "$_t" in *')'*) script_hd_recv_closes "$_t" && script_hdrecv_closer=1 ;; esac   # M-HD-RECV-CLOSES
+  # A `}` word keeps the body whatever stands beside it: zsh reads a lone `}` as a group's closer.
+  case "$_t" in '}'|'}'[[:blank:]]*|*[[:blank:]]'}'|*[[:blank:]]'}'[[:blank:]]*) script_hdrecv_closer=1 ;; esac
+  # zsh also ends that word at a redirection or a control character, so a `}` that begins a word and is
+  # followed directly by one closes the group too, and the redirections after it bind to the whole group.
+  case "$_t" in '}'['<>|&;()']*|*[[:blank:]]'}'['<>|&;()']*) script_hdrecv_closer=1 ;; esac   # M-HD-RECV-BRACE-OP
+  script_hdrecv_out="$_t"
+  if [ "$_s" -gt 0 ]; then script_hdrecv_step=1; fi
+  return 0
 }
 
 # Walk $COMMAND left to right, honouring quote state so a `<<` inside a quoted
@@ -3052,10 +3320,12 @@ script_heredoc_prescan() {
   local _n=0 _i=0 _k=0 _qn=0 _qs=0 _work=0 _pos=0 _lastsep=0 _abs=0 _od=0 _bt=-1 _h2=0 _c2=0 _j=0 _rh2=""
   local _total=0 _excised=0 _found=0 _quoted=0 _strip=0 _ex=0 _out="" _ops="" _cont=0 _nd=0
   local _lcar="" _lprev=""
+  local _cls=0 _cat1=0 _lm=1 _catx=0 _stp=0
 
   # Split into PHYSICAL lines. Bodies are newline-delimited, so the line is the
   # unit this pass reasons in.
   _tmp="$COMMAND"
+  # ceil-bounded: the pre-pass bails at 500 lines
   while [ -n "$_tmp" ]; do
     if [ "$_n" -ge 500 ]; then script_hdbail=1; return 0; fi
     case "$_tmp" in
@@ -3065,6 +3335,7 @@ script_heredoc_prescan() {
     _n=$(( _n + 1 ))
   done
 
+  # ceil-bounded: the 500 lines split above
   while [ "$_i" -lt "$_n" ]; do
     _opline="${_lines[$_i]}"
     _i=$(( _i + 1 ))
@@ -3077,12 +3348,15 @@ script_heredoc_prescan() {
     _cont=0
     # an enclosure still open from an earlier line opens this line at its start
     _j=0
+    # ceil-bounded: the opener stack's depth, inside the pre-pass's 2,000 steps
     while [ "$_j" -lt "$_od" ]; do _ostk[$_j]=0; _j=$(( _j + 1 )); done
     if [ "$_bt" -ge 0 ]; then _bt=0; fi
     script_qt="$_opline"
 
     # ---- scan this line for here-document operators at quote-state 0 ----
+    # Charged, and capped at the pre-pass's 2,000 steps (_work): a step reads the line left to scan.
     while [ -n "$script_qt" ]; do
+      script_ceil_check hd-scan   # M-CEIL-HD-SCAN
       _work=$(( _work + 1 ))
       if [ "$_work" -ge 2000 ]; then script_hdbail=1; return 0; fi
 
@@ -3132,6 +3406,7 @@ script_heredoc_prescan() {
           case "$_pre" in
             *"$script_qd")
               _nd=0
+              # ceil-bounded: 64 delimiter characters (_nd)
               while [ "$_nd" -lt 64 ]; do
                 case "$_pre" in
                   *"$script_qd") _pre="${_pre%"$script_qd"}"; _nd=$(( _nd + 1 )) ;;
@@ -3174,6 +3449,7 @@ script_heredoc_prescan() {
                 '-'*) _strip=1; _pos=$(( _pos + 1 )); script_qt="${script_qt:1}" ;;
               esac
               while :; do
+                script_ceil_check hd-blank   # M-CEIL-HD-BLANK
                 case "$script_qt" in
                   ' '*|$'\t'*) _pos=$(( _pos + 1 )); script_qt="${script_qt:1}" ;;
                   *) break ;;
@@ -3261,6 +3537,7 @@ script_heredoc_prescan() {
 
     # ---- consume the queued bodies, in operator order ----
     _k=0
+    # ceil-bounded: at most two bodies a line and eight a command (_qn)
     while [ "$_k" -lt "$_qn" ]; do
       _delim="${_qdelim[$_k]}"
       _quoted="${_qquoted[$_k]}"
@@ -3270,12 +3547,14 @@ script_heredoc_prescan() {
       _bodyraw=""
       _delimline=""
       _found=0
+      # ceil-bounded: the 500 lines split above
       while [ "$_i" -lt "$_n" ]; do
         _cmp="${_lines[$_i]}"
         _delimline="${_lines[$_i]}"
         _i=$(( _i + 1 ))
         if [ "$_strip" -eq 1 ]; then
           while :; do
+            script_ceil_check hd-tab   # M-CEIL-HD-TAB
             case "$_cmp" in
               $'\t'*) _cmp="${_cmp:1}" ;;
               *) break ;;
@@ -3294,12 +3573,35 @@ script_heredoc_prescan() {
 
       _ex=0
       _c2=0
-      script_resolve_head "${_qhead2[$_k]}"
+      _cls=0
+      _cat1=0
+      _lm=1
+      # Each receiver reading is taken through the grammar openers (script_hd_recv_text), which also
+      # reports a closer in it. The logical-line reading is resolved first, so that the line reading
+      # below stays the last resolve before M-WRAP-QVAL-HDHEAD reads script_head_open. _lm: 1 when
+      # there is no logical reading or it names a carrier, 2 when it names cat, 0 otherwise.
+      if [ -n "${_qlhead[$_k]}" ]; then
+        script_hd_recv_text "${_qlhead[$_k]}"
+        if [ "$script_hdrecv_closer" -eq 1 ]; then _cls=1; fi
+        _lm=0
+        # cat counts for the logical reading only as itself or a system path, as for the line reading below.
+        if script_head_is_carrier "$script_hdrecv_out"; then _lm=1; elif [ "${script_head##*/}" = cat ]; then case "$script_head" in cat|/bin/cat|/usr/bin/cat) _lm=2 ;; esac; fi   # M-HD-RECV-CATPATH-LM
+      fi
+      script_hd_recv_text "${_qhead2[$_k]}"
+      if [ "$script_hdrecv_closer" -eq 1 ]; then _cls=1; fi
+      script_resolve_head "$script_hdrecv_out"
       _rh2="$script_head"
       case "${script_head##*/}" in
         gh|printf|echo|jq) _c2=1 ;;
+        # cat satisfies the enclosure reading only where that reading is the line reading's own text.
+        # Wherever the two differ an enclosure opens on the operator line, which the no-consumer test
+        # below declines, so a carrier head over a cat enclosure keeps today's reading.
+        cat) if [ "${_qhead2[$_k]}" = "$_headtxt" ]; then _c2=1; fi ;;   # M-HD-RECV-CAT2
       esac
-      script_resolve_head "$_headtxt"
+      script_hd_recv_text "$_headtxt"
+      if [ "$script_hdrecv_closer" -eq 1 ]; then _cls=1; fi
+      _stp="$script_hdrecv_step"
+      script_resolve_head "$script_hdrecv_out"
       case "${script_head##*/}" in
         gh|printf|echo|jq)
           if [ "$_quoted" -eq 1 ]; then
@@ -3311,7 +3613,21 @@ script_heredoc_prescan() {
             esac
           fi
           ;;
+        # The receiver list's fifth member, under condition (2) unchanged and the no-consumer test.
+        cat)
+          _cat1=1
+          if [ "$_quoted" -eq 1 ]; then
+            _ex=1
+          else
+            case "$_body" in
+              *"$script_qd"*|*"$script_qbt"*) _ex=0 ;;
+              *) _ex=1 ;;
+            esac
+          fi
+          ;;
       esac
+      # cat is read as the receiver only as itself or a system path: a name that only ends in cat is not.
+      case "${script_head##*/}" in cat) case "$script_head" in cat|/bin/cat|/usr/bin/cat) ;; *) _ex=0 ;; esac ;; esac   # M-HD-RECV-CATPATH
       # A carrier word the head walk read from inside a value that holds a blank is not the
       # receiver: the walk reached it by stepping over an assignment token whose quote is still
       # open, and the shell feeds the body to a later word (the review's PR-2, at this site). The
@@ -3321,7 +3637,14 @@ script_heredoc_prescan() {
       # The receiver is read from the physical line and from the logical line, and the body is
       # excised only when both name a carrier: a continuation can make a carrier's physical line
       # the tail of a shell's command, which reads the body. Withdraw-only.
-      if [ "$_ex" -eq 1 ] && [ -n "${_qlhead[$_k]}" ] && ! script_head_is_carrier "${_qlhead[$_k]}"; then _ex=0; fi   # M-CONT-RECV
+      if [ "$_ex" -eq 1 ] && [ "$_lm" -eq 0 ]; then _ex=0; fi   # M-CONT-RECV
+      if [ "$_lm" -eq 2 ]; then _cat1=1; fi
+      # A receiver text holding a closer keeps the body, whichever reading holds it (script_hd_recv_text).
+      if [ "$_ex" -eq 1 ] && [ "$_cls" -eq 1 ]; then _ex=0; fi   # M-HD-RECV-CLOSER
+      # The new reach does not enter the enclosure family's warn-phase path below. Where the line reading
+      # came through a stepped opener or names cat, an enclosure reading that names no listed receiver keeps
+      # the body at every phase: today the line reading there was the opener itself, or cat, and kept it.
+      if [ "$_ex" -eq 1 ] && [ "$_c2" -eq 0 ] && { [ "$_stp" -eq 1 ] || [ "$_cat1" -eq 1 ]; }; then _ex=0; fi   # M-HD-RECV-NEWREACH
 
       # >>> ENCL-HDHEAD-BEGIN — core/hooks/tests/block-destructive.test.sh
       # A body is excised only when the receiver read from the line head AND the one
@@ -3347,6 +3670,7 @@ script_heredoc_prescan() {
       # >>> ENCL-HDHEAD-END
       if [ "$_ex" -eq 1 ]; then
         _excised=$(( _excised + 1 ))
+        if [ "$_cat1" -eq 1 ]; then _catx=1; fi
         _out="${_out}${_delimline}"$'\n'
       else
         _out="${_out}${_bodyraw}${_delimline}"$'\n'
@@ -3359,6 +3683,26 @@ script_heredoc_prescan() {
   # is not command text). It runs before the three exits below, so a command whose only
   # `<<` sat inside a quote is still asked, and a declined command keeps every body.
   if script_qmodel_needed "$_ops" 1 && ! script_qmodel_ok "$_ops" 1; then script_hdbail=1; return 0; fi   # M-QMODEL-FULL
+
+  # THE NO-CONSUMER TEST (D-8326-1). cat prints its input, so a cat-received body is inert only where
+  # nothing in the command reads cat's output. When an excision relied on cat, every operator line of
+  # the command is read, and a pipe, a parenthesis, a backtick or a coprocess anywhere in them latches
+  # the bail: all-or-nothing, today's verdict. Reading every line, not the operator's own, reaches a
+  # consumer behind a descriptor duplication on that line, a substitution opened on an earlier line
+  # (the opener stack resets per line) and a group closed and piped on a later one. Its cost is false
+  # positives only: any such character in a cat-received command keeps today's verdict, never an allow.
+  if [ "$_catx" -eq 1 ]; then case "$_ops" in *'|'*|*'('*|*')'*|*"$script_qbt"*|*coproc*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-NOCONS
+  # Nor in a command that rebinds a command name, where the word cat may not run cat: an alias, a
+  # function definition by its keyword, a hash entry or an enabled builtin anywhere in the command keeps
+  # every body.
+  # Each word is read as a substring of the whole command, every body included, so a builtin quoted,
+  # escaped or followed by any blank is read too, and so is any longer word that holds one, such as a
+  # plural or an inflection (a declared cost, arm HD-RECV-COST-rebind-prose), and so are the shells' alias
+  # and command tables (BASH_ALIASES, BASH_CMDS, zsh's aliases and commands; zsh's functions is read
+  # through `function`). A function definition spelled with a parenthesis names none of these words: the
+  # no-consumer test above reads its parenthesis (arm HD-RECV-MF-cat-rebind-paren). It is an enumeration,
+  # not a closed class: R-1 names, as an open list, some of what it does not read.
+  if [ "$_catx" -eq 1 ]; then case "$COMMAND" in *alias*|*function*|*hash*|*enable*|*BASH_ALIASES*|*BASH_CMDS*|*commands*) script_hdbail=1; return 0 ;; esac; fi   # M-HD-RECV-REBIND
 
   # No here-document operator at quote-state 0 — every `<<` in this command was a
   # here-string or quoted text. Nothing to excise, and nothing to decline.
@@ -3410,7 +3754,7 @@ script_resolve_head() {
   # is open when either reading says so. The count stays a disjunct, so nothing it marked open is
   # closed: withdraw-only, the fail-closed direction.
   script_head_open=0
-  local _i _hsq _hdq _sq="'" _dq='"'
+  local _i
   local -a _tok
   set -f
   # shellcheck disable=SC2206
@@ -3418,14 +3762,14 @@ script_resolve_head() {
   set +f
   _i=0
   while [ "$_i" -lt "${#_tok[@]}" ]; do
+    script_ceil_check head   # M-CEIL-HEAD
     case "${_tok[$_i]}" in
       [A-Za-z_]*=*)
         case "${_tok[$_i]%%=*}" in
           *[!A-Za-z0-9_]*) break ;;
         esac
-        _hsq="${_tok[$_i]//[!$_sq]/}"
-        _hdq="${_tok[$_i]//[!$_dq]/}"
-        if [ $(( ${#_hsq} % 2 )) -eq 1 ] || [ $(( ${#_hdq} % 2 )) -eq 1 ]; then script_head_open=1; fi
+        script_quote_parity "${_tok[$_i]}"
+        if [ "$script_qp_sq" -eq 1 ] || [ "$script_qp_dq" -eq 1 ]; then script_head_open=1; fi
         if [ "$script_head_open" -eq 0 ] && script_head_token_scan "${_tok[$_i]}"; then script_head_open=1; fi
         _i=$(( _i + 1 ))
         ;;
@@ -3458,11 +3802,8 @@ script_head_token_scan() {   # $1 = an assignment token -> 0 when its value is s
 
 # Open by either reading: the quote count script_resolve_head keeps, or the scan above.
 script_head_value_open() {   # $1 = an assignment token -> 0 when its value is still open at its end
-  local _sq="'" _dq='"' _c
-  _c="${1//[!$_sq]/}"
-  if [ $(( ${#_c} % 2 )) -eq 1 ]; then return 0; fi
-  _c="${1//[!$_dq]/}"
-  if [ $(( ${#_c} % 2 )) -eq 1 ]; then return 0; fi
+  script_quote_parity "$1"
+  if [ "$script_qp_sq" -eq 1 ] || [ "$script_qp_dq" -eq 1 ]; then return 0; fi
   script_head_token_scan "$1"
 }
 
@@ -3567,7 +3908,9 @@ script_head_is_carrier() {   # $1 = text -> 0 when the head it resolves to is on
 # fragment is suppressed — fail-closed, and a possible false refusal.
 
 # A construct the value step never crosses: one that runs a command, or whose extent holds
-# blanks this scanner does not model.
+# blanks this scanner does not model. The assignment-substitution step after it crosses one
+# shape of a command substitution under conditions of its own (script_assign_subst_rest); this
+# guard is not widened for it.
 script_qval_opaque() {   # $1 = one token -> 0 when it carries such a construct
   case "$1" in
     *'$('*|*'${'*|*'$['*|*'`'*|*'<('*|*'>('*|*'=('*) return 0 ;;   # M-WRAP-QVAL-SUBST
@@ -3617,6 +3960,7 @@ script_qval_gap() {   # $1 = token index -> script_qval_gapn
     script_qval_gaprest="$script_seg"
   fi
   while [ "$script_qval_gapi" -le "$1" ]; do
+    script_ceil_check qval-gap   # M-CEIL-QVAL-GAP
     _b="${script_qval_gaprest%%[!${_bl}]*}"
     script_qval_gaprest="${script_qval_gaprest:$(( ${#_b} + ${#script_tokens[$script_qval_gapi]} ))}"
     script_qval_gapi=$(( script_qval_gapi + 1 ))
@@ -3638,6 +3982,7 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
   script_qval_sq=0; script_qval_dq=0
   _i="$script_qval_from"
   while [ "$_i" -lt "$_k" ]; do   # M-WRAP-QVAL-PFX
+    script_ceil_check qval-pfx   # M-CEIL-QVAL-PFX
     if script_qval_opaque "${script_tokens[$_i]}"; then _ok=0; break; fi
     script_qadvance "${script_tokens[$_i]}"
     if [ "$script_qstate" -eq 0 ] && script_qval_dangles "${script_tokens[$_i]}"; then _ok=0; break; fi
@@ -3647,6 +3992,7 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
     script_qadvance "$1"
     script_qval_readable "$1" || _ok=0   # M-WRAP-QVAL-READ
     _j="$_k"
+    # ceil-bounded: the shared 1,000-step cap (script_qwork)
     while [ "$_ok" -eq 1 ] && [ "$script_qwork" -lt 1000 ]; do
       if [ "$script_qstate" -eq 0 ]; then
         script_qval_dangles "${script_tokens[$_j]}" || break
@@ -3667,6 +4013,145 @@ script_assign_value_rest() {   # $1 = the assignment token just stepped over
   fi
   if [ "$_ok" -eq 1 ]; then script_qval_from="$script_hidx"; else script_hidx="$_h"; fi
   script_qstate="$_qs"; script_qtaint="$_qt"
+}
+
+# THE ASSIGNMENT-SUBSTITUTION STEP. The characters of a command substitution, from its opener to
+# its closer, are part of the word they appear in (POSIX Shell Command Language 2.3), but the walk
+# splits a segment on whitespace first, so `NAME=$(<word> <path>)` reaches it as the assignment's
+# first piece and the substitution's later words, and the one-token step leaves the walk on the
+# last of them: the path with the closer attached. That was read as the command word. The exec arm
+# recorded a word it could not resolve when the path was written in quotes, and a command word
+# written after the assignment was never read. The value step above never crosses such a value:
+# its construct guard (script_qval_opaque) declines every command substitution.
+#
+# script_assign_subst_rest reads one shape of that word to its end and moves script_hidx to the
+# shell's next word. It moves it ONLY when all of these hold, each tested on its own marked line;
+# every decline leaves script_hidx, script_qval_from and the normalizer's outputs as they stood:
+#   1. no step has moved the walk since the assignment token (script_qval_from is behind
+#      script_hidx), so script_hidx is the token after it (M-ASGN-SUBST-MOVED);
+#   2. the segment is vouched to start outside any quote: the value step's gate,
+#      script_qval_trust (M-ASGN-SUBST-TRUST), and the token's text before its first `=`
+#      is plain (M-ASGN-SUBST-NAME). The prefix walk only steps a token whose name is plain,
+#      but env's operand loop takes any assignment-shaped operand, and a quote, an escape or
+#      an expansion there carries the shell's word past the substitution's closer;
+#   3. the value is an optional double quote, a plain run, one opener — `$(`, or a backtick when
+#      the value is not double-quoted — and a plain word that is not `case`, so a second opener,
+#      an arithmetic expansion and every escape decline here (M-ASGN-SUBST-SHAPE);
+#   4. that word carries no slash. A slash-bearing word there is a direct execution only the
+#      enclosure view reads, and past that view's position ceiling the first view's record of it
+#      is its only one (M-ASGN-SUBST-SLASH);
+#   5. no token from the last boundary known to sit outside quotes (script_qval_from) up to the
+#      assignment token carries a quote, a backslash, a backtick or a `$` (M-ASGN-SUBST-PFX);
+#   6. the shared work budget is unspent; the step charges it one unit (M-ASGN-SUBST-WORK);
+#   7. the enclosure view's own cut (script_encl_cut, its local quote state and step bound
+#      unchanged) finds the substitution's closer inside the next token. The cut returns 0 on
+#      every path, so found means its output is shorter than the token (M-ASGN-SUBST-CUT);
+#   8. what follows the closer is exactly the value's own closing quote: one `"` for a
+#      double-quoted value, and nothing at all for an unquoted one (M-ASGN-SUBST-END);
+#   9. the text before the closer normalizes to exactly one literal word (M-ASGN-SUBST-NORM),
+#      a non-empty plain one (M-ASGN-SUBST-PLAIN), which is not option-shaped, because a word
+#      that begins with `-` or `+` is read by an interpreter as an option and not as the script
+#      it names (M-ASGN-SUBST-OPT), and which the allowlist admits (M-ASGN-SUBST-ALLOW);
+#  10. the walk before the step reads the closing token as no verb: where the verb classifier's raw or
+#      normalized view names an interpreter, shell or non-shell, or the source word, every word after
+#      it is that verb's to read, so the step declines, whatever follows and at either view, and the walk
+#      before's reading stands (M-ASGN-SUBST-VERB; script_assign_subst_verbnext states what it reads).
+# A token that carries neither opener is passed over at once, before any reading of its value.
+# Condition 3 declines every such token, so that first test changes no verdict and has no mutant;
+# it keeps the step's cost on an ordinary assignment to one pattern match.
+# The gate on the allowlist is the failure-direction argument. Whatever runs that word inside the
+# substitution — the interpreter written against the opener, a command that reads it, or the word
+# itself — the verdict is the one the allowlist gives the word in plain form; the only other word
+# in the substitution is the one against the opener, which condition 4 keeps slash-free, a
+# PATH-resolved word this rule does not adjudicate in plain form. So the step can only stop the
+# exec arm adjudicating a listed script. The enclosure view adjudicates the substitution's command as
+# before. That argument rests on condition 10. Without the step the walk takes the closing token for
+# the command word. Read as no verb, that token is the only word the walk before reads there: its closer
+# keeps every wrapper and keyword reading off it, it is no redirection, and the walk ends the segment at
+# it, judging it as a direct execution when it carries a slash. Read as a verb, the words after it are
+# that verb's operands, and the verb's arm reads them by views and in families the exec arm does not
+# share (among them the word after quote removal, the join of a quoted path holding whitespace, a
+# non-shell interpreter's family, the enclosure family and the source word's domain), so the step
+# declines there, and every command keeps the walk before's reading, with the one work unit condition 6
+# charged (row AS26, arms ASGN-SUBST-KEEP-verb* and ASGN-SUBST-PIN-verb-*). A quoted closing word named
+# as an interpreter, which the normalizer does not resolve, is read as no verb, and its name ends in no
+# script suffix, so the walk before records nothing there and the step records the word after it (arm
+# ASGN-SUBST-PIN-verb).
+# A command word written after the assignment is now read where it never was. It is asked
+# from the prefix walk and from env's operand loop, and not from the head resolver or the
+# carrier-head check, which stay withdraw-only.
+script_assign_subst_rest() {   # $1 = the assignment token just stepped over
+  local _k=$(( script_hidx - 1 )) _v="${1#*=}" _dq=0 _o=0 _e="" _p _r _w _t _i _c _ok
+  local _no="$script_norm_out" _nr="$script_norm_raw" _nk="$script_norm_ok"
+  script_ceil_check asgn-subst   # M-CEIL-ASGN-SUBST
+  case "$1" in *'$('*|*'`'*) ;; *) return 0 ;; esac
+  [ "$script_qval_from" -lt "$script_hidx" ] || return 0   # M-ASGN-SUBST-MOVED
+  [ "$script_qval_trust" -eq 1 ] || return 0   # M-ASGN-SUBST-TRUST
+  script_plain_word "${1%%=*}" || return 0   # M-ASGN-SUBST-NAME
+  case "$_v" in '"'*) _dq=1; _e='"'; _v="${_v:1}" ;; esac
+  _p="${_v%%[!A-Za-z0-9_=+,.:/@%-]*}"
+  _r="${_v:${#_p}}"
+  case "$_r" in
+    '$('*) _o=1; _w="${_r:2}" ;;
+    '`'*) _o=2; _w="${_r:1}" ;;
+    *) _w="$_r" ;;
+  esac
+  if [ "$_o" -eq 0 ] || [ "${_o}${_dq}" = 21 ] || [ "$_w" = case ] || ! script_plain_word "$_w"; then return 0; fi   # M-ASGN-SUBST-SHAPE
+  case "$_w" in */*) return 0 ;; esac   # M-ASGN-SUBST-SLASH
+  _i="$script_qval_from"
+  while [ "$_i" -lt "$_k" ]; do   # M-ASGN-SUBST-PFX
+    script_ceil_check asgn-pfx   # M-CEIL-ASGN-PFX
+    case "${script_tokens[$_i]}" in *[\'\"\\\`\$]*) return 0 ;; esac
+    _i=$(( _i + 1 ))
+  done
+  [ "$script_qwork" -lt 1000 ] || return 0   # M-ASGN-SUBST-WORK
+  script_qwork=$(( script_qwork + 1 ))
+  _t="${script_tokens[$script_hidx]:-}"
+  script_encl_cut "$_t" "$_o"
+  [ "${#script_cut_out}" -lt "${#_t}" ] || return 0   # M-ASGN-SUBST-CUT
+  [ "${_t:$(( ${#script_cut_out} + 1 ))}" = "$_e" ] || return 0   # M-ASGN-SUBST-END
+  normalize_script_token "$script_cut_out"
+  _c="$script_norm_out"; _ok="$script_norm_ok"
+  script_norm_out="$_no"; script_norm_raw="$_nr"; script_norm_ok="$_nk"
+  [ "$_ok" -eq 1 ] || return 0   # M-ASGN-SUBST-NORM
+  { [ -n "$_c" ] && script_plain_word "$_c"; } || return 0   # M-ASGN-SUBST-PLAIN
+  case "$_c" in [-+]*) return 0 ;; esac   # M-ASGN-SUBST-OPT
+  is_script_allowlisted "$_c" || return 0   # M-ASGN-SUBST-ALLOW
+  if script_assign_subst_verbnext "$_t"; then return 0; fi   # M-ASGN-SUBST-VERB
+  script_hidx=$(( script_hidx + 1 ))
+  script_qval_from="$script_hidx"
+  return 0
+}
+
+# THE WALK BEFORE THE STEP, ON A LISTED CLOSING WORD IT READS AS A VERB (condition 10 of
+# script_assign_subst_rest; the operator's decision at Stage 7 pass 3, option (a)). Without the step the
+# walk takes the closing token for the command word, and the verb classifier names an interpreter or the
+# source word from the token's raw basename, then, when the normalizer resolves the token, from its
+# normalized one, against the same ten names. This helper asks those two views of the same token, in that
+# order, and declines when either names a verb, whatever the next word is and at a first-view or an
+# enclosure position alike. It does not read the next word. Where it declines, the walk before's reading
+# stands for every word after the closing one, with the one work unit the step has already charged. The
+# classifier's third view, the word after quote removal (M-REACH-VERB), is not asked: it names no verb
+# for any closing token the step admits, because the substitution's closer stays a literal character at
+# the word's end, a double-quoted value's closing quote leaves the word unclosed, and a backtick makes it
+# no literal word. For the same reason the raw-basename test never matches; it is kept so that the order
+# is the classifier's. A quoted closing word the normalizer does not resolve names no verb in either view,
+# so the step's reading stands there. Returns 0 to decline; the normalizer's outputs are restored on every
+# path.
+script_assign_subst_verbnext() {   # $1 = the closing token
+  local _r=1
+  local _no="$script_norm_out" _nr="$script_norm_raw" _nk="$script_norm_ok"
+  case "${1##*/}" in
+    bash|sh|zsh|python|python3|perl|ruby|node|source|.) return 0 ;;
+  esac
+  normalize_script_token "$1"
+  if [ "$script_norm_ok" -eq 1 ]; then
+    case "${script_norm_out##*/}" in
+      bash|sh|zsh|python|python3|perl|ruby|node|source|.) _r=0 ;;
+    esac
+  fi
+  script_norm_out="$_no"; script_norm_raw="$_nr"; script_norm_ok="$_nk"
+  return "$_r"
 }
 
 # THE CARRIER HEAD, READ THROUGH THE STEP (the review's PR-2). script_resolve_head walks the
@@ -3699,6 +4184,7 @@ script_qval_head_carrier() {   # reads script_seg -> 0 when the shell's head wor
   set +f
   if { [ "$script_qbail" -eq 0 ] && [ "$script_segstart" -eq 0 ]; } || { [ "$script_pass" -eq 1 ] && [ "$script_segno" -eq 1 ]; }; then script_qval_trust=1; fi
   while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
+    script_ceil_check carrier   # M-CEIL-CARRIER
     _t="${script_tokens[$script_hidx]}"
     case "$_t" in
       [A-Za-z_]*=*)
@@ -3761,6 +4247,15 @@ case "$TOOL_NAME" in
       deny_missing_primitive "command-position.awk" "$HOOK_NAME" "$PRINTF"
       exit 2   # caller owns the fail-closed exit — never trust the callee to terminate
     fi
+    # THE LENGTH GATE, AFTER THE COMMAND'S EXTRACTION AND AHEAD OF THE FIRST PASS THAT READS THE WHOLE
+    # COMMAND (the work ceiling's gate; see script_ceil_refuse). The extraction above reads the whole
+    # tool input once, and the gate measures what it returns; between the two stand only the
+    # empty-command exit and the canary probes, which read fixed strings. The command-position pass
+    # below is the first pass that reads the whole extracted command, so a command longer than
+    # SCRIPT_CEIL_CHARS is refused before it runs. No verdict moves: nothing between here and the -022
+    # entry lets a command through, so only the refusing rule's ID changes for a long command another
+    # rule refuses (arm CEIL-GATE-EARLY-rule).
+    if [ "${#COMMAND}" -gt "$SCRIPT_CEIL_CHARS" ]; then script_ceil_refuse chars entry; fi   # M-CEIL-GATE-EARLY
     COMMAND_CMDPOS="$("$PRINTF" '%s' "$COMMAND" | /usr/bin/awk -f "$CMDPOS_AWK" 2>/dev/null || "$PRINTF" '%s' "$COMMAND")"
     # Belt-and-braces: a non-empty command must never canonicalize to nothing.
     [ -n "$COMMAND_CMDPOS" ] || COMMAND_CMDPOS="$COMMAND"
@@ -4084,7 +4579,19 @@ case "$TOOL_NAME" in
     #       prior-turn state. NOT NEW — the quoted-argument suppression below
     #       carries the identical hole (`gh … --body 'note; bash <x>.sh'` ships
     #       allowed). The surface grows to here-document bodies; the kind, the
-    #       precondition and the fail direction do not.
+    #       precondition and the fail direction do not. The pre-pass's receiver list
+    #       adds cat, so a function, alias or command-hash entry named cat grows the
+    #       surface by one name. The rebinding test that guards it (M-HD-RECV-REBIND)
+    #       is a non-exhaustive enumeration over this command's own text, and what it
+    #       does not read is an open list, which includes a rebinding made in an earlier
+    #       turn, one made by text the shell evaluates, and one whose builtin name is
+    #       split by quotes or put together by an expansion. It also includes a change to
+    #       the command search path in the same command that BLOCK-DESTRUCTIVE-020 does not
+    #       judge: that rule's not-judged spellings are known instances and not a closed
+    #       list, and its row routes some of them to its successor card, zsh's array tied
+    #       to the search path among them. Neither that rule nor this test reads such a
+    #       change, so a cat head behind one is this residual too, as a carrier head behind
+    #       one already was.
     #   R-2 A BARE-DELIMITER EXPANSION INTRODUCED BY NEITHER `$` NOR A BACKTICK.
     #       None exists in POSIX; this is the same claim condition (2) already
     #       makes for `"…"`, so both break together if a shell ever adds one.
@@ -4093,10 +4600,11 @@ case "$TOOL_NAME" in
     #       measured, in item 3 of the readiness fragment's residual list, with which
     #       of them an AC-ENCL-RESIDUAL arm pins and which no arm pins. A green
     #       here-document arm is still not evidence about any of them.
-    #   R-4 A NON-CARRIER RECEIVER KEEPS THE FALSE POSITIVE. `cat <<'RPT'` still
-    #       blocks. Deliberate: a missing carrier entry costs a false positive and
+    #   R-4 A RECEIVER ON NO LIST KEEPS THE FALSE POSITIVE. `tee <file> <<'RPT'`
+    #       still blocks. Deliberate: a missing entry costs a false positive and
     #       can never admit an evasion, which is the fail direction this block
-    #       demands below.
+    #       demands below. `cat` is on the pre-pass's receiver list, under the
+    #       whole-command no-consumer test (script_heredoc_prescan).
     #
     # Suppression stays gated on an ALLOWLIST of command words that cannot evaluate
     # their arguments. The direction of that choice is deliberate: an entry MISSING
@@ -4117,12 +4625,13 @@ case "$TOOL_NAME" in
     # here-document pre-pass asks. The four current members satisfy both, so the
     # value is shared rather than duplicated into a second set that could drift from
     # this one (keeping two matchers is what let the arms drift apart before). A
-    # verb that satisfies (a) but not (b) — `cat` and `tee` do not execute stdin, but
-    # any stdin-executing verb would — is a fail-open on the pre-pass while still
-    # sound here, so BOTH tests must be answered before adding a member. `cat` and
-    # `tee` are plausible additions that would remove the R-4 false positive; they
-    # are deliberately NOT added here, because membership risk does not belong in a
-    # change whose job is to narrow.
+    # verb that satisfies (a) but not (b) — any stdin-executing verb would — is a
+    # fail-open on the pre-pass while still sound here, so BOTH tests must be
+    # answered before adding a member. The pre-pass alone reads one more receiver,
+    # `cat`, which passes (b) but prints its input, so it is admitted there only under
+    # a third condition, the whole-command no-consumer test; it is not added to this
+    # set, whose quoted-argument suppression no card asks to widen. `tee` is on
+    # neither: it writes files whose names this rule does not read.
     script_q1="'"
     script_q2='"'
     script_bs='\'
@@ -4158,10 +4667,32 @@ case "$TOOL_NAME" in
     # reason as the three below: an unset read under `set -u` exits 1, and exit 1
     # is NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
     script_ftok=""
+    # The backtick command word's state (M-EXEC-TICK): whether the second view gave every
+    # opener in this command its position, and the decline's cursor, text and answer.
+    # Initialised for the same reason as script_ftok above: an unset read under `set -u`
+    # exits 1, and exit 1 is NON-blocking in the PreToolUse contract — it would fail OPEN.
+    script_encl_all=0
+    script_tki=0
+    script_tkt=""
+    script_tkp=""
+    script_tick_decline=0
     # The option-run latch and the reading it tests (see script_option_word).
     # Initialised for the same reason as script_ftok above.
     script_fsub=""
     script_optrun=1
+    # The conservative route's cause (see script_route_note): the gate that sent the
+    # segment there, the gate about to be asked, the token, whether the route's own
+    # loop is running, how many words it has placed in the operand domain, and the
+    # note. Initialised for the same reason as script_ftok above.
+    script_route=""
+    script_route_gate=""
+    script_route_tok=""
+    script_route_live=0
+    script_route_n=0
+    script_rnote=""
+    # The quote-parity helper's two outputs. Initialised for the same reason as script_ftok above.
+    script_qp_sq=0
+    script_qp_dq=0
     # normalize_script_token sets all three before any reader runs. Initialised
     # anyway because an unset read under `set -u` exits 1, and exit 1 is
     # NON-blocking in the PreToolUse contract — i.e. it would fail OPEN.
@@ -4207,6 +4738,8 @@ case "$TOOL_NAME" in
     # in both of its modes, for a command whose carried quote state the trust
     # boundary (SCRIPT_QMODEL_AWK) cannot follow — then no fragment is suppressed
     # and no body is excised.
+    # THE WORK CEILING'S ENTRY: the length gate, then one time check, before any -022 scan runs.
+    if [ "${#COMMAND}" -gt "$SCRIPT_CEIL_CHARS" ]; then script_ceil_refuse chars entry; fi; script_ceil_check entry   # M-CEIL-ENTRY
     script_hdstripped="$COMMAND"
     script_hdbail=0
     script_heredoc_prescan
@@ -4257,11 +4790,13 @@ case "$TOOL_NAME" in
     case "$script_hdstripped" in
       *'('*|*'`'*)
         while IFS= read -r script_seg; do
+          script_ceil_check view-seg   # M-CEIL-VIEW-SEG
           script_p1n=$(( script_p1n + 1 ))
           script_rest="$script_seg"
           script_mark="$SCRIPT_BND_OLD"
           script_hold=""
           while :; do
+            script_ceil_check view-pos   # M-CEIL-VIEW-POS
             case "$script_rest" in
               *'('*|*'`'*) ;;
               *) break ;;
@@ -4269,6 +4804,10 @@ case "$TOOL_NAME" in
             # TWO BUDGETS, both declared limits pinned by AC-ENCL-RESIDUAL-budget-*.
             # Past the position ceiling no further position is opened; past the
             # remainder budget a position is opened without its appended remainder.
+            # The work ceiling bounds their time. Each exit loses a position only at
+            # `warn`; once an arm that reads these positions enforces, it refuses
+            # instead (script_ceil_budget).
+            if [ "$script_lift" -ge "$SCRIPT_ENCL_POS_MAX" ]; then script_ceil_budget positions; fi   # M-CEIL-POS
             if [ "$script_lift" -ge "$SCRIPT_ENCL_POS_MAX" ]; then break; fi
             script_lift=$(( script_lift + 1 ))
             script_piece="${script_rest%%[\(\`]*}"
@@ -4283,6 +4822,7 @@ case "$TOOL_NAME" in
               script_liftb=$(( script_liftb + ${#script_rest} ))
               script_encl="${script_encl}${script_mark}${script_hold}${script_piece}"$'\n'"${script_rest}"$'\n'
             else
+              script_ceil_budget remainder   # M-CEIL-TAIL
               script_encl="${script_encl}${script_mark}${script_hold}${script_piece}"$'\n'$'\n'
             fi
             script_hold=""
@@ -4294,11 +4834,17 @@ case "$TOOL_NAME" in
           script_encl="${script_encl}${script_mark}${script_hold}${script_rest}"$'\n'$'\n'
         done <<< "$script_segments"
         script_segments="${script_segments}"$'\n'"${script_encl%$'\n'}"
+        # Every opener in this command was given its position, so the exec arm may leave a
+        # backtick command word to the position its backtick opened (M-EXEC-TICK). It stays 0
+        # when the position ceiling cut this loop short, and any other early exit added to the
+        # loop must leave it 0 as well.
+        if [ "$script_lift" -lt "$SCRIPT_ENCL_POS_MAX" ]; then script_encl_all=1; fi   # M-EXEC-TICK-ALL
         ;;
     esac
     # >>> ENCLOSURE-VIEW-END
 
     while IFS= read -r script_seg; do
+      script_ceil_check segment   # M-CEIL-SEGMENT
       script_segno=$(( script_segno + 1 ))
       script_rdr_carry="${script_rdr_owed:-0}"; script_rdr_owed=0
       # the case state: a later arm's closer is stepped only in a command that opened a case (pass 1)
@@ -4473,7 +5019,10 @@ case "$TOOL_NAME" in
       # (script_assign_value_rest), moves the walk on to the shell's next word where the segment
       # is vouched to start outside quotes and every character of the value is readable, and
       # leaves today's reading exactly as it is everywhere else. Its conditions and its declines
-      # are stated once, above that function.
+      # are stated once, above that function. A value that opens a command substitution is read
+      # by a second step called after it (script_assign_subst_rest), and only where the word that
+      # closes the substitution is one literal path the allowlist admits; its conditions are
+      # stated above it.
       #
       # A COMMAND-WRAPPER prefix is walked the same way, from a BOUNDED ENUMERATION,
       # and each wrapper's own options and operands are walked from its row. `sudo
@@ -4525,7 +5074,9 @@ case "$TOOL_NAME" in
       # token today's walk ended on. The inner loop is not re-indented, because the suite's
       # mutants key on its lines' text and indentation.
       while :; do   # M-REACH-LOOP
+        script_ceil_check reach   # M-CEIL-REACH
       while [ "$script_hidx" -lt "${#script_tokens[@]}" ]; do
+        script_ceil_check prefix   # M-CEIL-PREFIX
         script_ptok="${script_tokens[$script_hidx]}"
         case "$script_ptok" in
           [A-Za-z_]*=*)
@@ -4535,6 +5086,7 @@ case "$TOOL_NAME" in
             esac
             script_hidx=$(( script_hidx + 1 ))
             script_assign_value_rest "$script_ptok"   # M-WRAP-QVAL
+            script_assign_subst_rest "$script_ptok"   # M-ASGN-SUBST
             continue
             ;;
         esac
@@ -4805,6 +5357,74 @@ case "$TOOL_NAME" in
               fi
               ;;
           esac
+          # >>> M-EXEC-TICK
+          # A COMMAND WORD THAT BEGINS WITH A BACKTICK OPENS A COMMAND SUBSTITUTION, AND IT IS
+          # NOT A PATHNAME. POSIX Shell Command Language 2.6.3 replaces a backquoted substitution
+          # with its command's output, and the slash test of 2.9.1.1 is asked of the command NAME
+          # that results: the slash in this token belongs to the program the substitution runs.
+          # Read as written, the token reached this arm as a backtick-led path (the trailing run
+          # strips the closing backtick), failed the allowlist on the backtick alone and was
+          # recorded — this arm's largest recorded class, text and real substitutions alike. The
+          # second view opens a position at that backtick and adjudicates what the substitution
+          # runs there, so this arm declines the word and leaves it to that position.
+          #
+          # A DECLINE IS AN EXEMPTION, SO IT IS TAKEN ONLY WHERE THE SECOND VIEW IS KNOWN TO READ
+          # THAT POSITION UNDER THE SAME QUOTE ATTRIBUTION, AND THE WORD HOLDS NOTHING BUT THE
+          # SUBSTITUTION. Anywhere else the token is read exactly as before.
+          #   - the second view gave every opener in the command its position (script_encl_all);
+          #   - the word is the segment's first, so the quote state at the backtick is the
+          #     segment's start state;
+          #   - in the second view's own pass; or, in the first, at state 0 (the position the
+          #     backtick opens is a command position) or state 2 (the backtick taints the run), or
+          #     with the trust boundary latched (nothing is suppressed). Inside a single-quoted or
+          #     ANSI-C run the second view can attribute the run to another carrier — a carrier at
+          #     the head of an unquoted substitution lends its exemption to a later program string
+          #     (AC-ENCL-RESIDUAL-carrier-head) — and this reading is then the only record;
+          #   - the closing backtick is on this segment, found token by token, and no token up to
+          #     and including it carries a backslash or a nested opener: past the second view's
+          #     remainder budget a position holds only the text up to its next opener, so a
+          #     script word behind a nested `(` would go unread there;
+          #   - nothing after the closer in its word is a slash, a `$`, a backtick or a
+          #     backslash: the name the shell looks up has no literal slash of its own, as `$X`
+          #     has none.
+          # It runs only for a word the slash test above sent here, and it reads the tokens in
+          # one expansion: bash 3.2 finds an indexed element by walking the array from its start.
+          # Declared residuals, pinned at today's reading (arms EXEC-TEXT-PIN-*, EXEC-TEXT-MF-carrier).
+          script_tick_decline=0
+          if [ "$script_verb" = "exec" ]; then
+            case "${script_tokens[$script_hidx]}" in
+              "$script_qbt"*)
+                if [ "$script_encl_all" -eq 1 ] && [ "$script_hidx" -eq 0 ]; then   # M-EXEC-TICK-GUARD
+                  case "${script_pass}:${script_segstart}:${script_qbail}" in
+                    2:*|1:0:*|1:2:*|1:*:1)   # M-EXEC-TICK-STATE
+                      script_tki=0
+                      for script_tkt in "${script_tokens[@]:$script_hidx}"; do
+                        script_ceil_check tick   # M-CEIL-TICK
+                        if [ "$script_tki" -eq 0 ]; then script_tkt="${script_tkt:1}"; fi
+                        script_tki=$(( script_tki + 1 ))
+                        case "$script_tkt" in
+                          *"$script_bs"*) break ;;
+                          *"$script_qbt"*)
+                            script_tkp="${script_tkt%%"$script_qbt"*}"
+                            case "$script_tkp" in *'('*) break ;; esac   # M-EXEC-TICK-NEST
+                            script_tkt="${script_tkt#*"$script_qbt"}"
+                            case "$script_tkt" in
+                              */*|*'$'*|*"$script_qbt"*|*"$script_bs"*) : ;;   # M-EXEC-TICK-TAIL
+                              *) script_tick_decline=1 ;;
+                            esac
+                            break
+                            ;;
+                          *'('*) break ;;   # M-EXEC-TICK-NEST
+                        esac
+                      done
+                      ;;
+                  esac
+                fi
+                ;;
+            esac
+          fi
+          if [ "$script_tick_decline" -eq 1 ]; then continue; fi
+          # <<< M-EXEC-TICK
       fi
 
       # EXEC ARM. No flag walk and no operand arity: the command word IS the file
@@ -4857,6 +5477,7 @@ case "$TOOL_NAME" in
         fi
         set -f
         for script_rdr_w in $script_rdr_prog; do
+          script_ceil_check rdr-prog   # M-CEIL-RDR-PROG
           normalize_script_token "$script_rdr_w"
           if script_operand_resolve "$script_interp_domain" ""; then
             if [ "$script_interp_domain" = "interp" ]; then
@@ -4927,6 +5548,7 @@ case "$TOOL_NAME" in
       script_xend="${#script_tokens[@]}"
       script_xk=$(( script_hidx + 1 ))
       while [ "$script_xk" -lt "${#script_tokens[@]}" ]; do
+        script_ceil_check closer   # M-CEIL-CLOSER
         case "${script_tokens[$script_xk]}" in
           *')'*|*'`'*)
             case "${script_tokens[$script_xk]}" in
@@ -5011,6 +5633,12 @@ case "$TOOL_NAME" in
       # checked against the interpreter, not argued from this code.
       script_idx=$(( script_hidx + 1 ))
       script_cmode=0
+      # The route's cause is per segment, as script_cmode is (script_route_note).
+      script_route=""
+      script_route_gate=""
+      script_route_tok=""
+      script_route_live=0
+      script_route_n=0
       # Is the interpreter in a parse-only mode AS OF THE LAST OPTION TOKEN SEEN?
       # Not "was a parse-only flag ever present" — the shells resolve this mode
       # last-one-wins, so the walk carries the RUNNING state and each stepped-over
@@ -5023,6 +5651,7 @@ case "$TOOL_NAME" in
       # value; 0 is the fail-safe one: it grants nothing.
       script_optrun=1
       while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
+        script_ceil_check flag-walk   # M-CEIL-FLAG-WALK
         script_ftok="${script_tokens[$script_idx]}"
         case "$script_ftok" in
           -*) ;;   # raw view already decides — unchanged, and asked first
@@ -5112,6 +5741,7 @@ case "$TOOL_NAME" in
         # quote did not resolve is left to the arm that ends the walk on it. Under
         # `source` no such route exists and there is no arity to get wrong, so the
         # token is stepped over as before.
+        script_route_gate="opaque"
         if [ "$script_verb" = "interp" ] && ! script_plain_word "$script_fsub"; then script_take_cmode_route; fi   # M-OPAQUE (mutation target; pinned by FWALK-OPAQUE-M1a)
         # A CLUSTER THAT CARRIES THE COMMAND-STRING LETTER IS `-c`. The label below is
         # an exact match; script_interp_cmode_flag is what lets `-ec`, `-xc` and `+ec`
@@ -5119,6 +5749,7 @@ case "$TOOL_NAME" in
         # cluster is still that cluster. No verb test is needed: script_interp_base
         # is cleared for every segment beside the verb, so under `source` the table
         # is asked about an empty basename and reaches its null.
+        script_route_gate="cluster"
         if script_interp_cmode_flag "$script_interp_base" "$script_fsub"; then script_take_cmode_route; fi   # M-CLUSTER (mutation target; pinned by FWALK-CLUSTER-M1a)
         # THE TERMINATION PREDICATE IS THE ARM'S OWN DECLARED OPERAND DOMAIN, not
         # "the first token that is not flag-shaped". Answering "where is the operand?"
@@ -5195,6 +5826,10 @@ case "$TOOL_NAME" in
           --) script_idx=$(( script_idx + 1 )); break ;;
           -c)
             if [ "$script_verb" = "interp" ]; then script_cmode=1; fi
+            # A real bare -c (the walk's own reading of the token is -c, not a token the route rewrote to
+            # -c) runs its program string whatever an option argument before it did, so the tag that
+            # argument's gate set is cleared; the verdict does not depend on it.
+            if [ "$script_fsub" = "-c" ] && [ "${script_route:-}" = "opaque-arg" ]; then script_route=""; script_route_tok=""; fi   # M-ROUTE-CLEAR-ARG (mutation target; pinned by LATCH-CAUSE-M1c)
             script_idx=$(( script_idx + 1 )); break ;;
           -*)
             # PARSE-ONLY DETECTION — AN ASSIGNMENT OF THE *CURRENT EFFECTIVE STATE*,
@@ -5510,8 +6145,10 @@ case "$TOOL_NAME" in
         continue
       fi
 
+      if [ "$script_cmode" -eq 1 ] && [ -n "$script_route" ]; then script_route_live=1; fi   # M-ROUTE-LIVE (mutation target; pinned by LATCH-CAUSE-M3a)
       if [ "$script_cmode" -eq 1 ]; then
         while [ "$script_idx" -lt "${#script_tokens[@]}" ]; do
+          script_ceil_check route   # M-CEIL-ROUTE
           normalize_script_token "${script_tokens[$script_idx]}"
           # This loop is the reason the domain gate exists at all: under `-c` the
           # tokens are WORDS OF A PROGRAM STRING, not declared operands, and
@@ -5521,6 +6158,7 @@ case "$TOOL_NAME" in
           # the shell passes where the first two views claim nothing, with NO join
           # and nothing consumed: every token keeps its own test (script_operand_resolve).
           if script_operand_resolve "$script_interp_domain" ""; then
+            script_route_n=$(( script_route_n + 1 ))
             if [ "$script_interp_domain" = "interp" ]; then
               script_shell_verdict "$script_subj_out" "$script_subj_ok"
             else
@@ -5529,6 +6167,7 @@ case "$TOOL_NAME" in
           fi
           script_idx=$(( script_idx + 1 ))
         done
+        script_route_live=0
       else
         # normalize BEFORE the filter on both verbs — a quoted path does not end in
         # `.sh` and does not start with `/`, so an unstripped quote matches no
