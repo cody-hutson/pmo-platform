@@ -132,11 +132,27 @@ must_block "cat > /tmp/m.txt <<'EOF'${NL}Don't${NL}EOF${NL}git commit -n -F /tmp
 # its length gate (SCRIPT_CEIL_CHARS, 65536 characters) before any rule reads it, so a 70 KB
 # command never reaches -024: it is refused with or without the flag. That fail-closed
 # outcome is what this pair pins.
-LONG_WORD="$(/usr/bin/printf '%070000d' 0)"
-test_case "refuse: git commit -m <70 KB word> -n (above -022's length gate)" \
-  "$(bash_payload "git commit -m ${LONG_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-022"
-test_case "refuse: git commit -m <70 KB word> (above -022's length gate)" \
-  "$(bash_payload "git commit -m ${LONG_WORD}")" 2 "BLOCK-DESTRUCTIVE-022"
+#
+# The long words are built by the shell's own printf, never /usr/bin/printf: a coreutils printf
+# may refuse a field this wide (the Rust coreutils on the Linux runner panics on it), and a
+# word built empty sends the hook a short command these arms do not mean to test, so they pass
+# or fail on the wrong input. Each word's length is checked before use; one that did not build
+# is a FAIL here, and its arms are not run.
+built_word() {   # <length> <label> -> WORD holds that many zeros; else records a FAIL, returns 1
+  WORD=""
+  printf -v WORD '%0*d' "$1" 0
+  [ "${#WORD}" -eq "$1" ] && return 0
+  /usr/bin/printf 'FAIL: %s\n  the input word built as %s characters, not %s, so its arms were not run\n' "$2" "${#WORD}" "$1"
+  FAIL=$((FAIL + 1))
+  return 1
+}
+if built_word 70000 "build the 70 KB word for the length-gate arms"; then
+  LONG_WORD="$WORD"
+  test_case "refuse: git commit -m <70 KB word> -n (above -022's length gate)" \
+    "$(bash_payload "git commit -m ${LONG_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-022"
+  test_case "refuse: git commit -m <70 KB word> (above -022's length gate)" \
+    "$(bash_payload "git commit -m ${LONG_WORD}")" 2 "BLOCK-DESTRUCTIVE-022"
+fi
 # Near the gate. An ASCII command short enough for -024 to read also fits within a pipe's
 # 64 KiB capacity, so no input -024 can still see tells a pipe-fed matcher from its
 # here-string one: this pair pins only that -024 reads a command near the gate in full,
@@ -144,11 +160,13 @@ test_case "refuse: git commit -m <70 KB word> (above -022's length gate)" \
 # gate and over a pipe's capacity only where ${#} counts characters, which depends on the
 # locale, so no such arm is kept. tests/ghsa-xxjm-long-input-matchers.test.sh pins the
 # shared matches() for the hooks without a length gate.)
-NEAR_WORD="$(/usr/bin/printf '%060000d' 0)"
-test_case "refuse: git commit -m <60 KB word> -n" \
-  "$(bash_payload "git commit -m ${NEAR_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-024"
-test_case "allow: git commit -m <60 KB word>" \
-  "$(bash_payload "git commit -m ${NEAR_WORD}")" 0
+if built_word 60000 "build the 60 KB word for the near-gate arms"; then
+  NEAR_WORD="$WORD"
+  test_case "refuse: git commit -m <60 KB word> -n" \
+    "$(bash_payload "git commit -m ${NEAR_WORD} -n")" 2 "BLOCK-DESTRUCTIVE-024"
+  test_case "allow: git commit -m <60 KB word>" \
+    "$(bash_payload "git commit -m ${NEAR_WORD}")" 0
+fi
 
 # ---------------------------------------------------------------------------
 # Positive arms — hooks-directory override for one invocation
