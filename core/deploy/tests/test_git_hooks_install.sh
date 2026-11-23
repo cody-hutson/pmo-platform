@@ -163,7 +163,7 @@ _validate() {
       --validation-dir "${WS}/.workspace-validation/run-${name}" "$@" 2>&1
 }
 # validate-install's A8 runs a full `deploy.sh --check`, which takes minutes per call; ten
-# such calls ran this suite past the CI step's 120-minute timeout. Every arm but Arm 7 reads
+# such calls ran this suite past its CI step's time limit. Every arm but Arm 7 reads
 # only the A3d and A3e verdicts, so `validate` passes --dry-run, which skips A8 (and the
 # validation-dir writes) and leaves A3d and A3e evaluated. Arm 7 calls validate_full: its
 # job is that the whole of validate-install, A8 included, still runs on a large worktree list.
@@ -410,8 +410,8 @@ report "post-merge still resolves after the linked worktree is removed" \
 printf '\nArm 7. Many linked worktrees: re-bootstrap and validate-install still run\n'
 /bin/rm -f "${HD}/pre-commit"
 # The list's size is what the arm needs, not the worktree count: every install and validate
-# step below walks every worktree, so 200 short-named worktrees ran this arm past the CI
-# step's 120-minute timeout. Three 200-character directory levels make each porcelain
+# step below walks every worktree, so 200 short-named worktrees ran this arm past its CI
+# step's time limit. Three 200-character directory levels make each porcelain
 # entry about 700 bytes, so 50 worktrees clear one pipe write (32 KB) with margin.
 seg="$(printf 'd%.0s' $(seq 1 199))"
 WTROOT="${SBX}/many-worktrees/${seg}1/${seg}2/${seg}3"
