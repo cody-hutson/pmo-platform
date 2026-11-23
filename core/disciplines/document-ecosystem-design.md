@@ -393,7 +393,7 @@ Frontmatter is added incrementally as files are processed, not in a bulk migrati
 | 2 | 04-Operations/ (Domain B) | Trackers gain staleness detection and evidence freshness tracking | 11 |
 | 3 | 05-Transcripts/ (Domain A) | Most common PPM Agent input — high relationship value | 6 |
 | 4 | Remaining 01-03, 06-07 (Domain A) | Complete coverage | 22 |
-| 5 | Other projects | Extend to 10.0.47 Upgrade, Credit Holds, Credit Card Processing | ~349 |
+| 5 | Other projects | Extend to [ERP_VERSION] Upgrade, [PROJECT_B], [PROJECT_C] | ~349 |
 
 ### Backfill Triggers
 

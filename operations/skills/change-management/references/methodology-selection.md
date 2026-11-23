@@ -218,7 +218,7 @@ reads each chosen methodology's deep doc for its internals.
 ## 7. Worked Example — selecting for a real change
 
 A fully-worked run of the §6 procedure on one named change: an **ERP/WMS cutover for
-Warehouse Ops and Buying & Planning, on a Waterfall delivery, where the dominant risk is
+[GROUP_B] and [GROUP_A], on a Waterfall delivery, where the dominant risk is
 resistance-and-grief** (the team has lived in the legacy system for years). This
 demonstrates the procedure and serves as the regression fixture.
 
@@ -228,7 +228,7 @@ demonstrates the procedure and serves as the regression fixture.
 |------|-----------|--------|
 | Unit-of-change | individual-behavioral **and** individual-psychological | Two functional groups must adopt new behaviors (behavioral) and let go of a long-held legacy way of working (psychological) |
 | Delivery-approach | Waterfall | Phase-gated ERP program |
-| Org-scope | org-wide-ish (two functions, top-down sponsor) | Warehouse Ops + Buying & Planning |
+| Org-scope | org-wide-ish (two functions, top-down sponsor) | [GROUP_B] + [GROUP_A] |
 | Time-horizon | single cutover | One go-live date |
 | Dominant-risk | resistance-and-grief | The legacy system is identity-laden; comparable go-lives kept reverting |
 
@@ -257,7 +257,7 @@ demonstrates the procedure and serves as the regression fixture.
 > **Selected combination: Lewin (frame) + ADKAR (per-group readiness) + Bridges (transition).**
 > - **Lewin** — frames the Unfreeze → Change → Refreeze arc of the cutover and the
 >   Force-Field feasibility read. → `lewin-3-stage.md`
-> - **ADKAR** — scores Warehouse Ops and Buying & Planning readiness per element at each
+> - **ADKAR** — scores [GROUP_B] and [GROUP_A] readiness per element at each
 >   phase gate; identifies the barrier point per group. → `adkar-framework.md`
 > - **Bridges** — runs underneath ADKAR to address the grief of letting go of the legacy
 >   system; works the Desire ↔ Ending seam so Desire interventions land. → `bridges-transition.md`

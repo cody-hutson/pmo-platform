@@ -386,7 +386,13 @@ emit_fail() {
   printf '[%s] FAIL — %s: %s\n' "${step}" "${check}" "${diagnostic}"
   printf '        -> hint: %s\n' "${hint}"
   record_step "${step}" "${check}" "FAIL" "${diagnostic}" "${hint}" "${mode}"
-  printf '[%s] %s: %s | %s\n' "${step}" "${check}" "${diagnostic}" "${hint}" >> "${FAILING_STEPS_FILE}"
+  # --dry-run creates no validation dir, so FAILING_STEPS_FILE stays empty. Appending to it
+  # then (`>> ""`) is a redirection error that `set -e` turns into an exit, which ended a
+  # dry run at its first FAIL and dropped every later check. Skip the append, as
+  # record_step skips its write, so a dry run reports every check.
+  if [ -n "${FAILING_STEPS_FILE}" ]; then
+    printf '[%s] %s: %s | %s\n' "${step}" "${check}" "${diagnostic}" "${hint}" >> "${FAILING_STEPS_FILE}"
+  fi
   case "${mode}" in
     A) MODE_A_FAIL=$((MODE_A_FAIL + 1)); MODE_A_FAIL_FLAG=1 ;;
     B) MODE_B_FAIL=$((MODE_B_FAIL + 1)); MODE_B_FAIL_FLAG=1 ;;

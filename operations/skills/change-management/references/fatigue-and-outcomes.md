@@ -124,7 +124,7 @@ Table shape (one row per audience):
 Worked example row (real-shaped audience):
 
 ```
-| Buying & Planning | High (per impact-assessment load table) [SOURCE] | Near-saturation (fatigued) | Stagger / defer — defer non-critical training; +support | MODERATE · HIGH |
+| [GROUP_A] | High (per impact-assessment load table) [SOURCE] | Near-saturation (fatigued) | Stagger / defer — defer non-critical training; +support | MODERATE · HIGH |
 ```
 
 ## 2. Outcome Measurement (Deployed vs Adopted)

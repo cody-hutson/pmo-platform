@@ -28,7 +28,7 @@
 #           PASSes a hook that only names the guard, and FAILs a byte copy of it.
 #   Arm 6 — a source repo outside the workspace root is not wired (the test suites
 #           pass the real checkout that way) and the run prints the manual step.
-#   Arm 7 — with a few hundred linked worktrees (the operator's real shape), re-bootstrap
+#   Arm 7 — with a worktree list larger than one pipe write (the operator's real shape), re-bootstrap
 #           and validate-install still run: no early-exit reader in a pipefail pipeline.
 #   Arm 8 — the remediation users are told to run, a real update.sh, re-wires an unwired
 #           guard and does not exit EX_NOCHANGE; a second run leaves it alone. (Runs
@@ -155,12 +155,20 @@ report "pre-push resolves to the main worktree's git-pre-push-pii.sh" \
   "$([ -n "${got}" ] && [ "${got}" = "$(resolve_path "${PUSHHOOK}")" ] && echo 1 || echo 0)" \
   "pre-push resolves to '${got:-<nothing>}'"
 
-validate() {
+_validate() {
+  local name="$1"; shift
   HOME="${HOME}" PMO_USER_SETTINGS_FILE="${SBX}/no-such-user-settings.json" \
     bash "${SRC}/docs/scripts/validate-install.sh" --mode install \
       --source-repo "${SRC}" --workspace-root "${WS}" \
-      --validation-dir "${WS}/.workspace-validation/run-$1" 2>&1
+      --validation-dir "${WS}/.workspace-validation/run-${name}" "$@" 2>&1
 }
+# validate-install's A8 runs a full `deploy.sh --check`, which takes minutes per call; ten
+# such calls ran this suite past its CI step's time limit. Every arm but Arm 7 reads
+# only the A3d and A3e verdicts, so `validate` passes --dry-run, which skips A8 (and the
+# validation-dir writes) and leaves A3d and A3e evaluated. Arm 7 calls validate_full: its
+# job is that the whole of validate-install, A8 included, still runs on a large worktree list.
+validate() { _validate "$1" --dry-run; }
+validate_full() { _validate "$1"; }
 out="$(validate wired)"
 report "validate-install A3d PASSes on the wired guard" \
   "$(grep -q '^\[A3d\] PASS' <<<"${out}" && echo 1 || echo 0)" \
@@ -342,7 +350,7 @@ ln -s "${PUSHHOOK}" "${SBX}/share/pp"; ln -s "${SBX}/share/pp" "${HD}/pre-push"
 out="$(validate chainpush)"
 report "A3e FAILs a chain of links to the pre-push hook" \
   "$(grep -q '^\[A3e\] FAIL.*chain of links' <<<"${out}" && echo 1 || echo 0)" \
-  "A3e line: $(grep -m1 '^\[A3e\]' <<<"${out}")"
+  "A3e line: $(grep -m1 '^\[A3e\]' <<<"${out}"); A3d line: $(grep -m1 '^\[A3d\]' <<<"${out}"); lines: $(grep -c . <<<"${out}"); tail: $(tail -4 <<<"${out}" | tr '\n' '|')"
 /bin/rm -f "${HD}/pre-commit"
 mkdir -p "${SBX}/other-worktree/core/hooks"
 printf '#!/usr/bin/env bash\n# git-pre-commit-pii.sh, disabled on a branch\nexit 0\n' > "${SBX}/other-worktree/core/hooks/git-pre-commit-pii.sh"
@@ -401,10 +409,16 @@ report "post-merge still resolves after the linked worktree is removed" \
 # cannot see the abort, so this arm adds enough --no-checkout worktrees to make it certain.
 printf '\nArm 7. Many linked worktrees: re-bootstrap and validate-install still run\n'
 /bin/rm -f "${HD}/pre-commit"
+# The list's size is what the arm needs, not the worktree count: every install and validate
+# step below walks every worktree, so 200 short-named worktrees ran this arm past its CI
+# step's time limit. Three 200-character directory levels make each porcelain
+# entry about 700 bytes, so 50 worktrees clear one pipe write (32 KB) with margin.
+seg="$(printf 'd%.0s' $(seq 1 199))"
+WTROOT="${SBX}/many-worktrees/${seg}1/${seg}2/${seg}3"
+mkdir -p "${WTROOT}"
 i=0
-while [ "${i}" -lt 200 ]; do
-  git -C "${SRC}" worktree add -q --no-checkout --detach \
-    "${SBX}/many-worktrees/a-linked-worktree-with-a-deliberately-long-name-to-fill-the-list-${i}" 2>/dev/null
+while [ "${i}" -lt 50 ]; do
+  git -C "${SRC}" worktree add -q --no-checkout --detach "${WTROOT}/wt-${i}" 2>/dev/null
   i=$((i + 1))
 done
 wl_bytes="$(git -C "${SRC}" worktree list --porcelain | wc -c | tr -d ' ')"
@@ -416,7 +430,7 @@ report "re-bootstrap exits 0 with many worktrees" "$([ "${rc}" -eq 0 ] && echo 1
   "exit ${rc}; tail: $(printf '%s' "${out}" | tail -3 | tr '\n' '|')"
 report "re-bootstrap wires the guard with many worktrees" \
   "$([ "$(resolve_path "${HD}/pre-commit")" = "$(resolve_path "${GUARD}")" ] && echo 1 || echo 0)"
-out="$(validate many)"
+out="$(validate_full many)"
 report "re-bootstrap wires the pre-push hook with many worktrees" \
   "$([ "$(resolve_path "${HD}/pre-push")" = "$(resolve_path "${PUSHHOOK}")" ] && echo 1 || echo 0)"
 report "validate-install reaches an A3d verdict with many worktrees" \
