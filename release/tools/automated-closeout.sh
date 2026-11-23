@@ -12189,10 +12189,23 @@ STUB
   # (j) AC5 — THE HERMETIC LEG STAYS INSTANT. The poll must honour DELAY=0 (only
   #     structurally possible because the bound is an attempt counter, not a clock the
   #     poll advances itself), and no leg above may have leaked a non-zero interval
-  #     into the group. 5+2 polls at the shipped 2s interval would alone cost ~14s, so
-  #     this arm genuinely can fail.
-  _st_arm 4d-settle j; [[ "$VERIFY_RECHECK_DELAY" -eq 0 ]] || { echo "FAIL: check-5 (j) — the settle legs must run at VERIFY_RECHECK_DELAY=0; a leaked non-zero interval buys the suite wall-clock, got '$VERIFY_RECHECK_DELAY'"; failures=$((failures+1)); }
-  [[ $(( SECONDS - _v5_t0 )) -le 2 ]] || { echo "FAIL: check-5 (j) — the #4416 settle legs must add no wall-clock (expected <=2s across the six-arm settle group, legs f-j plus i.2), took $(( SECONDS - _v5_t0 ))s"; failures=$((failures+1)); }
+  #     into the group.
+  #
+  #     The interval limb reads the SAME expansion the poll reads, `${...:-2}`. A bare
+  #     `"$VERIFY_RECHECK_DELAY" -eq 0` passes on an EMPTY value (`[[ "" -eq 0 ]]` is
+  #     true), while the poll's `:-2` turns that same empty value into the shipped 2s.
+  #
+  #     The wall-clock limb is sized from the sleep it must catch, not from the speed of
+  #     the machine: the group spends 10 polls (f settles at poll 5, g exhausts its 2
+  #     attempts, i spends none, i.2 breaks at poll 3, each asserted above), so any
+  #     per-poll sleep of 1s or more costs at least 10s, and the shipped 2s interval 20s.
+  #     The group's own work is not zero and varies with runner load: 0.7s idle, 2.4s
+  #     (read as 3 by the integer SECONDS) with every core oversubscribed eightfold. A
+  #     2s bound sat on that noise and failed a CI run with no sleep at all; less than
+  #     one second per poll spent keeps a threefold margin over it.
+  local _v5_group_polls=$(( 5 + 2 + 0 + 3 ))
+  _st_arm 4d-settle j; [[ "${VERIFY_RECHECK_DELAY:-2}" -eq 0 ]] || { echo "FAIL: check-5 (j) — the settle legs must run at VERIFY_RECHECK_DELAY=0; a leaked non-zero or empty interval (the poll reads an empty one as the shipped 2s) buys the suite wall-clock, got '${VERIFY_RECHECK_DELAY-<unset>}'"; failures=$((failures+1)); }
+  [[ $(( SECONDS - _v5_t0 )) -lt "$_v5_group_polls" ]] || { echo "FAIL: check-5 (j) — the #4416 settle legs must not sleep (expected under ${_v5_group_polls}s, one second per poll the six-arm settle group spends, legs f-j plus i.2), took $(( SECONDS - _v5_t0 ))s"; failures=$((failures+1)); }
   _st_witness 4d-settle 6
 
   /bin/rm -rf "$_v5_tmp" 2>/dev/null || true
