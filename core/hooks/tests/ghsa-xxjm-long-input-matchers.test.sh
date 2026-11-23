@@ -52,6 +52,15 @@
 # arm make up to SENS_TRIES runs and pass on the first miss: the question they answer is whether the
 # old shape CAN miss. The fixed shape has no race, so its arms run once.
 #
+# ONE MATCHER OUTRUNS THE LONG FORM. block-shell-injection's rule pattern is slow enough that, at
+# the long form's size, the writer usually finishes before grep exits, so its old shape rarely
+# misses (measured on macOS, that rule's own pattern piped the old way over this padding: 37 and
+# 56 of 200 runs missed at 96 KB, 200 of 200 at 192 KB). Its old-shape arm therefore reads a form
+# with twice the padding, on Darwin only (elsewhere a single argument caps at 128 KiB, and the hooks
+# pass their whole input as one), and the fixed shape must refuse that same form with the same
+# rule first, so the two shapes are compared on one input. No other hook's arm changes:
+# block-destructive's length gate would refuse the doubled form before its matcher read it.
+#
 # Self-contained: builds its own layout copies, so it runs identically in the setup-ci-layout.sh
 # sandbox and standalone from it. bash 3.2-safe. No payload is executed: every command here is
 # data handed to a hook on stdin.
@@ -123,9 +132,9 @@ fi
 PAD="true $(/usr/bin/printf '\303\251%.0s' $(/usr/bin/seq 1 70))"   # 5 + 140 bytes, 75 characters
 PAD_LINES=658   # 658 x 146 bytes (with its newline) = 96,068 bytes and 50,008 characters
 
-long_text() {   # <first line> -> the first line, then PAD_LINES padding lines (builtin printf: no argv)
-  local t="$1" n=0
-  while [ "$n" -lt "$PAD_LINES" ]; do
+long_text() {   # <first line> [lines] -> the first line, then that many padding lines (default PAD_LINES; builtin printf: no argv)
+  local t="$1" n=0 lines="${2:-$PAD_LINES}"
+  while [ "$n" -lt "$lines" ]; do
     t="${t}"$'\n'"${PAD}"
     n=$((n+1))
   done
@@ -296,16 +305,38 @@ while IFS='|' read -r h rule mf <&3; do
   else fail "${h}: the same padding behind a benign first line is allowed" "exit=${RC} stderr: $(head2k "${WORK}/e")"; fi
 
   if [ "$OLD_OK" = 1 ] && [ "$MECH" = 1 ]; then
-    slipped=0; try=0
-    while [ "$try" -lt "$SENS_TRIES" ]; do
-      try=$((try+1))
-      run_hook "$OLD" "$h" "${WORK}/${h}-long.json" "${WORK}/e"
-      if ! names_rule "${WORK}/e" "$rule"; then slipped=1; break; fi
-    done
-    if [ "$slipped" = 1 ]; then
-      pass "${h}: on the pipe-shape copy the long form slips past ${rule} (sensitivity; run ${try} of up to ${SENS_TRIES})"
-    else
-      fail "${h}: on the pipe-shape copy the long form slips past ${rule} (sensitivity)" "the old shape refused in all ${SENS_TRIES} runs (last exit=${RC}): this arm cannot tell the shapes apart. stderr: $(head2k "${WORK}/e")"
+    # The form the old-shape arm reads: the long form, or for the one slow matcher on Darwin a
+    # form with twice the padding (see ONE MATCHER OUTRUNS THE LONG FORM above).
+    sens="${h}-long"; sens_ok=1
+    if [ "$h" = block-shell-injection ] && [ "$(/usr/bin/uname -s)" = Darwin ]; then
+      make_payload "${h}-sens" "$(long_text "$fl" $((PAD_LINES * 2)))"
+      sens="${h}-sens"
+      sb="$(file_bytes "${WORK}/${sens}.cmd")"; sj="$(file_bytes "${WORK}/${sens}.json")"
+      if [ "$sb" -le 150000 ] || [ "$sj" -ge 262144 ]; then
+        arm_invalid "${h}: sensitivity form sizing" "command ${sb} B (must exceed 150000), payload ${sj} B (must stay under 262144)"
+        sens_ok=0
+      else
+        run_hook "$NEW" "$h" "${WORK}/${sens}.json" "${WORK}/e"
+        if [ "$RC" = 2 ] && names_rule "${WORK}/e" "$rule"; then
+          pass "${h}: the ${sb}-byte sensitivity form refuses with the same ${rule}"
+        else
+          fail "${h}: the ${sb}-byte sensitivity form refuses with the same ${rule}" "exit=${RC} stderr: $(head2k "${WORK}/e")"
+          sens_ok=0
+        fi
+      fi
+    fi
+    if [ "$sens_ok" = 1 ]; then
+      slipped=0; try=0
+      while [ "$try" -lt "$SENS_TRIES" ]; do
+        try=$((try+1))
+        run_hook "$OLD" "$h" "${WORK}/${sens}.json" "${WORK}/e"
+        if ! names_rule "${WORK}/e" "$rule"; then slipped=1; break; fi
+      done
+      if [ "$slipped" = 1 ]; then
+        pass "${h}: on the pipe-shape copy the long form slips past ${rule} (sensitivity; $(file_bytes "${WORK}/${sens}.cmd") bytes; run ${try} of up to ${SENS_TRIES})"
+      else
+        fail "${h}: on the pipe-shape copy the long form slips past ${rule} (sensitivity)" "the old shape refused in all ${SENS_TRIES} runs (last exit=${RC}): this arm cannot tell the shapes apart. stderr: $(head2k "${WORK}/e")"
+      fi
     fi
   elif [ "$OLD_OK" = 1 ]; then
     /usr/bin/printf 'RESIDUAL: ghsa-xxjm: %s old-shape arm not run (mechanism did not reproduce here)\n' "$h"
