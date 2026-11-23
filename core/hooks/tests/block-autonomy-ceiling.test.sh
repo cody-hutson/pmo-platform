@@ -1701,6 +1701,94 @@ fi
 /bin/rm -rf "$D_LOGBOX" "$D_NOPY" "$D_MUT" "$D_MUT2" "$D_MUT3" "$D_ALIAS_PARENT" "$D_MASTER_OFF"
 
 # =====================================================================
+# Suite NC — nested clones and operations-side git (#7660)
+# =====================================================================
+# Membership cannot see a separate clone of the platform repository, so before #7660 a session
+# rooted in projects/ could write into one, commit there and push to the public remote, with every
+# hook allowing it. This suite runs against REAL repositories in a workspace of its own, because
+# the suite-wide platform above is a bare `.git` directory with no remote to compare against. The
+# workspace sits inside TEST_WS, so the suite's exit trap removes it with everything else.
+#   NC-W  — -002's platform-clone arm refuses a Write/Edit into a clone of the platform repository
+#           under projects/, however its remote is spelled, and fails closed on one it cannot read.
+#   NC-B  — BLOCK-AUTONOMY-005 refuses git clone, init, commit and push (and gh repo clone) from an
+#           operations-side working directory, in every spelling the rule declares.
+#   NC-C  — the controls: writes into other repositories and plain operations files, git that reads
+#           only, and the same verbs from an engineering working directory, are not refused.
+echo ""
+echo "--- Suite NC: nested clones and operations-side git (#7660) ---"
+NC_WS="${TEST_WS}/nc-ws"
+/bin/mkdir -p "$NC_WS"
+nc_git() { GIT_CONFIG_NOSYSTEM=1 HOME="$TEST_HOME" /usr/bin/git "$@" >/dev/null 2>&1; }
+nc_git init -q "${NC_WS}/pmo-platform"
+nc_git -C "${NC_WS}/pmo-platform" remote add origin "https://github.com/example-owner/pmo-platform.git"
+NC_P="${NC_WS}/projects"
+/bin/mkdir -p "${NC_P}/plain"
+nc_git init -q "${NC_P}/platform-clone"
+nc_git -C "${NC_P}/platform-clone" remote add origin "git@GitHub.com:Example-Owner/pmo-platform"
+nc_git init -q "${NC_P}/local-clone"
+nc_git -C "${NC_P}/local-clone" remote add origin "${NC_WS}/pmo-platform"
+nc_git init -q "${NC_P}/other-repo"
+nc_git -C "${NC_P}/other-repo" remote add origin "https://github.com/someone-else/unrelated.git"
+nc_git init -q "${NC_P}/no-remote"
+/bin/mkdir -p "${NC_P}/broken-repo"
+/usr/bin/printf 'gitdir: %s/no-such-git-dir\n' "$NC_WS" > "${NC_P}/broken-repo/.git"
+NC_ENG="${NC_WS}/pmo-platform"
+# The floor is mode-independent; mode off keeps the mode-gated rules out of the allow arms.
+set_mode "off"
+nc_case() { CLAUDE_WORKSPACE_ROOT="$NC_WS" test_case "$@"; }
+
+# NC-W — the platform-clone arm of -002
+nc_case "NC-W1 Write into a clone whose remote is the platform's (scp form, other case) -> BLOCK -002" \
+  "$(write_payload "${NC_P}/platform-clone/core/ops-notes.md" "$NC_P")" 2 "BLOCK-AUTONOMY-002.*CLONE of the platform"
+nc_case "NC-W2 Write into a clone of the local platform checkout -> BLOCK -002" \
+  "$(write_payload "${NC_P}/local-clone/ops-notes.md" "$NC_P")" 2 "BLOCK-AUTONOMY-002.*CLONE of the platform"
+nc_case "NC-W3 Edit in the platform clone -> BLOCK -002" \
+  "$(edit_payload "${NC_P}/platform-clone/README.md" "$NC_P")" 2 "BLOCK-AUTONOMY-002"
+nc_case "NC-W4 Write into a directory the clone does not have yet -> BLOCK -002" \
+  "$(write_payload "${NC_P}/platform-clone/core/new/dir/x.md" "$NC_P")" 2 "BLOCK-AUTONOMY-002"
+nc_case "NC-W5 Write into a repository under projects/ whose config does not read -> BLOCK -002 (fail closed)" \
+  "$(write_payload "${NC_P}/broken-repo/x.md" "$NC_P")" 2 "BLOCK-AUTONOMY-002.*UNDETERMINABLE"
+nc_case "NC-W6 CONTROL Write into the platform repository itself (member) -> BLOCK -002" \
+  "$(write_payload "${NC_WS}/pmo-platform/core/x.md" "$NC_P")" 2 "BLOCK-AUTONOMY-002"
+
+# NC-B — BLOCK-AUTONOMY-005
+for nc_cmd in \
+  "git commit -am ops" \
+  "git -C ${NC_P}/platform-clone push origin main" \
+  "cd ${NC_P}/platform-clone && git push" \
+  "git clone https://github.com/example-owner/pmo-platform.git ${NC_P}/fresh" \
+  "git init ${NC_P}/newrepo" \
+  "GIT PUSH origin main" \
+  "/usr/bin/git push origin main" \
+  "env GIT_TRACE=1 git push" \
+  "git-push origin main" \
+  "git --git-dir ${NC_P}/platform-clone/.git push" \
+  "git -c user.name=x commit -m ops" \
+  "gh repo clone example-owner/pmo-platform"; do
+  nc_case "NC-B '${nc_cmd}' from a projects/ cwd -> BLOCK -005" \
+    "$(bash_payload "$nc_cmd" "$NC_P")" 2 "BLOCK-AUTONOMY-005"
+done
+nc_case "NC-B13 git push from a working directory deeper under projects/ -> BLOCK -005" \
+  "$(bash_payload "git push" "${NC_P}/platform-clone")" 2 "BLOCK-AUTONOMY-005"
+
+# NC-C — the controls
+nc_case "NC-C1 CONTROL Write into an unrelated repository under projects/ -> allow" \
+  "$(write_payload "${NC_P}/other-repo/notes.md" "$NC_P")" 0
+nc_case "NC-C2 CONTROL Write into a repository with no remote -> allow" \
+  "$(write_payload "${NC_P}/no-remote/notes.md" "$NC_P")" 0
+nc_case "NC-C3 CONTROL Write a plain operations file -> allow" \
+  "$(write_payload "${NC_P}/plain/notes.md" "$NC_P")" 0
+nc_case "NC-C4 CONTROL Write into the platform clone from an engineering cwd -> not -002 (mode off)" \
+  "$(write_payload "${NC_P}/platform-clone/notes.md" "$NC_ENG")" 0
+for nc_cmd in "git status" "git log --oneline -3" "git diff --stat" "printf ok" "echo pushover > ${NC_P}/plain/a.txt" "grep -r commit ${NC_P}/plain"; do
+  nc_case "NC-C '${nc_cmd}' from a projects/ cwd -> allow" "$(bash_payload "$nc_cmd" "$NC_P")" 0
+done
+nc_case "NC-C5 CONTROL git commit from an engineering cwd -> not -005" \
+  "$(bash_payload "git commit -m eng" "$NC_ENG")" 0
+nc_case "NC-C6 CONTROL git push from an engineering cwd -> not -005" \
+  "$(bash_payload "git push origin main" "$NC_ENG")" 0
+
+# =====================================================================
 # Summary
 # =====================================================================
 echo ""

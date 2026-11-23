@@ -1,6 +1,6 @@
 ---
 title: Controls — hook-rule
-purpose: The 86 controls whose mechanism kind is hook-rule, from the controls register
+purpose: The 87 controls whose mechanism kind is hook-rule, from the controls register
 type: reference
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
@@ -9,12 +9,12 @@ generated_by: build-process-catalog.py
 
 # Controls — hook-rule
 
-86 controls from the controls register. The statement, the class and the surface are the register's cells. Cited by counts the pages that cite the control; the pages and steps are on [controls-cited](controls-cited.md).
+87 controls from the controls register. The statement, the class and the surface are the register's cells. Cited by counts the pages that cite the control; the pages and steps are on [controls-cited](controls-cited.md).
 
 | Control | Statement | Enforcement class | Surface | Source path | Cited by |
 |---|---|---|---|---|---|
 | C-001 | A Write/Edit whose resolved target is a governance file (workspace charter, OPERATIONS.md, RELEASE_PROTOCOL.md, .claude/settings.json, anything under .claude/hooks/ or .claude/rules/) is refused — Tier-0 floor, independent of mode and automation level | code-enforce | hook | `core/hooks/block-autonomy-ceiling.sh` | — |
-| C-002 | A Write/Edit from an operations-workspace cwd into any working tree of the platform repository is refused — Tier-0 floor | code-enforce | hook | `core/hooks/block-autonomy-ceiling.sh` | — |
+| C-002 | A Write/Edit from an operations-workspace cwd into any working tree of the platform repository, or into a clone of it placed in the operations workspace, is refused — Tier-0 floor | code-enforce | hook | `core/hooks/block-autonomy-ceiling.sh` | — |
 | C-003 | An action whose required Autonomy Tier exceeds the resolved [automation].automation_level ceiling is refused | code-off | hook | `core/hooks/block-autonomy-ceiling.sh` | — |
 | C-004 | A Write/Edit from a platform-repository cwd into the operations workspace (projects/) is refused — layer-discipline signal | code-off | hook | `core/hooks/block-autonomy-ceiling.sh` | — |
 | C-005 | Read-tool access to ~/.ssh/* is refused (public .pub keys allowed) | code-enforce | hook | `core/hooks/block-credential-reads.sh` | — |
@@ -99,3 +99,4 @@ generated_by: build-process-catalog.py
 | C-084 | (automation) After a merge lands on main, changed skills are redeployed by running deploy.sh --deploy (never --check) | not-a-control | hook | `core/hooks/git-post-merge-deploy.sh` | — |
 | C-452 | Bash git commit --no-verify or -n, a -c, --config-env, GIT_CONFIG_KEY_`<n>` or GIT_CONFIG_PARAMETERS override naming core.hooksPath, and a git config write, unset or core-section removal of core.hooksPath are refused (each skips the commit-time PII guard) | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
 | C-453 | A git push whose new commits or annotated tags carry a literal home-directory path, phone number, or personal-email pattern (accepted homes excepted), in an added line, a commit or tag object, or a needle-file hit, is refused: the commit-time guard runs over every commit the push would publish, including the commits merge, cherry-pick, revert, rebase, stash and commit-tree make without pre-commit | code-enforce | hook | `core/hooks/git-pre-push-pii.sh` | — |
+| C-455 | A Bash git clone, init, commit or push, or gh repo clone, from an operations-workspace cwd is refused — Tier-0 floor | code-enforce | hook | `core/hooks/block-autonomy-ceiling.sh` | — |

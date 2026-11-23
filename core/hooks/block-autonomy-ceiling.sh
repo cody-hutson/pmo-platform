@@ -583,6 +583,137 @@ pm_member() {
   return 0
 }
 
+# --- PLATFORM CLONES AND OPERATIONS-SIDE GIT (#7660) ---
+# Membership above answers "is this a working tree of THIS repository". A separate clone of the
+# platform remote is a different repository to git, so membership never counts it: placed under
+# projects/ it is classed projects, and an operations session could write into it, commit there
+# and push the result to the public remote. That breaks the premise the operations workspace's
+# protection rests on - projects/ is not a git repository, so nothing written there can be pushed.
+# Two additions close the path, both on the Tier-0 floor:
+#   * -002's platform-clone arm: a Write/Edit target under projects/ that sits in a git working
+#     tree whose remote is the platform's own remote (any spelling of that URL, or a local path
+#     to the platform repository) is refused as a write into the platform. A repository whose
+#     remotes cannot be read fails closed, like every other undeterminable -002 input.
+#   * BLOCK-AUTONOMY-005: from a session whose working directory is on the operations side, a git
+#     command that clones, initializes, commits or pushes is refused, whatever repository it
+#     names. The operations workspace holds no repository by design, so nothing run from it has a
+#     legitimate reason to create or publish one; this also covers a clone of some other public
+#     repository, which the remote match above does not.
+readonly GIT_BIN="/usr/bin/git"
+readonly ENV_BIN="/usr/bin/env"
+
+# git_plain — git with none of the environment that redirects which repository or config it
+# reads, so a payload-side GIT_DIR or GIT_CONFIG_* cannot answer these questions for it.
+git_plain() {
+  "$ENV_BIN" -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    -u GIT_CONFIG -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM -u GIT_CONFIG_COUNT \
+    -u GIT_CONFIG_PARAMETERS GIT_CONFIG_NOSYSTEM=1 "$GIT_BIN" "$@"
+}
+
+# pc_norm_url URL — one comparable spelling of a remote URL: lower case; no scheme, user or
+# port; an scp-style host:path written host/path; no trailing slash or .git suffix.
+pc_norm_url() {
+  local u h r
+  u="$("$TR" '[:upper:]' '[:lower:]' <<< "$1")"
+  case "$u" in *://*) u="${u#*://}" ;; esac
+  case "$u" in *@*) u="${u#*@}" ;; esac
+  h="${u%%/*}"
+  case "$h" in
+    *:*) r="${u#*:}"; h="${h%%:*}"
+         case "$r" in [0-9]*/*) r="${r#*/}" ;; esac
+         u="${h}/${r#/}" ;;
+  esac
+  u="${u%/}"; u="${u%.git}"; u="${u%/}"
+  "$PRINTF" '%s' "$u"
+}
+
+# The platform's remote URLs, normalized, one per line. Read once, from the anchor's git dir.
+PC_URLS_LOADED=0
+PC_PLATFORM_URLS=""
+pc_platform_urls_load() {
+  [ "$PC_URLS_LOADED" = 1 ] && return 0
+  PC_URLS_LOADED=1
+  local out="" line url
+  out="$(git_plain --git-dir="$PM_ANCHOR" config --get-regexp '^remote\..*\.url$' 2>/dev/null)" || out=""
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    url="${line#* }"
+    case "$url" in /*|./*|../*|file://*) continue ;; esac
+    PC_PLATFORM_URLS="${PC_PLATFORM_URLS}$(pc_norm_url "$url")
+"
+  done <<< "$out"
+  return 0
+}
+
+# pc_remote_is_platform URL DIR — 0 when the remote URL names the platform repository: a local
+# path (absolute, relative to DIR, or file://) that resolves to the platform checkout or its git
+# dir, or a network URL whose normalized spelling equals one of the platform's own remotes.
+pc_remote_is_platform() {
+  local url="$1" base="$2" p="" n pu
+  case "$url" in
+    file://*) p="${url#file://}" ;;
+    /*) p="$url" ;;
+    ./*|../*) p="${base}/${url}" ;;
+  esac
+  if [ -n "$p" ]; then
+    [ -d "$p" ] || return 1
+    p="$(cd "$p" 2>/dev/null && pwd -P)" || return 1
+    if [ "$p" = "$PM_ANCHOR" ] || [ "${p}/.git" = "$PM_ANCHOR" ]; then return 0; fi
+    return 1
+  fi
+  n="$(pc_norm_url "$url")"
+  [ -n "$n" ] || return 1
+  while IFS= read -r pu; do
+    [ -n "$pu" ] || continue
+    if [ "$n" = "$pu" ]; then return 0; fi
+  done <<< "$PC_PLATFORM_URLS"
+  return 1
+}
+
+# projects_platform_clone TARGET ROOT — set PC_RC for a resolved Write/Edit target under the
+# operations root ROOT: 0 when it sits in a git working tree whose remote names the platform
+# repository, 1 when it does not (no repository above it below ROOT, or one whose remotes name
+# something else), 2 when that cannot be told (the repository's config does not read, the walk
+# exceeds its bound, or the membership helper is unavailable). Always returns 0.
+PC_RC=1
+projects_platform_clone() {
+  PC_RC=1
+  local d="${1%/*}" root="$2" n=0 out="" rc=0 line url
+  while :; do
+    if [ -e "${d}/.git" ]; then break; fi
+    if [ -z "$d" ] || [ "$d" = "$root" ]; then return 0; fi
+    case "$d" in "$root"/*) ;; *) return 0 ;; esac
+    d="${d%/*}"
+    n=$((n + 1))
+    if [ "$n" -gt 64 ]; then PC_RC=2; return 0; fi
+  done
+  if [ "$PM_LIB_OK" != 1 ] || [ -z "$PM_ANCHOR" ]; then PC_RC=2; return 0; fi
+  pc_platform_urls_load
+  out="$(git_plain -C "$d" config --local --get-regexp '^remote\..*\.url$' 2>/dev/null)" || rc=$?
+  case "$rc" in
+    0) ;;
+    1) return 0 ;;              # no remote configured: a clone of nothing
+    *) PC_RC=2; return 0 ;;     # the repository's config could not be read
+  esac
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    url="${line#* }"
+    if pc_remote_is_platform "$url" "$d"; then PC_RC=0; return 0; fi
+  done <<< "$out"
+  return 0
+}
+
+# ops_git_repo_verb COMMAND — 0 when the Bash command runs git to clone, initialize, commit or
+# push (the command word in any case, on a path or bare, the dashed git-<verb> form, global
+# options between the word and the verb), or `gh repo clone`. Lexical, over the raw text.
+readonly AB5_GIT_RE='(^|[^[:alnum:]_.-])[gG][iI][tT](-|([[:space:]]+[^[:space:];&|]+)*[[:space:]]+)([cC][lL][oO][nN][eE]|[iI][nN][iI][tT]|[cC][oO][mM][mM][iI][tT]|[pP][uU][sS][hH])([^[:alnum:]_-]|$)'
+readonly AB5_GH_RE='(^|[^[:alnum:]_.-])gh[[:space:]]+repo[[:space:]]+clone([^[:alnum:]_-]|$)'
+ops_git_repo_verb() {
+  "$GREP" -qE "$AB5_GIT_RE" <<< "$1" && return 0
+  "$GREP" -qE "$AB5_GH_RE" <<< "$1" && return 0
+  return 1
+}
+
 # ==========================================================================
 # RULE EVALUATION
 # ==========================================================================
@@ -892,6 +1023,27 @@ if [ -n "$ABS_TARGET" ]; then
           "repair or remove the corrupt .git pointer above the target, or make the change from a session rooted outside projects/ if it is platform-engineering work; set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
       fi
 
+      # --- BLOCK-AUTONOMY-002, platform-clone arm (#7660) ---
+      # A target under projects/ that sits in a CLONE of the platform repository is the platform
+      # to every question this rule exists for: what is written there can be committed and pushed
+      # to the public remote. Membership above cannot see a clone, so it is asked here, and only
+      # for the pair this rule owns - an operations-side working directory writing into projects/.
+      # BLOCK-AUTONOMY-004's direction is untouched: target_domain stays "projects".
+      PC_RC=1
+      if [ "$cwd_under_projects" = 1 ] && [ "$target_domain" = "projects" ]; then
+        projects_platform_clone "$ABS_TARGET" "${PRIMARY_ROOT}/projects"
+        if [ "$PC_RC" = 0 ]; then
+          always_block "BLOCK-AUTONOMY-002" \
+            "cross-domain bridge write into a CLONE of the platform repository placed under projects/ (an Operations cwd writing into a git working tree whose remote is the platform's own remote, where the content becomes committable and pushable on the public repository); blocked regardless of automation_level or mode. Target: ${ABS_TARGET}" \
+            "the operations workspace holds no repository by design - remove the clone from projects/, and make platform-engineering changes from a session rooted in the pmo-platform checkout; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
+        fi
+        if [ "$PC_RC" = 2 ]; then
+          always_block "BLOCK-AUTONOMY-002" \
+            "UNDETERMINABLE: cross-domain bridge write from an Operations working directory into a git repository under projects/ whose remotes could not be read (its config did not read, the walk to it passed its bound, or lib/platform-membership.sh is unavailable), so it cannot be ruled out as a clone of the platform repository; this Tier-0 floor fails closed. Target: ${ABS_TARGET}" \
+            "repair or remove the repository under projects/ - the operations workspace holds none by design; set CLAUDE_HOOK_BYPASS=1 only if you ARE the operator acting intentionally"
+        fi
+      fi
+
       # --- BLOCK-AUTONOMY-002, fail-closed arm (#6199) ---
       # A check that cannot read its input still checks. With the working directory unresolvable
       # the Operations direction cannot be ruled out, and this floor exists for the direction that
@@ -905,6 +1057,50 @@ if [ -n "$ABS_TARGET" ]; then
         always_block "BLOCK-AUTONOMY-002" \
           "cross-domain bridge write into the tracked platform repository from a working directory that could not be resolved (the payload cwd and the hook process's working directory are both empty, or neither resolves to an absolute path), so the Operations direction cannot be ruled out; this Tier-0 floor fails closed rather than trusting an unreadable value. Target: ${ABS_TARGET}" \
           "relaunch the session from a working directory that exists — the pmo-platform checkout for platform-engineering work — so the direction can be evaluated; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
+      fi
+      ;;
+  esac
+fi
+
+# --------------------------------------------------------------------------
+# BLOCK-AUTONOMY-005 — Tier-0 item 7: no repository is made or published from the
+# operations side (#7660)
+# --------------------------------------------------------------------------
+# A Bash command that runs git to clone, initialize, commit or push is refused when the session's
+# working directory is on the operations side - the same two readings -002 uses, either one
+# enough: the resolved path under the operations root, or the payload spelling under
+# ${PRIMARY_ROOT}/projects. The operations workspace holds no repository by design, so the verbs
+# that create one or publish from one have no legitimate use there, and refusing them keeps a
+# clone - of the platform or of any other public repository - from becoming a way to push
+# operations content. Like -002, it sits on the floor above the master and scope gates, and an
+# unresolvable working directory fails closed. The match is lexical: see the Known Limitations
+# entry for what it does not see.
+# Cheap by construction: jq runs only for a Bash payload whose text contains "git" or "gh " at all.
+if [ "$TOOL_NAME" = "Bash" ]; then
+  case "$INPUT" in
+    *[gG][iI][tT]*|*"gh "*)
+      AB5_CMD="$("$PRINTF" '%s' "$INPUT" | "$JQ" -r '.tool_input.command // empty')"
+      if [ -n "$AB5_CMD" ] && ops_git_repo_verb "$AB5_CMD"; then
+        ab5_side=0
+        ABS_CWD="$(resolve_cwd_path "$CWD")" || ABS_CWD=""
+        if [ -n "$ABS_CWD" ]; then
+          ab5_root="${PRIMARY_ROOT}/projects"
+          if [ -L "$ab5_root" ]; then
+            ab5_root="$(resolve_path "$ab5_root")" || ab5_root="${PRIMARY_ROOT}/projects"
+          fi
+          case "$ABS_CWD" in "$ab5_root"|"$ab5_root/"*) ab5_side=1 ;; esac
+        fi
+        case "$CWD" in "${PRIMARY_ROOT}/projects"|"${PRIMARY_ROOT}/projects/"*) ab5_side=1 ;; esac
+        if [ "$ab5_side" = 1 ]; then
+          always_block "BLOCK-AUTONOMY-005" \
+            "git repository creation or publication from the operations workspace (a projects/ working directory running git clone, init, commit or push, or gh repo clone); the operations workspace holds no repository by design, and a clone there would make operations content committable and pushable; blocked regardless of automation_level or mode" \
+            "run repository work from a session rooted in its own checkout - platform-engineering work from the pmo-platform checkout; operations work needs no git; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
+        fi
+        if [ -z "$ABS_CWD" ]; then
+          always_block "BLOCK-AUTONOMY-005" \
+            "git repository creation or publication from a working directory that could not be resolved (the payload cwd and the hook process's working directory are both empty, or neither resolves to an absolute path), so the operations side cannot be ruled out; this Tier-0 floor fails closed rather than trusting an unreadable value" \
+            "relaunch the session from a working directory that exists, so the side can be evaluated; if you ARE the operator acting intentionally, CLAUDE_HOOK_BYPASS=1 disables every security hook for this one call"
+        fi
       fi
       ;;
   esac
