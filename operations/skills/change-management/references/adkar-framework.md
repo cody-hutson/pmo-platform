@@ -302,28 +302,28 @@ A worked end-to-end assessment for three named groups, demonstrating the §11 pr
 
 | Stakeholder Group | A | D | K | Ab | R | Barrier Point | Readiness |
 |-------------------|---|---|---|----|----|--------------|-----------|
-| **Buying & Planning** | 5 | 4 | 4 | 4 | 4 | None (no element <=3) | Conditional |
-| **Warehouse Ops** | 4 | 2 | 3 | 2 | 1 | **Desire** (first element <=3) | Not Ready |
-| **Customer Service** | 5 | 5 | 4 | 4 | 5 | None | Conditional |
+| **[GROUP_A]** | 5 | 4 | 4 | 4 | 4 | None (no element <=3) | Conditional |
+| **[GROUP_B]** | 4 | 2 | 3 | 2 | 1 | **Desire** (first element <=3) | Not Ready |
+| **[GROUP_C]** | 5 | 5 | 4 | 4 | 5 | None | Conditional |
 
-- Buying & Planning: no element <=3, but elements at 4 -> **Conditional** (support plan).
-- Warehouse Ops: Desire = 2 is the first element <=3 -> **Not Ready**; intervene at
+- [GROUP_A]: no element <=3, but elements at 4 -> **Conditional** (support plan).
+- [GROUP_B]: Desire = 2 is the first element <=3 -> **Not Ready**; intervene at
   Desire (WIIFM, involvement, address fears) BEFORE any Knowledge/Ability training.
-- Customer Service: no element <=3, elements at 4 -> **Conditional**.
+- [GROUP_C]: no element <=3, elements at 4 -> **Conditional**.
 
 ### Step 4: Champion Count (per §7)
 
 | Stakeholder Group | Overall Severity | Impacted Population | Denominator (§7) | champion_count = ceil(pop / denom) |
 |-------------------|------------------|---------------------|------------------|-------------------------------------|
-| **Buying & Planning** | 3 — High | 60 | 1:20 | ceil(60 / 20) = **3** |
-| **Warehouse Ops** | 4 — Critical | 220 | 1:10 | ceil(220 / 10) = **22** |
-| **Customer Service** | 2 — Medium | 45 | 1:40 | ceil(45 / 40) = **2** |
+| **[GROUP_A]** | 3 — High | 60 | 1:20 | ceil(60 / 20) = **3** |
+| **[GROUP_B]** | 4 — Critical | 220 | 1:10 | ceil(220 / 10) = **22** |
+| **[GROUP_C]** | 2 — Medium | 45 | 1:40 | ceil(45 / 40) = **2** |
 
 ### Step 5: Emit
 
 - **Numeric scores:** produced per group above (the 5-element 1-5 matrix).
-- **Identified barriers:** Buying & Planning — None (Conditional); Warehouse Ops —
-  **Desire** (Not Ready); Customer Service — None (Conditional).
+- **Identified barriers:** [GROUP_A] — None (Conditional); [GROUP_B] —
+  **Desire** (Not Ready); [GROUP_C] — None (Conditional).
 - **Total champion count:** 3 + 22 + 2 = **27 champions** across the three groups.
 
 This example is the regression fixture: an agent reading only this document must

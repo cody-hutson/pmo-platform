@@ -63,7 +63,7 @@ comparison and the under-target flag.
     is sized, so UNDER-TARGET does not apply.
 - **Worked micro-example (regression fixture by reference).** Reuse the
   `adkar-framework.md §12` groups rather than inventing a parallel fixture. Reading that
-  fixture, Warehouse Ops is severity-4, population 220 → target = ceil(220 / 10) = 22
+  fixture, [GROUP_B] is severity-4, population 220 → target = ceil(220 / 10) = 22
   (the §7 value computed in §12). If 14 champions are active → `champion_gap = 14 − 22 =
   −8` → flag **UNDER-TARGET (−8)**; remediation = recruit 8 more per §7 criteria. (The
   target 22 is read from §12 / §7; this section adds only the −8 gap and the flag.)

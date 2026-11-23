@@ -25,7 +25,7 @@ Read the first 100 lines. Look for structural indicators:
 ### Layer 2: Project Identification (For Multi-Project)
 Match content against all active PROJECT.md files:
 - Participant names from Key People table
-- Jira ticket references (project key pattern, e.g., ATP-###)
+- Jira ticket references (project key pattern, e.g., [KEY]-###)
 - System names from Systems Involved section
 - Project-specific terminology from Technical Domain section
 
