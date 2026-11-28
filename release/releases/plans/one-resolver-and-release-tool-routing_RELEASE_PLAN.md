@@ -205,7 +205,7 @@ core/config/operator.toml.template  edit
 core/config/operator-toml-schema.json  edit
 core/deploy/tests/test_lib_instance_path.sh  edit
 core/standards/instance-data-placement-standard.md  edit
-core/ADRs/ADR-NNN-class-homes-switch-and-designation.md  add
+core/ADRs/ADR-243-class-homes-switch-and-designation.md  add
 core/ADRs/README.md  edit
 docs/platform-config-reference.md  edit
 core/schemas/platform-config-schema.md  edit
@@ -230,7 +230,7 @@ packages/finops-usage-extractor.skill.sha256  edit
 release/releases/plans/one-resolver-and-release-tool-routing_RELEASE_PLAN.md  add
 ```
 
-The decision record's number is taken by `release/tools/renumber-adr.py` immediately before the file is created; the commit that adds it re-spells its row here with the real number.
+The decision record's number was taken by `release/tools/renumber-adr.py` immediately before the file was created (`--next-free` 243; `--detect` → BINDS), and the commit that adds it re-spelled its row here. Should the mainline claim 243 first, the renumbering tool moves the record at merge and this row with it.
 
 #### Read-only inputs
 

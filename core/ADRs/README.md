@@ -377,6 +377,13 @@ ADR-006 establishes the 22-skill 3-module partition; ADR-007 extends to the non-
 **Reversibility:** EXPENSIVE (MEDIUM confidence) — nothing moves in the release that ships it; once ratified it changes only by supersession, and each cutover that executes it carries its own rehearsal.
 **File:** [ADR-231-non-tracked-data-homed-by-risk-class.md](ADR-231-non-tracked-data-homed-by-risk-class.md)
 
+### ADR-243 — One resolver per class, behind a per-repository switch read through the config root, with a repository's main checkout designated by name
+
+**Status:** recorded in the record's own `status:` field, which is the authority (authored at Stage 6 for the `one-resolver-and-release-tool-routing` release; ratified at its Stage 13 close). Composes with ADR-231 and supersedes nothing.
+**Decision:** Each class resolves through one function in `core/deploy/lib-instance-path.sh`, behind `operator.toml [adapters] governed_homes`, which lists repository names, ships empty, and is read through the config root. With the switch empty every function returns today's path by today's rungs; once a repository is listed, its working state resolves under its designated main checkout's `/local-state/`, its run-scoped members require the repository to be named, family-wide relocations are refused rather than dropped, and per-user results are refused inside any git work tree and in a config-root sandbox with no XDG base. A run's class is an argument; its record is positive and fail-closed.
+**Reversibility:** CHEAP while no repository is listed; MODERATE once later waves build against the contract.
+**File:** [ADR-243-class-homes-switch-and-designation.md](ADR-243-class-homes-switch-and-designation.md)
+
 ## Release-ops / capacity ADRs
 
 ### ADR-027 — Release-bundle risk-weighting keys on Release Class, not a new per-issue Tier field
