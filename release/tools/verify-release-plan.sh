@@ -3389,8 +3389,15 @@ parse_fcm_declarations() {
     # routes an unrecognised row into the uninterpreted count instead of discarding
     # it. That is what makes the NEXT omission from this enum a visible non-PASS
     # rather than a silent one, so this list no longer has to be complete to be safe.
+    #
+    # `analysis` and `local-state` were the next two omissions. Each is a top-level
+    # directory the repository tracks as its README alone (a registered in-repo
+    # home), so a plan declaring that README as an ADD read the row as uninterpreted
+    # and coverage could not reach PASS. With them the list names every top-level
+    # directory the repository tracks. It is a path-recognition list, not a home
+    # list: it excludes nothing, and a home missing from it costs a visible SKIP.
     function pathof(s,   t) {
-      if (!match(s, /(core|operations|release|docs|packages|projects|roadmaps|\.github|\.claude)\/[^ \t`|,;()]+/)) return ""
+      if (!match(s, /(core|operations|release|docs|packages|projects|roadmaps|\.github|\.claude|analysis|local-state)\/[^ \t`|,;()]+/)) return ""
       t = substr(s, RSTART, RLENGTH)
       sub(/\*\*$/, "", t); sub(/[.,;:]+$/, "", t); sub(/`+$/, "", t)
       return t
@@ -4225,8 +4232,13 @@ EOF_SCOPE_SEL
 
 # scope_pathspec_selects <pathspec> <paths> -- TRUE when an included pathspec selects
 # at least one delivered path, or at least one path in the tree: a literal or
-# directory pathspec is tested for existence; a glob one against every path under
-# the root (find -path, whose `*` crosses `/` as a git pathspec's does).
+# directory pathspec is tested for existence; a glob one against the tree. On a git
+# work tree the tree is the index -- git's own default pathspec reading, whose `*`
+# crosses `/`, with `<glob>/*` standing for a directory the glob names -- so an
+# ignored path (a registered in-repo home's contents, a linked worktree under
+# .claude/worktrees/) is never walked. A non-git root (the fixture case) keeps the
+# filesystem walk (find -path, whose `*` crosses `/` the same way). A glob ending in
+# `/` names nothing find prints, and selects nothing on either branch.
 scope_pathspec_selects() {
   local pat="$1" paths="$2" q
   while IFS= read -r q; do {
@@ -4239,7 +4251,12 @@ EOF_SCOPE_SELECTS
   case "$pat" in
     ''|.) return 0 ;;
     *'*'*|*'?'*|*'['*)
-      if [ -n "$( cd "$REPO_ROOT" && find . -path ./.git -prune -o -path "./$pat" -print 2>/dev/null )" ]; then return 0; fi
+      case "$pat" in */) return 1 ;; esac
+      if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        if [ -n "$(git -C "$REPO_ROOT" ls-files -- "$pat" "$pat/*" 2>/dev/null)" ]; then return 0; fi
+        return 1
+      fi
+      if [ -n "$( cd "$REPO_ROOT" && find . -path ./.git -prune -o -path "./$pat" -print 2>/dev/null )" ]; then return 0; fi  # tree-walk: allow — non-git root only (fixture mode): a git work tree reads the index on the branch above
       return 1 ;;
   esac
   [ -e "$REPO_ROOT/${pat%/}" ]

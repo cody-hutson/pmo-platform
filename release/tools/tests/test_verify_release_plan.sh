@@ -676,6 +676,31 @@ case "$(observed_of "$J_PRESENT" FCM-COVERAGE)" in
   *) bad "A13 control — fcm-conformant.md should report uninterpreted=0, got '$(observed_of "$J_PRESENT" FCM-COVERAGE)'" ;;
 esac
 
+# --- A14: a registered in-repo home's README ADD is recognised. ---
+# A registered home is a top-level directory the repository tracks as its
+# README alone. Two of the three were absent from the first-segment enum, so a
+# plan declaring one of those READMEs as an ADD read the row as uninterpreted,
+# and FCM-COVERAGE could not reach PASS on a release that ships a home. Both
+# rows must now be graded, and the coverage COUNT must say no row was lost.
+DIFF_HOME="$REPO_ROOT/$FIXD/fcm-diff-home-readme.tsv"
+fcm_run "$VERIFY" fcm-home-readme.md "$DIFF_HOME"; J_HOME="$FCM_JSON"
+HOME_OBS="$(observed_of "$J_HOME" FCM-1) | $(observed_of "$J_HOME" FCM-2)"
+case "$HOME_OBS" in
+  *declared-add-delivered:local-state/README.md*)
+    ok "A14 HOME README — a local-state/README.md ADD is recognised and graded" ;;
+  *) bad "A14 expected declared-add-delivered:local-state/README.md, got '$HOME_OBS'" ;;
+esac
+case "$HOME_OBS" in
+  *declared-add-delivered:analysis/README.md*)
+    ok "A14 HOME README — an analysis/README.md ADD is recognised and graded" ;;
+  *) bad "A14 expected declared-add-delivered:analysis/README.md, got '$HOME_OBS'" ;;
+esac
+case "$(observed_of "$J_HOME" FCM-COVERAGE)" in
+  *uninterpreted=0*)
+    ok "A14 a matrix of home README rows reports uninterpreted=0 (no row left the denominator)" ;;
+  *) bad "A14 expected uninterpreted=0, got '$(observed_of "$J_HOME" FCM-COVERAGE)'" ;;
+esac
+
 # ---------------------------------------------------------------------------
 # G6-M — MUTATION ARMS. Each removes ONE observing step and asserts an arm moves.
 # ---------------------------------------------------------------------------
