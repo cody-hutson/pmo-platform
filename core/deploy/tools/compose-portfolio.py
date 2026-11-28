@@ -833,7 +833,7 @@ def select_rollups(root: Path, paths: list, portfolio: str, records: list) -> tu
 
     members, rep_ = [], {"served": portfolio, "portfolios": len(active), "members": 0,
                          "unassigned": [], "unresolved": [], "inactive": [], "held": [],
-                         "project_key_polluted": [], "held_elsewhere": 0,
+                         "polluted": [], "held_elsewhere": 0,
                          "other_portfolio": 0, "drift_outside": 0}
     redact_ids, redact_aliases, keep_ids, keep_aliases = set(), set(), set(), set()
     for p in paths:
@@ -842,7 +842,7 @@ def select_rollups(root: Path, paths: list, portfolio: str, records: list) -> tu
         prj_key, prj_id, prj_bad = _project_portfolio(prj) if prj else (None, None, False)
         mine = eff(key)
         if prj_bad:
-            rep_["project_key_polluted"].append(project_id); disposition = "polluted"
+            rep_["polluted"].append(project_id); disposition = "polluted"
         elif prj is not None and eff(prj_key) != mine:
             if eff(prj_key) == portfolio or eff(prj_key) not in active:
                 rep_["held"].append(project_id)
@@ -871,7 +871,7 @@ def select_rollups(root: Path, paths: list, portfolio: str, records: list) -> tu
     redact_ids -= keep
     redact_aliases -= keep
     rep_["members"] = len(members)
-    for k in ("unassigned", "unresolved", "inactive", "held", "project_key_polluted"):
+    for k in ("unassigned", "unresolved", "inactive", "held", "polluted"):
         rep_[k] = sorted(rep_[k])
     return (members, rep_, frozenset(redact_ids), frozenset(redact_aliases),
             frozenset(keep_ids), frozenset(keep))
@@ -2117,7 +2117,7 @@ def run_self_test() -> int:
             (AP, "portfolio_id: port-alpha\n", "portfolio_id: port-alpha   # BELONGS_TO parent\n")])
         _rep = {}
         _b, _err = _try_compose(pk, "port-alpha", _rep)
-        if (_err or "proj-alpha" in _s1_ids(_b) or _rep.get("project_key_polluted") != ["proj-alpha"]
+        if (_err or "proj-alpha" in _s1_ids(_b) or _rep.get("polluted") != ["proj-alpha"]
                 or _rep.get("held")):
             failures.append(f"(portfolio-project-key) a polluted PROJECT.md portfolio_id was not held "
                             f"and named in its own report class: {_err} {_rep}")
@@ -2126,7 +2126,7 @@ def run_self_test() -> int:
                             "PROJECT.md key")
         _rep = {}
         _b, _err = _try_compose(one_root, "port-alpha", _rep)
-        if _err or "proj-alpha" not in _s1_ids(_b) or _rep.get("project_key_polluted"):
+        if _err or "proj-alpha" not in _s1_ids(_b) or _rep.get("polluted"):
             failures.append(f"(portfolio-project-key) CONTROL FAILED — the clean tree: {_err} {_rep}")
 
         # (portfolio-alias-exact) FM-D4
@@ -2278,7 +2278,7 @@ def portfolio_report_line(r: dict) -> str:
             f"names an inactive Portfolio record: {nm('inactive')}; held for re-emission "
             f"(rollup key disagrees with its PROJECT.md): {nm('held')}{elsewhere}; "
             f"PROJECT.md portfolio_id polluted (remove the inline comment): "
-            f"{nm('project_key_polluted')}; excluded, another portfolio: {r['other_portfolio']}; "
+            f"{nm('polluted')}; excluded, another portfolio: {r['other_portfolio']}; "
             f"contract drift outside the served portfolio: {r['drift_outside']}; "
             f"active Portfolio record(s): {nm('active')}{dup}")
 
