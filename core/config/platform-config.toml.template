@@ -19,7 +19,7 @@
 #
 # Per-tier override VALUES (Layer 2 — operator-instance, git-ignored) live at:
 #   ~/.config/pmo-platform/platform-config.toml  [overrides]  — individual-tier (XDG)
-#   <workspace>/projects/_config/PORTFOLIO.md frontmatter  platform_config: {...}  — portfolio
+#   <workspace>/projects/_config/<portfolio_id>/PORTFOLIO.md frontmatter  platform_config: {...}  — portfolio (projects/_config/PORTFOLIO.md with no Portfolio record)
 #   <workspace>/projects/<Program>/_config/program-config.toml  — program-tier
 #   <workspace>/projects/<Project>/PROJECT.md frontmatter  platform_config: {...}  — project
 #

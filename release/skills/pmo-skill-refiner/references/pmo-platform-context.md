@@ -15,7 +15,7 @@ The PMO platform is organized into two domains with distinct management rules:
 | **Engineering (Layer 1)** | `pmo-platform/` | Tracked | Function-oriented (governance, skills, reference, packages, releases, engineering) | Claude Code via git |
 | **Operations (Layer 2)** | `projects/` | Ignored | Tier-oriented (portfolio → program → project) | Cowork |
 
-New skills created via the refiner live in `release/skills/<name>/`. Skills may READ Layer 2 files (`projects/_config/PORTFOLIO.md`, `SESSION_STATE.md`, `CORRECTIONS.md`) for context but MUST NOT WRITE to any Layer 2 file.
+New skills created via the refiner live in `release/skills/<name>/`. Skills may READ Layer 2 files (the served portfolio's `PORTFOLIO.md` — `projects/_config/<portfolio_id>/PORTFOLIO.md`, or `projects/_config/PORTFOLIO.md` with no Portfolio record — `SESSION_STATE.md`, `CORRECTIONS.md`) for context but MUST NOT WRITE to any Layer 2 file.
 
 ## 13-Stage Pipeline
 
@@ -114,7 +114,7 @@ Decision-class outputs carry CHEAP / MODERATE / EXPENSIVE / IRREVERSIBLE labels 
 ## Layer Boundary Rules
 
 1. **New skills go in `release/skills/<name>/`.** Single-skill directories; no plugin wrapping. If the scaffolder produced a plugin-style layout, the refiner repositions to this single-skill convention.
-2. **Skills read Layer 2 for context only.** Paths allowed: `projects/_config/PORTFOLIO.md`, `SESSION_STATE.md`, `CORRECTIONS.md`. Never write.
+2. **Skills read Layer 2 for context only.** Paths allowed: the served portfolio's `PORTFOLIO.md` (`projects/_config/<portfolio_id>/PORTFOLIO.md`; `projects/_config/PORTFOLIO.md` with no Portfolio record), `SESSION_STATE.md`, `CORRECTIONS.md`. Never write.
 3. **Governance changes flow through the release process.** If a new skill would need to modify CLAUDE.md, OPERATIONS.md, or other governance files, raise a GitHub Issue per CLAUDE.md § No ungoverned changes — do not encode a direct-write path into the skill.
 4. **Deployment lives in `deploy.sh`.** New skills are added to the per-module skill array for their module (`OPERATIONS_SKILLS` / `RELEASE_SKILLS` / `CORE_SKILLS`) — and to `SUPPLEMENTARY_SKILLS` if they have scripts/agents/references beyond SKILL.md. The refiner flags this as a cascade edit in its handoff message.
 

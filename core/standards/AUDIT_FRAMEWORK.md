@@ -33,7 +33,7 @@ Read the audit framework at core/standards/AUDIT_FRAMEWORK.md first, then read
 these files in order:
 1. Claude/CLAUDE.md
 2. core/governance/OPERATIONS.md
-3. projects/_config/PORTFOLIO.md
+3. each portfolio's PORTFOLIO.md (projects/_config/<portfolio_id>/PORTFOLIO.md; projects/_config/PORTFOLIO.md with no Portfolio record)
 4. projects/_config/SESSION_STATE.md
 5. GitHub Issues (improvement backlog — `gh issue list --label improvement`)
 6. projects/[Project]/PROJECT.md

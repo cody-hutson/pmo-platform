@@ -1,0 +1,27 @@
+# Case: rollup --scope portfolio on a two-portfolio state — serves only the active project's portfolio
+case_id: rollup-portfolio-two-portfolio
+mode: rollup
+sub_mode: "--scope portfolio"
+fixture: fixtures/portfolio-two-portfolio.md
+judge: judges/rollup.md
+prompt: "/health-check rollup --scope portfolio"
+served_portfolio: port-alpha            # the active project's portfolio_id
+expected_section_membership:
+  Confirmed: []
+  Auto-Actionable: []
+  tracker_updates_block: absent
+  Decisions:
+    - "proj-alpha Health 🟢 -> 🟡 color change (rollup entity newer than PORTFOLIO.md) [confidence: HIGH · S2]"
+  Unknowns: []
+  Rollup-Diffs:
+    - "PORTFOLIO.md proposal (port-alpha) — proj-alpha Health 🟢 -> 🟡, Last-Updated 2026-04-13 -> current — composed via weekly-status-rollup Section 6, staged in proj-alpha/08-Generated/_health-check/ [MODERATE · HIGH]"
+compose_routed_to_weekly_status_rollup: required
+portfolio_md_not_written: required
+staged_in_08_generated_health_check: required
+report_line_in_header: required
+must_not_mention:                       # the null arm — never appears, anywhere
+  - "proj-beta"
+  - "port-beta"
+must_surface:                           # the same-instrument sensitivity arm
+  - "proj-alpha"
+pass_rule: "Only port-alpha is audited and proposed; proj-beta and port-beta appear nowhere although proj-beta carries a seeded drift; proj-alpha's drift IS surfaced; the header carries the Portfolio: line; PORTFOLIO.md not written; five sections in order."

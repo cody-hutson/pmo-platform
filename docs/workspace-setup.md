@@ -172,7 +172,7 @@ Canonical artifact-to-directory mapping. When in doubt, use this table.
 | Package code (skills, hooks, schemas) | `pmo-platform/<module>/` | `pmo-platform/core/skills/prompt-builder/` |
 | Package documentation | `pmo-platform/docs/` | `pmo-platform/docs/workspace-setup.md` (this file) |
 | Active project artifacts | `projects/[Project]/` | `projects/[PROJECT_KEY] Implementation/05-Transcripts/` |
-| Cross-project operational config | `projects/_config/` | `projects/_config/PORTFOLIO.md`, `projects/_config/SESSION_STATE.md` |
+| Cross-project operational config | `projects/_config/` | `projects/_config/PORTFOLIO.md`, `projects/_config/SESSION_STATE.md` — once Portfolio records exist, each portfolio's `PORTFOLIO.md` lives in its own folder, `projects/_config/<portfolio_id>/PORTFOLIO.md`, and no `projects/_config/PORTFOLIO.md` stays beside an active Portfolio record (`core/standards/portfolio-writeback-contract.md` § Portfolio scoping) |
 | Closed projects (archived) | `projects/Archive/` | `projects/Archive/[OldProject]/` |
 | Operator-instance platform config + runtime state | `pmo-instance/` | `pmo-instance/skill-editor-exemption-list.txt`, `pmo-instance/deploy-check.mode`, `pmo-instance/hub-state/` |
 | Operator's personal notes | `personal/notes/` | `personal/notes/billing/`, `personal/notes/patreon/` |

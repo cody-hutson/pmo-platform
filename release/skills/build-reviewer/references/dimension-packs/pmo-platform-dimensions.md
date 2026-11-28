@@ -140,7 +140,7 @@ The platform is governed by a hierarchy of context files (CLAUDE.md, OPERATIONS.
 **What to check:**
 - Layer 1 (Engineering, git-tracked, `pmo-platform/`) files are modified only from Claude Code sessions (via git worktrees and PRs). No Layer 1 file modified directly from Cowork.
 - Layer 2 (Operations, git-ignored, `projects/`) files appear in `.gitignore` and do NOT appear in `git status` after a session.
-- Layer 3 bridge files (today: `projects/_config/PORTFOLIO.md`) have documented write-rules for both agents (Cowork writes, Claude Code reads only per CLAUDE.md § Bridge Files).
+- Layer 3 bridge files (today: each portfolio's `PORTFOLIO.md` — `projects/_config/<portfolio_id>/PORTFOLIO.md`, or `projects/_config/PORTFOLIO.md` with no Portfolio record) have documented write-rules for both agents (Cowork writes, Claude Code reads only per CLAUDE.md § Bridge Files).
 - Classification in CLAUDE.md § Platform vs. Working Content Boundary matches actual file placements — no file is Layer 1 by classification but lives under `projects/`, and vice versa.
 - `.gitignore` enforces Layer 2 boundary — `projects/` is ignored; no Layer 2 leakage to git.
 

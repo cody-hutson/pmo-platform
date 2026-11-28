@@ -91,10 +91,10 @@ status: "Implemented (v2 slice)."
 ```yaml
 mode_rollup:
   trigger_intent:    "I need to refresh a rollup on demand — up-to-portfolio or down-through one project — rather than wait for the scheduled cadence."
-  decision_intent:   "Is the rollup surface current — does PORTFOLIO.md match the composed per-project rollup entities (portfolio), or does one project's rollup entity match its sub-entities (project)?"
+  decision_intent:   "Is the rollup surface current — does the served portfolio's composed file match its member projects' rollup entities (portfolio), or does one project's rollup entity match its sub-entities (project)?"
   output_intent:     "A 5-section punch list; portfolio composition is routed to weekly-status-rollup and staged in 08-Generated/_health-check/; project refresh emits TRACKER_UPDATES for the rollup entity."
   confidence_intent: "Assertive on rollup-entity freshness drift; cautious on composed portfolio health (routes the write to weekly-status-rollup)."
-audits: "The project↔portfolio rollup contract on demand. `--scope portfolio` audits per-project rollup-entity freshness vs PORTFOLIO.md and composes the PORTFOLIO.md proposal via weekly-status-rollup Section 6 (compose-not-absorb), staged in 08-Generated/_health-check/. `--scope project --depth full|status` refreshes one project's rollup entity from a Milestones/RAID/Plans/Resources sub-entity scan, routed via TRACKER_UPDATES. Arg-required and excluded from the full sweep. Contract-tolerant when the rollup entity / portfolio-writeback contract is absent (surfaces a ## Unknowns coverage-gap). See references/rollup-mode.md."
+audits: "The project↔portfolio rollup contract on demand. `--scope portfolio` audits the served portfolio's member rollup-entity freshness vs that portfolio's composed file (portfolio-writeback-contract.md § Portfolio scoping, membership by portfolio_id) and composes that portfolio's proposal via weekly-status-rollup Section 6 (compose-not-absorb), staged in 08-Generated/_health-check/. `--scope project --depth full|status` refreshes one project's rollup entity from a Milestones/RAID/Plans/Resources sub-entity scan, routed via TRACKER_UPDATES. Arg-required and excluded from the full sweep. Contract-tolerant when the rollup entity / portfolio-writeback contract is absent (surfaces a ## Unknowns coverage-gap). See references/rollup-mode.md."
 status: "Implemented (v3 slice)."
 ```
 

@@ -38,7 +38,7 @@ Connected via the 13-stage deployment pipeline (see release-process.md).
 
 ## Cross-Domain Read Access
 Claude Code MAY READ these Layer 2 files for context:
-- `projects/_config/PORTFOLIO.md` — cross-project health data
+- each portfolio's `PORTFOLIO.md` — cross-project health data (`projects/_config/<portfolio_id>/PORTFOLIO.md`; `projects/_config/PORTFOLIO.md` on an install with no Portfolio record)
 - `projects/_config/SESSION_STATE.md` — session continuity
 - `projects/_config/CORRECTIONS.md` — active behavioral redirects
 

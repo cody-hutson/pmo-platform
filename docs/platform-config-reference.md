@@ -22,7 +22,7 @@
 | Rung (lowest → highest precedence) | Surface | Scope |
 |---|---|---|
 | 1 — global default | `core/config/platform-config.toml.template` + `core/config/operator.toml.template` (Layer 1, ships) — read in place from your clone; **not** installed to a runtime copy | all installs |
-| 2 — portfolio | `projects/_config/PORTFOLIO.md` frontmatter `platform_config: {...}` | a portfolio |
+| 2 — portfolio | the portfolio's composed `PORTFOLIO.md` frontmatter `platform_config: {...}` — `projects/_config/<portfolio_id>/PORTFOLIO.md`, or `projects/_config/PORTFOLIO.md` with no Portfolio record | a portfolio |
 | 3 — program | `projects/<Program>/_config/program-config.toml` | a program |
 | 4 — project | `projects/<Project>/PROJECT.md` frontmatter `platform_config: {...}` | a project |
 | 5 — individual | `~/.config/pmo-platform/platform-config.toml` `[overrides]` (and `operator.toml` for identity/adapters) | one operator (highest precedence) |

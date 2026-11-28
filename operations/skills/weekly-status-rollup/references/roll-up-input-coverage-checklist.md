@@ -13,7 +13,7 @@ mitigation mechanism; this file is its single source.
 
 | # | Input | Present means | On absence |
 |---|---|---|---|
-| 1 | PORTFOLIO.md | Active-project list readable with governance models | STOP — no roll-up without the project roster |
+| 1 | The served portfolio's composed file (`portfolio-writeback-contract.md` § Portfolio scoping) | The served portfolio's active-member roster is readable, with governance models | STOP — no roll-up without the served portfolio's roster |
 | 2 | PROJECT.md (per project) | Phase, milestones, health fields populated | Mark the project NOT ASSESSED; name it in Section 1 |
 | 3 | Daily Status Log (per project) | ≥1 entry inside the reporting window | Run Step 2 day-coverage enumeration; never infer a quiet week |
 | 4 | Carry-forward tracker (per project) | Blockers / decisions / actions current within the window | Flag staleness next to every item carried from it |

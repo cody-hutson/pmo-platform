@@ -32,6 +32,8 @@ PASS only if ALL hold:
 
 **FAIL triggers (any one):** PORTFOLIO.md written directly; the portfolio aggregation re-implemented inside health-check (the ADR-019 absorb anti-pattern) rather than routed to `weekly-status-rollup`; the proposal placed anywhere but `## Rollup-Diffs`/`08-Generated/_health-check/`; the clean project row flagged.
 
+**Invocation A — two-portfolio variant (`portfolio-writeback-contract.md` § Portfolio scoping).** When the fixture holds two portfolios, PASS additionally requires: (6) the served portfolio is the active project's portfolio, only its member projects are audited, and the output header carries its `Portfolio:` report line; (7) no project, portfolio id or composed-file path of the other portfolio appears anywhere in the output — even where the fixture seeds a drift in that portfolio. **FAIL trigger:** any mention of the other portfolio's project, id or file. The served portfolio's own drift must still be surfaced (criterion 1); that is the sensitivity arm of criterion 7.
+
 ## Invocation B — `--scope project --depth full` (sub-entity scan)
 
 PASS only if ALL hold:

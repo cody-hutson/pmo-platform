@@ -2,7 +2,7 @@
 name: daily-status
 description: >
   Generates Teams-ready AM and PM daily status updates from carry-forward trackers and recent transcripts. Uses the project's Daily Status Update Framework. Triggers: "generate the AM update", "daily status", "morning update", "afternoon update", "PM update", "EOD update", "prep the daily connect", "I just came out of testing — status post."
-version: v2.32
+version: v6.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -691,9 +691,12 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ## Multi-Project Support
 
-When multiple projects are active (per PORTFOLIO.md):
+When multiple projects are active in the served portfolio — `portfolio-writeback-contract.md` § Portfolio scoping, which places a project by its `portfolio_id` (no active Portfolio record: every active project, as before, unless the projects name two or more portfolios, when the run stops and names the Portfolio records to create; one active portfolio: every project that names it or names none; two or more active portfolios: the projects whose `portfolio_id` names the served portfolio, and a project naming none is unassigned):
 
 - Generate status updates per-project (not combined)
 - Each project uses its own Framework, trackers, and templates
 - If the user says "generate all daily updates," process each project in sequence
 - Present all outputs together for review before posting
+- A batch request ("generate all daily updates") covers the served portfolio's member projects only; outputs for two portfolios are never presented together in one review.
+- The review opens with the line `Portfolio: <served portfolio_id, or unscoped> — unassigned: <project ids or none>; unresolved portfolio_id: <project ids or none>`, so an excluded project is never dropped silently.
+- The run never reads another portfolio's composed file. It stops, naming the move, while `projects/_config/PORTFOLIO.md` still exists beside an active Portfolio record.

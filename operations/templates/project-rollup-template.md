@@ -13,6 +13,7 @@ entity_type: Project Rollup (composed)
 owning_agent: ppm-agent
 content_lifecycle_pattern: Living          # Axis-2 → frontmatter-schema §Cat-2 Domain B (composed read-surface, refreshed)
 project_id: {{PROJECT_ID}}                 # kebab-case project slug (operational tier-taxonomy DD-2 *_id convention)
+portfolio_id: {{PORTFOLIO_ID}}
 last_published: {{LAST_PUBLISHED}}         # ISO 8601 datetime — drives [STALE]; age = today − last_published, BUSINESS days
 # ── The 7 contract fields, each annotated with the source entity it READS ──
 status: {{STATUS}}                         # ← Project (entity 1) — health_rag; ppm-agent derives + maintains. RAG {green|yellow|red}; worst-component dominance
@@ -40,6 +41,8 @@ _Freshness: age = `today − last_published` in **business days** — `> 3 bd` r
 | `milestone_delta` | Milestone (entity 2) `target_date` / `actual_date` / `lifecycle_state` | S1 Health Summary |
 | `cross_project_conflicts[]` | Cross-Project Resource Conflict / XRC (entity 16) | S6 Cross-Project RAID · S8 Resource Conflicts |
 | `last_published` | rollup meta (this file) | meta `Last Updated` + inline `[STALE]` markers |
+
+_Join keys outside the seven fields: `project_id`, and `portfolio_id` when the project names a portfolio — the key `portfolio-writeback-contract.md` § Portfolio scoping selects on. Omit the `portfolio_id` line when the project names none; never write it empty or with an inline comment._
 
 ## Notes
 

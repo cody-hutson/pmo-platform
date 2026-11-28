@@ -17,7 +17,7 @@ doc carries the full sub-mode + contract detail once.
 
 | Invocation | Direction | What it does | Write routing |
 |---|---|---|---|
-| `rollup --scope portfolio` | up-to-portfolio | Audit per-project rollup-entity freshness vs PORTFOLIO.md, then **compose the PORTFOLIO.md proposal via `weekly-status-rollup` Section 6** (compose-not-absorb); re-home the staged proposal under `08-Generated/_health-check/`. | `## Rollup-Diffs` (staged, tiered; **never** a direct PORTFOLIO.md write) |
+| `rollup --scope portfolio` | up-to-portfolio | Audit the served portfolio's member rollup-entity freshness vs that portfolio's composed file (`portfolio-writeback-contract.md` § Portfolio scoping, by `portfolio_id`), then **compose that portfolio's proposal via `weekly-status-rollup` Section 6** (compose-not-absorb); re-home the staged proposal under `08-Generated/_health-check/`. | `## Rollup-Diffs` (staged, tiered; **never** a direct PORTFOLIO.md write) |
 | `rollup --scope project --depth full` | down-through-project | Scan the project's sub-entities (Milestones / RAID Items / Plans / Resources) and propose a refreshed rollup entity. | `TRACKER_UPDATES:` block in `## Auto-Actionable` → `/tracker-manager` on approval |
 | `rollup --scope project --depth status` | down-through-project | Quick refresh of the rollup entity's `status` fields only (lighter than `--depth full`). | `TRACKER_UPDATES:` block in `## Auto-Actionable` |
 
@@ -27,9 +27,11 @@ sub-entity set downward; `--scope project --depth status` refreshes only the sta
 
 ## `--scope portfolio` — compose, not absorb
 
+In this reference `PORTFOLIO.md` means the composed file of the active project's portfolio (`portfolio-writeback-contract.md` § Portfolio scoping): `projects/_config/<portfolio_id>/PORTFOLIO.md`, or `projects/_config/PORTFOLIO.md` with no active Portfolio record.
+
 The portfolio direction's **native value-add is the freshness-drift audit**: for each
-active project, is its rollup entity current against the sub-entities it summarizes, and
-does PORTFOLIO.md reflect the latest per-project rollup entities? That audit is
+active member project of the served portfolio, is its rollup entity current against the sub-entities it summarizes, and
+does the served portfolio's composed file reflect its members' latest rollup entities? That audit is
 health-check's own work and lands as findings in the 5-section output.
 
 The **PORTFOLIO.md composition itself is not re-implemented here.** `weekly-status-rollup`

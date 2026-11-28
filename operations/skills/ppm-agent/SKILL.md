@@ -2,7 +2,7 @@
 name: ppm-agent
 description: >
   The strategic brain of the PMO — reads any project artifact and pushes every actionable item toward resolution. Use when uploading transcripts, asking about project status, needing decisions framed, or requesting risk assessment. Triggers: "review this", "what's the state of [project]", "process this transcript", "triage this", "what needs my attention", "what actions came out of this", "what needs to surface."
-version: v2.29
+version: v6.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -144,7 +144,7 @@ Based on the artifact type and content, also read relevant project artifacts:
 - **Transcript about testing** → Test plan, open bugs/defects list
 - **Jira export** → Project plan, sprint scope, acceptance criteria docs
 - **FDD or design doc** → Related FDDs, integration specs, requirements
-- **Status request** → Most recent daily status, PORTFOLIO.md
+- **Status request** → Most recent daily status, and the composed file of the project's portfolio — `portfolio-writeback-contract.md` § Portfolio scoping, from the project's `portfolio_id` (`projects/_config/<portfolio_id>/PORTFOLIO.md`; `projects/_config/PORTFOLIO.md` with no active Portfolio record, unless the projects name two or more portfolios, when it stops and names the Portfolio records to create; with one active portfolio, a project that names none belongs to it). For a portfolio-level status request, the served portfolio's file, and the answer opens with the line `Portfolio: <served portfolio_id, or unscoped> — unassigned: <project ids or none>; unresolved portfolio_id: <project ids or none>`. Never read another portfolio's composed file to answer a status request; in this skill `PORTFOLIO.md` always means that resolved file. It stops, naming the move, while `projects/_config/PORTFOLIO.md` still exists beside an active Portfolio record.
 
 Read what the artifact content warrants — not everything always. The goal is targeted
 cross-referencing, not exhaustive pre-loading.
@@ -615,6 +615,7 @@ never re-derive an authoritative value the source entity owns:**
 | `milestone_delta` | Milestone (entity 2) |
 | `cross_project_conflicts[]` | Cross-Project Resource Conflict / XRC (entity 16) |
 | `last_published` | rollup meta — ISO datetime; drives `[STALE]` (age = `today − last_published`, business days) |
+| `portfolio_id` (join key beside `project_id`, not a contract field) | Project (entity 1) `portfolio_id` — stamped as the bare slug when the Project carries one; the line is **omitted** when it carries none, never written empty, never given an inline comment, and never inferred at emission (membership is the consumer's, per `portfolio-writeback-contract.md` § Portfolio scoping). A source value that fails the slug test (a trailing `# …` is content, not a comment) is not stamped: it is surfaced as a Section-5 "Decisions needed" line naming the `PROJECT.md` to correct |
 
 The emission rides the existing § 8.7 `TRACKER_UPDATE` carrier — no new mechanism. PPM Agent
 **emits** the rollup; the composed `PORTFOLIO.md` write-back is staged by `weekly-status-rollup`
@@ -1013,7 +1014,9 @@ structural conformance and content quality.
   restrict tracker reads, RAID entries, and Section 9 content to that project. Cross-
   project items are included only when they directly affect the named project (shared
   resource conflict, dependent milestone) and are flagged as cross-project in Section 9.4
-  (Stale follow-ups). Out-of-scope cross-project items are dropped from output.
+  (Stale follow-ups). A counterpart that belongs to another portfolio is shown as
+  `[OTHER PORTFOLIO]` (`portfolio-writeback-contract.md` § Portfolio scoping).
+  Out-of-scope cross-project items are dropped from output.
 - **Principal response vs. junior response:** Principal restricts to the named project
   and notes "1 cross-project item included because it affects [Project X]'s cutover."
   Junior dumps everything from PORTFOLIO.md context and produces a cluttered output that
