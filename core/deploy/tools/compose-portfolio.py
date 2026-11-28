@@ -1424,7 +1424,7 @@ def run_self_test() -> int:
       (single-portfolio-unchanged) AC3 — a one-record install composes the bytes the
                      pre-scoping composer composed on the same tree. CONTROL: the same
                      comparison on the two-portfolio tree differs.
-      (portfolio-membership) one portfolio: an unkeyed rollup is its member; two or
+      (portfolio-membership) one active portfolio: an unkeyed rollup is its member; two or
                      more: an unkeyed rollup is UNASSIGNED (in no output, named, exit
                      0); a key naming no record is UNRESOLVED, one naming an archived
                      record INACTIVE (both excluded, named); no record: a keyed rollup
@@ -1442,10 +1442,10 @@ def run_self_test() -> int:
       (portfolio-records) records are found by key, not filename (one in its folder, one
                      at the config top); a dot-leading copy is out of corpus; a duplicate
                      is counted once and reported; a near-miss type key is exit 2.
-      (portfolio-guards) exit 2 for: an unscoped run at a root holding records; an
+      (portfolio-guards) exit 2 for: an unscoped run at a root holding active records; an
                      unscoped run at a record-less root whose rollups name two
                      portfolios; a served id naming no active record; an unmigrated
-                     layout (the root composed file beside records); a non-slug flag.
+                     layout (the root composed file beside active records); a non-slug flag.
                      CONTROL: the zero-record committed fixture still composes both.
       (portfolio-recordless-stop) D-RecordlessTwoIds — a record-less root whose rollups
                      name two portfolios is stopped (exit 2) with the remedy "create the
