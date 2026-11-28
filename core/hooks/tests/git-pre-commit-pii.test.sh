@@ -65,6 +65,7 @@ if [ -z "$LIB_SRC" ]; then
 fi
 report "precondition: the resolver lib is findable in this layout" 1
 /bin/cp "$HOOK_SRC" "${GEOM}/core/hooks/git-pre-commit-pii.sh"
+/bin/cp "${SRC_DIR}/git-pre-commit-homes.sh" "${GEOM}/core/hooks/git-pre-commit-homes.sh"
 /bin/cp "$LIB_SRC" "${GEOM}/core/deploy/lib-instance-path.sh"
 HOOK="${GEOM}/core/hooks/git-pre-commit-pii.sh"
 STRAY_MODE="${GEOM}/core/hooks/git-pre-commit-pii.mode"

@@ -73,6 +73,7 @@ arm_setup() {
   HOMEDIR="${SBX}/$1/home"; WS="${HOMEDIR}/Claude"; REPO="${WS}/pmo-platform"; INST="${WS}/pmo-instance"
   /bin/mkdir -p "${REPO}/core/hooks" "${REPO}/core/deploy"
   /bin/cp "$HOOK_SRC" "${REPO}/core/hooks/git-pre-commit-pii.sh"
+  /bin/cp "$(dirname "$HOOK_SRC")/git-pre-commit-homes.sh" "${REPO}/core/hooks/git-pre-commit-homes.sh"
   /bin/chmod +x "${REPO}/core/hooks/git-pre-commit-pii.sh"
   /bin/cp "$LIB_SRC" "${REPO}/core/deploy/lib-instance-path.sh"
   /usr/bin/git -C "$REPO" init -q 2>/dev/null

@@ -76,6 +76,7 @@ report "precondition: the resolver lib is findable in this layout" "$([ -n "$LIB
 report "precondition: the pre-push hook exists (${PUSH_SRC})" "$([ -r "$PUSH_SRC" ] && echo 1 || echo 0)"
 [ -n "$LIB_SRC" ] && /bin/cp "$LIB_SRC" "${GEOM}/core/deploy/lib-instance-path.sh"
 /bin/cp "$GUARD_SRC" "${GEOM}/core/hooks/git-pre-commit-pii.sh"
+/bin/cp "${SRC_DIR}/git-pre-commit-homes.sh" "${GEOM}/core/hooks/git-pre-commit-homes.sh"
 [ -r "$PUSH_SRC" ] && /bin/cp "$PUSH_SRC" "${GEOM}/core/hooks/git-pre-push-pii.sh"
 /bin/chmod +x "${GEOM}/core/hooks/"*.sh
 GUARD="${GEOM}/core/hooks/git-pre-commit-pii.sh"
@@ -532,7 +533,7 @@ git init -q --bare "$SRV"
 git init -q "$SEED"; git -C "$SEED" symbolic-ref HEAD refs/heads/main
 git -C "$SEED" config user.name "Push Test"; git -C "$SEED" config user.email "push-test@example.invalid"
 git -C "$SEED" config commit.gpgsign false
-/bin/cp "$GUARD" "$PUSHHOOK" "${SEED}/core/hooks/"; /bin/cp "${GEOM}/core/deploy/lib-instance-path.sh" "${SEED}/core/deploy/"
+/bin/cp "$GUARD" "$PUSHHOOK" "${GEOM}/core/hooks/git-pre-commit-homes.sh" "${SEED}/core/hooks/"; /bin/cp "${GEOM}/core/deploy/lib-instance-path.sh" "${SEED}/core/deploy/"
 # main's public history carries a phone number already: a branch on it must not be re-read.
 /usr/bin/printf 'call %s\n' "$PHONE" > "${SEED}/old.txt"
 git -C "$SEED" add -A; git -C "$SEED" commit -q -m base
