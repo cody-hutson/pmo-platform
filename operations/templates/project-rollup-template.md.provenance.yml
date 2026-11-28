@@ -19,11 +19,11 @@ canonical_path: operations/templates/project-rollup-template.md
 owner: [OPERATOR_NAME]
 review_status: DRAFT
 created: 2026-07-17
-updated: 2026-08-03
+updated: 2026-11-28
 generated_by: release-pipeline v4.06
 reviewer: N/A
 canon: PMBOK 7 §Measurement Performance Domain
 canon_compat: none
-version: "v4.06"
+version: "v6.00"
 supersedes: N/A
 superseded_by: N/A

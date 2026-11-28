@@ -73,7 +73,7 @@ F-2  ANY flush-left line containing a colon becomes a top-level key. Only the
      leading-whitespace test at the top of the loop excludes a line; there is no
      effective guard beyond it. In particular a full-line "#" comment inside the
      block IS admitted as a key — the shipped
-     operations/templates/project-rollup-template.md parses to 14 top-level
+     operations/templates/project-rollup-template.md parses to 15 top-level
      keys, 2 of which are its own "#" comment lines — and so is ordinary prose:
      "This is prose: something" yields the key "This is prose".
      The internal-space guard below is UNREACHABLE and is frozen as unreachable.
