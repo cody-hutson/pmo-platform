@@ -52,7 +52,7 @@ A fix had to hold four constraints at once. A single-portfolio install had to co
 ## Consequences
 
 - Five skills and the composer cite one rule, and the cross-tier contract adopts it by citation.
-- A single-portfolio install and an install with no Portfolio record compose the same stakeholder-facing bytes as before.
+- A single-portfolio install and an install with no active Portfolio record compose the same stakeholder-facing bytes as before.
 - An install that gains an active Portfolio record must move its composed file into the portfolio's folder; until it does, every portfolio-level surface stops, loudly and by design.
 - The configuration reader's portfolio rung reads exactly one composed file or none; per-project selection of that rung remains its own work.
 - The prose surfaces' resolution of the served portfolio is the primary control and can drift; a deterministic served-portfolio resolver is the follow-up that would narrow it.

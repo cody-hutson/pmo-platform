@@ -117,7 +117,7 @@ Exit codes (fail-loud family contract; #1771-F1 separates [STALE] from drift):
                   no active Portfolio record, an id naming no active record, an unnamed
                   run at a root that holds one, an unmigrated layout, a malformed record,
                   a composed PORTFOLIO.md carrying a Portfolio record, one portfolio_id in
-                  conflicting states, a reserved portfolio_id, or a record-less root
+                  conflicting states, a reserved portfolio_id, or a root with no active record
                   whose rollups name two or more portfolios
   3  path-unresolvable — --root does not resolve, or --out's parent does not exist
 """
@@ -266,7 +266,7 @@ class ContractDrift(Exception):
 
 
 class PortfolioScopeError(Exception):
-    """A contract §7 configuration or calling error (no record for a scoped run, an
+    """A contract §7 configuration or calling error (no active record for a scoped run, an
     unnamed run on a scoped root, an unmigrated layout, a malformed or near-miss
     Portfolio record). Surfaced as exit 2; the composer emits no body."""
 
@@ -1249,7 +1249,7 @@ def compose(root: Path, as_of: date, portfolio=None, report=None) -> str:
     """Read every rollup under `root`, validate against the contract (raises
     ContractDrift on any type violation), select the served portfolio's member
     rollups (contract §7 — `portfolio` None = unscoped, legal only at a root whose
-    `_config/` holds no Portfolio record; raises PortfolioScopeError otherwise), and
+    `_config/` holds no active Portfolio record; raises PortfolioScopeError otherwise), and
     render the section registry. Returns the composed markdown (LF newlines, single
     trailing newline). `report`, when a dict, receives the §7 counts."""
     paths = discover_rollups(root)

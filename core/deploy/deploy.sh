@@ -8499,7 +8499,7 @@ cmd_check() {
     # The PORTFOLIO limb accepts both layouts portfolio-writeback-contract.md
     # § Portfolio scoping allows (the root file with no Portfolio record, else one
     # file per portfolio folder) and is labelled with both, so neither outcome names
-    # only the root file — the one that is unlawful beside a Portfolio record.
+    # only the root file — the one that is unlawful beside an active Portfolio record.
     _ops_label="$f"
     if [[ "$f" == "projects/_config/PORTFOLIO.md" ]]; then
       _ops_label="$f or projects/_config/<portfolio_id>/PORTFOLIO.md"

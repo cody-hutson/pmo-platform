@@ -196,7 +196,7 @@ flowchart LR
     comp -->|"stdout: S's members only; stderr: the report line"| stage[["weekly-status-rollup Section 6 — human-in-the-loop checkpoint"]]
     hc["health-check rollup, portfolio scope — S is the active project's portfolio"] -->|invokes| stage
     stage --> writer[("Cowork writer")]
-    writer --> out[/"PORTFOLIO.md in the served portfolio's folder; the config folder's own PORTFOLIO.md with no record"/]
+    writer --> out[/"PORTFOLIO.md in the served portfolio's folder; the config folder's own PORTFOLIO.md with no active record"/]
     recs --> direct["daily-status multi-project run; ppm-agent status; project-initiator Steps 5, 5a, B1, B6"]
     prj --> direct
     classDef automated fill:#D4EDDA,stroke:#28A745,color:#155724;

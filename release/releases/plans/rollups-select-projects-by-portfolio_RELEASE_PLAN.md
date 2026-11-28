@@ -73,7 +73,7 @@ reversibility: MODERATE / Confidence HIGH — one card on one branch, one pull r
   - N = 1: a project that names that portfolio, or names none, belongs to it; a key naming no record is excluded and listed as unresolved.
   - N ≥ 2: a project belongs to the portfolio its `portfolio_id` names; a project naming none is unassigned, in no output, listed to the operator. Nothing stops.
   - There is **no default portfolio**.
-- **One composed file per portfolio folder.** Each portfolio's composed file is `projects/_config/<portfolio_id>/PORTFOLIO.md`; an install with no Portfolio record keeps `projects/_config/PORTFOLIO.md`. While the root file exists beside a Portfolio record, every portfolio-level surface stops and names the move.
+- **One composed file per portfolio folder.** Each portfolio's composed file is `projects/_config/<portfolio_id>/PORTFOLIO.md`; an install with no active Portfolio record keeps `projects/_config/PORTFOLIO.md`. While the root file exists beside an active Portfolio record, every portfolio-level surface stops and names the move.
 - **The composer is the executable half.** `compose-portfolio.py --portfolio <id>` reads the Portfolio records itself, refuses a scoped run at a narrowed root, cross-checks each rollup against its own `PROJECT.md`, and reports excluded projects on standard error, never in the body. The prose surfaces' own text is the primary production control (D8 of the decision record).
 - **Scope:** 54 File Change Matrix rows (66 paths) from the Stage-5 delta, plus three rows the Stage-6 absorbed items add (the ADR, two cascade docs) and the two reference-pack skills' `SKILL.md` version fields — 71 paths. Size **XL**, measured. `core/governance/OPERATIONS.md` is Tier-0-floored: the operator commits its one line on this branch (split disposition); this spoke never edits it.
 - **Version:** bump-class major, provisional `v6.00`, binding at the Stage-12 claim.
@@ -298,7 +298,7 @@ The control census: risks=26 · control=R3, R4, R14, R16, R17, R18, R28 · owner
 | R14 | Real ids reach a public fixture or example | public text | High | Placeholder ids only; the depersonalization gate runs on the PR |
 | R15 | The Agent-Editability derivation goes stale if a hook file changes first | drift | Low | Re-read at Stage 6 entry (unchanged) |
 | R16 | The "7-field" count cascades | scope | Medium | The join key sits outside the seven; no stated count moves |
-| R17 | After deploy, an install that gains a record keeps its root file, so every surface stops | rollback | Low | The stop names the move; handoff step 3 moves it; Check 4 accepts either layout |
+| R17 | After deploy, an install that gains an active record keeps its root file, so every surface stops | rollback | Low | The stop names the move; handoff step 3 moves it; Check 4 accepts either layout |
 | R18 | A flag-less run at a narrowed root composes the keyed rollups under it | scope | Low | § Portfolio scoping states it; Section 6 never narrows; scoped narrowed runs are refused |
 | R19 | Prose resolution of the served portfolio in five skills is the primary production control and can drift | maintainability / disclosure | **High** | One rule home; the literal report line at every surface; citation probes; walkthroughs; the deterministic served-portfolio resolver held for the Stage 9 filing step |
 | R22 | Check 0(f) reads a migrated install as critical drift | outcome | Low | D-DriftCheckF (B): the narrowed correction carries it; the charter's Governance File Map row states the per-folder location |
@@ -408,22 +408,22 @@ Run immediately after Stage 12 Execute, in one operations session after `./deplo
    - Start from the operator's stated list of the portfolios the install runs — not from the keys projects carry.
    - For each, seed a record per `project-schema.md` § Entity-Seeding Protocol, Portfolio-tier step: `entity_type: Portfolio`, `lifecycle_state: active`, and its `portfolio_id` (a kebab slug, never `releases`), in **its own file** — never inside a composed `PORTFOLIO.md`, which the composer refuses. If the existing composed file's frontmatter carries Portfolio-record keys, move them into the record's own file.
    - Recommended location: `projects/_config/<portfolio_id>/`, created together with that portfolio's composed file (step 3).
-   - Read back: the distinct active `portfolio_id` values equal the operator's stated list (a stated portfolio with no record is the state this read-back exists to catch), and every `portfolio_id` a project carries names one of them.
+   - Read back: the distinct active `portfolio_id` values equal the operator's stated list (a stated portfolio with no active record is the state this read-back exists to catch), and every `portfolio_id` a project carries names one of them.
 2. **Backfill `portfolio_id`.**
-   - With two or more portfolios, every active project's `PROJECT.md` names its portfolio; an unkeyed project is unassigned and in no roll-up until it is keyed.
+   - With two or more active portfolios, every active project's `PROJECT.md` names its portfolio; an unkeyed project is unassigned and in no roll-up until it is keyed.
    - On an install that has been separating portfolios by manual override, backfill is **required at any number of portfolios, one included**: every project the behavioral correction kept out of a portfolio's roll-up carries the key that now keeps it out.
-   - Otherwise, with one portfolio, backfill is optional. The key is written with no inline comment.
+   - Otherwise, with one active portfolio, backfill is optional. The key is written with no inline comment.
 3. **Move the composed file and give every active portfolio its folder file.**
    - Move `projects/_config/PORTFOLIO.md` whole, frontmatter included (any `platform_config:` value survives), to `projects/_config/<portfolio_id>/PORTFOLIO.md` of the portfolio its projects belong to. On an install that already runs two portfolios by manual override, that is the first portfolio.
    - Create every other active portfolio's folder with an empty composed file in the section shape, so each active portfolio has exactly one folder file from the moment it is active. A record seeded later is seeded together with its folder file.
-   - Read back: no root file remains beside a record — the direct read; `deploy.sh --check` Check 4 reads OK on either layout and is not evidence of the move — and each active portfolio has exactly one folder file.
+   - Read back: no root file remains beside an active record — the direct read; `deploy.sh --check` Check 4 reads OK on either layout and is not evidence of the move — and each active portfolio has exactly one folder file.
 4. **Re-emit the rollups.** Run ppm-agent's rollup emission for every active project, so each rollup carries its `portfolio_id`. Read back: for each portfolio, the composer at the projects root exits 0 with `held for re-emission … none` and `PROJECT.md portfolio_id polluted … none`. The hold ends here.
 5. **Read back each portfolio's output.** At each portfolio's weekly Section 6 checkpoint, confirm:
-   - the member set is exactly the projects whose `PROJECT.md` names that portfolio (with one portfolio, every project that names it or names none);
+   - the member set is exactly the projects whose `PROJECT.md` names that portfolio (with one active portfolio, every project that names it or names none);
    - the report line's unassigned and unresolved fields read `none`;
    - no project of another portfolio appears, and — the sensitivity arm — no project the manual-override correction kept out of a portfolio appears in that portfolio's output (name those projects first, from the correction's own text).
 6. **Narrow the behavioral correction; do not remove it.**
-   - It now covers Daily Processing Cycle check 0(d), step 14, and check 0(f)'s `PORTFOLIO.md` item, and it states that `projects/_config/PORTFOLIO.md` is **not recreated** beside a Portfolio record (recreating it stops every portfolio-level surface). Those stay in force until #8546 ships; step 14 and check 0(f) are routed there.
+   - It now covers Daily Processing Cycle check 0(d), step 14, and check 0(f)'s `PORTFOLIO.md` item, and it states that `projects/_config/PORTFOLIO.md` is **not recreated** beside an active Portfolio record (recreating it stops every portfolio-level surface). Those stay in force until #8546 ships; step 14 and check 0(f) are routed there.
    - Remove the rest: project-initiator Steps 5 and 5a no longer need manual overrides.
    - The interim read-back after each new project continues for those daily-cycle steps until #8546 ships.
 7. **Recompose the workspace charter** with the next workspace update, so its portfolio rows appear. The deployed rules mirror is re-laid by `deploy.sh --deploy`.
@@ -485,6 +485,7 @@ Recorded on #9180 (comment 7234535888): **split** — the Engineering spoke buil
 | DEV-22 | 7 → 6 (Phase E) | Tier 1 [ADJUST], Stage 7 F-07: the PR body's Summary bullet on the `OPERATIONS.md` row and the Implementation row's Key Commits cell are brought to the head, and its Deviation Log range reads DEV-1 to DEV-22; the Issue References block is unchanged | Stage 7 Pass 1 F-07; the hub's Phase E routing (fix-now) |
 | DEV-23 | 7 → 6 (Phase E) | Tier 1 [ADJUST], Stage 7 Pass 2 F-09: the contract's two descriptions of weekly Section 6's composer call (§ 3 and the Consume paragraph of § 5) and the Caller column of the composer's row in `core/deploy/tools/README.md` now pass `--portfolio` only on an install that holds an active Portfolio record, the wording weekly's Section 6 and the composer's help already carry and the condition the composer enforces. One word at three sites; no criterion, branch or package changes | Stage 7 Pass 2 F-09 and D1; the hub's Pass 2 routing (fix-now) |
 | DEV-24 | 7 → 6 (Phase E) | Tier 1 [ADJUST], Stage 7 Pass 2 F-08: the ADR's Consequences line on migration now says an install that gains an active Portfolio record moves its composed file, matching D4 and contract § 7.5, which stop only beside an active record. Batched into the F-09 commit | Stage 7 Pass 2 F-08; the hub's Pass 2 routing (fix-now, batched) |
+| DEV-25 | 7 → 6 (Phase E) | Tier 1 [ADJUST], Stage 7 Pass 3 F-11 and F-12, routed by class: every clause in this release's files that says what a surface or the composer does on a count or state of Portfolio records now says active, as contract § 7.1 and the composer count. That is 23 clauses: the tools README's exit-2 sentence (F-11), the contract's § 7.6 output label (F-12), the ADR's unchanged-bytes Consequence, the workspace-setup mapping row, one `deploy.sh` comment, the project-schema `portfolio_id` cell, three composer docstrings, and this plan's Summary, Risk Register R17, post-deploy handoff and Change Description. Kept as worded: the rows outside the rule's home that name where the composed file lives (Pass 1 D2), seeding, the remedy, definitions, test and fixture text, and the records of measurements and decisions, the ratified Outcome Statement among them. No criterion, branch, output byte or package changes | Stage 7 Pass 3 F-11 and F-12; the hub's Pass 3 routing (fix-now, by class) |
 
 ## Verification Evidence
 
@@ -573,10 +574,10 @@ The first head read three gates red. The operator-memory-reference and issue-ref
 
 ### Outcome
 
-Every portfolio-level surface now selects its project set by portfolio, under one rule in `core/standards/portfolio-writeback-contract.md` § Portfolio scoping. The weekly roll-up and its composer, the daily-status multi-project run, the health-check portfolio audit, the ppm-agent status answer, and project-initiator's registration and closure each serve one portfolio per run. Each portfolio's composed file lives in its own folder, `projects/_config/<portfolio_id>/PORTFOLIO.md`. An install with one portfolio, or with no Portfolio record, composes the same stakeholder-facing bytes as before.
+Every portfolio-level surface now selects its project set by portfolio, under one rule in `core/standards/portfolio-writeback-contract.md` § Portfolio scoping. The weekly roll-up and its composer, the daily-status multi-project run, the health-check portfolio audit, the ppm-agent status answer, and project-initiator's registration and closure each serve one portfolio per run. Each portfolio's composed file lives in its own folder, `projects/_config/<portfolio_id>/PORTFOLIO.md`. An install with one portfolio, or with no active Portfolio record, composes the same stakeholder-facing bytes as before.
 
 - **The rule.** Membership turns on the number of active portfolios. With none, surfaces run unscoped, and they stop to name the records to create when the projects already name two or more portfolios. With one, a project that names it or names none belongs to it. With two or more, a project belongs to the portfolio its `portfolio_id` names, and a project that names none is unassigned: listed to the operator and rolled up nowhere. There is no default portfolio.
-- **The composer.** `compose-portfolio.py --portfolio <id>` reads the Portfolio records itself and composes only that portfolio's members. It refuses a scoped run at a narrowed root and an unscoped run at a root that holds a record. It holds a rollup that disagrees with its own `PROJECT.md`, masks a member's references to another portfolio's projects as `[OTHER PORTFOLIO]`, and reports excluded projects on standard error, never in the body. Fifteen self-test arms carry it, in two RED/GREEN pairs.
+- **The composer.** `compose-portfolio.py --portfolio <id>` reads the Portfolio records itself and composes only that portfolio's members. It refuses a scoped run at a narrowed root and an unscoped run at a root that holds an active record. It holds a rollup that disagrees with its own `PROJECT.md`, masks a member's references to another portfolio's projects as `[OTHER PORTFOLIO]`, and reports excluded projects on standard error, never in the body. Fifteen self-test arms carry it, in two RED/GREEN pairs.
 - **The cascade.** `deploy.sh` rung 2 reads exactly one composed file or none, and Check 4 and the report accept either lawful layout. The charter template, the operations-bridge rule, the config docs, the disciplines and two skill reference packs name the per-folder location.
 
 ### Issues resolved
@@ -588,9 +589,9 @@ Every portfolio-level surface now selects its project set by portfolio, under on
 ### Key decisions
 
 - **No default portfolio** (Stage-5 round 1): an unkeyed project on a multi-portfolio install is unassigned, never defaulted.
-- **Same filename per portfolio folder** (D-ComposedOutput): no portfolio is special-cased; the root file stays only for an install with no record.
-- **D-RecordlessTwoIds (B):** a record-less install whose projects name two or more portfolios stops and names the records to create.
-- **D-UnresolvedAtOnePortfolio (A):** a key naming no record is excluded and listed even with one portfolio, so a second portfolio's projects never compose into the first's output during the move from one to two.
+- **Same filename per portfolio folder** (D-ComposedOutput): no portfolio is special-cased; the root file stays only for an install with no active record.
+- **D-RecordlessTwoIds (B):** an install with no active record whose projects name two or more portfolios stops and names the records to create.
+- **D-UnresolvedAtOnePortfolio (A):** a key naming no record is excluded and listed even with one active portfolio, so a second portfolio's projects never compose into the first's output during the move from one to two.
 - **D-RecordNotComposedFile (A):** a composed `PORTFOLIO.md` is never a Portfolio record (exit 2).
 - **D-DriftCheckF (B):** the daily-cycle check 0(f) item is carried by the narrowed behavioral correction; `OPERATIONS.md` gets one operator-executed line, the rung-2 row.
 - **D-Resolver (C):** per-project selection of the config rung stays with its own card; this release keeps rung 2 continuous across the move.
