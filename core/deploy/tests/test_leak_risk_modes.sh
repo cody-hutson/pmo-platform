@@ -350,10 +350,11 @@ if need_lib "T8024-L1: the population equals the expected set"; then
     "$([ "${upd_root}" -ge 1 ] && [ "${upd_inst}" -ge 1 ] && echo 1 || echo 0)" \
     "update.sh root lines ${upd_root}, -instance- lines ${upd_inst}"
 
-  # L3 — enforce sets the policy.
-  out="$(lib_leak_risk_enforce_for "${WS_L}" 0 2>&1)"
+  # L3 — enforce sets the policy. Each library call runs in this shell, its output to a
+  # file, so the counters it sets are the ones read here.
+  lib_leak_risk_enforce_for "${WS_L}" 0 > "${SBX}/l3.out" 2>&1
   changed="${LIB_LEAK_RISK_CHANGED:-x}"
-  lib_leak_risk_enforce_for "${WS_L}" 0 >/dev/null 2>&1
+  out="$(cat "${SBX}/l3.out")"
   report "T8024-L3: enforce counts every seeded off-policy member once (${L_OFF_MEMBERS})" \
     "$([ "${changed}" = "${L_OFF_MEMBERS}" ] && echo 1 || echo 0)" "LIB_LEAK_RISK_CHANGED=${changed}"
   allok=1; bad=""
@@ -374,9 +375,8 @@ if need_lib "T8024-L1: the population equals the expected set"; then
   report "T8024-L3: one summary line" "$([ "$(count_lines "${out}" '^leak-risk modes: ')" = 1 ] && echo 1 || echo 0)"
 
   # L4 — idempotent.
-  out="$(lib_leak_risk_enforce_for "${WS_L}" 0 2>&1)"
-  out4="${out}"
-  lib_leak_risk_enforce_for "${WS_L}" 0 >/dev/null 2>&1
+  lib_leak_risk_enforce_for "${WS_L}" 0 > "${SBX}/l4.out" 2>&1
+  out4="$(cat "${SBX}/l4.out")"
   report "T8024-L4: a second enforce changes nothing" "$([ "${LIB_LEAK_RISK_CHANGED:-x}" = 0 ] && echo 1 || echo 0)" \
     "LIB_LEAK_RISK_CHANGED=${LIB_LEAK_RISK_CHANGED:-x}"
   report "T8024-L4: and prints no LEAK-RISK-MODE: line" "$([ "$(count_lines "${out4}" '^LEAK-RISK-MODE: ')" = 0 ] && echo 1 || echo 0)"
@@ -400,8 +400,8 @@ if need_lib "T8024-L1: the population equals the expected set"; then
     "LIB_LEAK_RISK_FINDINGS=${LIB_LEAK_RISK_FINDINGS:-x}"
   d10="$(primary "${WS_L}" S-10)"; d10="${d10%/*}/.${B10}"
   chmod 644 "${d10}"
-  fout="$(lib_leak_risk_findings_for "${WS_L}" 2>&1)"
-  lib_leak_risk_findings_for "${WS_L}" >/dev/null 2>&1
+  lib_leak_risk_findings_for "${WS_L}" > "${SBX}/l6.out" 2>&1
+  fout="$(cat "${SBX}/l6.out")"
   report "T8024-L6: one dot-prefixed S-10 backup at 0644 is exactly one finding" \
     "$([ "${LIB_LEAK_RISK_FINDINGS:-x}" = 1 ] && echo 1 || echo 0)" "LIB_LEAK_RISK_FINDINGS=${LIB_LEAK_RISK_FINDINGS:-x}"
   report "T8024-L6: the finding names S-10 and the path" \
@@ -410,8 +410,8 @@ if need_lib "T8024-L1: the population equals the expected set"; then
   # L6b — owner-only deviations are INFO (CD-3).
   p9="$(primary "${WS_L}" S-09)"
   chmod 400 "${p9}"; chmod 400 "${T1}/a"
-  fout="$(lib_leak_risk_findings_for "${WS_L}" 2>&1)"
-  lib_leak_risk_findings_for "${WS_L}" >/dev/null 2>&1
+  lib_leak_risk_findings_for "${WS_L}" > "${SBX}/l6b.out" 2>&1
+  fout="$(cat "${SBX}/l6b.out")"
   report "T8024-L6b: an S-09 primary at 0400 and an S-40 file at 0400 are no FAIL" \
     "$([ "${LIB_LEAK_RISK_FINDINGS:-x}" = 0 ] && echo 1 || echo 0)" "LIB_LEAK_RISK_FINDINGS=${LIB_LEAK_RISK_FINDINGS:-x}"
   report "T8024-L6b: they are two INFO lines, naming S-09 and S-40" \
