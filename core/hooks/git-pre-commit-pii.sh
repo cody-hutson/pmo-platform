@@ -86,9 +86,10 @@
 #     GIT_EXTERNAL_DIFF, diff.external, textconv drivers and an attribute marking paths
 #     binary (`-diff`) cannot replace or hide the added lines.
 #   - The resolver's variables (PMO_LOCALIZED_NEEDLES, PMO_INSTANCE_PATH,
-#     CLAUDE_WORKSPACE_ROOT, and HOME through its default) can ADD to the coworker/org
-#     scan but never remove from it: the instance home beside the guard's own install
-#     is always read as well. See "The anchored home" below.
+#     CLAUDE_WORKSPACE_ROOT, HOME through its default, and the class resolvers'
+#     PMO_PLATFORM_CONFIG_ROOT, XDG_DATA_HOME and PMO_SRC_ROOT) can ADD to the
+#     coworker/org scan but never remove from it: the instance home beside the guard's
+#     own install is always read as well. See "The anchored home" below.
 # PATH (and GIT_EXEC_PATH, which git puts at the head of PATH) is NOT covered: a
 # planted executable named like a command used here still runs. This hook is not the
 # only PII boundary (commands that create commits without running pre-commit skip it
@@ -232,10 +233,18 @@ if [[ "$_pii_lib_loaded" == "1" ]]; then
     */core/hooks) anchor_ws="$(cd "${_pii_hook_dir}/../../.." 2>/dev/null && pwd -P || true)" ;;
   esac
 fi
-# Run one resolver function rooted at the anchor, with the env overrides cleared.
-# CLAUDE_WORKSPACE_ROOT is set to the anchor, so HOME is never consulted either.
+# Run one resolver function rooted at the anchor, with every input a commit-command
+# prefix could use to move it cleared: the two instance overrides (PMO_INSTANCE_PATH,
+# PMO_LOCALIZED_NEEDLES) and the three the class resolvers read (PMO_PLATFORM_CONFIG_ROOT,
+# XDG_DATA_HOME, PMO_SRC_ROOT). CLAUDE_WORKSPACE_ROOT is set to the anchor, and HOME is
+# pinned to /var/empty — a home that holds no readable operator.toml — so the anchored
+# read is a function of the guard's install geometry alone, whatever the committer's
+# HOME. Consequence, recorded with the class-resolver decision: the anchored floor stays
+# workspace-keyed when the leak-risk class moves to its per-user home, and the leak-risk
+# migration states how it reaches that home before the container is retired.
 _pii_anchored() {
-  ( unset PMO_INSTANCE_PATH PMO_LOCALIZED_NEEDLES; CLAUDE_WORKSPACE_ROOT="$anchor_ws"; "$1" )
+  ( unset PMO_INSTANCE_PATH PMO_LOCALIZED_NEEDLES PMO_PLATFORM_CONFIG_ROOT XDG_DATA_HOME PMO_SRC_ROOT
+    CLAUDE_WORKSPACE_ROOT="$anchor_ws"; HOME=/var/empty; "$1" )
 }
 anchor_needles=""; anchor_instance_dir=""; anchor_legacy_dir=""
 if [[ -n "$anchor_ws" ]]; then
