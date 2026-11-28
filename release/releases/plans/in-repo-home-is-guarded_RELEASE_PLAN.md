@@ -20,7 +20,7 @@ reversibility: MODERATE / Confidence HIGH — one release branch, one pull reque
 
 **Release class:** `novel`; Stage 9 review depth **Deep**.
 
-> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #9203 and is amended, in order, by: the Stage-4 gate's Decision Recorded (plan approved as recommended; D-GuardScope (A); D-RequiredCheck (B); D-ReleaseClass `novel`; D-Version minor as a recorded determination; D-C SINGLE; P0), then the three Stage-5 designs and their adversarial reviews as the Collective Review adopted them, then the Collective Review scope-lock Decision Recorded. Where the plan and a later record differ, the later record wins, and each change is recorded in § Deviation Log. The #8022 rows of the File Change Matrix and the Verification Plan are amended to its design's resolved set, and the #8023 rows to its Stage-5 inventory as the Collective Review amended it, each by that card's Engineering spoke; the #8024 rows stay as Stage 4 planned them until its own spoke amends them in its slice. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
+> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #9203 and is amended, in order, by: the Stage-4 gate's Decision Recorded (plan approved as recommended; D-GuardScope (A); D-RequiredCheck (B); D-ReleaseClass `novel`; D-Version minor as a recorded determination; D-C SINGLE; P0), then the three Stage-5 designs and their adversarial reviews as the Collective Review adopted them, then the Collective Review scope-lock Decision Recorded. Where the plan and a later record differ, the later record wins, and each change is recorded in § Deviation Log. The #8022 rows of the File Change Matrix and the Verification Plan are amended to its design's resolved set, the #8023 rows to its Stage-5 inventory as the Collective Review amended it, and the #8024 rows to its Stage-5 design as the Collective Review amended it, each by that card's Engineering spoke. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
 
 ---
 
@@ -283,6 +283,18 @@ The #8023 slice lands as commits in this order after the #8022 slice, each pushe
 7. **The durability copy.** repo-next copied from the git index plus `.git`.
 8. **The placement standard.** The tree-walk clause of the § Protections working-state cell.
 
+### #8024 slice order, as designed (Stage 5 design on #9213, as amended at the Collective Review)
+
+The #8024 slice lands as commits in this order after the #8023 slice, each pushed when it is coherent. Messages carry the trailing `(#8024)`, never a close-family verb before a number, and name leak-risk surfaces by register row, never by file name.
+
+1. **The plan.** These #8024 rows of § File Change Matrix and § Verification Plan, their § Deviation Log rows, § Named Residuals and § Operational Deployment Manifest.
+2. **Tests first (RED).** `core/deploy/tests/test_leak_risk_modes.sh` with its four allowlist forms and its `REGRESSION_MEMBERS` row, and the T8024-V arms in `core/deploy/tests/test_validate_install.sh`. The new suite runs through the install regression suite; its RED run, and the validator suite's, are read against the tree with no library.
+3. **The library.** `core/deploy/lib-leak-risk-modes.sh`.
+4. **The creation sites and the passes.** The six scaffold copies and the extractor's `touch` under `umask 077`; the installer's Section 15f pass; the update path's Phase 2.5f pass, its S-40 copy created at the policy, and its exit-reduction term.
+5. **The validator.** Check A11 and the Mode A count cascade.
+6. **The placement standard.** The § Protections Leak-risk delivery cell, and register row S-48.
+7. **The Change Description and the pull-request body**, for all three slices.
+
 ### Agent-Editability Read
 
 **Derivation:** controls read at commit `8ed5e273`.
@@ -381,7 +393,7 @@ Parse quality: 3 cards parsed, 0 deferred, 0 parse-failed (Affected Files presen
 
 ## File Change Matrix
 
-The release is the #8022 rows below, as its Stage-5 design resolved them, the #8023 rows as its Stage-5 inventory and the Collective Review resolved them, and the #8024 rows as Stage 4 planned them. Each later spoke promotes or retires its own card's CONDITIONAL rows in its slice, and records the change in § Deviation Log.
+The release is the #8022 rows below, as its Stage-5 design resolved them, the #8023 rows as its Stage-5 inventory and the Collective Review resolved them, and the #8024 rows as its Stage-5 design and the Collective Review resolved them. Each spoke promoted or retired its own card's CONDITIONAL rows in its slice, and recorded the change in § Deviation Log.
 
 ```
 # ── #8022 — always delivered (the Stage-5 design's resolved set, as amended at the Collective Review) ──
@@ -425,14 +437,21 @@ core/deploy/deploy.sh                                            NOT EDITED   # 
 core/deploy/tools/check-doc-links.py                             NOT EDITED   # CONDITIONAL:INVENTORY-NAMES-DOC-LINKS did not fire: S; Check 14 and link-check.yml scope untouched
 core/deploy/tools/check-canonical-structure.sh                   NOT EDITED   # CONDITIONAL:INVENTORY-NAMES-CANONICAL did not fire: S, a skill's references/
 core/deploy/allowlists/selftest-coverage-manifest.txt            NOT EDITED   # CONDITIONAL:NEW-SELFTEST-TOOL did not fire: the new test dispatches no --self-test
-# ── #8024 — always delivered (as Stage 4 planned; its spoke amends these in its slice) ──
-docs/scripts/setup-workspace.sh                                  edit
-update.sh                                                        edit
-docs/scripts/validate-install.sh                                 edit
-core/deploy/tests/test_validate_install.sh                       edit
-# ── #8024 — CONDITIONAL:NEW-INSTALL-MODE-TEST ──
-core/deploy/tests/test_*mode*.sh                                 add    CONDITIONAL:NEW-INSTALL-MODE-TEST
-core/deploy/tests/test_install_end_to_end.sh                     edit   CONDITIONAL:INSTALL-ARM-IN-E2E
+# ── #8024 — always delivered (the Stage-5 design's resolved set, as amended at the Collective Review) ──
+core/deploy/lib-leak-risk-modes.sh                               add    # the population, the setter and the read-only findings; files 0600, folders 0700, S-15 included (D-ScanExec B)
+docs/scripts/setup-workspace.sh                                  edit   # the Section 15f pass in fresh_install and rebootstrap; two scaffold copies under umask 077
+update.sh                                                        edit   # the Phase 2.5f pass; the S-40 copy created at the policy, uncounted; two scaffold copies; the exit-reduction term
+install.sh                                                       edit   # two fallback scaffold copies under umask 077 (DEV-29)
+core/deploy/extract-roster-needles.sh                            edit   # the S-08 touch under umask 077, the seventh creation site (adversarial PR-3, DEV-35)
+docs/scripts/validate-install.sh                                 edit   # check A11 INSTALL-LEAK-RISK-MODES in both Mode A sub-modes; the count cascade
+core/deploy/tests/test_validate_install.sh                       edit   # the T8024-V arms and new_leak_arm; arm 5 copies the library (PR-2); one count-free line
+core/deploy/tests/test_leak_risk_modes.sh                        add    # CONDITIONAL:NEW-INSTALL-MODE-TEST fired (100755)
+core/config/allowlists/script-execution-allowlist.txt            edit   # four invocation forms for the new suite
+core/deploy/tests/run-install-regression.sh                      edit   # one REGRESSION_MEMBERS row — CI wiring: "Install/onboarding/update regression suite (macOS)"
+core/standards/instance-data-placement-standard.md               edit   # § Protections Leak-risk delivery cell in the present tense; register row S-48 for the second PII scan list (CD-2)
+# ── #8024 — CONDITIONAL rows resolved NOT FIRED ──
+core/deploy/tests/test_install_end_to_end.sh                     NOT EDITED   # CONDITIONAL:INSTALL-ARM-IN-E2E did not fire: it installs from the real checkout, so the /local-state/ near-miss cannot be planted there
+.github/workflows/install-tests.yml                              NOT EDITED   # CONDITIONAL:REGRESSION-STEP-BUDGET did not fire: it fires above about 101 minutes on either gating step (adversarial FM-4, DEV-38)
 ```
 
 
@@ -550,9 +569,9 @@ Considered and dropped: a CIAC over the placement standard's § Protections word
 | #8023 | AC-1 | `grep -c -F "T8023-K1" core/deploy/tests/test_tree_walk_skips_homes.sh` at least 1 [READER-GRADED — the Stage-5 walker inventory, one row per walker with its root and class, read against the diffs of the five changed walkers (the verifier's glob resolver, the import tracer and the durability copy enumerate the git index; the budget scan is rooted at the three module trees; both tracers resolve an omitted root to their own checkout), with the census arms T8023-K1 and T8023-K2 reading 0 unmarked and 0 stale] | every inventoried walker skips the homes or reads tracked files only; the durability copy is graded here |
 | #8023 | AC-2 | `grep -c -F "T8023-M" core/deploy/tests/test_tree_walk_skips_homes.sh` at least 4 [READER-GRADED — the install regression suite's member line for this test reads 0 failed: T8023-S1 to S4 equal on the planted fixture, T8023-M1 to M4 differ, T8023-A3 and A4 equal from a non-git parent, T8023-E3 non-empty] | the walkers the test runs report the clean findings with 1,000 files planted per home; each mutant reports a difference |
 | #8023 | AC-3 | `grep -c -F "T8023-N" core/deploy/tests/test_tree_walk_skips_homes.sh` at least 4 [READER-GRADED — T8023-N1 to N4 pass on the clean and the planted fixture] | each similarly named tracked path is still walked |
-| #8024 | AC-1 | [DEFERRED — the install-mode arm, in the test file Stage 5 picks, run by the install regression suite] | every register Leak-risk file 0600; leak-risk-only folders 0700 |
-| #8024 | AC-2 | `grep -c -F "T8024-V" core/deploy/tests/test_validate_install.sh` at least 1 | ≥1 (baseline 0); behaviour graded by the install regression CI job |
-| #8024 | AC-3 | [DEFERRED — the same install test's near-miss arm] | the working-state fixture file keeps its mode |
+| #8024 | AC-1 | `grep -c -F "T8024-I1" core/deploy/tests/test_leak_risk_modes.sh` at least 1 [READER-GRADED — the install regression suite's member line for this test reads 0 failed: the install arms T8024-I0 to I6, the update arms T8024-U1 to U5, the surfaces-only arm T8024-S1, the creation-site arms T8024-F1 to F3 and X1, and the population arms T8024-L0 to L9] | after install and after a full update, every file the Leak-risk register rows name at a path the install path resolves, backups included, reads 0600, and every S-40 copy reads 0700 on each folder and 0600 on each file; `--surfaces-only` runs no pass |
+| #8024 | AC-2 | `grep -c -F "T8024-V1" core/deploy/tests/test_validate_install.sh` at least 1 [READER-GRADED — the arms T8024-V1 to V12, run by the install regression suite and directly] | V1 prints `[A11] FAIL` naming S-09 and 644; any group or other bit FAILs A11, and an owner-only deviation is an INFO beside a PASS |
+| #8024 | AC-3 | `grep -c -F "T8024-N1" core/deploy/tests/test_leak_risk_modes.sh` at least 1 [READER-GRADED — the near-miss arms T8024-N1 to N5, at library level, after the install and after an update, and T8024-V3] | the 0640 working-state file under `/local-state/` and its 0750 folder keep their modes |
 
 No row expects a null result: enumerated over the 11 per-issue rows and the one CIAC. Stage 6 C4 self-verification runs `release/tools/verify-release-plan.sh` on the committed plan.
 
@@ -857,3 +876,43 @@ Recorded on #9205 (comment 7236696308): **CR-1** — scope-lock with the recomme
 | DEV-26 | 6 | **Adversarial PR-4.** The design's reason for E over A on the budget scan is corrected: A keeps the filesystem walk on a non-git root, so it would not zero the agents row. E is chosen because the script's roster already pins the three module trees and every tracked agent file sits under them. The decision is unchanged | Collective Review (folded into the Stage-6 spec) |
 | DEV-27 | 6 | **DEV-18 resolved.** The `fcm-delivery` first-segment enum gains `analysis` and `local-state`, so it lists every top-level directory the repository tracks: its modules, `docs`, `packages`, `.github`, and the three in-repo homes, each tracked as its README. It is a path-recognition list, not a home list under CIAC-1: it carries no README exception, excludes nothing, and no walk reads it, and a home missing from it degrades to an uninterpreted row (FCM-COVERAGE non-PASS), never a silent pass. The plan's two top-level-file rows (`update.sh`, `.gitignore`) stay uninterpreted by design (arm A13 pins a top-level row with no directory as uninterpreted), so FCM-COVERAGE still reads SKIP on this plan. New suite arm A14, RED before the enum change and GREEN after. Tier 1 [ADJUST] | #8022 finding, routed to the #8023 slice by the hub |
 | DEV-28 | 6 | **Adversarial FM-3 wording.** The placement standard's tree-walk clause states only what holds and what the test enforces, scoped to the walkers the test runs: they skip the homes by reading the git index or by rooting below the repository root, and the test fails when one of them reads a home, or when a new root walk of the shapes it lists appears unmarked. The design's first clause ("every tree walker ... enumerates the git index or a named subtree") is not written, because the inventory's ignore-bound, root-listing, outside-the-repository, CI-only and sweep rows do neither | Collective Review (CR-1) |
+| DEV-29 | 6 | **#8024 File Change Matrix resolved** to its Stage-5 design as the Collective Review amended it. CONDITIONAL:NEW-INSTALL-MODE-TEST fires (`core/deploy/tests/test_leak_risk_modes.sh`); INSTALL-ARM-IN-E2E and REGRESSION-STEP-BUDGET do not. Rows added beyond the Stage-4 matrix: the library, `install.sh` (its two fallback scaffolds are creation sites; design item 10), the extractor (DEV-35), the placement standard, and the new suite's allowlist and roster rows. Tier 1 [ADJUST] | #8024 Engineering spoke |
+| DEV-30 | 6 | **D-ScanExec B.** The S-15 script is run as `bash <path>`, so it takes 0600 like every other leak-risk file. The library carries one file mode and one folder mode and no executable kind; the design's S-15 clause in the § Protections cell is not written; arms T8024-I2, L3, U1 and V6 expect 0600 | operator, Collective Review |
+| DEV-31 | 6 | **CD-2.** The second PII scan list, the S-15 script's needle file, joins the population as register row **S-48** (Leak-risk, source `design`), through the five steps of the standard's new-surface checklist: classified Leak-risk as an operator scan list (§ Classifying a surface, question 3); registered with no path token, so no token-registry row; no provisioning step, because the operator places it and nothing writes it; protected by the permission policy this release delivers; validated by A11 and by the reads recorded in the spoke output. Its leaf is the one the tracked `.gitignore` scan-list line already names; the library's backup predicate covers its dot-prefixed form. Everywhere outside the register row it is named by row | Collective Review (CR-1) |
+| DEV-32 | 6 | **CD-3.** The setter stays exact (0600 for a file, 0700 for a folder). The validator's A11 FAILs a leak-risk file or folder that has any group or other permission bit, and reports any other deviation from the exact mode (a 0400 file, for instance) as an INFO beside its verdict. Arms T8024-L6b and T8024-V11 | Collective Review (CR-1) |
+| DEV-33 | 6 | **Adversarial FM-1.** Every public library function returns 0 whatever a `find` or a `chmod` does, so a host under `set -Eeuo pipefail` is never stopped by the pass; a failure is a counter and a `WARN-LEAK-RISK-MODE:` line on stderr. "Changed" is read from the post-state: a member counts as changed only when a re-read shows fewer off-policy entries than before, and a member still off the policy counts as failed, so a `chmod` that returns 0 and changes nothing is a failure, never a change, and a failure alone never sets the update path's change flag. The folder pass runs batched and then once more per folder in pre-order, so a folder made readable is descended in the same pass. Arms: T8024-L8 (a no-op `chmod`), L9 (an unreadable folder chain), E1 to E3 (the contract under `set -Eeuo pipefail`), and the immutable-file arms T8024-I6 and U1, which require the install to exit 0, the update to reach its hook-refresh phase, a warning naming the file, and A11 to FAIL naming it | Collective Review (folded into the Stage-6 spec) |
+| DEV-34 | 6 | **Adversarial PR-2.** A11 SKIPs only when the instance resolver is absent from the source repository too, the shape of every pre-existing validator fixture; with the resolver present and the leak-risk library absent it FAILs ("cannot be evaluated"). The design's V7 is split into V7a (SKIP) and V7b (FAIL), and arm 5 of `test_validate_install.sh`, which copies the resolver into its fixture, copies the library too | Collective Review (folded into the Stage-6 spec) |
+| DEV-35 | 6 | **Adversarial PR-3.** `core/deploy/extract-roster-needles.sh` creates S-08 with `touch` when it is absent, so that `touch` runs under `umask 077` as the seventh creation site, with arm T8024-X1 and a mutant sensitivity arm. The runtime writers of S-09 and S-10 between updates are a named residual (§ Named Residuals) | Collective Review (folded into the Stage-6 spec) |
+| DEV-36 | 6 | **Adversarial PR-5.** T8024-N3 is worded as a glob-width guard: the S-40 pattern does not reach an S-41-shaped copy. S-41's conditional Leak-risk content is a named residual for the installer milestone | Collective Review (folded into the Stage-6 spec) |
+| DEV-37 | 6 | **Adversarial FM-3.** The S-40 walk is measured on a fixture the size of the largest live copy (about 139,000 files in about 21,800 folders) by the opt-in arm T8024-P1, which runs only when `T8024_MEASURE_FILES` is set; the times are recorded in the spoke output. The walk's cost bound is the installer milestone's S-40 retention rule (§ Named Residuals) | Collective Review (folded into the Stage-6 spec) |
+| DEV-38 | 6 | **Adversarial FM-4.** CONDITIONAL:REGRESSION-STEP-BUDGET fires above about 101 minutes on either gating step of `.github/workflows/install-tests.yml` — the main regression step and the fresh-HOME step, each budgeted at 135 minutes with a third of headroom. When it fires, both step budgets and the job limit are re-derived by the job header's rule. It is read on the release PR's CI run | Collective Review (folded into the Stage-6 spec) |
+| DEV-39 | 6 | **Adversarial FM-5.** The register-parity arm T8024-L0 parses rows with `S-[0-9]+`, and its sensitivity arm plants S-100 | Collective Review (folded into the Stage-6 spec) |
+| DEV-40 | 6 | **Adversarial PR-1 (AL-LOW).** The library's header lists the literals it composes outside the resolver (the S-10, S-15, S-33 and S-48 leaves, the backup-name predicate and the S-40 folder glob) as repoint targets for the one-resolver release; the hub records that obligation against that release. D1 stands | Collective Review (PR-1 recorded obligation) |
+| DEV-41 | 6 | **Cascade N/A rows.** `core/process-catalog/engineering-harness/validate-install.md` (its Mode A count and check list, lines 25 and 46) and `install-platform.md` (line 72) will not list A11 or the new count; both are outside the matrix, stale already, and their citations are rewritten at Stage 12 | Collective Review (the adversarial review's cascade rows) |
+| DEV-42 | 6 | **Test-design additions beyond the design, each within its arms' intent.** The four override variables are unset at the top of `test_validate_install.sh` rather than per call; the creation-site arms (T8024-F1 to F3) run every scaffold copy of the three scripts, extracted, against an empty sandbox, each with a mutant that drops the `umask 077` wrapper and must create at 0644; leaf-source parity arms (T8024-L2b) hold the library's composed leaves equal to the template, register row, `deploy.sh` line and `.gitignore` line each one copies; T8024-V11 (an owner-only INFO) and V12 (S-48 at 0644 FAILs) are added; T8024-S1 pins that `--surfaces-only` runs no pass. Tier 1 [ADJUST] | #8024 Engineering spoke |
+
+## Named Residuals
+
+What this release leaves for a later one, each with its owner. Every residual is a known gap, not a defect of this release.
+
+| # | Residual | Why it is left | Owner |
+|---|---|---|---|
+| NR-1 | The governed leak-risk home, and any copy of it an operator made by hand, gets no mode from the pass (D-FolderLimb A). S-46 lives only there | No accessor resolves the home, and provisioning it at the policy is the installer milestone's | install-provisions-every-home (#8027) |
+| NR-2 | S-19, an embargoed security-fix run, gets no mode | No install-time path: a run's class is resolvable only once the resolver takes it as an argument | one-resolver-and-release-tool-routing (#8020), then the migration milestone (#8032) |
+| NR-3 | S-41 copies keep their modes, although an S-41 copy is Leak-risk while it holds an allowlist copy that carries an operator identifier (adversarial PR-5) | S-41's class is Working state in the register, and its home and split are the installer milestone's | install-provisions-every-home (#8027) |
+| NR-4 | Between updates, a file the operator's tools rewrite (the roster and its clarification queue among them) takes whatever mode its writer leaves; A11 reports it, and the next full update repairs it (adversarial PR-3) | The runtime writers are agent or operator edits outside the platform's scripts | the migration milestone (#8032), which moves them under the leak-risk home |
+| NR-5 | The pass walks every S-40 copy on every full update and every validator run, and the copies accumulate one full container copy per update (adversarial FM-3) | Retention of S-40 is the installer milestone's decision; the measured cost is in DEV-37 | install-provisions-every-home (#8027) |
+| NR-6 | The library composes six literals outside the resolver (adversarial PR-1, DEV-40) | D1: this release adds no resolver function | one-resolver-and-release-tool-routing (#8020) |
+| NR-7 | S-10 is resolved beside the container, not beside a roster that `PMO_PEOPLE_ROSTER` moved elsewhere | The register row and the queue template both place it in the container | one-resolver-and-release-tool-routing (#8020) |
+| NR-8 | A member that is a symbolic link is neither followed nor reported | Following a link would let the pass change a file outside the population | no owner yet; held for the Stage-9 filing step |
+| NR-9 | The Windows install and update proxies set no POSIX modes | The platform has no Windows install path that the policy could reach | — |
+| NR-10 | The `.gitignore` stray-copy backstop matches the scan lists' and the roster's exact names only, not their backup forms | `.gitignore` belongs to the sibling release; held for the Stage-9 filing step | Stage-9 filing step (`follow-up: privacy`) |
+
+## Operational Deployment Manifest
+
+Layer-2 activation for Stage 12. The default propagation carrier, `./update.sh --surfaces-only`, runs no leak-risk mode pass, and `core/deploy/deploy.sh --deploy` does not either, so the policy reaches an existing install only through a full update.
+
+| # | Source (Layer 1) | Target (Layer 2) | Mechanism | Verification |
+|---|---|---|---|---|
+| 1 | `core/deploy/lib-leak-risk-modes.sh`, `update.sh` | the operator's install: the Leak-risk primaries, their backups and the S-40 copies | update: `./update.sh` (full) — activates the leak-risk mode pass; the first run tightens the Leak-risk primaries, their backups and the S-40 copies | validate-install A11 PASS |
+| 2 | `core/config/allowlists/script-execution-allowlist.txt` | the deployed hook-tier allowlist | the Stage-12 deploy | the new suite's four invocation forms are present in the deployed copy |
