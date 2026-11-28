@@ -1862,6 +1862,671 @@ for fsbc_shape in word cluster split lsplit; do
 done
 /bin/rm -rf "$FSBC_BASE"
 
+# ==========================================================================
+# FSB — a listed verb's operand at the six positions the token walk does not hand over
+# ==========================================================================
+# At six positions the token walk never handed a listed verb's operand to the cascade, so an
+# out-of-root literal operand there was admitted with no refusal and no record at every mode:
+# after a redirection operator that carries an ampersand (class 1), on a continuation line
+# (class 2), with the verb word written in quotes (class 4), behind a listed prefix word while an
+# unbalanced quote switches the shared canonicalizer off (class 5), after a redirection operator
+# that carries a pipe (PR), and after a process substitution (PS). Beside them, a verb at a plain
+# command start is hidden when marks the shell does not read as quoting leave the canonicalizer's
+# quote mask on and inverted (INV).
+#
+# THE CORPUS. Each position form below is one line: its label, the roles that carry a pin of their
+# own, the verdict each side recorded before the fix (pre) and after it (post), a tag, and the
+# command template. It is expanded across the four verb roles — a read (`cat X`), a write source
+# (`cp X /tmp/d`), a write destination (`cp /tmp/s X`) and `tee X` — and two sides: the out-of-root
+# operand and its in-root twin. The explicit rows that follow carry the inverted-mask faces, the
+# adjacent faces, the declared case residual, the must-not-refuse shapes, a breadth sample of every
+# class refused today and of common agent commands, and the here-document bodies, with the declared
+# over-block tagged `over`. A verdict is `a` (admitted) or `B<n>` (refused under BLOCK-FS-BOUNDARY-00<n>);
+# P stands for the plain form's rule (B1 read, B2 write); a spec of four values is per role, in the
+# order read, write source, write destination, tee. In a command, @NL@ is a line break, @SQ@ an
+# apostrophe and @TAB@ a tab, so every row is one single-quoted line.
+#
+# THE ARMS read one call per row and copy, run once: a pin is the shipped hook refusing the row's
+# out-of-root operand under the plain rule with exactly one block record; its near miss is the
+# in-root twin admitted with no record, paired with a copy whose allowlist is empty, at warn, where
+# the in-root operand must be named in a -001/-002 record (so it reached the cascade). FSBDIFF reads
+# the whole table: every row's recorded pre and post, and, statically, that no row moves from a
+# refusal to an admit and none changes rule.
+echo ""
+echo "a listed verb's operand at the six positions the token walk does not hand over (FSB-*, FSBDIFF-*)"
+echo "---"
+
+FSBP_BASE="$(/usr/bin/mktemp -d)"
+FSBP_ROWS="${FSBP_BASE}/rows"
+: > "$FSBP_ROWS"
+FSBP_OUT_OP='/opt/other/notes.txt'
+FSBP_IN_OP='/tmp/ok.txt'
+
+# fsbp_plain <role> -> the plain form's rule for that role (B1 read, B2 write)
+fsbp_plain() { case "$1" in r) /usr/bin/printf B1 ;; *) /usr/bin/printf B2 ;; esac; }
+
+# fsbp_pick <spec> <role> -> the value a pre/post spec gives that role (one value, or four in
+# role order read, write source, write destination, tee; P is the plain rule)
+fsbp_pick() {
+  local v="$1"
+  case "$v" in
+    *,*,*,*)
+      case "$2" in
+        r) v="${v%%,*}" ;;
+        s) v="${v#*,}"; v="${v%%,*}" ;;
+        d) v="${v#*,*,}"; v="${v%%,*}" ;;
+        t) v="${v##*,}" ;;
+      esac ;;
+  esac
+  [ "$v" = P ] && v="$(fsbp_plain "$2")"
+  /usr/bin/printf '%s' "$v"
+}
+
+# fsbp_fill <template> <role> <operand> -> the template with that role's words and the operand.
+#   @V@ the verb word; @V1@ @V2@ its two halves; @VO@ @VH@ @VU@ the verb with its first letter as
+#   an octal, hex or unicode escape (for an ANSI-C span); @A@ the words before the operand and @Z@
+#   the words after it; @F@ a flag the verb takes; @X@ the operand.
+fsbp_fill() {
+  local t="$1" v v1 v2 vo vh vu a z f
+  case "$2" in
+    r) v=cat; v1=ca; v2=t; vo='\143at'; vh='\x63at'; vu='cat'; a=''; z=''; f='-u' ;;
+    s) v=cp; v1=c; v2=p; vo='\143p'; vh='\x63p'; vu='cp'; a=''; z=' /tmp/d'; f='-p' ;;
+    d) v=cp; v1=c; v2=p; vo='\143p'; vh='\x63p'; vu='cp'; a='/tmp/s '; z=''; f='-p' ;;
+    *) v=tee; v1=te; v2=e; vo='\164ee'; vh='\x74ee'; vu='tee'; a=''; z=''; f='-a' ;;
+  esac
+  t="${t//@VO@/$vo}"; t="${t//@VH@/$vh}"; t="${t//@VU@/$vu}"
+  t="${t//@V1@/$v1}"; t="${t//@V2@/$v2}"; t="${t//@V@/$v}"
+  t="${t//@A@/$a}"; t="${t//@Z@/$z}"; t="${t//@F@/$f}"; t="${t//@X@/$3}"
+  /usr/bin/printf '%s' "$t"
+}
+
+# fsbp_form '<label>|<pinned roles>|<pre out>|<post out>|<pre in>|<post in>|<tag>|<template>'
+#   One position form, expanded into FSBP_ROWS across the four roles and both sides. The label is
+#   FSB-POS<position>-<form>.
+fsbp_form() {
+  local spec="$1" label pins po qo pi qi tag tpl pos form role
+  label="${spec%%|*}"; spec="${spec#*|}"
+  pins="${spec%%|*}"; spec="${spec#*|}"
+  po="${spec%%|*}"; spec="${spec#*|}"
+  qo="${spec%%|*}"; spec="${spec#*|}"
+  pi="${spec%%|*}"; spec="${spec#*|}"
+  qi="${spec%%|*}"; spec="${spec#*|}"
+  tag="${spec%%|*}"; tpl="${spec#*|}"
+  pos="${label#FSB-POS}"; pos="${pos%%-*}"; form="${label#FSB-POS*-}"
+  for role in r s d t; do
+    /usr/bin/printf '%s|%s|%s|out|%s|%s|%s|%s|%s\n' "${pos}.${form}.${role}.out" "$pos" "$role" \
+      "$(fsbp_pick "$po" "$role")" "$(fsbp_pick "$qo" "$role")" "$tag" "$pins" \
+      "$(fsbp_fill "$tpl" "$role" "$FSBP_OUT_OP")" >> "$FSBP_ROWS"
+    /usr/bin/printf '%s|%s|%s|in|%s|%s|%s|%s|%s\n' "${pos}.${form}.${role}.in" "$pos" "$role" \
+      "$(fsbp_pick "$pi" "$role")" "$(fsbp_pick "$qi" "$role")" "$tag" "$pins" \
+      "$(fsbp_fill "$tpl" "$role" "$FSBP_IN_OP")" >> "$FSBP_ROWS"
+  done
+}
+
+# fsbp_row '<id>|<position>|<role>|<side>|<pre>|<post>|<tag>|<command>' — one explicit row.
+fsbp_row() {
+  local tail="$1" head
+  head="${tail%%|*}"; tail="${tail#*|}"
+  head="${head}|${tail%%|*}"; tail="${tail#*|}"
+  head="${head}|${tail%%|*}"; tail="${tail#*|}"
+  head="${head}|${tail%%|*}"; tail="${tail#*|}"
+  head="${head}|${tail%%|*}"; tail="${tail#*|}"
+  head="${head}|${tail%%|*}"; tail="${tail#*|}"
+  head="${head}|${tail%%|*}"; tail="${tail#*|}"
+  /usr/bin/printf '%s|-|%s\n' "$head" "$tail" >> "$FSBP_ROWS"
+}
+
+# fsbp_decode <command field> -> the command, @NL@ @SQ@ @TAB@ decoded
+FSBP_NL='
+'
+FSBP_SQ="'"
+FSBP_TAB="$(/usr/bin/printf '\t')"
+fsbp_decode() {
+  local c="$1"
+  c="${c//@NL@/$FSBP_NL}"; c="${c//@SQ@/$FSBP_SQ}"; c="${c//@TAB@/$FSBP_TAB}"
+  /usr/bin/printf '%s' "$c"
+}
+
+# fsbp_copy <name> [<sed edit>...] — <FSBP_BASE>/<name>/hooks: the shipped hook with each edit
+#   applied in turn, beside a copy of its lib/, the allowlist and a .mode of enforce, writing its
+#   own logs. Prints the copy's hook directory.
+fsbp_copy() {
+  local d="${FSBP_BASE}/${1}/hooks" e
+  shift
+  /bin/mkdir -p "$d"
+  /bin/cp -R "${HOOK_DIR}/lib" "${d}/lib"
+  /bin/cp "${HOOK_DIR}/../fs-boundary-allowlist.txt" "${d}/../fs-boundary-allowlist.txt"
+  /bin/cp "$HOOK" "${d}/block-fs-boundary.sh"
+  for e in "$@"; do
+    /usr/bin/sed -e "$e" "${d}/block-fs-boundary.sh" > "${d}/next.sh"
+    /bin/mv "${d}/next.sh" "${d}/block-fs-boundary.sh"
+  done
+  /bin/chmod +x "${d}/block-fs-boundary.sh"
+  /usr/bin/printf 'enforce' > "${d}/.mode"
+  /usr/bin/printf '%s' "$d"
+}
+
+# fsbp_pass <hooks dir> <rows file> <results file> [<needle>] — every row through one copy, one
+#   call each, the payload fed from a FILE. A results line is tab-separated: id; verdict (a, B1,
+#   B2, B3, N for INPUT-NOT-EVALUATED, X<exit> otherwise); exit; block records; warn records;
+#   whether a -001/-002 warn record's reason names <needle> (- when none is given); warn records
+#   whose rule is INPUT-NOT-EVALUATED; and whether stderr carries the not-evaluated WARN notice.
+fsbp_pass() {
+  local d="$1" rows="$2" res="$3" nd="${4:-}" line cmd rc v e blk w wn pf="${3}.payload" ef="${3}.stderr"
+  : > "$res"
+  while IFS= read -r line; do
+    cmd="$(fsbp_decode "${line#*|*|*|*|*|*|*|*|}")"
+    bash_payload "$cmd" > "$pf"
+    : > "${d}/block-log.jsonl"; : > "${d}/fs-boundary-warn-log.jsonl"
+    rc=0
+    /bin/bash "${d}/block-fs-boundary.sh" < "$pf" > /dev/null 2> "$ef" || rc="$?"
+    e="$(< "$ef")"
+    case "$rc" in
+      0) v=a ;;
+      2) case "$e" in
+           *":BLOCK-FS-BOUNDARY-001] BLOCKED"*) v=B1 ;;
+           *":BLOCK-FS-BOUNDARY-002] BLOCKED"*) v=B2 ;;
+           *":BLOCK-FS-BOUNDARY-003] BLOCKED"*) v=B3 ;;
+           *":INPUT-NOT-EVALUATED] BLOCKED"*) v=N ;;
+           *) v=X2 ;;
+         esac ;;
+      *) v="X${rc}" ;;
+    esac
+    wn=0
+    case "$e" in *":INPUT-NOT-EVALUATED] WARN"*) wn=1 ;; esac
+    blk="$(/usr/bin/awk 'index($0, "\"rule\":") { n++ } END { printf "%d", n + 0 }' "${d}/block-log.jsonl")"
+    w="$(/usr/bin/awk -v n="$nd" '
+      index($0, "\"rule\":") { t++; ok = (index($0, "\"BLOCK-FS-BOUNDARY-001\"") || index($0, "\"BLOCK-FS-BOUNDARY-002\""))
+        if (index($0, "\"INPUT-NOT-EVALUATED\"")) ine++ }
+      n != "" && index($0, "\"reason\":") && ok && index($0, n) { f = 1 }
+      END { printf "%d\t%s\t%d", t + 0, (n == "" ? "-" : f + 0), ine + 0 }' "${d}/fs-boundary-warn-log.jsonl")"
+    /usr/bin/printf '%s\t%s\t%s\t%s\t%s\t%s\n' "${line%%|*}" "$v" "$rc" "$blk" "$w" "$wn" >> "$res"
+  done < "$rows"
+}
+
+# fsbp_report <arm output file> — print each PASS/FAIL line and count it.
+fsbp_report() {
+  local l
+  while IFS= read -r l; do
+    /usr/bin/printf '%s\n' "$l"
+    case "$l" in
+      PASS:*) PASS=$((PASS + 1)) ;;
+      FAIL:*) FAIL=$((FAIL + 1)) ;;
+    esac
+  done < "$1"
+}
+# fsbp-table.sh — provisional corpus (pre/post to be measured). Sourced after fsbp-lib.sh.
+# class 1 — after a redirection operator that carries an ampersand
+fsbp_form 'FSB-POS1-dupout|rd|a|P|a|a|-|@V@ @A@>&2 @X@@Z@'
+fsbp_form 'FSB-POS1-dupfd|st|a|P|a|a|-|@V@ @A@2>&1 @X@@Z@'
+fsbp_form 'FSB-POS1-dupin|rt|a|P|a|a|-|@V@ @A@<&0 @X@@Z@'
+fsbp_form 'FSB-POS1-closeout|sd|a|P|a|a|-|@V@ @A@2>&- @X@@Z@'
+fsbp_form 'FSB-POS1-closein|rs|a|P|a|a|-|@V@ @A@0<&- @X@@Z@'
+fsbp_form 'FSB-POS1-both|dt|a|P|a|a|-|@V@ @A@&>/dev/null @X@@Z@'
+fsbp_form 'FSB-POS1-bothapp|rd|a|P|a|a|-|@V@ @A@&>>/tmp/log @X@@Z@'
+fsbp_form 'FSB-POS1-move|st|a|P|a|a|-|@V@ @A@3>&1- @X@@Z@'
+fsbp_form 'FSB-POS1-dupsep|rt|a|P|a|a|-|@V@ @A@2>& 1 @X@@Z@'
+fsbp_form 'FSB-POS1-bothsep|sd|a|P|a|a|-|@V@ @A@&> /dev/null @X@@Z@'
+fsbp_form 'FSB-POS1-zclob1|rs|a|P|a|a|-|@V@ @A@&>|/dev/null @X@@Z@'
+fsbp_form 'FSB-POS1-zclob2|dt|a|P|a|a|-|@V@ @A@>&|/dev/null @X@@Z@'
+fsbp_form 'FSB-POS1-zbang1|rd|a|P|a|a|-|@V@ @A@&>!/dev/null @X@@Z@'
+fsbp_form 'FSB-POS1-zbang2|st|a|P|a|a|-|@V@ @A@>&!/dev/null @X@@Z@'
+fsbp_form 'FSB-POS1-zapp2|rt|a|P|a|a|-|@V@ @A@>>&/tmp/log @X@@Z@'
+fsbp_form 'FSB-POS1-zappclob1|sd|a|P|a|a|-|@V@ @A@&>>|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POS1-zappclob2|rs|a|P|a|a|-|@V@ @A@>>&|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POS1-zappbang1|dt|a|P|a|a|-|@V@ @A@&>>!/tmp/log @X@@Z@'
+fsbp_form 'FSB-POS1-zappbang2|rd|a|P|a|a|-|@V@ @A@>>&!/tmp/log @X@@Z@'
+fsbp_form 'FSB-POS1-dupword|st|a|P|a|a|-|@V@ @A@>&/dev/null @X@@Z@'
+fsbp_form 'FSB-POS1-namedfd|rt|a|P|a|a|-|@V@ @A@{fd}>&2 @X@@Z@'
+fsbp_form 'FSB-POS1-lead|sd|a|P|a|a|-|2>&1 @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS1-leadafter|rs|a|P|a|a|-|sudo 2>&1 @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS1-leadbefore|dt|a|P|a|a|-|2>&1 sudo @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS1-shift|rd|a|P|a|a|-|(( y = 1 << 2 ))@NL@@V@ @A@2>&1 @X@@Z@'
+# class 2 — on a continuation line
+fsbp_form 'FSB-POS2-alone|rd|a|P|a|a|-|@V@ @A@\@NL@@X@@Z@'
+fsbp_form 'FSB-POS2-flag|st|a|P|a|a|-|@V@ @F@ @A@\@NL@@X@@Z@'
+fsbp_form 'FSB-POS2-twocont|rt|a|P|a|a|-|@V@ \@NL@@A@\@NL@@X@@Z@'
+fsbp_form 'FSB-POS2-redir|sd|a|P|a|a|-|@V@ @A@\@NL@2>&1 @X@@Z@'
+fsbp_form 'FSB-POS2-wrapper|-|P|P|a|a|-|sudo \@NL@@V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS2-splitpfx|dt|a|P|a|a|-|su\@NL@do @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS2-splitverb|rd|a|P|a|a|-|@V1@\@NL@@V2@ @A@@X@@Z@'
+fsbp_form 'FSB-POS2-commentbefore|st|a|P|a|a|-|# a note@NL@@V@ @A@\@NL@@X@@Z@'
+fsbp_form 'FSB-POS2-group|rt|a|P|a|a|-|{ @V@ @A@\@NL@@X@@Z@; }'
+fsbp_form 'FSB-POS2-wrapopt|-|P|P|a|a|-|nice -n 5 \@NL@@V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS2-shift|rs|a|P|a|a|-|(( y = 1 << 2 ))@NL@@V@ @A@\@NL@@X@@Z@'
+# class 4 — the verb word written in quotes
+fsbp_form 'FSB-POS4-dq|rd|a|P|a|a|-|"@V@" @A@@X@@Z@'
+fsbp_form 'FSB-POS4-sq|st|a|P|a|a|-|@SQ@@V@@SQ@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-partial|rt|a|P|a|a|-|@V1@"@V2@" @A@@X@@Z@'
+fsbp_form 'FSB-POS4-emptypad|sd|a|P|a|a|-|""@V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-emptyrun|rs|a|P|a|a|-|""""""@V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-midbs|dt|a|P|a|a|-|@V1@\@V2@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-ansi|rd|a|P|a|a|-|$@SQ@@V@@SQ@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-ansioct|st|a|P|a|a|-|$@SQ@@VO@@SQ@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-ansihex|rt|a|P|a|a|-|$@SQ@@VH@@SQ@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-ansiuni|sd|a|P|a|a|-|$@SQ@@VU@@SQ@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-ansinul|rs|a|P|a|a|-|$@SQ@@V@\0x@SQ@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-locale|dt|a|P|a|a|-|$"@V@" @A@@X@@Z@'
+fsbp_form 'FSB-POS4-abspath|rd|a|P|a|a|-|"/bin/@V@" @A@@X@@Z@'
+fsbp_form 'FSB-POS4-zeq|st|a|P|a|a|-|=@V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS4-pfx|rt|a|P|a|a|-|sudo "@V@" @A@@X@@Z@'
+fsbp_form 'FSB-POS4-sep|sd|a|P|a|a|-|true; "@V@" @A@@X@@Z@'
+# class 5 — behind a listed prefix word while an unbalanced quote switches the canonicalizer off
+fsbp_form 'FSB-POS5-sudo-hdb|rd|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@sudo @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-sudo-hda|st|a|P|a|a|-|sudo @V@ @A@@X@@Z@@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-sudo-ansi|rt|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; sudo @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-sudo-csub|sd|a|P|a|a|-|x=$(echo ")"); sudo @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-env-hdb|rs|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@env @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-env-hda|dt|a|P|a|a|-|env @V@ @A@@X@@Z@@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-env-ansi|rd|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; env @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-env-csub|st|a|P|a|a|-|x=$(echo ")"); env @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-nice-hdb|rt|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@nice -n 5 @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-nice-hda|sd|a|P|a|a|-|nice -n 5 @V@ @A@@X@@Z@@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-nice-ansi|rs|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; nice -n 5 @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-nice-csub|dt|a|P|a|a|-|x=$(echo ")"); nice -n 5 @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-time-hdb|rd|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@time @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-time-hda|st|a|P|a|a|-|time @V@ @A@@X@@Z@@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-time-ansi|rt|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; time @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-time-csub|sd|a|P|a|a|-|x=$(echo ")"); time @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-asgn-hdb|rs|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@X=1 @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-asgn-hda|dt|a|P|a|a|-|X=1 @V@ @A@@X@@Z@@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-asgn-ansi|rd|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; X=1 @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-asgn-csub|st|a|P|a|a|-|x=$(echo ")"); X=1 @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qwrap-hdb|rt|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@"sudo" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qwrap-hda|sd|a|P|a|a|-|"sudo" @V@ @A@@X@@Z@@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-qwrap-ansi|rs|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; "sudo" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qwrap-csub|dt|a|P|a|a|-|x=$(echo ")"); "sudo" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qasgn-hdb|rd|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@X="a b" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qasgn-hda|st|a|P|a|a|-|X="a b" @V@ @A@@X@@Z@@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-qasgn-ansi|rt|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; X="a b" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qasgn-csub|sd|a|P|a|a|-|x=$(echo ")"); X="a b" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qopt-hdb|rs|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@nice -n "5" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qopt-hda|dt|a|P|a|a|-|nice -n "5" @V@ @A@@X@@Z@@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-qopt-ansi|rd|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; nice -n "5" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qopt-csub|st|a|P|a|a|-|x=$(echo ")"); nice -n "5" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-then-hdb|rt|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@if true; then @V@ @A@@X@@Z@; fi'
+fsbp_form 'FSB-POS5-then-ansi|sd|a|P|a|a|-|echo $@SQ@a\@SQ@b@SQ@; if true; then @V@ @A@@X@@Z@; fi'
+fsbp_form 'FSB-POS5-then-hda|rs|a|P|a|a|-|if true; then @V@ @A@@X@@Z@; fi@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF'
+fsbp_form 'FSB-POS5-then-csub|dt|a|P|a|a|-|x=$(echo ")"); if true; then @V@ @A@@X@@Z@; fi'
+fsbp_form 'FSB-POS5-qverb-hdb|rs|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@sudo "@V@" @A@@X@@Z@'
+fsbp_form 'FSB-POS5-leadredir-hdb|dt|a|P|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@2>&1 sudo @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qwrap-cmt|rd|a|P|a|a|-|(true)#it@SQ@s@NL@"sudo" @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POS5-qwrap-ndq|st|a|P|a|a|-|x="$(printf %s @SQ@"@SQ@)"; "sudo" @V@ @A@@X@@Z@'
+# the pipe-carrying redirection
+fsbp_form 'FSB-POSPR-clob|rd|a|P|a|a|-|@V@ @A@>|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-clobfd|st|a|P|a|a|-|@V@ @A@2>|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-clobsep|rt|a|P|a|a|-|@V@ @A@>| /tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-appclob|sd|a|P|a|a|-|@V@ @A@>>|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-appclobsep|rs|a|P|a|a|-|@V@ @A@>>| /tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-zclob1|dt|a|P|a|a|-|@V@ @A@&>|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-zclob2|rd|a|P|a|a|-|@V@ @A@>&|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-zappclob1|st|a|P|a|a|-|@V@ @A@&>>|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-zappclob2|rt|a|P|a|a|-|@V@ @A@>>&|/tmp/log @X@@Z@'
+fsbp_form 'FSB-POSPR-lead|sd|a|P|a|a|-|>|/tmp/log @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POSPR-leadbefore|rs|a|P|a|a|-|>|/tmp/log sudo @V@ @A@@X@@Z@'
+fsbp_form 'FSB-POSPR-shift|dt|a|P|a|a|-|(( y = 1 << 2 ))@NL@@V@ @A@>|/tmp/log @X@@Z@'
+# the process substitution
+fsbp_form 'FSB-POSPS-in|rd|a|P|a|a|-|@V@ @A@<(true) @X@@Z@'
+fsbp_form 'FSB-POSPS-out|st|a|P|a|a|-|@V@ @A@>(true) @X@@Z@'
+fsbp_form 'FSB-POSPS-two|rt|a|P|a|a|-|@V@ @A@<(true) <(true) @X@@Z@'
+fsbp_form 'FSB-POSPS-nested|sd|a|P|a|a|-|@V@ @A@<(cat <(true)) @X@@Z@'
+fsbp_form 'FSB-POSPS-redir|rs|a|P|a|a|-|@V@ @A@<(true) 2>/dev/null @X@@Z@'
+fsbp_form 'FSB-POSPS-pfxbody|dt|a|P|a|a|-|@V@ @A@<(sudo true) @X@@Z@'
+fsbp_form 'FSB-POSPS-zeq|rd|a|P|a|a|-|@V@ @A@=(true) @X@@Z@'
+fsbp_form 'FSB-POSPS-asgn|st|a|P|a|a|-|@V@ @A@<(true) a=b @X@@Z@'
+fsbp_form 'FSB-POSPS-kw|rt|a|P|a|a|-|@V@ @A@<(true) then @X@@Z@'
+fsbp_form 'FSB-POSPS-blanks|sd|a|P|a|a|-|@V@ @A@<( true ) @X@@Z@'
+fsbp_form 'FSB-POSPS-caseu|rs|a|P|a|a|-|@V@ @A@<(case a in a) true;; esac) @X@@Z@'
+fsbp_form 'FSB-POSPS-casep|dt|a|P|a|a|-|@V@ @A@<(case a in (a) true;; esac) @X@@Z@'
+fsbp_form 'FSB-POSPS-quoted|rd|a|P|a|a|-|@V@ @A@<(echo "a b") @X@@Z@'
+# the inverted-mask faces: a verb at a plain command start, hidden by a mask the shell does not see
+fsbp_row 'INV.ansi1.r.out|INV|r|out|a|B1|-|echo $@SQ@it\@SQ@s@SQ@; cat /opt/other/notes.txt; echo \@SQ@'
+fsbp_row 'INV.ansi1.d.out|INV|d|out|a|B2|-|echo $@SQ@it\@SQ@s@SQ@; cp /tmp/s /opt/other/notes.txt; echo \@SQ@'
+fsbp_row 'INV.ansi1.r.twin|INV|r|twin|B1|B1|-|echo its; cat /opt/other/notes.txt; echo x'
+fsbp_row 'INV.ansi1.d.twin|INV|d|twin|B2|B2|-|echo its; cp /tmp/s /opt/other/notes.txt; echo x'
+fsbp_row 'INV.ansi1.r.in|INV|r|in|a|a|-|echo $@SQ@it\@SQ@s@SQ@; cat /tmp/ok.txt; echo \@SQ@'
+fsbp_row 'INV.ansi1.d.in|INV|d|in|a|a|-|echo $@SQ@it\@SQ@s@SQ@; cp /tmp/s /tmp/ok.txt; echo \@SQ@'
+fsbp_row 'INV.ansi2.r.out|INV|r|out|a|B1|-|printf $@SQ@\@SQ@@SQ@; cat /opt/other/notes.txt; printf \@SQ@'
+fsbp_row 'INV.ansi2.d.out|INV|d|out|a|B2|-|printf $@SQ@\@SQ@@SQ@; cp /tmp/s /opt/other/notes.txt; printf \@SQ@'
+fsbp_row 'INV.ansi2.r.twin|INV|r|twin|B1|B1|-|printf x; cat /opt/other/notes.txt; printf x'
+fsbp_row 'INV.ansi2.d.twin|INV|d|twin|B2|B2|-|printf x; cp /tmp/s /opt/other/notes.txt; printf x'
+fsbp_row 'INV.ansi2.r.in|INV|r|in|a|a|-|printf $@SQ@\@SQ@@SQ@; cat /tmp/ok.txt; printf \@SQ@'
+fsbp_row 'INV.ansi2.d.in|INV|d|in|a|a|-|printf $@SQ@\@SQ@@SQ@; cp /tmp/s /tmp/ok.txt; printf \@SQ@'
+fsbp_row 'INV.hd.r.out|INV|r|out|a|B1|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@cat /opt/other/notes.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/y.txt@NL@it@SQ@s@NL@EOF'
+fsbp_row 'INV.hd.d.out|INV|d|out|a|B2|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@cp /tmp/s /opt/other/notes.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/y.txt@NL@it@SQ@s@NL@EOF'
+fsbp_row 'INV.hd.r.twin|INV|r|twin|B1|B1|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@its@NL@EOF@NL@cat /opt/other/notes.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/y.txt@NL@its@NL@EOF'
+fsbp_row 'INV.hd.d.twin|INV|d|twin|B2|B2|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@its@NL@EOF@NL@cp /tmp/s /opt/other/notes.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/y.txt@NL@its@NL@EOF'
+fsbp_row 'INV.hd.r.in|INV|r|in|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@cat /tmp/ok.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/y.txt@NL@it@SQ@s@NL@EOF'
+fsbp_row 'INV.hd.d.in|INV|d|in|a|a|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@cp /tmp/s /tmp/ok.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/y.txt@NL@it@SQ@s@NL@EOF'
+fsbp_row 'INV.csub.r.out|INV|r|out|a|B1|-|x=$(echo ")")@NL@cat /opt/other/notes.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@"@NL@EOF'
+fsbp_row 'INV.csub.d.out|INV|d|out|a|B2|-|x=$(echo ")")@NL@cp /tmp/s /opt/other/notes.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@"@NL@EOF'
+fsbp_row 'INV.csub.r.twin|INV|r|twin|B1|B1|-|x=$(echo x)@NL@cat /opt/other/notes.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@x@NL@EOF'
+fsbp_row 'INV.csub.d.twin|INV|d|twin|B2|B2|-|x=$(echo x)@NL@cp /tmp/s /opt/other/notes.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@x@NL@EOF'
+fsbp_row 'INV.csub.r.in|INV|r|in|a|a|-|x=$(echo ")")@NL@cat /tmp/ok.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@"@NL@EOF'
+fsbp_row 'INV.csub.d.in|INV|d|in|a|a|-|x=$(echo ")")@NL@cp /tmp/s /tmp/ok.txt@NL@cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@"@NL@EOF'
+fsbp_row 'INV.cmt.r.out|INV|r|out|a|B1|-|(true)#it@SQ@s@NL@cat /opt/other/notes.txt@NL@(true)#it@SQ@s'
+fsbp_row 'INV.cmt.d.out|INV|d|out|a|B2|-|(true)#it@SQ@s@NL@cp /tmp/s /opt/other/notes.txt@NL@(true)#it@SQ@s'
+fsbp_row 'INV.cmt.r.twin|INV|r|twin|B1|B1|-|(true)#its@NL@cat /opt/other/notes.txt@NL@(true)#its'
+fsbp_row 'INV.cmt.d.twin|INV|d|twin|B2|B2|-|(true)#its@NL@cp /tmp/s /opt/other/notes.txt@NL@(true)#its'
+fsbp_row 'INV.cmt.r.in|INV|r|in|a|a|-|(true)#it@SQ@s@NL@cat /tmp/ok.txt@NL@(true)#it@SQ@s'
+fsbp_row 'INV.cmt.d.in|INV|d|in|a|a|-|(true)#it@SQ@s@NL@cp /tmp/s /tmp/ok.txt@NL@(true)#it@SQ@s'
+fsbp_row 'INV.ndq.r.out|INV|r|out|a|B1|-|x="$(printf %s @SQ@"@SQ@)"; cat /opt/other/notes.txt; y="$(printf %s @SQ@"@SQ@)"'
+fsbp_row 'INV.ndq.d.out|INV|d|out|a|B2|-|x="$(printf %s @SQ@"@SQ@)"; cp /tmp/s /opt/other/notes.txt; y="$(printf %s @SQ@"@SQ@)"'
+fsbp_row 'INV.ndq.r.twin|INV|r|twin|B1|B1|-|x="$(printf %s x)"; cat /opt/other/notes.txt; y="$(printf %s x)"'
+fsbp_row 'INV.ndq.d.twin|INV|d|twin|B2|B2|-|x="$(printf %s x)"; cp /tmp/s /opt/other/notes.txt; y="$(printf %s x)"'
+fsbp_row 'INV.ndq.r.in|INV|r|in|a|a|-|x="$(printf %s @SQ@"@SQ@)"; cat /tmp/ok.txt; y="$(printf %s @SQ@"@SQ@)"'
+fsbp_row 'INV.ndq.d.in|INV|d|in|a|a|-|x="$(printf %s @SQ@"@SQ@)"; cp /tmp/s /tmp/ok.txt; y="$(printf %s @SQ@"@SQ@)"'
+# adjacent faces
+fsbp_row 'ADJ.group.r.out|ADJ|r|out|a|B1|-|echo $@SQ@a\@SQ@b@SQ@; { cat /opt/other/notes.txt; }'
+fsbp_row 'ADJ.group.r.in|ADJ|r|in|a|a|-|echo $@SQ@a\@SQ@b@SQ@; { cat /tmp/ok.txt; }'
+fsbp_row 'ADJ.subshell.r.out|ADJ|r|out|a|B1|-|echo $@SQ@a\@SQ@b@SQ@; ( cat /opt/other/notes.txt )'
+fsbp_row 'ADJ.subshell.r.in|ADJ|r|in|a|a|-|echo $@SQ@a\@SQ@b@SQ@; ( cat /tmp/ok.txt )'
+fsbp_row 'ADJ.then.d.out|ADJ|d|out|a|B2|-|echo $@SQ@a\@SQ@b@SQ@; if true; then cp /tmp/s /opt/other/notes.txt; fi'
+fsbp_row 'ADJ.then.d.in|ADJ|d|in|a|a|-|echo $@SQ@a\@SQ@b@SQ@; if true; then cp /tmp/s /tmp/ok.txt; fi'
+fsbp_row 'ADJ.psubc1.r.out|ADJ|r|out|a|B1|-|diff <(cat 2>&1 /opt/other/notes.txt) /tmp/ok.txt'
+fsbp_row 'ADJ.psubc1.r.in|ADJ|r|in|a|a|-|diff <(cat 2>&1 /tmp/ok.txt) /tmp/ok.txt'
+fsbp_row 'ADJ.psubc4.r.out|ADJ|r|out|a|B1|-|diff <("cat" /opt/other/notes.txt) /tmp/ok.txt'
+fsbp_row 'ADJ.psubc4.r.in|ADJ|r|in|a|a|-|diff <("cat" /tmp/ok.txt) /tmp/ok.txt'
+fsbp_row 'ADJ.psubc2.r.out|ADJ|r|out|a|B1|-|diff <(cat \@NL@/opt/other/notes.txt) /tmp/ok.txt'
+fsbp_row 'ADJ.psubc2.r.in|ADJ|r|in|a|a|-|diff <(cat \@NL@/tmp/ok.txt) /tmp/ok.txt'
+fsbp_row 'ADJ.redirwrap.r.out|ADJ|r|out|a|B1|-|nice -n 5 2>&1 cat /opt/other/notes.txt'
+fsbp_row 'ADJ.redirwrap.r.in|ADJ|r|in|a|a|-|nice -n 5 2>&1 cat /tmp/ok.txt'
+fsbp_row 'ADJ.eqq.r.out|ADJ|r|out|a|B1|-|="cat" /opt/other/notes.txt'
+fsbp_row 'ADJ.eqq.r.in|ADJ|r|in|a|a|-|="cat" /tmp/ok.txt'
+# the case residual inside a process-substitution body (declared, pinned)
+fsbp_row 'RESID.casesubj.r.out|RESID|r|out|a|a|-|cat <(case "a b" in a) true;; esac) /opt/other/notes.txt'
+fsbp_row 'RESID.casesubj.r.in|RESID|r|in|a|a|-|cat <(case "a b" in a) true;; esac) /tmp/ok.txt'
+# must-not-refuse: an out-of-root word that is not a listed verb's operand
+fsbp_row 'NM.and|NM|-|nm|a|a|-|cat /tmp/ok.txt && echo /opt/other/notes.txt'
+fsbp_row 'NM.or|NM|-|nm|a|a|-|cat /tmp/ok.txt || echo /opt/other/notes.txt'
+fsbp_row 'NM.pipeboth|NM|-|nm|a|a|-|cat /tmp/ok.txt |& echo /opt/other/notes.txt'
+fsbp_row 'NM.disown1|NM|-|nm|a|a|-|cat /tmp/ok.txt &| echo /opt/other/notes.txt'
+fsbp_row 'NM.disown2|NM|-|nm|a|a|-|cat /tmp/ok.txt &! echo /opt/other/notes.txt'
+fsbp_row 'NM.bg|NM|-|nm|a|a|-|cat /tmp/ok.txt & echo /opt/other/notes.txt'
+fsbp_row 'NM.pipe|NM|-|nm|a|a|-|cat /tmp/ok.txt | echo /opt/other/notes.txt'
+fsbp_row 'NM.semi|NM|-|nm|a|a|-|cat /tmp/ok.txt; echo /opt/other/notes.txt'
+fsbp_row 'NM.psubsemi|NM|-|nm|a|a|-|cat <(true) /tmp/ok.txt; echo /opt/other/notes.txt'
+fsbp_row 'NM.psuband|NM|-|nm|a|a|-|cat <(true) /tmp/ok.txt && echo /opt/other/notes.txt'
+fsbp_row 'NM.psubnl|NM|-|nm|a|a|-|cat <(true) /tmp/ok.txt@NL@echo /opt/other/notes.txt'
+fsbp_row 'NM.commentcont|NM|-|nm|a|a|-|cat /tmp/ok.txt # see \@NL@/opt/other/notes.txt'
+fsbp_row 'NM.verbarg|NM|-|nm|a|a|-|echo cat /opt/other/notes.txt'
+# breadth: classes refused today, common agent commands, redirection-target parity
+fsbp_row 'BR.plainr|BR|-|br|B1|B1|-|cat /opt/other/notes.txt'
+fsbp_row 'BR.plainw|BR|-|br|B2|B2|-|cp /opt/other/notes.txt /tmp/d'
+fsbp_row 'BR.tee|BR|-|br|B2|B2|-|tee /opt/other/notes.txt'
+fsbp_row 'BR.mv|BR|-|br|B2|B2|-|mv /tmp/s /opt/other/x'
+fsbp_row 'BR.ddif|BR|-|br|B2|B2|-|dd if=/opt/other/notes.txt of=/tmp/d'
+fsbp_row 'BR.ddof|BR|-|br|B2|B2|-|dd if=/tmp/s of=/opt/other/x'
+fsbp_row 'BR.g0|BR|-|br|B3|B3|-|find . -name x | xargs cat'
+fsbp_row 'BR.g1|BR|-|br|B3|B3|-|cat "${RUN_DIR}/body.md"'
+fsbp_row 'BR.g2sub|BR|-|br|B3|B3|-|cat $(id -un)'
+fsbp_row 'BR.g2tick|BR|-|br|B3|B3|-|cat `id -un`'
+fsbp_row 'BR.g2op|BR|-|br|B3|B3|-|cat ${CFG@P}'
+fsbp_row 'BR.g3|BR|-|br|B3|B3|-|cat /tmp/../etc/passwd'
+fsbp_row 'BR.g5|BR|-|br|B1|B1|-|cat /etc/$X'
+fsbp_row 'BR.g6|BR|-|br|a|a|-|cat "$SPOKE_OUT/x.md"'
+fsbp_row 'BR.multi|BR|-|br|B2|B2|-|cat /tmp/ok.txt; cp /opt/other/notes.txt /tmp/d'
+fsbp_row 'BR.group|BR|-|br|B1|B1|-|{ cat /opt/other/notes.txt; }'
+fsbp_row 'BR.subshell|BR|-|br|B1|B1|-|( cat /opt/other/notes.txt )'
+fsbp_row 'BR.sudo|BR|-|br|B1|B1|-|sudo cat /opt/other/notes.txt'
+fsbp_row 'BR.nice|BR|-|br|B1|B1|-|nice -n 5 cat /opt/other/notes.txt'
+fsbp_row 'BR.env|BR|-|br|B1|B1|-|env -i cat /opt/other/notes.txt'
+fsbp_row 'BR.cpoff|BR|-|br|B1|B1|-|cat <<@SQ@EOF@SQ@ > /tmp/x.txt@NL@it@SQ@s@NL@EOF@NL@cat /opt/other/notes.txt'
+fsbp_row 'BR.sepredir|BR|-|br|B1|B1|sepredir|cat /tmp/ok.txt > /opt/other/notes.txt'
+fsbp_row 'BR.attredir|BR|-|br|a|a|-|cat /tmp/ok.txt >/opt/other/notes.txt'
+fsbp_row 'BR.git|BR|-|br|a|a|-|git status --short'
+fsbp_row 'BR.ls|BR|-|br|a|a|-|ls -la /tmp'
+fsbp_row 'BR.wc|BR|-|br|a|a|-|cat /tmp/ok.txt | wc -l'
+fsbp_row 'BR.grep|BR|-|br|a|a|-|grep -n x /tmp/ok.txt'
+fsbp_row 'BR.rel|BR|-|br|a|a|-|cat README.md'
+fsbp_row 'BR.cpin|BR|-|br|a|a|-|cp /tmp/a /tmp/b'
+fsbp_row 'BR.gh|BR|-|br|a|a|-|gh issue view 1 --json title'
+fsbp_row 'BR.echo|BR|-|br|a|a|-|echo done > /tmp/out.txt'
+fsbp_row 'BR.devnull|BR|-|br|a|a|-|cat /tmp/ok.txt 2>/dev/null'
+fsbp_row 'BR.teein|BR|-|br|a|a|-|tee -a /tmp/log.txt < /tmp/ok.txt'
+fsbp_row 'BR.py|BR|-|br|a|a|-|python3 -c @SQ@print(1)@SQ@'
+fsbp_row 'BR.sort|BR|-|br|a|a|-|printf @SQ@%s\n@SQ@ a b | sort'
+fsbp_row 'BR.home|BR|-|br|a|a|-|cat "$HOME/Claude/README.md"'
+fsbp_row 'BR.gitcat|BR|-|br|a|a|-|git log --oneline -5 | cat'
+# here-document bodies (the declared over-block is tagged)
+fsbp_row 'HD.prosemid|HD|-|hd|a|a|-|cat > /tmp/f.md <<@SQ@EOF@SQ@@NL@It@SQ@s a note that cat /opt/other/notes.txt is mentioned.@NL@EOF'
+fsbp_row 'HD.prosestart|HD|-|hd|B1|B1|-|cat > /tmp/f.md <<@SQ@EOF@SQ@@NL@cat /opt/other/notes.txt@NL@EOF'
+fsbp_row 'HD.scriptc1|HD|-|hd|a|B1|over|cat > /tmp/f.sh <<@SQ@EOF@SQ@@NL@cat 2>&1 /opt/other/notes.txt@NL@EOF'
+fsbp_row 'HD.scriptc2|HD|-|hd|a|B1|over|cat > /tmp/f.sh <<@SQ@EOF@SQ@@NL@cat \@NL@/opt/other/notes.txt@NL@EOF'
+fsbp_row 'HD.commit|HD|-|hd|a|a|-|git commit -F - <<@SQ@EOF@SQ@@NL@Note: it@SQ@s about cat /opt/other/notes.txt@NL@EOF'
+fsbp_row 'HD.commitc1|HD|-|hd|a|B1|over|git commit -F - <<@SQ@EOF@SQ@@NL@cat 2>&1 /opt/other/notes.txt@NL@EOF'
+fsbp_row 'HD.unquoted|HD|-|hd|a|a|-|cat > /tmp/f.md <<EOF@NL@It@SQ@s fine@NL@EOF'
+fsbp_row 'HD.md|HD|-|hd|a|a|-|cat > /tmp/f.md <<@SQ@EOF@SQ@@NL@# Title@NL@Run the reader on /opt/other/notes.txt to see it.@NL@EOF'
+
+# ----- the copies, and one pass of every row through each -----
+# Two copies of the shipped hook, byte-identical to it, share the rows between them so the passes
+# run side by side, each with its own logs. FSBP_PRE names the copies the recorded pre-fix verdicts
+# are read through: from the first slice that lands the second pass, two copies whose second pass
+# is off, shape-guarded (in the commit that lands the arms, the shipped hook itself).
+FSBP_S1="$(fsbp_copy s1)"
+FSBP_S2="$(fsbp_copy s2)"
+FSBP_EA="$(fsbp_copy ea)"
+/usr/bin/printf '# emptied: every operand reads outside\n' > "${FSBP_EA}/../fs-boundary-allowlist.txt"
+/usr/bin/printf 'warn' > "${FSBP_EA}/.mode"
+FSBP_TG5A="$(fsbp_copy tg5a "$XFORM_X_T" "$XFORM_X_G5A")"
+fsbp_same=1
+/usr/bin/cmp -s "$HOOK" "${FSBP_S1}/block-fs-boundary.sh" || fsbp_same=0
+/usr/bin/cmp -s "$HOOK" "${FSBP_S2}/block-fs-boundary.sh" || fsbp_same=0
+FSBP_PRE1="$FSBP_S1"; FSBP_PRE2="$FSBP_S2"; FSBP_PRE_IS_SHIP=1
+
+/usr/bin/awk 'NR % 2 == 1' "$FSBP_ROWS" > "${FSBP_BASE}/rows.1"
+/usr/bin/awk 'NR % 2 == 0' "$FSBP_ROWS" > "${FSBP_BASE}/rows.2"
+# the near-miss twins of every pin, for the emptied-allowlist pairing
+/usr/bin/awk -F'|' '$4 == "in" && index($8, $3) && $2 ~ /^(1|2|4|5|PR|PS)$/' "$FSBP_ROWS" > "${FSBP_BASE}/rows.ea"
+# the rows refused before the fix: the differential's sensitivity copy and the superset read them
+/usr/bin/awk -F'|' '$5 ~ /^B/' "$FSBP_ROWS" > "${FSBP_BASE}/rows.b"
+
+fsbp_pass "$FSBP_S1" "${FSBP_BASE}/rows.1" "${FSBP_BASE}/res.s1" &
+fsbp_pass "$FSBP_S2" "${FSBP_BASE}/rows.2" "${FSBP_BASE}/res.s2" &
+fsbp_pass "$FSBP_EA" "${FSBP_BASE}/rows.ea" "${FSBP_BASE}/res.ea" "$FSBP_IN_OP" &
+fsbp_pass "$FSBP_TG5A" "${FSBP_BASE}/rows.b" "${FSBP_BASE}/res.tg5a" &
+if [ "$FSBP_PRE_IS_SHIP" = 0 ]; then
+  fsbp_pass "$FSBP_PRE1" "${FSBP_BASE}/rows.1" "${FSBP_BASE}/res.p1" &
+  fsbp_pass "$FSBP_PRE2" "${FSBP_BASE}/rows.2" "${FSBP_BASE}/res.p2" &
+fi
+wait
+/bin/cat "${FSBP_BASE}/res.s1" "${FSBP_BASE}/res.s2" > "${FSBP_BASE}/res.ship"
+if [ "$FSBP_PRE_IS_SHIP" = 0 ]; then
+  /bin/cat "${FSBP_BASE}/res.p1" "${FSBP_BASE}/res.p2" > "${FSBP_BASE}/res.pre"
+else
+  /bin/cp "${FSBP_BASE}/res.ship" "${FSBP_BASE}/res.pre"
+fi
+if [ "$fsbp_same" = 1 ]; then
+  /usr/bin/printf 'PASS: FSB-COPIES: the two copies the corpus runs through are byte-identical to the shipped hook\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FSB-COPIES: a copy the corpus runs through differs from the shipped hook\n'; FAIL=$((FAIL + 1))
+fi
+# ----- the arms, read from the passes in one awk program -----
+#   pins       FSB-POS<n>-<form>-<role>: the shipped hook refuses the out-of-root operand under the
+#              plain rule with exactly one block record. With PAIRS=1, -PAIR: the copy whose second
+#              pass is off admits it with no record (the pre-fix verdict).
+#   near       FSB-NEAR<n>-<form>-<role>: the in-root twin is admitted with no record; -PAIR: through
+#              the emptied-allowlist copy at warn, a -001/-002 record names the in-root operand.
+#   INV, ADJ   a face refused under the plain rule (TWIN: its desync-free twin, refused on both;
+#              NEAR: its in-root twin, admitted); RESID admitted with no record; NM admitted.
+#   FSBDIFF    ROWS (well formed), REC-PRE, REC-POST, NOMOVE (criterion 5's zero), DECLARED.
+fsbp_arms() {
+  /usr/bin/awk -F'\t' -v pairs="$1" -v preship="$FSBP_PRE_IS_SHIP" '
+    function plain(r) { return (r == "r" ? "B1" : "B2") }
+    function obs(t, id) { return t "[" id "]" }
+    function seen(t, id, f) { return ((t SUBSEP id SUBSEP f) in R) }
+    function g(t, id, f) { return R[t, id, f] }
+    function noted(t, id) { return " (" t ": verdict=" g(t, id, 1) " exit=" g(t, id, 2) " block=" g(t, id, 3) " warn=" g(t, id, 4) ")" }
+    function arm(ok, label, why) { if (ok) printf "PASS: %s\n", label; else printf "FAIL: %s%s\n", label, why }
+    function quiet(t, id) { return (seen(t, id, 1) && g(t, id, 2) == 0 && g(t, id, 3) == 0 && g(t, id, 4) == 0) }
+    function refused(t, id, want) { return (seen(t, id, 1) && g(t, id, 1) == want && g(t, id, 2) == 2 && g(t, id, 3) == 1) }
+    FILENAME ~ /res\.(ship|pre|ea)$/ {
+      t = FILENAME; sub(/.*res\./, "", t)
+      for (k = 2; k <= 6; k++) R[t, $1, k - 1] = $k
+      next
+    }
+    {
+      split($0, f, "|")
+      id = f[1]; n++; ID[n] = id; POS[id] = f[2]; ROLE[id] = f[3]; SIDE[id] = f[4]
+      PRE[id] = f[5]; POST[id] = f[6]; TAG[id] = f[7]; PINS[id] = f[8]
+      c = $0; for (k = 1; k <= 8; k++) sub(/^[^|]*\|/, "", c); CMD[id] = c
+      if (id in DUP) dup++; DUP[id] = 1
+    }
+    END {
+      six = "^(1|2|4|5|PR|PS)$"
+      for (i = 1; i <= n; i++) {
+        id = ID[i]; p = POS[id]; r = ROLE[id]; s = SIDE[id]
+        split(id, w, "."); form = w[2]
+        if (p ~ six && index(PINS[id], r)) {
+          if (s == "out") {
+            lab = "FSB-POS" p "-" form "-" r
+            arm(refused("ship", id, plain(r)), lab ": the out-of-root operand is refused under " plain(r) " with one block record", noted("ship", id))
+            if (pairs) arm(quiet("pre", id), lab "-PAIR: through the copy whose second pass is off, the same operand is admitted with no record", noted("pre", id))
+          } else if (s == "in") {
+            lab = "FSB-NEAR" p "-" form "-" r
+            arm(quiet("ship", id), lab ": the in-root twin is admitted with no record", noted("ship", id))
+            arm(seen("ea", id, 1) && g("ea", id, 2) == 0 && g("ea", id, 5) == 1, lab "-PAIR: through the emptied-allowlist copy at warn, a -001/-002 record names the in-root operand", noted("ea", id))
+          }
+        }
+        if (p == "INV" || p == "ADJ") {
+          lab = "FSB-" p "-" form "-" r
+          if (s == "out") {
+            arm(refused("ship", id, POST[id]), lab ": the face is refused under " POST[id] " with one block record", noted("ship", id))
+            if (pairs) arm(quiet("pre", id), lab "-PAIR: through the copy whose second pass is off, the face is admitted with no record", noted("pre", id))
+          } else if (s == "twin") {
+            arm(refused("ship", id, POST[id]), lab "-TWIN: the desync-free twin is refused under " POST[id] " (control)", noted("ship", id))
+          } else {
+            arm(quiet("ship", id), lab "-NEAR: the in-root twin is admitted with no record", noted("ship", id))
+          }
+        }
+        if (p == "RESID") {
+          lab = (s == "out" ? "FSB-PS-CASE-RESID" : "FSB-PS-CASE-RESID-NEAR")
+          arm(quiet("ship", id), lab ": a case subject holding a quoted blank inside a process-substitution body is admitted with no record (declared residual)", noted("ship", id))
+        }
+        if (p == "NM") arm(quiet("ship", id), "FSB-NM-" form ": an out-of-root word that is not a listed verb'"'"'s operand is admitted with no record", noted("ship", id))
+        # the differential
+        if (!(p ~ "^(1|2|4|5|PR|PS|INV|ADJ|RESID|NM|BR|HD)$")) bad = bad " " id ":position"
+        if (!(s ~ "^(out|in|twin|nm|br|hd)$")) bad = bad " " id ":side"
+        if (!(PRE[id] ~ "^(a|B1|B2|B3)$") || !(POST[id] ~ "^(a|B1|B2|B3)$")) bad = bad " " id ":verdict"
+        if (CMD[id] == "") bad = bad " " id ":command"
+        if (g("pre", id, 1) != PRE[id]) { npre++; if (npre <= 5) lpre = lpre " " id "=" g("pre", id, 1) }
+        if (g("ship", id, 1) != POST[id]) { npost++; if (npost <= 5) lpost = lpost " " id "=" g("ship", id, 1) }
+        if (PRE[id] ~ /^B/ && POST[id] == "a") { nmove++; lmove = lmove " " id }
+        if (PRE[id] ~ /^B/ && POST[id] ~ /^B/ && PRE[id] != POST[id]) { nrule++; lmove = lmove " " id }
+        if (PRE[id] != POST[id]) {
+          moved++
+          if (!((s == "out" && p ~ six) || p == "INV" || p == "ADJ" || TAG[id] == "over")) { nundecl++; lundecl = lundecl " " id }
+        }
+      }
+      arm(bad == "" && dup == 0 && n > 0, "FSBDIFF-ROWS: " n " rows, unique ids, every position, side and verdict from its closed set", " —" bad (dup ? " duplicate ids" : ""))
+      arm(npre == 0, "FSBDIFF-REC-PRE: " (preship ? "the shipped hook" : "the copy whose second pass is off") " returns the recorded pre-fix verdict on every row", " — " npre " rows differ:" lpre)
+      arm(npost == 0, "FSBDIFF-REC-POST: the shipped hook returns the recorded post-fix verdict on every row", " — " npost " rows differ:" lpost)
+      arm(nmove == 0 && nrule == 0, "FSBDIFF-NOMOVE: no row moves from a refusal to an admit and none changes rule (" moved " rows move from an admit to a refusal)", " — refusal to admit " nmove ", rule changed " nrule ":" lmove)
+      arm(nundecl == 0, "FSBDIFF-DECLARED: every row that moves is an out-of-root row at one of the six positions, an inverted-mask or adjacent face, or a declared over-block", " — undeclared:" lundecl)
+    }
+  ' "${FSBP_BASE}/res.ship" "${FSBP_BASE}/res.pre" "${FSBP_BASE}/res.ea" "$FSBP_ROWS" > "${FSBP_BASE}/arms.out"
+  fsbp_report "${FSBP_BASE}/arms.out"
+}
+fsbp_arms 0
+
+# FSBDIFF-DET: the differential's sensitivity, through a copy whose G2 third limb is removed and
+# whose G5 admits (both edits key on lines this release does not touch). Over the rows refused
+# before the fix, the comparator must report at least one move from a refusal to an admit, and the
+# copy must still refuse at least one row, so the zero above is read with a comparator that fires.
+fsbp_fires="$(/usr/bin/awk -F'\t' 'NR == FNR { split($0, f, "|"); pre[f[1]] = f[5]; next } pre[$1] ~ /^B/ && $2 == "a" { n++ } END { printf "%d", n + 0 }' "${FSBP_BASE}/rows.b" "${FSBP_BASE}/res.tg5a")"
+fsbp_alive="$(/usr/bin/awk -F'\t' '$2 ~ /^B/ { n++ } END { printf "%d", n + 0 }' "${FSBP_BASE}/res.tg5a")"
+if [ "$fsbp_fires" -ge 1 ]; then
+  /usr/bin/printf 'PASS: FSBDIFF-DET-fires: through the seeded copy the comparator reports %s refusal-to-admit moves\n' "$fsbp_fires"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FSBDIFF-DET-fires: the comparator reports no move through the seeded copy (BROKEN PROBE)\n'; FAIL=$((FAIL + 1))
+fi
+if [ "$fsbp_alive" -ge 1 ]; then
+  /usr/bin/printf 'PASS: FSBDIFF-DET-alive: the seeded copy still refuses %s rows\n' "$fsbp_alive"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FSBDIFF-DET-alive: the seeded copy refuses nothing, so the comparator was read on a dead copy\n'; FAIL=$((FAIL + 1))
+fi
+
+# ----- FSB-P2-COST: the second pass adds canonicalizer runs, never a longer scan -----
+# The canonicalizer's scan grows faster than linearly with the command, on every consumer, so a
+# bound on a time ratio across sizes would fail the unchanged hook. COST-RATIO bounds the MULTIPLE
+# instead: the time through the shipped hook over the time through the copy whose second pass is
+# off, at 80 KB, may be at most 1.5 times the same multiple at 40 KB, each time the median of three
+# runs, on a quote-padded verb word the shipped hook refuses. A multiple that grows with size fails
+# it, and the canonicalizer's own growth cancels out of it. COST-160 holds two 160 KB refusals
+# inside the suite's budget: the padded verb word, and a here-document file write whose body lines
+# carry an apostrophe, ending in an out-of-root operand after a redirection that carries an
+# ampersand. Both reuse the AC-FSB-X watchdog (fsbx_timed), and no time is printed beside a size.
+FSBX_BASE="$FSBP_BASE"
+FSBP_P2OFF="$(fsbp_copy p2offcost 's/^readonly FSB_PASS2=1  # M-FSB-PASS2$/readonly FSB_PASS2=0  # M-FSB-PASS2/')"
+fsbp_p2off_n="$(/usr/bin/diff "$HOOK" "${FSBP_P2OFF}/block-fs-boundary.sh" 2>/dev/null | /usr/bin/awk '/^[<>]/ { n++ } END { printf "%d", n + 0 }')"
+# fsbp_qpad <bytes> <file> — a run of empty quote pairs, then the verb word and an out-of-root operand
+fsbp_qpad() {
+  LC_ALL=C /usr/bin/awk -v n="$1" -v x="$FSBP_OUT_OP" 'BEGIN { t = "cat " x; m = n - length(t); r = "\"\""
+    while (length(r) < m) r = r r
+    printf "%s%s", substr(r, 1, m - m % 2), t }' > "$2"
+}
+# fsbp_hdoc <bytes> <file> — a here-document file write whose body lines carry an apostrophe, then
+#   a read whose out-of-root operand follows a redirection that carries an ampersand
+fsbp_hdoc() {
+  LC_ALL=C /usr/bin/awk -v n="$1" -v x="$FSBP_OUT_OP" -v sq="'" 'BEGIN { h = "cat > /tmp/f.md <<" sq "EOF" sq "\n"
+    t = "EOF\ncat 2>&1 " x; u = "it" sq "s a line of prose in the body\n"; s = h
+    while (length(s) + length(u) + length(t) <= n) s = s u
+    printf "%s%s", s, t }' > "$2"
+}
+# fsbp_med3 <a> <b> <c> -> the median of three tenths values
+fsbp_med3() {
+  if [ "$1" -gt "$2" ]; then set -- "$2" "$1" "$3"; fi
+  if [ "$2" -gt "$3" ]; then set -- "$1" "$3" "$2"; fi
+  if [ "$1" -gt "$2" ]; then set -- "$2" "$1" "$3"; fi
+  /usr/bin/printf '%s' "$2"
+}
+fsbp_why=""
+fsbp_m40s=0; fsbp_m40o=0; fsbp_m80s=0; fsbp_m80o=0
+if [ "$fsbp_p2off_n" != 2 ]; then
+  fsbp_why=" the copy whose second pass is off could not be built (it differs from the shipped hook in ${fsbp_p2off_n} lines, want 2), so there is no multiple to bound;"
+else
+  for fsbp_kb in 40 80; do
+    fsbp_qpad $(( fsbp_kb * 1024 )) "${FSBP_BASE}/qpad-${fsbp_kb}.cmd"
+    fsbp_s1=0; fsbp_s2=0; fsbp_s3=0; fsbp_o1=0; fsbp_o2=0; fsbp_o3=0
+    for fsbp_k in 1 2 3; do
+      fsbx_timed "$FSBP_S1" C "${FSBP_BASE}/qpad-${fsbp_kb}.cmd" "$FSBX_LIMIT"
+      if [ "$FSBX_DS" = -1 ]; then fsbp_why="${fsbp_why} the shipped hook was stopped at the budget at ${fsbp_kb} KB;"; fi
+      if [ "$FSBX_EXIT" != 2 ]; then fsbp_why="${fsbp_why} the shipped hook did not refuse the padded verb word at ${fsbp_kb} KB (exit ${FSBX_EXIT});"; fi
+      case "$fsbp_k" in 1) fsbp_s1="$FSBX_DS" ;; 2) fsbp_s2="$FSBX_DS" ;; 3) fsbp_s3="$FSBX_DS" ;; esac
+      fsbx_timed "$FSBP_P2OFF" C "${FSBP_BASE}/qpad-${fsbp_kb}.cmd" "$FSBX_LIMIT"
+      if [ "$FSBX_DS" = -1 ]; then fsbp_why="${fsbp_why} the copy whose second pass is off was stopped at the budget at ${fsbp_kb} KB;"; fi
+      case "$fsbp_k" in 1) fsbp_o1="$FSBX_DS" ;; 2) fsbp_o2="$FSBX_DS" ;; 3) fsbp_o3="$FSBX_DS" ;; esac
+    done
+    if [ "$fsbp_kb" = 40 ]; then
+      fsbp_m40s="$(fsbp_med3 "$fsbp_s1" "$fsbp_s2" "$fsbp_s3")"; fsbp_m40o="$(fsbp_med3 "$fsbp_o1" "$fsbp_o2" "$fsbp_o3")"
+    else
+      fsbp_m80s="$(fsbp_med3 "$fsbp_s1" "$fsbp_s2" "$fsbp_s3")"; fsbp_m80o="$(fsbp_med3 "$fsbp_o1" "$fsbp_o2" "$fsbp_o3")"
+    fi
+  done
+fi
+if [ -z "$fsbp_why" ]; then
+  fsbp_q="$(/usr/bin/awk -v a="$fsbp_m40s" -v b="$fsbp_m40o" -v c="$fsbp_m80s" -v d="$fsbp_m80o" 'BEGIN {
+    if (b < 1) b = 1; if (d < 1) d = 1; r40 = a / b; r80 = c / d; if (r40 <= 0) r40 = 1; printf "%.2f", r80 / r40 }')"
+  if /usr/bin/awk -v q="$fsbp_q" 'BEGIN { exit (q <= 1.5 ? 0 : 1) }'; then
+    /usr/bin/printf 'PASS: FSB-P2-COST-RATIO: the multiple of the second pass on a padded verb word grows by %s from 40 to 80 KB (bound 1.50), and every run is a refusal\n' "$fsbp_q"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: FSB-P2-COST-RATIO: the multiple of the second pass grows by %s from 40 to 80 KB, past the bound 1.50 — a multiple that grows with size\n' "$fsbp_q"; FAIL=$((FAIL + 1))
+  fi
+else
+  /usr/bin/printf 'FAIL: FSB-P2-COST-RATIO: the multiple of the second pass on a padded verb word cannot be bounded —%s\n' "$fsbp_why"; FAIL=$((FAIL + 1))
+fi
+fsbp_qpad $(( 160 * 1024 )) "${FSBP_BASE}/qpad-160.cmd"
+fsbp_hdoc $(( 160 * 1024 )) "${FSBP_BASE}/hdoc-160.cmd"
+for fsbp_shape in qpad hdoc; do
+  fsbx_timed "$FSBP_S1" C "${FSBP_BASE}/${fsbp_shape}-160.cmd" "$FSBX_LIMIT"
+  if [ "$FSBX_DS" != -1 ] && [ "$FSBX_EXIT" = 2 ]; then
+    /usr/bin/printf 'PASS: FSB-P2-COST-160-%s: the 160 KB shape is refused within the budget\n' "$fsbp_shape"; PASS=$((PASS + 1))
+  else
+    /usr/bin/printf 'FAIL: FSB-P2-COST-160-%s: the 160 KB shape is refused within the budget — measured ratio %s of the budget, bound 1.00; exit=%s (want 2)\n' "$fsbp_shape" "$(fsbx_ratio "$FSBX_DS" "$FSBX_LIMIT")" "$FSBX_EXIT"; FAIL=$((FAIL + 1))
+  fi
+done
+/bin/rm -rf "$FSBP_BASE"
+
 # ----- Summary -----
 
 echo ""
