@@ -61,7 +61,7 @@ A spoke briefed to run an audit mode that emits a dated analysis folder gets tha
      - Make the tracked change your run requires and leave it in place. Do not remove the folder.
      - End your output's Evidence section with one line: `Analysis output: staged — <your worktree root relative to the main checkout's root>/analysis/<folder>/ (<N> files)`, or `Analysis output: none — <reason>`. The main checkout's root is the parent of `git rev-parse --path-format=absolute --git-common-dir`."
 
-**At return.** Two steps fire inside Procedure 4, before routing: the listing R-0, for every spoke, and, for a briefed spoke, its row, which the Procedure 4 action-item scan fires (`open` → `in-flight`). Then:
+**At return.** Inside Procedure 4, before routing, the listing R-0 runs for every spoke, and for a briefed spoke the Procedure 4 action-item scan also fires its row (`open` → `in-flight`). Then, in order:
 
 - **R-0.** For every spoke, briefed or not, list the `analysis/` folder of the tree it ran in: the spoke's own worktree, at the path its Agent result names, or the hub's own worktree for a spoke launched without isolation. An entry there other than `README.md` is a folder a run left in a worktree. If no row covers it, open one now as in launch step 3, in the isolated form, and carry it through R-3 to R-7 with that tree as the source. The same listing runs once more at Stage 13, before the orphan-state sweep, over every worktree the run's spokes ran in, using the paths their Agent results named.
 - **R-1.** Read the spoke's `Analysis output:` line from its output comment, from a trusted author only.
