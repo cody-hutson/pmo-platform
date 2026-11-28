@@ -136,7 +136,7 @@ The helper validates that the target is one of the **9** allowlists it knows and
 
 The helper never writes a marker fence itself; the composition tooling owns the fence and its dialect.
 
-**Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. The guard's protected set is `CLAUDE.md`, `pmo-platform/**`, `.claude/settings.json`, `.claude/hooks/*` and `.claude/rules/*`, less that rule's three exemptions, each keyed on the write target (a target inside a repo-rooted worktree `pmo-platform/.claude/worktrees/<name>/…`, the git-ignored `pmo-platform/analysis/<subfolder>/…` workspace, and the git-ignored roadmap instances `pmo-platform/roadmaps/<name>`).
+**Allowlist files are explicitly excluded from the self-mod guard** (NEW-B BLOCK-DESTRUCTIVE-019) — Claude can append to them without bypass. The guard's protected set is `CLAUDE.md`, `pmo-platform/**`, `.claude/settings.json`, `.claude/hooks/*` and `.claude/rules/*`, less that rule's four exemptions, each keyed on the write target (a target inside a repo-rooted worktree `pmo-platform/.claude/worktrees/<name>/…`, the git-ignored `pmo-platform/analysis/<subfolder>/…` workspace, the git-ignored roadmap instances `pmo-platform/roadmaps/<name>`, and the git-ignored working-state home `pmo-platform/local-state/<subfolder>/…`).
 
 ## Warn-Mode vs. Enforce-Mode
 
