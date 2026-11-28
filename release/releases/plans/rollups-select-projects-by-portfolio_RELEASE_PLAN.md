@@ -478,11 +478,11 @@ Recorded on #9180 (comment 7234535888): **split** — the Engineering spoke buil
 | DEV-15 | 6 | Two literal-placement readings: health-check `references/rollup-mode.md`'s convention sentence is inserted as the new first paragraph under its heading (Change 18's "becomes" read as an insertion, so the freshness-audit paragraph is kept and edited per its own bullets); project-initiator's Operating Principles carries a paragraph, so Change 26's two bullets follow it | Stage-6 reading (minor) |
 | DEV-16 | 6 | The A2 decomposition is the GitHub sub-issue container with nine native sub-issues of #9180 (#9237–#9245: S1–S6, sync, plan-update, verification), each closed with its landing SHA. Earlier releases used the Stage-6 sub-task itself as the container with no further sub-issues | the hub's Stage-6 brief |
 | DEV-17 | 6 | The skill `version:` fields and the rollup template's provenance sidecar carry the literal provisional `v6.00`, not the release-version token: the stamp pre-flight refuses that token on a SKILL.md `version:` line, and the sidecar follows its existing literal convention. Both are re-read at Stage 7 and re-checked against the won tag at Stage 12 | `claim-version.sh` stamp pre-flight |
-| DEV-18 | 6 | Two rewordings after the draft PR's first CI read: the composer's polluted-key report class is named `polluted`, like its sibling keys (the operator-memory-reference gate read the longer name as a memory-file stem), and the ADR's `source_observations:` line drops the card's number, which stays in its `## References` block (the issue-reference gate). Meaning and behaviour are unchanged; the self-test, parity suite and AC3 bytes were re-run green | CI gates on the draft PR (minor) |
+| DEV-18 | 6 | Two rewordings after the draft PR's first CI read: the composer's polluted-key report class is named `polluted`, like its sibling keys (the operator-memory-reference gate read the longer name as a memory-file stem), and the ADR's `source_observations:` line drops the card's number, which stays in its `## References` block (the issue-reference gate). Meaning and behaviour are unchanged; the self-test, parity suite and AC3 bytes were re-run green. The rename was made so the gate's pattern stops matching an identifier that is not a memory reference. The alternative is the gate's file-level `allow-memory-ref` marker, which also blinds the file to a real reference. Which to keep is the hub's call, and the gate's over-match on `project_x_y`-shaped identifiers is reported as a finding | CI gates on the draft PR (minor; hub's call) |
 
 ## Verification Evidence
 
-Stage-6 C4 self-verification at the build head, before the operator's `OPERATIONS.md` commit. Nothing here reads the live operations tree: every `deploy.sh` run below sets `CLAUDE_WORKSPACE_ROOT` to a throwaway workspace, and the composer runs over the in-repo fixtures.
+Stage-6 C4 self-verification at the build head, before the operator's `OPERATIONS.md` commit. Nothing here reads the operations tree's project content: the composer runs over the in-repo fixtures, and the `--report`, `--check` and `--check-required-subset` runs set `CLAUDE_WORKSPACE_ROOT` to a throwaway workspace. Two reads did reach the operator's installation rather than the repository: `--check-package-freshness` ran on the default root, and resolved the live skill install only to locate the roster; and the sandboxed `--check`'s Check 9 compared the rules source against the deployed rules mirror, which reads DRIFTED on `operations-bridge.md` until Stage 12's deploy re-lays it.
 
 ### Per-issue checks (#8478)
 
@@ -528,7 +528,26 @@ The repository's own `deploy.sh`, invoked repo-relative under its own `set -euo 
 | root file and one folder file | PASS | — |
 | nothing | FAIL — missing (the sensitivity arm) | — |
 
-Rung 2 itself has no caller a sandboxed `--check` reaches with a value it reports, so its value semantics (root → root value; one → its value; two → none; root and one → root value; nothing → none) are carried to Stage 7, with a permitted form named there.
+Rung 2 executed on the one-folder-file layout inside that `--check` run, under `set -euo pipefail`: Check 33's cross-check calls the resolver and read OK, the expected default, because the planted file sets no `bundle_doctrine_frame`. Its value semantics are carried to Stage 7, with a permitted form named there: root → root value; one → its value; two → none; root and one → root value; nothing → none. Check 4 ran on that one layout only, so its coexistence WARN and its dual-label MISSING line did not execute here. Change 38 has no RED commit and no committed test: N/A with reason — `deploy.sh` carries no harness for the resolver or for Check 4, and the committed resolver test belongs to the routed per-project-rung card (D-Resolver (C)).
+
+### pmo-skill-editor Mode B and Mode C, re-run against their references
+
+The seven skills' commit trailers state a Mode B PASS and the GR / XC checks. Those trailers were written before the editor's `references/suite-contracts.md` and the canonical `core/standards/regression-checks.md` were read, so the checks were re-run against both at the build head. One Skill invocation covered all seven skills, where the plan had said one session per skill.
+
+- **Mode B** (`suite-contracts.md`):
+  - No contract-matrix row changes interface. ppm-agent's RAID entries and the daily-status → weekly-status-rollup status-log schema are untouched.
+  - The new `Portfolio:` report line is an additive output field, non-breaking under § Contract Versioning Rules, and no consumer parses it.
+  - The edits add no follow-up tag and no RAID namespace change, and the date-handling contract is kept.
+- **Mode C**, as mechanical arms over the seven skills' added lines, each beside a sensitivity arm over the same skills' whole text:
+  - GR-03: 2 hits, both `TBD` in the new eval fixture's Go-Live column, the sibling fixture's own convention for seeded data (sensitivity 18).
+  - GR-06: 8 dates, every day-of-week correct, 2026-04-24 a Friday and 2026-04-13 a Monday (sensitivity 61).
+  - XC-03: 0 new RAID ids (sensitivity 54).
+  - The evidence-label set: no new label (sensitivity 118).
+  - XC-01/02, follow-up tags: the probe is unusable, because its control also returned 0; the diff edits no routing line.
+- **Not triggered:** Category 7 (no registered corpus file edited) and Category 8 (no shell tool's anchor edited).
+- **Skill-specific:** ppm-agent's SS-01..03 bind outputs this edit does not change.
+- **Mechanical gates:** Check 6 read OK for all seven skills in the sandboxed `--check`; Check 10's predicate, read locally, finds the trailer on each skill's last commit (control: Engineering Commit 0 carries none).
+- **No FAIL**, so no fix-forward commit.
 
 ### CI on the draft pull request
 
