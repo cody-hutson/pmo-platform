@@ -10,6 +10,8 @@ This directory holds **schema templates** for per-release hub-state. The runtime
 | [`action-items.md.template`](action-items.md.template) | Action-item tracking (durable commitments to execute at a future routing point) | [`../../../core/standards/hub-action-tracking.md`](../../../core/standards/hub-action-tracking.md) § 2 |
 | [`sessions.md.template`](sessions.md.template) | Surface C (OPTIONAL) — session lineage with composite session-IDs | [`../../../core/standards/hub-session-continuity.md`](../../../core/standards/hub-session-continuity.md) § 3.3 |
 
+The resume pointer (`resume-pointer.md`) has no template here: the hub writes it whole at every checkpoint, per `core/standards/hub-session-continuity.md` § The resume pointer and its write-ahead cadence.
+
 Surface B (the hub-decisions / pipeline-event-log) is not represented here — it lives at the operator-instance evals path and reuses the existing `pipeline-event-log.md` schema. See [`../../../core/standards/hub-session-continuity.md`](../../../core/standards/hub-session-continuity.md) § 3.2.
 
 ## Runtime instance (OPERATOR-INSTANCE — NOT tracked)
@@ -21,6 +23,7 @@ The hub writes runtime instances to `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milesto
 ├── pending-approvals.md    # Surface A runtime instance
 ├── action-items.md         # Action-item runtime instance
 ├── sessions.md             # Surface C runtime instance (OPTIONAL)
+├── resume-pointer.md       # Resume pointer — rewritten whole at each checkpoint; no template
 └── staging/                # Run-scoped staging for hub-authored bodies
                             # awaiting posting; ends at Procedure 7 Step 6
 ```
