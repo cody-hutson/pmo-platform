@@ -49,7 +49,7 @@ The control-flow core. The hub:
 4. Before **every** spawn: runs the **quota-budget gate** — wave *or* singleton, at every stage including the write-serialized 6/13 — and honors the **parallelism class**, which is the stage-scoped half of the pair ([`spoke-launch.md`](spoke-launch.md)). A wave renders the full four-value verdict; a singleton renders the reduced PROCEED/DEFER form. The verdict is rendered on every launch, PROCEED included — the gate emits no event, so an unrendered verdict is indistinguishable from a gate that never ran.
 5. **Per-wave concurrent-PR check (pre-spawn):** before spawning a build spoke for issue #N, query open PRs referencing that issue (`gh pr list --state open --search "#N"` or equivalent; N = the target issue number). If an open PR already references it, **surface to the operator — proceed / adopt / skip — BEFORE spawning**, never deferred to the Stage 7/8 coherence review. **Re-run every wave** (not once at Stage 4): the open-PR population changes mid-run, so a clean planning-time scan does not carry ([`spoke-launch.md`](spoke-launch.md)).
 6. **Per-launch spoke-brief path scan (pre-spawn):** scans the **rendered** brief — not the template — with `core/deploy/tools/path-leak-patterns.sh --scan-file`, and does not spawn on a non-exempt hit. Exit 2 (unreadable file, or a copy of the primitive predating the arm) is UNKNOWN, not clean; assert the arm exists before trusting a verdict. This is the fourth standing pre-spawn guard ([`spoke-launch.md`](spoke-launch.md)).
-7. Spawns the wave.
+7. Rewrites the resume pointer, naming every spoke of the wave as in flight (`core/standards/hub-session-continuity.md` § The resume pointer and its write-ahead cadence), then spawns the wave.
 
 ## Procedure 3 — Spoke prompt construction
 
@@ -57,7 +57,7 @@ When spawning a per-issue stage spoke (5–13), the hub builds the prompt from t
 
 ## Procedure 4 — Spoke completion handling
 
-After a spoke (or batch) returns: read the return value + output comment; verify closure; assess sufficiency; **evaluate the spoke's recommendations adversarially** against release-wide context (verify, don't rubber-stamp — R1 in [`decision-briefing.md`](decision-briefing.md)); produce a **Decision Briefing**; route only after the operator renders every decision. The action-item scan composes here.
+After a spoke (or batch) returns: read the return value + output comment; rewrite the resume pointer (`core/standards/hub-session-continuity.md` § The resume pointer and its write-ahead cadence); verify closure; assess sufficiency; **evaluate the spoke's recommendations adversarially** against release-wide context (verify, don't rubber-stamp — R1 in [`decision-briefing.md`](decision-briefing.md)); produce a **Decision Briefing**; route only after the operator renders every decision. The action-item scan composes here.
 
 ## Procedure 4a — Emit on decision (MANDATORY)
 
@@ -267,6 +267,8 @@ invisible to the check that would otherwise catch it. Full convention:
 
 A routing step that advances with a rendered decision and no emitted row is incomplete.
 
+Once the rows are read back, rewrite the resume pointer (`core/standards/hub-session-continuity.md` § The resume pointer and its write-ahead cadence) before routing continues. Its moments, contents and write rules live in that section and are not restated here.
+
 ### 4a.1 — Hub-state lazy creation (first write only)
 
 Before the FIRST write to any hub-state surface this release (`pending-approvals.md`,
@@ -362,7 +364,7 @@ blocks no release in flight.
 
 ## Procedure 5 — Gate handling (the `STOP`-disposition touchpoints)
 
-**Do NOT spawn a spoke — gates are operator decisions.** Which touchpoints stop here is read from the **Hub Gate Register** below — the rows whose `Disposition` is `STOP` or `STOP-IF` — not from a count restated in this heading. The hub reads the prior outputs, runs the action-item scan + (Stage-9 only) the Release Readiness Scan + the goal-conformance check, and presents:
+**Do NOT spawn a spoke — gates are operator decisions.** Which touchpoints stop here is read from the **Hub Gate Register** below — the rows whose `Disposition` is `STOP` or `STOP-IF` — not from a count restated in this heading. The hub reads the prior outputs, runs the action-item scan + (Stage-9 only) the Release Readiness Scan + the goal-conformance check, rewrites the resume pointer with the gate as its next action (`core/standards/hub-session-continuity.md` § The resume pointer and its write-ahead cadence), and presents:
 - **Stage 9 — Plan Review (GO / NO-GO):** the release-authorization decision. The hub assembles the evidence; the operator renders GO/NO-GO. **NEVER auto-crossed.** The verdict is recorded by the Stage 9 spec's own step — release/references/pipeline/stage-09-plan-review.md § 5 Phase C1, read from the repository — which writes the decision record and the verdict's `gate-outcome` row (stage `9`, actor `operator`) as one action and reads the row back, typed to its class, before the gate sub-task closes; Procedure 4a supplies the emit mechanics.
 - **Stage 12 — Execute:** merge + deploy authorization. **NEVER auto-crossed** — the operator renders the Execute decision (not a spoke). **Once authorized, the hub routes the Stage-12 *mechanics* through the spawned `pmo-release-manager` tail** — **B1** (merge) + **B3** (atomic version-claim / signed-tag via `claim-version.sh`) + **B4** (the deploy of the release's changed files, per `stage-12-execute.md` Phase B4) + **B5** (the DEPLOYED RELEASE_LOG-row chore PR), run via `release-executor` — **never a bare `gh pr merge` by the hub** (the orchestrator running stage mechanics directly is the ADR-019 fat-orchestrator anti-pattern; "No stage mechanics" per SKILL.md `## What This Skill Does NOT Do`). **Guard:** a merged release left with no DEPLOYED RELEASE_LOG row + no version tag **blocks / flags before close-out with a remediation prompt** (not a bare preflight FAIL) — this catches a Stage-12 that landed merge-only.
 

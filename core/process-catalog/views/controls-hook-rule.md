@@ -39,7 +39,7 @@ generated_by: build-process-catalog.py
 | C-024 | git filter-branch is refused | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
 | C-025 | git filter-repo is refused | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
 | C-026 | Write/Edit to .git/config, .git/hooks/*, .git/info/* is refused | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
-| C-027 | Write/Edit whose resolved target is a Layer-1 primary-checkout path is refused (three target-keyed exemptions: repo-rooted worktree, git-ignored analysis subfolder, git-ignored roadmap instance) | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
+| C-027 | Write/Edit whose resolved target is a Layer-1 primary-checkout path is refused (four target-keyed exemptions: repo-rooted worktree, git-ignored analysis subfolder, git-ignored roadmap instance, git-ignored local-state subfolder) | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
 | C-028 | PATH manipulation in a Bash command (PATH=, export PATH, unset PATH) is refused | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
 | C-029 | alias / function override of critical tools (grep, jq, bash, sh, printf) is refused | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
 | C-030 | Mid-session setting of CLAUDE_HOOK_BYPASS or PMO_SCOPE_GUARD_ROOT is refused (anti-injection) | code-enforce | hook | `core/hooks/block-destructive.sh` | — |

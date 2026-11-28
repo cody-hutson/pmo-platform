@@ -13,7 +13,7 @@ Mode O launches every spoke with the **`Agent` tool** (a fresh session) — neve
 
 `Agent({subagent_type, prompt, description, model, isolation, run_in_background})`. Two are load-bearing:
 - **`model` — REQUIRED-EXPLICIT** at the PMO surface (never rely on the implicit default).
-- **`isolation: "worktree"`** — MUST be pinned for the write stages (6, 12, 13); MAY be used for read-only stages (5, 7, 8).
+- **`isolation: "worktree"`** — MUST be pinned for the write stages (6, 12, 13); MAY be used for read-only stages (5, 7, 8), except for a spoke that runs an audit mode and changes no tracked file, which is launched without it (§ Audit output below).
 
 (Full signature table: `hub-spoke-bridge.md` § Spoke Launch Mechanisms § Default.)
 
@@ -37,6 +37,53 @@ Every spoke prompt Mode O renders MUST carry the run-directory clause verbatim: 
 **Paths the hub writes TO — the other half of that same obligation.** The rule above governs the paths Mode O *emits*. The paths Mode O *writes to* are governed too, and by exactly one location: every body the hub stages before posting — issue and PR bodies, decision-record and stage comments, milestone-description revisions, cross-milestone notices — is written inside the release run's staging directory under the operator-instance hub-state path, and nowhere else, for the life of the run. That staging ends at the release close's orphan-state cleanup step, and a body the operator means to keep past the run is moved to the operator's own area rather than left in it. Canonical clause, its lifecycle, and its honest scope: `release/references/how-to/hub-spoke-bridge.md` § Hub Staging Discipline. Cite it; do not restate it here.
 
 **Why the hub is the fix point, not the spoke.** A brief carries a path into a spoke; the spoke echoes it into a public comment; that echo is IRREVERSIBLE, because editing a published comment does not scrub its edit history. Repairing the brief repairs every downstream spoke at once. Repairing the echo repairs one comment that is already public. The observed instance was 19 occurrences across 8 public issues in a single release, all of them injected by the orchestrator and echoed back.
+
+## Audit output — launch shape, staging and promotion
+
+A spoke briefed to run an audit mode that emits a dated analysis folder gets that folder to the analysis home according to the shape it is launched in. The rule and its reasons are stated in `core/standards/analysis-workspace-standard.md` § Spoke-run analysis. The hub's steps are stated here in full, because the hub runs them from the installed skill.
+
+**At launch.**
+
+1. **Choose the shape.** A spoke whose run changes no tracked file launches **without** `isolation`. A spoke whose run also changes a tracked file launches **with** `isolation: "worktree"`: an audit mode that overwrites a committed summary surface, or any Stage 6, 12 or 13 spoke.
+2. **Choose the folder name.** List the home for the mode's own name for the day, `<name>-<UTC date>/`. If that name is taken, brief the spoke `<name>-run<N>-<UTC date>/`, with `N` the lowest number from 2 not already taken at the home. The date stays last, as the analysis standard's folder convention requires, and the mode's own pointers then carry the final name. Step R-4 still stops on a name taken after this check.
+3. **Open the record before the spawn.** Add one full 13-field row to the run's `action-items.md`, per `core/standards/hub-action-tracking.md` § 2:
+   - `id` the next free `AI-NNN`; `created_at` now; `source_stage` the launching stage; `source_sub_task` the spoke's sub-task;
+   - `category` `verification`, `owner` `hub`;
+   - `description` `analysis output of spoke #<sub-task>: confirm it at the analysis home` without isolation, or `analysis output of spoke #<sub-task>: promote it to the analysis home and confirm it` with isolation;
+   - `trigger_type` `event`, `trigger_detail` `return of the spoke for #<sub-task>, before any removal of its worktree`;
+   - `target` `file:<OPERATOR_INSTANCE_ANALYSIS_PATH>/`, `status` `open`, `resolved_at` `—`, `resolution` `—`.
+
+   Read the row back. The commitment sweep renders it. Only `status`, `resolved_at` and `resolution` change afterwards.
+4. **Render the matching clause verbatim** into the brief, with step 2's folder name in place of `<folder>`. Write the home in a § Output path form; in the clause without isolation, write it in the `$HOME`-relative form or as the token, never repo-relative.
+   - *Without isolation:* "**Audit output.** Write your run's dated analysis folder at the analysis home, `<home>/<folder>/`. That is the main checkout's git-ignored workspace, which the registered-homes carve-out admits from any working directory. You share the launching session's working tree, and its own git-ignored `analysis/` is not the home: before you write, confirm that the target sits under the main checkout's root, the parent of `git rev-parse --path-format=absolute --git-common-dir`, and not under `git rev-parse --show-toplevel` where the two differ. Use the file-write tools or a shell write. A write any control refused is never re-attempted through the shell. End your output's Evidence section with one line: `Analysis output: written — <OPERATOR_INSTANCE_ANALYSIS_PATH>/<folder>/ (<N> files)`, or `Analysis output: none — <reason>` if the run wrote no folder."
+   - *With isolation:* "**Audit output (isolated spoke).** You write the analysis home on no channel: the harness confines your file-write tools to your own worktree, and the hub promotes your folder after you return. A refusal is reported, never re-attempted through the shell.
+     - Write your run's dated analysis folder at the same relative path inside your own worktree, `analysis/<folder>/` under `git rev-parse --show-toplevel`, with the file-write tools.
+     - Make the tracked change your run requires and leave it in place. Do not remove the folder.
+     - End your output's Evidence section with one line: `Analysis output: staged — <your worktree root relative to the main checkout's root>/analysis/<folder>/ (<N> files)`, or `Analysis output: none — <reason>`. The main checkout's root is the parent of `git rev-parse --path-format=absolute --git-common-dir`."
+
+**At return.** Inside Procedure 4, before routing, the listing R-0 runs for every spoke, and for a briefed spoke the Procedure 4 action-item scan also fires its row (`open` → `in-flight`). Then, in order:
+
+- **R-0.** For every spoke, briefed or not, list the `analysis/` folder of the tree it ran in: the spoke's own worktree, at the path its Agent result names, or the hub's own worktree for a spoke launched without isolation. An entry there other than `README.md` is a folder a run left in a worktree. If no row covers it, open one now as in launch step 3, in the isolated form, and carry it through R-3 to R-7 with that tree as the source. The same listing runs once more at Stage 13, before the orphan-state sweep, over every worktree the run's spokes ran in, using the paths their Agent results named.
+- **R-1.** Read the spoke's `Analysis output:` line from its output comment, from a trusted author only.
+  - On `none` with R-0's listing empty, set `status` `done` and `resolution` `no folder — <reason>`: the check ran and found nothing to promote. If R-0 found a folder, go on by R-3 with that tree as the source. The hub never cancels a row; that transition is the operator's.
+  - With no `Analysis output:` line at all, list both the home and the spoke's tree for a folder dated that UTC day. Go on by R-2 if it is at the home, by R-3 if it is in the tree, or leave the row `in-flight` and surface it if it is in neither.
+- **R-2.** On `written`, list the folder at the home and run `git -C <main checkout> check-ignore -q` on its `SUMMARY.md` (exit 0). Set `status` `done` and `resolution` `at home — <folder in token form> (<N> files)`. Stop here. If the folder is absent from the home, list `<hub worktree>/analysis/<folder>/`: when it is there, promote it by R-3 to R-7 with the hub's worktree as the source; when it is nowhere, leave the row `in-flight` and surface it.
+- **R-3.** On `staged`:
+  - The source is the main checkout's root joined with the reported path. The destination is the home plus the folder name.
+  - Count the source's files.
+  - If the source is absent, leave the row `in-flight` and surface the loss to the operator. A lost folder never resolves its own row: only the operator's ruling moves it to `cancelled`, with `resolution` `lost — <the ruling>`.
+- **R-4.** If the destination already exists and `diff -r` shows it identical to the source, go to R-6. Otherwise stop and surface it. Never overwrite a folder at the home.
+- **R-5.** Copy the folder with `mkdir -p <destination>`, then `cp -R <source>/. <destination>/`. The hub's file tools reach the main checkout, so the registered-homes carve-out sanctions this shell write inside the home.
+  - If a control refuses the copy, fall back to the file-write tools, the channel the carve-out is enforced on: read each file of the source (the Read tool, or a shell read) and write it with `Write` to the same relative path under the destination.
+  - A file too large for one `Write`, or a `Write` a control refused, goes to the operator, never back to the shell. Give a one-line copy command in a fenced block, with its reversibility tier and the read-back you will run. The row stays `in-flight` until the operator reports the copy done.
+- **R-6.** Verify all three: `diff -r <source> <destination>` exits 0; the two file counts match; `git -C <main checkout> check-ignore -q <destination>/SUMMARY.md` exits 0.
+- **R-7.** Set `status` `done` and `resolution` `promoted <folder> (<N> files) from <reported path>; diff -r clean`, and read the row back.
+  - Then dispose of the run's tracked change. When the launching stage commits (6, 12 or 13), the spoke has committed it on its branch as that stage requires. Otherwise, in the same routing turn, carry the change onto the release branch from the spoke's worktree or open a `deferred-edit` row for it. After either, the change no longer depends on the worktree.
+  - Retire the staged copy with `trash <absolute source path>`, so the orphan-state sweep can reap the worktree later. That sweep never removes a worktree holding git-ignored files.
+
+**A hub resuming after a cut-off** reads the `open` and `in-flight` rows whose description begins `analysis output of spoke #`. For each, it takes the spoke's `Analysis output:` line from the spoke's output comment and runs R-1 to R-7 unchanged. A row left unresolved blocks the release's close at the Stage 13 action-item gate.
+
+**Honest scope — a discipline, not an interlock.** Nothing asserts per launch that the shape was chosen, the row opened or the clause rendered, nor per return that the listing ran. For a briefed run the row is the observable: an audit spoke with no row, or a row still open at close, makes the gap visible. A run no brief predicted is visible only through R-0's listing.
 
 ## Worktree detect-first guard
 

@@ -6630,6 +6630,22 @@ case "$TOOL_NAME" in
       # does not follow a repointed roadmaps path: an instance home configured elsewhere
       # is not exempt.
       #
+      # FOURTH -019 EXEMPTION — the git-ignored working-state home, `pmo-platform/local-state/<sub>/…`.
+      # core/standards/instance-data-placement-standard.md registers /local-state/ as the
+      # repository's working-state home; .gitignore (`/local-state/*` + `!/local-state/README.md`)
+      # ignores everything under it and tracks README.md alone.
+      #   The arm requires a SUBFOLDER SEGMENT, as the analysis arm does: a file at the top of the
+      #   home stays blocked, and git never descends an ignored subfolder, so an ignore file a
+      #   session places below one re-includes nothing. Two exclusions read the first segment under
+      #   the home and come first: README.md in any case spelling, as a file or as a folder name (a
+      #   session-made file or folder of that name in the main checkout collides with the tracked
+      #   README a fast-forward brings), and any dot-leading entry (git reads an ignore file at the
+      #   top of the home). PREMISE: README.md is the only tracked file under local-state/ —
+      #   re-check it whenever `.gitignore` changes there. Anchored at the repo root.
+      #   PARITY: the homes these arms admit are held equal to the "Main-checkout carve-out admits"
+      #   column of the placement standard's registered-homes table by the T8019-P arms of
+      #   tests/block-destructive.test.sh. Change a home here only in the same change as that table.
+      #
       # WHY THE PREDICATES ARE STATIC, AND WHY THAT IS THE SECURITY PROPERTY. These
       # patterns live inside .claude/hooks/*, which -019 itself protects and
       # BLOCK-AUTONOMY-001 always-blocks. An exemption authored in a surface the
@@ -6670,6 +6686,15 @@ case "$TOOL_NAME" in
         "${PRIMARY_ROOT}/pmo-platform/roadmaps/"?*)
           exempt_home="roadmaps"
           ;;
+        "${PRIMARY_ROOT}/pmo-platform/local-state/"[Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd]|"${PRIMARY_ROOT}/pmo-platform/local-state/"[Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd]/*)
+          exempt_withheld="local-state/README.md, the tracked file of the local-state home, is an excluded leaf"
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/local-state/".*)
+          exempt_withheld="a dot-leading entry at the top of the local-state home is an excluded leaf"
+          ;;
+        "${PRIMARY_ROOT}/pmo-platform/local-state/"*/*)
+          exempt_home="local-state"
+          ;;
       esac
 
       if [ -n "$exempt_home" ]; then
@@ -6692,6 +6717,13 @@ case "$TOOL_NAME" in
             "roadmaps:${exempt_root}/pmo-platform/roadmaps/".*)
               ;;
             "roadmaps:${exempt_root}/pmo-platform/roadmaps/"?*)
+              exit 0
+              ;;
+            "local-state:${exempt_root}/pmo-platform/local-state/"[Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd]|"local-state:${exempt_root}/pmo-platform/local-state/"[Rr][Ee][Aa][Dd][Mm][Ee].[Mm][Dd]/*)
+              ;;
+            "local-state:${exempt_root}/pmo-platform/local-state/".*)
+              ;;
+            "local-state:${exempt_root}/pmo-platform/local-state/"*/*)
               exit 0
               ;;
           esac

@@ -472,11 +472,10 @@ pmo_external_sync_path_for() {
 # anchors on <workspace-root>/pmo-platform, the main checkout, as the analysis and
 # roadmaps homes do.
 #
-# NO WRITER DEFAULTS TO IT. The placement standard admits no session write into the
-# main checkout's /local-state/ until /local-state/ joins the main-checkout carve-out
-# hook's static set, so the cost-row mode keeps its folder an explicit --out-dir and
-# does not call this function. A default wired before that change would make the
-# prohibited write the default.
+# NO WRITER DEFAULTS TO IT. The cost-row mode keeps its folder an explicit --out-dir and
+# does not call this function. The main-checkout carve-out admits a session's Write/Edit
+# under /local-state/<sub>/, so the folder is reachable from a session worktree; giving a
+# writer this default is that writer's own change.
 #
 # TWO declared tiers and no env tier: the operator.toml override key the token
 # declares, else the in-repo default. ADR-032 § "invent no new variable" forbids
@@ -504,8 +503,8 @@ pmo_telemetry_path_for() {
 # report under it is git-ignored, so a report never reaches a commit while the home
 # stays discoverable. It anchors on <workspace-root>/pmo-platform, the main checkout,
 # for the reason the telemetry folder above does: a report written into a session
-# worktree dies with that worktree. Unlike /local-state/, a session may write a
-# subfolder here — the main-checkout carve-out admits /analysis/<sub>/ today.
+# worktree dies with that worktree. As under /local-state/, a session may write a
+# subfolder here — the main-checkout carve-out admits /analysis/<sub>/.
 #
 # TWO declared tiers and no env tier: the operator.toml override key the token
 # declares, else the in-repo default. PMO_INSTANCE_PATH does not relocate it and

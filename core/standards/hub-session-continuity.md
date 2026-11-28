@@ -1,6 +1,6 @@
 ---
 title: Hub Session Continuity
-purpose: K1 codified-knowledge standard defining how a new hub session reconstructs release-scoped state from durable artifacts — persistence format, 3-surface state schema, 9-step Resume Procedure, composite session-ID, dual-surface Decision Log Mechanism, and the durable-state contract that the queued-approval mechanism rides on
+purpose: K1 codified-knowledge standard defining how a new hub session reconstructs release-scoped state from durable artifacts — persistence format, 3-surface state schema, the write-ahead resume pointer and its cadence, 9-step Resume Procedure, composite session-ID, dual-surface Decision Log Mechanism, and the durable-state contract that the queued-approval mechanism rides on
 type: standard
 status: ACTIVE
 source: ""
@@ -55,7 +55,7 @@ Per Stage 5 D-2 verdict on the hub-session-continuity sub-task: the persistence 
 
 ## 3. State Schema
 
-Hub state partitions across THREE surfaces by concern.
+Hub state partitions across THREE surfaces by concern. The three partition the run's record, and each grows by appended rows rather than being rewritten. The resume pointer (§ 3.4) is a further file in the run folder, not a fourth partition of that record: it is one file, rewritten whole at each checkpoint, that says where the run stands and holds what no record carries. Where the pointer and the record disagree, the record wins.
 
 ### 3.1 Surface A: Pending-Approval Queue (NEW substrate for queued approvals)
 
@@ -138,9 +138,64 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 
 `events_emitted` is best-effort hub-self-report (count of `pipeline-event-log` rows emitted during the session). Drift acceptable — Surface C is informational only.
 
+### 3.4 The resume pointer and its write-ahead cadence
+
+**What it is for.** A hub session can stop mid-turn — at an account's usage cap, for one — and be resumed by a fresh session, under the same account or another, that has no transcript of the first. Surfaces A, B and C let that session rebuild the record; they do not say what the stopped session was in the middle of. The resume pointer does. It is written ahead of each action the hub takes, so a resuming hub finds the stage and the gate, the next action, every spoke in flight with a test for whether it died, and everything the stopped session held that was bound to its account.
+
+**Home and class.** Runtime instance (operator-local): `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/resume-pointer.md`, at the root of the run folder beside `pending-approvals.md` and `action-items.md` — never under `staging/`, which holds bodies awaiting posting and ends at the release's close (the hub-spoke bridge's Hub Staging Discipline). The pointer is a member of the placement standard's surface S-01, the release-hub run folders. Its class is **Working state**; its governed home is `/local-state/release-runs/` in the main checkout of the repository the run belongs to — an external target's run, that target's own home; and until that repository's cutover it resolves through `<OPERATOR_INSTANCE_HUB_STATE_PATH>` at the path above. It is one more file inside a run folder S-01 already registers, so it registers no new surface, path token, resolver or home subfolder. It has no tracked template: the hub writes it whole at every checkpoint, so the § 7.3 copy-then-append protocol does not apply to it. It is never committed or pushed; a resume reads it from the run folder, never from a branch.
+
+**It is not a ledger row.** Its content changes at every checkpoint, and an action-item row may change only `status`, `resolved_at` and `resolution` once it is appended (`hub-action-tracking.md` § Action-Item Schema), so the pointer's content cannot live in the ledger. The ledger needs no row for it, because Resume Procedure Step 7 reads it at the fixed path above. A run that keeps one keeps at most one, appended once: category `reminder`, trigger_type `time`, trigger_detail `next session start`, target the pointer's path, carrying none of the pointer's content. That row is resolved at Procedure 7, before the action-item gate: `done`, with resolution `pointer retired at close`, once a resume has moved it to `in-flight`; otherwise `cancelled` at the operator's Procedure 7 review, with resolution `no resume read it`.
+
+**Contents.** Frontmatter as the sibling surfaces carry it, plus one field, `checkpoint`:
+
+```yaml
+---
+schema_version: "v1.0"
+milestone: "<milestone-slug>"
+created_at: "<ISO 8601 UTC of the run's first pointer write>"
+last_updated: "<ISO 8601 UTC of this write>"
+last_session_id: "<worktree>__<ISO-start>__<short-sha>"
+checkpoint: "<before-launch | after-return | after-decision | before-stop | before-handle>: <the sub-task, decision or gate it concerns>"
+---
+```
+
+Then four sections, in this order, each present on every write and reading `none` where empty:
+
+| Section | Holds |
+|---|---|
+| `## Where the run stands` | The stage, and the gate it is at or heads to; what the run waits on — spokes, the operator at a named gate (with its pending-approval id where the gate is queued), or nothing; the release branch, its head commit at this write, and the release pull request where one exists; for each spoke that has returned and whose worktree is not yet removed, that worktree's path as its Agent result named it; and where the audit-output rows are: the run's `action-items.md`, the rows whose description begins `analysis output of spoke #` |
+| `## Next action` | Exactly one action, in the imperative, naming the sub-task, decision or gate it serves |
+| `## Spokes in flight` | One row per spoke launched and not yet returned: its sub-task, its stage, `launched_at`, its launch shape — background or foreground, and isolation (`worktree` or none), with the worktree path or agent ID once the launch returns it — the exact output heading literal that its sub-task body's Output line names, the action-item id of any audit-output row opened for it, and its died-test |
+| `## Bound to the account` | One row per handle the run holds outside the record — a background spoke, a background shell task or monitor, a wakeup or session-only timer, each of which ends with the session that armed it, and a scheduled task or routine registered through the scheduler adapter, which outlives every session — giving the handle, its kind, that lifetime, when it was armed and when it is due, what it is for, and what a resume does with it (§ 4.2 step 4) |
+
+A section the hub adds after these four is its own note; the Resume Procedure does not read it.
+
+**The died-test.** Each in-flight row states the observable that tells a resuming hub whether the spoke returned. A spoke whose output is a sub-task comment has returned when its sub-task carries a comment from the trusted set, created after `launched_at` minus five minutes, that either opens with the heading literal its row records or carries the `Post-push mergeability:` line every spoke output is obliged to render. A spoke that commits has also done part of its work when the release branch carries commits after the head `## Where the run stands` records. A spoke with neither has died only when § 4.2's liveness read finds that nothing which launched or holds it is still alive. Absence of output is never a died verdict on its own: the stopped session may still be running in another app instance, capped and waiting for its reset, with its spokes and its transcript.
+
+**Current state only.** Decisions, approvals, action items and history stay in the record, named by id where the pointer needs them and never copied: a copy is a second source that drifts. Paths are written in token-relative or repository-relative form. No account's name or address is ever recorded — the handle and its purpose are enough, and an account identifier would turn the run folder into leak-risk content under the placement standard.
+
+**The write-ahead cadence.** The hub rewrites the pointer:
+
+1. **before each spoke launch** — after the launch's pre-spawn guards and any action-item row the launch opens, immediately before the launch, with the spoke named in `## Spokes in flight`; a wave is written once, naming every spoke, before its first launch;
+2. **after each spoke return** — once the return value and the output comment are read, before the return is evaluated or briefed;
+3. **after each decision** — every operator-rendered decision and every hub-rendered determination, once its Decision Recorded comment and its event-log row are written and read back, before routing continues;
+4. **before each stop gate** — every operator gate (the touchpoints the release-hub orchestration playbook's Hub Gate Register marks `STOP` or `STOP-IF`, or the bridge's Procedure 5 gates for a hub run by hand), before the gate is presented; where the gate is queued to Surface A (§ 7.2), the pending-approval row is appended first and the pointer names it.
+
+It also rewrites the pointer **before it arms any handle bound to the account, or pauses the run on purpose**, so the handle or the pause is on record before it exists; and **once a launch or an arming returns its identifier** — an isolated spoke's worktree path or agent ID, a job ID — so the identifier is on record while the spoke or the handle lives. That write keeps the `checkpoint` of the launch or the arming it completes; for a foreground launch the after-return write already covers it. Two of these moments with no action between them are served by one write.
+
+**Order within a checkpoint.** At each moment the record is written first — the comment, the event-log row, the ledger row, the pending-approval row — and the pointer last, so the pointer never names a record entry that does not exist. "Before" in moments 1 and 4 is relative to the launch and to the presentation, not to those record writes. A pointer that names a spoke before the spoke exists is safe: if the session ends between the write and the launch, no worktree and no output exist, the died-test reads died once the liveness read clears, and the spoke is launched again.
+
+**How it is written.** Only the hub writes it; a spoke never does. Each write replaces the whole file in one write — never an append and never a partial edit. `last_updated`, and each `launched_at` the write records, are copied from `date -u +%Y-%m-%dT%H:%M:%SZ`, run in the same turn immediately before the write — never typed, rounded or prefixed with `~`. The write is read back: `last_updated` equals the value just written and lies within two minutes of the file's modification time, or the file is written again; and `## Spokes in flight` names exactly what the hub is about to launch or already holds in flight. No earlier copy is kept beside it; the record carries the history.
+
+**The lease.** Each session keeps the `last_updated` value it last read or wrote. Before every pointer write it re-reads the pointer. If `last_updated` has moved and `last_session_id` names another session, this session has been superseded: it writes nothing more, routes nothing, and tells the operator. A resuming session takes the lease at its first write (§ 4.2 step 6). A stopped session that wakes — at its usage-cap reset, for one — meets the lease at its next checkpoint, which falls before any launch or gate.
+
+**Honest scope — a discipline, not an interlock.** **Runner:** NONE — a registered named gap. Nothing observes whether a hub wrote at each moment: the pointer lands on a path no CI job reads, and a skipped write issues no tool call to observe. The gap is recorded in the gate-coverage register of `core/standards/gate-efficacy-standard.md`. The declared observable is the pointer itself at the next resume: a compliant hub leaves a pointer no older than every entry of the comparison set (§ 4.2 step 1), apart from the entries of the one checkpoint it was cut off in, and Resume Procedure Step 9 reports a pointer that is older than that, or absent, as drift (§ 4.1). A skipped write followed at once by a stop reads the same as a stop mid-checkpoint; the record wins in both, so that residual is safe. A run that is never resumed is never checked this way.
+
 ## 4. Resume Procedure
 
 **Trigger:** Hub session start (operator paste of Hub Prompt, OR scheduled-task hub spawn, OR any new hub session reading from a worktree where a release is in flight).
+
+**The case the resume pointer exists for** is a session that stopped mid-turn, resumed by a fresh session under the same account or another. A resuming session also takes on the write side: from its first routing decision it keeps the resume pointer current at the moments § 3.4 names.
 
 **Read order (9 steps):**
 
@@ -152,7 +207,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 | 4 | `release/releases/plans/<slug>_RELEASE_PLAN.md` from release branch OR main | Stage 4 release plan (scope, sequence, D-Gate verdicts) | YES — if file exists; fallback: Stage 4 sub-task comment per [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) |
 | 5 | `gh issue list --milestone "<name>" --label sub-task --state all --limit 500 --json number,title,state,labels,projectItems` | Per-stage sub-task states + GitHub Projects field anchors | YES |
 | 6 | `grep "\| v<X.Y> \|" <OPERATOR_INSTANCE_EVALS_RESULTS_PATH>/pipeline-event-log.md` | Release-scoped decision history (D-class verdicts, scope-lock, gate outcomes, escalations) | YES |
-| 7 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/pending-approvals.md` | Queued approvals awaiting current session | YES — if exists |
+| 7 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/resume-pointer.md` (§ 3.4), then `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/pending-approvals.md` | Where the previous session stopped and what it held in flight, read per § 4.2; then the queued approvals awaiting the current session | YES — each if it exists |
 | 8 | `<OPERATOR_INSTANCE_HUB_STATE_PATH>/<milestone-slug>/sessions.md` | Session lineage (informational) | OPTIONAL |
 | 9 | Drift check: cross-reference event-log decisions vs. release plan deviation log vs. sub-task closure states | Surface inconsistencies before acting | YES |
 
@@ -165,6 +220,7 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 3. Last operator decisions (most recent 5 event-log rows for this release)
 4. Drift findings (if any)
 5. Recommended next routing (per [`hub-spoke-bridge.md` Procedure 2](../../release/references/how-to/hub-spoke-bridge.md))
+6. The resume read (§ 4.2): where the pointer says the run stopped; whether the liveness read found that the stopped session may still be running — and if so, that session and its live handles, with the ask to close that session or its app instance, or to tell this hub to stand down; each in-flight spoke's died-test verdict; each audit output still awaiting promotion; and each account-bound handle lost and whether it is re-armed — or that no pointer was found, and why
 
 ### 4.1 Drift Detection (Step 9)
 
@@ -174,8 +230,40 @@ last_session_id: "<worktree>__<ISO-start>__<short-sha>"
 | Sub-task closed without expected event-log emission (e.g., Stage 9 GO closed without `gate-outcome/plan-review-go`) | Per-stage cross-check | MEDIUM | Surface to operator; ask whether to backfill or accept |
 | Pending-approval row marked `pending` but originating sub-task closed | Per-pending-approval cross-check | HIGH | Surface to operator immediately — possible orphaned approval |
 | Release plan file out-of-sync with milestone scope (e.g., milestone added issue post-Stage-4) | Compare plan's issue list to current milestone enumeration | MEDIUM | Per A7 Bundle Mutability Protocol per [`release-process.md` Stage 3 A7](../../release/governance/release-process.md) — surface refresh-trigger to operator |
+| Resume pointer older than the record — its `last_updated` precedes the newest entry of the comparison set (§ 4.2 step 1) | Compare `last_updated` with the newest such entry (§ 4.2 step 1) | MEDIUM; LOW, and read as cut off mid-checkpoint rather than as a missed write, when every newer entry concerns the checkpoint the pointer's `checkpoint` field names or the one immediately after it | The record wins: take the stage, the gate and the next action from the record, and report which write the pointer missed, or the checkpoint it was cut off in |
+| Resume pointer names a spoke in flight whose output already exists | The row's died-test reads returned (§ 4.2 step 2) | LOW | The spoke returned after the last write: handle it per Procedure 4 |
+| No readable resume pointer — none at the run root or a legacy place (§ 4.2), or one missing a § 3.4 section — while the release has routed past Stage 4 | Step 7 read | MEDIUM | Rebuild from the record, and report that the write-ahead cadence did not run |
 
 Drift findings emit `decision/empirical-verification-finding` rows per the existing R3 discipline (per [`evidence-grounding-standard.md`](evidence-grounding-standard.md)); NOT a new subtype.
+
+### 4.2 Resuming from the resume pointer (Step 7)
+
+The resume pointer (§ 3.4) gives a resuming hub the stage and the gate the run is at (`## Where the run stands`), the next action, every spoke in flight with the test for whether it died, and the handles bound to the stopped session's account. Each is a lead, not a fact: the hub checks each field against the record before it acts on it.
+
+**The liveness read comes first.** The session that stopped may not have ended: it can be capped and waiting in another app instance, with a wake timer of its own due at its reset. Before any died verdict, any re-arm and any routing, the hub reads the stopped session's live handles:
+
+- for each isolated in-flight spoke, its worktree's lock in `git worktree list --porcelain` — found by the worktree path the row records, or by step 2's discovery step — and whether the process the lock names is alive;
+- for each `## Bound to the account` row, whether its due time has passed.
+
+If a lock's host process is alive, or a wake handle is still pending, the stopped session may be running. The resuming hub then does not relaunch, re-arm or route: briefing item 6 names the stopped session and those handles, and asks the operator to close that session or its app instance, or to tell this hub to stand down. A live lock host means the hub cannot conclude that the spoke died; it does not show that the spoke is alive.
+
+After Step 7 reads the pointer and the liveness read has cleared, and before any routing:
+
+1. **Freshness.** Compare `last_updated` with the newest entry of the comparison set: event-log rows whose `actor` is `hub` or `operator`, Decision Recorded comments, and action-item and pending-approval mutations. Rows whose actor is `spoke:#N` or `skill:NAME` are excluded, because they are expected while a spoke is in flight. A newer entry means a write was missed or cut off. When every newer entry concerns the checkpoint the pointer's `checkpoint` field names, or the one immediately after it, the stop came mid-checkpoint and no write was missed. Either way the record wins, and the stage, the gate and the next action are taken from the record (§ 4.1).
+2. **Spokes in flight.** Open on the liveness read's result: a spoke whose host may still be running is not judged. Run each other row's died-test (§ 3.4).
+   - **Returned** — handle the return per Procedure 4.
+   - **Partly done** — a spoke that commits and pushed part of its work: launch it again on the release branch, where those commits are.
+   - **Died** — launch it again, in a fresh run directory, when its stage is safe to re-run from the record: Stages 4, 5, 7 and 8, whose output is a sub-task comment, and Stage 6, which resumes from the pushed branch. A Stage 12 or Stage 13 spoke is never launched again blind: a merge, a version claim, a tag, a deploy and a close-out are not safe to repeat, so the hub first reads the release pull request's state, the version tag, the release-log row and the close-out pull request, and brings anything partial to the operator.
+   - Before launching an isolated spoke again, the hub reads that spoke's worktree for uncommitted work or a staged analysis folder, and nothing removes the worktree first.
+   - **Discovery, for a died isolated spoke with no recorded path.** List the `git worktree list --porcelain` entries under `.claude/worktrees/agent-*` whose directory was created at or after `launched_at`. For each candidate, read its lock, its `git status --porcelain` and its git-ignored files before any relaunch, and remove none before that read. When a wave leaves several candidates, surface the set to the operator.
+3. **Audit output.** Read the action items in the run's `action-items.md` whose description begins `analysis output of spoke #` and whose `status` is `open` or `in-flight`. Each names a spoke — still in flight, or returned before the stop — whose dated analysis folder is not yet confirmed at the analysis home. Finish each through the promotion steps in the release-hub skill's spoke-launch reference, § Audit output, which owns those items. The pointer's in-flight rows name the same items by id, but the ledger is the source, because it also holds the spokes that returned before the stop. The worktree path of each spoke that returned, as `## Where the run stands` records it from the Agent result, is the tree those steps list; a spoke that died in flight is found by step 2's discovery step.
+4. **Handles bound to the account.** Read each `## Bound to the account` row by its lifetime, never by session id alone. A session-scoped handle — a background spoke, a shell task, a monitor, an in-session wakeup or a session-only timer — ends when its host session ends: read that from the liveness read, never assume it. A routine registered through the scheduler adapter outlives every session. Its lifecycle belongs to that adapter (`scheduler-adapter-routine-firing.md` § `register(id)` / `deregister(id)`), so the resume reads its registration and never re-arms a duplicate. Re-arm each ended handle the run still needs, and record the rest retired.
+5. **The next action.** Before taking it, read the record for evidence it was already taken — the comment posted, the row appended, the pull request merged, the spoke's output present. Take it only when that evidence is absent and the record agrees with it; otherwise route from the record (Procedure 2).
+6. **The write side.** This session's first pointer write falls at the next moment § 3.4 names, taking the lease against the value read at Step 7.
+
+**Where the pointer is found.** At the run root. A run folder with no `resume-pointer.md` there is read at the places hubs kept it before this section named its home — `staging/resume-pointer.md`, then `RESUME.md`, then `staging/RESUME.md` — read-only; the next write goes to the run root.
+
+**Limit, stated.** The pointer is machine-local. A resume that runs on another machine — a cloud routine, for one — cannot read it, and rebuilds from the record alone.
 
 ## 5. Session-ID Tracking
 
@@ -309,7 +397,7 @@ fi
 
 ## 8. Cutover
 
-**Cutover discipline:** Applies to all releases going forward.
+**Cutover discipline:** Applies to all releases going forward. The resume pointer and its cadence (§ 3.4) bind from the merge that ships them, because this standard loads from the repository tree rather than from a deployed copy; a run already in flight then is read where it kept its pointer (§ 4.2) until its next write.
 
 ## 9. Cross-References
 
@@ -329,12 +417,16 @@ fi
 | [`hub-spoke-bridge.md` Procedure 0 § Canonical location](../../release/references/how-to/hub-spoke-bridge.md) | Release plan file location convention per D-C topology — anchors Resume Procedure Step 4 fallback |
 | [`hub-spoke-bridge.md` Procedure 0a — Audit-Aware Orientation](../../release/references/how-to/hub-spoke-bridge.md) | Drift-detection precedent (audit-snapshot vs current state) — anchors Resume Procedure Step 9 |
 | [`operations-bridge.md`](<OPERATOR_INSTANCE_CLAUDE_DIR>/rules/operations-bridge.md) | Layer 1 / Layer 2 partition rationale; SESSION_STATE.md Cowork-ownership boundary |
-| [`instance-data-placement-standard.md`](instance-data-placement-standard.md) | The runtime instance's risk class (working state) and its governed home; § 2 *Placement class and target home* states the target wording |
+| [`instance-data-placement-standard.md`](instance-data-placement-standard.md) | The runtime instance's risk class (working state) and its governed home; § 2 *Placement class and target home* states the target wording, and § 3.4 names the resume pointer a member of its surface S-01 |
 | [`release-process.md` Stage 3 A7](../../release/governance/release-process.md) | Bundle Mutability Protocol — anchor for Step 9 "Release plan file out-of-sync" drift class |
 | [`knowledge-architecture.md`](../disciplines/knowledge-architecture.md) | K1 codified-knowledge convention placing standards in `core/standards/` |
+| [`gate-efficacy-standard.md`](gate-efficacy-standard.md) § Gate-coverage register (seed) | Records the write-ahead cadence of § 3.4 as a named gap, with its declared observable and its population |
+| [`spoke-launch.md`](../../release/skills/release-hub/references/spoke-launch.md) § Audit output | Owns the audit-output action items § 4.2 step 3 reads and the promotion steps a resuming hub runs; this standard restates neither |
+| [`scheduler-adapter-routine-firing.md`](scheduler-adapter-routine-firing.md) § `register(id)` / `deregister(id)` | Owns a registered routine's lifecycle, which § 4.2 step 4 reads rather than re-arms |
 
 ## 10. Version History
 
 | Version | Date | Author | Change |
 |---|---|---|---|
+| — | 2026-11-28 | Stage 6 Engineering (per release sub-task) | § 3.4 resume pointer and its write-ahead cadence — before each spoke launch, after each spoke return, after each decision, before each stop gate, before arming an account-bound handle, and once a launch returns its identifier; clock-sourced stamps, a file-time read-back and a one-comparison lease; a member of the placement standard's S-01, with no template and no ledger content. § 4 Step 7 reads it, § 4.1 gains three drift classes, § 4.2 resumes from it behind a liveness read, and the session-start briefing gains item 6. The surface count and the step count are unchanged |
 | — | 2026-05-23 | Stage 6 Engineering (per parent release sub-task) | Initial authoring per Stage 5 spec; 3-surface state schema; 9-step Resume Procedure; composite session-ID format; dual-surface Decision Log Mechanism; durable-state contract for the queued-approval mechanism |

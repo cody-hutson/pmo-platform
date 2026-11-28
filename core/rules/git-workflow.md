@@ -32,7 +32,7 @@ unscoped_rationale: "Branch, commit and worktree discipline must be held BEFORE 
 
 ## Primary Checkout Discipline
 
-The primary checkout at `${HOME}/Claude/` is READ-ONLY for Claude Code sessions. It is the user's Finder-visible view of the latest merged main; the user depends on it showing current-state, merged content.
+The primary checkout at `${HOME}/Claude/` is READ-ONLY for Claude Code sessions, except for the registered-homes carve-out below. It is the user's Finder-visible view of the latest merged main; the user depends on it showing current-state, merged content, and the carve-out reaches only git-ignored paths.
 
 ### Rules
 - Never `cd` into `${HOME}/Claude/` from a Claude Code session
@@ -40,7 +40,21 @@ The primary checkout at `${HOME}/Claude/` is READ-ONLY for Claude Code sessions.
 - All work happens inside a worktree at `${HOME}/Claude/.claude/worktrees/[name]/`
 - To sync latest main into your worktree: `git fetch origin main && git merge origin/main` (within the worktree — no cd to primary)
 - To READ files under `${HOME}/Claude/` for context: absolute paths are fine for Read/Grep; do NOT `cd` there
-- **A spawned spoke has NO primary access.** A spoke launched via the Agent tool (Stage 6 / 12 / 13 content-modifying spokes per [`release/references/how-to/hub-spoke-bridge.md`](/release/references/how-to/hub-spoke-bridge.md) § Worktree discipline) operates ONLY in its own worktree — it never `cd`s to, commits in, or otherwise mutates `${HOME}/Claude/pmo-platform` (the primary). The primary is out of a spoke's reach by construction; a spoke that reaches it (as in the 2026-06-20 stray-commit-then-reset incident) is a control-gap defect, not authorized behavior. The spoke prompt's own no-`cd`/never-primary clause is the enforcing surface.
+- **The registered-homes carve-out.** A platform-engineering session whose file tools reach the main checkout — a main session, or a spoke launched without worktree isolation, from any working directory outside the operations workspace — may write files inside exactly three paths of the main checkout, the in-repo git-ignored homes the instance-data placement standard registers:
+  - `${HOME}/Claude/pmo-platform/local-state/<sub>/…`, a subfolder of the working-state home, where the tracked `local-state/README.md`, a folder of that name and any dot-leading entry at the top of the home are excluded;
+  - `${HOME}/Claude/pmo-platform/analysis/<sub>/…`, where the tracked `analysis/README.md` is excluded;
+  - `${HOME}/Claude/pmo-platform/roadmaps/<name>`, where the tracked `roadmaps/README.md` and any dot-leading leaf are excluded.
+
+  Every other write into the primary stays prohibited. The carve-out admits files, not git operations: no `cd`, commit, reset or other state-changing git command in the primary, homes included.
+
+  **The carve-out is enforced on the file-write channel.** `BLOCK-DESTRUCTIVE-019` admits a `Write`/`Edit` into the primary only when the target as written and its resolved location both sit in one of these three shapes. Its set is a static pattern, held equal to the standard's registered-homes table by a parity test in the hook's own suite, so the rule, the standard and the hook change together.
+
+  **Inside the homes, any channel; the session shape bounds who.** Inside the three homes, and only in their exact shapes (the subfolder requirement, the README exclusion and the dot-entry exclusion), a write is sanctioned on any channel for a session whose file tools reach the main checkout. The shell channel (redirection and file verbs) is outside the carve-out's enforcement and carries no write guard on the primary, an accepted residual: a shell write anywhere else in the primary is not sanctioned by this carve-out and is refused by nothing. An Agent-tool isolated spoke writes the homes on no channel; its output reaches a home through the hub's promotion. A write that any control refused, the platform's or not, is never re-attempted through the shell.
+
+  **A permission, not a reachability promise.** For every worktree-rooted session the carve-out states what is sanctioned, not what will succeed: a guard outside the platform can refuse a file-tool write into a home, and a refusal by any control, the platform's or not, is reported, never routed around through the shell.
+
+  An operations-rooted session writes nothing in the platform repository, homes included: the Tier-0 cross-domain floor, `BLOCK-AUTONOMY-002`, refuses it on the file-write channel.
+- **A spawned spoke has no primary access beyond the carve-out.** A spoke launched via the Agent tool (Stage 6 / 12 / 13 content-modifying spokes per [`release/references/how-to/hub-spoke-bridge.md`](/release/references/how-to/hub-spoke-bridge.md) § Worktree discipline) operates ONLY in its own worktree — it never `cd`s to, commits in, resets, or otherwise changes git state in `${HOME}/Claude/pmo-platform` (the primary). An Agent-tool isolated spoke writes the registered homes on no channel: its output reaches a home through the hub's promotion. A spoke launched without isolation, whose file tools reach the primary, writes there only files inside the three registered homes above, under the same rule as any session. A refusal of a spoke's write is reported, never routed around through the shell; a spoke that reaches the primary any other way (as in the 2026-06-20 stray-commit-then-reset incident) is a control-gap defect, not authorized behavior. The spoke prompt's own no-`cd`/never-primary clause is the enforcing surface.
 - **Never restore a user's uncommitted change without asking.** An uncommitted deletion (`D <path>`) or modification in the primary is often deliberate in-progress cleanup the user will commit on their own schedule — not an accident. Do not `git restore` or `git checkout -- <path>` it. If a pending change is non-obvious, gather context (`git status`, `git log --oneline -n N -- <path>`) and ask; default to preserving the user's intent (leave a deletion deleted, a modification modified).
 - **Diagnose by content before any irreversible discard.** A small working-tree diff on a detached or behind primary is frequently a stale draft a prior session left after the finalized version already merged via another PR. Compare the edit's text against `origin/main` (`git show origin/main:<path>`). If the content already lives on `origin/main` it is a redundant duplicate — not unlanded work and needs no PR; the clean fix is to drop it, but get explicit confirmation for the discard first. Never frame discarding a confirmed-redundant draft as "losing work" — state plainly that the content already exists on main.
 
@@ -228,7 +242,7 @@ Every Claude Code session begins with:
 - Never commit directly to main — always use a branch + PR
 - Never `git add .` or `git add -A` — stage files explicitly
 - Never commit Layer 2/3 files (they're gitignored, but verify with `git status`)
-- Never `cd ${HOME}/Claude/` from a Claude Code session (Primary is read-only; see §Primary Checkout Discipline)
+- Never `cd ${HOME}/Claude/` from a Claude Code session (Primary is read-only outside its registered homes; see §Primary Checkout Discipline)
 - Never run `git checkout main && git pull` inside a worktree (claims main, blocks primary; use `git fetch origin main && git merge origin/main` instead)
 - Never use `gh issue list --limit N` (or any batch CLI command with a result-cap parameter) without verifying N ≥ total dataset size. Silent truncation produces misclassified state — see § Batch CLI Query Limits below.
 - Never commit draft / scratch / proposal / working-notes content as tracked files in the public repo — see § Draft / scratch content below for where it belongs.

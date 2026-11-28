@@ -76,8 +76,8 @@ flip-scan-needles.txt
 # one release-cost/<slug>.json per release, written by the release-velocity tool's
 # cost-row mode. Governed home: the main checkout's /local-state/telemetry/, resolved
 # through <OPERATOR_INSTANCE_WORKING_STATE_TELEMETRY_PATH> (instance-data placement
-# standard, surface register). This narrower rule precedes the /local-state/ home's own
-# ignore-rule pair, which covers this folder too once it lands and can absorb this line.
+# standard, surface register). The /local-state/ home's own ignore-rule pair, below,
+# covers this folder too; this narrower rule is redundant with it and can be absorbed.
 /local-state/telemetry/*
 
 # Secret files (per core/standards/secrets-handling-policy.md §3)
@@ -173,6 +173,12 @@ audit-output/
 /analysis/*
 !/analysis/README.md
 
+# Repo-scoped working-state home — this repository's own release, run and operating state
+# (instance-data placement standard: classes, admission test, protections and the
+# main-checkout carve-out). Everything under it is git-ignored; README.md alone is tracked.
+/local-state/*
+!/local-state/README.md
+
 # Legacy _validation/ folder — historical evidence removed; ignored to prevent accidental regeneration
 _validation/
 
@@ -184,6 +190,6 @@ core/hooks/.mode
 # Process-catalog figures — what the catalog's registered measures report on this
 # install, written by the catalog generator's overlay command. Working state about
 # this repository only. Written only when a run names this folder as its overlay root;
-# the command has no default. This narrower rule precedes the /local-state/ home's own
-# ignore-rule pair, which covers this folder too once it lands and can absorb this line.
+# the command has no default. The /local-state/ home's own ignore-rule pair, above,
+# covers this folder too; this narrower rule is redundant with it and can be absorbed.
 /local-state/process-catalog/*

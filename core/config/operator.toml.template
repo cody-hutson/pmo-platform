@@ -188,7 +188,7 @@ operator_instance_claude_settings = ""
 # Default: ${claude_workspace_root}/.claude/worktrees
 # Consumer: core/rules/git-workflow.md § Primary Checkout Discipline — the home
 # every session worktree is created under, the primary checkout being read-only
-# for Claude Code sessions.
+# for Claude Code sessions outside its registered in-repo git-ignored homes.
 operator_instance_worktrees_path = ""
 
 # Resolves <OPERATOR_INSTANCE_SKILLS_PATH>.
