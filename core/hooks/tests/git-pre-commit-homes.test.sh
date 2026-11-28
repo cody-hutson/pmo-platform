@@ -325,8 +325,15 @@ fi
 # =============================================================================
 # C. The guard's own fixture arms, as the In-repo home content gate runs them first
 # =============================================================================
-if [ -n "$DET" ]; then OUT="$(/bin/bash -p "$DET" --self-test 2>&1)"; DRC=$?; else OUT="the detector is absent"; DRC=127; fi
-report "T8022-C1 --self-test exits 0 with 17/17 arms passed" \
+# Run the way the CI job runs it: by its repository-relative path from the repository
+# root, so a self-test that loses its own path once it changes directory fails here.
+mk_repo c1
+if [ -r "${REPO}/core/hooks/git-pre-commit-homes.sh" ]; then
+  OUT="$(cd "$REPO" && /usr/bin/env HOME="$HOMEDIR" /bin/bash -p core/hooks/git-pre-commit-homes.sh --self-test 2>&1)"; DRC=$?
+else
+  OUT="the detector is absent"; DRC=127
+fi
+report "T8022-C1 --self-test, run by its relative path from the repository root as CI runs it, exits 0 with 17/17 arms passed" \
   "$([ "$DRC" -eq 0 ] && has "$OUT" 'self-test: 17/17 arms passed' && echo 1 || echo 0)" "exit=${DRC}; output: $(flat "$OUT")"
 
 # =============================================================================

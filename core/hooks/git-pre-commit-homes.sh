@@ -140,7 +140,11 @@ fi
 
 # --- --self-test: the predicate, each input mode and the parity check --------
 if [[ "$hg_mode" == "self-test" ]]; then
+  # The arms run the guard from inside a scratch repository, so its own path is taken
+  # absolute here: a relative invocation (the CI job's) would not resolve after the cd.
   hg_self="${BASH_SOURCE[0]:-$0}"
+  hg_self="$(cd "$(dirname "$hg_self")" 2>/dev/null && pwd -P)/$(basename "$hg_self")"
+  [[ -r "$hg_self" ]] || { echo "self-test: could not resolve this guard's own path (cannot assert)" >&2; exit 2; }
   hg_tmp="$(mktemp -d 2>/dev/null || true)"
   if [[ -z "$hg_tmp" || ! -d "$hg_tmp" ]]; then
     echo "self-test: could not create a scratch directory (cannot assert)" >&2; exit 2
