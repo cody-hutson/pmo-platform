@@ -355,6 +355,11 @@ D1 approve (the plan, the Release Outcome Statement draft, the re-scope of #8019
 | DEV-3 | 6 (Commit 0) | #8019's commit C2 splits into C2a (the ignore pair) and C2b (the arms) | review FM-3, adopted at scope-lock |
 | DEV-4 | 6 (Commit 0) | The Rollback Strategy carries the operator's numeric trigger in place of the Stage-4 qualitative one | D-Rollback |
 | DEV-5 | 6 (Commit 0) | The design's AC-7 method (`git check-ignore` with an exit-status echo) is not a shape the plan verifier runs; the row's designated command is a `grep` on `.gitignore`, and the `check-ignore` result is a reader-graded limb recorded in the Stage-6 evidence | the plan verifier's executable shapes |
+| DEV-6 | 6 (#8019) | The rule applies D-7 A′ beyond the shell paragraph: the carve-out bullet names "a main session, or a spoke launched without worktree isolation" where the design wrote "a main session or a spawned spoke", and the spawned-spoke bullet and the C-319 statement say an Agent-tool isolated spoke writes the homes on no channel | D-7 A′ is the top-precedence record; the design literal predates it |
+| DEV-7 | 6 (#8019) | The regenerated hook registry moved 8 catalog line citations in the three engineering-harness pages, so commit C4 carries their anchor rewrite; the register row in C6 moved 10 more, rewritten in C6 | the catalog citation gate |
+| DEV-8 | 6 (#8019) | RED-2 ran through the hook test runner rather than the suite alone: exporting the runner's scope-guard root in a session command is refused by `BLOCK-DESTRUCTIVE-023`, and without it a direct suite run reads the hooks as out of scope | a control firing, recorded in the Stage-6 output; the runner is the sanctioned path |
+| DEV-9 | 6 (#8019) | A2 container: the threshold predicate selects the sub-issue container (more than five units, multi-file). The decomposition is the scaffolded Stage-6 sub-task #9155 plus the commit slices C1 to C6, listed as a checklist in the release PR body; no further sub-issues were created | the per-issue Stage-6 sub-task is the container Procedure 1 scaffolds |
+| DEV-10 | 6 (#8019) | The `## Change Description` section (Stage 6 C1) is owed by the release's last Engineering slice (#7929), because the #7503 and #7929 slices are not yet built | Stage 6 C1 is authored before the PR is marked ready, at Stage 9 |
 
 ## Verification Evidence
 
@@ -364,3 +369,15 @@ Populated by each Engineering slice; § Commit 0 is this file's own.
 
 - Version half: PROCEED (`v5.15`; § Commit-0 Version Re-Verify Record).
 - Manifest half and the CIAC lint: recorded in the Engineering Commit 0 message and in the #8019 Stage-6 output on #9155.
+
+### #8019 (commits C1 to C6)
+
+- **RED-1** (C1 against the unchanged hook): `block-destructive.test.sh` 2,474 assertions, 14 FAIL, exactly A1–A5, S1, MSG1, L5–L7, P1, P4, P4b and P5.
+- **RED-2** (working tree only, never committed; the naive arms were undone by edit): an any-path arm with no withholds failed 16 (D4–D10, D16, S5, MSG1, L2–L4, P1, P4b, P5); a subfolder arm with no withholds failed 4 (D7, D10, MSG1, L3).
+- **GREEN** on macOS from the worktree root, 30 suites: `block-destructive.test.sh` 2,474/2,474, aggregate 5,490/5,490, 0 FAIL. The block-destructive count equals the revised target; the aggregate is 8 above the 5,482 target, every one of them a PASS outside block-destructive, not reconciled per suite here. Linux was not run locally; the release PR's Linux job is its reading.
+- **AC-7:** `git check-ignore` from the repository root — `local-state/zz-ac7/x` ignored (exit 0, by `/local-state/*`), `local-state/README.md` not ignored (exit 1, the negation), and the near-miss `local-state-x/y` not ignored (exit 1).
+- **Registry and catalog:** `build-hook-registry.py --check` in sync; `build-process-catalog.py build --check`, `anchors resolve --check` and `check-process-catalog.py --pattern-arm not-run` each exit 0.
+- **Doc links:** `check-doc-links.py` over the six changed markdown rule and reference files reports no broken reference (control: its `--self-test`, 12 fixtures).
+- **Skill-package freshness:** `build-skill-packages.sh --skills-for-paths` over the 21 paths in the release diff names no skill (control: the release-hub skill file names `release-hub`).
+- **Cascade sweep:** 16 superseded phrasings over the 14 cascade files, read by the same program at both revisions, total 24 on `origin/main` and 0 at the C6 head.
+- **ADR index:** N/A — this release adds no record under `release/ADRs/` (as of #8019's slices).
