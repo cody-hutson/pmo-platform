@@ -278,8 +278,8 @@ readonly FSB_NL=$'\n'
 readonly FSB_PASS2=1  # M-FSB-PASS2
 readonly FSB_REDIR=1  # M-FSB-REDIR
 readonly FSB_JOINS=1  # M-FSB-JOIN
-readonly FSB_HDQ=0  # M-FSB-HDQ
-readonly FSB_MASKFREE=0  # M-FSB-MASKFREE
+readonly FSB_HDQ=1  # M-FSB-HDQ
+readonly FSB_MASKFREE=1  # M-FSB-MASKFREE
 FSB_SEEN=""
 FSB_SEEN_N=0
 
@@ -1177,7 +1177,7 @@ readonly FSB_ADDED_AWK='
     return d
   }
   function verbof(w,   t) {
-    t = w  # M-FSB-QVERB
+    t = lit(w); if (t == "") return ""  # M-FSB-QVERB
     if (substr(t, 1, 1) == "=") t = substr(t, 2)
     sub(/^\/(usr\/(local\/)?|opt\/(homebrew|local)\/)?bin\//, "", t)
     return (t in V) ? t : ""

@@ -915,6 +915,7 @@ fi
 #   T    G2's third limb removed (its call line -> :)       exit dimension of every G2 refusal
 #   TO   G2's third limb refuses as outside (return 1)      rule dimension of every G2 refusal
 #   TG5A T, and G5 admits                                   exit dimension of XFORM-PFX-02
+#   TH   T, and the scanner repair off                      exit dimension of XFORM-SUBJ-03
 #   F    the walk hands a flag-position word to the cascade  exit dimension of XFORM-POS-01
 #   FT   F, and T                                            record dimension of XFORM-POS-01
 #   W    the walk hands every word of every segment over     exit dimension of XFORM-POS-02
@@ -1086,6 +1087,7 @@ XFORM_G1O="$(xform_copy g1o "$XFORM_X_G1O")"
 XFORM_T="$(xform_copy t "$XFORM_X_T")"
 XFORM_TO="$(xform_copy to "$XFORM_X_TO")"
 XFORM_TG5A="$(xform_copy tg5a "$XFORM_X_T" "$XFORM_X_G5A")"
+XFORM_TH="$(xform_copy th "$XFORM_X_T" 's/^readonly FSB_HDQ=1  # M-FSB-HDQ$/readonly FSB_HDQ=0  # M-FSB-HDQ/')"
 XFORM_F="$(xform_copy f "$XFORM_X_F")"
 XFORM_FT="$(xform_copy ft "$XFORM_X_F" "$XFORM_X_T")"
 XFORM_W="$(xform_copy w "$XFORM_X_W1" "$XFORM_X_W2")"
@@ -1140,6 +1142,7 @@ xform_shape "XFORM-MUT-SHAPE-L: the copy whose joined readings are off differs i
 xform_shape "XFORM-MUT-SHAPE-T: the copy without G2's third limb differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_T" 1 1
 xform_shape "XFORM-MUT-SHAPE-TO: the copy whose third limb refuses as outside differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_TO" 1 1
 xform_shape "XFORM-MUT-SHAPE-TG5A: T with G5 admitting differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_TG5A" 2 2
+xform_shape "XFORM-MUT-SHAPE-TH: T with the scanner repair off differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_TH" 2 2
 xform_shape "XFORM-MUT-SHAPE-FT: F without the third limb differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_FT" 2 2
 xform_shape "XFORM-MUT-SHAPE-WT: W without the third limb differs in three lines, parses, and still refuses and admits untouched literals" "$XFORM_WT" 3 3
 xform_shape "XFORM-MUT-SHAPE-U: the copy whose span split takes an unterminated brace differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_U" 1 1
@@ -1149,13 +1152,16 @@ xform_shape "XFORM-MUT-SHAPE-KG5A: K with G5 admitting differs in two lines, par
 xform_shape "XFORM-MUT-SHAPE-KL: K with the joined readings off differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_KL" 2 2
 
 # ----- XFORM-SUBJ / XFORM-PFX: the measured pair, and what the pair hides -----
-# xform_g2_pin <label> <command> <T exit> <T records> — a G2 refusal (exit 2, -003) with both
-# of its pairing arms: T (the third limb removed) must give <T exit> with <T records>
-# records, and TO (the limb refuses as outside) must name -001.
+# xform_g2_pin <label> <command> <T exit> <T records> [<copy> <what>] — a G2 refusal (exit 2,
+# -003) with both of its pairing arms: T (the third limb removed) must give <T exit> with
+# <T records> records, and TO (the limb refuses as outside) must name -001. A fifth and sixth
+# argument name another copy for the exit pair and say what it is.
 xform_g2_pin() {
+  local xg_copy="${5:-$XFORM_T}" xg_what="the copy without G2's third limb"
+  if [ -n "${6:-}" ]; then xg_what="$6"; fi
   xform_pin "$1" "$2" 2 rule BLOCK-FS-BOUNDARY-003
-  xform_pair "${1%%:*}-PAIR-exit: through the copy without G2's third limb, the same operand is not refused at G2" \
-    "$XFORM_T" "$2" 2 rule BLOCK-FS-BOUNDARY-003   "$3" "$4" -
+  xform_pair "${1%%:*}-PAIR-exit: through ${xg_what}, the same operand is not refused at G2" \
+    "$xg_copy" "$2" 2 rule BLOCK-FS-BOUNDARY-003   "$3" "$4" -
   xform_pair "${1%%:*}-PAIR-rule: through the copy whose third limb refuses as outside, the refusal names -001 — the -003 reads a live rule" \
     "$XFORM_TO" "$2" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
 }
@@ -1177,7 +1183,10 @@ xform_pair "XFORM-SUBJ-02-PAIR-rule: through the copy whose G1 refuses as outsid
 # is enough, and the command is still valid shell. Step 1 then strips the quotes and the
 # operand is read as its unquoted spelling, which G2's third limb refuses by its shape.
 XFORM_C_NOMASK="cat <<'EOF' > /tmp/x.txt${XFORM_NL}it's${XFORM_NL}EOF${XFORM_NL}cat \"\${CFG@P}\""
-xform_g2_pin "XFORM-SUBJ-03: QUOTED \${VAR@P} with the quote mask unavailable is REFUSED at G2 under -003" "$XFORM_C_NOMASK" 0 1
+# The second pass's scanner repair neutralizes the body line's apostrophe and restores the mask on
+# this command, so G1 refuses the quoted operand in that reading even through T. The exit pair is
+# therefore read through TH, the copy without the third limb and with the scanner repair off.
+xform_g2_pin "XFORM-SUBJ-03: QUOTED \${VAR@P} with the quote mask unavailable is REFUSED at G2 under -003" "$XFORM_C_NOMASK" 0 1 "$XFORM_TH" "the copy without G2's third limb and with the scanner repair off"
 
 # shellcheck disable=SC2016
 XFORM_C_PFXIN='cat /tmp/${CFG@P}'
@@ -2582,6 +2591,18 @@ xform_shape "FSB-MUT-SHAPE-REDIROFF: the copy whose redirection join is off diff
 xform_shape "FSB-MUT-SHAPE-JOINSOFF: the copy whose joined readings are off differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_JOINSOFF" 1 1
 fsbp_off_ids "$FSBP_REDIROFF" '^(1|PR)[.]|^2[.]redir[.]|^5[.]leadredir-hdb[.]|^ADJ[.](psubc1|redirwrap)[.]' REDIROFF 'redirection join'
 fsbp_off_ids "$FSBP_JOINSOFF" '^2[.](alone|flag|twocont|redir|splitpfx|splitverb|commentbefore|group|shift)[.]|^ADJ[.]psubc2[.]' JOINSOFF 'joined readings'
+FSBP_QVERBOFF="$(fsbp_copy qverboff '/  # M-FSB-QVERB$/s/^    t = lit(w); if (t == "") return ""  #/    t = w  #/')"
+FSBP_EQOFF="$(fsbp_copy eqoff 's/^    if (substr(t, 1, 1) == "=") t = substr(t, 2)$/    t = t/')"
+FSBP_HDQOFF="$(fsbp_copy hdqoff 's/^readonly FSB_HDQ=1  # M-FSB-HDQ$/readonly FSB_HDQ=0  # M-FSB-HDQ/')"
+FSBP_MFOFF="$(fsbp_copy mfoff 's/^readonly FSB_HDQ=1  # M-FSB-HDQ$/readonly FSB_HDQ=0  # M-FSB-HDQ/' 's/^readonly FSB_MASKFREE=1  # M-FSB-MASKFREE$/readonly FSB_MASKFREE=0  # M-FSB-MASKFREE/')"
+xform_shape "FSB-MUT-SHAPE-QVERBOFF: the copy whose verb comparison reads the word as written differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_QVERBOFF" 1 1
+xform_shape "FSB-MUT-SHAPE-EQOFF: the copy that keeps a leading = on the verb word differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_EQOFF" 1 1
+xform_shape "FSB-MUT-SHAPE-HDQOFF: the copy whose scanner repair is off differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_HDQOFF" 1 1
+xform_shape "FSB-MUT-SHAPE-MFOFF: the copy whose scanner repair and mask-free readings are both off differs in two lines, parses, and still refuses and admits untouched literals" "$FSBP_MFOFF" 2 2
+fsbp_off_ids "$FSBP_QVERBOFF" '^4[.](dq|sq|partial|emptypad|emptyrun|midbs|ansi|ansioct|ansihex|ansiuni|ansinul|locale|abspath|pfx|sep)[.]|^5[.]qverb-hdb[.]|^ADJ[.](eqq|psubc4)[.]' QVERBOFF 'quote-removed verb comparison'
+fsbp_off_ids "$FSBP_EQOFF" '^4[.]zeq[.]|^ADJ[.]eqq[.]' EQOFF 'leading-= strip'
+fsbp_off_ids "$FSBP_HDQOFF" '^5[.](qwrap|qasgn)-|^INV[.]' HDQOFF 'scanner repair'
+fsbp_off_ids "$FSBP_MFOFF" '^5[.](sudo|env|nice|time|asgn|then|qopt)-|^5[.](qverb|leadredir)-hdb[.]|^ADJ[.](group|subshell|then)[.]' MFOFF 'scanner repair and mask-free reading'
 
 # ----- FSB-P2-COST: the second pass adds canonicalizer runs, never a longer scan -----
 # The canonicalizer's scan grows faster than linearly with the command, on every consumer, so a
