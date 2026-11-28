@@ -140,6 +140,7 @@ REGRESSION_MEMBERS=(
   "test_lib_instance_path.sh"              # lib-instance-path.sh resolver contract — the install/update/setup scripts source it; previously enrolled nowhere
   "test_git_hooks_install.sh"              # GHSA-c748: install + update wire the PII pre-commit guard; validate-install A3d reports it unwired
   "test_tree_walk_skips_homes.sh"          # the root tree walkers skip the in-repo homes: clean vs planted fixture, mutant sensitivity, root-walk census
+  "test_leak_risk_modes.sh"                # leak-risk files 0600 and folders 0700 at install and full update; working state untouched; --surfaces-only runs no pass
 )
 
 SUITE_PASS=0

@@ -38,6 +38,15 @@
 # the "silence indistinguishable from approval" inversion this suite exists to
 # rule out.
 #
+# The T8024-V arms (after arm 6) are check A11's, INSTALL-LEAK-RISK-MODES: a leak-risk
+# file or folder with any group or other permission bit FAILs it (V1, V4, V5, V6, V12),
+# the same fixture at the policy PASSes (V2) and keeps every working-state near-miss
+# untouched (V3), an owner-only deviation is an INFO beside a PASS (V11), and the check
+# SKIPs only when neither library is in the source tree (V7a), FAILs when the resolver is
+# there without the leak-risk library (V7b), and SKIPs honestly when no member is present
+# (V8). It runs in both Mode A sub-modes (V9), and the emitted step count equals
+# MODE_A_TOTAL (V10).
+#
 # HARD SANDBOX. Every arm runs under its own mktemp root with
 # PMO_PLATFORM_DEPLOY_ROOT, HOME, --source-repo, --workspace-root and
 # --validation-dir all redirected into it. The operator's live ~/.claude/skills
@@ -53,6 +62,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 VALIDATE="${REPO_ROOT}/docs/scripts/validate-install.sh"
+# The four path overrides the instance resolver and A11 honour. Unset once, here, so no
+# arm reads a leak-risk path outside its sandbox.
+unset PMO_INSTANCE_PATH PMO_LOCALIZED_NEEDLES PMO_PEOPLE_ROSTER PMO_PROJECT_KEYS
 
 PASS=0
 FAIL=0
@@ -147,7 +159,7 @@ new_fixture() {
 
 # --- Fixture construction -------------------------------------------------- #
 #
-# A9 is the subject, but validate-install.sh runs all thirteen Mode A checks and
+# A9 is the subject, but validate-install.sh runs every Mode A check and
 # gates Mode B on Mode A's aggregate verdict. So the fixture is built HEALTHY
 # across every other check. Two reasons, both load-bearing:
 #   1. Each arm's A9 verdict is then attributable to the A9 variation alone.
@@ -489,6 +501,10 @@ new_arm; SBX="${NEW_ARM}"
 write_skill "${SBX}/.claude/skills/demo-platform-skill/SKILL.md" "demo-platform-skill" 1
 mkdir -p "${SBX}/src/core/deploy"
 cp "${REPO_ROOT}/core/deploy/lib-instance-path.sh" "${SBX}/src/core/deploy/lib-instance-path.sh"
+# The leak-risk library ships beside the resolver in a real checkout. A11 FAILs a source
+# tree that carries the resolver without it, so the copy keeps this arm's healthy
+# baseline healthy; with no leak-risk member seeded, A11 SKIPs here.
+cp "${REPO_ROOT}/core/deploy/lib-leak-risk-modes.sh" "${SBX}/src/core/deploy/lib-leak-risk-modes.sh" 2>/dev/null
 mkdir -p "${SBX}/Claude/pmo-instance/inbox" \
          "${SBX}/Claude/pmo-instance/ambient-intake" \
          "${SBX}/Claude/pmo-instance/external-sync"
@@ -573,6 +589,131 @@ chmod +x "${SBX}/Claude/.claude/hooks/block-fixture-1.sh"
 _run "${SBX}" "${SBX}/src" "install"
 assert_line   "${OUT}" '^\[A3c\] SKIP'  "arm6d: A3c SKIPs (not PASSes) when no deployed hook declares a dependency"
 assert_absent "${OUT}" '^\[A3c\] PASS'  "arm6d: an empty derived set is never reported as a clean PASS"
+
+# =========================================================================== #
+# T8024-V — A11 leak-risk modes: FAIL on a group or other bit, PASS at policy #
+# =========================================================================== #
+#
+# The fixture is arm 5's healthy shape (both libraries in the source tree, the ambient
+# dirs provisioned) plus one member of each resolvable Leak-risk file row and one S-40
+# copy, all at the policy, so each arm below varies exactly one mode. Paths are resolved
+# through the libraries, never typed. No arm reads a leak-risk file's contents.
+LEAK_LIB="${REPO_ROOT}/core/deploy/lib-leak-risk-modes.sh"
+RESOLVER_LIB="${REPO_ROOT}/core/deploy/lib-instance-path.sh"
+# leak_path <ws> <row> — the row's primary path, or nothing while the library is absent.
+leak_path() {
+  ( . "${RESOLVER_LIB}"
+    if [ -r "${LEAK_LIB}" ]; then . "${LEAK_LIB}"; lib_leak_risk_primary_for "$1" "$2"
+    elif [ "$2" = "S-09" ]; then pmo_people_roster_for "$1"; fi ) 2>/dev/null
+}
+if stat -c '%a' / > /dev/null 2>&1; then mode_of() { stat -c '%a' "$1" 2>/dev/null; }
+else mode_of() { stat -f '%Lp' "$1" 2>/dev/null; }; fi
+# seed_mode <path> <mode> — a fixture file at an explicit mode.
+seed_mode() { mkdir -p "$(dirname "$1")"; printf 'fixture\n' > "$1"; chmod "$2" "$1"; }
+
+NEW_LEAK_ARM=""
+LEAK_TREE=""
+new_leak_arm() {
+  new_arm
+  local sbx="${NEW_ARM}" ws row p
+  ws="${sbx}/Claude"
+  write_skill "${sbx}/.claude/skills/demo-platform-skill/SKILL.md" "demo-platform-skill" 1
+  mkdir -p "${sbx}/src/core/deploy"
+  cp "${RESOLVER_LIB}" "${sbx}/src/core/deploy/"
+  cp "${LEAK_LIB}" "${sbx}/src/core/deploy/" 2>/dev/null
+  ( . "${RESOLVER_LIB}"
+    mkdir -p "$(pmo_inbox_path_for "${ws}")" "$(pmo_ambient_intake_path_for "${ws}")" \
+             "$(pmo_external_sync_path_for "${ws}")" )
+  for row in S-08 S-09 S-10 S-15 S-48; do
+    p="$(leak_path "${ws}" "${row}")"
+    [ -n "${p}" ] && seed_mode "${p}" 600
+  done
+  LEAK_TREE="${ws}/.backup-pre-update-instance-20260101T000000Z"
+  mkdir -p "${LEAK_TREE}/sub"
+  seed_mode "${LEAK_TREE}/a" 600; seed_mode "${LEAK_TREE}/sub/b" 600
+  chmod 700 "${LEAK_TREE}" "${LEAK_TREE}/sub"
+  NEW_LEAK_ARM="${sbx}"
+}
+
+printf '\nArm T8024-V. A11 leak-risk modes\n'
+new_leak_arm; SBX="${NEW_LEAK_ARM}"; WSV="${SBX}/Claude"
+P09V="$(leak_path "${WSV}" S-09)"
+P10V="$(leak_path "${WSV}" S-10)"
+P15V="$(leak_path "${WSV}" S-15)"
+P48V="$(leak_path "${WSV}" S-48)"
+
+chmod 644 "${P09V}"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] FAIL — INSTALL-LEAK-RISK-MODES:.*S-09 .* 644' "T8024-V1: a roster at 0644 FAILs A11, naming S-09 and 644"
+assert_eq "${RC}" "1"                                                         "T8024-V1: the run exits 1"
+_run "${SBX}" "${SBX}/src" "operator-pre-existing"
+assert_line "${OUT}" '^\[A11\] FAIL'                                          "T8024-V9: A11 runs and FAILs in the operator-pre-existing sub-mode too"
+
+chmod 600 "${P09V}"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] PASS — INSTALL-LEAK-RISK-MODES: .*file.*folder' "T8024-V2: the same fixture at the policy PASSes, stating its file and folder counts"
+assert_line "${OUT}" '^\[A11\] INFO — .*S-19.*S-46'                          "T8024-V2: the deferred rows S-19 and S-46 are reported as INFO"
+assert_eq "${RC}" "0"                                                         "T8024-V2: the healthy run exits 0"
+mode_a_total="$(sed -n 's/^readonly MODE_A_TOTAL=\([0-9][0-9]*\)$/\1/p' "${VALIDATE}")"
+steps="$(grep -cE '^\[A[0-9]+[a-z]?\] (PASS|FAIL|SKIP)' <<<"${OUT}")"
+assert_eq "${steps}" "${mode_a_total}"                                        "T8024-V10: the Mode A step records equal MODE_A_TOTAL (${mode_a_total:-unparsed})"
+
+# V3 — working state and an S-41-shaped copy are not in A11's population (AC-3).
+NM_LS="${SBX}/src/local-state/release-runs/fixture-run.md"
+NM_C="$( . "${RESOLVER_LIB}"; pmo_instance_path_for "${WSV}" )/hub-state/fixture-run.md"
+NM_41="${WSV}/.backup-pre-update-20260101T000000Z"
+seed_mode "${NM_LS}" 640; seed_mode "${NM_C}" 640; seed_mode "${NM_41}/fixture.txt" 640; chmod 750 "${NM_41}"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] PASS'                                          "T8024-V3: working state under /local-state/, in the container and in an S-41 copy does not FAIL A11"
+assert_eq "$(mode_of "${NM_LS}") $(mode_of "${NM_C}") $(mode_of "${NM_41}")" "640 640 750" "T8024-V3: and the validator changes none of their modes"
+
+[ -n "${P10V}" ] && seed_mode "${P10V%/*}/.${P10V##*/}" 644
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] FAIL.*S-10 '                                   "T8024-V4: a dot-prefixed S-10 backup at 0644 FAILs A11, naming S-10"
+[ -n "${P10V}" ] && chmod 600 "${P10V%/*}/.${P10V##*/}"
+
+chmod 755 "${LEAK_TREE}"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] FAIL.*S-40 '                                   "T8024-V5: an S-40 copy whose top folder reads 0755 FAILs A11, naming S-40"
+chmod 700 "${LEAK_TREE}"
+
+[ -n "${P15V}" ] && chmod 755 "${P15V}"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] FAIL.*S-15 '                                   "T8024-V6: the S-15 script at 0755 FAILs A11"
+[ -n "${P15V}" ] && chmod 600 "${P15V}"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] PASS'                                          "T8024-V6: and at 0600 it PASSes (D-ScanExec B)"
+
+chmod 400 "${P09V}"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] PASS'                                          "T8024-V11: a roster at 0400 (owner-only) does not FAIL A11"
+assert_line "${OUT}" '^\[A11\] INFO — .*S-09 .* 400'                          "T8024-V11: it is reported as an INFO naming S-09 and 400"
+chmod 600 "${P09V}"
+
+[ -n "${P48V}" ] && chmod 644 "${P48V}"
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] FAIL.*S-48 '                                   "T8024-V12: the second PII scan list (S-48) at 0644 FAILs A11"
+[ -n "${P48V}" ] && chmod 600 "${P48V}"
+
+# V7a / V7b — the library-absence branches (adversarial PR-2).
+new_arm; SBX="${NEW_ARM}"
+write_skill "${SBX}/.claude/skills/demo-platform-skill/SKILL.md" "demo-platform-skill" 1
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] SKIP'                                          "T8024-V7a: with neither library in the source tree A11 SKIPs"
+assert_absent "${OUT}" '^\[A11\] PASS'                                        "T8024-V7a: and never PASSes"
+mkdir -p "${SBX}/src/core/deploy"
+cp "${RESOLVER_LIB}" "${SBX}/src/core/deploy/"
+( . "${RESOLVER_LIB}"
+  mkdir -p "$(pmo_inbox_path_for "${SBX}/Claude")" "$(pmo_ambient_intake_path_for "${SBX}/Claude")" \
+           "$(pmo_external_sync_path_for "${SBX}/Claude")" )
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] FAIL.*cannot be evaluated'                     "T8024-V7b: with the resolver present and the leak-risk library absent A11 FAILs"
+
+# V8 — both libraries, no member present: an honest SKIP, never a PASS.
+cp "${LEAK_LIB}" "${SBX}/src/core/deploy/" 2>/dev/null
+_run "${SBX}" "${SBX}/src" "install"
+assert_line "${OUT}" '^\[A11\] SKIP.*no leak-risk file or folder present'     "T8024-V8: with no leak-risk member present A11 SKIPs, naming why"
+assert_eq "${RC}" "0"                                                         "T8024-V8: and the run still exits 0"
 
 # --- Summary --------------------------------------------------------------- #
 printf '\n======================================================================\n'
