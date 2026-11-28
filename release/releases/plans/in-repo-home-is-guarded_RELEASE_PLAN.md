@@ -32,7 +32,7 @@ reversibility: MODERATE / Confidence HIGH — one release branch, one pull reque
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): hook, check and installer behaviour inside the existing structure, with no new skill and no new governance file. The rule-computed next-free re-verified at Engineering Commit 0 is `v5.15`. The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-28 (Saturday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub, Engineering spokes at Stage 6) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) |
+| **Status** | Executing — Stage 6 Engineering complete for #8022, #8023 and #8024; the release PR stays in draft for Stage 7 |
 | **Branch** | `release/in-repo-home-is-guarded` |
 | **PR** | opened in **draft** at Stage 6 |
 | **Milestone** | `in-repo-home-is-guarded` |
@@ -884,12 +884,13 @@ Recorded on #9205 (comment 7236696308): **CR-1** — scope-lock with the recomme
 | DEV-34 | 6 | **Adversarial PR-2.** A11 SKIPs only when the instance resolver is absent from the source repository too, the shape of every pre-existing validator fixture; with the resolver present and the leak-risk library absent it FAILs ("cannot be evaluated"). The design's V7 is split into V7a (SKIP) and V7b (FAIL), and arm 5 of `test_validate_install.sh`, which copies the resolver into its fixture, copies the library too | Collective Review (folded into the Stage-6 spec) |
 | DEV-35 | 6 | **Adversarial PR-3.** `core/deploy/extract-roster-needles.sh` creates S-08 with `touch` when it is absent, so that `touch` runs under `umask 077` as the seventh creation site, with arm T8024-X1 and a mutant sensitivity arm. The runtime writers of S-09 and S-10 between updates are a named residual (§ Named Residuals) | Collective Review (folded into the Stage-6 spec) |
 | DEV-36 | 6 | **Adversarial PR-5.** T8024-N3 is worded as a glob-width guard: the S-40 pattern does not reach an S-41-shaped copy. S-41's conditional Leak-risk content is a named residual for the installer milestone | Collective Review (folded into the Stage-6 spec) |
-| DEV-37 | 6 | **Adversarial FM-3.** The S-40 walk is measured on a fixture the size of the largest live copy (about 139,000 files in about 21,800 folders) by the opt-in arm T8024-P1, which runs only when `T8024_MEASURE_FILES` is set; the times are recorded in the spoke output. The walk's cost bound is the installer milestone's S-40 retention rule (§ Named Residuals) | Collective Review (folded into the Stage-6 spec) |
-| DEV-38 | 6 | **Adversarial FM-4.** CONDITIONAL:REGRESSION-STEP-BUDGET fires above about 101 minutes on either gating step of `.github/workflows/install-tests.yml` — the main regression step and the fresh-HOME step, each budgeted at 135 minutes with a third of headroom. When it fires, both step budgets and the job limit are re-derived by the job header's rule. It is read on the release PR's CI run | Collective Review (folded into the Stage-6 spec) |
+| DEV-37 | 6 | **Adversarial FM-3.** The S-40 walk is measured on a fixture the size of the largest live copy (about 139,000 files in about 21,800 folders) by the opt-in arm T8024-P1, which runs only when `T8024_MEASURE_FILES` is set. Measured on the Stage-6 machine at 139,000 files in 23,307 folders, every entry off the policy: the findings pass 7.8 s, the enforce pass 13.9 s, and the findings pass at the policy 8.0 s. The walk's cost bound is the installer milestone's S-40 retention rule (§ Named Residuals) | Collective Review (folded into the Stage-6 spec) |
+| DEV-38 | 6 | **Adversarial FM-4.** CONDITIONAL:REGRESSION-STEP-BUDGET fires above about 101 minutes on either gating step of `.github/workflows/install-tests.yml` — the main regression step and the fresh-HOME step, each budgeted at 135 minutes with a third of headroom. When it fires, both step budgets and the job limit are re-derived by the job header's rule. Locally the new suite's real install took 8 s and each real update 8 to 12 s; the two CI steps' durations are read on the release PR's CI run at Stage 7 | Collective Review (folded into the Stage-6 spec) |
 | DEV-39 | 6 | **Adversarial FM-5.** The register-parity arm T8024-L0 parses rows with `S-[0-9]+`, and its sensitivity arm plants S-100 | Collective Review (folded into the Stage-6 spec) |
 | DEV-40 | 6 | **Adversarial PR-1 (AL-LOW).** The library's header lists the literals it composes outside the resolver (the S-10, S-15, S-33 and S-48 leaves, the backup-name predicate and the S-40 folder glob) as repoint targets for the one-resolver release; the hub records that obligation against that release. D1 stands | Collective Review (PR-1 recorded obligation) |
 | DEV-41 | 6 | **Cascade N/A rows.** `core/process-catalog/engineering-harness/validate-install.md` (its Mode A count and check list, lines 25 and 46) and `install-platform.md` (line 72) will not list A11 or the new count; both are outside the matrix, stale already, and their citations are rewritten at Stage 12 | Collective Review (the adversarial review's cascade rows) |
 | DEV-42 | 6 | **Test-design additions beyond the design, each within its arms' intent.** The four override variables are unset at the top of `test_validate_install.sh` rather than per call; the creation-site arms (T8024-F1 to F3) run every scaffold copy of the three scripts, extracted, against an empty sandbox, each with a mutant that drops the `umask 077` wrapper and must create at 0644; leaf-source parity arms (T8024-L2b) hold the library's composed leaves equal to the template, register row, `deploy.sh` line and `.gitignore` line each one copies; T8024-V11 (an owner-only INFO) and V12 (S-48 at 0644 FAILs) are added; T8024-S1 pins that `--surfaces-only` runs no pass. Tier 1 [ADJUST] | #8024 Engineering spoke |
+| DEV-43 | 6 | **Self-repair (Retry pattern), test-only.** The first green run of the install regression suite read the new suite at 120 passed, 2 failed: T8024-L0's own sensitivity and specificity arms tested membership with a `case` statement inside a command substitution, which bash 3.2 misparses. The parity logic was right (it reported S-100 unhandled); the arms now use a helper. Four arms in the suite as first written (L3, L4, L6 and L6b) also read the library's counters from a subshell; that was found by reading, before the green run | #8024 Engineering spoke |
 
 ## Named Residuals
 
@@ -916,3 +917,68 @@ Layer-2 activation for Stage 12. The default propagation carrier, `./update.sh -
 |---|---|---|---|---|
 | 1 | `core/deploy/lib-leak-risk-modes.sh`, `update.sh` | the operator's install: the Leak-risk primaries, their backups and the S-40 copies | update: `./update.sh` (full) — activates the leak-risk mode pass; the first run tightens the Leak-risk primaries, their backups and the S-40 copies | validate-install A11 PASS |
 | 2 | `core/config/allowlists/script-execution-allowlist.txt` | the deployed hook-tier allowlist | the Stage-12 deploy | the new suite's four invocation forms are present in the deployed copy |
+
+## Verification Evidence
+
+Populated after Stage 12 execution. Stage 6 self-verification for each slice is recorded in the release pull request's `### Verification Evidence` block and on that card's Stage-6 sub-task.
+
+## Deployment Execution Log
+
+Populated during Stage 12.
+
+| Step | Timestamp | Result | Notes |
+|------|-----------|--------|-------|
+| Pre-execution check | | | |
+| Merge PR | | | |
+| Tag release | | | |
+| Skill deployment | | | |
+| Manifest execution | | | |
+| State anchor update | | | |
+| Post-execution verification | | | |
+
+## Change Description
+
+Authored by the last Stage 6 Engineering spoke at pull-request completion, per `release/governance/RELEASE_PROTOCOL.md` § Change Description Protocol. It is distinct from the user-facing release note, which is written at Stage 13 Close.
+
+### Outcome
+
+The three registered in-repo git-ignored homes (`/local-state/`, `/analysis/` and `/roadmaps/`) are now guarded against a commit. `/local-state/` ships with its tracked README; a commit guard refuses any path under a home other than its README, a forced add included, at pre-commit and over every commit a push would publish; and a new required CI job, the In-repo home content gate, keeps home content off `main`. The repository tree walkers that read a home now read the git index or root below the repository root, and a regression test fails when one reads a home. Leak-risk files get one permission policy — 0600 on each file and 0700 on each folder, the pre-update container copies included — set at install and at every full update, and reported by the install validator's new check A11.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #8022 | `/local-state/` ships with its README; `core/hooks/git-pre-commit-homes.sh` refuses home content at commit and at push, and the In-repo home content gate refuses it on every pull request | DONE — AC-1 reads red until the sibling release's ignore pair reaches this branch, and AC-5 is the operator's Stage-12 registration |
+| #8023 | The verifier's glob resolver, the import tracer, the context-budget agents scan and the durability copy no longer read a home; `core/deploy/tests/test_tree_walk_skips_homes.sh` fails when a walker it runs does | DONE |
+| #8024 | `core/deploy/lib-leak-risk-modes.sh` sets every Leak-risk register row's files to 0600 and folders to 0700 at install and full update; validate-install A11 fails any group or other permission bit | DONE |
+
+### Key decisions
+
+Rendered in § Operator Decisions — rendered and recorded in § Deviation Log.
+
+- **D-GuardScope (A):** the guard covers every registered in-repo home, each README excepted, from one static list the tree-walk test also reads.
+- **D-RequiredCheck (B):** the job's header declares `required`; the operator registers the context at Stage 12 once it is green on the head, then merges.
+- **D-Bypass (C):** the commit-time check runs even under `CLAUDE_HOOK_BYPASS`, and the push-time check honours it. The decision record is ADR-242, status `Proposed`.
+- **D-CIArm (A + squash-merge):** the CI job reads the merge tree, and its refusal prescribes removing the file and squash-merging.
+- **D-8023-WalkerSet (A):** all four home-reaching walkers change, and both tracers resolve an omitted root from their own checkout before the working directory.
+- **D-ScanExec (B):** the S-15 script is run as `bash <path>`, so it is 0600 like every other leak-risk file.
+- **D-FolderLimb (A) and D-S40Scope (A):** the folder limb reaches the S-40 copies, which are created at the policy and repaired; the governed leak-risk home is the installer milestone's.
+- **CD-2 and CD-3:** the second PII scan list gets register row S-48; the validator fails a group or other bit, and the setter stays exact.
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** De-register the In-repo home content gate's required context first, then revert the release merge with a mainline revert; the leak-risk modes this release set stay at the more protective setting, and a claimed version tag is retained.
+
+### Downstream impact
+
+- **Stage 12:** the operator registers `In-repo home content gate` as a required context. Each open pull request whose latest run lacks the job then needs a fresh push or a merge from `main`.
+- **Existing installs:** one full `./update.sh` after the merge tightens the leak-risk files (§ Operational Deployment Manifest row 1). Until it runs, validate-install A11 FAILs, and in its default `all` mode Mode B is skipped.
+- **Merge order:** ship-gated on `worktree-sessions-reach-in-repo-homes`, which ships the `/local-state/` ignore pair. Same-cell edits to the placement standard reconcile at the Stage-9 merge from `main`.
+- **Carried forward:** the installer milestone inherits the leak-risk home at the policy, the S-40 and S-41 homes and S-40 retention (NR-1, NR-3, NR-5). The one-resolver release inherits the library's six repoint targets (NR-6).
+- **Held for the Stage-9 filing step:** the stray-copy backstop's exact-name matching, the script-execution guard's misfire on `find -path` operands, and its interpreter-subprocess coverage gap.
+
+### Cross-references
+
+- Release plan: this file, top section.
+- Milestone: `in-repo-home-is-guarded`.
+- User-facing release notes: written at Stage 13 Close under `release/releases/notes/`, per `release/references/standards/release-notes-standard.md`.
