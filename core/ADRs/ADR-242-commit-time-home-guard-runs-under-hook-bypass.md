@@ -6,7 +6,7 @@ release: in-repo-home-is-guarded
 deciders: "Workspace owner (Collective Review scope lock, option C of the bypass decision); the guard's host and predicate chosen at Stage 5 Solutioning, and the option named by the adversarial design review"
 tags: [architecture, git-hooks, bypass, in-repo-homes, commit-guard, reversibility-cheap]
 source_observations:
-  - "#8022 — the card that ships the /local-state/ README and the commit guard over the three registered in-repo homes; its second criterion asks the guard to fail a forced add whether or not CLAUDE_HOOK_BYPASS is set."
+  - "The card that ships the /local-state/ README and the commit guard over the three registered in-repo homes asks, in its second criterion, for the guard to fail a forced add whether or not CLAUDE_HOOK_BYPASS is set."
   - "Before this record every platform hook and git hook exited on CLAUDE_HOOK_BYPASS before anything else, so a session launched with the bypass could force-add a file under a home, commit it and push it, and no local layer would read either step."
   - "A home's README passes the guard by construction, and nothing else in a home is ever committed, so the commit-time home check has no legitimate override use."
   - "Every CI layer reads a branch that is already on the remote: the push-time scan runs after the push, and a pull-request job needs the head branch published."
