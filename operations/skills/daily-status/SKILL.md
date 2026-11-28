@@ -691,7 +691,7 @@ pmo-qa-auditor gate G7 enforces structural conformance and content quality.
 
 ## Multi-Project Support
 
-When multiple projects are active in the served portfolio — `portfolio-writeback-contract.md` § Portfolio scoping, which places a project by its `portfolio_id` (no Portfolio record: every active project, as before, unless the projects name two or more portfolios, when the run stops and names the Portfolio records to create; one: every project that names it or names none; two or more: the projects whose `portfolio_id` names the served portfolio, and a project naming none is unassigned):
+When multiple projects are active in the served portfolio — `portfolio-writeback-contract.md` § Portfolio scoping, which places a project by its `portfolio_id` (no active Portfolio record: every active project, as before, unless the projects name two or more portfolios, when the run stops and names the Portfolio records to create; one active portfolio: every project that names it or names none; two or more active portfolios: the projects whose `portfolio_id` names the served portfolio, and a project naming none is unassigned):
 
 - Generate status updates per-project (not combined)
 - Each project uses its own Framework, trackers, and templates
@@ -699,4 +699,4 @@ When multiple projects are active in the served portfolio — `portfolio-writeba
 - Present all outputs together for review before posting
 - A batch request ("generate all daily updates") covers the served portfolio's member projects only; outputs for two portfolios are never presented together in one review.
 - The review opens with the line `Portfolio: <served portfolio_id, or unscoped> — unassigned: <project ids or none>; unresolved portfolio_id: <project ids or none>`, so an excluded project is never dropped silently.
-- The run never reads another portfolio's composed file. It stops, naming the move, while `projects/_config/PORTFOLIO.md` still exists beside a Portfolio record.
+- The run never reads another portfolio's composed file. It stops, naming the move, while `projects/_config/PORTFOLIO.md` still exists beside an active Portfolio record.

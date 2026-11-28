@@ -27,7 +27,7 @@ sub-entity set downward; `--scope project --depth status` refreshes only the sta
 
 ## `--scope portfolio` — compose, not absorb
 
-In this reference `PORTFOLIO.md` means the composed file of the active project's portfolio (`portfolio-writeback-contract.md` § Portfolio scoping): `projects/_config/<portfolio_id>/PORTFOLIO.md`, or `projects/_config/PORTFOLIO.md` with no Portfolio record.
+In this reference `PORTFOLIO.md` means the composed file of the active project's portfolio (`portfolio-writeback-contract.md` § Portfolio scoping): `projects/_config/<portfolio_id>/PORTFOLIO.md`, or `projects/_config/PORTFOLIO.md` with no active Portfolio record.
 
 The portfolio direction's **native value-add is the freshness-drift audit**: for each
 active member project of the served portfolio, is its rollup entity current against the sub-entities it summarizes, and

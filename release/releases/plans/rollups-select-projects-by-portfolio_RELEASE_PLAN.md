@@ -337,7 +337,7 @@ None declared. The milestone has one non-sub-task member, and a cross-issue crit
 | weekly-status-rollup, daily-status, ppm-agent, project-initiator | static rule-citation probes plus a Stage-7 walkthrough of each selection step on the in-repo fixtures | Stage 7 |
 | `deploy.sh` rung 2 and the presence helper (Change 38) | the extracted function and helper run under `/bin/bash` with `set -euo pipefail` against five temporary workspaces | Stage 7 (not executed at Stage 5: the script-execution control refused both spokes) |
 
-**Static probes — run by Stage 7.** For each of the five skills: `grep -c -F "Portfolio scoping"`, `grep -c -F "portfolio_id"`, `grep -c -F "names none"` (the one-portfolio clause) and `grep -c -F "beside a Portfolio record"` (the migration stop) at least 1; `grep -c -F "unresolved portfolio_id"` at least 1 on weekly-status-rollup, daily-status, health-check and ppm-agent; `grep -c -F "Portfolio: <portfolio_id, or unscoped>"` at least 1 on project-initiator. All read 0 at 8ed5e273 (control: the contract's own heading carries `Portfolio scoping` after S1).
+**Static probes — run by Stage 7.** For each of the five skills: `grep -c -F "Portfolio scoping"`, `grep -c -F "portfolio_id"`, `grep -c -F "names none"` (the one-portfolio clause) and `grep -c -F "beside an active Portfolio record"` (the migration stop) at least 1; `grep -c -F "unresolved portfolio_id"` at least 1 on weekly-status-rollup, daily-status, health-check and ppm-agent; `grep -c -F "Portfolio: <portfolio_id, or unscoped>"` at least 1 on project-initiator. All read 0 at 8ed5e273 (control: the contract's own heading carries `Portfolio scoping` after S1).
 
 **Stage 7 walkthroughs:**
 
