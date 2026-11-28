@@ -1386,6 +1386,20 @@ fsb_pass2() {
   [ "$judged" = 1 ] || return 45
   "$PRINTF" '%s' JUDGED
 }
+# fsb_run_pass2 — FSB_P2_RES and FSB_P2_RC = the second pass's output and exit status.
+#   The substitution stands as a plain assignment: never on the left of an and-or list, never in
+#   an if or while test. Bash ignores errexit for every command a function runs in such a
+#   position, and the Linux hook-harness job's bash 5.3 carried that into the substitution, so an
+#   unchecked failing command inside the pass ran on and the pass printed its completion line;
+#   macOS bash 3.2 honoured the re-armed errexit in either position. The hook's own errexit is
+#   suspended around the one assignment, and a function does not inherit the ERR trap, so a
+#   non-zero status reaches the dispatch below instead of ending the hook.
+fsb_run_pass2() {
+  set +e
+  FSB_P2_RES="$(set -e; fsb_pass2)"
+  FSB_P2_RC="$?"
+  set -e
+}
 
 # ==========================================================================
 # RULE EVALUATION
@@ -1409,7 +1423,7 @@ done
 if [ "$FSB_PASS2" != 1 ]; then  :                        # the second pass's off switch (M-FSB-PASS2)
 elif [ "$CMDPOS_OK" = 1 ]; then
   FSB_P2_RC=0
-  FSB_P2_RES="$(set -e; fsb_pass2)" || FSB_P2_RC="$?"
+  fsb_run_pass2
   case "$FSB_P2_RC" in
     0) [ "$FSB_P2_RES" = JUDGED ] || reading_not_evaluated "no completion line" ;;
     2) if [ "$MODE" = "enforce" ]; then exit 2; fi; reading_not_evaluated "exit 2 under warn" ;;
