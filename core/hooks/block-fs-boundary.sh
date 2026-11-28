@@ -1207,7 +1207,7 @@ readonly FSB_ADDED_AWK='
       ch = pq[k]
       if (ch == "(") pdp[L]++
       else if (ch == ")") {
-        if (0) continue  # M-FSB-CASE
+        if (cs[L] > 0 && pdp[L] == csd[L, cs[L]]) continue  # M-FSB-CASE
         pdp[L]--
         if (pdp[L] <= 0) { L--; xm[L] = 1 }
       }
@@ -1215,7 +1215,7 @@ readonly FSB_ADDED_AWK='
   }
   function word(w,   l, t, rem) {
     if (hsep) { NEXTW = w; onsep(); hsep = 0; nsemi = 0; noth = 0 }
-    if (0) {  # M-FSB-PSUB
+    if (w ~ /^[<>=]\(/) {  # M-FSB-PSUB
       if (!sd[L]) { sd[L] = 1; vb[L] = "" }
       sk[L] = 0
       L++; rs(L); pdp[L] = 1; cs[L] = 0

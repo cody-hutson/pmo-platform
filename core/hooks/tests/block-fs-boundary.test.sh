@@ -2603,6 +2603,22 @@ fsbp_off_ids "$FSBP_QVERBOFF" '^4[.](dq|sq|partial|emptypad|emptyrun|midbs|ansi|
 fsbp_off_ids "$FSBP_EQOFF" '^4[.]zeq[.]|^ADJ[.]eqq[.]' EQOFF 'leading-= strip'
 fsbp_off_ids "$FSBP_HDQOFF" '^5[.](qwrap|qasgn)-|^INV[.]' HDQOFF 'scanner repair'
 fsbp_off_ids "$FSBP_MFOFF" '^5[.](sudo|env|nice|time|asgn|then|qopt)-|^5[.](qverb|leadredir)-hdb[.]|^ADJ[.](group|subshell|then)[.]' MFOFF 'scanner repair and mask-free reading'
+FSBP_PSUBOFF="$(fsbp_copy psuboff '/  # M-FSB-PSUB$/s/^    if (.*) {  #/    if (0) {  #/')"
+FSBP_CASEOFF="$(fsbp_copy caseoff '/  # M-FSB-CASE$/s/^        if (.*) continue  #/        if (0) continue  #/')"
+xform_shape "FSB-MUT-SHAPE-PSUBOFF: the copy whose walk carries no process-substitution body differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_PSUBOFF" 1 1
+xform_shape "FSB-MUT-SHAPE-CASEOFF: the copy whose body count reads every case pattern's closing parenthesis differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_CASEOFF" 1 1
+fsbp_off_ids "$FSBP_PSUBOFF" '^PS[.]' PSUBOFF 'process-substitution carry'
+# FSB-PS-CASE-PAIR: through the copy whose body count reads a case pattern's closing parenthesis
+# as the body's close, the unparenthesized-pattern form is admitted with no record, so the case
+# rule is what closes it.
+/usr/bin/awk -F'|' '$4 == "out" && $1 ~ /^PS\.caseu\./ && $3 == substr($8, 1, 1)' "$FSBP_ROWS" > "${FSBP_BASE}/rows.case"
+fsbp_pass "$FSBP_CASEOFF" "${FSBP_BASE}/rows.case" "${FSBP_BASE}/res.case"
+fsbp_case="$(/usr/bin/awk -F'\t' '{ printf "%s/%s/%s/%s", $2, $3, $4, $5 }' "${FSBP_BASE}/res.case")"
+if [ "$fsbp_case" = a/0/0/0 ]; then
+  /usr/bin/printf 'PASS: FSB-PS-CASE-PAIR: through the copy without the case rule, the unparenthesized-pattern body is admitted with no record — the case rule is what closes it\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FSB-PS-CASE-PAIR: through the copy without the case rule the body is not reopened (verdict/exit/block/warn %s)\n' "$fsbp_case"; FAIL=$((FAIL + 1))
+fi
 
 # ----- FSB-P2-COST: the second pass adds canonicalizer runs, never a longer scan -----
 # The canonicalizer's scan grows faster than linearly with the command, on every consumer, so a
