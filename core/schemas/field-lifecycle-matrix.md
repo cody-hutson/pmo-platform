@@ -11,7 +11,7 @@ consumers: agents executing the CER Claim phase across the 13 stages; the gate s
 
 Defines the lifecycle of every issue field across all 13 pipeline stages — which fields are created, required, updated, locked, or irrelevant at each stage, who populates them, and what gates prevent stage advancement with missing data.
 
-**Consumers:** Agents executing the CER Claim phase (step 3: "Validate entry gate") use this matrix to determine field requirements. The [Agent Write Permissions](../../release/references/specs/ticket-information-architecture.md#agent-write-permissions) table defines WHAT each stage CAN write; this matrix defines WHAT each stage SHOULD write and MUST validate.
+**Consumers:** Agents executing the CER Claim phase (step 3: "Validate entry gate") use this matrix to determine field requirements. For body fields, § Body Fields Lifecycle below is the governing table for which stage may write each body field, per [ADR-242](../ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md); the [Agent Write Permissions](../../release/references/specs/ticket-information-architecture.md#agent-write-permissions) table's Body Updates column points each stage at its column here rather than restating it. For the State Anchor fields, [ADR-242](../ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md) changes nothing: the Agent Write Permissions table defines WHAT each stage CAN write; this matrix defines WHAT each stage SHOULD write and MUST validate.
 
 **Relationship to the architecture stack:**
 - [ticket-information-architecture.md](../../release/references/specs/ticket-information-architecture.md) — defines the three-layer model and write permissions
@@ -31,7 +31,7 @@ Six values define the lifecycle state of each field at each pipeline stage.
 | **R** | **Required** — must exist for stage exit gate (set at a prior stage) | Agent validates existence. Gate check — do not proceed if missing. |
 | **U** | **Updated** — may be refined at this stage | Agent may modify per body update protocol. Not required to change. |
 | **A** | **Auto** — populated by GitHub automation | Agent does not write. May validate result. |
-| **L** | **Locked** — set at an earlier stage, not modified | Agent reads only. Modification requires correction protocol. |
+| **L** | **Locked** — set at an earlier stage, not modified | Agent reads only. Modification requires correction protocol; for a body contract section or single-value field that protocol is [ADR-242](../ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md)'s: the field is changed only to carry out a decision the operator has recorded, in place, with one short comment giving the date, what changed and why — the path for changing a locked field. A locked record field is never rewritten; a line added beside it follows the Section classes paragraph below. |
 | **—** | **N/A** — field not relevant at this stage | Agent ignores. |
 
 ### C vs. R Distinction
@@ -58,7 +58,7 @@ Six values define the lifecycle state of each field at each pipeline stage.
 | Description | 1-Intake | Author | **C** | R | L | L | L | L | L | L | L | L | L |
 | Evidence | 1-Intake | Author | **C** | R | L | L | L | L | L | L | L | L | L |
 | Proposed Change | 1-Intake | Author | **C** | R/U | L | U | U | L | L | L | L | L | L |
-| AC | 1-Intake | Author | **C** | R/U | L | L | U | L | L | L | L | L | L |
+| AC | 1-Intake | Author | **C** | R/U | L | U* | U | L | L | L | L | L | L |
 | Priority (body) | 1 (opt) / 2 (req) | Author (opt) -> Triage Agent (req) | O | **C\**/U | R | L | L | L | U* | U* | L | L | L |
 | Category (body) | 1 (opt) / 2 (req) | Author (opt) -> Triage Agent (req) | O | **C\**/U | R | L | L | L | L | L | L | L | L |
 | Affected Files | 1 (opt) / 4 (req) | Author (opt) -> Planning Agent (req) | O | U | — | **C\**/U | U | L | L | L | L | L | L |
@@ -70,6 +70,20 @@ Six values define the lifecycle state of each field at each pipeline stage.
 **Dual-origin fields:** Priority, Category, Affected Files, and Dependencies have dual "Created At" values. The field may be optionally populated at intake (O in Stage 1) but is not gating until a later stage where the responsible agent either creates it (if absent) or validates/updates it (if present). The **C\*/U** notation means: Create if absent, Update if present.
 
 **Priority U\* at DT/QA:** Updated only if testing reveals severity warrants escalation. Rare but permitted per body update protocol.
+
+**AC U\* at Planning:** Updated only on one of two triggers: an A0.5 currency mismatch, recorded in the release plan's deviation log, or a refinement the triage-design re-review routes as C2. Any other change to the criteria at Planning is made only to carry out a decision the operator has recorded ([ADR-242](../ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md), rule 2).
+
+**Section classes ([ADR-242](../ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md)).** A body section is a contract section — what the card asks for (Proposed Change, AC, Affected Files, Dependencies, Documentation Impact, Risks) — or a record section — what was observed (Description, Evidence, Notes). Title, Priority and Category are single-value fields and follow their rows. A contract field is edited in place inside the stages its row opens: a cell reading U, C\*/U, R/U or O, and a U\* cell only under its footnote. A record field is never rewritten; an O cell on its row marks that the section may be present without gating, and opens no addition. A line added beside a record field follows [ADR-242](../ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md)'s writers rule — the Stage 2 counted-observation line or the Stage 13 folded follow-up line, each added to another card and applied only after the operator confirms it, or a line that carries out a decision the operator has recorded — and appears in no column, because the columns describe the card a stage is processing. A template section with no row of its own follows the Proposed Change row when it is a contract section, the Dependencies row when it names related or blocking work, and the Description row when it is a record section. A single-value field with no row of its own follows the row of the field it stands for — a severity the Priority (body) row from Triage on, a domain the Category (body) row, a parent link the Dependencies row — and any other, such as a decision card's Status or a size, follows the Title row: set at intake, and changed afterwards only to carry out a decision the operator has recorded. A decision card's Status is not the authority for the decision's status; the decision record's own `status:` field is. The per-template classification is kept in [ticket-information-architecture.md § Contract and Record Sections](../../release/references/specs/ticket-information-architecture.md#contract-and-record-sections).
+
+<!-- design-artifact: flow-class=data-flow; name=body-section-write-authority; depicts=core/schemas/field-lifecycle-matrix.md,release/references/specs/ticket-information-architecture.md -->
+
+| Section class | Writer | When | Comment |
+|---|---|---|---|
+| Contract | Stage agent | Inside the stages its row opens (U, C\*/U, R/U, O); a U\* cell only under its footnote | One why-comment when scope, AC or fix direction changes; none for a hygiene or citation fix |
+| Contract | Any writer | Carrying out a decision the operator has recorded, whatever the stage and the cell | One short comment: date, what changed, why |
+| Record | Stage agent | One added line, never a rewrite, at the Stage 2 counted-observation step or the Stage 13 folded follow-up step, each operator-confirmed | None; the added line names its source |
+| Record | Any writer | One added line carrying out a decision the operator has recorded | None; the added line names its source |
+| Single-value field | Per its row, or the row named for it above | Per that row's cells | Per that row's footnote |
 
 ---
 
