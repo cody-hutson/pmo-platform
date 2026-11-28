@@ -411,6 +411,7 @@ N/A — enumerated over the classes {skill S-2 copies, rules mirror pairs, harne
 | DEV-7 | A draft Verification Plan of nine rows, three deferred to later stages | Revision 1's 33 rows and its design-criteria note | Stage-5 revision 1 (FM-3) |
 | DEV-8 | Agent-Editability Read over 10 + 3 paths | The ten remaining Stage-4 paths plus one row for `release/governance/release-process.md` (unconstrained) | Stage-5 operator decision (E9); editability currency refresh on #9152 |
 | DEV-9 | Stage 9 Plan Review: "RUN (Deep), and the ratification decision" | Stage 9: RUN (Deep); ratification at Stage 13 Phase A13 | Stage-4 plan gate |
+| DEV-10 | S2 (E2): the ADR-062 entry in `core/ADRs/README.md` gains the pointer line, and its Decision line is left as written, still stating the body-wide historical-record clause | The entry's Decision line no longer states the body-wide historical-record clause; it points at ADR-242 instead. The heading and the pointer line are unchanged, and the Success Indicator's restating-surfaces limb now holds | Stage 9 NO-GO (operator, 2026-11-28, Saturday UTC); decision record on #9158 |
 
 ### Stage 6 implementation notes (minor; no scope change)
 
