@@ -271,6 +271,18 @@ else
   COMMAND_CMDPOS="$COMMAND"
 fi
 
+readonly FSB_READ_VERBS="cat head tail less more base64 xxd od hexdump strings"
+readonly FSB_WRITE_VERBS="cp mv tee dd"
+readonly FSB_TAB=$'\t'
+readonly FSB_NL=$'\n'
+readonly FSB_PASS2=1  # M-FSB-PASS2
+readonly FSB_REDIR=1  # M-FSB-REDIR
+readonly FSB_JOINS=1  # M-FSB-JOIN
+readonly FSB_HDQ=0  # M-FSB-HDQ
+readonly FSB_MASKFREE=0  # M-FSB-MASKFREE
+FSB_SEEN=""
+FSB_SEEN_N=0
+
 # --- HELPERS ---
 log_block() {
   local rule_id="$1"
@@ -804,13 +816,13 @@ advise_unresolvable() {
     "${verb} target opens with an unresolvable expansion and has no decidable literal prefix to classify; admitted under advisory policy: $(render_token "$token")"
 }
 
-# check_verb(verb, rule_id_class)
-#   Run the verb-detection + per-token classification loop.
-#   rule_id_class: "READ" → BLOCK-FS-BOUNDARY-001 / -003 / -004
-#                  "WRITE" → BLOCK-FS-BOUNDARY-002 / -003 / -004
-#   Returns: 0 always (block_or_warn exits on enforce-mode block; warn-mode returns)
-check_verb() {
-  local verb="$1"; local class="$2"
+# judge_operand(verb, rule_id_class, token)
+#   The per-operand disposition, shared by both passes: one token, classified by the cascade
+#   (resolve_and_classify) and refused, warned, advised or admitted by the rule its class
+#   names. The braced block keeps check_verb's indentation, so the suite's line-keyed
+#   mutations of these lines still target them.
+judge_operand() {
+  local verb="$1"; local class="$2"; local token="$3"
   local outside_rule
   local strict_rule
   case "$class" in
@@ -818,14 +830,7 @@ check_verb() {
     WRITE) outside_rule="BLOCK-FS-BOUNDARY-002"; strict_rule="BLOCK-FS-BOUNDARY-003";;
     *)     outside_rule="BLOCK-FS-BOUNDARY-001"; strict_rule="BLOCK-FS-BOUNDARY-003";;
   esac
-
-  # Detect verb at command-start position (absolute-path-aware)
-  if ! matches "${ANCHOR_PREFIX_BASH}${verb}([[:space:]]+|$)"; then
-    return 0
-  fi
-
-  while IFS= read -r token; do
-    [ -z "$token" ] && continue
+  {
     local classification=0
     local resolved
     resolved="$(resolve_and_classify "$token")" || classification="$?"
@@ -857,6 +862,28 @@ check_verb() {
         advise_unresolvable "$verb" "$token"
         ;;
     esac
+  }
+}
+
+# check_verb(verb, rule_id_class)
+#   Run the verb-detection + per-token classification loop.
+#   rule_id_class: "READ" → BLOCK-FS-BOUNDARY-001 / -003 / -004
+#                  "WRITE" → BLOCK-FS-BOUNDARY-002 / -003 / -004
+#   Each token it hands to judge_operand is recorded in FSB_SEEN first, so the second pass
+#   below never judges it again.
+#   Returns: 0 always (block_or_warn exits on enforce-mode block; warn-mode returns)
+check_verb() {
+  local verb="$1"; local class="$2"
+
+  # Detect verb at command-start position (absolute-path-aware)
+  if ! matches "${ANCHOR_PREFIX_BASH}${verb}([[:space:]]+|$)"; then
+    return 0
+  fi
+
+  while IFS= read -r token; do
+    [ -z "$token" ] && continue
+    FSB_SEEN="${FSB_SEEN}${verb}${FSB_TAB}${token}${FSB_NL}"; FSB_SEEN_N=$((FSB_SEEN_N + 1))
+    judge_operand "$verb" "$class" "$token"
   done < <(extract_target_tokens "$verb")
 }
 
@@ -865,7 +892,7 @@ check_verb() {
 # ==========================================================================
 
 # File-read verb class — BLOCK-FS-BOUNDARY-001 (or -003 if unresolvable)
-for verb in cat head tail less more base64 xxd od hexdump strings; do
+for verb in $FSB_READ_VERBS; do
   check_verb "$verb" READ
 done
 
@@ -873,7 +900,7 @@ done
 # For cp/mv: both source AND target may resolve outside; extract_target_tokens
 # yields all positional args, both are checked uniformly.
 # For tee/dd: target matters for write-leak.
-for verb in cp mv tee dd; do
+for verb in $FSB_WRITE_VERBS; do
   check_verb "$verb" WRITE
 done
 
