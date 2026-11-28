@@ -41,7 +41,9 @@ if [ ! -f "$ROSTER" ]; then
   exit 0
 fi
 mkdir -p "$(dirname "$NEEDLES")"
-touch "$NEEDLES"
+# An absent needle file is created at the leak-risk policy (0600), not at the process
+# umask. An existing one keeps its mode; the installer and a full update set it.
+( umask 077; touch "$NEEDLES" )
 
 # Pull the value of the two name-bearing fields (preferred_name, name_spelling)
 # from the inline `{ value: "...", ... }` form. Skip unfilled placeholders

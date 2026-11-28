@@ -3266,7 +3266,9 @@ scaffold_localized_needles() {
     return 0
   fi
   mkdir -p "$(dirname "${needle_file}")" || { err "mkdir failed: $(dirname "${needle_file}")"; exit 73; }
-  cp "${example}" "${needle_file}" || { err "needle scaffold copy failed → ${needle_file}"; exit 74; }
+  # Created at the leak-risk policy (0600), not at the process umask. The folder is made
+  # outside the subshell: today's container holds working state too, so it is not 0700.
+  ( umask 077; cp "${example}" "${needle_file}" ) || { err "needle scaffold copy failed → ${needle_file}"; exit 74; }
   info "INSTALLED needle template: ${needle_file}"
   printf 'rm-file:%s\n' "${needle_file}" >> "${ROLLBACK_OPS_FILE}"
 }
@@ -3306,9 +3308,38 @@ scaffold_localized_roster() {
     return 0
   fi
   mkdir -p "$(dirname "${roster_file}")" || { err "mkdir failed: $(dirname "${roster_file}")"; exit 73; }
-  cp "${template}" "${roster_file}" || { err "roster scaffold copy failed → ${roster_file}"; exit 74; }
+  # Created at the leak-risk policy (0600); see scaffold_localized_needles.
+  ( umask 077; cp "${template}" "${roster_file}" ) || { err "roster scaffold copy failed → ${roster_file}"; exit 74; }
   info "INSTALLED roster template: ${roster_file}"
   printf 'rm-file:%s\n' "${roster_file}" >> "${ROLLBACK_OPS_FILE}"
+}
+
+# --- Section 15f: leak-risk permission policy ---
+# Mode 0600 on every leak-risk file and 0700 on every leak-risk folder the placement
+# standard's Leak-risk register rows name at a path this install resolves, backups and the
+# update path's pre-update container copies included. The population and the policy live
+# in core/deploy/lib-leak-risk-modes.sh, which validate-install's check A11 reads too, so
+# the setter and the check cannot disagree. Today's container itself is never chmod-ed: it
+# holds working state beside the leak-risk files.
+#
+# NON-FATAL BY CONTRACT. The library's functions always return 0 and report a member they
+# cannot set on a WARN-LEAK-RISK-MODE: line, so one immutable or foreign-owned file never
+# stops the install. A mode change is not reverted by the rollback ops: the policy is the
+# more protective state, and undoing it would leave the file more exposed than before.
+apply_leak_risk_modes() {
+  local lib="${SOURCE_REPO}/core/deploy/lib-leak-risk-modes.sh"
+  if [ ! -r "${lib}" ]; then
+    warn "Leak-risk permission library not found at ${lib}; leak-risk modes NOT set"
+    return 0
+  fi
+  # shellcheck source=../../core/deploy/lib-leak-risk-modes.sh disable=SC1091
+  if ! source "${lib}"; then
+    warn "Leak-risk permission library at ${lib} did not load; leak-risk modes NOT set"
+    return 0
+  fi
+  lib_leak_risk_enforce_for "${WORKSPACE_ROOT}" "${DRY_RUN}" >&2 \
+    || warn "Leak-risk mode pass returned non-zero (continuing)"
+  return 0
 }
 
 # --- Section 15e: operations-tier seed scaffold (#5829) ---
@@ -3828,6 +3859,8 @@ fresh_install() {
   install_composition_surface_files
   scaffold_localized_needles
   scaffold_localized_roster
+  # After both scaffolds, so the files they create are already members.
+  apply_leak_risk_modes
   # Call site 1 of 2. The twin is in rebootstrap() — see that call site's note.
   scaffold_operations_tiers
   if run_verification_gate; then
@@ -3870,6 +3903,9 @@ rebootstrap() {
   install_composition_surface_files
   scaffold_localized_needles
   scaffold_localized_roster
+  # The re-bootstrap flow is the one an existing operator takes, so this is the call site
+  # that reaches files an older install left at the process umask.
+  apply_leak_risk_modes
   # Call site 2 of 2, and the one that actually matters. create_dir_layout runs on THIS
   # flow too, so omitting this line would give every already-installed operator the nine
   # tier directories and none of their orientation cards — empty folders with no
