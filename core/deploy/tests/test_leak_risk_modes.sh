@@ -147,6 +147,9 @@ PY
 }
 PARITY_UNHANDLED=""
 PARITY_EXTRA=""
+# in_list <space-separated list> <word> — 0 when the word is a member. A helper rather than
+# a `case` inside a command substitution: bash 3.2 misparses a case pattern's `)` there.
+in_list() { case " $1 " in *" $2 "*) return 0 ;; esac; return 1; }
 parity_against() {
   local expected lib_rows r
   expected=" $(register_leak_rows "$1") "
@@ -173,9 +176,9 @@ if need_lib "T8024-L0: the library's rows equal the register's Leak-risk rows"; 
   printf '| S-98 | planted surface | Working state | x | x | design |\n' >> "${plant}"
   parity_against "${plant}"
   report "T8024-L0 sensitivity: a planted Leak-risk row S-100 is reported unhandled" \
-    "$(case " ${PARITY_UNHANDLED} " in *" S-100 "*) echo 1 ;; *) echo 0 ;; esac)" "unhandled:${PARITY_UNHANDLED:- none}"
+    "$(in_list "${PARITY_UNHANDLED}" S-100 && echo 1 || echo 0)" "unhandled:${PARITY_UNHANDLED:- none}"
   report "T8024-L0 specificity: a planted Working-state row S-98 is not expected" \
-    "$(case " ${PARITY_UNHANDLED} " in *" S-98 "*) echo 0 ;; *) echo 1 ;; esac)" "unhandled:${PARITY_UNHANDLED:- none}"
+    "$(in_list "${PARITY_UNHANDLED}" S-98 && echo 0 || echo 1)" "unhandled:${PARITY_UNHANDLED:- none}"
 fi
 
 # The L fixture: every resolvable primary; three backup forms for S-08, S-09 and S-10; the
