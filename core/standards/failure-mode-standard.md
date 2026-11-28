@@ -690,10 +690,12 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
 - **Conditional:** do NOT treat the issue body as current state at
   spoke-entry when the body carries substrate claims (counts, states,
   milestone-description figures) that a canonical-source read can check,
-  because intake substrate drifts between intake and design — the body is
-  historical-record, not live truth (the body is directional, not
-  authoritative), and a design built on a stale body claim is a
-  spec-vs-reality defect caught at Stage 7 DT or later.
+  because intake substrate drifts between intake and design — a substrate
+  claim in a body is a point-in-time observation of a platform fact,
+  which the canonical corpus owns (the body is the source of truth for
+  what the card asks for, and directional about structure), and a design
+  built on a stale body claim is a spec-vs-reality defect caught at
+  Stage 7 DT or later.
 - **Root cause:** The issue body is the fastest, most-proximate signal;
   re-deriving live state at spoke-entry costs a `gh`/`grep`/`git` read and
   feels redundant with the body — so the check is skipped and the body's
@@ -704,17 +706,21 @@ The 5 entries below are drawn from the 2026-04-24 backlog reorganization session
   emit a structured drift report (`drift_class` / `body_claim` /
   `current_state` / `gap_age_days`) for each checkable body claim; on
   drift, route a disposition (current-state-driven AC interpretation, OR
-  escalate body amendment to the operator) — never auto-amend the body,
-  because a canonical-spec edit wins over a substrate (issue-body)
-  mutation per the substrate-vs-canonical precedent (issue bodies remain
-  historical-record). Defer to A0.5's Planning-time reconciliation for any
-  AC-currency axis it already owns; do not re-derive it.
+  escalate body amendment to the operator) — leave a record section as
+  written, update a contract section only as the
+  issue-body-contract-sections-are-the-scope-of-record record's writers
+  rule allows, and land the fix for a platform fact at its canonical
+  home, because a canonical-spec edit wins over a substrate (issue-body)
+  mutation per the substrate-vs-canonical precedent. Defer to A0.5's
+  Planning-time reconciliation for any AC-currency axis it already owns;
+  do not re-derive it.
 - **Principal response vs. junior response:** Principal reconciles the
   body against live state before designing, reports the drift as a typed
-  object for adversarial review, and designs against current state while
-  leaving the body as historical-record. Junior reads the body as the
-  spec, designs against the stale claim, and surfaces the mismatch only
-  after Dev Testing flags the spec-vs-reality defect.
+  object for adversarial review, and designs against current state,
+  leaving the record sections as written and routing any contract-section
+  update through the writers rule. Junior reads the body as the spec,
+  designs against the stale claim, and surfaces the mismatch only after
+  Dev Testing flags the spec-vs-reality defect.
 ```
 
 ### Hub-spoke chip-prompt examples — release-execution-class workflow
