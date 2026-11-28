@@ -132,7 +132,10 @@ run_scan() {
   emit_row "core/schemas/"      "$(find "$repo_root/core/schemas"      -name '*.md' -type f 2>/dev/null)"
   emit_row "core/specs/"        "$(find "$repo_root/core/specs"        -name '*.md' -type f 2>/dev/null)"
   emit_row "core/disciplines/"  "$(find "$repo_root/core/disciplines"  -name '*.md' -type f 2>/dev/null)"
-  emit_row "agents"             "$(find "$repo_root" -path '*/skills/*/agents/*.md' -type f 2>/dev/null)"
+  # Agent files live under the three module skill trees the roster reads. Rooting the
+  # scan there keeps it out of the repository-root homes and out of every linked
+  # worktree under .claude/worktrees/, whose copies would inflate the count.
+  emit_row "agents"             "$(find "$repo_root/core" "$repo_root/release" "$repo_root/operations" -path '*/skills/*/agents/*.md' -type f 2>/dev/null)"
   emit_row "hooks (.claude/hooks/)" "$(find "$repo_root/.claude/hooks" -maxdepth 1 -name '*.sh' -type f 2>/dev/null)"
   # CLAUDE.md lives at the workspace root, which is the repo root on a canonical
   # install but one level up on a nested install; try both (graceful degradation —
