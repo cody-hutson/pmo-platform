@@ -32,9 +32,9 @@ reversibility: CHEAP / Confidence HIGH — one pull request; reverting it remove
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): the change set carries material edits to rules agents follow — stage-05 Phase A1.5, the bridge's Stage 5 substrate-drift chip pattern, the ticket spec's write permissions, the field lifecycle matrix and the release-process AC-Drift Handling Protocol — per the Bump-Class Selection Guide's row for a protocol text modification. The rule-computed next-free re-verified at Engineering Commit 0 is `v5.15`. The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-28 (Saturday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub; Stage 6 Engineering spoke) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) |
+| **Status** | Executing — Stage 6 Engineering: slices S0–S5 landed and self-verified; next, Stage 7 Dev Testing |
 | **Branch** | `release/issue-body-is-the-scope-of-record` |
-| **PR** | opened in **draft** at Stage 6 |
+| **PR** | #9201, opened in **draft** at Stage 6 (transitioned to ready at the Stage 9 gate) |
 | **Milestone** | `issue-body-is-the-scope-of-record` |
 | **Baseline pin** | `origin/main` at `8ed5e273d301f80bb0e281222e06a22432090ebb` (the Stage-4 pin; the branch is cut from the same commit) |
 
@@ -412,10 +412,85 @@ N/A — enumerated over the classes {skill S-2 copies, rules mirror pairs, harne
 | DEV-8 | Agent-Editability Read over 10 + 3 paths | The ten remaining Stage-4 paths plus one row for `release/governance/release-process.md` (unconstrained) | Stage-5 operator decision (E9); editability currency refresh on #9152 |
 | DEV-9 | Stage 9 Plan Review: "RUN (Deep), and the ratification decision" | Stage 9: RUN (Deep); ratification at Stage 13 Phase A13 | Stage-4 plan gate |
 
+### Stage 6 implementation notes (minor; no scope change)
+
+| # | Note | Basis |
+|---|---|---|
+| ENG-1 | E6(c) names no position for the added reading entry; it is placed directly after the ADR-062 entry it qualifies, so the predecessor and its successor are read together. | Stage 6 inline decision (spec depth: placement unspecified) |
+| ENG-2 | E6(d) and E8 replace hard-wrapped text; the replacement is re-wrapped to each passage's width, and every probe phrase the verification rows name stays on one line. | Stage-5 revision 1, transcription conventions |
+| ENG-3 | The Phase A2 container predicate selects the GitHub sub-issue container (six slices over 11 files); the slices are tracked as the release pull request's checklist rows instead, and the choice is put to the hub. | Stage 6 Phase A2; recorded on #9152 |
+
 ## Verification Evidence
 
-(Stage 6 Phase C4 results are recorded here by the plan-update commit after slice S5; Stage 7 onward appends its own.)
+### Stage 6 Phase C4 self-verification
+
+Head `834a2a93` (slice S5) against `origin/main` `8ed5e273`.
+
+| Check | Result |
+|---|---|
+| Plan verifier (`release/tools/verify-release-plan.sh --format=json`, with the Stage-4 comment supplied for the provenance delta) | 38 PASS · 0 FAIL · 2 SKIP (AC-2c and AC-9, declared-deferred) · 0 UNRUNNABLE · 0 ERROR; 33 per-issue rows read. File Change Matrix: `declared=11 interpreted=11 obligations=2 excluded=0 conditional=0 uninterpreted=0`, both ADDs delivered. Provenance: presence, grammar and delta PASS. |
+| The same 33 rows at Engineering Commit 0 (before S1) | 31 FAIL · 2 SKIP — every runnable row discriminates before the change |
+| Cross-issue criteria lint (`--ciac-lint`) | `CIAC-LINT-SUMMARY declared=0 parsed=0 clean=0 declared-deferral=0 flagged=0` (one card; none declared) |
+| Release diff against the matrix (`git diff --name-status origin/main...HEAD`) | 11 paths — 2 added, 9 modified — equal to § File Change Matrix; no extra and no missing file |
+| ADR-062 | numstat `1 0`; the one added line is the `superseded_by:` pointer and `status: Accepted` is unchanged (an early reading of AC-2c, which Stage 7 grades) |
+| ADR numbering | `renumber-adr.py --detect`: anchor 241, next-free 242, branch claim ADR-242 (detection only). `check-adr-numbers.py`: PASS, contiguous, no duplicates |
+| ADR durability lint (`check-adr-durability.py --diff-base origin/main`, ADR-242 and ADR-062) | COUNT 0, reciprocity included; the lint's self-test passes in full |
+| Doc links (`check-doc-links.py`) | `--self-test` OK; a run over the 11 changed files reports 0 broken links (control: a planted broken link in a scratch tree is reported, a valid one is not) |
+| Dead-file references and anchors (`check-release-links.py --check-anchors --anchors-hard-fail --diff-base origin/main`, the 11 files) | 0 broken links and 0 missing anchors on added lines. The same instrument without the diff base reports two missing anchors on unchanged lines of the ticket spec and the matrix (a glossary anchor, pre-existing), so it reads anchors there and the three new ones resolve. |
+| Transcription fidelity (each NEW span of revision 1's E3–E9 searched in its target file, whitespace-normalized) | 55 of 55 present; control arm (each span plus a sentinel) 55 of 55 absent |
+| Skill-package cascade (`build-skill-packages.sh --skills-for-paths`, paths on STDIN) | 0 skills over the 11 paths (control: `release/skills/release-hub/SKILL.md` returns `release-hub`); no package rebuild |
+| Check 63 (`check-count-structure.py`) | `release-process.md` and `failure-mode-standard.md` read KNOWN (their baselined preambles), and no write-set file reads FAIL. Six FAIL rows sit in files outside the write set that this release leaves byte-identical to `origin/main`. |
+| Reference-durability classes on the added lines (a local reading of the gate's link, version-cutover and issue-reference classes) | 0 findings; the bridge, the personas spec and this plan are whole-file allowlisted, and every scanned file that gains a link carries `allow-link` (control: planted lines → 2 findings) |
+| Release-module ADR index | N/A — this release adds no record under `release/ADRs/` |
+| Runtime suite | Selection-map row 8 (no match): doc and governance changes only, so `test-run/suite-skip` |
+| Deployed copies (Phase C3) | N/A — no write-set file is a mirror-pair member, a skill file or a harness artifact |
+| `deliverable_state` | `deployed-copy-synced` for every deliverable: each is committed on the release branch and the release declares no propagation target (§ Operational Deployment Manifest) |
 
 ## Deployment Execution Log
 
 (Populated during Stage 12.)
+
+## Change Description
+
+### Outcome
+
+This release states who owns each part of an issue body, binding once the successor is ratified at Stage 13 Close. A body's contract sections — what the card asks for: the change, the criteria, the files, the dependencies, the expected effects — are the scope of record and are edited in place; its record sections — what was observed — are never rewritten, and a later observation is added beside them only at a step that adds one today or on a decision the operator has recorded. The field lifecycle matrix is the one table that says which stage may write each body field, and the rule is recorded in a new ADR that supersedes ADR-062's body-wide no-rewrite clause.
+
+### Issues resolved
+
+| # | Outcome (one line) | Status |
+|---|---|---|
+| #7970 | The successor ADR (`status: Proposed`) and every surface that restated ADR-062's body-wide rule, narrowed in the same change; ratification follows at Stage 13 Close Phase A13 | DONE (ratification pending at Stage 13) |
+
+### Key decisions
+
+- **D-GT — G1, limited to body fields.** The matrix governs body-field writes; the successor says nothing about labels or Projects fields, which keep their standing.
+- **D-AC4 — A′.** The matrix's acceptance-criteria cell at Planning reads `U*`, open on an A0.5 currency mismatch or a C2 re-review refinement; any other Planning-stage criteria change carries out an operator-recorded decision.
+- **Add-beside writers.** A line added beside a record section is an edit like any other: the Stage 2 counted-observation line, the Stage 13 folded follow-up line, or an operator-recorded decision.
+- **release-process.md § AC-Drift Handling.** The post-Stage-8 criteria refinement is written into the body only to carry out the operator's recorded decision on the flag.
+- **Ratification at Stage 13 Close Phase A13** (Stage-4 plan gate), never inferred from milestone closure. If it is declined, the record stays `Proposed` and a follow-up change reverts the edits that cite it.
+
+### Reversibility
+
+**CHEAP — HIGH confidence.** Revert the release pull request: the ADR, ADR-062's pointer and every narrowing edit revert together, with no data migration.
+
+### Downstream impact
+
+- Card-body edits held behind this decision (the stale-citation backlog and #6170's corrected criteria) proceed under the rules once the successor is ratified.
+- The permissions table's Body Updates cells now point at matrix columns, so the six-cell drift between the two tables cannot recur.
+- Affected surfaces, by reader:
+  - agents running the CER Claim phase read body-field permission from the matrix alone, and a Planning agent may change criteria only on the AC cell's two triggers;
+  - the ticket spec carries the per-template contract/record classification and the why-comment rule a scope, criteria or fix-direction edit follows;
+  - a Stage 5 chip built from the bridge's M1.1 pattern routes a contract-section change through the writers rule instead of forbidding every body edit;
+  - a Stage 8 `FLAG-UPSTREAM` verdict still routes Tier 1 / Tier 2, and its criteria refinement lands in the body only on the operator's recorded decision;
+  - the core ADR index marks ADR-062 as superseded in part and lists the successor.
+- No skill package, mirror pair or harness artifact is touched, so nothing is rebuilt or redeployed.
+- Five surfaces outside the write set write card bodies under rules that do not yet state the successor's; they are held as follow-up candidates for the Stage 9 filing step (§ Held follow-up candidates).
+- Stage 7 runs the ADR durability lint with a diff base, ADR-number integrity, the anchor check in the real tree, the reference-durability and repo-integrity gates, `deploy.sh --check`, and AC-2c.
+
+### Cross-references
+
+- Release plan: this file, from its Header
+- Milestone: `issue-body-is-the-scope-of-record`
+- Successor ADR: `core/ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md` (number provisional until merge)
+- User-facing release notes: authored at Stage 13 Close under `release/releases/notes/`, named for the claimed version, per the release-notes standard
