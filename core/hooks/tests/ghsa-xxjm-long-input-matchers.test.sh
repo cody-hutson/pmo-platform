@@ -197,6 +197,10 @@ for h in $(/usr/bin/printf '%s\n' "$HOOKS" | /usr/bin/cut -d'|' -f1); do
     OLD_OK=0
   fi
 done
+# The filesystem-boundary guard reads the command a second time after its rule loops, without
+# matches(), so on its pipe-shape copy that pass would still refuse the long form. That copy runs
+# with its second pass off, so its old-shape arm reads the matcher alone.
+/usr/bin/sed 's/^readonly FSB_PASS2=1  # M-FSB-PASS2$/readonly FSB_PASS2=0  # M-FSB-PASS2/' "${OLD}/.claude/hooks/block-fs-boundary.sh" > "${WORK}/fsb-old.sh" && /bin/cat "${WORK}/fsb-old.sh" > "${OLD}/.claude/hooks/block-fs-boundary.sh"
 
 set_mode() {   # <layout> <mode-file name> <mode>
   [ -n "$2" ] && /usr/bin/printf '%s' "$3" > "$1/.claude/hooks/$2"

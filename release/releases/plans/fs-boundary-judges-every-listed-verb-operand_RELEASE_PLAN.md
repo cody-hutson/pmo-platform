@@ -133,7 +133,7 @@ One card, one branch, one release PR, the commits in this order (Stage 5 revisio
 
 ## File Change Matrix
 
-There are **4 EDIT rows and 2 ADD rows** that are unconditional, plus CONDITIONAL rows. No row is a delete. The mover set is empty.
+There are **5 EDIT rows and 2 ADD rows** that are unconditional (the GHSA long-input suite promoted from its conditional row in the slice that delivers it), plus CONDITIONAL rows. No row is a delete. The mover set is empty.
 
 ```
 # ── release-wide (always delivered) ──
@@ -143,6 +143,7 @@ core/rules/bypass-mode-readiness/block-fs-boundary.md  EDIT
 core/rules/bypass-mode-readiness.md  EDIT
 release/releases/plans/fs-boundary-judges-every-listed-verb-operand_RELEASE_PLAN.md  ADD
 core/ADRs/ADR-242-fs-boundary-second-pass-reads-skipped-operands.md  ADD
+core/hooks/tests/ghsa-xxjm-long-input-matchers.test.sh  EDIT
 # ── CONDITIONAL ──
 CONDITIONAL:FIX-IN-CANONICALIZER core/hooks/lib/command-position.awk  EDIT
 CONDITIONAL:FIX-IN-CANONICALIZER core/hooks/block-destructive.sh  EDIT
@@ -157,7 +158,6 @@ CONDITIONAL:FIX-IN-CANONICALIZER core/rules/bypass-mode-readiness/_cross-cutting
 CONDITIONAL:FIX-IN-CANONICALIZER core/rules/bypass-mode-readiness/block-destructive.md  EDIT
 CONDITIONAL:FIX-IN-CANONICALIZER core/rules/bypass-mode-readiness/block-egress.md  EDIT
 CONDITIONAL:FIX-IN-CANONICALIZER core/rules/bypass-mode-readiness/block-rm-prefer-trash.md  EDIT
-CONDITIONAL:MATCHER-SHAPE core/hooks/tests/ghsa-xxjm-long-input-matchers.test.sh  EDIT
 CONDITIONAL:REGISTRY-LINES-SHIFT core/process-catalog/engineering-harness/flip-gate-to-enforce.md  EDIT
 CONDITIONAL:REGISTRY-LINES-SHIFT core/process-catalog/engineering-harness/graduate-gate-modes.md  EDIT
 CONDITIONAL:REGISTRY-LINES-SHIFT core/process-catalog/engineering-harness/review-warn-log-drains.md  EDIT
@@ -168,7 +168,7 @@ How each conditional row stands after Stage 5 (revision 1, Fired CONDITIONAL row
 
 - **Generated file.** `core/rules/bypass-mode-readiness.md` is generated from the fragments by `core/deploy/tools/build-hook-registry.py` and is never hand-edited.
 - **`STAGE5-ADR` fired** and is promoted to the unconditional ADR row above at this commit (DEV-1).
-- **`MATCHER-SHAPE` fired** on a broader trigger than its text states, a Tier 1 [ADJUST] by the operator's recorded determination: `matches()` is unchanged, but the GHSA suite's old-shape copy of this guard must also run with the second pass off. Promoted in the commit that delivers the edit (DEV-2).
+- **`MATCHER-SHAPE` fired** on a broader trigger than its text states, a Tier 1 [ADJUST] by the operator's recorded determination: `matches()` is unchanged, but the GHSA suite's old-shape copy of this guard must also run with the second pass off. Promoted to the unconditional rows in the commit that delivers the edit (DEV-2).
 - **`REGISTRY-LINES-SHIFT` fired**: the restated coverage boundary changes the fragment's length, so the citations after this guard's registry section shift. Promoted in the documents commit (DEV-3).
 - **`FIX-IN-CANONICALIZER` and `NEW-SUITE-FILE` did not fire** (DEV-4): no canonicalizer edit, and the new arms go in the existing suite to reuse its helpers.
 
@@ -293,3 +293,5 @@ Recorded on #9188: **D1** revise the design first (one Stage 5 revision folding 
 | DEV-7 | 6 | The out-of-root operand of every new arm is `/opt/other/notes.txt`, not the other-user home path `xform_shape`'s liveness check uses: the repository's pre-commit PII guard refuses a newly added `/Users/<name>/` shape in any added line, and the suite's EXT-POS arms already use this operand for the same reason. **Tier 1 [ADJUST]** | Engineering, recorded determination |
 | DEV-8 | 6 | The differential's table carries two columns beyond the seven revision 1 names (id, position, role, side, pre, post, command): a tag (`over` for the declared over-block, `sepredir` for the superset's designed exception) and the pinned roles. A position form is one line expanded at load across the four roles and both sides, its `pre`/`post` stated once per form (one value, four per-role values, or `P` for the plain rule); the explicit rows carry the faces, breadth and here-document rows. `FSBDIFF-ROWS` reads the expanded rows. Each row is run once per copy, and the arms read those observations; the two copies of the shipped hook the passes run through are asserted byte-identical to it. **Tier 1 [ADJUST]** | Engineering |
 | DEV-9 | 6 | Two class-2 forms (a wrapper continued before the verb, and a wrapper's option continued) are already examined by the first pass (the verb starts a physical line), so they are corpus rows recorded refused before and after and carry no pin; every pin is a row the pre-fix hook admits, so the RED commit's pins are red. **Tier 1 [ADJUST]** | Engineering |
+| DEV-10 | 6 | The XFORM section's closing RESIDUAL line counted four positions the token walk never examines; from the slice that lands the redirection join and the joined readings, two of them (the expansion-bearing pins at those positions) are refused, so the line counts two positions neither pass examines. Revision 1's sweep did not list that line. **Tier 1 [ADJUST]** | Engineering |
+| DEV-11 | 6 | zsh's `=verb` spelling of class 4 closes in the slice that lands the second pass, not in the class-4 slice: the walk drops one leading `=` before the verb lookup whether or not the quote-removed comparison is on, as the measured prototype does (its quote-removal switch-off reopens the quoted forms, not this one; the `=`-strip copy is what reopens it) | Engineering, recorded |

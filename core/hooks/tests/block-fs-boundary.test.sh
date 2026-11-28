@@ -919,16 +919,16 @@ fi
 #   FT   F, and T                                            record dimension of XFORM-POS-01
 #   W    the walk hands every word of every segment over     exit dimension of XFORM-POS-02
 #   WT   W, and T                                            record dimension of XFORM-POS-02
-#   A    the walk keeps a redirection's & in the segment    exit dimension of XFORM-POS-03
-#   AT   A, and T                                            record dimension of XFORM-POS-03
-#   L    the walk joins a continuation line to its line     exit dimension of XFORM-POS-04
-#   LT   L, and T                                            record dimension of XFORM-POS-04
+#   A    the second pass's redirection join is off          exit dimension of XFORM-POS-03
+#   L    the second pass's joined readings are off          exit dimension of XFORM-POS-04
+#                                                            (T gives both their record dimension)
 #   U    the span split takes an unterminated ${ as a span   exit dimension of SPLIT and FRAG-15
 #   UO   the span split's failure is refused as outside      rule dimension of SPLIT, FRAG and OVER-05/06/08/09/10
 #   K    the span split takes a span closed inside a subscript (its check -> :)
 #                                                            exit dimension of every split-subscript
 #                                                            refusal; rule dimension of FRAG-14, OVER-07
 #   KG5A K, and G5 admits                                   exit dimension of FRAG-14 and OVER-07
+#   KL   K, and the joined readings off                     exit dimension of FRAG-11 and FRAG-12
 # The document arms XFORM-DOC-01 and -02 are paired on both halves: the document half by
 # the XFORM-DOC-03 mutants, the hook half by XFORM-MUT-01. XFORM-RESID-04 and XFORM-SEM-01
 # assert shell behaviour rather than hook behaviour; their own control (a direct
@@ -1058,16 +1058,13 @@ XFORM_X_G5A='s/; return 4;;$/; return 0;;/'
 XFORM_X_F='s/^          if (substr(t, 1, 1) == "-") continue;$/          t = t;/'
 XFORM_X_W1='s/^        if (first_token != v) continue;$/        first_token = v;/'
 XFORM_X_W2='s/^        for (i = first + 1; i <= m; i++) {$/        for (i = first; i <= m; i++) {/'
-# A and L both change the walk's split line, each in a copy of its own. The walk ends a
-# segment at every `&` and the canonicalizer starts a command after one, so A takes a
-# redirection's `&` and the separator after it out of the record before the split, and the
-# verb's segment runs on past the redirection. The walk reads one physical line per awk
-# record, so L joins a line that ends in a backslash to the line after it before the split,
-# as the shell does.
-# shellcheck disable=SC2016
-XFORM_X_A='s#^      n = split(\$0, segments, /\[;&|\]+/);$#      gsub(/[<>]\&; /, ">"); n = split($0, segments, /[;\&|]+/);#'
-# shellcheck disable=SC2016
-XFORM_X_L='s#^      n = split(\$0, segments, /\[;&|\]+/);$#      while ($0 ~ /\\\\$/ \&\& (getline nx) > 0) $0 = substr($0, 1, length($0) - 1) " " nx; n = split($0, segments, /[;\&|]+/);#'
+# A and L each switch one reading of the second pass off, by that reading's one-line switch: A
+# the redirection join, which takes each top-level redirection operator's & and | out of a copy
+# of the command before canonicalizing it, and L the joined readings, which read the command
+# with its line continuations joined. Through either copy the word the first pass's walk never
+# hands over is examined by no reading at all.
+XFORM_X_A='s/^readonly FSB_REDIR=1  # M-FSB-REDIR$/readonly FSB_REDIR=0  # M-FSB-REDIR/'
+XFORM_X_L='s/^readonly FSB_JOINS=1  # M-FSB-JOIN$/readonly FSB_JOINS=0  # M-FSB-JOIN/'
 # T removes G2's third limb and TO makes it refuse as outside; U lets the span split take an
 # unterminated ${ as one span and UO makes its failure refuse as outside; K removes the span
 # split's subscript check. Each call line they key on occurs exactly once in the hook.
@@ -1094,13 +1091,12 @@ XFORM_FT="$(xform_copy ft "$XFORM_X_F" "$XFORM_X_T")"
 XFORM_W="$(xform_copy w "$XFORM_X_W1" "$XFORM_X_W2")"
 XFORM_WT="$(xform_copy wt "$XFORM_X_W1" "$XFORM_X_W2" "$XFORM_X_T")"
 XFORM_A="$(xform_copy a "$XFORM_X_A")"
-XFORM_AT="$(xform_copy at "$XFORM_X_A" "$XFORM_X_T")"
 XFORM_L="$(xform_copy l "$XFORM_X_L")"
-XFORM_LT="$(xform_copy lt "$XFORM_X_L" "$XFORM_X_T")"
 XFORM_U="$(xform_copy u "$XFORM_X_U")"
 XFORM_UO="$(xform_copy uo "$XFORM_X_UO")"
 XFORM_K="$(xform_copy k "$XFORM_X_K")"
 XFORM_KG5A="$(xform_copy kg5a "$XFORM_X_K" "$XFORM_X_G5A")"
+XFORM_KL="$(xform_copy kl "$XFORM_X_K" "$XFORM_X_L")"
 
 # xform_shape <label> <copy> <lines out> <lines in> — the copy's shape against the shipped
 # hook: exactly <lines out> taken out and <lines in> put in, it parses, it refuses an
@@ -1139,19 +1135,18 @@ xform_shape "XFORM-MUT-SHAPE-G1A: the copy whose G1 admits differs in one line, 
 xform_shape "XFORM-MUT-SHAPE-G1O: the copy whose G1 refuses as outside differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_G1O" 1 1
 xform_shape "XFORM-MUT-SHAPE-F: the copy whose walk hands flag-position words over differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_F" 1 1
 xform_shape "XFORM-MUT-SHAPE-W: the copy whose walk hands every word of every segment over differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_W" 2 2
-xform_shape "XFORM-MUT-SHAPE-A: the copy whose walk keeps a redirection's ampersand in the verb's segment differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_A" 1 1
-xform_shape "XFORM-MUT-SHAPE-L: the copy whose walk joins a continuation line to the line it continues differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_L" 1 1
+xform_shape "XFORM-MUT-SHAPE-A: the copy whose redirection join is off differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_A" 1 1
+xform_shape "XFORM-MUT-SHAPE-L: the copy whose joined readings are off differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_L" 1 1
 xform_shape "XFORM-MUT-SHAPE-T: the copy without G2's third limb differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_T" 1 1
 xform_shape "XFORM-MUT-SHAPE-TO: the copy whose third limb refuses as outside differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_TO" 1 1
 xform_shape "XFORM-MUT-SHAPE-TG5A: T with G5 admitting differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_TG5A" 2 2
 xform_shape "XFORM-MUT-SHAPE-FT: F without the third limb differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_FT" 2 2
 xform_shape "XFORM-MUT-SHAPE-WT: W without the third limb differs in three lines, parses, and still refuses and admits untouched literals" "$XFORM_WT" 3 3
-xform_shape "XFORM-MUT-SHAPE-AT: A without the third limb differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_AT" 2 2
-xform_shape "XFORM-MUT-SHAPE-LT: L without the third limb differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_LT" 2 2
 xform_shape "XFORM-MUT-SHAPE-U: the copy whose span split takes an unterminated brace differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_U" 1 1
 xform_shape "XFORM-MUT-SHAPE-UO: the copy whose split failure is refused as outside differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_UO" 1 1
 xform_shape "XFORM-MUT-SHAPE-K: the copy without the span split's subscript check differs in one line, parses, and still refuses and admits untouched literals" "$XFORM_K" 1 1
 xform_shape "XFORM-MUT-SHAPE-KG5A: K with G5 admitting differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_KG5A" 2 2
+xform_shape "XFORM-MUT-SHAPE-KL: K with the joined readings off differs in two lines, parses, and still refuses and admits untouched literals" "$XFORM_KL" 2 2
 
 # ----- XFORM-SUBJ / XFORM-PFX: the measured pair, and what the pair hides -----
 # xform_g2_pin <label> <command> <T exit> <T records> — a G2 refusal (exit 2, -003) with both
@@ -1216,7 +1211,7 @@ xform_g2_pin "XFORM-PARAM-01: indexed element \${arr[0]@P} REFUSED at G2" 'cat $
 # shellcheck disable=SC2016
 xform_g2_pin "XFORM-NEST-01: operator nested in a default word \${A:-\${B@P}} REFUSED at G2" 'cat ${CFG:-${X@P}}' 0 1
 
-# ----- XFORM-POS: words the token walk never hands to the cascade -----
+# ----- XFORM-POS: words neither pass hands to the cascade, and two the second pass hands over -----
 # The cascade sees only the target operands extract_target_tokens emits for a listed verb.
 # A flag-position word (it begins with `-`) is skipped there, and an assignment ahead of
 # the verb is a prefix the canonicalizer separates from the verb's segment, so neither is
@@ -1239,26 +1234,33 @@ xform_pair "XFORM-POS-02-PAIR-exit: through the copy whose walk hands every word
   "$XFORM_W" "$XFORM_C_ASSIGN" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
 xform_pair "XFORM-POS-02-PAIR-rec: through that copy without the third limb, the assignment is admitted under G6 with a record" \
   "$XFORM_WT" "$XFORM_C_ASSIGN" 0 rec 0   0 1 -
-# Two operand positions of a listed verb, by the same walk. An ampersand inside a
-# redirection operator ends the verb's segment: the walk splits on every `&`, and the
-# canonicalizer starts a command after it. And the walk reads one physical line at a time,
-# so an operand on a continuation line sits in a record of its own. Each is pinned at
-# today's verdict, with the walk mutation that hands the word over as its pairing.
+# Two operand positions of a listed verb that the first pass's walk never hands over: after a
+# redirection operator that carries an ampersand, which ends the verb's segment, and on a
+# continuation line, which the walk reads as a line of its own. The second pass hands each over
+# (its redirection join, and its joined readings), and G2's third limb refuses the operator
+# there under -003. Each pin is paired through the copy whose reading is off (examined by no
+# reading: admitted, no record), the copy without the third limb (admitted under G6 with one
+# record: the -003 is G2's and the operand is reached) and the copy whose third limb refuses as
+# outside (-001: the -003 reads a live rule).
 # shellcheck disable=SC2016
 XFORM_C_AMPREDIR='cat 2>&1 ${CFG@P}'
-xform_pin "XFORM-POS-03: the operator after a redirection operator that carries an ampersand is never examined — admitted, no record (declared exclusion)" \
-  "$XFORM_C_AMPREDIR" 0 rec 0
-xform_pair "XFORM-POS-03-PAIR-exit: through the copy whose walk keeps a redirection's ampersand in the verb's segment, G2 refuses the operand — POS-03's zero is the walk's" \
-  "$XFORM_A" "$XFORM_C_AMPREDIR" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
-xform_pair "XFORM-POS-03-PAIR-rec: through that copy without the third limb, the operand is admitted under G6 with a record" \
-  "$XFORM_AT" "$XFORM_C_AMPREDIR" 0 rec 0   0 1 -
+xform_pin "XFORM-POS-03: the operator after a redirection operator that carries an ampersand is REFUSED at G2 under -003 — the second pass's redirection join hands it over" \
+  "$XFORM_C_AMPREDIR" 2 rule BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-03-PAIR-exit: through the copy whose redirection join is off, the operand is never examined — admitted, no record — POS-03's refusal is that reading's" \
+  "$XFORM_A" "$XFORM_C_AMPREDIR" 2 rule BLOCK-FS-BOUNDARY-003   0 0 -
+xform_pair "XFORM-POS-03-PAIR-rec: through the copy without the third limb, the operand is admitted under G6 with a record — the -003 is G2's, and the operand is reached" \
+  "$XFORM_T" "$XFORM_C_AMPREDIR" 2 rule BLOCK-FS-BOUNDARY-003   0 1 -
+xform_pair "XFORM-POS-03-PAIR-rule: through the copy whose third limb refuses as outside, the refusal names -001 — the -003 reads a live rule" \
+  "$XFORM_TO" "$XFORM_C_AMPREDIR" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
 XFORM_C_CONT="cat \\${XFORM_NL}\${CFG@P}"
-xform_pin "XFORM-POS-04: the operator on a continuation line is never examined — admitted, no record (declared exclusion)" \
-  "$XFORM_C_CONT" 0 rec 0
-xform_pair "XFORM-POS-04-PAIR-exit: through the copy whose walk joins a continuation line to the line it continues, G2 refuses the operand — POS-04's zero is the walk's" \
-  "$XFORM_L" "$XFORM_C_CONT" 0 rec 0   2 0 BLOCK-FS-BOUNDARY-003
-xform_pair "XFORM-POS-04-PAIR-rec: through that copy without the third limb, the operand is admitted under G6 with a record" \
-  "$XFORM_LT" "$XFORM_C_CONT" 0 rec 0   0 1 -
+xform_pin "XFORM-POS-04: the operator on a continuation line is REFUSED at G2 under -003 — the second pass's joined readings hand it over" \
+  "$XFORM_C_CONT" 2 rule BLOCK-FS-BOUNDARY-003
+xform_pair "XFORM-POS-04-PAIR-exit: through the copy whose joined readings are off, the operand is never examined — admitted, no record — POS-04's refusal is that reading's" \
+  "$XFORM_L" "$XFORM_C_CONT" 2 rule BLOCK-FS-BOUNDARY-003   0 0 -
+xform_pair "XFORM-POS-04-PAIR-rec: through the copy without the third limb, the operand is admitted under G6 with a record — the -003 is G2's, and the operand is reached" \
+  "$XFORM_T" "$XFORM_C_CONT" 2 rule BLOCK-FS-BOUNDARY-003   0 1 -
+xform_pair "XFORM-POS-04-PAIR-rule: through the copy whose third limb refuses as outside, the refusal names -001 — the -003 reads a live rule" \
+  "$XFORM_TO" "$XFORM_C_CONT" 2 rule BLOCK-FS-BOUNDARY-003   2 0 BLOCK-FS-BOUNDARY-001
 
 # ----- XFORM-NEAR: the named near misses stay allowed -----
 # xform_near <label> <command> — a must-not-flag arm (exit 0) with its pairing arm: the
@@ -1301,13 +1303,17 @@ xform_g2_pin "XFORM-OVER-03: the subject with a backslash before its dollar — 
 xform_g2_pin "XFORM-OVER-04: literal text of the shape before the first opener — REFUSED at G2 (declared order-blindness)" 'cat /tmp/a@b}${X}' 0 0
 # shellcheck disable=SC2016
 xform_g2_pin "XFORM-OVER-11: a replacement whose pattern is the at-sign and whose replacement is empty \${U/@/} — REFUSED at G2 (declared over-refusal)" 'cat ${U/@/}' 0 1
-# xform_frag_pin <label> <command> <K exit> <K records> <UO rule> — a span-split refusal
-# (exit 2, -003): K (no subscript check) gives <K exit> with <K records> records, and UO
-# (the split's failure refused as outside) names <UO rule>.
+# xform_frag_pin <label> <command> <K exit> <K records> <UO rule> [<copy> <what>] — a span-split
+# refusal (exit 2, -003): K (no subscript check) gives <K exit> with <K records> records, and UO
+# (the split's failure refused as outside) names <UO rule>. A sixth and seventh argument name
+# another copy for the exit pair and say what it is (a break the second pass's joined readings
+# also refuse needs them off too).
 xform_frag_pin() {
+  local xf_copy="${6:-$XFORM_K}" xf_what="the copy without the span split's subscript check"
+  if [ -n "${7:-}" ]; then xf_what="$7"; fi
   xform_pin "$1" "$2" 2 rule BLOCK-FS-BOUNDARY-003
-  xform_pair "${1%%:*}-PAIR-exit: through the copy without the span split's subscript check, the same command is not refused under -003" \
-    "$XFORM_K" "$2" 2 rule BLOCK-FS-BOUNDARY-003   "$3" "$4" -
+  xform_pair "${1%%:*}-PAIR-exit: through ${xf_what}, the same command is not refused under -003" \
+    "$xf_copy" "$2" 2 rule BLOCK-FS-BOUNDARY-003   "$3" "$4" -
   xform_pair "${1%%:*}-PAIR-rule: through the copy whose split failure is refused as outside, the refusal names ${5}" \
     "$XFORM_UO" "$2" 2 rule BLOCK-FS-BOUNDARY-003   2 0 "$5"
 }
@@ -1375,8 +1381,8 @@ xform_frag_pin "XFORM-FRAG-08: subscript broken by an ampersand — REFUSED by t
 # shellcheck disable=SC2016
 xform_frag_pin "XFORM-FRAG-09: an associative key broken by a semicolon — REFUSED by the span split" 'cat /tmp/${map[${k};x]@P}' 0 0 BLOCK-FS-BOUNDARY-001
 xform_frag_pin "XFORM-FRAG-10: subscript broken by a literal newline — REFUSED by the span split" "cat /tmp/\${arr[\${i}${XFORM_NL}0]@P}" 0 0 BLOCK-FS-BOUNDARY-001
-xform_frag_pin "XFORM-FRAG-11: a line continuation before the closing brace — REFUSED by the span split" "cat /tmp/\${arr[\${i}]@P\\${XFORM_NL}}" 0 0 BLOCK-FS-BOUNDARY-001
-xform_frag_pin "XFORM-FRAG-12: a line continuation between the at-sign and the letter — REFUSED by the span split" "cat /tmp/\${arr[\${i}]@\\${XFORM_NL}P}" 0 0 BLOCK-FS-BOUNDARY-001
+xform_frag_pin "XFORM-FRAG-11: a line continuation before the closing brace — REFUSED by the span split" "cat /tmp/\${arr[\${i}]@P\\${XFORM_NL}}" 0 0 BLOCK-FS-BOUNDARY-001 "$XFORM_KL" "the copy without the span split's subscript check and with the joined readings off"
+xform_frag_pin "XFORM-FRAG-12: a line continuation between the at-sign and the letter — REFUSED by the span split" "cat /tmp/\${arr[\${i}]@\\${XFORM_NL}P}" 0 0 BLOCK-FS-BOUNDARY-001 "$XFORM_KL" "the copy without the span split's subscript check and with the joined readings off"
 # shellcheck disable=SC2016
 xform_frag_pin "XFORM-FRAG-13: the nested expansion itself subscripted, broken by a space — REFUSED by the span split" 'cat /tmp/${arr[${b[0]} 1]@P}' 0 0 BLOCK-FS-BOUNDARY-001
 # shellcheck disable=SC2016
@@ -1487,7 +1493,7 @@ else
     "$xform_r_ctl" "$xform_r_spec" "$xform_r_off" "$xform_r_idx" "$xform_r_ind"
   FAIL=$((FAIL + 1))
 fi
-/usr/bin/printf 'RESIDUAL: XFORM arms pin four positions the token walk never examines and three value-re-evaluating expansion forms as ADMITTED, and two brace forms refused only by where the operand breaks. A green run here does not mean any of them is refused by a rule.\n'
+/usr/bin/printf 'RESIDUAL: XFORM arms pin two positions neither pass examines and three value-re-evaluating expansion forms as ADMITTED, and two brace forms refused only by where the operand breaks. A green run here does not mean any of them is refused by a rule.\n'
 
 # ----- XFORM-SEM-01: does the operator EXECUTE? (method b) -----
 # Capability, not a version string: each candidate interpreter is asked whether it
@@ -2312,7 +2318,14 @@ FSBP_TG5A="$(fsbp_copy tg5a "$XFORM_X_T" "$XFORM_X_G5A")"
 fsbp_same=1
 /usr/bin/cmp -s "$HOOK" "${FSBP_S1}/block-fs-boundary.sh" || fsbp_same=0
 /usr/bin/cmp -s "$HOOK" "${FSBP_S2}/block-fs-boundary.sh" || fsbp_same=0
-FSBP_PRE1="$FSBP_S1"; FSBP_PRE2="$FSBP_S2"; FSBP_PRE_IS_SHIP=1
+FSBP_X_P2OFF='s/^readonly FSB_PASS2=1  # M-FSB-PASS2$/readonly FSB_PASS2=0  # M-FSB-PASS2/'
+FSBP_PRE1="$(fsbp_copy p2off1 "$FSBP_X_P2OFF")"
+FSBP_PRE2="$(fsbp_copy p2off2 "$FSBP_X_P2OFF")"
+FSBP_PRE_IS_SHIP=0
+xform_shape "FSB-MUT-SHAPE-P2OFF: the copy whose second pass is off differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_PRE1" 1 1
+FSBP_W0="$(fsbp_copy w0 's/^          print t;$/          t = t;/')"
+FSBP_W0P="$(fsbp_copy w0p 's/^          print t;$/          t = t;/' "$FSBP_X_P2OFF")"
+xform_shape "FSB-MUT-SHAPE-W0: the copy whose first pass hands no operand over differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_W0" 1 1
 
 /usr/bin/awk 'NR % 2 == 1' "$FSBP_ROWS" > "${FSBP_BASE}/rows.1"
 /usr/bin/awk 'NR % 2 == 0' "$FSBP_ROWS" > "${FSBP_BASE}/rows.2"
@@ -2329,6 +2342,8 @@ if [ "$FSBP_PRE_IS_SHIP" = 0 ]; then
   fsbp_pass "$FSBP_PRE1" "${FSBP_BASE}/rows.1" "${FSBP_BASE}/res.p1" &
   fsbp_pass "$FSBP_PRE2" "${FSBP_BASE}/rows.2" "${FSBP_BASE}/res.p2" &
 fi
+fsbp_pass "$FSBP_W0" "${FSBP_BASE}/rows.b" "${FSBP_BASE}/res.w0" &
+fsbp_pass "$FSBP_W0P" "${FSBP_BASE}/rows.b" "${FSBP_BASE}/res.w0p" &
 wait
 /bin/cat "${FSBP_BASE}/res.s1" "${FSBP_BASE}/res.s2" > "${FSBP_BASE}/res.ship"
 if [ "$FSBP_PRE_IS_SHIP" = 0 ]; then
@@ -2427,7 +2442,7 @@ fsbp_arms() {
   ' "${FSBP_BASE}/res.ship" "${FSBP_BASE}/res.pre" "${FSBP_BASE}/res.ea" "$FSBP_ROWS" > "${FSBP_BASE}/arms.out"
   fsbp_report "${FSBP_BASE}/arms.out"
 }
-fsbp_arms 0
+fsbp_arms 1
 
 # FSBDIFF-DET: the differential's sensitivity, through a copy whose G2 third limb is removed and
 # whose G5 admits (both edits key on lines this release does not touch). Over the rows refused
@@ -2445,6 +2460,128 @@ if [ "$fsbp_alive" -ge 1 ]; then
 else
   /usr/bin/printf 'FAIL: FSBDIFF-DET-alive: the seeded copy refuses nothing, so the comparator was read on a dead copy\n'; FAIL=$((FAIL + 1))
 fi
+
+# FSBWALK-SUPERSET: the second pass's token rules restate the first pass's. Through the copy whose
+# first pass hands no operand over (its `print t;` made `t = t;`), every row the first pass refused
+# must still be refused under the same rule, by the second pass alone — except the one designed
+# exception: a separate-word redirection target, which the first pass judges and the second pass,
+# by design, takes as no operand (tag `sepredir`). Its sensitivity: the same copy with the second
+# pass off admits at least one of those rows.
+fsbp_sup="$(/usr/bin/awk -F'\t' 'FILENAME ~ /rows\.b$/ { split($0, f, "|"); tag[f[1]] = f[7]; next }
+  FILENAME ~ /res\.ship$/ { ship[$1] = $2; next }
+  ($1 in tag) { if (tag[$1] == "sepredir") { if ($2 == ship[$1]) ex++; else exm++ } else if ($2 != ship[$1]) { n++; l = l " " $1 "=" $2 "/" ship[$1] } }
+  END { printf "%d|%d|%d|%s", n + 0, ex + 0, exm + 0, l }' "${FSBP_BASE}/rows.b" "${FSBP_BASE}/res.ship" "${FSBP_BASE}/res.w0")"
+fsbp_supctl="$(/usr/bin/awk -F'\t' '$2 == "a" { n++ } END { printf "%d", n + 0 }' "${FSBP_BASE}/res.w0p")"
+case "$fsbp_sup" in
+  0\|*)
+    /usr/bin/printf 'PASS: FSBWALK-SUPERSET: through the copy whose first pass hands nothing over, every row the first pass refuses is refused alike by the second pass (the designed separate-word redirection exception aside)\n'; PASS=$((PASS + 1)) ;;
+  *)
+    /usr/bin/printf 'FAIL: FSBWALK-SUPERSET: the second pass alone does not reproduce the first pass refusals — %s\n' "$fsbp_sup"; FAIL=$((FAIL + 1)) ;;
+esac
+if [ "$fsbp_supctl" -ge 1 ]; then
+  /usr/bin/printf 'PASS: FSBWALK-SUPERSET-CTL: with the second pass also off, that copy admits %s of those rows (the superset is read on a live comparison)\n' "$fsbp_supctl"; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FSBWALK-SUPERSET-CTL: with the second pass also off the copy still refuses every row, so the superset arm cannot fail (BROKEN PROBE)\n'; FAIL=$((FAIL + 1))
+fi
+
+# ----- FSB-INJ: a second-pass reading that does not complete is not a clean result -----
+# Five copies break the completion discipline one way each: the walk program's completion line
+# replaced by `exit 4` (INJAWK); a checked lexer call made to fail (INJCHK); an unchecked failing
+# command inserted in the pass's top function and in its per-base function (INJUNCHK1, INJUNCHK2);
+# and the walk's counted header dropped (INJHDR). At enforce each must refuse every breadth row the
+# shipped hook admits with INPUT-NOT-EVALUATED and no block record, and keep every refusal's rule;
+# at warn each must admit those rows with the not-evaluated notice and exactly one warn record whose
+# rule is INPUT-NOT-EVALUATED. These run in both hook-harness jobs, so the Linux job (bash 5) reads
+# the completion mechanism there too.
+/usr/bin/awk -F'|' '$2 == "BR"' "$FSBP_ROWS" > "${FSBP_BASE}/rows.br"
+FSBP_INJ_AWK='s/^    printf "WALKED\\n"$/    exit 4/'
+FSBP_INJ_CHK='s#^  FSB_L="\$(LC_ALL=C /usr/bin/awk -v mode=#  FSB_L="$(LC_ALL=C /nonexistent/awk -v mode=#'
+FSBP_INJ_U1='s#^  local v t judged=0$#  local v t judged=0; /usr/bin/false#'
+FSBP_INJ_U2='/^  local t="\$1" c0="\$2" j="\$3" /s#$#; /usr/bin/false#'
+FSBP_INJ_HDR='s#<<< "SEEN \${FSB_SEEN_N}\${FSB_NL}\${FSB_SEEN}\${1}")"#<<< "${FSB_SEEN}${1}")"#'
+fsbp_inj_n=0
+for fsbp_inj in awk:"$FSBP_INJ_AWK" chk:"$FSBP_INJ_CHK" u1:"$FSBP_INJ_U1" u2:"$FSBP_INJ_U2" hdr:"$FSBP_INJ_HDR"; do
+  fsbp_inj_n=$((fsbp_inj_n + 1))
+  fsbp_nm="${fsbp_inj%%:*}"
+  eval "FSBP_INJ_D_${fsbp_nm}=\"\$(fsbp_copy inj-${fsbp_nm} \"\${fsbp_inj#*:}\")\""
+done
+for fsbp_nm in awk chk u1 u2 hdr; do
+  eval "fsbp_d=\"\$FSBP_INJ_D_${fsbp_nm}\""
+  fsbp_cw="${FSBP_BASE}/inj-${fsbp_nm}w/hooks"
+  /bin/mkdir -p "${FSBP_BASE}/inj-${fsbp_nm}w"
+  /bin/cp -R "$fsbp_d" "$fsbp_cw"
+  /bin/cp "${fsbp_d}/../fs-boundary-allowlist.txt" "${fsbp_cw}/../fs-boundary-allowlist.txt"
+  /usr/bin/printf 'warn' > "${fsbp_cw}/.mode"
+  fsbp_pass "$fsbp_d" "${FSBP_BASE}/rows.br" "${FSBP_BASE}/res.inj-${fsbp_nm}" &
+  fsbp_pass "$fsbp_cw" "${FSBP_BASE}/rows.br" "${FSBP_BASE}/res.inj-${fsbp_nm}w" &
+done
+wait
+for fsbp_nm in awk chk u1 u2 hdr; do
+  eval "fsbp_d=\"\$FSBP_INJ_D_${fsbp_nm}\""
+  fsbp_dn="$(/usr/bin/diff "$HOOK" "${fsbp_d}/block-fs-boundary.sh" 2>/dev/null | /usr/bin/awk '/^[<>]/ { n++ } END { printf "%d", n + 0 }')"
+  xform_observe "$fsbp_d" 'cat /tmp/ok.txt'
+  fsbp_live=0
+  if [ "$fsbp_dn" = 2 ] && /bin/bash -n "${fsbp_d}/block-fs-boundary.sh" 2>/dev/null && [ "$XO_EXIT" = 2 ]; then
+    case "$XO_ERR" in *":INPUT-NOT-EVALUATED] BLOCKED"*) fsbp_live=1 ;; esac
+  fi
+  /usr/bin/awk -F'\t' -v nm="$fsbp_nm" -v live="$fsbp_live" '
+    FILENAME ~ /rows\.br$/ { split($0, f, "|"); pre[f[1]] = f[5]; next }
+    FILENAME ~ /w$/ { if (pre[$1] == "a") { wn++; if (!($3 == 0 && $8 == 1 && $7 == 1)) { wb++; wl = wl " " $1 } } next }
+    { if (pre[$1] == "a") { en++; if (!($2 == "N" && $4 == 0)) { eb++; el = el " " $1 } } else { rn++; if ($2 != pre[$1]) { rb++; rl = rl " " $1 "=" $2 } } }
+    END {
+      lab = "FSB-INJ-" toupper(nm)
+      if (live && eb == 0 && rb == 0 && en > 0 && rn > 0) printf "PASS: %s-enforce: the copy is shape-guarded and live; %d admitted rows are refused with INPUT-NOT-EVALUATED and no block record, and %d refusals keep their rule\n", lab, en, rn
+      else printf "FAIL: %s-enforce: live=%d; not refused as not evaluated:%s; refusals that changed:%s\n", lab, live, el, rl
+      if (wb == 0 && wn > 0) printf "PASS: %s-warn: %d admitted rows stand down with the notice and exactly one INPUT-NOT-EVALUATED warn record\n", lab, wn
+      else printf "FAIL: %s-warn: rows without the notice or the one record:%s\n", lab, wl
+    }' "${FSBP_BASE}/rows.br" "${FSBP_BASE}/res.inj-${fsbp_nm}" "${FSBP_BASE}/res.inj-${fsbp_nm}w" > "${FSBP_BASE}/inj.out"
+  fsbp_report "${FSBP_BASE}/inj.out"
+done
+fsbp_injctl="$(/usr/bin/awk -F'\t' 'NR == FNR { split($0, f, "|"); br[f[1]] = 1; next } ($1 in br) && $2 == "N" { n++ } END { printf "%d", n + 0 }' "${FSBP_BASE}/rows.br" "${FSBP_BASE}/res.ship")"
+if [ "$fsbp_injctl" = 0 ]; then
+  /usr/bin/printf 'PASS: FSB-INJ-CTL: the unbroken hook names INPUT-NOT-EVALUATED on none of the same rows\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FSB-INJ-CTL: the unbroken hook names INPUT-NOT-EVALUATED on %s breadth rows\n' "$fsbp_injctl"; FAIL=$((FAIL + 1))
+fi
+
+# FSB-P2-CANARY-WARN: on the warn-degraded path, where the canonicalizer failed its canary, the
+# second pass does not run and says so in the warn log: exactly one INPUT-NOT-EVALUATED record,
+# beside the canary's own notice. Control: the same call on the shipped hook at warn writes none.
+FSBP_CN="$(fsbp_copy canary)"
+: > "${FSBP_CN}/lib/command-position.awk"
+/usr/bin/printf 'warn' > "${FSBP_CN}/.mode"
+/usr/bin/printf '%s\n' "BR.cn|BR|-|br|a|a|-|-|cat /tmp/ok.txt" > "${FSBP_BASE}/rows.cn"
+fsbp_pass "$FSBP_CN" "${FSBP_BASE}/rows.cn" "${FSBP_BASE}/res.cn"
+FSBP_CW="$(fsbp_copy canaryctl)"
+/usr/bin/printf 'warn' > "${FSBP_CW}/.mode"
+fsbp_pass "$FSBP_CW" "${FSBP_BASE}/rows.cn" "${FSBP_BASE}/res.cw"
+fsbp_cn="$(/usr/bin/awk -F'\t' '{ printf "%s/%s", $3, $7 }' "${FSBP_BASE}/res.cn")"
+fsbp_cw="$(/usr/bin/awk -F'\t' '{ printf "%s/%s", $3, $7 }' "${FSBP_BASE}/res.cw")"
+if [ "$fsbp_cn" = 0/1 ] && [ "$fsbp_cw" = 0/0 ]; then
+  /usr/bin/printf 'PASS: FSB-P2-CANARY-WARN: with the canonicalizer failing its canary at warn, the second pass does not run and writes one INPUT-NOT-EVALUATED record (control: none on the shipped hook)\n'; PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: FSB-P2-CANARY-WARN: exit/records %s with the canary failed (want 0/1), %s on the shipped hook (want 0/0)\n' "$fsbp_cn" "$fsbp_cw"; FAIL=$((FAIL + 1))
+fi
+
+# ----- FSB-*-OFF: each position's reading, switched off, reopens that position -----
+# fsbp_off_ids <copy> <id regex> <suffix> <what> — the out-of-root rows whose ids match, through
+#   the copy whose reading is off: each must be admitted with no record, so its refusal is that
+#   reading's. A position form contributes its first pinned role's row; a face contributes each row.
+fsbp_off_ids() {
+  /usr/bin/awk -F'|' -v p="$2" '$4 == "out" && $1 ~ p && ($8 == "-" || $3 == substr($8, 1, 1))' "$FSBP_ROWS" > "${FSBP_BASE}/rows.off"
+  fsbp_pass "$1" "${FSBP_BASE}/rows.off" "${FSBP_BASE}/res.off"
+  /usr/bin/awk -F'\t' -v sfx="$3" -v what="$4" '{ split($1, w, "."); lab = (w[1] ~ /^(INV|ADJ)$/ ? "FSB-" : "FSB-POS") w[1] "-" w[2] "-" w[3] "-" sfx
+      if ($3 == 0 && $4 == 0 && $5 == 0) printf "PASS: %s: through the copy whose %s is off, the operand is admitted with no record — the refusal is that reading'"'"'s\n", lab, what
+      else printf "FAIL: %s: through the copy whose %s is off the operand is not reopened (verdict=%s exit=%s block=%s warn=%s)\n", lab, what, $2, $3, $4, $5 }
+    END { if (NR == 0) printf "FAIL: FSB-OFF-%s: no row selected for the copy whose %s is off (BROKEN PROBE)\n", sfx, what }' "${FSBP_BASE}/res.off" > "${FSBP_BASE}/off.out"
+  fsbp_report "${FSBP_BASE}/off.out"
+}
+FSBP_REDIROFF="$(fsbp_copy rediroff "$XFORM_X_A")"
+FSBP_JOINSOFF="$(fsbp_copy joinsoff "$XFORM_X_L")"
+xform_shape "FSB-MUT-SHAPE-REDIROFF: the copy whose redirection join is off differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_REDIROFF" 1 1
+xform_shape "FSB-MUT-SHAPE-JOINSOFF: the copy whose joined readings are off differs in one line, parses, and still refuses and admits untouched literals" "$FSBP_JOINSOFF" 1 1
+fsbp_off_ids "$FSBP_REDIROFF" '^(1|PR)[.]|^2[.]redir[.]|^5[.]leadredir-hdb[.]|^ADJ[.](psubc1|redirwrap)[.]' REDIROFF 'redirection join'
+fsbp_off_ids "$FSBP_JOINSOFF" '^2[.](alone|flag|twocont|redir|splitpfx|splitverb|commentbefore|group|shift)[.]|^ADJ[.]psubc2[.]' JOINSOFF 'joined readings'
 
 # ----- FSB-P2-COST: the second pass adds canonicalizer runs, never a longer scan -----
 # The canonicalizer's scan grows faster than linearly with the command, on every consumer, so a
