@@ -165,12 +165,12 @@ When the Planning-side detection misses drift (e.g., context shifts between Stag
 | `PARTIAL` | AC criterion partially satisfied | — |
 | `N/A-WITH-RATIONALE` | AC references stale context; the criterion's premise no longer applies AND the underlying intent of the criterion has been met by a different mechanism (typical: version reference drift where the equivalent assertion holds for the new version) | REQUIRED `Drift-rationale:` field naming the stale-context premise + the equivalent-assertion evidence |
 | `REINTERPRET-WITH-RATIONALE` | AC references stale context; the criterion's premise can be re-mapped to current context AND the re-mapped criterion is `MET` | REQUIRED `Drift-rationale:` field naming the stale-context premise + the re-mapping + the evidence the re-mapped criterion is met |
-| `FLAG-UPSTREAM` | AC drift is structurally significant (criterion cannot be evaluated as written AND cannot be locally re-interpreted) | REQUIRED `Drift-rationale:` field + escalation to Tier 1 [ADJUST] (when fix-forward refinement of AC is possible) or Tier 2 [SCOPE CHANGE] (when scope of issue itself is affected) per § Inter-Stage Feedback Protocol |
+| `FLAG-UPSTREAM` | AC drift is structurally significant (criterion cannot be evaluated as written AND cannot be locally re-interpreted) | REQUIRED `Drift-rationale:` field + escalation to Tier 1 [ADJUST] (when fix-forward refinement of AC is possible) or Tier 2 [SCOPE CHANGE] (when scope of issue itself is affected) per § Inter-Stage Feedback Protocol; the refined AC is written into the issue body only to carry out the operator's recorded decision on the flag |
 
 The 3 drift verdicts are **not failure modes** — they record legitimate handling of upstream drift that escaped Planning-side detection. Drift verdicts compose with overall verdict at Phase E:
 - All AC verdicts in `{MET, N/A-WITH-RATIONALE, REINTERPRET-WITH-RATIONALE}` → `ACCEPT` is permitted (Phase E Tier 3 operator decision).
 - Any AC verdict = `FLAG-UPSTREAM` → operator decision required (typically `CONDITIONAL ACCEPT` with deviation-log entry OR `REJECT` if the flagged AC's premise breaks the release outcome).
-- Drift verdicts do NOT trigger Lane 2 (QA→DT Return) per Phase C — they trigger Tier 1 [ADJUST] (Planning-side AC refinement on the issue body) OR Tier 2 [SCOPE CHANGE] (operator scope decision), not engineering rework.
+- Drift verdicts do NOT trigger Lane 2 (QA→DT Return) per Phase C — they trigger Tier 1 [ADJUST] (Planning-side AC refinement on the issue body, made only to carry out the operator's recorded decision, because after Stage 5 a change to the criteria is made only that way per {{ADR:issue-body-contract-sections-are-the-scope-of-record}}) OR Tier 2 [SCOPE CHANGE] (operator scope decision), not engineering rework.
 
 ##### Verdict-selection criteria (when each drift verdict applies)
 
@@ -178,7 +178,7 @@ The 3 drift verdicts are **not failure modes** — they record legitimate handli
 
 - Use `REINTERPRET-WITH-RATIONALE` when: (a) the AC text can be locally re-mapped to the new context by substituting the stale reference; (b) the re-mapped criterion is verifiable as `MET` against current state; (c) the substitution is a 1:1 mapping (no semantic shift). Example: AC says "the prior-version tag uses signed-annotated format"; the release is the next version; re-mapped criterion: "the current-version tag uses signed-annotated format"; verified MET → REINTERPRET-WITH-RATIONALE.
 
-- Use `FLAG-UPSTREAM` when: (a) neither N/A nor REINTERPRET applies (no equivalent signal, no clean re-mapping); OR (b) the drift indicates the AC's premise is structurally invalid (the rule the AC was asserting cannot be evaluated in current context); OR (c) the spoke cannot resolve the drift without operator judgment. Tier 1 [ADJUST] is the default routing (Planning spoke amends the AC); Tier 2 [SCOPE CHANGE] if scope decision required.
+- Use `FLAG-UPSTREAM` when: (a) neither N/A nor REINTERPRET applies (no equivalent signal, no clean re-mapping); OR (b) the drift indicates the AC's premise is structurally invalid (the rule the AC was asserting cannot be evaluated in current context); OR (c) the spoke cannot resolve the drift without operator judgment. Tier 1 [ADJUST] is the default routing: the Planning spoke drafts the refined AC and amends it in the issue body only once the operator records the decision that adopts it, with one short comment giving the date, what changed and why; Tier 2 [SCOPE CHANGE] if scope decision required.
 
 ##### Composition with adjacent protocols
 
