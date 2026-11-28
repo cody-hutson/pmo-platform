@@ -28,8 +28,8 @@
 #          could not read the index, the tree or the commits, or an id is not a commit or tag.
 # POSTURE. Fails closed. It reads no mode dial: git-pre-commit-pii.mode never reaches it.
 #          CLAUDE_HOOK_BYPASS is read by its callers, never here, and they treat its two
-#          inputs differently (decision record ADR-242,
-#          commit-time-home-guard-runs-under-hook-bypass). git-pre-commit-pii.sh runs the
+#          inputs differently (decision record
+#          {{ADR:commit-time-home-guard-runs-under-hook-bypass}}). git-pre-commit-pii.sh runs the
 #          STAGED read before its own bypass exit, so the commit-time check runs whether or
 #          not the bypass is set: an exception to the uniform bypass convention, and the only
 #          check in either PII git hook the bypass does not skip. The push-time read

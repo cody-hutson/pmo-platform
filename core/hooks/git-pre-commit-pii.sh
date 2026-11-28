@@ -54,8 +54,8 @@
 # every PII scan here. The --commits home read sits after the exit, and git-pre-push-pii.sh
 # exits on the bypass before it runs this hook, so the push-time home check honours the
 # bypass. The operator's escape hatch at commit time is git commit --no-verify, which
-# BLOCK-DESTRUCTIVE-024 refuses to agents. Decision record: ADR-242
-# (commit-time-home-guard-runs-under-hook-bypass).
+# BLOCK-DESTRUCTIVE-024 refuses to agents. Decision record:
+# {{ADR:commit-time-home-guard-runs-under-hook-bypass}}.
 #
 # Install:  wired as the repo's pre-commit hook by docs/scripts/setup-workspace.sh
 #           (install, and update.sh via --refresh-hooks); validate-install.sh A3d

@@ -219,13 +219,15 @@ commit -- -m g3; expect_commit_refused "T8022-G3 a forced add under /roadmaps/ i
 # G4 — the PII guard's mode dial never reaches the home guard. The instance home exists
 # with no needle file, so the PII guard takes its configured-but-unfilled branch; the dial
 # sits at the instance rung the field case uses.
-for _m in off warn enforce; do
-  case "$_m" in off) _id=G4a ;; warn) _id=G4b ;; enforce) _id=G4c ;; esac
-  mk_repo "g4-${_m}"; /bin/mkdir -p "${WS}/pmo-instance"; /usr/bin/printf '%s' "$_m" > "${WS}/pmo-instance/git-pre-commit-pii.mode"
+g4_arm() { # g4_arm <label> <mode>
+  mk_repo "g4-$2"; /bin/mkdir -p "${WS}/pmo-instance"; /usr/bin/printf '%s' "$2" > "${WS}/pmo-instance/git-pre-commit-pii.mode"
   h="$(head_sha)"; put local-state/run/x.json; g add -f local-state/run/x.json
-  commit -- -m "g4-${_m}"
-  expect_commit_refused "T8022-${_id} with git-pre-commit-pii.mode=${_m}, a forced add under /local-state/ is refused" "$h"
-done
+  commit -- -m "g4-$2"
+  expect_commit_refused "$1 with git-pre-commit-pii.mode=$2, a forced add under /local-state/ is refused" "$h"
+}
+g4_arm T8022-G4a off
+g4_arm T8022-G4b warn
+g4_arm T8022-G4c enforce
 mk_repo g4d; /bin/mkdir -p "${WS}/pmo-instance"; /usr/bin/printf 'off' > "${WS}/pmo-instance/git-pre-commit-pii.mode"
 h="$(head_sha)"; put docs/ok2.md; g add docs/ok2.md
 commit -- -m g4d; expect_commit_accepted "T8022-G4d control: with the dial at off, a benign commit is accepted (the PII guard alone passes)" "$h"
