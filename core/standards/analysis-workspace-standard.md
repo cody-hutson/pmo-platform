@@ -4,7 +4,7 @@ purpose: Defines the in-repo git-ignored analysis workspace for read-once platfo
 type: standard
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
-consumers: CLAUDE.md §Governance File Map (Program-scoped analysis row); operators and agents creating audit/review/gap-analysis artifacts; the analysis-folder convention cited across the disciplines
+consumers: CLAUDE.md §Governance File Map (Program-scoped analysis row); operators and agents creating audit/review/gap-analysis artifacts; the analysis-folder convention cited across the disciplines; the release hub's spoke launch and return (the release-hub skill's spoke-launch reference)
 ---
 # Analysis-Workspace Standard
 
@@ -30,7 +30,7 @@ roadmaps home.
 |---|---|
 | **Path** | The repo-root `analysis/` folder. Cross-cutting working material owned by no single module → sited at the root, parallel to the git-ignored `audit-output/` working dir. |
 | **Placement** | A registered in-repo working-state home that applies the folder-plus-README-tracked idiom of the instance-data placement standard (`core/standards/instance-data-placement-standard.md`). For this home: `analysis/README.md` is the only tracked file; every `<name>-YYYY-MM-DD/` subfolder is git-ignored by the `/analysis/*` and `!/analysis/README.md` pair; and the folder ships on clone, so no install or resolver step creates it. Operator-written analysis never enters git history. |
-| **Write path** | Any session shape may write the workspace — worktree or not, `Write`/`Edit` or Bash — with **no hook bypass**. `BLOCK-DESTRUCTIVE-019` exempts `analysis/<subfolder>/…` for Write/Edit; the tracked `analysis/README.md` is **not** exempt and is edited from a worktree like any other tracked file. |
+| **Write path** | A session whose file tools reach the main checkout — a main session, or a spawned spoke launched without worktree isolation — writes a dated subfolder of the main checkout's workspace, `analysis/<sub>/…`, with the file-write tools (`Write`/`Edit`) or the shell, and **no hook bypass**. `BLOCK-DESTRUCTIVE-019` admits that shape from any working directory, as the registered-homes carve-out in `core/rules/git-workflow.md` § Primary Checkout Discipline states. The carve-out is enforced on the file-write channel; inside the workspace, in that exact shape, a write is permitted on any channel for a session whose file tools reach the main checkout, and the shell channel carries no guard. A spoke launched with worktree isolation writes the workspace on no channel: its folder reaches the workspace only through the launching session's promotion (§ 1.1, Spoke-run analysis). A write that any control refused is never re-attempted through the shell. The tracked `analysis/README.md` is **not** admitted and is edited from a worktree like any other tracked file. |
 
 **Scope boundary.** This workspace is for analysis **about the platform/repo** (release,
 backlog, platform audits/reviews/gap analyses). It is **not** for:
@@ -41,6 +41,52 @@ backlog, platform audits/reviews/gap analyses). It is **not** for:
 
 Both exclusions are the placement standard's admission test applied to this home: a
 repository's in-repo homes admit only content about that repository.
+
+### 1.1 Spoke-run analysis
+
+A spawned spoke that runs an audit mode gets its dated folder to the workspace according to
+the shape it was launched in. A spoke launched with worktree isolation writes the workspace
+on no channel. The harness confines its file-write tools to its own worktree, so the main
+checkout's workspace is out of its reach whatever the hook admits, and its folder reaches the
+workspace only through the launching session's promotion. A refusal there is reported, and
+never re-attempted through the shell.
+
+| Launch shape | Where the spoke writes the dated folder | How the folder reaches the workspace |
+|---|---|---|
+| Without worktree isolation — the spoke shares the launching session's working tree | The workspace itself, `<OPERATOR_INSTANCE_ANALYSIS_PATH>/<name>-YYYY-MM-DD/`, with the file-write tools or the shell. The shared working tree carries its own git-ignored `analysis/`, which is not the workspace, so the spoke confirms that its target sits under the main checkout's root before it writes | It is already there |
+| With worktree isolation — the spoke runs in its own worktree | The same relative path inside its own worktree, `analysis/<name>-YYYY-MM-DD/`, with the file-write tools; the staged copy is git-ignored there too | The launching session promotes it into the workspace after the spoke returns and before anything removes the spoke's worktree, confirms the copy is byte-identical, then removes the staged copy |
+
+**Which shape an audit run takes.** A run that changes no tracked file, whose only durable
+output is the folder, is launched without isolation. A run that also changes a tracked file is
+launched with isolation, as its stage requires: an audit mode that overwrites its committed
+summary, or a content-modifying stage that runs an audit. The reason is survival. An isolated
+worktree that holds a tracked change is kept when the spoke returns. One whose only change is
+git-ignored content may be cleaned up at return, taking the staged folder with it.
+
+**What protects a staged folder until it is promoted.** The release tooling's orphan-state
+sweep never removes a worktree that holds git-ignored files. A release hub that launches an
+isolated audit spoke records the promotion as an action item before the launch, and the item
+blocks the release's close until it is resolved. The steps are in the release-hub skill's
+spoke-launch reference, § Audit output. A hand-run `git worktree remove` deletes git-ignored
+files without `--force`, so a manual sweep checks for them first, as the git-workflow rule's
+sweep-deletion safety requires.
+
+**What the spoke reports.** Every spoke briefed to run an audit mode ends its output with one
+line, whether or not it wrote anything:
+
+- `Analysis output: written — <OPERATOR_INSTANCE_ANALYSIS_PATH>/<folder>/ (<N> files)`
+- `Analysis output: staged — <the spoke's worktree path from the main checkout's root>/analysis/<folder>/ (<N> files)`
+- `Analysis output: none — <reason>`
+
+**Counting runs.** A count of dated folders at the workspace sees every run written directly
+and every run whose promotion completed. For the runs a release hub launched with the
+audit-output clause, a run still awaiting promotion is counted by its open action item in the
+launching hub's run folder, so the workspace count plus those open items is the whole
+population of briefed runs. A run no brief predicted has no item until the hub finds its
+folder: at each spoke's return, and before the release close's orphan-state sweep, the hub
+lists the `analysis/` of every worktree its own spokes ran in, and a dated folder found there
+opens an item and is promoted. A count taken inside a worktree's own `analysis/` is not a
+count of runs.
 
 ## 2. Folder convention
 
