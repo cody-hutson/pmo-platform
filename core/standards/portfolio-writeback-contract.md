@@ -152,7 +152,7 @@ A trailing `# …` on the `portfolio_id:` line is content to the shared frontmat
 
 - **Nothing stops for a per-project state.** An unassigned, unresolved or inactive project, or one held for a polluted `PROJECT.md` key, is excluded from every output and listed to the operator; the run continues.
 - **A rollup and its own `PROJECT.md` agree.** When a rollup's `portfolio_id` and its own `PROJECT.md`'s place the project in different portfolios — a project with no key, on an install with one active portfolio, is in that portfolio — the rollup is **held** out of every output until it is re-emitted, and reported. The composer applies this whenever its root holds that `PROJECT.md`.
-- **Moving a project** to another portfolio is two acts, never an edit of `portfolio_id` alone: the project's row is closed out of the old portfolio's composed file and registered in the new one's (`project-initiator`), and its rollup is re-emitted. Until it is, the rollup is held.
+- **Moving a project** to another portfolio is two acts, never an edit of `portfolio_id` alone: the project's row is removed from the old portfolio's composed file — with no closure recorded there, since the project is not closed — and registered in the new one's (`project-initiator`), and its rollup is re-emitted. Until it is, the rollup is held.
 
 ### §7.3 The served portfolio
 
