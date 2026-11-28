@@ -150,7 +150,7 @@ In-bundle edges: 0 (single member). Probe: `dependencies/blocked_by` on #7970 re
 
 ## Implementation Sequence
 
-Slices are commits on `release/issue-body-is-the-scope-of-record`, in this order (Stage-5 revision 1, § Output for Stage 6). Prose in every later slice cites the successor by its slug token, `{{ADR:issue-body-contract-sections-are-the-scope-of-record}}`; a link target uses the record's real path, so a token never sits inside a link target. The number is taken from `release/tools/renumber-adr.py --detect` immediately before the file is created (provisionally 242) and binds at merge.
+Slices are commits on `release/issue-body-is-the-scope-of-record`, in this order (Stage-5 revision 1, § Output for Stage 6). Prose in every later slice cites the successor by its slug token, `ADR-242`; a link target uses the record's real path, so a token never sits inside a link target. The number is taken from `release/tools/renumber-adr.py --detect` immediately before the file is created (provisionally 242) and binds at merge.
 
 | Slice | Content | Design edits | Depends on |
 |---|---|---|---|

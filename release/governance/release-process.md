@@ -170,7 +170,7 @@ When the Planning-side detection misses drift (e.g., context shifts between Stag
 The 3 drift verdicts are **not failure modes** — they record legitimate handling of upstream drift that escaped Planning-side detection. Drift verdicts compose with overall verdict at Phase E:
 - All AC verdicts in `{MET, N/A-WITH-RATIONALE, REINTERPRET-WITH-RATIONALE}` → `ACCEPT` is permitted (Phase E Tier 3 operator decision).
 - Any AC verdict = `FLAG-UPSTREAM` → operator decision required (typically `CONDITIONAL ACCEPT` with deviation-log entry OR `REJECT` if the flagged AC's premise breaks the release outcome).
-- Drift verdicts do NOT trigger Lane 2 (QA→DT Return) per Phase C — they trigger Tier 1 [ADJUST] (Planning-side AC refinement on the issue body, made only to carry out the operator's recorded decision, because after Stage 5 a change to the criteria is made only that way per {{ADR:issue-body-contract-sections-are-the-scope-of-record}}) OR Tier 2 [SCOPE CHANGE] (operator scope decision), not engineering rework.
+- Drift verdicts do NOT trigger Lane 2 (QA→DT Return) per Phase C — they trigger Tier 1 [ADJUST] (Planning-side AC refinement on the issue body, made only to carry out the operator's recorded decision, because after Stage 5 a change to the criteria is made only that way per ADR-242) OR Tier 2 [SCOPE CHANGE] (operator scope decision), not engineering rework.
 
 ##### Verdict-selection criteria (when each drift verdict applies)
 

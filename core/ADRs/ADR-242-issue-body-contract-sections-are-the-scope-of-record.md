@@ -20,7 +20,7 @@ source_observations:
 
 Proposed. Authored at Stage 6 of the `issue-body-is-the-scope-of-record` release from its Stage 5 design. Ratification is the operator's, rendered per record at that release's Stage 13 Close (Phase A13) and verified there by Gate 13 row G-CL9; it is never inferred from milestone closure.
 
-**Numbering provenance.** This record was authored at the next-free number computed from the mainline anchor. An ADR number is allocated at authorship but claimed at merge; should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `{{ADR:issue-body-contract-sections-are-the-scope-of-record}}`, which resolves at the claim.
+**Numbering provenance.** This record was authored at the next-free number computed from the mainline anchor. An ADR number is allocated at authorship but claimed at merge; should the mainline claim this number first, the renumbering tool moves this record at merge time and appends one provenance note here per hop. Citations use the slug token `ADR-242`, which resolves at the claim.
 
 This decision is extended or reversed only by a successor ADR, never by an in-place edit of this record.
 
