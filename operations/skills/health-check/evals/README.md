@@ -9,7 +9,7 @@ Per-mode binary-judge evals for the `health-check` skill, authored via the `eval
 | Path | Contents |
 |---|---|
 | `evals.json` | The harness-runnable case set (skill_name + per-case prompt / expected_output / files) — the `pmo-skill-refiner` harness entry point. |
-| `fixtures/` | Historical project-state snapshots with **seeded drift** (stakeholder names sanitized) + one MCP-unavailable fixture: `pre-cutover.md` (v1 modes), `uat-window-mcp-degraded.md` (degradation), `hypercare-window.md` (v2 modes). |
+| `fixtures/` | Historical project-state snapshots with **seeded drift** (stakeholder names sanitized) + one MCP-unavailable fixture: `pre-cutover.md` (v1 modes), `uat-window-mcp-degraded.md` (degradation), `hypercare-window.md` (v2 modes), `portfolio-two-project.md` (v3 rollup), `portfolio-two-portfolio.md` (v5 portfolio scoping). |
 | `judges/` | One **binary** LLM-judge prompt per mode (`full.md`, `timeline.md`, `attribution.md`, `comms.md`, `plan.md`, `raid.md`, `sources.md`, `rollup.md`, `structure.md`). |
 | `cases/` | Case → expected-section-membership mappings (one YAML per case), the structured assertion the judge applies. |
 
@@ -36,6 +36,7 @@ One fixture (`fixtures/uat-window-mcp-degraded.md`) marks an MCP source unavaila
 | `fixtures/uat-window-mcp-degraded.md` | A project mid-UAT with Jira unreachable | a single-source-only finding (must cap at MEDIUM, not auto-action) + the degradation banner | `full` (degradation) |
 | `fixtures/hypercare-window.md` | A project in the hypercare window after go-live | a stale-SENT + obsolete-DRAFT + unsent-READY comm (comms); a plan-promised-but-unreflected item (plan); a passive-voice + ownerless + mitigation-less risk and a stale RAID entry (raid); a stale external-source sync + a no-MCP source (sources); an entity-record layer seeding three distinct structural shapes — an empty required-field slot, a populated-but-unresolvable reference whose target tier IS populated, and a typed edge to an absent entity (structure); clean items per mode | `comms`, `plan <name>`, `raid`, `sources`, `rollup --scope project --depth full`, `structure` |
 | `fixtures/portfolio-two-project.md` | A two-project portfolio with per-project rollup entities + a partially-stale PORTFOLIO.md | a rollup-entity-newer-than-PORTFOLIO.md freshness drift on one project + a clean project row that must NOT be flagged | `rollup --scope portfolio` |
+| `fixtures/portfolio-two-portfolio.md` | Two portfolios, one active project in each; the active project is in port-alpha | a stale composed-file row for the served portfolio's project + a seeded drift in the OTHER portfolio that must not appear at all | `rollup --scope portfolio` (portfolio scoping) |
 
 Coverage maps to #1125 AC-7 (the 3 v1 modes against ≥2 project states, each seeded with known drift of each v1 class — a date moved (`timeline`), an owner swapped (`attribution`), a multi-source disagreement (`full`) — plus the degradation case) and #1126 AC-7 (the 4 v2 modes against the hypercare-window state, including the `plan` no-arg "which plan?" prompt case). The v3 rollup slice's AC covers all three `rollup` sub-modes against ≥3 project states — `--scope portfolio` (two-project-portfolio), `--scope project --depth full` (hypercare-window), `--scope project --depth status` (pre-cutover). The bank now spans four project states.
 
