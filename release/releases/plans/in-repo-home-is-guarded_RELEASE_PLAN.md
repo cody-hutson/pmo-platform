@@ -20,7 +20,7 @@ reversibility: MODERATE / Confidence HIGH — one release branch, one pull reque
 
 **Release class:** `novel`; Stage 9 review depth **Deep**.
 
-> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #9203 and is amended, in order, by: the Stage-4 gate's Decision Recorded (plan approved as recommended; D-GuardScope (A); D-RequiredCheck (B); D-ReleaseClass `novel`; D-Version minor as a recorded determination; D-C SINGLE; P0), then the three Stage-5 designs and their adversarial reviews as the Collective Review adopted them, then the Collective Review scope-lock Decision Recorded. Where the plan and a later record differ, the later record wins, and each change is recorded in § Deviation Log. The #8022 rows of the File Change Matrix and the Verification Plan are amended to its design's resolved set; the #8023 and #8024 rows stay as Stage 4 planned them, and their own Engineering spokes amend them in their slices. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
+> **Provenance and precedence.** This file transcribes the Stage-4 Release Planning output on #9203 and is amended, in order, by: the Stage-4 gate's Decision Recorded (plan approved as recommended; D-GuardScope (A); D-RequiredCheck (B); D-ReleaseClass `novel`; D-Version minor as a recorded determination; D-C SINGLE; P0), then the three Stage-5 designs and their adversarial reviews as the Collective Review adopted them, then the Collective Review scope-lock Decision Recorded. Where the plan and a later record differ, the later record wins, and each change is recorded in § Deviation Log. The #8022 rows of the File Change Matrix and the Verification Plan are amended to its design's resolved set, and the #8023 rows to its Stage-5 inventory as the Collective Review amended it, each by that card's Engineering spoke; the #8024 rows stay as Stage 4 planned them until its own spoke amends them in its slice. Every thread comment consumed is authored by the repository owner (Comment-Ingestion Trust Boundary).
 
 ---
 
@@ -270,6 +270,19 @@ The #8022 slice lands as commits in this order, each pushed when it is coherent.
 5. **Governance and documentation.** The gate-efficacy rows, the placement standard, `architecture-overview.md`, `git-workflow.md` § Repository-Integrity Gates, and the D-Bypass C decision record (status `Proposed`).
 6. **Catalog.** The two controls-register rows, then the generator's build and its checks, never a hand edit of a generated file.
 
+### #8023 slice order, as designed (Stage 5 design on #9209, as amended at the Collective Review)
+
+The #8023 slice lands as commits in this order after the #8022 slice, each pushed when it is coherent. Messages carry the trailing `(#8023)`, never a close-family verb before a number.
+
+1. **The plan.** These #8023 rows of § File Change Matrix and § Verification Plan, and their § Deviation Log rows.
+2. **Tests first (RED).** `core/deploy/tests/test_tree_walk_skips_homes.sh` with its four allowlist forms and its `REGRESSION_MEMBERS` row. It runs through the install regression suite, and its RED run is read against the tree with no walker changed.
+3. **The verifier.** The scope glob resolver reads the git index; the FCM first-segment enum gains its two missing top-level directories, with suite arm A14 RED before and GREEN after.
+4. **The import tracer.** Tracked-first scan list with the empty-index fallback, root resolution from its own checkout, its marker, and the domain suite's header.
+5. **The doc tracer.** Root resolution from its own checkout and its marker, and the protocol's `--root` cell.
+6. **The budget scan.** Rooted at the three module trees, with the skill package rebuilt by its build tool in the same commit.
+7. **The durability copy.** repo-next copied from the git index plus `.git`.
+8. **The placement standard.** The tree-walk clause of the § Protections working-state cell.
+
 ### Agent-Editability Read
 
 **Derivation:** controls read at commit `8ed5e273`.
@@ -300,7 +313,7 @@ The #8022 slice lands as commits in this order, each pushed when it is coherent.
 | #8022 | `.github/workflows/repo-integrity.yml` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8022 | placement and gate-efficacy standards, `architecture-overview.md`, `core/rules/git-workflow.md`, `core/rules/bypass-mode-readiness/*` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
 | #8022 / #8024 | `docs/scripts/setup-workspace.sh`, `docs/scripts/validate-install.sh`, `update.sh`, `core/deploy/tests/*` | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
-| #8023 | `release/tools/verify-release-plan.sh` and its test, `core/deploy/deploy.sh`, `core/deploy/tools/*`, the allowlist and roster rows | no | no (conjunct 1) | unconstrained | unconstrained | ordinary Engineering spoke |
+| #8023 | `release/tools/verify-release-plan.sh`, `blast-radius.sh`, `domain-blast-radius.sh` and their suites and fixtures, `release/references/protocols/blast-radius-protocol.md`, `core/skills/context-budget-auditor/scripts/measure-context-budget.sh` and its package, `core/deploy/tests/*`, the placement standard, the allowlist and roster rows (resolved set, DEV-20) | no | no (conjunct 1: a skill `scripts/` path is outside `SKILL_SCOPE_RE`) | unconstrained | unconstrained | ordinary Engineering spoke |
 
 Notes:
 - No path in the write set is Tier-0-floored or skill-gated. An `unconstrained` row means no control refuses the write; it does not mean the change is ungoverned.
@@ -368,7 +381,7 @@ Parse quality: 3 cards parsed, 0 deferred, 0 parse-failed (Affected Files presen
 
 ## File Change Matrix
 
-The release is the #8022 rows below, as its Stage-5 design resolved them, plus the #8023 and #8024 rows as Stage 4 planned them. Each later spoke promotes or retires its own card's CONDITIONAL rows in its slice, and records the change in § Deviation Log.
+The release is the #8022 rows below, as its Stage-5 design resolved them, the #8023 rows as its Stage-5 inventory and the Collective Review resolved them, and the #8024 rows as Stage 4 planned them. Each later spoke promotes or retires its own card's CONDITIONAL rows in its slice, and records the change in § Deviation Log.
 
 ```
 # ── #8022 — always delivered (the Stage-5 design's resolved set, as amended at the Collective Review) ──
@@ -390,17 +403,28 @@ core/process-catalog/definitions/controls-register.tsv           edit   # two ro
 core/process-catalog/definitions/pack.json                       edit   # highest_minted_id raised to the two new control IDs (DEV-16)
 core/process-catalog/views/                                      edit   # regenerated by the catalog generator, never by hand
 release/releases/plans/in-repo-home-is-guarded_RELEASE_PLAN.md   add    # Engineering Commit 0
-# ── #8023 — always delivered (as Stage 4 planned; its spoke amends these in its slice) ──
-core/deploy/tests/test_*home*.sh                                 add    # regression test with a sensitivity arm
+# ── #8023 — always delivered (the Stage-5 inventory's resolved set, as amended at the Collective Review) ──
+core/deploy/tests/test_tree_walk_skips_homes.sh                  add    # the fixture test (100755): clean against planted, mutant sensitivity, near-miss, empty-index, non-git-parent and census arms
 core/config/allowlists/script-execution-allowlist.txt            edit   # four invocation forms for the new test
-core/deploy/tests/run-install-regression.sh                      edit   # roster row — CI wiring: "Install/onboarding/update regression suite (macOS)"
-# ── #8023 — CONDITIONAL (per the Stage-5 inventory) ──
-release/tools/verify-release-plan.sh                             edit   CONDITIONAL:ROOT-WALKER-FIX
-release/tools/tests/test_verify_release_plan.sh                  edit   CONDITIONAL:ROOT-WALKER-FIX
-core/deploy/deploy.sh                                            edit   CONDITIONAL:INVENTORY-NAMES-DEPLOY-WALKER
-core/deploy/tools/check-doc-links.py                             edit   CONDITIONAL:INVENTORY-NAMES-DOC-LINKS
-core/deploy/tools/check-canonical-structure.sh                   edit   CONDITIONAL:INVENTORY-NAMES-CANONICAL
-core/deploy/allowlists/selftest-coverage-manifest.txt            edit   CONDITIONAL:NEW-SELFTEST-TOOL   # regenerated, never hand-edited
+core/deploy/tests/run-install-regression.sh                      edit   # one REGRESSION_MEMBERS row — CI wiring: "Install/onboarding/update regression suite (macOS)"
+release/tools/verify-release-plan.sh                             edit   # ROOT-WALKER-FIX fired: the scope glob resolver reads the git index; the FCM first-segment enum gains its two missing top-level directories (DEV-27)
+release/tools/tests/test_verify_release_plan.sh                  edit   # one arm: a registered home's README ADD is interpreted (DEV-27)
+release/tools/tests/fixtures/fcm-home-readme.md                  add    # that arm's plan fixture
+release/tools/tests/fixtures/fcm-diff-home-readme.tsv            add    # that arm's diff seam
+release/tools/domain-blast-radius.sh                             edit   # tracked-first scan list with the empty-index fallback; an omitted root resolves to its own checkout first
+release/tools/tests/test_domain_blast_radius.sh                  edit   # header comment only: the enumerated git calls
+release/tools/blast-radius.sh                                    edit   # an omitted root resolves to its own checkout first; one marker on the fallback walk
+release/references/protocols/blast-radius-protocol.md            edit   # the --root default cell (cascade of the root order, DEV-21)
+core/skills/context-budget-auditor/scripts/measure-context-budget.sh  edit   # the agents scan rooted at the three module trees
+packages/context-budget-auditor.skill                            edit   # regenerated by build-skill-packages.sh, never by hand
+packages/context-budget-auditor.skill.sha256                     edit   # regenerated with it
+core/deploy/tests/test_upgrade_config_durability.sh              edit   # repo-next copied from the git index plus .git
+core/standards/instance-data-placement-standard.md               edit   # § Protections working-state cell: the tree-walk clause only, after the #8022 edit
+# ── #8023 — CONDITIONAL rows resolved NOT FIRED (Stage-5 inventory) ──
+core/deploy/deploy.sh                                            NOT EDITED   # CONDITIONAL:INVENTORY-NAMES-DEPLOY-WALKER did not fire: every walker is S, D1 or X
+core/deploy/tools/check-doc-links.py                             NOT EDITED   # CONDITIONAL:INVENTORY-NAMES-DOC-LINKS did not fire: S; Check 14 and link-check.yml scope untouched
+core/deploy/tools/check-canonical-structure.sh                   NOT EDITED   # CONDITIONAL:INVENTORY-NAMES-CANONICAL did not fire: S, a skill's references/
+core/deploy/allowlists/selftest-coverage-manifest.txt            NOT EDITED   # CONDITIONAL:NEW-SELFTEST-TOOL did not fire: the new test dispatches no --self-test
 # ── #8024 — always delivered (as Stage 4 planned; its spoke amends these in its slice) ──
 docs/scripts/setup-workspace.sh                                  edit
 update.sh                                                        edit
@@ -523,9 +547,9 @@ Considered and dropped: a CIAC over the placement standard's § Protections word
 | #8022 | AC-3 | `grep -c -F "In-repo home content gate" .github/workflows/repo-integrity.yml` at least 2 [READER-GRADED — the job's committed self-test arms T8022-C1 to C17 run first on every pull request to main, and the job reports green on the release PR head] | ≥2 (baseline 0): the header and the job's name line at least |
 | #8022 | AC-4 | `grep -c -F "T8022-N2" core/hooks/tests/git-pre-commit-homes.test.sh` at least 1 [READER-GRADED — the near-miss arms T8022-N1 to N7 in the hook suite and C4, C8 and C10 in the self-test] | a README-only commit passes the guard and the job's predicate; `local-state/readme.md` fails both |
 | #8022 | AC-5 | [DEFERRED — read back main's required status-check contexts after the operator registers the In-repo home content gate at Stage 12, and again at Stage 13] | the context is present (baseline absent) |
-| #8023 | AC-1 | [DEFERRED — graded against the Stage-5 walker inventory, one row per walker with its root] | every walker skips the homes or reads tracked files |
-| #8023 | AC-2 | [DEFERRED — the fixture run at Stage 7, with its sensitivity arm] | findings unchanged; the sensitivity arm differs |
-| #8023 | AC-3 | [DEFERRED — the same fixture's near-miss arm] | the similarly named path is still walked |
+| #8023 | AC-1 | `grep -c -F "T8023-K1" core/deploy/tests/test_tree_walk_skips_homes.sh` at least 1 [READER-GRADED — the Stage-5 walker inventory, one row per walker with its root and class, read against the diffs of the five changed walkers (the verifier's glob resolver, the import tracer and the durability copy enumerate the git index; the budget scan is rooted at the three module trees; both tracers resolve an omitted root to their own checkout), with the census arms T8023-K1 and T8023-K2 reading 0 unmarked and 0 stale] | every inventoried walker skips the homes or reads tracked files only; the durability copy is graded here |
+| #8023 | AC-2 | `grep -c -F "T8023-M" core/deploy/tests/test_tree_walk_skips_homes.sh` at least 4 [READER-GRADED — the install regression suite's member line for this test reads 0 failed: T8023-S1 to S4 equal on the planted fixture, T8023-M1 to M4 differ, T8023-A3 and A4 equal from a non-git parent, T8023-E3 non-empty] | the walkers the test runs report the clean findings with 1,000 files planted per home; each mutant reports a difference |
+| #8023 | AC-3 | `grep -c -F "T8023-N" core/deploy/tests/test_tree_walk_skips_homes.sh` at least 4 [READER-GRADED — T8023-N1 to N4 pass on the clean and the planted fixture] | each similarly named tracked path is still walked |
 | #8024 | AC-1 | [DEFERRED — the install-mode arm, in the test file Stage 5 picks, run by the install regression suite] | every register Leak-risk file 0600; leak-risk-only folders 0700 |
 | #8024 | AC-2 | `grep -c -F "T8024-V" core/deploy/tests/test_validate_install.sh` at least 1 | ≥1 (baseline 0); behaviour graded by the install regression CI job |
 | #8024 | AC-3 | [DEFERRED — the same install test's near-miss arm] | the working-state fixture file keeps its mode |
@@ -824,3 +848,12 @@ Recorded on #9205 (comment 7236696308): **CR-1** — scope-lock with the recomme
 | DEV-17 | 6 | Arm T8022-W3 added beyond the design: with the detector missing, a benign commit under `CLAUDE_HOOK_BYPASS` is refused, because under D-Bypass C the commit-time check cannot be skipped by the bypass and a check that cannot run fails closed. The suite also carries T8022-G6c (the push-time residual, accepted), T8022-G7a and T8022-G7b (FM-1), and T8022-Z1 (the source checkout's status is unchanged), so it has 40 arms; RED-1 measured 31 FAIL and 9 PASS. Tier 1 [ADJUST] | #8022 Engineering spoke |
 | DEV-18 | 6 | The `fcm-delivery` family cannot interpret the `local-state/README.md` ADD row: its path recognizer's first-segment set names `core`, `operations`, `release`, `docs`, `packages`, `projects`, `roadmaps`, `.github` and `.claude`, and neither `local-state` nor a top-level file. Three rows read as uninterpreted (that README, `update.sh` and `.gitignore`), so FCM-COVERAGE reads SKIP. The verifier is a #8023 conditional row; the gap is recorded for the hub, not repaired here | #8022 Engineering spoke (finding) |
 | DEV-19 | 6 | The In-repo home content gate went red on its first CI run: the job runs the guard by its repository-relative path, and the self-test re-invoked itself by that relative path from inside its scratch repository, so every arm exited 127. The self-test now takes its own path absolute, and arm T8022-C1 runs it the way CI does (RED 39/40 against the previous guard, GREEN 40/40). The source_observations card number in the decision record was moved out too, because the Issue-reference validity gate does not read frontmatter as a reference block | #8022 Engineering spoke (self-repair, Retry pattern) |
+| DEV-20 | 6 | **#8023 File Change Matrix resolved** to its Stage-5 inventory as the Collective Review amended it (D-8023-WalkerSet A). CONDITIONAL:ROOT-WALKER-FIX fires for the verifier; the deploy, doc-link, canonical-structure and selftest-manifest conditionals do not fire. Inventory additions: the import tracer and its suite header, the budget scan with its regenerated package and sidecar, and the durability copy. `release/tools/blast-radius.sh` becomes an unconditional behavioural edit (its root resolution), not the design's one marker comment; `release/tools/tests/test_verify_release_plan.sh` flips from not edited to edited, with two fixture files (DEV-27); the placement standard joins the #8023 rows. Tier 1 [ADJUST] | #8023 Engineering spoke |
+| DEV-21 | 6 | **Root order for both tracers** (adversarial CD-1(a)): `--root`, then the working directory's git toplevel, then the toplevel of the script's own checkout, and only then the working directory. "Before any working-directory fallback" is read as preceding the `pwd` fallback: a working directory inside another work tree still selects that work tree, as before. Cascade: both tracers' usage text, the domain suite's enumerated git calls, and the `--root` default cell of `release/references/protocols/blast-radius-protocol.md` (outside the design's matrix, added). Arms T8023-A3 and T8023-A4 run both tracers from a non-git parent of the fixture with no `--root`. Tier 1 [ADJUST] | Collective Review (CR-1) |
+| DEV-22 | 6 | **Adversarial FM-2.** The import tracer's tracked branch requires a non-empty index list; an empty one (a non-git copy nested in a work tree) falls back to the walk, as the sibling tracer's empty-list branch does, so the tracer never reports zero importers over an empty population. Arms T8023-E3 (the nested copy is scanned) and T8023-E3M (a mutant without the fallback is caught) | Collective Review (folded into the Stage-6 spec) |
+| DEV-23 | 6 | **Marker wording.** Neither tracer's marker claims "non-git root only": after DEV-22 each fallback walk runs for any root whose index lists nothing, and each marker says so. The verifier's marker keeps "non-git root only", because its index branch takes every work tree. No marker landed before the tracer's root-resolution fix, in the same commit as that fix | Collective Review (FM-1); #8023 Engineering spoke |
+| DEV-24 | 6 | **Census widened** (adversarial FM-4): K1 takes `-L`/`-H`/`-P` and a `/` after the operand; K3 takes `-r` and `-a`; K7 takes the `tar -C <root> .` form; K8 takes `copytree(` and `Path(<root>).rglob(`. The sensitivity input carries at least two spellings per shape (18 tagged lines, the expected count derived from the tags), the specificity input a subtree twin of each spelling, and the coverage claim is an enumeration with a stated boundary (other variable names, arguments, computed paths, callees, and other spellings are the inventory's, not the census's). Over the tracked code at the slice's base the widened census reads the same 5 unmarked hits | Collective Review (CR-1) |
+| DEV-25 | 6 | **Home list** (adversarial PR-3): the test's `homes_list` runs `core/hooks/git-pre-commit-homes.sh --print-homes` and appends `/` to each name; `HOME_LIST_REL` is that detector path. INT-1 reads: outside comments the test names no registered home literally, and T8023-F2's `homes=<k>` equals the number of names `--print-homes` prints | hub determination at the Collective Review |
+| DEV-26 | 6 | **Adversarial PR-4.** The design's reason for E over A on the budget scan is corrected: A keeps the filesystem walk on a non-git root, so it would not zero the agents row. E is chosen because the script's roster already pins the three module trees and every tracked agent file sits under them. The decision is unchanged | Collective Review (folded into the Stage-6 spec) |
+| DEV-27 | 6 | **DEV-18 resolved.** The `fcm-delivery` first-segment enum gains `analysis` and `local-state`, so it lists every top-level directory the repository tracks: its modules, `docs`, `packages`, `.github`, and the three in-repo homes, each tracked as its README. It is a path-recognition list, not a home list under CIAC-1: it carries no README exception, excludes nothing, and no walk reads it, and a home missing from it degrades to an uninterpreted row (FCM-COVERAGE non-PASS), never a silent pass. The plan's two top-level-file rows (`update.sh`, `.gitignore`) stay uninterpreted by design (arm A13 pins a top-level row with no directory as uninterpreted), so FCM-COVERAGE still reads SKIP on this plan. New suite arm A14, RED before the enum change and GREEN after. Tier 1 [ADJUST] | #8022 finding, routed to the #8023 slice by the hub |
+| DEV-28 | 6 | **Adversarial FM-3 wording.** The placement standard's tree-walk clause states only what holds and what the test enforces: a walker skips the homes by enumerating the git index or by rooting below the repository root, and the test fails when one of the walkers it runs reads a home, or when a new root walk of the shapes it lists appears unmarked. The design's first clause ("every tree walker ... enumerates the git index or a named subtree") is not written, because the inventory's ignore-bound, root-listing, outside-the-repository, CI-only and sweep rows do neither | Collective Review (CR-1) |
