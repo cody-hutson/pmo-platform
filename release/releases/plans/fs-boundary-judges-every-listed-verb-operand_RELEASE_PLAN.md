@@ -32,9 +32,9 @@ reversibility: MODERATE / Confidence HIGH — one guard hook, its suite, a secon
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a guard hook's behaviour changes inside its existing rules, with its suite and readiness text, the same shape as the recent hook releases. The rule-computed next-free re-verified at Engineering Commit 0 is `v5.15`. The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-28 (Saturday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub; Stage 6 built by one Engineering spoke) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) |
+| **Status** | Executing — Stage 6 Engineering complete (release PR #9257 in draft); next Stage 7 Dev Testing |
 | **Branch** | `release/fs-boundary-judges-every-listed-verb-operand` |
-| **PR** | opened in **draft** at Stage 6, right after this commit |
+| **PR** | #9257, opened in **draft** at Stage 6 right after Engineering Commit 0 |
 | **Milestone** | `fs-boundary-judges-every-listed-verb-operand` |
 
 `domain_practice: { source: N/A — pipeline-internal release, date: 2026-11-27, domain: software }`
@@ -296,3 +296,76 @@ Recorded on #9188: **D1** revise the design first (one Stage 5 revision folding 
 | DEV-10 | 6 | The XFORM section's closing RESIDUAL line counted four positions the token walk never examines; from the slice that lands the redirection join and the joined readings, two of them (the expansion-bearing pins at those positions) are refused, so the line counts two positions neither pass examines. Revision 1's sweep did not list that line. **Tier 1 [ADJUST]** | Engineering |
 | DEV-11 | 6 | zsh's `=verb` spelling of class 4 closes in the slice that lands the second pass, not in the class-4 slice: the walk drops one leading `=` before the verb lookup whether or not the quote-removed comparison is on, as the measured prototype does (its quote-removal switch-off reopens the quoted forms, not this one; the `=`-strip copy is what reopens it) | Engineering, recorded |
 | DEV-12 | 6 | `CONDITIONAL:REGISTRY-LINES-SHIFT` fired by prediction but moves no citation: the three fragment edits replace text inside two existing lines of the fragment, so the regenerated registry is 1036 lines before and after and differs only on those two lines (531 and 549); each of the eight process-catalog line anchors resolves to the same content before and after (pre/post sweep: 6 distinct cited lines, 8 anchors, 0 moved). NOT DELIVERED: `core/process-catalog/engineering-harness/flip-gate-to-enforce.md`, `core/process-catalog/engineering-harness/graduate-gate-modes.md`, `core/process-catalog/engineering-harness/review-warn-log-drains.md` (no citation to rewrite). **Tier 1 [ADJUST]** — the write set shrinks | Engineering, measured |
+
+## Verification Evidence
+
+### Slice gates
+
+Each gate ran the runner (`bash .claude/hooks/tests/test-runner.sh`) on the default-site layout rebuilt by `bash core/hooks/tests/setup-ci-layout.sh` from the slice's tree, with the suites outside the slice moved out of the layout's tests directory for that run. The runner forwards only FAIL lines, so a slice's red set is read by label.
+
+| Slice | Commit | Gate the slice owes | Reading |
+|---|---|---|---|
+| C0 | `699a9f1a` | stamp manifest; the floor | `verify-stamp OK`; full runner 5446 PASS / 1 FAIL, the one FAIL this spoke's own mid-run interference (§ Verification Plan); binding floor 5447 with 0 FAIL |
+| C1 RED | `0c5628cc` | new position, inverted-mask, near-miss-pairing, post-verdict and cost arms red; must-not-refuse and existing arms green | guard suite 1090 arms: 606 PASS, 484 FAIL, every FAIL a new FSB-* or FSBDIFF-REC-POST arm; 0 existing arms red; FSBDIFF-REC-PRE, -ROWS, -NOMOVE, -DECLARED and the seeded-copy controls green; the SIGPIPE-idiom gate's own script over the delta: clean |
+| C2 refactor | `7afce5a2` | exactly C1's red set; REC-PRE green | 1090 arms: 606 / 484, the red set identical to C1's by label |
+| C3 | `f13e60df` | the slice's arms green, every existing arm green | guard suite 1410: 1118 PASS / 292 FAIL, the remaining red only class 4, class 5 and process-substitution arms, the inverted-mask and five adjacent faces, two cost arms and REC-POST; 0 existing arms red (the re-expressed pins and re-pointed pairs included); GHSA long-input suite 37 / 37 |
+| C4 | `27e78123` | as above | guard suite 1490: 1437 / 53, the remaining red only the process-substitution arms and REC-POST |
+| C5 | `6b2aad1e` | every arm green | guard suite 1506 / 1506; false-positive control 198 / 198; GHSA long-input 37 / 37; fail-closed 75 / 75 |
+| C6 documents | the documents commit | registry, citations, doc links; the classifier arms on the new text | `build-hook-registry.py --check` in sync; `check-registry-currency.sh` 0 FAIL; `check-citation-anchors.sh` 0 findings; the doc-link check over the changed markdown 0 broken; guard suite on the new fragment and registry 1506 of 1506 (the XFORM-DOC and MODEOFF-REC classifiers read the new fragment and registry) |
+
+### C4 self-verification
+
+- **Plan verifier.** `release/tools/verify-release-plan.sh` on this file: 12 PASS, 0 FAIL, 2 SKIP, 0 ERROR over 14 records — AC-1 to AC-5 PASS on their label-presence probes, AC-6 declared-deferred to the final runner, FCM-COVERAGE and FCM-1 to FCM-3 PASS, the provenance label PASS, PROV-DELTA SKIP (no Stage 4 comment supplied).
+- **Registry and citations.** As in the C6 row; the eight process-catalog line anchors into the registry resolve to the same six lines before and after the regeneration (DEV-12).
+- **Final full runner.** Read at the final head after this commit, in the checkout-site layout with no source edit and no probe file in the layout while it ran; its AGGREGATE is recorded in the pull request's Verification Evidence and in the Stage 6 output comment, against the floor above.
+- **Sync (C3): N/A for an agent.** The deployed hook tree and the deployed rules mirror are refreshed by the operator at Stage 12 (`docs/scripts/setup-workspace.sh --refresh-hooks`, which has no agent-invocable allowlist row, and `./deploy.sh --deploy`); the hub then reads Check 79.
+- **Deliverable state.** The guard, its suites, its fragment and the registry: `deployed-copy-synced`, the propagation owned by the Stage 12 operator refresh. `core/ADRs/ADR-242-fs-boundary-second-pass-reads-skipped-operands.md`: `artifact-accepted` — Artifact-Acceptance Record: the record exists at its canonical path on the release branch with `status: Proposed`; acceptance is its Stage 13 ratification.
+- **ADR index: N/A** — this release adds no record under `release/ADRs/` (its record is under `core/ADRs/`, whose README has no projector).
+- **Skill packages: N/A** — the full write set, piped to `build-skill-packages.sh --skills-for-paths` on stdin, names no skill (control: a release skill's `SKILL.md` names that skill).
+- **Runtime-suite event.** The runtime suite for this change is the hook harness; its readings are the rows above and the final runner. The `test-run` event row lives in the operator-instance pipeline event log, which this worktree session does not write; the hub emits it from this record.
+
+## Change Description
+
+### Outcome
+
+The filesystem-boundary guard (`core/hooks/block-fs-boundary.sh`, BLOCK-FS-BOUNDARY-001 and -002) now examines a listed read or write verb's operand at six command positions where its token walk never handed the operand over: after a redirection operator that carries an ampersand, on a continuation line, with the verb word written in quotes, behind a listed prefix word while an unbalanced quote switches the shared canonicalizer off, after a redirection operator that carries a pipe, and after a process substitution. An out-of-root literal operand there is refused under the plain form's rule at `enforce` and recorded at `warn`, as at the head of a command; the in-root twin stays admitted. It does this with an add-only second pass that runs after every first-pass verdict, so it can only add a refusal or a record.
+
+### Issues resolved
+
+| # | Outcome | Status |
+|---|---|---|
+| #8547 | All six positions refused under `-001`/`-002` with one record, each beside a copy of the hook whose reading is off; the in-root twins admitted; a verb at a plain command start hidden by an inverted quote mask closed on this guard too; zero refuse-to-allow movements in the suite's recorded-verdict differential; one declared, pinned residual (a `case` inside a process-substitution body whose subject holds a quoted blank) | DONE (residual for the Stage 9 GO) |
+
+### Key decisions
+
+- **Design B, add-only second pass, guard-local** (Stage 5 D-S1, signed off at Phase B): the shared canonicalizer is run unchanged on transformed copies of the command, so no other consumer's verdict moves; the first pass's lines are byte-identical where the suite keys on them.
+- **Completion is proven, not inferred** (D-S12, the Phase B ruling's scope): one command substitution with errexit re-armed, flag-checked helpers, a counted header on the walk's input, a completion line printed last; a reading that does not complete is refused at `enforce` and, at `warn`, stands down with an `INPUT-NOT-EVALUATED` warn-log record.
+- **Close both unbalanced-quote faces here** (Phase B D2): the scanner-repair reading on its shape trigger and the mask-free reading under its original gate; the canonicalizer scanner card for its other consumers is held for the Stage 9 filing step.
+- **Here-document body over-block accepted** (Phase B D3), read in the warn-mode shakedown before any flip.
+- **Structural blast-radius tier accepted** with the Stage 5 content triage (Phase B D4).
+- **The GHSA long-input suite's old-shape copy runs with the second pass off** (the recorded `MATCHER-SHAPE` determination, Tier 1 [ADJUST], DEV-2): `matches()` is unchanged, and the arm then reads the matcher alone.
+- **Pins that flip are re-expressed in the commit that flips them** (D-S10, Tier 1 [ADJUST], DEV-5): `XFORM-POS-03` and `-04` became refusals at G2 under `-003` in the redirection-and-continuation slice, each paired through the copy whose reading is off.
+
+### What the suite now holds
+
+- 1506 arms in the guard's suite (322 before): a recorded-verdict corpus of 1048 rows — 117 position forms across four verb roles and both sides (936 rows) and 112 explicit rows for the inverted-mask and adjacent faces, the case residual, the must-not-refuse shapes, a breadth sample and the here-document rows — with a pin and a near-miss pin for two roles of every position form the pre-fix hook admits.
+- Each reading has a one-line off switch, and a shape-guarded copy with that reading off reopens exactly the positions it serves; five injection copies prove a reading that does not complete is refused at `enforce` and stands down with its record at `warn`.
+- Two cost arms hold the second pass's multiple flat across size and two 160 KB refusals inside the suite's budget.
+
+### Reversibility
+
+MODERATE / Confidence HIGH — revert the merge on `main`, then the operator refreshes the deployed hook tree; before merge each slice reverts as one commit, each reading has a one-line off switch, and the second pass as a whole has one.
+
+### Downstream impact
+
+- The cards #8836 and #8837 re-baseline against this merged guard (merge order: this release first); the ADR names the canonicalizer's opt-in view seam as the lift-up path for these readings, owned by the shared-walk card family.
+- Milestone 449 (`worktree-sessions-reach-in-repo-homes`) regenerates the same registry after this release merges, and re-checks the process-catalog line citations into it.
+- Held for the Stage 9 filing step: the shared canonicalizer scanner card (five scanner-divergence sources), the separate-word redirection target, the first pass's walk read with no completion line, and the partially quoted prefix word; and the process-substitution case residual, which reaches the operator at the Stage 9 GO with a named successor owner.
+- The deployed hook tree is refreshed by the operator at Stage 12; the hub then reads Check 79.
+
+### Cross-references
+
+- Release plan: this file (`release/releases/plans/fs-boundary-judges-every-listed-verb-operand_RELEASE_PLAN.md`).
+- Milestone: `fs-boundary-judges-every-listed-verb-operand`.
+- Decision record: `core/ADRs/ADR-242-fs-boundary-second-pass-reads-skipped-operands.md` (`Proposed`).
+- User-facing release notes: authored at Stage 13 under `release/releases/notes/`.
