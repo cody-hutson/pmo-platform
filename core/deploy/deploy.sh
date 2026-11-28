@@ -2832,9 +2832,9 @@ _de_release_rows() {
 #                              nothing), not a benign absence, so the caller flags it.
 #     CLEAN <n>                n in-scope release(s), every asserted class present
 #     INCOMPLETE <f> <n>       f finding(s) across n checked release(s)
-#   $1 = surface: accepted for signature parity with the other _cNN_compute_verdict
-#   bodies. There is no network anchor here (the whole predicate is corpus + operator-
-#   instance file reads), so the verdict is surface-invariant.
+#     UNRESOLVED <reason>      the event-log path was refused by the resolver: a broken
+#                              control, never a SKIP; each caller's fail-closed arm takes it
+#   $1 = surface: signature parity only; no network anchor, so the verdict is surface-invariant.
 #   Fixture overrides mirror the CC_* convention: DE_LOG / DE_RELEASE_LOG / DE_ASSERTED /
 #   DECISION_EMISSION_CUTOVER_SLUG. --self-test drives them at a sandbox; the live
 #   operator log is NEVER written by this gate (it is read-only).
@@ -2843,8 +2843,8 @@ _de_compute_verdict() {
   local de_rlog="${DE_RELEASE_LOG:-release/releases/RELEASE_LOG.md}"
   local de_asserted="${DE_ASSERTED:-core/deploy/allowlists/decision-emission-asserted-set.txt}"
   local de_cutover="${DECISION_EMISSION_CUTOVER_SLUG:-decision-telemetry-emission}"
-  local de_log="${DE_LOG:-}"
-  [[ -n "$de_log" ]] || de_log="$(pmo_evals_results_path)/pipeline-event-log.md"
+  local de_log="${DE_LOG:-}" de_unresolved=0
+  [[ -n "$de_log" ]] || { de_log="$(pmo_evals_results_path --repo "$PWD")" || de_unresolved=1; de_log="${de_log:+$de_log/pipeline-event-log.md}"; }
 
   # Dormant sentinel — asserted FIRST (the safe default), mirroring _cc_compute_verdict.
   if [[ "$de_cutover" == "__none__" ]]; then
@@ -2875,7 +2875,7 @@ _de_compute_verdict() {
     return 0
   fi
   if [[ ! -f "$de_log" ]]; then
-    printf 'SKIP no event log at %s (operator-instance state — fresh install / CI; nothing to assert)\n' "$de_log"
+    if [[ "$de_unresolved" -eq 1 ]]; then printf 'UNRESOLVED the event-log path did not resolve: core/deploy/lib-instance-path.sh refused it (its line is on stderr) — a broken control, not a fresh install; nothing was measured\n'; else printf 'SKIP no event log at %s (operator-instance state — fresh install / CI; nothing to assert)\n' "$de_log"; fi
     return 0
   fi
 
@@ -10439,11 +10439,11 @@ cmd_check() {
   # (append-pipeline-event.sh) — drift indicates a direct edit that bypassed
   # schema validation.
   # Sub-checks:
-  # 19a presence — THREE distinct outcomes, split by ownership class (#4051):
+  # 19a presence — FOUR distinct outcomes, split by ownership class (#4051):
   #     · tracked schema doc unresolvable → fail-loud as a PATH-RESOLUTION
   #       FAILURE (asserted first + unconditionally; deterministic in CI)
   #     · operator-instance log/write-log absent → SKIP, no flag, no drift claim
-  #       (legitimately absent on a fresh install and in CI)
+  #       (absent on a fresh install and in CI); its path REFUSED → flagged, never a SKIP
   #     · all three present → 19b + 19c assert
   # 19b row-count parity — data-row count in log file == data-line count in
   #     write-log (one write-log line per appended row; both grow together)
@@ -10469,7 +10469,7 @@ cmd_check() {
     # 19b and 19c never ran there. A new 19b/19c finding on such an instance after
     # upgrading is a PRE-EXISTING condition this check can finally see, not a
     # regression introduced by the path change.
-    local c19_evals_dir="$(pmo_evals_results_path)"
+    local c19_evals_dir="" c19_unresolved=0; c19_evals_dir="$(pmo_evals_results_path --repo "$PWD")" || c19_unresolved=1
     local c19_log="$c19_evals_dir/pipeline-event-log.md"
     local c19_write_log="$c19_evals_dir/pipeline-event-log-write.log"
     # Class B — tracked repo doc. Committed, so it resolves in every checkout.
@@ -10493,9 +10493,9 @@ cmd_check() {
     # in CI, so hard-failing would break both. The emission is deliberately
     # DISTINCT from the fail-loud above — collapsing the two into one warn is what
     # made "this control is disabled" typographically identical to "there is
-    # nothing to check yet". The resolved path is printed so a mis-resolution is
-    # visible even on the SKIP path.
-    if [[ ! -f "$c19_log" ]]; then
+    # nothing to check yet". A refused path is flagged; a resolved one is printed even on a SKIP.
+    if [[ "$c19_unresolved" -eq 1 ]]; then flag_warn_or_issue "pipeline-event-log-integrity" "path-resolution failure: core/deploy/lib-instance-path.sh refused the event-log path (its line is on stderr) — a BROKEN CONTROL, not an absent log; 19b and 19c are not evaluated"
+    elif [[ ! -f "$c19_log" ]]; then
       log "  SKIP:  no event log at $c19_log (operator-instance state — fresh install / CI; nothing to assert)"
     elif [[ ! -f "$c19_write_log" ]]; then
       log "  SKIP:  no write-log at $c19_write_log (operator-instance state — fresh install / CI; nothing to assert)"
