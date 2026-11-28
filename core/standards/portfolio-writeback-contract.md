@@ -55,7 +55,7 @@ The per-project rollup entity (`[Project]_Rollup.md`, templated at [`../../opera
 
 > **age = `today − last_published`, in BUSINESS days.**
 
-The anchor is `today` (the current date at composition), **not** `max(last_published)` across projects. The fixed-`--as-of` form is scoped **only** to the composer's `--self-test` fixture (which pins a deterministic date so the fixture output is reproducible); in production the composer is invoked with **`--as-of=today`**. `weekly-status-rollup` Section 6 passes `--as-of=today` and, on an install that holds a Portfolio record, `--portfolio <served portfolio_id>` at the projects root (§7).
+The anchor is `today` (the current date at composition), **not** `max(last_published)` across projects. The fixed-`--as-of` form is scoped **only** to the composer's `--self-test` fixture (which pins a deterministic date so the fixture output is reproducible); in production the composer is invoked with **`--as-of=today`**. `weekly-status-rollup` Section 6 passes `--as-of=today` and, on an install that holds an active Portfolio record, `--portfolio <served portfolio_id>` at the projects root (§7).
 
 **Unit is business days** (the calendar-vs-business-day ambiguity is resolved here to business days, uniformly):
 
@@ -114,7 +114,7 @@ Two mappings are deliberately **not 1:1** and both are stated rather than smooth
 
 **Emit (ppm-agent).** `ppm-agent` maintains the Project entity, runs the daily processing cycle, and is the emitter for entity-lifecycle transitions. On its scheduled cadence it emits / refreshes the per-project rollup entity per this contract — **READING** each source entity (§2) and staging its value into the rollup field, never re-deriving an authoritative value the source entity owns. The emission rides the existing `TRACKER_UPDATE` carrier (`../../operations/skills/ppm-agent/SKILL.md` § 8.7 / § 8.8) — no new mechanism. The evidence gate binds unchanged: a source value that is `[ASSUMPTION – CONFIRM]` is surfaced as a "Decisions needed" line, not emitted.
 
-**Consume (weekly-status-rollup).** `weekly-status-rollup` Section 6 CONSUMES the per-project rollup entity and composes the `PORTFOLIO.md` sections (§4) from the contract fields rather than re-deriving each field. In production the deterministic composer is invoked with `--as-of=today` (§3) and, on an install that holds a Portfolio record, `--portfolio <served portfolio_id>` (§7), honors the `[STALE]` marker, and stages the result for the Cowork writer at the Section-6 human checkpoint.
+**Consume (weekly-status-rollup).** `weekly-status-rollup` Section 6 CONSUMES the per-project rollup entity and composes the `PORTFOLIO.md` sections (§4) from the contract fields rather than re-deriving each field. In production the deterministic composer is invoked with `--as-of=today` (§3) and, on an install that holds an active Portfolio record, `--portfolio <served portfolio_id>` (§7), honors the `[STALE]` marker, and stages the result for the Cowork writer at the Section-6 human checkpoint.
 
 ## §6 Cutover & provenance
 
