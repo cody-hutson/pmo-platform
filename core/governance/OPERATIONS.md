@@ -513,7 +513,7 @@ A consumer asking "what is the effective value of field `F` for scope `S`?" reso
 | Rung | Precedence | Surface | Layer |
 |---|---|---|---|
 | 1 | lowest | global default — `platform-config.toml.template` / `operator.toml.template` | Layer 1 (always present) |
-| 2 | ↑ | portfolio override — `projects/_config/PORTFOLIO.md` frontmatter `platform_config: {...}` | Layer 2 (optional) |
+| 2 | ↑ | portfolio override — frontmatter `platform_config: {...}` of the scope's portfolio's composed file (`projects/_config/<portfolio_id>/PORTFOLIO.md`; `projects/_config/PORTFOLIO.md` on an install with no Portfolio record) | Layer 2 (optional) |
 | 3 | ↑ | program override — `projects/<Program>/_config/program-config.toml` | Layer 2 (optional) |
 | 4 | ↑ | project override — `projects/<Project>/PROJECT.md` frontmatter `platform_config: {...}` | Layer 2 (optional) |
 | 5 | **highest** | individual override — `~/.config/pmo-platform/platform-config.toml` `[overrides]` (and `operator.toml` for identity/adapters) | Layer 2 (optional) |
