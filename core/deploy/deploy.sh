@@ -4929,7 +4929,7 @@ build_skill_to_dir() {
 #
 # Rungs read (lowest -> highest precedence; the LAST rung that sets the field wins):
 #   1. global default   <- core/config/platform-config.toml.template (this repo)
-#   2. portfolio        <- $CLAUDE_WORKSPACE_ROOT/projects/_config/PORTFOLIO.md frontmatter (optional)
+#   2. portfolio        <- a composed PORTFOLIO.md's frontmatter (optional) — see the Rung 2 block below
 #   3. program          <- $CLAUDE_WORKSPACE_ROOT/projects/<Program>/_config/program-config.toml (optional)
 #   4. project          <- <project-path>/PROJECT.md frontmatter (optional; arg 2)
 #   5. individual       <- ~/.config/pmo-platform/platform-config.toml (optional)
@@ -4994,8 +4994,28 @@ resolve_platform_config() {
   hit="$(_toml_field "$tmpl" "$field")"
   [ -n "$hit" ] && val="$hit"
 
-  # Rung 2 — portfolio (PORTFOLIO.md frontmatter platform_config block; flat key match).
-  hit="$(_toml_field "${ws_root}/projects/_config/PORTFOLIO.md" "$field")"
+  # Rung 2 — portfolio (a composed PORTFOLIO.md's frontmatter platform_config block;
+  # flat key match). Which file is portfolio-writeback-contract.md § Portfolio
+  # scoping's: projects/_config/PORTFOLIO.md on an install with no Portfolio record,
+  # else one projects/_config/<portfolio_id>/PORTFOLIO.md per portfolio. With no
+  # project path this reader cannot tell portfolios apart, so it reads a per-portfolio
+  # file only when exactly one composed file exists, and none when two or more do —
+  # one composed file's override is never applied while another composed file exists.
+  # It counts composed files, not Portfolio records, so an archived portfolio's folder
+  # counts toward "exactly one". Per-project selection of the rung is not implemented
+  # here yet.
+  local _pf="${ws_root}/projects/_config/PORTFOLIO.md" _pf_c _pf_n=0 _pf_one=""
+  if [ ! -r "$_pf" ]; then
+    for _pf_c in "${ws_root}"/projects/_config/*/PORTFOLIO.md; do
+      [ -r "$_pf_c" ] || continue
+      _pf_n=$((_pf_n + 1)); _pf_one="$_pf_c"
+    done
+    _pf=""
+    if [ "$_pf_n" -eq 1 ]; then
+      _pf="$_pf_one"
+    fi
+  fi
+  hit="$(_toml_field "$_pf" "$field")"
   [ -n "$hit" ] && val="$hit"
 
   # Rung 3 — program (program-config.toml under the project's program dir, if derivable).
@@ -5021,6 +5041,28 @@ resolve_platform_config() {
   [ -n "$hit" ] && val="$hit"
 
   printf '%s' "$val"
+}
+
+# _portfolio_composed_present <ws_root> — true when the portfolio composed file is
+# present in a layout portfolio-writeback-contract.md § Portfolio scoping allows:
+# projects/_config/PORTFOLIO.md (no Portfolio record) or at least one
+# projects/_config/<portfolio_id>/PORTFOLIO.md. One body, two surfaces: Check 4 in
+# cmd_check() and Governance Presence in cmd_report() both call it. Hoisted to top
+# level because --report never enters cmd_check().
+_portfolio_composed_present() {
+  local _ws="$1"
+  [[ -f "${_ws}/projects/_config/PORTFOLIO.md" ]] && return 0
+  _portfolio_folder_file_present "$_ws"
+}
+
+# _portfolio_folder_file_present <ws_root> — true when at least one per-portfolio
+# composed file (projects/_config/<portfolio_id>/PORTFOLIO.md) exists.
+_portfolio_folder_file_present() {
+  local _ws="$1" _c
+  for _c in "${_ws}"/projects/_config/*/PORTFOLIO.md; do
+    [[ -f "$_c" ]] && return 0
+  done
+  return 1
 }
 
 build_full_roster_skills() {
@@ -8452,17 +8494,33 @@ cmd_check() {
       ISSUES=$((ISSUES + 1))
     fi
   done
+  local _ops_label
   for f in "${EXPECTED_OPS[@]}"; do
-    if [[ -f "${_ws_root}/$f" ]]; then
-      log "  OK:    $f"
+    # The PORTFOLIO limb accepts both layouts portfolio-writeback-contract.md
+    # § Portfolio scoping allows (the root file with no Portfolio record, else one
+    # file per portfolio folder) and is labelled with both, so neither outcome names
+    # only the root file — the one that is unlawful beside a Portfolio record.
+    _ops_label="$f"
+    if [[ "$f" == "projects/_config/PORTFOLIO.md" ]]; then
+      _ops_label="$f or projects/_config/<portfolio_id>/PORTFOLIO.md"
+    fi
+    if { [[ "$f" == "projects/_config/PORTFOLIO.md" ]] && _portfolio_composed_present "$_ws_root"; } \
+       || [[ -f "${_ws_root}/$f" ]]; then
+      log "  OK:    $_ops_label"
     else
       # Name the root that was searched. A bare "MISSING" cannot distinguish an
       # absent file from a mis-resolved root, which is the defect this block
       # just carried.
-      log "  MISSING: $f (searched under ${_ws_root})"
+      log "  MISSING: $_ops_label (searched under ${_ws_root})"
       ISSUES=$((ISSUES + 1))
     fi
   done
+  # Advisory, no counter: the root file beside a per-portfolio file is the
+  # unmigrated layout every portfolio-level surface stops on. Check 4 cannot read
+  # Portfolio records, so it reports the coexistence it can see.
+  if [[ -f "${_ws_root}/projects/_config/PORTFOLIO.md" ]] && _portfolio_folder_file_present "$_ws_root"; then
+    log "  WARN:  projects/_config/PORTFOLIO.md exists beside a per-portfolio composed file — move it into its portfolio's folder (portfolio-writeback-contract.md § Portfolio scoping)"
+  fi
 
   # Check 5 — Skill-roster drift detection (per the skill-roster discipline §1.2)
   # Asserts (a) every directory under <module>/skills/ is registered in one
@@ -23117,7 +23175,8 @@ cmd_report() {
     projects/_config/CORRECTIONS.md
   )
   for f in "${EXPECTED_ENGINEERING[@]}" "${EXPECTED_OPS[@]}"; do
-    if [[ -f "$f" ]]; then
+    if { [[ "$f" == "projects/_config/PORTFOLIO.md" ]] && _portfolio_composed_present "${CLAUDE_WORKSPACE_ROOT:-$HOME/Claude}"; } \
+       || [[ -f "$f" ]]; then
       echo "[PASS] $f"
       PASS=$((PASS + 1))
     else

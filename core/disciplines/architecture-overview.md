@@ -280,7 +280,7 @@ The deploy flow above propagates changes *within* a checkout; acquiring the plat
 | OPERATIONS.md | core/governance/ | Git | Behavioral rules for operational skills |
 | RELEASE_PROTOCOL.md | core/governance/ | Git | Release lifecycle and change management |
 | RELEASE_LOG.md | core/governance/ | Git | Version history |
-| PORTFOLIO.md | projects/_config/ | Local (git-ignored) | Cross-project health snapshot |
+| PORTFOLIO.md | projects/_config/<portfolio_id>/ (one per portfolio; projects/_config/ with no Portfolio record) | Local (git-ignored) | Cross-project health snapshot |
 | SESSION_STATE.md | projects/_config/ | Local (git-ignored) | Session handoff state |
 | CORRECTIONS.md | projects/_config/ | Local (git-ignored) | Active behavioral redirects |
 

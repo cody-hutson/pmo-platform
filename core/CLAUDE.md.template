@@ -49,7 +49,7 @@ Claude/
 │   └── packages/                ← Compiled .skill packages (one per deployed skill)
 ├── projects/                    ← Operations domain (git-ignored)
 │   ├── _config/                 ← Program-scoped operational files
-│   │   ├── PORTFOLIO.md         ← Cross-project health snapshot
+│   │   ├── PORTFOLIO.md         ← Cross-project health snapshot (with Portfolio records: one per portfolio, in <portfolio_id>/)
 │   │   ├── SESSION_STATE.md     ← Phase handoff between sessions
 │   │   ├── CORRECTIONS.md       ← Active behavioral redirects
 │   │   └── releases/            ← Pre-git release plans (frozen)
@@ -75,7 +75,7 @@ Read context in order of specificity. More-specific files override less-specific
 | 1.8 (Cross-account handoff) | projects/_config/SWAP_HANDOFF.md | Work-context bridge across account-switcher swaps; metadata + pointers only (no PII/content) | Auto-written at swap boundary by account-switcher harness |
 | 2 (Program) | pmo-platform/core/governance/OPERATIONS.md | PMO protocols, skills, cross-project rules | When protocols evolve |
 | 3 (Project) | [Project]/PROJECT.md | Phase, team, dates, systems, artifacts | Per processing cycle |
-| 4 (Portfolio) | projects/_config/PORTFOLIO.md | Cross-project health, resource conflicts | After any project state change |
+| 4 (Portfolio) | the served portfolio's PORTFOLIO.md — projects/_config/<portfolio_id>/PORTFOLIO.md, or projects/_config/PORTFOLIO.md with no Portfolio record | Cross-project health, resource conflicts | After any project state change |
 
 The read order above governs *which* file wins on a shared claim. For the cross-surface read-vs-write decision — which surface owns a fact, and whether a given surface is read-only / auto-write / operator-write-only — consult `pmo-platform/core/disciplines/memory-architecture.md` (the unified memory contract).
 
@@ -88,7 +88,7 @@ Every governance file has a defined placement tier, location, and rationale. Thi
 | Workspace-global | `Claude/` | Universal rules that apply regardless of work area | CLAUDE.md |
 | Program-scoped (governance) | `pmo-platform/core/governance/` (OPERATIONS.md); `pmo-platform/release/governance/` (RELEASE_PROTOCOL.md); `pmo-platform/release/releases/` (RELEASE_LOG.md) | Authoritative governance source, git-tracked. Shared across all projects. | OPERATIONS.md, RELEASE_PROTOCOL.md, RELEASE_LOG.md |
 | Program-scoped (roadmaps) | `/roadmaps/` (shipped in-repo home — folder + README tracked, instances git-ignored; the default the `<OPERATOR_INSTANCE_ROADMAPS_PATH>` token resolves to, repointable per deployment) | Initiative-roadmap *instances* authored here (git-ignored) per ADR-012 (not tracked) + ADR-046 (location); the *framework* (`core/standards/initiative-roadmap-framework.md`) defines the convention. Each roadmap states a Capability Outcome, Now/Next/Later sequence, and Sunset Criteria. | (git-ignored instances) |
-| Program-scoped (ops config) | `projects/_config/` | Cowork-owned operational config. Session state, platform-wide corrections, portfolio health. Account-switcher harness writes SWAP_HANDOFF.md here at swap boundary). `CORRECTIONS.md` here is narrowed to **platform-wide** redirects only; project-scoped redirects live in `[Project]/CORRECTIONS.md` (Project-scoped row below). | PORTFOLIO.md, SESSION_STATE.md, CORRECTIONS.md, SWAP_HANDOFF.md, releases/ |
+| Program-scoped (ops config) | `projects/_config/` | Cowork-owned operational config. Session state, platform-wide corrections, portfolio health. Account-switcher harness writes SWAP_HANDOFF.md here at swap boundary). `CORRECTIONS.md` here is narrowed to **platform-wide** redirects only; project-scoped redirects live in `[Project]/CORRECTIONS.md` (Project-scoped row below). | PORTFOLIO.md (one per portfolio in `<portfolio_id>/` once Portfolio records exist), SESSION_STATE.md, CORRECTIONS.md, SWAP_HANDOFF.md, releases/ |
 | Program-scoped (analysis) | `<OPERATOR_INSTANCE_ANALYSIS_PATH>/<audit-name>-YYYY-MM-DD/` (in-repo **git-ignored** workspace — the empty folder + its README ship tracked; all analysis content is git-ignored, never committed; per `core/standards/analysis-workspace-standard.md`) | Read-once engineering analysis artifacts — audits, reviews, gap analyses, research, design (release/backlog analysis about the platform; NOT projects/other). Inform governance changes but are not themselves governance. Each audit gets its own dated subfolder; each artifact carries the analysis frontmatter (open `analysis_type`) + obeys the sunset rule. | tree-audit-2026-04-18/, skill-review-2026-04-18/ |
 | Program-scoped (release notes) | `pmo-platform/release/releases/notes/` | User-facing release notes for non-technical platform users; one per release, version-keyed, plain-language per [`pmo-platform/release/references/standards/release-notes-standard.md`](/release/references/standards/release-notes-standard.md). Distinct from `RELEASE_LOG.md` (engineering audit trail) and `releases/plans/` (implementation audit trail). Established by . | vX.Y_RELEASE_NOTES.md |
 | Program-scoped (knowledge reference) | `pmo-platform/core/` | K1 codified-knowledge corpus — universal reference docs, schemas, standards, protocols. The knowledge-tier classification (K1–K5), universality/authorship axes, and placement model are defined in [knowledge-architecture.md](/core/disciplines/knowledge-architecture.md). | knowledge-architecture.md, architecture-overview.md, operating-model.md, schemas/, standards/, pipeline/, references/reference/claude-code-runtime-state.md |
@@ -124,7 +124,7 @@ The operations domain (`projects/`, Layer-2, git-ignored) is organized into thre
 
 | Tier | Classifier (frontmatter) | Physical home | Instance slug |
 |---|---|---|---|
-| **Portfolio** | `portfolio_id` | `projects/_config/` | kebab-case, lowercase |
+| **Portfolio** | `portfolio_id` | `projects/_config/` — the Portfolio record in it or in one folder below it; each portfolio's composed `PORTFOLIO.md` in `projects/_config/<portfolio_id>/`, an output home keyed by the slug, **not** a classifier | kebab-case, lowercase |
 | **Program** | `program_id` (on the Program record; and the component→program link on each member Project) | `projects/_config/` — the Program record is embedded in its parent config (`persistence_mode: embedded-in-parent`); **no dedicated program folder** | kebab-case, lowercase |
 | **Project** | `project_id` | `projects/[Project]/` | `id` = kebab-case; folder display name = Title-case |
 
@@ -157,7 +157,7 @@ This table lists **cross-domain** bridges only — a file earns a row when one d
 
 | File | Path | Cowork Role | Claude Code Role |
 |------|------|-------------|-----------------|
-| PORTFOLIO.md | `projects/_config/PORTFOLIO.md` | Writes project health data | Reads for context only |
+| PORTFOLIO.md (one per portfolio) | `projects/_config/<portfolio_id>/PORTFOLIO.md`; `projects/_config/PORTFOLIO.md` with no Portfolio record | Writes project health data | Reads for context only |
 
 ### Classification Rule
 

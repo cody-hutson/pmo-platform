@@ -184,7 +184,7 @@ A [Task](../specs/terminology-glossary.md#term-task) (sub-task GitHub Issue) is 
 | Release working state | `release/releases/plans/<slug>_RELEASE_PLAN.md` (slug-primary / pre-claim; renamed to `vX.Y_RELEASE_PLAN.md` at the Stage-12 claim) | Current release's plan + deviation log + verification evidence | Sessions within a release |
 | Cross-release audit trail | `<OPERATOR_INSTANCE_RELEASE_LOG_PATH>` | Shipped releases' permanent record | Forever |
 | Project operating state | `projects/<project>/PROJECT.md` | Active project context | Project lifetime |
-| Portfolio state | `projects/_config/PORTFOLIO.md` | Cross-project health | Continuously |
+| Portfolio state | `projects/_config/<portfolio_id>/PORTFOLIO.md` (one per portfolio; `projects/_config/PORTFOLIO.md` with no Portfolio record) | Cross-project health | Continuously |
 
 **Cross-reference contracts:**
 - Any stage that produces durable state MUST name its authoritative file (per each `pipeline/stage-NN-*.md` § 6 Outputs).
