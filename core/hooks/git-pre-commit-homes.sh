@@ -28,14 +28,15 @@
 #          could not read the index, the tree or the commits, or an id is not a commit or tag.
 # POSTURE. Fails closed. It reads no mode dial: git-pre-commit-pii.mode never reaches it.
 #          CLAUDE_HOOK_BYPASS is read by its callers, never here, and they treat its two
-#          inputs differently (the decision record commit-time-home-guard-runs-under-hook-
-#          bypass, ADR-242). git-pre-commit-pii.sh runs the STAGED read before its own bypass
-#          exit, so the commit-time check runs whether or not the bypass is set; this is the
-#          one exception to the uniform bypass convention. The push-time read (--commits)
-#          sits after that exit, and git-pre-push-pii.sh exits on the bypass before it runs
-#          the PII guard at all, so the push-time check honours the bypass. A person's last
-#          resort at commit time is git commit --no-verify, which BLOCK-DESTRUCTIVE-024
-#          refuses to agents.
+#          inputs differently (decision record ADR-242,
+#          commit-time-home-guard-runs-under-hook-bypass). git-pre-commit-pii.sh runs the
+#          STAGED read before its own bypass exit, so the commit-time check runs whether or
+#          not the bypass is set: an exception to the uniform bypass convention, and the only
+#          check in either PII git hook the bypass does not skip. The push-time read
+#          (--commits) sits after that exit, and git-pre-push-pii.sh exits on the bypass
+#          before it runs the PII guard at all, so the push-time check honours the bypass. A
+#          person's last resort at commit time is git commit --no-verify, which
+#          BLOCK-DESTRUCTIVE-024 refuses to agents.
 # LAYERS.  The local hook layers (this guard at pre-commit and at pre-push) are the only
 #          layer before publication. The In-repo home content gate reads a pull request's
 #          merge tree, so it keeps home content off main, but it runs after the branch is

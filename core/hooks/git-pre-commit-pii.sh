@@ -47,20 +47,22 @@
 # in-repo git-ignored home other than its README, and reads no mode dial: the .mode setting
 # below never reaches it. Not found beside this hook, the commit or push is refused.
 #
-# THE ONE EXCEPTION TO THE BYPASS. The staged home read runs ahead of this hook's
+# THE HOME CHECK RUNS UNDER THE BYPASS. The staged home read runs ahead of this hook's
 # CLAUDE_HOOK_BYPASS exit, on git's own no-argument invocation, so the commit-time home check
-# runs whether or not the bypass is set. The bypass still skips every PII scan here. The
-# --commits home read sits after the exit, and git-pre-push-pii.sh exits on the bypass before
-# it runs this hook, so the push-time home check honours the bypass. The operator's escape
-# hatch at commit time is git commit --no-verify, which BLOCK-DESTRUCTIVE-024 refuses to
-# agents. Decision record: ADR-242 (commit-time-home-guard-runs-under-hook-bypass).
+# runs whether or not the bypass is set: an exception to the uniform bypass convention, and
+# the only check in either PII git hook the bypass does not skip. The bypass still skips
+# every PII scan here. The --commits home read sits after the exit, and git-pre-push-pii.sh
+# exits on the bypass before it runs this hook, so the push-time home check honours the
+# bypass. The operator's escape hatch at commit time is git commit --no-verify, which
+# BLOCK-DESTRUCTIVE-024 refuses to agents. Decision record: ADR-242
+# (commit-time-home-guard-runs-under-hook-bypass).
 #
 # Install:  wired as the repo's pre-commit hook by docs/scripts/setup-workspace.sh
 #           (install, and update.sh via --refresh-hooks); validate-install.sh A3d
 #           reports it missing. Manual form, from the repo root:
 #           ln -s ../../core/hooks/git-pre-commit-pii.sh "$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit"
 # Bypass:   CLAUDE_HOOK_BYPASS=1 git commit ... skips the PII scan; the in-repo home guard's
-#           commit-time read still runs (see "THE ONE EXCEPTION TO THE BYPASS" above)
+#           commit-time read still runs (see "THE HOME CHECK RUNS UNDER THE BYPASS" above)
 # Needles:  resolved by core/deploy/lib-instance-path.sh (pmo_localized_needles);
 #           default <instance-dir>/localized-context-needles.txt. PMO_LOCALIZED_NEEDLES /
 #           PMO_INSTANCE_PATH add a second list; they never replace the first (see
