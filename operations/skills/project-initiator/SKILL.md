@@ -2,7 +2,7 @@
 name: project-initiator
 description: >
   Manages the full project lifecycle — scaffolding new projects, migrating existing ones onto the current target states, and closing completed ones. Modes: Initiation (creates folder structure, populates PROJECT.md, updates PORTFOLIO.md) · Closure (finalizes trackers, produces closure summary, archives) · Migration (moves an existing project onto the entity-first target states). Triggers: "new project", "start project", "kick off [project]", "close project", "archive project", "project closure", "wrap up [project]", "migrate this project", "move this project onto the new structure", "this project is on the old folder layout."
-version: v4.37
+version: v6.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -26,6 +26,9 @@ never fabricate stakeholders, dates, technical details, or scope items.
 ## Operating Principles
 
 **Template-protocol consumption.** When scaffolding a project from a template (e.g., `project-md-template.md`), consult `core/standards/template-protocol.md` for the T1-T5 trigger evaluation and the lifecycle state machine. New project-scaffolding templates must pass P1-P5 promotion gates before canonical placement under `operations/templates/`. See [`OPERATIONS.md § Template Protocol`](../../OPERATIONS.md).
+
+- **Which `PORTFOLIO.md`.** A project registers with, and closes out of, its own portfolio — the one its `portfolio_id` names; on a single-portfolio install, the only portfolio when the project names it or names none; with no Portfolio record, the install's one unscoped file, unless the projects name two or more portfolios, when the skill stops and names the Portfolio records to create (`portfolio-writeback-contract.md` § Portfolio scoping). In this skill `PORTFOLIO.md` means that portfolio's composed file — `projects/_config/<portfolio_id>/PORTFOLIO.md`, or `projects/_config/PORTFOLIO.md` with no Portfolio record — and every mention below reads that way. A project is never written into another portfolio's file, and while `projects/_config/PORTFOLIO.md` exists beside a Portfolio record the skill stops and names the move rather than registering anywhere.
+- **Portfolio move.** Moving a project to another portfolio is a re-registration, not a closure of the project: change `portfolio_id` in its `PROJECT.md`; remove its row from the old portfolio's composed file (Step B6's composed-file update only — no other closure step runs); add it to the new portfolio's composed file (Steps 5 and 5a); then have ppm-agent re-emit its rollup. Until the rollup is re-emitted, the composer holds it out of both portfolios.
 
 ## Mode Selection
 
@@ -86,12 +89,14 @@ required fields (max 5 questions — everything else becomes `ASSUMPTION – CON
 - Phase timeline (if already defined)
 - Additional stakeholders beyond the minimum three
 - Project terminology — domain shorthand, workstream names, and internal labels the team uses in its documents. Seeds the PROJECT.md `## Routing Signals` Terminology line (Step 3); the durable home is the `Key Terms Glossary.csv` scaffolded at Step 4.
+- **Portfolio** (`portfolio_id`) — the portfolio this project belongs to. **Required when the install holds two or more active portfolios** (`portfolio-writeback-contract.md` § Portfolio scoping); otherwise optional: with one, an omitted value means the only portfolio; with none, the project is unscoped.
 
 ## Execution Steps
 
 ### Step 1: Validate Inputs
 
 1. Confirm all 8 required inputs are present
+1a. **Portfolio.** Count the distinct active `portfolio_id` values among the Portfolio records under `projects/_config/`. With two or more, a Portfolio input is required — ask for it, listing them; a project is never scaffolded unassigned. A supplied value must name an active record; otherwise halt and re-prompt. The required set in item 1 stays 8; this input is conditional.
 2. Validate the governance model is one of: Agile, Waterfall, Hybrid
 3. Validate day-of-week for the go-live date
 4. If Agile or Hybrid, confirm Jira Project Key is provided
@@ -246,7 +251,7 @@ without this value a newly-scaffolded PROJECT.md is born missing one. `lifecycle
 FILE/NODE content-maturity axis; the Project ENTITY's Axis-1 carrier is `status` (project-schema.md §3b,
 entity-field-schemas.md V-PRJ-03) — the inline `**Status:**` line, which stays inline and distinct. The
 entity-record keys are NOT in this block; they are seeded by the project-schema.md §7 Entity-Seeding
-Protocol, not written at scaffold time.
+Protocol, not written at scaffold time. One exception: when the Portfolio input is supplied, write `portfolio_id: <id>` into the frontmatter at scaffold, because every portfolio-level surface selects on it — on a multi-portfolio install a project scaffolded without it would be unassigned, in no portfolio's output, until seeding ran; the seeding protocol's add-absent-keys-only rule never overwrites it. Write it as the bare slug with no inline comment on the line: a trailing `# …` is part of the value to the shared frontmatter reader, and a polluted key holds the project out of every portfolio's output.
 
 ### Step 4: Generate Starter Artifacts
 
@@ -276,9 +281,9 @@ Status framework templates:
 7. `[Project]_Daily_Status_Update_Framework.md` — Phase-appropriate prompt templates for AM/PM updates
 8. `Executive_Status_Report_Prompt.md` — Leadership report prompt template
 
-### Step 5: Update PORTFOLIO.md
+### Step 5: Register with the project's portfolio
 
-Read `projects/_config/PORTFOLIO.md`. Add the new project:
+Read the project's portfolio's composed file; create it from the same section shape in that portfolio's folder when it does not exist yet, but never while `projects/_config/PORTFOLIO.md` exists beside a Portfolio record. Add the new project there and nowhere else:
 
 1. Increment `Active Projects` count
 2. Add row to Portfolio Health Summary table with initial health = 🟢 GREEN
@@ -293,7 +298,7 @@ Read `projects/_config/PORTFOLIO.md`. Add the new project:
 
 After updating PORTFOLIO.md (Step 5), validate the write before proceeding:
 
-1. **Re-read PORTFOLIO.md** and locate the new project entry
+1. **Re-read the project's portfolio's composed file** and locate the new project entry
 2. **Field completeness check:** Verify all required fields are populated:
    - Project name matches folder name
    - Health indicators present (initialized to 🟢)
@@ -307,8 +312,9 @@ After updating PORTFOLIO.md (Step 5), validate the write before proceeding:
    - Stakeholder names match
    - Governance model matches
 4. **If discrepancies found:** Auto-correct the PORTFOLIO.md entry and present the diff to the user: "Fixed: PORTFOLIO.md listed go-live as [X] but PROJECT.md says [Y]. Updated to match PROJECT.md."
-5. **If PORTFOLIO.md was not updated** (e.g., write failed or was skipped): Flag as critical: "⚠️ PORTFOLIO.md does not contain an entry for [Project Name]. This must be resolved before proceeding."
+5. **If the project's portfolio's composed file was not updated** (e.g., write failed or was skipped): Flag as critical: "⚠️ [that file's path] does not contain an entry for [Project Name]. This must be resolved before proceeding."
 6. **Record validation result** in the Step 8 summary as: "Portfolio Updated ✓ — [N] fields verified, [M] corrections applied" or "⚠️ Portfolio Update Failed — manual intervention required."
+7. **No cross-registration:** confirm the project's row is in no other active portfolio's composed file — this is the one read of another portfolio's file the skill makes, for this project's row only; if the row is there, remove it and flag it.
 
 ### Step 5b: Routing-Target Registration Check
 
@@ -374,14 +380,14 @@ Produce an ordered list of what to do after scaffold creation:
 3. Schedule project kickoff (if not already scheduled)
 4. Run first PPM Agent processing cycle with any available transcripts
 5. Review and customize the Daily Status Update Framework for this project's meeting cadence
-6. Verify PORTFOLIO.md reflects the new project accurately
+6. Verify the project's portfolio's composed file reflects the new project accurately
 
 ### Step 8: Present Summary
 
 Present the user with:
 1. Folder structure created (tree view)
 2. Files generated (list with purposes)
-3. PORTFOLIO.md changes made
+3. Portfolio registration — `Portfolio: <portfolio_id, or unscoped>`, the composed file's path, the changes made
 4. User Setup Checklist (actionable)
 5. Recommended next steps
 6. Any `ASSUMPTION – CONFIRM` items that need verification
@@ -421,7 +427,7 @@ the project is read-only reference material with a complete audit trail.
 2. Read `3-Operations/` trackers: Daily Status Log, RAID Log, Communications Tracker,
    Open Meetings Tracker, Transcript Register
 3. Inventory the **closed bin set** (`1-Governance/` · `2-Delivery/` · `3-Operations/` · `4-Evidence/` · `5-Reference/`) **and the two transient underscore areas** — `_inbox/`, **including `_inbox/_unsorted/`**, and `_generated/` — for content; note which have artifacts vs. empty. `_inbox/_unsorted/` is named explicitly because it is the population the Step B2 unsorted-hold reconcile and the Step B5 precondition operate on; an inventory that omits it cannot feed them.
-4. Read `PORTFOLIO.md` — confirm project is listed as active
+4. Read the project's portfolio's composed file — confirm the project is listed as active there
 
 If PROJECT.md status is already `CLOSED`, stop and notify user: "This project is already
 marked CLOSED. Do you want to re-run closure (e.g., to regenerate the closure summary)?"
@@ -592,9 +598,9 @@ flowchart TD
 2. Move the entire project folder from `projects/[Project]/` to `projects/Archive/[Project]/`
 3. Verify the move completed (all files present in new location)
 
-### Step B6: Update PORTFOLIO.md
+### Step B6: Update the project's portfolio composed file
 
-Read `projects/_config/PORTFOLIO.md` and update:
+Read the project's portfolio's composed file and update it — never another portfolio's file:
 
 1. Decrement `Active Projects` count
 2. Remove project row from the Portfolio Health Summary table
@@ -609,7 +615,7 @@ Read `projects/_config/PORTFOLIO.md` and update:
 | [Name] | [Date] | [Duration] | [Brief outcome] | projects/Archive/[Name]/ |
 ```
 
-4. Update Cross-Project Dependencies section — remove any dependencies that only involved this project
+5. Update Cross-Project Dependencies section — remove any dependencies that only involved this project
 
 ### Step B7: Generate User Teardown Checklist
 
@@ -641,7 +647,7 @@ Produce a checklist of actions the user must take in parallel systems:
 Present the user with:
 1. Closure Summary produced (with link to file)
 2. Open items finalized (disposition counts: resolved, transferred, accepted)
-3. PORTFOLIO.md changes made
+3. Portfolio composed-file changes made — `Portfolio: <portfolio_id, or unscoped>` and the file's path
 4. Project moved to Archive (new location)
 5. User Teardown Checklist (actionable)
 6. Any items requiring user decision before closure is complete
@@ -1150,12 +1156,12 @@ structural conformance and content quality.
 - **File Router** gains a new PROJECT.md to match against for content-based classification.
 - **PPM Agent** can immediately process artifacts for the new project by reading its PROJECT.md.
 - **Tracker Manager** recognizes the new project's operational trackers by their standard naming.
-- **Daily Status / Weekly Roll-Up** workflows include the new project automatically via PORTFOLIO.md.
+- **Daily Status / Weekly Roll-Up** workflows include the new project automatically, in its own portfolio's runs only, via that portfolio's composed file.
 
 **After Mode B (Closure) completes:**
 - **File Router** stops routing files to this project (PROJECT.md status = CLOSED).
 - **PPM Agent** skips this project in daily processing cycles.
-- **Daily Status / Weekly Roll-Up** exclude the project (removed from PORTFOLIO.md active list).
+- **Daily Status / Weekly Roll-Up** exclude the project (removed from its portfolio's active list).
 - **All skills** can still read archived project data for cross-project reference and lessons learned.
 
 **After Mode D (Migration) completes:**
