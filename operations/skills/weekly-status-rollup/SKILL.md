@@ -2,7 +2,7 @@
 name: weekly-status-rollup
 description: >
   Generates a weekly executive status roll-up across all active projects. Covers project health, key risks, decisions made/pending, and upcoming milestones. Writes back updated health indicators to PORTFOLIO.md. Triggers: "generate the weekly roll-up", "weekly status", "SteerCo prep deck", "executive status", "cross-project health summary", "refresh the health indicators".
-version: v4.10
+version: v6.00
 license: BUSL-1.1
 skill_discipline_migrated_v10_2: true
 ---
@@ -21,6 +21,8 @@ After producing the summary, you write back the synthesized health data to PORTF
 keeping the portfolio dashboard current for downstream consumers (daily-status, project-
 initiator, visualizations).
 
+**Which `PORTFOLIO.md`.** Each run serves one portfolio, chosen by `portfolio-writeback-contract.md` § Portfolio scoping, which places a project by its `portfolio_id`: with no Portfolio record the run is unscoped and covers every active project, as before — unless the projects name two or more portfolios, when it stops and names the Portfolio records to create; with one, a project that names it or names none belongs to it; with two or more, a project belongs to the portfolio its `portfolio_id` names, and a project that names none is unassigned — listed, never rolled up. In this skill `PORTFOLIO.md` means the served portfolio's composed file — `projects/_config/<portfolio_id>/PORTFOLIO.md`, or `projects/_config/PORTFOLIO.md` on an install with no Portfolio record — and every mention below reads that way. A run never reads or writes another portfolio's file, and it stops, naming the move, while `projects/_config/PORTFOLIO.md` still exists beside a Portfolio record.
+
 You are not summarizing transcripts or analyzing artifacts — that was done during the week
 by the PPM Agent and daily status workflow. You are rolling up the results.
 
@@ -28,8 +30,8 @@ by the PPM Agent and daily status workflow. You are rolling up the results.
 
 Read these files in order before generating:
 
-1. **PORTFOLIO.md** — List of all active projects with governance models and key dates
-2. For each active project (every item below is a **tracked-layer** read — see the read-side
+1. **The served portfolio's composed file** — resolve the served portfolio and its member projects per `portfolio-writeback-contract.md` § Portfolio scoping first (by `portfolio_id`); a project outside that set is not read for this roll-up, and an unassigned or unresolved one is listed in the checkpoint below. The file lists the served portfolio's active projects with governance models and key dates.
+2. For each active **member** project of the served portfolio (every item below is a **tracked-layer** read — see the read-side
    aggregation contract that follows):
    a. **PROJECT.md** — Current phase, milestones, health status
    b. **Daily Status Log** — this week's `DEC-###` / `ACT-###` entries (Monday through current day)
@@ -159,6 +161,7 @@ Both tracks converge on: [single unified priority or action]
 - Dependencies between projects
 - Shared resource conflicts
 - Items that affect multiple projects
+- A cross-project item whose counterpart project belongs to another portfolio is listed with that counterpart shown as `[OTHER PORTFOLIO]` — the rule the composer applies to its cross-project sections (`portfolio-writeback-contract.md` § Portfolio scoping).
 
 #### Section 3.6: Cross-Project RAID Aggregation (S6 fill logic)
 
@@ -279,11 +282,14 @@ per-project publishing schema (`status`, `top_risks[]`, `key_dependencies[]`, `c
 `milestone_delta`, `cross_project_conflicts[]`, `last_published`). This section CONSUMES those
 fields and composes the PORTFOLIO.md sections (the contract's S1–S8 section-schema map) from
 them **rather than re-deriving each field**. In production the deterministic composer is invoked
-with `--as-of=today`; it honors the `[STALE]` marker — a field whose age (`today − last_published`,
+at the projects root with `--as-of=today` and, on an install that holds a Portfolio record,
+`--portfolio <served portfolio_id>`; it composes the served portfolio's member rollups only; it honors the `[STALE]` marker — a field whose age (`today − last_published`,
 **business days**) exceeds `3 bd` renders `[STALE]` inline, and `> 5 bd` auto-degrades. The one
 staleness mechanism lives in the contract; the health-score layer supplies only the threshold
 values. `cross_project_conflicts[]` makes the Cross-Project RAID (S6) and Resource Conflicts (S8)
 sections render deterministically from fields, not agent-synthesized prose.
+
+**Composer exit codes.** Exit 0 is a clean run, including one that excluded rollups outside the served portfolio — its standard-error report line is repeated in the checkpoint below. Exit 1 is contract drift and halts the write-back: a `project_id` or `portfolio_id` that is empty, polluted or misspelled halts every portfolio's run; a malformed contract field halts only the run of the portfolio its rollup belongs to. Exit 2 is a calling or configuration error — a missing or wrong `--portfolio`, a root that is not the projects root, a malformed Portfolio record, a composed `PORTFOLIO.md` that carries a Portfolio record, one `portfolio_id` held in conflicting states, a record-less install whose rollups name two or more portfolios (create the Portfolio records), or `projects/_config/PORTFOLIO.md` still present beside a Portfolio record (move it into its portfolio's folder). Unassigned, unresolved and held projects are named in the checkpoint, never in the composed body.
 
 **Portfolio Health Hard-Gate (Rules 1-3) — the right-sized health-scoring layer.** The portfolio
 `Health` summary is governed by a three-rule hard gate applied to the composed output at the
@@ -324,7 +330,7 @@ section schemas below, never a second renderer.
 
 **What gets written back:**
 
-For each active project in PORTFOLIO.md:
+For each active member project of the served portfolio:
 
 1. **Portfolio Health Summary table (S1)** — Update the row:
    - `Phase`: Current phase from this week's analysis
@@ -406,6 +412,7 @@ Section-6 checkpoint (never a Claude-side `projects/` write):
 - If health color changes (e.g., 🟢 → 🟡), note the reason inline
 - Present the proposed PORTFOLIO.md changes as a summary for user approval before writing
 - Format: "PORTFOLIO.md Update: [N] fields changed for [Project Name]. [1-line summary of most significant change]."
+- Before writing, confirm every project listed in the served portfolio's composed file is a member (by its `PROJECT.md` `portfolio_id`); flag a listed non-member in the checkpoint for removal — a moved project needs project-initiator's portfolio move (`portfolio-writeback-contract.md` § Portfolio scoping).
 
 **Human-in-the-loop checkpoint:**
 After producing the executive summary and before writing to PORTFOLIO.md, present:
@@ -413,6 +420,7 @@ After producing the executive summary and before writing to PORTFOLIO.md, presen
 📊 Portfolio Write-Back Summary:
 - [Project 1]: Health 🟡→🟢 (all blockers resolved this week). Phase unchanged.
 - [Project 2]: Phase "Testing" → "Issue Resolution". 3 risk updates.
+- Portfolio: [served portfolio_id, or "unscoped"] — unassigned: [project_ids or none]; unresolved portfolio_id: [project_ids or none]  (and the composer's standard-error line, verbatim)
 Approve these changes to PORTFOLIO.md? (Or provide corrections)
 ```
 Wait for user confirmation before writing. If running as a scheduled task, produce the
@@ -582,7 +590,7 @@ no transition is a factual record and does not require a tier.
 
 ## Output Formatting
 
-- **File output:** Save to `08-Generated/Weekly_Status_Rollup_[DATE].md`
+- **File output:** Save to `08-Generated/Weekly_Status_Rollup_[DATE].md`, staged under a project that belongs to the served portfolio — every portfolio alike (`portfolio-writeback-contract.md` § Portfolio scoping)
 - **Length:** Target 2-3 pages equivalent. Executives skim — prioritize density over length.
 - **Evidence:** Every factual claim traces to a tracker entry, daily update, or transcript.
   Use inline citations: `(Daily Status 3/17)`, `(DEC-012)`, `(BLK-005)`.
@@ -593,7 +601,7 @@ no transition is a factual record and does not require a tier.
 
 - Process projects in order of health severity (RED first, then YELLOW, then GREEN)
 - Cross-project items appear in their own section, not duplicated under each project
-- If only one project is active, skip the portfolio dashboard and cross-project sections
+- If only one project is active in the served portfolio, skip the portfolio dashboard and cross-project sections
 - Portfolio write-back applies regardless of project count
 
 ## Reversibility Discipline
@@ -827,6 +835,10 @@ structural conformance and content quality.
   project-specific impact), and propagate to BOTH projects' rows at the Section 6
   write-back — the sibling's Top Risks or affected Health Indicator cites the same
   RAID source ([SOURCE: RAID R-PPM-052]) — inside the same human-in-the-loop approval.
+  When the sibling project belongs to another portfolio, the escalation reaches it
+  through that portfolio's own roll-up; this run lists the item with the sibling shown
+  as `[OTHER PORTFOLIO]` and never writes the other portfolio's file
+  (`portfolio-writeback-contract.md` § Portfolio scoping).
 - **Principal response vs. junior response:** Principal writes the shared-resource
   conflict into Section 3, pointers into both Section 2 summaries, and proposes
   write-back rows for both projects ("Project B: Top Risk + Schedule indicator 🟡 —
