@@ -131,10 +131,11 @@ Options:
   --surfaces-only       Regenerate composition-surface managed sections ONLY.
                         Runs preflight, schema migration, the instance backup,
                         and managed-section regeneration — and nothing else.
-                        Skips: needle/roster scaffolds, skill redeploy, the
-                        security-hook bundle refresh, the legacy exemption-list
-                        reconcile, the .version snapshot, and the .last-update
-                        state write. Use this to refresh a single
+                        Skips: needle/roster scaffolds, the leak-risk mode
+                        pass, skill redeploy, the security-hook bundle
+                        refresh, the legacy exemption-list reconcile, the
+                        .version snapshot, and the .last-update state
+                        write. Use this to refresh a single
                         stale allowlist or other composition surface without the
                         blast radius of a full update. Note: core/deploy/deploy.sh
                         --deploy CANNOT refresh a composition surface; this flag
@@ -150,8 +151,10 @@ Options:
   --help                Show this help
 
 Exit codes:
-  0    Update applied successfully (managed sections regenerated and/or skills redeployed)
-  64   No update needed (no managed-section regeneration AND no skill redeploy)
+  0    Update applied successfully (managed sections regenerated, skills redeployed,
+       or leak-risk file modes set)
+  64   No update needed (no managed-section regeneration, no skill redeploy and no
+       leak-risk mode change)
   65   operator.toml missing or malformed, or the canonical platform root cannot be resolved
   66   Schema migration aborted (operator dismissed prompt)
   73   Regeneration failure (file write or verification error)
@@ -553,6 +556,17 @@ resolve_instance_dir() {
   fi
 }
 
+# The leak-risk permission library (core/deploy/lib-leak-risk-modes.sh), loaded once.
+# Returns 1 only when the library is absent or does not load; callers warn and continue.
+source_leak_risk_lib() {
+  if command -v lib_leak_risk_normalize_tree >/dev/null 2>&1; then return 0; fi
+  local lib="${REPO_ROOT}/core/deploy/lib-leak-risk-modes.sh"
+  [ -r "${lib}" ] || return 1
+  # shellcheck source=core/deploy/lib-leak-risk-modes.sh disable=SC1091
+  source "${lib}" || return 1
+  command -v lib_leak_risk_normalize_tree >/dev/null 2>&1
+}
+
 backup_instance_dir() {
   info "Phase 2.5a: Pre-update backup of operator-instance dir"
   resolve_instance_dir
@@ -565,10 +579,26 @@ backup_instance_dir() {
     return 0
   fi
   local backup_dir="${BACKUP_DIR_ROOT}-instance-$(date -u +%Y%m%dT%H%M%SZ)"
-  if mkdir -p "${backup_dir}" && cp -R "${INSTANCE_DIR}/." "${backup_dir}/" 2>/dev/null; then
+  # The copy is leak-risk content (register row S-40), so it is created at the policy:
+  # under umask 077, then normalized, because umask alone leaves a 0400 file at 0400 and an
+  # executable at 0700. Best-effort as before: a failed or partial copy warns and the
+  # update continues, and whatever was copied is still normalized. Normalizing changes no
+  # byte of content, and it is never counted as a change: the copy is new on every run,
+  # so counting it would make EX_NOCHANGE unreachable.
+  if ( umask 077; mkdir -p "${backup_dir}" && cp -R "${INSTANCE_DIR}/." "${backup_dir}/" ) 2>/dev/null; then
     info "Backed up operator-instance dir → ${backup_dir}"
   else
     warn "Pre-update instance backup did not complete cleanly (continuing): ${backup_dir}"
+  fi
+  if [ -d "${backup_dir}" ]; then
+    if source_leak_risk_lib; then
+      lib_leak_risk_normalize_tree "${backup_dir}" || true
+      if [ "${LIB_LEAK_RISK_NORMALIZE_FAILED:-0}" -gt 0 ]; then
+        warn "Pre-update copy ${backup_dir}: ${LIB_LEAK_RISK_NORMALIZE_FAILED} entries could not be set to the leak-risk policy (continuing)"
+      fi
+    else
+      warn "Leak-risk permission library unavailable; the pre-update copy is left at umask modes. A full ./update.sh re-applies the leak-risk policy once the library is present."
+    fi
   fi
 }
 
@@ -600,7 +630,9 @@ scaffold_needles() {
     return 0
   fi
   mkdir -p "$(dirname "${needle_file}")"
-  cp "${example}" "${needle_file}"
+  # Created at the leak-risk policy (0600); the folder is not, because today's container
+  # also holds working state.
+  ( umask 077; cp "${example}" "${needle_file}" )
   info "Scaffolded localized-context needle file → ${needle_file}"
 }
 
@@ -633,7 +665,8 @@ scaffold_roster() {
     return 0
   fi
   mkdir -p "$(dirname "${roster_file}")"
-  cp "${template}" "${roster_file}"
+  # Created at the leak-risk policy (0600); see scaffold_needles.
+  ( umask 077; cp "${template}" "${roster_file}" )
   info "Scaffolded people-roster → ${roster_file}"
 }
 
@@ -724,6 +757,38 @@ scaffold_settings_local() {
   fi
   printf '{}\n' > "${overlay}"
   info "Scaffolded operator settings overlay → ${overlay}"
+}
+
+# --- Phase 2.5f: leak-risk permission policy ---
+# Mode 0600 on every leak-risk file and 0700 on every leak-risk folder the placement
+# standard's Leak-risk register rows name at a path this workspace resolves: the scan
+# lists, the roster and its clarification queue, the scan script, their backups, and the
+# pre-update container copies. The population and the policy live in
+# core/deploy/lib-leak-risk-modes.sh, which validate-install's check A11 reads too.
+#
+# A FULL-UPDATE PHASE, NEVER A MEMBER OF --surfaces-only, which scaffolds no
+# operator-instance state; the operator activates the policy with a full ./update.sh.
+#
+# NON-FATAL BY CONTRACT, and that is what lets it sit ahead of the skill redeploy and the
+# security-hook refresh: the library's functions always return 0 and report a member they
+# cannot set on a WARN-LEAK-RISK-MODE: line, so one immutable or foreign-owned file never
+# stops the update. A mode repair is a workspace change and sets LEAK_RISK_MODES_SET, read
+# by the EX_NOCHANGE reduction; a member the pass could not set is a warning, never a
+# change, so a run that changed nothing still reports no changes. Under --dry-run a
+# would-change counts, as the legacy-exemption reconcile's dry run does.
+LEAK_RISK_MODES_SET=0
+apply_leak_risk_modes() {
+  info "Phase 2.5f: leak-risk permission policy (files 0600, folders 0700)"
+  if ! source_leak_risk_lib; then
+    warn "Leak-risk permission library not found under ${REPO_ROOT}/core/deploy; leak-risk modes NOT set (continuing)."
+    return 0
+  fi
+  lib_leak_risk_enforce_for "${WORKSPACE_ROOT}" "${DRY_RUN}" >&2 \
+    || warn "Leak-risk mode pass returned non-zero (continuing)."
+  if [ "${LIB_LEAK_RISK_CHANGED:-0}" -gt 0 ]; then
+    LEAK_RISK_MODES_SET=1
+  fi
+  return 0
 }
 
 # --- Phase 4: State update ---
@@ -1259,9 +1324,11 @@ refresh_version_snapshot() {
 # category: the hook-tier allowlists are composition-surface files refreshed by
 # update.sh's regenerate_managed_sections, not there.
 #
-# It does NOT scaffold needles or the roster, redeploy skills, refresh the
-# security-hook bundle, reconcile a legacy exemption-list copy, restamp the .version
-# snapshot, or write .last-update.
+# It does NOT scaffold needles or the roster, run the leak-risk mode pass, redeploy
+# skills, refresh the security-hook bundle, reconcile a legacy exemption-list copy,
+# restamp the .version snapshot, or write .last-update. Its pre-update copy is still
+# created at the leak-risk policy: that is backup_instance_dir's own creation rule, not
+# the pass.
 #
 # The .last-update omission is deliberate and load-bearing, not an oversight.
 # write_last_update is the LAST member of the full sequence, so a .last-update
@@ -1290,6 +1357,9 @@ else
   backup_instance_dir
   scaffold_needles
   scaffold_roster
+  # After both scaffolds, so the files they create are already members. Not a member of
+  # surfaces_only_flow — see apply_leak_risk_modes's header.
+  apply_leak_risk_modes
   # Not a member of surfaces_only_flow — that flow omits scaffold_needles and
   # scaffold_roster for the same reason: --surfaces-only regenerates composition
   # surfaces, it does not scaffold operator-instance state.
@@ -1355,8 +1425,9 @@ fi
 
 # A retired legacy exemption-list copy is a change to the workspace in its own right, so a
 # run whose only change is that retirement returns EX_OK (its own flag, set by Phase 5c1).
+# So is a leak-risk mode repair (its own flag, set by Phase 2.5f).
 if [ "${REGENERATED_COUNT}" -eq 0 ] && [ "${PHASE5_DEPLOYED}" -eq 0 ] \
-   && [ "${LEGACY_EXEMPTION_RETIRED}" -eq 0 ]; then
+   && [ "${LEGACY_EXEMPTION_RETIRED}" -eq 0 ] && [ "${LEAK_RISK_MODES_SET}" -eq 0 ]; then
   info "Update complete (no changes — composition surface already current)."
   exit "${EX_NOCHANGE}"
 fi

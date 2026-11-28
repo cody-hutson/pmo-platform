@@ -47,7 +47,7 @@ Three primary triggers — plus operator-initiated ad-hoc use:
 | `--depth=N` | `2` | Recursion depth for second-order detection; hard cap `4` |
 | `--max-expand=N` | `300` | Deterministic cap on how many first-order referrers are expanded for second-order detection. `0` = unlimited. When the cap fires the run emits a partial-result marker and exits `6` (see § Traversal bound) |
 | `--include-mirrors` | unset (mirrors filtered) | Include mirror-pair references in output (annotated `[MIRROR]`) |
-| `--root=PATH` | `git rev-parse --show-toplevel` | Repo root for scanning; falls back to invocation cwd |
+| `--root=PATH` | `git rev-parse --show-toplevel` | Repo root for scanning; when the invocation cwd is not a work tree, the toplevel of the script's own checkout, and only then the invocation cwd |
 | `--exclude=GLOB` | (additive to default) | Additional exclusion path-prefix; repeatable |
 | `--no-color` | unset | Disable ANSI color in table output |
 | `-h`, `--help` | — | Usage banner |

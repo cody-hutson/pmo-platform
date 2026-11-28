@@ -26,10 +26,13 @@ set -euo pipefail
 #        checkable: a GIT_TRACE run DOES show git calls, and they are these three, none
 #        of them a history read and all three fine in a shallow clone —
 #          (1) `git rev-parse --show-toplevel` from domain-blast-radius.sh resolving its
-#              own scan root in the dispatch group, which passes no --root;
+#              own scan root in the dispatch group, which passes no --root (from the
+#              working directory, and from the script's own directory when the
+#              working directory is not a work tree);
 #          (2) `git rev-parse --is-inside-work-tree` and, where that succeeds,
-#              `git ls-files -z` from blast-radius.sh scoping its enumeration to tracked
-#              files. On F1's runtime root — a mktemp copy — (2) resolves NOT-a-work-tree,
+#              `git ls-files -z` from blast-radius.sh and domain-blast-radius.sh scoping
+#              their enumeration to tracked files. On F1's runtime root — a mktemp copy —
+#              (2) resolves NOT-a-work-tree,
 #              which is why the golden records scan_scope=all-files / not-run;
 #          (3) `git rev-parse --short HEAD`, in --regenerate-golden ONLY, to stamp the
 #              producing SHA into the Regeneration Log row.

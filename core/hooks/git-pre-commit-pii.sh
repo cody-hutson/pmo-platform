@@ -40,11 +40,29 @@
 # "Environment inputs" below), plus -M so a pure move adds nothing, as it does at
 # commit time.
 #
+# The in-repo home guard runs first. git has one pre-commit slot and the installer links it
+# here, so this hook also runs its sibling core/hooks/git-pre-commit-homes.sh over the same
+# input: the staged index at pre-commit, before any PII work; with --commits, the same
+# commits, once they are classified. That guard refuses a tracked path under a registered
+# in-repo git-ignored home other than its README, and reads no mode dial: the .mode setting
+# below never reaches it. Not found beside this hook, the commit or push is refused.
+#
+# THE HOME CHECK RUNS UNDER THE BYPASS. The staged home read runs ahead of this hook's
+# CLAUDE_HOOK_BYPASS exit, on git's own no-argument invocation, so the commit-time home check
+# runs whether or not the bypass is set: an exception to the uniform bypass convention, and
+# the only check in either PII git hook the bypass does not skip. The bypass still skips
+# every PII scan here. The --commits home read sits after the exit, and git-pre-push-pii.sh
+# exits on the bypass before it runs this hook, so the push-time home check honours the
+# bypass. The operator's escape hatch at commit time is git commit --no-verify, which
+# BLOCK-DESTRUCTIVE-024 refuses to agents. Decision record:
+# {{ADR:commit-time-home-guard-runs-under-hook-bypass}}.
+#
 # Install:  wired as the repo's pre-commit hook by docs/scripts/setup-workspace.sh
 #           (install, and update.sh via --refresh-hooks); validate-install.sh A3d
 #           reports it missing. Manual form, from the repo root:
 #           ln -s ../../core/hooks/git-pre-commit-pii.sh "$(git rev-parse --path-format=absolute --git-path hooks)/pre-commit"
-# Bypass:   CLAUDE_HOOK_BYPASS=1 git commit ...
+# Bypass:   CLAUDE_HOOK_BYPASS=1 git commit ... skips the PII scan; the in-repo home guard's
+#           commit-time read still runs (see "THE HOME CHECK RUNS UNDER THE BYPASS" above)
 # Needles:  resolved by core/deploy/lib-instance-path.sh (pmo_localized_needles);
 #           default <instance-dir>/localized-context-needles.txt. PMO_LOCALIZED_NEEDLES /
 #           PMO_INSTANCE_PATH add a second list; they never replace the first (see
@@ -99,6 +117,38 @@ unset POSIXLY_CORRECT CDPATH GREP_OPTIONS
 export LC_ALL=C
 set -uo pipefail
 
+# --- This hook's own directory, then the in-repo home guard (see the header) ---
+# The hook is symlinked into .git/hooks/pre-commit, so $0 points at the symlink;
+# resolve it to the real core/hooks/ location. It reads nothing but BASH_SOURCE, readlink,
+# cd and pwd (CDPATH is unset above), so it runs before the bypass exit below.
+_pii_self="${BASH_SOURCE[0]:-$0}"
+# Follow one symlink level (the canonical install is a single symlink).
+if [[ -L "$_pii_self" ]]; then
+  _pii_link="$(readlink "$_pii_self" 2>/dev/null || true)"
+  if [[ -n "$_pii_link" ]]; then
+    case "$_pii_link" in
+      /*) _pii_self="$_pii_link" ;;
+      *)  _pii_self="$(cd "$(dirname "$_pii_self")" 2>/dev/null && cd "$(dirname "$_pii_link")" 2>/dev/null && pwd)/$(basename "$_pii_link")" ;;
+    esac
+  fi
+fi
+_pii_hook_dir="$(cd "$(dirname "$_pii_self")" 2>/dev/null && pwd -P || true)"
+
+# The home guard sits before the resolver is sourced, so no instance home, needle file or
+# dial can reach its verdict. On git's own no-argument invocation its staged read runs here,
+# ahead of the bypass exit: the commit-time home check is not skipped by CLAUDE_HOOK_BYPASS.
+_pii_homes_guard="${_pii_hook_dir:+${_pii_hook_dir}/git-pre-commit-homes.sh}"
+_pii_homes_missing() {
+  echo "BLOCKED: [git-pre-commit-pii] the in-repo home guard was not found beside this hook (${_pii_homes_guard:-its directory did not resolve}); refused." >&2
+  exit 1
+}
+_pii_homes_staged_done=0
+if [[ $# -eq 0 ]]; then
+  [[ -n "$_pii_homes_guard" && -r "$_pii_homes_guard" ]] || _pii_homes_missing
+  /bin/bash -p "$_pii_homes_guard" || exit 1
+  _pii_homes_staged_done=1
+fi
+
 [[ "${CLAUDE_HOOK_BYPASS:-0}" == "1" ]] && exit 0
 
 pii_input="staged"; pii_redact=0; pii_needle_arg=""; pii_needle_arg_set=0
@@ -113,6 +163,13 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+# Every other invocation reaches the home guard after the bypass exit: a staged run a
+# direct caller gave arguments to here, and --commits once the commits are classified.
+[[ -n "$_pii_homes_guard" && -r "$_pii_homes_guard" ]] || _pii_homes_missing
+if [[ "$pii_input" == "staged" && "$_pii_homes_staged_done" == "0" ]]; then
+  /bin/bash -p "$_pii_homes_guard" || exit 1
+fi
 
 # Prints each line a diff ADDS, as "+<text>". In a hunk, a header's run of `@` gives
 # the parent count: `@@` is one parent; `@@@` is two, a merge's combined diff. An
@@ -173,22 +230,9 @@ pii_refuse_unscanned() {
 }
 
 # --- Resolve the operator-instance / needle path via the single resolver ---
-# The hook is symlinked into .git/hooks/pre-commit, so $0 points at the symlink;
-# resolve it to the real core/hooks/ location, then source the sibling resolver
-# in core/deploy/. If sourcing fails for any reason, fall back to inline default
-# functions so a missing lib can never hard-break commits.
-_pii_self="${BASH_SOURCE[0]:-$0}"
-# Follow one symlink level (the canonical install is a single symlink).
-if [[ -L "$_pii_self" ]]; then
-  _pii_link="$(readlink "$_pii_self" 2>/dev/null || true)"
-  if [[ -n "$_pii_link" ]]; then
-    case "$_pii_link" in
-      /*) _pii_self="$_pii_link" ;;
-      *)  _pii_self="$(cd "$(dirname "$_pii_self")" 2>/dev/null && cd "$(dirname "$_pii_link")" 2>/dev/null && pwd)/$(basename "$_pii_link")" ;;
-    esac
-  fi
-fi
-_pii_hook_dir="$(cd "$(dirname "$_pii_self")" 2>/dev/null && pwd -P || true)"
+# This hook's real core/hooks/ location was resolved at the top of the file; source the
+# sibling resolver in core/deploy/. If sourcing fails for any reason, fall back to inline
+# default functions so a missing lib can never hard-break commits.
 _pii_lib="${_pii_hook_dir}/../deploy/lib-instance-path.sh"
 if [[ -r "$_pii_lib" ]]; then
   # shellcheck source=../deploy/lib-instance-path.sh disable=SC1090,SC1091
@@ -292,6 +336,11 @@ else
     exit 1
   fi
   [[ -s "$pii_tmp/objects" ]] || exit 0
+  # The in-repo home guard over the same commits (see the header). Its refusal is the push's.
+  if [[ -s "$pii_tmp/commits" ]]; then
+    _pii_homes_args=(--commits); [[ "$pii_redact" == "1" ]] && _pii_homes_args+=(--redact)
+    /bin/bash -p "$_pii_homes_guard" "${_pii_homes_args[@]}" < "$pii_tmp/commits" || exit 1
+  fi
   pii_loc_all="$pii_tmp/all.loc"; pii_loc_nonhome="$pii_tmp/nonhome.loc"
   : > "$pii_tmp/all.txt"; : > "$pii_tmp/nonhome.txt"; : > "$pii_loc_all"; : > "$pii_loc_nonhome"
   if [[ -s "$pii_tmp/commits" ]]; then

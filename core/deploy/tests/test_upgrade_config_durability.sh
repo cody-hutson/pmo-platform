@@ -414,9 +414,16 @@ fi
 # --- Stage 3: build <sbx>/repo-next with an edited managed-section source ---
 printf '\nStage 3: build sandboxed repo-next + perturb a managed-section source SHA\n'
 REPONEXT="${SBX}/repo-next"
-# Copy the repo into the sandbox. -R preserves the tree; the .git dir is copied
-# too but update.sh does not read it (it derives REPO_ROOT from its own path).
-cp -R "${REPO_ROOT}" "${REPONEXT}"
+# Copy the repository into the sandbox from the git index (its tracked files, as the
+# working tree holds them) plus the .git entry, never the whole directory: an ignored
+# path -- a registered in-repo home's contents, a linked worktree under
+# .claude/worktrees/ -- is no part of the repository's next version and is never read.
+# update.sh derives REPO_ROOT from its own path; .git is carried so the git-aware
+# steps it reaches behave exactly as they did under the whole-directory copy.
+mkdir -p "${REPONEXT}"
+( cd "${REPO_ROOT}" && { git ls-files -z; printf '.git\0'; } \
+    | while IFS= read -r -d '' f; do if [ -e "${f}" ]; then printf '%s\0' "${f}"; fi; done \
+    | tar --null -T - -cf - ) | ( cd "${REPONEXT}" && tar -xf - )
 DELTA_MARKER="# c8-version-delta-probe: simulated managed-content change (do not ship)"
 printf '\n%s\n' "${DELTA_MARKER}" >> "${REPONEXT}/${DELTA_SOURCE_REL}"
 if grep -qF "c8-version-delta-probe" <<<"$(tail -1 "${REPONEXT}/${DELTA_SOURCE_REL}")"; then

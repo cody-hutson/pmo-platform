@@ -150,7 +150,9 @@ scaffold_needles() {
     return 0
   fi
   mkdir -p "$(dirname "${needle_file}")"
-  cp "${example}" "${needle_file}"
+  # Created at the leak-risk policy (0600); the folder is not, because today's container
+  # also holds working state.
+  ( umask 077; cp "${example}" "${needle_file}" )
   info "Scaffolded localized-context needle file → ${needle_file}"
 }
 
@@ -180,7 +182,8 @@ scaffold_roster() {
     return 0
   fi
   mkdir -p "$(dirname "${roster_file}")"
-  cp "${template}" "${roster_file}"
+  # Created at the leak-risk policy (0600); see scaffold_needles.
+  ( umask 077; cp "${template}" "${roster_file}" )
   info "Scaffolded people-roster → ${roster_file}"
 }
 

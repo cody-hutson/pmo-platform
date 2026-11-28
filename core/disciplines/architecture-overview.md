@@ -144,7 +144,7 @@ workspace root/
 │   ├── docs/                           ← install/setup docs + scripts
 │   ├── analysis/                       ← working-state home: read-once analysis (README tracked, contents git-ignored)
 │   ├── roadmaps/                       ← working-state home: roadmap instances (README tracked, contents git-ignored)
-│   ├── local-state/                    ← TARGET working-state home: release and run state (README tracked, contents git-ignored; not yet provisioned)
+│   ├── local-state/                    ← working-state home: release and run state (README tracked, contents git-ignored)
 │   └── packages/                       ← compiled .skill packages
 │
 └── projects/                           ← OPERATIONAL WORKSPACE (git-ignored)

@@ -27,7 +27,9 @@ set -euo pipefail
 #                     is scoped out for v1 — see "second-order scope-out" below);
 #                     the flag is accepted for envelope parity.
 #   --format=FORMAT   json | table | md (default: table if tty, json otherwise)
-#   --root=PATH       Repo root for scanning (default: git toplevel)
+#   --root=PATH       Repo root for scanning (default: the git toplevel of the working
+#                     directory, else of this script's own checkout, else the working
+#                     directory)
 #   --exclude=GLOB    Additional exclusion path-prefix; repeatable. `.claude/worktrees/`
 #                     is excluded BY DEFAULT (worktree copies inflate import counts).
 #   --no-color        Disable ANSI color in table output
@@ -196,7 +198,9 @@ OPTIONS
   --depth=N         Traversal depth (default $DEFAULT_DEPTH; hard cap $HARD_CAP_DEPTH).
                     software ships first-order only; second-order is scoped out for v1.
   --format=FORMAT   json | table | md   (default: table if tty, json otherwise)
-  --root=PATH       Repo root for scanning (default: git toplevel)
+  --root=PATH       Repo root for scanning (default: the working directory's git
+                    toplevel, else this script's own checkout's, else the working
+                    directory)
   --exclude=GLOB    Additional exclusion path-prefix; repeatable
   --no-color        Disable ANSI color in table output
   --version         Show CLI + schema version and exit
@@ -292,7 +296,13 @@ check_deps() {
 }
 
 # ---------------------------------------------------------------------------
-# Repo root resolution
+# Repo root resolution: --root, else the working directory's git toplevel, else
+# the toplevel of this script's own checkout, and only then the working
+# directory. The third step keeps an omitted --root from walking an ancestor of
+# the checkout: run from a directory that is not a work tree (the workspace root
+# above a checkout is not one), the working directory would otherwise become the
+# root, and the walk would reach the checkout's in-repo homes and every linked
+# worktree under .claude/worktrees/.
 # ---------------------------------------------------------------------------
 resolve_root() {
   if [ -n "$ARG_ROOT" ]; then
@@ -306,6 +316,10 @@ resolve_root() {
   if command -v git >/dev/null 2>&1; then
     local git_root
     if git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+      REPO_ROOT="$git_root"
+      return
+    fi
+    if git_root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null); then
       REPO_ROOT="$git_root"
       return
     fi
@@ -376,10 +390,38 @@ resolve_target() {
 # Build the code-file scan list for the software domain (newline-delimited
 # repo-relative paths). Writes SCAN_LIST_FILE; sets TOTAL_FILES_SCANNED to the
 # count of CODE files searched (domain-specific denominator per F4).
+#
+# On a git work tree whose index lists files, the candidates are the index (git
+# ls-files), as blast-radius.sh's build_scan_list reads them: an ignored path (a
+# registered in-repo home's contents, a linked worktree under .claude/worktrees/)
+# is never a candidate, and a tracked file deleted from the working tree is
+# dropped by the existence test. An index that lists nothing (a non-git copy
+# nested inside a work tree) is a vacuous zero, not a measurement, so it falls
+# back to the filesystem walk, as blast-radius.sh does for an empty tracked list;
+# so does a non-git root (every fixture corpus), unchanged.
 # ---------------------------------------------------------------------------
 build_software_scan_list() {
   SCAN_LIST_FILE="$WORK_DIR/scan-list.txt"
-  local find_args=( "$REPO_ROOT" -type f )
+  local raw="$WORK_DIR/git-ls-files.raw" rel ext t keep
+  if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+     && git -C "$REPO_ROOT" ls-files -z > "$raw" 2>/dev/null \
+     && [ -s "$raw" ]; then
+    tr '\0' '\n' < "$raw" \
+      | while IFS= read -r rel; do
+          ext="${rel##*.}"; keep=0
+          for t in "${SOFTWARE_SCANNED_TYPES[@]}"; do
+            if [ "$ext" = "$t" ]; then keep=1; break; fi
+          done
+          if [ "$keep" = 1 ] && ! path_under_exclusion "$rel" && [ -f "$REPO_ROOT/$rel" ]; then
+            printf '%s\n' "$rel"
+          fi
+        done \
+      | sort -u > "$SCAN_LIST_FILE"
+    TOTAL_FILES_SCANNED=$(wc -l < "$SCAN_LIST_FILE" | tr -d ' ')
+    return 0
+  fi
+
+  local find_args=( "$REPO_ROOT" -type f )  # tree-walk: allow — only a root whose index lists nothing (no git, no work tree, or an untracked copy); an omitted --root resolves to this script's checkout first
   find_args+=( "(" )
   local first=1 ext
   for ext in "${SOFTWARE_SCANNED_TYPES[@]}"; do

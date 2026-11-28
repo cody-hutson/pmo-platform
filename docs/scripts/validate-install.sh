@@ -121,9 +121,9 @@ readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 # are EXCLUDED by construction: an INFO is a record, not a step, and increments
 # no counter.
 #
-# Both Mode A sub-modes emit the SAME total. --mode install runs all sixteen
-# checks. --mode operator-pre-existing runs twelve (A1, A2, A3, A3c, A3d, A3e, A5,
-# A6, A6b, A7, A8, A9) and emits SKIP for the four whose surfaces postdate such a
+# Both Mode A sub-modes emit the SAME total. --mode install runs all seventeen
+# checks. --mode operator-pre-existing runs thirteen (A1, A2, A3, A3c, A3d, A3e, A5,
+# A6, A6b, A7, A8, A9, A11) and emits SKIP for the four whose surfaces postdate such a
 # workspace — A3b composition-surface manifest, A4 state marker, A5b operations
 # anchor, A10 operator.toml. A SKIP is still an emitted record, so a single
 # constant is correct for both sub-modes, which is what stops this number
@@ -134,7 +134,11 @@ readonly OPERATOR_TOML_PATH="${HOME}/.config/pmo-platform/operator.toml"
 # from the current release's file list, so it is satisfiable by a pre-installer
 # workspace. It may still emit SKIP at runtime when the derivation matches
 # nothing — a SKIP is an emitted record either way, so the total is unaffected.
-readonly MODE_A_TOTAL=16
+#
+# A11 (leak-risk modes) is on the RUN side of both sub-modes for the same kind of reason:
+# a workspace that predates the installer still holds leak-risk files, and their modes
+# are a security posture rather than an installer artifact.
+readonly MODE_A_TOTAL=17
 readonly MODE_B_TOTAL=4
 
 # --- Section 3: Mutable state (scalars only; bash-3.2-compatible) ---
@@ -174,7 +178,7 @@ Verify pmo-platform install (Mode A) and first-task invocation (Mode B).
 Options:
   --mode {install,first-task,all,operator-pre-existing}
                           Select scope (default: all).
-                          - install: Mode A only (16 checks).
+                          - install: Mode A only (17 checks).
                           - first-task: Mode B only (4 checks).
                           - all: Mode A followed by Mode B.
                           - operator-pre-existing: subset of Mode A for
@@ -198,7 +202,7 @@ Output channels:
 
 Modes:
   - install                  Verifies setup-workspace.sh succeeded.
-                             16 checks, all read-only bash.
+                             17 checks, all read-only bash.
   - first-task               Verifies demo skill output parses correctly.
                              4 checks; B2 emits an operator hand-off block;
                              re-run with --continue after capturing the
@@ -207,11 +211,11 @@ Modes:
                              skipped (install must verify first).
   - operator-pre-existing    Workspaces created before setup-workspace.sh
                              shipped (no state-marker yet). Runs A1, A2, A3,
-                             A3c, A3d, A3e, A5, A6, A6b, A7, A8, A9; A3b, A4,
-                             A5b and A10 emit
+                             A3c, A3d, A3e, A5, A6, A6b, A7, A8, A9, A11; A3b,
+                             A4, A5b and A10 emit
                              SKIP because those surfaces postdate such a
                              workspace.
-                             Emits 16 check records — the same total as the
+                             Emits 17 check records — the same total as the
                              install sub-mode, because a SKIP is still a record.
                              Aggregate verdict is per-mode unambiguous.
 
@@ -1348,6 +1352,91 @@ check_a10_operator_toml() {
   emit_pass "A10" "INSTALL-OPERATOR-TOML" "operator_name key present" "A"
 }
 
+# A11 asserts the leak-risk permission policy: mode 0600 on each file and 0700 on each
+# folder that the placement standard's Leak-risk register rows name at a path this
+# workspace resolves, backups and the update path's pre-update container copies included.
+# The population and the policy are read from core/deploy/lib-leak-risk-modes.sh, the
+# library the installer and a full ./update.sh set the modes from, so the setter and this
+# check cannot disagree about which files are members.
+#
+# The FAIL predicate is a group or other permission bit — the disclosure the policy exists
+# to prevent. A member that is owner-only but not exact (a 0400 roster, say) discloses
+# nothing, so it is reported as an INFO beside the verdict rather than failed; the setter
+# stays exact and would only add the owner bit.
+#
+# FAIL CLOSED ON A BROKEN CHECKOUT. The check SKIPs only when the source repository carries
+# neither the instance resolver nor the leak-risk library: the shape of a fixture or of a
+# tree too old to have either. A checkout with the resolver and without the library is
+# incomplete, and the check FAILs rather than reporting nothing. With nothing present to
+# check it SKIPs and says so, which is not a PASS.
+#
+# A11 RUNS in both Mode A sub-modes. A workspace that predates the installer still holds
+# leak-risk files, and their modes are a security posture rather than an installer
+# artifact. The rows with no install-time path (S-19, S-46) are named in an INFO record,
+# so the narrowing is visible rather than silent.
+check_a11_leak_risk_modes() {
+  local resolver="${SOURCE_REPO}/core/deploy/lib-instance-path.sh"
+  local lib="${SOURCE_REPO}/core/deploy/lib-leak-risk-modes.sh"
+  if [ ! -r "${lib}" ]; then
+    if [ ! -r "${resolver}" ]; then
+      emit_skip "A11" "INSTALL-LEAK-RISK-MODES" \
+        "neither ${resolver} nor ${lib} is readable; leak-risk modes NOT checked" "A"
+    else
+      emit_fail "A11" "INSTALL-LEAK-RISK-MODES" \
+        "leak-risk modes cannot be evaluated: ${lib} is unreadable while ${resolver} is present" \
+        "restore a complete pmo-platform checkout at ${SOURCE_REPO}, then re-run" "A"
+    fi
+    return
+  fi
+  if [ -r "${resolver}" ]; then
+    # shellcheck source=../../core/deploy/lib-instance-path.sh disable=SC1091
+    . "${resolver}"
+  fi
+  # shellcheck source=../../core/deploy/lib-leak-risk-modes.sh disable=SC1091
+  if ! . "${lib}" || ! command -v lib_leak_risk_findings_for > /dev/null 2>&1 \
+     || ! command -v pmo_instance_path_for > /dev/null 2>&1; then
+    emit_fail "A11" "INSTALL-LEAK-RISK-MODES" \
+      "leak-risk modes cannot be evaluated: ${lib} did not load, or the instance resolver is unavailable" \
+      "restore a complete pmo-platform checkout at ${SOURCE_REPO}, then re-run" "A"
+    return
+  fi
+  lib_leak_risk_findings_for "${WORKSPACE_ROOT}" > /dev/null 2>&1 || true
+
+  local tab verdict row path observed wanted fails="" nfail=0 infos="" ninfo=0 deferred
+  tab="$(printf '\t')"
+  while IFS="${tab}" read -r verdict row path observed wanted; do
+    [ -n "${verdict}" ] || continue
+    if [ "${verdict}" = "FAIL" ]; then
+      nfail=$((nfail + 1))
+      if [ "${nfail}" -le 5 ]; then fails="${fails}${fails:+; }${row} ${path} ${observed} (want ${wanted})"; fi
+    else
+      ninfo=$((ninfo + 1))
+      if [ "${ninfo}" -le 5 ]; then infos="${infos}${infos:+; }${row} ${path} ${observed} (want ${wanted})"; fi
+    fi
+  done <<EOF
+${LIB_LEAK_RISK_REPORT}
+EOF
+  if [ "${nfail}" -gt 5 ]; then fails="${fails}; +$((nfail - 5)) more"; fi
+  if [ "${ninfo}" -gt 5 ]; then infos="${infos}; +$((ninfo - 5)) more"; fi
+  deferred="$(lib_leak_risk_rows | awk -F'\t' '$2 == "deferred" { printf "%s%s (%s)", sep, $1, $3; sep = "; " }')"
+
+  if [ "${LIB_LEAK_RISK_PRESENT}" -eq 0 ]; then
+    emit_skip "A11" "INSTALL-LEAK-RISK-MODES" \
+      "no leak-risk file or folder present at any path the Leak-risk register rows resolve to under ${WORKSPACE_ROOT}" "A"
+  elif [ "${nfail}" -gt 0 ]; then
+    emit_fail "A11" "INSTALL-LEAK-RISK-MODES" \
+      "${nfail} leak-risk member(s) with a group or other permission bit: ${fails}" \
+      "run ./update.sh (its leak-risk mode pass sets the policy), or chmod the paths named: files 600, folders 700" "A"
+  else
+    emit_pass "A11" "INSTALL-LEAK-RISK-MODES" \
+      "${LIB_LEAK_RISK_FILES} file(s) and ${LIB_LEAK_RISK_FOLDERS} folder(s) with no group or other bit; rows present: ${LIB_LEAK_RISK_ROWS_PRESENT}; rows absent: ${LIB_LEAK_RISK_ABSENT_ROWS}" "A"
+  fi
+  if [ "${ninfo}" -gt 0 ]; then
+    emit_info "A11" "INSTALL-LEAK-RISK-MODES" "owner-only but not the exact policy mode: ${infos}" "A"
+  fi
+  emit_info "A11" "INSTALL-LEAK-RISK-MODES" "deferred rows, not checked: ${deferred}" "A"
+}
+
 # --- Section 12: Mode A routing ---
 
 mode_a_install_verify() {
@@ -1367,6 +1456,7 @@ mode_a_install_verify() {
   check_a8_deploy_check
   check_a9_skill_roster
   check_a10_operator_toml
+  check_a11_leak_risk_modes
 }
 
 mode_a_operator_pre_existing() {
@@ -1381,7 +1471,7 @@ mode_a_operator_pre_existing() {
   # only, so this population cannot satisfy it by definition.
   #
   # Every dropped check emits SKIP rather than vanishing, so this sub-mode emits
-  # the same 16 step records as --mode install (see MODE_A_TOTAL). A3b was
+  # the same 17 step records as --mode install (see MODE_A_TOTAL). A3b was
   # previously the one dropped check that left no trace in the record at all.
   check_a1_platform
   check_a2_workspace_layout
@@ -1404,6 +1494,8 @@ mode_a_operator_pre_existing() {
   check_a8_deploy_check
   check_a9_skill_roster
   emit_skip "A10" "INSTALL-OPERATOR-TOML" "operator-pre-existing mode (operator.toml not expected)" "A"
+  # A11 RUNS here: see check_a11_leak_risk_modes's header.
+  check_a11_leak_risk_modes
 }
 
 # --- Section 13: Mode B check functions ---
