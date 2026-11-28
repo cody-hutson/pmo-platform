@@ -251,7 +251,7 @@ without this value a newly-scaffolded PROJECT.md is born missing one. `lifecycle
 FILE/NODE content-maturity axis; the Project ENTITY's Axis-1 carrier is `status` (project-schema.md §3b,
 entity-field-schemas.md V-PRJ-03) — the inline `**Status:**` line, which stays inline and distinct. The
 entity-record keys are NOT in this block; they are seeded by the project-schema.md §7 Entity-Seeding
-Protocol, not written at scaffold time. One exception: when the Portfolio input is supplied, write `portfolio_id: <id>` into the frontmatter at scaffold, because every portfolio-level surface selects on it — on a multi-portfolio install a project scaffolded without it would be unassigned, in no portfolio's output, until seeding ran; the seeding protocol's add-absent-keys-only rule never overwrites it. Write it as the bare slug with no inline comment on the line: a trailing `# …` is part of the value to the shared frontmatter reader, and a polluted key holds the project out of every portfolio's output.
+Protocol, not written at scaffold time. One exception: when the Portfolio input is supplied, write `portfolio_id: <id>` into the frontmatter at scaffold, because every portfolio-level surface selects on it — on an install with two or more active portfolios a project scaffolded without it would be unassigned, in no portfolio's output, until seeding ran; the seeding protocol's add-absent-keys-only rule never overwrites it. Write it as the bare slug with no inline comment on the line: a trailing `# …` is part of the value to the shared frontmatter reader, and a polluted key holds the project out of every portfolio's output.
 
 ### Step 4: Generate Starter Artifacts
 
