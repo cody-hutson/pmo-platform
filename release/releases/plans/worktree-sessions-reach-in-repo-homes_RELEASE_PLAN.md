@@ -32,7 +32,7 @@ reversibility: MODERATE / Confidence HIGH — one guard hook arm, its suite, the
 | **Bump Class** | minor — the durable determination (D-Version, a recorded determination at the Stage-4 gate): a guard hook's behaviour changes inside existing structure, with its rule text, per the Bump-Class Selection Guide's row "Protocol text addition or modification". No new skill and no new governance file. The rule-computed next-free re-verified at Engineering Commit 0 is `v5.15`. The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-28 (Saturday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub, spoke-built Stage 6) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) |
+| **Status** | Executing — Stage 6 Engineering built (Commit 0, then the #8019, #7503 and #7929 slices); the draft PR goes to Stage 7 |
 | **Branch** | `release/worktree-sessions-reach-in-repo-homes` |
 | **PR** | opened in **draft** at Stage 6 by the #8019 Engineering spoke |
 | **Milestone** | `worktree-sessions-reach-in-repo-homes` |
@@ -112,7 +112,7 @@ Single branch, one release PR, slices committed in this order (P0 serial). Commi
    - **C5** — the cascade rows, then the process-catalog build and `build --check`.
    - **C6** — the S-36 row (D-S36 A), then the gate-coverage register row (D-6 A) with the catalog anchor rewrite and its checks, in that one commit.
 2. **#7503** (sub-task #9163): the hub-promotion branch (D-1 C) — `analysis-workspace-standard.md` § 1.1, the bridge's Procedure 4b and isolation row, and `spoke-launch.md` with the `SKILL.md` `version:` bump in a sanctioned `pmo-skill-editor` session, followed in the same commit by the `release-hub` package rebuild. Inherits 1's rule text.
-3. **#7929** (sub-task #9169): the cadence, the resume-state contents and the resume-pointer home in `hub-session-continuity.md`; the hub-state README; the bridge's Procedure 0b clause; its register row after #8019's; the release-hub playbook clauses and `version:` bump in a sanctioned session (D-5 B); a second `release-hub` package rebuild after its own release-hub source edit.
+3. **#7929** (sub-task #9169): the cadence, the resume-state contents and the resume-pointer home in `hub-session-continuity.md`; the hub-state README; the bridge's Procedure 0b clause; its register row after #8019's; the release-hub playbook clauses in a sanctioned session (D-5 B), leaving the `SKILL.md` `version:` that #7503's slice set (DEV-16, DEV-25); a second `release-hub` package rebuild after its own release-hub source edit.
 
 Rationale: every later slice inherits #8019's rule; #7929 is ordered last so its spoke-return checkpoint can name #7503's step.
 
@@ -199,7 +199,7 @@ release/skills/release-hub/references/orchestration-playbook.md  edit
 core/process-catalog/engineering-harness/flip-gate-to-enforce.md  edit
 core/process-catalog/engineering-harness/graduate-gate-modes.md  edit
 core/process-catalog/engineering-harness/review-warn-log-drains.md  edit
-# ── #7503 and #7929 (SKILL.md: #7503's version-only bump, then #7929's edit; the package rebuilt in each slice) ──
+# ── #7503 and #7929 (SKILL.md: #7503's version-only bump, which #7929's slice keeps; the package rebuilt in each slice) ──
 release/skills/release-hub/SKILL.md  edit
 packages/release-hub.skill  edit
 packages/release-hub.skill.sha256  edit
@@ -368,6 +368,14 @@ D1 approve (the plan, the Release Outcome Statement draft, the re-scope of #8019
 | DEV-16 | 6 (#7503) | `release/skills/release-hub/SKILL.md` moves into the shared #7503/#7929 matrix group: #7503 sets `version:` to `v5.15`, the provisional next-free recorded at Commit 0, which binds at the Stage-12 claim and is restamped there if the claim lands elsewhere; the package is rebuilt in #7503's slice and again in #7929's, where the Stage-4 plan said one rebuild, and the matrix comment, the Contention Map, the Implementation Sequence and the Agent-Editability Read are reconciled to that | the #7503 review's matrix finding, adopted at scope-lock; the hub's Stage-6 routing on #9163 |
 | DEV-17 | 6 (#7503) | A2 container: as DEV-9, the scaffolded sub-task #9163 plus the commit slices C7503-1 to C7503-3; the release PR body is left to the last Engineering spoke | the hub's Stage-6 brief: this spoke does not edit the PR title or body |
 | DEV-18 | 6 (#7503) | C7503-3 lands as two commits, not one: a follow-on (`1c9ebc28`) rewords the At-return lead-in after `deploy.sh --check` Check 63 read it as a stated count of 2 over an eight-item list, and rebuilds the package; each pushed head stayed package-fresh | a gate finding fixed forward in a new commit; the shared branch is never rewritten |
+| DEV-19 | 6 (#7929) | The CIAC-3 seam lands in `## Where the run stands`: each returned spoke's worktree path, as its Agent result named it, until that worktree is removed, and where the audit-output rows are. `## Spokes in flight` keeps only spokes not yet returned, and the pointer keeps four sections | #7503's Stage-6 seam; a fifth section would cascade into the register row's census |
+| DEV-20 | 6 (#7929) | The liveness read (FM-1) is an unnumbered lead paragraph of § 4.2, and step 2 opens on its result. That satisfies both the hub's "§ 4.2 opens with" and the review's "step 2 opens with", and keeps the step numbers the lease and the handle rule cite | review FM-1 and CD-1; the hub's Stage-6 input |
+| DEV-21 | 6 (#7929) | FM-5's rewrite once a launch or an arming returns its identifier is a sentence of the cadence, not a fifth moment, and it keeps the `checkpoint` of the launch or arming it completes; the `checkpoint` field keeps its five values | the review's guard on the counts (four moments, three surfaces, nine steps) |
+| DEV-22 | 6 (#7929) | A citation of another document's section names it by heading text: the action-tracking standard's Action-Item Schema, the scheduler adapter's register and deregister section, and the continuity standard's resume-pointer section in the bridge, the README, the playbook and the register row, where the design wrote numbers | the reference-durability citation rule, as DEV-13 applied it |
+| DEV-23 | 6 (#7929) | FM-1's lifetime rule is applied to the `## Bound to the account` cell as well as § 4.2 step 4: each row carries its lifetime and its due time, and a routine registered through the scheduler adapter is read, never re-armed | review FM-1 mitigation 2; the liveness read needs the due time |
+| DEV-24 | 6 (#7929) | FM-3 is applied in a fifth place the review did not list, § 3.4's declared observable. The register row's falsification test is re-keyed to a skipped write followed by the next moment's record writes, and the residual is stated: a skipped write followed at once by a stop reads as a stop mid-checkpoint, and the record wins in both | review FM-3; the gate-efficacy standard's observable requirement |
+| DEV-25 | 6 (#7929) | C7929-3 edits the playbook only. `SKILL.md` keeps `v5.15`, set by #7503's slice; the Implementation Sequence and the matrix's shared-group comment are reconciled to that | the hub's Stage-6 input |
+| DEV-26 | 6 (#7929) | A2 container: as DEV-9, the scaffolded sub-task #9169 plus the slices C7929-1 to C7929-3. As the release's last Engineering spoke, this slice also authors `## Change Description` (discharging DEV-10) and finalizes the release PR body | the hub's Stage-6 brief |
 
 ## Verification Evidence
 
@@ -417,3 +425,64 @@ Populated by each Engineering slice; § Commit 0 is this file's own.
 6. **Remove the worktree**, every command run from the hub's own release worktree, never in the primary: `git -C <spoke worktree> checkout -- release/releases/decision-health-summary.md`; `git worktree remove <absolute spoke-worktree path>`; then `git branch -d <its worktree-agent branch>`. If `-d` refuses, leave the branch to the orphan-state sweep. Never use `-D`.
 7. **Observe.** `ls -1 <home>/<the step-1 folder>/` lists `SUMMARY.md` and `findings-register.md`. `git -C <main checkout> worktree list --porcelain` has no entry for the spoke's worktree. `git -C <main checkout> check-ignore -q <home>/<the step-1 folder>/SUMMARY.md` exits 0. The row reads `done`. Both step-1 snapshots are unchanged.
 8. **Post the evidence** on #7503's Stage-8 sub-task, naming the folder a reproduction run whose summary was discarded. The Stage-8 spoke re-runs step 7's `ls` and `check-ignore` read-only. Expected: the folder is present at the home and the worktree is gone, so AC-2 is MET.
+
+### #7929 (commits C7929-1 to C7929-3)
+
+- **Slices.** C7929-1 `d1b27927` (the continuity standard, the hub-state README and the bridge's Procedure 0b clause), C7929-2 `4174b0b8` (the gate-coverage register row and the anchor rewrite), C7929-3 `63e3df81` (the four playbook clauses and the `release-hub` package, in a `pmo-skill-editor` Mode A session whose sentinel was minted by the session tool, ended after the commit, and never staged; `SKILL.md` untouched).
+- **The design's arms script**, run from the worktree root. RED at `ef595d61`: T7929-1..8 all 0 except T7929-5b at 1, which #7503's slice had already turned; S1–S5 1, 9, 1, 1, 0; C1–C4 1, 1, 36, 1. GREEN at the C7929-3 head: T7929-1 4, -2 5, -3 5, -4a/4b/4c/4d 1/1/1/0, -5a/5b 1/1, -6 1, -7 1, -8 4; S1–S5 1, 9, 1, 1, 1; C1–C4 1, 1, 37, 1. Every value equals the design's GREEN column.
+- **Scope-lock literal arms** (16, over the § 3.4 and § 4 extracts and the register row), each 0 at RED and 1 at the head, each with a sensitivity control (the literal planted in a probe string, read 1) and a specificity control (a near-miss, read 0): FM-1 the liveness read, the stand-down hand-off and handles by lifetime; CD-1 the lease's superseded rule and § 4.2 step 6; FM-2 the `date -u` stamp, the file-time read-back and the five-minute tolerance; FM-3 the mid-checkpoint class, the excluded spoke rows and the register row's comparison set; FM-4 the `Post-push mergeability:` marker and the recorded heading literal; FM-5 the `agent-*` discovery step and the field filled once the launch returns it; the CIAC-3 seam's returned-spoke paths. The extracts read 0 bytes at RED for § 3.4, which did not exist, so a whole-file count was read too: three literals the standard already carried elsewhere (`superseded`, `date -u`, `spoke:#N`) read 2, 2 and 1 at RED and 3, 3 and 2 at the head.
+- **AC rows** (plan): AC-1 `grep -c -i "before each spoke launch"` reads 2; AC-2 `grep -c -i "died"` reads 13; AC-3 `grep -c -i "resume pointer"` reads 13; each baseline 0. Reader-graded limbs: § 4.2 names the stage and gate, the next action, every spoke in flight with its died-test, and the account-bound handles; § 3.4 names the S-01 membership, the class Working state, `/local-state/release-runs/`, today's path through the hub-state token, no new surface, and the ledger rule.
+- **CIAC-3 and INT-1:** § 4.2 step 3 reads the rows whose description begins `analysis output of spoke #` with status `open` or `in-flight`, cites `spoke-launch.md` § Audit output and restates none of its return steps; `## Where the run stands` records each returned spoke's worktree path as its Agent result named it, the residual #7503's evidence handed to this card.
+- **INT-2:** the governed shape `/local-state/release-runs/<milestone-slug>/resume-pointer.md` is a file two segments below a subfolder of the home, neither the README nor a dot-leading entry at its top: the shape class of `T8019-A3`, which passes in the suite run below. Graded at Stage 8 Phase B.
+- **Rollback trigger (b) probe at the head:** `git log --all --name-only` and `git ls-files`, searched for `resume-pointer`, read 0 and 0 (control: the same reads for `pending-approvals` give 2 and 1).
+- **Catalog:** the register row moved 10 citations in the three declared engineering-harness pages; `anchors resolve --write` rewrote exactly those 10, then `anchors resolve --check` (486 of 486), `build --check` and `check-process-catalog.py --pattern-arm not-run` each exit 0.
+- **Corpus hygiene** over the slices' added lines (101, 1 and 5): issue-reference, raw-URL, home-path, handle, strikethrough, placeholder, bypass-token, numbered cross-document citation and close-keyword probes read 0, each of 9 planted controls firing. `path-leak-patterns.sh --scan-file` exits 0 on the standard and the playbook. `check-doc-links.py --require-targets` over the five edited documents reports no broken reference (control: `--self-test`, 12 fixtures). `check-count-structure.py` reads the same six findings as before, none in a file this release changes (controls PASS).
+- **Package.** `build-skill-packages.sh --skills-for-paths` (stdin) names no skill for the standard, the README or the bridge, and names `release-hub` for the playbook (control). `release-hub` rebuilt after the playbook edit; `deploy.sh --check-package-freshness` reads 55 content-fresh.
+- **Hook suites** (a non-regression read; this card changes no hook), from the worktree root at the C7929-3 head: 30 suites, `AGGREGATE: PASS=5490 FAIL=0`, `block-destructive.test.sh` 2,474/2,474 (its target exactly), `ghsa-xxjm-long-input-matchers.test.sh` 37, equal to the #8019 and #7503 readings. `git status --porcelain --untracked-files=all` read clean before the layout build and showed only the uncommitted plan file after the run. Linux was not run locally; the release PR's Linux job is its reading.
+- **`deploy.sh --check`** (at `63e3df81`): exit 1, with the same two FAIL rows as at #7503's head, neither naming a file this release changes: `release-body-drift` (published releases) and `count-structure` (Check 63; the six sites in `SECURITY.md`, ADR-232, `operator-instance-home-and-isolation-key.md` and `release-notes-standard.md`). Check 6 reads `release-hub` OK; Check 7 reads 55 packages content-fresh; Check 10 reads `release-hub` OK at `bfbafec8`, the last commit touching its `SKILL.md`, which this card does not edit; Check 14 reports no broken cross-reference. The installed `release-hub` copies read DRIFT and Check 9 warns on the `git-workflow.md` mirror, both expected before the Stage-12 deploy.
+- **Plan verifier and lint, after this card's plan edit.** `verify-release-plan.sh` exits 0 with the roll-up 11 PASS / 0 FAIL / 4 SKIP / 7 UNRUNNABLE / 0 ERROR over 22 records, against 10 / 3 / 4 / 5 before this slice. The three #7929 rows moved: AC-1 is PASS at 2, and AC-2 and AC-3 are UNRUNNABLE by design, their grep limbs PASS at 13 with a reader-graded limb following. FCM-COVERAGE is PASS at 46 declared and 46 interpreted, and FCM-1 is PASS. `--ciac-lint` reads declared=3, parsed=3, clean=1, declared-deferral=2, flagged=0.
+- **`deliverable_state`:** `deployed-copy-synced`, reached when the Stage-12 deploy syncs `release-hub`; the standard binds from the merge, because it loads from the tree.
+- **Owed at Stage 13 (G-CL10):** the `resume-pointer-at-close` census over this release's run folder, recorded here per `stage-13-close.md` § Phase A14. From its first write after the merge, this release's hub writes its pointer at the run root in the § 3.4 form.
+- **ADR index:** N/A — #7929 adds no record under `release/ADRs/`.
+
+## Change Description
+
+### Outcome
+
+A worktree session, or a spoke launched without isolation, can now write the main checkout's three registered in-repo git-ignored homes (`local-state/<sub>/…`, `analysis/<sub>/…`, `roadmaps/<name>`) through the file-write tools, while `BLOCK-DESTRUCTIVE-019` still refuses every other file-tool write into the main checkout; the rule states the same carve-out. A spoke-run audit's dated folder reaches the governed analysis home and survives its worktree. A release hub keeps one resume pointer per run and rewrites it ahead of each action, so a hub resumed under any account, without the earlier transcript, finds where the run stopped and what it held in flight.
+
+### Issues resolved
+
+| # | Outcome | Status |
+|---|---|---|
+| #8019 | `-019` admits a subfolder of `/local-state/` in both views (README and dot entries withheld); a parity arm holds the hook's set equal to the placement standard's registered-homes table; the ignore pair ships in its own commit; `git-workflow.md` states the carve-out, its channel scope and its reach caveat; the S-36 row records the ruling | DONE |
+| #7503 | The analysis standard names a spoke-run audit's destination by launch shape; `spoke-launch.md` § Audit output carries the launch steps and the R-0 to R-7 promotion; the bridge's Procedure 4b binds the listing to every spoke's return | DONE (AC-2 graded by reproduction at Stage 8) |
+| #7929 | The continuity standard names the run-root resume pointer, an S-01 member, with its write-ahead cadence, its contents, clock-sourced stamps and a lease; § 4.2 resumes from it behind a liveness read; the register records the cadence as a named gap; four playbook clauses point at it | DONE |
+
+### Key decisions
+
+- **D1 (approve), D-LocalState C, D-ReleaseClass `novel`, D-7502 (leave out and record):** the Stage-4 plan gate (§ Operator Decisions — rendered).
+- **D-CR1 (approve with adjusts):** every adversarial finding entered Stage 6 as a literal, and the spoke-decided choices were ratified, among them #7503 D-1 C (hub promotion) and #7929 D-1 B (a cursor, not a fourth surface), D-5 B (the playbook clauses) and D-6 (the register row).
+- **D-7 A′:** any channel inside the homes, in their exact shapes, for a session whose file tools reach the main checkout; an Agent-tool isolated spoke writes the homes on no channel, and its output reaches a home through the hub's promotion.
+- **D-S36 A:** the skill-iteration workspace stays out of the registered homes, by ruling.
+- **D-Rollback:** a numeric trigger with a 7-day window (§ Delivery Strategy · Rollback Strategy).
+
+### Reversibility
+
+**MODERATE — HIGH confidence.** Before merge each slice reverts with its commits; after the Stage-12 deploy, revert the #8019 hook and rule commits while keeping the ignore-pair commit and redeploy, and for a #7503 or #7929 revert rebuild `packages/release-hub.skill`; the version tag is retained.
+
+### Downstream impact
+
+- **Stages 7 and 8.** Stage 7 reads the hook suites on macOS and Linux; only #8019 changes a hook. Stage 8 grades INT-1 and INT-2 by read, and the hub runs #7503's AC-2 reproduction at Stage-8 entry; Stage 9 grades the three CIACs.
+- **Until the Stage-12 deploy** the deployed `-019` governs every session. The first live proof is the Stage-13 probe: a `Write` and an `Edit` to `<main>/local-state/<sub>/probe` allowed, a write to `<main>/core/<probe>` refused.
+- **Stage 12** restamps `release-hub` `SKILL.md` in a sanctioned session, and rebuilds its package, if the claim binds a number other than the provisional `v5.15`.
+- **Stage 13 owes** the `resume-pointer-at-close` census (G-CL10) and the disposition of the AC-2 reproduction folder.
+- **Unblocked:** #7946 and #7947, which this release's #7929 natively blocks; #7947's Stage 5 inherits the lease and two gaps — an off-machine resume cannot read the pointer, and a scheduled resume plus a manual one are two writers. Waves 3 to 8 of epic #8005 wait on this milestone.
+- **`in-repo-home-is-guarded`** keeps the `local-state/README.md` and the commit guard, and reconciles the homes list after this release merges.
+- **Stated residuals:** the shell channel in the main checkout carries no write guard (D-7 A′); the cadence has no runner (a named gap); a skipped pointer write followed at once by a stop reads as a stop mid-checkpoint, and the record wins in both.
+
+### Cross-references
+
+- This plan: `release/releases/plans/worktree-sessions-reach-in-repo-homes_RELEASE_PLAN.md` (top: § Header, § Summary); it takes its version name at the Stage-12 claim.
+- Milestone 449, `worktree-sessions-reach-in-repo-homes`; epic #8005; release PR #9258.
+- User-facing release notes: authored at Stage 13 Close under `release/releases/notes/`.
