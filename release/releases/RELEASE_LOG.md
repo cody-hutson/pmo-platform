@@ -277,6 +277,54 @@ Spec: [`stage-12-execute.md § Phase B5`](../references/pipeline/stage-12-execut
 | v5.12 | obligation-runners-declared | #6227, #6226, #6225, #7842 | #8995 | `59be7694d4d5af4704f46dda7019b59afbdcc917` | `v5.12` | VERIFIED | 2026-11-17 |
 | v5.13 | superseded-pr-runs-cancelled | #8440, #9007 | #9026 | `f5df15cdc3000068c475487f21032c4e7e85c7bb` | `v5.13` | VERIFIED | 2026-11-17 |
 | v5.14 | script-guard-refuses-only-what-executes | #8490, #8548, #8326, #8493, #8327 | #9093 | `d8814512bf4612d330ef23132316d9b536fef312` | `v5.14` | VERIFIED | 2026-11-22 |
+| v5.15 | issue-body-is-the-scope-of-record | #7970 | #9201 | `7499df9f74d5089d46f358956efb43104ef5787e` | `v5.15` | DEPLOYED | 2026-11-28 |
+
+#### Deployment Log v5.15
+**Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** Each was read back. The release has no other deployment item: its plan's Operational Deployment Manifest is N/A. Paths are repository-relative.
+
+- **(1) The merge.** It carries the release's 11 changed paths to `main` (2 added, 9 modified), measured at the merge commit `7499df9f` against its first parent `8ed5e273`:
+  - ADR-242 (added, `Proposed`), ADR-062 and the ADR index `core/ADRs/README.md`;
+  - `core/schemas/field-lifecycle-matrix.md` and `core/standards/failure-mode-standard.md`;
+  - `release/governance/release-process.md`, the hub-spoke bridge, the Stage 5 spec, the release-personas spec and the ticket information architecture spec;
+  - this release's plan (added).
+- **(2) Phase B4 ran once.** It ran from the Stage-12 session worktree detached at `origin/main` `7499df9f`, the merge commit itself; `main` had not moved (`merge-base --is-ancestor` exit 0).
+  - **Command:** `bash core/deploy/deploy.sh --deploy --release issue-body-is-the-scope-of-record --no-targets`. It exited 0 and reported nothing to deploy beyond the rules mirror.
+  - **B4.5 record:**
+    - **Join key:** `issue-body-is-the-scope-of-record`, derived from the PR's head ref, asserted non-empty and read back with 55 rows under it before the claim and 56 after the version-binding row. Control: an unknown slug reads 0.
+    - **Targets:** none, so the run used `--no-targets`. The B4.3 derivation found 0 of the merge's 11 paths under a skill root or `packages/`, so there was no candidate and no non-member; the roster read 55 names.
+    - **Deploy mode:** the run printed no `Deploy mode: user-local only` line. With no target named, neither the skill half nor the package half ran.
+    - **Rules mirror:** re-laid at `<deploy-root>/.claude/rules/`, 9 files written, unchanged in membership. All 9 members read byte-equal to source after the deploy (control: a mismatched pair differs); the merge changes no mirror member.
+  - **Rows written:** under the slug, the run wrote one `deploy-rules-mirror` row, outcome `resolved` (`result:SUCCESS`), at 15:38:31Z. It is the slug's only `deployment-status` row: there is no `deploy-skill` and no `deploy-package` row, as `--no-targets` requires.
+- **Nothing else is owed.** The merge changes no skill, no package, no `harness/` path, no hook, no allowlist and no context-file template, so no `.skill` rebuild, no hook-bundle refresh and no composition-surface propagation is owed.
+
+**Mechanism:** a git merge commit and the atomic version claim; the release-stamped rules-mirror deploy (S-2 direct copy).
+- **The merge.** PR #9201 merged to `main` at `7499df9f74d5089d46f358956efb43104ef5787e` (parents `8ed5e273` / `87719822`) by `gh pr merge --merge --match-head-commit`, pinned to the head the re-authorized Execute decision names, with no `--admin`, no `--auto`, no `--delete-branch`, no squash and no force-push. It verified as `MERGED` with a non-null merge commit, and the host reads the merge commit `verified=true, reason=valid`. The repository's `delete_branch_on_merge` setting removed the release branch from the remote. The PR body's Issue References block carried the plan-declared closing reference for the one card, #7970, which closed at 15:31:09Z, two seconds after the merge.
+- **The pre-merge state, on head `87719822`.**
+  - **A.4:** the plan declares no strategy token; the merge-commit strategy used is allowed (`merge`, `squash` and `rebase` all read `true`).
+  - **A.5:** 0 commits behind `main` `8ed5e273`, so no merge into the branch.
+  - **A.5.6:** the dry run read `v5.15`, equal to the provisional, so `version-freeness = FREE`.
+  - **A.5.7:** `--detect` read anchor 241 and `ADR-242 BINDS`, so `adr-number-freeness = FREE (ADR-242)`. `--stamp --check` read 0 residual tokens over 11 in-scope files (control: 21 on the pre-stamp head `22a6d267`); no stamp was applied in this run.
+  - **A.5.8:** the four commands exited 0, 0, 1 and 0, so `process-catalog repair = not needed`. The staleness command's exit 1 (`depicted_changed=74 cited_changed=75`) is reported and decides nothing. No publication hold: the plan carries no hold row and the release adds no catalog file.
+  - **A.6 and A.7:** `MERGEABLE` / `CLEAN`, `isDraft=false`. At the head, 24 of 24 required checks and 63 of 63 checks were in the `pass` bucket (Stage 9 condition C1). **B0:** no dependent PR.
+- **Phase B1.1.** The sweep exited 0: 4 open pull requests on `main`, all clear, none newly unmergeable.
+- **Phase B1.2.** The three process-catalog checks on the merge commit's push run completed `success`, and the three commands exited 0 in a worktree at the merge commit, so `repair owed at B5: no`.
+- **The version claim.** `claim-version.sh` claimed **`v5.15`** for bump class `minor` by atomic ref-CAS, with no collision reported. That equals the dry run at the merge SHA.
+  - `--stamp-slug`, derived from the PR's head ref, was passed explicitly. The chore branch was cut at the merge commit before the claim.
+  - The tag object `bd905ffe` is signed and annotated and peels to the merge commit on `origin`. `git tag -v` reads a good signature, and the host reads the tag `verified=true, reason=valid`. The message is the tool's default, `v5.15 — release SHA = merge 7499df9f74d5`.
+  - **Re-version ledger input:** none. The provisional and the claimed version are both `v5.15`.
+- **The claim-time stamp.** The manifest was plan-only, staling no package. The stamp commit `7ab43b0c` (signed; the host reads it `verified=true, reason=valid`) renamed the plan to `release/releases/plans/v5/v5.15_RELEASE_PLAN.md` and resolved its one placeholder, leaving none.
+- **The version-binding row (B3.1)** was appended by the executor at 15:37:51Z: rows under the slug went from 55 to 56, and exactly one carries the `d:version-claim` payload. The event-record integrity cutover was already bound, so B3.2 was a no-op (`--assert-bound` exit 0).
+
+**Timestamp:** 2026-11-28 15:31 UTC (Saturday). The `Date` cell is the merge event: the merge's `mergedAt`, `2026-11-28T15:31:07Z`. Sequence:
+- the re-read of the head, the check roster and `main` (`8ed5e273`), then the merge at `15:31:07Z`;
+- the Phase B1.1 sweep and the Phase B1.2 read after the merge;
+- the claim, with the tag at `15:37:17Z` and the stamp commit at `15:37:19Z`;
+- the version-binding row at `15:37:51Z`;
+- the stamped deploy's row at `15:38:31Z`.
+
+The day of the week is computed from the date.
+**Cycle-Time:** N/A (1 deployment-status row(s) exist for v5.15, none of an anchor subtype — T_DEPLOY anchors only on deploy-skill and deploy-harness, per deployment-cycle-time.md § 2.1, so it is excluded by definition, not by an anchor target failing: deploy-rules-mirror 1 (1 resolved, 1 by the deploy emitter, 0 hand-written))
+**Result:** SUCCESS — the merge, the version claim, the plan stamp and the release-stamped rules-mirror deploy are complete and read back, and the release owes no other deployment item.
 
 #### Deployment Log v5.14
 **Files deployed:** **The merge, the version claim with its plan stamp, and the release-stamped rules-mirror deploy are complete.** Each was read back. The plan's one deployment item, the refresh of the deployed security-hook bundle, is operator-side and is pending (item 3), so the deployed `block-destructive.sh` is not yet the merged version. Paths are repository-relative.
