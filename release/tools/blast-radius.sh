@@ -211,7 +211,9 @@ OPTIONS
                         explicit partial-result marker and exits $EXIT_PARTIAL.
                         Default: $DEFAULT_MAX_EXPAND; 0 = unlimited.
   --include-mirrors     Include mirror-pair references in output (filtered by default)
-  --root=PATH           Repo root for scanning
+  --root=PATH           Repo root for scanning (default: the working directory's git
+                        toplevel, else this script's own checkout's, else the working
+                        directory)
                         Default: \$(git rev-parse --show-toplevel)
   --exclude=GLOB        Additional exclusion path-prefix; repeatable
   --no-color            Disable ANSI color in table output
@@ -396,7 +398,13 @@ check_deps() {
 }
 
 # ---------------------------------------------------------------------------
-# Repo root resolution
+# Repo root resolution: --root, else the working directory's git toplevel, else
+# the toplevel of this script's own checkout, and only then the working
+# directory. The third step keeps an omitted --root from walking an ancestor of
+# the checkout: run from a directory that is not a work tree (the workspace root
+# above a checkout is not one), the working directory would otherwise become the
+# root, the tracked source would not apply, and the fallback walk would reach the
+# checkout's in-repo homes and every linked worktree under .claude/worktrees/.
 # ---------------------------------------------------------------------------
 resolve_root() {
   if [ -n "$ARG_ROOT" ]; then
@@ -411,6 +419,10 @@ resolve_root() {
   if command -v git >/dev/null 2>&1; then
     local git_root
     if git_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+      REPO_ROOT="$git_root"
+      return
+    fi
+    if git_root=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null); then
       REPO_ROOT="$git_root"
       return
     fi
@@ -632,7 +644,7 @@ build_scan_list() {
   local unreachable_count
   : > "$unreachable"
 
-  local find_args=( "$REPO_ROOT" )
+  local find_args=( "$REPO_ROOT" )  # tree-walk: allow — only when try_git_tracked_candidates finds no index to read (no git, no work tree, a failed read, or an empty list); an omitted --root resolves to this script's checkout first
   find_args+=( -type f )
 
   # Type filter: -name "*.md" -o -name "*.sh" -o ...
