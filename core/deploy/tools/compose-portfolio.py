@@ -1377,6 +1377,28 @@ def run_self_test() -> int:
                      portfolios; a served id naming no active record; an unmigrated
                      layout (the root composed file beside records); a non-slug flag.
                      CONTROL: the zero-record committed fixture still composes both.
+      (portfolio-recordless-stop) D-RecordlessTwoIds — a record-less root whose rollups
+                     name two portfolios is stopped (exit 2) with the remedy "create the
+                     Portfolio records", never a scoped run. CONTROL: rollups naming one
+                     portfolio there compose unscoped.
+      (portfolio-composed-not-record) D-RecordNotComposedFile — a composed PORTFOLIO.md
+                     that carries entity_type: Portfolio is exit 2. CONTROL: the same
+                     record in its own file beside it is served.
+      (portfolio-record-walk) the record walk is bounded to <root>/_config/*.md and
+                     <root>/_config/<slug>/*.md, never releases/ in any case; one id in
+                     conflicting states and the reserved id `releases` are exit 2.
+                     CONTROL: a record in a slug-named folder is counted, and two active
+                     copies of one id count once and are reported.
+      (portfolio-project-key) a PROJECT.md portfolio_id that fails the slug test holds
+                     the rollup and is named in its own report class, not as a
+                     re-emission hold. CONTROL: the clean tree composes it.
+      (portfolio-alias-exact) a PROJECT.md id alias redacts by exact match only, and the
+                     longest project_id prefix decides against a member's. SENSITIVITY:
+                     the pre-scoping render names the neutral id.
+      (portfolio-report-line) the line leads with the surfaces' report-line fields,
+                     prints the active set, and labels an archived-only unscoped run "no
+                     active Portfolio record". CONTROL: the committed zero-record
+                     fixture's line stays empty.
     """
     import contextlib
     import io
@@ -1933,6 +1955,169 @@ def run_self_test() -> int:
         if _quiet_main(["--root", str(two_root), "--as-of", _iso, "--portfolio", "Port Alpha"]) != 2:
             failures.append("(portfolio-guards) a non-slug --portfolio was not exit 2")
 
+        # ---- contract §7: Stage 6 round-2 decisions and absorbed review items -----
+        def _scope_error(r, s):
+            """The PortfolioScopeError text a compose raises, or None when it composes."""
+            try:
+                compose(r, as_of, s)
+            except PortfolioScopeError as _e:
+                return str(_e)
+            except ContractDrift as _e:
+                return f"<ContractDrift: {_e}>"
+            return None
+
+        def _try_compose(r, s, rep=None):
+            try:
+                return compose(r, as_of, s, rep), None
+            except (ContractDrift, PortfolioScopeError) as _e:
+                return None, f"{type(_e).__name__}: {_e}"
+
+        _beta_rec = (two_root / CONFIG_DIRNAME / "port-beta.md").read_text(encoding="utf-8")
+        _beta_fm = _beta_rec[:_beta_rec.index("\n---\n") + 5]   # the frontmatter, both fences
+
+        # (portfolio-recordless-stop) D-RecordlessTwoIds (B)
+        _msg = _scope_error(nc, None)
+        if _msg is None or "create the Portfolio records" not in _msg or "--portfolio" in _msg:
+            failures.append(f"(portfolio-recordless-stop) a record-less root whose rollups name two "
+                            f"portfolios was not stopped with the remedy 'create the Portfolio "
+                            f"records' (and no scoped-run remedy): {_msg!r}")
+        n1 = _variant("recordless-one-id", nc, [(BR, "portfolio_id: port-beta\n",
+                                                 "portfolio_id: port-alpha\n")])
+        _b, _err = _try_compose(n1, None)
+        if _err or sorted(_s1_ids(_b)) != ["proj-alpha", "proj-beta"]:
+            failures.append(f"(portfolio-recordless-stop) CONTROL FAILED — rollups naming one "
+                            f"portfolio at a record-less root did not compose unscoped: {_err}")
+
+        # (portfolio-composed-not-record) D-RecordNotComposedFile (A)
+        cr = _variant("composed-is-record", two_root, [])
+        (cr / CONFIG_DIRNAME / "port-beta.md").unlink()
+        _pf = cr / CONFIG_DIRNAME / "port-beta" / ROOT_COMPOSED_NAME
+        _pf.write_text(_beta_fm + _pf.read_text(encoding="utf-8"), encoding="utf-8")
+        _msg = _scope_error(cr, "port-alpha")
+        if _msg is None or "never a Portfolio record" not in _msg:
+            failures.append(f"(portfolio-composed-not-record) a composed PORTFOLIO.md carrying "
+                            f"entity_type: Portfolio was not refused: {_msg!r}")
+        if _quiet_main(["--root", str(cr), *_ok]) != 2:
+            failures.append("(portfolio-composed-not-record) the refusal is not exit 2")
+        cr2 = _variant("record-own-file", two_root, [])
+        (cr2 / CONFIG_DIRNAME / "port-beta.md").rename(
+            cr2 / CONFIG_DIRNAME / "port-beta" / "portfolio-record.md")
+        _b, _err = _try_compose(cr2, "port-beta")
+        if _err or _s1_ids(_b) != ["proj-beta"]:
+            failures.append(f"(portfolio-composed-not-record) CONTROL FAILED — the same record in "
+                            f"its own file beside the composed file was not served: {_err}")
+
+        # (portfolio-record-walk) FM-D2, CD-D1 (b)-(d)
+        _gamma = _beta_rec.replace("port-beta", "port-gamma")
+        for _name, _rel, _want, _what in (
+                ("walk-releases", "_config/releases/port-gamma.md", 2,
+                 "a record under the config folder's releases/"),
+                ("walk-releases-cap", "_config/Releases/port-gamma.md", 2, "a record under Releases/"),
+                ("walk-deep", "_config/port-gamma/old/port-gamma.md", 2,
+                 "a record nested two folders deep"),
+                ("walk-control", "_config/port-gamma/port-gamma.md", 3,
+                 "CONTROL: a record in a slug-named folder")):
+            _rep = {}
+            _b, _err = _try_compose(_variant(_name, two_root, [(_rel, None, _gamma)]), "port-alpha", _rep)
+            if _err or _rep.get("portfolios") != _want:
+                failures.append(f"(portfolio-record-walk) {_what}: {_err or ''} counted "
+                                f"{_rep.get('portfolios')} active portfolio(s), expected {_want}")
+        cs = _variant("walk-conflict", two_root, [
+            ("_config/port-beta.md", "lifecycle_state: active", "lifecycle_state: archived"),
+            ("_config/port-beta/portfolio-record.md", None, _beta_rec)])
+        _msg = _scope_error(cs, "port-alpha")
+        if _msg is None or "conflicting states" not in _msg:
+            failures.append(f"(portfolio-record-walk) one portfolio_id held by an active and an "
+                            f"archived record was not a configuration error: {_msg!r}")
+        rv = _variant("walk-reserved", two_root, [
+            ("_config/reserved.md", None, _beta_rec.replace("port-beta", "releases"))])
+        _msg = _scope_error(rv, "port-alpha")
+        if _msg is None or "reserved" not in _msg:
+            failures.append(f"(portfolio-record-walk) a record whose portfolio_id names the config "
+                            f"folder's releases/ was not refused: {_msg!r}")
+        _rep = {}
+        _b, _err = _try_compose(_variant("walk-dupe", two_root, [
+            ("_config/port-beta/portfolio-record.md", None, _beta_rec)]), "port-alpha", _rep)
+        if _err or _rep.get("duplicates") != ["port-beta"]:
+            failures.append(f"(portfolio-record-walk) CONTROL FAILED — two active records with one "
+                            f"id were not counted once and reported: {_err} {_rep}")
+
+        # (portfolio-project-key) FM-D3
+        pk = _variant("project-key-polluted", one_root, [
+            (AP, "portfolio_id: port-alpha\n", "portfolio_id: port-alpha   # BELONGS_TO parent\n")])
+        _rep = {}
+        _b, _err = _try_compose(pk, "port-alpha", _rep)
+        if (_err or "proj-alpha" in _s1_ids(_b) or _rep.get("project_key_polluted") != ["proj-alpha"]
+                or _rep.get("held")):
+            failures.append(f"(portfolio-project-key) a polluted PROJECT.md portfolio_id was not held "
+                            f"and named in its own report class: {_err} {_rep}")
+        elif "PROJECT.md portfolio_id polluted" not in portfolio_report_line(_rep):
+            failures.append("(portfolio-project-key) the report line does not name the polluted "
+                            "PROJECT.md key")
+        _rep = {}
+        _b, _err = _try_compose(one_root, "port-alpha", _rep)
+        if _err or "proj-alpha" not in _s1_ids(_b) or _rep.get("project_key_polluted"):
+            failures.append(f"(portfolio-project-key) CONTROL FAILED — the clean tree: {_err} {_rep}")
+
+        # (portfolio-alias-exact) FM-D4
+        ax = _variant("alias-neutral", two_root, [
+            (AR, "    to: beta-delivery\n    state: open\n",
+             "    to: beta-delivery\n    state: open\n"
+             "  - from: proj-alpha\n    to: beta-delivery-gateway\n    state: open\n")])
+        _b, _err = _try_compose(ax, "port-alpha")
+        if _err:
+            failures.append(f"(portfolio-alias-exact) compose raised: {_err}")
+        else:
+            if "beta-delivery-gateway" not in _b:
+                failures.append("(portfolio-alias-exact) a portfolio-neutral id sharing a PROJECT.md "
+                                "id alias's first words was rewritten — alias matching must be exact")
+            if _b.replace("beta-delivery-gateway", "").count("beta-delivery") != 0:
+                failures.append("(portfolio-alias-exact) the exact PROJECT.md id alias is no longer "
+                                "redacted")
+        if "beta-delivery-gateway" not in compose(_pre_scoping(ax, "alias-pre"), as_of):
+            failures.append("(portfolio-alias-exact) SENSITIVITY FAILED — the pre-scoping render "
+                            "does not name the neutral id")
+        try:
+            _c = Ctx([], as_of, redact=frozenset({"proj-beta"}), keep=frozenset({"proj-beta-two"}),
+                     alias=frozenset({"beta-delivery"}), keep_ids=frozenset({"proj-beta-two"}))
+            _want_ref = {"proj-beta-two-golive": "proj-beta-two-golive",
+                         "proj-beta-golive": OTHER_PORTFOLIO_REF,
+                         "proj-beta": OTHER_PORTFOLIO_REF, "proj-beta-two": "proj-beta-two",
+                         "beta-delivery": OTHER_PORTFOLIO_REF,
+                         "beta-delivery-gateway": "beta-delivery-gateway"}
+            _got_ref = {k: _c.ref(k) for k in _want_ref}
+            if _got_ref != _want_ref:
+                failures.append(f"(portfolio-alias-exact) longest-prefix / exact-alias matching "
+                                f"wrong: {_got_ref}")
+        except TypeError as _e:
+            failures.append(f"(portfolio-alias-exact) Ctx carries no separate alias and member-id "
+                            f"sets: {_e}")
+
+        # (portfolio-report-line) CD-D1 (d), the §7.4 leading fields, the no-active label
+        _rep = {}
+        compose(two_root, as_of, "port-alpha", _rep)
+        _line = portfolio_report_line(_rep)
+        if not _line.startswith("compose-portfolio: Portfolio: port-alpha — unassigned: none; "
+                                "unresolved portfolio_id: none;"):
+            failures.append(f"(portfolio-report-line) the line does not lead with the surfaces' "
+                            f"report-line fields (contract §7.4): {_line!r}")
+        if "active Portfolio record(s): port-alpha, port-beta" not in _line:
+            failures.append(f"(portfolio-report-line) the line does not print the active set: {_line!r}")
+        ao = _variant("archived-only", one_root, [
+            ("_config/port-alpha/portfolio-record.md", "lifecycle_state: active",
+             "lifecycle_state: archived")])
+        _rep = {}
+        _b, _err = _try_compose(ao, None, _rep)
+        _line = "" if _err else portfolio_report_line(_rep)
+        if _err or "Portfolio: unscoped (no active Portfolio record)" not in _line:
+            failures.append(f"(portfolio-report-line) an archived-only install's unscoped line is "
+                            f"mislabelled: {_err} {_line!r}")
+        _rep = {}
+        compose(root, as_of, None, _rep)
+        if portfolio_report_line(_rep):
+            failures.append("(portfolio-report-line) CONTROL FAILED — the committed zero-record "
+                            "fixture's report line is no longer empty")
+
         # (guard) an --out path under projects/ is rejected.
         if not out_path_rejected(str(Path(td) / "projects" / "_config" / "PORTFOLIO.md")):
             failures.append("(guard) an --out path under projects/ was NOT rejected")
@@ -1995,7 +2180,9 @@ def run_self_test() -> int:
           "join-key-polluted / "
           "discovery-polluted x2 / dot-segment / portfolio-scope / portfolio-discrimination / "
           "single-portfolio-unchanged / portfolio-membership / portfolio-crosscheck / "
-          "portfolio-key-drift / portfolio-field-drift / portfolio-records / portfolio-guards)")
+          "portfolio-key-drift / portfolio-field-drift / portfolio-records / portfolio-guards / "
+          "portfolio-recordless-stop / portfolio-composed-not-record / portfolio-record-walk / "
+          "portfolio-project-key / portfolio-alias-exact / portfolio-report-line)")
     return 0
 
 
