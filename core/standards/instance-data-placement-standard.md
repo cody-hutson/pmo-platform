@@ -74,6 +74,7 @@ classes → homes
 │   └── release/releases/  Tracked repository content — the release corpus (corpus_home = tracked)
 ├── ${XDG_STATE_HOME:-$HOME/.local/state}/pmo-platform/telemetry/    Working state, install-scoped
 ├── ${XDG_DATA_HOME:-$HOME/.local/share}/pmo-platform/pmo-private/   Leak-risk
+│   └── embargoed/<repository>/   S-19 — an embargoed run's state, one folder per target, until disclosure
 ├── ${CLAUDE_WORKSPACE_ROOT}/projects/                                 Operator PMO content
 └── Tool-owned — where each owning tool puts it: the agent-config roots, the memory store,
     the workspace charter, ${PMO_PLATFORM_CONFIG_ROOT:-$HOME/.config/pmo-platform}/
@@ -105,7 +106,7 @@ The release corpus — the release log with its archives, the release index, the
 
 ### Until each repository's cutover
 
-A governed home is where a surface lives after its repository's cutover. Until that cutover the surface resolves to today's path through the pointer its register row names in **Resolves today through** — hub state, for one, through `<OPERATOR_INSTANCE_HUB_STATE_PATH>`. Today's out-of-tree container is `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/`, resolved through `pmo_instance_path` in `core/deploy/lib-instance-path.sh`. One resolver per class sits behind a switch that keeps today's paths and is flipped per repository at its cutover.
+A governed home is where a surface lives after its repository's cutover. Until that cutover the surface resolves to today's path through the pointer its register row names in **Resolves today through** — hub state, for one, through `<OPERATOR_INSTANCE_HUB_STATE_PATH>`. Today's out-of-tree container is `${CLAUDE_WORKSPACE_ROOT}/pmo-instance/`, resolved through `pmo_instance_path` in `core/deploy/lib-instance-path.sh`. One resolver per class — `pmo_working_state_path_for`, `pmo_install_state_path_for` and `pmo_leak_risk_path_for` in that file — sits behind the switch `operator.toml [adapters] governed_homes`, which ships off and keeps every repository on today's paths; each repository's entry is added by that repository's cutover change, and the platform repository's entry also moves the per-user classes, which are the install's; {{ADR:class-homes-switch-and-designation}} records the switch's grammar and the designation rule.
 
 **A surface that states where a kind of data lives says both things:** its class and governed home, citing this standard, and the path it resolves to until cutover.
 
@@ -149,10 +150,10 @@ Every non-tracked platform surface that tracked code resolves or writes today ha
 
 | ID | Surface | Class | Governed home | Resolves today through | Source |
 |---|---|---|---|---|---|
-| S-01 | Release-hub run folders | Working state | `/local-state/release-runs/` of the repository the run belongs to; an external target's runs go to that target's own home | `<OPERATOR_INSTANCE_HUB_STATE_PATH>` — `hub-state/` in today's container | fit/gap |
+| S-01 | Release-hub run folders | Working state | `/local-state/release-runs/` of the repository the run belongs to; an external target's runs go to that target's own home | `<OPERATOR_INSTANCE_HUB_STATE_PATH>` — `hub-state/` in today's container; the release tools reach it through `pmo_working_state_path[_for]`, member `release-runs` | fit/gap |
 | S-02 | Provisioned copies of the hub-state templates | Working state | S-01's home, provisioned by the installer from the shipped source `release/releases/hub-state/*.template`, which is package content and stays tracked | Copies inside today's container, through `pmo_instance_path` | fit/gap |
 | S-03 | Pipeline event log | Working state | `/local-state/event-log/`, one log per repository | `<OPERATOR_INSTANCE_EVALS_RESULTS_PATH>`, through `pmo_evals_results_path` | fit/gap |
-| S-04 | Close-out registers | Working state | `/local-state/registers/` | The container's `releases/registers/` subfolder, through `pmo_instance_path` | fit/gap |
+| S-04 | Close-out registers | Working state | `/local-state/registers/` | The container's `releases/registers/` subfolder, through `pmo_working_state_path`, member `registers`, whose switch-off arm is `pmo_instance_path` | fit/gap |
 | S-05 | Deploy-check warn logs | Working state | `/local-state/logs/` | The container root, through `pmo_instance_path` | fit/gap |
 | S-06 | Usage telemetry store | Working state, install-scoped | `${XDG_STATE_HOME:-$HOME/.local/state}/pmo-platform/telemetry/`; a derived row that passes § The admission test may live in `/local-state/telemetry/` | `<OPERATOR_INSTANCE_FINOPS_STORE_PATH>` | fit/gap |
 | S-07 | Allowlist instances, each classed after its identifier check and § The admission test | Working state | `/local-state/allowlists/`; an instance that carries an operator identifier goes to the leak-risk home, and one whose entries describe other work takes the class that content earns | The container root, through `pmo_instance_path`: `skip-doc-link-check.txt`, read by deploy Check 14, and `agents-model-overrides.txt`, read by deploy Check 27; and `skill-editor-exemption-list.txt`, through `pmo_skill_editor_exemption_list`; and `status-label-invariant-exemption-list.txt`, which the installer provisions there through the composition manifest's instance tier (deploy reads its copy under `.claude/`) | fit/gap |
@@ -167,7 +168,7 @@ Every non-tracked platform surface that tracked code resolves or writes today ha
 | S-16 | Return-value warn log | Working state | `/local-state/logs/` if a reader is found; retired otherwise | The container root | fit/gap |
 | S-17 | Installed copy of the platform-config template | Tool-owned | None: the copy is retired, and the template is read in place from the clone at `core/config/platform-config.toml.template`, which is package content | The container root | fit/gap |
 | S-18 | Archived bodies of expired corrections | Operator PMO content | The `projects/` folder that holds the corrections file the entry expired from: `${CLAUDE_WORKSPACE_ROOT}/projects/_config/` for a platform-wide entry, the project's own folder for a project-scoped one | Today's container | fit/gap |
-| S-19 | Embargoed security-fix runs, until disclosure | Leak-risk | `${XDG_DATA_HOME:-$HOME/.local/share}/pmo-platform/pmo-private/` until disclosure, then S-01's home | S-01's path, until the resolver takes a run's class | design |
+| S-19 | Embargoed security-fix runs, until disclosure | Leak-risk | `${XDG_DATA_HOME:-$HOME/.local/share}/pmo-platform/pmo-private/embargoed/<repository>/`, mirroring that repository's `/local-state/` subfolders, until disclosure, then S-01's home | S-01's path. With the run's class `leak-risk`, the working-state resolver returns the governed home in either switch state; the hub's classification step and the tools' class lookup come with the leak-risk migration card | design |
 | S-20 | Analysis workspace | Working state | `/analysis/` | `<OPERATOR_INSTANCE_ANALYSIS_PATH>` | registry |
 | S-21 | Roadmap instances | Working state | `/roadmaps/` | `<OPERATOR_INSTANCE_ROADMAPS_PATH>` | registry |
 | S-22 | Judge-calibration ledger | Working state | `/local-state/registers/` | `<OPERATOR_INSTANCE_EVALS_PATH>` | registry |
