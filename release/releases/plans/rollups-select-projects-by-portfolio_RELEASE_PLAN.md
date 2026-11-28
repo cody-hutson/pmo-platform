@@ -32,7 +32,7 @@ reversibility: MODERATE / Confidence HIGH — one card on one branch, one pull r
 | **Bump Class** | major — the durable determination (D-Version, a recorded determination at the Stage-4 gate): five operations skills change how they select their project set, per the Bump-Class Selection Guide's row "Skill behavioral change (new mode, altered processing logic)" (v5.00 precedent). Confidence MEDIUM; minor is the operator's override. The rule-computed next-free re-verified at Engineering Commit 0 is `v6.00`. The concrete number binds at the Stage-12 atomic claim (ADR-092) |
 | **Date Created** | 2026-11-28 (Saturday, UTC) |
 | **Release Manager** | Agent-assisted (release-hub; one Stage-6 Engineering spoke) |
-| **Status** | Executing — Stage 6 Engineering: Engineering Commit 0 (this file) |
+| **Status** | Executing — Stage 6 Engineering complete; draft PR open; Stage 7 next, after the operator's `OPERATIONS.md` commit |
 | **Branch** | `release/rollups-select-projects-by-portfolio` |
 | **PR** | opened in **draft** at Stage 6 |
 | **Milestone** | `rollups-select-projects-by-portfolio` |
@@ -75,7 +75,7 @@ reversibility: MODERATE / Confidence HIGH — one card on one branch, one pull r
   - There is **no default portfolio**.
 - **One composed file per portfolio folder.** Each portfolio's composed file is `projects/_config/<portfolio_id>/PORTFOLIO.md`; an install with no Portfolio record keeps `projects/_config/PORTFOLIO.md`. While the root file exists beside a Portfolio record, every portfolio-level surface stops and names the move.
 - **The composer is the executable half.** `compose-portfolio.py --portfolio <id>` reads the Portfolio records itself, refuses a scoped run at a narrowed root, cross-checks each rollup against its own `PROJECT.md`, and reports excluded projects on standard error, never in the body. The prose surfaces' own text is the primary production control (D8 of the decision record).
-- **Scope:** 54 File Change Matrix rows (66 paths) from the Stage-5 delta, plus three rows the Stage-6 absorbed items add (the ADR, two cascade docs). Size **XL**, measured. `core/governance/OPERATIONS.md` is Tier-0-floored: the operator commits its one line on this branch (split disposition); this spoke never edits it.
+- **Scope:** 54 File Change Matrix rows (66 paths) from the Stage-5 delta, plus three rows the Stage-6 absorbed items add (the ADR, two cascade docs) and the two reference-pack skills' `SKILL.md` version fields — 71 paths. Size **XL**, measured. `core/governance/OPERATIONS.md` is Tier-0-floored: the operator commits its one line on this branch (split disposition); this spoke never edits it.
 - **Version:** bump-class major, provisional `v6.00`, binding at the Stage-12 claim.
 
 ## Phase A0 — Triage→Design Re-Review
@@ -176,7 +176,7 @@ Control: `git ls-remote --heads origin 'release/*'` returns 3 heads, this releas
 
 ## File Change Matrix
 
-The release is the Stage-5 delta's 54 rows (66 paths, counting the 14 fixture files) plus the rows § Deviation Log DEV-7 adds. No row is a delete or a move.
+The release is the Stage-5 delta's 54 rows (66 paths, counting the 14 fixture files) plus the rows § Deviation Log DEV-7 and DEV-14 add, 71 paths in all. No row is a delete or a move.
 
 ```
 # ── Commit 0 and S1, the rule and its carriers ──
@@ -236,7 +236,9 @@ core/disciplines/operating-model.md  EDIT
 core/disciplines/architecture-overview.md  EDIT
 core/standards/AUDIT_FRAMEWORK.md  EDIT
 release/skills/build-reviewer/references/dimension-packs/pmo-platform-dimensions.md  EDIT
+release/skills/build-reviewer/SKILL.md  EDIT
 release/skills/pmo-skill-refiner/references/pmo-platform-context.md  EDIT
+release/skills/pmo-skill-refiner/SKILL.md  EDIT
 docs/workspace-setup.md  EDIT
 core/specs/operational-artifact-inventory.md  EDIT
 # ── S6, packages (the set resolved by --skills-for-paths; amended in the commit that rebuilds) ──
@@ -466,3 +468,118 @@ Recorded on #9180 (comment 7234535888): **split** — the Engineering spoke buil
 | DEV-5 | 5 | D-RecordlessTwoIds (B), D-UnresolvedAtOnePortfolio (A) (the hub amends card Proposed Change item 4 and AC3) and D-RecordNotComposedFile (A) refine the round-1 wording for the states it did not contemplate | operator, Stage-5 round 2 |
 | DEV-6 | 6 | `core/governance/OPERATIONS.md` (Change 41 limb 1) is built by the operator, not this spoke (split disposition). Until the operator's commit lands, this head carries the other 65 delta paths | operator, #9180 comment 7234535888 |
 | DEV-7 | 6 | File Change Matrix rows added by the Stage-6 absorbed items: the ADR (the design calls for one; the delta's matrix omitted the row), `docs/workspace-setup.md` (PR-D4, the § 3 canonical mapping table gains the per-folder clause; was PRESERVE) and `core/specs/operational-artifact-inventory.md` (PR-D4, its `PORTFOLIO.md` row) | the round-2 absorbed list |
+| DEV-8 | 6 | The composer's evidence is two RED/GREEN pairs. Pair 1's RED lands the nine Stage-5 arms and both fixture trees against an interface-only composer (the `portfolio` parameter, the `--portfolio` flag and two stubs, with no selection), so every arm fails on behaviour and none on a missing name; its GREEN is the literal Stage-5 patch, byte for byte. Pair 2's RED lands six new arms against pair 1's head; its GREEN implements the round-2 decisions and the absorbed composer items | Stage-6 evidence shape (minor) |
+| DEV-9 | 6 | The composer's report line leads with the fields every surface's line carries (`Portfolio: … — unassigned: …; unresolved portfolio_id: …`), then what only the composer computes; an archived-only install's unscoped line reads "no active Portfolio record" (the mislabel the focused review measured). Pinned by `(portfolio-report-line)` | contract § 7.4 alignment (minor) |
+| DEV-10 | 6 | The bounded record walk (FM-D2 / CD-D1 (b)) and the composed-file exception (D-RecordNotComposedFile) are stated wherever the record location was stated: contract § 7.1, the entity-model Portfolio note (Change 11) and the charter's taxonomy Portfolio row ("anywhere under it" becomes "in it or in one folder below it") | cascade of an absorbed item (minor) |
+| DEV-11 | 6 | D-RecordlessTwoIds (B)'s stop is stated in each of the five skills' convention lines and in weekly-status-rollup's exit-code paragraph, as well as in contract § 7.2's first row and the composer's refusal — the blast radius the review's CD-D3 (B) names | round-2 decision cascade (minor) |
+| DEV-12 | 6 | The gate-coverage register row (Change 37) carries a `**Population:**` segment, `portfolio-report-line-emitted` (the Stage-7 walkthrough rows, threshold 100%): a prose-surface row a release adds must declare its population for G-CL10 at Stage 13 (`core/deploy/tools/check-doc-gates.py`, arm i). Stage 7 writes the population record into this file | gate obligation the delta's literal row lacked (minor) |
+| DEV-13 | 6 | ppm-agent's § 8.8 `portfolio_id` row stamps the bare slug and surfaces a polluted source value as a "Decisions needed" line instead of stamping it (FM-D3: "stamp the slug only, and flag a polluted source"); project-initiator Step 3 and the project-schema § 3b cell forbid an inline comment on that line | absorbed item FM-D3 |
+| DEV-14 | 6 | build-reviewer and pmo-skill-refiner bump `version:` to the provisional `v6.00`: the editor classified their references edits as cross-reference changes to a shared contract, which § Bump Rules names material. Their two `SKILL.md` files join the File Change Matrix for the version field | pmo-skill-editor determination |
+| DEV-15 | 6 | Two literal-placement readings: health-check `references/rollup-mode.md`'s convention sentence is inserted as the new first paragraph under its heading (Change 18's "becomes" read as an insertion, so the freshness-audit paragraph is kept and edited per its own bullets); project-initiator's Operating Principles carries a paragraph, so Change 26's two bullets follow it | Stage-6 reading (minor) |
+| DEV-16 | 6 | The A2 decomposition is the GitHub sub-issue container with nine native sub-issues of #9180 (#9237–#9245: S1–S6, sync, plan-update, verification), each closed with its landing SHA. Earlier releases used the Stage-6 sub-task itself as the container with no further sub-issues | the hub's Stage-6 brief |
+| DEV-17 | 6 | The skill `version:` fields and the rollup template's provenance sidecar carry the literal provisional `v6.00`, not the release-version token: the stamp pre-flight refuses that token on a SKILL.md `version:` line, and the sidecar follows its existing literal convention. Both are re-read at Stage 7 and re-checked against the won tag at Stage 12 | `claim-version.sh` stamp pre-flight |
+
+## Verification Evidence
+
+Stage-6 C4 self-verification at the build head, before the operator's `OPERATIONS.md` commit. Nothing here reads the live operations tree: every `deploy.sh` run below sets `CLAUDE_WORKSPACE_ROOT` to a throwaway workspace, and the composer runs over the in-repo fixtures.
+
+### Per-issue checks (#8478)
+
+| Check | Result |
+|---|---|
+| Composer `--self-test` (`/usr/bin/python3`) | exit 0; the OK line names all fifteen portfolio arms beside every earlier arm |
+| RED/GREEN pair 1 | RED `09d881d9`: exit 1, 42 FAILED lines across the nine Stage-5 labels, no earlier arm failing · GREEN `d3a774bb`: exit 0 (the literal Stage-5 patch) |
+| RED/GREEN pair 2 | RED `6326cf02`: exit 1, 14 FAILED lines across the six new labels, every CONTROL and SENSITIVITY limb holding · GREEN `877ceb3d`: exit 0 |
+| `test_corpus_walker_parity.py` | OK at both GREENs and at the head (`discover_rollups(root)` untouched) |
+| `_frontmatter.py --self-test` | OK; the template parses to 15 top-level keys, 2 of them comment keys (control: 14 at `8ed5e273`) |
+| AC3 byte identity (composer at `8ed5e273` vs the head, `--as-of 2026-07-15`) | single-portfolio tree served `port-alpha`: `8a5fe095e1000962` on both · committed zero-record fixture, no flags: `2b128c4fb1e2422f` on both, 0 bytes of stderr · control, the two-portfolio tree: `3057d1a5b1a26e32` against `edcd9ccc5460e4e0` (differs) |
+| Static probes, five skills | `Portfolio scoping` 6 / 1 / 1 / 3 / 2; `portfolio_id` 10 / 4 / 5 / 6 / 8; `names none` 2 / 1 / 1 / 1 / 1; `beside a Portfolio record` 2 / 1 / 1 / 1 / 2 (weekly / daily / health-check / ppm-agent / project-initiator); `unresolved portfolio_id` 1 on each of the first four; `Portfolio: <portfolio_id, or unscoped>` 2 on project-initiator. Every count was 0 at `8ed5e273`; control: `PORTFOLIO.md` 34 / 2 / 23 / 7 / 25 |
+| Card probe, inverted | `portfolio_id` in the composer 51 and the contract 17 (0 at `8ed5e273`) |
+| Plan verifier (`release/tools/verify-release-plan.sh --format=md` on this file) | roll-up 23 PASS / 0 FAIL / 2 SKIP / 2 UNRUNNABLE / 0 ERROR over 27 records. AC-4 PASS (count 9). AC-1 and AC-3: limb 1, the arm-label grep, PASS (counts 4 and 4); limb 2, the reader-graded walkthrough, is UNRUNNABLE here by design and is graded at Stage 7. AC-2 SKIP (declared, the Stage-7 dry run). Every declared File Change Matrix ADD reads delivered |
+
+### Integration and regression checks
+
+| Check | Result |
+|---|---|
+| `check-selftest-coverage.py --reconcile` | CLEAN (exit 0); Arm E 55 of 55 tools documented |
+| `check-doc-links.py` over the Check-14 scope (shared target-paths file, tracked base allowlist, `--require-targets`) | 0 findings; self-test OK (12 fixtures) |
+| `check-count-structure.py` on every edited `.md` | FAIL=0 on each; the KNOWN rows are pre-existing allowlist entries |
+| `deploy.sh --check-required-subset` (sandbox root) | exit 0; `mirror-pair-parity` PASS; `rules-budget` PASS |
+| `check-rules-budget.py` | WITHIN |
+| ADR: `check-adr-numbers.py` | PASS, contiguous, no duplicates |
+| ADR: `check-adr-durability.py --files <the ADR> --diff-base origin/main` | COUNT 0; its self-test 156/156 |
+| ADR index | N/A — this release adds no record under `release/ADRs/` (the record is in `core/ADRs/`) |
+| Rename cascade, the two renamed project-initiator headings | `git grep -E "Step (5|B6): Update PORTFOLIO"` → pre 2 / post 0; no anchor targets either heading |
+| Exact-path cascade sweep (`projects/_config/PORTFOLIO.md`, outside `release/releases/`) | pre: 23 occurrences in 17 files (control `[Project]/CORRECTIONS.md` 13). Head: every prose line that names the root path alone is ADR-238's census block (PRESERVE) or the `OPERATIONS.md` rung-2 row (the operator's commit); the other bare hits are the root-file arms of `deploy.sh`'s two-layout code |
+| Added-line scan (durable corpus) | the link and hex-colour shapes found sit in two files carrying `allow-link` and in the Mermaid block; 0 operator-identity literals over the added lines |
+| Close-keyword scan, commit messages | CLEAN before every push |
+| Package freshness (`deploy.sh --check-package-freshness`) | 55 rostered skill packages content-fresh |
+
+### Change 38 executed (`deploy.sh` with a sandboxed `CLAUDE_WORKSPACE_ROOT`)
+
+The repository's own `deploy.sh`, invoked repo-relative under its own `set -euo pipefail`, against five throwaway workspaces:
+
+| Layout | `--report` Governance Presence, PORTFOLIO limb | `--check` Check 4 |
+|---|---|---|
+| root file only | PASS | — |
+| one portfolio folder file | PASS | `OK: projects/_config/PORTFOLIO.md or projects/_config/<portfolio_id>/PORTFOLIO.md` |
+| two portfolio folder files | PASS | — |
+| root file and one folder file | PASS | — |
+| nothing | FAIL — missing (the sensitivity arm) | — |
+
+Rung 2 itself has no caller a sandboxed `--check` reaches with a value it reports, so its value semantics (root → root value; one → its value; two → none; root and one → root value; nothing → none) are carried to Stage 7, with a permitted form named there.
+
+### Runtime suites (`runtime-suite-selection-map.md`)
+
+- Row 4 (`core/deploy/tools/*.py`): `check-selftest-coverage.py --run` — 86 of 87 discovered tools OK, `compose-portfolio.py` and `_frontmatter.py` among them. The 87th, `release/tools/cleanup-orphan-state.sh --self-test`, hit the per-tool timeout (exit 124) while a sandboxed `deploy.sh --check` ran on the same host. Its self-test pushes to scratch repositories, each push running the host's pre-push hook, and it reads no path this release changes (it sources none of them). The CI selftest-discovery job re-runs it on the pull request, and Stage 7 Phase A8 is the authoritative read. The hub appends the `test-run` event; this spoke cannot write the operator-instance event log.
+- Rows 2 (`core/deploy/**`) and 5 (`core/CLAUDE.md.template`, `core/config/*.template`): the CI suites in `install-tests.yml`, run on the pull request; Stage 7 Phase A8 re-runs the selected suites as the authoritative gate.
+
+### Sync (C3) and deliverable state
+
+- The rules mirror (`core/rules/operations-bridge.md`) and the seven skills' runtime mirrors are re-laid by `./deploy.sh --deploy` at Stage 12; the rebuilt packages and sidecars are already on this branch.
+- `deliverable_state`: the five operations skills, build-reviewer and pmo-skill-refiner, and the rules mirror → `deployed-copy-synced` at Stage 12's deploy. The composer, its fixtures, the contract, the ADR, the schema, template and cascade docs → `deployed-copy-synced`, with no propagation target beyond the merged source (the charter template recomposes on the operator's next workspace update).
+
+## Change Description
+
+### Outcome
+
+Every portfolio-level surface now selects its project set by portfolio, under one rule in `core/standards/portfolio-writeback-contract.md` § Portfolio scoping. The weekly roll-up and its composer, the daily-status multi-project run, the health-check portfolio audit, the ppm-agent status answer, and project-initiator's registration and closure each serve one portfolio per run. Each portfolio's composed file lives in its own folder, `projects/_config/<portfolio_id>/PORTFOLIO.md`. An install with one portfolio, or with no Portfolio record, composes the same stakeholder-facing bytes as before.
+
+- **The rule.** Membership turns on the number of active portfolios. With none, surfaces run unscoped, and they stop to name the records to create when the projects already name two or more portfolios. With one, a project that names it or names none belongs to it. With two or more, a project belongs to the portfolio its `portfolio_id` names, and a project that names none is unassigned: listed to the operator and rolled up nowhere. There is no default portfolio.
+- **The composer.** `compose-portfolio.py --portfolio <id>` reads the Portfolio records itself and composes only that portfolio's members. It refuses a scoped run at a narrowed root and an unscoped run at a root that holds a record. It holds a rollup that disagrees with its own `PROJECT.md`, masks a member's references to another portfolio's projects as `[OTHER PORTFOLIO]`, and reports excluded projects on standard error, never in the body. Fifteen self-test arms carry it, in two RED/GREEN pairs.
+- **The cascade.** `deploy.sh` rung 2 reads exactly one composed file or none, and Check 4 and the report accept either lawful layout. The charter template, the operations-bridge rule, the config docs, the disciplines and two skill reference packs name the per-folder location.
+
+### Issues resolved
+
+| # | Outcome | Status |
+|---|---|---|
+| #8478 | The six portfolio-level surfaces select by `portfolio_id` under contract § Portfolio scoping, with one composed file per portfolio folder; single-portfolio and no-record output unchanged (AC3 measured byte-identical); the composer's discrimination holds at every narrowed root (AC4). The `OPERATIONS.md` rung-2 row is the operator's commit, before Stage 7 | DONE (Stage 6); AC2 and the prose walkthroughs graded at Stage 7 |
+
+### Key decisions
+
+- **No default portfolio** (Stage-5 round 1): an unkeyed project on a multi-portfolio install is unassigned, never defaulted.
+- **Same filename per portfolio folder** (D-ComposedOutput): no portfolio is special-cased; the root file stays only for an install with no record.
+- **D-RecordlessTwoIds (B):** a record-less install whose projects name two or more portfolios stops and names the records to create.
+- **D-UnresolvedAtOnePortfolio (A):** a key naming no record is excluded and listed even with one portfolio, so a second portfolio's projects never compose into the first's output during the move from one to two.
+- **D-RecordNotComposedFile (A):** a composed `PORTFOLIO.md` is never a Portfolio record (exit 2).
+- **D-DriftCheckF (B):** the daily-cycle check 0(f) item is carried by the narrowed behavioral correction; `OPERATIONS.md` gets one operator-executed line, the rung-2 row.
+- **D-Resolver (C):** per-project selection of the config rung stays with its own card; this release keeps rung 2 continuous across the move.
+
+### Reversibility
+
+MODERATE · confidence HIGH. Each slice reverts by its own commits and the seven packages regenerate from the reverted sources. After deploy, an install that moved its composed file into a portfolio folder needs an operations session to move it back; the version tag stays.
+
+### Downstream impact
+
+- **Post-deploy handoff, immediately after Stage 12:** an install that holds an active Portfolio record and still has its root composed file stops at every portfolio-level surface until the file moves. The handoff in this plan creates the records, backfills `portfolio_id`, moves the file and creates every portfolio's folder file, re-emits the rollups, reads back each portfolio's output, and narrows (not removes) the behavioral correction.
+- **The operator's commit:** Change 41 limb 1, the `OPERATIONS.md` rung-2 row, lands on this branch before Stage 7. It stales no skill package.
+- **Stage 7 owes:** the prose walkthroughs, including the FM-D7 variant; the rung-2 execution probe; the eval case; and the `portfolio-report-line-emitted` population record.
+- **Cross-milestone:** cross-tier-rollup-resolves cites § Portfolio scoping. cross-project-rollups-have-one-home, entity-key-and-referential-contract, governance-surfaces-agree, conformance-and-stewardship-mechanized and ppm-agent-findings-become-artifacts rebase onto this release. The sibling adding a core ADR at the same number renumbers at its claim.
+- **Held for the Stage 9 filing step:** a deterministic served-portfolio resolver for the prose surfaces; the `cmd_report` relative-path defect on its other two governance entries.
+
+### Cross-references
+
+- This plan: `release/releases/plans/rollups-select-projects-by-portfolio_RELEASE_PLAN.md` (top: § Header, § Summary).
+- Milestone 435, `rollups-select-projects-by-portfolio`.
+- The record: `{{ADR:portfolio-scoped-selection}}`.
+- User-facing release notes: authored at Stage 13 Close under `release/releases/notes/`.
