@@ -478,6 +478,7 @@ Recorded on #9180 (comment 7234535888): **split** — the Engineering spoke buil
 | DEV-15 | 6 | Two literal-placement readings: health-check `references/rollup-mode.md`'s convention sentence is inserted as the new first paragraph under its heading (Change 18's "becomes" read as an insertion, so the freshness-audit paragraph is kept and edited per its own bullets); project-initiator's Operating Principles carries a paragraph, so Change 26's two bullets follow it | Stage-6 reading (minor) |
 | DEV-16 | 6 | The A2 decomposition is the GitHub sub-issue container with nine native sub-issues of #9180 (#9237–#9245: S1–S6, sync, plan-update, verification), each closed with its landing SHA. Earlier releases used the Stage-6 sub-task itself as the container with no further sub-issues | the hub's Stage-6 brief |
 | DEV-17 | 6 | The skill `version:` fields and the rollup template's provenance sidecar carry the literal provisional `v6.00`, not the release-version token: the stamp pre-flight refuses that token on a SKILL.md `version:` line, and the sidecar follows its existing literal convention. Both are re-read at Stage 7 and re-checked against the won tag at Stage 12 | `claim-version.sh` stamp pre-flight |
+| DEV-18 | 6 | Two rewordings after the draft PR's first CI read: the composer's polluted-key report class is named `polluted`, like its sibling keys (the operator-memory-reference gate read the longer name as a memory-file stem), and the ADR's `source_observations:` line drops the card's number, which stays in its `## References` block (the issue-reference gate). Meaning and behaviour are unchanged; the self-test, parity suite and AC3 bytes were re-run green | CI gates on the draft PR (minor) |
 
 ## Verification Evidence
 
@@ -529,9 +530,13 @@ The repository's own `deploy.sh`, invoked repo-relative under its own `set -euo 
 
 Rung 2 itself has no caller a sandboxed `--check` reaches with a value it reports, so its value semantics (root → root value; one → its value; two → none; root and one → root value; nothing → none) are carried to Stage 7, with a permitted form named there.
 
+### CI on the draft pull request
+
+The first head read three gates red. The operator-memory-reference and issue-reference gates were reworded in place (DEV-18). The **process-catalog citation gate** reports catalog citations into `core/deploy/deploy.sh` whose line numbers moved with Change 38 (`moved=177 gone=0 ambiguous=0`). Stage 12 Phase A.5.8 rewrites moved citations once, against the tree that merges, so that gate stays red until then by design.
+
 ### Runtime suites (`runtime-suite-selection-map.md`)
 
-- Row 4 (`core/deploy/tools/*.py`): `check-selftest-coverage.py --run` — 86 of 87 discovered tools OK, `compose-portfolio.py` and `_frontmatter.py` among them. The 87th, `release/tools/cleanup-orphan-state.sh --self-test`, hit the per-tool timeout (exit 124) while a sandboxed `deploy.sh --check` ran on the same host. Its self-test pushes to scratch repositories, each push running the host's pre-push hook, and it reads no path this release changes (it sources none of them). The CI selftest-discovery job re-runs it on the pull request, and Stage 7 Phase A8 is the authoritative read. The hub appends the `test-run` event; this spoke cannot write the operator-instance event log.
+- Row 4 (`core/deploy/tools/*.py`): `check-selftest-coverage.py --run` — 86 of 87 discovered tools OK, `compose-portfolio.py` and `_frontmatter.py` among them. The 87th, `release/tools/cleanup-orphan-state.sh --self-test`, hit the per-tool timeout (exit 124) while a sandboxed `deploy.sh --check` ran on the same host. Its self-test pushes to scratch repositories, each push running the host's pre-push hook, and it reads no path this release changes (it sources none of them). Re-run alone, it passed (exit 0 in about nine minutes; one of its 23 checks skipped because its fixture remote could not be set up). The CI selftest-discovery job re-runs it on the pull request, and Stage 7 Phase A8 is the authoritative read. The hub appends the `test-run` event; this spoke cannot write the operator-instance event log.
 - Rows 2 (`core/deploy/**`) and 5 (`core/CLAUDE.md.template`, `core/config/*.template`): the CI suites in `install-tests.yml`, run on the pull request; Stage 7 Phase A8 re-runs the selected suites as the authoritative gate.
 
 ### Sync (C3) and deliverable state
