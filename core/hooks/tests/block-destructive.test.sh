@@ -3950,6 +3950,167 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+# T8019 — the main checkout's registered in-repo git-ignored homes (the placement standard's
+# § Registered in-repo git-ignored homes). -019 admits a Write/Edit into the main checkout only
+# inside the three homes: a subfolder of /local-state/ (the tracked README.md, a folder of that
+# name and any dot-leading entry at the top of the home excluded), a subfolder of /analysis/,
+# and a roadmap instance under /roadmaps/. A1-A5 are the /local-state/ limb, red against the
+# pre-change hook; A6-A7 are non-regression arms for the two homes that already ship. D1-D16
+# are the denials AC-2 names. S1-S5 are spoke-shaped: the payload's working directory is an
+# Agent-tool worktree, which proves the arm does not read the working directory (whether a
+# real isolated spoke reaches the path is a harness question, not this hook's). Every fixture
+# name is zz-8019-*, and no fixture path exists on disk.
+#
+# A1..A7 — admitted.
+test_case "T8019-A1: Write local-state/<sub>/x.md with a worktree cwd allows (the working-state home)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-sub/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  0
+
+test_case "T8019-A2: Edit local-state/<sub>/x.md with a worktree cwd allows (Edit parity)" \
+  "$(edit_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-sub/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  0
+
+test_case "T8019-A3: Write local-state/<sub>/deeper/x.json with a worktree cwd allows (any depth below the subfolder)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-sub/deeper/x.json' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  0
+
+test_case "T8019-A4: Write local-state/<sub>/x.md with a primary cwd allows (cwd-independent)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-sub/x.md' ''"$HOME"'/Claude')" \
+  0
+
+test_case "T8019-A5: Write local-state/<sub>/.hidden.md with a worktree cwd allows (a dotfile below a subfolder)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-sub/.hidden.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  0
+
+test_case "T8019-A6: Write analysis/<sub>/x.md with a worktree cwd allows (non-regression)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/zz-8019-sub/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  0
+
+test_case "T8019-A7: Write roadmaps/<name>.md with a worktree cwd allows (non-regression)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/zz-8019-initiative.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  0
+
+# D1..D16 — denied, each from a worktree cwd.
+test_case "T8019-D1: Write core/<x>/x.md with a worktree cwd blocks (a tracked tree)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/core/zz-8019-probe/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D2: Write a skill iteration workspace with a worktree cwd blocks (ignored, not a registered home)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/release/skills/zz-8019-workspace/iteration-1/benchmark.json' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D3: Write audit-output/<x>/x.md with a worktree cwd blocks (ignored, not a registered home)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/audit-output/zz-8019/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D4: Write local-state/README.md with a worktree cwd blocks (the tracked file)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/README.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D5: Edit local-state/README.md with a worktree cwd blocks (Edit parity)" \
+  "$(edit_payload ''"$HOME"'/Claude/pmo-platform/local-state/README.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D6: Write local-state/readme.md with a worktree cwd blocks (a case spelling of the tracked file)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/readme.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D7: Write local-state/README.md/x.md with a worktree cwd blocks (README.md as a folder name)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/README.md/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D8: Write local-state/<top>.md with a worktree cwd blocks (a subfolder segment is required)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-top.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D9: Write local-state/.gitignore with a worktree cwd blocks (a dot-leading entry at the top)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/.gitignore' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D10: Write local-state/.<hidden>/x.md with a worktree cwd blocks (a dot-leading folder at the top)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/.zz-8019-hidden/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D11: Write local-state-x/<x>/x.md with a worktree cwd blocks (a prefix is not a segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state-x/zz-8019/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D12: Write local-state/<sub>/../../core/x.md with a worktree cwd blocks (dot-segment guard)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-sub/../../core/zz-nonexistent/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D13: Write local-state/./<sub>/x.md with a worktree cwd blocks (a single dot segment)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/./zz-8019-sub/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D14: Write local-state/<sub>/. with a worktree cwd blocks (a trailing dot fakes the subfolder)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-sub/.' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D15: Write release/local-state/<x>/x.md with a worktree cwd blocks (anchored at the repo root)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/release/local-state/zz-8019/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-D16: Write local-state//<top>.md with a worktree cwd blocks (an empty segment; the resolved view has no subfolder)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state//zz-8019-top.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/zz-8019-wt')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+# S1..S5 + CIAC1 — spoke-shaped: the payload's working directory is an Agent-tool worktree.
+# CIAC1 is the exact analysis destination shape a spoke-run audit writes (a dated subfolder
+# holding SUMMARY.md), the shape the analysis-workspace standard names for a spoke.
+test_case "T8019-S1: Write local-state/<sub>/x.md with an Agent-tool worktree cwd allows" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/zz-8019-sub/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/agent-zz8019')" \
+  0
+
+test_case "T8019-S2: Write analysis/<sub>/x.md with an Agent-tool worktree cwd allows" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/zz-8019-sub/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/agent-zz8019')" \
+  0
+
+test_case "T8019-S3: Write roadmaps/<name>.md with an Agent-tool worktree cwd allows" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/roadmaps/zz-8019-initiative.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/agent-zz8019')" \
+  0
+
+test_case "T8019-S4: Write core/<x>/x.md with an Agent-tool worktree cwd blocks" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/core/zz-8019-probe/x.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/agent-zz8019')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-S5: Write local-state/README.md with an Agent-tool worktree cwd blocks" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/README.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/agent-zz8019')" \
+  2 "BLOCK-DESTRUCTIVE-019"
+
+test_case "T8019-CIAC1: Write analysis/<dated>/SUMMARY.md with an Agent-tool worktree cwd allows (a spoke-run audit's destination)" \
+  "$(write_payload ''"$HOME"'/Claude/pmo-platform/analysis/zz-8019-ciac-2000-01-01/SUMMARY.md' ''"$HOME"'/Claude/pmo-platform/.claude/worktrees/agent-zz8019')" \
+  0
+
+# MSG1 — a local-state target the as-written view refuses is told its cause, in the
+# T7497-MSG1 shape. ONE arm, TWO payloads (the tracked README and a dot-leading entry at the
+# top of the home): it passes only when both messages name the as-written cause and an
+# excluded leaf, and neither tells the caller the target "is not inside a worktree".
+t8019_msg_ok=1
+t8019_msg_detail=""
+for t8019_msg_rel in README.md .gitignore; do
+  t8019_msg_err="$(/usr/bin/mktemp)"
+  t8019_msg_rc=0
+  /usr/bin/printf '%s' "$(write_payload ''"$HOME"'/Claude/pmo-platform/local-state/'"$t8019_msg_rel" ''"$HOME"'/Claude')" \
+    | /bin/bash "$HOOK" 2>"$t8019_msg_err" >/dev/null || t8019_msg_rc="$?"
+  if [ "$t8019_msg_rc" != 2 ] \
+     || ! /usr/bin/grep -q 'BLOCK-DESTRUCTIVE-019' "$t8019_msg_err" \
+     || ! /usr/bin/grep -qF 'is refused as written: ' "$t8019_msg_err" \
+     || ! /usr/bin/grep -qF 'excluded leaf' "$t8019_msg_err" \
+     || /usr/bin/grep -qF 'is not inside a worktree' "$t8019_msg_err"; then
+    t8019_msg_ok=0
+    t8019_msg_detail="${t8019_msg_detail} [local-state/${t8019_msg_rel}: exit=${t8019_msg_rc}; $(/bin/cat "$t8019_msg_err")]"
+  fi
+  /bin/rm -f "$t8019_msg_err"
+done
+if [ "$t8019_msg_ok" = 1 ]; then
+  /usr/bin/printf 'PASS: %s\n' "T8019-MSG1: a local-state target refused as written is told its cause (an excluded leaf), not that it is outside a worktree"
+  PASS=$((PASS + 1))
+else
+  /usr/bin/printf 'FAIL: %s\n  expected exit 2, BLOCK-DESTRUCTIVE-019, the as-written cause and an excluded leaf named, and no "is not inside a worktree"; got%s\n' "T8019-MSG1: a local-state target refused as written is told its cause (an excluded leaf), not that it is outside a worktree" "$t8019_msg_detail"
+  FAIL=$((FAIL + 1))
+fi
+
 # Explicit allow: .claude/skills (deploy target)
 test_case "Write .claude/skills/SKILL.md allows (deploy target)" \
   "$(write_payload ''"$HOME"'/Claude/.claude/skills/skill-x/SKILL.md' ''"$HOME"'/Claude')" \
@@ -4223,6 +4384,52 @@ fi
 if [ "$t7497_prev_cwr" = "__t7497_unset__" ]; then unset CLAUDE_WORKSPACE_ROOT; else export CLAUDE_WORKSPACE_ROOT="$t7497_prev_cwr"; fi
 /bin/rm -rf "$T7497_SB" "$T7497_SYM"
 
+# T8019-L1..L7 — the /local-state/ exemption's resolved view, in its own physical sandbox. A
+# local-state-prefixed spelling whose resolved location leaves the home's subfolders gets no
+# exemption: L1 through a symlinked ancestor over a missing tail, L2 through an existing leaf
+# that resolves to the tracked README, L3 to a dot-leading entry at the top of the home, L4 to
+# the top of the home. The exemption is live in the same sandbox (L5), on the resolved branch
+# an existing file takes (L6), and under a symlink-spelled absent root (L7, the FM1b shape,
+# with its fixture precondition folded in so a mis-built sandbox FAILs rather than allowing).
+T8019_SB="$(cd -P -- "$(/usr/bin/mktemp -d)" && pwd -P)"
+T8019_L="${T8019_SB}/pmo-platform/local-state"
+/bin/mkdir -p "${T8019_L}/zz-8019-sub/real" "${T8019_L}/.zz-8019-hid" "${T8019_SB}/pmo-platform/core"
+/usr/bin/printf 'x\n' > "${T8019_L}/README.md"
+/usr/bin/printf 'x\n' > "${T8019_L}/zz-8019-sub/real/existing.json"
+/bin/ln -s "${T8019_SB}/pmo-platform/core" "${T8019_L}/zz-8019-sub/lnk"
+/bin/ln -s "${T8019_L}/README.md" "${T8019_L}/zz-8019-sub/rd.md"
+/bin/ln -s "${T8019_L}/.zz-8019-hid" "${T8019_L}/zz-8019-sub/hid"
+/bin/ln -s "${T8019_L}" "${T8019_L}/zz-8019-sub/up"
+t8019_prev_cwr="${CLAUDE_WORKSPACE_ROOT-__t8019_unset__}"
+export CLAUDE_WORKSPACE_ROOT="$T8019_SB"
+
+sandbox_case "T8019-L1: a local-state subfolder symlink + missing tail resolving into core blocks" "$HOOK" \
+  "$(write_payload "${T8019_L}/zz-8019-sub/lnk/zz-new/x.md" "$T8019_SB")" 2 "BLOCK-DESTRUCTIVE-019"
+sandbox_case "T8019-L2: an existing leaf resolving to local-state/README.md blocks" "$HOOK" \
+  "$(write_payload "${T8019_L}/zz-8019-sub/rd.md" "$T8019_SB")" 2 "BLOCK-DESTRUCTIVE-019"
+sandbox_case "T8019-L3: a subfolder symlink resolving to a dot-leading entry at the top of the home blocks" "$HOOK" \
+  "$(write_payload "${T8019_L}/zz-8019-sub/hid/x.md" "$T8019_SB")" 2 "BLOCK-DESTRUCTIVE-019"
+sandbox_case "T8019-L4: a subfolder symlink resolving to the top of the home blocks" "$HOOK" \
+  "$(write_payload "${T8019_L}/zz-8019-sub/up/zz-top.md" "$T8019_SB")" 2 "BLOCK-DESTRUCTIVE-019"
+sandbox_case "T8019-L5: a real local-state subfolder allows (the sandbox exemption is live)" "$HOOK" \
+  "$(write_payload "${T8019_L}/zz-8019-sub/real/x.md" "$T8019_SB")" 0
+sandbox_case "T8019-L6: Edit an existing file in a local-state subfolder allows (the resolved branch)" "$HOOK" \
+  "$(edit_payload "${T8019_L}/zz-8019-sub/real/existing.json" "$T8019_SB")" 0
+
+T8019_SYM="$(cd -P -- "$(/usr/bin/mktemp -d)" && pwd -P)"
+/bin/ln -s "${T8019_SYM}/ws-not-yet" "${T8019_SYM}/ws"
+export CLAUDE_WORKSPACE_ROOT="${T8019_SYM}/ws"
+if [ -L "${T8019_SYM}/ws" ] && [ ! -e "${T8019_SYM}/ws" ]; then
+  sandbox_case "T8019-L7: symlink-spelled absent root, a local-state subfolder target allows (the root resolved like the target)" "$HOOK" \
+    "$(write_payload "${T8019_SYM}/ws/pmo-platform/local-state/zz-8019-sub/x.md" "${T8019_SYM}/ws")" 0
+else
+  /usr/bin/printf 'FAIL: T8019-L7: fixture not built (the root link is not a dangling symlink)\n'
+  FAIL=$((FAIL + 1))
+fi
+
+if [ "$t8019_prev_cwr" = "__t8019_unset__" ]; then unset CLAUDE_WORKSPACE_ROOT; else export CLAUDE_WORKSPACE_ROOT="$t8019_prev_cwr"; fi
+/bin/rm -rf "$T8019_SB" "$T8019_SYM"
+
 # PAR-01..03 — subject parity, asserted rather than described. -019's exemptions must read
 # the TARGET: no non-comment line between the rule's header and its block call may read the
 # session's working directory, and the dot guard must precede the worktree arm, which must
@@ -4303,6 +4510,138 @@ else
   FAIL=$((FAIL + 1))
 fi
 /bin/rm -f "$T7497_PAR_CWD" "$T7497_PAR_ORD"
+
+# T8019-P1..P5 — the placement standard's registered-homes table (its "Main-checkout carve-out
+# admits" column) and -019's static set, read in BOTH views, name one set of home shapes.
+# One awk pass, index()/substr()/split() only, exits only in END, no pipeline. FAILS CLOSED:
+# an unreadable standard or hook, a missing table/column/marker, or an empty set never reads AGREE.
+# The standard is found through the layout's .source-repo-root marker (CI builds with --sandbox),
+# else three levels up (a source-tree run, or the layout at the checkout root).
+t8019_root=""
+if [ -r "$(dirname "$0")/.source-repo-root" ]; then IFS= read -r t8019_root < "$(dirname "$0")/.source-repo-root" || true; fi
+[ -n "$t8019_root" ] && [ -f "${t8019_root}/core/standards/instance-data-placement-standard.md" ] || t8019_root="$(cd "$(dirname "$0")/../../.." && pwd -P)"
+T8019_STD="${t8019_root}/core/standards/instance-data-placement-standard.md"
+t8019_parity() {   # $1 standard  $2 hook -> AGREE T=… | DISAGREE T=… V1=… V2=… | STD-MISSING | HOOK-MISSING | TABLE-MISSING | COLUMN-MISSING | TABLE-EMPTY | HOOK-MARKER-MISSING | HOOK-EMPTY …
+  [ -f "$1" ] || { /usr/bin/printf 'STD-MISSING'; return 0; }
+  [ -f "$2" ] || { /usr/bin/printf 'HOOK-MISSING'; return 0; }
+  # shellcheck disable=SC2016
+  /usr/bin/awk '
+function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+function shape(g) { if (g == "*/*") return "<sub>/"; if (g == "?*") return "<name>"; return "?" g }
+function add(kind, v) { if (kind == "T") t[++nT] = v; else if (kind == "1") v1[++n1] = v; else v2[++n2] = v }
+function joined(kind,   a, n, i, j, x, s) {
+  if (kind == "T") { n = nT; for (i = 1; i <= n; i++) a[i] = t[i] }
+  else if (kind == "1") { n = n1; for (i = 1; i <= n; i++) a[i] = v1[i] }
+  else { n = n2; for (i = 1; i <= n; i++) a[i] = v2[i] }
+  for (i = 2; i <= n; i++) { x = a[i]; j = i - 1; while (j >= 1 && a[j] > x) { a[j + 1] = a[j]; j-- } a[j + 1] = x }
+  s = ""; for (i = 1; i <= n; i++) s = s (i > 1 ? "," : "") a[i]
+  return s
+}
+function arm(line, prefix,   p, rest, q, folder) {
+  p = index(line, prefix "/pmo-platform/"); if (p == 0) return ""
+  rest = substr(line, p + length(prefix "/pmo-platform/"))
+  q = index(rest, "/\""); if (q == 0) return ""
+  folder = substr(rest, 1, q - 1); rest = substr(rest, q + 2)
+  q = index(rest, ")"); if (q == 0) return ""
+  return folder "|" substr(rest, 1, q - 1)
+}
+FNR == 1 { file++ }
+file == 1 && index($0, "### Registered in-repo git-ignored homes") == 1 { sec = 1; next }
+file == 1 && sec == 1 && substr($0, 1, 1) == "#" { sec = 2 }
+file == 1 && sec == 1 && substr($0, 1, 1) == "|" {
+  nf = split($0, c, "|")
+  if (k == 0) { for (i = 1; i <= nf; i++) if (trim(c[i]) == "Main-checkout carve-out admits") k = i; if (k == 0) colmiss = 1; next }
+  if (index($0, "|---") == 1) next
+  home = trim(c[2]); cell = c[k]
+  a = index(cell, "`/"); if (a == 0) { add("T", "UNREAD:" home); next }
+  tok = substr(cell, a + 1); b = index(tok, "`"); tok = substr(tok, 2, b - 2)
+  h = home; gsub(/`/, "", h); sub(/^\//, "", h)
+  if (index(tok, h) != 1) add("T", "MISMATCH:" tok); else add("T", tok)
+  next
+}
+file == 2 && index($0, "# BLOCK-DESTRUCTIVE-019 ") { in019 = 1; hdr = 1; next }
+file == 2 && in019 && index($0, "block \"BLOCK-DESTRUCTIVE-019\"") { in019 = 0; next }
+file == 2 && in019 {
+  l = trim($0)
+  if (pend1 != "") { if (index(l, "exempt_home=\"") == 1) { h = substr(l, 14); sub(/".*/, "", h); split(pend1, fg, "|")
+        if (h != "worktree") { if (h != fg[1]) add("1", "MISMATCH:" h); else add("1", fg[1] "/" shape(fg[2])) } }
+      pend1 = "" }
+  if (pend2 != "") { if (l == "") next; if (l == "exit 0") { split(pend2, fg, "|")
+        if (pend2h != "worktree") { if (pend2h != fg[1]) add("2", "MISMATCH:" pend2h); else add("2", fg[1] "/" shape(fg[2])) } }
+      pend2 = "" }
+  if (index(l, "\"${PRIMARY_ROOT}/pmo-platform/") == 1) pend1 = arm(l, "${PRIMARY_ROOT}")
+  else if (substr(l, 1, 1) == "\"" && index(l, ":${exempt_root}/pmo-platform/")) { pend2 = arm(l, "${exempt_root}"); x = substr(l, 2); pend2h = substr(x, 1, index(x, ":") - 1) }
+}
+END {
+  if (sec == 0) { printf "TABLE-MISSING"; exit }
+  if (colmiss || k == 0) { printf "COLUMN-MISSING"; exit }
+  if (nT == 0) { printf "TABLE-EMPTY"; exit }
+  if (hdr == 0) { printf "HOOK-MARKER-MISSING"; exit }
+  if (n1 == 0 || n2 == 0) { printf "HOOK-EMPTY V1=%s V2=%s", joined("1"), joined("2"); exit }
+  T = joined("T"); A = joined("1"); B = joined("2")
+  if (T == A && T == B) printf "AGREE T=%s", T; else printf "DISAGREE T=%s V1=%s V2=%s", T, A, B
+}' "$1" "$2"
+}
+
+# Arm assertions. P1 reads the shipped standard and hook. P2-P4b are its red-before controls:
+# each mutates ONE surface in a temporary copy and must read DISAGREE — P2 the standard's
+# /local-state/ carve-out cell, P3 a whole table row, P4 the hook's view-1 admit arm and P4b
+# its view-2 admit arm, so a view-2 extraction that silently followed view 1 is caught. P5 is
+# the specificity control: a reordered table and a changed non-carve-out cell must still read
+# AGREE. A mutant that cmp finds byte-identical to its source FAILs as INERT (the T7497-FM2c
+# rule) rather than testing the shipped surface by accident.
+t8019_par_report() {   # $1 id  $2 description  $3 expected verdict prefix  $4 verdict
+  case "$4" in
+    "$3"*) /usr/bin/printf 'PASS: %s %s (%s)\n' "$1" "$2" "$4"; PASS=$((PASS + 1)) ;;
+    *) /usr/bin/printf 'FAIL: %s %s\n  expected=%s actual=%s\n' "$1" "$2" "$3" "$4"; FAIL=$((FAIL + 1)) ;;
+  esac
+}
+t8019_par_mutant() {   # $1 id  $2 description  $3 source  $4 mutant  $5 which (std|hook)  $6 expected
+  if /usr/bin/cmp -s "$3" "$4"; then
+    /usr/bin/printf 'FAIL: %s %s\n  the mutation is INERT (the copy is byte-identical to its source)\n' "$1" "$2"
+    FAIL=$((FAIL + 1))
+  elif [ "$5" = std ]; then
+    t8019_par_report "$1" "$2" "$6" "$(t8019_parity "$4" "$HOOK")"
+  else
+    t8019_par_report "$1" "$2" "$6" "$(t8019_parity "$T8019_STD" "$4")"
+  fi
+}
+
+t8019_par_report "T8019-P1" "the placement standard's carve-out column and -019's static set, in both views, name one set of home shapes" \
+  "AGREE" "$(t8019_parity "$T8019_STD" "$HOOK")"
+
+T8019_M_P2="$(/usr/bin/mktemp)"
+T8019_M_P3="$(/usr/bin/mktemp)"
+T8019_M_P4="$(/usr/bin/mktemp)"
+T8019_M_P4B="$(/usr/bin/mktemp)"
+T8019_M_P5="$(/usr/bin/mktemp)"
+# Each awk program and key is literal text; nothing in it may expand.
+# shellcheck disable=SC2016
+/usr/bin/awk -v key='| `/local-state/` |' -v row='| `/local-state/` | mutant | `/local-state/` and everything under it | mutant | mutant |' \
+  'index($0, key) == 1 { print row; next } { print }' "$T8019_STD" > "$T8019_M_P2"
+# shellcheck disable=SC2016
+/usr/bin/awk -v key='| `/roadmaps/` |' 'index($0, key) == 1 { next } { print }' "$T8019_STD" > "$T8019_M_P3"
+# shellcheck disable=SC2016
+/usr/bin/awk -v key='exempt_home="local-state"' 'index($0, key) { next } { print }' "$HOOK" > "$T8019_M_P4"
+# shellcheck disable=SC2016
+/usr/bin/awk -v key='"local-state:${exempt_root}/pmo-platform/local-state/"*/*)' '
+  index($0, key) { f = 1; print; next }
+  f { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); if (t == "exit 0") { f = 0; next } }
+  { print }' "$HOOK" > "$T8019_M_P4B"
+# shellcheck disable=SC2016
+/usr/bin/awk -v ana='| `/analysis/` |' -v rdm='| `/roadmaps/` |' -v lst='| `/local-state/` |' '
+  index($0, ana) == 1 { held = $0; next }
+  index($0, rdm) == 1 { print; if (held != "") { print held; held = "" } next }
+  index($0, lst) == 1 { sub(/release, run and operating state/, "XYZZY") }
+  { print }
+  END { if (held != "") print held }' "$T8019_STD" > "$T8019_M_P5"
+
+t8019_par_mutant "T8019-P2" "a mutated /local-state/ carve-out cell in the standard reads DISAGREE" "$T8019_STD" "$T8019_M_P2" std "DISAGREE"
+t8019_par_mutant "T8019-P3" "a standard missing its /roadmaps/ row reads DISAGREE" "$T8019_STD" "$T8019_M_P3" std "DISAGREE"
+t8019_par_mutant "T8019-P4" "a hook missing its view-1 local-state admit arm reads DISAGREE" "$HOOK" "$T8019_M_P4" hook "DISAGREE"
+t8019_par_mutant "T8019-P4b" "a hook missing its view-2 local-state admit (the exit under the */* arm) reads DISAGREE" "$HOOK" "$T8019_M_P4B" hook "DISAGREE"
+t8019_par_mutant "T8019-P5" "a reordered table with a changed non-carve-out cell still reads AGREE (specificity)" "$T8019_STD" "$T8019_M_P5" std "AGREE"
+/bin/rm -f "$T8019_M_P2" "$T8019_M_P3" "$T8019_M_P4" "$T8019_M_P4B" "$T8019_M_P5"
 
 # ==========================================================================
 # PARSE-* — parse-only (noexec) exemption + the two admitted allowlist paths
