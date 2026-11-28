@@ -271,6 +271,18 @@ else
   COMMAND_CMDPOS="$COMMAND"
 fi
 
+readonly FSB_READ_VERBS="cat head tail less more base64 xxd od hexdump strings"
+readonly FSB_WRITE_VERBS="cp mv tee dd"
+readonly FSB_TAB=$'\t'
+readonly FSB_NL=$'\n'
+readonly FSB_PASS2=1  # M-FSB-PASS2
+readonly FSB_REDIR=1  # M-FSB-REDIR
+readonly FSB_JOINS=1  # M-FSB-JOIN
+readonly FSB_HDQ=1  # M-FSB-HDQ
+readonly FSB_MASKFREE=1  # M-FSB-MASKFREE
+FSB_SEEN=""
+FSB_SEEN_N=0
+
 # --- HELPERS ---
 log_block() {
   local rule_id="$1"
@@ -804,13 +816,13 @@ advise_unresolvable() {
     "${verb} target opens with an unresolvable expansion and has no decidable literal prefix to classify; admitted under advisory policy: $(render_token "$token")"
 }
 
-# check_verb(verb, rule_id_class)
-#   Run the verb-detection + per-token classification loop.
-#   rule_id_class: "READ" → BLOCK-FS-BOUNDARY-001 / -003 / -004
-#                  "WRITE" → BLOCK-FS-BOUNDARY-002 / -003 / -004
-#   Returns: 0 always (block_or_warn exits on enforce-mode block; warn-mode returns)
-check_verb() {
-  local verb="$1"; local class="$2"
+# judge_operand(verb, rule_id_class, token)
+#   The per-operand disposition, shared by both passes: one token, classified by the cascade
+#   (resolve_and_classify) and refused, warned, advised or admitted by the rule its class
+#   names. The braced block keeps check_verb's indentation, so the suite's line-keyed
+#   mutations of these lines still target them.
+judge_operand() {
+  local verb="$1"; local class="$2"; local token="$3"
   local outside_rule
   local strict_rule
   case "$class" in
@@ -818,14 +830,7 @@ check_verb() {
     WRITE) outside_rule="BLOCK-FS-BOUNDARY-002"; strict_rule="BLOCK-FS-BOUNDARY-003";;
     *)     outside_rule="BLOCK-FS-BOUNDARY-001"; strict_rule="BLOCK-FS-BOUNDARY-003";;
   esac
-
-  # Detect verb at command-start position (absolute-path-aware)
-  if ! matches "${ANCHOR_PREFIX_BASH}${verb}([[:space:]]+|$)"; then
-    return 0
-  fi
-
-  while IFS= read -r token; do
-    [ -z "$token" ] && continue
+  {
     local classification=0
     local resolved
     resolved="$(resolve_and_classify "$token")" || classification="$?"
@@ -857,7 +862,543 @@ check_verb() {
         advise_unresolvable "$verb" "$token"
         ;;
     esac
+  }
+}
+
+# check_verb(verb, rule_id_class)
+#   Run the verb-detection + per-token classification loop.
+#   rule_id_class: "READ" → BLOCK-FS-BOUNDARY-001 / -003 / -004
+#                  "WRITE" → BLOCK-FS-BOUNDARY-002 / -003 / -004
+#   Each token it hands to judge_operand is recorded in FSB_SEEN first, so the second pass
+#   below never judges it again.
+#   Returns: 0 always (block_or_warn exits on enforce-mode block; warn-mode returns)
+check_verb() {
+  local verb="$1"; local class="$2"
+
+  # Detect verb at command-start position (absolute-path-aware)
+  if ! matches "${ANCHOR_PREFIX_BASH}${verb}([[:space:]]+|$)"; then
+    return 0
+  fi
+
+  while IFS= read -r token; do
+    [ -z "$token" ] && continue
+    FSB_SEEN="${FSB_SEEN}${verb}${FSB_TAB}${token}${FSB_NL}"; FSB_SEEN_N=$((FSB_SEEN_N + 1))
+    judge_operand "$verb" "$class" "$token"
   done < <(extract_target_tokens "$verb")
+}
+
+# ==========================================================================
+# SECOND PASS — the operands the token walk does not hand over
+# ({{ADR:fs-boundary-second-pass-reads-skipped-operands}})
+# ==========================================================================
+# Runs after both rule-evaluation loops, so every first-pass verdict is reached first: under
+# enforce a first-pass refusal has already exited, and under warn its records are already
+# written. The second pass reads the command again, in readings the first pass does not make,
+# and hands each verb-and-word pair the first pass did not hand over to judge_operand — the same
+# disposition, rule IDs and messages. It can therefore only add a refusal or a record.
+#
+# THE READINGS. Each base text is the command as written, and, when a line continuation is
+# present, the command with every continuation joined (no join after a line on which an unquoted
+# # opens a comment). For each base:
+#   C   the base with each top-level redirection operator's & and | taken out (M-FSB-REDIR), so
+#       the canonicalizer cuts it only where the shell does, then canonicalized (the first pass's
+#       canonical text is reused when nothing was taken out);
+#   CH  the same copy with every mark the canonicalizer's quote scanner reads apart from the shell
+#       mapped to a neutral byte, canonicalized, and the marks restored (M-FSB-HDQ) — built
+#       whenever such a mark is present, whether or not C changed;
+#   CM  the base with every quote mark neutral, canonicalized and restored (M-FSB-MASKFREE) —
+#       built only when C equals its input, the input carries a quote mark, and CH (if built)
+#       also left its input unchanged.
+# Each canonical reading of the unjoined base is also read with its continuations joined. At most
+# six canonicalizer runs are added, three per base.
+#
+# FAIL DIRECTION. The whole pass runs in one command substitution with set -e re-armed inside it,
+# every external call is checked, every helper leaves FSB_OK=1 only as its last statement and its
+# caller checks that flag, and the pass prints its completion line JUDGED only as its last step.
+# A non-zero status or a missing completion line is a reading that did not complete:
+# reading_not_evaluated refuses under enforce and, under warn, stands down with a warn-log
+# record. Every program is fed from a here-string. See the readiness fragment, coverage of G2.
+readonly FSB_LEX_AWK='
+  # FSB_LEX_AWK - the second pass lexer over one text. -v mode= flags | text | join | maskfree | restore
+  BEGIN {
+    SQ = sprintf("%c", 39); DQ = sprintf("%c", 34); BS = sprintf("%c", 92)
+    C2 = sprintf("%c", 2); C3 = sprintf("%c", 3); C4 = sprintf("%c", 4); C5 = sprintf("%c", 5); C6 = sprintf("%c", 6)
+    if (scheme == 2) { MQ = C2 C5; MD = C3 C5; MO = C2 C6; MC = C3 C6; E2 = C2 C4; E3 = C3 C4 }
+    else             { MQ = C2;    MD = C3;    MO = C4;    MC = C5;    E2 = C2;    E3 = C3 }
+    ESC = (scheme == 2 && (repair || mode == "maskfree"))
+    nchk = 0; cur = ""; cl = 0; nrec = 0; pend = 0; joined = 0
+    fR = 0; fC = 0; fQ = 0; fT = 0; fX = 0
+    L = 0; st[0] = 0; pd[0] = 0; ar[0] = 0; kd[0] = 0; cq[0] = 0
+    nq = 0; qh = 1; body = 0
+  }
+  function out(s) { cur = cur s; cl += length(s); if (cl >= 512) { chk[++nchk] = cur; cur = ""; cl = 0 } }
+  function em(x) { if (ESC) { if (x == C2) { out(E2); return } if (x == C3) { out(E3); return } } out(x) }
+  function code(x) { return (x == SQ ? MQ : (x == DQ ? MD : (x == "(" ? MO : MC))) }
+  function emm(x) { fT = 1; if (!repair) { em(x); return } out(code(x)) }
+  function emq(x) { if (L >= 1 && kd[1] == 2) { emm(x); return } em(x) }
+  function emp(x) { if (L >= 1 && kd[1] == 1 && (x == "(" || x == ")")) { emm(x); return } if (x == SQ || x == DQ) { emq(x); return } em(x) }
+  function naive() { return (L >= 1 && kd[1] == 1) }
+  function wstart(i) { if (i == 1) return 1; return (index(" \t;&|()<>", c[i - 1]) > 0) }
+  function shifts(s,   n, i, x, z, dep) {
+    if (naive() && s ~ /[()]/) return 1
+    n = split(s, q, ""); z = 0
+    for (i = 1; i <= n; i++) {
+      x = q[i]
+      if (z == 0) {
+        if (x == "$" && q[i + 1] == "(") { dep = 1; i += 2; while (i <= n && dep > 0) { if (q[i] == "(") dep++; else if (q[i] == ")") dep--; i++ } if (dep > 0) return 1; i--; continue }
+        if (x == BS) { i++; continue }
+        if (x == "#" && (i == 1 || index(" \t;&|", q[i - 1]) > 0)) return 0
+        if (x == SQ) { z = 1; continue }
+        if (x == DQ) { z = 2; continue }
+        continue
+      }
+      if (z == 2 && x == BS) { i++; continue }
+      if ((z == 1 && x == SQ) || (z == 2 && x == DQ)) z = 0
+    }
+    return (z != 0)
+  }
+  function plain(s,   n, i) { if (!ESC) { out(s); return } n = split(s, q, ""); for (i = 1; i <= n; i++) em(q[i]) }
+  function mapall(s,   n, i, x) {
+    n = split(s, q, "")
+    for (i = 1; i <= n; i++) { x = q[i]; if (x == SQ || x == DQ || x == "(" || x == ")") emm(x); else em(x) }
+  }
+  function oddbs(s) { if (match(s, /\\+$/)) return (RLENGTH % 2 == 1); return 0 }
+  function rjoin(s,   r) {
+    r = s
+    gsub(/&>/, ">", r); gsub(/>&/, ">", r); gsub(/>\|/, ">", r); gsub(/<&/, "<", r)
+    if (r != s) fR = 1
+    return r
+  }
+  function bodyline(s,   t, k, sh, j, u) {
+    k = qh; t = s
+    if (hdash[k]) sub(/^\t+/, "", t)
+    if (canon) sub(/^; /, "", t)
+    if (t == hd[k]) { plain(s); qh++; if (qh > nq) { body = 0; nq = 0; qh = 1 } return }
+    sh = shifts(s); if (sh) fT = 1
+    j = oddbs(s); if (j) fC = 1
+    u = s
+    if (redir || mode == "flags") u = rjoin(u)
+    if (mode == "join" && j) { u = substr(u, 1, length(u) - 1); pend = 1; joined = 1 }
+    if (repair && sh) mapall(u); else plain(u)
+  }
+  function hdword(i, n,   j, w, x, quo, inq) {
+    j = i; while (j <= n && (c[j] == " " || c[j] == "\t")) j++
+    w = ""; quo = 0; inq = ""
+    while (j <= n && length(w) < 256) {
+      x = c[j]
+      if (inq == "") {
+        if (index(" \t;&|()<>", x) > 0) break
+        if (x == SQ || x == DQ) { inq = x; quo = 1; j++; continue }
+        if (x == BS) { quo = 1; j++; if (j <= n) w = w c[j]; j++; continue }
+        w = w x; j++; continue
+      }
+      if (x == inq) { inq = ""; j++; continue }
+      w = w x; j++
+    }
+    if (w == "") return
+    nq++; hd[nq] = w; hquo[nq] = quo; hdash[nq] = HDASH
+  }
+  function push(k, a) { L++; st[L] = 0; pd[L] = 1; kd[L] = k; ar[L] = a; cq[L] = 0 }
+  function scanline(s,   n, i, x, y, z, cont) {
+    n = split(s, c, ""); i = 1; cont = 0
+    if (index(s, C2) || index(s, C3) || index(s, C4) || index(s, C5)) fX = 1
+    if (index(s, SQ) || index(s, DQ)) fQ = 1
+    while (i <= n) {
+      x = c[i]; z = st[L]
+      if (z == 1) { if (x == SQ) st[L] = 0; emp(x); i++; continue }
+      if (z == 3) {
+        if (x == BS) {
+          if (i == n) { em(x); i++; continue }
+          y = c[i + 1]; em(x)
+          if (y == SQ && L == 0) emm(y); else emp(y)
+          i += 2; continue
+        }
+        if (x == SQ) st[L] = 0
+        emp(x); i++; continue
+      }
+      if (z == 4) {
+        if ((x == SQ || x == DQ) && cq[L]) emm(x); else emp(x)
+        i++; continue
+      }
+      if (z == 2) {
+        if (x == BS) {
+          if (i == n) { cont = 1; i++; continue }
+          y = c[i + 1]; em(x); emp(y)
+          i += 2; continue
+        }
+        if (x == DQ) { st[L] = 0; emq(x); i++; continue }
+        if (x == "$" && c[i + 1] == "(") { em(x); em("("); push(2, c[i + 2] == "("); i += 2; continue }
+        emp(x); i++; continue
+      }
+      if (x == BS) {
+        if (i == n) { cont = 1; i++; continue }
+        y = c[i + 1]; em(x); emp(y)
+        i += 2; continue
+      }
+      if (x == "#" && !ar[L] && wstart(i)) { st[L] = 4; cq[L] = (L == 0 && i > 1 && index("()<>", c[i - 1]) > 0); em(x); i++; continue }
+      if (x == SQ) { st[L] = 1; emq(x); i++; continue }
+      if (x == DQ) { st[L] = 2; emq(x); i++; continue }
+      if (x == "$") {
+        y = c[i + 1]
+        if (y == "$") { em(x); em(y); i += 2; continue }
+        if (y == SQ) { em(x); emq(y); st[L] = 3; i += 2; continue }
+        if (y == DQ) { em(x); emq(y); st[L] = 2; i += 2; continue }
+        if (y == "(") { em(x); em("("); push(L == 0 ? 1 : kd[L], c[i + 2] == "("); i += 2; continue }
+        em(x); i++; continue
+      }
+      if (x == "(") { if (L >= 1) pd[L]++; em(x); i++; continue }
+      if (x == ")") { em(x); i++; if (L >= 1) { pd[L]--; if (pd[L] <= 0) L-- } continue }
+      if (x == "<" && c[i + 1] == "<" && c[i + 2] != "<" && !ar[L] && (i == 1 || c[i - 1] != "<")) {
+        HDASH = (c[i + 2] == "-"); hdword(i + 2 + HDASH, n)
+        em(x); em(c[i + 1]); i += 2; continue
+      }
+      if (L == 0 && x == "&") {
+        y = c[i + 1]
+        if (y == ">") {
+          fR = 1; if (!redir) em(x); em(y); i += 2
+          if (c[i] == ">") { em(c[i]); i++ }
+          if (c[i] == "|") { if (!redir) em(c[i]); i++ } else if (c[i] == "!") { em(c[i]); i++ }
+          continue
+        }
+        if (y == "&" || y == "|" || y == "!") { em(x); em(y); i += 2; continue }
+        em(x); i++; continue
+      }
+      if (L == 0 && x == ">") {
+        em(x); i++
+        if (c[i] == ">") { em(c[i]); i++ }
+        if (c[i] == "&") { fR = 1; if (!redir) em(c[i]); i++ }
+        if (c[i] == "|") { fR = 1; if (!redir) em(c[i]); i++ } else if (c[i] == "!") { em(c[i]); i++ }
+        continue
+      }
+      if (L == 0 && x == "<" && c[i + 1] == "&") { fR = 1; em(x); if (!redir) em("&"); i += 2; continue }
+      if (x == "|" && (c[i + 1] == "|" || c[i + 1] == "&")) { em(x); em(c[i + 1]); i += 2; continue }
+      em(x); i++
+    }
+    if (st[L] == 4) st[L] = 0
+    if (cont) { fC = 1; if (mode == "join") { pend = 1; joined = 1 } else em(BS); return }
+    if (nq >= qh && st[L] == 0) body = 1
+  }
+  function maskline(s,   n, i, x) {
+    n = split(s, q, "")
+    for (i = 1; i <= n; i++) { x = q[i]; if (x == SQ) out(MQ); else if (x == DQ) out(MD); else em(x) }
+  }
+  function restline(s,   n, i, x, y) {
+    n = split(s, q, "")
+    for (i = 1; i <= n; i++) {
+      x = q[i]
+      if (scheme == 2) {
+        if ((x == C2 || x == C3) && i < n) {
+          y = q[i + 1]; i++
+          if (y == C4) out(x)
+          else if (y == C5) out(x == C2 ? SQ : DQ)
+          else if (y == C6) out(x == C2 ? "(" : ")")
+          else out(x y)
+          continue
+        }
+        out(x); continue
+      }
+      if (x == C2) out(SQ); else if (x == C3) out(DQ); else if (x == C4) out("("); else if (x == C5) out(")"); else out(x)
+    }
+  }
+  {
+    nrec++
+    if (nrec > 1) { if (pend) pend = 0; else out("\n") }
+    if (mode == "maskfree") { maskline($0); next }
+    if (mode == "restore") { restline($0); next }
+    if (body) { bodyline($0); next }
+    scanline($0)
+  }
+  END {
+    if (cl > 0) chk[++nchk] = cur
+    if (mode == "flags") { printf "R=%d C=%d Q=%d T=%d X=%d\n", fR, fC, fQ, fT, fX; exit 0 }
+    if (mode == "join") { if (!joined) { print "NONE"; exit 0 } print "JOINED" }
+    for (k = 1; k <= nchk; k++) printf "%s", chk[k]
+  }
+'
+readonly FSB_ADDED_AWK='
+  # FSB_ADDED_AWK - the second pass walk over one reading. stdin: "SEEN <n>", n seen pairs, then the reading.
+  # Prints "PAIRS <k>", the k new verb<TAB>word pairs, then "WALKED". Exits 3 unless line 1 is the header and
+  # the n counted pairs arrive. -v verbs="<the listed verbs>" -v cross=1 when the reading is canonicalizer output.
+  BEGIN {
+    SQ = sprintf("%c", 39); DQ = sprintf("%c", 34); BS = sprintf("%c", 92); TAB = sprintf("%c", 9)
+    nv = split(verbs, va, " "); for (k = 1; k <= nv; k++) V[va[k]] = 1
+    np = split("then do else elif in ! if while until sudo time env nohup command builtin exec xargs nice stdbuf timeout", pw, " ")
+    for (k = 1; k <= np; k++) PW[pw[k]] = 1
+    HX = "0123456789abcdef"
+    hdr = 0; want = 0; got = 0; bad = 0; npairs = 0
+    L = 0; rs(0); nsemi = 0; noth = 0; hsep = 0
+  }
+  function rs(l) { vb[l] = ""; sd[l] = 0; sk[l] = 0; xm[l] = 0; cw[l] = 0 }
+  function hexv(ch) { return index(HX, tolower(ch)) - 1 }
+  function lit(w,   n, k, ch, z, d, dl, nx, v, m, nul) {
+    if (!index(w, SQ) && !index(w, DQ) && !index(w, BS) && !index(w, "$")) { if (w ~ /[`{*?[~]/ || length(w) > 32) return ""; return w }
+    n = split(w, q, ""); z = 0; d = ""; dl = 0; nul = 0
+    for (k = 1; k <= n; k++) {
+      if (dl > 32) return ""
+      ch = q[k]
+      if (z == 0) {
+        if (ch == SQ) { z = 1; continue }
+        if (ch == DQ) { z = 2; continue }
+        if (ch == BS) { if (k == n) return ""; k++; d = d q[k]; dl++; continue }
+        if (ch == "$") { if (q[k + 1] == SQ) { z = 3; nul = 0; k++; continue } if (q[k + 1] == DQ) { z = 2; k++; continue } return "" }
+        if (index("`{*?[~", ch) > 0) return ""
+        d = d ch; dl++; continue
+      }
+      if (z == 1) { if (ch == SQ) z = 0; else { d = d ch; dl++ } continue }
+      if (z == 2) {
+        if (ch == DQ) { z = 0; continue }
+        if (ch == "$" || ch == "`") return ""
+        if (ch == BS && k < n) { nx = q[k + 1]; if (nx == "$" || nx == "`" || nx == DQ || nx == BS) { d = d nx; dl++; k++; continue } }
+        d = d ch; dl++; continue
+      }
+      if (ch == SQ) { z = 0; continue }
+      if (ch != BS || k == n) { if (!nul) { d = d ch; dl++ } continue }
+      k++; nx = q[k]; v = -1
+      if (nx == "a") v = 7; else if (nx == "b") v = 8; else if (nx == "e" || nx == "E") v = 27
+      else if (nx == "f") v = 12; else if (nx == "n") v = 10; else if (nx == "r") v = 13
+      else if (nx == "t") v = 9; else if (nx == "v") v = 11
+      else if (nx == BS || nx == SQ || nx == DQ || nx == "?") v = -2
+      else if (nx ~ /[0-7]/) { v = nx + 0; for (m = 1; m < 3 && q[k + 1] ~ /[0-7]/; m++) { k++; v = v * 8 + q[k] } }
+      else if (nx == "x" || nx == "u" || nx == "U") {
+        m = (nx == "x" ? 2 : (nx == "u" ? 4 : 8)); v = 0
+        if (hexv(q[k + 1]) < 0) { v = -3 } else { while (m > 0 && hexv(q[k + 1]) >= 0) { k++; v = v * 16 + hexv(q[k]); m-- } }
+      }
+      else if (nx == "c") v = -4
+      if (nul) continue
+      if (v == -2) { d = d nx; dl++; continue }
+      if (v == -3) { d = d BS nx; dl += 2; continue }
+      if (v == -4) return ""
+      if (v == -1) { d = d BS nx; dl += 2; continue }
+      if (v == 0) { nul = 1; continue }
+      if (v > 127) return ""
+      d = d sprintf("%c", v); dl++
+    }
+    if (z != 0) return ""
+    return d
+  }
+  function verbof(w,   t) {
+    t = lit(w); if (t == "") return ""  # M-FSB-QVERB
+    if (substr(t, 1, 1) == "=") t = substr(t, 2)
+    sub(/^\/(usr\/(local\/)?|opt\/(homebrew|local)\/)?bin\//, "", t)
+    return (t in V) ? t : ""
+  }
+  function pfx(w,   t) {
+    if (w ~ /^[0-9]*[<>]/ || w ~ /^&>/) return 1
+    t = w; if (substr(t, 1, 1) == BS) t = substr(t, 2)
+    if (length(t) >= 2 && (substr(t, 1, 1) == SQ || substr(t, 1, 1) == DQ) && substr(t, length(t), 1) == substr(t, 1, 1)) t = substr(t, 2, length(t) - 2)
+    sub(/.*\//, "", t)
+    return (t in PW)
+  }
+  function emit(v, t,   p) { p = v TAB t; if ((p in seen) || (p in E)) return; E[p] = 1; P[++npairs] = p }
+  function endseg(l) { rs(l) }
+  function onsep() {
+    if (xm[L] && cross && nsemi == 1 && noth == 0 && !pfx(NEXTW)) { xm[L] = (NEXTW ~ /^[A-Za-z_][A-Za-z0-9_]*[+]?=/) ? 1 : 0; return }
+    endseg(L)
+  }
+  function casew(w, l) {
+    if (cw[l] == 2) { cw[l] = 0; if (w == "in") { cs[l]++; csd[l, cs[l]] = pdp[l] } return }
+    if (cw[l] == 1) { cw[l] = 2; return }
+    if (w == "case") cw[l] = 1
+    if (cs[l] > 0 && w ~ /^esac([);]|$)/) cs[l]--
+  }
+  function parens(w,   n, k, ch) {
+    n = split(w, pq, "")
+    for (k = 1; k <= n && L > 0; k++) {
+      ch = pq[k]
+      if (ch == "(") pdp[L]++
+      else if (ch == ")") {
+        if (cs[L] > 0 && pdp[L] == csd[L, cs[L]]) continue  # M-FSB-CASE
+        pdp[L]--
+        if (pdp[L] <= 0) { L--; xm[L] = 1 }
+      }
+    }
+  }
+  function word(w,   l, t, rem) {
+    if (hsep) { NEXTW = w; onsep(); hsep = 0; nsemi = 0; noth = 0 }
+    if (w ~ /^[<>=]\(/) {  # M-FSB-PSUB
+      if (!sd[L]) { sd[L] = 1; vb[L] = "" }
+      sk[L] = 0
+      L++; rs(L); pdp[L] = 1; cs[L] = 0
+      rem = substr(w, 3)
+      if (rem != "") word(rem)
+      return
+    }
+    l = L
+    if (l > 0) casew(w, l)
+    if (sk[l]) sk[l] = 0
+    else if (!sd[l]) { sd[l] = 1; vb[l] = verbof(w) }
+    else if (vb[l] != "") {
+      if (w ~ /^[0-9]*[<>]/ || w ~ /^&>/ || w ~ /^\{[A-Za-z_][A-Za-z0-9_]*\}[<>]/) {
+        if (w ~ /^([0-9]*|\{[A-Za-z_][A-Za-z0-9_]*\})([<>]|&>)[<>&|!]*$/) sk[l] = 1
+      }
+      else if (substr(w, 1, 1) != "-" && w !~ /^[(){}]+$/) {
+        t = w; sub(/^(if|of|conv|status|bs|count|seek|skip|iflag|oflag)=/, "", t)
+        if (t != "") emit(vb[l], t)
+      }
+    }
+    if (l > 0) parens(w)
+  }
+  function walkline(s,   n, i, x, ws) {
+    n = split(s, c, ""); ws = 0
+    for (i = 1; i <= n; i++) {
+      x = c[i]
+      if (x == " " || x == "\t" || x == "\v" || x == "\f" || x == "\r" || x == ";" || x == "&" || x == "|") {
+        if (ws) { word(substr(s, ws, i - ws)); ws = 0 }
+        if (x == ";") { nsemi++; hsep = 1 } else if (x == "&" || x == "|") { noth++; hsep = 1 }
+        continue
+      }
+      if (!ws) ws = i
+    }
+    if (ws) word(substr(s, ws, n - ws + 1))
+    noth++; hsep = 1
+  }
+  NR == 1 { if ($0 !~ /^SEEN [0-9]+$/) { bad = 1; exit 3 } want = substr($0, 6) + 0; hdr = 1; next }
+  got < want { seen[$0] = 1; got++; next }
+  { walkline($0) }
+  END {
+    if (bad || !hdr || got < want) exit 3
+    printf "PAIRS %d\n", npairs
+    for (k = 1; k <= npairs; k++) printf "%s\n", P[k]
+    printf "WALKED\n"
+  }
+'
+readonly FSB_ALL_VERBS="${FSB_READ_VERBS} ${FSB_WRITE_VERBS}"
+readonly FSB_P2_END="END${FSB_TAB}END"
+
+# reading_not_evaluated <why> — a second-pass reading did not complete. Mode-coupled (ADR-078 D2):
+#   enforce refuses; warn stands down loudly and writes a warn-log record whose rule field is
+#   INPUT-NOT-EVALUATED, the record the enforce flip reads. Never returns.
+reading_not_evaluated() {
+  log_error "INPUT-NOT-EVALUATED: ${1}"
+  if [ "$LIB_GUARD_MODE" = "enforce" ]; then
+    "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] BLOCKED (fail-closed): the second pass could not read the command (%s); this is not a clean result: the hook could not evaluate its input. See %s.\n' "$HOOK_NAME" "$1" "$ERROR_LOG" >&2
+    exit 2
+  fi
+  log_warn "INPUT-NOT-EVALUATED" "second pass not evaluated: ${1}"
+  "$PRINTF" '[CLAUDE-HOOK:%s:INPUT-NOT-EVALUATED] WARN (degraded, .mode=%s): the second pass could not read the command (%s); this is not a clean result: the operands only the second pass reads were not judged this run.\n' "$HOOK_NAME" "$LIB_GUARD_MODE" "$1" >&2
+  exit 0
+}
+
+# fsb_canon <text> — FSB_C = the canonicalizer's output on <text>.
+fsb_canon() {
+  FSB_OK=0
+  FSB_C="$(/usr/bin/awk -f "$CMDPOS_AWK" <<< "$1")" || return 1
+  if [ -z "$FSB_C" ] && [ -n "$1" ]; then return 1; fi
+  FSB_OK=1
+}
+# fsb_lex <mode> <text> [awk -v assignments] — FSB_L = the lexer's output on <text>.
+fsb_lex() {
+  local m="$1" t="$2"
+  FSB_OK=0
+  shift 2
+  FSB_L="$(LC_ALL=C /usr/bin/awk -v mode="$m" "$@" "$FSB_LEX_AWK" <<< "$t")" || return 1
+  FSB_OK=1
+}
+# fsb_walk <reading> <cross> — walk one reading; append its new pairs to FSB_OUT and FSB_SEEN.
+fsb_walk() {
+  local w k body
+  FSB_OK=0
+  w="$(LC_ALL=C /usr/bin/awk -v verbs="$FSB_ALL_VERBS" -v cross="$2" "$FSB_ADDED_AWK" <<< "SEEN ${FSB_SEEN_N}${FSB_NL}${FSB_SEEN}${1}")" || return 1
+  case "$w" in
+    "PAIRS "*"${FSB_NL}WALKED") : ;;
+    *) return 1 ;;
+  esac
+  k="${w%%"$FSB_NL"*}"; k="${k#PAIRS }"
+  case "$k" in ''|*[!0-9]*) return 1 ;; esac
+  if [ "$k" != 0 ]; then
+    body="${w#*"$FSB_NL"}"; body="${body%WALKED}"
+    FSB_OUT="${FSB_OUT}${body}"; FSB_SEEN="${FSB_SEEN}${body}"; FSB_SEEN_N=$((FSB_SEEN_N + k))
+  fi
+  FSB_OK=1
+}
+# fsb_walk_joined <reading> <cross> — the reading with its continuations joined, when it has one.
+fsb_walk_joined() {
+  FSB_OK=0
+  fsb_lex join "$1" -v canon=1; [ "$FSB_OK" = 1 ] || return 1
+  case "$FSB_L" in
+    NONE) FSB_OK=1; return 0 ;;
+    JOINED"$FSB_NL"*) fsb_walk "${FSB_L#JOINED"$FSB_NL"}" "$2"; [ "$FSB_OK" = 1 ] || return 1 ;;
+    *) return 1 ;;
+  esac
+  FSB_OK=1
+}
+# fsb_restore <text> <scheme> — FSB_R = <text> with each neutral code mapped back.
+fsb_restore() {
+  FSB_OK=0
+  fsb_lex restore "$1" -v scheme="$2"; [ "$FSB_OK" = 1 ] || return 1
+  FSB_R="$FSB_L"; FSB_OK=1
+}
+# fsb_base <text> <first-pass canonical or empty> <joined 0|1> — every reading of one base text.
+fsb_base() {
+  local t="$1" c0="$2" j="$3" f r=0 q=0 x=0 sc=1 tr cr ch="" rp="" chr
+  FSB_OK=0
+  fsb_lex flags "$t"; [ "$FSB_OK" = 1 ] || return 1; f="$FSB_L"
+  case "$f" in "R="*" C="*" Q="*" T="*" X="*) : ;; *) return 1 ;; esac
+  case "$f" in *"R=1"*) r="$FSB_REDIR" ;; esac
+  case "$f" in *"Q=1"*) q=1 ;; esac
+  case "$f" in *"T=1"*) x="$FSB_HDQ" ;; esac
+  case "$f" in *"X=1"*) sc=2 ;; esac
+  case "$f" in *"C=1"*) FSB_BASE_CJ="$FSB_JOINS" ;; *) FSB_BASE_CJ=0 ;; esac
+  [ "$FSB_JOINS" = 1 ] || j=1
+  tr="$t"
+  if [ "$r" = 1 ]; then fsb_lex text "$t" -v redir=1; [ "$FSB_OK" = 1 ] || return 1; tr="$FSB_L"; fi
+  if [ "$r" = 0 ] && [ -n "$c0" ]; then cr="$c0"; else fsb_canon "$tr"; [ "$FSB_OK" = 1 ] || return 1; cr="$FSB_C"; fi
+  fsb_walk "$cr" "$([ "$cr" != "$tr" ] && echo 1 || echo 0)"; [ "$FSB_OK" = 1 ] || return 1
+  if [ "$j" = 0 ]; then fsb_walk_joined "$cr" 1; [ "$FSB_OK" = 1 ] || return 1; fi
+  if [ "$x" = 1 ]; then
+    fsb_lex text "$t" -v redir="$r" -v repair=1 -v scheme="$sc"; [ "$FSB_OK" = 1 ] || return 1; rp="$FSB_L"
+    fsb_canon "$rp"; [ "$FSB_OK" = 1 ] || return 1; ch="$FSB_C"
+    fsb_restore "$ch" "$sc"; [ "$FSB_OK" = 1 ] || return 1; chr="$FSB_R"
+    fsb_walk "$chr" "$([ "$ch" != "$rp" ] && echo 1 || echo 0)"; [ "$FSB_OK" = 1 ] || return 1
+    if [ "$j" = 0 ]; then fsb_walk_joined "$chr" 1; [ "$FSB_OK" = 1 ] || return 1; fi
+  fi
+  if [ "$FSB_MASKFREE" = 1 ] && [ "$cr" = "$tr" ] && [ "$q" = 1 ] && { [ "$x" = 0 ] || [ "$ch" = "$rp" ]; }; then
+    fsb_lex maskfree "$tr" -v scheme="$sc"; [ "$FSB_OK" = 1 ] || return 1; rp="$FSB_L"
+    fsb_canon "$rp"; [ "$FSB_OK" = 1 ] || return 1; ch="$FSB_C"
+    fsb_restore "$ch" "$sc"; [ "$FSB_OK" = 1 ] || return 1; chr="$FSB_R"
+    fsb_walk "$chr" "$([ "$ch" != "$rp" ] && echo 1 || echo 0)"; [ "$FSB_OK" = 1 ] || return 1
+    if [ "$j" = 0 ]; then fsb_walk_joined "$chr" 1; [ "$FSB_OK" = 1 ] || return 1; fi
+  fi
+  FSB_OK=1
+}
+# fsb_pass2 — build every reading, then judge every new pair. Runs inside the command
+#   substitution below; its last statement prints the completion line.
+fsb_pass2() {
+  local v t judged=0
+  FSB_OUT=""
+  fsb_base "$COMMAND" "$COMMAND_CMDPOS" 0; [ "$FSB_OK" = 1 ] || return 41
+  if [ "$FSB_BASE_CJ" = 1 ]; then
+    fsb_lex join "$COMMAND"; [ "$FSB_OK" = 1 ] || return 42
+    case "$FSB_L" in
+      NONE) : ;;
+      JOINED"$FSB_NL"*) fsb_base "${FSB_L#JOINED"$FSB_NL"}" "" 1; [ "$FSB_OK" = 1 ] || return 43 ;;
+      *) return 44 ;;
+    esac
+  fi
+  FSB_OUT="${FSB_OUT}${FSB_P2_END}"
+  while IFS="$FSB_TAB" read -r v t; do
+    if [ "$v" = END ] && [ "$t" = END ]; then judged=1; break; fi
+    case " $FSB_WRITE_VERBS " in
+      *" $v "*) judge_operand "$v" WRITE "$t" ;;
+      *) judge_operand "$v" READ "$t" ;;
+    esac
+  done <<< "$FSB_OUT"
+  [ "$judged" = 1 ] || return 45
+  "$PRINTF" '%s' JUDGED
+}
+# fsb_run_pass2 — FSB_P2_RES and FSB_P2_RC = the second pass's output and exit status.
+#   The substitution stands as a plain assignment: never on the left of an and-or list, never in
+#   an if or while test. Bash ignores errexit for every command a function runs in such a
+#   position, and the Linux hook-harness job's bash 5.3 carried that into the substitution, so an
+#   unchecked failing command inside the pass ran on and the pass printed its completion line;
+#   macOS bash 3.2 honoured the re-armed errexit in either position. The hook's own errexit is
+#   suspended around the one assignment, and a function does not inherit the ERR trap, so a
+#   non-zero status reaches the dispatch below instead of ending the hook.
+fsb_run_pass2() {
+  set +e
+  FSB_P2_RES="$(set -e; fsb_pass2)"
+  FSB_P2_RC="$?"
+  set -e
 }
 
 # ==========================================================================
@@ -865,7 +1406,7 @@ check_verb() {
 # ==========================================================================
 
 # File-read verb class — BLOCK-FS-BOUNDARY-001 (or -003 if unresolvable)
-for verb in cat head tail less more base64 xxd od hexdump strings; do
+for verb in $FSB_READ_VERBS; do
   check_verb "$verb" READ
 done
 
@@ -873,9 +1414,24 @@ done
 # For cp/mv: both source AND target may resolve outside; extract_target_tokens
 # yields all positional args, both are checked uniformly.
 # For tee/dd: target matters for write-leak.
-for verb in cp mv tee dd; do
+for verb in $FSB_WRITE_VERBS; do
   check_verb "$verb" WRITE
 done
+
+# The second pass, gated on the canonicalizer's canary: on the warn-degraded path it does not run,
+# and says so in the warn log (enforce has already refused at the canary).
+if [ "$FSB_PASS2" != 1 ]; then  :                        # the second pass's off switch (M-FSB-PASS2)
+elif [ "$CMDPOS_OK" = 1 ]; then
+  FSB_P2_RC=0
+  fsb_run_pass2
+  case "$FSB_P2_RC" in
+    0) [ "$FSB_P2_RES" = JUDGED ] || reading_not_evaluated "no completion line" ;;
+    2) if [ "$MODE" = "enforce" ]; then exit 2; fi; reading_not_evaluated "exit 2 under warn" ;;
+    *) reading_not_evaluated "exit ${FSB_P2_RC}" ;;
+  esac
+else
+  log_warn "INPUT-NOT-EVALUATED" "second pass not evaluated: the command-position canonicalizer failed its canary"
+fi
 
 # No matcher-verb detected — allow
 exit 0
