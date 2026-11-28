@@ -239,8 +239,8 @@ operator_instance_working_state_telemetry_path = ""
 # Adapter selectors — install-level choices of which implementation backs a
 # platform seam (ADR-017 §S2 names operator.toml as the home for "identity,
 # paths, methodology, adapters"). Each host selector picks an external surface
-# the platform integrates with; corpus_home, last, is a placement selector that
-# names where the release corpus is homed. This is the canonical onboarding seam:
+# the platform integrates with; corpus_home and governed_homes, last, are placement
+# selectors that name where data is homed. This is the canonical onboarding seam:
 # onboarding-time operator choices about which host surfaces to use are written here.
 # Each selector ships a v1 default so a fresh install runs end-to-end with no
 # operator action. These are install-level / individual-tier choices; finer-
@@ -309,6 +309,29 @@ scheduler = "none"
 # Valid: "tracked" (the corpus is tracked in this repository under release/releases/)
 # Default: "tracked"
 corpus_home = "tracked"
+
+# Class-home switch — the repositories whose non-tracked data resolves to the
+# governed homes core/standards/instance-data-placement-standard.md names, instead
+# of today's paths. A placement selector, like corpus_home above.
+#
+# Value: comma-separated repository names. A name designates the main checkout at
+# <claude_workspace_root>/<name>; every worktree of it, and any clone whose origin
+# matches, resolves there. The platform repository's entry also moves the install's
+# per-user classes — the leak-risk content and the usage store — to their per-user
+# homes.
+#
+# SHIPPED OFF. An absent, empty or blank value keeps every repository on today's
+# paths, which is what every resolver returns. Each repository's entry is added by
+# that repository's cutover change, after its homes exist and its data is copied;
+# setup and reconcile never write this key.
+#
+# Read by core/deploy/lib-instance-path.sh through the config root
+# (PMO_PLATFORM_CONFIG_ROOT when set). A string, not a TOML array.
+# Valid: "" | "<name>[,<name>...]"
+# Each name matches ^[A-Za-z0-9][A-Za-z0-9._-]*$; anything else is refused, so a value
+# cannot compose a path outside the workspace. A TOML array is not read — write one string.
+# Default: ""
+governed_homes = ""
 
 # --- Multi-destination work-tracker config (#384) -------------------------------
 # The [trackers.<id>] NAMED SUBTABLES declare N segregated work-tracker

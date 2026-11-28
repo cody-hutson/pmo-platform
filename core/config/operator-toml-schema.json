@@ -447,6 +447,16 @@
           "required": false,
           "description": "Release-corpus home — where this install's release corpus lives, named by its home class; ADR-231 defines the corpus and records where it lives. A placement selector, not a host surface. \"tracked\" keeps the corpus tracked in this repository under release/releases/. DECLARED, NOT YET READ: the release tooling's corpus resolver resolves by presence, the tracked tree first, and does not consult this key; a value other than \"tracked\" joins the enum only in the change that teaches that resolver to read it. Shipped opt-in, so no live config carries a value nothing reads and an absent key resolves to the default.",
           "since": "5.03"
+        },
+        {
+          "key": "governed_homes",
+          "type": "string",
+          "source": "operator-or-default",
+          "delivery": "opt-in",
+          "default": "",
+          "required": false,
+          "description": "Class-home switch — comma-separated names of the repositories whose non-tracked data resolves to the governed homes core/standards/instance-data-placement-standard.md names, each name matching ^[A-Za-z0-9][A-Za-z0-9._-]*$; a name designates the main checkout at <claude_workspace_root>/<name>, and the platform repository's entry also moves the install's per-user classes. A placement selector, like corpus_home. Shipped off: an absent, empty or blank value keeps every repository on today's paths, which is what core/deploy/lib-instance-path.sh returns; each repository's entry is added by that repository's cutover change. Read through the config root (PMO_PLATFORM_CONFIG_ROOT when set). Shipped opt-in, so setup and reconcile never write it.",
+          "since": "5.15"
         }
       ]
     },

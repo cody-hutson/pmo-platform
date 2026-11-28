@@ -6,6 +6,8 @@
 # one-word prefix on `git commit` reaches every input the guard reads from it. Before
 # this suite's fix, each of these let a staged coworker/org needle hit through:
 #   PMO_LOCALIZED_NEEDLES, PMO_INSTANCE_PATH, CLAUDE_WORKSPACE_ROOT, HOME
+# (group A adds the class resolvers' inputs — PMO_PLATFORM_CONFIG_ROOT, XDG_DATA_HOME,
+# PMO_SRC_ROOT and the committer's HOME — against a switch-aware needle accessor)
 # and each of these let EVERY hit through, home paths and phone numbers included:
 #   GIT_EXTERNAL_DIFF, `git -c diff.external=`, a textconv driver, a function exported
 #   through the environment (BASH_FUNC_<name>%%), BASH_ENV, and an attribute marking
@@ -104,6 +106,7 @@ do_commit() {
   # shellcheck disable=SC2086  # GITARGS / unsets are deliberately word-split
   /usr/bin/env -u CLAUDE_WORKSPACE_ROOT -u PMO_INSTANCE_PATH -u PMO_LOCALIZED_NEEDLES \
     -u PMO_PEOPLE_ROSTER -u GIT_CONFIG_GLOBAL -u XDG_CONFIG_HOME -u GIT_CONFIG_COUNT \
+    -u XDG_DATA_HOME -u XDG_STATE_HOME -u PMO_PLATFORM_CONFIG_ROOT -u PMO_SRC_ROOT \
     -u GIT_CONFIG_PARAMETERS -u GIT_EXTERNAL_DIFF -u BASH_ENV $unsets \
     "$homearg" GIT_CONFIG_NOSYSTEM=1 "$@" \
     /usr/bin/git -C "$REPO" $GITARGS commit -q -m probe >/dev/null 2>"$tmp" || RC="$?"
@@ -311,6 +314,66 @@ case "$ERR" in
   *) if [ "$RC" != 0 ]; then report "B5 binary hit is shown without escape sequences" 1
      else report "B5 binary hit is shown without escape sequences" 0 "commit was ACCEPTED"; fi ;;
 esac
+
+# =============================================================================
+# A — THE ANCHORED READ UNDER THE CLASS RESOLVERS' INPUTS. The real needle accessor
+#     reads none of these inputs today, so a row here can fail only against a
+#     switch-aware accessor: arm_setup_fwd appends one, built from the leak-risk class
+#     resolver, to the COPIED lib (the accessor the consumer-routing card is expected to
+#     ship). A prefix that moves that accessor's read must not move the anchored floor.
+# =============================================================================
+arm_setup_fwd() { # arm_setup_fwd <name> — arm_setup plus the switch-aware accessor
+  arm_setup "$1"
+  /usr/bin/printf '\npmo_localized_needles() { pmo_leak_risk_path needles; }\n' >> "${REPO}/core/deploy/lib-instance-path.sh"
+}
+needles_via() { # needles_via <lib> — the accessor's answer in the arm's baseline environment
+  /usr/bin/env -u CLAUDE_WORKSPACE_ROOT -u PMO_INSTANCE_PATH -u PMO_LOCALIZED_NEEDLES -u PMO_PEOPLE_ROSTER \
+    -u XDG_DATA_HOME -u XDG_STATE_HOME -u PMO_PLATFORM_CONFIG_ROOT -u PMO_SRC_ROOT HOME="${HOMEDIR}" \
+    /bin/bash -c '. "$1"; pmo_localized_needles' _ "$1" 2>&1
+}
+arm_setup_fwd a0
+_a0_real="$(needles_via "$LIB_SRC")"; _a0_fwd="$(needles_via "${REPO}/core/deploy/lib-instance-path.sh")"
+if [ -n "$_a0_real" ] && [ "$_a0_real" = "$_a0_fwd" ]; then
+  report "A0 precondition: with no switch the forward accessor answers what the real lib does" 1
+else
+  report "A0 precondition: with no switch the forward accessor answers what the real lib does" 0 "real='${_a0_real}' forward='${_a0_fwd}' (the group is not evidence)"
+fi
+arm_setup_fwd a1; mk_inst "$INST" "" "$NEEDLE"; stage_line "$NEEDLE_LINE"
+/bin/mkdir -p "${SBX}/a1/evil-cfg"
+/usr/bin/printf 'governed_homes = "pmo-platform"\nclaude_workspace_root = "%s"\n' "$WS" > "${SBX}/a1/evil-cfg/operator.toml"
+do_commit PMO_PLATFORM_CONFIG_ROOT="${SBX}/a1/evil-cfg" XDG_DATA_HOME="${SBX}/a1/evil-data"
+expect_refused "A1 PMO_PLATFORM_CONFIG_ROOT + XDG_DATA_HOME naming an empty per-user home -> refused"
+arm_setup_fwd a2; mk_inst "$INST" "" "$NEEDLE"; stage_line "$NEEDLE_LINE"
+/bin/mkdir -p "${SBX}/a2/evil-home/.config/pmo-platform"
+/usr/bin/printf 'governed_homes = "pmo-platform"\nclaude_workspace_root = "%s"\n' "$WS" > "${SBX}/a2/evil-home/.config/pmo-platform/operator.toml"
+do_commit HOME="${SBX}/a2/evil-home"
+expect_refused "A2 HOME=<a home whose operator.toml lists the platform> -> refused"
+arm_setup_fwd a3; mk_inst "$INST" "" "$NEEDLE"; stage_line "$NEEDLE_LINE"
+/bin/mkdir -p "${HOMEDIR}/.config/pmo-platform" "${WS}/decoy"
+/usr/bin/printf 'governed_homes = "decoy"\n' > "${HOMEDIR}/.config/pmo-platform/operator.toml"
+/usr/bin/git -C "${WS}/decoy" init -q 2>/dev/null
+do_commit PMO_SRC_ROOT="${WS}/decoy"
+expect_refused "A3 PMO_SRC_ROOT=<a listed decoy repository> -> refused"
+# A4: the anchored read's own shape, extracted from the copied guard.
+arm_setup a4
+_a4_fn="$(/usr/bin/sed -n '/^_pii_anchored() {/,/^}/p' "${REPO}/core/hooks/git-pre-commit-pii.sh")"
+_a4_run() { # _a4_run <function text> — the seven inputs, as the anchored function sees them
+  /usr/bin/env PMO_INSTANCE_PATH=X PMO_LOCALIZED_NEEDLES=X PMO_PLATFORM_CONFIG_ROOT=X XDG_DATA_HOME=X PMO_SRC_ROOT=X \
+    HOME=X CLAUDE_WORKSPACE_ROOT=X /bin/bash -c "$1"'
+anchor_ws=/anc
+_a4_probe() { /usr/bin/printf "%s|%s|%s|%s|%s|%s|%s" "${PMO_INSTANCE_PATH-U}" "${PMO_LOCALIZED_NEEDLES-U}" "${PMO_PLATFORM_CONFIG_ROOT-U}" "${XDG_DATA_HOME-U}" "${PMO_SRC_ROOT-U}" "${HOME}" "${CLAUDE_WORKSPACE_ROOT}"; }
+_pii_anchored _a4_probe' 2>&1
+}
+_a4_got="$(_a4_run "$_a4_fn")"
+if [ "$_a4_got" = "U|U|U|U|U|/var/empty|/anc" ]; then report "A4 structure: the anchored read clears five inputs and pins HOME" 1
+else report "A4 structure: the anchored read clears five inputs and pins HOME" 0 "got '${_a4_got}'"; fi
+_a4_mut="$(_a4_run "${_a4_fn// PMO_SRC_ROOT/}")"
+if [ "$_a4_mut" != "U|U|U|U|U|/var/empty|/anc" ]; then report "A4 mutation control: with PMO_SRC_ROOT not cleared the probe mismatches" 1
+else report "A4 mutation control: with PMO_SRC_ROOT not cleared the probe mismatches" 0 "the mutated text still matched: a broken probe"; fi
+arm_setup_fwd a5; mk_inst "$INST" "" "$NEEDLE"; stage_line "$NEEDLE_LINE"; do_commit
+expect_refused "A5 control: forward accessor, no prefix, needle hit -> refused"
+arm_setup_fwd a5b; mk_inst "$INST" "" "$NEEDLE"; stage_line "$BENIGN_LINE"; do_commit
+expect_accepted "A5 control: forward accessor, no prefix, benign line -> accepted"
 
 /usr/bin/printf '\nRESIDUAL: PATH / GIT_EXEC_PATH naming a planted executable is NOT covered (see the guard header).\n'
 /usr/bin/printf '\nTotal: %d  PASS: %d  FAIL: %d\n' "$((PASS + FAIL))" "$PASS" "$FAIL"
