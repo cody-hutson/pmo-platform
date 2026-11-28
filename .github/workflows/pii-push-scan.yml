@@ -6,9 +6,14 @@ name: PII push scan
 #              the PII_NEEDLES secret is set, a coworker/org needle, in its added lines,
 #              its message, its author/committer lines or its tag object. Asserted by
 #              core/hooks/git-pre-push-pii.sh, which runs core/hooks/git-pre-commit-pii.sh
-#              --commits over every pushed commit the default branch does not already hold.
+#              --commits over every pushed commit the default branch does not already hold;
+#              and, through core/hooks/git-pre-commit-homes.sh, which the PII guard runs
+#              first, none adds a tracked path under a registered in-repo git-ignored home
+#              other than that home's README.
 #   falsification: push a branch whose new commit adds a phone-number-shaped line -> this
-#                  job turns red, naming the commit and the file, never the line.
+#                  job turns red, naming the commit and the file, never the line; push a
+#                  branch whose new commit adds `analysis/x` -> red, naming the home and the
+#                  commit.
 #
 # WHAT THIS IS FOR. The pre-push hook stops a push on a machine where it is wired. This job
 # reads every push the repository receives from anywhere: a clone with no hooks, a cloud
@@ -83,7 +88,7 @@ jobs:
           fi
           # A pushed commit without the scripts (a branch cut before they existed) cannot be
           # scanned by this job. Say so, rather than report a finding there was no run to make.
-          for f in core/hooks/git-pre-push-pii.sh core/hooks/git-pre-commit-pii.sh core/deploy/lib-instance-path.sh; do
+          for f in core/hooks/git-pre-push-pii.sh core/hooks/git-pre-commit-pii.sh core/hooks/git-pre-commit-homes.sh core/deploy/lib-instance-path.sh; do
             if [ ! -r "$f" ]; then
               echo "::error::PII push scan: $f is not in the pushed commit, so this push was not scanned"
               echo ":x: PII push scan — not scanned: $f is not in the pushed commit" >> "$GITHUB_STEP_SUMMARY"
@@ -120,15 +125,15 @@ jobs:
             exit 0
           fi
           {
-            echo "## :x: PII push scan found private data in this push"
+            echo "## :x: PII push scan found private data in this push (or in-repo home content)"
             echo ""
             echo "This branch is already public. Rewrite or drop each commit named below and force-push,"
             echo "or delete the branch, then ask the hosting provider to purge the cached commits if the"
-            echo "data must not stay reachable by its commit id. Findings are redacted: commit, file, class."
+            echo "data must not stay reachable by its commit id. Findings are redacted: commit, file and class, or commit and home."
             echo ""
             echo '```'
             printf '%s\n' "$out"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::PII push scan: the push adds private data (see the run summary; redacted)"
+          echo "::error::PII push scan: the push adds private data or in-repo home content (see the run summary; redacted)"
           exit 1

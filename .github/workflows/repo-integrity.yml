@@ -222,8 +222,42 @@ name: Repository integrity
 #                 ENFORCING (it exits non-zero on a finding); it is not yet BLOCKING.
 #                 An `advisory` declaration is off the registration track, so this gate
 #                 has no row in the registration-disposition table.
+#
+# gate-efficacy: posture=required  enforcement=branch-protection:"In-repo home content gate" (no WARN_MODE — a finding turns the check RED)  always-reports=yes
+#   invariant: no tracked path in the pull request's merge tree sits under a registered
+#              in-repo git-ignored home — the set `core/hooks/git-pre-commit-homes.sh
+#              --print-homes` prints, held equal to the instance-data placement
+#              standard's registered-homes table by --check-parity in this job — other
+#              than that home's own README.md, spelled exactly; a home's name is matched
+#              in any case. The scan reads paths only, never a home's contents, and its
+#              log names the home, never the rest of the path.
+#   falsification: add `local-state/x.md`, `Analysis/x` or `roadmaps/readme.md` to a pull
+#                  request -> the job FAILS (exit 1) naming the home; a change to
+#                  `local-state/README.md` alone -> green; drop a row from the standard's
+#                  table without the guard's set -> the parity step FAILS. The committed
+#                  --self-test (sensitivity, specificity and parity-mutant arms) runs
+#                  first and hard-fails ahead of the scan.
+#   scope note: WHOLE-TREE, for the Tool exec-mode row's reason: a path reaches a branch by
+#               a merge from main as often as by a commit on it. The job reads the tree a
+#               merge would record, not each commit, so its refusal prescribes removing the
+#               path and squash-merging the pull request, which drops the commit that added
+#               it. Every commit a push would publish is read by the same guard at
+#               pre-push, before publication.
+#   layer note: the local hook layers are the only layer before publication. The guard's
+#               commit-time read runs even under CLAUDE_HOOK_BYPASS; its push-time read
+#               honours the bypass. This job keeps home content off main, but it runs on a
+#               branch already on the remote and does not stop a branch being published.
+#   posture note: registered in branch protection immediately before the change that adds
+#                 this job merges, once the job has reported green on its head, in the order
+#                 core/standards/gate-efficacy-standard.md § Requirement (b) fixes; its row
+#                 in § Declared-required contexts — registration disposition is REGISTER.
+#                 Rollback: de-register the context before reverting or renaming this job —
+#                 a required context that no longer reports blocks every pull request.
+#   eligibility note: verdict-input closure over repository paths is CLOSED — the job reads
+#                 the checked-out tree, git's object database and one tracked markdown
+#                 file, with no network, auth or rate-limit input.
 
-# Three PR-time integrity gates as three named jobs on one workflow, on the
+# PR-time integrity gates as named jobs on one workflow, on the
 # proven parser-clean scaffold (override-marker -> locate-anchor -> scan-changed-
 # files -> teach-block -> exit 1). PER-GATE SCOPE: there is NO single shared
 # allowlist. The depersonalization gate runs ONLY over the C6 governance domains
@@ -2717,3 +2751,56 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
           exit 1
+
+  # ---------------------------------------------------------------------------
+  # GATE — In-repo home content (whole merge tree; paths only; redacted log).
+  # Consumes NO github.event.* input: every step is a static invocation against
+  # the checked-out tree, which on a pull request is the merge commit. The
+  # default shallow checkout is sufficient — the scan reads one tree.
+  # ---------------------------------------------------------------------------
+  in-repo-home-content:
+    name: In-repo home content gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assert no tracked path sits under a registered in-repo home (README excepted)
+        run: |
+          set -euo pipefail
+          G=core/hooks/git-pre-commit-homes.sh
+          STD=core/standards/instance-data-placement-standard.md
+          if [ ! -r "$G" ]; then
+            echo "::error::In-repo home content gate: $G is not in this pull request's tree, so nothing was scanned (NOT-EVALUATED)"
+            exit 1
+          fi
+
+          # Self-test FIRST: the arms prove the predicate detects and discriminates,
+          # and that the parity check reads the table. Hard-fails.
+          /bin/bash -p "$G" --self-test | tee -a "$GITHUB_STEP_SUMMARY"
+
+          set +e
+          /bin/bash -p "$G" --check-parity "$STD" > "$RUNNER_TEMP/homes-parity.out" 2>&1
+          PRC=$?
+          /bin/bash -p "$G" --tree HEAD --redact > "$RUNNER_TEMP/homes-tree.out" 2>&1
+          TRC=$?
+          set -e
+          {
+            echo "### In-repo home content scan"
+            echo '```'
+            cat "$RUNNER_TEMP/homes-parity.out" "$RUNNER_TEMP/homes-tree.out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/homes-parity.out" "$RUNNER_TEMP/homes-tree.out"
+
+          case "$PRC" in
+            0) ;;
+            1) echo "::error::In-repo home content gate: the guard's home set and the placement standard's registered-homes table disagree"; exit 1 ;;
+            2) echo "::error::In-repo home content gate: the registered-homes table could not be read (exit 2) — the parity check cannot assert"; exit 1 ;;
+            *) echo "::error::In-repo home content gate: parity exited ${PRC} (unexpected)"; exit 1 ;;
+          esac
+          case "$TRC" in
+            0) echo ":white_check_mark: In-repo home content — no tracked path under a registered in-repo home other than its README" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0 ;;
+            1) echo "::error::In-repo home content gate: a path under a registered in-repo home is tracked (redacted; see the run summary). Each home tracks its README.md alone: remove the path with git rm --cached and squash-merge this pull request, so the commit that added it is dropped"; exit 1 ;;
+            2|3) echo "::error::In-repo home content gate: NOT-EVALUATED (exit ${TRC}) — the tree could not be read; this is not a clean result"; exit 1 ;;
+            *) echo "::error::In-repo home content gate: the scan exited ${TRC} (unexpected)"; exit 1 ;;
+          esac
