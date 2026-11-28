@@ -67,7 +67,7 @@ generated_by: build-process-catalog.py
 | C-316 | An issue reference in a commit message is reference-only — never a close-family verb directly before #N (subject or body) | code-enforce | — | `core/rules/git-workflow.md` | — |
 | C-317 | Never use --no-verify; respect pre-commit hooks | prose-only | — | `core/rules/git-workflow.md` | — |
 | C-318 | Never cd into the primary checkout and never run state-changing git operations there from a Claude Code session | prose-only | — | `core/rules/git-workflow.md` | — |
-| C-319 | A spawned spoke has NO primary access — it operates only in its own worktree | prose-only | — | `core/rules/git-workflow.md` | — |
+| C-319 | A spawned spoke never cds to, commits in or changes git state in the primary; its only writes there are files inside the registered in-repo git-ignored homes, and an isolated spoke writes none | prose-only | — | `core/rules/git-workflow.md` | — |
 | C-320 | Never restore a user's uncommitted change without asking; diagnose by content before any irreversible discard | prose-only | — | `core/rules/git-workflow.md` | — |
 | C-321 | After gh pr merge in a worktree never checkout main there — detach, remove, or branch; ExitWorktree is a no-op on harness worktrees | prose-only | — | `core/rules/git-workflow.md` | — |
 | C-322 | Sweep-deletion of other sessions' worktrees re-lists before each delete, gates force-removal on a clean dirty-check, and verifies liveness per live process | prose-only | — | `core/rules/git-workflow.md` | — |
