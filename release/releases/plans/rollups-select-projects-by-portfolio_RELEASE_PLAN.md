@@ -305,7 +305,7 @@ The control census: risks=26 · control=R3, R4, R14, R16, R17, R18, R28 · owner
 | R23 | Rung 2 reads no portfolio file with two or more; an archived portfolio's folder counts toward "exactly one" | latent | Low | Stated in `platform-config-schema.md` § 4; handoff step 3 creates every active portfolio's folder file (CD-D2) |
 | R24 | Changing a portfolio's id creates a new folder | stability | Low | The charter's rename rule (new `*_id`, supersession) |
 | R25 | A `portfolio_id` equal to the config folder's own `releases/` child | config | Low | The composer refuses a reserved `portfolio_id` (CD-D1 (d)) |
-| R26 | On a multi-portfolio install every pre-emission unkeyed rollup with a keyed `PROJECT.md` is held, so the first composition is empty | cutover | Low | The handoff hold runs through step 4's re-emission |
+| R26 | On an install with two or more active portfolios every pre-emission unkeyed rollup with a keyed `PROJECT.md` is held, so the first composition is empty | cutover | Low | The handoff hold runs through step 4's re-emission |
 | R27 | Wider contention with three milestones; `deploy.sh` is a hot file | contention | Low | Localized hunks; merge order recorded |
 | R28 | Check 63, doc-link or reference-durability findings on cascade edits | process | Low | The three checkers run over the edited files at C4 |
 
@@ -386,7 +386,7 @@ None declared. The milestone has one non-sub-task member, and a cross-issue crit
 
 ## Release Outcome Statement (as amended at Stage 5)
 
-**AFTER** — Each portfolio-level surface — the weekly roll-up and its PORTFOLIO composer, the daily-status multi-project run, the health-check portfolio roll-up audit, the ppm-agent status answer, and project-initiator's registration, validation and closure of a project — selects its project set by portfolio under one rule, `portfolio-writeback-contract.md` § Portfolio scoping, and each portfolio's composed output lives in its own folder, `projects/_config/<portfolio_id>/PORTFOLIO.md`. A project whose `portfolio_id` names another portfolio never appears in a portfolio's output. On an install with two or more portfolios, a project with no `portfolio_id` appears in no portfolio's output and is listed to the operator as unassigned; on a single-portfolio install a project with no `portfolio_id` belongs to the only portfolio; with no Portfolio record, surfaces run unscoped and produce the same output as before.
+**AFTER** — Each portfolio-level surface — the weekly roll-up and its PORTFOLIO composer, the daily-status multi-project run, the health-check portfolio roll-up audit, the ppm-agent status answer, and project-initiator's registration, validation and closure of a project — selects its project set by portfolio under one rule, `portfolio-writeback-contract.md` § Portfolio scoping, and each portfolio's composed output lives in its own folder, `projects/_config/<portfolio_id>/PORTFOLIO.md`. A project whose `portfolio_id` names another portfolio never appears in a portfolio's output. On an install with two or more active portfolios, a project with no `portfolio_id` appears in no portfolio's output and is listed to the operator as unassigned; on a single-portfolio install a project with no `portfolio_id` belongs to the only portfolio; a project whose `portfolio_id` names no active Portfolio record appears in no output and is listed to the operator. With no active Portfolio record, surfaces run unscoped and produce the same output as before, unless the rollups name two or more portfolios, in which case they stop and name the Portfolio records to create.
 
 **BEFORE** — The entity model admits more than one Portfolio record and gives each Project an optional `portfolio_id`, but every portfolio-level surface reads one PORTFOLIO.md and none reads `portfolio_id`. Keeping one portfolio's projects out of another portfolio's roll-ups depends on prose instructions and manual overrides of project-initiator Steps 5 and 5a.
 
@@ -588,7 +588,7 @@ Every portfolio-level surface now selects its project set by portfolio, under on
 
 ### Key decisions
 
-- **No default portfolio** (Stage-5 round 1): an unkeyed project on a multi-portfolio install is unassigned, never defaulted.
+- **No default portfolio** (Stage-5 round 1): an unkeyed project on an install with two or more active portfolios is unassigned, never defaulted.
 - **Same filename per portfolio folder** (D-ComposedOutput): no portfolio is special-cased; the root file stays only for an install with no active record.
 - **D-RecordlessTwoIds (B):** an install with no active record whose projects name two or more portfolios stops and names the records to create.
 - **D-UnresolvedAtOnePortfolio (A):** a key naming no record is excluded and listed even with one active portfolio, so a second portfolio's projects never compose into the first's output during the move from one to two.

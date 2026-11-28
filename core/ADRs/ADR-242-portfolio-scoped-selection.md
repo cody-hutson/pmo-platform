@@ -39,7 +39,7 @@ A fix had to hold four constraints at once. A single-portfolio install had to co
 
 ## Alternatives Considered
 
-- **A declared default portfolio.** Rejected by the operator: a project with no key on a multi-portfolio install is unassigned, not defaulted, so no portfolio's output ever takes a project on a guess.
+- **A declared default portfolio.** Rejected by the operator: a project with no key on an install with two or more active portfolios is unassigned, not defaulted, so no portfolio's output ever takes a project on a guess.
 - **A second composed file beside an unchanged root file.** Rejected by the operator in favour of the same filename per portfolio folder, so no portfolio is special-cased.
 - **An eighth contract field.** Rejected: the seven-field count is stated in a Tier-0-floored governance file, and a join key beside `project_id` reaches the same outcome with no count change.
 - **A composer join to `PROJECT.md` as the selector.** Rejected as the selector: it fails at a narrowed scan root, where the Project record falls outside the scan. It is kept as the cross-check, read by an ancestor lookup rather than a second walk.
