@@ -179,6 +179,18 @@ UNSOURCED_CELL = "UNSOURCED"
 # this local declaration at the shared grammar when it ships.
 PROJECT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
+# Contract §7 Portfolio scoping. The rollup's PORTFOLIO key sits BESIDE project_id
+# and OUTSIDE the seven §2 fields, and it is OPTIONAL: an ABSENT key means "this
+# project names no portfolio". A PRESENT-but-empty key, a PRESENT-but-polluted key
+# and a near-miss key NAME are JOIN-KEY drift (exit 1, every run halts: membership is
+# undecidable), never "absent". Same kebab-slug grammar as project_id.
+PORTFOLIO_KEY_FIELD = "portfolio_id"
+PORTFOLIO_ID_RE = PROJECT_ID_RE
+PORTFOLIO_ENTITY_TYPE = "Portfolio"     # a Portfolio record's type key (project-schema.md S2)
+PORTFOLIO_STATES = ("active", "archived")  # V-PORT-04 Axis-1
+CONFIG_DIRNAME = "_config"              # Portfolio records are read under <root>/_config/
+ROOT_COMPOSED_NAME = "PORTFOLIO.md"     # <root>/_config/PORTFOLIO.md = the no-record layout
+
 # Per-structured-field required sub-keys (shape validation for drift detection).
 # HARD-required = the item-identity keys below (a missing one is structural drift ->
 # exit 1 halt). `owner` / `mitigation` on the two risk-bearing legs (top_risks,
@@ -207,6 +219,9 @@ STALE_THRESHOLD_BD = 3     # age > 3 bd -> render [STALE] inline
 DEGRADE_THRESHOLD_BD = 5   # age > 5 bd -> auto-degrade (health-score: not-Green)
 
 STALE_MARKER = "[STALE]"
+# Contract §7: in a served portfolio's output, a member's cross-project reference to
+# a DISCOVERED rollup outside that portfolio renders this marker in its place.
+OTHER_PORTFOLIO_REF = "[OTHER PORTFOLIO]"
 DEGRADE_MARKER = "[STALE:DEGRADED]"
 
 
@@ -217,6 +232,12 @@ DEGRADE_MARKER = "[STALE:DEGRADED]"
 class ContractDrift(Exception):
     """A rollup field whose value TYPE violates the contract (or a missing
     required field). Raised during read/validate; surfaced as exit 1 (halt)."""
+
+
+class PortfolioScopeError(Exception):
+    """A contract §7 configuration or calling error (no record for a scoped run, an
+    unnamed run on a scoped root, an unmigrated layout, a malformed or near-miss
+    Portfolio record). Surfaced as exit 2; the composer emits no body."""
 
 
 # --------------------------------------------------------------------------- #
@@ -620,6 +641,12 @@ def discover_rollups(root: Path) -> list:
     return found
 
 
+def discover_portfolio_records(root: Path) -> list:
+    """RED interface stub (Stage 6 RED commit): contract §7's Portfolio-record
+    read is not implemented yet, so no record is ever found."""
+    return []
+
+
 # --------------------------------------------------------------------------- #
 # Staleness (business-day age vs. the fixed --as-of anchor).
 # --------------------------------------------------------------------------- #
@@ -950,7 +977,9 @@ SECTION_REGISTRY = (
 # Compose (the deterministic core — no section shape lives here).
 # --------------------------------------------------------------------------- #
 
-def compose(root: Path, as_of: date) -> str:
+def compose(root: Path, as_of: date, portfolio=None, report=None) -> str:
+    # RED interface stub (Stage 6 RED commit): `portfolio` and `report` are
+    # accepted and ignored — contract §7 selection is not implemented yet.
     """Read every rollup under `root`, validate against the contract (raises
     ContractDrift on any type violation), and render the section registry.
     Returns the composed markdown (LF newlines, single trailing newline)."""
@@ -997,8 +1026,8 @@ def out_path_rejected(out_arg: str) -> bool:
 # Self-test (committed fixture — idempotency + render + drift + guard).
 # --------------------------------------------------------------------------- #
 
-def _fixture_dir() -> Path:
-    return Path(__file__).resolve().parent / "tests" / "fixtures" / "portfolio-composer"
+def _fixture_dir(name: str = "portfolio-composer") -> Path:
+    return Path(__file__).resolve().parent / "tests" / "fixtures" / name
 
 
 def _selftest_as_of(root: Path) -> date:
@@ -1062,6 +1091,43 @@ def run_self_test() -> int:
                      other two corpus walkers excluded them. Control arm
                      (anti-vacuity), asserted first: clean discovery finds a
                      non-zero count, so the equality is not 0 == 0.
+      (portfolio-scope) contract §7 — serving each portfolio of the two-portfolio tree
+                     composes exactly its own project. CONTROL: the pre-scoping render
+                     of the same tree composes both.
+      (portfolio-discrimination) AC4 on subject rows — the other portfolio's rollup
+                     is never a subject row; CONTROL: serving its own portfolio composes
+                     it. Every narrowed root (the other project, its rollup folder, the
+                     served project) is REFUSED for a scoped run. Defense in depth at the
+                     full root: the other project's id, its PROJECT.md id and an entity
+                     id it prefixes occur 0 times and the marker renders; SENSITIVITY:
+                     the pre-scoping render names all three. Free text is not rewritten:
+                     the display-name residual is MEASURED and pinned.
+      (single-portfolio-unchanged) AC3 — a one-record install composes the bytes the
+                     pre-scoping composer composed on the same tree. CONTROL: the same
+                     comparison on the two-portfolio tree differs.
+      (portfolio-membership) one portfolio: an unkeyed rollup is its member; two or
+                     more: an unkeyed rollup is UNASSIGNED (in no output, named, exit
+                     0); a key naming no record is UNRESOLVED, one naming an archived
+                     record INACTIVE (both excluded, named); no record: a keyed rollup
+                     is composed unscoped and reported unresolved.
+      (portfolio-crosscheck) a rollup whose key disagrees with its own PROJECT.md is
+                     HELD out of every output (a moved project); CONTROL: on a one-
+                     portfolio tree an unkeyed rollup whose PROJECT.md names the only
+                     portfolio agrees and composes.
+      (portfolio-key-drift) an empty, a polluted, and a near-miss-NAMED portfolio key
+                     halt EVERY portfolio's run (exit 1) with the diagnostic naming its
+                     remedy. CONTROL: the unmodified tree exits 0.
+      (portfolio-field-drift) field drift in another portfolio's rollup does not halt
+                     the served run: counted, not named. The same drift halts its own
+                     portfolio's run. CONTROL: the unmodified tree counts 0.
+      (portfolio-records) records are found by key, not filename (one in its folder, one
+                     at the config top); a dot-leading copy is out of corpus; a duplicate
+                     is counted once and reported; a near-miss type key is exit 2.
+      (portfolio-guards) exit 2 for: an unscoped run at a root holding records; an
+                     unscoped run at a record-less root whose rollups name two
+                     portfolios; a served id naming no active record; an unmigrated
+                     layout (the root composed file beside records); a non-slug flag.
+                     CONTROL: the zero-record committed fixture still composes both.
     """
     import contextlib
     import io
@@ -1375,6 +1441,249 @@ def run_self_test() -> int:
             failures.append(f"(discovery-polluted) SPECIFICITY FAILED — an unrelated "
                             f"entity_type was flagged as a near-miss: {e}")
 
+        # ---- contract §7 Portfolio scoping ------------------------------------
+        two = _fixture_dir("portfolio-composer-two-portfolio")
+        one = _fixture_dir("portfolio-composer-single-portfolio")
+        two_root, one_root = Path(td) / "two", Path(td) / "one"
+        shutil.copytree(two, two_root)
+        shutil.copytree(one, one_root)
+        _iso = as_of.isoformat()
+
+        def _s1_ids(text):
+            win = _section_window(text, "S1", "S2") or ""
+            return [l.split("|")[1].strip() for l in win.split("\n")
+                    if l.startswith("| ") and not l.startswith("| Project ")]
+
+        def _pre_scoping(src_root, name):
+            # The tree as the pre-§7 composer saw it: no rollup key, no config folder.
+            dst = Path(td) / name
+            shutil.copytree(src_root, dst)
+            for _p in discover_rollups(dst):
+                _p.write_text("\n".join(l for l in _p.read_text(encoding="utf-8").split("\n")
+                                        if not l.startswith("portfolio_id:")), encoding="utf-8")
+            shutil.rmtree(dst / CONFIG_DIRNAME)
+            return dst
+
+        def _variant(name, base, edits):
+            dst = Path(td) / name
+            shutil.copytree(base, dst)
+            for rel, old, new in edits:
+                f = dst / rel
+                txt = f.read_text(encoding="utf-8") if f.exists() else ""
+                if old is None:
+                    f.parent.mkdir(parents=True, exist_ok=True)
+                    f.write_text(new, encoding="utf-8")
+                elif old not in txt:
+                    failures.append(f"(fixture) {name}: anchor {old!r} absent in {rel}")
+                else:
+                    f.write_text(txt.replace(old, new, 1), encoding="utf-8")
+            return dst
+
+        def _scope_refused(r, s):
+            try:
+                compose(r, as_of, s)
+            except PortfolioScopeError:
+                return True
+            return False
+
+        BR = "proj-beta/04-PMO-Operations/proj-beta_Rollup.md"
+        AR = "proj-alpha/04-PMO-Operations/proj-alpha_Rollup.md"
+        BP, AP = "proj-beta/PROJECT.md", "proj-alpha/PROJECT.md"
+
+        # (portfolio-scope)
+        for _S, _mine in (("port-alpha", "proj-alpha"), ("port-beta", "proj-beta")):
+            _ids = _s1_ids(compose(two_root, as_of, _S))
+            if _ids != [_mine]:
+                failures.append(f"(portfolio-scope) serving {_S} composed S1 rows {_ids}, "
+                                f"expected [{_mine!r}]")
+        _unscoped = compose(_pre_scoping(two_root, "two-pre"), as_of)
+        if sorted(_s1_ids(_unscoped)) != ["proj-alpha", "proj-beta"]:
+            failures.append("(portfolio-scope) CONTROL FAILED — the pre-scoping render does "
+                            "not compose both projects")
+
+        # (portfolio-discrimination)
+        for _S, _mine, _other, _opf, _alias, _derived in (
+                ("port-alpha", "proj-alpha", "proj-beta", "port-beta", "beta-delivery", None),
+                ("port-beta", "proj-beta", "proj-alpha", "port-alpha", None, "proj-alpha-golive")):
+            _body = compose(two_root, as_of, _S)
+            if _other in _s1_ids(_body):
+                failures.append(f"(portfolio-discrimination) {_other} is a subject row of {_S}")
+            if _other not in _s1_ids(compose(two_root, as_of, _opf)):
+                failures.append(f"(portfolio-discrimination) CONTROL FAILED — serving {_opf} "
+                                f"did not compose {_other}")
+            for _r in (two_root / _other, two_root / _other / "04-PMO-Operations", two_root / _mine):
+                if not _scope_refused(_r, _S):
+                    failures.append(f"(portfolio-discrimination) a scoped run at the narrowed "
+                                    f"root {_r.relative_to(two_root)} was not refused")
+            if _body.count(_other) != 0 or OTHER_PORTFOLIO_REF not in _body:
+                failures.append(f"(portfolio-discrimination) {_other} occurs {_body.count(_other)}x "
+                                f"in {_S}'s body, or no {OTHER_PORTFOLIO_REF} marker rendered")
+            for _tok in (_alias, _derived):
+                if _tok and _tok in _body:
+                    failures.append(f"(portfolio-discrimination) {_tok!r} rendered in {_S}'s body")
+        for _tok in ("proj-beta", "beta-delivery", "proj-alpha-golive"):
+            if _tok not in _unscoped:
+                failures.append(f"(portfolio-discrimination) SENSITIVITY FAILED — the "
+                                f"pre-scoping render does not name {_tok!r}, so its limb is dead")
+        _resid = compose(two_root, as_of, "port-beta").count("Alpha")
+        if _resid != 2:
+            failures.append(f"(portfolio-discrimination) MEASURED RESIDUAL moved: port-beta's "
+                            f"body names the display name 'Alpha' {_resid}x (pinned: 2 — free "
+                            f"text is not rewritten, contract §7)")
+
+        # (single-portfolio-unchanged)
+        _before = compose(_pre_scoping(one_root, "one-pre"), as_of)
+        _after = compose(one_root, as_of, "port-alpha")
+        if hashlib.sha256(_before.encode("utf-8")).digest() != hashlib.sha256(_after.encode("utf-8")).digest():
+            failures.append("(single-portfolio-unchanged) the one-record install's output changed")
+        if compose(two_root, as_of, "port-alpha") == _unscoped:
+            failures.append("(single-portfolio-unchanged) CONTROL FAILED — scoped and "
+                            "pre-scoping renders of the two-portfolio tree are equal")
+
+        # (portfolio-membership)
+        _rep = {}
+        if (sorted(_s1_ids(compose(one_root, as_of, "port-alpha", _rep))) != ["proj-alpha", "proj-gamma"]
+                or _rep.get("unassigned")):
+            failures.append(f"(portfolio-membership) one portfolio: the unkeyed rollup is not a member: {_rep}")
+        GR, GP = "proj-gamma/04-PMO-Operations/proj-gamma_Rollup.md", "proj-gamma/PROJECT.md"
+        g1 = _variant("one-unresolved", one_root, [
+            (GR, "last_published:", "portfolio_id: port-zeta\nlast_published:"),
+            (GP, "delivery_approach: Scrum\n", "delivery_approach: Scrum\nportfolio_id: port-zeta\n")])
+        _rep = {}
+        if "proj-gamma" in _s1_ids(compose(g1, as_of, "port-alpha", _rep)) or _rep.get("unresolved") != ["proj-gamma"]:
+            failures.append(f"(portfolio-membership) one portfolio: a key naming no record was "
+                            f"not excluded and named unresolved: {_rep}")
+        un = _variant("unassigned", two_root, [(BR, "portfolio_id: port-beta\n", ""),
+                                               (BP, "portfolio_id: port-beta\n", "")])
+        for _S in ("port-alpha", "port-beta"):
+            _rep = {}
+            if "proj-beta" in _s1_ids(compose(un, as_of, _S, _rep)) or _rep.get("unassigned") != ["proj-beta"]:
+                failures.append(f"(portfolio-membership) unassigned not excluded and named for {_S}: {_rep}")
+        if _quiet_main(["--root", str(un), "--as-of", _iso, "--portfolio", "port-alpha"]) != 0:
+            failures.append("(portfolio-membership) an unassigned project stopped the run")
+        ur = _variant("unresolved", two_root, [(BR, "portfolio_id: port-beta\n", "portfolio_id: port-gamma\n"),
+                                               (BP, "portfolio_id: port-beta\n", "portfolio_id: port-gamma\n")])
+        _rep = {}
+        if "proj-beta" in _s1_ids(compose(ur, as_of, "port-alpha", _rep)) or _rep.get("unresolved") != ["proj-beta"]:
+            failures.append(f"(portfolio-membership) unresolved key not excluded and named: {_rep}")
+        ar = _variant("archived", two_root, [("_config/port-beta.md", "lifecycle_state: active",
+                                              "lifecycle_state: archived")])
+        _rep = {}
+        compose(ar, as_of, "port-alpha", _rep)
+        if _rep.get("inactive") != ["proj-beta"] or not _scope_refused(ar, "port-beta"):
+            failures.append(f"(portfolio-membership) archived record: not reported inactive, or "
+                            f"an archived portfolio was served: {_rep}")
+        zk = _variant("zero-keyed", root, [(AR, "last_published:", "portfolio_id: port-alpha\nlast_published:")])
+        _rep = {}
+        if (sorted(_s1_ids(compose(zk, as_of, None, _rep))) != ["proj-alpha", "proj-beta"]
+                or _rep.get("unresolved") != ["proj-alpha"]):
+            failures.append(f"(portfolio-membership) no record: a keyed rollup was not composed "
+                            f"unscoped and reported unresolved: {_rep}")
+
+        # (portfolio-crosscheck)
+        mv = _variant("moved", two_root, [(BP, "portfolio_id: port-beta\n", "portfolio_id: port-alpha\n")])
+        for _S in ("port-alpha", "port-beta"):
+            try:
+                if "proj-beta" in _s1_ids(compose(mv, as_of, _S)):
+                    failures.append(f"(portfolio-crosscheck) a moved project's stale rollup composed for {_S}")
+            except (ContractDrift, PortfolioScopeError) as _e:
+                failures.append(f"(portfolio-crosscheck) compose raised for {_S}: {_e}")
+        _ra, _rb = {}, {}
+        compose(mv, as_of, "port-alpha", _ra)
+        compose(mv, as_of, "port-beta", _rb)
+        if _ra.get("held") != ["proj-beta"] or _rb.get("held") or _rb.get("held_elsewhere") != 1:
+            failures.append(f"(portfolio-crosscheck) held reporting wrong: {_ra} / {_rb}")
+        c1 = _variant("agree-one", one_root, [(AR, "portfolio_id: port-alpha\n", "")])
+        _rep = {}
+        if "proj-alpha" not in _s1_ids(compose(c1, as_of, "port-alpha", _rep)) or _rep.get("held"):
+            failures.append(f"(portfolio-crosscheck) CONTROL FAILED — one portfolio, unkeyed "
+                            f"rollup vs PROJECT.md naming it, was held: {_rep}")
+
+        # (portfolio-key-drift)
+        _ok = ["--as-of", _iso, "--portfolio", "port-alpha"]
+        for _tag, _new, _want in (("empty", "portfolio_id:\n", "present but empty"),
+                                  ("polluted", "portfolio_id: port-beta   # moved\n", "is CONTENT"),
+                                  ("near-miss", "portfolio-id: port-beta\n", "near-miss")):
+            kd = _variant(f"keydrift-{_tag}", two_root, [(BR, "portfolio_id: port-beta\n", _new)])
+            if _quiet_main(["--root", str(kd), *_ok]) != 1:
+                failures.append(f"(portfolio-key-drift/{_tag}) did not halt the other portfolio's run (exit 1)")
+            try:
+                compose(kd, as_of, "port-alpha")
+                failures.append(f"(portfolio-key-drift/{_tag}) no ContractDrift raised")
+            except ContractDrift as _e:
+                if _want not in str(_e):
+                    failures.append(f"(portfolio-key-drift/{_tag}) diagnostic lacks {_want!r}")
+        pj = _variant("keydrift-project-id", two_root, [(BR, "project_id: proj-beta\n",
+                                                         "project_id: proj-beta   # renamed\n")])
+        try:
+            compose(pj, as_of, "port-alpha")
+            failures.append("(portfolio-key-drift/project-id) a polluted project_id did not halt")
+        except ContractDrift as _e:
+            if "remove the comment from that line" not in str(_e):
+                failures.append("(portfolio-key-drift/project-id) phase 1 lost the remedy text")
+        if _quiet_main(["--root", str(two_root), *_ok]) != 0:
+            failures.append("(portfolio-key-drift) CONTROL FAILED — the unmodified tree did not exit 0")
+
+        # (portfolio-field-drift)
+        fd = _variant("fielddrift", two_root, [(BR, "status: red", "status: purple")])
+        _rep = {}
+        try:
+            if _s1_ids(compose(fd, as_of, "port-alpha", _rep)) != ["proj-alpha"] or _rep.get("drift_outside") != 1:
+                failures.append(f"(portfolio-field-drift) other portfolio's field drift not counted: {_rep}")
+        except ContractDrift as _e:
+            failures.append(f"(portfolio-field-drift) another portfolio's field drift halted the served run: {_e}")
+        if "proj-beta" in portfolio_report_line(_rep):
+            failures.append("(portfolio-field-drift) the report line names the other portfolio's project")
+        try:
+            compose(fd, as_of, "port-beta")
+            failures.append("(portfolio-field-drift) its own portfolio's run did not halt")
+        except ContractDrift:
+            pass
+        _rep = {}
+        compose(two_root, as_of, "port-alpha", _rep)
+        if _rep.get("drift_outside") != 0:
+            failures.append("(portfolio-field-drift) CONTROL FAILED — the clean tree counts drift")
+
+        # (portfolio-records)
+        if sorted(p for _, p, _ in discover_portfolio_records(two_root)) != ["port-alpha", "port-beta"]:
+            failures.append("(portfolio-records) records not found by key in folder and at config top")
+        rc_ = _variant("records", two_root, [
+            ("_config/.backup/port-gamma.md", None, (two_root / "_config/port-beta.md").read_text(
+                encoding="utf-8").replace("port-beta", "port-gamma")),
+            ("_config/port-alpha/copy.md", None, (two_root / "_config/port-alpha/portfolio-record.md").read_text(
+                encoding="utf-8"))])
+        _rep = {}
+        compose(rc_, as_of, "port-alpha", _rep)
+        if _rep.get("portfolios") != 2 or _rep.get("duplicates") != ["port-alpha"]:
+            failures.append(f"(portfolio-records) dot-leading copy discovered, or duplicate not "
+                            f"counted once and reported: {_rep}")
+        nm = _variant("record-nearmiss", two_root, [("_config/port-beta.md", "entity_type: Portfolio\n",
+                                                     "entity_type: Portfolio   # note\n")])
+        if _quiet_main(["--root", str(nm), *_ok]) != 2:
+            failures.append("(portfolio-records) a near-miss record type key was not exit 2")
+
+        # (portfolio-guards)
+        if _quiet_main(["--root", str(two_root), "--as-of", _iso]) != 2:
+            failures.append("(portfolio-guards) an unscoped run at a root holding records was not exit 2")
+        if not _scope_refused(one_root, None):
+            failures.append("(portfolio-guards) an unscoped run at a one-record root (rollups "
+                            "naming one portfolio) was not refused")
+        nc = _variant("no-config", two_root, [])
+        shutil.rmtree(nc / CONFIG_DIRNAME)
+        if not _scope_refused(nc, None):
+            failures.append("(portfolio-guards) an unscoped run over rollups naming two "
+                            "portfolios at a record-less root was not refused")
+        if sorted(_s1_ids(compose(root, as_of))) != ["proj-alpha", "proj-beta"]:
+            failures.append("(portfolio-guards) CONTROL FAILED — the zero-record fixture no "
+                            "longer composes both rollups unscoped")
+        if not _scope_refused(two_root, "port-gamma"):
+            failures.append("(portfolio-guards) a served id naming no active record was not refused")
+        um = _variant("unmigrated", two_root, [("_config/PORTFOLIO.md", None, "# Portfolio Dashboard\n")])
+        if _quiet_main(["--root", str(um), *_ok]) != 2:
+            failures.append("(portfolio-guards) an unmigrated layout was not exit 2")
+        if _quiet_main(["--root", str(two_root), "--as-of", _iso, "--portfolio", "Port Alpha"]) != 2:
+            failures.append("(portfolio-guards) a non-slug --portfolio was not exit 2")
+
         # (guard) an --out path under projects/ is rejected.
         if not out_path_rejected(str(Path(td) / "projects" / "_config" / "PORTFOLIO.md")):
             failures.append("(guard) an --out path under projects/ was NOT rejected")
@@ -1435,8 +1744,16 @@ def run_self_test() -> int:
           "exit-0-with-[STALE] / drift->exit-1 / join-key->exit-1 / projects-guard / "
           "s2-per-dimension / s2-resolver-varies / dimension-seam / "
           "join-key-polluted / "
-          "discovery-polluted x2 / dot-segment)")
+          "discovery-polluted x2 / dot-segment / portfolio-scope / portfolio-discrimination / "
+          "single-portfolio-unchanged / portfolio-membership / portfolio-crosscheck / "
+          "portfolio-key-drift / portfolio-field-drift / portfolio-records / portfolio-guards)")
     return 0
+
+
+def portfolio_report_line(r: dict) -> str:
+    """RED interface stub (Stage 6 RED commit): the §7 operator-side report
+    line is not implemented yet."""
+    return ""
 
 
 # --------------------------------------------------------------------------- #
@@ -1449,6 +1766,8 @@ def main(argv=None) -> int:
     ap.add_argument("--root", metavar="PATH", help="corpus/projects root to scan for rollup entities")
     ap.add_argument("--as-of", metavar="ISO", help="staleness anchor YYYY-MM-DD (default: today)")
     ap.add_argument("--out", metavar="PATH", help="write composed markdown here (rejects projects/); default stdout")
+    ap.add_argument("--portfolio", metavar="ID",
+                    help="serve this portfolio_id only (contract §7 Portfolio scoping)")
     ap.add_argument("--self-test", action="store_true", help="run committed-fixture assertions and exit")
     args = ap.parse_args(argv)
 
@@ -1477,11 +1796,18 @@ def main(argv=None) -> int:
               f"(Layer-2, Cowork-owned): {args.out}", file=sys.stderr)
         return 2
 
+    report: dict = {}
     try:
-        markdown = compose(root, as_of)
+        markdown = compose(root, as_of, args.portfolio, report)
     except ContractDrift as exc:
         print(f"compose-portfolio: contract drift — {exc}", file=sys.stderr)
         return 1   # #1771-F1: drift is the ONLY non-zero-for-findings path ([STALE] is not)
+    except PortfolioScopeError as exc:
+        print(f"compose-portfolio: portfolio scoping — {exc}", file=sys.stderr)
+        return 2
+    line = portfolio_report_line(report)
+    if line:
+        print(line, file=sys.stderr)
 
     if args.out:
         out_path = Path(args.out).expanduser()
