@@ -70,7 +70,20 @@ CIAC-4 STAGING (structural). Output goes to STDOUT by default (a pure filter —
 file write). `--out <path>` fail-loud REJECTS any path with a `projects` component
 (the Layer-2, Cowork-owned tree). The composer NEVER writes into `projects/`;
 weekly-status-rollup Section 6 stages the output at its existing human-in-the-loop
-checkpoint and the Cowork writer performs the `projects/_config/PORTFOLIO.md` write.
+checkpoint and the Cowork writer performs the write to the served portfolio's composed
+file (contract §7 Portfolio scoping: `projects/_config/<portfolio_id>/PORTFOLIO.md`, or
+`projects/_config/PORTFOLIO.md` on an install with no Portfolio record).
+
+PORTFOLIO SCOPING (contract §7). With `--portfolio S` the composer serves ONE portfolio:
+it reads the Portfolio records under `<root>/_config/` (located by `entity_type:
+Portfolio`, never by filename — the composer's config-folder read, on the shared
+is_corpus_path predicate; not a fourth node-corpus walker), selects S's member
+rollups AFTER discovery (discover_rollups is untouched), and renders them. The body
+never names a portfolio, so a single-portfolio install composes the bytes it composed
+before §7. A scoped run is REFUSED (exit 2) at a root holding no active Portfolio
+record — a narrowed root cannot serve a portfolio — and an unscoped run is refused at a
+root that holds one. The composer limb of §7 binds only when the composer runs: the
+production caller is weekly-status-rollup Section 6, operator-driven.
 
 Stdlib-only, Python 3.9 (`/usr/bin/python3`). Imports the shared `_frontmatter.py`
 reader (F1 consistency); the structured-field block parse is composer-local.
@@ -81,14 +94,22 @@ CLI:
                      --self-test pins max(last_published) for byte-reproducibility
   --out PATH         write composed markdown to PATH (rejects any path under projects/);
                      default is stdout
+  --portfolio ID     serve this portfolio_id only (contract §7 Portfolio scoping);
+                     required at a root whose _config/ holds an active Portfolio record
   --self-test        run the committed-fixture assertions and exit
 
 Exit codes (fail-loud family contract; #1771-F1 separates [STALE] from drift):
   0  clean run  — INCLUDING a run that renders [STALE]/degrade markers ([STALE] is a
-                  display state, NOT an error)
+                  display state, NOT an error), and a run that excludes rollups
+                  outside the served portfolio (reported on stderr, §7)
   1  contract drift ONLY — a rollup field whose value TYPE violates the contract
-                  (or a missing required field); the composer HALTS, emits no body
-  2  usage error — bad / missing flags, or an --out path under projects/
+                  (or a missing required field); the composer HALTS, emits no body.
+                  Join-key drift (project_id / portfolio_id) halts EVERY run; field
+                  drift halts a scoped run only when it sits in a member rollup
+  2  usage or configuration error — bad / missing flags, an --out path under
+                  projects/, or a §7 configuration error: --portfolio at a root holding
+                  no active Portfolio record, an id naming no active record, an unnamed
+                  run at a root that holds one, an unmigrated layout, a malformed record
   3  path-unresolvable — --root does not resolve, or --out's parent does not exist
 """
 from __future__ import annotations
@@ -425,11 +446,12 @@ class Rollup:
 
     __slots__ = ("project_id", "rel_path", "status", "last_published", "top_risks",
                  "key_dependencies", "cross_project_conflicts", "capacity_signal",
-                 "milestone_delta")
+                 "milestone_delta", "portfolio_id")
 
-    def __init__(self, project_id, rel_path, fields):
+    def __init__(self, project_id, rel_path, fields, portfolio_id=None):
         self.project_id = project_id
         self.rel_path = rel_path
+        self.portfolio_id = portfolio_id   # None = absent key (contract §7)
         self.status = fields["status"]
         self.last_published = fields["last_published"]
         self.top_risks = fields["top_risks"]
@@ -442,6 +464,61 @@ class Rollup:
 def _parse_iso_date(value: str) -> date:
     """Parse the date portion of an ISO 8601 datetime (`YYYY-MM-DD[...]`)."""
     return date.fromisoformat(value.strip()[:10])
+
+
+def _project_id_drift(project_id: str) -> list:
+    """The project_id join-key diagnostics, shared by read_rollup and read_rollup_keys
+    so the remedy text is identical on both paths."""
+    if not project_id:
+        return ["project_id absent or empty — the rollup's join key to its "
+                "Project record (contract §2); no fallback is applied"]
+    if not PROJECT_ID_RE.match(project_id):
+        return [
+            f"project_id={project_id!r} does not match the declared join-key "
+            f"charset (ADR-179 D1: ^[a-z0-9][a-z0-9-]*$). A trailing '# …' on the "
+            f"`project_id:` line is CONTENT, not a comment — the shared reader "
+            f"does not strip it (its frozen F-4) — so remove the comment from "
+            f"that line. This matters because a polluted join key is a WRONG "
+            f"value rather than a missing one: it passes every presence check and "
+            f"then silently fails to match its Project record"]
+    return []
+
+
+def _portfolio_key(scalars: dict, drift: list):
+    """Contract §7: validate the rollup's optional portfolio key and its name.
+    Returns the key or None (absent); appends JOIN-KEY drift to `drift`."""
+    for k in scalars:
+        if (not k.startswith("#") and k != PORTFOLIO_KEY_FIELD
+                and re.sub(r"[^a-z0-9]", "", k.lower()) == "portfolioid"):
+            drift.append(f"top-level key {k!r} is a near-miss of {PORTFOLIO_KEY_FIELD!r} — "
+                         f"it would be read as 'no portfolio'; spell the key exactly")
+    if PORTFOLIO_KEY_FIELD not in scalars:
+        return None
+    value = (scalars.get(PORTFOLIO_KEY_FIELD) or "").strip()
+    if not value:
+        drift.append("portfolio_id is present but empty — omit the key for a project "
+                     "that names no portfolio (contract §7); an empty key is not read "
+                     "as 'no portfolio'")
+    elif not PORTFOLIO_ID_RE.match(value):
+        drift.append(f"portfolio_id={value!r} does not match the join-key charset "
+                     f"^[a-z0-9][a-z0-9-]*$ — a trailing '# …' on the line is CONTENT "
+                     f"to the shared reader, not a comment")
+    return value or None
+
+
+def read_rollup_keys(doc_path: Path, root: Path) -> tuple:
+    """Phase 1 of a scoped compose (contract §7): read and validate ONLY the two join
+    keys. Returns (rel, project_id, portfolio_id, drift). Key drift is install-level:
+    membership is undecidable, so it halts every portfolio's run and names the path."""
+    scalars, status = read_frontmatter(doc_path)
+    rel = doc_path.relative_to(root).as_posix()
+    if status != "ok":
+        return rel, "", None, ["no frontmatter block"]
+    drift: list = []
+    project_id = (scalars.get(JOIN_KEY_FIELD) or "").strip()
+    drift.extend(_project_id_drift(project_id))
+    portfolio_id = _portfolio_key(scalars, drift)
+    return rel, project_id, portfolio_id, drift
 
 
 def read_rollup(doc_path: Path, root: Path) -> Rollup:
@@ -461,18 +538,10 @@ def read_rollup(doc_path: Path, root: Path) -> Rollup:
     # defaulted: the former `or scalars.get("id") or rel` fallback resolved to
     # `<slug>-rollup` (the template's own `id:`) -- a WRONG key, not a missing one.
     project_id = (scalars.get(JOIN_KEY_FIELD) or "").strip()
-    if not project_id:
-        drift.append("project_id absent or empty — the rollup's join key to its "
-                     "Project record (contract §2); no fallback is applied")
-    elif not PROJECT_ID_RE.match(project_id):
-        drift.append(
-            f"project_id={project_id!r} does not match the declared join-key "
-            f"charset (ADR-179 D1: ^[a-z0-9][a-z0-9-]*$). A trailing '# …' on the "
-            f"`project_id:` line is CONTENT, not a comment — the shared reader "
-            f"does not strip it (its frozen F-4) — so remove the comment from "
-            f"that line. This matters because a polluted join key is a WRONG "
-            f"value rather than a missing one: it passes every presence check and "
-            f"then silently fails to match its Project record")
+    drift.extend(_project_id_drift(project_id))
+
+    # --- portfolio key (contract §7; optional, beside project_id) ---
+    portfolio_id = _portfolio_key(scalars, drift)
 
     # --- scalars ---
     rag = (scalars.get("status") or "").strip().lower()
@@ -537,7 +606,7 @@ def read_rollup(doc_path: Path, root: Path) -> Rollup:
 
     if drift:
         raise ContractDrift(f"{rel} (project {project_id or '<unset>'}): " + "; ".join(drift))
-    return Rollup(project_id, rel, fields)
+    return Rollup(project_id, rel, fields, portfolio_id)
 
 
 def _normalized_entity_type(value) -> str:
@@ -642,9 +711,114 @@ def discover_rollups(root: Path) -> list:
 
 
 def discover_portfolio_records(root: Path) -> list:
-    """RED interface stub (Stage 6 RED commit): contract §7's Portfolio-record
-    read is not implemented yet, so no record is ever found."""
-    return []
+    """Contract §7: the Portfolio records under `<root>/_config/`, located by frontmatter
+    `entity_type == "Portfolio"` exactly and by `portfolio_id` — NEVER by filename, so
+    a record may sit anywhere under the config folder (its portfolio's folder is the
+    recommended home). Sorted; a dot-leading segment is out of corpus on the shared
+    is_corpus_path predicate. Returns [(rel, portfolio_id, lifecycle_state)].
+    A near-miss type key or a malformed record is a configuration error (exit 2):
+    silently dropping a record would drop that portfolio's projects from every run."""
+    cfg = root / CONFIG_DIRNAME
+    if not cfg.is_dir():
+        return []
+    found, bad = [], []
+    for path in sorted(cfg.rglob("*.md"), key=lambda p: p.relative_to(root).as_posix()):
+        if not is_corpus_path(path, root):
+            continue
+        scalars, status = read_frontmatter(path)
+        if status != "ok":
+            continue
+        et = scalars.get("entity_type")
+        rel = path.relative_to(root).as_posix()
+        if et != PORTFOLIO_ENTITY_TYPE:
+            if _normalized_entity_type(et) == PORTFOLIO_ENTITY_TYPE:
+                bad.append(f"{rel}: entity_type {et!r} is a near-miss of 'Portfolio'")
+            continue
+        pid = (scalars.get(PORTFOLIO_KEY_FIELD) or "").strip()
+        state = (scalars.get("lifecycle_state") or "").strip().lower()
+        if not PORTFOLIO_ID_RE.match(pid):
+            bad.append(f"{rel}: portfolio_id {pid!r} is empty or not a kebab slug (V-PORT-02)")
+        elif state not in PORTFOLIO_STATES:
+            bad.append(f"{rel}: lifecycle_state {state!r} not in {PORTFOLIO_STATES} (V-PORT-04)")
+        else:
+            found.append((rel, pid, state))
+    if bad:
+        raise PortfolioScopeError("malformed Portfolio record(s) under "
+                                  f"{CONFIG_DIRNAME}/ — " + "; ".join(bad))
+    return found
+
+
+def _own_project_record(doc_path: Path, root: Path):
+    """Contract §7 cross-check: the rollup's own PROJECT.md — the nearest ancestor
+    directory strictly below `root` that holds one. An ancestor LOOKUP along the
+    rollup's own path, not a corpus walk. None when no such record is under root."""
+    d = doc_path.parent
+    while d != root and root in d.parents:
+        cand = d / "PROJECT.md"
+        if cand.is_file():
+            return cand
+        d = d.parent
+    return None
+
+
+def _project_portfolio(project_md: Path) -> tuple:
+    """(portfolio_id or None, PROJECT.md id or None) from a PROJECT.md frontmatter.
+    An empty value reads as absent; a non-slug value is kept so it disagrees."""
+    scalars, status = read_frontmatter(project_md)
+    if status != "ok":
+        return None, None
+    pid = (scalars.get(PORTFOLIO_KEY_FIELD) or "").strip() or None
+    rid = (scalars.get("id") or "").strip() or None
+    return pid, rid
+
+
+def select_rollups(root: Path, paths: list, portfolio: str, records: list) -> tuple:
+    """Contract §7 membership, applied AFTER discovery. Returns (member_paths, report,
+    redact, keep). `report` counts what the composer can compute: unassigned,
+    unresolved, inactive and held projects are NAMED (they belong to no active
+    portfolio, or to the served one); another portfolio's projects are only COUNTED."""
+    active = sorted({pid for _, pid, st in records if st == "active"})
+    archived = {pid for _, pid, st in records if st == "archived"} - set(active)
+    only = active[0] if len(active) == 1 else None
+
+    def eff(key):
+        return only if key is None else key
+
+    members, rep_ = [], {"served": portfolio, "portfolios": len(active), "members": 0,
+                         "unassigned": [], "unresolved": [], "inactive": [], "held": [],
+                         "held_elsewhere": 0, "other_portfolio": 0, "drift_outside": 0}
+    redact, keep = set(), set()
+    for p in paths:
+        rel, project_id, key, _ = read_rollup_keys(p, root)
+        prj = _own_project_record(p, root)
+        prj_key, prj_id = _project_portfolio(prj) if prj else (None, None)
+        mine = eff(key)
+        if prj is not None and eff(prj_key) != mine:
+            if eff(prj_key) == portfolio or eff(prj_key) not in active:
+                rep_["held"].append(project_id)
+            else:
+                rep_["held_elsewhere"] += 1
+            disposition = "held"
+        elif mine is None:
+            rep_["unassigned"].append(project_id); disposition = "unassigned"
+        elif mine == portfolio:
+            disposition = "member"
+        elif mine in active:
+            rep_["other_portfolio"] += 1; disposition = "other"
+        elif mine in archived:
+            rep_["inactive"].append(project_id); disposition = "inactive"
+        else:
+            rep_["unresolved"].append(project_id); disposition = "unresolved"
+        ids = {project_id} | ({prj_id} if prj_id else set())
+        if disposition == "member":
+            members.append(p); keep |= ids
+        else:
+            redact |= ids
+    redact -= keep
+    rep_["members"] = len(members)
+    for k in ("unassigned", "unresolved", "inactive", "held"):
+        rep_[k] = sorted(rep_[k])
+    return members, rep_, frozenset(redact), frozenset(keep)
 
 
 # --------------------------------------------------------------------------- #
@@ -686,11 +860,39 @@ def _stale_suffix(last_published: str, as_of: date) -> str:
 # --------------------------------------------------------------------------- #
 
 class Ctx:
-    __slots__ = ("rollups", "as_of")
+    __slots__ = ("rollups", "as_of", "redact", "keep")
 
-    def __init__(self, rollups, as_of):
+    def __init__(self, rollups, as_of, redact=frozenset(), keep=frozenset()):
         self.rollups = rollups   # sorted by project_id
         self.as_of = as_of
+        self.redact = redact     # contract §7: ids of discovered rollups outside the served portfolio
+        self.keep = keep         # ... and of its members (never redacted)
+
+    def ref(self, value):
+        """Contract §7: a reference to a discovered project outside the served
+        portfolio — its project_id, its PROJECT.md id, or an entity id it prefixes
+        (`<id>-…`) — renders OTHER_PORTFOLIO_REF. With nothing to redact the value is
+        returned unchanged, so a single-portfolio install's bytes do not move."""
+        if not self.redact or not isinstance(value, str):
+            return value
+        v = value.strip()
+        if v in self.keep:
+            return value
+        if v in self.redact or any(v.startswith(r + "-") for r in self.redact):
+            return OTHER_PORTFOLIO_REF
+        return value
+
+    def ref_affected(self, cf):
+        """`projects_affected` as a list or as a comma scalar: redacts per element, and
+        returns the authored rendering unchanged when nothing in it is redacted."""
+        affected = cf.get("projects_affected") if isinstance(cf, dict) else None
+        if isinstance(affected, list):
+            return ", ".join(self.ref(a) for a in affected)
+        raw = _get(cf, "projects_affected")
+        parts = [x.strip() for x in raw.split(",")]
+        if self.redact and any(self.ref(x) != x for x in parts):
+            return ", ".join(self.ref(x) for x in parts)
+        return raw
 
 
 def _rag_cell(rag: str) -> str:
@@ -898,12 +1100,12 @@ def render_s6(sec, ctx) -> list:
             out.append(f"| Risk | {_get(item, 'risk')}{flag} | {_get(item, 'owner')} | "
                        f"{_get(item, 'mitigation')} | Project | {r.project_id} |")
         for dep in r.key_dependencies:
-            desc = f"{_get(dep, 'from')} → {_get(dep, 'to')} ({_get(dep, 'state')})"
-            linked = f"{_get(dep, 'from')}, {_get(dep, 'to')}"
+            _f, _t = ctx.ref(_get(dep, 'from')), ctx.ref(_get(dep, 'to'))
+            desc = f"{_f} → {_t} ({_get(dep, 'state')})"
+            linked = f"{_f}, {_t}"
             out.append(f"| Dependency | {desc} | — | — | Portfolio | {linked} |")
         for cf in r.cross_project_conflicts:
-            affected = cf.get("projects_affected") if isinstance(cf, dict) else None
-            aff = ", ".join(affected) if isinstance(affected, list) else _get(cf, "projects_affected")
+            aff = ctx.ref_affected(cf)
             flag = _incomplete_risk_flag(cf)
             out.append(f"| Conflict | {_get(cf, 'conflict')}{flag} | {_get(cf, 'owner')} | "
                        f"{_get(cf, 'mitigation')} | Portfolio | {aff} |")
@@ -916,7 +1118,7 @@ def render_s7(sec, ctx) -> list:
            "| From | To | State | Project |", "|---|---|---|---|"]
     for r in ctx.rollups:
         for dep in r.key_dependencies:
-            out.append(f"| {_get(dep, 'from')} | {_get(dep, 'to')} | "
+            out.append(f"| {ctx.ref(_get(dep, 'from'))} | {ctx.ref(_get(dep, 'to'))} | "
                        f"{_get(dep, 'state')} | {r.project_id} |")
     out.append("")
     return out
@@ -934,8 +1136,7 @@ def render_s8(sec, ctx) -> list:
         out.append("| Conflict | Projects Affected | Owner | Mitigation |")
         out.append("|---|---|---|---|")
         for cf in r.cross_project_conflicts:
-            affected = cf.get("projects_affected") if isinstance(cf, dict) else None
-            aff = ", ".join(affected) if isinstance(affected, list) else _get(cf, "projects_affected")
+            aff = ctx.ref_affected(cf)
             out.append(f"| {_get(cf, 'conflict')} | {aff} | {_get(cf, 'owner')} | {_get(cf, 'mitigation')} |")
         out.append("")
     return out
@@ -978,14 +1179,62 @@ SECTION_REGISTRY = (
 # --------------------------------------------------------------------------- #
 
 def compose(root: Path, as_of: date, portfolio=None, report=None) -> str:
-    # RED interface stub (Stage 6 RED commit): `portfolio` and `report` are
-    # accepted and ignored — contract §7 selection is not implemented yet.
     """Read every rollup under `root`, validate against the contract (raises
-    ContractDrift on any type violation), and render the section registry.
-    Returns the composed markdown (LF newlines, single trailing newline)."""
-    rollups = [read_rollup(p, root) for p in discover_rollups(root)]
+    ContractDrift on any type violation), select the served portfolio's member
+    rollups (contract §7 — `portfolio` None = unscoped, legal only at a root whose
+    `_config/` holds no Portfolio record; raises PortfolioScopeError otherwise), and
+    render the section registry. Returns the composed markdown (LF newlines, single
+    trailing newline). `report`, when a dict, receives the §7 counts."""
+    paths = discover_rollups(root)
+    records = discover_portfolio_records(root)
+    active = sorted({pid for _, pid, st in records if st == "active"})
+    dupes = sorted({pid for _, pid, st in records
+                    if st == "active" and sum(1 for _, q, s in records if q == pid and s == "active") > 1})
+    keyed = [read_rollup_keys(p, root) for p in paths]   # phase 1: join keys, every rollup
+    key_drift = [f"{rel} (project {pid or '<unset>'}): {'; '.join(d)}" for rel, pid, _, d in keyed if d]
+    if key_drift:
+        raise ContractDrift("join-key drift — membership is undecidable, so every "
+                            "portfolio's run halts: " + " | ".join(key_drift))
+    rep_ = {"served": portfolio, "portfolios": len(active), "duplicates": dupes}
+    redact, keep = frozenset(), frozenset()
+    if portfolio is None:
+        if active:
+            raise PortfolioScopeError(
+                f"this root's {CONFIG_DIRNAME}/ holds {len(active)} active Portfolio record(s) "
+                f"({', '.join(active)}) — name the served portfolio with --portfolio (contract §7)")
+        named = sorted({k for _, _, k, _ in keyed if k})
+        if len(named) >= 2:
+            raise PortfolioScopeError(
+                f"rollups under this root name {len(named)} portfolios but the root holds no "
+                f"Portfolio record — compose at the projects root with --portfolio (contract §7)")
+        members = paths
+        rep_.update({"members": len(paths), "unresolved": sorted(p for _, p, k, _ in keyed if k)})
+    else:
+        if portfolio not in active:   # also the root guard: a narrowed root holds no record
+            raise PortfolioScopeError(
+                f"--portfolio {portfolio} names no active Portfolio record under this root's "
+                f"{CONFIG_DIRNAME}/ (active: {', '.join(active) or 'none'}) — a scoped run "
+                f"composes at the projects root (contract §7)")
+        if (root / CONFIG_DIRNAME / ROOT_COMPOSED_NAME).exists():
+            raise PortfolioScopeError(
+                f"unmigrated layout — {CONFIG_DIRNAME}/{ROOT_COMPOSED_NAME} exists beside active "
+                f"Portfolio records; move it to {CONFIG_DIRNAME}/<portfolio_id>/{ROOT_COMPOSED_NAME} "
+                f"(contract §7) before composing")
+        members, sel, redact, keep = select_rollups(root, paths, portfolio, records)
+        rep_.update(sel)
+        member_set = set(members)
+        for p in paths:                                    # phase 2, outside S: count, never name
+            if p in member_set:
+                continue
+            try:
+                read_rollup(p, root)
+            except ContractDrift:
+                rep_["drift_outside"] += 1
+    if report is not None:
+        report.update(rep_)
+    rollups = [read_rollup(p, root) for p in members]   # phase 2: members halt on field drift
     rollups.sort(key=lambda r: r.project_id)   # determinism: never trust FS order
-    ctx = Ctx(rollups, as_of)
+    ctx = Ctx(rollups, as_of, redact, keep)
 
     lines = [
         "# Portfolio Dashboard",
@@ -1751,9 +2000,26 @@ def run_self_test() -> int:
 
 
 def portfolio_report_line(r: dict) -> str:
-    """RED interface stub (Stage 6 RED commit): the §7 operator-side report
-    line is not implemented yet."""
-    return ""
+    """The §7 operator-side report line (stderr). Empty for an unscoped run with no
+    keyed rollup and no duplicate, so a legacy run's stderr stays empty."""
+    if not r:
+        return ""
+    dup = (f"; duplicate Portfolio record(s): {', '.join(r['duplicates'])}"
+           if r.get("duplicates") else "")
+    if r.get("served") is None:
+        if not r.get("unresolved") and not dup:
+            return ""
+        return (f"compose-portfolio: Portfolio: unscoped (no Portfolio record) — "
+                f"{r['members']} rollup(s); unresolved portfolio_id: "
+                f"{', '.join(r['unresolved']) or 'none'}{dup}")
+    nm = lambda k: ", ".join(r[k]) or "none"  # noqa: E731
+    return (f"compose-portfolio: Portfolio: {r['served']} — {r['members']} member rollup(s); "
+            f"unassigned: {nm('unassigned')}; unresolved portfolio_id: {nm('unresolved')}; "
+            f"names an inactive Portfolio record: {nm('inactive')}; held for re-emission "
+            f"(rollup key disagrees with its PROJECT.md): {nm('held')}"
+            f"{' (+' + str(r['held_elsewhere']) + ' elsewhere)' if r['held_elsewhere'] else ''}; "
+            f"excluded, another portfolio: {r['other_portfolio']}; contract drift outside "
+            f"the served portfolio: {r['drift_outside']}{dup}")
 
 
 # --------------------------------------------------------------------------- #
@@ -1790,6 +2056,11 @@ def main(argv=None) -> int:
             return 2
     else:
         as_of = date.today()   # production default; weekly-status-rollup §6 passes today
+
+    if args.portfolio is not None and not PORTFOLIO_ID_RE.match(args.portfolio):
+        print(f"compose-portfolio: --portfolio {args.portfolio!r} is not a portfolio_id slug",
+              file=sys.stderr)
+        return 2
 
     if args.out and out_path_rejected(args.out):
         print(f"compose-portfolio: --out rejected — path resolves under projects/ "
