@@ -13,7 +13,7 @@ Every ticket carries information in three distinct layers. Each layer has a defi
 
 | Layer | Mechanism | Role | Who Writes | Who Reads |
 |---|---|---|---|---|
-| **Source of Truth** | Issue body | Current authoritative state — structured fields, AC, dependencies, priority. Updated in-place when facts change. | Intake author (create), Triage/Planning agents (update fields), operator (corrections) | Every stage's agent. Read first. |
+| **Source of Truth** | Issue body | Current authoritative state — structured fields, AC, dependencies, priority. Contract sections are edited in place when scope changes; record sections are never rewritten (§ Contract and Record Sections). | Intake author (create); stage agents, inside the stages the field lifecycle matrix opens for each field; any writer carrying out a decision the operator has recorded | Every stage's agent. Read first. |
 | **Stage Reviews** | Comments (single-pass) or sub-issues (multi-pass) | Per-stage analysis, findings, decisions, evidence. Append-only comments form immutable audit trail. Sub-issues enable iterative review with independent lifecycle. | Stage agents (Stages 2-13), operator (decisions) | Downstream stages for context. |
 | **State Anchors** | Projects fields, labels, Milestones | Machine-readable pipeline position. Fields track state, labels categorize, Milestones assign releases. | Automated (on stage transition) or agent (at stage entry/exit) | Agents (routing), operator (visibility), automation (triggers) |
 
@@ -44,17 +44,25 @@ The Three-Layer Model above is methodology-agnostic at its structural level (Sou
 
 ## Source of Truth: Issue Body
 
-The issue body is the single authoritative record of what this issue IS. It is structured by the `improvement.yml` template at Intake and updated in-place as facts change.
+The issue body is the single authoritative record of what this issue IS. It is structured by the `improvement.yml` template at Intake and its contract sections are updated in place as scope changes.
+
+**Authority.** [{{ADR:issue-body-contract-sections-are-the-scope-of-record}}](../../../core/ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md), which supersedes ADR-062 in part, decides which sections are the source of truth, who may write them, how a stale citation is handled and where an operator ruling lands. The body is the source of truth for what the card asks for; the canonical corpus owns platform facts, and a body points at a platform fact by file and section rather than restating it.
 
 ### Body Update Protocol
 
 | Trigger | Update Type | Example |
 |---|---|---|
 | Field value changes | In-place field update | Priority P3 → P2 at Triage |
-| New structured data | Section added or replaced | Gap summary with issue numbers added at definition |
-| Stage finding changes requirements | AC updated + comment explaining why | Stage 8 drift → revised AC in body |
+| New structured data | Section added or replaced (a contract section is replaced; a record section is added beside) | Gap summary with issue numbers added at definition |
+| Scope, acceptance criteria or fix direction changes (a stage finding, or an operator ruling) | The contract section is edited in place, replacing the superseded text, and one short comment gives the date, what changed and why | A Stage 5 design re-scopes the AC → the criteria are replaced in the body, with one why-comment; Stage 8 drift → the operator records a decision → the criteria are revised in the body, with one why-comment |
+| Hygiene or citation fix | Edited in place, riding an edit the writers rule authorizes; no comment | A stale path or line number replaced by the file and section name |
+| A later observation | One line added beside the record section, naming its source; the intake text is never rewritten; no comment | A Stage 2 counted-observation line on an owning item; a Stage 13 folded follow-up line on an owner |
 | Consolidation | Subsumption note added | Per subsumption convention |
 | Dependency resolution | Dependencies field updated | Dependency closed → "Resolved" annotation |
+
+**Who makes each update.** Each row above is made by a writer the field lifecycle matrix opens for that field at the card's stage, or to carry out a decision the operator has recorded ([{{ADR:issue-body-contract-sections-are-the-scope-of-record}}](../../../core/ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md), rule 2). That includes a dependency's "Resolved" annotation after Stage 5, where the matrix locks Dependencies, and a later observation, whose line is added only at the two steps the third new row names or on an operator-recorded decision.
+
+**The why-comment rule.** A body edit that changes scope, acceptance criteria or fix direction gets one short comment giving the date, what changed and why; a hygiene or citation fix gets none, and so does a line added beside a record section, which names its own source ([{{ADR:issue-body-contract-sections-are-the-scope-of-record}}](../../../core/ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md)).
 
 ### What Goes in the Body
 
@@ -68,13 +76,26 @@ The issue body is the single authoritative record of what this issue IS. It is s
 - Stage reviews — comments or sub-issues (immutable audit trail)
 - Execution evidence — comments, linked to specific runs
 - Discussion and back-and-forth — comments (conversation thread)
-- Temporal observations — comments (timestamped naturally)
+- Temporal observations — comments (timestamped naturally); the one exception is a line added beside a record section under the writers rule (§ Contract and Record Sections)
 
 > **See also:** the Solutioning Pre-Read convention
 > ([`solutioning-output-template.md` § 3.5](../standards/solutioning-output-template.md))
 > relies on this rule — a Stage-5 advisory pre-read posted on the parent issue
 > is a stage-review comment (non-binding context), never body content; the issue
 > body stays the sole authoritative contract.
+
+### Contract and Record Sections
+
+Per [{{ADR:issue-body-contract-sections-are-the-scope-of-record}}](../../../core/ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md), every body section is classified by what it holds. A **contract section** states what the card asks for and is edited in place; a **record section** states what was observed and is never rewritten — a later observation is added beside it, by the writers [{{ADR:issue-body-contract-sections-are-the-scope-of-record}}](../../../core/ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md) names. A section that holds both is a record section, and the change goes into a contract section. A **single-value field** is not a section; it follows its row in the field lifecycle matrix, or the row the matrix names for a field without one, shown here in parentheses. The table is a projection of the rule: re-derive a row when its template changes. A heading outside these templates is classified by the same rule, and the acceptance-criteria heading vocabulary (Acceptance Criteria, Completion condition (verifiable), Cross-Issue Acceptance Criteria) is contract.
+
+| Template | Contract | Record | Single-value (row followed) |
+|---|---|---|---|
+| `improvement.yml` | Proposed Change · Acceptance Criteria · Affected Files · Dependencies · Documentation Impact · Risks & Cross-Cutting Impact | Description · Evidence · Notes | Priority (Priority (body)) · Category (Category (body)) · Domain (Category (body)) |
+| `bug.yml` | Expected Behavior · Affected Files · Documentation Impact · Acceptance Criteria | Reproduction Steps · Actual Behavior · Environment · Evidence | Severity (Priority (body)) |
+| `story.yml` | Acceptance Criteria · Documentation Impact | Value · Notes | Story points (Title) · Parent epic (Dependencies) |
+| `epic.yml` | Outcome · Scope · Candidate child items · Documentation Impact | Notes | — |
+| `observation.yml` | What does good look like? · File or section affected | What is missing? · Notes | — |
+| `adr.yml` | Decision Drivers · Considered Options · Decision · Consequences · Related Issues | Context | Status (Title) |
 
 ### Dependencies Field — Typed Schema (PMBOK CPM convention)
 
@@ -479,21 +500,21 @@ Each pipeline stage's agent has explicitly defined write permissions. This follo
 
 | Stage | Body Updates | Comments | Sub-Issues | Labels | Projects Fields | Native Deps | Operator Approval Required |
 |---|---|---|---|---|---|---|---|
-| 1 (Intake) | Create issue | — | — | `improvement` (auto) | status: Proposed | — | No |
-| 2 (Triage) | Proposed Change (R/U), AC (R/U), Priority (C\*/U), Category (C\*/U), Affected Files (U), Dependencies (U), Evidence / Value (U — one counted-observation line on an owning item) | Decision comment, `Counted into #N` closure comment | — | Category label applied (from body Category dropdown per `improvement.yml`, or fallback to `improvement` if no specific category fits) | status: Approved/Rejected/Deferred | Mirror body `FS+0d #N` deps to native `blocked-by` via A3.5 substep (per § Native Dependencies) | Decision (Tier 3) |
-| 3 (Bundle) | Dependencies (C\*/R) | Bundle rationale comment | — | — | status: Bundled; Milestone assignment | — | Scope approval (Tier 3) |
-| 4 (Planning) | Proposed Change (U), Affected Files (C\*/U), Dependencies (U) | Plan reference comment | — | — | stage: 4-Planning | — | No |
-| 5 (Solutioning) | Proposed Change (U), AC (U), Affected Files (U), Documentation Impact (U) | Design review comment | — | — | stage: 5-Solutioning | Re-trigger mirror logic if AC refinement touches Dependencies field (conditional) | Design decisions (Tier 3) |
-| 6 (Engineering) | — | — | Create sub-tasks | — | stage: 6-Engineering, status: In Progress | Populate sub-task native deps when parent is decomposed into sub-tasks with native-meaningful (`FS+0d`) edges | Decomposition checkpoint |
-| 7 (Dev Testing) | — | — | Create review pass sub-issues | — | stage: 7-DevTest | — | No |
-| 8 (QA Testing) | — | — | Create review pass sub-issues | — | stage: 8-QA | — | Acceptance (Tier 3) |
-| 9 (Plan Review) | — | Decision record comment | — | — | stage: 9-PlanReview | — | Go/No-Go (Tier 3) |
-| 12 (Execute) | — | Deployment log comment | — | — | stage: 12-Execute | — | Authorization (Tier 3) |
-| 13 (Close) | Create one follow-up sweep issue per repository and the separate bug / feature issues, from the Stage 9 ledger and the Stage 13 addendum (Phase A10.5); add one evidence line to each owner a row folded into | Verification evidence comment | — | — | status: Done, stage: 13-Close | Re-run drift-check as QC4 verification parity-check (per § Native Dependencies) | No |
+| 1 (Intake) | Matrix column 1-In (the issue is created) | — | — | `improvement` (auto) | status: Proposed | — | No |
+| 2 (Triage) | Matrix column 2-Tri; on an owning item, one counted-observation line beside its record section | Decision comment, `Counted into #N` closure comment | — | Category label applied (from body Category dropdown per `improvement.yml`, or fallback to `improvement` if no specific category fits) | status: Approved/Rejected/Deferred | Mirror body `FS+0d #N` deps to native `blocked-by` via A3.5 substep (per § Native Dependencies) | Decision (Tier 3) |
+| 3 (Bundle) | Matrix column 3-Bun | Bundle rationale comment | — | — | status: Bundled; Milestone assignment | — | Scope approval (Tier 3) |
+| 4 (Planning) | Matrix column 4-Plan | Plan reference comment | — | — | stage: 4-Planning | — | No |
+| 5 (Solutioning) | Matrix column 5-Sol | Design review comment | — | — | stage: 5-Solutioning | Re-trigger mirror logic if AC refinement touches Dependencies field (conditional) | Design decisions (Tier 3) |
+| 6 (Engineering) | Matrix column 6-Eng | — | Create sub-tasks | — | stage: 6-Engineering, status: In Progress | Populate sub-task native deps when parent is decomposed into sub-tasks with native-meaningful (`FS+0d`) edges | Decomposition checkpoint |
+| 7 (Dev Testing) | Matrix column 7-DT | — | Create review pass sub-issues | — | stage: 7-DevTest | — | No |
+| 8 (QA Testing) | Matrix column 8-QA | — | Create review pass sub-issues | — | stage: 8-QA | — | Acceptance (Tier 3) |
+| 9 (Plan Review) | Matrix column 9-PR | Decision record comment | — | — | stage: 9-PlanReview | — | Go/No-Go (Tier 3) |
+| 12 (Execute) | Matrix column 12-Ex | Deployment log comment | — | — | stage: 12-Execute | — | Authorization (Tier 3) |
+| 13 (Close) | Matrix column 13-Cl; create one follow-up sweep issue per repository and the separate bug / feature issues, from the Stage 9 ledger and the Stage 13 addendum (Phase A10.5); on each owner a row folded into, one folded follow-up line beside its record section | Verification evidence comment | — | — | status: Done, stage: 13-Close | Re-run drift-check as QC4 verification parity-check (per § Native Dependencies) | No |
 
 > **Note:** Stages 10 and 11 are compressed into the git workflow (per release-process.md) and have no independent agent write permissions.
 
-**Source of truth for Body Updates:** The "Body Updates" cells above align to [field-lifecycle-matrix.md § Body Fields Lifecycle](../../../core/schemas/field-lifecycle-matrix.md#body-fields-lifecycle) (authoritative) — each cell lists every body field that matrix marks **U** (Updated) or **C\*** (Create-if-absent) at that stage, with the matrix notation in parentheses. Alignment is one-directional (this table → matrix); kept consistent so the two never re-diverge undetected.
+**Source of truth for Body Updates:** the [field lifecycle matrix § Body Fields Lifecycle](../../../core/schemas/field-lifecycle-matrix.md#body-fields-lifecycle) governs, per [{{ADR:issue-body-contract-sections-are-the-scope-of-record}}](../../../core/ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md). Each Body Updates cell names the matrix's column for the card that stage is processing, and the fields that column opens are that stage's body updates; this table does not list them, so it cannot disagree with the matrix. A line a stage adds beside the record section of another card is named in its cell, because the matrix's columns describe only the card being processed. [{{ADR:issue-body-contract-sections-are-the-scope-of-record}}](../../../core/ADRs/ADR-242-issue-body-contract-sections-are-the-scope-of-record.md) governs this column only; the table's other columns keep the standing they had before it.
 
 **Read permissions:** All stages have full read access to all layers (body, comments, sub-issues, labels, fields).
 
