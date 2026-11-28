@@ -1,6 +1,6 @@
 ---
 title: Controls — ci-job
-purpose: The 55 controls whose mechanism kind is ci-job, from the controls register
+purpose: The 56 controls whose mechanism kind is ci-job, from the controls register
 type: reference
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
@@ -9,7 +9,7 @@ generated_by: build-process-catalog.py
 
 # Controls — ci-job
 
-55 controls from the controls register. The statement, the class and the surface are the register's cells. Cited by counts the pages that cite the control; the pages and steps are on [controls-cited](controls-cited.md).
+56 controls from the controls register. The statement, the class and the surface are the register's cells. Cited by counts the pages that cite the control; the pages and steps are on [controls-cited](controls-cited.md).
 
 | Control | Statement | Enforcement class | Surface | Source path | Cited by |
 |---|---|---|---|---|---|
@@ -68,3 +68,4 @@ generated_by: build-process-catalog.py
 | C-254 | Every rostered skill has a registry row and every row resolves (row layer) | code-enforce | ci-run | `.github/workflows/skill-registry-currency-check.yml` | — |
 | C-255 | The candidate release version is not already claimed (Check 41 verdict) | code-warn | ci-run | `.github/workflows/version-freeness.yml` | 2 pages |
 | C-454 | No commit or annotated tag a push adds carries a home-directory path, phone number, or personal-email pattern (accepted homes excepted), or a needle from the optional PII_NEEDLES secret; detective only, since the pushed branch is public before the job runs; findings are redacted | code-enforce | ci-run | `.github/workflows/pii-push-scan.yml` | — |
+| C-457 | No tracked path in a pull request's merge tree sits under a registered in-repo git-ignored home other than that home's own README.md (CI twin of the commit guard); it keeps home content off main, and runs after the branch is already on the remote | code-enforce | merge-gate | `.github/workflows/repo-integrity.yml` | — |

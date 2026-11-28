@@ -1,6 +1,6 @@
 ---
 title: Controls — hook-rule
-purpose: The 87 controls whose mechanism kind is hook-rule, from the controls register
+purpose: The 88 controls whose mechanism kind is hook-rule, from the controls register
 type: reference
 status: ACTIVE
 reversibility: CHEAP / Confidence HIGH
@@ -9,7 +9,7 @@ generated_by: build-process-catalog.py
 
 # Controls — hook-rule
 
-87 controls from the controls register. The statement, the class and the surface are the register's cells. Cited by counts the pages that cite the control; the pages and steps are on [controls-cited](controls-cited.md).
+88 controls from the controls register. The statement, the class and the surface are the register's cells. Cited by counts the pages that cite the control; the pages and steps are on [controls-cited](controls-cited.md).
 
 | Control | Statement | Enforcement class | Surface | Source path | Cited by |
 |---|---|---|---|---|---|
@@ -100,3 +100,4 @@ generated_by: build-process-catalog.py
 | C-452 | Bash git commit --no-verify or -n, a -c, --config-env, GIT_CONFIG_KEY_`<n>` or GIT_CONFIG_PARAMETERS override naming core.hooksPath, and a git config write, unset or core-section removal of core.hooksPath are refused (each skips the commit-time PII guard) | code-enforce | hook | `core/hooks/block-destructive.sh` | — |
 | C-453 | A git push whose new commits or annotated tags carry a literal home-directory path, phone number, or personal-email pattern (accepted homes excepted), in an added line, a commit or tag object, or a needle-file hit, is refused: the commit-time guard runs over every commit the push would publish, including the commits merge, cherry-pick, revert, rebase, stash and commit-tree make without pre-commit | code-enforce | hook | `core/hooks/git-pre-push-pii.sh` | — |
 | C-455 | A Bash git clone, init, commit or push, or gh repo clone, from an operations-workspace cwd is refused — Tier-0 floor | code-enforce | hook | `core/hooks/block-autonomy-ceiling.sh` | — |
+| C-456 | A git commit whose index holds a tracked path under a registered in-repo git-ignored home other than that home's own README.md is refused, a forced add included, whatever the PII guard's mode dial reads and whether or not CLAUDE_HOOK_BYPASS is set; at push the same guard reads every commit the push would publish, including the commits merge, cherry-pick, revert, rebase and commit-tree make without pre-commit, unless the push runs under the bypass | code-enforce | hook | `core/hooks/git-pre-commit-homes.sh` | — |
